@@ -119,8 +119,8 @@ struct MdObserved:
     column: int
     message: str
 
-# Runs BODY (through an untyped parameter, as lib/test.bot's helpers do: a
-# direct call of a body whose block is rejected is KNOWN-ERROR).
+# Runs BODY (through an untyped parameter, as lib/test.bot's helpers do; a
+# direct handled call of a body whose block is rejected compiles as well).
 fn md_observe(body) -> MdObserved:
     v = body():
         on compiler::CompilerError {code, primary, message}:

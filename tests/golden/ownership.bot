@@ -235,14 +235,14 @@ nomethod fn own_rejects_chains(name: str, expected: compiler::DiagnosticCode, ma
 # coroutines.test
 
 # af-generic-errors (the half a suite can hold): a coroutine's error
-# (This body is the suite's first static block on purpose: until it is
-# rejected, its error-declaring coroutine passed to an untyped function
-# gives every trial build an erased-callable contract, and the compiler
-# then decides one rejected block per round (hir/static.tcl's
-# GlobalChannels). First, it is rejected in the first round.)
 # crosses the specialized generic call as a direct resume's would:
 # unhandled inside an untyped HOF that does not admit it, the call that
-# specializes it is invalid.
+# specializes it is invalid. This body is the suite's first static block
+# on purpose: until it is rejected, its error-declaring coroutine passed
+# to an untyped function gives every trial build an erased-callable
+# contract, and the compiler then decides one rejected block per round
+# (hir/static.tcl's GlobalChannels). Placed first, it is rejected in the
+# first round, and the later rounds decide independent blocks together.
 fn b_generic_unadmitted() errors compiler::CompilerError:
     static compile:
         fn w2(seed: int, resume Message) -> Event errors Boom:

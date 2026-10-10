@@ -50,14 +50,14 @@
 @@ runner-skips-last the runner does not run the last registered case
 ## lib/test.bot
 <<<<
-    loop c in suite.cases:
+    loop c in registered():
         m = (c.run)()
 ====
-    remaining = suite.cases
-    dropped = remaining.pop():
-        on IndexNotFound:
-            return []
-    loop c in remaining:
+    all = registered()
+    n = list::length(all)
+    loop c in all and k from 0 to n:
+        if k == n - 1:
+            break
         m = (c.run)()
 >>>>
 
@@ -156,4 +156,52 @@
         10.glyph().concat((0 - n).digits_from(1))
 ====
         (0 - n).digits_from(1)
+>>>>
+
+@@ escape-drops-quote a quotation mark inside a described String is not escaped
+## lib/test.bot
+<<<<
+    if c == '"':
+        "\\\""
+====
+    if c == '"':
+        ""
+>>>>
+
+@@ code-name-shifted a diagnostic code is named by its neighbour's name (Type reads as Unbound)
+## lib/test.bot
+<<<<
+        "Type",
+        "Unbound",
+====
+        "Unbound",
+        "Type",
+>>>>
+
+@@ describe-drops-bool a Bool is described as a value with no text form
+## lib/test.bot
+<<<<
+    elif v == true:
+        "true"
+====
+    elif v == unit:
+        "true"
+>>>>
+
+@@ count-declares-context count declares the Suite context itself, so an application context trait spelled like it is satisfied by the suite
+## lib/test.bot
+<<<<
+fn count() -> int:
+    list::length(registered())
+====
+fn count(context suite: Suite) -> int:
+    list::length(registered())
+>>>>
+
+@@ report-drops-detail a mismatch's detail line is left out of the report
+## lib/test.bot
+<<<<
+        if result.detail != "":
+====
+        if result.detail == "never":
 >>>>

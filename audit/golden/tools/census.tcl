@@ -9,7 +9,10 @@
 # test::rejects, test::rejects_at, test::rejects_any, test::case); ownhelper
 # counts the calls of a suite's own registration helpers (a statement calling
 # a function with a String first argument: its own matcher over test::case). A body is a nested function
-# declaring `errors compiler::CompilerError`.
+# declaring `errors compiler::CompilerError` (toplevelbody: one declared at the
+# suite's top level, outside any registration function); helpers are the
+# suite's other top-level functions (its own matchers, shared code under
+# test).
 
 set root [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]]
 set files $argv
@@ -30,12 +33,13 @@ set columns {
     rejects_any {^\s+test::rejects_any\(}
     custom      {^\s+test::case\(}
     ownhelper   {^\s+(?!test::)[a-z_][a-z_0-9]*\("}
-    bodies      {^\s+fn \S+\(\) errors compiler::CompilerError:}
+    bodies      {^\s*fn \S+\(\) errors compiler::CompilerError:}
+    toplevelbody {^fn \S+\(\) errors compiler::CompilerError:}
     static      {^\s+static compile:}
     handlers    {^\s+on (?!compiler::CompilerError)\S+}
     registrars  {^fn register_\S+\(}
     toplevel    {^(struct|enum|error|type|refined type|trait|context struct|opaque struct|opaque context struct) }
-    helpers     {^(nomethod )?fn (?!register_)\S+\(}
+    helpers     {^(nomethod )?fn (?!register_)[^(]+\((?!\) errors compiler::CompilerError:)}
 }
 
 set totals [dict create]

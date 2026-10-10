@@ -153,9 +153,10 @@ set results {}
 foreach spec [dict get $options -mutants] {
     lassign [split $spec :] file name
     lassign [goldentools::mutant [file join $root $file] $name] description edits
+    # The rows whose mutants column names the mutant (as a word: the column
+    # is free text, "audit/X/tools/mutants.txt NAME, NAME2, ...").
     set related [lmap row $rows {
-        if {[lsearch -exact [split [string map {" " ""} [dict get $row mutants]] ,] "$file:$name"] < 0
-            && [lsearch -exact [split [string map {" " ""} [dict get $row mutants]] ,] $name] < 0} continue
+        if {![regexp "(^|\[\\s,;:/\])[string map {- \\-} $name](\$|\[\\s,;\])" [dict get $row mutants]]} continue
         set row
     }]
     set scope [expr {$related eq {} ? "every row" : "[llength $related] rows"}]
@@ -178,16 +179,25 @@ foreach spec [dict get $options -mutants] {
             }
         }
         lassign [runOld $tree [oldTestsOf $checked] $timeout] old -
-        lassign [runNew $tree $checked $timeout $backends] new states -
+        # The new side runs every suite: a mutant may kill a golden test
+        # outside the related rows, or a whole suite (it does not compile,
+        # aborts, or the backends disagree) -- a detection without
+        # per-test attribution.
+        lassign [runNew $tree $rows $timeout $backends] new states -
         set oldFailed [lmap row $checked {if {[dict get $old [oldKey $row]] eq "pass"} continue; oldKey $row}]
         set newFailed [lmap row $checked {if {[dict get $new [newKey $row]] eq "pass"} continue; newKey $row}]
+        set otherFailed [lmap row $rows {if {$row in $checked || [dict get $new [newKey $row]] eq "pass"} continue; newKey $row}]
+        set broken [lmap {suite state} $states {if {$state in {ok failed}} continue; string cat $suite = $state}]
         set oldDetects [expr {[llength $oldFailed] > 0}]
         set newDetects [expr {[llength $newFailed] > 0}]
-        set verdict [expr {$oldDetects && $newDetects ? "BOTH" : $oldDetects ? "OLD-ONLY" : $newDetects ? "NEW-ONLY" : "NEITHER"}]
+        set newAnywhere [expr {$newDetects || [llength $otherFailed] > 0 || [llength $broken] > 0}]
+        set verdict [expr {$oldDetects && $newDetects ? "BOTH" : $oldDetects && $newAnywhere ? "BOTH-SUITE-LEVEL"
+            : $oldDetects ? "OLD-ONLY" : $newAnywhere ? "NEW-ONLY" : "NEITHER"}]
         if {$verdict eq "OLD-ONLY"} { set exit 1 }
         puts "$verdict $spec ($scope) -- $description"
         puts "    old failed: [llength $oldFailed] ([join [lrange [lsort -unique $oldFailed] 0 5] {, }])"
-        puts "    new failed: [llength $newFailed] ([join [lrange [lsort -unique $newFailed] 0 5] {, }]); suites: [join [lmap {s st} $states {string cat $s = $st}] {, }]"
+        puts "    new failed (related): [llength $newFailed] ([join [lrange [lsort -unique $newFailed] 0 5] {, }])"
+        puts "    new failed (other rows): [llength $otherFailed] ([join [lrange [lsort -unique $otherFailed] 0 3] {, }]); suites not ok: [join $broken {, }]"
         flush stdout
         lappend results [list $spec $verdict]
     } finally {
