@@ -851,7 +851,7 @@ test sc-alloc-accepted-zero {item 48: an accepted block adds no allocation: the 
     list [dict get $a total allocations] [expr {[dict get $a total] eq [dict get $b total]}]
 } -cleanup {unset -nocomplain a b} -result {0 1}
 
-test sc-alloc-rejected {item 49: a rejected block's failure allocates what its payload holds (the message String, the location structs, the related List) when a handler materializes it; a handler reading only the code allocates no message} -constraints linuxX86_64 -body {
+test sc-alloc-rejected {item 47: a rejected block's failure allocates what its payload's fields hold -- the primary SourceLocation struct and the related List; the message is a String constant, never allocated per failure -- and a handler that binds the payload whole materializes one struct more} -constraints linuxX86_64 -body {
     set whole [native::allocationReport [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nr = f():\n    on compiler::CompilerError details:\n        details\nr.code == compiler::DiagnosticCode::Unbound\n"] summary]
     set code [native::allocationReport [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nr = f():\n    on compiler::CompilerError \{code\}:\n        code == compiler::DiagnosticCode::Unbound\nr\n"] summary]
     list [dict get $whole total allocations] [dict get $code total allocations]

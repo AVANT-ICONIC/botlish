@@ -600,13 +600,16 @@ code is.
 
 ### 47. Failed-path allocation
 
-Natively the failure itself allocates the `primary` SourceLocation struct
-and the message String (2 allocations, 72 bytes, exactly what the same
-`fail compiler::CompilerError {...}` written by hand allocates --
-Performance below); the empty `related` List is static; the handler's
-binding materializes the anonymous payload struct only when used whole
-(`sc-alloc-rejected`: 3 allocations whole, 2 reading fields). The payload
-travels field-wise in the payload slots, never boxed.
+Natively each failure allocates what its payload's fields hold: the
+`primary` SourceLocation struct (48 bytes) and the `related` List (24 bytes
+when empty) -- 2 allocations, 72 bytes, exactly what the same
+`fail compiler::CompilerError {...}` written by hand allocates
+(Performance below). The message is a String constant, allocated once with
+the program's static data, never per failure; the code is an enum word. A
+handler that binds the payload whole materializes the anonymous payload
+struct, one allocation more (`sc-alloc-rejected`: 3 whole, 2 reading
+fields). The payload travels field-wise in the payload slots, never boxed.
+Nothing is allocated on a path where the block does not fail.
 
 ### 48. Differential valid-body tests
 
@@ -670,8 +673,15 @@ killed by the fuzzer too).
 
 ### 51. Mutation results
 
-`audit/static-compile/tools/mutate.tcl`, the 21 mutants of
-`mutants.txt` -- every one of item 82's list:
+`audit/static-compile/tools/mutate.tcl`, the 21 mutants of `mutants.txt`:
+the 17 of item 82's list, one each, plus `loader-error-escapes` (the
+loader's half of "escapes as a fatal outer diagnostic"), `outermost-owner`,
+`internal-diagnostic-reified` (the diagnostic half of "internal failure
+becomes CompilerError") and `same-failure-counts-reified`. Item 82's "leaks
+a type/error declaration" is `leaks-declaration`: the only declaration a
+block can hold is a function's, since `struct`, `error`, `enum`, `type` and
+`trait` are top-level syntax, a parse error inside any block.
+
 **21 mutants, 21 killed, 0 survived** (final tree; each mutant against
 `tests/static-compile.test` and 12 fuzz programs, seed 3). The detectors
 that caught each:
@@ -688,8 +698,8 @@ that caught each:
 | `success-returns-unit` | 25 | 12 of 12 |
 | `runtime-errors-wrapped` | 4 | 7 of 12 |
 | `keeps-runtime-wrapper` | 14 | 8 of 12 |
-| `executes-prefix` | 12 | 5 of 12 |
-| `leaks-binding` | 2 | 8 of 12 |
+| `executes-prefix` | 13 | 5 of 12 |
+| `leaks-binding` | 3 | 8 of 12 |
 | `leaks-declaration` | 4 | -- |
 | `leaks-affine-move` | 1 | -- |
 | `outermost-owner` | 2 | 3 of 12 |
@@ -740,7 +750,12 @@ tree:
 | `audit/error-payloads/tools/mutate.tcl` | 44 mutants, 44 killed |
 | `audit/affine/tools/fuzz.tcl` | seeds 1, 2: 30 programs each, 0 disagreements |
 | `audit/enums/tools/mutate.tcl -only cross-enum-parameter` | killed (its text follows `IsFn` -> `IsCallable`) |
-CAMPAIGNROWS
+| `audit/affine/tools/mutate.tcl` | 29 mutants, 29 killed |
+| `audit/coroutines/tools/mutate.tcl` | 52 mutants, 52 killed |
+| `audit/one-char-string-literal/tools/fuzz.tcl` | 300 seeds, 0 failures, 0 extra warnings; spelling law 788 of 788 |
+| `audit/refinement-values/tools/fuzz.tcl` | 200 programs, 0 failures |
+| `audit/traits/tools/mutate.tcl` | 18 mutants, 18 killed |
+| `audit/context-traits/tools/mutate.tcl` | 23 mutants, 23 killed |
 
 ### 53. GC stress
 
@@ -853,7 +868,67 @@ handler guards or pattern matching on diagnostics.
 
 ## Performance
 
-PERFORMANCE
+`tclsh9.0 bench/static-compile.tcl` (defaults: best of 5 runs; 2000 calls
+on the Tcl backends, 200000 natively), on an otherwise idle 4-CPU Linux
+x86-64 container, Tcl 9.0.1, the release native backend:
+
+### Compile time
+
+| program | compile | builds |
+|---|---|---|
+| 1. ordinary valid block (`if true:`) | 24.9 ms | 1 |
+| 2. the same block under `static compile:` | 25.9 ms | 1 |
+| 3. an invalid block under `static compile:` | 24.9 ms | 2 |
+
+| K blocks | plain (valid only) | all valid, static | builds | mixed (1/3 UNBOUND, 1/3 TYPE), static | builds | per build |
+|---|---|---|---|---|---|---|
+| 10 | 55.9 ms | 59.9 ms | 1 | 105.1 ms | 3 | 35.0 ms |
+| 25 | 144.2 ms | 123.6 ms | 1 | 204.7 ms | 3 | 68.2 ms |
+| 50 | 239.3 ms | 238.6 ms | 1 | 373.4 ms | 3 | 124.5 ms |
+
+### Run time
+
+| operation (ns per call) | interp | compile | native |
+|---|---|---|---|
+| accepted static block | 137006.0 | 2340.0 | 42.6 |
+| the same body written plainly | 137811.0 | 2334.0 | 46.7 |
+| rejected static block, CompilerError handled | 264604.0 | 22483.5 | 241.5 |
+| the same CompilerError written by hand, handled | 372409.5 | 24566.0 | 248.3 |
+
+### Native heap allocations (one call)
+
+| program | allocations | bytes |
+|---|---|---|
+| accepted static block | 0 | 0 |
+| the same body written plainly | 0 | 0 |
+| rejected static block, handler reads code and primary | 2 | 72 |
+| the same CompilerError written by hand | 2 | 72 |
+
+Reading it:
+
+* **Compile time.** A program whose blocks are all accepted costs one
+  build, the same build its plain spelling costs: the static file and the
+  plain one are within run-to-run noise of each other (at K = 25 the plain
+  file even measured slower). Every round of rejections costs one more
+  whole build of the program; the mixed files -- a third of the blocks
+  rejected in resolution, a third by a type check -- take three builds
+  however many blocks they hold (resolution rejections are decided
+  together; check-phase rejections in independent top-level functions are
+  decided together), so their cost is about 1.6-1.9 times the all-valid
+  file's. A build that stops at a resolution diagnostic is cheap (row 3's
+  two builds cost one full build's time).
+* **Run time.** An accepted block is the plain body: the same NIR (item
+  45), the same Core IR, so the same time -- the table's differences
+  (42.6 against 46.7 ns natively) are noise between two identical
+  programs. A rejected block costs exactly what the same
+  `fail compiler::CompilerError {...}` written by hand costs: the
+  hand-written function needs a parameter and a branch to avoid being a
+  KNOWN-ERROR, which is why it is, if anything, slower.
+* **Allocations.** None for an accepted block. A rejected one allocates
+  what its payload's fields need when it fails (the `primary`
+  SourceLocation and the `related` List: 2 allocations, 72 bytes; the
+  message is a static String constant), the same as the hand-written
+  failure; nothing is allocated on the paths that do not fail.
 
 ## Files
 
