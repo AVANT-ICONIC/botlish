@@ -762,3 +762,37 @@ seeds, once with `-gc-stress 1`) and `audit/static-compile/tools/mutate.tcl`
 be killed: update a mutant's text when you change the code it mutates, keeping
 it a mutant of the same rule). `bench/static-compile.tcl` regenerates the
 performance report.
+
+## Golden tests (Botlish-native test framework)
+
+`lib/test.bot` (GOLDEN-TEST-FRAMEWORK.md) is an ordinary Botlish library:
+a test suite is an installed `context struct Suite` whose `MutableVector`
+holds the registered cases, each a deferred `Fn{args: [], return:
+test::Match}`; the runner is an ordinary coroutine. It has no syntax, no
+compiler knowledge and no natives of its own: never add test syntax, a
+`test` keyword, an assertion form, a catch-all error, a test-only native,
+module-initializer registration or discovery, or compiler knowledge of
+PASS/FAIL to support it; record the friction instead (the report's
+"Recurring boilerplate" and "Findings"). The library may import `compiler`
+to read `compiler::CompilerError`, and nothing knows static blocks.
+
+`tests/golden/*.bot` are ported Tcl tests, each listed in
+`tests/golden/manifest.tsv` with its Tcl original, which stays in the Tcl
+suite, authoritative, unchanged. `tests/golden.test` runs the suites and
+fails when a suite's reported tests differ from the manifest's; a new or
+removed golden test is a manifest row added or removed. `rejects_at` pins
+line and column in the suite file: adding lines above one moves it (update
+the test). `tests/golden/README.md` is the porting guide.
+
+If you change `lib/test.bot`, run `tests/golden-framework.test`,
+`tests/golden.test`, `tclsh9.0 tests/golden/run.tcl`,
+`audit/golden/tools/fuzz.tcl` (several seeds, once with `-gc-stress 1`)
+and `audit/golden/tools/mutate.tcl` (every mutant in
+`audit/golden/tools/mutants.txt` must still apply and be killed: update a
+mutant's text when you change the code it mutates, keeping it a mutant of
+the same rule), and the warning gate (`lib/test.bot` is in its manifest). If
+you change a compiler diagnostic, `compiler::DiagnosticCode` or the
+completion analysis, also run `tests/golden.test` and
+`audit/golden/tools/check.tcl` (old and new tests side by side; with
+`-mutants` it runs existing mutants against both). `bench/golden-framework.tcl`
+regenerates the performance report.

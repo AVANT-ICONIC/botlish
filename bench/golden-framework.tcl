@@ -1,0 +1,288 @@
+# golden-framework.tcl -- the performance report of the golden test
+# framework, lib/test.bot (GOLDEN-TEST-FRAMEWORK.md, "Performance").
+#
+#   tclsh9.0 bench/golden-framework.tcl ?-runs N? ?-n N? ?-native-n N?
+#                                       ?-sizes LIST? ?-backends LIST?
+#
+# Run time (best of RUNS, compilation excluded): a suite registering N cases
+# in a loop -- one body closure per case, created in the loop, so the program
+# text and its compile cost do not grow with N -- of one kind:
+#
+#   registration  N value cases registered, none run (the value is the count)
+#   pass          N passing value cases, run (test::results), no report text
+#   pass+report   the same, with the report (test::report)
+#   mismatch      N value cases whose value differs, with the report
+#   rejects       N rejects cases whose block is rejected (the expected
+#                 diagnostic), with the report
+#   rejected      N value cases whose block is rejected (an unexpected
+#                 diagnostic: the mismatch names code, location, message)
+#   runtime-error N value cases whose body handles a run-time IndexNotFound
+#   baseline      no framework: the same N body closures created and called
+#                 directly, their values compared by ==
+#
+# reported per case as (T(kind, N) - T(empty suite)) / N, on the Tcl
+# interpreter, the Tcl compiler and natively (native::measure, in-process
+# best of RUNS; N is -n on the Tcl backends, -native-n natively).
+#
+# Native heap allocations: one-time (the empty suite) and per case (the
+# difference between 2 and 1 cases), by object kind and by the function that
+# allocates (registration, the case's check closure, the runner coroutine,
+# TestResult/Match, result collection, report text).
+#
+# Compile time (best of RUNS, surface::compile, warnings off): suites of K
+# distinct cases (K from -sizes), each its own nested function and static
+# block, all passing value cases and mixed (two thirds value cases, one
+# third rejected blocks expected by test::rejects), beside the same bodies
+# written as plain functions without the framework; with the number of whole
+# builds the static decisions took.
+
+set root [file dirname [file dirname [file normalize [info script]]]]
+set args $argv
+set argv {}
+source [file join $root tests helpers.tcl]
+source [file join $root surface surface.tcl]
+interp recursionlimit {} 200000
+
+set runs 3
+set n 200
+set nativeN 2000
+set sizes {10 50 100}
+set backends {interp compile native}
+foreach {option value} $args {
+    switch -- $option {
+        -runs { set runs $value }
+        -n { set n $value }
+        -native-n { set nativeN $value }
+        -sizes { set sizes $value }
+        -backends { set backends $value }
+        default { error "unknown option $option" }
+    }
+}
+
+# The body each kind's case runs and the registration it makes, in a loop
+# over i (captured by the body, so nothing is decided statically).
+set kinds {
+    registration {test::value("t", i * 2, body)} {i + i} count
+    pass {test::value("t", i * 2, body)} {i + i} results
+    pass+report {test::value("t", i * 2, body)} {i + i} report
+    mismatch {test::value("t", i * 2 + 1, body)} {i + i} report
+    rejects {test::rejects("t", compiler::DiagnosticCode::Unbound, body)} {missing + i} report
+    rejected {test::value("t", 0, body)} {missing + i} report
+    runtime-error {test::value("t", -1, body)} {r = list::at(xs, i + 5):
+    on IndexNotFound:
+        -1
+r} report
+}
+
+proc suiteProgram {registration body end count} {
+    set final [dict get {count {test::count()} results {list::length(test::results())} report {list::length(test::report())}} $end]
+    set body [string map [list \n "\n                "] $body]
+    return [string map [list @REG@ $registration @BODY@ $body @FINAL@ $final @N@ $count] {import compiler
+import list
+import test
+
+fn register_bench(xs: List[int], count: int):
+    loop i from 0 to count:
+        fn body() errors compiler::CompilerError:
+            static compile:
+                @BODY@
+        @REG@
+
+with context test::suite()
+register_bench([1, 2], @N@)
+@FINAL@
+}]
+}
+
+proc baselineProgram {count} {
+    return [string map [list @N@ $count] {import list
+
+fn run_bench(count: int) -> int:
+    passed = loop i from 0 to count:
+        fn body() -> int:
+            i + i
+        if body() != i * 2:
+            continue
+        i
+    list::length(passed)
+
+run_bench(@N@)
+}]
+}
+
+proc compileHir {text} {
+    return [surface::compile $text bench.bot -warnings off]
+}
+
+# Best-of-RUNS microseconds running HIR on BACKEND.
+proc runUs {hir backend} {
+    if {$backend eq "native"} {
+        return [lindex [native::measure $hir $::runs] 2]
+    }
+    set ir [hir::lower $hir]
+    set saved [core::useBackend]
+    core::useBackend $backend
+    set best ""
+    try {
+        for {set i 0} {$i < $::runs} {incr i} {
+            set us [lindex [time {core::evalProgram $ir}] 0]
+            if {$best eq "" || $us < $best} { set best $us }
+        }
+    } finally {
+        core::useBackend $saved
+    }
+    return $best
+}
+
+proc fmt {us} {
+    if {$us >= 1000} { return [format "%.1f ms" [expr {$us / 1000.0}]] }
+    return [format "%.2f us" $us]
+}
+
+puts "# golden test framework performance\n"
+puts "runs $runs (best of); Tcl backends N = $n cases, native N = $nativeN cases\n"
+
+# ---------------------------------------------------------------------------
+puts "## Run time per case\n"
+puts "| kind | [join $backends { | }] |"
+puts "|---|[string repeat ---| [llength $backends]]"
+set empty [dict create]
+foreach backend $backends {
+    set count [expr {$backend eq "native" ? $nativeN : $n}]
+    dict set empty $backend [runUs [compileHir [suiteProgram {test::value("t", i * 2, body)} {i + i} report 0]] $backend]
+}
+foreach {kind registration body end} $kinds {
+    set cells {}
+    foreach backend $backends {
+        set count [expr {$backend eq "native" ? $nativeN : $n}]
+        set hir [compileHir [suiteProgram $registration $body $end $count]]
+        set us [runUs $hir $backend]
+        lappend cells [fmt [expr {($us - [dict get $empty $backend]) / double($count)}]]
+    }
+    puts "| $kind | [join $cells { | }] |"
+}
+set cells {}
+foreach backend $backends {
+    set count [expr {$backend eq "native" ? $nativeN : $n}]
+    set us [runUs [compileHir [baselineProgram $count]] $backend]
+    set zero [runUs [compileHir [baselineProgram 0]] $backend]
+    lappend cells [fmt [expr {($us - $zero) / double($count)}]]
+}
+puts "| baseline (no framework) | [join $cells { | }] |"
+puts "| empty suite (whole run) | [join [lmap b $backends {fmt [dict get $empty $b]}] { | }] |"
+
+# ---------------------------------------------------------------------------
+puts "\n## Native heap allocations\n"
+proc census {text} {
+    set hir [compileHir $text]
+    return [native::allocationReport $hir sites]
+}
+proc kindsOf {report} {
+    set out {}
+    dict for {kind stats} [dict get $report byKind] {
+        if {[dict get $stats allocations] > 0} {
+            lappend out "$kind [dict get $stats allocations]"
+        }
+    }
+    return [join $out ", "]
+}
+proc byFunction {report} {
+    set out [dict create]
+    foreach site [dict get $report sites] {
+        set f [dict get $site func]
+        regsub {#\d+$} $f "" f
+        dict incr out "$f [dict get $site objectKind]" [dict get $site allocations]
+    }
+    return $out
+}
+puts "| program | allocations | bytes | by kind |"
+puts "|---|---|---|---|"
+foreach {kind registration body end} $kinds {
+    if {$kind ni {registration pass pass+report mismatch rejected runtime-error}} continue
+    foreach count {0 1 2} {
+        set report [census [suiteProgram $registration $body $end $count]]
+        dict set allocs $kind $count $report
+    }
+    set r0 [dict get $allocs $kind 0]
+    set r1 [dict get $allocs $kind 1]
+    set r2 [dict get $allocs $kind 2]
+    set one [dict get $r0 total allocations]
+    set per [expr {[dict get $r2 total allocations] - [dict get $r1 total allocations]}]
+    set perBytes [expr {[dict get $r2 total allocatedBytes] - [dict get $r1 total allocatedBytes]}]
+    puts "| $kind: one-time (empty suite) | $one | [dict get $r0 total allocatedBytes] | [kindsOf $r0] |"
+    puts "| $kind: per case | $per | $perBytes | |"
+}
+puts "\nPer-case allocation sites (2 cases minus 1 case), by function and object kind:\n"
+foreach kind {registration pass+report mismatch rejected} {
+    set f1 [byFunction [dict get $allocs $kind 1]]
+    set f2 [byFunction [dict get $allocs $kind 2]]
+    set lines {}
+    dict for {key count} $f2 {
+        set before [expr {[dict exists $f1 $key] ? [dict get $f1 $key] : 0}]
+        if {$count - $before != 0} {
+            lappend lines "$key: [expr {$count - $before}]"
+        }
+    }
+    puts "* $kind: [join $lines {; }]"
+}
+set reportZero [dict get $allocs registration 0]
+puts "\nStatic data (one-time, program constants): [dict get $reportZero static allocations] allocations, [dict get $reportZero static bytes] bytes"
+if {[dict exists [dict get $allocs pass+report 2] coroutines]} {
+    puts "Runner coroutine (pass+report, 2 cases): [dict get [dict get $allocs pass+report 2] coroutines]"
+}
+
+# ---------------------------------------------------------------------------
+puts "\n## Compile time\n"
+
+# A suite of K distinct cases; MIXED: every third is a rejected block.
+proc distinctSuite {k mixed} {
+    set lines {"import compiler" "import test" "" "fn register_bench(n: int):"}
+    if {$k == 0} {
+        lappend lines "    return"
+    }
+    for {set i 0} {$i < $k} {incr i} {
+        lappend lines "    fn body_${i}() errors compiler::CompilerError:" "        static compile:"
+        if {$mixed && $i % 3 == 2} {
+            lappend lines "            missing_$i + n" "    test::rejects(\"t$i\", compiler::DiagnosticCode::Unbound, body_${i})"
+        } else {
+            lappend lines "            n * $i + $i" "    test::value(\"t$i\", 7 * $i + $i, body_${i})"
+        }
+    }
+    lappend lines "" "with context test::suite()" "register_bench(7)" "test::report()" ""
+    return [join $lines \n]
+}
+proc plainProgram {k} {
+    set lines {"fn run_all(n: int):"}
+    set names {}
+    for {set i 0} {$i < $k} {incr i} {
+        lappend lines "    fn body_${i}() -> int:" "        n * $i + $i"
+        lappend names "body_${i}()"
+    }
+    lappend lines "    \[[join $names {, }]\]" "" "run_all(7)" ""
+    return [join $lines \n]
+}
+proc compileStats {text} {
+    set best ""
+    set builds 0
+    for {set i 0} {$i < $::runs} {incr i} {
+        set ::buildCount 0
+        set us [lindex [time {surface::compile $text bench.bot -warnings off}] 0]
+        if {$best eq "" || $us < $best} { set best $us; set builds $::buildCount }
+    }
+    return [list [expr {$best / 1000.0}] $builds]
+}
+rename hir::BuildOnce hir::BuildOnce__bench
+proc hir::BuildOnce {args} {
+    incr ::buildCount
+    tailcall hir::BuildOnce__bench {*}$args
+}
+puts "| K cases | plain functions, no framework | framework, all passing | builds | framework, mixed (1/3 rejected) | builds |"
+puts "|---|---|---|---|---|---|"
+set libOnly [lindex [compileStats [distinctSuite 0 0]] 0]
+foreach k $sizes {
+    lassign [compileStats [plainProgram $k]] plain plainBuilds
+    lassign [compileStats [distinctSuite $k 0]] valid validBuilds
+    lassign [compileStats [distinctSuite $k 1]] mixed mixedBuilds
+    puts [format "| %d | %.1f ms | %.1f ms | %d | %.1f ms | %d |" $k $plain $valid $validBuilds $mixed $mixedBuilds]
+}
+puts [format "\nThe library alone (a suite of no case): %.1f ms." $libOnly]

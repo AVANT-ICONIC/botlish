@@ -1,0 +1,206 @@
+# run.tcl -- runs Botlish golden test suites (GOLDEN-TEST-FRAMEWORK.md).
+#
+#   tclsh9.0 tests/golden/run.tcl [-backends interp,compile,cranelift]
+#                                 [-lib DIR] [-quiet] [-names] [FILE.bot ...]
+#
+# A golden suite is an ordinary Botlish program (tests/golden/*.bot by
+# default) that installs a `test::suite()` context, registers its tests by
+# calling ordinary registration functions, and ends with `test::report()`: its
+# value is the deterministic report, a List of lines ("PASS name", "FAIL name"
+# plus indented "expected:", "actual:", "detail:" lines, then "P passed, F
+# failed"). Nothing here knows tests: this script compiles each program once
+# (warnings off, as the Tcl suite's harness does), runs it on every backend,
+# checks that every backend produced the same report, and prints it.
+#
+# Botlish has no exit-status facility, so the report is interpreted here: the
+# exit status is 1 when any report has a failed test, when a program's
+# compilation or run fails (the runner was aborted: an internal or run-time
+# failure no handler can catch, which is not a test result), or when the
+# backends disagree; else 0.
+#
+# -lib DIR compiles against the library directory DIR instead of lib/ (a
+# private, mutated copy: audit/golden/tools/). -names prints only the test
+# names with their verdicts ("PASS name"/"FAIL name"), one per line, for
+# tools that compare suites, after a "SUITE STATUS STATUS" line (ok,
+# failed, aborted, disagree or compile-error). -quiet prints one summary line
+# per program and backend.
+
+namespace eval golden {}
+set ::golden::here [file dirname [file normalize [info script]]]
+set ::golden::root [file dirname [file dirname $::golden::here]]
+# (A script that sources this file to use its procs -- tests/golden.test --
+# has loaded the front end already: loading it again would reset its state.)
+if {[info commands ::core::evalProgram] eq ""} {
+    source [file join $::golden::root compiler compiler.tcl]
+}
+if {[info commands ::surface::readProgramFile] eq ""} {
+    source [file join $::golden::root surface surface.tcl]
+}
+if {[info commands ::native::evalHir] eq ""} {
+    source [file join $::golden::root native native.tcl]
+}
+
+
+# Compiles the Botlish program at PATH once: {ok HIR SECONDS} or {error
+# MESSAGE SECONDS}.
+proc golden::compile {path} {
+    set start [clock microseconds]
+    if {[catch {surface::readProgramFile $path -warnings off} hir options]} {
+        return [list error "$hir ([dict get $options -errorcode])" \
+            [expr {([clock microseconds] - $start) / 1e6}]]
+    }
+    return [list ok $hir [expr {([clock microseconds] - $start) / 1e6}]]
+}
+
+# Compiles the Botlish program text SOURCE (as file FILENAME) once, like
+# golden::compile.
+proc golden::compileSource {source {filename suite.bot}} {
+    set start [clock microseconds]
+    if {[catch {surface::compile $source $filename -warnings off} hir options]} {
+        return [list error "$hir ([dict get $options -errorcode])" \
+            [expr {([clock microseconds] - $start) / 1e6}]]
+    }
+    return [list ok $hir [expr {([clock microseconds] - $start) / 1e6}]]
+}
+
+# Runs HIR on BACKEND: {lines LINES SECONDS} (the report's lines, a Tcl list)
+# or {abort MESSAGE SECONDS}.
+proc golden::run {hir backend} {
+    set start [clock microseconds]
+    set failed [catch {
+        if {$backend in {cranelift cranelift-generic}} {
+            native::evalHir $hir {*}[expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
+        } else {
+            set saved [core::useBackend]
+            core::useBackend $backend
+            try {
+                core::evalProgram [hir::lower $hir]
+            } finally {
+                core::useBackend $saved
+            }
+        }
+    } value options]
+    set seconds [expr {([clock microseconds] - $start) / 1e6}]
+    if {$failed} {
+        return [list abort "$value ([dict get $options -errorcode])" $seconds]
+    }
+    if {[catch {lmap item [core::value::items $value] {core::value::strOf $item}} lines]} {
+        return [list abort "the program's value is not a report (a List of Strings): [core::value::show $value 1]" $seconds]
+    }
+    return [list lines $lines $seconds]
+}
+
+# The verdict lines ("PASS name" / "FAIL name") of report LINES.
+proc golden::verdicts {lines} {
+    return [lsearch -all -inline -regexp $lines {^(PASS|FAIL) }]
+}
+
+# {PASSED FAILED} from the report's last line, or "" if it has none.
+proc golden::summary {lines} {
+    if {[regexp {^(\d+) passed, (\d+) failed$} [lindex $lines end] -> passed failed]} {
+        return [list $passed $failed]
+    }
+    return ""
+}
+
+# Runs the suite at PATH on BACKENDS. Returns a dict: path, compile {ok|error
+# ...}, outcomes {BACKEND {lines|abort ...}}, status ok|failed|aborted|
+# disagree|compile-error.
+proc golden::suite {path backends} {
+    set result [dict create path $path outcomes {}]
+    set compiled [compile $path]
+    dict set result compile $compiled
+    if {[lindex $compiled 0] ne "ok"} {
+        dict set result status compile-error
+        return $result
+    }
+    set hir [lindex $compiled 1]
+    foreach backend $backends {
+        dict set result outcomes $backend [run $hir $backend]
+    }
+    set status ok
+    set reports [lsort -unique [lmap {b o} [dict get $result outcomes] {lrange $o 0 1}]]
+    foreach {backend outcome} [dict get $result outcomes] {
+        if {[lindex $outcome 0] eq "abort"} {
+            set status aborted
+        } elseif {[summary [lindex $outcome 1]] eq "" || [lindex [summary [lindex $outcome 1]] 1] != 0} {
+            if {$status eq "ok"} { set status failed }
+        }
+    }
+    if {[llength $reports] > 1} {
+        set status disagree
+    }
+    dict set result status $status
+    return $result
+}
+
+proc golden::main {argv} {
+    set backends {interp compile cranelift}
+    set mode report
+    set files {}
+    for {set i 0} {$i < [llength $argv]} {incr i} {
+        set arg [lindex $argv $i]
+        switch -- $arg {
+            -backends { set backends [split [lindex $argv [incr i]] ,] }
+            -lib { set ::core::libraryDir [file normalize [lindex $argv [incr i]]] }
+            -quiet { set mode quiet }
+            -names { set mode names }
+            default { lappend files $arg }
+        }
+    }
+    if {$files eq ""} {
+        set files [lsort [glob -directory $::golden::here *.bot]]
+    }
+    set exit 0
+    foreach path $files {
+        set result [suite $path $backends]
+        set status [dict get $result status]
+        if {$status ne "ok"} { set exit 1 }
+        set name [file tail $path]
+        if {$mode eq "names"} {
+            puts "$name STATUS $status"
+        }
+        if {$status eq "compile-error"} {
+            puts "== $name: COMPILE ERROR [lindex [dict get $result compile] 1]"
+            continue
+        }
+        set compileSeconds [lindex [dict get $result compile] 2]
+        if {$mode eq "quiet"} {
+            foreach {backend outcome} [dict get $result outcomes] {
+                set text [expr {[lindex $outcome 0] eq "abort" ? "ABORTED [lindex $outcome 1]" : [lindex [lindex $outcome 1] end]}]
+                puts [format "%-28s %-10s %s (compile %.2fs, run %.2fs)" $name $backend $text $compileSeconds [lindex $outcome 2]]
+            }
+            if {$status eq "disagree"} { puts "$name: BACKENDS DISAGREE" }
+            continue
+        }
+        set first [lindex [dict get $result outcomes] 1]
+        if {$mode eq "names"} {
+            if {[lindex $first 0] eq "lines"} {
+                foreach line [verdicts [lindex $first 1]] { puts "$name $line" }
+            } else {
+                puts "$name ABORTED"
+            }
+            continue
+        }
+        puts "== $name ([join $backends {, }]; compile [format %.2f $compileSeconds]s)"
+        if {[lindex $first 0] eq "lines"} {
+            puts [join [lindex $first 1] \n]
+        }
+        foreach {backend outcome} [dict get $result outcomes] {
+            if {[lindex $outcome 0] eq "abort"} {
+                puts "ABORTED on $backend: [lindex $outcome 1]"
+            }
+        }
+        if {$status eq "disagree"} {
+            foreach {backend outcome} [dict get $result outcomes] {
+                puts "-- $backend: [lrange $outcome 0 1]"
+            }
+            puts "BACKENDS DISAGREE"
+        }
+    }
+    return $exit
+}
+
+if {[info script] eq $::argv0} {
+    exit [golden::main $argv]
+}

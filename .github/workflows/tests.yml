@@ -109,6 +109,33 @@ jobs:
       - name: Warning gate
         run: tclsh9.0 audit/refactor/tools/gate.tcl
 
+  golden:
+    name: golden suites (Botlish-native tests)
+    # The Botlish golden test suites (tests/golden/*.bot, lib/test.bot,
+    # GOLDEN-TEST-FRAMEWORK.md) on every backend, then the side-by-side
+    # check: every Tcl test tests/golden/manifest.tsv lists as ported, and
+    # the golden test it became, must both pass on this revision. The Tcl
+    # tests stay authoritative; tests/golden.test also runs the suites
+    # inside the ordinary test jobs.
+    runs-on: ubuntu-latest
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Golden suites
+        run: tclsh9.0 tests/golden/run.tcl
+
+      - name: Old and new tests side by side
+        run: tclsh9.0 audit/golden/tools/check.tcl
+
   gc-stress:
     name: tests (native GC-stress)
     # GC-stress forces a GC attempt at every allocation site, which is the

@@ -1,0 +1,93 @@
+# golden.test -- the Botlish golden suites (tests/golden/*.bot,
+# GOLDEN-TEST-FRAMEWORK.md) as part of the Tcl suite: every suite compiles,
+# runs on the backends of this pass, reports no failed test, and reports
+# exactly the tests tests/golden/manifest.tsv lists for it -- so a ported
+# test cannot disappear, or one be added, without the manifest saying so.
+#
+# Backends: the outer pass's own (CORE_BACKEND interp or compile), plus
+# Cranelift in the interp pass, so the two passes of tests/all.tcl cover all
+# three once; native-coverage's cranelift pass runs Cranelift; run directly,
+# the file runs all three. (tests/golden/run.tcl runs every suite on every
+# backend at once, for a quick look.)
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+source [file join $::projectRoot tests golden run.tcl]
+
+interp recursionlimit {} 100000
+
+if {![info exists ::env(CORE_BACKEND)]} {
+    set goldenBackends {interp compile cranelift}
+} elseif {$::env(CORE_BACKEND) eq "interp"} {
+    set goldenBackends {interp cranelift}
+} else {
+    set goldenBackends [list $::env(CORE_BACKEND)]
+}
+
+# The manifest's ported tests: a dict suite file -> the list of its test
+# names, in manifest order.
+proc goldenManifest {} {
+    set path [file join $::projectRoot tests golden manifest.tsv]
+    if {![file exists $path]} {
+        return [dict create]
+    }
+    set channel [open $path]
+    fconfigure $channel -encoding utf-8
+    set lines [split [string trimright [read $channel] \n] \n]
+    close $channel
+    set header [split [lindex $lines 0] \t]
+    set suiteColumn [lsearch -exact $header suite]
+    set testColumn [lsearch -exact $header new_test]
+    set ported [dict create]
+    foreach line [lrange $lines 1 end] {
+        set fields [split $line \t]
+        set suite [lindex $fields $suiteColumn]
+        set name [lindex $fields $testColumn]
+        if {$name eq "-" || $suite eq "-"} continue
+        dict lappend ported $suite $name
+    }
+    return $ported
+}
+
+set goldenPorted [goldenManifest]
+
+foreach path [lsort [glob -directory [file join $::projectRoot tests golden] *.bot]] {
+    set suite [file tail $path]
+    test golden-$suite "the golden suite $suite: compiles once, passes every test on [join $goldenBackends {, }] (the same report on each), and reports exactly the manifest's tests" -body {
+        set result [golden::suite $path $goldenBackends]
+        set status [dict get $result status]
+        if {$status eq "compile-error"} {
+            return "compile error: [lindex [dict get $result compile] 1]"
+        }
+        set problems {}
+        foreach {backend outcome} [dict get $result outcomes] {
+            if {[lindex $outcome 0] eq "abort"} {
+                lappend problems "$backend aborted: [lindex $outcome 1]"
+                continue
+            }
+            foreach line [lindex $outcome 1] {
+                if {[string match "FAIL *" $line] || [string match "  *" $line]} {
+                    lappend problems "$backend: $line"
+                }
+            }
+        }
+        if {$status eq "disagree"} {
+            lappend problems "the backends' reports differ"
+        }
+        set first [lindex [dict get $result outcomes] 1]
+        if {[lindex $first 0] eq "lines"} {
+            set names [lmap line [golden::verdicts [lindex $first 1]] {string range $line 5 end}]
+            set listed [expr {[dict exists $::goldenPorted $suite] ? [dict get $::goldenPorted $suite] : {}}]
+            if {[lsort $names] ne [lsort $listed]} {
+                foreach n $names { if {$n ni $listed} { lappend problems "not in the manifest: $n" } }
+                foreach n $listed { if {$n ni $names} { lappend problems "in the manifest, not reported: $n" } }
+            }
+        }
+        if {$problems eq {}} {
+            return ok
+        }
+        return [join $problems \n]
+    } -result ok
+}
+
+cleanupTests

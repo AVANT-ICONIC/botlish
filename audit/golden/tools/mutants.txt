@@ -1,0 +1,159 @@
+# Mutants of the golden test framework (audit/golden/tools/mutate.tcl;
+# GOLDEN-TEST-FRAMEWORK.md, "Framework mutation results"): each a deliberate
+# bug in lib/test.bot -- the brief's item 54 list, plus a few the framework's
+# own design suggests. Format (as audit/static-compile/tools/mutants.txt):
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# Every mutant must be killed by tests/golden-framework.test (and the golden
+# suites, and the framework fuzzer, which mutate.tcl also runs).
+
+@@ registration-executes registering a case calls its check at once, before storing it
+## lib/test.bot
+<<<<
+    suite.cases.push(TestCase {name: name, run: run})
+====
+    early = run()
+    suite.cases.push(TestCase {name: name, run: run})
+>>>>
+
+@@ registration-drops-one registering the second case of a suite stores nothing
+## lib/test.bot
+<<<<
+    suite.cases.push(TestCase {name: name, run: run})
+====
+    if mutable_vector::length(suite.cases) != 1:
+        suite.cases.push(TestCase {name: name, run: run})
+>>>>
+
+@@ registration-reorders registering a case puts it first, moving the former first case to the end
+## lib/test.bot
+<<<<
+    suite.cases.push(TestCase {name: name, run: run})
+====
+    entry = TestCase {name: name, run: run}
+    if mutable_vector::length(suite.cases) == 0:
+        suite.cases.push(entry)
+    else:
+        displaced = suite.cases.swap(0, entry):
+            on IndexNotFound:
+                entry
+        suite.cases.push(displaced)
+>>>>
+
+@@ runner-skips-last the runner does not run the last registered case
+## lib/test.bot
+<<<<
+    loop c in suite.cases:
+        m = (c.run)()
+====
+    remaining = suite.cases
+    dropped = remaining.pop():
+        on IndexNotFound:
+            return []
+    loop c in remaining:
+        m = (c.run)()
+>>>>
+
+@@ runner-runs-twice the runner calls every check twice, reporting the second result
+## lib/test.bot
+<<<<
+        m = (c.run)()
+====
+        discarded = (c.run)()
+        m = (c.run)()
+>>>>
+
+@@ runner-stops-at-mismatch the runner stops after the first failing case (fail-fast)
+## lib/test.bot
+<<<<
+        yield [TestResult {name: c.name, passed: m.matched, expected: m.expected, actual: m.actual, detail: m.detail}]
+====
+        yield [TestResult {name: c.name, passed: m.matched, expected: m.expected, actual: m.actual, detail: m.detail}]
+        if not m.matched:
+            break
+>>>>
+
+@@ mismatch-marked-passed a result is recorded as passed whatever its check found
+## lib/test.bot
+<<<<
+        yield [TestResult {name: c.name, passed: m.matched, expected: m.expected, actual: m.actual, detail: m.detail}]
+====
+        yield [TestResult {name: c.name, passed: true, expected: m.expected, actual: m.actual, detail: m.detail}]
+>>>>
+
+@@ value-compares-wrong-operand the value matcher compares the expected value with itself
+## lib/test.bot
+<<<<
+    if actual == expected:
+====
+    if expected == expected:
+>>>>
+
+@@ code-matcher-accepts-any the diagnostic-code matcher accepts any code
+## lib/test.bot
+<<<<
+    if code == expected:
+        passed()
+====
+    if code == code:
+        passed()
+>>>>
+
+@@ location-matcher-ignores-column rejects_at compares the code and the line, not the column
+## lib/test.bot
+<<<<
+                if code == expected and primary.line == line and primary.column == column:
+====
+                if code == expected and primary.line == line:
+>>>>
+
+@@ any-rejection-accepts-values rejects_any passes a body that completed normally
+## lib/test.bot
+<<<<
+        mismatch("a compiler diagnostic", "value ".concat(actual.describe()), "")
+====
+        passed()
+>>>>
+
+@@ rejection-passes-value value passes a body whose block was rejected
+## lib/test.bot
+<<<<
+                return mismatch(expected.describe(), code.diagnostic_text(primary), message)
+        expected.equal(actual)
+====
+                return passed()
+        expected.equal(actual)
+>>>>
+
+@@ suite-starts-with-stale-case a new suite already holds a case, as if one leaked from an earlier suite (the library cannot keep a mutable value outside the context: a module binding is immutable)
+## lib/test.bot
+<<<<
+    Suite {cases: mutable_vector::from_list([])}
+====
+    fn stale() -> Match:
+        passed()
+    Suite {cases: mutable_vector::from_list([TestCase {name: "stale", run: stale}])}
+>>>>
+
+@@ summary-miscounts the summary counts every result as passed
+## lib/test.bot
+<<<<
+    Summary {total: total, passed: list::length(passing), failed: total - list::length(passing)}
+====
+    Summary {total: total, passed: total, failed: 0}
+>>>>
+
+@@ int-text-drops-sign a negative Int is shown without its sign
+## lib/test.bot
+<<<<
+        10.glyph().concat((0 - n).digits_from(1))
+====
+        (0 - n).digits_from(1)
+>>>>

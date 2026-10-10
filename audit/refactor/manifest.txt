@@ -128,6 +128,7 @@ program lib/linux.bot
 fails lib/list.bot SURFACE MODULE MISSING-IMPORT -- own-namespace intrinsics: list.bot calls its namespace's intrinsic list::at, which needs no import as module `list` and may not be imported there (SELF-IMPORT), while an entry program needs `import list`; xs.at(i) compiles both ways but is a field projection when instantiated (verified through `import list`)
 program lib/mathish.bot
 fails lib/mutable_array.bot SURFACE MODULE MISSING-IMPORT -- own-namespace intrinsics: mutable_array.bot calls mutable_array::at, as for lib/list.bot (verified through `import mutable_array`)
+fails lib/test.bot CORE SEMANTIC CONTEXT-FUNCTION-VALUE -- entry-program value: as for lib/io.bot, the last declaration (report) requires a context (the test suite), so it cannot be a value (verified through `import test`)
 program lib/web.bot
   ONE-CHAR-STRING-LITERAL 105:47 none -- classifier: local_extra_chars is queried by local_char?(c: str), which also classifies c with str::is_tcl_alnum and is passed to scan_while beside str::is_tcl_alpha (Fn{args: [str]}): a set of characters would need c decoded again
   ONE-CHAR-STRING-LITERAL 105:52 none -- classifier: the set's "_", as above
