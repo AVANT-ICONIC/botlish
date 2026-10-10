@@ -892,8 +892,3 @@ proc hir::static::Owner {sites origin} {
 proc hir::static::sites {hir} {
     return [expr {[dict exists $hir staticSites] ? [dict get $hir staticSites] : {}}]
 }
-
-# 1 if expression E of HIR is the reified failure of a rejected static site.
-proc hir::static::isReified {hir e} {
-    return [dict exists $hir exprs $e static]
-}

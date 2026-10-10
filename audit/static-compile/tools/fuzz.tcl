@@ -19,7 +19,8 @@
 #           a coroutine (affine) started and resumed, method sugar, a List
 #           read past its end at run time (IndexNotFound), an opaque struct
 #           of a private module through its own operations, an `if`/`elif`
-#           chain, a collecting loop, and a nested accepted block
+#           chain, a collecting loop, a nested accepted block, and a
+#           rejected block nested on a branch that never runs
 #   fault   one deliberate semantic error and the diagnostic the model
 #           predicts, with its location: UNBOUND, TYPE (an argument; a
 #           nested function's result), USE-AFTER-MOVE, UNHANDLED-ERROR (a
@@ -169,7 +170,14 @@ fn consume(s: Coroutine{args: [Message], return: Event}, n: int) -> int:
 }
 
 # The model's diagnostic numbers, and the program's code_number() mapping
-# the compiler::DiagnosticCode cases the faults produce to them.
+# the compiler::DiagnosticCode cases the faults produce to them. The case of
+# each kind is written here, as lib/compiler.bot spells it -- never asked of
+# the static implementation's own table (hir::static::codes), so a wrong
+# mapping there is a disagreement.
+set ::codeCases {UNBOUND Unbound TYPE Type USE-AFTER-MOVE UseAfterMove
+    UNHANDLED-ERROR UnhandledError KNOWN-ERROR KnownError
+    OPAQUE-CONSTRUCTION OpaqueConstruction MISSING-IMPORT MissingImport
+    UNKNOWN-FIELD UnknownField DUPLICATE Duplicate}
 set ::codeNumbers {UNBOUND 1 TYPE 2 USE-AFTER-MOVE 3 UNHANDLED-ERROR 4 KNOWN-ERROR 5
     OPAQUE-CONSTRUCTION 6 MISSING-IMPORT 7 UNKNOWN-FIELD 8 DUPLICATE 9}
 
@@ -177,7 +185,7 @@ proc CodeNumberFunction {} {
     set text "fn code_number(c: compiler::DiagnosticCode) -> int:\n"
     set first 1
     foreach {kind n} $::codeNumbers {
-        set case [hir::static::CodeOf $kind]
+        set case [dict get $::codeCases $kind]
         append text "    [expr {$first ? "if" : "elif"}] c == compiler::DiagnosticCode::$case:\n        $n\n"
         set first 0
     }
@@ -193,7 +201,7 @@ proc CodeNumberFunction {} {
 proc Fragment {k fault} {
     set c [expr {[Rand 9] + 1}]
     if {!$fault} {
-        switch -- [Rand 15] {
+        switch -- [Rand 16] {
             0 { return [dict create lines [list "a = x + $c" "a * [expr {$c + 1}]"] \
                     model [list {x c} {list value [expr {($x + $c) * ($c + 1)}]}] c $c] }
             1 { return [dict create lines [list "inc(x) + $c"] model [list {x c} {list value [expr {$x + 1 + $c}]}] c $c] }
@@ -220,6 +228,13 @@ proc Fragment {k fault} {
                     model [list {x c} {list value [expr {3 + $x}]}] c $c] }
             14 { return [dict create lines [list "static compile:" "    x + $c"] \
                     model [list {x c} {list value [expr {$x + $c}]}] c $c] }
+            15 {
+                # A rejected block on a branch that never runs, inside this
+                # accepted one: the diagnostic is the inner block's (the
+                # innermost site holding it), so the outer block runs.
+                return [dict create lines [list "if x > 100000:" "    static compile:" "        x + missing_$k" "x + $c"] \
+                    model [list {x c} {list value [expr {$x + $c}]}] c $c]
+            }
         }
     }
     switch -- [Rand 13] {
@@ -327,9 +342,11 @@ proc Plain {text sites} {
     return [join $lines \n]
 }
 
-# {KIND LINE COLUMN RELATED MESSAGE} of diagnostic D of HIR.
+# {KIND LINE COLUMN RELATED MESSAGE} of diagnostic D of HIR (its location
+# its own `origin`, else its expression's: hir/hir.tcl's diagnostics).
 proc Diagnostic {hir d} {
-    set origin [hir::static::PrimaryOrigin $hir $d]
+    set origin [expr {[dict exists $d origin] ? [dict get $d origin]
+        : [dict get $hir exprs [dict get $d expr] origin]}]
     set related [expr {[dict exists $d related] ? [dict get $d related] : {}}]
     return [list [dict get $d kind] [dict get $origin line] [dict get $origin column] \
         [lmap r $related {list [dict get $r line] [dict get $r column]}] [dict get $d message]]

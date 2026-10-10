@@ -251,7 +251,10 @@ proc hir::static::Accepted {node body position} {
 @@ same-failure-counts-reified SAME-FAILURE counts a rejected block's reified failure as a fail site the programmer wrote
 ## hir/warnings.tcl
 <<<<
-                && [dict get $node name] in $declared && ![dict exists $node static]} {
+        if {[dict exists $node static]} {
+            continue
+        }
+        if {[dict get $node kind] eq "fail" && [dict get $node reachable]
 ====
-                && [dict get $node name] in $declared} {
+        if {[dict get $node kind] eq "fail" && [dict get $node reachable]
 >>>>

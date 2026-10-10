@@ -84,6 +84,21 @@ a rejected block completes with `compiler::CompilerError`, an ordinary
 namespaced declaration, and Botlish has no implicit imports. Without it the
 loader reports `MISSING-IMPORT` at the `static` keyword.
 
+### Where malformed source stops
+
+At the parser, for the whole file. The body of a static block is parsed by
+the program's own parser, so a lexical or grammatical error inside it -- an
+unclosed bracket, a malformed declaration, a declaration that is top-level
+only (`type`, `struct`, `enum`, `error`, `trait`), an `import` -- is the
+enclosing program's syntax error (`{SURFACE SYNTAX ...}`, every one of them
+with `-recover 1`), exactly as in any other block, and no CompilerError
+exists for it (`sc-grammar-body-parse-error`). The import header, likewise,
+is checked before any block is. What `static compile:` recovers is the layer
+after the parser: everything the loader says about a qualified reference in
+the block, and everything resolution and the static checks say about its
+code. A future `static parse:` -- a boundary at the token/parser level --
+would sit below it; the two stay distinct.
+
 ## How it works
 
 `static compile:` is processed after parsing and before resolution, by
@@ -603,32 +618,169 @@ HIR/Core IR/NIR identity tests.
 `sc-diag-exact-*` (15 kinds: unbound, unbound-later, type, result-type,
 unknown-field, duplicate, break-outside, unhandled-fail, undeclared-error,
 flag-unknown, use-after-move, erased-unhandled, missing-import,
-unknown-namespace, not-an-enum): the reified diagnostic equals the ordinary
-compiler's first diagnostic inside the block written as `if true:` (kind,
-line, column, related, message); and the fuzzer for every fault.
+unknown-namespace, not-an-enum): the ordinary compiler's first diagnostic
+inside the block written as `if true:` (kind, line, column, related,
+message) equals both the diagnostic the site recorded and the
+`compiler::CompilerError` the block fails with on every backend -- code,
+primary, related and message as a handler reads them, the code's case
+spelled by the test itself (`scPayloadOf`), never asked of
+`hir::static::codes`. The fuzzer does the same for every fault: its model
+predicts kind, line and column, and its program's `code_number` names each
+case literally.
 
 ### 50. Fuzz results
 
 `audit/static-compile/tools/fuzz.tcl` (its header has the design):
-FUZZRESULTS
+a model-based generator: each program has 3..8 sites, a function per
+site whose body is one `static compile:` block (its last statement, or one
+time in three the value of a binding it returns), each block a valid
+fragment or a deliberate fault, and a driver per site that calls it under
+handlers for `compiler::CompilerError` and the program's application
+errors. The model shares nothing with the compiler: it predicts a valid
+fragment's value or application error and a fault's kind, line and column,
+and every backend (interp, compile, Cranelift) must produce exactly that.
+Beside the model, every program is checked twice more: its valid sites
+written as ordinary `if true:` blocks must give the same values
+(transparency), and every rejected site's recorded diagnostic must equal
+the ordinary compiler's first diagnostic in that block (exact diagnostics).
+
+Final campaign (seeds 1, 41 and 81, 40 programs each, and seed 121, 20
+programs, with `-gc-stress 1`):
+
+| | |
+|---|---|
+| programs | 140 |
+| sites | 747 |
+| accepted | 459 (23 of them holding a rejected nested block) |
+| rejected | 288: TYPE 54, UNHANDLED-ERROR 50, UNBOUND 46, DUPLICATE 27, MISSING-IMPORT 26, OPAQUE-CONSTRUCTION 26, KNOWN-ERROR 22, USE-AFTER-MOVE 20, UNKNOWN-FIELD 17 |
+| transparent valid sites | 459 |
+| exact diagnostics | 288 |
+| decision builds | 345 (2.5 per program) |
+| disagreements | **0** |
+
+The first campaign's two disagreements were the model's: it placed a
+nested function's result TYPE one column early (the compiler reports a
+function's result at the `(` of its literal, as for every function). The
+model was corrected; the compiler was right. The mutation campaign then
+showed the generator's one blind spot -- a rejected nested block whose
+failure escapes looks the same whichever block owns the diagnostic -- so a
+fragment now nests a rejected block on a branch that never runs, which only
+the innermost owner lets the outer block survive (`outermost-owner` is now
+killed by the fuzzer too).
 
 ### 51. Mutation results
 
 `audit/static-compile/tools/mutate.tcl`, the 21 mutants of
 `mutants.txt` -- every one of item 82's list:
-MUTATIONRESULTS
+**21 mutants, 21 killed, 0 survived** (final tree; each mutant against
+`tests/static-compile.test` and 12 fuzz programs, seed 3). The detectors
+that caught each:
+
+| mutant | tests failing | fuzz |
+|---|---|---|
+| `body-resolved-normally` | 60 | 12 of 12 programs disagree |
+| `error-escapes-fatal` | 50 | 12 of 12 |
+| `loader-error-escapes` | 3 | -- |
+| `wrong-code` | 27 | 11 of 12 |
+| `loses-primary` | 27 | 11 of 12 |
+| `loses-related` | 3 | -- |
+| `string-not-error` | 44 | 11 of 12 |
+| `success-returns-unit` | 25 | 12 of 12 |
+| `runtime-errors-wrapped` | 4 | 7 of 12 |
+| `keeps-runtime-wrapper` | 14 | 8 of 12 |
+| `executes-prefix` | 12 | 5 of 12 |
+| `leaks-binding` | 2 | 8 of 12 |
+| `leaks-declaration` | 4 | -- |
+| `leaks-affine-move` | 1 | -- |
+| `outermost-owner` | 2 | 3 of 12 |
+| `known-error-rejects-reified` | 34 | 11 of 12 |
+| `known-error-disabled` | 2 | 1 of 12 |
+| `warning-becomes-error` | 9 | 10 of 12 |
+| `internal-becomes-compiler-error` | 1 | -- |
+| `internal-diagnostic-reified` | 1 | -- |
+| `same-failure-counts-reified` | 1 | -- |
+
+The fuzzer misses what its generator never builds: loader faults are 1 in
+13 fault fragments (12 programs may hold none), its model encodes no
+related locations, no fragment declares a function a later block could
+call, no two failing blocks share an affine value, and nothing in it fails
+inside the compiler. Each of those has its own test. The first campaign
+killed 20 of 21: `same-failure-counts-reified` survived, because the rule
+it breaks is also implied end to end by SAME-FAILURE's conservative payload
+rule (item 59); `sc-same-failure-sites` now pins the rule where the warning
+reads it.
 
 ### 52. Full regression
 
-REGRESSIONRESULTS
+The whole suite (`tests/all.tcl`, 165 files, each run with a private
+`-tmpdir`) on the final tree, with every brief-named area in it (errors,
+error-payloads, namespaced-errors, higher-order-completions, affine,
+coroutines, opaque-struct, contexts, traits, refinements, struct
+destructuring, method sugar, imports, semantic instances, HIR round trips,
+the warning gate):
+
+| backend | total | passed | skipped | failed |
+|---|---|---|---|---|
+| `CORE_BACKEND=interp` | 7120 | 7120 | 0 | 0 |
+| `CORE_BACKEND=compile` | 7120 | 7116 | 4 | 0 |
+
+(The four skips are the suite's `coreScoping` constraint on the Tcl
+compiler, as before this milestone.) The warning gate
+(`audit/refactor/tools/gate.tcl`) passes with `lib/compiler.bot` listed in
+the manifest, warning-clean.
+
+The campaigns of the phases this milestone touched (AGENTS.md), on the final
+tree:
+
+| campaign | result |
+|---|---|
+| `audit/same-failure/tools/fuzz.tcl` | 300 seeds, 0 failures, 0 extra warnings |
+| `audit/same-failure/tools/mutate.tcl` | 15 mutants, 15 killed (three mutant texts needed the `FailSites` skip on its own lines; the condition they mutate is unchanged) |
+| `audit/error-payloads/tools/fuzz.tcl` | seeds 1, 2; seed 3 with `-gc-stress 1`; `-fault unhandled`; `-fault wrong-namespace`: 40 programs each, 0 disagreements |
+| `audit/error-payloads/tools/mutate.tcl` | 44 mutants, 44 killed |
+| `audit/affine/tools/fuzz.tcl` | seeds 1, 2: 30 programs each, 0 disagreements |
+| `audit/enums/tools/mutate.tcl -only cross-enum-parameter` | killed (its text follows `IsFn` -> `IsCallable`) |
+CAMPAIGNROWS
 
 ### 53. GC stress
 
-GCRESULTS
+With `BOTLISH_NATIVE_GC_STRESS=1` (a collection attempt at every allocation
+site), on the final tree:
+
+* `tests/static-compile.test`: **83 of 83 pass** -- among them
+  `sc-gc-stress`, which forces stress itself and runs on Cranelift: a
+  rejected block's CompilerError read whole (message String, related List,
+  nested SourceLocation structs); an accepted block's run-time
+  IndexNotFound; and a program whose handler for a rejected block's
+  CompilerError first runs an accepted block that starts and resumes a
+  coroutine (an affine value), then reads the payload's related List and
+  message String, five times over, the results kept in a List (63
+  collections; every coroutine released, none swept);
+* the fuzzer with `-gc-stress 1` (seed 121, 20 programs, 102 sites):
+  0 disagreements (above);
+* `audit/error-payloads/tools/fuzz.tcl -seed 3 -gc-stress 1`: 40 programs,
+  0 disagreements.
+
+A rejected block's payload is an ordinary declared error's: it travels
+field-wise in the Vm's payload slots, which the collector roots, and the
+handler's binding is an ordinary value.
 
 ### 54. Native coverage
 
-NATIVECOVERAGE
+`tests/native-coverage.tcl` (the whole suite on Cranelift, classified), on
+the final tree:
+
+| class | tests |
+|---|---|
+| native | 2873 |
+| independent | 4118 |
+| passed-partial | 69 |
+| unsupported | 60 |
+| failed | 0 |
+
+Every `static-compile.test` test passes on Cranelift; the 60 unsupported
+tests are the suite's existing ones (test-only natives such as `test-log`,
+sequence mode, a validator contract), none of them a static block.
 
 ### 55. Scalar / codegen audit
 
@@ -636,7 +788,12 @@ Item 45's NIR identity is the scalar audit for accepted blocks (no branch,
 allocation, check, wrapper or indirect call). The one native lowering change
 (`PureDecidedCondition` accepting a root Boolean reference) removes a dead
 `bool` constant from every `if true:`/`if false:` (and every accepted block
-whose body binds a name); SCALARAUDIT
+whose body binds a name). The scalar machine-code corpus
+(`native/generate-scalar-audit.tcl`, regenerated into a private directory:
+13 programs, 178 functions, 72887 bytes of machine code) is byte-identical to
+the committed `audit/native-scalar-asm/` -- every `.asm` and `.vcode` file;
+only the README's revision lines differ -- so no shipped program's code
+changed.
 
 ### 56. Compile-time performance
 
@@ -658,7 +815,14 @@ preceding rejected blocks.
 A reified failure is not a fail site the programmer wrote: `hir::warnings::
 FailSites` skips `fail` nodes with the `static` mark, so blocks rejected for
 the same diagnostic never group (`sc-same-failure`). Ordinary `fail` sites
-are unchanged. The reified message is a String constant the frontend
+are unchanged. End to end the rule is also implied by the warning's
+conservative payload rule -- a reified payload is a struct construction,
+which `hir::exact::Identity` never proves identical to another, so it could
+not group even unmarked -- which is why the first mutation campaign's
+`same-failure-counts-reified` survived: the rule is now pinned where the
+warning reads it (`sc-same-failure-sites`: of a function's two `fail` nodes,
+one written and one reified, only the written one is a fail site), so it
+holds if SAME-FAILURE ever learns struct identity. The reified message is a String constant the frontend
 synthesizes; it is enumerated by `oc-synthesized-string-consts-enumerated`
 and never one character long, so ONE-CHAR-STRING-LITERAL needs no rule.
 

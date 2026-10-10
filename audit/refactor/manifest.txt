@@ -120,6 +120,7 @@ program bench/uri-steady.bot
 program lib/abi.bot
 program lib/ascii.bot
 program lib/byte.bot
+program lib/compiler.bot
 fails lib/io.bot CORE SEMANTIC CONTEXT-FUNCTION-VALUE -- entry-program value: compiled as an entry program, a module's last declaration is the program's value, and io's last function requires a context, so it cannot be a value; no module member could end the file without adding to its API (verified through `import io`)
   ONE-CHAR-STRING-LITERAL 59:31 none -- char->text: print_line appends the newline to TEXT as text, so its one write request carries it
   ONE-CHAR-STRING-LITERAL 67:37 none -- char->text: write_error_line's newline, as above

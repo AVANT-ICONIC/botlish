@@ -149,6 +149,27 @@ proc scReified {source} {
     return $got
 }
 
+# The outcome scProbe's program has when its block is rejected with the
+# diagnostic D ({KIND LINE COLUMN RELATED MESSAGE}, an ordinary compiler's):
+# the CompilerError's fields as the handler lists them. The case of each kind
+# is written here, as lib/compiler.bot spells it -- never asked of the static
+# implementation's table (item 81).
+proc scPayloadOf {d} {
+    lassign $d kind line column related message
+    set case [dict get {
+        UNBOUND Unbound TYPE Type UNKNOWN-FIELD UnknownField DUPLICATE Duplicate
+        BREAK-OUTSIDE-LOOP BreakOutsideLoop UNHANDLED-ERROR UnhandledError
+        UNDECLARED-ERROR UndeclaredError UNKNOWN-FLAG UnknownFlag USE-AFTER-MOVE UseAfterMove
+        MISSING-IMPORT MissingImport UNKNOWN-NAMESPACE UnknownNamespace NOT-AN-ENUM NotAnEnum
+    } $kind]
+    set locations [lmap r $related {
+        lassign $r l c
+        string cat "compiler::SourceLocation \{line: $l, column: $c\}"
+    }]
+    set text [string map [list \\ \\\\ \" \\\" \n \\n \t \\t] $message]
+    return [list value "\[compiler::DiagnosticCode::$case, $line, $column, \[[join $locations {, }]\], \"$text\"\]"]
+}
+
 proc scBefore {a b} {
     lassign $a l1 c1
     lassign $b l2 c2
@@ -318,6 +339,15 @@ test sc-success-declared-error {item 17: a declared application error raised by 
     scAgree "error MyApplicationError:\n    code: int\n\nfn f(x: int) -> int errors MyApplicationError, compiler::CompilerError:\n    static compile:\n        if x > 1:\n            fail MyApplicationError \{code: x\}\n        x\n\nfn probe(x: int):\n    r = f(x):\n        on MyApplicationError \{code\}:\n            code * 100\n        on compiler::CompilerError:\n            -1\n    r\n\n\[probe(1), probe(7)\]\n"
 } -result {value {[1, 700]}}
 
+test sc-control-flow {an accepted block is the ordinary block where it stands: `continue` and `break` reach the enclosing loop, `return` returns from the enclosing function} -body {
+    scAgree "import list\n\nfn f(n: int) -> int errors compiler::CompilerError:\n    total = loop i from 0 to n:\n        static compile:\n            if i == 2:\n                continue\n            if i == 4:\n                break\n            i * 10\n    static compile:\n        return 7 + list::length(total)\n\nr = f(9):\n    on compiler::CompilerError:\n        -1\nr\n"
+} -result {value 10}
+
+test sc-trait-program {a block in a trait program is decided by the checked build and runs in the monomorphized one: an operation of the trait is accepted, an operation it does not declare is TraitUnknownOperation} -body {
+    set text "trait Shape:\n    fn area(self: Shape) -> int\n\nstruct Square:\n    side: int\n\nfn area(s: Square) -> int:\n    s.side * s.side\n\nfn describe(s: Shape) -> int errors compiler::CompilerError:\n    static compile:\n        s.area() + 1\n\nfn bad(s: Shape) -> int errors compiler::CompilerError:\n    static compile:\n        s.perimeter()\n\nr = describe(Square \{side: 3\}):\n    on compiler::CompilerError:\n        -1\nr2 = bad(Square \{side: 3\}):\n    on compiler::CompilerError \{code\}:\n        if code == compiler::DiagnosticCode::TraitUnknownOperation:\n            -2\n        else:\n            -3\n\[r, r2\]\n"
+    list [scSites $text] [scAgree $text]
+} -cleanup {unset -nocomplain text} -result {{accepted {rejected TRAIT-UNKNOWN-OPERATION 17 11}} {value {[10, -2]}}}
+
 test sc-independent-sites {item 60, 71: accepted, rejected, accepted, rejected, accepted blocks in one program all compile into it, each with its own outcome} -body {
     set text "fn needs_int(v: int) -> int:\n    v\n\n"
     append text "fn s1() -> int errors compiler::CompilerError:\n    static compile:\n        1\n\n"
@@ -483,6 +513,29 @@ test sc-same-failure {item 96: blocks rejected for the same diagnostic in one fu
     lmap w [hir::warnings::collect $hir] {dict get $w code}
 } -cleanup {unset -nocomplain hir} -result {}
 
+# End to end the rule above cannot be told apart from the conservative payload
+# rule (a reified payload is a struct construction, never proven identical to
+# another: WARNINGS-SAME-FAILURE.md), so the provenance rule itself is pinned
+# where the warning reads it: a reified fail is never one of its fail sites,
+# while a `fail` of the same error the programmer wrote beside it is.
+test sc-same-failure-sites {items 96, 97: SAME-FAILURE's fail sites are the fail nodes the programmer wrote, never a rejected block's reified fail} -body {
+    set hir [surface::compile [scProgram "fn f(x: int) -> int errors compiler::CompilerError:\n    if x > 0:\n        fail compiler::CompilerError {code: compiler::DiagnosticCode::Unbound, primary: compiler::SourceLocation {line: 1, column: 1}, related: \[\], message: \"m\"}\n    static compile:\n        missing\n\nfn g(x: int) -> int:\n    r = f(x):\n        on compiler::CompilerError:\n            0\n    r\n\ng(1)\n"] -warnings off]
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "block" && [dict exists $node declaredErrors]
+                && [dict get $node declaredErrors] ne {}} {
+            set block $e
+        }
+    }
+    set fails [lmap e [hir::warnings::BodyExprs $hir $block] {
+        set node [dict get $hir exprs $e]
+        expr {[dict get $node kind] eq "fail" ? [dict exists $node static] : [continue]}
+    }]
+    set sites [lmap site [hir::warnings::FailSites $hir $block] {
+        dict exists $hir exprs [lindex $site 0] static
+    }]
+    list $fails $sites
+} -cleanup {unset -nocomplain hir e node block fails sites} -result {{0 1} 0}
+
 # ---------------------------------------------------------------------------
 # Warnings (items 27, 28)
 
@@ -635,10 +688,12 @@ foreach {name prelude body} [list \
     unknown-namespace "" "nosuch::f()" \
     not-an-enum "" "bool::Yes" \
 ] {
-    test sc-diag-exact-$name "items 50, 81: the reified diagnostic ($name) is the ordinary compiler's first diagnostic in the block written as an ordinary block: kind, primary location, related locations, message" -body {
-        lassign [scDifferential [scProbe $body $prelude]] ordinary static
-        list [expr {$ordinary ne ""}] [expr {$ordinary eq $static}] [lindex $static 0]
-    } -result [list 1 1 [dict get {
+    test sc-diag-exact-$name "items 50, 81: the reified diagnostic ($name) is the ordinary compiler's first diagnostic in the block written as an ordinary block: kind, primary location, related locations, message -- the one recorded, and the CompilerError the block fails with on every backend" -body {
+        set program [scProbe $body $prelude]
+        lassign [scDifferential $program] ordinary static
+        list [expr {$ordinary ne ""}] [expr {$ordinary eq $static}] \
+            [expr {[scAgree $program] eq [scPayloadOf $ordinary]}] [lindex $static 0]
+    } -result [list 1 1 1 [dict get {
         unbound UNBOUND unbound-later UNBOUND type TYPE result-type TYPE unknown-field UNKNOWN-FIELD
         duplicate DUPLICATE break-outside BREAK-OUTSIDE-LOOP unhandled-fail UNHANDLED-ERROR
         undeclared-error UNDECLARED-ERROR flag-unknown UNKNOWN-FLAG use-after-move USE-AFTER-MOVE
@@ -816,6 +871,15 @@ test sc-gc-stress {item 84: a rejected block's payload (message String, related 
                 "import list\n\nfn at(xs: List\[str\], i: int) -> str errors IndexNotFound:\n    static compile:\n        list::at(xs, i)\n\nfn probe(i: int) -> str:\n    r = at(\[\"a\", \"b\"\], i):\n        on IndexNotFound:\n            \"none\"\n    r\n\nprobe(9)\n"] {
             lappend results [lrange [outcomeUnderHir cranelift [scHir $text]] 0 1]
         }
+        # Payloads read after allocating: a rejected block's CompilerError
+        # handled, an accepted block that starts and resumes a coroutine run
+        # in its handler, then its related List and message String read,
+        # five times, the results kept in a List; every coroutine released.
+        set hir [scHir "import list\nimport str\n${::scAffineDecls}fn bad(k: int) -> List\[int\] errors compiler::CompilerError:\n    if k > 0:\n        static compile:\n            coroutine \{step\} = worker(k)\n            consume(step, 1)\n            consume(step, 2)\n    \[k\]\n\nfn good(k: int) -> int:\n    static compile:\n        coroutine \{step, first\} = worker(k)\n        first.value + consume(step, k)\n\nfn probe(i: int) -> List\[int\]:\n    r = bad(i):\n        on compiler::CompilerError \{code, primary, related, message\}:\n            g = good(i)\n            rel = loop l in related:\n                l.line * 1000 + l.column\n            first = list::at(rel, 0):\n                on IndexNotFound:\n                    -1\n            \[g, primary.line * 1000 + primary.column, first, str::length(message)\]\n    r\n\nloop i from 1 to 6:\n    probe(i)\n"]
+        lappend results [lrange [outcomeUnderHir cranelift $hir] 0 1]
+        set c [dict get [native::allocationReport $hir summary] coroutines]
+        lappend results [expr {[dict get $c released] == [dict get $c stacksMapped] + [dict get $c stacksReused]
+            && [dict get $c released] == 5 && [dict get $c sweptSuspended] == 0}]
         set results
     } finally {
         if {$saved eq ""} {
@@ -824,7 +888,7 @@ test sc-gc-stress {item 84: a rejected block's payload (message String, related 
             set ::env(BOTLISH_NATIVE_GC_STRESS) $saved
         }
     }
-} -cleanup {unset -nocomplain saved results text} -result {{value {[compiler::DiagnosticCode::UseAfterMove, 25, 17, [compiler::SourceLocation {line: 24, column: 17}], "`step` was used after its coroutine value was moved\n\nmoved here:\n    step passed to consume  (<input>:24:17)\n\nused here:\n    <input>:25:17"]}} {value {"none"}}}
+} -cleanup {unset -nocomplain saved results text hir c} -result {{value {[compiler::DiagnosticCode::UseAfterMove, 25, 17, [compiler::SourceLocation {line: 24, column: 17}], "`step` was used after its coroutine value was moved\n\nmoved here:\n    step passed to consume  (<input>:24:17)\n\nused here:\n    <input>:25:17"]}} {value {"none"}} {value {[[2, 28021, 27021, 138], [4, 28021, 27021, 138], [6, 28021, 27021, 138], [8, 28021, 27021, 138], [10, 28021, 27021, 138]]}} 1}
 
 test sc-rounds {item 87: the decisions cost one build when every block is accepted, and independent rejected blocks are decided together} -body {
     set text "fn needs_int(v: int) -> int:\n    v\n\n"

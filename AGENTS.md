@@ -748,7 +748,9 @@ is listed with the reason it never is. Adding a diagnostic kind anywhere in
 `hir/` or `surface/modules.tcl` therefore means classifying it there (and, if
 recoverable, adding its case to both). A diagnostic with further locations
 records them as `related` origins (`hir::Diagnose`'s last argument), never only
-in its message text.
+in its message text. The tests' and the fuzzer's expectations spell their
+`DiagnosticCode` cases themselves (`scPayloadOf`, the fuzzer's `codeCases`):
+never derive an expected code from `hir::static::codes` or `CodeOf`.
 
 If you change the static grammar, `hir/static.tcl`, the loader's deferral of a
 block's qualified references (`surface/modules.tcl`), how `fail` resolves or

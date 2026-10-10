@@ -1137,11 +1137,14 @@ proc hir::warnings::FailSites {hir block} {
     set sites {}
     foreach e [BodyExprs $hir $block] {
         set node [dict get $hir exprs $e]
+        # A rejected static block's reified failure is the compiler's report
+        # of a diagnostic, not an exit the programmer wrote
+        # (STATIC-COMPILE.md): never a fail site of this warning.
+        if {[dict exists $node static]} {
+            continue
+        }
         if {[dict get $node kind] eq "fail" && [dict get $node reachable]
-                && [dict get $node name] in $declared && ![dict exists $node static]} {
-            # (A rejected static block's reified failure is the compiler's
-            # report of a diagnostic, not an exit the programmer wrote:
-            # STATIC-COMPILE.md. It is never a fail site of this warning.)
+                && [dict get $node name] in $declared} {
             lappend sites [list $e [dict get $node name]]
             if {[dict exists $node value] && [dict get $node value] ne ""} {
                 set identity [hir::exact::Identity $hir [dict get $node value]]
