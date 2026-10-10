@@ -68,6 +68,16 @@ test::report()
   `test::rejects`). A mistake in one test's code is then that test's
   failure, not a suite that does not build.
 * The suite ends with `test::report()`: the program's value is the report.
+* **Compile cost of rejected blocks.** The compiler decides `static
+  compile:` blocks in rounds of whole-program builds, and decides rejected
+  blocks together only when they are in different top-level units that do
+  not reach each other: rejected blocks nested in one function are decided
+  one build at a time (13 of them in one registration function: 9 builds,
+  ~20 s; one per top-level unit: 4 builds, ~5 s). A body that does not
+  capture anything can be a top-level function of its own (the
+  registration function only names it); one that captures an input of its
+  registration function stays nested -- give such tests a registration
+  function each when a suite has many rejections.
 
 ## Helpers
 

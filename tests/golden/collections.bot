@@ -1,0 +1,718 @@
+# collections.bot -- collection, string, struct, method and enum tests
+# (manifest: category collections): Lists and the list library, strings and
+# Unicode characters, structs and destructuring, method sugar, enums,
+# immutable sets, mutable vectors and arrays used as values, and flags.
+import char
+import compiler
+import coroutine
+import immutable_set
+import list
+import mutable_array
+import mutable_vector
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only). Each keeps the Tcl test's own
+# name when no other test here declares that name.
+
+# structs.test: struct-error-unknown-field.
+struct Person:
+    name: str
+    age: int
+
+# struct-destructuring.test: the destructuring theorem's Rec (renamed: the
+# evaluate-once tests declare a three-field Rec).
+struct DestructRec:
+    a: int
+    b: str
+    c: int
+    d: int
+
+# struct-destructuring.test: the evaluate-once tests' Rec.
+struct OnceRec:
+    a: int
+    b: str
+    c: int
+
+# enums.test: the shared VehicleType, and the Other enum of enum-equality
+# (enum-immutable-set's Other declares only Car: one declaration, {Car,
+# Boat} in that order, serves both).
+enum VehicleType:
+    Boat,
+    Car,
+    Truck,
+    Tank,
+    Tractor,
+    Airplane,
+
+enum Other:
+    Car,
+    Boat,
+
+# enums.test: enum-wrong-enum-call-result-field.
+enum A:
+    Same,
+
+enum B:
+    Same,
+
+struct S:
+    a: A
+
+# mutable-vector.test: the affine declarations (mvDecls) mv-affine-at uses.
+struct Command:
+    value: int
+
+struct Event:
+    value: int
+
+fn worker(seed: int, resume Command) -> Event:
+    command = yield Event {value: seed}
+    return Event {value: command.value + seed}
+
+fn make(seed: int) -> Coroutine{args: [Command], return: Event}:
+    coroutine {step} = worker(seed)
+    step
+
+fn empty_queue() -> MutableVector[Coroutine{args: [Command], return: Event}]:
+    mutable_vector::from_list([])
+
+struct Sched:
+    queue: MutableVector[Coroutine{args: [Command], return: Event}]
+
+# mutable-array.test: ma-cow-extraction's Box.
+struct Box:
+    data: MutableArray[int]
+    n: int
+
+# ---------------------------------------------------------------------------
+# Custom checks: a rejection's code, location and message. lib/test.bot
+# compares codes and locations only; the Tcl tests below that are about a
+# diagnostic's wording compare its message too (test::case: the library has
+# no message helper). BODY is an untyped parameter, as in the library's own
+# helpers, so one registration helper serves every body.
+
+# TEXT starts with HEAD and ends with TAIL, the two not overlapping. (A
+# substring past either end is an empty piece: no match.)
+fn col_framed?(text: str, head: str, tail: str) -> bool:
+    n = str::length(text)
+    h = str::length(head)
+    t = str::length(tail)
+    first = text.substring(0, h):
+        on LowerUnderrun:
+            ""
+        on UpperOverrun:
+            ""
+    last = text.substring(n - t, n):
+        on LowerUnderrun:
+            ""
+        on UpperOverrun:
+            ""
+    h + t <= n and first == head and last == tail
+
+# BODY's block must be rejected with EXPECTED at LINE:COLUMN, its message
+# exactly HEAD (TAIL empty), or HEAD, an elided part and TAIL: the elided
+# part is what a suite cannot pin, the HIR id in a shown callable type.
+nomethod fn col_rejects_message(name: str, expected: compiler::DiagnosticCode, line: int, column: int, head: str, tail: str, body, context suite: test::Suite) -> unit:
+    fn check() -> test::Match:
+        place = compiler::SourceLocation {line: line, column: column}
+        wanted = if tail == "":
+            head
+        else:
+            head.concat("...").concat(tail)
+        shown = expected.diagnostic_text(place).concat(", message: ").concat(wanted)
+        actual = body():
+            on compiler::CompilerError {code, primary, message}:
+                same = if tail == "":
+                    message == head
+                else:
+                    message.col_framed?(head, tail)
+                if code == expected and primary.line == line and primary.column == column and same:
+                    return test::passed()
+                return test::mismatch(shown, code.diagnostic_text(primary), message)
+        test::mismatch(shown, "value ".concat(test::describe(actual)), "")
+    test::case(name, check)
+
+# ---------------------------------------------------------------------------
+# lists.test
+
+fn register_lists_tests(index: int):
+    # lists-4: list::at's failure is the declared IndexNotFound, which a
+    # handler catches (INDEX is 2: past the end of [1, 2]).
+    fn b_lists_4() errors compiler::CompilerError:
+        static compile:
+            fn at_or_missing(xs, i):
+                r = list::at(xs, i):
+                    on IndexNotFound:
+                        return "missing"
+                r
+            at_or_missing([1, 2], index)
+    test::value("lists-4", "missing", b_lists_4)
+
+# ---------------------------------------------------------------------------
+# list-stdlib.test
+
+# list-find-short-circuits: find stops at the first match; the poison
+# element (mod of a String) is never reached.
+fn b_find_short_circuits() errors compiler::CompilerError:
+    static compile:
+        fn is_even(x):
+            mod(x, 2) == 0
+        f = list::find([6, "poison"], is_even):
+            on list::NotFound:
+                -1
+        f
+
+fn register_list_stdlib_tests():
+    test::value("list-find-short-circuits", 6, b_find_short_circuits)
+
+# ---------------------------------------------------------------------------
+# stdlib-namespaces.test
+
+# ns-slice-rule-substring: START against 0..N first, then END against
+# START..N; BigInts included; indices count Unicode scalars.
+fn b_slice_rule() errors compiler::CompilerError:
+    static compile:
+        fn slice_of(s, a, b):
+            v = str::substring(s, a, b):
+                on LowerUnderrun:
+                    return "lower"
+                on UpperOverrun:
+                    return "upper"
+            v
+        [slice_of("abc", -1, 2), slice_of("abc", 4, 4), slice_of("abc", 2, 1), slice_of("abc", 1, 4), slice_of("abc", -1, 9), slice_of("abc", 4, 1), slice_of("abc", 3, 3), slice_of("abc", 0, 3), slice_of("abc", 1, 100000000000000000000), slice_of("abc", -100000000000000000000, 1), slice_of("ä😀b", 1, 2)]
+
+# ns-proof-literal-out-of-range: a provably missing index is KNOWN-ERROR,
+# with a handler or without.
+fn b_literal_past_end() errors compiler::CompilerError:
+    static compile:
+        list::at([1, 2, 3], 3)
+
+fn b_literal_empty() errors compiler::CompilerError:
+    static compile:
+        list::at([], 0)
+
+fn b_literal_handled() errors compiler::CompilerError:
+    static compile:
+        r = list::at([1], -1):
+            on IndexNotFound:
+                0
+        r
+
+fn register_stdlib_namespaces_tests():
+    test::value("ns-slice-rule-substring", ["lower", "upper", "lower", "upper", "lower", "upper", "", "abc", "upper", "lower", "😀"], b_slice_rule)
+
+    test::rejects("ns-proof-literal-out-of-range/past-end", compiler::DiagnosticCode::KnownError, b_literal_past_end)
+    test::rejects("ns-proof-literal-out-of-range/empty", compiler::DiagnosticCode::KnownError, b_literal_empty)
+    test::rejects("ns-proof-literal-out-of-range/handled", compiler::DiagnosticCode::KnownError, b_literal_handled)
+
+# ---------------------------------------------------------------------------
+# structs.test
+
+# struct-error-unknown-field: located at the field the struct lacks.
+fn b_unknown_field() errors compiler::CompilerError:
+    static compile:
+        p = Person {name: "Ada", age: 1, height: 3}
+
+# struct-projection-instance-invalid-call: the instance's missing field
+# is a TYPE error at the call.
+fn b_instance_invalid_call() errors compiler::CompilerError:
+    static compile:
+        fn first(x):
+            x.value
+        first({other: 1})
+
+fn register_structs_tests():
+    test::rejects_at("struct-error-unknown-field", compiler::DiagnosticCode::UnknownField, 216, 42, b_unknown_field)
+
+    test::rejects_at("struct-projection-instance-invalid-call", compiler::DiagnosticCode::Type, 224, 9, b_instance_invalid_call)
+
+# ---------------------------------------------------------------------------
+# struct-destructuring.test
+
+# destructure-basic-named-names-swapped: {a: b, b: a} reads field a into
+# b and field b into a, exactly as the explicit spelling does.
+fn b_swapped_destructured() errors compiler::CompilerError:
+    static compile:
+        {a: b, b: a} = DestructRec {a: 1, b: "x", c: 3, d: 4}
+        [a, b]
+
+fn b_swapped_explicit() errors compiler::CompilerError:
+    static compile:
+        tmp = DestructRec {a: 1, b: "x", c: 3, d: 4}
+        b = tmp.a
+        a = tmp.b
+        [a, b]
+
+# destructure-once-nested-once: a nested destructure evaluates its source
+# once. The source is a generator: every evaluation takes its next value,
+# so a second evaluation would change the fields and the value after.
+fn b_nested_once_destructured() errors compiler::CompilerError:
+    static compile:
+        fn sources():
+            yield {u: OnceRec {a: 0, b: "w", c: 0}, w: 0}
+            yield {u: OnceRec {a: 1, b: "x", c: 3}, w: 7}
+            yield {u: OnceRec {a: 10, b: "y", c: 30}, w: 70}
+            yield {u: OnceRec {a: 100, b: "z", c: 300}, w: 700}
+            {u: OnceRec {a: 1000, b: "v", c: 3000}, w: 7000}
+        coroutine {step} = sources()
+        {u: {a, c}, w} = step()
+        after = step()
+        [a, c, w, after.w]
+
+fn b_nested_once_explicit() errors compiler::CompilerError:
+    static compile:
+        fn sources():
+            yield {u: OnceRec {a: 0, b: "w", c: 0}, w: 0}
+            yield {u: OnceRec {a: 1, b: "x", c: 3}, w: 7}
+            yield {u: OnceRec {a: 10, b: "y", c: 30}, w: 70}
+            yield {u: OnceRec {a: 100, b: "z", c: 300}, w: 700}
+            {u: OnceRec {a: 1000, b: "v", c: 3000}, w: 7000}
+        coroutine {step} = sources()
+        tmp = step()
+        tmp2 = tmp.u
+        a = tmp2.a
+        c = tmp2.c
+        w = tmp.w
+        after = step()
+        [a, c, w, after.w]
+
+fn register_struct_destructuring_tests():
+    test::value("destructure-basic-named-names-swapped/destructured", ["x", 1], b_swapped_destructured)
+    test::value("destructure-basic-named-names-swapped/explicit", ["x", 1], b_swapped_explicit)
+
+    test::value("destructure-once-nested-once/destructured", [1, 3, 7, 70], b_nested_once_destructured)
+    test::value("destructure-once-nested-once/explicit", [1, 3, 7, 70], b_nested_once_explicit)
+
+# ---------------------------------------------------------------------------
+# method-sugar.test
+
+# method-failure-locations: at the receiver, or at the later argument
+# that is wrong, as the free call is.
+fn b_wrong_receiver() errors compiler::CompilerError:
+    static compile:
+        fn takes_text(t: str):
+            t
+        5.takes_text()
+
+fn b_wrong_later_text() errors compiler::CompilerError:
+    static compile:
+        fn later_text(a, t: str):
+            a
+        "x".later_text(7)
+
+fn b_wrong_later_int() errors compiler::CompilerError:
+    static compile:
+        fn later_text(a, t: str):
+            a
+        1.later_text(7)
+
+# method-field-call-ambiguous-is-rejected: a callable field and a visible
+# function of the same name; the message names both spellings.
+fn b_field_call_ambiguous() errors compiler::CompilerError:
+    static compile:
+        fn inc(a):
+            a + 1
+        fn cb(a):
+            a + 100
+        s = {cb: inc, v: 3}
+        s.cb(41)
+
+# method-evaluation-receiver-before-arguments: the receiver is the first
+# argument, evaluated once, before the others. A counter coroutine
+# numbers the evaluations: 1, 2, 3 in that order, then 4.
+fn b_receiver_first_method() errors compiler::CompilerError:
+    static compile:
+        fn counter() -> int:
+            yield 0
+            yield 1
+            yield 2
+            yield 3
+            4
+        fn add3(a, b, c):
+            a * 100 + b * 10 + c
+        coroutine {step} = counter()
+        v = step().add3(step(), step())
+        [v, step()]
+
+fn b_receiver_first_free() errors compiler::CompilerError:
+    static compile:
+        fn counter() -> int:
+            yield 0
+            yield 1
+            yield 2
+            yield 3
+            4
+        fn add3(a, b, c):
+            a * 100 + b * 10 + c
+        coroutine {step} = counter()
+        v = add3(step(), step(), step())
+        [v, step()]
+
+fn register_method_sugar_tests():
+    test::rejects_at("method-failure-locations/receiver", compiler::DiagnosticCode::Type, 297, 9, b_wrong_receiver)
+    test::rejects_at("method-failure-locations/later-argument", compiler::DiagnosticCode::Type, 303, 24, b_wrong_later_text)
+    test::rejects_at("method-failure-locations/later-argument-int-receiver", compiler::DiagnosticCode::Type, 309, 22, b_wrong_later_int)
+
+    col_rejects_message("method-field-call-ambiguous-is-rejected", compiler::DiagnosticCode::AmbiguousMethodCall, 320, 11, "method-style call \"cb\" is ambiguous: the receiver (type struct{cb: block(e", ")/1 -> int, v: int}) has a field \"cb\" whose value may be callable, and a function \"cb\" is also visible here; write (receiver.cb)(...) to call the field, or cb(receiver, ...) to call the function", b_field_call_ambiguous)
+
+    test::value("method-evaluation-receiver-before-arguments/method", [123, 4], b_receiver_first_method)
+    test::value("method-evaluation-receiver-before-arguments/free", [123, 4], b_receiver_first_free)
+
+# ---------------------------------------------------------------------------
+# enums.test
+
+# enum-unknown-case: UNKNOWN-ENUM-CASE with the nearest spellings, never
+# a fallback to a visible binding of that name.
+fn b_unknown_carr() errors compiler::CompilerError:
+    static compile:
+        VehicleType::Carr
+
+fn b_unknown_tank() errors compiler::CompilerError:
+    static compile:
+        VehicleType::tank
+
+fn b_unknown_submarine() errors compiler::CompilerError:
+    static compile:
+        fn Submarine():
+            1
+        VehicleType::Submarine
+
+# enum-equality: nominal -- same enum, same case; never by position, never
+# across enums, never equal to an Int or a String.
+fn b_enum_equality() errors compiler::CompilerError:
+    static compile:
+        fn same(x):
+            x
+        [VehicleType::Car == VehicleType::Car, VehicleType::Car == VehicleType::Truck, VehicleType::Car != VehicleType::Truck, VehicleType::Car != VehicleType::Car, same(VehicleType::Car) == same(Other::Car), same(VehicleType::Boat) == same(Other::Car), VehicleType::Car == Other::Car, VehicleType::Car == 1, VehicleType::Car == "Car"]
+
+# enum-wrong-enum-call-result-field: another enum's case (or an Int) is
+# rejected at a call argument, a declared result, a struct field and a
+# List[A] argument; an enum is not an int.
+fn b_wrong_call() errors compiler::CompilerError:
+    static compile:
+        fn f(x: A):
+            x
+        f(B::Same)
+
+fn b_wrong_result() errors compiler::CompilerError:
+    static compile:
+        fn g() -> A:
+            B::Same
+        g()
+
+fn b_wrong_field() errors compiler::CompilerError:
+    static compile:
+        S {a: B::Same}
+
+fn b_wrong_int_argument() errors compiler::CompilerError:
+    static compile:
+        fn f(x: A):
+            x
+        f(1)
+
+fn b_wrong_as_int() errors compiler::CompilerError:
+    static compile:
+        fn h(x: int):
+            x
+        h(A::Same)
+
+fn b_wrong_list() errors compiler::CompilerError:
+    static compile:
+        fn f(x: List[A]):
+            x
+        f([B::Same])
+
+# enum-immutable-set: deduplication and membership by nominal equality.
+fn b_enum_set() errors compiler::CompilerError:
+    static compile:
+        fn same(x):
+            x
+        s = immutable_set::from_list([VehicleType::Car, VehicleType::Boat, VehicleType::Car])
+        [immutable_set::contains(s, VehicleType::Car), immutable_set::contains(s, VehicleType::Tank), immutable_set::contains(s, same(Other::Car)), s == immutable_set::from_list([VehicleType::Boat, VehicleType::Car])]
+
+fn register_enums_tests():
+    col_rejects_message("enum-unknown-case/Carr", compiler::DiagnosticCode::UnknownEnumCase, 370, 9, "enum VehicleType has no case \"Carr\" (its cases: Boat, Car, Truck, Tank, Tractor, Airplane); did you mean VehicleType::Car?", "", b_unknown_carr)
+    col_rejects_message("enum-unknown-case/tank", compiler::DiagnosticCode::UnknownEnumCase, 374, 9, "enum VehicleType has no case \"tank\" (its cases: Boat, Car, Truck, Tank, Tractor, Airplane); did you mean VehicleType::Tank?", "", b_unknown_tank)
+    col_rejects_message("enum-unknown-case/Submarine", compiler::DiagnosticCode::UnknownEnumCase, 380, 9, "enum VehicleType has no case \"Submarine\" (its cases: Boat, Car, Truck, Tank, Tractor, Airplane)", "", b_unknown_submarine)
+
+    test::value("enum-equality", [true, false, true, false, false, false, false, false, false], b_enum_equality)
+
+    test::rejects_at("enum-wrong-enum-call-result-field/call", compiler::DiagnosticCode::Type, 397, 11, b_wrong_call)
+    test::rejects_at("enum-wrong-enum-call-result-field/result", compiler::DiagnosticCode::Type, 401, 13, b_wrong_result)
+    test::rejects_at("enum-wrong-enum-call-result-field/field", compiler::DiagnosticCode::Type, 407, 12, b_wrong_field)
+    test::rejects_at("enum-wrong-enum-call-result-field/int-argument", compiler::DiagnosticCode::Type, 413, 11, b_wrong_int_argument)
+    test::rejects_at("enum-wrong-enum-call-result-field/as-int", compiler::DiagnosticCode::Type, 419, 11, b_wrong_as_int)
+    test::rejects_at("enum-wrong-enum-call-result-field/list", compiler::DiagnosticCode::Type, 425, 11, b_wrong_list)
+
+    test::value("enum-immutable-set", [true, false, false, true], b_enum_set)
+
+# ---------------------------------------------------------------------------
+# immutable-set.test
+
+# set-equality-examples: order- and duplicate-independent set equality.
+fn b_set_equality() errors compiler::CompilerError:
+    static compile:
+        [immutable_set::from_list([1, 2]) == immutable_set::from_list([1, 2]), immutable_set::from_list([1, 2]) == immutable_set::from_list([2, 1]), immutable_set::from_list([1, 1, 2]) == immutable_set::from_list([2, 1]), immutable_set::from_list([1, 2]) == immutable_set::from_list([1, 3]), immutable_set::from_list([]) == immutable_set::from_list([])]
+
+fn register_immutable_set_tests():
+    test::value("set-equality-examples", [true, true, true, false, true], b_set_equality)
+
+# ---------------------------------------------------------------------------
+# mutable-vector.test
+
+# mv-context-member: a context struct's vector member, installed below the
+# suite's own context (a body cannot use a context: registration does).
+context struct CaptureIO:
+    output: MutableVector[str]
+
+fn write_text(text: str, context io: CaptureIO) -> unit:
+    io.output.push(text)
+
+fn count(context io: CaptureIO) -> int:
+    io.output.length()
+
+fn snapshot(context io: CaptureIO) -> MutableVector[str]:
+    io.output
+
+fn texts(v: MutableVector[str]) -> List[str]:
+    loop x in v:
+        x
+
+# mv-cow-copies: copies mutate independently through push, swap and pop;
+# a copy taken before a pop keeps the element. (A vector has no ==: the
+# body reads each one out as a List.)
+fn b_cow_copies() errors compiler::CompilerError:
+    static compile:
+        fn items(v: MutableVector[int]) -> List[int]:
+            loop x in v:
+                x
+        a = mutable_vector::from_list([1, 2, 3])
+        b = a
+        a.push(4)
+        old = b.swap(0, 9):
+            on IndexNotFound:
+                0
+        c = a
+        last = a.pop():
+            on IndexNotFound:
+                0
+        [items(a), items(b), items(c), old, last]
+
+# mv-affine-at: `at` of an affine element is AFFINE-ELEMENT-COPY-OUT,
+# naming the moving alternatives; also through a struct field path.
+fn b_affine_at_local() errors compiler::CompilerError:
+    static compile:
+        fn f() -> int:
+            q = empty_queue()
+            s = mutable_vector::at(q, 0):
+                on IndexNotFound:
+                    make(1)
+            1
+        f()
+
+fn b_affine_at_field() errors compiler::CompilerError:
+    static compile:
+        fn f() -> int:
+            s = Sched {queue: empty_queue()}
+            s.queue.push(make(1))
+            x = mutable_vector::at(s.queue, 0):
+                on IndexNotFound:
+                    make(1)
+            1
+        f()
+
+fn register_mutable_vector_tests():
+    test::value("mv-cow-copies", [[1, 2, 3], [9, 2, 3], [1, 2, 3, 4], 1, 4], b_cow_copies)
+
+    col_rejects_message("mv-affine-at/local", compiler::DiagnosticCode::AffineElementCopyOut, 509, 36, "mutable_vector::at would copy an affine element out of `q` (MutableVector[Coroutine{args: [Command], return: Event, errors: []}]) while the vector still owns it, making a second owner: move it out instead -- `take(i)` removes it, `pop()` removes the last one, `swap(i, replacement)` exchanges it for another (there are no references to elements)", "", b_affine_at_local)
+    test::rejects("mv-affine-at/field", compiler::DiagnosticCode::AffineElementCopyOut, b_affine_at_field)
+
+    # mv-context-member: the member is a place every function sharing the
+    # context mutates in place; a snapshot read out of it is independent of
+    # later writes. Registration runs the program (it needs the context) and
+    # reads the snapshots out as Lists only after the last write; the body
+    # compares.
+    write_text("a0")
+    s1 = snapshot()
+    write_text("b0")
+    write_text("c0")
+    s2 = snapshot()
+    observed = [count(), texts(s1), texts(s2)]
+    fn b_context_member() errors compiler::CompilerError:
+        static compile:
+            observed
+    test::value("mv-context-member", [4, ["s0", "a0"], ["s0", "a0", "b0", "c0"]], b_context_member)
+
+# ---------------------------------------------------------------------------
+# mutable-array.test
+
+# ma-cow-extraction: an array taken out of a struct field (projection,
+# destructure, anonymous field, a struct parameter's field) is a copy;
+# inside a generic body, a local or struct field bound to the untyped
+# parameter is a dynamic copy. Mutating the copy never changes the source.
+fn b_extract_projection() errors compiler::CompilerError:
+    static compile:
+        fn f() -> List[int] errors IndexNotFound:
+            a = mutable_array::create(2, 0)
+            p = Box {data: a, n: 1}
+            d = p.data
+            d.set(0, 9)
+            [p.data.at(0), d.at(0)]
+        r = f():
+            on IndexNotFound:
+                []
+        r
+
+fn b_extract_destructure() errors compiler::CompilerError:
+    static compile:
+        fn f() -> List[int] errors IndexNotFound:
+            a = mutable_array::create(2, 0)
+            p = Box {data: a, n: 1}
+            {data} = p
+            data.set(0, 9)
+            [p.data.at(0), data.at(0)]
+        r = f():
+            on IndexNotFound:
+                []
+        r
+
+fn b_extract_anonymous() errors compiler::CompilerError:
+    static compile:
+        fn f() -> List[int] errors IndexNotFound:
+            a = mutable_array::create(2, 0)
+            s = {data: a, n: 1}
+            d = s.data
+            d.set(0, 9)
+            [s.data.at(0), d.at(0)]
+        r = f():
+            on IndexNotFound:
+                []
+        r
+
+fn b_extract_parameter() errors compiler::CompilerError:
+    static compile:
+        fn g(p: Box) -> List[int] errors IndexNotFound:
+            d = p.data
+            d.set(0, 9)
+            [p.data.at(0), d.at(0)]
+        fn f() -> List[int] errors IndexNotFound:
+            a = mutable_array::create(2, 0)
+            g(Box {data: a, n: 1})
+        r = f():
+            on IndexNotFound:
+                []
+        r
+
+fn b_extract_generic_local() errors compiler::CompilerError:
+    static compile:
+        fn g(x, v) errors IndexNotFound:
+            y = x
+            mutable_array::set(y, 0, v)
+            [mutable_array::at(x, 0), mutable_array::at(y, 0)]
+        fn f() -> List[int] errors IndexNotFound:
+            a = mutable_array::create(2, 0)
+            g(a, 7)
+        r = f():
+            on IndexNotFound:
+                []
+        r
+
+fn b_extract_generic_field() errors compiler::CompilerError:
+    static compile:
+        fn g(x, v) errors IndexNotFound:
+            s = {data: x}
+            mutable_array::set(s.data, 0, v)
+            [mutable_array::at(x, 0), mutable_array::at(s.data, 0)]
+        fn f() -> List[int] errors IndexNotFound:
+            a = mutable_array::create(2, 0)
+            g(a, 7)
+        r = f():
+            on IndexNotFound:
+                []
+        r
+
+fn register_mutable_array_tests():
+    test::value("ma-cow-extraction/projection", [0, 9], b_extract_projection)
+    test::value("ma-cow-extraction/destructure", [0, 9], b_extract_destructure)
+    test::value("ma-cow-extraction/anonymous", [0, 9], b_extract_anonymous)
+    test::value("ma-cow-extraction/parameter", [0, 9], b_extract_parameter)
+    test::value("ma-cow-extraction/generic-local", [0, 7], b_extract_generic_local)
+    test::value("ma-cow-extraction/generic-field", [0, 7], b_extract_generic_field)
+
+# ---------------------------------------------------------------------------
+# str-char-at.test
+
+# str-char-at-values: the scalar at every character index (ASCII, 2-, 3-
+# and 4-byte UTF-8, the astral one as one unit).
+fn b_char_at_values() errors compiler::CompilerError:
+    static compile:
+        s = "a%é世😀z"
+        loop i from 0 to str::length(s):
+            char::scalar_value(str::char_at(s, i))
+
+fn register_str_char_at_tests():
+    test::value("str-char-at-values", [97, 37, 233, 19990, 128512, 122], b_char_at_values)
+
+# ---------------------------------------------------------------------------
+# unicode-char.test
+
+# char-typed-callable-escape-rejected: a typed callable through an
+# untyped helper keeps its contract: the helper's instance accepts a
+# UnicodeChar and rejects a String at the call.
+fn b_escape_accepted() errors compiler::CompilerError:
+    static compile:
+        fn consume(c: UnicodeChar) -> UnicodeChar:
+            c
+        fn apply(f, v):
+            f(v)
+        apply(consume, 'A')
+
+fn b_escape_rejected() errors compiler::CompilerError:
+    static compile:
+        fn consume(c: UnicodeChar) -> UnicodeChar:
+            c
+        fn apply(f, v):
+            f(v)
+        apply(consume, "A")
+
+fn register_unicode_char_tests():
+    test::value("char-typed-callable-escape-rejected/accepted", 'A', b_escape_accepted)
+    test::rejects_at("char-typed-callable-escape-rejected/rejected", compiler::DiagnosticCode::Type, 678, 9, b_escape_rejected)
+
+# ---------------------------------------------------------------------------
+# flags.test
+
+# flags-diagnostic-unknown-callee: a flag supplied to a callee that is no
+# statically known function, at the flag's own spelling.
+fn b_flag_unknown_callee() errors compiler::CompilerError:
+    static compile:
+        fn f(g):
+            g(1, :a)
+        f(f)
+
+fn register_flags_tests():
+    test::rejects_at("flags-diagnostic-unknown-callee", compiler::DiagnosticCode::FlagCalleeUnknown, 692, 18, b_flag_unknown_callee)
+
+# ---------------------------------------------------------------------------
+
+fn register_collections_tests():
+    register_lists_tests(2)
+    register_list_stdlib_tests()
+    register_stdlib_namespaces_tests()
+    register_structs_tests()
+    register_struct_destructuring_tests()
+    register_method_sugar_tests()
+    register_enums_tests()
+    register_immutable_set_tests()
+    register_mutable_vector_tests()
+    register_mutable_array_tests()
+    register_str_char_at_tests()
+    register_unicode_char_tests()
+    register_flags_tests()
+
+with context CaptureIO {output: mutable_vector::from_list(["s0"])}
+with context test::suite()
+register_collections_tests()
+test::report()

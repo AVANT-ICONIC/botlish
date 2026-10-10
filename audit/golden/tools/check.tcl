@@ -31,7 +31,7 @@
 source [file join [file dirname [file normalize [info script]]] tree.tcl]
 set root $::goldentools::root
 
-set options [dict create -mutants {} -only-mutated 1 -backends {interp compile cranelift} -timeout 3600]
+set options [dict create -mutants {} -only-mutated 1 -backends {interp compile cranelift-generic cranelift} -timeout 3600]
 foreach {option value} $argv {
     if {![dict exists $options $option]} { error "unknown option $option" }
     dict set options $option $value

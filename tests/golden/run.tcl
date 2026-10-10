@@ -1,6 +1,6 @@
 # run.tcl -- runs Botlish golden test suites (GOLDEN-TEST-FRAMEWORK.md).
 #
-#   tclsh9.0 tests/golden/run.tcl [-backends interp,compile,cranelift]
+#   tclsh9.0 tests/golden/run.tcl [-backends interp,compile,cranelift-generic,cranelift]
 #                                 [-lib DIR] [-quiet] [-names] [FILE.bot ...]
 #
 # A golden suite is an ordinary Botlish program (tests/golden/*.bot by
@@ -25,7 +25,10 @@
 # failed, aborted, disagree or compile-error). -quiet prints one summary line
 # per program and backend.
 
-namespace eval golden {}
+namespace eval golden {
+    # How many cranelift-generic runs the specialized outcome stood in for.
+    variable genericStandIns 0
+}
 set ::golden::here [file dirname [file normalize [info script]]]
 set ::golden::root [file dirname [file dirname $::golden::here]]
 # (A script that sources this file to use its procs -- tests/golden.test --
@@ -39,6 +42,9 @@ if {[info commands ::surface::readProgramFile] eq ""} {
 if {[info commands ::native::evalHir] eq ""} {
     source [file join $::golden::root native native.tcl]
 }
+# The Tcl backends evaluate Botlish calls as nested Tcl evaluations: the
+# test suite's own limit (tests/golden.test), not tclsh's default 1000.
+interp recursionlimit {} 100000
 
 
 # Compiles the Botlish program at PATH once: {ok HIR SECONDS} or {error
@@ -81,6 +87,15 @@ proc golden::run {hir backend} {
         }
     } value options]
     set seconds [expr {([clock microseconds] - $start) / 1e6}]
+    if {$failed && $backend eq "cranelift-generic"
+            && [dict get $options -errorcode] eq "NATIVE UNSUPPORTED struct-shape"} {
+        # The unspecialized native baseline has no slot for a projection only
+        # a semantic instance proves (tests/helpers.tcl's
+        # GenericBaselineUndefined): undefined rather than wrong, and the
+        # specialized outcome stands in for it, as in the Tcl suite.
+        incr ::golden::genericStandIns
+        return [run $hir cranelift]
+    }
     if {$failed} {
         return [list abort "$value ([dict get $options -errorcode])" $seconds]
     }
@@ -135,7 +150,7 @@ proc golden::suite {path backends} {
 }
 
 proc golden::main {argv} {
-    set backends {interp compile cranelift}
+    set backends {interp compile cranelift-generic cranelift}
     set mode report
     set files {}
     for {set i 0} {$i < [llength $argv]} {incr i} {

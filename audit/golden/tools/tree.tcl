@@ -196,7 +196,7 @@ proc goldentools::runTestFile {tree testFile timeout {match ""}} {
 # tests/golden/*.bot when empty) in TREE: a dict suite -> {STATUS VERDICTS},
 # STATUS ok|failed|aborted|disagree|compile-error, VERDICTS a dict test name
 # -> PASS|FAIL (from the first backend's report).
-proc goldentools::runSuites {tree suites timeout {backends {interp compile cranelift}}} {
+proc goldentools::runSuites {tree suites timeout {backends {interp compile cranelift-generic cranelift}}} {
     if {$suites eq ""} {
         set suites [lmap p [lsort [glob -directory [file join $tree tests golden] *.bot]] {
             string range $p [expr {[string length $tree] + 1}] end

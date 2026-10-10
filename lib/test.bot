@@ -113,7 +113,13 @@ struct TestCase:
     run: Fn{args: [], return: Match}
 
 # The suite: the context a program installs. Its one field is the registered
-# cases, in registration order.
+# cases, in registration order. Exactly two functions declare it as their
+# context parameter -- `case` (registration) and `registered` (the snapshot
+# the runner reads) -- and every other function's requirement is derived:
+# a context implements, structurally, any context trait whose operations its
+# owner's functions with that context parameter spell (CONTEXT-TRAITS.md), so
+# the fewer such functions, the fewer application traits the suite could
+# satisfy by accident.
 context struct Suite:
     cases: MutableVector[TestCase]
 
@@ -136,9 +142,15 @@ fn suite() -> Suite:
 nomethod fn case(name: str, run: Fn{args: [], return: Match}, context suite: Suite) -> unit:
     suite.cases.push(TestCase {name: name, run: run})
 
+# The registered cases, in registration order: a snapshot (a List), so
+# nothing that runs later can change it.
+fn registered(context suite: Suite) -> List[TestCase]:
+    loop c in suite.cases:
+        c
+
 # How many cases are registered.
-fn count(context suite: Suite) -> int:
-    mutable_vector::length(suite.cases)
+fn count() -> int:
+    list::length(registered())
 
 # ---------------------------------------------------------------------------
 # Text
@@ -178,13 +190,29 @@ fn int_text(n: int) -> str:
     else:
         n.digits_from(1)
 
-# TEXT from character INDEX on, with every quotation mark, backslash,
-# newline, tab and carriage return written as its Botlish escape.
-fn escaped_from(text: str, index: int) -> str:
-    if index < 0 or index >= str::length(text):
-        return ""
-    c = text.char_at(index)
-    piece = if c == '"':
+fn no_texts() -> MutableVector[str]:
+    mutable_vector::from_list([])
+
+# PARTS joined by SEPARATOR. Iterative (a one-element vector holds the text
+# so far: bindings are immutable), so a long List or String costs no stack.
+fn joined(parts: List[str], separator: str) -> str:
+    text = no_texts()
+    loop part in parts and k from 0 to list::length(parts):
+        sofar = text.pop():
+            on IndexNotFound:
+                ""
+        if k == 0:
+            text.push(part)
+        else:
+            text.push(sofar.concat(separator).concat(part))
+    whole = text.pop():
+        on IndexNotFound:
+            ""
+    whole
+
+# The Botlish escape of the character C, or "" when it needs none.
+fn escape_of(c: UnicodeChar) -> str:
+    if c == '"':
         "\\\""
     elif c == '\\':
         "\\\\"
@@ -195,28 +223,31 @@ fn escaped_from(text: str, index: int) -> str:
     elif c == '\r':
         "\\r"
     else:
-        one = text.substring(index, index + 1):
-            on LowerUnderrun:
-                ""
-            on UpperOverrun:
-                ""
-        one
-    piece.concat(text.escaped_from(index + 1))
+        ""
+
+# TEXT with every quotation mark, backslash, newline, tab and carriage return
+# written as its Botlish escape.
+fn escaped(text: str) -> str:
+    pieces = loop i from 0 to str::length(text):
+        c = text.char_at(i):
+            on IndexNotFound:
+                continue
+        escape = c.escape_of()
+        if escape != "":
+            escape
+        else:
+            one = text.substring(i, i + 1):
+                on LowerUnderrun:
+                    ""
+                on UpperOverrun:
+                    ""
+            one
+    pieces.joined("")
 
 # TEXT as a Botlish String literal.
 fn quoted(text: str) -> str:
     mark = 11.glyph()
-    mark.concat(text.escaped_from(0)).concat(mark)
-
-# PARTS from INDEX on, joined by SEPARATOR.
-fn joined(parts: List[str], separator: str, index: int) -> str:
-    if index < 0 or index >= list::length(parts):
-        return ""
-    head = list::at(parts, index)
-    if index + 1 >= list::length(parts):
-        head
-    else:
-        head.concat(separator).concat(parts.joined(separator, index + 1))
+    mark.concat(text.escaped()).concat(mark)
 
 # The lines of TEXT: its pieces between newline characters (one piece, TEXT
 # itself, when it has none).
@@ -238,7 +269,7 @@ fn text_lines(text: str) -> List[str]:
                 on IndexNotFound:
                     length
             previous + 1
-        end = list::get(breaks, k, length)
+        end = breaks.get(k, length)
         piece = text.substring(start, end):
             on LowerUnderrun:
                 ""
@@ -272,7 +303,7 @@ fn describe(original) -> str:
     elif list?(v):
         parts = loop x in v:
             x.describe()
-        12.glyph().concat(parts.joined(", ", 0)).concat(13.glyph())
+        12.glyph().concat(parts.joined(", ")).concat(13.glyph())
     else:
         "a value with no text form"
 
@@ -514,7 +545,7 @@ fn diagnostic(expected: compiler::DiagnosticCode, code: compiler::DiagnosticCode
 # name, not a receiver.
 
 # BODY's value must equal EXPECTED.
-nomethod fn value(name: str, expected, body, context suite: Suite) -> unit:
+nomethod fn value(name: str, expected, body) -> unit:
     fn check() -> Match:
         actual = body():
             on compiler::CompilerError {code, primary, message}:
@@ -523,7 +554,7 @@ nomethod fn value(name: str, expected, body, context suite: Suite) -> unit:
     case(name, check)
 
 # BODY's value must satisfy PREDICATE (see `satisfies`).
-nomethod fn holds(name: str, description: str, predicate, body, context suite: Suite) -> unit:
+nomethod fn holds(name: str, description: str, predicate, body) -> unit:
     fn check() -> Match:
         actual = body():
             on compiler::CompilerError {code, primary, message}:
@@ -532,7 +563,7 @@ nomethod fn holds(name: str, description: str, predicate, body, context suite: S
     case(name, check)
 
 # BODY's block must be rejected with diagnostic code EXPECTED.
-nomethod fn rejects(name: str, expected: compiler::DiagnosticCode, body, context suite: Suite) -> unit:
+nomethod fn rejects(name: str, expected: compiler::DiagnosticCode, body) -> unit:
     fn check() -> Match:
         actual = body():
             on compiler::CompilerError {code, primary, message}:
@@ -542,7 +573,7 @@ nomethod fn rejects(name: str, expected: compiler::DiagnosticCode, body, context
 
 # BODY's block must be rejected with diagnostic code EXPECTED, reported at
 # LINE and COLUMN of the suite's source file.
-nomethod fn rejects_at(name: str, expected: compiler::DiagnosticCode, line: int, column: int, body, context suite: Suite) -> unit:
+nomethod fn rejects_at(name: str, expected: compiler::DiagnosticCode, line: int, column: int, body) -> unit:
     fn check() -> Match:
         wanted = expected.diagnostic_text(compiler::SourceLocation {line: line, column: column})
         actual = body():
@@ -554,7 +585,7 @@ nomethod fn rejects_at(name: str, expected: compiler::DiagnosticCode, line: int,
     case(name, check)
 
 # BODY's block must be rejected, with any diagnostic.
-nomethod fn rejects_any(name: str, body, context suite: Suite) -> unit:
+nomethod fn rejects_any(name: str, body) -> unit:
     fn check() -> Match:
         actual = body():
             on compiler::CompilerError:
@@ -569,8 +600,8 @@ nomethod fn rejects_any(name: str, body, context suite: Suite) -> unit:
 # segment sending that case's result as a one-element List; the last
 # segment sends the empty List. Start it with
 # `coroutine {step, first} = test::run()` and resume it with `step()`.
-fn run(context suite: Suite) -> List[TestResult]:
-    loop c in suite.cases:
+fn run() -> List[TestResult]:
+    loop c in registered():
         m = (c.run)()
         yield [TestResult {name: c.name, passed: m.matched, expected: m.expected, actual: m.actual, detail: m.detail}]
     return []
@@ -579,7 +610,7 @@ fn no_results() -> MutableVector[TestResult]:
     mutable_vector::from_list([])
 
 # Runs the suite once: every case's result, in registration order.
-fn results(context suite: Suite) -> List[TestResult]:
+fn results() -> List[TestResult]:
     coroutine {step, first} = run()
     collected = no_results()
     loop r in first:
@@ -602,13 +633,10 @@ fn summarize(results: List[TestResult]) -> Summary:
     total = list::length(results)
     Summary {total: total, passed: list::length(passing), failed: total - list::length(passing)}
 
-fn no_lines() -> MutableVector[str]:
-    mutable_vector::from_list([])
-
 # The report lines of one result: "PASS name", or "FAIL name" and what was
 # expected, what was observed and the detail, if any.
 fn result_lines(result: TestResult) -> List[str]:
-    lines = no_lines()
+    lines = no_texts()
     if result.passed:
         lines.push("PASS ".concat(result.name))
     else:
@@ -634,13 +662,25 @@ fn summary_line(summary: Summary) -> str:
     summary.passed.int_text().concat(" passed, ").concat(summary.failed.int_text()).concat(" failed")
 
 # Runs the suite once and returns its report: every result's lines, in
-# registration order, then the summary line.
-fn report(context suite: Suite) -> List[str]:
+# registration order, then the summary line. A run that reports a different
+# number of results than there are registered cases is itself a failure,
+# reported as one more failed line ("FAIL the run"): the runner is ordinary
+# Botlish over an ordinary coroutine, and a fault below it (a coroutine that
+# lost a segment) must not shorten a report silently.
+fn report() -> List[str]:
     all = results()
-    lines = no_lines()
+    lines = no_texts()
     loop r in all:
         loop line in r.result_lines():
             lines.push(line)
-    lines.push(all.summarize().summary_line())
+    summary = all.summarize()
+    registered = count()
+    if summary.total == registered:
+        lines.push(summary.summary_line())
+    else:
+        lines.push("FAIL the run")
+        lines.push("  expected: ".concat(registered.int_text()).concat(" results, one per registered case"))
+        lines.push("  actual: ".concat(summary.total.int_text()).concat(" results"))
+        lines.push(Summary {total: summary.total + 1, passed: summary.passed, failed: summary.failed + 1}.summary_line())
     loop line in lines:
         line

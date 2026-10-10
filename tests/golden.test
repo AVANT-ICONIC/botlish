@@ -5,9 +5,11 @@
 # test cannot disappear, or one be added, without the manifest saying so.
 #
 # Backends: the outer pass's own (CORE_BACKEND interp or compile), plus
-# Cranelift in the interp pass, so the two passes of tests/all.tcl cover all
-# three once; native-coverage's cranelift pass runs Cranelift; run directly,
-# the file runs all three. (tests/golden/run.tcl runs every suite on every
+# Cranelift in the interp pass and unspecialized Cranelift
+# (cranelift-generic) in the compile pass, so the two passes of
+# tests/all.tcl cover the four executable paths the Tcl suite's own
+# differential tests use, each once; native-coverage's cranelift pass runs
+# Cranelift; run directly, the file runs all four. (tests/golden/run.tcl runs every suite on every
 # backend at once, for a quick look.)
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
@@ -17,9 +19,11 @@ source [file join $::projectRoot tests golden run.tcl]
 interp recursionlimit {} 100000
 
 if {![info exists ::env(CORE_BACKEND)]} {
-    set goldenBackends {interp compile cranelift}
+    set goldenBackends {interp compile cranelift-generic cranelift}
 } elseif {$::env(CORE_BACKEND) eq "interp"} {
     set goldenBackends {interp cranelift}
+} elseif {$::env(CORE_BACKEND) eq "compile"} {
+    set goldenBackends {compile cranelift-generic}
 } else {
     set goldenBackends [list $::env(CORE_BACKEND)]
 }

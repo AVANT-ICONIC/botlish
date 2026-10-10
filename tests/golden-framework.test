@@ -957,4 +957,37 @@ register_nir(7)
     list [expr {$a eq $b}] [regexp {op rimul} $a] [regexp {static|compiler|CompilerError} $a]
 } -result {1 1 0}
 
+
+test gf-fuzz-bounded {a bounded run of the framework's model-based fuzzer (audit/golden/tools/fuzz.tcl): generated suites, every backend, the report its independent model predicts} -body {
+    set output [exec [info nameofexecutable] [file join $::projectRoot audit golden tools fuzz.tcl] -n 3 -seed 101 2>@1]
+    regexp {(\d+) disagreements$} [string trim $output] -> disagreements
+    set disagreements
+} -result 0
+
+
+test gf-context-trait-surface {the suite is an ordinary context: it implements, structurally, a context trait whose operations are spelled like the library's functions that declare the Suite context parameter -- and only two do (case, registered): an application trait spelled like count() is not satisfied by the suite} -body {
+    list [gfStaticError {import test
+
+context trait Counted:
+    fn count() -> int
+
+fn how_many(context c: Counted) -> int:
+    c.count()
+
+with context test::suite()
+how_many()
+}] [gfValue {import list
+import test
+
+context trait Listed:
+    fn registered() -> List[test::TestCase]
+
+fn how_many(context c: Listed) -> int:
+    list::length(c.registered())
+
+with context test::suite()
+how_many()
+}]
+} -match glob -result {{MISSING-CONTEXT: *Counted is required by this call*} 0}
+
 cleanupTests

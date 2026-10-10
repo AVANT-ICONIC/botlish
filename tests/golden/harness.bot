@@ -1,0 +1,363 @@
+# harness.bot -- harness-oriented tests (manifest: category harness): Tcl
+# tests whose assertions read what a Botlish program cannot observe -- the
+# process argument vector the harness injects, warnings, allocation reports,
+# release placement, the Tcl test-log and test-tick natives, the diagnostics
+# list of a non-strict build, the Core IR round trip -- ported as the
+# semantic core that remains: the value each program computes, on interp,
+# compile and cranelift, which must agree.
+#
+# What these ports lose, each says: the injected argv vectors (a suite sees
+# the runner's default vector, ["botlish-runner"]), warning records and the
+# cranelift-generic backend, allocation sites and counts, the HIR/Core IR
+# texts, and every diagnostic after the first. Evaluation order needs no
+# test-log: a function that yields its argument (a deep yield, COROUTINES.md)
+# records each evaluation as one segment of a coroutine the body drives, and
+# a coroutine the code under test owns stands in for test-tick. A release's
+# effect is observed through a second installed context (a body cannot use
+# one, so the registration function computes it).
+import compiler
+import coroutine
+import list
+import mutable_array
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only).
+
+# coroutines.test: co-release-values's V (renamed HarnessV) and its context
+# Log (renamed HarnessLog: a second context, installed below beside the
+# suite), with the functions that need it (note, seen, noisy, abandon:
+# prefixed). A body cannot use a context, so these run in the registration
+# function.
+struct HarnessV:
+    n: int
+
+context struct HarnessLog:
+    a: MutableArray[int]
+
+fn harness_note(v: int, context log: HarnessLog) -> int:
+    mutable_array::set(log.a, 0, v):
+        on IndexNotFound:
+            unit
+    v
+
+fn harness_seen(context log: HarnessLog) -> int:
+    mutable_array::at(log.a, 0):
+        on IndexNotFound:
+            -1
+
+# Records 1, suspends at its first yield, and would record 2 if it ran on.
+fn harness_noisy() -> HarnessV:
+    harness_note(1)
+    yield HarnessV {n: 10}
+    harness_note(2)
+    return HarnessV {n: 20}
+
+# Starts harness_noisy and abandons it suspended: released at the handle's
+# last use, never resumed.
+fn harness_abandon() -> int:
+    coroutine {first} = harness_noisy()
+    first.n
+
+# ---------------------------------------------------------------------------
+# argv.test
+
+fn register_argv_tests():
+    # argv-default-argv-is-synthetic-not-the-runner's: with no injected
+    # vector argv() is the one synthetic argument zero, the same on every
+    # backend, never the Tcl process's own argv. (The Tcl test also reads
+    # core::process::defaultArgv and $::argv0 and runs cranelift-generic;
+    # here the vector is the golden runner's own default.)
+    fn b_default_argv() errors compiler::CompilerError:
+        static compile:
+            args = argv():
+                on InvalidArgumentEncoding:
+                    ["fallback"]
+            args
+    test::value("argv-default-argv-is-synthetic-not-the-runner's", ["botlish-runner"], b_default_argv)
+
+    # argv-contents-and-length-are-not-static-facts: the compiler knows
+    # List[str] and the error, nothing about the length or the elements. The
+    # Tcl test reads hir::exact::Of of the three calls; here the evidence is
+    # that the handled list::at(args, 1) -- which fails on this run -- is not
+    # KNOWN-ERROR (it would be if the vector's length were an exact fact),
+    # and the values are the run's.
+    fn b_not_static_facts() errors compiler::CompilerError:
+        static compile:
+            args = argv():
+                on InvalidArgumentEncoding:
+                    []
+            n = list::length(args)
+            first = list::at(args, 0):
+                on IndexNotFound:
+                    "none"
+            second = list::at(args, 1):
+                on IndexNotFound:
+                    "absent"
+            [n, first, second]
+    test::value("argv-contents-and-length-are-not-static-facts", [1, "botlish-runner", "absent"], b_not_static_facts)
+
+# ---------------------------------------------------------------------------
+# warnings.test
+
+fn register_warnings_tests():
+    # warn-backend-independent-off: the policy program (two exits returning
+    # 0: a SAME-RETURN-VALUE warning under the default policy) compiled with
+    # warnings off runs identically on every backend. The golden runner
+    # compiles with -warnings off and requires one report from interp,
+    # compile and cranelift (not cranelift-generic).
+    fn b_policy_program() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                if x:
+                    return 0
+                return 0
+            f(true)
+    test::value("warn-backend-independent-off", 0, b_policy_program)
+
+# ---------------------------------------------------------------------------
+# native-alloc.test
+
+fn register_native_alloc_tests(huge: int):
+    # alloc-sites-3: a BigInt subtraction landing back on a small Int, then
+    # an unrelated concat. The Tcl test pins the allocation report (no
+    # BigInt allocated, sites listnew and strcat only); the value is what is
+    # left. The literal program is the Tcl test's; /dynamic takes the
+    # operands from the registration function, so nothing folds and every
+    # backend runs the BigInt slow path.
+    fn b_sites_3() errors compiler::CompilerError:
+        static compile:
+            [100000000000000000000000000000000000 - 100000000000000000000000000000000000, str::concat("x", "y")]
+    test::value("alloc-sites-3", [0, "xy"], b_sites_3)
+    fn b_sites_3_dynamic() errors compiler::CompilerError:
+        static compile:
+            d = huge - huge
+            [d, d == 0, d + 1, str::concat("x", "y")]
+    test::value("alloc-sites-3/dynamic", [0, true, 1, "xy"], b_sites_3_dynamic)
+
+# ---------------------------------------------------------------------------
+# static-compile.test
+
+fn register_static_compile_tests():
+    # sc-alloc-rejected: a rejected block's failure carries its payload --
+    # the code, the primary SourceLocation, the related List, the message --
+    # to a handler that binds it whole and to one that destructures it. The
+    # Tcl test counts the native allocations of the two programs (3 and 2);
+    # here the inner block, nested in the body's own block, is rejected and
+    # both handlers read its code.
+    fn b_alloc_rejected() errors compiler::CompilerError:
+        static compile:
+            fn f() errors compiler::CompilerError:
+                static compile:
+                    missing
+            r = f():
+                on compiler::CompilerError details:
+                    details
+            whole = r.code == compiler::DiagnosticCode::Unbound
+            code_only = f():
+                on compiler::CompilerError {code}:
+                    code == compiler::DiagnosticCode::Unbound
+            [whole, code_only, list::length(r.related)]
+    test::value("sc-alloc-rejected", [true, true, 0], b_alloc_rejected)
+
+# ---------------------------------------------------------------------------
+# coroutines.test
+
+fn register_coroutines_tests():
+    # co-release-values: a release changes no value -- after a last
+    # statement whose value is a function's result, a loop element, an if's
+    # value or the program's result the value is kept -- and a released
+    # suspended body runs no further code. The context-dependent part (the
+    # abandoned harness_noisy and the log it writes) runs here, in the
+    # registration function, once, when the suite registers; the body
+    # computes the rest and compares. (Checked against the coroutine mutant
+    # release-resumes-body, applied to a private copy: logged is 2 and this
+    # test fails.)
+    abandoned = harness_abandon()
+    logged = harness_seen()
+    fn b_release_values() errors compiler::CompilerError:
+        static compile:
+            fn w(k: int) -> HarnessV:
+                yield HarnessV {n: k}
+                return HarnessV {n: k + 1}
+            fn f(k: int) -> int:
+                coroutine {step} = w(k)
+                step().n
+            xs = loop i from 0 to 3:
+                coroutine {step} = w(i)
+                step().n
+            y = if f(1) > 0:
+                coroutine {step} = w(7)
+                step().n
+            else:
+                0
+            coroutine {step} = w(5)
+            [f(3), xs, y, abandoned, logged, step().n]
+    test::value("co-release-values", [4, [1, 2, 3], 8, 10, 1, 6], b_release_values)
+
+# ---------------------------------------------------------------------------
+# surface-samples.test
+
+fn register_surface_samples_tests():
+    # surface-run-evaluation-order: arguments evaluate left to right. The
+    # Tcl test logs with test_log; here log(n) yields n, so the coroutine's
+    # segments are the log ([1, 2, 3]) and its result is pick's value (3).
+    fn b_evaluation_order() errors compiler::CompilerError:
+        static compile:
+            fn log(n: int) -> int:
+                yield n
+                n
+            fn pick(a, b, c):
+                c
+            fn program() -> int:
+                pick(log(1), log(2), log(3))
+            coroutine {step, first} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value("surface-run-evaluation-order", [1, [2, 3, 3]], b_evaluation_order)
+
+    # surface-run-continue: continue starts the next iteration, each a fresh
+    # scope. The Tcl test counts with test_tick; here f owns a ticker
+    # coroutine whose resumes count 1, 2, 3, ... (its first segment, 0, is
+    # the eager start's), and f returns t with the next tick: 4 means f
+    # ticked exactly three times, as the Tcl test's tick count says.
+    fn b_continue() errors compiler::CompilerError:
+        static compile:
+            fn ticker() -> int:
+                loop i from 0 to 1000:
+                    yield i
+                return -1
+            fn f():
+                coroutine {step: tick, first} = ticker()
+                loop:
+                    t = tick()
+                    if t < 3:
+                        continue
+                    return [first, t, tick()]
+            f()
+    test::value("surface-run-continue", [0, 3, 4], b_continue)
+
+# ---------------------------------------------------------------------------
+# calls.test
+
+fn register_calls_tests():
+    # call-1: the callee, then the arguments, are evaluated left to right.
+    # The Tcl test (Core IR) logs the callee expression `test-log(list)` and
+    # each argument; here callee() logs 0 and returns pick (standing in for
+    # the `list` native), and the coroutine's segments are the log.
+    fn b_call_1() errors compiler::CompilerError:
+        static compile:
+            fn log(n: int) -> int:
+                yield [n]
+                n
+            fn pick(a, b, c):
+                [a, b, c]
+            fn callee():
+                log(0)
+                pick
+            fn program() -> List[int]:
+                (callee())(log(1), log(2), log(3))
+            coroutine {step, first} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value("call-1", [[0], [[1], [2], [3], [1, 2, 3]]], b_call_1)
+
+# ---------------------------------------------------------------------------
+# strict-references.test
+
+# sr-no-derivative-diagnostics: a forward reference is one UNBOUND at the
+# reference (helper, called before its declaration) and no type noise. The
+# Tcl test lists every diagnostic of a -strict 0 build ({UNBOUND 2:5} only);
+# a rejected block reifies the first diagnostic only, so the port pins its
+# code and location and cannot see that there is no second one. (A
+# top-level body: it captures nothing.)
+fn b_sr_no_derivative_diagnostics() errors compiler::CompilerError:
+    static compile:
+        fn caller(x):
+            helper(x)
+        fn helper(y):
+            y + 1
+        caller(1)
+
+fn register_strict_references_tests():
+    test::rejects_at("sr-no-derivative-diagnostics", compiler::DiagnosticCode::Unbound, 284, 13, b_sr_no_derivative_diagnostics)
+
+# ---------------------------------------------------------------------------
+# hir-lowering.test
+
+fn register_hir_lowering_tests():
+    # hir-lower-compile-closures: HIR -> the Tcl compiler agrees with the
+    # interpreter on the closures corpus program (compose(inc, dbl)(20)).
+    # The Tcl program is Core IR (an anonymous block returned by compose);
+    # here compose returns a named nested function. The golden runner's
+    # agreement of interp, compile and cranelift stands in for the
+    # differential; the round trip of the Core IR text is not observed.
+    fn b_closures() errors compiler::CompilerError:
+        static compile:
+            fn compose(f, g):
+                fn composed(x):
+                    f(g(x))
+                composed
+            fn inc(x):
+                x + 1
+            fn dbl(x):
+                x * 2
+            (compose(inc, dbl))(20)
+    test::value("hir-lower-compile-closures", 41, b_closures)
+
+# ---------------------------------------------------------------------------
+# native-stack-overflow.test
+
+fn register_native_stack_overflow_tests():
+    # native-stack-gc-1: 400 live recursive frames, each allocating, build
+    # "xy" 400 times. The Tcl test runs the hand-written NIR fixture
+    # build400.nir on the native binary under BOTLISH_NATIVE_GC_STRESS=1;
+    # here the same function, from source, on every backend (under stress
+    # only when the runner is). The value: its length and the positions
+    # holding a wrong character (none).
+    fn b_build_400() errors compiler::CompilerError:
+        static compile:
+            fn build(n):
+                if n < 1:
+                    return ""
+                str::concat(str::concat("x", "y"), build(n - 1))
+            s = build(400)
+            wrong = loop i from 0 to str::length(s):
+                c = s.char_at(i):
+                    on IndexNotFound:
+                        '?'
+                want = if mod(i, 2) == 0:
+                    'x'
+                else:
+                    'y'
+                if c == want:
+                    continue
+                i
+            [str::length(s), wrong]
+    test::value("native-stack-gc-1", [800, []], b_build_400)
+
+# ---------------------------------------------------------------------------
+
+fn register_harness_tests():
+    register_argv_tests()
+    register_warnings_tests()
+    register_native_alloc_tests(100000000000000000000000000000000000)
+    register_static_compile_tests()
+    register_coroutines_tests()
+    register_surface_samples_tests()
+    register_calls_tests()
+    register_strict_references_tests()
+    register_hir_lowering_tests()
+    register_native_stack_overflow_tests()
+
+with context test::suite()
+with context HarnessLog {a: mutable_array::create(1, 0)}
+register_harness_tests()
+test::report()
