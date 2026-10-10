@@ -489,7 +489,7 @@ proc hir::completions::NewCtx {} {
         indexBounds [dict create] upperBounds [dict create] sizes [dict create] minSizes [dict create] \
         exprs [dict create] errors [dict create] analyses 0 returned 0 returnRange never \
         record 0 visited [dict create] bounds [dict create] callables [dict create] closures [dict create] \
-        incomplete 0]
+        incomplete 0 intended 0]
 }
 
 # Seeds CTX for a walk of BLOCK's own body by its own check (checkBlock,
@@ -630,6 +630,14 @@ proc hir::completions::Eval {hirVar ctxVar diagnose enclosing guard e} {
                 }
             }
             dict set ctx errors [dict get $node name] 1
+            if {[dict exists $node static]} {
+                # The reified failure of a rejected static block
+                # (STATIC-COMPILE.md): an intended completion of the
+                # intrinsic, which analyzeBlock never counts as proof that a
+                # call cannot complete normally (KNOWN-ERROR). The error is
+                # charged like any other.
+                dict set ctx intended 1
+            }
             return never
         }
         ok - error {
@@ -2339,7 +2347,13 @@ proc hir::completions::analyzeBlock {hir block argRanges argExact argExactLists 
     # body (RESULT ne never) or through any reachable `return` (ctx.returned
     # -- see Eval's own `return` case): both are ordinary successful
     # completions of this function, never a failure.
-    set normal [expr {$result ne {never} || [dict get $ctx returned]}]
+    # A path that ends in a rejected static block's reified failure does not
+    # make the call a known failure either (STATIC-COMPILE.md): reporting
+    # that failure is the intrinsic's purpose, not an accident of the call,
+    # so the call is treated as one that may complete normally -- the
+    # narrowest exemption: an ordinary `fail` or a call proven to fail on
+    # its own still makes its callers KNOWN-ERROR.
+    set normal [expr {$result ne {never} || [dict get $ctx returned] || [dict get $ctx intended]}]
     # The successful result is the fall-through value joined with every
     # returned one (`never` when there is neither).
     set result [hir::range::join $result [dict get $ctx returnRange]]

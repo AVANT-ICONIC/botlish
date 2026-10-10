@@ -2271,6 +2271,9 @@ proc hir::traits::monomorphize {nodes options given hir syntax} {
         # resolved: a problem here is the compiler's, said so.
         dict set mono diagnostics [lmap d [dict get $mono diagnostics] {
             dict set d message "in the monomorphized program: [dict get $d message]"
+            # (Never a static block's rejection, STATIC-COMPILE.md: an
+            # internal failure is the compiler's, wherever it points.)
+            dict set d internal 1
             set d
         }]
     }

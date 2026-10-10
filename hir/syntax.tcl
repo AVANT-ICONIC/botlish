@@ -101,6 +101,17 @@
 #             is a `struct` node with `payloadOf NAME`, the field
 #             initializers of `fail NAME {...}`, checked like a named
 #             construction against the error's declared payload)
+#   static    operation (a static intrinsic's operation name: `compile`),
+#             operationOrigin, bodyOrigin, body (nodes), deferred (a list,
+#             possibly empty, of {kind message origin} dicts: diagnostics the
+#             module loader found in the body before any HIR exists -- a
+#             qualified reference the file may not make -- in source order)
+#             -- `static compile:` and its captured block (STATIC-COMPILE.md).
+#             Never resolved: hir/static.tcl replaces every static node by
+#             its decided form (the body as ordinary syntax, or the
+#             reification of the compiler diagnostic that rejected it)
+#             before hir::resolve sees the program, so no HIR expression,
+#             analysis or backend knows the kind
 #   handle    call (a `call` node), handlers (a list of {name nameSpan
 #             origin body payload} dicts, one per "on NAME:" clause, in
 #             written order -- name/nameSpan for diagnostics, origin for the
@@ -376,6 +387,17 @@ proc hir::syntax::errorNode {origin value} {
 proc hir::syntax::failNode {origin name {value ""}} {
     core::ir::checkShape [list fail $name]
     return [Node fail $origin name $name value $value]
+}
+
+# `static OPERATION:` and its captured block BODY (STATIC-COMPILE.md): ORIGIN
+# spans the whole form, OPERATIONORIGIN the operation's name, BODYORIGIN the
+# block. DEFERRED as this file's header describes `static`.
+proc hir::syntax::staticNode {origin operation operationOrigin bodyOrigin body {deferred {}}} {
+    if {$operation ni [hir::static::operations]} {
+        core::malformed "\"$operation\" is not a static operation" [list static $operation]
+    }
+    return [Node static $origin operation $operation operationOrigin $operationOrigin \
+        bodyOrigin $bodyOrigin body $body deferred $deferred]
 }
 
 # HANDLERS: a list of {name nameSpan origin body payload} dicts, as this

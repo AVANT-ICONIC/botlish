@@ -1357,7 +1357,7 @@ proc hir::range::ProvesValueAcceptedBy {argType argRange declared} {
             || [hir::types::IsMutArray $declared]} {
         return [AggregateAdmits [hir::types::Unshaped $argType] $declared]
     }
-    if {[hir::types::IsFn $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
+    if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
             || [hir::types::IsEnum $declared]} {
         # An enum type (ENUMS.md) likewise, by its declaration only.
         #
@@ -1368,7 +1368,10 @@ proc hir::range::ProvesValueAcceptedBy {argType argRange declared} {
         # A structural function type (STRUCTURAL-FUNCTION-TYPES.md): the
         # argument must be a callable whose own call contract is
         # compatible (hir::types::subtype's contravariant/covariant/subset
-        # rule) -- no Range fact bears on that.
+        # rule) -- no Range fact bears on that. An exact callable type (a
+        # handled call whose normal result is a function value, its
+        # handlers' value checked against it) likewise: no Range fact is
+        # one of a callable.
         return [hir::types::subtype $argType $declared]
     }
     return [expr {[hir::types::subtype $argType $declared] || [ProvesType $argRange $declared]}]

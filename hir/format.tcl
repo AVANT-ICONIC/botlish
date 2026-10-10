@@ -52,7 +52,11 @@
 #                                        written order (STRUCTS.md);
 #                                        payload(NAME) for the payload of
 #                                        `fail NAME {...}` (ERROR-PAYLOADS.md)
-#   eN fail NAME                         the payload, if any, its child
+#   eN fail NAME ?static=OP:KIND?        the payload, if any, its child;
+#                                        static=OP:KIND marks the reified
+#                                        failure of a rejected `static OP:`
+#                                        block and the diagnostic kind it
+#                                        reifies (STATIC-COMPILE.md)
 #   eN handle                            children: the call, then one "on
 #                                        NAME SCOPE ?payload (B NAME)?
 #                                        ?consumed=F,...? ?binds ...?" line
@@ -554,7 +558,13 @@ proc hir::format::Expr {hir e indent origins linesVar} {
         fail {
             # "fail NAME", and the payload (ERROR-PAYLOADS.md) as its one
             # child line, like return's value.
-            Line $hir $e "fail [dict get $node name]" $indent $origins lines
+            # A rejected static block's reified failure (STATIC-COMPILE.md)
+            # says so: "static=OPERATION:KIND", the diagnostic it reifies.
+            set text "fail [dict get $node name]"
+            if {[dict exists $node static]} {
+                append text " static=[dict get $node static operation]:[dict get $node static kind]"
+            }
+            Line $hir $e $text $indent $origins lines
             if {[dict exists $node value] && [dict get $node value] ne ""} {
                 Expr $hir [dict get $node value] $inner $origins lines
             }

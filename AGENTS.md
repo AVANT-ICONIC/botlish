@@ -721,3 +721,42 @@ and be killed) and `cargo test --release --manifest-path native/Cargo.toml
 any change they name. A change to native tracing or drops also needs a
 `BOTLISH_NATIVE_GC_STRESS=1` run of `tests/mutable-array.test`.
 `bench/mutable-array.tcl` regenerates the performance report.
+
+## Static intrinsics
+
+`static compile:` (STATIC-COMPILE.md) is a recoverable semantic-compilation
+boundary: hir/static.tcl decides each block by ordinary whole-program builds
+of the syntax with the block's body in place, reading the diagnostics as
+data, and replaces it -- before resolution -- by its body (accepted) or by an
+ordinary `fail compiler::CompilerError {...}` reifying the diagnostic
+(rejected). No HIR expression kind, Core IR form, NIR instruction or runtime
+operation knows static intrinsics: never add one, never invoke the compiler at
+run time, never serialize the body to text and re-parse it, never catch a Tcl
+error or an `internal` diagnostic as a rejection (a compiler failure fails the
+compilation), and never give `CompilerError` a case per diagnostic or a default
+`Unknown` code. `static` is the introducer of compiler-directed syntax only (no
+storage/member meaning), its operations are compiler vocabulary (only
+`compile`: no `static parse:`, `static assert_*:`, test framework, syntactic
+functions or compile-time evaluation yet), and `compiler::*` is reached only
+through `import compiler`.
+
+Every error diagnostic kind the front end can report is classified in
+`tests/static-compile.test`'s `sc-census-exhaustive`: a kind a block can
+produce has exactly one `compiler::DiagnosticCode` case (`lib/compiler.bot`,
+`hir::static::codes`, the Botlish enum spelling of the kind); every other kind
+is listed with the reason it never is. Adding a diagnostic kind anywhere in
+`hir/` or `surface/modules.tcl` therefore means classifying it there (and, if
+recoverable, adding its case to both). A diagnostic with further locations
+records them as `related` origins (`hir::Diagnose`'s last argument), never only
+in its message text.
+
+If you change the static grammar, `hir/static.tcl`, the loader's deferral of a
+block's qualified references (`surface/modules.tcl`), how `fail` resolves or
+lowers, the completion walk's `fail` case (`intended`), `hir::Diagnose`'s
+fields, `hir::BuildFull`, or SAME-FAILURE's fail sites, run
+`tests/static-compile.test`, `audit/static-compile/tools/fuzz.tcl` (several
+seeds, once with `-gc-stress 1`) and `audit/static-compile/tools/mutate.tcl`
+(every mutant in `audit/static-compile/tools/mutants.txt` must still apply and
+be killed: update a mutant's text when you change the code it mutates, keeping
+it a mutant of the same rule). `bench/static-compile.tcl` regenerates the
+performance report.

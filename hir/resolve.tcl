@@ -1223,6 +1223,11 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 set name $spelling
             }
             SetField hir $e name $name
+            if {[dict exists $node static]} {
+                # The reified failure of a rejected static site
+                # (hir/static.tcl): provenance, never semantics.
+                SetField hir $e static [dict get $node static]
+            }
             # The payload (ERROR-PAYLOADS.md) is evaluated before the error is
             # raised: resolved first, in the enclosing scope.
             set value ""
@@ -1233,6 +1238,16 @@ proc hir::resolve::Expr {hirVar node ctx} {
             if {!$known} {
                 hir::Diagnose hir UNDECLARED-ERROR \
                     [hir::errordecls::unknownMessage $spelling [CtxNamespace $ctx]] $e
+            } elseif {$name ni [dict get $ctx errors] && [dict exists $node static]} {
+                # Nobody wrote this `fail`: the site's body was rejected, and
+                # its completion is the error, where the enclosing code must
+                # handle or admit it like any other (STATIC-COMPILE.md).
+                set static [dict get $node static]
+                set remedy [expr {[dict get $ctx callable] eq ""
+                    ? "a program's top level admits no error: write the block in a function that declares \"errors $name\" and handle the error where it is called"
+                    : "handle it, or declare \"errors $name\" on the enclosing function"}]
+                hir::Diagnose hir UNHANDLED-ERROR \
+                    "this \"static [dict get $static operation]:\" block's body was rejected ([dict get $static kind]), so the block completes with the error \"$name\", which is not admitted here: $remedy" $e
             } elseif {$name ni [dict get $ctx errors]} {
                 hir::Diagnose hir UNHANDLED-ERROR \
                     "\"fail $spelling\" is not admitted here: the enclosing function does not declare \"errors $spelling\"" $e

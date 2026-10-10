@@ -1779,6 +1779,21 @@ add10(32)          # 42 (add captures x)
   once).
   `coroutine` and `resume` stay ordinary names elsewhere; `yield` is a
   keyword. See COROUTINES.md.
+* **Static intrinsics.** `static compile:` followed by an indented block is
+  a recoverable semantic-compilation boundary (STATIC-COMPILE.md): if the
+  compiler accepts the block where it stands, the boundary disappears and the
+  block runs with its ordinary value and errors (the same HIR, code and
+  machine code as the block written there); if it rejects it, the block
+  completes with the one payload error `compiler::CompilerError {code,
+  primary, related, message}` -- `code` a `compiler::DiagnosticCode` case
+  (`Unbound`, `Type`, `UseAfterMove`, ...), `primary` the diagnostic's
+  `compiler::SourceLocation` -- none of the block runs, and the enclosing
+  program still compiles. A rejected block's error is handled or declared
+  like any other; a file using a static intrinsic imports `compiler`. It
+  captures parsed syntax (a parse error in the block is the program's),
+  is decided at compile time by the ordinary compiler, and is never an
+  assertion. `static` and `compile` are contextual words; `static NAME:` with
+  any other operation is `STATIC-UNKNOWN-OPERATION`.
 * Integers (decimal, arbitrary precision, no leading zeros), strings
   (`"..."`, escapes `\\ \" \n \r \t`), `true`, `false`, `unit`, lists
   `[a, b]`, calls `f(x)(y)`.

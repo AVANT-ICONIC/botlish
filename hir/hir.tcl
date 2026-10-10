@@ -52,7 +52,20 @@
 #   modules      NAMESPACE -> ScopeId of that namespace's own module
 #                section scope (surface/modules.tcl, hir/resolve.tcl's
 #                ResolveQualifiedRef); absent for a program with no modules
-#   diagnostics  list of {kind KIND message TEXT expr ExprId}
+#   diagnostics  list of {kind KIND message TEXT expr ExprId}, optionally
+#                with `origin` (the primary location, when not EXPR's) and
+#                `related` (further locations the diagnostic names, as
+#                origins in message order: a used value's move), and
+#                `internal 1` on a failure of the compiler itself
+#   staticSites  the static intrinsics of a source program and their
+#                decisions (hir/static.tcl, STATIC-COMPILE.md): site key ->
+#                {key origin operation outcome accepted|rejected ?diagnostic
+#                D?}; absent for a program without any. `staticRounds` is the
+#                number of builds the decisions took. No analysis, lowering
+#                or backend reads either: an accepted block is ordinary
+#                syntax, a rejected one an ordinary `fail` (whose expression
+#                carries `static {operation OP kind KIND}`, provenance read
+#                by KNOWN-ERROR, SAME-FAILURE and diagnostics only)
 #   warnings     compiler-internal side table of compiler warnings
 #                (hir/warnings.tcl, WARNINGS-SAME-RETURN.md): a list of
 #                {code message primary secondary data} records, attached by the
@@ -241,9 +254,17 @@ proc hir::NewId {hirVar kind} {
     return [dict get $prefixes $kind]$n
 }
 
-proc hir::Diagnose {hirVar kind message expr} {
+proc hir::Diagnose {hirVar kind message expr {related {}}} {
     upvar 1 $hirVar hir
-    dict lappend hir diagnostics [dict create kind $kind message $message expr $expr]
+    set diagnostic [dict create kind $kind message $message expr $expr]
+    if {$related ne {}} {
+        # The diagnostic's related locations (origins, in the order its
+        # message names them): the further places it is about, beside its
+        # primary location -- e.g. where a used value was moved. Data, so a
+        # consumer never parses them out of the message (STATIC-COMPILE.md).
+        dict set diagnostic related $related
+    }
+    dict lappend hir diagnostics $diagnostic
 }
 
 # Diagnose, locating the diagnostic at ORIGIN (an expression origin, e.g. a
@@ -357,6 +378,28 @@ proc hir::buildSyntax {nodes args} {
     # candidate functions have been decided (DecideMethodCalls) -- which needs
     # the typed HIR of trial builds, so no build may raise before it.
     set halt [expr {[dict get $options -strict] || [dict get $options -halt-on-resolution-errors]}]
+    if {[hir::static::present $nodes [dict get $options -modules]]} {
+        # Static intrinsics (STATIC-COMPILE.md): each site is decided by
+        # ordinary builds of the program before the program itself is
+        # built; the result is the build of the decided syntax.
+        set hir [hir::static::decide $nodes $options $given $halt]
+    } else {
+        set hir [BuildFull $nodes $options $given $halt checked]
+    }
+    if {[dict get $options -strict] && [dict get $hir diagnostics] ne ""} {
+        # Resolution failed, or a static check did: the first diagnostic.
+        core::semanticError [dict get [lindex [dict get $hir diagnostics] 0] kind] \
+            [dict get [lindex [dict get $hir diagnostics] 0] message]
+    }
+    return $hir
+}
+
+# The whole build of the syntax NODES (hir::buildSyntax's OPTIONS and GIVEN,
+# with no static node left: hir/static.tcl expands them first), stopping
+# after resolution when HALT and a name is unresolved. Sets CHECKEDVAR to
+# whether the static checks ran. Raises nothing for a diagnostic.
+proc hir::BuildFull {nodes options given halt checkedVar} {
+    upvar 1 $checkedVar checked
     set traits [expr {[dict get $options -trait-decls] ne {}}]
     # A source program that may construct coroutines may give a generic
     # function an affine argument, which the monomorphization below
@@ -393,11 +436,6 @@ proc hir::buildSyntax {nodes args} {
         if {[lindex [dict get $options -origin] 0] ne "ir"} {
             hir::mutvec::Elaborate hir
         }
-    }
-    if {[dict get $options -strict] && [dict get $hir diagnostics] ne ""} {
-        # Resolution failed, or a static check did: the first diagnostic.
-        core::semanticError [dict get [lindex [dict get $hir diagnostics] 0] kind] \
-            [dict get [lindex [dict get $hir diagnostics] 0] message]
     }
     return $hir
 }
@@ -1093,7 +1131,7 @@ proc hir::exprsAt {hir origin} {
 }
 
 apply {{dir} {
-    foreach file {syntax imports resolve flags contexts coroutines affine mutvec refcheck hygiene sourcetypes structs enums traits syscall errordecls types exactvalue signatures modulebinding refine repeatable lower format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings} {
+    foreach file {syntax static imports resolve flags contexts coroutines affine mutvec refcheck hygiene sourcetypes structs enums traits syscall errordecls types exactvalue signatures modulebinding refine repeatable lower format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings} {
         uplevel #0 [list source [file join $dir $file.tcl]]
     }
 }} $hir::home

@@ -172,6 +172,13 @@
 #              execution-environment context of its type for the rest of
 #              the scope (CONTEXTS.md); `form` leaves room for later `with`
 #              declarations
+#   static     operation (the static operation's name: "compile"),
+#              operationSpan, staticSpan (the "static" word), body (a suite)
+#              -- "static compile:" followed by an indented block
+#              (STATIC-COMPILE.md): a static intrinsic, a compiler-directed
+#              syntactic operation on the captured block. The body is parsed
+#              syntax, never text; it is a statement or the value of a
+#              binding, return or destructuring (like an if)
 #   fail       name, nameSpan, payload -- "fail NAME": produces the named
 #              error's completion (EXPLICIT-ERROR-COMPLETIONS.md). PAYLOAD is
 #              "" or, for "fail NAME {field: value, ...}", the anonstruct
@@ -438,6 +445,9 @@ proc surface::ast::Ids {node id} {
                 dict set node payload [Ids [dict get $node payload] $id/payload]
             }
         }
+        static {
+            dict set node body [Suite [dict get $node body] $id]
+        }
     }
     return $node
 }
@@ -490,7 +500,7 @@ proc surface::ast::Children {node} {
             return [expr {[dict get $node value] eq "" ? {} : [list [dict get $node value]]}]
         }
         with - yield       { return [list [dict get $node value]] }
-        function           { return [list [dict get $node body]] }
+        function - static  { return [list [dict get $node body]] }
         loop {
             if {[llength [dict get $node clauses]] > 1} {
                 set children {}
@@ -880,6 +890,10 @@ proc surface::ast::Statement {node indent show linesVar} {
             lappend lines "${pad}with [dict get $node form]$at [Expr [dict get $node value] $show]"
             return
         }
+        static {
+            StaticIntrinsic $node "" $indent $show lines
+            return
+        }
         bind - return - break - destructure - coroutinebind {
             set value [dict get $node value]
             set prefix [switch -- [dict get $node kind] {
@@ -896,9 +910,22 @@ proc surface::ast::Statement {node indent show linesVar} {
                 HandledCall $value $indent $show lines $prefix
                 return
             }
+            if {$value ne "" && [dict get $value kind] eq "static"} {
+                StaticIntrinsic $value $prefix $indent $show lines
+                return
+            }
         }
     }
     lappend lines "$pad[Expr $node $show]"
+}
+
+# Lines of the static intrinsic NODE ("static OPERATION" and its captured
+# block, STATIC-COMPILE.md), its first line starting with PREFIX.
+proc surface::ast::StaticIntrinsic {node prefix indent show linesVar} {
+    upvar 1 $linesVar lines
+    set pad [string repeat {    } $indent]
+    lappend lines "$pad${prefix}static [dict get $node operation][At $node $show]"
+    Body [dict get $node body] [expr {$indent + 1}] $show lines
 }
 
 # Source text of the destructuring PATTERN, as written: "{a, b: c, d: {e}}"

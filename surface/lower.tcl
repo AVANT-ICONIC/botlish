@@ -133,7 +133,14 @@
 # the node's structural id, ast.tcl); nodes a rule adds get the id with a
 # role (ID/op for an operator's callee, ID/then for a branch it adds, ...).
 
-namespace eval surface::lower {}
+namespace eval surface::lower {
+    # The loader's diagnostics of the static intrinsics of the file being
+    # lowered (STATIC-COMPILE.md): AST node id of a `static` node -> the
+    # {kind message span} dicts of the qualified references in its body the
+    # file may not make (surface/modules.tcl's CollectAndLoad), set by the
+    # loader around the file's lowering. Empty for a file without any.
+    variable staticDeferred [dict create]
+}
 
 proc surface::lowerToHir {ast args} {
     set options [dict create -strict 1 -warnings [hir::warnings::defaultMode] -warning-channel stderr]
@@ -792,6 +799,25 @@ proc surface::lower::Node {node} {
         }
         handledcall {
             return [hir::syntax::handleNode $origin [Node [dict get $node call]] [Handlers $node]]
+        }
+        static {
+            # `static compile:` (STATIC-COMPILE.md): the captured block stays
+            # syntax -- the same nodes it would lower to anywhere, with their
+            # own origins -- under a `static` node that hir/static.tcl
+            # replaces by its decided form before resolution.
+            variable staticDeferred
+            set body [dict get $node body]
+            set deferred {}
+            if {[dict exists $staticDeferred [dict get $node id]]} {
+                set deferred [lmap d [dict get $staticDeferred [dict get $node id]] {
+                    dict create kind [dict get $d kind] message [dict get $d message] \
+                        origin [Origin [dict get $d span] [dict get $node id]/deferred]
+                }]
+            }
+            return [hir::syntax::staticNode $origin [dict get $node operation] \
+                [Origin [dict get $node operationSpan] [dict get $node id]/operation] \
+                [Origin [dict get $body span] [dict get $body id]/body] \
+                [Sequence [dict get $body body]] $deferred]
         }
     }
     error "surface::lowerToHir: cannot lower a \"[dict get $node kind]\" node"

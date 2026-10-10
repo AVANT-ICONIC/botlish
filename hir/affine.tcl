@@ -567,8 +567,8 @@ proc hir::affine::verify {hirVar} {
     set accepted [Analyze hir $parentMap $regions [dict keys [dict get $hir exprs]] 1]
     variable diagnostics
     foreach e [lsort -dictionary [dict keys $diagnostics]] {
-        lassign [dict get $diagnostics $e] kind message at
-        hir::Diagnose hir $kind $message $at
+        lassign [dict get $diagnostics $e] kind message at related
+        hir::Diagnose hir $kind $message $at $related
     }
     # Releases: only for a program the discipline accepts (a rejected one
     # that still runs, -strict 0, keeps every value until collected), and
@@ -747,8 +747,8 @@ proc hir::affine::verifyInstance {viewVar block exprs} {
     Analyze view $parentMap $regions $exprs 0
     variable diagnostics
     foreach e [lsort -dictionary [dict keys $diagnostics]] {
-        lassign [dict get $diagnostics $e] kind message at
-        hir::Diagnose view $kind $message $at
+        lassign [dict get $diagnostics $e] kind message at related
+        hir::Diagnose view $kind $message $at $related
     }
     # A resume of a coroutine the instance was given charges its declared
     # errors exactly as a direct resume does (AFFINE-VALUES.md, "Generic
@@ -1053,12 +1053,14 @@ proc hir::affine::Use {hirVar e b state} {
             moved {
                 set move [lindex $status 1]
                 dict set diagnostics $e [list USE-AFTER-MOVE \
-                    "`$name` was used after its $what value was moved\n\nmoved here:\n    [MoveText $hir $move]\n\nused here:\n    [Where $hir $e]" $e]
+                    "`$name` was used after its $what value was moved\n\nmoved here:\n    [MoveText $hir $move]\n\nused here:\n    [Where $hir $e]" $e \
+                    [list [MoveOrigin $hir $move]]]
             }
             maybe {
                 set moves [lrange $status 1 end]
                 dict set diagnostics $e [list AFFINE-NOT-DEFINITELY-LIVE \
-                    "`$name` is not definitely live here: its $what value was moved on some path reaching this use\n\nmoved here:\n    [join [lmap m $moves {MoveText $hir $m}] "\n    "]\n\nused here:\n    [Where $hir $e]" $e]
+                    "`$name` is not definitely live here: its $what value was moved on some path reaching this use\n\nmoved here:\n    [join [lmap m $moves {MoveText $hir $m}] "\n    "]\n\nused here:\n    [Where $hir $e]" $e \
+                    [lmap m $moves {MoveOrigin $hir $m}]]
             }
             default {
                 if {[dict exists $diagnostics $e]} {
@@ -1078,6 +1080,19 @@ proc hir::affine::Use {hirVar e b state} {
         }
     }
     return $state
+}
+
+# The source origin MoveText locates move MOVE at: a diagnostic's related
+# location (hir::Diagnose), exactly the one its message names.
+proc hir::affine::MoveOrigin {hir move} {
+    variable consumers
+    if {[dict get $hir exprs $move kind] ni {bind block} && [dict exists $consumers $move]} {
+        lassign [dict get $consumers $move] _ where at
+        if {$where eq "bind"} {
+            return [dict get $hir exprs $at origin]
+        }
+    }
+    return [dict get $hir exprs $move origin]
 }
 
 # Where move MOVE (a moving reference, or a binding statement whose value

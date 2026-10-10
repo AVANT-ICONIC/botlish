@@ -1223,6 +1223,11 @@ proc hir::read::Expr {hirVar level s path block} {
             SetField hir $e receiver [Expr hir $inner $s [concat $path 1] $block]
         }
         fail {
+            if {[regexp {^(\S+) static=([a-z]+):([A-Z][A-Z0-9-]*)$} $head -> name operation reified]} {
+                # A rejected static block's reified failure (STATIC-COMPILE.md).
+                SetField hir $e static [dict create operation $operation kind $reified]
+                set head $name
+            }
             if {$head eq "" || ![hir::errordecls::isDeclared $head]} {
                 Fail $number "unknown error \"$head\": no \"error $head\" declaration is visible"
             }

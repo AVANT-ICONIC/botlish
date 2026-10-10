@@ -230,13 +230,13 @@ proc core::primitives::add {a b} {
 @@ cross-enum-parameter a case of any enum is accepted for a parameter of another enum
 ## hir/range.tcl
 <<<<
-    if {[hir::types::IsFn $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
+    if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
             || [hir::types::IsEnum $declared]} {
 ====
     if {[hir::types::IsEnum $declared] && [hir::types::IsEnum $argType]} {
         return 1
     }
-    if {[hir::types::IsFn $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
+    if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
             || [hir::types::IsEnum $declared]} {
 >>>>
 

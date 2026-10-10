@@ -27,7 +27,22 @@
 #                  "with" and "context" are contextual (below); no binding
 #                  name, no type annotation, no list, no block, no colon
 #   simple       = binding | destructure | coroutineBind | return | break
-#                | continue | fail | expression
+#                | continue | fail | staticIntrinsic | expression
+#   staticIntrinsic = "static" IDENT ":" suite
+#                  -- STATIC-COMPILE.md: a compiler-directed syntactic
+#                  operation on the captured block. The IDENT names the
+#                  operation and belongs to the compiler's static-intrinsic
+#                  vocabulary (staticOperations: only "compile"), never to
+#                  any scope: an unknown one is STATIC-UNKNOWN-OPERATION.
+#                  "static" and the operation name are contextual: the form
+#                  is recognized only where a statement or a statement's
+#                  value starts, as the word "static" directly followed by
+#                  a name (AtStatic) -- two adjacent names, which no other
+#                  construct allows -- so `static = 3`, `static(x)`,
+#                  `x.static`, `compile = f` and `compile(x)` are ordinary
+#                  names. The body is parsed as an ordinary suite (a parse
+#                  error in it is the program's parse error); what the
+#                  operation does with it is HIR's (hir/static.tcl)
 #   coroutineBind = "coroutine" "{" coField { "," coField } [ "," ] "}"
 #                  "=" valueOrHandled     -- COROUTINES.md: eagerly starts
 #                  the call on its right side as a coroutine. "coroutine" is
@@ -39,8 +54,8 @@
 #   coField      = ( "step" | "first" ) [ ":" IDENT ]
 #                  -- step the affine coroutine handle, first the first
 #                  outward result; any other name is COROUTINE-BINDING-FIELD
-#   valued       = IDENT "=" (if|loop|handledExpr)
-#                | "return" (if|loop|handledExpr)
+#   valued       = IDENT "=" (if|loop|staticIntrinsic|handledExpr)
+#                | "return" (if|loop|staticIntrinsic|handledExpr)
 #   handledExpr  = expression [ handlers ]     -- handlers only after a bare
 #                                                  call expression (item 9)
 #   handlers     = ":" NEWLINE INDENT { handler } DEDENT
@@ -302,6 +317,12 @@ namespace eval surface::parser {
     # The contextual words that may precede `type` in a type declaration
     # (REFINEMENT-VALUES.md): `refined type NAME = CARRIER`.
     variable typeModifiers {refined}
+    # The static intrinsics (STATIC-COMPILE.md): the operation names that
+    # may follow `static` (see the grammar above). The vocabulary is the
+    # compiler's, never a scope's: `static compile:` means the same whatever
+    # the program binds. A future `static parse:` is one more entry here
+    # (and its own meaning in hir/static.tcl), never a new node kind.
+    variable staticOperations {compile}
 }
 
 proc surface::parse {source args} {
@@ -1121,9 +1142,13 @@ proc surface::parser::Statement {pVar} {
         # The handler suite(s) already ended the line.
         return $statement
     }
+    if {[dict get $statement kind] eq "static"} {
+        # The static intrinsic's suite already ended the line.
+        return $statement
+    }
     if {[dict get $statement kind] in {bind return destructure coroutinebind}
             && [dict get $statement value] ne ""
-            && [dict get $statement value kind] in {if loop handledcall}} {
+            && [dict get $statement value kind] in {if loop handledcall static}} {
         # The if's (or loop's, or the handler suite's) suite(s) already
         # ended the line. break is deliberately excluded here (unlike
         # bind/return): PAYLOAD-FREE-BREAK.md -- break never has a value, so
@@ -1244,6 +1269,12 @@ proc surface::parser::ValueOrHandled {pVar} {
     if {[Kind p] in {if loop}} {
         return [Value p]
     }
+    if {[AtStatic p]} {
+        return [StaticIntrinsic p]
+    }
+    if {[AtStaticWithoutOperation p]} {
+        StaticWithoutOperationError p
+    }
     set expr [Expression p]
     if {[Kind p] eq ":" && [dict get $expr kind] in {call methodcall}} {
         return [HandledCall p $expr]
@@ -1344,6 +1375,73 @@ proc surface::parser::HandlerGuardError {pVar name} {
         Fail $token "a handler names exactly one error: write one \"on NAME:\" handler per error"
     }
     Fail $token "expected \":\" after the handler's error name and its optional payload binding (\"on $name:\", \"on $name details:\" or \"on $name \{field, ...\}:\"), found [Describe $token]"
+}
+
+# 1 if the next tokens start a static intrinsic (STATIC-COMPILE.md): the
+# contextual word "static" directly followed by a name, the operation's.
+# Two adjacent names are never a valid expression, so an ordinary variable
+# called `static` (`static = 1`, `static(x)`, `static.x`, `static + 1`) is
+# unaffected; whether the name is an operation is StaticIntrinsic's
+# question, never a lookup.
+proc surface::parser::AtStatic {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "static"
+        && [Kind p 1] eq "IDENT"}]
+}
+
+# 1 if the next tokens are "static" directly followed by ":" -- a static
+# intrinsic without its operation name (never a valid expression either: a
+# ":" after a plain name ends nothing).
+proc surface::parser::AtStaticWithoutOperation {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "static"
+        && [Kind p 1] eq ":"}]
+}
+
+proc surface::parser::StaticWithoutOperationError {pVar} {
+    variable staticOperations
+    upvar 1 $pVar p
+    FailCode [dict get [Peek p 1] span] STATIC-INTRINSIC-FORM \
+        "a static intrinsic names its operation after \"static\": write \"static [lindex $staticOperations 0]:\" followed by an indented block (the static operations: [join $staticOperations {, }])"
+}
+
+# "static" IDENT ":" suite (STATIC-COMPILE.md), at a token AtStatic accepted.
+# Node: static, operation, operationSpan, staticSpan, body (a suite). The
+# operation must be one of staticOperations -- a word of the compiler's
+# static-intrinsic vocabulary, never resolved through a scope or namespace
+# -- and the form is exactly the keyword pair, ":" and an indented block:
+# every other shape is a located STATIC-* syntax error.
+proc surface::parser::StaticIntrinsic {pVar} {
+    variable staticOperations
+    upvar 1 $pVar p
+    set staticToken [Advance p]
+    set start [dict get $staticToken span]
+    set operation [Advance p]
+    set name [dict get $operation value]
+    if {$name ni $staticOperations} {
+        FailCode [dict get $operation span] STATIC-UNKNOWN-OPERATION \
+            "unknown static operation \"$name\": the static operations are [join [lmap op $staticOperations {string cat "\"static $op:\""}] {, }]; an operation after \"static\" is compiler syntax, never a name looked up in scope"
+    }
+    switch -- [Kind p] {
+        ( {
+            FailCode [dict get [Peek p] span] STATIC-INTRINSIC-FORM \
+                "\"static $name\" takes no arguments: it captures the indented block written after \"static $name:\""
+        }
+        : {}
+        default {
+            FailCode [dict get [Peek p] span] STATIC-INTRINSIC-FORM \
+                "expected \":\" and an indented block after \"static $name\", found [Describe [Peek p]]"
+        }
+    }
+    if {[Kind p 1] ni {NEWLINE EOF}} {
+        FailCode [dict get [Peek p 1] span] STATIC-INTRINSIC-FORM \
+            "\"static $name:\" captures an indented block: start it on a new line after the \":\", found [Describe [Peek p 1]]"
+    }
+    set body [Suite p "\"static $name\""]
+    return [surface::ast::node static [SpanFrom p $start] operation $name \
+        operationSpan [dict get $operation span] staticSpan $start body $body]
 }
 
 # A statement's value: an if, a loop, or an expression.

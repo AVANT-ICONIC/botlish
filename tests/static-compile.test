@@ -1,0 +1,844 @@
+# static-compile.test -- `static compile:` (STATIC-COMPILE.md): the first
+# static intrinsic, a recoverable semantic-compilation boundary.
+#
+#   static compile:
+#       BODY
+#
+# If the compiler accepts BODY where it stands, the boundary disappears and
+# BODY runs with its ordinary value and errors; if it rejects BODY, the block
+# completes with the one payload error compiler::CompilerError, whose payload
+# is the compiler's diagnostic (code, primary location, related locations,
+# message), and none of BODY runs. The enclosing program still compiles.
+#
+# * grammar: the contextual words, the accepted positions, misuse;
+# * the import rule;
+# * the brief's examples (items 51-60), on every backend;
+# * transactions: a rejected body leaves nothing behind (bindings, moves,
+#   facts, instances, candidates), on the outer code or on another block;
+# * completions: the contract of a rejected block, KNOWN-ERROR, SAME-FAILURE;
+# * the diagnostic bridge: the code table against lib/compiler.bot and the
+#   census of the compiler's diagnostic kinds, primary/related/message equal
+#   to the ordinary compilation's, internal failures never reified;
+# * evidence: HIR, Core IR, NIR, allocations, no compiler at run time.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+
+testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux"
+    && $::tcl_platform(machine) in {x86_64 amd64}}]
+
+# ---------------------------------------------------------------------------
+# Helpers
+
+# TEXT with the `import compiler` header every file using a static intrinsic
+# needs.
+proc scProgram {text} {
+    return "import compiler\n$text"
+}
+
+# The outcome of the program TEXT (scProgram) on every backend (they must
+# agree).
+proc scAgree {text} {
+    return [sourceAgree [scProgram $text]]
+}
+
+# The HIR of the program TEXT (scProgram), strict, warnings off.
+proc scHir {text} {
+    return [surface::compile [scProgram $text] -warnings off]
+}
+
+# The error code (last word) of compiling the program TEXT (scProgram), or ok.
+proc scCode {text} {
+    if {[catch {surface::compile [scProgram $text] -warnings off} message options]} {
+        set code [dict get $options -errorcode]
+        if {[lrange $code 0 1] eq {SURFACE SYNTAX}} {
+            set diagnostic [lindex $code 2]
+            return [expr {[dict exists $diagnostic code] ? [dict get $diagnostic code] : "SYNTAX"}]
+        }
+        return [lindex $code end]
+    }
+    return ok
+}
+
+# The message of compiling the program TEXT, or ok.
+proc scMessage {text} {
+    if {[catch {surface::compile [scProgram $text] -warnings off} message]} {
+        return $message
+    }
+    return ok
+}
+
+# The decided sites of the program TEXT, in post-order: `accepted`, or
+# {rejected KIND LINE COLUMN}.
+proc scSites {text} {
+    set hir [scHir $text]
+    set result {}
+    dict for {key site} [hir::static::sites $hir] {
+        if {[dict get $site outcome] eq "rejected"} {
+            set d [dict get $site diagnostic]
+            lappend result [list rejected [dict get $d kind] [dict get $d origin line] [dict get $d origin column]]
+        } else {
+            lappend result [dict get $site outcome]
+        }
+    }
+    return $result
+}
+
+# A probe program: function probe() runs BODY (its lines, indented relative
+# to the block) in a static compile block, and the program calls it under a
+# handler that returns the reified payload's fields. PRELUDE is written before
+# it. BODY's first line is line 4 of the program when PRELUDE is empty
+# (scProgram's header, `fn probe()`, `static compile:`).
+proc scProbe {body {prelude ""}} {
+    set lines [lmap line [split [string trimright $body \n] \n] {string cat "        " $line}]
+    return "${prelude}fn probe() errors compiler::CompilerError:\n    static compile:\n[join $lines \n]\n\nr = probe():\n    on compiler::CompilerError {code, primary, related, message}:\n        \[code, primary.line, primary.column, related, message\]\nr\n"
+}
+
+# {KIND LINE COLUMN RELATED MESSAGE} of diagnostic D of HIR (RELATED a list of
+# {LINE COLUMN}).
+proc scDiagnostic {hir d} {
+    set origin [hir::static::PrimaryOrigin $hir $d]
+    set related [expr {[dict exists $d related] ? [dict get $d related] : {}}]
+    return [list [dict get $d kind] [dict get $origin line] [dict get $origin column] \
+        [lmap r $related {list [dict get $r line] [dict get $r column]}] [dict get $d message]]
+}
+
+# The differential oracle (items 50, 81): for the program TEXT (scProgram)
+# with exactly one static site, {ORDINARY STATIC} -- ORDINARY the first
+# diagnostic the ordinary compiler (-strict 0, every diagnostic) reports
+# inside the block when the site is written as the ordinary block it stands
+# for, `if true:` (the same lines, so the same locations); STATIC the
+# diagnostic the site reified. Each {KIND LINE COLUMN RELATED MESSAGE}.
+proc scDifferential {text} {
+    set source [scProgram $text]
+    set ast [surface::parse $source <input>]
+    set site [scFindStatic $ast]
+    set body [dict get $site body span]
+    set from [list [dict get $body line] [dict get $body column]]
+    set to [list [dict get $body endLine] [dict get $body endColumn]]
+    set ordinary [string map {"static compile:" "if true:"} $source]
+    set expected ""
+    try {
+        set hir [surface::compile $ordinary -strict 0 -warnings off]
+    } trap {SURFACE MODULE} {message options} {
+        # The loader raises (-strict 0 or not): its one diagnostic.
+        regexp {^[^:]*:([0-9]+):([0-9]+): (.*)$} $message -> line column text
+        return [list [list [lindex [dict get $options -errorcode] 2] $line $column {} $text] [scReified $source]]
+    }
+    foreach d [hir::diagnostics $hir] {
+        set diagnostic [scDiagnostic $hir $d]
+        set at [lrange $diagnostic 1 2]
+        if {[scBefore $at $from] || [scBefore $to $at]} continue
+        set expected $diagnostic
+        break
+    }
+    return [list $expected [scReified $source]]
+}
+
+# The diagnostic the rejected site of the program SOURCE reified,
+# {KIND LINE COLUMN RELATED MESSAGE}, or "".
+proc scReified {source} {
+    set hir [surface::compile $source -warnings off]
+    set got ""
+    dict for {key s} [hir::static::sites $hir] {
+        if {[dict get $s outcome] eq "rejected"} {
+            set d [dict get $s diagnostic]
+            set got [list [dict get $d kind] [dict get $d origin line] [dict get $d origin column] \
+                [lmap r [dict get $d related] {list [dict get $r line] [dict get $r column]}] [dict get $d message]]
+        }
+    }
+    return $got
+}
+
+proc scBefore {a b} {
+    lassign $a l1 c1
+    lassign $b l2 c2
+    return [expr {$l1 < $l2 || ($l1 == $l2 && $c1 < $c2)}]
+}
+
+# The first `static` AST node of NODE.
+proc scFindStatic {node} {
+    if {[dict get $node kind] eq "static"} {
+        return $node
+    }
+    foreach child [surface::ast::Children $node] {
+        set found [scFindStatic $child]
+        if {$found ne ""} {
+            return $found
+        }
+    }
+    return ""
+}
+
+# The instruction lines of function NAME in the NIR of HIR (register numbers
+# and expression ids kept, the `@eN` suffixes dropped).
+proc scFunc {hir name args} {
+    set lines {}
+    set inside 0
+    foreach line [split [native::nir $hir {*}$args] \n] {
+        if {[regexp {^func [0-9]+ "([^"]*)"} $line -> fname]} {
+            set inside [expr {$fname eq $name}]
+            continue
+        }
+        if {$line eq "end"} {
+            set inside 0
+            continue
+        }
+        if {$inside} {
+            lappend lines [regsub { @e[0-9]+$} [string trim $line] {}]
+        }
+    }
+    return $lines
+}
+
+# ---------------------------------------------------------------------------
+# Grammar (items 2-5, 8, 14, 89, 90)
+
+test sc-grammar-ast {`static compile:` is one AST node: the operation and the captured block, statement or value of a binding, return or destructuring} -body {
+    surface::formatAst [surface::parse "static compile:\n    1 + 2\nx = static compile:\n    3\nfn f():\n    return static compile:\n        4\n{a} = static compile:\n    {a: 1}\n" t.bot] -ids 1
+} -result {static compile <static>
+    (binary + (int 1) <static/binary/left> (int 2) <static/binary/right>) <static/binary>
+bind x <x=> = static compile <x=/value>
+    (int 3) <x=/value/int>
+fn f () <f()>
+    return <f()/return> static compile <f()/return/value>
+        (int 4) <f()/return/value/int>
+destructure {a <destructure/field1>} <destructure> = static compile <destructure/value>
+    (struct (a (int 1) <destructure/value/anonstruct/field1>)) <destructure/value/anonstruct>}
+
+test sc-grammar-contextual {static and compile stay ordinary names: binding, calling, projecting, a parameter or a field named static or compile; `static compile:` keeps its meaning whatever the program binds (item 90)} -body {
+    scAgree "fn compile(x):\n    x * 10\n\nstatic = 3\nf = compile\nfn g(static, compile):\n    static + compile\n\nr = {static: 1, compile: 2}\nv = static compile:\n    compile(static)\n\[f(static), g(1, 2), r.static, r.compile, v\]\n"
+} -result {value {[30, 3, 1, 2, 30]}}
+
+test sc-grammar-unknown-operation {an operation the compiler does not know is a syntax error of its own, never resolved through a scope (item 89)} -body {
+    list [scCode "static unknown:\n    1\n"] [scCode "fn unknown():\n    1\n\nstatic unknown:\n    1\n"] \
+        [scMessage "static unknown:\n    1\n"]
+} -result {STATIC-UNKNOWN-OPERATION STATIC-UNKNOWN-OPERATION {<input>:2:8: STATIC-UNKNOWN-OPERATION: unknown static operation "unknown": the static operations are "static compile:"; an operation after "static" is compiler syntax, never a name looked up in scope}}
+
+test sc-grammar-malformed {malformed static intrinsics are located syntax errors: arguments, no colon, a one-line body, no operation, no block (item 89)} -body {
+    lmap text {
+        "static compile(1):\n    2\n"
+        "static compile\n    1\n"
+        "static compile: 1\n"
+        "static:\n    1\n"
+        "static compile:\n1\n"
+    } {scCode $text}
+} -result {STATIC-INTRINSIC-FORM STATIC-INTRINSIC-FORM STATIC-INTRINSIC-FORM STATIC-INTRINSIC-FORM SYNTAX}
+
+test sc-grammar-body-parse-error {a parse error in the body is the enclosing program's parse error: static compile captures parsed syntax, never text (items 8, 73)} -body {
+    list [scCode "fn f() errors compiler::CompilerError:\n    static compile:\n        g(1\n    0\n"] \
+        [scCode "fn f() errors compiler::CompilerError:\n    static compile:\n        type T = int in 0..2\n"] \
+        [scCode "fn f() errors compiler::CompilerError:\n    static compile:\n        import list\n"] \
+        [scCode "fn f() errors compiler::CompilerError:\n    static compile:\n        error E\n"]
+} -result {SYNTAX SYNTAX SYNTAX SYNTAX}
+
+test sc-grammar-not-an-expression {a static intrinsic is a statement or a statement's value, never an operand or an argument (item 16)} -body {
+    list [scCode "x = 1 + static compile:\n    2\n"] [scCode "f(static compile:\n    2)\n"]
+} -result {SYNTAX SYNTAX}
+
+test sc-import-required {a file using a static intrinsic imports `compiler`: no implicit import (item 29)} -body {
+    list [catch {surface::compile "static compile:\n    1\n"} message options] \
+        [dict get $options -errorcode] $message \
+        [scAgree "static compile:\n    1\n"]
+} -result {1 {SURFACE MODULE MISSING-IMPORT} {<input>:1:1: namespace "compiler" is not imported; add `import compiler` to use `static compile:` (a block it rejects completes with the error compiler::CompilerError)} {value 1}}
+
+test sc-names-qualified {compiler::CompilerError, DiagnosticCode and SourceLocation are ordinary namespaced declarations: named qualified after the import, never by a bare name (item 29)} -body {
+    list [scCode "fn f() errors CompilerError:\n    0\n"] \
+        [scCode "x = DiagnosticCode::Unbound\n"] \
+        [catch {surface::compile "x = compiler::DiagnosticCode::Unbound\n"} m o] [dict get $o -errorcode] \
+        [scAgree "x = compiler::SourceLocation {line: 1, column: 2}\n\[x.line, x.column, compiler::DiagnosticCode::Unbound == compiler::DiagnosticCode::Unbound\]\n"]
+} -result {UNDECLARED-ERROR UNKNOWN-NAMESPACE 1 {SURFACE MODULE MISSING-IMPORT} {value {[1, 2, true]}}}
+
+# ---------------------------------------------------------------------------
+# First examples (items 51-60, 102)
+
+test sc-positive-arithmetic {item 51: a valid body runs with its ordinary value on every backend} -body {
+    scAgree "static compile:\n    1 + 2\n"
+} -result {value 3}
+
+test sc-positive-call {item 51: a body calling a function of the program} -body {
+    scAgree "fn inc(x: int):\n    x + 1\n\nstatic compile:\n    inc(3)\n"
+} -result {value 4}
+
+test sc-positive-lexical {item 51/10/11: the body sees the lexical environment where it stands -- a parameter, its declared type, a function before it, an imported namespace} -body {
+    scAgree "import list\n\nfn helper(x):\n    x + 1\n\nfn f(x: int):\n    static compile:\n        helper(x) + list::length(\[x, x\])\n\nf(40)\n"
+} -result {value 43}
+
+test sc-success-value {item 59, 102: the body's value is the block's, in every accepted position; 20 + 22 is 42 with or without the boundary} -body {
+    scAgree "fn t(v: int) -> int:\n    return static compile:\n        v * 2\n\nfn u(v: int) -> int:\n    \{a, b\} = static compile:\n        \{a: v, b: v + 1\}\n    a + b\n\nx = static compile:\n    20 + 22\ny = static compile:\n    z = 40\n    z + 2\n\[x, y, t(4), u(10)\]\n"
+} -result {value {[42, 42, 8, 21]}}
+
+test sc-negative-unbound {item 52, 102: a rejected body is the error compiler::CompilerError with code Unbound and the primary location of `missing`; the enclosing program compiles; every backend} -body {
+    scAgree [scProbe "missing"]
+} -result {value {[compiler::DiagnosticCode::Unbound, 4, 9, [], "unbound name \"missing\""]}}
+
+test sc-negative-type {item 53: a static type error is code Type at the argument the ordinary compilation points at} -body {
+    scAgree [scProbe "needs_int(\"s\")" "fn needs_int(v: int) -> int:\n    v\n\n"]
+} -result {value {[compiler::DiagnosticCode::Type, 7, 19, [], "argument for parameter \"v\" cannot be proven to satisfy int (argument type: str)"]}}
+
+test sc-native-type-error-is-runtime {`1 + "x"` is not a compile-time error in Botlish (a native's argument kinds are checked at run time): the body is accepted and fails with the run-time TYPE error, not CompilerError (item 53, 58)} -body {
+    list [scSites "fn f() errors compiler::CompilerError:\n    static compile:\n        1 + \"xy\"\n\n0\n"] \
+        [lindex [scAgree "fn f() errors compiler::CompilerError:\n    static compile:\n        1 + \"xy\"\n\nf()\n"] 1]
+} -result {accepted {CORE SEMANTIC TYPE}}
+
+set scErased {error E1
+error E2
+
+fn raise(x) -> int errors E1, E2:
+    if x == 1:
+        fail E1
+    if x == 2:
+        fail E2
+    0
+
+fn call(f, x):
+    f(x)
+
+fn generic(x) -> int errors E1, E2:
+    call(raise, x)
+
+}
+
+test sc-negative-unhandled-erased {item 54: the completion analysis' erased-callable fallback runs inside the block: E1 escaping generic through an untyped call, with a handler for E2 only, is UnhandledError} -body {
+    scAgree [scProbe "generic(0):\n    on E2:\n        -1" $scErased]
+} -result {value {[compiler::DiagnosticCode::UnhandledError, 20, 9, [], "this call may produce the declared error \"E1\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration"]}}
+
+test sc-negative-known-error {item 36: a call proven to fail inside the body is the ordinary KNOWN-ERROR, reified as code KnownError} -body {
+    scAgree [scProbe "fn g() -> int errors Boom:\n    always()\n0" "error Boom\n\nfn always() -> int errors Boom:\n    fail Boom\n\n"]
+} -result {value {[compiler::DiagnosticCode::KnownError, 10, 13, [], "this call can never complete normally under the facts proven for its arguments here -- it always produces the declared error(s) Boom; a handler does not make a statically known failure legal"]}}
+
+test sc-list-at-empty-is-known-error {item 58's `list::at([], 0)`: the completion proofs see the empty List, so the ordinary compiler rejects the call (KNOWN-ERROR) -- inside a block it is code KnownError, not a run-time IndexNotFound} -body {
+    scSites "import list\n\nfn f() errors compiler::CompilerError:\n    static compile:\n        list::at(\[\], 0)\n\n0\n"
+} -result {{rejected KNOWN-ERROR 6 9}}
+
+test sc-success-runtime-error {item 58, 17, 102: a body the compiler accepts that fails at run time fails with its ordinary error (IndexNotFound), never CompilerError, on every backend} -body {
+    scAgree "import list\n\nfn at(xs: List\[int\], i: int) -> int errors IndexNotFound, compiler::CompilerError:\n    static compile:\n        list::at(xs, i)\n\nfn probe(i: int) -> int:\n    r = at(\[10, 20\], i):\n        on IndexNotFound:\n            -1\n        on compiler::CompilerError:\n            -2\n    r\n\n\[probe(1), probe(5)\]\n"
+} -result {value {[20, -1]}}
+
+test sc-success-declared-error {item 17: a declared application error raised by an accepted body is that error} -body {
+    scAgree "error MyApplicationError:\n    code: int\n\nfn f(x: int) -> int errors MyApplicationError, compiler::CompilerError:\n    static compile:\n        if x > 1:\n            fail MyApplicationError \{code: x\}\n        x\n\nfn probe(x: int):\n    r = f(x):\n        on MyApplicationError \{code\}:\n            code * 100\n        on compiler::CompilerError:\n            -1\n    r\n\n\[probe(1), probe(7)\]\n"
+} -result {value {[1, 700]}}
+
+test sc-independent-sites {item 60, 71: accepted, rejected, accepted, rejected, accepted blocks in one program all compile into it, each with its own outcome} -body {
+    set text "fn needs_int(v: int) -> int:\n    v\n\n"
+    append text "fn s1() -> int errors compiler::CompilerError:\n    static compile:\n        1\n\n"
+    append text "fn f1() -> int errors compiler::CompilerError:\n    static compile:\n        missing_a\n\n"
+    append text "fn s2() -> int errors compiler::CompilerError:\n    static compile:\n        2\n\n"
+    append text "fn f2() -> int errors compiler::CompilerError:\n    static compile:\n        needs_int(\"b\")\n\n"
+    append text "fn s3() -> int errors compiler::CompilerError:\n    static compile:\n        3\n\n"
+    append text "fn run(f):\n    r = f():\n        on compiler::CompilerError \{primary\}:\n            -primary.line\n    r\n\n"
+    append text "\[run(s1), run(f1), run(s2), run(f2), run(s3)\]\n"
+    list [scSites $text] [scAgree $text]
+} -cleanup {unset -nocomplain text} -result {{accepted {rejected UNBOUND 11 9} accepted {rejected TYPE 19 19} accepted} {value {[1, -11, 2, -19, 3]}}}
+
+test sc-nested {item 37: a nested static compile is its own boundary; the inner rejection is an ordinary CompilerError completion of the outer body, which the outer one compiles} -body {
+    list [scSites "fn f() errors compiler::CompilerError:\n    static compile:\n        static compile:\n            missing\n\n0\n"] \
+        [scAgree "fn outer() errors compiler::CompilerError:\n    static compile:\n        static compile:\n            missing\n\nr = outer():\n    on compiler::CompilerError \{code, primary\}:\n        \[code, primary.line, primary.column\]\nr\n"]
+} -result {{{rejected UNBOUND 5 13} accepted} {value {[compiler::DiagnosticCode::Unbound, 5, 13]}}}
+
+test sc-nested-outer-rejects {item 37: an outer body that cannot admit its inner block's CompilerError is itself rejected (UnhandledError at the inner block)} -body {
+    list [scSites "fn f() errors compiler::CompilerError:\n    static compile:\n        fn g() -> int:\n            static compile:\n                missing\n        g\n\n0\n"]
+} -result {{{rejected UNBOUND 6 17} {rejected UNHANDLED-ERROR 5 13}}}
+
+# ---------------------------------------------------------------------------
+# Transactions (items 12, 13, 38-42, 88)
+
+test sc-tx-binding {item 38: the outer binding, its type and value survive a rejected block} -body {
+    scAgree "x = 41\n\nfn t() errors compiler::CompilerError:\n    static compile:\n        y = x + 1\n        missing\n\nr = t():\n    on compiler::CompilerError:\n        x + 1\n\[r, x\]\n"
+} -result {value {[42, 41]}}
+
+test sc-tx-binding-no-export {items 13, 38, 41: a rejected body's bindings and functions do not exist after it: the enclosing scope may bind the same names} -body {
+    scAgree "fn f(n: int) -> int errors compiler::CompilerError:\n    if n > 100:\n        static compile:\n            y = n + 1\n            fn helper(v):\n                v\n            missing\n    y = n * 2\n    fn helper(v):\n        v + 1000\n    helper(y)\n\nr = f(4):\n    on compiler::CompilerError:\n        -1\nr\n"
+} -result {value 1008}
+
+test sc-no-prefix {items 34, 64: nothing of a rejected body runs, not even its valid prefix: a prefix that would fail at run time with IndexNotFound does not, the block completes with CompilerError} -body {
+    scAgree "import list\n\nfn f(xs: List\[int\], i: int) -> int errors IndexNotFound, compiler::CompilerError:\n    static compile:\n        list::at(xs, i)\n        missing\n\nfn probe(i: int) -> int:\n    r = f(\[1\], i):\n        on IndexNotFound:\n            -1\n        on compiler::CompilerError:\n            -2\n    r\n\nprobe(9)\n"
+} -result {value -2}
+
+test sc-tx-scope {item 13: an accepted body's bindings are scoped to its block, exactly an `if true:` block's: no export} -body {
+    list [scCode "static compile:\n    x = 3\nx\n"] [scAgree "x = 1\nstatic compile:\n    x = 3\n    x\n"] \
+        [scCode "if true:\n    x = 3\nx\n"]
+} -result {UNBOUND {value 3} UNBOUND}
+
+set scAffineDecls {import coroutine
+
+struct Message:
+    value: int
+
+struct Event:
+    value: int
+
+fn worker(seed: int, resume Message) -> Event:
+    message = yield Event {value: seed}
+    return Event {value: message.value}
+
+fn consume(s: Coroutine{args: [Message], return: Event}, n: int) -> int:
+    e = s(Message {value: n})
+    e.value
+
+fn flag(n: int) -> bool:
+    n > 100
+
+}
+
+test sc-affine-use-after-move {item 57: a use after move in the body is code UseAfterMove at the use, with the move as its related location; on every backend} -body {
+    scAgree [scProbe "coroutine \{step\} = worker(10)\nconsume(step, 1)\nconsume(step, 2)" $scAffineDecls]
+} -result {value {[compiler::DiagnosticCode::UseAfterMove, 25, 17, [compiler::SourceLocation {line: 24, column: 17}], "`step` was used after its coroutine value was moved\n\nmoved here:\n    step passed to consume  (<input>:24:17)\n\nused here:\n    <input>:25:17"]}}
+
+test sc-affine-rollback {items 39, 57: a rejected block that moved an outer affine value leaves it unmoved: the code after it uses it, at compile time and at run time} -body {
+    scAgree "${scAffineDecls}fn probe(n: int) -> int errors compiler::CompilerError:\n    coroutine \{step\} = worker(10)\n    if flag(n):\n        static compile:\n            consume(step, 1)\n            consume(step, 2)\n    e = step(Message \{value: 5\})\n    e.value\n\nr = probe(1):\n    on compiler::CompilerError:\n        -1\nr2 = probe(500):\n    on compiler::CompilerError \{code\}:\n        if code == compiler::DiagnosticCode::UseAfterMove:\n            -2\n        else:\n            -3\n\[r, r2\]\n"
+} -result {value {[5, -2]}}
+
+test sc-affine-rollback-next-block {items 39, 88: a later block is judged after an earlier rejected block's move is gone: it uses the value and is accepted} -body {
+    set text "${scAffineDecls}fn probe(n: int) -> int errors compiler::CompilerError:\n    coroutine \{step\} = worker(10)\n    if flag(n):\n        static compile:\n            consume(step, 1)\n            consume(step, 2)\n    static compile:\n        consume(step, 7)\n\nr = probe(1):\n    on compiler::CompilerError:\n        -1\nr\n"
+    list [scSites $text] [scAgree $text]
+} -cleanup {unset -nocomplain text} -result {{{rejected USE-AFTER-MOVE 26 21} accepted} {value 7}}
+
+test sc-affine-accepted-moves {item 39: an accepted block's moves are the ordinary block's: using the value after it is the enclosing program's USE-AFTER-MOVE} -body {
+    list [scCode "${scAffineDecls}fn probe() -> int:\n    coroutine \{step\} = worker(10)\n    static compile:\n        consume(step, 1)\n    e = step(Message \{value: 5\})\n    e.value\n\n0\n"]
+} -result USE-AFTER-MOVE
+
+set scRefined {refined type Small = int
+
+error NotSmall
+
+fn validate_small(v: int) -> unit proves v: Small errors NotSmall:
+    if v > 10:
+        fail NotSmall
+
+fn need(s: Small) -> int:
+    s
+
+}
+
+test sc-tx-refinement {item 40: a refinement established by a rejected body does not survive it, while an accepted body's does, exactly as an `if true:` block's} -body {
+    list [scCode "${scRefined}fn use(n: int) -> int errors NotSmall, compiler::CompilerError:\n    static compile:\n        validate_small(n)\n        missing\n    need(n)\n\n0\n"] \
+        [scAgree "${scRefined}fn use(n: int) -> int errors NotSmall, compiler::CompilerError:\n    static compile:\n        validate_small(n)\n    need(n)\n\nr = use(3):\n    on NotSmall:\n        -1\n    on compiler::CompilerError:\n        -2\nr\n"]
+} -result {TYPE {value 3}}
+
+test sc-tx-context {item 40: an installation inside a block is the nested-scope installation the ordinary block would be (rejected); the rest of the program does not see it} -body {
+    list [scSites "import linux::io\n\nfn f() errors compiler::CompilerError:\n    static compile:\n        with context linux::io::create()\n        1\n\n0\n"] \
+        [scCode "import io\nimport linux::io\n\nfn f() errors compiler::CompilerError:\n    static compile:\n        with context linux::io::create()\n        1\n\nfn w() -> unit errors io::WriteFailed:\n    linux::io::write_text(\"hi\")\n\nr = w():\n    on io::WriteFailed:\n        unit\nr\n"]
+} -result {{{rejected CONTEXT-INSTALLATION-UNSUPPORTED 6 9}} MISSING-CONTEXT}
+
+test sc-tx-callable {items 40, 41: a function declared in a rejected body leaves no binding and no method-call candidate behind} -body {
+    list [scCode "fn f() errors compiler::CompilerError:\n    static compile:\n        fn twice(x):\n            x * 2\n        missing\n    twice(1)\n\n0\n"] \
+        [scCode "fn f(n: int) errors compiler::CompilerError:\n    if n > 100:\n        static compile:\n            fn twice(x):\n                x * 2\n            missing\n    3.twice()\n\n0\n"] \
+        [scAgree "fn f() -> int errors compiler::CompilerError:\n    static compile:\n        fn twice(x):\n            x * 2\n        3.twice()\n\nr = f():\n    on compiler::CompilerError:\n        -1\nr\n"]
+} -result {UNBOUND NOT-A-STRUCT {value 6}}
+
+# The argument types of the semantic instances of HIR, sorted.
+proc scInstances {hir} {
+    set keys {}
+    if {[dict exists $hir semantic instances]} {
+        dict for {id inst} [dict get $hir semantic instances] {
+            lappend keys [dict get $inst args]
+        }
+    }
+    return [lsort $keys]
+}
+
+test sc-tx-instance {items 40, 42: a semantic instance created only by a rejected body is not in the program; one created by an accepted body is} -body {
+    set base "fn id(x):\n    x\n\nfn f() errors compiler::CompilerError:\n    static compile:\n        id(\"text\")\n        MISSING\n\nid(1)\n"
+    list [scInstances [scHir $base]] [scInstances [scHir [string map {"        MISSING\n" ""} $base]]]
+} -cleanup {unset -nocomplain base} -result {int {int str}}
+
+test sc-tx-deterministic {item 88: a block's diagnostic is the same whether or not rejected blocks come before it; the same block compiled again after them is decided the same} -body {
+    set block "fn probe() -> int errors compiler::CompilerError:\n    coroutine \{step\} = worker(10)\n    static compile:\n        consume(step, 1)\n        consume(step, 2)\n\n"
+    set alone [scSites "${scAffineDecls}${block}0\n"]
+    set before ""
+    for {set i 0} {$i < 4} {incr i} {
+        append before "fn bad$i\() errors compiler::CompilerError:\n    coroutine \{step\} = worker($i)\n    static compile:\n        consume(step, 1)\n        missing$i\n\n"
+    }
+    set after [scSites "${scAffineDecls}${before}[string map {probe probe2} $block]${block}0\n"]
+    list [lindex $alone 0 1] [lrange [lindex $after end] 1 1] [lrange [lindex $after end-1] 1 1] \
+        [lsort -unique [lmap s [lrange $after 0 3] {lindex $s 1}]]
+} -cleanup {unset -nocomplain block alone before after i} -result {USE-AFTER-MOVE USE-AFTER-MOVE USE-AFTER-MOVE UNBOUND}
+
+# ---------------------------------------------------------------------------
+# Completions (items 35, 36, 61-64, 96)
+
+test sc-contract-admitted {item 62: a rejected block's CompilerError must be handled or admitted like any error: the enclosing function without the `errors` clause is rejected (UNHANDLED-ERROR at the block), a top-level block likewise} -body {
+    list [scCode "fn f() -> int:\n    static compile:\n        missing\n\n0\n"] \
+        [scMessage "fn f() -> int:\n    static compile:\n        missing\n\n0\n"] \
+        [scCode "static compile:\n    missing\n"]
+} -result {UNHANDLED-ERROR {<input>:3:5: this "static compile:" block's body was rejected (UNBOUND), so the block completes with the error "compiler::CompilerError", which is not admitted here: handle it, or declare "errors compiler::CompilerError" on the enclosing function} UNHANDLED-ERROR}
+
+test sc-contract-accepted-none {items 61, 63: an accepted block contributes no CompilerError: the enclosing function needs no `errors` clause and its callers handle nothing} -body {
+    scAgree "fn f(x: int) -> int:\n    static compile:\n        x + 1\n\nf(1)\n"
+} -result {value 2}
+
+test sc-contract-unhandled-call {item 62: a caller of a function whose block was rejected handles the error or is UNHANDLED-ERROR} -body {
+    scCode "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nf()\n"
+} -result UNHANDLED-ERROR
+
+test sc-known-error-exempt {item 35: a call whose callee always completes with a rejected block's error is not KNOWN-ERROR -- reporting it is the intrinsic's purpose; an ordinary always-failing call still is, also when the ordinary failure comes before a rejected block ("do not globally weaken"); a callee failing ordinarily on some paths and with the rejected block on the rest is accepted} -body {
+    list [scAgree "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nr = f():\n    on compiler::CompilerError:\n        1\nr\n"] \
+        [scCode "error Boom\n\nfn g() -> int errors Boom:\n    fail Boom\n\nr = g():\n    on Boom:\n        1\nr\n"] \
+        [scCode "error Boom\n\nfn g() -> int errors Boom, compiler::CompilerError:\n    if true:\n        fail Boom\n    static compile:\n        missing\n\nr = g():\n    on Boom:\n        1\n    on compiler::CompilerError:\n        2\nr\n"] \
+        [scAgree "error Boom\n\nfn g(x: int) -> int errors Boom, compiler::CompilerError:\n    if x > 0:\n        fail Boom\n    static compile:\n        missing\n\nfn probe(x: int):\n    r = g(x):\n        on Boom:\n            1\n        on compiler::CompilerError:\n            2\n    r\n\n\[probe(1), probe(0)\]\n"]
+} -result {{value 1} KNOWN-ERROR KNOWN-ERROR {value {[1, 2]}}}
+
+test sc-same-failure {item 96: blocks rejected for the same diagnostic in one function are not exits the programmer wrote: no SAME-FAILURE warning} -body {
+    set hir [surface::compile [scProgram "fn f(x: int) -> int errors compiler::CompilerError:\n    if x > 0:\n        static compile:\n            missing\n    static compile:\n        missing\n\nr = f(1):\n    on compiler::CompilerError:\n        0\nr\n"] -warnings off]
+    lmap w [hir::warnings::collect $hir] {dict get $w code}
+} -cleanup {unset -nocomplain hir} -result {}
+
+# ---------------------------------------------------------------------------
+# Warnings (items 27, 28)
+
+test sc-warnings-visible {item 28: a warning in an accepted body is reported where it is, and the body runs} -body {
+    set channel [file tempfile path]
+    try {
+        set hir [surface::compile [scProgram "fn t() -> str:\n    static compile:\n        x = \"a\"\n        x\n\nt()\n"] -warnings default -warning-channel $channel]
+        seek $channel 0
+        set warnings [read $channel]
+    } finally {
+        close $channel
+        file delete $path
+    }
+    list [string trim $warnings] [lindex [outcomeUnderHir interp $hir] 1]
+} -cleanup {unset -nocomplain channel path hir warnings} -result {{<input>:4:13: warning: the String literal `"a"` is one character long; a single character is written as a character literal (ONE-CHAR-STRING-LITERAL)} {"a"}}
+
+test sc-warnings-not-rejection {item 27: a warning never rejects a block; under -warnings error it fails the whole compilation, the global policy, never as CompilerError} -body {
+    set text [scProgram "fn t() -> str:\n    static compile:\n        x = \"a\"\n        x\n\nt()\n"]
+    list [dict get [lindex [dict values [hir::static::sites [surface::compile $text -warnings off]]] 0] outcome] \
+        [catch {surface::compile $text -warnings error} m o] [dict get $o -errorcode]
+} -cleanup {unset -nocomplain text m o} -result {accepted 1 {CORE SEMANTIC ONE-CHAR-STRING-LITERAL}}
+
+# ---------------------------------------------------------------------------
+# The diagnostic bridge (items 19-26, 44, 50, 69, 81)
+
+# The kinds of the code table, the enum's cases, and the census.
+proc scEnumCases {} {
+    set ast [surface::parse [core::ReadFile [file join $::core::libraryDir compiler.bot]] compiler.bot]
+    foreach statement [dict get $ast body] {
+        if {[dict get $statement kind] eq "enumdecl" && [dict get $statement name] eq "DiagnosticCode"} {
+            return [lmap case [dict get $statement cases] {dict get $case name}]
+        }
+    }
+    return {}
+}
+
+test sc-codes-one-to-one {items 20, 22: every DiagnosticCode case is the code of exactly one diagnostic kind, every kind of the table has exactly one case, by the Botlish enum spelling of the kind (UNBOUND Unbound, USE-AFTER-MOVE UseAfterMove)} -body {
+    set codes [hir::static::codes]
+    set cases [scEnumCases]
+    set kinds [dict keys $codes]
+    set values [dict values $codes]
+    list [expr {[llength $kinds] == [llength [lsort -unique $kinds]]}] \
+        [expr {[llength $values] == [llength [lsort -unique $values]]}] \
+        [expr {[lsort $values] eq [lsort $cases]}] \
+        [lmap {kind case} $codes {
+            if {$case eq [join [lmap word [split $kind -] {string totitle $word}] ""]} continue
+            list $kind $case
+        }] [llength $cases]
+} -cleanup {unset -nocomplain codes cases kinds values} -result {1 1 1 {} 87}
+
+# The census (STATIC-COMPILE.md, "Diagnostic-code census"): every diagnostic
+# kind the compiler's front end (hir/*.tcl, surface/modules.tcl) can name, by
+# class. `recoverable` is exactly the code table; the others are never a
+# static block's rejection, each for its reason. Any other upper-case kind
+# token in that code is a new, unclassified kind: classify it (and give it a
+# case if a block can produce it).
+set scCensus {
+    internal {CONTEXT-TRAIT-INTERNAL TRAIT-INTERNAL}
+    declaration {CYCLIC-REFINEMENT REFINEMENT-CARRIER TRAIT-DUPLICATE-REQUIREMENT TRAIT-NAME-COLLISION
+        TRAIT-OTHER-TRAIT TRAIT-REQUIREMENT-RECEIVER TRAIT-SELF-POSITION ENUM-EMPTY}
+    top-level-install {CONTEXT-TYPE-NOT-EXACT DUPLICATE-CONTEXT}
+    not-from-source {LISTLOOP-BREAK-VALUE}
+    header {CYCLE DUPLICATE-IMPORT DUPLICATE-NATIVE INVALID-TOPLEVEL NOT-A-TYPE SELF-IMPORT TYPE-IMPORT-COLLISION}
+    warning {SAME-RETURN-VALUE METHOD-ELIGIBLE FIXED-ARITY-LIST-RETURN SAME-FAILURE PROVES-NAMING
+        ONE-CHAR-STRING-LITERAL MANY-BOOLEAN-ARGUMENTS}
+    parser {STATIC-INTRINSIC-FORM STATIC-UNKNOWN-OPERATION COROUTINE-BINDING-FIELD MALFORMED-CONTEXT-SECTION
+        MALFORMED-FLAG-SECTION MALFORMED-FLAG ARGUMENT-AFTER-FLAG FLAG-NOT-A-VALUE LIST-DESTRUCTURING
+        ANONYMOUS-ENUM TRAIT-EMPTY TRAIT-REQUIREMENT-FLAGS TRAIT-CONTEXT-REQUIREMENT TRAIT-REQUIREMENT-BODY
+        TRAIT-NESTED}
+    runtime {NOT-CALLABLE NOT-BOOLEAN}
+    other {MODULE-BINDINGS A-Z A-Z0-9}
+}
+
+test sc-census-exhaustive {item 22: every diagnostic kind the front end names is classified -- a code of the table, or never a block's rejection for a stated reason -- and every code of the table is a kind the front end names; a new kind fails here until it is classified} -body {
+    set classified [dict create]
+    foreach kind [dict keys [hir::static::codes]] {
+        dict set classified $kind recoverable
+    }
+    dict for {class kinds} $::scCensus {
+        foreach kind $kinds {
+            dict set classified $kind $class
+        }
+    }
+    set seen [dict create]
+    foreach path [concat [glob [file join $::projectRoot hir *.tcl]] [list [file join $::projectRoot surface modules.tcl]]] {
+        foreach line [split [core::ReadFile $path] \n] {
+            if {[regexp {^\s*#} $line]} continue
+            foreach token [regexp -all -inline {\m[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\M} $line] {
+                dict set seen $token 1
+            }
+        }
+    }
+    # The one-word kinds (the token pattern above needs a dash).
+    foreach kind {TYPE UNBOUND DUPLICATE ARITY} {
+        dict set seen $kind 1
+    }
+    set unclassified [lmap token [lsort [dict keys $seen]] {
+        expr {[dict exists $classified $token] ? [continue] : $token}
+    }]
+    set stale [lmap kind [lsort [dict keys [hir::static::codes]]] {
+        expr {[dict exists $seen $kind] ? [continue] : $kind}
+    }]
+    list $unclassified $stale
+} -cleanup {unset -nocomplain classified class kinds kind seen path line token unclassified stale} -result {{} {}}
+
+test sc-unmapped-kind-internal {items 22, 44: a diagnostic kind without a case is an internal compiler failure, never a default case} -body {
+    list [catch {hir::static::CodeOf NO-SUCH-KIND} message] $message
+} -result {1 {internal compiler error: diagnostic kind "NO-SUCH-KIND" has no compiler::DiagnosticCode case (hir/static.tcl's codes, lib/compiler.bot)}}
+
+test sc-internal-failure-propagates {item 44: a failure of the compiler while it compiles a block (a Tcl error, not a diagnostic: here one the body's code provokes) fails the compilation loudly, never as CompilerError} -body {
+    rename ::hir::lockstep::verify ::scSavedLockstepVerify
+    proc ::hir::lockstep::verify {hirVar} {
+        upvar 1 $hirVar hir
+        dict for {e node} [dict get $hir exprs] {
+            if {[dict get $node kind] eq "ref" && [dict get $node name] eq "trigger_compiler_bug"} {
+                error "simulated compiler bug"
+            }
+        }
+        ::scSavedLockstepVerify hir
+    }
+    try {
+        list [catch {scHir "fn trigger_compiler_bug():\n    1\n\nfn f() errors compiler::CompilerError:\n    static compile:\n        trigger_compiler_bug()\n\n0\n"} message] $message \
+            [dict get [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        1\n\n0\n"] staticRounds]
+    } finally {
+        rename ::hir::lockstep::verify {}
+        rename ::scSavedLockstepVerify ::hir::lockstep::verify
+    }
+} -cleanup {unset -nocomplain message} -result {1 {simulated compiler bug} 1}
+
+test sc-internal-diagnostic-not-reified {item 44: a diagnostic the compiler marks as its own failure (a monomorphized-program diagnostic, an *-INTERNAL kind) is never a block's rejection} -body {
+    list [hir::static::Internal {kind TRAIT-INTERNAL message m expr e1}] \
+        [hir::static::Internal {kind TYPE message m expr e1 internal 1}] \
+        [hir::static::Internal {kind TYPE message m expr e1}]
+} -result {1 1 0}
+
+foreach {name prelude body} [list \
+    unbound "" "missing" \
+    unbound-later "" "y = later\nlater = 1\ny" \
+    type "fn needs_int(v: int) -> int:\n    v\n\n" "needs_int(\"s\")" \
+    result-type "" "fn g() -> str:\n    1\ng" \
+    unknown-field "" "p = \{a: 1\}\np.b" \
+    duplicate "" "x = 1\nx = 2\nx" \
+    break-outside "" "break" \
+    unhandled-fail "error Boom\n\n" "fail Boom" \
+    undeclared-error "" "fail NoSuchError" \
+    flag-unknown "fn opt(x, flags :quiet):\n    x\n\n" "opt(1, :loud)" \
+    use-after-move "import coroutine\n\nstruct M:\n    v: int\n\nfn w(s: int, resume M) -> int:\n    m = yield s\n    m.v\n\nfn use(c: Coroutine\{args: \[M\], return: int\}) -> int:\n    c(M \{v: 1\})\n\n" "coroutine \{step\} = w(1)\nuse(step)\nuse(step)" \
+    erased-unhandled $::scErased "generic(0):\n    on E2:\n        -1" \
+    missing-import "" "list::length(\[\])" \
+    unknown-namespace "" "nosuch::f()" \
+    not-an-enum "" "bool::Yes" \
+] {
+    test sc-diag-exact-$name "items 50, 81: the reified diagnostic ($name) is the ordinary compiler's first diagnostic in the block written as an ordinary block: kind, primary location, related locations, message" -body {
+        lassign [scDifferential [scProbe $body $prelude]] ordinary static
+        list [expr {$ordinary ne ""}] [expr {$ordinary eq $static}] [lindex $static 0]
+    } -result [list 1 1 [dict get {
+        unbound UNBOUND unbound-later UNBOUND type TYPE result-type TYPE unknown-field UNKNOWN-FIELD
+        duplicate DUPLICATE break-outside BREAK-OUTSIDE-LOOP unhandled-fail UNHANDLED-ERROR
+        undeclared-error UNDECLARED-ERROR flag-unknown UNKNOWN-FLAG use-after-move USE-AFTER-MOVE
+        erased-unhandled UNHANDLED-ERROR missing-import MISSING-IMPORT unknown-namespace UNKNOWN-NAMESPACE
+        not-an-enum NOT-AN-ENUM
+    } $name]]
+}
+unset -nocomplain name prelude body
+
+test sc-primary-selection {item 26: of several diagnostics in one body, the reified one is the one ordinary compilation reports first: a resolution diagnostic before a later type error, the first of two in source order} -body {
+    list [lindex [scSites "fn needs_int(v: int) -> int:\n    v\n\nfn f() errors compiler::CompilerError:\n    static compile:\n        needs_int(\"s\")\n        missing\n\n0\n"] 0] \
+        [lindex [scSites "fn f() errors compiler::CompilerError:\n    static compile:\n        a1\n        a2\n\n0\n"] 0]
+} -result {{rejected UNBOUND 8 9} {rejected UNBOUND 4 9}}
+
+test sc-location-original-span {item 23: the primary location is the original file line and column, not a coordinate of the block} -body {
+    scAgree [scProbe "\n\n1 + 2\nf(1, missing)" "fn f(a, b):\n    a\n\n\n"]
+} -result {value {[compiler::DiagnosticCode::Unbound, 11, 14, [], "unbound name \"missing\""]}}
+
+# Namespaced errors (item 55) and opaque structs (item 56): library modules.
+proc scWithModules {modules script} {
+    uplevel 1 [list withPrivateLibrary [string cat [list foreach {name content} $modules {
+        set f [open [file join $::core::libraryDir $name.bot] w]
+        fconfigure $f -encoding utf-8
+        puts -nonewline $f $content
+        close $f
+    }] \n $script]]
+}
+
+set scNsModules {
+a {error Failed:
+    code: int
+
+fn run(x: int) -> int errors Failed:
+    if x < 0:
+        fail Failed {code: x}
+    x
+}
+b {error Failed:
+    code: int
+
+fn run(x: int) -> int errors Failed:
+    if x < 0:
+        fail Failed {code: x * 10}
+    x
+}
+token {opaque struct Token:
+    value: int
+
+fn make(v: int) -> Token:
+    Token {value: v}
+
+fn value(t: Token) -> int:
+    t.value
+}
+}
+
+test sc-namespaced-errors {item 55: inside a block, a::Failed handled as b::Failed is UnhandledError naming the canonical identity, as the ordinary compiler says it; the correct handler is accepted} -body {
+    scWithModules $::scNsModules {
+        set bad [scAgree "import a\nimport b\n\nfn probe(x: int) errors compiler::CompilerError:\n    static compile:\n        a::run(x):\n            on b::Failed:\n                0\n\nr = probe(-1):\n    on compiler::CompilerError \{code, message\}:\n        \[code, message\]\nr\n"]
+        set good [scAgree "import a\nimport b\n\nfn probe(x: int) -> int errors compiler::CompilerError:\n    static compile:\n        a::run(x):\n            on a::Failed \{code\}:\n                code\n\nr = probe(-3):\n    on compiler::CompilerError:\n        0\nr\n"]
+        list $bad $good
+    }
+} -result {{value {[compiler::DiagnosticCode::UnhandledError, "this call may produce the declared error \"a::Failed\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration"]}} {value -3}}
+
+test sc-opaque {item 56: an outside construction or projection of an opaque struct inside a block is code OpaqueConstruction / OpaqueRepresentation; the module's own operations are accepted} -body {
+    scWithModules $::scNsModules {
+        list [scSites "import token\n\nfn f() errors compiler::CompilerError:\n    static compile:\n        token::Token \{value: 1\}\n\n0\n"] \
+            [scSites "import token\n\nfn f() errors compiler::CompilerError:\n    static compile:\n        t = token::make(1)\n        t.value\n\n0\n"] \
+            [scAgree "import token\n\nfn f() -> int errors compiler::CompilerError:\n    static compile:\n        token::value(token::make(7))\n\nr = f():\n    on compiler::CompilerError:\n        0\nr\n"]
+    }
+} -result {{{rejected OPAQUE-CONSTRUCTION 6 9}} {{rejected OPAQUE-REPRESENTATION 7 11}} {value 7}}
+
+test sc-module-block {a block in a module's function: the module imports compiler, the block is decided in the module's own namespace, and its rejection is located in the module's file} -body {
+    scWithModules {
+        probe_mod {import compiler
+
+fn checked() errors compiler::CompilerError:
+    static compile:
+        missing
+
+fn fine(x: int) -> int:
+    static compile:
+        x + 1
+}
+        noimport {fn f():
+    static compile:
+        1
+}
+    } {
+        list [scAgree "import probe_mod\n\nr = probe_mod::checked():\n    on compiler::CompilerError \{code, primary\}:\n        \[code, primary.line, primary.column, probe_mod::fine(1)\]\nr\n"] \
+            [catch {surface::compile "import noimport\n0\n"} m o] [dict get $o -errorcode]
+    }
+} -cleanup {unset -nocomplain m o} -result {{value {[compiler::DiagnosticCode::Unbound, 5, 9, 2]}} 1 {SURFACE MODULE MISSING-IMPORT}}
+
+# ---------------------------------------------------------------------------
+# Evidence: HIR, Core IR, NIR, allocations (items 15, 47-49, 65, 75-78, 86)
+
+test sc-hir-accepted-ordinary {items 15, 65, 78: an accepted block is ordinary HIR -- the same HIR text as the body written in place (one that binds nothing) or as `if true:` (one that does) -- with no static node} -body {
+    set a [hir::format [scHir "fn f(x: int) -> int:\n    static compile:\n        x + 1\n\nf(1)\n"]]
+    set b [hir::format [scHir "fn f(x: int) -> int:\n    x + 1\n\nf(1)\n"]]
+    set c [hir::format [scHir "fn f(x: int) -> int:\n    static compile:\n        y = x\n        y + 1\n\nf(1)\n"]]
+    set d [hir::format [scHir "fn f(x: int) -> int:\n    if true:\n        y = x\n        y + 1\n\nf(1)\n"]]
+    list [expr {$a eq $b}] [expr {$c eq $d}] [string match *static* "$a$c"]
+} -cleanup {unset -nocomplain a b c d} -result {1 1 0}
+
+test sc-hir-rejected {items 33, 65, 78, 97: a rejected block is an ordinary `fail` of compiler::CompilerError with its payload construction, marked with the diagnostic it reifies; nothing of the body is in the HIR} -body {
+    set lines [lmap line [split [hir::format [scHir "fn side_effect() -> int:\n    1\n\nfn f() errors compiler::CompilerError:\n    static compile:\n        side_effect()\n        missing\n\n0\n"]] \n] {
+        regsub -all {\m[ebs][0-9]+\M} [string trim $line] {#}
+    }]
+    list [lsearch -all -inline -glob $lines {# fail *}] [lsearch -all -inline -glob $lines {# ref * side_effect *}] \
+        [lsearch -all -inline -glob $lines {# struct *}] [lsearch -all -inline -glob $lines {# const *}]
+} -cleanup {unset -nocomplain lines} -result {{{# fail compiler::CompilerError static=compile:UNBOUND : never}} {} {{# struct payload(compiler::CompilerError) (code, primary, related, message) : struct{code: compiler::DiagnosticCode, message: str, primary: compiler::SourceLocation, related: List[compiler::SourceLocation]}} {# struct compiler::SourceLocation (line, column) : compiler::SourceLocation}} {{# const 1 : int} {# const enum {compiler::DiagnosticCode Unbound} : compiler::DiagnosticCode} {# const 8 : int} {# const 9 : int} {# const str {unbound name "missing"} : str} {# const 0 : int}}}
+
+test sc-hir-text-round-trip {item 78: the HIR text of a program with a rejected block reads back to the same text: the `static=compile:KIND` mark included} -body {
+    set text [hir::format [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\n0\n"]]
+    set read [hir::parse $text]
+    list [expr {[hir::format $read] eq $text}] [llength [lmap {e node} [dict get $read exprs] {
+        expr {[dict exists $node static] ? $e : [continue]}
+    }]]
+} -cleanup {unset -nocomplain text read} -result {1 1}
+
+test sc-before-hir {item 78: before static processing the block is syntax -- the AST and the hir/syntax.tcl `static` node -- and no HIR expression kind exists for it} -body {
+    set ast [surface::parse [scProgram "static compile:\n    1\n"] t.bot]
+    set node [surface::lower::Node [scFindStatic $ast]]
+    list [dict get $node kind] [dict get $node operation] [llength [dict get $node body]] \
+        [lsearch -exact [hir::syntax::scopeBindNames [list $node]] static]
+} -cleanup {unset -nocomplain ast node} -result {static compile 1 -1}
+
+test sc-core-ir {items 42, 75, 76: the Core IR of an accepted block is the unwrapped body's; of a rejected one an ordinary `fail` with the payload construction -- no static form, no compiler call} -body {
+    set a [hir::lower [scHir "fn f(x: int) -> int:\n    static compile:\n        x + 1\n\nf(1)\n"]]
+    set b [hir::lower [scHir "fn f(x: int) -> int:\n    x + 1\n\nf(1)\n"]]
+    set c [hir::lower [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\n0\n"]]
+    list [expr {$a eq $b}] [expr {[string first "fail compiler::CompilerError" $c] >= 0}] \
+        [expr {[string first {const enum {compiler::DiagnosticCode Unbound}} $c] >= 0}] \
+        [regexp {static|compile[^r]} $c]
+} -cleanup {unset -nocomplain a b c} -result {1 1 1 0}
+
+test sc-nir-accepted-identical {items 15, 48, 77, 86: an accepted block's NIR is byte-identical to the unwrapped body's (one that binds nothing), and to the `if true:` block's (one that does): no branch, wrapper, check or allocation} -constraints linuxX86_64 -body {
+    set a [scFunc [scHir "fn f(x: int) -> int:\n    static compile:\n        x * 3 + 1\n\nfn g(n: int):\n    f(n) + f(n + 1)\n\ng(1)\n"] g]
+    set b [scFunc [scHir "fn f(x: int) -> int:\n    x * 3 + 1\n\nfn g(n: int):\n    f(n) + f(n + 1)\n\ng(1)\n"] g]
+    set c [scFunc [scHir "fn f(x: int) -> int:\n    static compile:\n        y = x * 3\n        y + 1\n\nf(2)\n"] f]
+    set d [scFunc [scHir "fn f(x: int) -> int:\n    if true:\n        y = x * 3\n        y + 1\n\nf(2)\n"] f]
+    list [expr {$a eq $b}] [expr {$c eq $d}] [lsearch -all -inline -regexp [concat $c] {\m(br|bool true)\M}]
+} -cleanup {unset -nocomplain a b c d} -result {1 1 {}}
+
+test sc-nir-rejected-payload-slots {items 49, 77: a rejected block's NIR is the ordinary payload failure: `faildeclared` with the payload's fields in the payload slots, no static instruction} -constraints linuxX86_64 -body {
+    set lines [scFunc [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nr = f():\n    on compiler::CompilerError:\n        0\nr\n"] f]
+    list [llength [lsearch -all -inline -glob $lines {faildeclared * "compiler::CompilerError" *}]] \
+        [lsearch -all -inline -glob $lines {*static*}]
+} -cleanup {unset -nocomplain lines} -result {1 {}}
+
+test sc-alloc-accepted-zero {item 48: an accepted block adds no allocation: the same managed-heap report as the unwrapped body} -constraints linuxX86_64 -body {
+    set a [native::allocationReport [scHir "fn f(x: int) -> int:\n    static compile:\n        x * 3 + 1\n\nf(5)\n"] summary]
+    set b [native::allocationReport [scHir "fn f(x: int) -> int:\n    x * 3 + 1\n\nf(5)\n"] summary]
+    list [dict get $a total allocations] [expr {[dict get $a total] eq [dict get $b total]}]
+} -cleanup {unset -nocomplain a b} -result {0 1}
+
+test sc-alloc-rejected {item 49: a rejected block's failure allocates what its payload holds (the message String, the location structs, the related List) when a handler materializes it; a handler reading only the code allocates no message} -constraints linuxX86_64 -body {
+    set whole [native::allocationReport [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nr = f():\n    on compiler::CompilerError details:\n        details\nr.code == compiler::DiagnosticCode::Unbound\n"] summary]
+    set code [native::allocationReport [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nr = f():\n    on compiler::CompilerError \{code\}:\n        code == compiler::DiagnosticCode::Unbound\nr\n"] summary]
+    list [dict get $whole total allocations] [dict get $code total allocations]
+} -cleanup {unset -nocomplain whole code} -result {3 2}
+
+test sc-uncaught-rendering {item 95: an uncaught CompilerError (reachable only with -strict 0) renders with the ordinary namespaced payload-error renderer, identically on every backend} -body {
+    set hir [surface::compile [scProgram "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nf()\n"] -strict 0 -warnings off]
+    lsort -unique [lmap b {interp compile cranelift} {lrange [outcomeUnderHir $b $hir] 0 2}]
+} -cleanup {unset -nocomplain hir} -result {{error {CORE SEMANTIC UNCAUGHT-ERROR} {uncaught propagated error: <error compiler::CompilerError {code: compiler::DiagnosticCode::Unbound, message: "unbound name \"missing\"", primary: compiler::SourceLocation {line: 4, column: 9}, related: []}>}}}
+
+test sc-gc-stress {item 84: a rejected block's payload (message String, related List, location structs) and an accepted body's runtime error and affine values survive a GC attempt at every allocation} -constraints linuxX86_64 -body {
+    set saved [expr {[info exists ::env(BOTLISH_NATIVE_GC_STRESS)] ? $::env(BOTLISH_NATIVE_GC_STRESS) : ""}]
+    set ::env(BOTLISH_NATIVE_GC_STRESS) 1
+    try {
+        set results {}
+        foreach text [list [scProbe "coroutine \{step\} = worker(10)\nconsume(step, 1)\nconsume(step, 2)" $::scAffineDecls] \
+                "import list\n\nfn at(xs: List\[str\], i: int) -> str errors IndexNotFound:\n    static compile:\n        list::at(xs, i)\n\nfn probe(i: int) -> str:\n    r = at(\[\"a\", \"b\"\], i):\n        on IndexNotFound:\n            \"none\"\n    r\n\nprobe(9)\n"] {
+            lappend results [lrange [outcomeUnderHir cranelift [scHir $text]] 0 1]
+        }
+        set results
+    } finally {
+        if {$saved eq ""} {
+            unset ::env(BOTLISH_NATIVE_GC_STRESS)
+        } else {
+            set ::env(BOTLISH_NATIVE_GC_STRESS) $saved
+        }
+    }
+} -cleanup {unset -nocomplain saved results text} -result {{value {[compiler::DiagnosticCode::UseAfterMove, 25, 17, [compiler::SourceLocation {line: 24, column: 17}], "`step` was used after its coroutine value was moved\n\nmoved here:\n    step passed to consume  (<input>:24:17)\n\nused here:\n    <input>:25:17"]}} {value {"none"}}}
+
+test sc-rounds {item 87: the decisions cost one build when every block is accepted, and independent rejected blocks are decided together} -body {
+    set text "fn needs_int(v: int) -> int:\n    v\n\n"
+    for {set i 0} {$i < 12} {incr i} {
+        append text "fn t$i\(x: int) -> int errors compiler::CompilerError:\n    static compile:\n"
+        switch [expr {$i % 3}] {
+            0 { append text "        x + $i\n\n" }
+            1 { append text "        missing_$i\n\n" }
+            2 { append text "        needs_int(\"s$i\")\n\n" }
+        }
+    }
+    append text "0\n"
+    list [dict get [scHir "fn f(x: int) -> int:\n    static compile:\n        x\n\n0\n"] staticRounds] \
+        [dict get [scHir $text] staticRounds]
+} -cleanup {unset -nocomplain text i} -result {1 3}
+
+cleanupTests

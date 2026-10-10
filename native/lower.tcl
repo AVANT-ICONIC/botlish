@@ -8075,12 +8075,20 @@ proc native::lower::NativeImpl {name} {
 # Control flow
 
 # 1 if evaluating CONDITION (an `if` condition whose outcome is decided) has
-# no effect, cannot fail and would produce only that Bool: a native
-# comparison (< <= > >= ==) of two PureIntOperands. Such a condition's
-# evaluation is dead code under a decided outcome (If, above).
+# no effect, cannot fail and would produce only that Bool: a reference to the
+# root `true` or `false` (the condition of an `if true:` block, which is also
+# what an accepted `static compile:` block whose body binds names becomes,
+# STATIC-COMPILE.md), or a native comparison (< <= > >= ==) of two
+# PureIntOperands. Such a condition's evaluation is dead code under a decided
+# outcome (If, above).
 proc native::lower::PureDecidedCondition {fnVar condition} {
     upvar 1 $fnVar fn
     variable hir
+    if {[hir::kind $hir $condition] eq "ref"} {
+        set b [hir::get $hir $condition binding]
+        return [expr {$b ne "" && [dict get $hir bindings $b kind] eq "root"
+            && [core::value::kind [dict get $hir bindings $b value]] eq "bool"}]
+    }
     if {[hir::kind $hir $condition] ne "call"} {
         return 0
     }
