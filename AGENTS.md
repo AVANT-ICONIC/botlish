@@ -787,6 +787,29 @@ be killed: update a mutant's text when you change the code it mutates, keeping
 it a mutant of the same rule). `bench/static-compile.tcl` regenerates the
 performance report.
 
+How many builds deciding the blocks takes is the scheduler's business, never
+the program's (STATIC-COMPILE.md, "Decision economics";
+STATIC-DECISION-ECONOMICS.md): the *sequential* order (one typed rejection per
+build) defines every outcome, and the default *batched* scheduler continues
+that order on one build for every block whose dependencies
+(`hir/staticdeps.tcl`) nothing rejected since has changed. Never make an
+outcome depend on the scheduler, never add a source-layout rule or annotation
+to make compilation cheaper, and never key a reused method-call decision by
+name. A missed cross-function channel shows up as a `mispredicted` build or a
+difference from `BOTLISH_STATIC_SCHEDULER=sequential`: add its edge to
+`hir/staticdeps.tcl`, not a special case to the scheduler. If you change the
+schedulers, the dependency analysis, the method-call seeds or build reuse
+(`hir/hir.tcl`), or add a fact an analysis reads across functions (a summary,
+an inferred contract, the erased-callable contract, an instance budget, a
+yield type, a diagnostic suppressed by reachability), run
+`tests/static-economics.test`, `tests/static-compile.test`, `tests/golden.test`
+(`golden-static-economics`), `audit/static-decisions/tools/fuzz.tcl` (several
+seeds), `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` and
+`audit/static-decisions/tools/mutate.tcl` (every mutant in its `mutants.txt`
+must still apply and be killed, the economic ones -- a build too many -- as
+much as the semantic ones). `bench/static-decisions.tcl` regenerates the
+economics report.
+
 ## Golden tests (Botlish-native test framework)
 
 `lib/test.bot` (GOLDEN-TEST-FRAMEWORK.md) is an ordinary Botlish library:

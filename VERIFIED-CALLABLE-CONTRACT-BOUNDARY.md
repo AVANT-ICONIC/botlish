@@ -786,7 +786,11 @@ fuzzer's registries are ordinary programs accepted for the same reason.
 
 * **The static-decision channel.** An accepted erasure keeps
   `hir::static::GlobalChannels` open in every build (errors.bot 8 rounds;
-  the two layouts kept for cost) -- the next milestone.
+  the two layouts kept for cost) -- the next milestone. *Fixed by
+  STATIC-DECISION-ECONOMICS.md*: the erased-callable contract is a node of
+  the decisions' dependency graph, delaying only its consumers (the calls
+  that have lost identity and contract precision); errors.bot takes 3
+  rounds, and both layouts are back in their natural form.
 * **Possible is per binding, not per call.** A closure's untyped capture
   stands for every value its function's calls pass: `wrap(raise2)` anywhere
   rejects `wrap`'s subsumption even for a call that passes an error-free

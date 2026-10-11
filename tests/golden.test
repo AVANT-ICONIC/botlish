@@ -62,6 +62,9 @@ proc goldenManifest {} {
 }
 
 set goldenPorted [goldenManifest]
+# Suite file -> the economics of its static decisions (hir/static.tcl's
+# staticStats), for golden-static-economics below.
+set goldenStatic [dict create]
 
 foreach path [lsort [glob -directory [file join $::projectRoot tests golden] *.bot]] {
     set suite [file tail $path]
@@ -70,6 +73,10 @@ foreach path [lsort [glob -directory [file join $::projectRoot tests golden] *.b
         set status [dict get $result status]
         if {$status eq "compile-error"} {
             return "compile error: [lindex [dict get $result compile] 1]"
+        }
+        set hir [lindex [dict get $result compile] 1]
+        if {[dict exists $hir staticStats]} {
+            dict set ::goldenStatic $suite [dict get $hir staticStats]
         }
         set problems {}
         foreach {backend outcome} [dict get $result outcomes] {
@@ -101,5 +108,33 @@ foreach path [lsort [glob -directory [file join $::projectRoot tests golden] *.b
         return [join $problems \n]
     } -result ok
 }
+
+# The static decisions' economics over every suite (STATIC-COMPILE.md,
+# "Decision economics"; STATIC-DECISION-ECONOMICS.md): whole-program builds
+# grow with the suites' semantic dependency depth, not with how many blocks
+# they hold or how they are laid out. A loose ceiling, not the exact count
+# (a harmless new build in some phase should not fail it): the suites took
+# 79 builds and 28 rounds before the batched scheduler, one of them 194
+# builds in its natural layout, and take 37 builds and 24 rounds with it.
+testConstraint goldenAllSuites [expr {[dict size $goldenStatic] > 0
+    && [dict size $goldenStatic] == [llength [glob -directory [file join $::projectRoot tests golden] *.bot]]}]
+test golden-static-economics {the golden suites' static decisions take at most 50 whole-program builds in all and at most 15 in any one suite, with no build contradicting a prediction of the batched scheduler} -constraints goldenAllSuites -body {
+    set problems {}
+    set total 0
+    dict for {suite stats} $goldenStatic {
+        set builds [dict get $stats builds]
+        incr total $builds
+        if {$builds > 15} {
+            lappend problems "$suite: $builds builds ([dict get $stats rounds] rounds)"
+        }
+        if {[dict get $stats mispredicted] ne {}} {
+            lappend problems "$suite: mispredicted [dict get $stats mispredicted]"
+        }
+    }
+    if {$total > 50} {
+        lappend problems "$total builds in all"
+    }
+    expr {$problems eq {} ? "ok" : [join $problems \n]}
+} -result ok
 
 cleanupTests

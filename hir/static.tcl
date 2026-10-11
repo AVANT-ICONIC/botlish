@@ -82,21 +82,51 @@
 #      is accepted -- every site before it compiled in a program whose
 #      earlier sites have their final forms. A rejected body's effects (a
 #      move, a refinement, an instance, a function's summary) are gone only
-#      from the next round on, so a later site is judged again without them:
-#      one rejection per round -- except that a further failing site is
-#      rejected in the same round when no other failing site can have caused
-#      its diagnostic (Rejectable, Independent): the two lie in different
-#      units of the program (a top-level function with everything nested in
-#      it, or a section's top-level code), neither unit reaches the other
-#      through the program's references, and nothing in the build acts
-#      program-wide (a demoted inferred contract, an erased-callable
-#      contract: GlobalChannels). Independent blocks -- a test framework's
-#      tests, each its own function -- are so decided together. A site
-#      accepted earlier that now has a diagnostic of its own is rejected (a
-#      later decision removed something it relied on): decisions only ever
-#      go from body to rejection, so the rounds end. A round in which no
-#      site has a diagnostic of its own accepts every undecided site and is
-#      the final program.
+#      from the next build on, so a later site is judged again without them:
+#      one rejection per build. A site accepted earlier that now has a
+#      diagnostic of its own is rejected (a later decision removed something
+#      it relied on): decisions only ever go from body to rejection, so the
+#      rounds end. A round in which no site has a diagnostic of its own
+#      accepts every undecided site and is the final program.
+#
+# That is the *sequential* order, the definition of every outcome. The
+# scheduler that runs it (decide's `scheduler`) only chooses how many builds
+# it takes.
+#
+# Decision economics: committing without a build
+# ----------------------------------------------
+# A site's own diagnostics are a function of the program around it -- of the
+# forms of the sites its analysis can see. hir/staticdeps.tcl computes, from
+# a build, which sites each site's analysis depends on (Deps: a conservative
+# graph of the program's semantic channels -- nesting, a function's own
+# statement sequence, the summaries a body reads, the facts of the bindings
+# it captures, and the backward and program-wide channels: an untyped
+# parameter's inferred contract, the callable inputs of an only-called
+# function, yields, the erased-callable contract, the semantic-instance
+# budget; STATIC-COMPILE.md, "Decision economics", has each one and why).
+#
+# The *batched* scheduler (the default) runs the sequential order on one
+# build for as long as that build already answers it (Simulate): it rejects
+# the first failing site, marks every site that depends on it *unknown* --
+# its diagnostics may differ once that site is rejected -- and keeps every
+# other site's status, which cannot change: nothing it depends on changed.
+# It then continues with the next site in post-order, exactly as the next
+# sequential build would, and stops at the first site whose status is
+# unknown: only that question needs a new build. So it commits exactly the
+# rejections the sequential order commits, in the same order, with the same
+# diagnostics -- independent failing sites in one build, however the source
+# is laid out -- and builds again only where one decision changes facts
+# another one reads. A build whose outcome contradicts the prediction (a
+# site the analysis said cannot have changed now fails) would mean the
+# dependency analysis missed a channel; decide records it (`mispredicted` in
+# staticStats) and the audits fail on it.
+#
+# The *sequential* scheduler builds after every rejection: the reference
+# the batched one is checked against (audit/static-decisions). The *legacy*
+# scheduler is the procedure before the economics milestone (Rejectable,
+# Independent, GlobalChannels: one rejection per round, more only for sites
+# in different top-level units that do not reach each other), kept for the
+# before/after measurements.
 #
 # Decisions follow source order. A site is judged with the sites after it
 # present as written: a later site's body can reach an earlier one only
@@ -242,6 +272,28 @@ namespace eval hir::static {
     variable errorName compiler::CompilerError
     variable codeEnum compiler::DiagnosticCode
     variable locationStruct compiler::SourceLocation
+    # The decision scheduler (header, "Decision economics"): batched (the
+    # default), sequential (the reference: one rejection per typed build) or
+    # legacy (the procedure before the economics milestone). Test, audit and
+    # benchmark knob only: every scheduler decides the same program.
+    variable scheduler batched
+    # BOTLISH_STATIC_SCHEDULER chooses it for a whole process: how the audits
+    # run the existing suites under the sequential and legacy schedulers.
+    if {[info exists ::env(BOTLISH_STATIC_SCHEDULER)] && $::env(BOTLISH_STATIC_SCHEDULER) ne ""} {
+        set scheduler $::env(BOTLISH_STATIC_SCHEDULER)
+    }
+    # 1 records each round in the decided HIR's staticStats (`trace`, with
+    # the reasons a failing site was deferred); BOTLISH_STATIC_TRACE=1 in the
+    # environment also prints it to stderr. Diagnostics of the compiler's
+    # scheduling only, never read by an analysis.
+    variable trace 0
+    # 1 (the default) lets a round reuse the method-style call decisions of
+    # the previous one that no rejection since can have changed
+    # (MethodSeeds); 0 decides every call afresh in every round.
+    variable methodReuse 1
+    # 1 builds every seeded round a second time without its seeds and fails
+    # unless the two programs are identical (audits and tests only).
+    variable methodAudit 0
 }
 
 # The static operations (surface/parser.tcl's staticOperations): the compiler's
@@ -580,67 +632,190 @@ proc hir::static::Location {origin at} {
 # errors): the rounds of this file's header, then the final program -- built
 # with the caller's HALT -- with its decisions in `staticSites` (key -> {key
 # origin operation outcome accepted|rejected diagnostic D}, D the reified
-# diagnostic) and the number of builds they took in `staticRounds`.
+# diagnostic), the number of builds they took in `staticRounds` and their
+# economics in `staticStats` (DecisionStats).
 proc hir::static::decide {nodes options given halt} {
+    variable scheduler
+    variable trace
+    if {$scheduler ni {batched sequential legacy}} {
+        error "hir::static: unknown scheduler \"$scheduler\" (batched, sequential or legacy)"
+    }
+    set tracing [expr {$trace || ([info exists ::env(BOTLISH_STATIC_TRACE)]
+        && $::env(BOTLISH_STATIC_TRACE) ni {"" 0})}]
     set modules [dict get $options -modules]
     set sites [Sites $nodes $modules]
     set decisions [dict create]
+    set log {}
+    set loaderRejected {}
     foreach site $sites {
         set deferred [dict get $site deferred]
         if {$deferred ne {}} {
             # The loader's diagnostic precedes every HIR diagnostic of the
             # same code: the site is rejected before any build.
             set first [lindex $deferred 0]
-            dict set decisions [dict get $site key] [list rejected \
-                [dict create kind [dict get $first kind] message [dict get $first message] \
-                    origin [dict get $first origin] related {}]]
+            set diagnostic [dict create kind [dict get $first kind] message [dict get $first message] \
+                origin [dict get $first origin] related {}]
+            dict set decisions [dict get $site key] [list rejected $diagnostic]
+            lappend loaderRejected [TraceDecision [dict get $site key] $diagnostic]
         }
     }
+    if {$loaderRejected ne {}} {
+        lappend log [dict create round 0 phase loader rejected $loaderRejected]
+    }
+    set start [hir::BuildStats]
+    set stats [dict create scheduler $scheduler mispredicted {} depMs 0 committedWithoutBuild 0]
+    # The batched scheduler's prediction for the next build (Simulate): key
+    # -> ok, or the first diagnostic a still-failing site keeps.
+    set predicted [dict create]
+    # The method-style call decisions the next round takes as made.
+    set seeds [dict create]
     set rounds 0
     while 1 {
         incr rounds
-        set hir [Round $nodes $options $given $decisions 1 checked]
+        set before [hir::BuildStats]
+        set hir [Round $nodes $options $given $decisions 1 checked $seeds]
+        set seeds [dict create]
         set own [Attribute $hir $sites $decisions]
-        set outer [dict get $own ""]
         dict unset own ""
+        set entry [dict create round $rounds phase [expr {$checked ? "checked" : "resolution"}] \
+            bodies [llength [Present $sites $decisions]] \
+            undecided [llength [lmap site $sites {
+                if {[dict exists $decisions [dict get $site key]]} continue
+                dict get $site key
+            }]]]
         if {!$checked} {
             # Stopped after resolution: every site with a resolution
-            # diagnostic of its own is rejected (resolution is lexical).
+            # diagnostic of its own is rejected (resolution is lexical). A
+            # site the last batched run predicted ok has none (a rejected
+            # inner block's failure, which resolution charges to the block
+            # around it, makes that one depend on it).
+            dict for {key expectation} $predicted {
+                if {$expectation eq "ok" && [dict exists $own $key]} {
+                    dict lappend stats mispredicted [list $rounds $key]
+                }
+            }
+            set rejected {}
+            dict for {key diagnostics} $own {
+                dict set decisions $key [list rejected [lindex $diagnostics 0]]
+                lappend rejected [TraceDecision $key [lindex $diagnostics 0]]
+            }
+            dict set entry rejected $rejected
+            lappend log [RoundEntry $entry $before]
             if {[dict size $own] == 0} {
                 # Only the enclosing program's own: it is rejected whatever
                 # the sites would be.
                 break
             }
-            dict for {key diagnostics} $own {
-                dict set decisions $key [list rejected [lindex $diagnostics 0]]
-            }
+            set predicted [dict create]
             continue
         }
         set failing {}
         foreach site $sites {
             if {[dict exists $own [dict get $site key]]} {
-                lappend failing $site
+                lappend failing [dict get $site key]
             }
         }
-        foreach site $sites {
-            set key [dict get $site key]
-            if {$failing ne {} && $key eq [dict get [lindex $failing 0] key]} break
-            if {![dict exists $decisions $key]} {
-                dict set decisions $key accepted
+        dict for {key expectation} $predicted {
+            # A prediction of the last simulation that this build contradicts
+            # (a message's internal ids are this build's numbering: an
+            # earlier rejection renumbers them, whatever the site depends on).
+            set actual [expr {[dict exists $own $key] ? [PredictionOf [lindex [dict get $own $key] 0]] : "ok"}]
+            if {$actual ne $expectation} {
+                dict lappend stats mispredicted [list $rounds $key]
             }
         }
+        set predicted [dict create]
+        dict set entry failing [llength $failing]
         if {$failing eq {}} {
+            AcceptBefore $sites decisions "" accepted
+            dict set entry accepted $accepted
+            lappend log [RoundEntry $entry $before]
             break
         }
-        foreach key [Rejectable $hir $failing] {
-            dict set decisions $key [list rejected [lindex [dict get $own $key] 0]]
+        switch -- $scheduler {
+            legacy {
+                set siteRecords [lmap site $sites {
+                    if {[dict get $site key] ni $failing} continue
+                    set site
+                }]
+                AcceptBefore $sites decisions [lindex $failing 0] accepted
+                set rejected {}
+                set keys [Rejectable $hir $siteRecords]
+                foreach key $keys {
+                    dict set decisions $key [list rejected [lindex [dict get $own $key] 0]]
+                    lappend rejected [TraceDecision $key [lindex [dict get $own $key] 0]]
+                }
+                dict set entry accepted $accepted
+                dict set entry rejected $rejected
+                dict set entry deferred [lmap key $failing {
+                    if {$key in $keys} continue
+                    list $key "legacy: not proven independent of an earlier failing site"
+                }]
+            }
+            sequential {
+                AcceptBefore $sites decisions [lindex $failing 0] accepted
+                set key [lindex $failing 0]
+                dict set decisions $key [list rejected [lindex [dict get $own $key] 0]]
+                dict set entry accepted $accepted
+                dict set entry rejected [list [TraceDecision $key [lindex [dict get $own $key] 0]]]
+                dict set entry deferred [lmap other [lrange $failing 1 end] {
+                    list $other "sequential: one rejection per build"
+                }]
+            }
+            batched {
+                variable methodReuse
+                set t0 [clock microseconds]
+                set methods [expr {$methodReuse && [dict exists $hir methodDecided]
+                    && [dict get $hir methodDecided] ne {}}]
+                if {[llength $failing] > 1 || $methods} {
+                    set deps [hir::staticdeps::Deps $hir $sites $decisions $methods]
+                } else {
+                    # One failing site: whatever depends on it, the next
+                    # sequential step needs a build.
+                    set deps ""
+                }
+                dict incr stats depMs [expr {([clock microseconds] - $t0) / 1000}]
+                set result [Simulate $sites $decisions $own $deps]
+                set decisions [dict get $result decisions]
+                set predicted [dict get $result predicted]
+                set committed [dict get $result committed]
+                dict incr stats committedWithoutBuild [expr {[llength $committed] - 1}]
+                if {$methods} {
+                    set seeds [MethodSeeds $hir $deps $committed]
+                    dict set entry methodSeeds [dict size $seeds]
+                    dict set entry methodRetried [expr {[dict size [dict get $hir methodCalls]] - [dict size $seeds]}]
+                }
+                dict set entry accepted [dict get $result accepted]
+                dict set entry rejected [lmap key $committed {
+                    TraceDecision $key [lindex [dict get $own $key] 0]
+                }]
+                dict set entry deferred [lmap key $failing {
+                    if {$key in $committed} continue
+                    list $key [Deferral $hir $sites $decisions $deps $result $key $tracing]
+                }]
+                if {$deps ne ""} {
+                    dict set entry channels [dict get $deps channels]
+                }
+            }
         }
+        lappend log [RoundEntry $entry $before]
     }
     if {!$halt && !$checked} {
         # The caller keeps the diagnostics of a program that does not
         # resolve and analyzes it anyway: build the decided program its way.
         set hir [Round $nodes $options $given $decisions 0 checked]
         incr rounds
+    }
+    set end [hir::BuildStats]
+    foreach counter {builds methodTrials methodFinals methodReused} {
+        dict set stats $counter [expr {[dict get $end $counter] - [dict get $start $counter]}]
+    }
+    dict set stats rounds $rounds
+    if {$tracing} {
+        dict set stats trace $log
+        if {[info exists ::env(BOTLISH_STATIC_TRACE)] && $::env(BOTLISH_STATIC_TRACE) ni {"" 0}} {
+            puts stderr [FormatTrace $stats]
+        }
     }
     set summary [dict create]
     foreach site $sites {
@@ -655,15 +830,333 @@ proc hir::static::decide {nodes options given halt} {
     }
     dict set hir staticSites $summary
     dict set hir staticRounds $rounds
+    dict set hir staticStats $stats
     return $hir
 }
 
-# The keys of the sites of FAILING (the sites with a diagnostic of their own
-# in HIR, a typed build, in post-order) this round rejects: the first, whose
-# earlier sites all have their final forms -- and every other one that no
-# other site of FAILING can have caused its diagnostic (Independent): its
-# diagnostic stays when the others are rejected, so it is decided now rather
-# than one build later. Without that proof, sites are decided one per round.
+# The sites of SITES present as bodies under DECISIONS (not rejected), in
+# post-order.
+proc hir::static::Present {sites decisions} {
+    return [lmap site $sites {
+        set key [dict get $site key]
+        if {[dict exists $decisions $key] && [lindex [dict get $decisions $key] 0] eq "rejected"} continue
+        set site
+    }]
+}
+
+# Accepts, in the caller's DECISIONSVAR, every undecided site of SITES (in
+# post-order) before the site with key STOP ("" for all of them): what the
+# sequential order does for the sites before the first failing one. Sets the
+# caller's ACCEPTEDVAR to their keys.
+proc hir::static::AcceptBefore {sites decisionsVar stop acceptedVar} {
+    upvar 1 $decisionsVar decisions $acceptedVar accepted
+    set accepted {}
+    foreach site $sites {
+        set key [dict get $site key]
+        if {$key eq $stop} break
+        if {![dict exists $decisions $key]} {
+            dict set decisions $key accepted
+            lappend accepted $key
+        }
+    }
+}
+
+# The batched scheduler's run of the sequential order on one build (header,
+# "Decision economics"): SITES in post-order, DECISIONS as built, OWN the
+# build's diagnostics by site (Attribute, without ""), DEPS the dependency
+# analysis of the build (hir::staticdeps::Deps; "" with one failing site).
+# The status of a site is failing (it has a diagnostic of its own), ok, or
+# unknown (it depends on a site rejected since the build).
+#
+# The sites fall into *components*: sites linked, directly or through
+# others, by a dependency in either direction. No decision in one component
+# can change a status in another, so the sequential order of the whole
+# program is an interleaving of each component's own sequential order --
+# the global first failing site is always the first non-ok site of its
+# component -- and the run takes each component's sequential step on its
+# own: reject the component's first site in post-order that is not ok (and
+# accept the undecided sites of the component before it) while that site
+# is failing. A rejection makes every site depending on it unknown; a
+# component whose first non-ok site is unknown needs a build, the others go
+# on. Returns a dict: decisions, committed (the rejected keys, in order),
+# accepted (the keys accepted), predicted (key -> ok or the first
+# diagnostic: what the next build must show for each site whose status the
+# run still knows).
+proc hir::static::Simulate {sites decisions own deps} {
+    set parentOf [dict create]
+    foreach site $sites {
+        dict set parentOf [dict get $site key] [dict get $site parent]
+    }
+    set status [dict create]
+    foreach site [Present $sites $decisions] {
+        set key [dict get $site key]
+        dict set status $key [expr {[dict exists $own $key] ? "failing" : "ok"}]
+    }
+    set component [Components $status $deps]
+    set committed {}
+    set held {}
+    set acceptedAll {}
+    while 1 {
+        set first ""
+        set blocked [dict create]
+        dict for {key s} $status {
+            set c [dict get $component $key]
+            if {$s eq "ok" || [dict exists $blocked $c]} continue
+            if {$s eq "unknown"} {
+                dict set blocked $c 1
+                continue
+            }
+            set first $key
+            break
+        }
+        if {$first eq ""} break
+        set c [dict get $component $first]
+        set ids [InternalIds [dict get [lindex [dict get $own $first] 0] message]]
+        if {$ids ne {}} {
+            # Its message names internal identities (hir::types::show's
+            # `block(e12)`), numbered by the build in one walk: an expression
+            # number is the sequential order's own only if no site numbered
+            # before it has another form here than there -- a site rejected
+            # since this build, or a failing or unknown one before it (the
+            # sequential order rejects those first). Any other kind of id is
+            # assumed to depend on every site. Else its component waits for a
+            # build.
+            set differing $committed
+            dict for {key s} $status {
+                if {$key eq $first} break
+                if {$s ne "ok"} {
+                    lappend differing $key
+                }
+            }
+            set clean 1
+            if {$differing ne {}} {
+                set bound ""
+                foreach key $differing {
+                    if {$deps ne "" && [dict exists $deps firstIds $key]} {
+                        set n [dict get $deps firstIds $key]
+                        if {$bound eq "" || $n < $bound} {
+                            set bound $n
+                        }
+                    } elseif {$deps eq ""} {
+                        set bound 0
+                    }
+                }
+                foreach id $ids {
+                    if {![string match e* $id] || ($bound ne "" && [string range $id 1 end] >= $bound)} {
+                        set clean 0
+                    }
+                }
+            }
+            if {!$clean} {
+                dict set status $first unknown
+                lappend held $first
+                continue
+            }
+        }
+        set accepted {}
+        foreach site $sites {
+            set key [dict get $site key]
+            if {$key eq $first} break
+            if {![dict exists $decisions $key] && [dict exists $status $key]
+                    && [dict get $component $key] eq $c} {
+                dict set decisions $key accepted
+                lappend accepted $key
+            }
+        }
+        lappend acceptedAll {*}$accepted
+        dict set decisions $first [list rejected [lindex [dict get $own $first] 0]]
+        lappend committed $first
+        dict unset status $first
+        # The sites nested in its body are gone with it (each was ok: it
+        # comes before it, and is accepted with the others).
+        foreach site $sites {
+            set key [dict get $site key]
+            if {[dict exists $status $key] && [Inside $parentOf $key $first]} {
+                if {![dict exists $decisions $key]} {
+                    dict set decisions $key accepted
+                    lappend acceptedAll $key
+                }
+                dict unset status $key
+            }
+        }
+        dict for {key s} $status {
+            if {$deps eq "" || $first in [dict get $deps sites $key]} {
+                # Without an analysis every other site is unknown.
+                dict set status $key unknown
+            }
+        }
+    }
+    set predicted [dict create]
+    dict for {key s} $status {
+        switch -- $s {
+            ok { dict set predicted $key ok }
+            failing { dict set predicted $key [PredictionOf [lindex [dict get $own $key] 0]] }
+        }
+    }
+    return [dict create decisions $decisions committed $committed accepted $acceptedAll \
+        predicted $predicted held $held]
+}
+
+# The components (Simulate) of the sites of STATUS under DEPS: key -> a
+# component id; one component when DEPS is "" (no analysis).
+proc hir::static::Components {status deps} {
+    set leader [dict create]
+    dict for {key s} $status {
+        dict set leader $key $key
+    }
+    if {$deps eq ""} {
+        set first [lindex [dict keys $status] 0]
+        dict for {key s} $status {
+            dict set leader $key $first
+        }
+        return $leader
+    }
+    dict for {key s} $status {
+        foreach other [dict get $deps sites $key] {
+            if {![dict exists $leader $other]} continue
+            set a [Find leader $key]
+            set b [Find leader $other]
+            if {$a ne $b} {
+                dict set leader $a $b
+            }
+        }
+    }
+    set component [dict create]
+    dict for {key s} $status {
+        dict set component $key [Find leader $key]
+    }
+    return $component
+}
+
+proc hir::static::Find {leaderVar key} {
+    upvar 1 $leaderVar leader
+    set root $key
+    while {[dict get $leader $root] ne $root} {
+        set root [dict get $leader $root]
+    }
+    while {[dict get $leader $key] ne $root} {
+        set next [dict get $leader $key]
+        dict set leader $key $root
+        set key $next
+    }
+    return $root
+}
+
+# What a prediction of the batched run (Simulate) says about DIAGNOSTIC: the
+# diagnostic with the internal ids of its message blanked (InternalIds).
+proc hir::static::PredictionOf {diagnostic} {
+    dict set diagnostic message [regsub -all {\m[ebsyt][0-9]+\M} [dict get $diagnostic message] #]
+    return $diagnostic
+}
+
+# The internal identities of the build it came from that diagnostic MESSAGE
+# names (expression, binding, scope, symbol or type ids: `block(e12)`), whose
+# numbering depends on the sites before them in the walk.
+proc hir::static::InternalIds {message} {
+    return [regexp -all -inline {\m[ebsyt][0-9]+\M} $message]
+}
+
+# 1 if site KEY is nested, at any depth, in the body of site OUTER (PARENTOF:
+# site key -> the key of the site whose body holds it, "" for none).
+proc hir::static::Inside {parentOf key outer} {
+    set p [dict get $parentOf $key]
+    while {$p ne ""} {
+        if {$p eq $outer} {
+            return 1
+        }
+        set p [dict get $parentOf $p]
+    }
+    return 0
+}
+
+# Why the batched run (RESULT of Simulate on DEPS) left failing site KEY
+# undecided: it depends on a site the run rejected (with the dependency's
+# path when TRACING: hir::staticdeps::Explain), or it comes after a site of
+# its component whose status became unknown.
+proc hir::static::Deferral {hir sites decisions deps result key tracing} {
+    if {$key in [dict get $result held]} {
+        return "its message names internal ids, numbered by the forms of the sites before it: decided in the sequential order's own build"
+    }
+    if {$deps eq ""} {
+        return "depends on [lindex [dict get $result committed] 0] (no dependency analysis with one failing site)"
+    }
+    foreach c [dict get $result committed] {
+        if {$c in [dict get $deps sites $key]} {
+            if {$tracing} {
+                return "depends on $c: [hir::staticdeps::Explain $deps $key $c]"
+            }
+            return "depends on $c"
+        }
+    }
+    return "after a site of its component whose status is unknown"
+}
+
+# The trace record of a decision: KEY and DIAGNOSTIC's kind and location.
+proc hir::static::TraceDecision {key diagnostic} {
+    set origin [dict get $diagnostic origin]
+    set at ""
+    if {[lindex $origin 0] eq "file"} {
+        set at "[dict get [lrange $origin 2 end] line]:[dict get [lrange $origin 2 end] column]"
+    }
+    return [list $key [dict get $diagnostic kind] $at]
+}
+
+# ENTRY with the builds made since the counters were BEFORE.
+proc hir::static::RoundEntry {entry before} {
+    set now [hir::BuildStats]
+    foreach counter {builds methodTrials methodFinals methodReused} {
+        dict set entry $counter [expr {[dict get $now $counter] - [dict get $before $counter]}]
+    }
+    return $entry
+}
+
+# The decision trace of STATS (staticStats with `trace`) as text, one line
+# per round and one per decision.
+proc hir::static::FormatTrace {stats} {
+    set lines [list "static decisions ([dict get $stats scheduler]): [dict get $stats rounds] rounds,\
+        [dict get $stats builds] builds ([dict get $stats methodTrials] method trials,\
+        [dict get $stats methodFinals] method finals, [dict get $stats methodReused] reused)"]
+    foreach entry [dict get $stats trace] {
+        set head "round [dict get $entry round] ([dict get $entry phase])"
+        foreach field {bodies undecided failing builds methodTrials methodSeeds methodRetried} {
+            if {[dict exists $entry $field]} {
+                append head " $field [dict get $entry $field]"
+            }
+        }
+        lappend lines $head
+        if {[dict exists $entry rejected]} {
+            foreach r [dict get $entry rejected] {
+                lappend lines "    reject [lindex $r 0] [lindex $r 1] [lindex $r 2]"
+            }
+        }
+        if {[dict exists $entry deferred]} {
+            foreach d [dict get $entry deferred] {
+                lappend lines "    defer [lindex $d 0]: [lindex $d 1]"
+            }
+        }
+        if {[dict exists $entry accepted] && [dict get $entry accepted] ne {}} {
+            lappend lines "    accept [llength [dict get $entry accepted]]: [dict get $entry accepted]"
+        }
+        if {[dict exists $entry channels]} {
+            lappend lines "    channels [dict get $entry channels]"
+        }
+    }
+    if {[dict get $stats mispredicted] ne {}} {
+        lappend lines "MISPREDICTED [dict get $stats mispredicted]"
+    }
+    return [join $lines \n]
+}
+
+# The legacy scheduler (header, "Decision economics"; kept for the
+# before/after measurements, never the default). The keys of the sites of
+# FAILING (the sites with a diagnostic of their own in HIR, a typed build, in
+# post-order) this round rejects: the first, whose earlier sites all have
+# their final forms -- and every other one that no other site of FAILING can
+# have caused its diagnostic (Independent): its diagnostic stays when the
+# others are rejected, so it is decided now rather than one build later.
+# Without that proof, sites are decided one per round. The batched scheduler
+# replaces the top-level units by the dependency graph of
+# hir/staticdeps.tcl and GlobalChannels' stop sign by its channel nodes.
 proc hir::static::Rejectable {hir failing} {
     set keys [list [dict get [lindex $failing 0] key]]
     if {[llength $failing] < 2 || [GlobalChannels $hir]} {
@@ -686,14 +1179,22 @@ proc hir::static::Rejectable {hir failing} {
     return $keys
 }
 
-# 1 if a site's body in HIR can change what the compiler concludes about code
-# anywhere, whatever calls what: a call that violates a trusted inferred
-# contract (the contract is demoted for every call, hir::check), or a
-# callable with declared errors passed into an untyped parameter (the
-# erased-callable contract charges every unidentified call no callable
-# contract bounds, and bounds what a structural type admits where a value
-# acquires it, hir/completions.tcl). In such a build no site is proven
-# independent.
+# The legacy scheduler's stop sign: 1 if a site's body in HIR might change
+# what the compiler concludes about code anywhere, whatever calls what -- a
+# call that violates a trusted inferred contract (the contract is demoted for
+# every call, hir::check), or a callable with declared errors passed into an
+# untyped parameter (the uncontracted erased-callable channel: the
+# erased-callable contract charges every call that has lost both identity
+# and contract precision -- no exact callee, no verified structural contract
+# bounding it -- and bounds what a structural type admits where a value
+# acquires it, hir/completions.tcl). In such a build the legacy scheduler
+# proves no site independent and decides one per round. Neither is a global
+# stop sign for the batched scheduler: a demotion changes no diagnostic
+# (hir::check keeps the diagnostics of the check before it), and the
+# erased-callable contract is a node of hir/staticdeps.tcl's graph with
+# contributors (the erasing calls) and consumers (the calls without identity
+# or contract precision); a call through a verified structural contract
+# consumes nothing.
 proc hir::static::GlobalChannels {hir} {
     if {[dict exists $hir demotedContracts] && [dict get $hir demotedContracts] ne {}} {
         return 1
@@ -801,16 +1302,83 @@ proc hir::static::UnitOf {units site} {
 }
 
 # One build of the program under DECISIONS: hir::BuildFull of the expanded
-# syntax, stopping after resolution errors when HALT. Sets CHECKEDVAR to
+# syntax, stopping after resolution errors when HALT, with the method-style
+# call decisions SEEDS taken as made (MethodSeeds). Sets CHECKEDVAR to
 # whether the static checks ran.
-proc hir::static::Round {nodes options given decisions halt checkedVar} {
+proc hir::static::Round {nodes options given decisions halt checkedVar {seeds {}}} {
     upvar 1 $checkedVar checked
+    variable methodAudit
     lassign [Expand $nodes [dict get $options -modules] $decisions] nodes modules
     dict set options -modules $modules
     if {[dict exists $given -modules]} {
         dict set given -modules $modules
     }
-    return [hir::BuildFull $nodes $options $given $halt checked]
+    if {$methodAudit && $seeds ne {}} {
+        # The audit: the same round deciding every call afresh must be the
+        # same program (built first, so the per-compilation registries are
+        # the seeded build's afterwards).
+        set fresh [hir::BuildFull $nodes $options $given $halt freshChecked]
+    }
+    set hir [hir::BuildFull $nodes $options $given $halt checked $seeds]
+    if {$methodAudit && $seeds ne {}} {
+        foreach {what a b} [list checked $freshChecked $checked \
+                diagnostics [dict get $fresh diagnostics] [dict get $hir diagnostics] \
+                choices [dict get $fresh methodChoices] [dict get $hir methodChoices] \
+                program [hir::format $fresh] [hir::format $hir]] {
+            if {$a ne $b} {
+                error "hir::static: method-call decision reuse changed the round's $what (seeds: $seeds)"
+            }
+        }
+    }
+    return $hir
+}
+
+# The method-style call decisions of HIR (a typed build: its methodDecided)
+# that the next round, in which the sites COMMITTED are rejected, may take as
+# made, by the dependency analysis DEPS of HIR (hir::staticdeps::Deps with
+# methods): a call's decision is a function of what its region reaches -- its
+# receiver, arguments and candidates, the calls those depend on, and the
+# sites (METHOD-SUGAR.md's rule, decided by trial builds of the candidates).
+# A call is decided afresh when it was not decided here (rejected, or not a
+# trial's to decide) or a committed site reaches it -- and so is every call
+# such a call reaches: the trial builds pair a call's candidates with those
+# of the calls it depends on, so a call decided afresh must see them varied
+# exactly as an unseeded round varies them. Every other decision is the one
+# the next round would make again.
+proc hir::static::MethodSeeds {hir deps committed} {
+    set decided [dict get $hir methodDecided]
+    set methods [dict get $deps methods]
+    set retry [dict create]
+    dict for {key cone} $methods {
+        if {![dict exists $decided $key]} {
+            dict set retry $key 1
+            continue
+        }
+        foreach c $committed {
+            if {$c in [dict get $cone sites]} {
+                dict set retry $key 1
+                break
+            }
+        }
+    }
+    set work [dict keys $retry]
+    while {$work ne {}} {
+        set key [lpop work]
+        if {![dict exists $methods $key]} continue
+        foreach other [dict get $methods $key calls] {
+            if {![dict exists $retry $other]} {
+                dict set retry $other 1
+                lappend work $other
+            }
+        }
+    }
+    set seeds [dict create]
+    dict for {key choice} $decided {
+        if {![dict exists $retry $key] && [dict exists $methods $key]} {
+            dict set seeds $key $choice
+        }
+    }
+    return $seeds
 }
 
 # The diagnostics of HIR (one build) by owner: a dict key -> its diagnostics

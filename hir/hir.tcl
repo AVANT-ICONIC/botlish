@@ -231,6 +231,23 @@ if {[info commands ::core::evalProgram] eq ""} {
 namespace eval hir {
     variable home [file dirname [file normalize [info script]]]
     variable prefixes [dict create expr e scope s binding b symbol y type t file f node n]
+    # Whole-program build counters (STATIC-COMPILE.md, "Decision economics"):
+    # `builds` counts every hir::BuildOnce, `methodTrials` and `methodFinals`
+    # the method-call decisions' trial and final builds among them, and
+    # `methodReused` the builds those decisions did not repeat because the
+    # one they needed had already been made (DecideMethodCalls). Measurement
+    # only: read as differences by hir/static.tcl and the benchmarks, never
+    # by an analysis.
+    variable buildStats [dict create builds 0 methodTrials 0 methodFinals 0 methodReused 0]
+    # 0 makes DecideMethodCalls build every trial and final build again even
+    # when it is the build it started from (measurement and audits only).
+    variable methodBuildReuse 1
+}
+
+# The build counters (hir::buildStats) as they are now.
+proc hir::BuildStats {} {
+    variable buildStats
+    return $buildStats
 }
 
 # ---------------------------------------------------------------------------
@@ -398,7 +415,13 @@ proc hir::buildSyntax {nodes args} {
 # with no static node left: hir/static.tcl expands them first), stopping
 # after resolution when HALT and a name is unresolved. Sets CHECKEDVAR to
 # whether the static checks ran. Raises nothing for a diagnostic.
-proc hir::BuildFull {nodes options given halt checkedVar} {
+#
+# SEEDS (key -> candidate display) are method-style calls already decided:
+# hir/static.tcl passes the decisions of its previous round that no change
+# since can have touched (STATIC-COMPILE.md, "Method-call decisions across
+# rounds"). They are the first build's choices and DecideMethodCalls takes
+# them as decided; without seeds the build is the one it always was.
+proc hir::BuildFull {nodes options given halt checkedVar {seeds {}}} {
     upvar 1 $checkedVar checked
     set traits [expr {[dict get $options -trait-decls] ne {}}]
     # A source program that may construct coroutines may give a generic
@@ -413,9 +436,9 @@ proc hir::BuildFull {nodes options given halt checkedVar} {
         dict set options -modules $modules
         dict set given -modules $modules
     }
-    set hir [BuildOnce $nodes $options $given {} $halt checked]
+    set hir [BuildOnce $nodes $options $given $seeds $halt checked]
     if {$checked && [dict exists $hir methodCalls]} {
-        set hir [DecideMethodCalls $nodes $options $given $hir]
+        set hir [DecideMethodCalls $nodes $options $given $hir $seeds]
     }
     if {($traits || ($affine && [hir::traits::NeedsAffinePlan $hir])) && $checked && [dict get $hir diagnostics] eq ""} {
         # Checked as written, with trait views; now the program every
@@ -448,6 +471,8 @@ proc hir::BuildFull {nodes options given halt checkedVar} {
 # whether the static checks ran. Raises nothing for a diagnostic.
 proc hir::BuildOnce {nodes options given choices halt checkedVar} {
     upvar 1 $checkedVar checked
+    variable buildStats
+    dict incr buildStats builds
     set checked 0
     if {[dict exists $given -imports]} {
         hir::imports::apply [dict get $options -imports]
@@ -593,9 +618,26 @@ proc hir::MethodCallProblems {hir expr} {
 # repeat with the calls decided so far fixed, because a call's receiver may
 # be another undecided call's result. Only calls with several candidates ever
 # cost a build; a program without one is built once. Returns the final HIR.
-proc hir::DecideMethodCalls {nodes options given hir} {
+#
+# A build whose choices resolve every call to the candidate HIR (the build
+# this procedure starts from) already resolved it to is HIR itself
+# (SameChoices): it is not made again -- a trial of the stand-in candidates,
+# and the final build when nothing else was built since (so the
+# per-compilation registries are still that build's).
+proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
+    variable buildStats
+    variable methodBuildReuse
     set calls [dict get $hir methodCalls]
     set decided [dict create]
+    # Calls decided before this build (BuildFull's SEEDS) are decided -- a
+    # call still there, with that candidate still among its candidates.
+    dict for {key choice} $seeds {
+        if {[dict exists $calls $key] && $choice in [dict get $calls $key candidates]} {
+            dict set decided $key $choice
+        }
+    }
+    # Whether the last build made is HIR (no trial was built since).
+    set lastIsInitial 1
     set validity [dict create]
     set problemsOf [dict create]
     # A method-style call on a trait view is an operation of the trait
@@ -625,7 +667,15 @@ proc hir::DecideMethodCalls {nodes options given hir} {
                 set candidates [dict get $calls $key candidates]
                 dict set choices $key [lindex $candidates [expr {min($t, [llength $candidates] - 1)}]]
             }
-            set trial [BuildOnce $nodes $options $given $choices 0 checked]
+            if {$methodBuildReuse && [SameChoices $hir $choices]} {
+                set trial $hir
+                set checked 1
+                dict incr buildStats methodReused
+            } else {
+                set trial [BuildOnce $nodes $options $given $choices 0 checked]
+                dict incr buildStats methodTrials
+                set lastIsInitial 0
+            }
             if {!$checked} {
                 # Not typeable: no call can be decided on types.
                 set undecided {}
@@ -707,7 +757,14 @@ proc hir::DecideMethodCalls {nodes options given hir} {
         }
         lappend rejected $key $valid
     }
-    set final [BuildOnce $nodes $options $given $choices 0 checked]
+    if {$methodBuildReuse && $lastIsInitial && [SameChoices $hir $choices]} {
+        set final $hir
+        dict set final methodChoices $choices
+        dict incr buildStats methodReused
+    } else {
+        set final [BuildOnce $nodes $options $given $choices 0 checked]
+        dict incr buildStats methodFinals
+    }
     foreach {key valid} $rejected {
         if {![dict exists $final methodCalls $key]} continue
         if {[UnknownTraitOperationInside [dict get $problemsOf $key]]} {
@@ -739,7 +796,32 @@ proc hir::DecideMethodCalls {nodes options given hir} {
         set added [lindex [dict get $final diagnostics] end]
         dict set final diagnostics [concat [list $added] $diagnostics]
     }
+    # The decided calls (not the rejected ones' stand-ins), for a later build
+    # of a changed program that can reuse them (hir/static.tcl). Bookkeeping
+    # of the decision, never read by an analysis.
+    dict set final methodDecided $decided
     return $final
+}
+
+# 1 if a build given the method-call choices CHOICES (key -> candidate
+# display) resolves every multi-candidate method call of HIR (a typed build:
+# its `methodCalls`) to the candidate HIR resolved it to -- a call CHOICES
+# does not name, or names with a display that is not one of its candidates,
+# stands in with its first candidate (hir::resolve::MethodChoice). Such a
+# build is HIR itself: hir::BuildOnce is a pure function of its inputs, and
+# the choices are the only one that differs.
+proc hir::SameChoices {hir choices} {
+    dict for {key info} [dict get $hir methodCalls] {
+        set candidates [dict get $info candidates]
+        set want [lindex $candidates 0]
+        if {[dict exists $choices $key] && [dict get $choices $key] in $candidates} {
+            set want [dict get $choices $key]
+        }
+        if {$want ne [dict get $info chosen]} {
+            return 0
+        }
+    }
+    return 1
 }
 
 # 1 if every candidate's problems (PERCANDIDATE, as MethodCallProblems gives
@@ -1131,7 +1213,7 @@ proc hir::exprsAt {hir origin} {
 }
 
 apply {{dir} {
-    foreach file {syntax static imports resolve flags contexts coroutines affine mutvec refcheck hygiene sourcetypes structs enums traits syscall errordecls types exactvalue signatures modulebinding refine repeatable lower format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings} {
+    foreach file {syntax static staticdeps imports resolve flags contexts coroutines affine mutvec refcheck hygiene sourcetypes structs enums traits syscall errordecls types exactvalue signatures modulebinding refine repeatable lower format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings} {
         uplevel #0 [list source [file join $dir $file.tcl]]
     }
 }} $hir::home

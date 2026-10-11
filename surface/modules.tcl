@@ -320,6 +320,9 @@ proc surface::modules::TypeRefs {type span foundVar} {
 # changes, so a module's diagnostics and source locations still point at
 # its own file, never at the file that happened to reference it.
 proc surface::modules::RemapOrigin {origin fileId} {
+    if {$origin eq ""} {
+        return ""
+    }
     dict set origin file $fileId
     return $origin
 }
@@ -349,6 +352,26 @@ proc surface::modules::RemapFile {node fileId} {
             dict set node params $params
             dict set node flags [RemapFlags [expr {[dict exists $node flags] ? [dict get $node flags] : {}}] $fileId]
             dict set node body [lmap child [dict get $node body] {RemapFile $child $fileId}]
+            # The clauses that carry origins: context parameters (their
+            # loads are nodes at the parameter's origin), proof clauses and
+            # the resume clause.
+            if {[dict exists $node contextParams]} {
+                dict set node contextParams [lmap c [dict get $node contextParams] {
+                    lassign $c name origin type typeOrigin
+                    list $name [RemapOrigin $origin $fileId] $type [RemapOrigin $typeOrigin $fileId]
+                }]
+            }
+            if {[dict exists $node proofs]} {
+                dict set node proofs [lmap clause [dict get $node proofs] {
+                    dict set clause paramOrigin [RemapOrigin [dict get $clause paramOrigin] $fileId]
+                    dict set clause typeOrigin [RemapOrigin [dict get $clause typeOrigin] $fileId]
+                    set clause
+                }]
+            }
+            if {[dict exists $node resume]} {
+                lassign [dict get $node resume] type origin
+                dict set node resume [list $type [RemapOrigin $origin $fileId]]
+            }
             # paramTypes carries no origin of its own (plain type-name
             # strings, resolved later by hir/resolve.tcl): nothing to remap.
         }

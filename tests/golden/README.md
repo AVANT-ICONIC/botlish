@@ -78,16 +78,15 @@ test::report()
   `test::rejects`). A mistake in one test's code is then that test's
   failure, not a suite that does not build.
 * The suite ends with `test::report()`: the program's value is the report.
-* **Compile cost of rejected blocks.** The compiler decides `static
-  compile:` blocks in rounds of whole-program builds, and decides rejected
-  blocks together only when they are in different top-level units that do
-  not reach each other: rejected blocks nested in one function are decided
-  one build at a time (13 of them in one registration function: 9 builds,
-  ~20 s; one per top-level unit: 4 builds, ~5 s). A body that does not
-  capture anything can be a top-level function of its own (the
-  registration function only names it); one that captures an input of its
-  registration function stays nested -- give such tests a registration
-  function each when a suite has many rejections.
+* **Layout is free.** Write a body where it reads best: nested in its
+  registration function (it may capture the function's inputs), or at the
+  top level. The compiler decides independent blocks together whatever their
+  nesting (STATIC-COMPILE.md, "Decision economics"): a suite's builds grow
+  with how deeply its blocks really depend on each other -- a block nested
+  in another block, blocks in one function's statement sequence, a block
+  consuming what another erases -- never with how many blocks it has or how
+  they are arranged. (Before that milestone this guide asked for bodies at
+  the top level and for an erasing body first: no longer needed.)
 
 ## Helpers
 
@@ -139,11 +138,13 @@ a `test::case` that compares `message` too.
   it constructs its own coroutines and affine values.
 * **Higher-order code** that passes a callable *declaring an error* through
   an *untyped* parameter makes the program's erased-callable contract carry
-  that error, and the completion analysis then charges it to every call it
-  cannot identify -- the runner's call of each stored check among them: the
-  suite stops compiling (UNHANDLED-ERROR inside lib/test.bot). Such a test
-  is NEW-FRAMEWORK-LIMITATION until the analysis is more precise
-  (GOLDEN-TEST-FRAMEWORK.md, "Generic completion capture").
+  that error; the completion analysis charges it only to calls whose callee
+  has neither an identity nor a contract -- never to the runner's call of a
+  stored check, which goes through its `Fn` contract
+  (VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md). Such code is portable as the
+  Tcl test writes it, prelude at the suite's top level included; the blocks
+  that consume the contract are decided after the blocks that change it,
+  and every other block is decided independently of it.
 * **What Botlish cannot observe** -- HIR, Core IR or NIR text, allocation or
   release counts, warnings, stdout -- stays in the Tcl suite. A semantic
   core of such a test (its program's value) may be ported, classified

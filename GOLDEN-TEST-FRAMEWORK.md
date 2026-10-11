@@ -20,7 +20,7 @@ under 21 existing compiler and runtime mutants, the golden suites caught
 every mutant the Tcl tests caught (18 per test, 3 only as a whole suite
 that aborts or does not compile). The framework's own 20 mutants are all
 killed, and its fuzzer agrees with an independent model on 466 generated
-cases. Natively a case costs one to seven microseconds and a whole suite executes in under half a millisecond; the cost of the approach is compiling it -- the static decisions (a layout rule keeps them to seconds a suite) and back-end code generation.
+cases. Natively a case costs one to seven microseconds and a whole suite executes in under half a millisecond; the cost of the approach is compiling it -- the static decisions (a layout rule keeps them to seconds a suite; *no longer needed*, see the update below) and back-end code generation.
 
 The limits: a library cannot observe an arbitrary run-time error it does not
 name (handlers are nominal; there is no catch-all), and a run-time-only
@@ -54,6 +54,22 @@ of the three lines every test repeats ([Recommendations](#recommendations)).
 > 283 s instead of 4 and 32 s), the static-decision economics the next
 > milestone addresses. The historical text below is kept as written; each
 > place it describes C3 carries a note.
+
+> **Update (STATIC-DECISION-ECONOMICS.md): the layout rule is gone.** The
+> compiler now decides every rejected block that depends on nothing
+> rejected since in the same build, wherever it stands
+> (STATIC-COMPILE.md, "Decision economics"), so bodies no longer need to
+> be hoisted to the top level or an erasing body placed first, and
+> `tests/golden/README.md` says so ("Layout is free"). Both ports written
+> around the old cost model are back in their natural form:
+> `sc-negative-unhandled-erased`'s prelude at the suite's top level, and
+> `af-generic-errors`' admitted half ported as
+> `af-generic-errors/admitted` (223 golden tests, 134 Tcl tests ported).
+> The eight suites take 24 decision rounds and 37 whole builds instead of
+> 28 and 79, TBD-GOLDEN-TIME; 100 nested cases with 33 checker
+> rejections take 2 builds instead of 68. The sections below keep their
+> numbers as historical before/after evidence; each place that describes
+> the old cost model or the layout rule carries a note.
 
 ## Contents
 
@@ -629,6 +645,19 @@ representation 4.4 -> 4.7, values 5.0 -> 4.7 -- the completion analysis's
 own extra work (the contract boundary and its static walk, about 3% of a
 front end).
 
+*After STATIC-DECISION-ECONOMICS.md* (the batched scheduler, the natural
+layouts restored, `af-generic-errors/admitted` added; TBD-GOLDEN-TABLE-NOTE):
+
+TBD-GOLDEN-TABLE
+
+The layout rule above (bodies in separate top-level units, the erasing body
+first) is no longer needed and no longer followed by diagnostics.bot and
+ownership.bot; the remaining rounds are the suites' semantic dependency
+depth -- a resolution round, a checked round, the final build, and a round
+for a block that genuinely waits on another (an AMBIGUOUS-METHOD-CALL whose
+message names internal ids, a consumer of an erased-callable contract, a
+nested block).
+
 ## Testing the framework
 
 `tests/golden-framework.test` (41 tests) tests the library like any Botlish
@@ -1188,6 +1217,16 @@ decision procedure, not in the library, and a compiler that decided
 independent rejected blocks of one unit together (or reused a build's
 analysis across rounds) would make the rule unnecessary.
 
+*After STATIC-DECISION-ECONOMICS.md* that compiler exists, and the rule is
+gone. The same suites (`bench/static-decisions.tcl`, best of 3 on a quiet
+machine; builds counted the same way):
+
+TBD-SYNTH-TABLE
+
+Nested and top-level suites now cost the same: a passing suite one build, a
+suite with resolution rejections two, with checker rejections two, at every
+size.
+
 ### Back ends: code generation against execution
 
 The front end (`surface::compile`, once); natively (`native::measure`, best
@@ -1277,7 +1316,7 @@ and from the porters' reports:
 | suite-local helper functions | 56 (message matchers in 6 suites, String search, a coroutine log driver, shared code under test) | 5-40 | what the library does not provide |
 | absolute suite-file locations in `rejects_at` and custom checks | 36 `rejects_at` + 14 custom | 0 (but re-derived after every edit above them) | a diagnostic's primary location is in the suite's coordinates |
 | the suite context: `with context test::suite()` and the driver | 8 (one per suite) | 3 | entry program top level |
-| hoisting bodies to the top level, ordering a "global" body first | 152 of the 218 bodies, in every suite with more than one rejection (representation.bot's single rejected body stays nested) | 0 lines, but a layout rule | the static decision rounds' cost model ([Performance](#performance)) |
+| hoisting bodies to the top level, ordering a "global" body first | 152 of the 218 bodies, in every suite with more than one rejection (representation.bot's single rejected body stays nested) | 0 lines, but a layout rule | the static decision rounds' cost model ([Performance](#performance)); *no longer needed since STATIC-DECISION-ECONOMICS.md* -- existing suites keep their layout, new tests may nest bodies freely |
 | a coroutine-log driver replacing `test-log` effects | 5 bodies (values), 2 (harness) | 7 | evaluation order observed through a yielding log |
 | setup or cleanup (brief item 81) | none | 0 | no test needed either: a body can reach no shared state (not the suite, not another body's values), so each is self-contained; the nearest things are the coroutine-log drivers above and the context tests' registration functions, which compute the context-dependent value before registering |
 | two spellings of one program (destructured/explicit, method/free, elif/nested) | 9 Tcl tests | a whole body each | the Tcl tests looped over spellings; a body is one program |
@@ -1334,7 +1373,11 @@ own milestone.
    the collections suite took 81 builds (~150 s) and ownership 178
    (~260 s); with bodies hoisted to the top level and the one "global" body
    placed first, 11 and 26 builds. The suites' layout follows the compiler's
-   cost model -- a rule a test author must know.
+   cost model -- a rule a test author must know. *Fixed by
+   STATIC-DECISION-ECONOMICS.md*: independent blocks are decided together
+   wherever they stand, the erased-callable contract delays only its
+   consumers, and method-call decisions are reused across rounds; the rule
+   is gone (collections 7 builds, ownership 11, in their current layouts).
 6. **No message, related-location or substring matcher.** Six suites
    (collections, diagnostics, errors, modules, ownership, representation)
    wrote their own on `test::case` (24 Tcl tests needed one). Candidates
@@ -1466,7 +1509,10 @@ the sample shows would otherwise be multiplied by thousands:
    written, two suites took 81 and 178 builds. Deciding independent rejected blocks together and reusing
    method-call decisions across rounds is a compiler optimization every
    program with `static compile:` benefits from; until then a migration must
-   follow the layout rule of `tests/golden/README.md` by hand. Behind it,
+   follow the layout rule of `tests/golden/README.md` by hand. *Done
+   (STATIC-DECISION-ECONOMICS.md)*: the builds now follow the suites'
+   dependency depth (the eight suites: 37 builds, none more than 11), and
+   the layout rule is gone; this prerequisite of the migration is met. Behind it,
    back-end code generation for large programs: the native NIR lowering
    (Tcl) takes 1.4-3.2 s a suite and the Tcl compiler 3-10 s, while the
    tests execute in under half a millisecond natively

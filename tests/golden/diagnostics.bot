@@ -10,12 +10,12 @@
 #
 # Every Tcl program here is one the ordinary compiler rejects, so each
 # becomes the body of a `static compile:` block that the compiler rejects
-# where it stands, and the test reads the reified diagnostic. A rejected
-# block costs whole-program builds, decided together only across top-level
-# units that do not reach each other (README, "Compile cost of rejected
-# blocks"): every body here captures nothing, so every body is a top-level
-# function of its own, written just before the registration function that
-# names it. Locations are lines and columns of this file.
+# where it stands, and the test reads the reified diagnostic. Every body
+# here captures nothing; each is a top-level function written just before
+# the registration function that names it (a layout for reading: the
+# compiler decides independent blocks together however they are nested,
+# STATIC-COMPILE.md, "Decision economics").
+# Locations are lines and columns of this file.
 #
 # The header is part of several tests: the suite imports list and
 # mutable_array (both `at`s are visible: imports-method-untyped-receiver-is-
@@ -37,7 +37,7 @@ import test
 # VehicleType, ...).
 
 # static-compile.test: the scErased prelude's E1 and E2 (its functions are
-# in the block: see sc-negative-unhandled-erased).
+# dg_raise, dg_call, dg_generic: see sc-negative-unhandled-erased).
 error DgE1
 error DgE2
 
@@ -163,29 +163,29 @@ nomethod fn dg_rejects_containing(name: str, expected: compiler::DiagnosticCode,
 # sc-negative-unhandled-erased: inside a block the completion analysis is the
 # whole program's: E1 escaping `generic` through an untyped call, with only
 # E2 handled, is UnhandledError at the call, naming E1. The Tcl program's
-# raise, call and generic are in the block for compile cost alone: at the
-# suite's top level, `call(raise, x)` would keep the erased-callable contract
-# E1, E2 open in every build -- no longer charged to the runner (C3, fixed by
-# VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md), but hir::static::GlobalChannels
-# then makes the compiler decide one rejected block per build: 14 decision
-# rounds, 34 builds, 46 s here, against 5, 12, 12 s. This body is the
-# file's first block on purpose: while its trial body is in a build, that
-# contract is program-wide, so no other site is proven independent and the
-# compiler rejects one block per build until this one is rejected
-# (GlobalChannels); first in source order, the first typed build does.
+# raise, call and generic are at the suite's top level, as there: the
+# program's erased-callable contract carries DgE1 and DgE2 in every build.
+# Since VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md that contract is no longer
+# charged to the runner (a call through its Fn contract), and since the
+# static-decision economics milestone (STATIC-COMPILE.md, "Decision
+# economics") it no longer serializes the suite's other blocks: only the
+# blocks that consume it depend on it. (Before, they took 14 decision
+# rounds and 34 builds here, and the port kept the three functions inside
+# its block.) The shorter names keep every line of this file where the
+# rejects_at checks below pin it.
+fn dg_raise(x) -> int errors DgE1, DgE2:
+    if x == 1:
+        fail DgE1
+    if x == 2:
+        fail DgE2
+    0
+fn dg_call(f, x):
+    f(x)
+fn dg_generic(x) -> int errors DgE1, DgE2:
+    dg_call(dg_raise, x)
 fn b_sc_negative_unhandled_erased() errors compiler::CompilerError:
     static compile:
-        fn raise(x) -> int errors DgE1, DgE2:
-            if x == 1:
-                fail DgE1
-            if x == 2:
-                fail DgE2
-            0
-        fn call(f, x):
-            f(x)
-        fn generic(x) -> int errors DgE1, DgE2:
-            call(raise, x)
-        generic(0):
+        dg_generic(0):
             on DgE2:
                 -1
 

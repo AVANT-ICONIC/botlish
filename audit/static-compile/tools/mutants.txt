@@ -162,11 +162,11 @@ proc hir::static::Accepted {node body position} {
 @@ leaks-affine-move every site that fails in a round is rejected at once, so a rejected body's move decides a later block's verdict
 ## hir/static.tcl
 <<<<
-    set keys [list [dict get [lindex $failing 0] key]]
-    if {[llength $failing] < 2 || [GlobalChannels $hir]} {
+            if {$deps eq "" || $first in [dict get $deps sites $key]} {
+                # Without an analysis every other site is unknown.
 ====
-    set keys [lmap site $failing {dict get $site key}]
-    if {1} {
+            if {0} {
+                # Without an analysis every other site is unknown.
 >>>>
 
 @@ outermost-owner a diagnostic belongs to the outermost site holding it, not the innermost
@@ -206,23 +206,22 @@ proc hir::static::Accepted {node body position} {
 @@ warning-becomes-error a warning in a static body rejects the block like a diagnostic
 ## hir/static.tcl
 <<<<
-    return [hir::BuildFull $nodes $options $given $halt checked]
+    set hir [hir::BuildFull $nodes $options $given $halt checked $seeds]
 ====
-    set hir [hir::BuildFull $nodes $options $given $halt checked]
+    set hir [hir::BuildFull $nodes $options $given $halt checked $seeds]
     if {[dict get $hir diagnostics] eq ""} {
         foreach w [hir::warnings::collect $hir] {
             dict lappend hir diagnostics [dict create kind TYPE message [dict get $w message] expr "" origin [dict get $w primary]]
         }
     }
-    return $hir
 >>>>
 
 @@ internal-becomes-compiler-error a failure of the compiler while it builds a round is reified as the first undecided site's CompilerError
 ## hir/static.tcl
 <<<<
-        set hir [Round $nodes $options $given $decisions 1 checked]
+        set hir [Round $nodes $options $given $decisions 1 checked $seeds]
 ====
-        if {[catch {Round $nodes $options $given $decisions 1 checked} hir]} {
+        if {[catch {Round $nodes $options $given $decisions 1 checked $seeds} hir]} {
             set victim ""
             foreach site $sites {
                 if {![dict exists $decisions [dict get $site key]]} {

@@ -1,0 +1,500 @@
+# static-economics.test -- the decision economics of `static compile:`
+# (STATIC-COMPILE.md, "Decision economics"; hir/static.tcl's schedulers,
+# hir/staticdeps.tcl's dependency analysis).
+#
+# * the semantics are frozen: the batched scheduler decides exactly the
+#   program the sequential reference decides (every site's outcome and
+#   reified diagnostic, the program's diagnostics, the decided HIR), on a
+#   corpus covering every channel the dependency analysis models, and no
+#   build contradicts a prediction;
+# * the economics are pinned: whole-program builds do not grow with the
+#   number of independent blocks, nested or top level; genuine dependency
+#   chains keep their builds; the erased-callable contract serializes only
+#   its contributors and consumers; method-style call decisions are reused
+#   across rounds exactly;
+# * the compiler properties the analysis relies on, pinned where they live.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+set ::sdRoot [file dirname [file dirname [file normalize [info script]]]]
+source [file join $::sdRoot audit static-decisions tools lib.tcl]
+
+# ---------------------------------------------------------------------------
+# Helpers
+
+# The HIR of SOURCE (-strict 0, warnings off) under SCHEDULER.
+proc seHir {source {scheduler batched}} {
+    set saved $hir::static::scheduler
+    set hir::static::scheduler $scheduler
+    try {
+        return [surface::compile $source -strict 0 -warnings off]
+    } finally {
+        set hir::static::scheduler $saved
+    }
+}
+
+# {ROUNDS BUILDS METHOD-TRIALS} of SOURCE under SCHEDULER.
+proc seEcon {source {scheduler batched}} {
+    set s [dict get [seHir $source $scheduler] staticStats]
+    return [list [dict get $s rounds] [dict get $s builds] [dict get $s methodTrials]]
+}
+
+# "" if the batched scheduler decides SOURCE exactly as the sequential one
+# (and, with LEGACY, as the legacy one up to its schedule's internal ids),
+# else the first difference.
+proc seSame {source {legacy 1}} {
+    set b [sdCompile batched $source]
+    if {[dict get $b error] ne ""} {
+        # Two compilations that fail alike are no evidence of anything.
+        return "does not compile: [string range [dict get $b error] 0 300]"
+    }
+    set diff [sdDiff $b [sdCompile sequential $source]]
+    if {$diff eq "" && $legacy} {
+        set diff [sdDiff $b [sdCompile legacy $source] 1]
+    }
+    return $diff
+}
+
+# The site outcomes of SOURCE (batched), in post-order: accepted or the
+# rejection's kind.
+proc seOutcomes {source} {
+    return [lmap {key site} [hir::static::sites [seHir $source]] {
+        expr {[dict get $site outcome] eq "rejected" ? [dict get $site diagnostic kind] : [dict get $site outcome]}
+    }]
+}
+
+# The golden framework's K-case suite: every third case rejected with
+# REJECTION (none, unbound, type), the bodies nested in the registration
+# function (NESTED 1) or each at the top level.
+proc seSuite {k rejection nested} {
+    set lines {"import compiler" "import test" ""}
+    set registrations {}
+    set pad [expr {$nested ? "    " : ""}]
+    if {$nested} {
+        lappend lines "fn register_bench():"
+    }
+    for {set i 0} {$i < $k} {incr i} {
+        lappend lines "${pad}fn body_${i}() errors compiler::CompilerError:" "${pad}    static compile:"
+        if {$rejection ne "none" && $i % 3 == 2} {
+            if {$rejection eq "unbound"} {
+                lappend lines "${pad}        missing_$i + 7"
+                set code Unbound
+            } else {
+                lappend lines "${pad}        fn want_${i}(x: int) -> int:" "${pad}            x" "${pad}        want_${i}(\"s\")"
+                set code Type
+            }
+            set registration "test::rejects(\"t$i\", compiler::DiagnosticCode::$code, body_${i})"
+        } else {
+            lappend lines "${pad}        7 * $i + $i"
+            set registration "test::value(\"t$i\", 7 * $i + $i, body_${i})"
+        }
+        if {$nested} {
+            lappend lines "    $registration"
+        } else {
+            lappend registrations "    $registration"
+        }
+    }
+    if {!$nested} {
+        lappend lines "fn register_bench():" {*}$registrations
+        if {$k == 0} { lappend lines "    return" }
+    }
+    lappend lines "" "with context test::suite()" "register_bench()" "test::report()" ""
+    return [join $lines \n]
+}
+
+# The erased-callable reproducer of tests/static-compile.test (`call` cannot
+# infer a contract for f, so what reaches it is erased): `generic` erases E1
+# from the top level; a contributor block erases E2 as well; a consumer
+# block handles E1 only around generic(0), which is charged everything the
+# program erases.
+set ::seErased {import compiler
+
+error E1
+error E2
+
+fn raise1(x) -> int errors E1:
+    if x == 1:
+        fail E1
+    0
+
+fn raise2(x) -> int errors E2:
+    if x == 2:
+        fail E2
+    0
+
+fn call(f, x):
+    f(x)
+
+fn generic(x) -> int errors E1:
+    call(raise1, x)
+
+}
+set ::seContributor {"fn gen2(x) -> int errors E2:" "    call(raise2, x)" "r = gen2(0):" "    on E2:" "        0" "r"}
+set ::seConsumer {"r = generic(0):" "    on E1:" "        -1" "r"}
+
+# A site function: name NAME, body lines BODY.
+proc seSite {name body} {
+    set lines [list "fn ${name}() -> int errors compiler::CompilerError:" "    static compile:"]
+    foreach line $body {
+        lappend lines "        $line"
+    }
+    return [join $lines \n]\n
+}
+
+proc seTypeFail {i} {
+    return [list "fn want_${i}(x: int) -> int:" "    x" "want_${i}(\"s\")"]
+}
+
+# ---------------------------------------------------------------------------
+# The semantics are frozen
+
+test se-equal-independent {independent failures at every stage, nested in one function and at the top level: the batched decisions are the sequential ones} -body {
+    set nested "import compiler\n\nfn needs_int(v: int) -> int:\n    v\n\nfn run() -> int:\n"
+    set top "import compiler\n\nfn needs_int(v: int) -> int:\n    v\n\n"
+    set calls {}
+    for {set i 0} {$i < 9} {incr i} {
+        switch [expr {$i % 3}] {
+            0 { set body [list "$i + 1"] }
+            1 { set body [list "missing_$i"] }
+            2 { set body [list "needs_int(\"s$i\")"] }
+        }
+        append top [seSite t$i $body]\n
+        foreach line [split [seSite t$i $body] \n] {
+            if {$line ne ""} { append nested "    $line\n" }
+        }
+        lappend calls "r$i = t${i}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    append nested "    0\n\nrun()\n"
+    append top [join $calls ""] "0\n"
+    list [seSame $nested] [seSame $top] [seOutcomes $nested] [seEcon $nested] [seEcon $top]
+} -result {{} {} {accepted UNBOUND TYPE accepted UNBOUND TYPE accepted UNBOUND TYPE} {3 3 0} {3 3 0}}
+
+test se-equal-sequence {sites in one function's statement sequence are judged one after another: an earlier rejection makes the code after it unreachable, where completion diagnostics are not reported -- the later site is accepted, as in the sequential order} -body {
+    set text "import compiler\n\nerror Boom\n\nfn boom() errors Boom:\n    fail Boom\n\nfn run() -> int errors compiler::CompilerError:\n    static compile:\n        missing_name\n    static compile:\n        boom()\n    0\n\nr = run():\n    on compiler::CompilerError:\n        0\nr\n"
+    list [seSame $text] [seOutcomes $text]
+} -result {{} {UNBOUND accepted}}
+
+test se-equal-ownership-siblings {sibling blocks with ownership effects: a rejected block's move of a coroutine handle is gone with it (the block after it in the same function is accepted), beside an independent USE-AFTER-MOVE and an accepted block whose handle lives across an error edge -- the batched decisions are the sequential ones} -body {
+    set text "import compiler\n\nerror Boom\n\nfn boom(x: int) -> int errors Boom:\n    if x > 5:\n        fail Boom\n    x\n\nfn needs_int(v: int) -> int:\n    v\n\nfn producer():\n    yield 1\n    2\n\n"
+    append text "fn run() -> int errors compiler::CompilerError:\n    coroutine \{step\} = producer()\n    static compile:\n        other = step\n        needs_int(\"s\")\n    static compile:\n        step()\n    0\n\n"
+    append text [seSite moved [list "coroutine {step: s1} = producer()" "other = s1" "s1()" "0"]]
+    append text [seSite edge [list "coroutine {step: s2} = producer()" "r = boom(3):" "    on Boom:" "        0" "s2()" "r"]]
+    append text "r0 = run():\n    on compiler::CompilerError:\n        -1\nr1 = moved():\n    on compiler::CompilerError:\n        -1\nr2 = edge():\n    on compiler::CompilerError:\n        -1\n\[r0, r1, r2\]\n"
+    list [seSame $text] [seOutcomes $text]
+} -result {{} {TYPE accepted USE-AFTER-MOVE accepted}}
+
+test se-equal-nested-chain {a nested block whose rejection rejects the block around it: the outer one is judged only after the inner one, one build per level} -body {
+    set text "import compiler\n\nfn outer() -> int errors compiler::CompilerError:\n    static compile:\n        fn level_0() -> int:\n            static compile:\n                fn level_1() -> int:\n                    static compile:\n                        missing\n                level_1()\n        level_0()\n\nr = outer():\n    on compiler::CompilerError:\n        0\nr\n"
+    list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
+} -result {{} {UNBOUND UNHANDLED-ERROR UNHANDLED-ERROR} 4}
+
+test se-equal-nested-checked {a nested block rejected by the checker: the block around it is judged again once it is -- its first diagnostic is then the inner block's unadmitted CompilerError, not its own type error} -body {
+    set text "import compiler\n\nfn want_int(x: int) -> int:\n    x\n\nfn outer() -> int errors compiler::CompilerError:\n    static compile:\n        fn level_0() -> int:\n            static compile:\n                want_int(\"s\")\n        want_int(\"t\")\n        level_0()\n\nr = outer():\n    on compiler::CompilerError:\n        0\nr\n"
+    list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
+} -result {{} {TYPE UNHANDLED-ERROR} 3}
+
+test se-equal-internal-ids {a rejection whose message names internal ids (the numbering of the build it came from) carries the sequential order's message: it is decided in the sequential order's own build} -body {
+    # Each block's message names its own struct's exact callable type,
+    # `block(eN)`, numbered after every earlier block.
+    set text "import compiler\n\nfn cb(s, x: int) -> int:\n    x\n\n"
+    for {set i 0} {$i < 4} {incr i} {
+        append text [seSite t$i [list "fn f_$i\(x: int) -> int:" "    x" "s = \{cb: f_$i, v: $i\}" "s.cb(1)"]]\n
+        append text "r$i = t${i}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    append text "0\n"
+    set outcomes [seOutcomes $text]
+    set messages [lmap {key site} [hir::static::sites [seHir $text]] {
+        expr {[regexp {block\(e[0-9]+\)} [dict get $site diagnostic message]]}
+    }]
+    list [seSame $text 0] [lsort -unique $outcomes] $messages
+} -result {{} AMBIGUOUS-METHOD-CALL {1 1 1 1}}
+
+test se-equal-erased {the erased-callable contract: a consumer judged against what the program erases, independent failures beside it -- the batched decisions are the sequential ones} -body {
+    set text $::seErased
+    append text [seSite contributor $::seContributor]
+    append text [seSite consumer $::seConsumer]
+    for {set i 0} {$i < 4} {incr i} {
+        append text [seSite t$i [seTypeFail $i]]
+    }
+    foreach name {contributor consumer t0 t1 t2 t3} {
+        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    append text "0\n"
+    list [seSame $text] [seOutcomes $text]
+} -result {{} {accepted accepted TYPE TYPE TYPE TYPE}}
+
+test se-equal-erased-consumer {a genuine consumer of the erased-callable contract: a callable read from a List[any] has neither identity nor contract, so its call is charged what the program erases -- E2 while the contributor's body erases raise2 (UNHANDLED-ERROR), nothing once that body is rejected (accepted)} -body {
+    set text "import compiler\nimport list\n\nerror E1\nerror E2\n\nfn harmless() -> int:\n    1\n\nfn raise2() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\n"
+    append text [seSite contributor [concat {"r = store(raise2)"} [seTypeFail 0]]]
+    append text [seSite consumer {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
+    append text "r1 = contributor():\n    on compiler::CompilerError:\n        -1\nr2 = consumer():\n    on compiler::CompilerError:\n        -1\nr1 + r2\n"
+    set hir::static::trace 1
+    try {
+        set hir [seHir $text]
+    } finally {
+        set hir::static::trace 0
+    }
+    list [seSame $text] [seOutcomes $text] [dict get $hir staticStats rounds] \
+        [llength [dict get [lindex [dict get $hir staticStats trace] 0] deferred]]
+} -result {{} {TYPE accepted} 2 1}
+
+test se-equal-multiple-contributors {several contributors, rejected by the checker and by resolution: the consumer is judged against the contract their final forms leave} -body {
+    set text $::seErased
+    append text [seSite c1 [concat $::seContributor [seTypeFail 9]]]
+    append text [seSite c2 [concat $::seContributor {missing_name}]]
+    append text [seSite consumer $::seConsumer]
+    foreach name {c1 c2 consumer} {
+        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    append text "0\n"
+    list [seSame $text] [seOutcomes $text]
+} -result {{} {TYPE UNBOUND accepted}}
+
+test se-equal-untyped-capture {two blocks capturing an untyped parameter of the function around them: its contract is inferred from every use, so one block's use can fail the other -- which is judged again once the first is rejected} -body {
+    set text "import compiler\nimport str\n\nfn want_int(x: int) -> int:\n    x\n\nfn register(n) -> int:\n    fn a() -> int errors compiler::CompilerError:\n        static compile:\n            q = str::length(n)\n            want_int(\"s\")\n    fn b() -> int errors compiler::CompilerError:\n        static compile:\n            want_int(n)\n    ra = a():\n        on compiler::CompilerError:\n            -1\n    rb = b():\n        on compiler::CompilerError:\n            -1\n    ra + rb\n\nregister(1)\n"
+    list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
+} -result {{} {TYPE accepted} 2}
+
+test se-equal-corpus {contexts, opaque structs, traits, coroutines and ownership, method sugar, namespaced errors: batched equals sequential (every program compiles: seSame refuses two failures alike)} -body {
+    set results {}
+    foreach text [list \
+        "import compiler\nimport linux::io\n\n[seSite a {{with context linux::io::create()} {1}}][seSite b {missing}]ra = a():\n    on compiler::CompilerError:\n        0\nrb = b():\n    on compiler::CompilerError:\n        0\nra + rb\n" \
+        "import compiler\nimport abi\nimport abi::bytes\n\n[seSite a [list "b = abi::bytes::Bytes {storage: 1}" "0"]][seSite b [list "d = abi::bytes::from_list(\[\])" "abi::bytes::length(d).value"]][seSite c [list "d = abi::bytes::from_list(\[\])" "d.storage"]][seSite e {missing}]ra = a():\n    on compiler::CompilerError:\n        0\nrb = b():\n    on compiler::CompilerError:\n        0\nrc = c():\n    on compiler::CompilerError:\n        0\nre = e():\n    on compiler::CompilerError:\n        0\nra + rb + rc + re\n" \
+        "import compiler\n\ntrait Shape:\n    fn area(shape: Shape) -> int\n\nstruct Square:\n    side: int\n\nfn area(s: Square) -> int:\n    s.side\n\nstruct Thing:\n    v: int\n\nfn measure(s: Shape) -> int:\n    s.area()\n\n[seSite a [list "measure(Square {side: 2})"]][seSite b [list "measure(Thing {v: 1})"]][seSite c [list "fn w(x: int) -> int:" "    x" "w(\"s\")"]]ra = a():\n    on compiler::CompilerError:\n        0\nrb = b():\n    on compiler::CompilerError:\n        0\nrc = c():\n    on compiler::CompilerError:\n        0\nra + rb + rc\n" \
+        "import compiler\n\nfn producer():\n    yield 1\n    2\n\n[seSite a [list "coroutine {step} = producer()" "other = step" "step()" "0"]][seSite b [list "coroutine {step} = producer()" "step()" "0"]][seSite c {missing}]ra = a():\n    on compiler::CompilerError:\n        0\nrb = b():\n    on compiler::CompilerError:\n        0\nrc = c():\n    on compiler::CompilerError:\n        0\nra + rb + rc\n" \
+        "import compiler\nimport list\nimport str\n\n[seSite a [list "xs = \[1, 2\]" "xs.length()"]][seSite b [list "s = \"ab\"" "fn w(x: int) -> int:" "    x" "w(s.length() == 2)"]][seSite c [list "xs = \[1\]" "s = \"x\"" "xs.length() + s.length()"]]ra = a():\n    on compiler::CompilerError:\n        0\nrb = b():\n    on compiler::CompilerError:\n        0\nrc = c():\n    on compiler::CompilerError:\n        0\nra + rb + rc\n" \
+        "import compiler\nimport list\n\nfn positive(x: int) -> bool:\n    x > 0\n\n[seSite a [list "r = list::find(\[1, 2\], positive):" "    on list::NotFound:" "        0" "r"]][seSite b [list "r = list::find(\[1, 2\], positive):" "    on NotFound:" "        0" "r"]][seSite c [list "list::find(\[1\], positive)"]]ra = a():\n    on compiler::CompilerError:\n        0\nrb = b():\n    on compiler::CompilerError:\n        0\nrc = c():\n    on compiler::CompilerError:\n        0\nra + rb + rc\n"] {
+        lappend results [seSame $text]
+    }
+    set results
+} -result {{} {} {} {} {} {}}
+
+test se-no-misprediction {the golden framework's suites of 30 cases: no build contradicts a prediction of the batched run} -body {
+    lmap rejection {none unbound type} {
+        dict get [seHir [seSuite 30 $rejection 1]] staticStats mispredicted
+    }
+} -result {{} {} {}}
+
+# ---------------------------------------------------------------------------
+# The economics are pinned (whole-program builds: hir::BuildOnce)
+
+test se-builds-type-nested {100 golden cases with 33 checker (TYPE) rejections, nested in one registration function: a constant number of builds -- the same as with every body at the top level} -body {
+    lassign [seEcon [seSuite 100 type 1]] rounds builds
+    lassign [seEcon [seSuite 100 type 0]] topRounds topBuilds
+    list [expr {$builds <= 4}] [expr {$rounds == $topRounds && $builds == $topBuilds}] $rounds
+} -result {1 1 2}
+
+test se-builds-unbound {independent UNBOUND rejections: the same builds at 10, 50 and 100 cases} -body {
+    lmap k {10 50 100} {
+        lrange [seEcon [seSuite $k unbound 1]] 0 1
+    }
+} -result {{2 2} {2 2} {2 2}}
+
+test se-builds-accepted {every block accepted: one build, whatever the number} -body {
+    lmap k {10 100} {
+        lrange [seEcon [seSuite $k none 1]] 0 1
+    }
+} -result {{1 1} {1 1}}
+
+test se-builds-legacy-pathology {the legacy scheduler on the nested TYPE suite: one build per rejection (the pathology this milestone removes)} -body {
+    lassign [seEcon [seSuite 30 type 1] legacy] rounds
+    lassign [seEcon [seSuite 30 type 1] batched] batched
+    list [expr {$rounds >= 10}] $batched
+} -result {1 2}
+
+test se-builds-erased {the erased-callable contract: a contributor and a consumer do not serialize 20 independent failures} -body {
+    set text $::seErased
+    append text [seSite contributor $::seContributor]
+    append text [seSite consumer $::seConsumer]
+    set names {contributor consumer}
+    for {set i 0} {$i < 20} {incr i} {
+        append text [seSite t$i [seTypeFail $i]]
+        lappend names t$i
+    }
+    foreach name $names {
+        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    append text "0\n"
+    list [lindex [seEcon $text] 0] [lindex [seEcon $text legacy] 0]
+} -result {2 21}
+
+test se-builds-contract {verified structural contracts are not consumers of the erased-callable contract: through Fn parameters, struct fields and vector elements, 12 failures beside an erasing body are decided together} -body {
+    set text "import compiler\nimport list\n\nerror E1\n\nfn raise1(x) -> int errors E1:\n    if x == 1:\n        fail E1\n    0\n\nfn call(f, x):\n    f(x)\n\nstruct Handler:\n    run: Fn{args: \[int\], return: int, errors: \[\]}\n\nfn apply(f: Fn{args: \[int\], return: int, errors: \[\]}, x: int) -> int:\n    f(x)\n\nfn dispatch(h: Handler, x: int) -> int:\n    (h.run)(x)\n\n"
+    append text [seSite eraser {"fn gen(x) -> int errors E1:" "    call(raise1, x)" "r = gen(0):" "    on E1:" "        0" "r"}]
+    set names eraser
+    for {set i 0} {$i < 12} {incr i} {
+        switch [expr {$i % 3}] {
+            0 { set body [list "fn add(x: int) -> int:" "    x + 1" "apply(add, $i)" "missing_$i"] }
+            1 { set body [list "fn add(x: int) -> int:" "    x + 1" "dispatch(Handler \{run: add\}, 1)" "missing_$i"] }
+            2 { set body [list "fn add(x: int) -> int:" "    x + 1" "apply(add, 1)" {*}[seTypeFail $i]] }
+        }
+        append text [seSite t$i $body]
+        lappend names t$i
+    }
+    foreach name $names {
+        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    append text "0\n"
+    list [seSame $text] [lindex [seEcon $text] 0]
+} -result {{} 3}
+
+test se-builds-contributor-early {a contributor rejected by resolution leaves no erasure: the consumer is decided in the first checked build} -body {
+    set text $::seErased
+    append text [seSite contributor [concat $::seContributor {missing_name}]]
+    append text [seSite consumer $::seConsumer]
+    append text "r1 = contributor():\n    on compiler::CompilerError:\n        -1\nr2 = consumer():\n    on compiler::CompilerError:\n        -1\n0\n"
+    list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
+} -result {{} {UNBOUND accepted} 2}
+
+test se-method-reuse {method-style call decisions are reused across rounds: fewer trial builds than deciding afresh, and the audit (every seeded round built again unseeded) finds the same program} -body {
+    set text "import compiler\nimport list\nimport str\n\n"
+    set names {}
+    for {set i 0} {$i < 6} {incr i} {
+        lappend names t$i
+        if {$i % 2} {
+            append text [seSite t$i [list "xs = \[1, $i\]" "s = \"ab\"" "xs.length() + s.length()"]]
+        } else {
+            append text [seSite t$i [list "xs = \[1, $i\]" {*}[seTypeFail $i] "xs.length()"]]
+        }
+    }
+    append text [seSite late [list "fn w(x: int) -> int:" "    x" "w(\"s\")"]]
+    lappend names late
+    foreach name $names {
+        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    append text "0\n"
+    set reuse [seEcon $text]
+    set hir::static::methodReuse 0
+    try {
+        set fresh [seEcon $text]
+    } finally {
+        set hir::static::methodReuse 1
+    }
+    set hir::static::methodAudit 1
+    try {
+        set audited [seEcon $text]
+    } finally {
+        set hir::static::methodAudit 0
+    }
+    list [expr {[lindex $reuse 2] < [lindex $fresh 2]}] [seSame $text 0] [expr {[lindex $audited 0] == [lindex $reuse 0]}]
+} -result {1 {} 1}
+
+test se-method-invalidated {a call whose receiver a rejected block changes is decided again, never reused: mk() is a List until its block is rejected, then never -- and xs.length() becomes ambiguous} -body {
+    set text "import compiler\nimport list\nimport str\n\nfn mk() errors compiler::CompilerError:\n    static compile:\n[join [lmap l [seTypeFail 0] {string cat "        " $l}] \n]\n        \[1, 2\]\n\nfn outside() -> int errors compiler::CompilerError:\n    xs = mk()\n    xs.length()\n\n[seSite other [seTypeFail 1]]r = outside():\n    on compiler::CompilerError:\n        -1\nr2 = other():\n    on compiler::CompilerError:\n        -1\nr + r2\n"
+    set a [sdCompile batched $text]
+    set hir::static::methodReuse 0
+    try {
+        set b [sdCompile batched $text]
+    } finally {
+        set hir::static::methodReuse 1
+    }
+    list [sdDiff $a $b] [seSame $text 0] [lsort -unique [lmap d [dict get $a diagnostics] {lindex $d 0}]]
+} -result {{} {} AMBIGUOUS-METHOD-CALL}
+
+test se-build-reuse-identical {a method-call decision build that would repeat the build it started from is not made again (hir::SameChoices) -- with or without static blocks, the program is the one building it again gives} -body {
+    set programs [list \
+        [seSuite 10 type 1] \
+        "$::seErased[seSite a $::seContributor][seSite b $::seConsumer][seSite c [seTypeFail 0]]0\n" \
+        "import list\nimport str\n\nfn f(xs: List\[int\]) -> int:\n    xs.length()\n\nfn g(xs) -> int:\n    xs.length()\n\nxs = \[1, 2\]\ns = \"ab\"\nxs.length() + s.length() + f(\[3\])\n" \
+        "import list\nimport str\n\nxs = \[1, 2\]\ns = \"ab\"\nxs.length() + s.length()\n" \
+        "trait Shape:\n    fn area(shape: Shape) -> int\n\nstruct Square:\n    side: int\n\nfn area(s: Square) -> int:\n    s.side * s.side\n\nfn measure(s: Shape) -> int:\n    s.area()\n\nmeasure(Square \{side: 3\})\n" \
+        "fn producer():\n    yield 1\n    2\n\ncoroutine \{step\} = producer()\nstep()\n"]
+    set results {}
+    foreach text $programs {
+        set reused [sdCompile batched $text]
+        set hir::methodBuildReuse 0
+        try {
+            set rebuilt [sdCompile batched $text]
+        } finally {
+            set hir::methodBuildReuse 1
+        }
+        lappend results [expr {[dict get $reused error] ne "" ? "does not compile" : [sdDiff $reused $rebuilt]}]
+    }
+    set results
+} -result {{} {} {} {} {} {}}
+
+# The batched run itself (hir::static::Simulate), on a synthetic dependency
+# relation: sites a, u, f in post-order; u depends on a and on f, f on
+# nothing. Rejecting a makes u unknown; f comes after u in u's component, and
+# the sequential order judges u (with f's body) before it rejects f -- so f
+# waits for the build, although nothing f depends on changed.
+proc seSyntheticSite {key parent} {
+    dict create key $key origin {file f1 start 0 end 0} bodyOrigin {file f1 start 0 end 0} \
+        operation compile parent $parent deferred {}
+}
+proc seSyntheticDiagnostic {kind} {
+    dict create kind $kind message "a $kind" origin {file f1 start 0 end 0 line 1 column 1} related {}
+}
+
+test se-simulate-component-waits {a component whose first non-ok site is unknown waits for a build: a later failing site of it is not committed, even one that depends on nothing changed} -body {
+    set sites [list [seSyntheticSite a ""] [seSyntheticSite u ""] [seSyntheticSite f ""] [seSyntheticSite z ""]]
+    set own [dict create a [list [seSyntheticDiagnostic TYPE]] u [list [seSyntheticDiagnostic TYPE]] \
+        f [list [seSyntheticDiagnostic TYPE]] z [list [seSyntheticDiagnostic UNBOUND]]]
+    set deps [dict create sites [dict create a {} u {a f} f {} z {}]]
+    set result [hir::static::Simulate $sites {} $own $deps]
+    list [dict get $result committed] [dict keys [dict get $result predicted]]
+} -result {{a z} f}
+
+test se-simulate-independent {independent failing sites are all committed in one run, in post-order, and their dependents become unknown} -body {
+    set sites [list [seSyntheticSite a ""] [seSyntheticSite b ""] [seSyntheticSite c ""] [seSyntheticSite d ""]]
+    set own [dict create a [list [seSyntheticDiagnostic TYPE]] c [list [seSyntheticDiagnostic TYPE]] \
+        d [list [seSyntheticDiagnostic UNBOUND] [seSyntheticDiagnostic TYPE]]]
+    set deps [dict create sites [dict create a {} b {c} c {} d {}]]
+    set result [hir::static::Simulate $sites {} $own $deps]
+    list [dict get $result committed] [dict get $result predicted] \
+        [dict get [lindex [dict get $result decisions d] 1] kind]
+} -result {{a c d} {} UNBOUND}
+
+# ---------------------------------------------------------------------------
+# Scheduling diagnostics
+
+test se-trace {the trace names every round's rejections and why a failing block waits: here, on the block whose use of a captured untyped parameter fails it} -body {
+    set text "import compiler\nimport str\n\nfn want_int(x: int) -> int:\n    x\n\nfn register(n) -> int:\n    fn a() -> int errors compiler::CompilerError:\n        static compile:\n            q = str::length(n)\n            want_int(\"s\")\n    fn b() -> int errors compiler::CompilerError:\n        static compile:\n            want_int(n)\n    ra = a():\n        on compiler::CompilerError:\n            -1\n    rb = b():\n        on compiler::CompilerError:\n            -1\n    ra + rb\n\nregister(1)\n"
+    set hir::static::trace 1
+    try {
+        set text [hir::static::FormatTrace [dict get [seHir $text] staticStats]]
+    } finally {
+        set hir::static::trace 0
+    }
+    list [regexp {round 1 \(checked\)} $text] [regexp {reject f[0-9]+:[0-9]+ TYPE} $text] \
+        [regexp {defer f[0-9]+:[0-9]+: depends on f[0-9]+:[0-9]+: .*untyped-parameter} $text] \
+        [regexp {round 2 \(checked\).*\n    accept 1} $text]
+} -result {1 1 1 1}
+
+test se-deterministic {the same program compiled three times in one process: the same decisions and the same economics, and nothing kept between compilations} -body {
+    set text [seSuite 12 type 1]
+    set before [lsort [info vars ::hir::static::*]]
+    set runs [lmap i {1 2 3} {
+        set hir [seHir $text]
+        list [hir::static::sites $hir] [dict get $hir staticStats rounds] [dict get $hir staticStats builds]
+    }]
+    list [llength [lsort -unique $runs]] [expr {[lsort [info vars ::hir::static::*]] eq $before}]
+} -result {1 1}
+
+# ---------------------------------------------------------------------------
+# The compiler properties the dependency analysis relies on
+# (hir/staticdeps.tcl's header): if one of these changes, the analysis must.
+
+test se-property-nested-entry {a nested function is analyzed from its own entry: where it is defined after a failure (its definition unreachable), its own completion and ownership diagnostics are still reported -- so a function does not depend on the reachability of the code that defines it} -body {
+    set text "error Boom\nerror Bang\n\nfn bang() errors Bang:\n    fail Bang\n\nfn gen():\n    yield 1\n    2\n\nfn f() errors Boom:\n    fail Boom\n    fn g():\n        coroutine \{step\} = gen()\n        step()\n        other = step\n        step()\n        bang()\n    0\n\nr = f():\n    on Boom:\n        1\nr\n"
+    lsort -unique [lmap d [dict get [surface::compile $text -strict 0 -warnings off] diagnostics] {
+        dict get $d kind
+    }]
+} -result {KNOWN-ERROR USE-AFTER-MOVE}
+
+test se-property-capture-narrowing {a captured binding is seen with the facts its mentions before the definition establish (a condition, a native's parameter types), and with no others -- what the capture edges of the analysis follow} -body {
+    set text "import list\n\nfn want(x: int) -> int:\n    x\n\nfn f(things: List\[any\]) -> int errors IndexNotFound:\n    v = list::at(things, 0)\n    if integer?(v):\n        fn g() -> int:\n            want(v)\n        g()\n    else:\n        0\n\nfn h(things: List\[any\]) -> int errors IndexNotFound:\n    w = list::at(things, 0)\n    w + 1\n    fn k() -> int:\n        want(w)\n    k()\n\nfn m(things: List\[any\]) -> int errors IndexNotFound:\n    u = list::at(things, 0)\n    fn q() -> int:\n        want(u)\n    q()\n\nfn all() -> int errors IndexNotFound:\n    f(\[1\]) + h(\[2\]) + m(\[3\])\n\nr = all():\n    on IndexNotFound:\n        0\nr\n"
+    lmap d [dict get [surface::compile $text -strict 0 -warnings off] diagnostics] {
+        list [dict get $d kind] [dict get [hir::static::PrimaryOrigin [surface::compile $text -strict 0 -warnings off] $d] line]
+    }
+} -result {{TYPE 25}}
+
+test se-property-subsume-local {the contract-boundary check of what an uncontracted input may hold (hir::completions::Subsume, Possible) runs only in a body's own diagnosing walk and only while the program erases something: what makes it a site-local channel} -body {
+    set body [info body hir::completions::Subsume]
+    regexp {if \{!\$diagnose \|\| \$value eq "" \|\| \[ErasedErrors \$hir\] eq \{\}\} \{\s*return} $body
+} -result 1
+
+test se-property-demotion-keeps-diagnostics {a demoted trusted contract changes no diagnostic: hir::check keeps the diagnostics of the check before the demotion -- why demotion is not a channel} -body {
+    regexp {set diagnostics \[dict get \$hir diagnostics\].*CheckOnce hir \$demote.*dict set hir diagnostics \$diagnostics} [info body hir::check]
+} -result 1
+
+cleanupTests

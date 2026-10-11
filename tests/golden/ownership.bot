@@ -7,10 +7,10 @@
 # order, live Tcl frames, NIR -- stays in the Tcl suite: a port of such a
 # test keeps its values and diagnostics and is noted weaker.
 #
-# Every body captures nothing, so each is a top-level function that the
-# registration functions only name (README.md, "Compile cost of rejected
-# blocks"). The suite imports str for its custom checks: a test whose
-# meaning depends on str not being imported says so.
+# Every body captures nothing, and each is a top-level function that the
+# registration functions only name (a layout for reading: README.md,
+# "Layout is free"). The suite imports str for its custom checks: a test
+# whose meaning depends on str not being imported says so.
 import compiler
 import coroutine
 import list
@@ -234,15 +234,15 @@ nomethod fn own_rejects_chains(name: str, expected: compiler::DiagnosticCode, ma
 # ---------------------------------------------------------------------------
 # coroutines.test
 
-# af-generic-errors, unadmitted (the admitted half costs 25 build rounds):
+# af-generic-errors, unadmitted (the admitted half is b_generic_admitted):
 # crosses the specialized generic call as a direct resume's would:
 # unhandled inside an untyped HOF that does not admit it, the call that
-# specializes it is invalid. This body is the suite's first static block
-# on purpose: until it is rejected, its error-declaring coroutine passed
-# to an untyped function gives every trial build an erased-callable
-# contract, and the compiler then decides one rejected block per round
-# (hir/static.tcl's GlobalChannels). Placed first, it is rejected in the
-# first round, and the later rounds decide independent blocks together.
+# specializes it is invalid. Its error-declaring coroutine passed to an
+# untyped function gives the program an erased-callable contract while
+# its body is in a build; only the blocks that consume that contract
+# depend on it (STATIC-COMPILE.md, "Decision economics") -- its place in
+# the file no longer matters (it used to have to be the first block, the
+# compiler deciding one rejected block per build until it was rejected).
 fn b_generic_unadmitted() errors compiler::CompilerError:
     static compile:
         fn w2(seed: int, resume Message) -> Event errors Boom:
@@ -564,6 +564,33 @@ fn b_restrict_set() errors compiler::CompilerError:
             1
         1
 
+# af-generic-errors, admitted: the same coroutine's Boom crosses the
+# specialized generic call and propagates to the handler at the call when
+# the HOF admits it -- [-1, 3] for the messages 9 and 3. The HOF is at the
+# top level (a generic function is specialized for an affine argument only
+# there). It used to be left out for compile cost alone: the accepted
+# erasure kept the erased-callable contract in every build, and the suite
+# took 25 decision rounds, 194 builds and 283 s.
+fn ow_invoke_boom(c, m) errors Boom:
+    c(m)
+
+fn b_generic_admitted() errors compiler::CompilerError:
+    static compile:
+        fn w2(seed: int, resume Message) -> Event errors Boom:
+            m = yield Event {value: seed}
+            if m.value > 5:
+                fail Boom
+            Event {value: m.value}
+        fn run(v: int) -> int:
+            coroutine {step} = w2(1):
+                on Boom:
+                    Event {value: 0}
+            e = ow_invoke_boom(step, Message {value: v}):
+                on Boom:
+                    Event {value: -1}
+            e.value
+        [run(9), run(3)]
+
 fn register_affine_tests():
     test::value("af-principal-callable/value", [10, 20], b_callable)
     test::rejects("af-principal-callable/use-after-move", compiler::DiagnosticCode::UseAfterMove, b_callable_moved)
@@ -582,6 +609,7 @@ fn register_affine_tests():
     test::value("af-restrictions/mutable-array", 1, b_restrict_array)
     test::rejects("af-restrictions/immutable-set", compiler::DiagnosticCode::AffineContainerUnsupported, b_restrict_set)
     test::rejects("af-generic-errors/unadmitted", compiler::DiagnosticCode::UnhandledError, b_generic_unadmitted)
+    test::value("af-generic-errors/admitted", [-1, 3], b_generic_admitted)
 
 # ---------------------------------------------------------------------------
 # mutable-vector.test

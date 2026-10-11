@@ -15,11 +15,11 @@
 # compare in the body: a body cannot need a context.
 #
 # Layout: a body that captures nothing is a top-level function just above
-# its registration function, which only names it (rejected blocks in
-# different top-level units are decided in the same compiler round; nested
-# in one registration function they would be decided one round each: the
-# README's "Compile cost of rejected blocks"). The two bodies that capture a
-# value computed at registration stay nested.
+# its registration function, which only names it; the two bodies that
+# capture a value computed at registration are nested. Either costs the
+# same: independent blocks are decided together however they are nested
+# (STATIC-COMPILE.md, "Decision economics"; the README's "Layout is
+# free").
 import abi
 import abi::bytes
 import compiler

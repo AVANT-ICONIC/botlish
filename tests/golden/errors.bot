@@ -92,12 +92,12 @@ nomethod fn err_rejects_message(name: str, expected: compiler::DiagnosticCode, l
 
 # ---------------------------------------------------------------------------
 # Layout. A test body is a function of no arguments named b_..., nested in the
-# registration function of its Tcl file -- except that a body that captures
-# nothing and holds a rejected block (or belongs to one Tcl test with such a
-# body) is a top-level function just above that registration function: the
-# compiler decides rejected blocks nested in one function one build at a
-# time, and those in separate top-level units together (README, "Compile cost
-# of rejected blocks").
+# registration function of its Tcl file -- or, for most bodies that capture
+# nothing, a top-level function just above that registration function: a
+# layout kept from before the static-decision economics milestone, when
+# rejected blocks nested in one function were decided one build at a time.
+# Now either layout costs the same (STATIC-COMPILE.md, "Decision economics";
+# README, "Layout is free").
 
 # ---------------------------------------------------------------------------
 # higher-order-completions.test: hoc-original-payload-free's body comes first.

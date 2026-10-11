@@ -54,6 +54,8 @@ index the compiler cannot decide.)
 * [How it works](#how-it-works)
 * [The compiler namespace](#the-compiler-namespace)
 * [Diagnostic-code census](#diagnostic-code-census)
+* [Decision economics](#decision-economics) -- how many builds the decisions
+  take (STATIC-DECISION-ECONOMICS.md has the milestone report)
 * [Report](#report) -- the 60 points of the milestone report, in order
 * [Performance](#performance)
 * [Files](#files)
@@ -120,15 +122,18 @@ would sit below it; the two stay distinct.
    during a build: diagnostics are data. Each diagnostic belongs to the
    innermost static block whose body holds its primary location, or to the
    enclosing program.
-3. The rounds decide every site: a block with a loader diagnostic is
-   rejected at once; a round that stopped after resolution rejects every
-   block with a resolution diagnostic of its own (resolution is lexical);
-   otherwise the first block in post-order with a diagnostic of its own is
-   rejected -- together with every other failing block no other failing
-   block can have influenced (different top-level units that do not reach
-   each other, no program-wide contract in play) -- and the blocks before it
-   are accepted. A round in which no block has a diagnostic of its own is the
-   final program.
+3. The rounds decide every site in the *sequential order*, which defines
+   every outcome: a block with a loader diagnostic is rejected at once; a
+   round that stopped after resolution rejects every block with a
+   resolution diagnostic of its own (resolution is lexical); otherwise the
+   first block in post-order with a diagnostic of its own is rejected and
+   the blocks before it are accepted. A round in which no block has a
+   diagnostic of its own is the final program. The scheduler only chooses
+   how many builds that order takes: it continues the order on one build for
+   as long as the build answers it, committing every rejection whose
+   block depends on nothing rejected since, and builds again only where one
+   decision changes facts another reads ([Decision
+   economics](#decision-economics)).
 4. An *accepted* block is its body: spliced in place when it binds nothing
    in its own scope (and is one expression in a value position), else the
    then-branch of an `if` on the root `true` -- exactly the `if true:` block
@@ -219,6 +224,201 @@ call of the function needing the context), a semantic instance's derived
 parameter contract (at the call), the call form of `UNWRAPPED-YIELD`, and a
 function's declared result not proven (at the enclosing function's
 literal). The block compiles; the program using it does not.
+
+## Decision economics
+
+What the decisions *are* is the sequential order of step 3: the definition
+of every outcome. How many whole-program builds deciding them takes is a
+separate question, answered by the scheduler (`hir::static::decide`'s
+`scheduler`; STATIC-DECISION-ECONOMICS.md has the measurements and the
+milestone report). Three schedulers exist, and all three decide the same
+program:
+
+* **batched** (the default) runs the sequential order on one build for as
+  long as that build answers it;
+* **sequential** builds after every typed rejection: the reference the
+  batched scheduler is checked against;
+* **legacy** is the procedure before the economics milestone (below), kept
+  for the before/after measurements.
+
+`BOTLISH_STATIC_SCHEDULER=sequential|legacy` selects one for a whole
+process (how the audits run the existing suites under the reference);
+`BOTLISH_STATIC_TRACE=1` prints each compilation's decision trace.
+
+### The theorem
+
+A build is a pure function of the forms of the static sites. A site's own
+diagnostics -- the only thing the order reads -- are a function of the
+facts its analysis reads, and those are a function of the forms of the sites
+its analysis can see: the sites it *depends on*. So, having rejected site
+Z on one build, every site that does not depend on Z has the diagnostics it
+would have in the next build, and the next sequential step can be read off
+the same build -- unless the site it needs depends on something rejected
+since.
+
+The batched scheduler (`hir::static::Simulate`) groups the sites into
+*components* -- sites linked, directly or through others, by a dependency
+in either direction -- and takes each component's sequential step on its
+own: reject the component's first site in post-order that is not *ok*
+(accepting the undecided sites of the component before it) while that site
+is *failing*; mark every site depending on it *unknown*; stop the component
+at its first *unknown* site. No decision in one component can change a
+status in another, so the sequential order of the whole program is an
+interleaving of the components' own orders: the run commits exactly the
+rejections the sequential order commits, with the same diagnostics, and a
+component builds again only where one of its decisions changed a fact
+another of its sites reads. A *stable decision* is one of these: the
+component's first non-ok site, failing, in a build in which nothing it
+depends on differs from the sequential order's build of that step.
+
+Each build checks the previous run's predictions (every site whose status
+it still knew must show the same status and, ids blanked, the same first
+diagnostic); a contradiction would mean the dependency analysis missed a
+channel, and is recorded (`mispredicted`) for the audits and tests, which
+fail on it.
+
+Resolution and loader rejections were decided together before this
+milestone and still are (resolution is lexical). Acceptances follow the
+rejections: a site is accepted when its component's sequential step passes
+it, and the round in which no site fails accepts the rest and is the final
+program.
+
+Two details keep the diagnostics exact:
+
+* **Nested sites.** An outer site depends on every site nested in its body
+  (its body contains their forms): a nested site is decided before the one
+  around it, and the outer one is judged again once an inner one is
+  rejected -- by then its first diagnostic may be the inner site's
+  unadmitted `CompilerError`. A rejected outer site takes the sites nested
+  in it with it (they are accepted, inside a body no build keeps).
+* **Internal ids.** A message that names internal ids (`block(e12)`) carries
+  the numbering of the build it came from, which the forms of the sites
+  numbered before them decide. Such a rejection is committed from a build
+  only when no site before its ids differs between that build and the
+  sequential order's; otherwise its component waits for a build (the trace
+  says so). Predictions compare messages with the ids blanked.
+
+### The dependency graph
+
+`hir/staticdeps.tcl` computes, from one build, which sites each site's
+diagnostics may depend on: a conservative graph whose nodes are regions
+(a function literal, or a program's top-level code), bindings, sites and
+program-wide channels, an edge saying "may read a fact of". A missed
+dependency would make the batched scheduler decide another program; an
+extra one only costs a build. Its header lists every edge; in short:
+
+* a site depends on the region its body stands in (its *position*: a
+  rejection can make the code after it unreachable, where completion and
+  ownership diagnostics are not reported), on the sites nested in it, and
+  on its own contract-boundary checks;
+* a region depends on everything its own code mentions -- bindings, the
+  functions it defines and calls (their summaries), every candidate of a
+  method-style call, its parameters and captures, the control operands
+  around its literal, and the narrowings of each captured binding between
+  its definition and the region -- but *not* on the rest of the function
+  around it: a function is analyzed from its own entry, and sees of the
+  enclosing code exactly its captures (`se-property-nested-entry`,
+  `se-property-capture-narrowing`). That is why bodies nested in one
+  registration function are as independent as top-level ones;
+* the backward channels: an untyped parameter's contract (inferred from its
+  uses in the function and the functions nested in it), a shared affine or
+  mutable binding (every region mentioning it), a yielding function's yield
+  type (the struct-protocol coroutine constructions that reach it);
+* the program-wide channels, modelled as nodes with contributors and
+  consumers rather than as a stop sign:
+  * **the erased-callable contract** (`hir::completions::erasedErrorsOf`).
+    Its *contributors* are the semantic-instance requests whose arguments
+    at parameters with no declared or trusted contract can carry errors (a
+    callable, or a value holding one), by those arguments and the call's
+    place, up the chain of requests; the positions where a callable with an
+    uncontracted parameter acquires a structural type (contravariant
+    erasure); and the requests the budget declined. Its *consumers* are the
+    regions that call through an uncontracted value -- a callee typed `any`
+    or a bare kind, a native calling such an argument -- whose identity and
+    contract are both lost. A call through a verified structural `Fn` or
+    `Coroutine` contract is *not* a consumer
+    (VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md: the contract bounds it whatever
+    it holds), so callback registries, struct fields and vector elements of
+    `Fn{...}` type serialize nothing (`se-builds-contract`). A coroutine
+    erases through the same channel (its construction is a call of a root
+    native with the callable as an argument) and its yield type is the
+    separate yield edge above;
+  * **the semantic-instance budget** of a function: open only under
+    pressure (a request declined, or half the per-block budget used), and
+    then every call of the function is both contributor and consumer;
+  * **the contract-boundary checks** (`hir::completions::Subsume` with
+    `Possible`), which run only in a body's own diagnosing walk while the
+    program erases something: a site-local channel, from the site to the
+    erased contract and to the inputs of the callables at its positions.
+
+Not channels: a demoted trusted contract (`hir::check` keeps the
+diagnostics of the check before the demotion,
+`se-property-demotion-keeps-diagnostics`), the trait monomorphization (it
+runs only on a program with no diagnostic, and its own are internal), and
+resolution (lexical).
+
+### Method-style call decisions across rounds
+
+A round's method-style calls with several candidates are decided by trial
+builds of the candidates (METHOD-SUGAR.md), and each round used to decide
+every one of them again. Now a round takes the previous round's decisions
+as made (`hir::static::MethodSeeds`, `hir::BuildFull`'s seeds) except for
+the calls that must be decided again: those not decided there, those whose
+region reaches a site rejected since (its receiver, arguments or
+candidates may differ), and every call such a call reaches (the trials
+pair a call's candidates with those of the calls it depends on). A seed is
+keyed by the call's identity (`methodCalls`: its file and syntax node, the
+same in every build of the compilation), never by its name, and is used only
+when the call still exists with that candidate among its candidates. A build whose choices are those the initial build
+already made is that build (`hir::SameChoices`): not made again, so a round
+with nothing to decide costs one build, not two. The seeds live in
+`decide`'s loop, for one round: nothing persists across compilations
+(`se-deterministic`). `hir::static::methodAudit` builds every seeded round
+a second time unseeded and fails unless the two programs are identical
+(`se-method-reuse`); `se-method-invalidated` pins a call decided again
+because a rejection changed its receiver.
+
+### The transaction model
+
+Unchanged: every build is a fresh, pure value, and nothing a body did
+survives a build that is not kept. A batched run reads diagnostics of one
+build for several decisions, but never continues *through* an invalid
+state: each committed decision is one the sequential order makes, on
+diagnostics the batched build shares with the sequential order's build of
+that step. The final program is an ordinary `hir::BuildFull` of the
+decided syntax -- the round in which no site fails -- with its own
+diagnostics and warnings, exactly as before.
+
+### Complexity
+
+* independent sites: a constant number of builds -- one per semantic
+  stage that rejects something (resolution, then the checks) plus the
+  final one, however many sites and however they are laid out (100 nested
+  TYPE rejections: 2 builds, as for the same bodies at the top level);
+* dependent sites: one build per level of genuine dependency (a chain of
+  K nested blocks each rejecting the one around it takes K + 1 builds, as
+  it must: each level's diagnostic is only known once the one inside it is
+  decided);
+* program-wide channels: a contributor and its consumers form one
+  component, decided in post-order, so the builds grow with the number of
+  *strata* -- consumers judged after a contributor's rejection -- not with
+  the number of sites beside them.
+
+The dependency analysis is one walk of the build plus a strongly-connected
+-components pass, a few percent of a build.
+
+### What the legacy scheduler did
+
+One rejection per typed round -- the first failing site in post-order --
+plus every other failing site in a *different top-level unit* (a top-level
+function with everything nested in it, or a section's top-level code) that
+neither reaches the other by reference; and no second rejection at all while
+`hir::static::GlobalChannels` held (a demoted trusted contract, or any
+erased-callable contract in the program). So independent failures nested in
+one function -- the golden framework's registration function -- were
+decided one build each, and one accepted erasing body anywhere serialized
+every rejection of the program. It is kept (`Rejectable`, `Independent`,
+`Units`, `GlobalChannels`) only as the legacy scheduler.
 
 ## Report
 
@@ -913,8 +1113,9 @@ Reading it:
   whole build of the program; the mixed files -- a third of the blocks
   rejected in resolution, a third by a type check -- take three builds
   however many blocks they hold (resolution rejections are decided
-  together; check-phase rejections in independent top-level functions are
-  decided together), so their cost is about 1.6-1.9 times the all-valid
+  together; independent check-phase rejections are decided together
+  wherever they stand -- [Decision economics](#decision-economics) and
+  STATIC-DECISION-ECONOMICS.md have the scaling), so their cost is about 1.6-1.9 times the all-valid
   file's. A build that stops at a resolution diagnostic is cheap (row 3's
   two builds cost one full build's time).
 * **Run time.** An accepted block is the plain body: the same NIR (item
@@ -939,8 +1140,9 @@ Reading it:
 | `surface/lower.tcl` | the `static` syntax node |
 | `surface/modules.tcl` | the `import compiler` rule, deferred loader diagnostics (`StaticSites`, `CheckRef`, `LowerStatements`), `RemapFile` |
 | `hir/syntax.tcl` | `staticNode` |
-| `hir/static.tcl` | sites, expansion, reification, decisions, the code table |
-| `hir/hir.tcl` | `hir::buildSyntax` / `hir::BuildFull`, `hir::Diagnose`'s `related` |
+| `hir/static.tcl` | sites, expansion, reification, decisions (the schedulers, `Simulate`, `MethodSeeds`, the trace), the code table |
+| `hir/staticdeps.tcl` | the dependency analysis of a build (`Deps`, `Explain`) |
+| `hir/hir.tcl` | `hir::buildSyntax` / `hir::BuildFull` (method-call seeds, `SameChoices`, `BuildStats`), `hir::Diagnose`'s `related` |
 | `hir/resolve.tcl` | the mark on a reified `fail`, its UNHANDLED-ERROR wording |
 | `hir/completions.tcl` | KNOWN-ERROR's `intended` |
 | `hir/warnings.tcl` | SAME-FAILURE skips reified failures |
@@ -951,8 +1153,11 @@ Reading it:
 | `native/lower.tcl` | `PureDecidedCondition`: a root Boolean reference |
 | `lib/compiler.bot` | `DiagnosticCode`, `SourceLocation`, `CompilerError` |
 | `tests/static-compile.test` | the tests named above |
+| `tests/static-economics.test` | the schedulers' equality, build-count bounds, method-decision reuse, the properties the dependency analysis relies on |
 | `audit/static-compile/tools/` | `fuzz.tcl`, `mutate.tcl`, `mutants.txt` |
+| `audit/static-decisions/tools/` | the schedulers' differential (`compare.tcl`, `lib.tcl`), model-based fuzzer (`fuzz.tcl`) and mutants (`mutate.tcl`, `mutants.txt`) |
 | `bench/static-compile.tcl` | the performance report |
+| `bench/static-decisions.tcl` | the decision economics report |
 
 ## What to run when changing this
 
@@ -965,3 +1170,23 @@ run `tests/static-compile.test`, `audit/static-compile/tools/fuzz.tcl`
 still apply and be killed). A new diagnostic kind needs its classification
 in `sc-census-exhaustive` and, if a block can produce it, a case in
 `lib/compiler.bot` and `hir::static::codes`.
+
+If you change the decision schedulers (`hir/static.tcl`'s `decide`,
+`Simulate`, `MethodSeeds`), the dependency analysis (`hir/staticdeps.tcl`),
+the method-call decisions' seeds or build reuse (`hir/hir.tcl`), or any fact
+an analysis reads across functions -- a new summary, a new backward or
+program-wide channel (an inferred contract, the erased-callable contract,
+an instance budget, a yield type), a new diagnostic suppressed by
+reachability -- run `tests/static-economics.test`,
+`tests/static-compile.test`, `audit/static-decisions/tools/fuzz.tcl`
+(several seeds; `-legacy 1` also checks the legacy scheduler),
+`audit/static-decisions/tools/compare.tcl` (the golden suites and the
+corpus under every scheduler) and `audit/static-decisions/tools/mutate.tcl`
+(every mutant in its `mutants.txt` must still apply and be killed: update a
+mutant's text when you change the code it mutates, keeping it a mutant of
+the same rule), and `tests/golden.test` (`golden-static-economics` bounds
+the suites' builds). A new cross-function channel the analysis misses shows
+up as a `mispredicted` build or a difference from the sequential scheduler:
+add its edge to `hir/staticdeps.tcl` (and to its header), never a special
+case in the scheduler. `bench/static-decisions.tcl` regenerates the
+economics report.
