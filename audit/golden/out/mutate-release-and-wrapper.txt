@@ -1,0 +1,33 @@
+# audit/golden/tools/mutate.tcl -mutants audit/coroutines/tools/mutants.txt -only release-never,native-release-not-emitted,compiler-release-missing,exit-release-never,native-exit-release-missing -fuzz 0 -suites 0
+# first run, before gf-coroutine-cleanup gained the early-exit case, release order and the HIR-compiling path:
+KILLED release-never -- no coroutine is released at its handle's last use: every one waits for a collection (Tcl: the program's end)
+    golden-framework.test: 4 failed (gf-coroutine-cleanup, gf-coroutine-cleanup-native, gf-gc-stress, gf-runner-abandoned)
+SURVIVED compiler-release-missing -- the Tcl compiler compiling HIR (main.tcl's compile backend) emits no release
+KILLED native-release-not-emitted -- native lowering emits no corelease
+    golden-framework.test: 2 failed (gf-coroutine-cleanup-native, gf-gc-stress)
+SURVIVED exit-release-never -- no exit releases anything: a coroutine left by a return, fail, break, continue or failing call waits for a collection (Tcl: the program's end)
+SURVIVED native-exit-release-missing -- native lowering releases nothing before a return
+
+5 mutants: 2 killed, 3 survived, 0 not applied, 0 not built
+
+# after:
+KILLED release-never -- no coroutine is released at its handle's last use: every one waits for a collection (Tcl: the program's end)
+    golden-framework.test: 4 failed (gf-coroutine-cleanup, gf-coroutine-cleanup-native, gf-gc-stress, gf-runner-abandoned)
+KILLED compiler-release-missing -- the Tcl compiler compiling HIR (main.tcl's compile backend) emits no release
+    golden-framework.test: 1 failed (gf-coroutine-cleanup)
+KILLED native-release-not-emitted -- native lowering emits no corelease
+    golden-framework.test: 2 failed (gf-coroutine-cleanup-native, gf-gc-stress)
+KILLED exit-release-never -- no exit releases anything: a coroutine left by a return, fail, break, continue or failing call waits for a collection (Tcl: the program's end)
+    golden-framework.test: 2 failed (gf-coroutine-cleanup, gf-coroutine-cleanup-native)
+KILLED native-exit-release-missing -- native lowering releases nothing before a return
+    golden-framework.test: 1 failed (gf-coroutine-cleanup-native)
+
+5 mutants: 5 killed, 0 survived, 0 not applied, 0 not built
+r2 0
+
+# audit/golden/tools/mutate.tcl -mutants audit/static-compile/tools/mutants.txt -only keeps-runtime-wrapper -fuzz 0 -suites 0 (gf-nir-migrated-bodies can fail)
+KILLED keeps-runtime-wrapper -- an accepted block keeps a run-time wrapper: its body runs as an immediately called closure
+    golden-framework.test: 4 failed (gf-nir-body-identical, gf-nir-migrated-bodies, gf-registration-does-not-run-native, gf-repeated-runs-native)
+
+1 mutants: 1 killed, 0 survived, 0 not applied, 0 not built
+w 0

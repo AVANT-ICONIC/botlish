@@ -311,10 +311,11 @@ error is raised again at every resume, there is no way to observe "failed"
 without re-raising, and the body's errors are already data by the time
 `check()` returns (see the census). Tests that *use* coroutines construct
 and drive their own, and ordinary ownership releases each one exactly once
-whether it completes, fails (handled inside the body) or is abandoned
-suspended (`gf-coroutine-cleanup`, the Tcl backends' release counters;
-`gf-coroutine-cleanup-native`, released == created and none swept, also
-under GC stress).
+whether it completes, fails (handled inside the body), is abandoned
+suspended or is left suspended by an early return, each before the next
+case runs (`gf-coroutine-cleanup`, the Tcl backends' release counters, in
+release order; `gf-coroutine-cleanup-native`, released == created and none
+swept, also under GC stress).
 
 ### Repeated runs, isolation, ordering
 
@@ -659,6 +660,33 @@ on their own (every suite reports "FAIL the run": the completeness check),
 and a mutant that changes no verdict (`registration-executes`,
 `runner-runs-twice`) is invisible to them by design -- those properties are
 pinned by the framework tests' probes and allocation counts.
+
+**"Coroutine not released"** (the brief's item 54 list) has no mutant in
+`lib/test.bot`: the library contains no release -- a coroutine is released
+by the language, at its handle's last use or on an exit that leaves its
+scope (COROUTINES.md) -- so there is no library code to break. The
+property is the framework's all the same (its runner is a coroutine, and
+tests construct their own), so the coroutine harness's own release mutants
+were run against `tests/golden-framework.test`:
+
+| mutant (`audit/coroutines/tools/mutants.txt`) | framework tests failing |
+|---|---|
+| `release-never` (nothing released at a last use) | 4: `gf-coroutine-cleanup`, `-native`, `gf-gc-stress`, `gf-runner-abandoned` |
+| `native-release-not-emitted` | 2: `gf-coroutine-cleanup-native`, `gf-gc-stress` |
+| `compiler-release-missing` (the Tcl compiler compiling HIR) | 1: `gf-coroutine-cleanup` |
+| `exit-release-never` (no release on return, fail, break, ...) | 2: `gf-coroutine-cleanup`, `-native` |
+| `native-exit-release-missing` | 1: `gf-coroutine-cleanup-native` |
+
+All five are killed -- but three survived the first run: no case left a
+coroutine through an early exit, `gf-coroutine-cleanup` compared the *set*
+of released coroutines (a release delayed to the program's end leaves the
+set unchanged), and it never ran the Tcl compiler's HIR path (`main.tcl
+-backend compile`). The test now has an early-returning case, compares the
+release *order* (each case's before the next case runs, the runner's
+last) and runs that path too, which is how C7 was found. The static-compile
+mutant `keeps-runtime-wrapper` (an accepted block keeps a run-time
+wrapper) is killed by `gf-nir-body-identical` and `gf-nir-migrated-bodies`,
+among others: the no-overhead tests can fail.
 
 ### Framework fuzzing
 
@@ -1457,8 +1485,9 @@ points to the section that has the evidence.
     `[]`; the empty suite completes at construction. No per-test coroutine
     ([Test coroutines](#test-coroutines)).
 12. **Cleanup and affinity.** Bodies own their coroutines; each is released
-    exactly once whether it completes, fails or is abandoned
-    (`gf-coroutine-cleanup`, `-native`, also under GC stress); an abandoned
+    exactly once, in order, whether it completes, fails, is abandoned or is
+    left by an early return (`gf-coroutine-cleanup` on three Tcl paths,
+    `-native`, also under GC stress); an abandoned
     runner releases (`gf-runner-abandoned`); a body cannot capture an affine
     value (AFFINE-CAPTURE-UNSUPPORTED, `gf-affine-capture-rejected`).
 13. **Repeat-run semantics.** Every run runs every case once more; nothing is
@@ -1504,7 +1533,7 @@ points to the section that has the evidence.
 30. **Output format.** `PASS name` / `FAIL name` with `expected:`,
     `actual:`, `detail:` lines, then `P passed, F failed`; a short run is
     `FAIL the run` ([The library](#the-library)).
-31. **Framework mutation results.** 20 framework mutants (`audit/golden/tools/mutants.txt`), all killed: each by at least one framework test, 13 also by the fuzzer ([Framework mutants](#framework-mutants)).
+31. **Framework mutation results.** 20 framework mutants (`audit/golden/tools/mutants.txt`), all killed: each by at least one framework test, 13 also by the fuzzer; "coroutine not released", which the library cannot express, through the coroutine harness's 5 release mutants, all killed after the cleanup test was strengthened ([Framework mutants](#framework-mutants)).
 32. **Framework fuzz results.** 4 campaigns, 80 generated suites, 466 cases, on all four backends and once under GC stress: 0 disagreements with the independent model ([Framework fuzzing](#framework-fuzzing)).
 33. **Migrated-test count.** 133 Tcl tests ported as 221 golden tests; 41
     more examined and not ported (174 examined).
@@ -1582,7 +1611,7 @@ points to the section that has the evidence.
 | `audit/golden/tools/check.tcl` | old and new tests side by side; existing mutants against both |
 | `audit/golden/tools/census.tcl` | the boilerplate census of the suites |
 | `audit/golden/tools/tree.tcl` | the private-tree machinery the tools share |
-| `audit/golden/out/` | the logs behind every number in this report: regression, mutants, fuzz, side by side, spot-check, GC stress, native coverage, static decisions, benchmarks, suite timings |
+| `audit/golden/out/` | the logs behind every number in this report: regression, mutants (the framework's, the release mutants), fuzz, side by side, spot-check, GC stress, native coverage, static decisions, benchmarks, suite timings |
 | `bench/golden-framework.tcl` | the performance report |
 | `audit/refactor/manifest.txt` | `lib/test.bot`'s gate entry (as `lib/io.bot`'s: its last declaration needs a context) |
 | `.github/workflows/tests.yml` | the `golden` job |
