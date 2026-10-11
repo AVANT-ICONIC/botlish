@@ -617,19 +617,43 @@ included.
 
 The completion analysis never turns lost precision into "no errors"
 (STATIC-COMPLETION-PROOFS.md, "Precision and the erased-callable contract"):
-an untyped or structural call is charged by its callee's callable fact
-(`hir::completions::CallableFact`: exact, clean or unknown), an unknown one
-the erased-callable contract, and an incomplete summary falls back to the
-callee's declared contract (`EffectiveFacts`, `Fallback`). Fallbacks are
-may-sets only (never a KNOWN-ERROR). If you change the walker's call, handle
-or bind cases, `EffectiveFacts`/`Fallback`/`IndirectFacts`, the erased-callable
-contract (`erasedErrorsOf`, `hir::callables::CarriedErrors`) or
-`hir/affine.tcl`'s error edges, run `tests/higher-order-completions.test`,
-`tests/error-payloads.test`, `audit/error-payloads/tools/fuzz.tcl -fault
-unhandled` (the unhandled error on every path, the untyped `generic` one
-included) and `audit/error-payloads/tools/mutate.tcl` (its completion
-mutants); a change to the affine error edges also needs the affine and
-coroutine harnesses above.
+an uncontracted call (callee `any` or a bare kind) is charged by its callee's
+callable fact (`hir::completions::CallableFact`: exact, contract, clean or
+unknown), an unknown one the erased-callable contract, and an incomplete
+summary falls back to the callee's declared contract (`EffectiveFacts`,
+`Fallback`). Fallbacks are may-sets only (never a KNOWN-ERROR).
+
+Identity precision and contract precision are separate
+(VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md): a call through a structural `Fn` or
+`Coroutine` type is bounded by its contract whatever callable it holds -- an
+exact fact may narrow it, nothing widens it, and the erased-callable contract
+never reaches it. That is sound only because every value acquiring a
+structural type is checked against it (`hir::completions::Subsume`,
+`SubsumeHandle`: what it raises through a callable it captured or receives,
+with untyped inputs standing for every value their calls pass, `Possible`).
+Never charge a structural call the erased-callable contract again, never
+trust a contract a value acquired without that check, and never let an
+unknown uncontracted call be charged less than the erased-callable contract
+(which includes contravariant erasure: what a structural `Fn`'s argument types
+carry into a callable's untyped parameters).
+
+If you change the walker's call, handle or bind cases,
+`EffectiveFacts`/`Fallback`/`IndirectFacts`, the callable facts, the
+erased-callable contract (`erasedErrorsOf`, `staticsOf`,
+`hir::callables::CarriedErrors`), the boundary check (`Subsume`,
+`SubsumedRaises`, `SubsumeHandle`, `Possible`) or `hir/affine.tcl`'s error
+edges, run `tests/structural-contract-completions.test`,
+`tests/higher-order-completions.test`, `tests/error-payloads.test`,
+`audit/structural-contracts/tools/fuzz.tcl` (several seeds; once with
+`-fault carrier`, `-fault unknown`, `-fault drop`),
+`audit/error-payloads/tools/fuzz.tcl -fault unhandled` (the unhandled error on
+every path, the untyped `generic` one included),
+`audit/structural-contracts/tools/mutate.tcl` and
+`audit/error-payloads/tools/mutate.tcl` (its completion mutants: every mutant
+in both `mutants.txt` files must still apply and be killed); a change to the
+affine error edges also needs the affine and coroutine harnesses above, and
+one to the golden suites' layout `tests/golden.test`
+(`bench/callback-registry.tcl` measures a registry beside erased callables).
 
 ## MutableVector
 

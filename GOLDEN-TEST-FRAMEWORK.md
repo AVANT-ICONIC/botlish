@@ -37,6 +37,24 @@ oracle; no test syntax; and, if any language feature, a general anonymous
 function expression with an inferred error contract, which would remove two
 of the three lines every test repeats ([Recommendations](#recommendations)).
 
+> **Update (VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md): the precision gap C3 is
+> fixed.** A call through a value of a checked structural callable type is
+> now bounded by that type's contract, whatever callable it holds, and the
+> erased-callable contract is charged only to calls no contract bounds. The
+> runner's `(c.run)()` through `Fn{args: [], return: test::Match}` is
+> charged nothing, so a test that passes an error-declaring callable through
+> an untyped parameter no longer stops a suite from compiling ("runner
+> poisoning" below is history). `hoc-original-payload-free-both-handled` is
+> ported (errors.bot: 134 Tcl tests, 222 golden tests); the two ports
+> written around the poisoning, `sc-negative-unhandled-erased` and
+> `af-generic-errors`, are expressible as their Tcl tests now but keep their
+> layout for compile cost alone -- an accepted erasure keeps the static
+> decisions' global channel open in every build (diagnostics.bot would take
+> 14 decision rounds and 46 s instead of 5 and 12 s, ownership.bot 25 and
+> 283 s instead of 4 and 32 s), the static-decision economics the next
+> milestone addresses. The historical text below is kept as written; each
+> place it describes C3 carries a note.
+
 ## Contents
 
 * [The library](#the-library)
@@ -503,6 +521,13 @@ does not trust a structural contract at an unidentified call. It is
 recorded as NEW-FRAMEWORK-LIMITATION in the manifest wherever it kept a test
 out, and as the first item of [Findings](#findings).
 
+*Fixed by VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md:* the analysis now trusts a
+checked structural contract at an unidentified call -- every value acquiring
+one is checked against it, including what it raises through callables it
+captured or receives -- so the program above compiles and its suite reports
+`PASS poison` on every backend (`tests/structural-contract-completions.test`,
+`scc-golden-runner`). Every runner shape listed here is bounded the same way.
+
 ## The static-compile convention
 
 A migrated test's body is a function of no arguments -- at the suite's top
@@ -586,6 +611,23 @@ layout rule of `tests/golden/README.md` (bodies in separate top-level units;
 in ownership.bot, the one rejected body whose code gives the program an
 erased-callable contract placed first, so that the contract is gone after
 the first round) no suite needs more than five.
+
+*After VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md* (one suite at a time, the
+trees before and after alternated, median of three; seconds are the front
+end, on a slower day than the table above): errors.bot holds one more,
+accepted block -- `hoc-original-payload-free-both-handled`, whose code
+passes an error-declaring callable through an untyped parameter -- so its
+final program keeps an erased-callable contract and
+hir::static::GlobalChannels stays true in every build: 26 blocks, 15
+accepted, 11 rejected, 8 decision rounds, 15 builds, 20.0 s (4 rounds, 7
+builds, 7.1 s on the tree before). The other seven suites keep their rounds
+and builds exactly (collections 3/11, diagnostics 5/12, harness 2/3,
+modules 3/6, ownership 4/26, representation 2/4, values 1/2) and together
+go from 90.2 to 92.1 s (+2%): collections 14.9 -> 15.5, diagnostics 13.7
+-> 14.3, harness 1.8 -> 1.7, modules 11.9 -> 13.1, ownership 38.5 -> 38.1,
+representation 4.4 -> 4.7, values 5.0 -> 4.7 -- the completion analysis's
+own extra work (the contract boundary and its static walk, about 3% of a
+front end).
 
 ## Testing the framework
 
@@ -1263,7 +1305,9 @@ own milestone.
    suite fail to compile, at the runner's `(c.run)()` in lib/test.bot. One
    Tcl test is not ported for it; two ports moved the poisoning helpers
    inside their block. Every deferred registry shares it; only executing
-   bodies at registration avoids it.
+   bodies at registration avoids it. *(Fixed: VERIFIED-CALLABLE-CONTRACT-
+   BOUNDARY.md. The Tcl test is ported; the two layouts stay for compile
+   cost, see the update at the top.)*
 2. **A run-time-only failure aborts the suite.** A body (or a mutant) that
    reaches `1 + "x"`, `mod(x, 0)`, a non-Boolean condition, a plain call's
    arity, `==` of callables or a stack overflow ends the whole run with no
@@ -1340,7 +1384,7 @@ candidates) and in an 87-branch `elif` chain (4.4 s per build, now 0.9 s).
 |---|---|---|---|
 | C1 | A semantic instance's checks run on a branch a type test decides dead, with the binding un-narrowed: `hir::refine::branchFacts` gives the impossible outcome no facts, and `hir/range.tcl`'s call verification still checks calls there | `fn g(text: str) -> int: text.length()` / `fn f(v): if string?(v): g(v) else: 0` / `[f(3), f("abc")]` is TYPE ("call to f with v : int is invalid ... (in the body of f, at 6:11)"); with a native (`v.length()`) instead of `g` it runs | `test::describe` passes its argument through an `any` struct field first |
 | C2 | Chained method sugar on Strings fails when a trait-polymorphic function of the same name is visible | `import io::path` / `import str` / `"x".concat("y").concat("z")` is NO-APPLICABLE-METHOD naming `str::concat: argument for parameter "path" does not satisfy trait io::path::Path` (str::concat has no such parameter); without `import io::path`, `"xyz"` | a suite helper wrote `str::concat(str::concat(a, b), c)` |
-| C3 | The erased-callable contract is charged to calls whose static type is a checked structural contract (`Fn{..., errors: []}`), and includes the declared errors of coroutines, which are always specialized and never reach an erased call | [Runner poisoning](#runner-poisoning-the-one-thing-the-census-found-that-breaks-a-deferred-registry); ownership's `poison2.bot` (a coroutine given to `invoke(c, m): c(m)` poisons `(b.run)()` of an unrelated `Fn{args: [], return: int}` field) | framework limitation 1 |
+| C3 | The erased-callable contract is charged to calls whose static type is a checked structural contract (`Fn{..., errors: []}`), and includes the declared errors of coroutines, which are always specialized and never reach an erased call | [Runner poisoning](#runner-poisoning-the-one-thing-the-census-found-that-breaks-a-deferred-registry); ownership's `poison2.bot` (a coroutine given to `invoke(c, m): c(m)` poisons `(b.run)()` of an unrelated `Fn{args: [], return: int}` field) | framework limitation 1. **Fixed** (VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md): a checked structural contract bounds every call through it; `poison2.bot`'s shape is `scc-coroutine-poison` |
 | C4 | Untyped parameter contract inference is path-insensitive: a result requirement is charged to the parameter although every path returning it is guarded | `type Small = Int in 0..10` / `fn check(n) -> Small errors TooBig: if n > 10: fail TooBig elif n < 0: fail TooBig else: n` called with an `int` is TYPE (with `n: int` it is proven) | one port types the parameter |
 | C5 | COROUTINE-RESUME-CONFLICT (and COROUTINE-RESUME-UNDERCONSTRAINED, the call form of UNWRAPPED-YIELD) name further locations only in their message text; their reified `related` is `[]` -- the convention AGENTS.md states for diagnostics with further locations | a block whose function reaches two yielding helpers declaring different `resume` types: `related` is `[]`, the two call locations are in `message` | a custom check parses the message |
 | C6 | `mutable_vector::length` accepts a List statically (with only `import mutable_vector`, `[1, 2].length()` compiles) and fails at run time | `import mutable_vector` / `[1, 2].length()`: run-time TYPE `mutable_vector::length: expected mutvec` | porters import `list` everywhere |
@@ -1437,7 +1481,8 @@ the sample shows would otherwise be multiplied by thousands:
    contract (`Fn{args: [], return: Match}`, `errors: []`) at an unidentified
    call -- the contract was verified at every store -- removes runner
    poisoning, the one thing that breaks a deferred registry, and benefits
-   every program that stores callables.
+   every program that stores callables. *(Done: VERIFIED-CALLABLE-CONTRACT-
+   BOUNDARY.md.)*
 
 And, cheaply, in the library before broad adoption: `rejects_message` (with
 an elision form for HIR ids in messages), `rejects_related` (the "moved
@@ -1606,7 +1651,9 @@ points to the section that has the evidence.
 41. **NOT-EXPRESSIBLE:** 40 ([reasons](#classes)).
 42. **OLD-TEST-OVERSPECIFIED:** 14 ([Old tests](#old-tests)).
 43. **NEW-FRAMEWORK-LIMITATION:** 3 rows, all runner poisoning (one Tcl
-    test not ported, two ported weaker); the suite context satisfying an
+    test not ported, two ported weaker) -- after VERIFIED-CALLABLE-CONTRACT-
+    BOUNDARY.md, 0 rows limited by it: the one is ported, the two keep their
+    layout for compile cost only; the suite context satisfying an
     application's context trait was found and fixed during porting; the ten
     [framework limitations](#framework-limitations-the-library-as-the-language-allows-it)
     list the rest.
