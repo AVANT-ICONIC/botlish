@@ -966,7 +966,10 @@ does not compile gives its tests no verdict.
 
 **All backends.** Every golden suite runs on the Tcl interpreter, the Tcl
 compiler, generic Cranelift and specialized Cranelift
-(`tests/golden/run.tcl`'s default), and `tests/golden-framework.test` compiles
+(`tests/golden/run.tcl`'s default) -- and every golden test passes on a
+fifth path too, the Tcl compiler compiling HIR itself (`main.tcl -backend
+compile`, `run.tcl -backends compile-hir`), one suite per process because
+of C7 -- and `tests/golden-framework.test` compiles
 each of its programs once and runs it on interp, compile and Cranelift,
 requiring identical reports. Exclusions, recorded: `representation.bot`
 aborts on generic Cranelift at one struct-shape case the generic baseline
