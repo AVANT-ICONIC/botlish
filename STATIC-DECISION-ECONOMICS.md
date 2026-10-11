@@ -448,7 +448,17 @@ TBD-QUIET
   erased-callable contract links (the allowance is 0 without them).
   Before the allowance was corrected, seed 3's program 6 was flagged
   (5 rounds nested, 7 split; [point 70](#70-remaining-unavoidable-dependency-cases)).
-* The existing suites under the reference: TBD-SEQ-SUITES.
+* The existing suites under the reference
+  (`BOTLISH_STATIC_SCHEDULER=sequential`): `tests/golden-framework.test`
+  41/41, `tests/static-economics.test` 31/31, `tests/static-compile.test`
+  82/83 -- the one failure is `sc-rounds`, which pins the batched economics
+  (twelve blocks, eight rejected: 3 rounds; the reference takes 6). Every
+  semantic expectation of the static-compile negative tests (code, primary,
+  related, message) holds under both schedulers.
+* `audit/static-compile/tools/fuzz.tcl` (its independent model and the
+  ordinary compiler), seeds 1, 2 and 3 (the last with `-gc-stress 1`): 90
+  programs, 532 sites, 0 disagreements; exact diagnostics for all 204
+  rejected sites, every accepted site transparent.
 
 ### Before against after: the trees
 
@@ -489,6 +499,21 @@ TBD-MUTANTS
   0 failed (169 files).
 * `CORE_BACKEND=compile tclsh9.0 tests/all.tcl`: 7250 tests, 7246 passed,
   4 skipped (the existing `coreScoping` constraint), 0 failed.
+
+* `cargo test --release --manifest-path native/Cargo.toml`: 219 + 31
+  passed, 0 failed (no native change).
+* `tests/native-coverage.tcl` (the suite on Cranelift): 7250 tests -- 2946
+  native, 4175 independent, 69 passed-partial, 60 unsupported (the existing
+  test-only natives, sequence mode and value tests), 0 failed.
+* `audit/refactor/tools/gate.tcl`: passed (57 corpus programs, 16 library
+  loaders, the observed warnings exactly the manifest's 42 entries).
+* GC stress: `BOTLISH_NATIVE_GC_STRESS=1 tclsh9.0 tests/golden.test`: 9/9
+  (the eight static-heavy suites on interp, compile, cranelift-generic and
+  cranelift, and `golden-static-economics`).
+* Scalar/codegen audit: `native/generate-scalar-audit.tcl -outdir` into a
+  scratch directory against the committed `audit/native-scalar-asm/`:
+  every `.asm`, `.vcode` and summary file byte-identical; only the README's
+  provenance lines (commit, rustc version) differ.
 
 TBD-REGRESSION
 
