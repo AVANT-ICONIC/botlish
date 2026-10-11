@@ -4,9 +4,10 @@
 #   tclsh9.0 audit/golden/tools/fuzz.tcl ?-n N? ?-seed S? ?-backends LIST?
 #                                         ?-gc-stress 0|1? ?-verbose 0|1?
 #
-# Each program is a generated suite: 0..12 cases, registered by two or three
-# registration functions (one calling another), each case a random helper
-# (value, holds, rejects, rejects_at, rejects_any) over a random body -- a
+# Each program is a generated suite: 0..12 cases, registered by one to three
+# registration functions (composed by a fourth that calls them in order),
+# each case a random helper (value, holds, rejects, rejects_at, rejects_any)
+# over a random body -- a
 # valid expression (an Int sum, a List, a String) or a deliberate fault
 # (an unbound name, a TYPE argument, a KNOWN-ERROR call, a USE-AFTER-MOVE, an
 # unknown field) -- with an expectation that matches or deliberately does

@@ -524,7 +524,12 @@ Of the 218 body functions, 152 are top-level and 66 nested.
 * **Accepted**, the block is its code (STATIC-COMPILE.md 13: the same HIR,
   NIR and machine code): `gf-nir-body-identical` compares the body's native
   code with the same closure written without the framework and without the
-  block -- equal but for HIR ids.
+  block -- equal but for HIR ids -- and `gf-nir-migrated-bodies` does the
+  same for four bodies taken from the suites (a closure, closures made per
+  loop iteration, an error propagated through a declaring caller and
+  handled, a coroutine protocol), function by function, NIR and native
+  allocations alike: equal once program-wide numbers (callees, shapes,
+  declared errors) are read as what they number.
 * **Rejected**, the block is `fail compiler::CompilerError {...}`: the
   helper turns it into the expected outcome or into a mismatch naming code,
   location and message. A refactoring mistake in one test is one failing
@@ -568,10 +573,10 @@ Over the eight suites (`hir::static::decide`'s own record of each block,
 | values.bot | 26 | 26 | 0 | 1 | 2 | 6.0 |
 | **total** | **221** | **107** | **114** | 1-5 | **71** | **97.1** |
 
-The 114 rejected blocks span 40 diagnostic kinds (TYPE 13, UNBOUND 10,
+The 114 rejected blocks span 39 diagnostic kinds (TYPE 13, UNBOUND 10,
 CONTEXT-TRAIT-MISUSE 8, OPAQUE-REPRESENTATION 8, KNOWN-ERROR 7,
 UNHANDLED-ERROR 7, USE-AFTER-MOVE 5, CONTEXT-INSTALLATION-UNSUPPORTED 5,
-AFFINE-LIST-OPERATION-UNSUPPORTED 4, and 31 more with 1-3 each). Every one is
+AFFINE-LIST-OPERATION-UNSUPPORTED 4, and 30 more with 1-3 each). Every one is
 an expected outcome of its test: no golden test passes because a block it
 expected to be accepted was rejected (`test::value` and `test::holds` report
 an unexpected rejection as a FAIL with the diagnostic). A decision round is
@@ -583,7 +588,7 @@ the first round) no suite needs more than five.
 
 ## Testing the framework
 
-`tests/golden-framework.test` (40 tests) tests the library like any Botlish
+`tests/golden-framework.test` (41 tests) tests the library like any Botlish
 program: each suite is compiled once and run on the Tcl interpreter, the Tcl
 compiler and Cranelift, which must agree. What Botlish cannot observe is
 observed from Tcl: how often a body ran, through a Tcl-side test native
@@ -606,7 +611,7 @@ runtime's release counters and the native coroutine census.
 | repeated-run policy | `gf-repeated-runs`, `-native` |
 | empty suite | `gf-empty-suite` |
 | several failures do not stop later tests | `gf-failures-continue` |
-| also | `gf-runner-protocol`, `gf-composition`, `gf-application-context`, `gf-body-cannot-use-context`, `gf-body-error-contract`, `gf-escaping-error-is-the-case-s`, `gf-runtime-only-failure-aborts`, `gf-describe`, `gf-int-text`, `gf-code-name-complete`, `gf-gc-stress`, `gf-library-warning-clean`, `gf-precision-*` (5), `gf-nir-body-identical`, `gf-fuzz-bounded`, `gf-context-trait-surface` |
+| also | `gf-runner-protocol`, `gf-composition`, `gf-application-context`, `gf-body-cannot-use-context`, `gf-body-error-contract`, `gf-escaping-error-is-the-case-s`, `gf-runtime-only-failure-aborts`, `gf-describe`, `gf-int-text`, `gf-code-name-complete`, `gf-gc-stress`, `gf-library-warning-clean`, `gf-precision-*` (5), `gf-nir-body-identical`, `gf-nir-migrated-bodies`, `gf-fuzz-bounded`, `gf-context-trait-surface` |
 
 ### Framework mutants
 
@@ -658,7 +663,8 @@ pinned by the framework tests' probes and allocation counts.
 ### Framework fuzzing
 
 `audit/golden/tools/fuzz.tcl` generates suites of 0-12 cases registered
-through two or three registration functions, each case a random helper over
+through one to three registration functions (composed by a fourth that
+calls them in order), each case a random helper over
 a valid body (an Int sum, a List, a String) or a deliberate fault (an
 unbound name, a TYPE argument, a KNOWN-ERROR call, a USE-AFTER-MOVE, an
 unknown field), with an expectation that matches or deliberately does not.
@@ -768,21 +774,22 @@ Further, per ported Tcl test:
 | strength against the Tcl test | equal 76, weaker 48, stronger 9 |
 | lines | 1308 lines of Tcl tests became 2249 lines of golden tests (bodies and registrations; suite declarations and helpers not counted) |
 
-**Weaker (48)**, by cause, from the manifest notes: the Tcl test also pinned
-a message the port does not compare (the README rule: compare the code; the
-message only when wording is the subject) or an embedded `FILE:LINE:COLUMN`
-inside a message; a block reifies only its *first* diagnostic where the Tcl
-test asserted a set (two UNDECLARED-ERRORs, both UNHANDLED-ERRORs of a
-generic, an inner site's record); the Tcl test ran a native option matrix
-(`-raw-int-abi-opt`, `-struct-opt`, ...) the golden runner cannot select; a
-context test varied the installed value across programs (one installation
-per type per program); a coroutine/affine test also asserted release counts
-or an affine value as the program's result; a context-placement message
-differs because a body is always a function; the Tcl test also pinned what
-Botlish cannot observe (an allocation report, a NIR or ABI plan, HIR
-completion facts); a sub-case or program of the Tcl test was not ported (an
-operator passed as a value has no source spelling, a third program of a
-table). **Stronger (9):** a Tcl test compiled with `-strict 0` and never
+**Weaker (48)**, by primary cause (the first reason each row's notes give):
+
+| cause | Tcl tests | examples |
+|---|---|---|
+| the Tcl test also pinned data Botlish cannot observe (an allocation report, a NIR or ABI plan, HIR completion facts, display text, the Tcl-side argv) | 12 | `alloc-sites-3`, `hoc-precise-without-erasure`, `sr-shape-named-vs-anonymous`, `enum-immutable-set` |
+| a message not compared (the README rule: compare the code; the message only when wording is the subject), or a `FILE:LINE:COLUMN` inside one | 7 | `sc-negative-unbound`, `struct-error-missing-field`, `flags-diagnostic-unknown-second` |
+| a block reifies only its *first* diagnostic where the Tcl test asserted a set | 7 | `errors-rejects-fail-of-undeclared-name`, `sr-duplicate-parameter-bind`, `co-protocol-conflict` |
+| part of the Tcl test not ported (an operator as a value, a third program, the half that poisons the runner) | 4 | `call-5`, `lists-4`, `af-generic-errors`, `trait-witness-join-rejected` |
+| release counts or an affine value as the program's result | 4 | `mv-loop-consumes`, `co-storage-frontier` |
+| installation variants across programs (one installation per type per program) | 2 | `io-substitute-context`, `contexts-opacity-exact` |
+| backend coverage (a GC-stress or generic-Cranelift half the golden run does not repeat) | 2 | `mv-context-member`, `co-release-values` |
+| a native option matrix (`-raw-int-abi-opt`, ...) the golden runner cannot select | 1 | `short-highest-scalar-round-trips` (and the second reason of 5 more) |
+| the context-placement message differs (a body is always a function) | 1 | `contexts-placement` |
+| other: a stand-in module with fewer identities or fields, a hand-written Core IR or NIR fixture, strict compilation forcing a typed parameter (C4), a generator instead of a context log, a warning policy the suite cannot choose | 8 | `loop-in-error-propagates`, `native-stack-gc-1`, `validator-module-qualified` |
+
+**Stronger (9):** a Tcl test compiled with `-strict 0` and never
 looked at diagnostics, or folded its operands at compile time, where the
 golden test is a strict program with undecidable inputs (2); the golden
 test checks a value the Tcl test only asserted compiles (1), pins a value
@@ -816,7 +823,7 @@ reproducer):
 | became clearer | 34 |
 | became significantly more verbose | 32 |
 | exposed a framework limitation | 3 rows, and 14 findings during porting ([Findings](#findings)), 5 of them fixed in the library during the milestone |
-| exposed an existing compiler bug | no ported test fails; porting found 6 compiler defects or precision gaps and 6 smaller inconsistencies ([Findings](#findings)) |
+| exposed an existing compiler bug | no ported test fails, so none is COMPILER-BUG-FOUND: every port was adapted around what it hit. By finding: C3 (the erased-callable contract) kept `hoc-original-payload-free-both-handled` out and made `sc-negative-unhandled-erased` and `af-generic-errors` weaker; C4 made `loop-in-error-propagates` type its parameter; C5 made `co-protocol-conflict` parse locations out of a message; C2 shaped a helper three of modules.bot's tests use. 5 Tcl tests in all; C1, C6 and C7 were found by the library and the framework's own tests. 7 compiler defects or precision gaps and 6 smaller inconsistencies ([Findings](#findings)) |
 
 ## Side-by-side agreement and the mutation spot-check
 
@@ -843,9 +850,10 @@ both full regression runs.
 21 existing mutants from nine mutation harnesses, chosen to span the
 sample's subjects (static-compile reification, enums, error payloads,
 MutableVector and MutableArray value semantics, coroutines, affinity,
-context traits, traits), one native. For each, `check.tcl -mutants` builds
-a private copy of the checkout with the mutant applied (and rebuilds the
-native backend for the native one), runs the Tcl tests of the manifest rows
+context traits, traits), one of them in the native lowering
+(`native/lower.tcl`: Tcl, so no rebuild of the native backend is needed).
+For each, `check.tcl -mutants` builds a private copy of the checkout with
+the mutant applied, runs the Tcl tests of the manifest rows
 that name the mutant, and runs every golden suite on all four backends.
 Verdicts: **BOTH** (an old and a related golden test fail), **BOTH-SUITE-LEVEL**
 (an old test fails; the golden side detects the mutant only as a suite that
@@ -879,8 +887,8 @@ does not compile, aborts or disagrees, or in a test of another row),
 **21 mutants: 18 BOTH, 3 BOTH-SUITE-LEVEL, no OLD-ONLY, no NEW-ONLY, no
 NEITHER.** The golden suites detect every mutant the Tcl tests detect.
 "Related rows" are the manifest rows whose `mutants` column names the
-mutant (`first-yield-discarded` is named by none -- the Tcl tests that
-kill it are not in the sample -- so every row is checked). A row counts as
+mutant (no row's `mutants` column names `first-yield-discarded`, although
+sampled Tcl tests such as `co-principal` kill it, so every row is checked). A row counts as
 failing on the golden side when its test FAILs on any backend; a suite that
 does not compile gives its tests no verdict.
 
@@ -936,8 +944,12 @@ requiring identical reports. Exclusions, recorded: `representation.bot`
 aborts on generic Cranelift at one struct-shape case the generic baseline
 does not support, and its specialized run stands in for the whole suite
 there, as in the Tcl harness ([The sample](#the-sample)); native coroutines
-exist on x86-64 Linux only, so the coroutine suites and framework tests that
-run natively carry the `linuxX86_64` constraint; `golden_probe` and the
+exist on x86-64 Linux only and the runner is a coroutine, so the framework
+runs natively there only: elsewhere `tests/golden.test` runs the suites on
+its pass's Tcl backends and `golden-framework.test` its reports on interp
+and compile (checked by running both with another `tcl_platform(os)`), and
+the six framework tests that observe native code, allocations or
+coroutines carry the `linuxX86_64` constraint; `golden_probe` and the
 release counters are Tcl-runtime observations, and their native
 counterparts are allocation sites and the native coroutine census
 (`-native` tests). The framework itself depends on no backend's error or
@@ -951,7 +963,13 @@ the suites in place: `CORE_BACKEND=interp` 7168 tests, 7168 passed;
 tests: every suite, against the manifest) and
 `tests/golden-framework.test` (40). `cargo test --release --manifest-path native/Cargo.toml`: 219 library and 31 binary tests passed (nothing native was changed). The warning gate passes
 (`lib/test.bot` has one entry, as `lib/io.bot`: its last declaration needs
-a context, so it cannot be a value).
+a context, so it cannot be a value). The feature harnesses AGENTS.md
+assigns to compiler changes (static-compile, error-payload, affine,
+coroutine, context, trait fuzzers and mutants) were not run as such:
+nothing under `hir/`, `surface/`, `core/`, `compiler/` or `native/` changed.
+Their mutants were used instead as detectors of the golden suites: 21 in
+the [spot-check](#mutation-spot-check) and 5 coroutine-release mutants
+against the framework's own tests ([Framework mutants](#framework-mutants)).
 
 **GC stress** (`BOTLISH_NATIVE_GC_STRESS=1`, a collection before every
 allocation -- checked to be in effect: the same suite collects 340 times
@@ -972,10 +990,7 @@ diagnostic message) or crash the run.
 `CORE_BACKEND=cranelift`): 7168 tests -- native 2921, independent 4118,
 passed-partial 69, unsupported 60 (all pre-existing: Tcl test natives such
 as `test-log`, sequence mode, ...), **failed 0**. The two new test files,
-classified alone under the same hook: 48 tests, 33 native, 15 independent
-(they run their programs through explicit backend calls -- the Tcl probe
-and release-counter tests, the NIR comparison, the fuzzer -- which the
-coverage hook does not count as runs), 0 unsupported, 0 failed.
+classified alone under the same hook: @@COVNEW@@
 
 ## Performance
 
@@ -1074,7 +1089,9 @@ grows by about 20 ms a case -- a nested function, a static block and a
 registration call, about five times a plain function's cost -- and needs
 two builds whatever its size (the decision round and the final build). A
 rejected block costs nothing extra when resolution rejects it, and one
-whole-program build per block when the checker does and the blocks share a
+decision round -- two whole-program builds, the round's and its
+method-sugar decision's -- per block when the checker does and the blocks
+share a
 top-level unit: 100 cases with 33 checker rejections take 68 builds and
 98 s nested, 4 builds and 5.5 s with every body at the top level. That is
 the layout rule of `tests/golden/README.md` and the first item of the
@@ -1133,13 +1150,14 @@ and from the porters' reports:
 | a named body per test, and its registration line | 218 bodies, 200 library registrations + 34 suite-helper registrations | 2 | Botlish has no anonymous function expression: every deferred body is a named function, named again in the registration |
 | registration functions | 83 | 2+ | 74 one per Tcl file ported, 8 suite drivers, 1 per-test helper (the composition mechanism) |
 | run-time error normalization: an `on E:` handler inside a body | 90 handlers | 2-3 each | a body may complete only normally or with CompilerError |
-| inputs routed through registration parameters | in every run-time-error suite | 1-3 | so the completion proofs cannot decide the failure (KNOWN-ERROR) or fold the arithmetic |
+| inputs routed through registration parameters | 5 registration functions (1-5 parameters each), in collections, errors, harness, representation and values | 1-3 | so the completion proofs cannot decide the failure (KNOWN-ERROR) or fold the arithmetic |
 | top-level declarations, renamed per suite (`Dg*`, `Md*`, ...) | 74 | 3-15 | declarations are top-level only; one suite holds many tests' declarations |
 | suite-local helper functions | 56 (message matchers in 6 suites, String search, a coroutine log driver, shared code under test) | 5-40 | what the library does not provide |
 | absolute suite-file locations in `rejects_at` and custom checks | 36 `rejects_at` + 14 custom | 0 (but re-derived after every edit above them) | a diagnostic's primary location is in the suite's coordinates |
 | the suite context: `with context test::suite()` and the driver | 8 (one per suite) | 3 | entry program top level |
-| hoisting bodies to the top level, ordering a "global" body first | every suite with more than one rejection (representation.bot's single rejected body stays nested) | 0 lines, but a layout rule | the static decision rounds' cost model ([Performance](#performance)) |
+| hoisting bodies to the top level, ordering a "global" body first | 152 of the 218 bodies, in every suite with more than one rejection (representation.bot's single rejected body stays nested) | 0 lines, but a layout rule | the static decision rounds' cost model ([Performance](#performance)) |
 | a coroutine-log driver replacing `test-log` effects | 5 bodies (values), 2 (harness) | 7 | evaluation order observed through a yielding log |
+| setup or cleanup (brief item 81) | none | 0 | no test needed either: a body can reach no shared state (not the suite, not another body's values), so each is self-contained; the nearest things are the coroutine-log drivers above and the context tests' registration functions, which compute the context-dependent value before registering |
 | two spellings of one program (destructured/explicit, method/free, elif/nested) | 9 Tcl tests | a whole body each | the Tcl tests looped over spellings; a body is one program |
 
 The fixed per-test cost of the convention is three lines -- the body's
@@ -1246,6 +1264,7 @@ candidates) and in an 87-branch `elif` chain (4.4 s per build, now 0.9 s).
 | C4 | Untyped parameter contract inference is path-insensitive: a result requirement is charged to the parameter although every path returning it is guarded | `type Small = Int in 0..10` / `fn check(n) -> Small errors TooBig: if n > 10: fail TooBig elif n < 0: fail TooBig else: n` called with an `int` is TYPE (with `n: int` it is proven) | one port types the parameter |
 | C5 | COROUTINE-RESUME-CONFLICT (and COROUTINE-RESUME-UNDERCONSTRAINED, the call form of UNWRAPPED-YIELD) name further locations only in their message text; their reified `related` is `[]` -- the convention AGENTS.md states for diagnostics with further locations | a block whose function reaches two yielding helpers declaring different `resume` types: `related` is `[]`, the two call locations are in `message` | a custom check parses the message |
 | C6 | `mutable_vector::length` accepts a List statically (with only `import mutable_vector`, `[1, 2].length()` compiles) and fails at run time | `import mutable_vector` / `[1, 2].length()`: run-time TYPE `mutable_vector::length: expected mutvec` | porters import `list` everywhere |
+| C7 | The Tcl compiler compiling HIR itself (`core::compiler::evalHir`, `main.tcl -backend compile`) keeps a program's installed contexts after the program ends: a second run in the same process of any program that installs a context fails at run time with DUPLICATE-CONTEXT. The core-IR paths (the interpreter, the Tcl compiler compiling core IR) reset them | `context struct Box: n: int` / `fn read(context b: Box) -> int: b.n` / `with context Box {n: 7}` / `read()`, run twice with `core::compiler::evalHir` in one process: `7`, then "Box is already installed in this scope" | `main.tcl` runs one program per process and never sees it; every golden suite after the first aborts on this path in one process, so `run.tcl`'s opt-in `compile-hir` backend needs one suite per process |
 
 Smaller inconsistencies: EQUALITY's run-time message says "callables" for
 MutableVector and MutableArray values; a non-Int loop bound's run-time
@@ -1262,10 +1281,18 @@ Struct, Coroutine and ListPlan from its "by kind" line.
 
 ### Old tests
 
-Fourteen Tcl tests were found overspecified for their property (an uncalled
-function in the program that alone kills a mutant, a message asserted where
-the code is the property, a diagnostic set where the first diagnostic is the
-subject), recorded OLD-TEST-OVERSPECIFIED. Some Tcl tests are weaker than
+Fourteen Tcl tests were found overspecified for their property, recorded
+OLD-TEST-OVERSPECIFIED (always as a further class): ten pin a diagnostic's
+message where its code and location are the property
+(`struct-error-unknown-field`, `struct-projection-instance-invalid-call`,
+`enum-wrong-enum-call-result-field`, `flags-diagnostic-unknown-callee`,
+`sc-negative-unbound`, `sc-negative-known-error`,
+`lower-semantic-break-outside`, `struct-error-missing-field`,
+`enum-cases-not-injected`, `flags-diagnostic-unknown-second`); one pins a
+HIR id inside a message (`method-field-call-ambiguous-is-rejected`); one a
+value's display text (`enum-immutable-set`); and two kill a mutant only
+through an uncalled function of a shared prelude (`ep-principal`,
+`ep-principal-ints`: the spot-check's one per-test gap). Some Tcl tests are weaker than
 they look: `native-int-2`'s `9223372036854775807 + 1` is folded at compile
 time by exact-value facts, so its four-backend agreement checks the folder,
 not each backend's run-time i64 overflow (the golden test adds a
@@ -1306,8 +1333,8 @@ next milestone can be the large-scale migration -- after three things that
 the sample shows would otherwise be multiplied by thousands:
 
 1. **The compile cost of `static compile:` decisions** (the dominant cost:
-   2-43 s a suite, against well under a second of run time per backend for
-   most suites). Rejected blocks are decided one whole-program build per
+   2-36 s of compile time a suite, against 0.1-0.4 ms of native execution
+   and 0.1-12 s on the Tcl backends, code generation included). Rejected blocks are decided one whole-program build per
    round unless the compiler proves them independent (different top-level
    units that do not reach each other), a build whose program has an
    erased-callable contract decides one block per round (`GlobalChannels`),
@@ -1317,7 +1344,7 @@ the sample shows would otherwise be multiplied by thousands:
    program with `static compile:` benefits from; until then a migration must
    follow the layout rule of `tests/golden/README.md` by hand.
 2. **Block-relative diagnostic locations.** `rejects_at` pins absolute
-   coordinates of the suite file; 36 `rejects_at` and 8 custom locations
+   coordinates of the suite file; 36 `rejects_at` and 14 custom locations
    were re-derived by script after edits. `compiler::CompilerError` carrying
    its primary location relative to the block's own origin (or the block's
    origin beside it) would make a location test as stable as the Tcl test's
@@ -1349,9 +1376,9 @@ four suite-local helpers the porters wrote.
   monitors cross-suite agreement, side by side and under mutants, as this
   milestone did. A Tcl test is retired only when its manifest row is
   `equal` or `stronger` and a mutant spot-check of its area shows no
-  `OLD-ONLY` verdict; a `weaker` row (48 of 133 here, mostly a message not
-  compared or a native option matrix the runner cannot select) keeps its
-  Tcl test.
+  `OLD-ONLY` verdict; a `weaker` row (48 of 133 here: most often data
+  Botlish cannot observe, a message not compared, or only the first of
+  several diagnostics) keeps its Tcl test.
 * **The manifest is the unit of audit.** It was cheap to keep (one row per
   test, filled by the porter) and it is what let every class, strength and
   mutant claim here be counted rather than estimated.
@@ -1469,8 +1496,9 @@ points to the section that has the evidence.
     `actual: compiler diagnostic CODE at line L, column C` and the message as
     `detail` (multi-line messages indented).
 28. **Static-compile convention.** [The static-compile convention](#the-static-compile-convention):
-    every body is a nested `fn NAME() errors compiler::CompilerError:` whose
-    whole body is one `static compile:` block. The suites hold 221 static blocks: 107 accepted, 114 rejected, across 40 diagnostic kinds; 61 of the 133 ported Tcl tests need the boundary to express the test, 72 use it by convention.
+    every body is a function `fn NAME() errors compiler::CompilerError:`
+    (top-level, or nested when it captures an input) whose whole body is
+    one `static compile:` block. The suites hold 221 static blocks: 107 accepted, 114 rejected, across 39 diagnostic kinds; 61 of the 133 ported Tcl tests need the boundary to express the test, 72 use it by convention.
 29. **Why the wrapping stays explicit.** `static compile:` consumes syntax; a
     library receives values, already compiled with the program.
 30. **Output format.** `PASS name` / `FAIL name` with `expected:`,
@@ -1484,12 +1512,12 @@ points to the section that has the evidence.
     errors 17/23, ownership 13/37, modules 11/31, representation 11/14,
     harness 11/13 (Tcl tests / golden tests; [The sample](#the-sample)).
 35. **Manifest.** `tests/golden/manifest.tsv` ([The manifest](#the-manifest)).
-36. **DIRECT:** 48 primary (51 named).
+36. **DIRECT:** 48 primary (52 named).
 37. **STATIC-COMPILE-ADAPTATION:** 24 primary (42 named).
-38. **EXPLICIT-ERROR-HANDLER:** 3 primary (5 named); 29 bodies handle a
-    run-time error.
+38. **EXPLICIT-ERROR-HANDLER:** 3 primary (5 named); the ports of 29 Tcl
+    tests (41 golden tests) handle a run-time error in the body.
 39. **CUSTOM-MATCHER:** 21 primary (24 named).
-40. **HARNESS-DIFFERENCE:** 36 primary (67 named).
+40. **HARNESS-DIFFERENCE:** 36 primary (68 named).
 41. **NOT-EXPRESSIBLE:** 40 ([reasons](#classes)).
 42. **OLD-TEST-OVERSPECIFIED:** 14 ([Old tests](#old-tests)).
 43. **NEW-FRAMEWORK-LIMITATION:** 3 rows, all runner poisoning (one Tcl
@@ -1497,8 +1525,8 @@ points to the section that has the evidence.
     application's context trait was found and fixed during porting; the ten
     [framework limitations](#framework-limitations-the-library-as-the-language-allows-it)
     list the rest.
-44. **Compiler bugs found.** No ported test fails; six defects or precision
-    gaps (C1-C6) and five smaller inconsistencies, with reproducers
+44. **Compiler bugs found.** No ported test fails; seven defects or
+    precision gaps (C1-C7) and six smaller inconsistencies, with reproducers
     ([Compiler defects](#compiler-defects-and-precision-gaps)).
 45. **Side-by-side agreement.** 221 of 221 ported rows: the Tcl test passes and the golden test passes, on one checkout (56 Tcl test files, every named Tcl test confirmed to have run; 8 suites on all four backends).
 46. **Mutation spot-check.** 21 existing mutants from nine harnesses: 18 caught by both, per test; 3 caught by the golden suites only at suite level (an uncatchable run-time failure aborts a suite, or a misuse surfacing after the static decision fails its compilation); none caught by the Tcl tests only ([Mutation spot-check](#mutation-spot-check)).
@@ -1517,8 +1545,8 @@ points to the section that has the evidence.
 55. **Compiler-error-test performance.** An expected rejection costs what a passing case does (Cranelift 1.71 us, Tcl compiler 241 us, interpreter 1.9 ms); an unexpected one, reported with code, location and message, 5.29 us, 1.0 ms and 28.8 ms. Its compile time is the real cost (items 56-58).
 56. **Compile time, ~10 tests.** 10 cases: 0.95 s all passing (plain functions: 41 ms; the library alone 0.77 s); 1.1 s with UNBOUND rejections; 2.0 s with TYPE rejections and top-level bodies, 3.9 s nested.
 57. **Compile time, ~50 tests.** 50 cases: 1.7 s all passing; 2.0 s with UNBOUND rejections; TYPE rejections 3.9 s with top-level bodies, 32.5 s nested (34 builds).
-58. **Compile time, ~100 tests.** 100 cases: 3.0 s all passing (2 builds); 3.3 s with UNBOUND rejections; TYPE rejections 5.5 s with top-level bodies (4 builds), 97.8 s nested (68 builds). The real suites (14-44 tests): 2-36 s each, 91 s in all ([Compile time](#compile-time)).
-59. **Tcl harness versus framework wall time.** The 133 Tcl tests: 23.5 s (0.18 s a test). The 221 golden tests: 161 s on four backends (0.73 s a test) -- 91 s compiling (mostly static-decision rebuilds), then 13 s interpreter, 48 s Tcl compiler, 6 s generic Cranelift, 12.5 s Cranelift, backend code generation included ([Tcl harness versus the framework](#tcl-harness-versus-the-framework-on-the-migrated-slice)).
+58. **Compile time, ~100 tests.** 100 cases: 3.0 s all passing (2 builds); 3.3 s with UNBOUND rejections; TYPE rejections 5.5 s with top-level bodies (4 builds), 97.8 s nested (68 builds). The real suites (13-44 tests): 2-36 s each, 91 s in all ([Compile time](#compile-time)).
+59. **Tcl harness versus framework wall time.** The 133 Tcl tests: 23.5 s (0.18 s a test). The 221 golden tests: 161 s on four backends (0.73 s a test). Measured again per suite in its own process, 171 s: 91 s compiling (mostly static-decision rebuilds), then 13 s interpreter, 48 s Tcl compiler, 6 s generic Cranelift, 12.5 s Cranelift, backend code generation included; native execution itself is 0.1-0.4 ms a suite ([Tcl harness versus the framework](#tcl-harness-versus-the-framework-on-the-migrated-slice)).
 60. **Recurring boilerplate.** [Recurring boilerplate](#recurring-boilerplate):
     three lines per test (the body's `fn` line with its error clause, the
     `static compile:` line, the registration), declarations hoisted and
@@ -1543,7 +1571,7 @@ points to the section that has the evidence.
 | file | what |
 |---|---|
 | `lib/test.bot` | the library |
-| `tests/golden-framework.test` | the framework's tests (40) |
+| `tests/golden-framework.test` | the framework's tests (41) |
 | `tests/golden/*.bot` | the golden suites: the ported tests |
 | `tests/golden/manifest.tsv` | the migration manifest |
 | `tests/golden/README.md` | the porting guide |
