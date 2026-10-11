@@ -485,6 +485,11 @@ TBD-MUTANTS
 
 ### Regression
 
+* `CORE_BACKEND=interp tclsh9.0 tests/all.tcl`: 7250 tests, 7250 passed,
+  0 failed (169 files).
+* `CORE_BACKEND=compile tclsh9.0 tests/all.tcl`: 7250 tests, 7246 passed,
+  4 skipped (the existing `coreScoping` constraint), 0 failed.
+
 TBD-REGRESSION
 
 
