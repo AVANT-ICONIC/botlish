@@ -19,7 +19,9 @@ interp recursionlimit {} 100000
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
 
-set gfBackends {interp compile cranelift}
+# Native coroutines exist on x86-64 Linux only (COROUTINES.md), and the
+# runner is a coroutine: elsewhere the framework runs on the Tcl backends.
+set gfBackends [expr {[testConstraint linuxX86_64] ? {interp compile cranelift} : {interp compile}}]
 
 proc gfProbeImpl {v} {
     lappend ::gfProbes [core::value::intOf $v]
@@ -1105,7 +1107,7 @@ test gf-nir-migrated-bodies {representative migrated golden bodies are their cod
 } -result {{closure {PASS nir} {1 1 1} 1} {loop-closures {PASS nir} {1 1} 1} {handled-errors {PASS nir} {1 1 1} 1} {coroutine {PASS nir} {1 1 1 1} 1}}
 
 test gf-fuzz-bounded {a bounded run of the framework's model-based fuzzer (audit/golden/tools/fuzz.tcl): generated suites, every backend, the report its independent model predicts} -body {
-    set output [exec [info nameofexecutable] [file join $::projectRoot audit golden tools fuzz.tcl] -n 3 -seed 101 2>@1]
+    set output [exec [info nameofexecutable] [file join $::projectRoot audit golden tools fuzz.tcl] -n 3 -seed 101 -backends $::gfBackends 2>@1]
     regexp {(\d+) disagreements$} [string trim $output] -> disagreements
     set disagreements
 } -result 0
