@@ -395,7 +395,83 @@ Reading it:
 * The remaining speedup at constant builds (1.2-2x on the top-level rows) is
   the halved method-decision builds; at 200 cases nested it is 61x.
 
-TBD-QUIET
+### Quiet machine
+
+The same machine with nothing else running, one process at a time.
+
+**The golden framework's suites** (best of 3 after; one run before, whose
+nested TYPE rows take minutes):
+
+| program | before rounds/builds | before | after rounds/builds | after | speedup |
+|---|---|---|---|---|---|
+| 10 cases, all passing | 1/2 | 1.62 s | 1/1 | 0.80 s | 2.0x |
+| 10 cases, UNBOUND, nested | 2/3 | 1.46 s | 2/2 | 1.03 s | 1.4x |
+| 10 cases, UNBOUND, top level | 2/3 | 1.53 s | 2/2 | 1.09 s | 1.4x |
+| 10 cases, TYPE, nested | 4/8 | 6.22 s | 2/2 | 1.72 s | 3.6x |
+| 10 cases, TYPE, top level | 2/4 | 3.45 s | 2/2 | 2.05 s | 1.7x |
+| 50 cases, all passing | 1/2 | 3.21 s | 1/1 | 1.81 s | 1.8x |
+| 50 cases, UNBOUND, nested | 2/3 | 3.15 s | 2/2 | 2.44 s | 1.3x |
+| 50 cases, UNBOUND, top level | 2/3 | 3.15 s | 2/2 | 2.17 s | 1.5x |
+| 50 cases, TYPE, nested | 17/34 | 54.32 s | 2/2 | 4.50 s | 12.1x |
+| 50 cases, TYPE, top level | 2/4 | 5.61 s | 2/2 | 4.39 s | 1.3x |
+| 100 cases, all passing | 1/2 | 5.01 s | 1/1 | 2.97 s | 1.7x |
+| 100 cases, UNBOUND, nested | 2/3 | 5.35 s | 2/2 | 3.55 s | 1.5x |
+| 100 cases, UNBOUND, top level | 2/3 | 5.95 s | 2/2 | 3.93 s | 1.5x |
+| 100 cases, TYPE, nested | 34/68 | 192.09 s | 2/2 | 6.23 s | 30.8x |
+| 100 cases, TYPE, top level | 2/4 | 11.57 s | 2/2 | 6.33 s | 1.8x |
+
+TBD-GOLDEN-FRESH
+
+**Method-style call decisions** (the methods workload, best of 3): 13
+builds with 8 method trial builds before, 9 builds with 4 trials after, at
+10, 50 and 100 blocks (0.95 -> 0.73 s, 4.34 -> 3.24 s, 10.22 -> 7.68 s).
+Of the 4 trials left, 3 are the first checked round's own (nothing to reuse
+yet) and 1 the call outside every block whose receiver a rejection changed
+-- decided again, as it must be (`se-method-invalidated` pins that case).
+The golden suites: 28 method trial builds before, 8 after
+(collections 6 -> 2, diagnostics 4 -> 1, ownership 18 -> 5).
+
+**Where the time goes** (`profile.tcl`, scratch: inclusive time of the main
+phases, outermost calls only, one fresh process each):
+
+| program | tree | front end | builds | per build | the checks (`hir::check`) | method decisions (incl. their builds) | dependency analysis (`Deps`) | other static bookkeeping |
+|---|---|---|---|---|---|---|---|---|
+| errors.bot | before | 30.09 s | 15 | 2.0 s | 21.61 s (72%) | 13.00 s (43%) | -- | 0.24 s |
+| errors.bot | after | 5.49 s | 3 | 1.8 s | 2.85 s (52%) | 0.00 s | 0.18 s (3.3%) | 0.04 s |
+| ownership.bot, natural layout | before | 649.94 s | 194 | 3.4 s | 521.32 s (80%) | 555.56 s (85%) | -- | 1.34 s |
+| ownership.bot, natural layout | after | 31.45 s | 11 | 2.9 s | 23.51 s (75%) | 17.63 s (56%) | 0.63 s (2.0%) | 0.05 s |
+| 100 cases, TYPE, nested | before | 192.78 s | 68 | 2.8 s | 136.32 s (71%) | 86.47 s (45%) | -- | 2.38 s |
+| 100 cases, TYPE, nested | after | 5.57 s | 2 | 2.8 s | 2.97 s (53%) | 0.00 s | 0.22 s (3.9%) | 0.06 s |
+
+Inside the checks, the same phases dominate before and after (signature
+inference about a third of the front end, then the semantic instances, the
+completion analysis, hygiene, ownership): the speedup is the builds not
+made, not cheaper builds. Per build, the after tree costs the same or less
+(the dependency analysis, 2-4% of the front end at golden-suite sizes, is
+paid back by the duplicate builds no longer made); the static bookkeeping
+(expansion, attribution, simulation, seeds) is under 1%. At 500 blocks
+the analysis grows to 2.0 s of a 20.9 s front end (9.7%): it is one walk of
+a build plus a strongly-connected-components pass, so it grows with the
+program, like a build, not with the rounds.
+
+**Memory** (peak resident set of a fresh process compiling the program):
+
+| program | before | after |
+|---|---|---|
+| 100 cases, all passing | 84 MB | 72 MB |
+| 100 cases, TYPE, nested | 105 MB | 96 MB |
+| 500 cases, all passing | 215 MB | 178 MB |
+| 500 cases, TYPE, nested | not run (167 rounds) | 253 MB |
+| errors.bot | 98 MB | 90 MB |
+| ownership.bot, natural layout | 125 MB | 122 MB |
+
+No build outlives its round: a round keeps the build it decides on until
+the next one replaces it, plus its dependency graph and the method-call
+seeds (key -> candidate), both dropped with it. The peak is one or two
+builds, as before; the after tree's lower peaks are the duplicate builds no
+longer made.
+
+**Process history**: TBD-HISTORY
 
 
 ## Validation
@@ -608,8 +684,8 @@ Every round's `BuildFull` decided every method-style call with several
 candidates from scratch -- one trial build per candidate index, repeated
 while a receiver was unstable -- and always ended with a final build, even
 with nothing to decide: two builds per round at least, more with ambiguous
-calls (the methods workload: 3 rounds, 11 builds, 6 trials, on the legacy
-scheduler with the new build reuse; TBD before).
+calls (the methods workload: 3 rounds, 13 builds, 8 of them method trials,
+at 10, 50 and 100 blocks alike; the golden suites: 28 method trial builds).
 
 ### 5. Instrumentation added
 
@@ -803,7 +879,9 @@ same program for the scheduler.
 ### 28-31. 10 / 50 / 100 / 200-case build counts and times
 
 The golden rows of [Every workload](#every-workload-before-and-after) (all
-four sizes) and the quiet-machine table below (10, 50, 100: TBD-QUIET-REF).
+four sizes) and the [quiet-machine](#quiet-machine) table (10, 50, 100;
+best of 3 after): 100 nested cases 192 s -> 6.2 s, the same bodies at the
+top level 11.6 s -> 6.3 s, all passing 5.0 s -> 3.0 s.
 
 ### 32. Mixed-phase benchmark
 
