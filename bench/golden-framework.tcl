@@ -32,9 +32,10 @@
 # Compile time (best of RUNS, surface::compile, warnings off): suites of K
 # distinct cases (K from -sizes), each its own nested function and static
 # block, all passing value cases and mixed (two thirds value cases, one
-# third rejected blocks expected by test::rejects), beside the same bodies
-# written as plain functions without the framework; with the number of whole
-# builds the static decisions took.
+# third rejected blocks expected by test::rejects) -- the mixed suite twice,
+# its bodies nested in the registration function and at the top level --
+# beside the same bodies written as plain functions without the framework;
+# with the number of whole builds the static decisions took.
 
 set root [file dirname [file dirname [file normalize [info script]]]]
 set args $argv
@@ -251,6 +252,28 @@ proc distinctSuite {k mixed} {
     lappend lines "" "with context test::suite()" "register_bench(7)" "test::report()" ""
     return [join $lines \n]
 }
+# The same suite with every body a top-level function (the layout
+# tests/golden/README.md recommends: rejected blocks in separate top-level
+# units are decided together); the registrations stay in one function.
+proc hoistedSuite {k mixed} {
+    set lines {"import compiler" "import test" ""}
+    set registrations {}
+    for {set i 0} {$i < $k} {incr i} {
+        lappend lines "fn body_${i}() errors compiler::CompilerError:" "    static compile:"
+        if {$mixed && $i % 3 == 2} {
+            lappend lines "        missing_$i + 7" ""
+            lappend registrations "    test::rejects(\"t$i\", compiler::DiagnosticCode::Unbound, body_${i})"
+        } else {
+            lappend lines "        7 * $i + $i" ""
+            lappend registrations "    test::value(\"t$i\", 7 * $i + $i, body_${i})"
+        }
+    }
+    if {$k == 0} {
+        lappend registrations "    return"
+    }
+    lappend lines "fn register_bench():" {*}$registrations "" "with context test::suite()" "register_bench()" "test::report()" ""
+    return [join $lines \n]
+}
 proc plainProgram {k} {
     set lines {"fn run_all(n: int):"}
     set names {}
@@ -276,13 +299,14 @@ proc hir::BuildOnce {args} {
     incr ::buildCount
     tailcall hir::BuildOnce__bench {*}$args
 }
-puts "| K cases | plain functions, no framework | framework, all passing | builds | framework, mixed (1/3 rejected) | builds |"
-puts "|---|---|---|---|---|---|"
+puts "| K cases | plain functions, no framework | framework, all passing | builds | framework, mixed (1/3 rejected), bodies nested | builds | mixed, bodies at top level | builds |"
+puts "|---|---|---|---|---|---|---|---|"
 set libOnly [lindex [compileStats [distinctSuite 0 0]] 0]
 foreach k $sizes {
     lassign [compileStats [plainProgram $k]] plain plainBuilds
     lassign [compileStats [distinctSuite $k 0]] valid validBuilds
     lassign [compileStats [distinctSuite $k 1]] mixed mixedBuilds
-    puts [format "| %d | %.1f ms | %.1f ms | %d | %.1f ms | %d |" $k $plain $valid $validBuilds $mixed $mixedBuilds]
+    lassign [compileStats [hoistedSuite $k 1]] hoisted hoistedBuilds
+    puts [format "| %d | %.1f ms | %.1f ms | %d | %.1f ms | %d | %.1f ms | %d |" $k $plain $valid $validBuilds $mixed $mixedBuilds $hoisted $hoistedBuilds]
 }
 puts [format "\nThe library alone (a suite of no case): %.1f ms." $libOnly]
