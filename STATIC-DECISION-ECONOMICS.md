@@ -537,7 +537,12 @@ The existing campaigns, on the final tree:
 | `audit/affine/tools/mutate.tcl` | 29 | 29 |
 | `audit/coroutines/tools/mutate.tcl` (native mutants rebuilt privately) | 52 | 52 |
 
-TBD-GOLDEN-CHECK
+The golden framework's cross-suite spot-check
+(`audit/golden/tools/check.tcl -mutants`, the 21 compiler and runtime
+mutants of GOLDEN-TEST-FRAMEWORK.md, "Mutation spot-check"): 18 BOTH, 3
+BOTH-SUITE-LEVEL, no OLD-ONLY, no NEW-ONLY, no NEITHER -- the same verdict
+for every mutant as before the milestone. The scheduler does not weaken
+any golden test's detection.
 
 ### Regression
 
@@ -561,7 +566,6 @@ TBD-GOLDEN-CHECK
   every `.asm`, `.vcode` and summary file byte-identical; only the README's
   provenance lines (commit, rustc version) differ.
 
-TBD-REGRESSION
 
 
 ## Report
@@ -861,7 +865,115 @@ links, where the order of contributors and consumers is the layout's -- and
 own model of the set's dependency depth (resolution, checked, final, one
 per genuine chain level, one per linked erased-contract member).
 
-TBD-49-67
+### 49. Semantic differential results
+
+Batched against the sequential reference: equal on every test program of
+`tests/static-economics.test`, all eight golden suites (`compare.tcl`), the
+60 fuzz programs in four layouts each (240 compilations per scheduler), and
+the existing suites run under the reference ([Validation](#validation)).
+No misprediction anywhere.
+
+### 50. Layout-fuzzer results
+
+All 60 programs: every fragment the same verdict in all four layouts
+(outcome, code, line and column relative to the fragment). Six layout pairs
+took different rounds, all in programs whose blocks the erased-callable
+contract links, within the allowance (one fewer than the linked blocks);
+the largest, seed 3's program 6, 5 rounds nested and 7 split ([point
+70](#70-remaining-unavoidable-dependency-cases)).
+
+### 51. Nested-fuzzer results
+
+The pool's nested fragments -- an accepted block around a rejected one
+(`nestedok`, 76 drawn) and genuine chains whose inner rejection rejects the
+outer block (`chain`, 80 drawn) -- agree with the reference in every
+program and layout; `se-equal-nested-chain` and `se-equal-nested-checked`
+pin a resolution chain and a checker chain, and `nested-child-ignored` (a
+block not depending on its nested blocks) is killed.
+
+### 52. Build-count / economics fuzz results
+
+Every program of the three seeds within the generator's model (resolution,
+checked, final, one per genuine chain level, one per linked erased-contract
+block); the economic mutants `one-commit-per-build`, `every-region-consumes`
+and `nested-same-unit` fail it.
+
+### 53-55. Mutation catalog; semantic and performance-only mutants
+
+[Mutation](#mutation): 17 mutants, 12 semantic and 5 economic, all killed by
+`tests/static-economics.test` (the economic ones by its build-count tests),
+5 of them also by the fuzzer.
+
+### 56. Static-compile old mutants
+
+21/21 killed, three retargeted from the legacy code path to the batched one
+with the same rules (`leaks-affine-move`: every failing site rejected at
+once; `warning-becomes-error`; `internal-becomes-compiler-error`) -- left
+on the legacy path they would have mutated code no default compilation
+runs. Wrong code, wrong primary, lost related, prefix execution, lost
+result, wrapped run-time errors, KNOWN-ERROR, warnings, nested ownership,
+transaction leakage: all covered, all killed.
+
+### 57. Structural-contract / completion mutants
+
+`audit/structural-contracts/tools/mutate.tcl` 18/18;
+`audit/error-payloads/tools/mutate.tcl` 44/44 (its completion mutants
+included). The scheduler reads the completion analysis's facts; it changes
+none, and C3's boundary is unchanged.
+
+### 58. Affine mutants
+
+`audit/affine/tools/mutate.tcl` 29/29.
+
+### 59. Coroutine mutants
+
+`audit/coroutines/tools/mutate.tcl` 52/52 (its native mutants rebuilt in a
+private copy).
+
+### 60. Golden cross-suite mutant spot-check
+
+21 mutants: 18 BOTH, 3 BOTH-SUITE-LEVEL -- every verdict as before.
+
+### 61. Exact diagnostic differential
+
+Every reified diagnostic (code, primary, related, message) of every block of
+79 programs, before against after: equal, except one message's internal id
+in collections.bot, where the old procedure did not follow its own
+definition ([Before against after](#before-against-after-the-trees)).
+
+### 62. Final-HIR differential
+
+The same 79 programs: the decided HIR text byte-identical (the one id
+inside that message's String constant aside); and batched against
+sequential, identical everywhere (`sdDiff` compares `hir::format`).
+
+### 63. NIR / codegen differential
+
+The Core IR and NIR of every program of the 79 without diagnostics (71):
+byte-identical, the same id aside. The scalar-assembly corpus regenerated:
+byte-identical.
+
+### 64. Full Tcl regression
+
+Both backends, 7250 tests, 0 failures ([Regression](#regression)).
+
+### 65. Native coverage
+
+7250 tests on Cranelift: 0 failed (2946 native, 4175 independent, 69
+passed-partial, 60 unsupported).
+
+### 66. GC stress
+
+`BOTLISH_NATIVE_GC_STRESS=1` over the golden suites (the static-heavy
+programs, on all four backends): 9/9; the static-compile fuzzer's seed 3
+under `-gc-stress 1`: no disagreement. The milestone changes no native code.
+
+### 67. Scalar / codegen audit
+
+`native/generate-scalar-audit.tcl` regenerated into a scratch directory:
+every assembly, vcode and summary file byte-identical to the committed
+corpus.
+
 
 
 ### 68. Documentation updates
