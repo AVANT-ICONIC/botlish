@@ -3,7 +3,7 @@
 #
 #   tclsh9.0 bench/golden-framework.tcl ?-runs N? ?-n N? ?-native-n N?
 #                                       ?-sizes LIST? ?-backends LIST?
-#                                       ?-parts {run alloc compile}?
+#                                       ?-parts {run alloc compile backend}?
 #
 # Run time (best of RUNS, compilation excluded): a suite registering N cases
 # in a loop -- one body closure per case, created in the loop, so the program
@@ -15,6 +15,9 @@
 #   mismatch      N value cases whose value differs, with the report
 #   rejects       N rejects cases whose block is rejected (the expected
 #                 diagnostic), with the report
+#   rejects-wrong-code
+#                 N rejects cases whose block is rejected with another
+#                 code than the expected one (a compiler-error mismatch)
 #   rejected      N value cases whose block is rejected (an unexpected
 #                 diagnostic: the mismatch names code, location, message)
 #   runtime-error N value cases whose body handles a run-time IndexNotFound
@@ -50,7 +53,7 @@ set n 200
 set nativeN 2000
 set sizes {10 50 100}
 set backends {interp compile native}
-set parts {run alloc compile}
+set parts {run alloc compile backend}
 foreach {option value} $args {
     switch -- $option {
         -runs { set runs $value }
@@ -71,6 +74,7 @@ set kinds {
     pass+report {test::value("t", i * 2, body)} {i + i} report
     mismatch {test::value("t", i * 2 + 1, body)} {i + i} report
     rejects {test::rejects("t", compiler::DiagnosticCode::Unbound, body)} {missing + i} report
+    rejects-wrong-code {test::rejects("t", compiler::DiagnosticCode::Type, body)} {missing + i} report
     rejected {test::value("t", 0, body)} {missing + i} report
     runtime-error {test::value("t", -1, body)} {r = list::at(xs, i + 5):
     on IndexNotFound:
@@ -205,7 +209,7 @@ proc byFunction {report} {
 puts "| program | allocations | bytes | by kind |"
 puts "|---|---|---|---|"
 foreach {kind registration body end} $kinds {
-    if {$kind ni {registration pass pass+report mismatch rejected runtime-error}} continue
+    if {$kind ni {registration pass pass+report mismatch rejects rejects-wrong-code rejected runtime-error}} continue
     foreach count {0 1 2} {
         set report [census [suiteProgram $registration $body $end $count]]
         dict set allocs $kind $count $report
@@ -240,8 +244,6 @@ if {[dict exists [dict get $allocs pass+report 2] coroutines]} {
 }
 
 # ---------------------------------------------------------------------------
-if {"compile" ni $parts} { exit 0 }
-puts "\n## Compile time\n"
 
 # The body lines (at INDENT spaces) and expected code of the I-th rejected
 # block of kind REJECTION: unbound, a name the resolution rejects (every
@@ -322,6 +324,8 @@ proc hir::BuildOnce {args} {
     incr ::buildCount
     tailcall hir::BuildOnce__bench {*}$args
 }
+if {"compile" in $parts} {
+puts "\n## Compile time\n"
 puts "Mixed suites: every third case a rejected block, an unbound name (UNBOUND, decided at resolution) or a typed call with a String (TYPE, decided by the checker); bodies nested in the registration function or each at the top level. Builds: whole-program builds (hir::BuildOnce), the static decision rounds' and the method-sugar decisions'.\n"
 puts "| K cases | plain functions, no framework | all passing | builds | UNBOUND, nested | builds | UNBOUND, top level | builds | TYPE, nested | builds | TYPE, top level | builds |"
 puts "|---|---|---|---|---|---|---|---|---|---|---|---|"
@@ -336,3 +340,27 @@ foreach k $sizes {
     puts "| $k | [join $cells { | }] |"
 }
 puts [format "\nThe library alone (a suite of no case): %.1f ms." $libOnly]
+}
+
+# ---------------------------------------------------------------------------
+if {"backend" in $parts} {
+puts "\n## Back ends: code generation and execution\n"
+puts "The front end (surface::compile, once), then natively (native::measure, best of $runs runs): NIR lowering, Cranelift code generation and one execution of the whole program; on the Tcl backends one whole run, best of $runs (the Tcl compiler's code generation included: it is not separable from the run).\n"
+puts "| program | front end | NIR lowering | Cranelift codegen | native execution | Tcl interpreter run | Tcl compiler run |"
+puts "|---|---|---|---|---|---|---|"
+proc backendRow {label hir frontUs} {
+    lassign [native::measure $hir $::runs] lower compile best
+    set interp [runUs $hir interp]
+    set tclCompile [runUs $hir compile]
+    puts "| $label | [fmt $frontUs] | [fmt $lower] | [fmt $compile] | [fmt $best] | [fmt $interp] | [fmt $tclCompile] |"
+}
+foreach k $sizes {
+    set text [distinctSuite $k none]
+    set us [lindex [time {set hir [compileHir $text]}] 0]
+    backendRow "$k passing cases" $hir $us
+}
+foreach path [lsort [glob -directory [file join $root tests golden] *.bot]] {
+    set us [lindex [time {set hir [surface::readProgramFile $path -warnings off]}] 0]
+    backendRow [file tail $path] $hir $us
+}
+}
