@@ -20,7 +20,7 @@ under 21 existing compiler and runtime mutants, the golden suites caught
 every mutant the Tcl tests caught (18 per test, 3 only as a whole suite
 that aborts or does not compile). The framework's own 20 mutants are all
 killed, and its fuzzer agrees with an independent model on 466 generated
-cases. @@PERFANSWER@@
+cases. Natively a case costs one to five microseconds; the cost of the approach is compile time, which the static decisions dominate (a layout rule keeps it to seconds a suite).
 
 The limits: a library cannot observe an arbitrary run-time error it does not
 name (handlers are nominal; there is no catch-all), and a run-time-only
@@ -977,7 +977,149 @@ classified alone under the same hook: 48 tests, 33 native, 15 independent
 and release-counter tests, the NIR comparison, the fuzzer -- which the
 coverage hook does not count as runs), 0 unsupported, 0 failed.
 
-@@PERF@@
+## Performance
+
+`bench/golden-framework.tcl`, on a quiet machine (4 cores, nothing else
+running), best of 3.
+
+### Run time per case
+
+A suite registering N cases of one kind in a loop (one body closure per
+case, created in the loop, so neither the program text nor its compile cost
+grows with N), measured as (T(N) - T(empty suite)) / N; N = 200 on the Tcl
+backends, 2000 natively. "baseline" is the same body closures called
+directly and compared with `==`, without the framework.
+
+| kind | Tcl interpreter | Tcl compiler | Cranelift |
+|---|---|---|---|
+| registration only (none run) | 385 us | 88 us | 0.45 us |
+| passing value case, run (`test::results`) | 1.2 ms | 217 us | 0.57 us |
+| passing value case, with the report | 1.9 ms | 338 us | 1.67 us |
+| value mismatch, with the report | 11.0 ms | 524 us | 3.46 us |
+| expected rejection (`test::rejects`), with the report | 1.9 ms | 241 us | 1.71 us |
+| unexpected rejection (code, location, message in the report) | 28.8 ms | 1.0 ms | 5.29 us |
+| custom run-time-error case (`on IndexNotFound` in the body) | 2.0 ms | 276 us | 1.66 us |
+| baseline: no framework | 283 us | 23 us | 0.03 us |
+| empty suite, whole run | 6.8 ms | 4.4 ms | 1.61 us |
+
+Natively a case costs one to five microseconds -- registration, the
+deferred call, the Match, the TestResult, the runner's segment and the
+report lines: a passing case 0.57 us run and 1.67 us with its report line,
+against 0.03 us for the bare call -- negligible beside compiling the suite. A passing case and an expected
+rejection cost the same (a rejected block is an ordinary `fail` the check's
+handler catches). What costs is text: a mismatch formats the expected and
+actual values, and an unexpected rejection also names the code (a lookup
+over two 87-element lists), the location and the message. On the Tcl
+interpreter that formatting dominates (11 ms and 29 ms a case), because
+Botlish has neither integer division nor an Int-to-String conversion:
+`test::int_text` builds the decimal digits by repeated subtraction and
+one-character `substring`s. Failing cases are few in a healthy suite, so
+this costs only when a suite is red.
+
+### Allocations (natively, `native::allocationReport`)
+
+| | allocations | bytes | what |
+|---|---|---|---|
+| one-time, registration only | 8 | 208 | Struct 2, MutableVector 2, List 4: the Suite and its installed copy, their vector headers, empty Lists |
+| one-time, with a run and its report | 26 | 783 | + Coroutine 1 (the runner: 1 stack, released when it completes, none swept), the result and line vectors, Lists and a plan, 3 Strings (the summary line) |
+| one-time, program constants | 99 | 4225 | static data (String and List constants of the library and suite) |
+| per case, registration | 3 | 176 | the TestCase struct (`case`), the check closure (`test::value`), the body closure (the registration function) |
+| per case, run, no report | 6 | 360 | + the Match, the TestResult and its one-element batch List (`run`) |
+| per case, passing, with report | 16 | 759 | + the report line, `result_lines`' vector, Lists and plan, the report's Lists |
+| per case, value mismatch | 20 | 957 | + the mismatch Match and the digit and line Strings |
+| per case, unexpected rejection | 39 | 3241 | + the reified diagnostic's payload, `code_name`'s two literal Lists (re-made on every call), `text_lines`, `diagnostic_text` |
+| per case, custom run-time-error | 16 | 767 | as passing |
+
+There is no per-case coroutine: one runner coroutine per run, its stack
+mapped once and released at the end (`gf-coroutine-cleanup-native`: the
+runner and every case's own coroutines, four created, four released, none
+swept). The deferred representation costs two closures per case.
+
+General improvements the census points at -- none of them test-specific:
+
+* **Constant List literals re-materialized per call.** `test::code_name`'s
+  two 87-element literal Lists are built again at every call (4 List
+  allocations and a plan per unexpected rejection). Hoisting a literal
+  List of constants to static data would help every Botlish lookup table.
+* **Collecting loops and vector-to-List read-outs** allocate an
+  intermediate List (and a plan) each: a passing case's report line costs
+  seven List allocations (`run`'s batch, `result_lines`' vector, its
+  Lists and the read-out, `report`'s Lists).
+* **Int-to-String and integer division** in the standard library: the
+  framework's slowest path on the Tcl backends is decimal formatting
+  written by repeated subtraction.
+* **Closure per registration** (two Blocks per case) is inherent in
+  deferral by function values, and small.
+
+### Compile time
+
+Suites of K distinct cases, each its own body and static block (the
+framework), beside the same bodies as plain functions without it; best of
+3, warnings off. Mixed suites: every third case a rejected block -- an
+unbound name (UNBOUND, which resolution decides for every block at once) or
+a typed call with a String (TYPE, which the checker decides one block per
+round within a top-level unit) -- with the bodies nested in the
+registration function or each at the top level. Builds are whole-program
+builds (`hir::BuildOnce`): the static decision rounds and the method-sugar
+decisions.
+
+| K cases | plain functions, no framework | all passing | builds | UNBOUND, nested | builds | UNBOUND, top level | builds | TYPE, nested | builds | TYPE, top level | builds |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 10 | 41 ms | 0.95 s | 2 | 1.07 s | 3 | 1.15 s | 3 | 3.9 s | 8 | 2.0 s | 4 |
+| 50 | 211 ms | 1.68 s | 2 | 2.01 s | 3 | 2.01 s | 3 | 32.5 s | 34 | 3.9 s | 4 |
+| 100 | 482 ms | 2.95 s | 2 | 3.28 s | 3 | 3.30 s | 3 | 97.8 s | 68 | 5.5 s | 4 |
+
+The library alone (a suite of no case) compiles in 0.77 s. A passing suite
+grows by about 20 ms a case -- a nested function, a static block and a
+registration call, about five times a plain function's cost -- and needs
+two builds whatever its size (the decision round and the final build). A
+rejected block costs nothing extra when resolution rejects it, and one
+whole-program build per block when the checker does and the blocks share a
+top-level unit: 100 cases with 33 checker rejections take 68 builds and
+98 s nested, 4 builds and 5.5 s with every body at the top level. That is
+the layout rule of `tests/golden/README.md` and the first item of the
+[Recommendations](#recommendations): the cost is in the compiler's
+decision procedure, not in the library, and a compiler that decided
+independent rejected blocks of one unit together (or reused a build's
+analysis across rounds) would make the rule unnecessary.
+
+### Tcl harness versus the framework, on the migrated slice
+
+`audit/golden/tools/check.tcl` on the same quiet machine:
+
+| | wall time | tests | per test |
+|---|---|---|---|
+| the 133 Tcl tests (56 files, one `tclsh` each, `-match` on the ported names, startup included) | 23.5 s | 133 | 0.18 s |
+| the 8 golden suites (compile once, run on 4 backends, one process each) | 161.0 s | 221 | 0.73 s |
+
+Measured per suite in its own process (`tests/golden/run.tcl -quiet`), the
+golden side's time splits into compiling the 8 suites, 91 s (0.41 s a
+test), and running them: Tcl interpreter 13.3 s, Tcl compiler 48.3 s,
+generic Cranelift 6.1 s, Cranelift 12.5 s (each backend's own code
+generation for the whole suite included -- natively that, not the tests,
+is most of it).
+
+The comparison is not apples to apples, and the difference is instructive.
+A Tcl test checks one small program (often Core IR text run on the reference
+interpreter, or a surface program of a few lines), on the backends the test
+chooses; it pays no compilation of a framework and no static decisions. A
+golden suite is one large program -- up to 44 tests, the library (0.8 s of
+compile time on its own: [Compile time](#compile-time)) and every test's
+code -- compiled once, with every `static compile:` block decided by
+whole-program builds (71 builds over the 8 suites, about 1.3 s each), then
+run on four backends. Compilation is about 55% of the framework's wall
+time, the Tcl compiler backend's code generation most of the rest, and
+most of that is the static decisions' rebuilds: the golden workload is
+a stress test of `static compile:`'s cost model, which is the compiler
+optimization the [Recommendations](#recommendations) put first. Running the
+tests themselves is cheap natively and moderate on the Tcl backends.
+
+One more observation, about the harness rather than the framework: running
+all eight suites in one process is slower than one process per suite (197 s
+against 171 s; `values.bot`, run last, takes 4.4 s on the interpreter and
+15.7 s on the Tcl compiler instead of 1.8 s and 9.7 s), so state the Tcl
+backends keep across programs makes later programs slower -- a cost the Tcl
+suite, which runs each test file in its own process, does not see.
 
 ## Recurring boilerplate
 
@@ -1367,16 +1509,16 @@ points to the section that has the evidence.
     Cranelift; the full Tcl suite passes on interp and compile.
 48. **GC stress.** All 8 suites (221 tests) on both native backends, `gf-gc-stress`, `gf-coroutine-cleanup-native` and a fuzz campaign under `BOTLISH_NATIVE_GC_STRESS=1`: no failure, no premature collection ([Backends, GC stress, native coverage](#backends-gc-stress-native-coverage)).
 49. **Native coverage.** The whole suite on Cranelift: 7168 tests, 0 failed (2921 native, 4118 independent, 69 partial, 60 unsupported, all pre-existing); the two new test files: 48 tests, 0 failed, 0 unsupported.
-50. **Registration allocation cost.** @@ALLOCREG@@
-51. **Per-test allocation cost.** @@ALLOCCASE@@
-52. **Coroutine allocation and release.** @@ALLOCCO@@
-53. **Passing-test performance.** @@PERFPASS@@
-54. **Mismatch performance.** @@PERFMISMATCH@@
-55. **Compiler-error-test performance.** @@PERFREJ@@
-56. **Compile time, ~10 tests.** @@COMPILE10@@
-57. **Compile time, ~50 tests.** @@COMPILE50@@
-58. **Compile time, ~100 tests.** @@COMPILE100@@
-59. **Tcl harness versus framework wall time.** @@ECON@@
+50. **Registration allocation cost.** Natively, one-time 8 allocations (208 bytes: the Suite, its installed copy, vector headers, empty Lists); per registered case 3 (176 bytes: the TestCase, the check closure, the body closure) ([Allocations](#allocations-natively-nativeallocationreport)).
+51. **Per-test allocation cost.** Per case, run: 6 allocations (360 bytes); with its report line 16 (759 bytes); a value mismatch 20 (957 bytes); an unexpected rejection 39 (3241 bytes, mostly formatting: `code_name`'s literal Lists are re-made per call).
+52. **Coroutine allocation and release.** One coroutine per run (the runner): one stack mapped, released when the run completes, none swept; no per-case coroutine. Bodies' own coroutines are released exactly once whether they complete, fail or are abandoned (`gf-coroutine-cleanup`, `-native`, under GC stress too).
+53. **Passing-test performance.** Per passing case: Cranelift 0.57 us run, 1.67 us with its report line; Tcl compiler 217 / 338 us; Tcl interpreter 1.2 / 1.9 ms (a bare call: 0.03 us, 23 us, 283 us).
+54. **Mismatch performance.** Per value mismatch with its report: Cranelift 3.46 us, Tcl compiler 524 us, Tcl interpreter 11.0 ms -- decimal formatting without division or Int-to-String in the standard library.
+55. **Compiler-error-test performance.** An expected rejection costs what a passing case does (Cranelift 1.71 us, Tcl compiler 241 us, interpreter 1.9 ms); an unexpected one, reported with code, location and message, 5.29 us, 1.0 ms and 28.8 ms. Its compile time is the real cost (items 56-58).
+56. **Compile time, ~10 tests.** 10 cases: 0.95 s all passing (plain functions: 41 ms; the library alone 0.77 s); 1.1 s with UNBOUND rejections; 2.0 s with TYPE rejections and top-level bodies, 3.9 s nested.
+57. **Compile time, ~50 tests.** 50 cases: 1.7 s all passing; 2.0 s with UNBOUND rejections; TYPE rejections 3.9 s with top-level bodies, 32.5 s nested (34 builds).
+58. **Compile time, ~100 tests.** 100 cases: 3.0 s all passing (2 builds); 3.3 s with UNBOUND rejections; TYPE rejections 5.5 s with top-level bodies (4 builds), 97.8 s nested (68 builds). The real suites (14-44 tests): 2-36 s each, 91 s in all ([Compile time](#compile-time)).
+59. **Tcl harness versus framework wall time.** The 133 Tcl tests: 23.5 s (0.18 s a test). The 221 golden tests: 161 s on four backends (0.73 s a test) -- 91 s compiling (mostly static-decision rebuilds), then 13 s interpreter, 48 s Tcl compiler, 6 s generic Cranelift, 12.5 s Cranelift, backend code generation included ([Tcl harness versus the framework](#tcl-harness-versus-the-framework-on-the-migrated-slice)).
 60. **Recurring boilerplate.** [Recurring boilerplate](#recurring-boilerplate):
     three lines per test (the body's `fn` line with its error clause, the
     `static compile:` line, the registration), declarations hoisted and
