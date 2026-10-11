@@ -796,7 +796,7 @@ Further, per ported Tcl test:
 |---|---|
 | outcome | value 68, diagnostic 17, diagnostic with location 20, custom 20, run-time error 8 (golden tests: value 91, diagnostic 59, with location 37, custom 26, run-time error 8) |
 | static boundary needed | 61 (a rejection, or an escaping error, is the subject); 72 use it by convention only (an accepted block) |
-| explicit run-time-error handler in the body | 29 |
+| explicit run-time-error handler in the body | 30 (41 golden tests) |
 | API | simple helpers only 109, a custom check 24 |
 | verbosity against the Tcl test | clearer 34, similar 67, more verbose 32 |
 | strength against the Tcl test | equal 76, weaker 48, stronger 9 |
@@ -845,13 +845,13 @@ reproducer):
 |---|---|
 | used only the simple public API | 109 of 133 Tcl tests (82%) |
 | needed a custom matcher | 24 (2 direct `test::case` checks, the rest through 9 suite-local helpers built on it, in 6 suites: message matchers in collections, diagnostics, errors, modules, ownership and representation, and related-location and call-chain matchers in ownership) |
-| needed explicit run-time-error handling | 29 |
+| needed explicit run-time-error handling | 30 |
 | needed explicit `static compile:` | all 133 use it (the convention); 61 need it to express the test |
 | could not be expressed | 41 examined (40 NOT-EXPRESSIBLE, 1 NEW-FRAMEWORK-LIMITATION), beside the 133 ported |
 | became clearer | 34 |
 | became significantly more verbose | 32 |
 | exposed a framework limitation | 3 rows, and 14 findings during porting ([Findings](#findings)), 5 of them fixed in the library during the milestone |
-| exposed an existing compiler bug | no ported test fails, so none is COMPILER-BUG-FOUND: every port was adapted around what it hit. By finding: C3 (the erased-callable contract) kept `hoc-original-payload-free-both-handled` out and made `sc-negative-unhandled-erased` and `af-generic-errors` weaker; C4 made `loop-in-error-propagates` type its parameter; C5 made `co-protocol-conflict` parse locations out of a message; C2 shaped a helper three of modules.bot's tests use. 5 Tcl tests in all; C1, C6 and C7 were found by the library and the framework's own tests. 7 compiler defects or precision gaps and 6 smaller inconsistencies ([Findings](#findings)) |
+| exposed an existing compiler bug | no ported test fails, so none is COMPILER-BUG-FOUND: every port was adapted around what it hit. By finding: C3 (the erased-callable contract) kept `hoc-original-payload-free-both-handled` out and made `sc-negative-unhandled-erased` and `af-generic-errors` weaker; C4 made `loop-in-error-propagates` type its parameter; C5 made `co-protocol-conflict` parse locations out of a message; C2 shaped a helper three of modules.bot's tests use: 8 Tcl tests in all (5 whose own port was adapted, 3 through a shared helper); C1, C6 and C7 were found by the library and the framework's own tests. 7 compiler defects or precision gaps and 6 smaller inconsistencies ([Findings](#findings)) |
 
 ## Side-by-side agreement and the mutation spot-check
 
@@ -1010,7 +1010,7 @@ under it and 0 times without):
 |---|---|
 | all eight golden suites, specialized and generic Cranelift | 221 passed on both, 0 failed |
 | `gf-gc-stress`: many registered checks capturing Strings and structs, CompilerError payloads, coroutines constructed and driven inside checks, several failing results retained until the report | 48 cases (24 failing); the report equals the Tcl interpreter's; 13 coroutines released, none swept |
-| `gf-coroutine-cleanup-native` under stress | four coroutines created (the runner, a completed, a failed and an abandoned case's), four released, none swept by the collector |
+| `gf-coroutine-cleanup-native` under stress | five coroutines created (the runner, a completed, a failed, an abandoned and an early-returning case's), five released, none swept by the collector |
 | the fuzzer, seed 404, 20 programs, 115 cases, `-gc-stress 1` | 0 disagreements with the model |
 
 No coroutine, captured value or retained result was collected early: a
@@ -1227,7 +1227,7 @@ and from the porters' reports:
 |---|---|---|---|
 | the static boundary: `static compile:` | 221 (every golden test) | 1, plus one indentation level for the code | the convention; necessary in 61 Tcl tests' ports, conventional in the rest |
 | the body's error clause: `fn NAME() errors compiler::CompilerError:` | 218 bodies | 1 | a body must admit the one error a rejected block completes with |
-| a named body per test, and its registration line | 218 bodies, 200 library registrations + 34 suite-helper registrations | 2 | Botlish has no anonymous function expression: every deferred body is a named function, named again in the registration |
+| a named body per test, and its registration line | 218 bodies, 200 library registrations + 28 suite-helper registrations (24 calls of suite matchers, 4 of a parameterized registration function) | 2 | Botlish has no anonymous function expression: every deferred body is a named function, named again in the registration |
 | registration functions | 83 | 2+ | 74 one per Tcl file ported, 8 suite drivers, 1 per-test helper (the composition mechanism) |
 | run-time error normalization: an `on E:` handler inside a body | 90 handlers | 2-3 each | a body may complete only normally or with CompilerError |
 | inputs routed through registration parameters | 5 registration functions (1-5 parameters each), in collections, errors, harness, representation and values | 1-3 | so the completion proofs cannot decide the failure (KNOWN-ERROR) or fold the arithmetic |
@@ -1413,8 +1413,8 @@ next milestone can be the large-scale migration -- after three things that
 the sample shows would otherwise be multiplied by thousands:
 
 1. **The compile cost of `static compile:` decisions** (the dominant cost:
-   2-36 s of compile time a suite, against 0.1-0.4 ms of native execution
-   and 0.1-12 s on the Tcl backends, code generation included). Rejected blocks are decided one whole-program build per
+   2-36 s of compile time a suite, against 0.04-0.5 ms of native execution
+   and about 1-10 s on the Tcl backends, code generation included). Rejected blocks are decided one whole-program build per
    round unless the compiler proves them independent (different top-level
    units that do not reach each other), a build whose program has an
    erased-callable contract decides one block per round (`GlobalChannels`),
@@ -1472,7 +1472,7 @@ four suite-local helpers the porters wrote.
 Nothing a `test` keyword, `expect`/`assert` syntax or attributes would do is
 missing: registration, deferral, ordering, matching, reporting and
 composition are ordinary calls, and the explicit library is easier to audit
-(its mutants, its fuzzer and its 40 tests are ordinary tests of ordinary
+(its mutants, its fuzzer and its 41 tests are ordinary tests of ordinary
 code). The demonstrated friction is elsewhere, and most of it is not
 syntax at all:
 
@@ -1481,7 +1481,7 @@ syntax at all:
 | a named body, its `errors compiler::CompilerError` clause and a registration line | 2 lines (+ the name twice) | a **general anonymous function expression whose error contract is inferred from its body**, as the intrinsic-contract inference already does for untyped parameters: `test::value("adds", 42, fn(): static compile: 20 + 22)`. Not test syntax: every higher-order Botlish program writes the same named-nested-function ceremony today (the errors clause is required: a nested body without it is UNHANDLED-ERROR at its block) |
 | the `static compile:` line | 1 line, one indentation level | nothing yet. It is the honest cost of the boundary; an implicit wrapping, or a *syntactic parameter* that lets `test::value` wrap its argument, would hide where the boundary is and is the one place where a language feature would be test-motivated. Revisit only if the anonymous-function form is adopted and the line still dominates |
 | absolute locations | re-derivation after edits | block-relative locations (above) |
-| run-time error normalization (`on E: ...` in 29 Tcl tests' bodies) | 2-3 lines a handler | nothing: naming the error is the test's content; a catch-all would be the "second error system" the brief excludes |
+| run-time error normalization (`on E: ...` in 30 Tcl tests' bodies) | 2-3 lines a handler | nothing: naming the error is the test's content; a catch-all would be the "second error system" the brief excludes |
 | run-time-only failures abort the suite | -- | a language decision (should ARITHMETIC, NOT-BOOLEAN, a native TYPE be declared errors?) for its own milestone, not for testing |
 | top-level-only declarations, renamed per suite | 74 declarations | nothing: a suite is one program |
 
@@ -1576,7 +1576,7 @@ points to the section that has the evidence.
 26. **Expected run-time errors.** An ordinary handler inside the body
     converting the outcome to a value (`on IndexNotFound: "IndexNotFound"`),
     inputs routed through registration parameters so KNOWN-ERROR cannot
-    decide them (29 Tcl tests).
+    decide them (30 Tcl tests, 41 golden tests).
 27. **Unexpected CompilerErrors.** A FAIL line with the expected outcome,
     `actual: compiler diagnostic CODE at line L, column C` and the message as
     `detail` (multi-line messages indented).
@@ -1599,7 +1599,7 @@ points to the section that has the evidence.
 35. **Manifest.** `tests/golden/manifest.tsv` ([The manifest](#the-manifest)).
 36. **DIRECT:** 48 primary (52 named).
 37. **STATIC-COMPILE-ADAPTATION:** 24 primary (42 named).
-38. **EXPLICIT-ERROR-HANDLER:** 3 primary (5 named); the ports of 29 Tcl
+38. **EXPLICIT-ERROR-HANDLER:** 3 primary (5 named); the ports of 30 Tcl
     tests (41 golden tests) handle a run-time error in the body.
 39. **CUSTOM-MATCHER:** 21 primary (24 named).
 40. **HARNESS-DIFFERENCE:** 36 primary (68 named).
@@ -1631,7 +1631,7 @@ points to the section that has the evidence.
 56. **Compile time, ~10 tests.** 10 cases: 0.95 s all passing (plain functions: 41 ms; the library alone 0.77 s); 1.1 s with UNBOUND rejections; 2.0 s with TYPE rejections and top-level bodies, 3.9 s nested.
 57. **Compile time, ~50 tests.** 50 cases: 1.7 s all passing; 2.0 s with UNBOUND rejections; TYPE rejections 3.9 s with top-level bodies, 32.5 s nested (34 builds).
 58. **Compile time, ~100 tests.** 100 cases: 3.0 s all passing (2 builds); 3.3 s with UNBOUND rejections; TYPE rejections 5.5 s with top-level bodies (4 builds), 97.8 s nested (68 builds). The real suites (13-44 tests): 2-36 s each, 91 s in all ([Compile time](#compile-time)).
-59. **Tcl harness versus framework wall time.** The 133 Tcl tests: 23.5 s (0.18 s a test). The 221 golden tests: 161 s on four backends (0.73 s a test). Measured again per suite in its own process, 171 s: 91 s compiling (mostly static-decision rebuilds), then 13 s interpreter, 48 s Tcl compiler, 6 s generic Cranelift, 12.5 s Cranelift, backend code generation included; native execution itself is 0.1-0.4 ms a suite ([Tcl harness versus the framework](#tcl-harness-versus-the-framework-on-the-migrated-slice)).
+59. **Tcl harness versus framework wall time.** The 133 Tcl tests: 23.5 s (0.18 s a test). The 221 golden tests: 161 s on four backends (0.73 s a test). Measured again per suite in its own process, 171 s: 91 s compiling (mostly static-decision rebuilds), then 13 s interpreter, 48 s Tcl compiler, 6 s generic Cranelift, 12.5 s Cranelift, backend code generation included; native execution itself is 0.04-0.5 ms a suite (36-490 us) ([Tcl harness versus the framework](#tcl-harness-versus-the-framework-on-the-migrated-slice)).
 60. **Recurring boilerplate.** [Recurring boilerplate](#recurring-boilerplate):
     three lines per test (the body's `fn` line with its error clause, the
     `static compile:` line, the registration), declarations hoisted and

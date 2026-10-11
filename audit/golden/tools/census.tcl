@@ -7,8 +7,9 @@
 #
 # A case is a registration call of the library (test::value, test::holds,
 # test::rejects, test::rejects_at, test::rejects_any, test::case); ownhelper
-# counts the calls of a suite's own registration helpers (a statement calling
-# a function with a String first argument: its own matcher over test::case). A body is a nested function
+# counts the calls of a suite's own registration helpers (its matchers over
+# test::case, named PREFIX_rejects_..., and a registration function called
+# with a test's name, register_..._test("name", ...)). A body is a function
 # declaring `errors compiler::CompilerError` (toplevelbody: one declared at the
 # suite's top level, outside any registration function); helpers are the
 # suite's other top-level functions (its own matchers, shared code under
@@ -32,7 +33,7 @@ set columns {
     rejects_at  {^\s+test::rejects_at\(}
     rejects_any {^\s+test::rejects_any\(}
     custom      {^\s+test::case\(}
-    ownhelper   {^\s+(?!test::)[a-z_][a-z_0-9]*\("}
+    ownhelper   {^\s+(?:[a-z]+_rejects_[a-z_]+|register_[a-z_]+)\("}
     bodies      {^\s*fn \S+\(\) errors compiler::CompilerError:}
     toplevelbody {^fn \S+\(\) errors compiler::CompilerError:}
     static      {^\s+static compile:}
