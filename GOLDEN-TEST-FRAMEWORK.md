@@ -1554,6 +1554,7 @@ points to the section that has the evidence.
 | `audit/golden/tools/check.tcl` | old and new tests side by side; existing mutants against both |
 | `audit/golden/tools/census.tcl` | the boilerplate census of the suites |
 | `audit/golden/tools/tree.tcl` | the private-tree machinery the tools share |
+| `audit/golden/out/` | the logs behind every number in this report: regression, mutants, fuzz, side by side, spot-check, GC stress, native coverage, static decisions, benchmarks, suite timings |
 | `bench/golden-framework.tcl` | the performance report |
 | `audit/refactor/manifest.txt` | `lib/test.bot`'s gate entry (as `lib/io.bot`'s: its last declaration needs a context) |
 | `.github/workflows/tests.yml` | the `golden` job |

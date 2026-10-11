@@ -1,0 +1,18 @@
+# CORE_BACKEND=interp tclsh9.0 tests/all.tcl
+Tests ended at Sun Oct 11 00:40:10 UTC 2026
+all.tcl:	Total	7168	Passed	7168	Skipped	0	Failed	0
+Sourced 167 Test Files.
+
+# CORE_BACKEND=compile tclsh9.0 tests/all.tcl
+Tests ended at Sun Oct 11 00:39:33 UTC 2026
+all.tcl:	Total	7168	Passed	7164	Skipped	4	Failed	0
+Sourced 167 Test Files.
+Number of tests skipped for each constraint:
+	4	coreScoping
+
+# cargo test --release --manifest-path native/Cargo.toml
+     Running unittests src/lib.rs (native/target/release/deps/botlish_native-bd3049e0f4503646)
+test result: ok. 219 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+     Running unittests src/main.rs (native/target/release/deps/botlish_native-7feb40a4bfda7bc6)
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

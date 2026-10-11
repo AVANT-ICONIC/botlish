@@ -1,0 +1,3 @@
+# tests/golden-framework.test and tests/golden.test alone under CORE_BACKEND=cranelift NATIVE_COVERAGE=...
+native 33 independent 15
+independent: gf-context-required gf-registration-does-not-run gf-run-executes-once gf-repeated-runs gf-runner-abandoned gf-one-suite-per-program gf-body-cannot-use-context gf-eager-coroutine-start gf-coroutine-body-deferred gf-coroutine-cleanup gf-affine-capture-rejected gf-body-error-contract gf-library-warning-clean gf-nir-body-identical gf-fuzz-bounded

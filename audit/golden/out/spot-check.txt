@@ -1,0 +1,184 @@
+# audit/golden/tools/check.tcl -mutants, first run (spot1, spot2); the eight mutants whose detection involved a suite not ok were re-run after per-test attribution (rspot1, rspot2); four re-run listing weaker rows (wspot1, wspot2) and first-yield-discarded likewise (wspot3). The re-runs' verdicts are the final ones.
+
+## spot1
+# Mutation spot-check
+
+BOTH audit/static-compile/tools/mutants.txt:wrong-code (4 rows) -- every rejection is reified with the code of TYPE, whatever the diagnostic's kind
+    old failed: 4 (tests/static-compile.test sc-affine-use-after-move, tests/static-compile.test sc-negative-known-error, tests/static-compile.test sc-negative-unbound, tests/static-compile.test sc-negative-unhandled-erased)
+    new failed (related): 4 (diagnostics.bot sc-affine-use-after-move, diagnostics.bot sc-negative-known-error, diagnostics.bot sc-negative-unbound, diagnostics.bot sc-negative-unhandled-erased)
+    new failed (other rows): 94 (collections.bot enum-unknown-case/Carr, collections.bot enum-unknown-case/Submarine, collections.bot enum-unknown-case/tank, collections.bot flags-diagnostic-unknown-callee); suites not ok: 
+BOTH audit/static-compile/tools/mutants.txt:loses-primary (4 rows) -- the primary location is the static block's own, not the diagnostic's
+    old failed: 4 (tests/static-compile.test sc-affine-use-after-move, tests/static-compile.test sc-negative-known-error, tests/static-compile.test sc-negative-unbound, tests/static-compile.test sc-negative-unhandled-erased)
+    new failed (related): 4 (diagnostics.bot sc-affine-use-after-move, diagnostics.bot sc-negative-known-error, diagnostics.bot sc-negative-unbound, diagnostics.bot sc-negative-unhandled-erased)
+    new failed (other rows): 45 (collections.bot char-typed-callable-escape-rejected/rejected, collections.bot enum-unknown-case/Carr, collections.bot enum-unknown-case/Submarine, collections.bot enum-unknown-case/tank); suites not ok: 
+BOTH audit/static-compile/tools/mutants.txt:success-returns-unit (2 rows) -- an accepted block's value is unit, not its body's
+    old failed: 2 (tests/static-compile.test sc-success-declared-error, tests/static-compile.test sc-success-runtime-error)
+    new failed (related): 2 (errors.bot sc-success-declared-error, errors.bot sc-success-runtime-error)
+    new failed (other rows): 108 (collections.bot char-typed-callable-escape-rejected/accepted, collections.bot destructure-basic-named-names-swapped/destructured, collections.bot destructure-basic-named-names-swapped/explicit, collections.bot destructure-once-nested-once/destructured); suites not ok: 
+BOTH audit/static-compile/tools/mutants.txt:runtime-errors-wrapped (1 rows) -- a body that may fail at run time with an application error is treated as rejected (its declared error becomes CompilerError)
+    old failed: 1 (tests/static-compile.test sc-success-runtime-error)
+    new failed (related): 1 (errors.bot sc-success-runtime-error)
+    new failed (other rows): 34 (collections.bot list-find-short-circuits, collections.bot lists-4, collections.bot ma-cow-extraction/anonymous, collections.bot ma-cow-extraction/destructure); suites not ok: 
+BOTH audit/static-compile/tools/mutants.txt:known-error-disabled (1 rows) -- KNOWN-ERROR is disabled globally
+    old failed: 1 (tests/static-compile.test sc-negative-known-error)
+    new failed (related): 1 (diagnostics.bot sc-negative-known-error)
+    new failed (other rows): 3 (errors.bot errors-byte-from-int-known-failure-with-handler-still-rejected, errors.bot errors-generic-bounded-fixture/too-large, errors.bot errors-generic-bounded-fixture/too-small); suites not ok: 
+BOTH audit/static-compile/tools/mutants.txt:keeps-runtime-wrapper (2 rows) -- an accepted block keeps a run-time wrapper: its body runs as an immediately called closure
+    old failed: 2 (tests/static-compile.test sc-success-declared-error, tests/static-compile.test sc-success-runtime-error)
+    new failed (related): 2 (errors.bot sc-success-declared-error, errors.bot sc-success-runtime-error)
+    new failed (other rows): 0 (); suites not ok: 
+BOTH audit/static-compile/tools/mutants.txt:loses-related (1 rows) -- the related locations are dropped: related is always []
+    old failed: 1 (tests/static-compile.test sc-affine-use-after-move)
+    new failed (related): 1 (diagnostics.bot sc-affine-use-after-move)
+    new failed (other rows): 1 (ownership.bot co-principal-move/use-after-move); suites not ok: 
+BOTH audit/enums/tools/mutants.txt:equal-ignores-enum-tcl (3 rows) -- case equality ignores the enum's identity (Tcl runtimes, and the compiler's decided comparisons)
+    old failed: 3 (tests/enums.test enum-equality, tests/enums.test enum-immutable-set, tests/surface-samples.test surface-sample-interp-15-enums)
+    new failed (related): 3 (collections.bot enum-equality, collections.bot enum-immutable-set, values.bot 15-enums)
+    new failed (other rows): 73 (collections.bot char-typed-callable-escape-rejected/accepted, collections.bot char-typed-callable-escape-rejected/rejected, collections.bot destructure-basic-named-names-swapped/destructured, collections.bot destructure-basic-named-names-swapped/explicit); suites not ok: collections.bot=disagree, values.bot=disagree
+BOTH audit/enums/tools/mutants.txt:equal-by-ordinal-tcl (3 rows) -- case equality compares declaration positions, not identities (Tcl runtimes)
+    old failed: 3 (tests/enums.test enum-equality, tests/enums.test enum-immutable-set, tests/surface-samples.test surface-sample-interp-15-enums)
+    new failed (related): 3 (collections.bot enum-equality, collections.bot enum-immutable-set, values.bot 15-enums)
+    new failed (other rows): 73 (collections.bot char-typed-callable-escape-rejected/accepted, collections.bot char-typed-callable-escape-rejected/rejected, collections.bot destructure-basic-named-names-swapped/destructured, collections.bot destructure-basic-named-names-swapped/explicit); suites not ok: collections.bot=disagree, values.bot=disagree
+BOTH audit/enums/tools/mutants.txt:bare-case-accepted (3 rows) -- a bare case name resolves to the one enum that declares it (cases injected into the scope)
+    old failed: 3 (tests/enums.test enum-cases-not-injected)
+    new failed (related): 1 (diagnostics.bot enum-cases-not-injected/case)
+    new failed (other rows): 0 (); suites not ok: 
+
+10 mutants: BOTH 10
+
+## spot2
+# Mutation spot-check
+
+BOTH audit/error-payloads/tools/mutants.txt:renaming-binds-original (2 rows) -- a handler's renaming binds the field's own name instead
+    old failed: 2 (tests/error-payloads.test ep-principal, tests/error-payloads.test ep-principal-ints)
+    new failed (related): 1 (errors.bot ep-principal)
+    new failed (other rows): 0 (); suites not ok: 
+BOTH audit/error-payloads/tools/mutants.txt:missing-payload-accepted (1 rows) -- `fail NAME` of a payload-bearing error is accepted
+    old failed: 1 (tests/error-payloads.test ep-fail-missing-payload)
+    new failed (related): 1 (errors.bot ep-fail-missing-payload)
+    new failed (other rows): 0 (); suites not ok: 
+BOTH audit/mutable-vector/tools/mutants.txt:share-aliases-tcl (1 rows) -- an unrestricted copy aliases writes (Tcl): a logical copy is the same header
+    old failed: 1 (tests/mutable-vector.test mv-context-member)
+    new failed (related): 1 (collections.bot mv-context-member)
+    new failed (other rows): 43 (collections.bot char-typed-callable-escape-rejected/accepted, collections.bot char-typed-callable-escape-rejected/rejected, collections.bot destructure-basic-named-names-swapped/destructured, collections.bot destructure-basic-named-names-swapped/explicit); suites not ok: collections.bot=disagree
+BOTH audit/mutable-array/tools/mutants.txt:struct-extraction-aliases (6 rows) -- an array a binding takes out of a struct field (or a destructure) is not copied: the binding's mutations reach the struct's field
+    old failed: 6 (tests/mutable-array.test ma-cow-extraction)
+    new failed (related): 4 (collections.bot ma-cow-extraction/anonymous, collections.bot ma-cow-extraction/destructure, collections.bot ma-cow-extraction/parameter, collections.bot ma-cow-extraction/projection)
+    new failed (other rows): 0 (); suites not ok: 
+BOTH audit/coroutines/tools/mutants.txt:two-protocols-accepted (2 rows) -- a second, different protocol reaching a function is ignored (the first wins)
+    old failed: 2 (tests/coroutines.test co-protocol-conflict)
+    new failed (related): 2 (ownership.bot co-protocol-conflict, ownership.bot co-protocol-conflict/resumes)
+    new failed (other rows): 0 (); suites not ok: 
+BOTH audit/coroutines/tools/mutants.txt:first-yield-discarded (every row) -- construction runs past the first yield: its value is lost
+    old failed: 15 (tests/affine.test af-aggregate-field-read, tests/affine.test af-generic-errors, tests/affine.test af-principal-callable, tests/coroutines.test co-errors-segment, tests/coroutines.test co-principal, tests/coroutines.test co-principal-move)
+    new failed (related): 221 (collections.bot char-typed-callable-escape-rejected/accepted, collections.bot char-typed-callable-escape-rejected/rejected, collections.bot destructure-basic-named-names-swapped/destructured, collections.bot destructure-basic-named-names-swapped/explicit, collections.bot destructure-once-nested-once/destructured, collections.bot destructure-once-nested-once/explicit)
+    new failed (other rows): 0 (); suites not ok: collections.bot=disagree, diagnostics.bot=disagree, errors.bot=disagree, harness.bot=disagree, modules.bot=disagree, ownership.bot=disagree, representation.bot=disagree, values.bot=disagree
+BOTH audit/affine/tools/mutants.txt:struct-affine-unrestricted (3 rows) -- a named struct with an affine field is unrestricted
+    old failed: 3 (tests/affine.test af-aggregate-field-read)
+    new failed (related): 3 (ownership.bot af-aggregate-field-read/done, ownership.bot af-aggregate-field-read/projection, ownership.bot af-aggregate-field-read/unrestricted)
+    new failed (other rows): 34 (ownership.bot af-generic-errors/unadmitted, ownership.bot af-list-operations/append, ownership.bot af-list-operations/at, ownership.bot af-list-operations/collect); suites not ok: ownership.bot=aborted
+BOTH audit/affine/tools/mutants.txt:any-erasure-hides (11 rows) -- erasing an affine value into an unrestricted position (any, an unrestricted field or argument) is accepted
+    old failed: 11 (tests/affine.test af-list-operations, tests/affine.test af-restrictions)
+    new failed (related): 2 (ownership.bot af-list-operations/mixed, ownership.bot af-restrictions/any-parameter)
+    new failed (other rows): 1 (ownership.bot co-storage-frontier/any); suites not ok: 
+BOTH audit/context-traits/tools/mutants.txt:witness-leaks-into-source (9 rows) -- the context-trait binding may be used as a value (no one-way check)
+    old failed: 9 (tests/context-traits.test ct-one-way)
+    new failed (related): 9 (modules.bot ct-one-way/compare, modules.bot ct-one-way/condition, modules.bot ct-one-way/pass-context-type, modules.bot ct-one-way/pass-untyped, modules.bot ct-one-way/project, modules.bot ct-one-way/return)
+    new failed (other rows): 22 (modules.bot contexts-opacity-exact/compare, modules.bot contexts-opacity-exact/construction, modules.bot contexts-opacity-exact/destructure, modules.bot contexts-opacity-exact/projection); suites not ok: modules.bot=compile-error
+BOTH audit/traits/tools/mutants.txt:mix-witnesses-at-join (2 rows) -- mix witnesses at a control-flow join (keep the first branch's witness)
+    old failed: 2 (tests/traits.test trait-witness-join-rejected)
+    new failed (related): 2 (modules.bot trait-witness-join-rejected/local, modules.bot trait-witness-join-rejected/result)
+    new failed (other rows): 29 (modules.bot contexts-opacity-exact/compare, modules.bot contexts-opacity-exact/construction, modules.bot contexts-opacity-exact/destructure, modules.bot contexts-opacity-exact/projection); suites not ok: modules.bot=compile-error
+BOTH audit/error-payloads/tools/mutants.txt:whole-binding-loses-field-native (1 rows) -- a handler's payload binding reads field 0 for its last field (native)
+    old failed: 1 (tests/error-payloads.test ep-principal)
+    new failed (related): 1 (errors.bot ep-principal)
+    new failed (other rows): 99 (diagnostics.bot enum-cases-not-injected/case, diagnostics.bot enum-cases-not-injected/projection, diagnostics.bot enum-cases-not-injected/type, diagnostics.bot flags-diagnostic-unknown-second); suites not ok: diagnostics.bot=disagree, errors.bot=disagree, harness.bot=disagree, ownership.bot=disagree
+
+11 mutants: BOTH 11
+
+## rspot1
+# Mutation spot-check
+
+BOTH audit/enums/tools/mutants.txt:equal-ignores-enum-tcl (3 rows) -- case equality ignores the enum's identity (Tcl runtimes, and the compiler's decided comparisons)
+    old failed: 3 (tests/enums.test enum-equality, tests/enums.test enum-immutable-set, tests/surface-samples.test surface-sample-interp-15-enums)
+    new failed (related): 3 (collections.bot enum-equality, collections.bot enum-immutable-set, values.bot 15-enums)
+    new failed (other rows): 0 (); suites not ok: collections.bot=disagree, values.bot=disagree
+BOTH audit/enums/tools/mutants.txt:equal-by-ordinal-tcl (3 rows) -- case equality compares declaration positions, not identities (Tcl runtimes)
+    old failed: 3 (tests/enums.test enum-equality, tests/enums.test enum-immutable-set, tests/surface-samples.test surface-sample-interp-15-enums)
+    new failed (related): 3 (collections.bot enum-equality, collections.bot enum-immutable-set, values.bot 15-enums)
+    new failed (other rows): 0 (); suites not ok: collections.bot=disagree, values.bot=disagree
+BOTH audit/mutable-vector/tools/mutants.txt:share-aliases-tcl (1 rows) -- an unrestricted copy aliases writes (Tcl): a logical copy is the same header
+    old failed: 1 (tests/mutable-vector.test mv-context-member)
+    new failed (related): 1 (collections.bot mv-context-member)
+    new failed (other rows): 1 (collections.bot mv-cow-copies); suites not ok: collections.bot=disagree
+BOTH audit/coroutines/tools/mutants.txt:first-yield-discarded (every row) -- construction runs past the first yield: its value is lost
+    old failed: 15 (tests/affine.test af-aggregate-field-read, tests/affine.test af-generic-errors, tests/affine.test af-principal-callable, tests/coroutines.test co-errors-segment, tests/coroutines.test co-principal, tests/coroutines.test co-principal-move)
+    new failed (related): 19 (collections.bot destructure-once-nested-once/destructured, collections.bot destructure-once-nested-once/explicit, collections.bot method-evaluation-receiver-before-arguments/free, collections.bot method-evaluation-receiver-before-arguments/method, harness.bot call-1, harness.bot co-release-values)
+    new failed (other rows): 0 (); suites not ok: collections.bot=disagree, diagnostics.bot=disagree, errors.bot=disagree, harness.bot=disagree, modules.bot=disagree, ownership.bot=disagree, representation.bot=disagree, values.bot=disagree
+
+4 mutants: BOTH 4
+
+## rspot2
+# Mutation spot-check
+
+BOTH-SUITE-LEVEL audit/affine/tools/mutants.txt:struct-affine-unrestricted (3 rows) -- a named struct with an affine field is unrestricted
+    old failed: 3 (tests/affine.test af-aggregate-field-read)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: ownership.bot=aborted
+BOTH-SUITE-LEVEL audit/context-traits/tools/mutants.txt:witness-leaks-into-source (9 rows) -- the context-trait binding may be used as a value (no one-way check)
+    old failed: 9 (tests/context-traits.test ct-one-way)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: modules.bot=compile-error
+BOTH-SUITE-LEVEL audit/traits/tools/mutants.txt:mix-witnesses-at-join (2 rows) -- mix witnesses at a control-flow join (keep the first branch's witness)
+    old failed: 2 (tests/traits.test trait-witness-join-rejected)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: modules.bot=compile-error
+BOTH audit/error-payloads/tools/mutants.txt:whole-binding-loses-field-native (1 rows) -- a handler's payload binding reads field 0 for its last field (native)
+    old failed: 1 (tests/error-payloads.test ep-principal)
+    new failed (related): 1 (errors.bot ep-principal)
+    new failed (other rows): 0 (); suites not ok: diagnostics.bot=disagree, errors.bot=disagree, harness.bot=disagree, ownership.bot=disagree
+
+4 mutants: BOTH-SUITE-LEVEL 3, BOTH 1
+
+## wspot1
+# Mutation spot-check
+
+BOTH audit/affine/tools/mutants.txt:any-erasure-hides (11 rows) -- erasing an affine value into an unrestricted position (any, an unrestricted field or argument) is accepted
+    old failed: 11 (tests/affine.test af-list-operations, tests/affine.test af-restrictions)
+    new failed (related): 2 (ownership.bot af-list-operations/mixed, ownership.bot af-restrictions/any-parameter)
+    new failed (other rows): 1 (ownership.bot co-storage-frontier/any); suites not ok: 
+    rows weaker for this mutant: ownership.bot af-list-operations/at (tests/affine.test af-list-operations); ownership.bot af-list-operations/append (tests/affine.test af-list-operations); ownership.bot af-list-operations/iteration (tests/affine.test af-list-operations); ownership.bot af-list-operations/collect (tests/affine.test af-list-operations); ownership.bot af-restrictions/capture (tests/affine.test af-restrictions); ownership.bot af-restrictions/handle-equality (tests/affine.test af-restrictions); ownership.bot af-restrictions/struct-equality (tests/affine.test af-restrictions); ownership.bot af-restrictions/mutable-array (tests/affine.test af-restrictions); ownership.bot af-restrictions/immutable-set (tests/affine.test af-restrictions)
+BOTH audit/enums/tools/mutants.txt:bare-case-accepted (3 rows) -- a bare case name resolves to the one enum that declares it (cases injected into the scope)
+    old failed: 3 (tests/enums.test enum-cases-not-injected)
+    new failed (related): 1 (diagnostics.bot enum-cases-not-injected/case)
+    new failed (other rows): 0 (); suites not ok: 
+    rows weaker for this mutant: diagnostics.bot enum-cases-not-injected/type (tests/enums.test enum-cases-not-injected); diagnostics.bot enum-cases-not-injected/projection (tests/enums.test enum-cases-not-injected)
+
+2 mutants: BOTH 2
+
+## wspot2
+# Mutation spot-check
+
+BOTH audit/mutable-array/tools/mutants.txt:struct-extraction-aliases (6 rows) -- an array a binding takes out of a struct field (or a destructure) is not copied: the binding's mutations reach the struct's field
+    old failed: 6 (tests/mutable-array.test ma-cow-extraction)
+    new failed (related): 4 (collections.bot ma-cow-extraction/anonymous, collections.bot ma-cow-extraction/destructure, collections.bot ma-cow-extraction/parameter, collections.bot ma-cow-extraction/projection)
+    new failed (other rows): 0 (); suites not ok: 
+    rows weaker for this mutant: collections.bot ma-cow-extraction/generic-local (tests/mutable-array.test ma-cow-extraction); collections.bot ma-cow-extraction/generic-field (tests/mutable-array.test ma-cow-extraction)
+BOTH audit/error-payloads/tools/mutants.txt:renaming-binds-original (2 rows) -- a handler's renaming binds the field's own name instead
+    old failed: 2 (tests/error-payloads.test ep-principal, tests/error-payloads.test ep-principal-ints)
+    new failed (related): 1 (errors.bot ep-principal)
+    new failed (other rows): 0 (); suites not ok: 
+    rows weaker for this mutant: errors.bot ep-principal-ints (tests/error-payloads.test ep-principal-ints)
+
+2 mutants: BOTH 2
+
+## wspot3
+# Mutation spot-check
+
+BOTH audit/coroutines/tools/mutants.txt:first-yield-discarded (every row) -- construction runs past the first yield: its value is lost
+    old failed: 15 (tests/affine.test af-aggregate-field-read, tests/affine.test af-generic-errors, tests/affine.test af-principal-callable, tests/coroutines.test co-errors-segment, tests/coroutines.test co-principal, tests/coroutines.test co-principal-move)
+    new failed (related): 19 (collections.bot destructure-once-nested-once/destructured, collections.bot destructure-once-nested-once/explicit, collections.bot method-evaluation-receiver-before-arguments/free, collections.bot method-evaluation-receiver-before-arguments/method, harness.bot call-1, harness.bot co-release-values)
+    new failed (other rows): 0 (); suites not ok: collections.bot=disagree, diagnostics.bot=disagree, errors.bot=disagree, harness.bot=disagree, modules.bot=disagree, ownership.bot=disagree, representation.bot=disagree, values.bot=disagree
+    rows weaker for this mutant: ownership.bot co-principal (tests/coroutines.test co-principal); ownership.bot co-principal-move/use-after-move (tests/coroutines.test co-principal-move); ownership.bot co-principal-move/moved-to (tests/coroutines.test co-principal-move); ownership.bot co-errors-segment (tests/coroutines.test co-errors-segment); ownership.bot af-principal-callable/value (tests/affine.test af-principal-callable); ownership.bot af-principal-callable/use-after-move (tests/affine.test af-principal-callable); ownership.bot af-aggregate-field-read/unrestricted (tests/affine.test af-aggregate-field-read); ownership.bot af-aggregate-field-read/projection (tests/affine.test af-aggregate-field-read); ownership.bot af-aggregate-field-read/done (tests/affine.test af-aggregate-field-read); ownership.bot af-generic-errors/unadmitted (tests/affine.test af-generic-errors); ownership.bot mv-loop-consumes/values (tests/mutable-vector.test mv-loop-consumes); ownership.bot mv-loop-consumes/use-after-move (tests/mutable-vector.test mv-loop-consumes); ownership.bot mv-affine-swap-failure/value (tests/mutable-vector.test mv-affine-swap-failure); ownership.bot mv-affine-swap-failure/use-after-move (tests/mutable-vector.test mv-affine-swap-failure)
+
+1 mutants: BOTH 1
