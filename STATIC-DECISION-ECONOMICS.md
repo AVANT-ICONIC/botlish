@@ -748,8 +748,10 @@ sequential and legacy schedulers; it checks (1) batched equals sequential
 exactly (sdDiff: every site's outcome and code/primary/related/message, the
 program's diagnostics, the decided HIR, no misprediction), (2) legacy agrees
 up to internal ids, (3) the four layouts give every fragment the same
-verdict (outcome, code, line and column relative to the fragment) and
-rounds within one, and (4) the economics: rounds within the generator's
+verdict (outcome, code, line and column relative to the fragment) and the
+same rounds -- up to one fewer than the blocks the erased-callable contract
+links, where the order of contributors and consumers is the layout's -- and
+(4) the economics: rounds within the generator's
 own model of the set's dependency depth (resolution, checked, final, one
 per genuine chain level, one per linked erased-contract member).
 
@@ -815,8 +817,14 @@ fact the previous one changes:
   sequential order judges the unknown block first; `se-simulate-component-
   waits`). This is the source of the layout sensitivity that remains: where
   a dependency runs one way, which block a layout writes first decides
-  whether the second waits -- at most one round per such pair (the fuzzer
-  checks it).
+  whether the second waits. Interleaving two contributors and two consumers
+  differently (`contributor, consumer, contributor, consumer` against both
+  contributors first) turns two strata into four: the sequential order
+  itself judges each consumer after the contributors before it, and a
+  consumer's diagnostic may change with each. Layouts of the same blocks
+  differ by at most one round fewer than the blocks the contract links, and
+  not at all without such blocks (the fuzzer checks both: seed 3's program 6
+  takes 5 rounds nested and 7 split, with six linked blocks).
 
 ### 71. New expected complexity model
 

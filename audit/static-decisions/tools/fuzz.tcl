@@ -40,10 +40,11 @@
 #   3. layout: the four layouts give every fragment the same verdict (its
 #      outcome and diagnostic code, and the diagnostic's line and column
 #      relative to the fragment) and take the same number of batched rounds
-#      within one (where a dependency runs one way -- a consumer of the
-#      erased-callable contract on a contributor -- the order a layout writes
-#      the two in decides whether the second waits for a build; the summary
-#      counts the programs where it does);
+#      -- except where a dependency runs one way (a consumer of the
+#      erased-callable contract on a contributor): the order a layout writes
+#      the two in decides whether the second waits for a build, so layouts may
+#      differ by at most one round fewer than the set has blocks the contract
+#      links (the summary counts the programs where they differ);
 #   4. economics: the batched rounds stay within the generator's own model of
 #      the set's dependency depth -- a resolution round, one checked round,
 #      one more per level of each genuine chain (a nested chain, the
@@ -349,8 +350,25 @@ for {set p 0} {$p < $n} {incr p} {
         dict set results $layout [dict create verdict [lsort -stride 2 -integer -index 0 $verdict] \
             rounds [dict get $b stats rounds] builds [dict get $b stats builds]]
     }
+    set kinds [lmap f $set {lindex $f 0}]
+    set chains [llength [lsearch -all $kinds chain]]
+    # The blocks the erased-callable contract links (every one calling
+    # generic, call or shared is a consumer as well as a contributor): in the
+    # worst case one chain, as deep as it has members.
+    set erased 0
+    foreach k {badcontributor earlycontributor contributor consumer erasing anyconsumer possible} {
+        incr erased [llength [lsearch -all $kinds $k]]
+    }
     if {$problem eq ""} {
         set base [dict get $results nested]
+        # The sequential order is post-order: where a dependency runs one way
+        # (a consumer of the erased-callable contract on a contributor),
+        # which of the two a layout writes first decides whether the second
+        # waits for a build. Each round of the linked blocks rejects at least
+        # one of them, so two layouts differ by at most one round fewer than
+        # they have members -- and not at all without them (every other
+        # fragment is self-contained).
+        set allowed [expr {$erased > 1 ? $erased - 1 : 0}]
         foreach layout [lrange $layouts 1 end] {
             set other [dict get $results $layout]
             if {[dict get $base verdict] ne [dict get $other verdict]} {
@@ -359,31 +377,17 @@ for {set p 0} {$p < $n} {incr p} {
             }
             set d [expr {abs([dict get $base rounds] - [dict get $other rounds])}]
             if {$d > 0} {
-                # The sequential order is post-order: where a dependency runs
-                # one way (a consumer of the erased-callable contract on a
-                # contributor), which of the two a layout writes first decides
-                # whether the second waits for a build -- one round, never
-                # more per such pair.
                 dict incr stats layoutRoundsDiffer
             }
-            if {$d > 1} {
-                set problem "layout $layout takes [dict get $other rounds] rounds, nested [dict get $base rounds]"
+            if {$d > $allowed} {
+                set problem "layout $layout takes [dict get $other rounds] rounds, nested [dict get $base rounds] ($erased blocks linked by the erased-callable contract)"
                 break
             }
         }
     }
     if {$problem eq ""} {
         # The model's bound: resolution, checked, final, plus each genuine
-        # chain's depth.
-        set kinds [lmap f $set {lindex $f 0}]
-        set chains [llength [lsearch -all $kinds chain]]
-        # The blocks the erased-callable contract links (every one calling
-        # generic, call or shared is a consumer as well as a contributor):
-        # in the worst case one chain, as deep as it has members.
-        set erased 0
-        foreach k {badcontributor earlycontributor contributor consumer erasing anyconsumer possible} {
-            incr erased [llength [lsearch -all $kinds $k]]
-        }
+        # chain's depth, plus the linked blocks'.
         set bound [expr {3 + ($chains > 0 ? 1 : 0) + ($erased > 1 ? $erased : 0)}]
         foreach layout $layouts {
             set rounds [dict get $results $layout rounds]
@@ -416,7 +420,7 @@ for {set p 0} {$p < $n} {incr p} {
         flush stdout
     }
 }
-puts "layouts with one round more or less: [dict get $stats layoutRoundsDiffer]"
+puts "layout pairs taking different rounds: [dict get $stats layoutRoundsDiffer]"
 puts "seed $seed: [dict get $stats programs] programs, [dict get $stats sites] sites, [dict get $stats rejected] rejected, [dict get $stats failures] failures"
 puts "fragments: [lsort -stride 2 $kindsSeen]"
 exit [expr {[dict get $stats failures] > 0}]
