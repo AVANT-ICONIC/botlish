@@ -190,11 +190,27 @@ proc golden::main {argv} {
         }
         set first [lindex [dict get $result outcomes] 1]
         if {$mode eq "names"} {
-            if {[lindex $first 0] eq "lines"} {
-                foreach line [verdicts [lindex $first 1]] { puts "$name $line" }
-            } else {
+            # One verdict per test over every backend that produced a
+            # report: FAIL if it failed on any of them, so a test that fails
+            # on one backend only is told apart from the suite's own state.
+            set order {}
+            set verdictOf [dict create]
+            foreach {backend outcome} [dict get $result outcomes] {
+                if {[lindex $outcome 0] ne "lines"} continue
+                foreach line [verdicts [lindex $outcome 1]] {
+                    regexp {^(PASS|FAIL) (.*)$} $line -> verdict test
+                    if {![dict exists $verdictOf $test]} {
+                        lappend order $test
+                        dict set verdictOf $test $verdict
+                    } elseif {$verdict eq "FAIL"} {
+                        dict set verdictOf $test FAIL
+                    }
+                }
+            }
+            if {$order eq {}} {
                 puts "$name ABORTED"
             }
+            foreach test $order { puts "$name [dict get $verdictOf $test] $test" }
             continue
         }
         puts "== $name ([join $backends {, }]; compile [format %.2f $compileSeconds]s)"

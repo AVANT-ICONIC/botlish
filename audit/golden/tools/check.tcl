@@ -20,9 +20,10 @@
 # whose `mutants` column names the mutant (or, if none does, every row).
 # Old detects the mutant when one of those rows' old tests fails (or its
 # file does not complete); new detects it when one of those rows' golden
-# tests fails, or its suite does not compile, aborts or disagrees across
-# backends. A mutant the old tests detect and the new ones do not is a
-# weaker port: the report says so. -only-mutated 0 also runs every other row
+# tests fails on some backend (BOTH), and at suite level when only another
+# golden test fails or a suite does not compile, aborts on a backend or
+# disagrees across backends (BOTH-SUITE-LEVEL). A mutant the old tests
+# detect and the new ones do not is a weaker port: the report says so. -only-mutated 0 also runs every other row
 # of the manifest under the mutant (every ported test as a detector).
 #
 # The checkout is never modified. Exit status 1 when a row disagrees on the
@@ -106,10 +107,15 @@ proc runNew {tree rows timeout backends} {
             dict set verdicts "[file tail $suite] $name" [expr {$verdict eq "PASS" ? "pass" : "fail"}]
         }
     }
+    # A test with no verdict (its suite did not compile, or aborted on every
+    # backend) is no-verdict: not a pass, and under a mutant a suite-level
+    # detection, not a failure of that test. A test of a suite that aborted
+    # on some backend or whose backends disagree keeps its own verdict; the
+    # suite's state is reported beside it.
     foreach row $rows {
         set key "[dict get $row suite] [dict get $row new_test]"
-        if {![dict exists $verdicts $key] || [dict get $states [dict get $row suite]] in {compile-error aborted disagree incomplete}} {
-            dict set verdicts $key fail
+        if {![dict exists $verdicts $key]} {
+            dict set verdicts $key no-verdict
         }
     }
     return [list $verdicts $states $seconds]
@@ -140,6 +146,12 @@ if {[dict get $options -mutants] eq {}} {
         }
     }
     dict for {pair count} $pairs { puts "$pair: $count" }
+    dict for {suite state} $states {
+        if {$state ne "ok"} {
+            puts "SUITE NOT OK: $suite $state"
+            set exit 1
+        }
+    }
     puts "\nOld tests, wall seconds per file (one tclsh each, startup included):"
     set total 0
     dict for {file s} $oldSeconds { puts [format "    %-44s %7.1f" $file $s]; set total [expr {$total + $s}] }
@@ -192,8 +204,8 @@ foreach spec [dict get $options -mutants] {
         if {$oldNotRun ne {}} {
             puts "    old tests that did not run: [join [lsort -unique $oldNotRun] {, }]"
         }
-        set newFailed [lmap row $checked {if {[dict get $new [newKey $row]] eq "pass"} continue; newKey $row}]
-        set otherFailed [lmap row $rows {if {$row in $checked || [dict get $new [newKey $row]] eq "pass"} continue; newKey $row}]
+        set newFailed [lmap row $checked {if {[dict get $new [newKey $row]] ne "fail"} continue; newKey $row}]
+        set otherFailed [lmap row $rows {if {$row in $checked || [dict get $new [newKey $row]] ne "fail"} continue; newKey $row}]
         set broken [lmap {suite state} $states {if {$state in {ok failed}} continue; string cat $suite = $state}]
         set oldDetects [expr {[llength $oldFailed] > 0}]
         set newDetects [expr {[llength $newFailed] > 0}]
