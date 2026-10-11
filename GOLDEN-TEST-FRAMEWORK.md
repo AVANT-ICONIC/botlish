@@ -556,9 +556,17 @@ result at the function): those are the suite's diagnostics, not the case's.
 Over the eight suites (`hir::static::decide`'s own record of each block,
 `staticSites` and `staticRounds`):
 
-| suite | blocks | accepted | rejected | decision rounds | whole builds | compile (s) |
+| suite | blocks | accepted | rejected | decision rounds | whole builds (decisions and method-sugar trials) | compile (s, quiet machine) |
 |---|---|---|---|---|---|---|
-@@STATICROWS@@
+| collections.bot | 44 | 22 | 22 | 3 | 11 | 13.4 |
+| diagnostics.bot | 28 | 0 | 28 | 5 | 12 | 13.0 |
+| errors.bot | 25 | 14 | 11 | 4 | 7 | 7.8 |
+| harness.bot | 14 | 12 | 2 | 2 | 3 | 2.3 |
+| modules.bot | 33 | 7 | 26 | 3 | 6 | 13.1 |
+| ownership.bot | 37 | 13 | 24 | 4 | 26 | 36.2 |
+| representation.bot | 14 | 13 | 1 | 2 | 4 | 5.1 |
+| values.bot | 26 | 26 | 0 | 1 | 2 | 6.0 |
+| **total** | **221** | **107** | **114** | 1-5 | **71** | **97.1** |
 
 The 114 rejected blocks span 40 diagnostic kinds (TYPE 13, UNBOUND 10,
 CONTEXT-TRAIT-MISUSE 8, OPAQUE-REPRESENTATION 8, KNOWN-ERROR 7,

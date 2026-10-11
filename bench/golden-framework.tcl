@@ -3,6 +3,7 @@
 #
 #   tclsh9.0 bench/golden-framework.tcl ?-runs N? ?-n N? ?-native-n N?
 #                                       ?-sizes LIST? ?-backends LIST?
+#                                       ?-parts {run alloc compile}?
 #
 # Run time (best of RUNS, compilation excluded): a suite registering N cases
 # in a loop -- one body closure per case, created in the loop, so the program
@@ -49,6 +50,7 @@ set n 200
 set nativeN 2000
 set sizes {10 50 100}
 set backends {interp compile native}
+set parts {run alloc compile}
 foreach {option value} $args {
     switch -- $option {
         -runs { set runs $value }
@@ -56,6 +58,7 @@ foreach {option value} $args {
         -native-n { set nativeN $value }
         -sizes { set sizes $value }
         -backends { set backends $value }
+        -parts { set parts $value }
         default { error "unknown option $option" }
     }
 }
@@ -144,6 +147,7 @@ puts "# golden test framework performance\n"
 puts "runs $runs (best of); Tcl backends N = $n cases, native N = $nativeN cases\n"
 
 # ---------------------------------------------------------------------------
+if {"run" in $parts} {
 puts "## Run time per case\n"
 puts "| kind | [join $backends { | }] |"
 puts "|---|[string repeat ---| [llength $backends]]"
@@ -171,8 +175,10 @@ foreach backend $backends {
 }
 puts "| baseline (no framework) | [join $cells { | }] |"
 puts "| empty suite (whole run) | [join [lmap b $backends {fmt [dict get $empty $b]}] { | }] |"
+}
 
 # ---------------------------------------------------------------------------
+if {"alloc" in $parts} {
 puts "\n## Native heap allocations\n"
 proc census {text} {
     set hir [compileHir $text]
@@ -231,20 +237,36 @@ puts "\nStatic data (one-time, program constants): [dict get $reportZero static 
 if {[dict exists [dict get $allocs pass+report 2] coroutines]} {
     puts "Runner coroutine (pass+report, 2 cases): [dict get [dict get $allocs pass+report 2] coroutines]"
 }
+}
 
 # ---------------------------------------------------------------------------
+if {"compile" ni $parts} { exit 0 }
 puts "\n## Compile time\n"
 
-# A suite of K distinct cases; MIXED: every third is a rejected block.
-proc distinctSuite {k mixed} {
+# The body lines (at INDENT spaces) and expected code of the I-th rejected
+# block of kind REJECTION: unbound, a name the resolution rejects (every
+# such block is decided in one round), or type, a typed call the checker
+# rejects (decided one per round within a top-level unit).
+proc rejectedBody {rejection i indent} {
+    set pad [string repeat " " $indent]
+    if {$rejection eq "unbound"} {
+        return [list [list "${pad}missing_$i + 7"] Unbound]
+    }
+    return [list [list "${pad}fn want_${i}(x: int) -> int:" "${pad}    x" "${pad}want_${i}(\"s\")"] Type]
+}
+
+# A suite of K distinct cases; REJECTION (none, unbound or type): every
+# third is a rejected block of that kind.
+proc distinctSuite {k rejection} {
     set lines {"import compiler" "import test" "" "fn register_bench(n: int):"}
     if {$k == 0} {
         lappend lines "    return"
     }
     for {set i 0} {$i < $k} {incr i} {
         lappend lines "    fn body_${i}() errors compiler::CompilerError:" "        static compile:"
-        if {$mixed && $i % 3 == 2} {
-            lappend lines "            missing_$i + n" "    test::rejects(\"t$i\", compiler::DiagnosticCode::Unbound, body_${i})"
+        if {$rejection ne "none" && $i % 3 == 2} {
+            lassign [rejectedBody $rejection $i 12] body code
+            lappend lines {*}$body "    test::rejects(\"t$i\", compiler::DiagnosticCode::$code, body_${i})"
         } else {
             lappend lines "            n * $i + $i" "    test::value(\"t$i\", 7 * $i + $i, body_${i})"
         }
@@ -255,14 +277,15 @@ proc distinctSuite {k mixed} {
 # The same suite with every body a top-level function (the layout
 # tests/golden/README.md recommends: rejected blocks in separate top-level
 # units are decided together); the registrations stay in one function.
-proc hoistedSuite {k mixed} {
+proc hoistedSuite {k rejection} {
     set lines {"import compiler" "import test" ""}
     set registrations {}
     for {set i 0} {$i < $k} {incr i} {
         lappend lines "fn body_${i}() errors compiler::CompilerError:" "    static compile:"
-        if {$mixed && $i % 3 == 2} {
-            lappend lines "        missing_$i + 7" ""
-            lappend registrations "    test::rejects(\"t$i\", compiler::DiagnosticCode::Unbound, body_${i})"
+        if {$rejection ne "none" && $i % 3 == 2} {
+            lassign [rejectedBody $rejection $i 8] body code
+            lappend lines {*}$body ""
+            lappend registrations "    test::rejects(\"t$i\", compiler::DiagnosticCode::$code, body_${i})"
         } else {
             lappend lines "        7 * $i + $i" ""
             lappend registrations "    test::value(\"t$i\", 7 * $i + $i, body_${i})"
@@ -299,14 +322,17 @@ proc hir::BuildOnce {args} {
     incr ::buildCount
     tailcall hir::BuildOnce__bench {*}$args
 }
-puts "| K cases | plain functions, no framework | framework, all passing | builds | framework, mixed (1/3 rejected), bodies nested | builds | mixed, bodies at top level | builds |"
-puts "|---|---|---|---|---|---|---|---|"
-set libOnly [lindex [compileStats [distinctSuite 0 0]] 0]
+puts "Mixed suites: every third case a rejected block, an unbound name (UNBOUND, decided at resolution) or a typed call with a String (TYPE, decided by the checker); bodies nested in the registration function or each at the top level. Builds: whole-program builds (hir::BuildOnce), the static decision rounds' and the method-sugar decisions'.\n"
+puts "| K cases | plain functions, no framework | all passing | builds | UNBOUND, nested | builds | UNBOUND, top level | builds | TYPE, nested | builds | TYPE, top level | builds |"
+puts "|---|---|---|---|---|---|---|---|---|---|---|---|"
+set libOnly [lindex [compileStats [distinctSuite 0 none]] 0]
 foreach k $sizes {
     lassign [compileStats [plainProgram $k]] plain plainBuilds
-    lassign [compileStats [distinctSuite $k 0]] valid validBuilds
-    lassign [compileStats [distinctSuite $k 1]] mixed mixedBuilds
-    lassign [compileStats [hoistedSuite $k 1]] hoisted hoistedBuilds
-    puts [format "| %d | %.1f ms | %.1f ms | %d | %.1f ms | %d | %.1f ms | %d |" $k $plain $valid $validBuilds $mixed $mixedBuilds $hoisted $hoistedBuilds]
+    set cells [list [format "%.1f ms" $plain]]
+    foreach {make rejection} {distinctSuite none distinctSuite unbound hoistedSuite unbound distinctSuite type hoistedSuite type} {
+        lassign [compileStats [$make $k $rejection]] ms builds
+        lappend cells [format "%.1f ms" $ms] $builds
+    }
+    puts "| $k | [join $cells { | }] |"
 }
 puts [format "\nThe library alone (a suite of no case): %.1f ms." $libOnly]
