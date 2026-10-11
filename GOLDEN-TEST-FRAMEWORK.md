@@ -1020,8 +1020,15 @@ diagnostic message) or crash the run.
 **Native coverage** (`tests/native-coverage.tcl`, the whole suite under
 `CORE_BACKEND=cranelift`): 7168 tests -- native 2921, independent 4118,
 passed-partial 69, unsupported 60 (all pre-existing: Tcl test natives such
-as `test-log`, sequence mode, ...), **failed 0**. The two new test files,
-classified alone under the same hook: @@COVNEW@@
+as `test-log`, sequence mode, ...), **failed 0** (run before
+`gf-nir-migrated-bodies` was added). The two new test files in their final
+form, classified alone under the same hook: 49 tests, 34 native, 15
+independent, 0 unsupported, 0 failed. Of the independent ones, six only
+compile (the MISSING-CONTEXT, DUPLICATE-CONTEXT, CONTEXT-FUNCTION-VALUE,
+affine-capture, error-contract and warning checks); the other nine run their
+programs through explicit backend calls the hook does not count -- the Tcl
+probe and release-counter tests, the NIR comparison, the fuzzer's
+subprocess.
 
 ## Performance
 
@@ -1614,7 +1621,7 @@ points to the section that has the evidence.
     framework's tests require identical reports from interp, compile and
     Cranelift; the full Tcl suite passes on interp and compile.
 48. **GC stress.** All 8 suites (221 tests) on both native backends, `gf-gc-stress`, `gf-coroutine-cleanup-native` and a fuzz campaign under `BOTLISH_NATIVE_GC_STRESS=1`: no failure, no premature collection ([Backends, GC stress, native coverage](#backends-gc-stress-native-coverage)).
-49. **Native coverage.** The whole suite on Cranelift: 7168 tests, 0 failed (2921 native, 4118 independent, 69 partial, 60 unsupported, all pre-existing); the two new test files: 48 tests, 0 failed, 0 unsupported.
+49. **Native coverage.** The whole suite on Cranelift: 7168 tests, 0 failed (2921 native, 4118 independent, 69 partial, 60 unsupported, all pre-existing); the two new test files: 49 tests, 0 failed, 0 unsupported.
 50. **Registration allocation cost.** Natively, one-time 8 allocations (208 bytes: the Suite, its installed copy, vector headers, empty Lists); per registered case 3 (176 bytes: the TestCase, the check closure, the body closure); 0.26 us a registration natively, 111 us on the Tcl compiler, 385 us on the interpreter ([Allocations](#allocations-natively-nativeallocationreport)).
 51. **Per-test allocation cost.** Per case, run: 6 allocations (360 bytes); with its report line 16 (759 bytes); an expected rejection 17 (783); a value mismatch 20 (957 bytes); an unexpected rejection 39 (3241 bytes) and a compiler-error mismatch 44 (4855 bytes), mostly formatting: `code_name`'s literal Lists are re-made per call.
 52. **Coroutine allocation and release.** One coroutine per run (the runner): with its result collection 6 heap allocations, 208 bytes, plus one mapped stack, released when the run completes, none swept; no per-case coroutine. Bodies' own coroutines are released exactly once, in order, whether they complete, fail, are abandoned or are left by an early return (`gf-coroutine-cleanup`, `-native`, under GC stress too).
