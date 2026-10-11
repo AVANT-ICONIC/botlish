@@ -15,7 +15,7 @@
 //! | helper                 | operands            | result / failure             | allocates |
 //! |------------------------|---------------------|------------------------------|-----------|
 //! | rt_int_add/sub/mul     | Int, Int            | Int                          | big Ints  |
-//! | rt_int_mod             | Int, Int            | Int (0<=r<|b|); ARITHMETIC   | no        |
+//! | rt_int_mod             | Int, Int            | Int (0<=r<|b|); ARITHMETIC   | big Ints  |
 //! | rt_int_and/or/xor      | Int, Int            | Int (two's-complement)       | big Ints  |
 //! | rt_int_shl/shr         | Int, Int(shift>=0)  | Int; RANGE if shift invalid  | big Ints  |
 //! | rt_int_cmp             | Int, Int            | -1/0/1 (raw i64)             | no        |
@@ -99,12 +99,13 @@ use unicode_general_category::{get_general_category, GeneralCategory};
 /// never allocates but their BigInt-overflow fallback (`rt_int_add` etc.)
 /// might; codegen has no cheaper way to tell the two paths apart from NIR
 /// alone, so the whole instruction is conservatively a safepoint (see
-/// codegen::roots's module doc).
+/// codegen::roots's module doc). `IMod` likewise: a BigInt operand can give
+/// a remainder outside the small-Int range, which `rt_int_mod` allocates.
 pub fn op_may_allocate(op: OpCode) -> bool {
     use OpCode::*;
     matches!(
         op,
-        IAdd | ISub | IMul | IAnd | IOr | IXor | IShl | IShr | Substr | DecodeCharAt | ShortToStr | AsciiToStr | StrLower | StrCat
+        IAdd | ISub | IMul | IMod | IAnd | IOr | IXor | IShl | IShr | Substr | DecodeCharAt | ShortToStr | AsciiToStr | StrLower | StrCat
             | StrUtf8Bytes | Argv | ListNew | ListAppend | MutArrayAllocate | MutArrayFreeze | MkOk
             // The owned byte storage is one allocation (a collection may run
             // first); the empty storage is a shared static (no allocation).

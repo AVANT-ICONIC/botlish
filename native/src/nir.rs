@@ -2663,7 +2663,7 @@ mod effect_tests {
     fn call_effects_independence_matrix() {
         let cases = [
             ("    %0 = unit\n", (false, false)),
-            ("    %1 = int 1\n    %2 = int 0\n    %0 = op imod %1 %2\n", (true, false)),
+            ("    %1 = int 1\n    %2 = int 0\n    %0 = op veq %1 %2\n", (true, false)),
             ("    %1 = unit\n    %0 = op mkok %1\n", (false, true)),
             ("    %1 = str \"x\"\n    %2 = int 0\n    %0 = op substr %1 %2 %2\n", (true, true)),
         ];

@@ -962,12 +962,13 @@ mod tests {
 
     // -----------------------------------------------------------------------
     // #28: tagged intermediates that die before any safepoint need no slot.
-    // `imod`'s helper never allocates (ops.rs's table), so this function has
-    // no safepoint at all despite every register being tagged.
+    // An Int comparison never allocates (ops.rs's table), so this function
+    // has no safepoint at all despite every register being tagged. (Not
+    // `imod`: a BigInt remainder is allocated, so it is a safepoint.)
 
     #[test]
     fn tagged_dead_before_safepoint_needs_no_slot() {
-        let f = program_of(3, "", "    %0 = int 7\n    %1 = int 2\n    %2 = op imod %0 %1\n    ret %2\n");
+        let f = program_of(3, "", "    %0 = int 7\n    %1 = int 2\n    %2 = op ilt %0 %1\n    ret %2\n");
         let plan = plan(&f, true);
         assert_eq!(plan.safepoints, 0);
         assert_eq!(plan.root_candidates, 0);

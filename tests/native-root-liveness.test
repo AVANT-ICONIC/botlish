@@ -164,15 +164,16 @@ test root-raw-1 {a function with only raw temporaries needs zero value slots} -b
 
 # ---------------------------------------------------------------------------
 # #28: tagged values that die before any safepoint need no slot. There is no
-# allocation at all here (imod's helper never allocates), so this also
+# allocation at all here (an Int comparison never allocates; `imod` would,
+# for a BigInt remainder -- root-imod-safepoint-1 below), so this also
 # demonstrates "no safepoint" directly: nothing to root, nothing that could
 # possibly collect.
 
 test root-dead-before-safepoint-1 {tagged values with no safepoint in the function need no slot} -body {
-    set text "${nirHeader}func 0 \"<program>\" params=0 env=0 regs=3 pnames=\"\" captures=0 rawregs=\"\"\n    %0 = int 7\n    %1 = int 2\n    %2 = op imod %0 %1\n    ret %2\nend\n"
+    set text "${nirHeader}func 0 \"<program>\" params=0 env=0 regs=3 pnames=\"\" captures=0 rawregs=\"\"\n    %0 = int 7\n    %1 = int 2\n    %2 = op ilt %0 %1\n    ret %2\nend\n"
     set report [rootsOfNir $text]
     list [underGcStress {runNir $text}] [safepointsOf $report "<program>"] [candidatesOf $report "<program>"]
-} -result {{value {int 1}} 0 0}
+} -result {{value {bool false}} 0 0}
 
 # ---------------------------------------------------------------------------
 # #29: a managed value live across a real allocation must survive GC stress
@@ -182,6 +183,33 @@ test root-live-across-gc-1 {a value live across a real allocation survives GC st
     set text "${nirHeader}func 0 \"<program>\" params=0 env=0 regs=3 pnames=\"\" captures=0 rawregs=\"\"\n    %0 = str \"kept\"\n    %1 = op listnew\n    %2 = op streq %0 %0\n    ret %2\nend\n"
     underGcStress {runNir $text}
 } -result {value {bool true}}
+
+# `imod` allocates its result when a BigInt operand gives a remainder outside
+# the small-Int range (rt_int_mod), so it is a safepoint like iadd/isub/imul
+# (ops.rs's op_may_allocate). It once was not: the String below lost its root
+# across the `imod` and was collected while still live, and a function whose
+# only allocation is an `imod` was summarized may_gc=false, so its callers'
+# live values were unrooted across the call too.
+
+test root-imod-safepoint-1 {an imod with a BigInt result is a safepoint: a String live across it survives GC stress} -body {
+    set text "${nirHeader}func 0 \"<program>\" params=0 env=0 regs=6 pnames=\"\" captures=0 rawregs=\"\"\n    %0 = str \"a\"\n    %1 = op strcat %0 %0\n    %2 = int 12345678901234567890123\n    %3 = int 1000000000000000000000\n    %4 = op imod %2 %3\n    %5 = op strcat %1 %1\n    ret %5\nend\n"
+    list [underGcStress {runNir $text}] [safepointsOf [rootsOfNir $text] "<program>"]
+} -result {{value {str aaaa}} 3}
+
+test root-imod-call-effects-1 {a function whose only allocation is an imod may collect: a String live across a call to it survives GC stress} -body {
+    set text "${nirHeader}func 0 \"<program>\" params=0 env=0 regs=5 pnames=\"\" captures=0 rawregs=\"\"\n    %0 = str \"a\"\n    %1 = op strcat %0 %0\n    %2 = int 12345678901234567890123\n    %3 = call 1 %2\n    %4 = op strcat %1 %1\n    ret %4\nend\nfunc 1 \"m\" params=1 env=0 regs=3 pnames=\"n\" captures=0 rawregs=\"\"\n    %1 = int 1000000000000000000000\n    %2 = op imod %0 %1\n    ret %2\nend\n"
+    set report [rootsOfNir $text]
+    list [underGcStress {runNir $text}] [regexp {may_gc=true} [rootsBlock $report m]] [safepointsOf $report "<program>"]
+} -result {{value {str aaaa}} 1 3}
+
+# The shape test::describe (lib/test.bot) hit on a BigInt: a String
+# construction plan returned by a recursive call, live across a `mod` with a
+# BigInt result, then extended by `construct str plan`.
+
+test root-imod-plan-1 {a construction plan live across a BigInt mod survives GC stress} -body {
+    set text "import str\nfn g(n: int) -> str:\n    \"y\"\nfn f(n: int, k: int) -> str:\n    if k == 0:\n        \"x\"\n    else:\n        f(n, k - 1).concat(g(n.mod(1000000000000000000000)))\nf(12345678901234567890123, 3)"
+    underGcStress {native::evalHir [sourceHir $text]}
+} -result {str xyyy}
 
 # ---------------------------------------------------------------------------
 # #46: a dead root is not artificially retained forever merely because its
