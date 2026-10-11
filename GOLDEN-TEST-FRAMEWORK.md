@@ -50,12 +50,15 @@ register_arithmetic_tests()
 test::report()          # ["PASS adds", "PASS unbound", "2 passed, 0 failed"]
 ```
 
-The whole public surface (`lib/test.bot`):
+The API (`lib/test.bot`; a module has no visibility control, so the
+library's other top-level helpers -- `joined`, `quoted`, `text_lines`, ... --
+are reachable too, but are not part of it):
 
 | name | what |
 |---|---|
 | `test::Suite` | `context struct Suite: cases: MutableVector[TestCase]` -- the suite context |
 | `test::suite()` | a new, empty Suite, for `with context test::suite()` |
+| `test::TestCase` | `{name, run}`: one registered case, the element of `Suite.cases` and of `registered()` |
 | `test::case(name, run)` | registers a case whose check is `run: Fn{args: [], return: test::Match}` (stored, not called): the low-level form and the escape hatch |
 | `test::value(name, expected, body)` | registers: `body()`'s value must `== expected` |
 | `test::holds(name, description, predicate, body)` | registers: `predicate(body())` must be true |
@@ -78,22 +81,45 @@ The registration helpers and `case`/`mismatch` are `nomethod`: their first
 argument is a name, not a receiver (`"adds".value(42, adds)` would read
 badly), which is also what keeps a suite free of `METHOD-ELIGIBLE` warnings.
 
-The report:
+The report of `gf-verdicts` (`tests/golden-framework.test`), whose suite
+registers every helper, passing and failing:
 
 ```
 PASS adds
 FAIL off by one
   expected: 42
   actual: 41
+PASS unbound
 FAIL unbound, expecting Type
   expected: compiler diagnostic Type
   actual: compiler diagnostic Unbound at line 23, column 13
   detail: unbound name "missing"
+PASS unbound at its column
+FAIL unbound, wrong column
+  expected: compiler diagnostic Unbound at line 23, column 14
+  actual: compiler diagnostic Unbound at line 23, column 13
+  detail: unbound name "missing"
+PASS unbound, any diagnostic
 FAIL value expected, block rejected
   expected: 1
   actual: compiler diagnostic Unbound at line 23, column 13
   detail: unbound name "missing"
-7 passed, 6 failed
+FAIL rejection expected, block accepted
+  expected: compiler diagnostic Unbound
+  actual: value 42
+FAIL located rejection expected, block accepted
+  expected: compiler diagnostic Unbound at line 23, column 13
+  actual: value 42
+FAIL any rejection expected, block accepted
+  expected: a compiler diagnostic
+  actual: value 42
+PASS lists
+PASS positive
+PASS positive, another value
+FAIL negative, failing
+  expected: a negative number
+  actual: 42
+7 passed, 8 failed
 ```
 
 A detail that spans lines (USE-AFTER-MOVE's "moved here / used here") is
@@ -160,10 +186,10 @@ by the suite only if it is spelled exactly like one of those two
 Registration is explicit and deterministic: a test exists because ordinary
 code called a registration function; registration functions compose as
 functions (`gf-composition`); nothing is discovered, and importing a module
-registers nothing (a module's top level cannot even call a function: module
-initializers are context-free values, and one that registered would be
-MISSING-CONTEXT -- registration runs only after the entry program installs
-the suite).
+registers nothing (a module's top level has no executable statements, only
+definitions and immutable bindings whose initializers must be context-free;
+an initializer that registered would be MISSING-CONTEXT -- registration runs
+only after the entry program installs the suite).
 
 ### The deferred test: a function value, because coroutines start eagerly
 
@@ -451,16 +477,22 @@ out, and as the first item of [Findings](#findings).
 
 ## The static-compile convention
 
-A migrated test's body is a nested function of no arguments that declares
-`errors compiler::CompilerError` and whose whole body is one
-`static compile:` block around the code under test:
+A migrated test's body is a function of no arguments -- at the suite's top
+level when it captures nothing, nested in its registration function when it
+captures an input -- that declares `errors compiler::CompilerError` and
+whose whole body is one `static compile:` block around the code under test
+(`tests/golden/collections.bot`):
 
 ```botlish
-    fn struct_error_unknown_field() errors compiler::CompilerError:
-        static compile:
-            p = Person {name: "Ada", age: 1, height: 3}
-    test::rejects_at("struct-error-unknown-field", compiler::DiagnosticCode::UnknownField, 202, 46, struct_error_unknown_field)
+fn b_unknown_field() errors compiler::CompilerError:
+    static compile:
+        p = Person {name: "Ada", age: 1, height: 3}
+...
+fn register_structs_tests():
+    test::rejects_at("struct-error-unknown-field", compiler::DiagnosticCode::UnknownField, 216, 42, b_unknown_field)
 ```
+
+Of the 218 body functions, 152 are top-level and 66 nested.
 
 * **Accepted**, the block is its code (STATIC-COMPILE.md 13: the same HIR,
   NIR and machine code): `gf-nir-body-identical` compares the body's native
@@ -510,7 +542,7 @@ runtime's release counters and the native coroutine census.
 | registration does not execute | `gf-registration-does-not-run` (probe: nothing), `-native` (no allocation at the body), `gf-registration-would-abort` (a body that would abort the program is registered and the program completes) |
 | registration order | `gf-registration-order` |
 | runner executes exactly once | `gf-run-executes-once` (probe: once) |
-| pass result, mismatch result | `gf-verdicts` (every helper, both ways, with the exact report text) |
+| pass result, mismatch result | `gf-verdicts` (every helper, both ways -- `rejects_any` and `rejects_at` given an accepted block too -- with the exact report text) |
 | compiler error mismatch, exact code match | `gf-verdicts` (rejects, rejects_at, rejects_any, value with a rejected block, rejects with an accepted one) |
 | context isolation between suites | `gf-one-suite-per-program`, `gf-isolation` |
 | eager-coroutine deferral | `gf-eager-coroutine-start` (the language fact), `gf-coroutine-body-deferred` (the framework's answer) |
@@ -544,6 +576,11 @@ and including tests chosen because they were expected to be hard:
 | harness | 11 | 13 | 11 |
 | **total** | **133** | **221** | **41** |
 
+A Tcl test sampled by two categories is counted once, in the first (six
+are: three ported, three not portable); counted in every category that
+sampled it, modules, representation and harness ported 12 each, and
+diagnostics found 4 and harness 13 not portable.
+
 The sample overshot the brief's "about 100" (133 Tcl tests, 221 golden
 tests): a Tcl test that checks several programs (a table of cases, a
 program written two ways) became one golden test per program, and the
@@ -553,9 +590,10 @@ not a migration.
 
 Every golden test passes on the Tcl interpreter, the Tcl compiler, generic
 Cranelift and specialized Cranelift, the four executable paths the Tcl
-suite's own differential tests use (one struct-shape case of
-`representation.bot` is undefined on the generic baseline and, as in the Tcl
-harness, the specialized outcome stands in for it). Every one of the 221
+suite's own differential tests use -- except that `representation.bot` (14
+tests) aborts on generic Cranelift at one struct-shape case the generic
+baseline does not support (NATIVE UNSUPPORTED struct-shape), and, as in the
+Tcl harness, its specialized run stands in for the whole suite there. Every one of the 221
 was also checked to be able to fail: each porter made a copy of its suite
 with every expectation deliberately wrong (a value changed, another
 DiagnosticCode, a column moved, a predicate flipped, a custom matcher's
@@ -565,7 +603,8 @@ vacuous.
 ### The manifest
 
 `tests/golden/manifest.tsv`, one row per golden test (a Tcl test that became
-several has several rows) and one per Tcl test examined and not ported: the
+several has several rows) and one per Tcl test examined and not ported in
+each category that examined it (44 rows for 41 Tcl tests): the
 Tcl test, the golden test, category, outcome class, both tests' backends,
 class and further classes, whether the static boundary is needed, whether
 the body handles a run-time error, simple or custom API, verbosity,
@@ -582,11 +621,11 @@ names (a port is often an adaptation in two ways):
 
 | class | primary, ported | primary, not ported | named at all |
 |---|---|---|---|
-| DIRECT | 48 | 0 | 51 |
+| DIRECT | 48 | 0 | 52 |
 | STATIC-COMPILE-ADAPTATION | 24 | 0 | 42 |
 | EXPLICIT-ERROR-HANDLER | 3 | 0 | 5 |
 | CUSTOM-MATCHER | 21 | 0 | 24 |
-| HARNESS-DIFFERENCE | 36 | 0 | 67 |
+| HARNESS-DIFFERENCE | 36 | 0 | 68 |
 | OLD-TEST-OVERSPECIFIED | 0 | 0 | 14 |
 | NEW-FRAMEWORK-LIMITATION | 1 | 1 | 3 |
 | COMPILER-BUG-FOUND | 0 | 0 | 0 (the compiler issues found are listed in [Findings](#findings): none made a ported test fail) |
@@ -614,11 +653,16 @@ generic, an inner site's record); the Tcl test ran a native option matrix
 context test varied the installed value across programs (one installation
 per type per program); a coroutine/affine test also asserted release counts
 or an affine value as the program's result; a context-placement message
-differs because a body is always a function. **Stronger (9):** a Tcl test
-compiled with `-strict 0` and never looked at diagnostics, or folded its
-operands at compile time, where the golden test is a strict program with
-undecidable inputs; or the golden test checks a value the Tcl test only
-asserted compiles.
+differs because a body is always a function; the Tcl test also pinned what
+Botlish cannot observe (an allocation report, a NIR or ABI plan, HIR
+completion facts); a sub-case or program of the Tcl test was not ported (an
+operator passed as a value has no source spelling, a third program of a
+table). **Stronger (9):** a Tcl test compiled with `-strict 0` and never
+looked at diagnostics, or folded its operands at compile time, where the
+golden test is a strict program with undecidable inputs (2); the golden
+test checks a value the Tcl test only asserted compiles (1), pins a value
+where the Tcl test only checked that the backends agree (2), or also pins a
+diagnostic code or location the Tcl test left out (4).
 
 **Not portable (41)**, by reason (each row's note has the verified
 reproducer):
@@ -640,14 +684,14 @@ reproducer):
 | question (item 75) | answer |
 |---|---|
 | used only the simple public API | 109 of 133 Tcl tests (82%) |
-| needed a custom matcher | 24 (11 direct `test::case` checks, the rest through 4 suite-local helpers built on it: a message matcher in three suites, a related-locations matcher in one) |
+| needed a custom matcher | 24 (2 direct `test::case` checks, the rest through 9 suite-local helpers built on it, in 6 suites: message matchers in collections, diagnostics, errors, modules, ownership and representation, and related-location and call-chain matchers in ownership) |
 | needed explicit run-time-error handling | 29 |
 | needed explicit `static compile:` | all 133 use it (the convention); 61 need it to express the test |
 | could not be expressed | 41 examined (40 NOT-EXPRESSIBLE, 1 NEW-FRAMEWORK-LIMITATION), beside the 133 ported |
 | became clearer | 34 |
 | became significantly more verbose | 32 |
 | exposed a framework limitation | 3 rows, and 14 findings during porting ([Findings](#findings)), 5 of them fixed in the library during the milestone |
-| exposed an existing compiler bug | no ported test fails; porting found 6 compiler defects or precision gaps and 5 smaller inconsistencies ([Findings](#findings)) |
+| exposed an existing compiler bug | no ported test fails; porting found 6 compiler defects or precision gaps and 6 smaller inconsistencies ([Findings](#findings)) |
 
 @@SIDEBYSIDE@@
 
@@ -663,14 +707,14 @@ and from the porters' reports:
 | the static boundary: `static compile:` | 221 (every golden test) | 1, plus one indentation level for the code | the convention; necessary in 61 Tcl tests' ports, conventional in the rest |
 | the body's error clause: `fn NAME() errors compiler::CompilerError:` | 218 bodies | 1 | a body must admit the one error a rejected block completes with |
 | a named body per test, and its registration line | 218 bodies, 200 library registrations + 34 suite-helper registrations | 2 | Botlish has no anonymous function expression: every deferred body is a named function, named again in the registration |
-| registration functions | 83 | 2+ | one per Tcl file ported (the composition mechanism) |
+| registration functions | 83 | 2+ | 74 one per Tcl file ported, 8 suite drivers, 1 per-test helper (the composition mechanism) |
 | run-time error normalization: an `on E:` handler inside a body | 90 handlers | 2-3 each | a body may complete only normally or with CompilerError |
 | inputs routed through registration parameters | in every run-time-error suite | 1-3 | so the completion proofs cannot decide the failure (KNOWN-ERROR) or fold the arithmetic |
 | top-level declarations, renamed per suite (`Dg*`, `Md*`, ...) | 74 | 3-15 | declarations are top-level only; one suite holds many tests' declarations |
-| suite-local helper functions | 56 (message matchers in 4 suites, String search, a coroutine log driver, shared code under test) | 5-40 | what the library does not provide |
-| absolute suite-file locations in `rejects_at` and custom checks | 36 `rejects_at` + 8 custom | 0 (but re-derived after every edit above them) | a diagnostic's primary location is in the suite's coordinates |
+| suite-local helper functions | 56 (message matchers in 6 suites, String search, a coroutine log driver, shared code under test) | 5-40 | what the library does not provide |
+| absolute suite-file locations in `rejects_at` and custom checks | 36 `rejects_at` + 14 custom | 0 (but re-derived after every edit above them) | a diagnostic's primary location is in the suite's coordinates |
 | the suite context: `with context test::suite()` and the driver | 8 (one per suite) | 3 | entry program top level |
-| hoisting bodies to the top level, ordering a "global" body first | every suite with rejections | 0 lines, but a layout rule | the static decision rounds' cost model ([Performance](#performance)) |
+| hoisting bodies to the top level, ordering a "global" body first | every suite with more than one rejection (representation.bot's single rejected body stays nested) | 0 lines, but a layout rule | the static decision rounds' cost model ([Performance](#performance)) |
 | a coroutine-log driver replacing `test-log` effects | 5 bodies (values), 2 (harness) | 7 | evaluation order observed through a yielding log |
 | two spellings of one program (destructured/explicit, method/free, elif/nested) | 9 Tcl tests | a whole body each | the Tcl tests looped over spellings; a body is one program |
 
@@ -712,7 +756,7 @@ own milestone.
    identical placeholder lines.
 4. **Locations are absolute suite coordinates.** `rejects_at` pins line and
    column of the suite file; every edit above a pinned test moves it (the
-   porters re-derived 36 `rejects_at` and 8 custom locations with scripts).
+   porters re-derived 36 `rejects_at` and 14 custom locations with scripts).
    A Tcl test pins a location in a tiny program. A CompilerError location
    relative to its block's origin would remove the brittleness (a compiler
    change: [Recommendations](#recommendations)).
@@ -725,7 +769,8 @@ own milestone.
    (~260 s); with bodies hoisted to the top level and the one "global" body
    placed first, 11 and 26 builds. The suites' layout follows the compiler's
    cost model -- a rule a test author must know.
-6. **No message, related-location or substring matcher.** Four suites
+6. **No message, related-location or substring matcher.** Six suites
+   (collections, diagnostics, errors, modules, ownership, representation)
    wrote their own on `test::case` (24 Tcl tests needed one). Candidates
    for the library: `rejects_message`, `rejects_related`, and a String
    `contains`.
@@ -744,8 +789,10 @@ own milestone.
    (UNWRAPPED-YIELD at the registration), an untyped helper given an affine
    argument inside it is AFFINE-GENERIC-NESTED-UNSUPPORTED (such helpers live
    at the suite's top level), and a body whose *value* is affine cannot be
-   registered (the helpers describe the value through an `any` field:
-   AFFINE-ERASURE-UNSUPPORTED at the registration).
+   registered: `test::value` compares it with `==`
+   (AFFINE-EQUALITY-UNSUPPORTED) and the helpers that describe it pass it
+   through an `any` field (AFFINE-ERASURE-UNSUPPORTED), both at the
+   registration.
 10. **Suite-wide imports shape every body.** A body's method calls resolve
     against the suite's imports: `import str` (for a message matcher) adds
     `str::length` as a candidate of `queue.length()`, turning a block's
@@ -784,7 +831,7 @@ NOT-BOOLEAN (`fn f(x: int): if x: ...`) and a direct call with the wrong
 arity (`zero(1)`) while the indirect forms are static TYPE errors (both
 documented as run-time-only, STATIC-COMPILE.md's census, but asymmetric); a
 closure capturing a context parameter observes the context's later
-mutations (a snapshot needs an explicit `snap = suite.tests`); the stale
+mutations (a snapshot needs an explicit `snap = suite.cases`); the stale
 mutant `stdout-stderr-swapped` of `audit/contexts/tools/mutate.tcl` no
 longer applies (lib/linux/io.bot changed); `native::allocationText` omits
 Struct, Coroutine and ListPlan from its "by kind" line.

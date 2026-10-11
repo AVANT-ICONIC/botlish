@@ -187,6 +187,8 @@ fn register_mixed():
     test::rejects_any("unbound, any diagnostic", unbound)
     test::value("value expected, block rejected", 1, unbound)
     test::rejects("rejection expected, block accepted", compiler::DiagnosticCode::Unbound, adds)
+    test::rejects_at("located rejection expected, block accepted", compiler::DiagnosticCode::Unbound, 23, 13, adds)
+    test::rejects_any("any rejection expected, block accepted", adds)
     fn lists() errors compiler::CompilerError:
         static compile:
             [1, 2].append(3)
@@ -229,13 +231,19 @@ FAIL value expected, block rejected
 FAIL rejection expected, block accepted
   expected: compiler diagnostic Unbound
   actual: value 42
+FAIL located rejection expected, block accepted
+  expected: compiler diagnostic Unbound at line 23, column 13
+  actual: value 42
+FAIL any rejection expected, block accepted
+  expected: a compiler diagnostic
+  actual: value 42
 PASS lists
 PASS positive
 PASS positive, another value
 FAIL negative, failing
   expected: a negative number
   actual: 42
-7 passed, 6 failed}
+7 passed, 8 failed}
 
 # ---------------------------------------------------------------------------
 # Registration records; running executes
