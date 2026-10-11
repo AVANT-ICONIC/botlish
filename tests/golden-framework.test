@@ -123,13 +123,21 @@ proc gfReleases {source backend} {
     set before $::core::coroutines::nextId
     set ::core::coroutines::releaseCalls {}
     try {
-        set outcome [outcomeUnderHir $backend $hir]
+        if {$backend eq "compile-hir"} {
+            # main.tcl's -backend compile: the Tcl compiler compiling the HIR
+            # itself (outcomeUnderHir's compile runs the core IR it lowers to).
+            set outcome [list value [core::value::show [core::compiler::evalHir $hir] 1 1]]
+        } else {
+            set outcome [outcomeUnderHir $backend $hir]
+        }
         set created [expr {$::core::coroutines::nextId - $before}]
+        # In release order: a release a mutant delays (to the program's end)
+        # shows as a moved id.
         set released [lmap id $::core::coroutines::releaseCalls {expr {$id - $before}}]
     } finally {
         set ::core::coroutines::releaseCalls none
     }
-    return [list [lindex $outcome 1] "created $created released [lsort -integer $released]"]
+    return [list [lindex $outcome 1] "created $created released $released"]
 }
 
 # The native coroutine census of SOURCE's run.
@@ -625,23 +633,30 @@ fn register_coroutine_cases(k: int):
             coroutine {first} = finite(k)
             first.n
     test::value("abandons", 1, abandons)
+    fn leaves_early() errors compiler::CompilerError:
+        static compile:
+            coroutine {step, first} = finite(k)
+            if first.n > 0:
+                return first.n
+            step().n
+    test::value("leaves early", 1, leaves_early)
 
 with context test::suite()
 register_coroutine_cases(1)
 test::report()
 }
 
-test gf-coroutine-cleanup {every coroutine a run creates -- the runner and each case's own, completed, failed and abandoned while suspended -- is released exactly once, deterministically, on the Tcl backends} -body {
-    lmap backend {interp compile} {gfReleases $gfCoroutineSuite $backend}
-} -result {{{["PASS completes", "PASS fails, handled", "PASS abandons", "3 passed, 0 failed"]} {created 4 released 1 2 3 4}} {{["PASS completes", "PASS fails, handled", "PASS abandons", "3 passed, 0 failed"]} {created 4 released 1 2 3 4}}}
+test gf-coroutine-cleanup {every coroutine a run creates -- the runner and each case's own, completed, failed, abandoned while suspended, and left suspended by an early return -- is released exactly once, deterministically and in order (each case's before the next case runs, the runner's last), on the Tcl backends: the interpreter, the Tcl compiler compiling the core IR, and the Tcl compiler compiling the HIR itself (main.tcl's -backend compile)} -body {
+    lmap backend {interp compile compile-hir} {gfReleases $gfCoroutineSuite $backend}
+} -result {{{["PASS completes", "PASS fails, handled", "PASS abandons", "PASS leaves early", "4 passed, 0 failed"]} {created 5 released 2 3 4 5 1}} {{["PASS completes", "PASS fails, handled", "PASS abandons", "PASS leaves early", "4 passed, 0 failed"]} {created 5 released 2 3 4 5 1}} {{["PASS completes", "PASS fails, handled", "PASS abandons", "PASS leaves early", "4 passed, 0 failed"]} {created 5 released 2 3 4 5 1}}}
 
-test gf-coroutine-cleanup-native {natively: four coroutines, four releases (two of them suspended: the abandoned case's and none other), none swept by the collector; the same under GC stress} -constraints linuxX86_64 -body {
+test gf-coroutine-cleanup-native {natively: five coroutines, five releases (the abandoned and the early-returning case's while suspended), none swept by the collector; the same under GC stress} -constraints linuxX86_64 -body {
     set plain [gfNativeCoroutines $gfCoroutineSuite]
     set stressed [withGcStress {gfNativeCoroutines $gfCoroutineSuite}]
     list [dict get $plain released] [dict get $plain sweptSuspended] \
         [dict get $stressed released] [dict get $stressed sweptSuspended] \
         [expr {[dict get $plain stacksMapped] + [dict get $plain stacksReused]}]
-} -result {4 0 4 0 4}
+} -result {5 0 5 0 5}
 
 
 # ---------------------------------------------------------------------------
@@ -925,15 +940,78 @@ test gf-precision-method-resolution {method resolution: a typed receiver picks i
         [gfPrecision "" "fn first(v):\n    v.length()\nfirst(\[1\])" 1]
 } -result {{{ok 2} {PASS probe}} {AMBIGUOUS-METHOD-CALL {rejected AmbiguousMethodCall}}}
 
-# The NIR text of function NAME in the native lowering of SOURCE, without
-# its HIR expression ids and its function number.
+# The NIR of every function of HIR's native lowering, a dict name -> text:
+# its header and lines without HIR expression ids, with every program-wide
+# number replaced by what it numbers -- a callee or function value by its
+# name, a struct shape by its declaration, a declared error by its name
+# (from any `faildeclared N "NAME"` of the program) or else by its order of
+# appearance -- since a suite's program also holds lib/test.bot's functions,
+# shapes and compiler::CompilerError. Instances of one name are keyed NAME,
+# NAME#2, ...; references name the function without the suffix. (Lower HIR
+# right after compiling it: the lowering reads the latest compilation's
+# module state.)
+proc gfNirFunctions {hir} {
+    set functions [dict create]
+    set numbers [dict create]
+    set errors [dict create]
+    set shapes [dict create]
+    set current ""
+    set inside 0
+    foreach line [split [native::nir $hir] \n] {
+        if {[regexp {^shape (\d+) (.*)$} $line -> number shape]} {
+            dict set shapes $number $shape
+        }
+        if {[regexp {^func (\d+) "([^"]*)" (.*)$} $line -> number name header]} {
+            # Instances of one function share its name: number the later ones.
+            set base $name
+            for {set k 2} {[dict exists $functions $name]} {incr k} { set name "$base#$k" }
+            set current $name
+            set inside 1
+            dict set numbers $number $base
+            dict set functions $name [list [regsub -all { ?@e\d+} $header ""]]
+        } elseif {$line eq "end"} {
+            set inside 0
+        } elseif {$inside} {
+            dict lappend functions $current [regsub -all { ?@e\d+} $line ""]
+        }
+        if {[regexp {faildeclared (\d+) "([^"]+)"} $line -> number name]} {
+            dict set errors $number $name
+        }
+    }
+    set result [dict create]
+    dict for {name lines} $functions {
+        set order [dict create]
+        set mapped {}
+        foreach line $lines {
+            if {[regexp {^(.*\m(?:call|callenv|closure|tailcall|fnvalue)) (\d+)(.*)$} $line -> before number after] && [dict exists $numbers $number]} {
+                set line "$before <[dict get $numbers $number]>$after"
+            }
+            if {[regexp {^(.*\mstructnew) (\d+)(.*)$} $line -> before number after] && [dict exists $shapes $number]} {
+                set line "$before <[dict get $shapes $number]>$after"
+            }
+            if {[regexp {^(.*\m(?:declarederroreq|faildeclared)) (\d+)(.*)$} $line -> before number after]} {
+                if {[dict exists $errors $number]} {
+                    set line "$before <[dict get $errors $number]>$after"
+                } else {
+                    if {![dict exists $order $number]} { dict set order $number "e[dict size $order]" }
+                    set line "$before <[dict get $order $number]>$after"
+                }
+            }
+            lappend mapped $line
+        }
+        dict set result $name [join $mapped \n]
+    }
+    return $result
+}
+
+# The NIR text of function NAME in the native lowering of SOURCE
+# (gfNirFunctions).
 proc gfFunctionNir {source name} {
-    set hir [gfCompile $source]
-    set text [native::nir $hir]
-    if {![regexp "func \\d+ \"$name\" (\[^\n\]*)\n(.*?)\nend" $text -> header body]} {
+    set functions [gfNirFunctions [gfCompile $source]]
+    if {![dict exists $functions $name]} {
         error "no function $name"
     }
-    return [regsub -all { ?@e\d+} "$header\n$body" ""]
+    return [dict get $functions $name]
 }
 
 test gf-nir-body-identical {an accepted golden body is its code: natively, the body function's NIR equals the same closure's written without the framework and without static compile (only the HIR ids differ)} -constraints linuxX86_64 -body {
@@ -965,6 +1043,66 @@ register_nir(7)
     list [expr {$a eq $b}] [regexp {op rimul} $a] [regexp {static|compiler|CompilerError} $a]
 } -result {1 1 0}
 
+
+# SOURCE with every non-empty line indented by N spaces.
+proc gfIndent {source n} {
+    set pad [string repeat " " $n]
+    return [join [lmap line [split $source \n] {if {$line eq ""} {string cat} else {string cat $pad $line}}] \n]
+}
+
+# The native allocations of HIR at the functions NAMES (by function and
+# object kind: a dict "FUNCTION KIND" -> count), one run.
+proc gfFunctionAllocations {hir names} {
+    set counts [dict create]
+    foreach site [dict get [native::allocationReport $hir sites] sites] {
+        set function [dict get $site func]
+        regsub {#\d+$} $function "" function
+        if {$function in $names} {
+            dict incr counts "$function [dict get $site objectKind]" [dict get $site allocations]
+        }
+    }
+    return $counts
+}
+
+# A migrated golden body, CODE (with the suite-level IMPORTS and DECLS it
+# needs; a registration function taking PARAMS, called with ARGS, which the
+# body may capture), compiled twice: inside the convention (a body declaring
+# compiler::CompilerError around a static compile: block, registered with
+# test::value) and plainly (the same code as an ordinary nested function,
+# called once through an untyped parameter). Returns the suite's verdict
+# line, whether the NIR of each of NAMES (the body and the functions its
+# block declares; "" for the anonymous function a coroutine construction
+# makes) is equal in both programs, and whether their native allocations
+# are.
+proc gfMigratedBody {imports decls params args code expected names} {
+    set suite "import compiler\n${imports}import test\n\n$decls\nfn register_nir($params):\n    fn body() errors compiler::CompilerError:\n        static compile:\n[gfIndent $code 12]\n    test::value(\"nir\", $expected, body)\n\nwith context test::suite()\nregister_nir($args)\ntest::report()\n"
+    set plain "${imports}\n$decls\nfn keep(f):\n    f()\n\nfn register_nir($params):\n    fn body():\n[gfIndent $code 8]\n    keep(body)\n\nregister_nir($args)\n"
+    set hir [gfCompile $suite]
+    set suiteNir [gfNirFunctions $hir]
+    set suiteAllocations [gfFunctionAllocations $hir $names]
+    set verdict [lindex [lindex [golden::run $hir cranelift] 1] 0]
+    set hir [gfCompile $plain]
+    set plainNir [gfNirFunctions $hir]
+    set plainAllocations [gfFunctionAllocations $hir $names]
+    # A name the library uses too (test::value's nested check) has several
+    # instances in the suite's program: one of them must equal the plain one.
+    set equal [lmap name $names {
+        set texts [dict values [dict filter $suiteNir script {key -} {regexp "^[string map {. \\.} $name](#\\d+)?\$" $key}]]
+        expr {[dict exists $plainNir $name] && [dict get $plainNir $name] in $texts}
+    }]
+    return [list $verdict $equal [expr {$suiteAllocations eq $plainAllocations}]]
+}
+
+test gf-nir-migrated-bodies {representative migrated golden bodies are their code: for a closure (values.bot 03-closure), closures made per loop iteration (loop-in-closure-per-iteration), an error propagated through a declaring caller and handled (errors-propagation-through-declaring-caller) and a coroutine protocol (ownership.bot co-principal), every function the body defines has the same native NIR, and the same native allocations, as the same code written plainly without the framework and without static compile} -constraints linuxX86_64 -body {
+    set cases [list \
+        closure {} {} {} {} "fn make_adder(x):\n    fn add(y):\n        x + y\n\n    add\n\nadd10 = make_adder(10)\nadd10(32)" 42 {body make_adder add} \
+        loop-closures {} {} {} {} "fs = loop x in \[1, 2, 3\]:\n    fn f():\n        x\n    f\nresults = loop g in fs:\n    g()\nresults" {[1, 2, 3]} {body f} \
+        handled-errors {} "error TooSmall\nerror TooBig\n" "big: int" 20 "fn check(n) -> int errors TooSmall, TooBig:\n    if n < 0:\n        fail TooSmall\n    else:\n        if n > 10:\n            fail TooBig\n        else:\n            n\nfn middle(n) -> int errors TooSmall, TooBig:\n    check(n)\nr = middle(big):\n    on TooSmall:\n        -1\n    on TooBig:\n        -2\nr" -2 {body check middle} \
+        coroutine "import coroutine\n" "struct Message:\n    value: int\n\nstruct Event:\n    value: int\n" {} {} "fn deep(base: int, resume Message) -> int:\n    message = yield Event {value: base}\n    message.value\nfn worker(base: int, resume Message) -> Event:\n    x = deep(base)\n    message = yield Event {value: x}\n    return Event {value: message.value}\ncoroutine {step, first} = worker(10)\nsecond = step(Message {value: 20})\nfinal = step(Message {value: 30})\nagain = step(Message {value: 999})\n\[first.value, second.value, final.value, again.value, coroutine::done?(step)\]" {[10, 20, 30, 30, true]} {body deep worker {}}]
+    lmap {label imports decls params args code expected names} $cases {
+        list $label {*}[gfMigratedBody $imports $decls $params $args $code $expected $names]
+    }
+} -result {{closure {PASS nir} {1 1 1} 1} {loop-closures {PASS nir} {1 1} 1} {handled-errors {PASS nir} {1 1 1} 1} {coroutine {PASS nir} {1 1 1 1} 1}}
 
 test gf-fuzz-bounded {a bounded run of the framework's model-based fuzzer (audit/golden/tools/fuzz.tcl): generated suites, every backend, the report its independent model predicts} -body {
     set output [exec [info nameofexecutable] [file join $::projectRoot audit golden tools fuzz.tcl] -n 3 -seed 101 2>@1]
