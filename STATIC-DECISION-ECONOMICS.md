@@ -491,7 +491,53 @@ byte-identical.
 
 ### Mutation
 
-TBD-MUTANTS
+`audit/static-decisions/tools/mutate.tcl`: 17 mutants, 17 killed. Twelve
+are semantic (the batched scheduler would decide another program), five
+economic (the decisions stay right, the builds grow: the milestone's
+contract is economic, so these are bugs too and the build-count tests kill
+them). Detectors: `tests/static-economics.test`, and the fuzzer (6
+programs, seed 5).
+
+| mutant | kind | killed by tests | fuzzer |
+|---|---|---|---|
+| `decide-dependents-together` (every failing site committed in the build that found it) | semantic | se-equal-erased-consumer, -nested-checked, -ownership-siblings, -untyped-capture, se-simulate-*, ... | survived |
+| `unknown-does-not-block` (an unknown site does not hold back its component) | semantic | se-simulate-component-waits | survived |
+| `erased-contributors-ignored` (the erased contract depends on no contributor) | semantic | se-equal-erased-consumer | survived |
+| `contribution-not-discarded` (an erasing call inside a block is no dependency on it) | semantic | se-equal-erased-consumer | survived |
+| `nested-child-ignored` (a block does not depend on its nested blocks) | semantic | se-equal-nested-checked | survived |
+| `position-ignored` (no dependency on the code around a block) | semantic | se-equal-erased-consumer, -nested-checked, -ownership-siblings, -untyped-capture, se-trace | survived |
+| `precedence-changed` (a batched rejection carries its last diagnostic) | semantic | se-simulate-independent | killed |
+| `internal-ids-ignored` (an id-bearing message committed from any build) | semantic | se-equal-internal-ids | survived |
+| `untyped-parameter-ignored` (an untyped parameter's contract ignores nested uses) | semantic | se-equal-untyped-capture, se-trace | survived |
+| `stale-method-reuse` (a decision reused though a rejected site reaches the call) | semantic | se-method-invalidated | survived |
+| `method-key-alias` (a reused decision applied by name) | semantic | se-equal-corpus, se-method-reuse | killed |
+| `same-choices-unchecked` (a decision build taken for the initial one whatever the choices) | semantic | se-build-reuse-identical, se-method-reuse | survived |
+| `one-commit-per-build` (the sequential schedule) | economic | se-builds-* (6), se-equal-independent, ... | killed |
+| `single-component` (an unknown site holds back every later one) | economic | se-simulate-component-waits, se-simulate-independent | survived |
+| `every-region-consumes` (the legacy GlobalChannels) | economic | se-builds-contributor-checked | killed |
+| `never-reuse-methods` | economic | se-method-reuse | survived |
+| `nested-same-unit` (the legacy units) | economic | se-builds-legacy-pathology, se-builds-type-nested, se-equal-independent, se-trace | killed |
+
+Two findings of the campaigns: `every-region-consumes` was at first killed
+only by the fuzzer's economic bound, so `se-builds-contributor-checked` now
+pins it deterministically; and hardening `seSame` (two compilations failing
+alike are no evidence) showed that three of `se-equal-corpus`'s five
+programs had never compiled -- Tcl's `\{` inside a braced list is two
+characters, so their struct literals and coroutine bindings parsed as a
+backslash -- and passed vacuously. They are rewritten, a namespaced-error
+program added, and the corpus now kills `method-key-alias` as well.
+
+The existing campaigns, on the final tree:
+
+| harness | mutants | killed |
+|---|---|---|
+| `audit/static-compile/tools/mutate.tcl` (three retargeted from the legacy code path to the batched one, same rules: `leaks-affine-move`, `warning-becomes-error`, `internal-becomes-compiler-error`) | 21 | 21 |
+| `audit/structural-contracts/tools/mutate.tcl` | 18 | 18 |
+| `audit/error-payloads/tools/mutate.tcl` (completion mutants included) | 44 | 44 |
+| `audit/affine/tools/mutate.tcl` | 29 | 29 |
+| `audit/coroutines/tools/mutate.tcl` (native mutants rebuilt privately) | 52 | 52 |
+
+TBD-GOLDEN-CHECK
 
 ### Regression
 
