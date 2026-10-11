@@ -424,7 +424,30 @@ TBD-QUIET
 
 `dump.tcl` (scratch; every site's outcome and reified diagnostic, the
 program's diagnostics, the final HIR text, the Core IR and the NIR) on both
-trees, the same files: TBD-DIFF.
+trees, the same files:
+
+| corpus | files | identical | differing |
+|---|---|---|---|
+| `examples/**/*.bot`, `bench/*.bot` (no static blocks: the build reuse alone) | 41 | 41 (39 with NIR) | 0 |
+| the eight golden suites (current layouts), the two old layouts of diagnostics.bot and ownership.bot, and 28 benchmark workloads (golden, mixed, erased, contract, probes, methods at 10 and 30 sites; a chain; a sequence) | 38 | 37 (32 with NIR) | 1 |
+
+(The library directory's path, which an UNKNOWN-NAMESPACE message names, is
+normalized.) The one difference is one internal id in one message:
+collections.bot's `b_field_call_ambiguous` is rejected with
+AMBIGUOUS-METHOD-CALL whose message names the receiver's exact callable type
+`block(e2024)` before and `block(e2023)` after -- in the site record, the
+reified `message` constant in HIR, Core IR and NIR alike, and nowhere else.
+The sequential reference gives `e2023`; the legacy scheduler gives `e2024`
+in the new tree too. The old procedure committed that rejection in the same
+round as an earlier failing block that was still a body in that build, so
+the expression ids before it were numbered over the earlier block's body
+rather than its reified failure: a message that did not follow the old
+procedure's own definition. The new scheduler holds such a rejection until
+the sequential order's build (the trace's internal-ids deferral; one round
+in collections.bot). The suites never compared it (`rejects_at` pins code
+and location). Every other site outcome, code, primary, related location and
+message, every program diagnostic, and every final HIR, Core IR and NIR is
+byte-identical.
 
 ### Mutation
 

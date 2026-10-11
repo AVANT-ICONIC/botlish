@@ -345,6 +345,21 @@ test se-builds-contributor-early {a contributor rejected by resolution leaves no
     list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
 } -result {{} {UNBOUND accepted} 2}
 
+test se-builds-contributor-checked {a contributor rejected by the checker beside 10 independent failures that consume nothing: all are rejected in the first build (2 rounds) -- independent blocks do not depend on what the program erases} -body {
+    set text $::seErased
+    append text [seSite contributor [concat $::seContributor [seTypeFail 99]]]
+    set names contributor
+    for {set i 0} {$i < 10} {incr i} {
+        append text [seSite t$i [seTypeFail $i]]
+        lappend names t$i
+    }
+    foreach name $names {
+        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    append text "0\n"
+    list [seSame $text] [lsort -unique [seOutcomes $text]] [lindex [seEcon $text] 0]
+} -result {{} TYPE 2}
+
 test se-method-reuse {method-style call decisions are reused across rounds: fewer trial builds than deciding afresh, and the audit (every seeded round built again unseeded) finds the same program} -body {
     set text "import compiler\nimport list\nimport str\n\n"
     set names {}
