@@ -217,6 +217,16 @@ foreach spec [dict get $options -mutants] {
         puts "    old failed: [llength $oldFailed] ([join [lrange [lsort -unique $oldFailed] 0 5] {, }])"
         puts "    new failed (related): [llength $newFailed] ([join [lrange [lsort -unique $newFailed] 0 5] {, }])"
         puts "    new failed (other rows): [llength $otherFailed] ([join [lrange [lsort -unique $otherFailed] 0 3] {, }]); suites not ok: [join $broken {, }]"
+        # The rows whose old test fails while their golden test does not:
+        # a port weaker for this mutant (the mutant may still be detected by
+        # the row's siblings), each to be explained in the manifest.
+        set weaker [lmap row $checked {
+            if {[dict get $old [oldKey $row]] ne "fail" || [dict get $new [newKey $row]] eq "fail"} continue
+            string cat [newKey $row] " (" [oldKey $row] ")"
+        }]
+        if {$weaker ne {}} {
+            puts "    rows weaker for this mutant: [join $weaker {; }]"
+        }
         flush stdout
         lappend results [list $spec $verdict]
     } finally {
