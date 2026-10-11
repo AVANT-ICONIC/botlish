@@ -175,7 +175,9 @@ proc goldentools::runTestFile {tree testFile timeout {match ""}} {
     set tmp [file tempdir botlish-golden-run]
     set args [list -tmpdir $tmp]
     if {$match ne ""} {
-        lappend args -match $match
+        # -verbose p: each test that passes prints "++++ NAME PASSED", so a
+        # caller can tell a passing test from one that never ran.
+        lappend args -match $match -verbose p
     }
     try {
         lassign [run $timeout tclsh9.0 [file join $tree $testFile] {*}$args] status output
@@ -189,7 +191,8 @@ proc goldentools::runTestFile {tree testFile timeout {match ""}} {
     } else {
         set incomplete "[file tail $testFile]: [lastLine $output]"
     }
-    return [list [lsort -unique $failed] $passed $incomplete]
+    set passedNames [lmap {- n} [regexp -all -inline -line {^\+\+\+\+ (\S+) PASSED$} $output] {set n}]
+    return [list [lsort -unique $failed] $passed $incomplete [lsort -unique $passedNames]]
 }
 
 # Runs the golden suites SUITES (paths relative to TREE; every

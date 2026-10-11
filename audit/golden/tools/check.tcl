@@ -68,7 +68,9 @@ proc oldTestsOf {rows} {
 }
 
 # Runs the old tests (dict file -> names) in TREE: a dict "file test" ->
-# pass|fail, and the wall seconds of each file's run.
+# pass|fail|not-run (a name tcltest reported neither passing nor failing:
+# misspelled, or skipped by a constraint), and the wall seconds of each
+# file's run.
 proc runOld {tree byFile timeout} {
     set verdicts [dict create]
     set seconds [dict create]
@@ -77,10 +79,11 @@ proc runOld {tree byFile timeout} {
         # some test names contain.
         set patterns [lmap n $names {string map {* \\* ? \\? [ \\[ ] \\]} $n}]
         set start [clock milliseconds]
-        lassign [goldentools::runTestFile $tree $file $timeout $patterns] failed passed incomplete
+        lassign [goldentools::runTestFile $tree $file $timeout $patterns] failed passed incomplete passedNames
         dict set seconds $file [expr {([clock milliseconds] - $start) / 1000.0}]
         foreach n $names {
-            dict set verdicts "$file $n" [expr {$incomplete ne "" || $n in $failed ? "fail" : "pass"}]
+            dict set verdicts "$file $n" [expr {$incomplete ne "" || $n in $failed ? "fail"
+                : $n in $passedNames ? "pass" : "not-run"}]
         }
     }
     return [list $verdicts $seconds]
@@ -184,7 +187,11 @@ foreach spec [dict get $options -mutants] {
         # aborts, or the backends disagree) -- a detection without
         # per-test attribution.
         lassign [runNew $tree $rows $timeout $backends] new states -
-        set oldFailed [lmap row $checked {if {[dict get $old [oldKey $row]] eq "pass"} continue; oldKey $row}]
+        set oldFailed [lmap row $checked {if {[dict get $old [oldKey $row]] ne "fail"} continue; oldKey $row}]
+        set oldNotRun [lmap row $checked {if {[dict get $old [oldKey $row]] ne "not-run"} continue; oldKey $row}]
+        if {$oldNotRun ne {}} {
+            puts "    old tests that did not run: [join [lsort -unique $oldNotRun] {, }]"
+        }
         set newFailed [lmap row $checked {if {[dict get $new [newKey $row]] eq "pass"} continue; newKey $row}]
         set otherFailed [lmap row $rows {if {$row in $checked || [dict get $new [newKey $row]] eq "pass"} continue; newKey $row}]
         set broken [lmap {suite state} $states {if {$state in {ok failed}} continue; string cat $suite = $state}]
