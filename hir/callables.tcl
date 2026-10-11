@@ -36,7 +36,11 @@
 # callable flowing into a position whose type is a structural supertype of
 # it (an if/break/return join of compatible callables, a declared Fn
 # parameter or result, a List[Fn] element) keeps its obligations checkable:
-# only its identity is forgotten (Preserves). A structural type that still
+# only its identity is forgotten (Preserves). The same positions are where
+# the completion analysis checks what the type does not show -- what the
+# callable raises through a callable it captured or receives -- against the
+# contract (hir::completions::Subsume, the verified contract boundary), so
+# that the contract bounds every call through it. A structural type that still
 # carries an obligation -- a non-any argument type or a non-empty error
 # set, both of which can only have come from a typed Botlish block or a
 # source annotation, since a native's structural arguments are all any

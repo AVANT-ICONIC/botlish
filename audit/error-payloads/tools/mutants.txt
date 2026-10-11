@@ -292,11 +292,13 @@
 @@ untyped-callable-reports-no-errors an untyped call whose callee the walk cannot identify contributes no errors and stays precise (the original hole)
 ## hir/completions.tcl
 <<<<
-                set extra [lmap name $erased {expr {$name in $errors ? [continue] : $name}}]
-                if {$extra ne {}} {
+        unknown {
+            set errors $erased
+            dict set ctx incomplete 1
+        }
 ====
-                set extra [lmap name $erased {expr {$name in $errors ? [continue] : $name}}]
-                if {0 && $extra ne {}} {
+        unknown {
+        }
 >>>>
 
 @@ precision-flag-dropped-on-return a summary never reports that its walk lost precision (the flag is discarded on return)
@@ -385,14 +387,9 @@
 @@ recovery-reports-no-errors an exact callable reaching an untyped parameter is recognized but its errors are dropped (the untyped call stays charged nothing)
 ## hir/completions.tcl
 <<<<
-                set errors [lsort -unique [concat $errors $sub]]
-                if {$incomplete} {
-                    dict set ctx incomplete 1
-                }
+            lassign [Recover hir ctx $guard $callee [lindex $fact 1] $argExprs $argRanges $argFacts] errors incomplete
 ====
-                if {$incomplete} {
-                    dict set ctx incomplete 1
-                }
+            lassign [Recover hir ctx $guard $callee [lindex $fact 1] $argExprs $argRanges $argFacts] _ incomplete
 >>>>
 
 # ---------------------------------------------------------------------------

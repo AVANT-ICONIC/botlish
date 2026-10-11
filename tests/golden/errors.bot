@@ -130,6 +130,33 @@ fn b_original() errors compiler::CompilerError:
                     -1
         0
 
+# hoc-original-payload-free-both-handled: handling both errors is accepted
+# and runs. The accepted body passes the error-declaring raise through the
+# untyped call, so the final program's erased-callable contract carries
+# HocE1 and HocE2: before the verified contract boundary
+# (VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md) that was charged to the runner's
+# (c.run)() and the suite did not compile (NEW-FRAMEWORK-LIMITATION, C3);
+# now that call is bounded by its contract, errors: [].
+fn b_original_both() errors compiler::CompilerError:
+    static compile:
+        fn raise(x) -> int errors HocE1, HocE2:
+            if x == 1:
+                fail HocE1
+            if x == 2:
+                fail HocE2
+            0
+        fn call(f, x):
+            f(x)
+        fn generic(x) -> int errors HocE1, HocE2:
+            call(raise, x)
+        fn bad(x):
+            generic(x):
+                on HocE1:
+                    -2
+                on HocE2:
+                    -1
+        [bad(0), bad(1), bad(2)]
+
 # ---------------------------------------------------------------------------
 # errors.test (registered by register_explicit_errors_tests, after the file's
 # subject, explicit error completions: register_errors_tests is the suite's)
@@ -251,12 +278,12 @@ fn register_explicit_errors_tests(big: int):
     test::value("errors-propagation-through-declaring-caller", -2, b_propagation)
 
     # The bodies above (top-level: they capture nothing).
-    test::rejects_at("errors-rejects-unhandled-in-declaring-function", compiler::DiagnosticCode::UnhandledError, 151, 13, b_unhandled_in_declaring)
+    test::rejects_at("errors-rejects-unhandled-in-declaring-function", compiler::DiagnosticCode::UnhandledError, 178, 13, b_unhandled_in_declaring)
     test::rejects("errors-rejects-fail-of-undeclared-name", compiler::DiagnosticCode::UndeclaredError, b_undeclared_name)
     test::value("errors-generic-bounded-fixture/safe", 15, b_bounded_safe)
     test::rejects("errors-generic-bounded-fixture/too-small", compiler::DiagnosticCode::KnownError, b_bounded_too_small)
     test::rejects("errors-generic-bounded-fixture/too-large", compiler::DiagnosticCode::KnownError, b_bounded_too_large)
-    test::rejects_at("errors-generic-bounded-fixture/dynamic", compiler::DiagnosticCode::UnhandledError, 213, 13, b_bounded_dynamic)
+    test::rejects_at("errors-generic-bounded-fixture/dynamic", compiler::DiagnosticCode::UnhandledError, 240, 13, b_bounded_dynamic)
     test::rejects("errors-byte-from-int-known-failure-with-handler-still-rejected", compiler::DiagnosticCode::KnownError, b_byte_known_failure)
 
 # ---------------------------------------------------------------------------
@@ -448,6 +475,7 @@ fn register_higher_order_completions_tests():
     # The body is the first function of this file (top-level: it captures
     # nothing; see there).
     err_rejects_message("hoc-original-payload-free", compiler::DiagnosticCode::UnhandledError, 128, 13, "this call may produce the declared error \"HocE1\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_original)
+    test::value("hoc-original-payload-free-both-handled", [0, -2, -1], b_original_both)
 
     # hoc-precise-without-erasure: exact narrowing -- maybe(k, 1) can only
     # fail HocE1, so a handler for HocE1 alone is enough.

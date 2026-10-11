@@ -3002,16 +3002,22 @@ proc hir::types::Call {hirVar ctxVar e} {
     # The declared errors this call may propagate (EXPLICIT-ERROR-
     # COMPLETIONS.md), for hir/errorsets.tcl. Only an exact, directly-known
     # callee (target {block ExprId}, or a root native whose registry entry
-    # declares -errors: `argv`) or a structural one (its contract's declared
-    # errors) is charged with a nonempty set here; any other callee (an
-    # unresolved dynamic dispatch through any/a bare kind) is charged none at
-    # this type level. That is not a proof it raises nothing:
-    # hir/callables.tcl's escape audit rejects every erasure of an
+    # declares -errors: `argv`) or a structural one is charged with a
+    # nonempty set here. For a structural Fn or Coroutine callee it is the
+    # callable contract's declared error set: a valid semantic upper bound,
+    # because every value of that type was checked against the contract
+    # where it acquired it -- its declared errors by subtyping, what it
+    # raises through a callable it captured or receives by the verified
+    # contract boundary (hir/completions.tcl's Subsume) -- so no other error
+    # is ever added to it. Any other callee (an unresolved dynamic dispatch
+    # through any/a bare kind: uncontracted) is charged none at this type
+    # level. That is not a proof it raises nothing -- unknown never means
+    # empty: hir/callables.tcl's escape audit rejects every erasure of an
     # error-bearing callable except into an untyped parameter of a semantic
-    # instance (hir/semantic.tcl), so such a callee may be one after all.
-    # The completion analysis (hir/completions.tcl, "Precision and the
-    # erased-callable contract") and hir/affine.tcl's error edges charge what
-    # it may raise.
+    # instance (hir/semantic.tcl) or of a callable given a structural type,
+    # so such a callee may be one after all. The completion analysis
+    # (hir/completions.tcl, "Precision and the erased-callable contract") and
+    # hir/affine.tcl's error edges charge what it may raise.
     set calleeErrors {}
     if {[lindex $target 0] eq "block"} {
         set calleeErrors [dict get $hir exprs [lindex $target 1] declaredErrors]
@@ -3036,7 +3042,8 @@ proc hir::types::Call {hirVar ctxVar e} {
         # A structural callee's declared error contract (a Fn's, or a
         # coroutine handle's: the errors a segment may end with): every
         # error it permits may escape this call, since which implementation
-        # runs (and so any narrower proof about it) is unknown here.
+        # runs (and so any narrower proof about it) is unknown here -- and no
+        # error it does not permit can (above).
         set calleeErrors [dict get [Contract $calleeType] errors]
     }
     dict set hir exprs $e calleeErrors $calleeErrors

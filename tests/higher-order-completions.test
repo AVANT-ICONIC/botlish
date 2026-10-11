@@ -72,7 +72,7 @@ fn make(f):
         f(y)
     inner
 
-fn use(kf: Fn{args: [int], return: any, errors: []}, x: int):
+fn use(kf: Fn{args: [int], return: any, errors: [E1, E2, E3]}, x: int) errors E1, E2, E3:
     kf(x)
 
 fn rec(f, n: int, x):
@@ -85,6 +85,11 @@ fn rec(f, n: int, x):
 
 # The paths of the corpus: NAME -> {PREAMBLE CALL}: the handled call is CALL
 # (with `k` the selector), after PREAMBLE's statements in the same function.
+# `structural` passes a closure that calls an erased callable through a
+# structural Fn parameter whose contract admits what it raises: the verified
+# contract boundary (STATIC-COMPLETION-PROOFS.md) bounds the call by that
+# contract. (With `errors: []` the closure does not fit the contract at all:
+# hoc-structural-boundary below.)
 set hocPaths {
     direct      {{} {call(raise, k)}}
     declaring   {{} {generic(k)}}
@@ -233,6 +238,19 @@ foreach path [dict keys $hocPaths] {
         sourceAgree [hocProgram $path {E3 E1 E2}]
     } -result {value {[[0], ["E1"], ["E2", 20], ["E3", 30]]}}
 }
+
+# The structural path as it was first written: `use`'s contract is
+# `errors: []`, and the closure make(raise) calls raise through its capture.
+# Its type says it declares nothing, but it raises E1, E2 and E3: it does not
+# fit the contract it is given, so the program is rejected where it acquires
+# the structural type (the verified contract boundary,
+# VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md) -- whatever handles the call to `use`.
+# Before that boundary, the call was charged the erased-callable contract
+# instead (the C3 precision gap of GOLDEN-TEST-FRAMEWORK.md).
+test hoc-structural-boundary {a closure carrying erased errors given a Fn type whose contract does not admit them is a TYPE error at the argument, handled or not} -body {
+    set text [string map {"errors: \[E1, E2, E3\]\}, x: int) errors E1, E2, E3:" "errors: \[\]\}, x: int):"} [hocProgram structural {E1 E2 E3}]]
+    list [regexp {errors: \[\]\}, x: int\):} $text] [hocDiagnostics $text]
+} -result {1 {{TYPE observe E1} {TYPE observe E2} {TYPE observe E3}}}
 
 test hoc-wrong-handler-specialized {the generic path on Cranelift with and without specialization: a wrong handler is never accepted, the right ones run identically} -body {
     list [hocKinds [hocProgram declaring {E2 E3}]] \

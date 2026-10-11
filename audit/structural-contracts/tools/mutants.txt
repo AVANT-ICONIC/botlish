@@ -1,0 +1,251 @@
+# Mutants of the verified callable contract boundary
+# (audit/structural-contracts/tools/mutate.tcl;
+# VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md): the mutants the milestone brief
+# names (item 52), each a deliberate bug in the completion analysis
+# (hir/completions.tcl) or its one consumer outside it, ownership's error
+# edges (hir/affine.tcl). Two families: the contract bound widened again (C3
+# back, one transport or path at a time), and the bound trusted where nothing
+# proved it (the boundary check, the possible errors of an untyped input,
+# contravariant erasure) -- with the dangerous overcorrection, every
+# unidentified call charged nothing, which the old soundness tests kill.
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. Lines starting with # outside an edit are
+# comments.
+
+@@ structural-call-adds-erased a call through a structural Fn is still charged the erased-callable contract beside its contract (C3 itself)
+## hir/completions.tcl
+<<<<
+                set errors [Within [lindex $fact 1] $contract]
+            }
+        }
+        return [list structural $errors]
+====
+                set errors [Within [lindex $fact 1] $contract]
+            }
+        }
+        return [list structural [lsort -unique [concat $errors $erased]]]
+>>>>
+
+@@ structural-empty-only only an `errors: []` contract is trusted; a call through a nonempty contract still widens by the erased-callable contract
+## hir/completions.tcl
+<<<<
+                set errors [Within [lindex $fact 1] $contract]
+            }
+        }
+        return [list structural $errors]
+====
+                set errors [Within [lindex $fact 1] $contract]
+            }
+        }
+        return [list structural [expr {$contract eq {} ? $errors : [lsort -unique [concat $errors $erased]]}]]
+>>>>
+
+@@ structural-short-name the boundary compares error identities by short name: a callable raising b::Failed fits a contract of a::Failed
+## hir/completions.tcl
+<<<<
+            if {$name ni $shown} {
+====
+            if {[hir::errordecls::shortName $name] ni [lmap s $shown {hir::errordecls::shortName $s}]} {
+>>>>
+
+@@ field-fixed-param-widens a call through a structural field is bounded, but one through a parameter still widens by the erased-callable contract
+## hir/completions.tcl
+<<<<
+                set errors [Within [lindex $fact 1] $contract]
+            }
+        }
+        return [list structural $errors]
+====
+                set errors [Within [lindex $fact 1] $contract]
+            }
+        }
+        if {[hir::kind $hir $callee] eq "ref" && [hir::get $hir $callee binding] ne ""
+                && [dict get [hir::binding $hir [hir::get $hir $callee binding]] kind] eq "param"} {
+            set errors [lsort -unique [concat $errors $erased]]
+        }
+        return [list structural $errors]
+>>>>
+
+@@ param-fixed-field-widens a call through a structural parameter is bounded, but one through a field, element or result still widens
+## hir/completions.tcl
+<<<<
+                set errors [Within [lindex $fact 1] $contract]
+            }
+        }
+        return [list structural $errors]
+====
+                set errors [Within [lindex $fact 1] $contract]
+            }
+        }
+        if {[hir::kind $hir $callee] ne "ref"} {
+            set errors [lsort -unique [concat $errors $erased]]
+        }
+        return [list structural $errors]
+>>>>
+
+@@ handle-still-widens EvalCall trusts the contract, but a handled structural call (EvalHandle) still widens
+## hir/completions.tcl
+<<<<
+            set normal 1
+            set errors [lindex $indirect 1]
+====
+            set normal 1
+            set errors [lindex $indirect 1]
+            if {[hir::types::IsFn $calleeType]} {
+                set errors [lsort -unique [concat $errors [ErasedErrors $hir]]]
+            }
+>>>>
+
+@@ affine-edges-still-widen completion trusts the contract, but ownership's error edges of a structural call still add the erased-callable contract
+## hir/completions.tcl
+<<<<
+        edge { return [dict exists $transparent [lindex $how 1]] }
+    }
+    return 0
+}
+====
+        edge { return [dict exists $transparent [lindex $how 1]] }
+    }
+    return [hir::types::IsFn [hir::typeOf $hir [dict get $node callee]]]
+}
+>>>>
+
+@@ fact-widens-contract a recovered exact callable's effective errors widen a structural call beyond its contract (the transparent-closure rule of the earlier milestone)
+## hir/completions.tcl
+<<<<
+                set errors [Within $sub $contract]
+====
+                set errors [lsort -unique [concat $contract $sub]]
+>>>>
+
+@@ fallback-widens-contract a recursion or budget fallback (every let-through, Carried) charges a value only a structural contract bounds the erased-callable contract instead of its contract
+## hir/completions.tcl
+<<<<
+            return [list [lindex $fact 1] 0]
+        }
+        block {
+====
+            return [list [lsort -unique [concat [lindex $fact 1] [ErasedErrors $hir]]] 1]
+        }
+        block {
+>>>>
+
+@@ native-factory-widens mutable_array::generate with a factory of structural type is still charged the erased-callable contract
+## hir/completions.tcl
+<<<<
+            set errors [lsort -unique [concat $errors $extra]]
+        }
+        return [list 1 $errors {}]
+====
+            set errors [lsort -unique [concat $errors $extra]]
+            if {[hir::types::IsFn [hir::typeOf $hir $factory]]} {
+                set errors [lsort -unique [concat $errors [ErasedErrors $hir]]]
+            }
+        }
+        return [list 1 $errors {}]
+>>>>
+
+@@ coroutine-contract-widens a resume through a structural coroutine type is still charged the erased-callable contract
+## hir/completions.tcl
+<<<<
+        return [list structural [hir::types::CoroutineErrors $calleeType]]
+====
+        return [list structural [lsort -unique [concat [hir::types::CoroutineErrors $calleeType] [ErasedErrors $hir]]]]
+>>>>
+
+@@ boundary-unchecked a structural contract is trusted without the effect check: whatever an exact callable raises through what it captured or receives is never compared with the contract it is given
+## hir/completions.tcl
+<<<<
+proc hir::completions::Subsume {hirVar ctxVar diagnose guard value final} {
+    upvar 1 $hirVar hir $ctxVar ctx
+====
+proc hir::completions::Subsume {hirVar ctxVar diagnose guard value final} {
+    upvar 1 $hirVar hir $ctxVar ctx
+    return
+>>>>
+
+@@ boundary-trusts-clean-captures the boundary takes a clean capture as carrying nothing (the deferral of an error charge applied to a contract, which is never charged again)
+## hir/completions.tcl
+<<<<
+        set fact [expr {$here ? [BindingFact $hir $ctx $c] : "unknown"}]
+        if {$fact in {clean unknown} && [CleanInput $hir $c]} {
+====
+        set fact [expr {$here ? [BindingFact $hir $ctx $c] : "unknown"}]
+        if {$fact eq "unknown" && [CleanInput $hir $c]} {
+>>>>
+
+@@ possible-ignores-call-sites an untyped parameter of a function only ever called is taken to hold nothing that raises (its calls' arguments ignored)
+## hir/completions.tcl
+<<<<
+            dict set equations $b $values
+====
+            dict set equations $b {}
+>>>>
+
+@@ coroutine-boundary-unchecked a coroutine handle leaving the body that constructed it is trusted to fit its Coroutine type without checking what its root raises through a callable passed to its construction
+## hir/completions.tcl
+<<<<
+proc hir::completions::SubsumeHandle {hirVar ctxVar guard value} {
+    upvar 1 $hirVar hir $ctxVar ctx
+====
+proc hir::completions::SubsumeHandle {hirVar ctxVar guard value} {
+    upvar 1 $hirVar hir $ctxVar ctx
+    return
+>>>>
+
+@@ contravariant-erasure-dropped a callable reaching an untyped parameter through a structural call's typed argument is not part of the erased-callable contract
+## hir/completions.tcl
+<<<<
+        set erased [lsort -unique [concat [InstanceErasures $hir] [dict get [Statics $hir] contravariant]]]
+====
+        set erased [lsort -unique [InstanceErasures $hir]]
+>>>>
+<<<<
+    return [lsort -unique [concat [InstanceErasures $hir] [dict get [staticsOf $hir] contravariant]]]
+====
+    return [lsort -unique [InstanceErasures $hir]]
+>>>>
+<<<<
+    set erased [lsort -unique [concat [InstanceErasures $hir] [dict get $statics contravariant]]]
+====
+    set erased [lsort -unique [InstanceErasures $hir]]
+>>>>
+
+@@ unidentified-calls-empty the dangerous overcorrection: every unidentified callable call -- contracted or not -- is charged nothing
+## hir/completions.tcl
+<<<<
+    if {$erased eq {}} {
+        return {none {}}
+    }
+====
+    if {1} {
+        return {none {}}
+    }
+>>>>
+<<<<
+        set errors $contract
+        set fact [CallableFact $hir $ctx $callee]
+====
+        set errors {}
+        set contract {}
+        set fact [CallableFact $hir $ctx $callee]
+>>>>
+
+@@ exact-recovery-disabled exact recovery disabled: an untyped call of a callable the walk identifies is charged the erased-callable contract instead of its effective errors
+## hir/completions.tcl
+<<<<
+        block {
+            lassign [Recover hir ctx $guard $callee [lindex $fact 1] $argExprs $argRanges $argFacts] errors incomplete
+====
+        block {
+            set errors $erased
+            set incomplete 1
+>>>>

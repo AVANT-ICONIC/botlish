@@ -1590,9 +1590,13 @@ proc hir::affine::ExitReleases {hir parent scopes} {
     # What a call may let through from a callable the program erases into
     # an untyped parameter (hir/completions.tcl, "Precision and the
     # erased-callable contract"): its type-level errors do not name it, yet
-    # it leaves through the call's error edge like any other.
-    set erased [hir::completions::erasedErrorsOf $hir]
-    set transparent [expr {$erased eq {} ? {} : [hir::completions::transparentBlocks $hir]}]
+    # it leaves through the call's error edge like any other. A call a
+    # structural contract bounds lets through only its contract's errors
+    # (its type-level calleeErrors) -- unless an argument may carry an
+    # erased callable into a parameter the contract leaves untyped
+    # (hir::completions::mayLetErasedThrough): the verified contract
+    # boundary, the same rule the completion analysis uses.
+    lassign [hir::completions::erasureFacts $hir] erased transparent
     foreach entry $order {
         set x [lindex $entry 0]
         set state [dict get $exitStates $x]

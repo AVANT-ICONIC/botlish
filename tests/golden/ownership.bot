@@ -234,7 +234,7 @@ nomethod fn own_rejects_chains(name: str, expected: compiler::DiagnosticCode, ma
 # ---------------------------------------------------------------------------
 # coroutines.test
 
-# af-generic-errors (the half a suite can hold): a coroutine's error
+# af-generic-errors, unadmitted (the admitted half costs 25 build rounds):
 # crosses the specialized generic call as a direct resume's would:
 # unhandled inside an untyped HOF that does not admit it, the call that
 # specializes it is invalid. This body is the suite's first static block

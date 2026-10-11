@@ -162,17 +162,17 @@ nomethod fn dg_rejects_containing(name: str, expected: compiler::DiagnosticCode,
 
 # sc-negative-unhandled-erased: inside a block the completion analysis is the
 # whole program's: E1 escaping `generic` through an untyped call, with only
-# E2 handled, is UnhandledError at the call, naming E1. The Tcl program
-# declares raise, call and generic at its top level; here they are in the
-# block: at the suite's top level, `call(raise, x)` would give the program's
-# erased-callable contract E1 and E2, which then charges every call the
-# analysis cannot identify -- lib/test.bot's runner's among them -- and the
-# suite would not compile (NEW-FRAMEWORK-LIMITATION). This body is the
+# E2 handled, is UnhandledError at the call, naming E1. The Tcl program's
+# raise, call and generic are in the block for compile cost alone: at the
+# suite's top level, `call(raise, x)` would keep the erased-callable contract
+# E1, E2 open in every build -- no longer charged to the runner (C3, fixed by
+# VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md), but hir::static::GlobalChannels
+# then makes the compiler decide one rejected block per build: 14 decision
+# rounds, 34 builds, 46 s here, against 5, 12, 12 s. This body is the
 # file's first block on purpose: while its trial body is in a build, that
 # contract is program-wide, so no other site is proven independent and the
 # compiler rejects one block per build until this one is rejected
-# (hir::static::GlobalChannels); first in source order, it is rejected by
-# the first typed build.
+# (GlobalChannels); first in source order, the first typed build does.
 fn b_sc_negative_unhandled_erased() errors compiler::CompilerError:
     static compile:
         fn raise(x) -> int errors DgE1, DgE2:

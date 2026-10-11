@@ -690,8 +690,10 @@ proc hir::static::Rejectable {hir failing} {
 # anywhere, whatever calls what: a call that violates a trusted inferred
 # contract (the contract is demoted for every call, hir::check), or a
 # callable with declared errors passed into an untyped parameter (the
-# erased-callable contract charges every unidentified call,
-# hir/completions.tcl). In such a build no site is proven independent.
+# erased-callable contract charges every unidentified call no callable
+# contract bounds, and bounds what a structural type admits where a value
+# acquires it, hir/completions.tcl). In such a build no site is proven
+# independent.
 proc hir::static::GlobalChannels {hir} {
     if {[dict exists $hir demotedContracts] && [dict get $hir demotedContracts] ne {}} {
         return 1
