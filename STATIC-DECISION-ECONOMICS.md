@@ -416,8 +416,38 @@ TBD-QUIET
   and without static blocks; the batched run on synthetic relations; the
   trace; determinism; and the compiler properties the analysis relies on.
 * `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` (batched,
-  sequential, legacy): TBD-COMPARE.
-* The fuzzer: TBD-FUZZ.
+  sequential, legacy; every site's outcome and reified diagnostic, the
+  programs' diagnostics, the decided HIR, no misprediction): all eight
+  suites agree exactly with the sequential reference, and with legacy up to
+  internal ids (collections.bot's one id, [above](#before-against-after-the-trees)).
+  Rounds/builds, with the new build reuse in all three (the legacy column
+  is therefore cheaper than the tree before; the suites in their current,
+  natural layouts):
+
+  | suite | batched | sequential | legacy |
+  |---|---|---|---|
+  | collections.bot | 4/7 | 19/73 | 3/9 |
+  | diagnostics.bot | 5/7 | 14/22 | 14/22 |
+  | errors.bot | 3/3 | 8/8 | 8/8 |
+  | harness.bot | 2/2 | 2/2 | 2/2 |
+  | modules.bot | 3/4 | 23/24 | 3/4 |
+  | ownership.bot | 4/11 | 25/170 | 25/170 |
+  | representation.bot | 2/2 | 2/2 | 2/2 |
+  | values.bot | 1/1 | 1/1 | 1/1 |
+  | **total** | **24/37** | **94/302** | **58/218** |
+
+  The legacy column is what the natural layouts would have cost the old
+  procedure: diagnostics.bot and ownership.bot with their erasing code back
+  at the top level take 14 and 25 rounds there.
+* The fuzzer, seeds 1-3, 20 programs each in four layouts, under all three
+  schedulers: 60 programs, 1608 blocks (944 rejected), every fragment kind
+  of the pool drawn (each seed's summary lists them), 0 failures -- every
+  program batched = sequential exactly and legacy up to ids, every layout
+  the same verdicts, every program within the economic model. Six layout
+  pairs took different rounds, all in programs with blocks the
+  erased-callable contract links (the allowance is 0 without them).
+  Before the allowance was corrected, seed 3's program 6 was flagged
+  (5 rounds nested, 7 split; [point 70](#70-remaining-unavoidable-dependency-cases)).
 * The existing suites under the reference: TBD-SEQ-SUITES.
 
 ### Before against after: the trees
