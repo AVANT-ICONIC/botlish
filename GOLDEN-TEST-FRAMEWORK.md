@@ -988,11 +988,11 @@ coroutine implementation beyond the language's: the same report, byte for
 byte, on every backend is what every framework test and every suite checks.
 
 **Full regression.** The whole Tcl suite, unchanged, with the library and
-the suites in place: `CORE_BACKEND=interp` 7168 tests, 7168 passed;
-`CORE_BACKEND=compile` 7168 tests, 7164 passed, 4 skipped (the
+the suites in place, on the final tree: `CORE_BACKEND=interp` 7169 tests,
+7169 passed; `CORE_BACKEND=compile` 7169 tests, 7165 passed, 4 skipped (the
 `coreScoping` constraint), 0 failed; both include `tests/golden.test` (8
 tests: every suite, against the manifest) and
-`tests/golden-framework.test` (40). `cargo test --release --manifest-path native/Cargo.toml`: 219 library and 31 binary tests passed (nothing native was changed). The warning gate passes
+`tests/golden-framework.test` (41). `cargo test --release --manifest-path native/Cargo.toml`: 219 library and 31 binary tests passed (nothing native was changed). The warning gate passes
 (`lib/test.bot` has one entry, as `lib/io.bot`: its last declaration needs
 a context, so it cannot be a value). The feature harnesses AGENTS.md
 assigns to compiler changes (static-compile, error-payload, affine,
