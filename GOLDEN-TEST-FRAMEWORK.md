@@ -66,7 +66,8 @@ of the three lines every test repeats ([Recommendations](#recommendations)).
 > `af-generic-errors`' admitted half ported as
 > `af-generic-errors/admitted` (223 golden tests, 134 Tcl tests ported).
 > The eight suites take 24 decision rounds and 37 whole builds instead of
-> 28 and 79, TBD-GOLDEN-TIME; 100 nested cases with 33 checker
+> 28 and 79, and 82 s instead of 181 s of front end on one machine; 100
+> nested cases with 33 checker
 > rejections take 2 builds instead of 68. The sections below keep their
 > numbers as historical before/after evidence; each place that describes
 > the old cost model or the layout rule carries a note.
@@ -646,9 +647,26 @@ own extra work (the contract boundary and its static walk, about 3% of a
 front end).
 
 *After STATIC-DECISION-ECONOMICS.md* (the batched scheduler, the natural
-layouts restored, `af-generic-errors/admitted` added; TBD-GOLDEN-TABLE-NOTE):
+layouts restored, `af-generic-errors/admitted` added; each suite compiled in
+a fresh process, front end only, best of 3, both trees on the same machine,
+alternated -- a slower machine than the tables above: the tree before took
+181.4 s there):
 
-TBD-GOLDEN-TABLE
+| suite | blocks | accepted | rejected | decision rounds | whole builds (method trials) | compile (s) | before (rounds / builds / s) |
+|---|---|---|---|---|---|---|---|
+| collections.bot | 44 | 22 | 22 | 4 | 7 (2) | 15.9 | 3 / 11 / 24.3 |
+| diagnostics.bot | 28 | 0 | 28 | 5 | 7 (1) | 11.9 | 5 / 12 / 22.7 |
+| errors.bot | 26 | 15 | 11 | 3 | 3 (0) | 5.1 | 8 / 15 / 32.0 |
+| harness.bot | 14 | 12 | 2 | 2 | 2 (0) | 1.7 | 2 / 3 / 2.5 |
+| modules.bot | 33 | 7 | 26 | 3 | 4 (0) | 11.8 | 3 / 6 / 21.8 |
+| ownership.bot | 38 | 14 | 24 | 4 | 11 (5) | 27.5 | 4 / 26 / 64.3 |
+| representation.bot | 14 | 13 | 1 | 2 | 2 (0) | 3.6 | 2 / 4 / 7.0 |
+| values.bot | 26 | 26 | 0 | 1 | 1 (0) | 4.7 | 1 / 2 / 6.9 |
+| **total** | **223** | **109** | **114** | 1-5 (24) | **37 (8)** | **82.2** | 28 / 79 / 181.4 |
+
+The two suites back in their natural layout would have cost the tree before
+14 rounds, 34 builds, 93.1 s (diagnostics.bot) and 25 rounds, 194 builds,
+640.8 s (ownership.bot).
 
 The layout rule above (bodies in separate top-level units, the erasing body
 first) is no longer needed and no longer followed by diagnostics.bot and
@@ -1221,7 +1239,14 @@ analysis across rounds) would make the rule unnecessary.
 gone. The same suites (`bench/static-decisions.tcl`, best of 3 on a quiet
 machine; builds counted the same way):
 
-TBD-SYNTH-TABLE
+| K cases | all passing | builds | UNBOUND, nested | builds | UNBOUND, top level | builds | TYPE, nested | builds | TYPE, top level | builds |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 10 | 0.80 s | 1 | 1.03 s | 2 | 1.09 s | 2 | 1.72 s | 2 | 2.05 s | 2 |
+| 50 | 1.81 s | 1 | 2.44 s | 2 | 2.17 s | 2 | 4.50 s | 2 | 4.39 s | 2 |
+| 100 | 2.97 s | 1 | 3.55 s | 2 | 3.93 s | 2 | 6.23 s | 2 | 6.33 s | 2 |
+
+(The tree before, measured the same way on this machine: 100 cases TYPE
+nested 34 rounds, 68 builds, 192.1 s; top level 4 builds, 11.6 s.)
 
 Nested and top-level suites now cost the same: a passing suite one build, a
 suite with resolution rejections two, with checker rejections two, at every

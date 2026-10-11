@@ -42,7 +42,7 @@ suites on a quiet machine: [Measurements](#measurements)):
 | the same, 200 cases (66 rejections) | 67 rounds, 134 builds, 642 s | 2 rounds, 2 builds, 10.6 s |
 | the same bodies at the top level (the old layout rule) | 2 rounds, 4 builds | 2 rounds, 2 builds |
 | 200 blocks, half failing at every stage (resolution, checker, ownership, completions, traits, contexts), nested | 87 rounds, 173 builds, 393 s | 3 rounds, 3 builds, 8.0 s |
-| the eight golden suites | 28 rounds, 79 builds, TBD s | 24 rounds, 37 builds, TBD s |
+| the eight golden suites (front end, fresh process each, best of 3) | 28 rounds, 79 builds, 181 s | 24 rounds, 37 builds, 82 s |
 | errors.bot (an accepted body that erases an error-bearing callable) | 8 rounds, 15 builds | 3 rounds, 3 builds |
 | ownership.bot with `af-generic-errors`' admitted half in its natural place | 25 rounds, 194 builds, 283 s (C3 report) | 4 rounds, 11 builds |
 | diagnostics.bot with `sc-negative-unhandled-erased` in its natural layout | 14 rounds, 34 builds, 46 s (C3 report) | 5 rounds, 7 builds |
@@ -420,7 +420,37 @@ nested TYPE rows take minutes):
 | 100 cases, TYPE, nested | 34/68 | 192.09 s | 2/2 | 6.23 s | 30.8x |
 | 100 cases, TYPE, top level | 2/4 | 11.57 s | 2/2 | 6.33 s | 1.8x |
 
-TBD-GOLDEN-FRESH
+**The eight golden suites** (the before tree's suites in their hoisted
+layouts, the after tree's in their natural ones; each compiled in a fresh
+process, front end only, best of 3, the trees alternated; the builds of the
+before tree from `bench/static-decisions.tcl`):
+
+| suite | blocks | before rounds/builds/method trials | before | after rounds/builds/method trials | after | speedup |
+|---|---|---|---|---|---|---|
+| collections.bot | 44 | 3/11/6 | 24.3 s | 4/7/2 | 15.9 s | 1.5x |
+| diagnostics.bot | 28 | 5/12/4 | 22.7 s | 5/7/1 | 11.9 s | 1.9x |
+| errors.bot | 26 | 8/15/0 | 32.0 s | 3/3/0 | 5.1 s | 6.3x |
+| harness.bot | 14 | 2/3/0 | 2.5 s | 2/2/0 | 1.7 s | 1.4x |
+| modules.bot | 33 | 3/6/0 | 21.8 s | 3/4/0 | 11.8 s | 1.8x |
+| ownership.bot | 37 / 38 | 4/26/18 | 64.3 s | 4/11/5 | 27.5 s | 2.3x |
+| representation.bot | 14 | 2/4/0 | 7.0 s | 2/2/0 | 3.6 s | 1.9x |
+| values.bot | 26 | 1/2/0 | 6.9 s | 1/1/0 | 4.7 s | 1.5x |
+| **total** | 222 / 223 | **28/79/28** | **181.4 s** | **24/37/8** | **82.2 s** | **2.2x** |
+
+(ownership.bot holds one block more after: `af-generic-errors/admitted`.)
+The suites' natural layouts on the tree before (one run each): diagnostics.bot
+14 rounds, 34 builds, 93.1 s; ownership.bot 25 rounds, 194 builds (144 of them
+method trials), 640.8 s -- against 5/7, 11.9 s and 4/11, 27.5 s after: the
+layout workaround is no longer needed, and the natural layout costs less
+than the workaround did. These times are slower than GOLDEN-TEST-FRAMEWORK.md's
+and VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md's (112 s for the eight suites
+there, 181 s here for the same tree): another machine; the before and after
+columns here are the same machine, alternated.
+
+Splitting the gain: the build count fell from 79 to 37 (a factor 2.1) and the
+front end from 181 to 82 s (2.2); the time per build stayed within a few
+percent (the profile below), so the gain is the builds not made.
+
 
 **Method-style call decisions** (the methods workload, best of 3): 13
 builds with 8 method trial builds before, 9 builds with 4 trials after, at
@@ -471,7 +501,18 @@ seeds (key -> candidate), both dropped with it. The peak is one or two
 builds, as before; the after tree's lower peaks are the duplicate builds no
 longer made.
 
-**Process history**: TBD-HISTORY
+**Process history**: compiling the same program again in one process gives the same
+decisions and the same builds every time (`se-deterministic`; here six
+times, errors.bot and the 100-case suite), and the peak resident set stays
+flat (94 MB after six compilations of errors.bot, 90 MB after one) -- no
+cache of this milestone grows. The *time* does grow, in both trees alike:
+errors.bot 5.3 s for the first compilation and 6.1-7.1 s for the next five
+(before: 32.0 s, then 35-40 s), the 100-case suite 4.5 s then up to 7.6 s.
+Neither a namespace variable, a namespace, a proc nor a command grows
+between compilations (checked); it is a property of the interpreter's
+state over a long process, present before this milestone, recorded here as
+a finding for the benchmarks (which compile many programs in one process:
+their later rows are inflated alike in both trees) and not addressed.
 
 
 ## Validation
@@ -918,7 +959,62 @@ application shape): 3 builds at every size and layout; nested in one
 `detect()` function, 200 probes took 163 builds and 321 s before, 3 builds
 and 7.4 s after.
 
-TBD-37-47
+### 37-39. errors.bot before / after: rounds, builds, time
+
+8 rounds and 15 builds before (the accepted erasing body kept
+`GlobalChannels` open in every build), 3 rounds and 3 builds after;
+32.0 s -> 5.1 s front end (fresh process, best of 3). Its rounds are now
+its semantic depth: a resolution round, a checked round, the final build.
+Before C3 it took 4 rounds and 7 builds.
+
+### 40. ownership.bot natural-layout result
+
+With `af-generic-errors`' admitted half in its natural place (the generic HOF
+at the suite's top level) and nothing placed first: 4 rounds, 11 builds, 5
+method trials, 27.5 s -- against 25 rounds, 194 builds and 640.8 s for the
+same file on the tree before, and 4 rounds, 26 builds, 64.3 s for the old,
+hoisted file there.
+
+### 41. af-generic-errors natural-layout result
+
+Both halves ported: `af-generic-errors/unadmitted` (UnhandledError) and the
+new `af-generic-errors/admitted` (`[run(9), run(3)]` is `[-1, 3]`, as in the
+Tcl test), passing on all four backends; neither has to be the suite's first
+block any more.
+
+### 42-44. Total golden-suite rounds, builds, front-end time
+
+28 rounds, 79 builds, 181.4 s before; 24 rounds, 37 builds, 82.2 s after
+(fresh processes, best of 3, this machine). With all 223 golden verdicts
+preserved (one more test than before: `af-generic-errors/admitted`).
+`golden-static-economics` bounds the total at 50 builds and any suite at 15.
+
+### 45. Method-sugar trial count before / after
+
+The golden suites: 28 method trial builds before, 8 after. The methods
+workload: 8 -> 4 at every size; the 4 left are the first checked round's
+own and the one call a rejection genuinely changes. Build reuse saves the
+duplicate final build of every round, method calls or not: 1 build per
+round instead of 2.
+
+### 46. Source-layout sensitivity before / after
+
+Before: the same bodies nested or at the top level took 68 and 4 builds
+(100 cases, 33 TYPE); diagnostics.bot and ownership.bot in their natural
+layouts 34 and 194 builds against 12 and 26 hoisted. After: nested and top
+level the same at every size (2 builds); the natural layouts cheaper than
+the old workaround. What remains is the order of one-way dependencies --
+consumers and contributors of the erased-callable contract -- which the
+sequential definition itself depends on ([point
+70](#70-remaining-unavoidable-dependency-cases)): six of 60 fuzz programs
+took different rounds in different layouts, never beyond the allowance.
+
+### 47. Memory / peak retention
+
+[Memory](#quiet-machine): the peak is one or two builds, as before; every
+case measured is at or below the tree before (500 passing cases: 215 ->
+178 MB; 500 cases with 166 rejections: 253 MB after, not run before). No
+build, graph or seed outlives its round; nothing outlives the compilation.
 
 ### 48. Static scheduling fuzzer design
 
