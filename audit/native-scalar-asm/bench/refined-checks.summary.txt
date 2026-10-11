@@ -2,7 +2,7 @@ source:  bench/refined-checks.bot
 backend: Cranelift (specialize=1)
 asm:     refined-checks.asm
 vcode:   refined-checks.vcode
-machine-code bytes: 11263 (per function: 1415 217 745 74 74 74 128 128 336 154 115 216 176 176 295 344 183 564 140 60 501 861 127 103 313 219 287 1255 1615 368)
+machine-code bytes: 11295 (per function: 1415 217 745 74 74 74 128 128 336 154 115 216 176 176 295 344 183 564 140 60 501 861 127 103 345 219 287 1255 1615 368)
 
 functions:
   0 <program entry>: nir-regs=43
@@ -354,11 +354,11 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     raw regs: 1
     managed-capable regs: 9
     effects: may_error=true may_gc=true
-    safepoints: 2
-    root candidates: 4
-    max live roots: 2
-    shadow slots: 2
-    entry zero slots: 0
+    safepoints: 3
+    root candidates: 6
+    max live roots: 4
+    shadow slots: 4
+    entry zero slots: 2
     depth reservation: no
     storage: native frame
   

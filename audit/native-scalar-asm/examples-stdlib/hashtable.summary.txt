@@ -2,7 +2,7 @@ source:  examples/stdlib/hashtable.bot
 backend: Cranelift (specialize=1)
 asm:     hashtable.asm
 vcode:   hashtable.vcode
-machine-code bytes: 10843 (per function: 45 427 385 70 69 69 46 170 236 636 1040 333 253 380 402 616 654 801 673 920 684 925 862 147)
+machine-code bytes: 10892 (per function: 45 427 385 70 69 69 46 182 228 636 1040 341 261 388 407 616 654 801 673 920 700 925 862 147)
 
 functions:
   0 <program entry>: nir-regs=1
@@ -126,11 +126,11 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     NIR regs: 5
     raw regs: 0
     managed-capable regs: 5
-    effects: may_error=true may_gc=false
-    safepoints: 0
-    root candidates: 0
-    max live roots: 0
-    shadow slots: 0
+    effects: may_error=true may_gc=true
+    safepoints: 1
+    root candidates: 2
+    max live roots: 2
+    shadow slots: 2
     entry zero slots: 0
     depth reservation: no
     storage: native frame
@@ -140,8 +140,8 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     raw regs: 1
     managed-capable regs: 6
     effects: may_error=true may_gc=true
-    safepoints: 1
-    root candidates: 3
+    safepoints: 2
+    root candidates: 5
     max live roots: 3
     shadow slots: 3
     entry zero slots: 0
@@ -179,11 +179,11 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     raw regs: 1
     managed-capable regs: 11
     effects: may_error=true may_gc=true
-    safepoints: 1
+    safepoints: 2
     root candidates: 3
     max live roots: 3
     shadow slots: 3
-    entry zero slots: 0
+    entry zero slots: 1
     depth reservation: no
     storage: native frame
   
@@ -192,11 +192,11 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     raw regs: 1
     managed-capable regs: 6
     effects: may_error=true may_gc=true
-    safepoints: 1
+    safepoints: 2
     root candidates: 3
     max live roots: 3
     shadow slots: 3
-    entry zero slots: 0
+    entry zero slots: 1
     depth reservation: no
     storage: native frame
   
@@ -205,8 +205,8 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     raw regs: 2
     managed-capable regs: 11
     effects: may_error=true may_gc=true
-    safepoints: 1
-    root candidates: 4
+    safepoints: 2
+    root candidates: 5
     max live roots: 4
     shadow slots: 4
     entry zero slots: 0
@@ -218,8 +218,8 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     raw regs: 1
     managed-capable regs: 15
     effects: may_error=true may_gc=true
-    safepoints: 1
-    root candidates: 6
+    safepoints: 2
+    root candidates: 7
     max live roots: 6
     shadow slots: 6
     entry zero slots: 0
@@ -296,11 +296,11 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     raw regs: 7
     managed-capable regs: 27
     effects: may_error=true may_gc=true
-    safepoints: 6
+    safepoints: 8
     root candidates: 10
     max live roots: 5
     shadow slots: 5
-    entry zero slots: 0
+    entry zero slots: 2
     depth reservation: no
     storage: native frame
   
@@ -309,11 +309,11 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     raw regs: 6
     managed-capable regs: 29
     effects: may_error=true may_gc=true
-    safepoints: 3
+    safepoints: 4
     root candidates: 11
     max live roots: 5
     shadow slots: 5
-    entry zero slots: 2
+    entry zero slots: 3
     depth reservation: no
     storage: native frame
   

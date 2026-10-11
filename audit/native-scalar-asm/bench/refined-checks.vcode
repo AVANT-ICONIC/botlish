@@ -1,7 +1,7 @@
 ; source:  bench/refined-checks.bot
 ; backend: Cranelift (specialize=1), native::vcode
 ; format:  Cranelift Debug for VCode, pre-regalloc machine-level lowering
-; total machine code bytes: 11263  (per function: 1415 217 745 74 74 74 128 128 336 154 115 216 176 176 295 344 183 564 140 60 501 861 127 103 313 219 287 1255 1615 368)
+; total machine code bytes: 11295  (per function: 1415 217 745 74 74 74 128 128 336 154 115 216 176 176 295 344 183 564 140 60 501 861 127 103 345 219 287 1255 1615 368)
 ;
 vcode from lowering: 
 VCode {
@@ -2474,62 +2474,67 @@ Block 0([]):
     (original IR block: block2)
     (successor: Block 1([]))
   Inst 0: args %v192=%rdi %v193=%rsi
-  Inst 1: movq %v193, <offset:1>+(%rsp)
-  Inst 2: jmp     label1
+  Inst 1: movq $0x0, <offset:1>+0x10(%rsp)
+  Inst 2: movq $0x0, <offset:1>+0x18(%rsp)
+  Inst 3: movq %v193, <offset:1>+(%rsp)
+  Inst 4: jmp     label1
 Block 1([]):
     (original IR block: block0)
     (successor: Block 3([]))
     (successor: Block 2([]))
-  Inst 3: movq 0x30(%v192), %v245
-  Inst 4: movq 8(%v245), %v244
-  Inst 5: movq %v244, <offset:1>+8(%rsp)
-  Inst 6: call    User(userextname0)
+  Inst 5: movq 0x30(%v192), %v246
+  Inst 6: movq 8(%v246), %v245
+  Inst 7: movq %v245, <offset:1>+8(%rsp)
+  Inst 8: call    User(userextname0)
     UserStackMap { by_type: [(types::I64, CompoundBitSet {0, 8})], sp_to_sized_stack_slots: None }
-  Inst 7: movq 0x10(%v244), %v242
-  Inst 8: sarq $1, (%v241 <- %v243)
-  Inst 9: movq (%v242, %v241, 8), %v240
-  Inst 10: movq %v240, <offset:1>+(%rsp)
-  Inst 11: movq 0x30(%v192), %v239
-  Inst 12: movq 8(%v239), %v238
-  Inst 13: movl $0x21, %v237
-  Inst 14: load_ext_name userextname1+0, %v236
-  Inst 15: call    *%v236
-  Inst 16: testq %v235, %v235
-  Inst 17: jnz     label3; j label2
+  Inst 9: movq 0x10(%v245), %v243
+  Inst 10: sarq $1, (%v242 <- %v244)
+  Inst 11: movq (%v243, %v242, 8), %v241
+  Inst 12: movq %v241, <offset:1>+8(%rsp)
+  Inst 13: movq 0x30(%v192), %v240
+  Inst 14: movq 8(%v240), %v239
+  Inst 15: movq %v239, <offset:1>+0x10(%rsp)
+  Inst 16: movl $0x21, %v238
+  Inst 17: movq $0x21, <offset:1>+0x18(%rsp)
+  Inst 18: load_ext_name userextname1+0, %v237
+  Inst 19: call    *%v237
+    UserStackMap { by_type: [(types::I64, CompoundBitSet {0, 8, 16, 24})], sp_to_sized_stack_slots: None }
+  Inst 20: testq %v236, %v236
+  Inst 21: jnz     label3; j label2
 Block 2([]):
     (successor: Block 5([]))
-  Inst 18: jmp     label5
+  Inst 22: jmp     label5
 Block 3([]):
     (original IR block: block3)
     (successor: Block 6([]))
     (successor: Block 4([]))
-  Inst 19: movq 0x10(%v238), %v234
-  Inst 20: sarq $1, (%v233 <- %v235)
-  Inst 21: movq (%v234, %v233, 8), %v232
-  Inst 22: movq %v232, <offset:1>+8(%rsp)
-  Inst 23: leaq <offset:1>+0x10(%rsp), %v231
-  Inst 24: movq $0x0, <offset:1>+0x10(%rsp)
-  Inst 25: movq %v240, <offset:1>+0x18(%rsp)
-  Inst 26: movq $0x0, <offset:1>+0x20(%rsp)
-  Inst 27: movq %v232, <offset:1>+0x28(%rsp)
-  Inst 28: movl $0x2, %v230
-  Inst 29: movl $0x4, %v229
-  Inst 30: load_ext_name userextname2+0, %v228
-  Inst 31: call    *%v228
+  Inst 23: movq 0x10(%v239), %v235
+  Inst 24: sarq $1, (%v234 <- %v236)
+  Inst 25: movq (%v235, %v234, 8), %v233
+  Inst 26: movq %v233, <offset:1>+(%rsp)
+  Inst 27: leaq <offset:1>+0x20(%rsp), %v232
+  Inst 28: movq $0x0, <offset:1>+0x20(%rsp)
+  Inst 29: movq %v241, <offset:1>+0x28(%rsp)
+  Inst 30: movq $0x0, <offset:1>+0x30(%rsp)
+  Inst 31: movq %v233, <offset:1>+0x38(%rsp)
+  Inst 32: movl $0x2, %v231
+  Inst 33: movl $0x4, %v230
+  Inst 34: load_ext_name userextname2+0, %v229
+  Inst 35: call    *%v229
     UserStackMap { by_type: [(types::I64, CompoundBitSet {0, 8})], sp_to_sized_stack_slots: None }
-  Inst 32: testq %v227, %v227
-  Inst 33: jnz     label6; j label4
+  Inst 36: testq %v228, %v228
+  Inst 37: jnz     label6; j label4
 Block 4([]):
     (successor: Block 5([]))
-  Inst 34: jmp     label5
+  Inst 38: jmp     label5
 Block 5([]):
     (original IR block: block1)
-  Inst 35: uninit  %v225
-  Inst 36: xorq %v225, (%v226 <- %v225)
-  Inst 37: rets %v226=%rax
+  Inst 39: uninit  %v226
+  Inst 40: xorq %v226, (%v227 <- %v226)
+  Inst 41: rets %v227=%rax
 Block 6([]):
     (original IR block: block4)
-  Inst 38: rets %v227=%rax
+  Inst 42: rets %v228=%rax
 }
 vcode from lowering: 
 VCode {
