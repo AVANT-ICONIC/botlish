@@ -41,36 +41,26 @@
 @@ erased-contributors-ignored the erased-callable contract depends on no contributor: its consumers are judged as if nothing changed what the program erases
 ## hir/staticdeps.tcl
 <<<<
-            foreach point [lsort -unique [dict get $state erasurePoints]] {
+            foreach unit [dict get $state erasureWitnesses] {
 ====
-            foreach point {} {
+            foreach unit {} {
 >>>>
 
 @@ contribution-not-discarded an erasing call inside a block is not a dependency on that block: rejecting the block keeps its contribution in the decisions' model
 ## hir/staticdeps.tcl
 <<<<
-                if {[dict exists $state siteOf $e]} {
-                    dict set succ Z:[dict get $state siteOf $e] erasure
-                }
-                lassign [dict get $hir exprs $e target] tk tb
-                set args [dict get $hir exprs $e args]
-                if {$tk ne "block" || ![dict exists $hir exprs $tb]} {
-                    foreach arg $args {
-                        AddSubtree $hir state $arg succ erasure
+                foreach e $items {
+                    if {[dict exists $state siteOf $e]} {
+                        dict set succ F:[dict get $state siteOf $e] erasure
+                    }
+                    lassign [dict get $hir exprs $e target] tk tb
+====
+                foreach e $items {
+                    lassign [dict get $hir exprs $e target] tk tb
+                    if {$tk eq "block"} {
+                        dict set succ R:$tb erasure
                     }
                     continue
-                }
-                dict set succ R:$tb erasure
-                foreach entry [hir::signatures::entryTypes $hir $tb] arg $args {
-                    if {$entry eq "" && $arg ne ""} {
-                        AddSubtree $hir state $arg succ erasure
-                    }
-                }
-====
-                lassign [dict get $hir exprs $e target] tk tb
-                if {$tk eq "block"} {
-                    dict set succ R:$tb erasure
-                }
 >>>>
 
 @@ nested-child-ignored a block does not depend on the blocks nested in it: the outer one is committed before its inner one's rejection is seen
@@ -81,6 +71,14 @@
             if {[dict get $spanParent $site] eq ""} {
                 dict set state ownSites $region $site 1
             }
+>>>>
+<<<<
+            if {[dict exists $state spanChildren $key]} {
+                foreach inner [dict get $state spanChildren $key] {
+                    dict set succ F:$inner nested
+                }
+            }
+====
 >>>>
 
 @@ position-ignored a block does not depend on the code around it in its function: a later block in one statement sequence is committed with the diagnostics it had before the earlier one's rejection made it unreachable
@@ -178,6 +176,36 @@
                     dict set mentions $b [list $e]
 >>>>
 
+@@ plan-consumers-ignored a site whose diagnostic only the trait monomorphization's plan reports does not depend on the plan's gate: it is predicted ok beside the diagnostics that keep the plan from running, and the next build contradicts it
+## hir/staticdeps.tcl
+<<<<
+                dict set succ C:plan plan-site
+====
+>>>>
+
+@@ plan-witness-ignored the plan's gate depends on no diagnostic while it is closed: its sites are predicted ok however many diagnostics are rejected, and the build that opens the gate contradicts them
+## hir/staticdeps.tcl
+<<<<
+        dict set plan Z:$last plan-gate
+        dict set plan F:$last plan-gate
+====
+>>>>
+
+@@ erased-every-request-empty no request is taken to erase anything: a consumer of the erased-callable contract is judged as if rejecting a contributor removed nothing from it
+## hir/staticdeps.tcl
+<<<<
+            if {$carried ne {} && $chain ne {}} {
+====
+            if {0} {
+>>>>
+
+@@ erasure-unlinked the erased-callable contract's contributors are not linked to it: a consumer turned unknown (a witness's errors may be gone) does not hold back another contributor of the same errors, and the next build judges it without both
+## hir/staticdeps.tcl
+<<<<
+                dict set succ C:erased erasure-contributor
+====
+>>>>
+
 # ---------------------------------------------------------------------------
 # Economic
 
@@ -250,4 +278,87 @@
                 return 0
             }
 ====
+>>>>
+
+@@ sibling-through-outer a nested site depends on the site around it, and so on everything that site's diagnostics read: sibling nested sites (each a dependency of the site around them) are decided one per build
+## hir/staticdeps.tcl
+<<<<
+            if {[dict exists $state spanChildren $key]} {
+                foreach inner [dict get $state spanChildren $key] {
+                    dict set succ F:$inner nested
+                }
+            }
+====
+            if {[dict exists $state spanChildren $key]} {
+                foreach inner [dict get $state spanChildren $key] {
+                    dict set succ F:$inner nested
+                }
+            }
+            if {[dict get $state spanParent $key] ne ""} {
+                dict set succ Z:[dict get $state spanParent $key] nested
+            }
+>>>>
+
+@@ form-reads-inputs a site's form is not told apart from what its diagnostics read: whatever depends on a site's form depends on that site's dependencies too, and a nested site reaches its siblings through the `if true:` around them
+## hir/staticdeps.tcl
+<<<<
+            dict set state names $v "site [SiteName $hir $key]"
+====
+            dict set state names $v "site [SiteName $hir $key]"
+            dict set succ Z:$key form
+>>>>
+
+@@ erased-empty-removed a request that erases nothing is taken to erase something not known: removing it changes the contract, and every caller of a consumer waits for each site passing such a function
+## hir/staticdeps.tcl
+<<<<
+            if {$carried ne {} && $chain ne {}} {
+                lappend units [list $carried key [lsort -unique $chain]]
+            }
+====
+            if {$chain ne {}} {
+                lappend units [list [expr {$carried eq {} ? "*" : $carried}] key [lsort -unique $chain]]
+            }
+>>>>
+
+@@ erased-every-contributor the erased-callable contract depends on every contribution, not on one witness per error: rejecting any contributor's site makes every consumer unknown, though another contribution still erases the same errors
+## hir/staticdeps.tcl
+<<<<
+        set rank $never
+        foreach e $items {
+====
+        lappend witnesses $index
+        set rank $never
+        foreach e $items {
+>>>>
+
+@@ fixed-carrier-body what an erased function carries is taken to depend on its body: a site inside a function passed through an untyped parameter is an erasure site of the contract
+## hir/staticdeps.tcl
+<<<<
+                    if {[FixedCarrier $hir $state $arg]} {
+====
+                    if {0} {
+>>>>
+
+@@ plan-every-diagnostic the plan's gate depends on every diagnostic while it is closed, not on one witness: a site ahead of several takes a build per rejection
+## hir/staticdeps.tcl
+<<<<
+        if {$site ne "" && ($last eq "" || [dict get $position $site] > [dict get $position $last])} {
+            set last $site
+        }
+====
+        if {$site ne ""} {
+            dict set plan F:$site plan-gate
+            dict set plan Z:$site plan-gate
+        }
+        if {$site ne "" && ($last eq "" || [dict get $position $site] > [dict get $position $last])} {
+            set last $site
+        }
+>>>>
+
+@@ internal-ids-unknown a message naming an internal id is recognized by any word of the right shape -- and an id of no other kind than an expression's is taken to depend on every site -- so its rejection never comes from a build other than its own (it waits a build more; the semantic counterpart is internal-ids-ignored)
+## hir/static.tcl
+<<<<
+    return [lmap {- - id} [regexp -all -inline {\m(block\(|function )(e[0-9]+)\M} $message] {set id}]
+====
+    return [regexp -all -inline {\m[ebsyt][0-9]+\M} $message]
 >>>>

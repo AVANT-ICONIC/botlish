@@ -201,6 +201,77 @@ proc seOwnershipProgram {args} {
     return "$text${calls}0\n"
 }
 
+# The gate of the trait monomorphization's plan (hir/staticdeps.tcl's
+# C:plan): sites NAME ..., each `a`/`b`/`tN` a TYPE failure and `nested` a
+# generic function declared inside another one given a coroutine handle
+# (AFFINE-GENERIC-NESTED-UNSUPPORTED, which only the plan reports), each
+# called under a handler.
+proc sePlanAffine {names} {
+    set text "import compiler\n\nstruct Message:\n    value: int\n\nstruct Event:\n    value: int\n\nfn worker(seed: int, resume Message) -> Event:\n    m = yield Event \{value: seed\}\n    return Event \{value: m.value + seed\}\n\nfn make(seed: int) -> Coroutine\{args: \[Message\], return: Event\}:\n    coroutine \{step\} = worker(seed)\n    step\n\nfn want(x: int) -> int:\n    x\n\n"
+    set calls ""
+    foreach name $names {
+        if {$name eq "nested"} {
+            append text [seSite $name {"fn outer() -> int:" "    fn inner(c):" "        c(Message {value: 1})" "    e = inner(make(1))" "    e.value" "outer()"}]
+        } else {
+            append text [seSite $name [list "want(\"$name\")"]]
+        }
+        append calls "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    return "$text${calls}0\n"
+}
+
+# Two sites holding TRAIT-IMPL-ORDER (the plan's last stage): the
+# implementation of `name` is declared after the top-level call that needs
+# `first`'s specialization, which needs `second`'s.
+proc sePlanTraits {} {
+    return "import compiler\n\ntrait Named:\n    fn name(value: Named) -> str\n\nstruct Person:\n    v: str\n\nfn second(v: Named) -> str errors compiler::CompilerError:\n    static compile:\n        v.name()\n\nfn first(v: Named) -> str errors compiler::CompilerError:\n    static compile:\n        a = v.name()\n        second(v)\n\nr0 = first(Person \{v: \"a\"\}):\n    on compiler::CompilerError:\n        \"rejected\"\n\nfn name(p: Person) -> str:\n    p.v\n\nr1 = second(Person \{v: \"b\"\}):\n    on compiler::CompilerError:\n        \"rejected\"\n\[r0, r1\]\n"
+}
+
+# K sibling functions, each with a checker-rejected site, nested in one
+# enclosing site (the golden framework's registration function, written as
+# a static block), or (NESTED 0) in a plain function.
+proc seSiblings {k {nested 1}} {
+    set text "import compiler\n\nfn want(x: int) -> int:\n    x\n\nfn outer() -> int errors compiler::CompilerError:\n"
+    set pad [expr {$nested ? "        " : "    "}]
+    if {$nested} {
+        append text "    static compile:\n"
+    }
+    for {set i 0} {$i < $k} {incr i} {
+        append text "${pad}fn t$i\() -> int errors compiler::CompilerError:\n$pad    static compile:\n$pad        want(\"s$i\")\n"
+    }
+    append text "${pad}0\nr = outer():\n    on compiler::CompilerError:\n        -1\nr\n"
+    return $text
+}
+
+# K sites, each passing a function that raises nothing (or, with ERRORS,
+# declares an error) to the untyped list::any? -- each an erasure site of
+# the erased-callable contract and a caller of its consumer -- and each
+# rejected for its function's representation access (OPAQUE-REPRESENTATION).
+proc seErasingSites {k {errors 0}} {
+    set text "import abi::bytes\nimport compiler\nimport list\n\nerror Boom\n\nfn run(body) -> int:\n    v = body():\n        on compiler::CompilerError:\n            return 1\n    0\n\n"
+    set calls {}
+    for {set i 0} {$i < $k} {incr i} {
+        set peek [expr {$errors ? "fn peek(x) -> bool errors Boom:" : "fn peek(x):"}]
+        append text "fn b$i\() errors compiler::CompilerError, Boom:\n    static compile:\n        b = abi::bytes::from_list(\[\])\n        $peek\n            x.storage\n        list::any?(\[b\], peek)\n\n"
+        lappend calls "run(b$i)"
+    }
+    return "$text\[[join $calls {, }]\]\n"
+}
+
+# K sites each passing raise (declaring E1, E2) through make's untyped
+# parameter into a structural Fn (use's): the contract-boundary check at
+# each reads what make's parameter may hold -- raise, from every site -- and
+# each handles E2 only (UNHANDLED-ERROR).
+proc seSubsumeSites {k} {
+    set text "import compiler\n\nerror E1\nerror E2\n\nfn raise(x) -> int errors E1, E2:\n    if x == 1:\n        fail E1\n    if x == 2:\n        fail E2\n    0\n\nfn make(f):\n    fn inner(y):\n        f(y)\n    inner\n\nfn use(kf: Fn\{args: \[int\], return: any, errors: \[E1, E2\]\}, x: int) errors E1, E2:\n    kf(x)\n\n"
+    set calls {}
+    for {set i 0} {$i < $k} {incr i} {
+        append text [seSite t$i [list "r = use(make(raise), $i):" "    on E2:" "        -2" "1"]]
+        append text "r_t$i = t$i\():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    return "${text}0\n"
+}
+
 # ---------------------------------------------------------------------------
 # The semantics are frozen
 
@@ -353,6 +424,36 @@ test se-equal-every-mention {every mention of a binding is an edge of the analys
     set results
 } -result {{} {TYPE accepted} {} 2 {} {TYPE accepted accepted} {} 2}
 
+test se-equal-plan-gate {the trait monomorphization's plan runs only on a program with no diagnostic at all, so a site whose diagnostic only the plan reports fails only once every other site's diagnostic is gone (hir/staticdeps.tcl's C:plan): judged beside two checker failures it is unknown, not predicted ok (the dependency analysis once missed the gate, and the next build contradicted its prediction); two plan diagnostics in one build are decided one per build, as the sequential order does (the plan is one computation over the whole program) -- the batched decisions are the sequential ones} -body {
+    set results {}
+    foreach text [list [sePlanAffine {a nested b}] [sePlanTraits]] {
+        set hir [seHir $text]
+        lappend results [seSame $text] [seOutcomes $text] [dict get $hir staticStats mispredicted]
+    }
+    set results
+} -result {{} {TYPE AFFINE-GENERIC-NESTED-UNSUPPORTED TYPE} {} {} {TRAIT-IMPL-ORDER TRAIT-IMPL-ORDER} {}}
+
+test se-equal-internal-ids-exact {only a message naming an internal id the way the compiler prints one (`block(e12)`) waits for the sequential order's own build: a USE-AFTER-MOVE naming the binding `s1` after an earlier rejection is committed beside it (it was once held back as if `s1` were a scope id)} -body {
+    set text "import compiler\n\nfn needs_int(v: int) -> int:\n    v\n\nfn producer():\n    yield 1\n    2\n\n"
+    append text [seSite t [list {needs_int("s")}]]
+    append text [seSite moved [list "coroutine {step: s1} = producer()" "other = s1" "s1()" "0"]]
+    append text "r0 = t():\n    on compiler::CompilerError:\n        -1\nr1 = moved():\n    on compiler::CompilerError:\n        -1\n\[r0, r1\]\n"
+    set hir [seHir $text]
+    list [seSame $text] [seOutcomes $text] [dict get $hir staticStats rounds] \
+        [hir::static::InternalIds "`s1` was used after its coroutine value was moved; other = s1 (f:1:2) t2 e3 b4 y5"] \
+        [hir::static::InternalIds "the callee block(e12)/1 -> int and native(str::length) and block(e7)/0 -> str, f : function e9/1 -> int"] \
+        [dict get [hir::static::PredictionOf {kind TYPE message "s1 is block(e12)/1 -> int, function e9/0 -> int"}] message]
+} -result {{} {TYPE USE-AFTER-MOVE} 2 {} {e12 e7 e9} {s1 is block(#)/1 -> int, function #/0 -> int}}
+
+test se-equal-erased-witness {the erased-callable contract is a set of errors, which loses one only once every contribution erasing it is gone: it depends on one witness per error (the contribution the sequential order removes last) -- and every other contributor is linked to it: here the consumer turns unknown when the block in mk() is rejected (the witness, in w(), erases mk()'s result, which then never exists), and the other contributor of E2, l(), must not be rejected in the same run, or the next build judges the consumer without E2 -- the batched decisions are the sequential ones} -body {
+    set text "import compiler\nimport list\n\nerror E1\nerror E2\n\nfn harmless() -> int:\n    1\n\nfn raise2() -> int errors E2:\n    fail E2\n\nfn raise2b() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn want(x: int) -> int:\n    x\n\nfn mk() errors compiler::CompilerError:\n    static compile:\n        want(\"z\")\n        raise2b\n\n"
+    append text [seSite y {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
+    append text [seSite l {"s = store(raise2)" {want("l")}}]
+    append text [seSite w {"store(mk())"}]
+    append text "r1 = y():\n    on compiler::CompilerError:\n        -1\nr2 = l():\n    on compiler::CompilerError:\n        -1\nr3 = w():\n    on compiler::CompilerError:\n        -1\nr1 + r2 + r3\n"
+    list [seSame $text] [seOutcomes $text]
+} -result {{} {TYPE UNHANDLED-ERROR TYPE accepted}}
+
 test se-no-misprediction {the golden framework's suites of 30 cases: no build contradicts a prediction of the batched run} -body {
     lmap rejection {none unbound type} {
         dict get [seHir [seSuite 30 $rejection 1]] staticStats mispredicted
@@ -470,6 +571,41 @@ test se-builds-ownership-verdict {the ownership verdict: a site whose path-relea
     set accepted [list [dict get $hir staticStats mispredicted] [dict get $hir staticStats rounds] [seOutcomes $text]]
     list $first $ahead $accepted
 } -result {{{} 3 {}} {{} 3 8 {AFFINE-LIST-OPERATION-UNSUPPORTED AFFINE-PATH-RELEASE-UNSUPPORTED USE-AFTER-MOVE}} {{} 2 {AFFINE-PATH-RELEASE-UNSUPPORTED TYPE TYPE TYPE TYPE}}}
+
+test se-builds-nested-siblings {checker failures in sibling functions nested in one enclosing site: the enclosing site depends on each (their forms are part of its body), the siblings on none of each other -- they are decided together, whatever their number, as in a plain function (a nested site once reached the enclosing site's form, and through it every sibling: one rejection per build)} -body {
+    set results {}
+    foreach k {3 6} {
+        set text [seSiblings $k]
+        lappend results [seEcon $text] [lindex [seEcon [seSiblings $k 0]] 0] [seSame $text]
+    }
+    lappend results [lsort -unique [seOutcomes [seSiblings 6]]]
+} -result {{2 2 0} 2 {} {2 2 0} 2 {} {TYPE accepted}}
+
+test se-builds-plan-gate {a site whose diagnostic only the plan reports, ahead of four checker failures: it waits for the last of them, not one build per rejection} -body {
+    set text [sePlanAffine {nested t0 t1 t2 t3}]
+    set hir [seHir $text]
+    list [dict get $hir staticStats rounds] [dict get $hir staticStats mispredicted] [lindex [seEcon $text sequential] 0] [seSame $text 0]
+} -result {3 {} 6 {}}
+
+test se-builds-erased-empty {sites that each pass a function to the untyped list::any? -- erasure sites of the erased-callable contract and callers of its consumer -- are decided together: rejecting one removes nothing from the contract when its function raises nothing (it erased nothing), or when another site still erases the same error (the contract is a set of errors), so no other is judged again; nor does a function passed to an untyped parameter (run(bN)) put its body into the contract (what it carries is its declared errors)} -body {
+    set results {}
+    foreach k {3 6} {
+        foreach errors {0 1} {
+            set text [seErasingSites $k $errors]
+            lappend results [lrange [seEcon $text] 0 1] [seSame $text]
+        }
+    }
+    set results
+} -result {{2 2} {} {2 2} {} {2 2} {} {2 2} {}}
+
+test se-builds-possible-witness {sites that each pass the same error-declaring function through an untyped parameter into a structural Fn -- each a contract-boundary check reading what that parameter may hold, and a value of it -- are decided together: what it holds is a set of errors, which another site's same value keeps whole} -body {
+    set results {}
+    foreach k {3 6} {
+        set text [seSubsumeSites $k]
+        lappend results [lrange [seEcon $text] 0 1] [seSame $text 0] [lsort -unique [seOutcomes $text]]
+    }
+    set results
+} -result {{2 2} {} UNHANDLED-ERROR {2 2} {} UNHANDLED-ERROR}
 
 test se-method-reuse {method-style call decisions are reused across rounds: fewer trial builds than deciding afresh, and the audit (every seeded round built again unseeded) finds the same program} -body {
     set text "import compiler\nimport list\nimport str\n\n"
@@ -628,6 +764,18 @@ test se-property-ownership-verdict {release scopes, and so AFFINE-PATH-RELEASE-U
         [expr {$kinds eq [lsort $hir::staticdeps::ownershipKinds]}] \
         [regexp {format \{call to %s } [info body hir::semantic::Derived]]
 } -result {1 1 1}
+
+test se-property-plan-gate {the trait monomorphization's plan runs only on a checked program with no diagnostic, and its diagnostics are exactly the kinds hir/staticdeps.tcl's C:plan lists -- the facts the plan's edges rely on} -body {
+    set f [open [file join $::sdRoot hir traits.tcl]]
+    set text [read $f]
+    close $f
+    set start [string first "proc hir::traits::Plan " $text]
+    set end [string first "\nproc " $text [expr {$start + 1}]]
+    set body [string range $text $start $end]
+    set kinds [lsort -unique [lmap {- kind} [regexp -all -inline {\[list ([A-Z][A-Z-]+) (?:\[|")} $body] {set kind}]]
+    list [regexp {&& \$checked && \[dict get \$hir diagnostics\] eq ""\} \{\s*#[^\n]*\n\s*#[^\n]*\n\s*set hir \[hir::traits::monomorphize} [info body hir::BuildFull]] \
+        [expr {$kinds eq [lsort $hir::staticdeps::planKinds]}] $kinds
+} -result {1 1 {AFFINE-GENERIC-NESTED-UNSUPPORTED AFFINE-INSTANCE-BUDGET TRAIT-IMPL-ORDER TRAIT-INSTANCE-BUDGET TRAIT-INTERNAL TRAIT-NOT-SATISFIED TRAIT-POLYMORPHIC-RECURSION}}
 
 test se-property-demotion-keeps-diagnostics {a demoted trusted contract changes no diagnostic: hir::check keeps the diagnostics of the check before the demotion -- why demotion is not a channel} -body {
     regexp {set diagnostics \[dict get \$hir diagnostics\].*CheckOnce hir \$demote.*dict set hir diagnostics \$diagnostics} [info body hir::check]
