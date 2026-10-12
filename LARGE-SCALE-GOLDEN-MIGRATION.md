@@ -598,3 +598,148 @@ independent ways, one compilation each:
 Every migration suite passed both before it was accepted (registrations with
 computed names or `unit`/`[]` expectations cannot be altered textually; invert
 covers them, and several migrators altered those by hand). PERTURB_RESULT
+
+## Mutation
+
+### The cross-suite sample (points 61, 62)
+
+`audit/golden/migration/mutant-sample.txt` lists 48 existing mutants of ten
+harnesses -- every migrated subsystem that has a mutation harness: coroutines
+(7), affine values (5), enums (6), error payloads (7), MutableArray (4),
+MutableVector (5), static intrinsics (4), structural contracts (3), traits (4)
+and context traits (3), the Tcl-runtime, front-end and native variants mixed.
+`audit/golden/migration/sample.tcl` runs each through
+`audit/golden/tools/check.tcl -mutants`: the Tcl files the mutant's harness
+targets (old side) and the golden suites holding those files' ported rows (new
+side), on the backends the mutated file can affect. A verdict is per mutant:
+
+| verdict | meaning | mutants |
+|---|---|---|
+| BOTH | a ported Tcl test and its own golden test both fail | 29 |
+| BOTH-SUITE-LEVEL | the Tcl side fails a ported test; the golden side fails the *suite* (compile error, abort, disagreement) rather than a named test | 16 |
+| OLD-ONLY | only the Tcl side detects it | 2 |
+| NEW-ONLY | only the golden side detects it | 0 |
+| NEITHER | no ported test on either side detects it | 1 |
+
+**BOTH-SUITE-LEVEL** is a detection with coarser localization, not a miss: a
+mutant that breaks the runtime under a whole program (an uncatchable run-time
+failure in one test aborts its suite's runner), or the compiler on a
+construct every suite uses, fails the suite. Two of them say something about
+the framework itself: `done-consumes` breaks `lib/test.bot`'s own runner (it
+calls `coroutine::done?` and resumes), so every suite fails to compile, and
+`fail-ignores-payload-tcl`/`whole-binding-loses-field-tcl` turn a missing
+payload field into a run-time failure no handler can catch.
+
+The first run of the sample found three OLD-ONLY and three NEITHER mutants. Each
+was investigated as a possible migration gap; four were (ce34e1d):
+
+* `contravariant-erasure-dropped` (OLD-ONLY): the port of
+  `scc-contravariant-admitted`/`-rejected` carried only half the theorem;
+  the missing half is ported, in two companions
+  (`callable-contracts-contravariant.bot`, `-rejected.bot`), because what a
+  structural `Fn`'s argument types erase is a program-wide fact. Now BOTH.
+* `handler-dispatch-short-name-tcl` (NEITHER): the namespaced-errors tests that
+  kill it (`nerr-both-handlers`, `nerr-completion-sets`/`-value`) had been
+  classified multi-program; they are expressible with a stock module's error
+  (`byte::AboveRange`) and are now ported. Now BOTH.
+* `caller-imports-provide` (NEITHER): `ct-owner-only` was re-expressed with a
+  stock context (`linux::io::LinuxIO`) instead of a private module. Now
+  BOTH-SUITE-LEVEL.
+
+The remaining three are explained, not gaps:
+
+* `missing-provider-silent` (OLD-ONLY): the diagnostic it suppresses,
+  MISSING-CONTEXT, is reported at the top-level call that needs the provider,
+  outside any `static compile:` block -- a static-boundary ownership gap
+  (OUTER-ANCHOR, [above](#static-boundary-ownership-gaps)).
+* `failed-swap-keeps-replacement` (OLD-ONLY): a leaked replacement is visible
+  only to the Tcl runtime's release counters; a release runs no Botlish code
+  (COROUTINES.md, "Release at the last use"), so no program can observe it.
+* `release-never` (NEITHER among ported tests): the same, for coroutines; the
+  Tcl tests that kill it are KEEP-INTERNAL (release traces).
+
+No source-semantic mutant is OLD-ONLY without that explanation (point 129).
+The sample ran on the migration's tree before the static-decision economics
+changes (17f0323 and later); those change how many builds a decision takes and
+the wording of two TYPE messages, not any program's outcome
+(`audit/static-decisions/tools/compare.tcl` and the side-by-side check agree on
+the final tree).
+
+### The harnesses (points 57 to 60)
+
+| harness | mutants | result | why it ran |
+|---|---|---|---|
+| golden framework (`audit/golden/tools/mutate.tcl`) | 20 | all apply, all killed | `lib/test.bot` gained two helpers |
+| static decisions (`audit/static-decisions/tools/mutate.tcl`) | 34 (17 before; 17 added with the fixes) | all apply, all killed | `hir/staticdeps.tcl`, `hir/static.tcl` |
+| structural contracts (`audit/structural-contracts/tools/mutate.tcl`) | 18 | all apply, all killed | `hir/completions.tcl` |
+| error payloads (`audit/error-payloads/tools/mutate.tcl`) | 44 | MUTANTS_EP | `hir/completions.tcl` |
+| static intrinsics (`audit/static-compile/tools/mutate.tcl`) | 21 | MUTANTS_SC | `hir/static.tcl` |
+| affine values (`audit/affine/tools/mutate.tcl`) | 29 | MUTANTS_AF | `hir/affine.tcl`, `hir/structs.tcl` |
+| coroutines (`audit/coroutines/tools/mutate.tcl`) | 52 | MUTANTS_CO | `hir/affine.tcl`; the runner is a coroutine |
+| MutableVector (`audit/mutable-vector/tools/mutate.tcl`) | 45 | MUTANTS_MV | `hir/mutvec.tcl` |
+| MutableArray (`audit/mutable-array/tools/mutate.tcl`) | 31 | MUTANTS_MA | `hir/mutvec.tcl` |
+
+Every compiler fix of the migration also ran its layer's fuzzers (several
+seeds, once under GC stress where the harness has the switch): FUZZ_RESULTS.
+
+## Freeze classification
+
+Points 65 to 69, as data for the next milestone (nothing is frozen):
+
+| class | Tcl tests | what it would mean |
+|---|---|---|
+| FROZEN-DUPLICATE-ORACLE (`tcl_layer` DUPLICATED-E2E) | 2042 | the whole theorem is carried by golden tests that pass on all four backends; a candidate to run in CI only, frozen except when a disagreement reveals a bug |
+| ACTIVE-TCL-INTERNAL | 5229 | stays actively maintained and keeps receiving new tests |
+| of which ACTIVE-INTERNAL | 3641 | compiler/runtime internals, warnings, and the internal half of every SPLIT test |
+| of which ACTIVE-NOT-EXPRESSIBLE | 1006 | parser and header behavior, run-time-only failures, outer-anchored diagnostics, unchecked/`-strict 0` semantics, and every *weaker* port's original |
+| of which ACTIVE-MULTI-PROGRAM | 582 | several programs, `main.tcl`, executables, stdout/argv, private modules, corpus files |
+
+Per subsystem (Tcl tests, share that would stay active):
+
+| subsystem | Tcl tests | duplicated | active | active share |
+|---|---|---|---|---|
+| surface | 685 | 552 | 133 | 19% |
+| coroutines | 56 | 40 | 16 | 29% |
+| errors | 267 | 160 | 107 | 40% |
+| functions | 411 | 244 | 167 | 41% |
+| opaque | 107 | 61 | 46 | 43% |
+| traits | 68 | 36 | 32 | 47% |
+| diagnostics | 198 | 91 | 107 | 54% |
+| refinements | 262 | 119 | 143 | 55% |
+| abi | 175 | 76 | 99 | 57% |
+| collections | 584 | 251 | 333 | 57% |
+| affine | 112 | 42 | 70 | 62% |
+| strings | 433 | 157 | 276 | 64% |
+| static-compile | 59 | 19 | 40 | 68% |
+| modules | 216 | 68 | 148 | 69% |
+| contexts | 75 | 20 | 55 | 73% |
+| native | 919 | 89 | 830 | 90% |
+| harness | 85 | 8 | 77 | 91% |
+| gc | 167 | 4 | 163 | 98% |
+| hir-core-nir | 1258 | 1 | 1257 | 100% |
+| parser | 496 | 2 | 494 | 100% |
+| warnings | 638 | 2 | 636 | 100% |
+
+* **Freezing would be per test, not per file**: no Tcl test file is entirely
+  DUPLICATED-E2E (five are at least 80%: `ascii`, `empty-collection-
+  admissibility`, `list-stdlib`, `native-uri-escape`, `typed-callable-escape`),
+  and 59 files (1603 tests) have no duplicated test at all. A freeze policy needs
+  a per-test mechanism (the manifest's `freeze` column is that list) or a file
+  reorganization; the Tcl suite was not reorganized here.
+* **Active Tcl tests that should keep receiving new coverage** (point 68): every
+  ACTIVE-INTERNAL file -- the warning suites (`fixed-arity-list-return`,
+  `method-eligible`, `same-failure`, `many-boolean-arguments`,
+  `one-char-string-literal`, `proves-naming`, `warnings`: warnings are not
+  reified), the representation and code-shape tests (`struct-scalar-replacement`,
+  `value-transport`, `raw-int-abi`, `native`), the analysis-fact tests
+  (`exact-value-facts`, `hir-range`, `surface-lowering`), the parser, and the
+  static scheduler (`static-economics`); and the split halves of
+  `mutable-array-type`, `affine`, `coroutines` and the error tests, whose release
+  counters, `-strict 0` diagnostic lists and program-boundary failures only Tcl
+  sees.
+* **Layers represented only in Tcl** (point 69): HIR/Core IR/NIR shape and the
+  analyses' facts (hir-core-nir, 100% active), the parser, every warning, the
+  native runtime's memory behavior (allocation counts, stack maps, root
+  liveness, GC: gc 98%, native 90%), release and drop order, the static
+  scheduler's economics, and the process boundary (`main.tcl`, executables,
+  argv, stdout).

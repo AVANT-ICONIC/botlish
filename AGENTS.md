@@ -851,6 +851,22 @@ removed golden test is a manifest row added or removed. `rejects_at` pins
 line and column in the suite file: adding lines above one moves it (update
 the test). `tests/golden/README.md` is the porting guide.
 
+The manifest maps *every* Tcl test that runs (LARGE-SCALE-GOLDEN-MIGRATION.md)
+and is generated: never edit it by hand. A golden test's row lives in its
+suite's fragment (`audit/golden/migration/fragments/SUITE.tsv`), a Tcl test's
+classification in its file's census (`audit/golden/migration/census/FILE.tsv`);
+a new Tcl test gets a census row (KEEP-INTERNAL for a test of compiler
+internals). Regenerate with `tclsh9.0 audit/golden/migration/merge.tcl -names
+audit/golden/migration/tcl-names.txt` (refresh the names with
+`audit/golden/tools/check.tcl -full 1 -names-out FILE` when tests were added).
+A new golden test must be able to fail: run `audit/golden/tools/perturb.tcl` on
+its suite. By default `tests/golden.test` runs the eight validation-sample
+suites (`BOTLISH_GOLDEN_SUITES=all` or a list of files runs others); CI's
+`golden` shards run every suite on every backend beside its Tcl originals
+(`check.tcl -shard I/4`). A suite that cannot run on a backend declares
+`# golden-exclude: BACKEND -- REASON` in its leading comments; keep such tests
+in a companion suite so the main suite keeps all four backends.
+
 If you change `lib/test.bot`, run `tests/golden-framework.test`,
 `tests/golden.test`, `tclsh9.0 tests/golden/run.tcl`,
 `audit/golden/tools/fuzz.tcl` (several seeds, once with `-gc-stress 1`)
