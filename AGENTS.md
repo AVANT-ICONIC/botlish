@@ -390,6 +390,13 @@ instance key of a trait parameter (`hir/semantic.tcl`), the plan or build 2
 `audit/traits/tools/mutants.txt` to still apply: update a mutant's text when
 you change the code it mutates, and keep it a mutant of the same rule).
 `audit/traits/tools/evidence.tcl` regenerates `audit/traits/principal/`.
+`hir::BuildFull` runs the plan only on a program with no diagnostic, and its
+diagnostics are a static site's: a program-wide channel of the static
+decisions (`hir/staticdeps.tcl`'s `C:plan`, which lists the plan's
+diagnostic kinds and the calls they are reported at). A change to that gate,
+to those kinds or to where they are anchored also needs
+`tests/static-economics.test` (`se-property-plan-gate`, `se-equal-plan-gate`)
+and the static-decision harnesses (Static intrinsics, below).
 
 ## Context traits
 
@@ -809,7 +816,12 @@ schedulers, the dependency analysis, the method-call seeds or build reuse
 an inferred contract, the erased-callable contract, an instance budget, a
 yield type, a diagnostic suppressed by reachability or by a whole-program
 verdict such as the ownership analysis's, which withholds release scopes and
-`AFFINE-PATH-RELEASE-UNSUPPORTED` from a program it rejects), run
+`AFFINE-PATH-RELEASE-UNSUPPORTED` from a program it rejects, or the trait
+plan's gate, which reports its diagnostics only for a program with no other;
+or a diagnostic that prints an internal id in a new form -- `hir::static::
+InternalIds` knows `block(eN)` and `function eN` only -- or a binding's
+`name`, which hygiene may have renamed `NAME#N` with a number counted over
+the whole program: print `hir::semantic::SourceName`), run
 `tests/static-economics.test`, `tests/static-compile.test`, `tests/golden.test`
 (`golden-static-economics`), `audit/static-decisions/tools/fuzz.tcl` (several
 seeds), `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` and

@@ -125,7 +125,18 @@
 #                       one or a native, whose result type carries nothing,
 #                       carries exactly its declared errors whatever its body
 #                       becomes (FixedCarrier): the edge goes to the sites it
-#                       is written in, not into its body. Its
+#                       is written in, not into its body. And the contract is
+#                       a set: it loses an error only once every contribution
+#                       erasing it is gone, so it depends, per error, on one
+#                       *witness* contribution -- the one the sequential order
+#                       removes last; for a semantic instance, the chain of
+#                       requests keeping it that is removed last
+#                       (RequestPath) -- and on every declined request; every
+#                       site holding a contribution is linked to it
+#                       (Z:site -> C:erased, as C:verdict's contributors are:
+#                       when a consumer turns unknown, the other contributors
+#                       of its errors are held back with it;
+#                       ErasureWitnesses). Its
 #                       *consumers*: R -> C:erased for a region with a call
 #                       through an uncontracted value (a callee of type any
 #                       or a bare kind, a native calling such an argument),
@@ -226,7 +237,11 @@
 # Z:site -> C:erased and -> P:input for the inputs of the callables at its
 # positions (and the outward finals of a yield in it: every construction
 # reaching it); P:input -> what its calls pass in its position (a parameter
-# of a function only ever called), its value (a local), or C:erased.
+# of a function only ever called), its value (a local), or C:erased. What an
+# input may hold is a set too (errors, and whether every value is quiet), so
+# P:input depends per part on one witness value whose part is fixed
+# (PossibleUnit), and on every other value; every site passing a value of a
+# fixed part is linked to it (Z:site -> P:input, possibleLinks).
 #
 # What is not a channel, and why: a demoted trusted contract (hir::check
 # keeps the diagnostics of the check before the demotion, so a demotion

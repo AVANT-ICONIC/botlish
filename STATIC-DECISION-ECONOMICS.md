@@ -157,12 +157,14 @@ missed a channel. None occurs in any suite, fuzz program or test.
 
 | node | depends on |
 |---|---|
-| `Z:site` | its region (*position*: its rejection can make the code after it unreachable, where completion and ownership diagnostics are not reported), the sites nested in it, its own contract-boundary checks |
-| `R:region` (a function literal or a program's top-level code) | everything its own code mentions: bindings, the functions it defines and calls (their summaries), every method-call candidate, its parameters and captures, the control operands around its literal, the narrowings of each capture between its definition and the region -- *not* the rest of the enclosing function: a function is analyzed from its own entry |
+| `Z:site` (what the site's own diagnostics read) | its region (*position*: its rejection can make the code after it unreachable, where completion and ownership diagnostics are not reported), the forms of the sites nested in it, its own contract-boundary checks |
+| `F:site` (the site's *form*: whether it is still a body; [below](#forms-the-plans-gate-and-the-witnesses)) | the form of the site around it -- nothing else: within a run a form changes only by the site's own rejection |
+| `R:region` (a function literal or a program's top-level code) | everything its own code mentions: bindings, the functions it defines and calls (their summaries), every method-call candidate, its parameters and captures, the forms of the sites its code is in, the control operands around its literal, the narrowings of each capture between its definition and the region -- *not* the rest of the enclosing function: a function is analyzed from its own entry |
 | `B:binding` | its definition, every narrowing mention in its own region ([every mention](#every-mention)); an untyped parameter also every reachable use in its function and the functions nested in it (its inferred contract); an affine or mutable binding -- never one holding a callable -- every region mentioning it |
-| `C:erased` (the erased-callable contract) | its contributors: the instance requests whose arguments at uncontracted parameters can carry errors (by those arguments and the call's place, up the chain of requests), the positions of contravariant erasure, the requests the budget declined |
-| `C:budget:B` | every call requesting one of B's instances, only under pressure |
-| `P:input` (what an uncontracted input may hold at the contract boundary) | what the calls of its function pass in its position, its value, or `C:erased` |
+| `C:erased` (the erased-callable contract, a set of errors) | per error, one *witness* contribution -- the one the sequential order removes last -- among the instance requests erasing it (the chain of requests keeping the instance, its function, its arguments but a function's body), the contravariant erasures erasing it; every request the budget declined. A request erasing nothing contributes nothing ([below](#forms-the-plans-gate-and-the-witnesses)) |
+| `C:budget:B` | B's body, the place of every call requesting one of B's instances and the facts of its arguments (of an argument naming a function, its place only), only under pressure |
+| `P:input` (what an uncontracted input may hold at the contract boundary: a set of errors and whether every value is quiet) | per error and for not being quiet one witness value among what the calls of its function pass in its position, every value whose part is not fixed, its value, or `C:erased` |
+| `C:plan` (the gate of the trait monomorphization's plan; [below](#forms-the-plans-gate-and-the-witnesses)) | while a diagnostic the plan does not report stays, one witness: the site of the last in post-order (else the region of each); while every diagnostic may be the plan's, the form of every site holding one |
 | `C:verdict` (the ownership analysis's verdict on the whole program; [below](#the-ownership-verdict)) | while the analysis reports something, one witness: the region of its diagnostic whose site is last in post-order, or of every one outside a site; while it accepts the program, every region passing an affine argument whose contract can widen |
 
 A region is a *consumer* of `C:erased` when it calls through a value that has
@@ -176,9 +178,9 @@ it).
 
 Not channels, each pinned by a `se-property-*` test where the fact lives:
 a demoted trusted contract (`hir::check` keeps the diagnostics of the check
-before the demotion), the trait monomorphization's build (it runs only on a
-program with no diagnostic), resolution (lexical). The gate of its *plan* is
-a channel, not modelled yet ([every mention](#every-mention)).
+before the demotion), the trait monomorphization's build after its plan (it
+runs only on a program with no diagnostic), resolution (lexical). The gate of
+its *plan* is a channel, `C:plan` ([below](#forms-the-plans-gate-and-the-witnesses)).
 
 ### The ownership verdict
 
@@ -389,7 +391,7 @@ failures around an AFFINE-GENERIC-NESTED-UNSUPPORTED one) mispredicts on
 the tree before this change. The decisions stay the sequential order's in
 every case measured (a build reports plan diagnostics only when it reports
 nothing else), but the channel is missing and is the next one to add, in the
-manner of `C:verdict`.
+manner of `C:verdict`. (Added since: `C:plan`, [below](#the-plans-gate).)
 
 Validation: `tests/static-economics.test` 35/35 and
 `tests/static-compile.test` 83/83 (interp); `compare.tcl` on collections,
@@ -398,6 +400,446 @@ loops, lists-and-sets, flags, coroutines and mutable-vector: every suite
 batched = sequential exactly, no misprediction; the fuzzer, seeds 1 (10
 programs), 2 and 3 (20 each, seed 3 with legacy): 50 programs, 1348 sites,
 0 failures; `mutate.tcl` (in three `-only` runs): 22 mutants, 22 applied and killed.
+
+### Forms, the plan's gate and the witnesses
+
+A later round of findings: the plan's gate (the last channel the graph was
+missing), a family of over-approximations that serialized independent
+sites -- sibling nested sites, erasing sites, messages that only looked like
+they named internal ids or named callables by them -- and a message that was
+not the same in every build (a hygiene rename). After it, every program
+measured decides as the sequential order does and no build contradicts a
+prediction; before it, two golden suites recorded mispredictions and the
+hygiene reproducer below committed another message than the sequential
+order's.
+
+#### A site's form is not what it reads
+
+`Z:site` used to stand for two things: what a site's own diagnostics read,
+and the site's form -- the edge every region holding the site's code, every
+subtree containing one of its expressions, had to it. Whatever read a site's
+form therefore read everything that site read. Within a run of the batched
+scheduler a site's form changes only when the site itself is rejected; a
+change of what it reads makes its *status* unknown, never its form. So the
+graph has two nodes per site now: `Z:site`, its diagnostics' inputs as
+before, and `F:site`, its form, whose one successor is the form of the site
+around it (whose rejection takes it away). Every edge that reads code goes
+to `F` (a region holding a site, `AddSubtree`, a narrowing mention, an
+erasure's site, a nested site); `Z` is reached only where a diagnostic
+itself is read (the plan's witness, below). A site depends on Z when `F:Z`
+is reachable from `Z:site`.
+
+**Sibling nested sites** (work item 2). The golden framework's shape: one
+enclosing site holding several functions, each with a checker-rejected site
+of its own. Every inner site depended on its enclosing site -- an explicit
+`Z:inner -> Z:outer` edge (the header said "the site whose body holds it"),
+and again through the `if true:` that scopes the enclosing body (a control
+operand around each function's literal, belonging to the outer site) -- and
+the outer site depends on every inner one (their forms are part of its
+body), so every inner site reached every sibling: one rejection per build
+(3 siblings: 4 rounds, 6: 7; the same functions in a plain function: 2).
+The inner-to-outer edge is gone (the outer site depends on its nested sites,
+now an explicit `Z:outer -> F:inner`; the trace path read "nested site OUTER
+-> position function outer -> defines function t0 -> holds site t0's"), and
+the `if true:`'s condition reaches only the outer site's *form*, which a
+nested site may depend on harmlessly (the outer's rejection removes it).
+`se-builds-nested-siblings`: 3 and 6 siblings, 2 rounds each, as in a plain
+function. Mutants: `sibling-through-outer`, `form-reads-inputs` (economic).
+
+#### The plan's gate
+
+`hir::BuildFull` runs the trait monomorphization's plan (`hir::traits::Plan`)
+only on a checked program with no diagnostic at all, and the plan reports
+diagnostics that belong to sites: TRAIT-NOT-SATISFIED in a clone's view,
+TRAIT-IMPL-ORDER, TRAIT-INSTANCE-BUDGET, AFFINE-GENERIC-NESTED-UNSUPPORTED,
+AFFINE-INSTANCE-BUDGET, TRAIT-POLYMORPHIC-RECURSION (`planKinds`, checked
+against `hir/traits.tcl` by `se-property-plan-gate`). A site holding one
+fails only once every other diagnostic is gone; the batched run predicted it
+ok beside the diagnostics that kept the plan from running, and the build
+that opened the gate contradicted it (`traits.bot`, `affinity.bot`, and the
+three-site program of two TYPE failures around an
+AFFINE-GENERIC-NESTED-UNSUPPORTED one: `mispredicted`).
+
+`C:plan` (`hir/staticdeps.tcl`, `PlanGate`):
+
+* **consumers**: `Z:site -> C:plan` for every site that holds a call the
+  plan can report at -- a trait operation, a call of a trait-polymorphic
+  function or of one requiring a context trait, a call giving an untyped
+  parameter an argument that is or may become affine (an `any`) -- in a
+  program that can plan at all (trait declarations, or a coroutine
+  construction), and that has no diagnostic of its own in the build (one
+  that has keeps the gate closed itself: its status changes only once that
+  diagnostic is gone, which its own edges say);
+* **while the gate is closed** (some diagnostic of a kind the plan does not
+  report, or the checker's TRAIT-NOT-SATISFIED, whose message names the
+  argument or the exit): one witness -- the site of the diagnostic last in
+  post-order, what it reads and its form (`Z` and `F`), else the region of
+  each diagnostic in no site's body (at a function literal, the function's
+  own: a declared result not proven at a top-level function is not about
+  the whole top-level code). Any one witness is sound: the gate cannot open
+  while its diagnostic stays. An earlier version took the region of every
+  diagnostic outside a site as well; one at a top-level function made the
+  top-level code, and so every function, the witness: `traits.bot` took 25
+  rounds. No linking is needed, unlike `C:verdict`: a plan diagnostic never
+  stands beside another diagnostic, so a consumer judged once the later
+  diagnostics are gone is rejected with the diagnostic the sequential order
+  gives it when they are -- which accepts it first and rejects it in the
+  build that opens the gate, a build of the same forms;
+* **while the gate may be open** (every diagnostic of a plan kind): every
+  site holding one is a consumer, and the plan depends on each one's form.
+  The plan is one computation over the whole program whose stages hide each
+  other's diagnostics (TRAIT-IMPL-ORDER appears only once no stage-one
+  diagnostic is left); its diagnostics are decided one per build, as the
+  sequential order decides them. (No program was found where a finer rule --
+  one witness -- decides another program; this is the conservative rule.)
+
+Consumers a rejection would first have to *create* (a callee whose type
+becomes an exact function once a join loses a branch, a receiver that
+becomes a trait view) are not detected: such a site, if one exists, is
+predicted ok, and the build that reports its plan diagnostic records a
+misprediction, which every audit fails on.
+
+| program | before | after | sequential |
+|---|---|---|---|
+| the three-site program (`se-equal-plan-gate`) | 3 rounds, mispredicted | 3 rounds | 4 rounds |
+| the plan site ahead of four TYPE failures (`se-builds-plan-gate`) | 3 rounds, mispredicted | 3 rounds | 6 rounds |
+| two TRAIT-IMPL-ORDER sites (`se-equal-plan-gate`) | 3 rounds | 3 rounds | 3 rounds |
+| `traits.bot` | 5 rounds / 10 builds, 2 mispredicted | 8 / 13 | 33 / 74 |
+| `affinity.bot` | 9 / 10, 1 mispredicted | 6 / 7 (4 / 5 once callables are named by source, below) | 25 / 26 |
+
+`traits.bot` pays for its correct prediction: its 36 consumers without a
+diagnostic depend on the last failing site, so they share its component, and
+whenever one of them turns unknown on its own account (a site of a function
+it calls is rejected) the later failing sites of that component wait
+(rounds 3 to 5, one rejection each), and its two TRAIT-IMPL-ORDER sites are
+decided one per build. Choosing the *first* failing site as the witness is
+worse (14 rounds, 31 builds: every consumer turns unknown at once). The
+cost is the component rule's ("order within a component", [point
+70](#70-remaining-unavoidable-dependency-cases)), not the channel's: a
+consumer without a diagnostic can only become one where the sequential
+order accepts it first, so it would not need to hold the sites after it --
+the "finer components" opportunity of [point 72](#72-next-optimization-opportunities)
+would recover these rounds.
+
+Mutants: `plan-consumers-ignored`, `plan-witness-ignored` (semantic: the
+build that opens the gate contradicts a prediction), `plan-every-diagnostic`
+(economic: the site ahead of four failures takes a build per rejection).
+
+#### Internal ids, exactly
+
+A message that names internal ids waits for the sequential order's own
+build. The recognizer (`hir::static::InternalIds`) matched any word shaped
+like an id -- `\m[ebsyt][0-9]+\M` -- so `se-equal-ownership-siblings/moved`'s
+USE-AFTER-MOVE, "`s1` was used after its coroutine value was moved ...
+other = s1 (...)", waited a round for a binding the program calls `s1`. A
+diagnostic names an id in exactly two forms: an exact callable's type,
+`block(e12)` (`hir::types::show`, `hir::specialize::ShowKey`), and a
+function without a name in a semantic instance's environment, `function e12`
+(`hir::semantic::ShowType`); only those count now, and predictions blank
+only those (`se-equal-internal-ids-exact`; mutant `internal-ids-unknown`,
+economic). Every rejected site's message of every golden suite was surveyed:
+`block(eN)` is the only form that occurs; the `s1` message was the only
+false match.
+
+#### Callables and bindings named by their source
+
+Most internal ids in messages were an exact callable's type in a TYPE
+message -- "(argument type: block(e12)/2 -> bool)" of `hir/range.tcl`'s
+three argument checks, the bearing check's "this value of type ..." and the
+declared-result check's contract (`hir/callables.tcl`) -- and such a
+rejection waits for a build whose earlier forms are the sequential order's
+([point 70](#70-remaining-unavoidable-dependency-cases), "internal ids"):
+`callables.bot`'s seven (lines 375, 386, 396, 410, 554, 702, 728) each
+waited for builds of their own. They now name the callable the way
+`hir::semantic::ShowType` names one in a semantic instance's environment
+(`hir::semantic::NameCallables`): by its function's name, `two/2 -> bool`,
+and `function e12` only for a function without one (which still waits).
+One Tcl test pinned the old text: `tests/structs.test`'s
+`struct-bearing-attacks`, whose two expectations
+`struct{handler: block(e2)/1 -> int}` now read
+`struct{handler: typed/1 -> int}`; the examples in
+STRUCTURAL-FUNCTION-TYPES.md and GOLDEN-TEST-FRAMEWORK.md follow.
+`hir/containers.tcl`'s factory message keeps `block(eN)`: the golden
+`mutable-array.bot` pins the text around it. Rounds/builds with the
+dependency changes alone, then with the names: `callables.bot` 10/10 to
+3/3, `compiled-values.bot` 8/8 to 4/4, `range-and-contract-values.bot` 8/8
+to 4/4, `affinity.bot` 6/7 to 4/5, `declared-errors.bot` 5/9 to 3/7,
+`structs-and-enums.bot` 6/19 to 4/17, `mutable-array.bot` 6/21 to 5/20.
+
+A name is the same in every build only as written. `hir/hygiene.tcl`
+renames a binding that name-based Core IR would let capture another
+reference to `NAME#N`, N counting that name's renames across the whole
+program -- every static site's body among it -- and the checker's messages
+printed that name: two sites each with a parameter `list` beside a list
+literal, both rejected (TYPE), and the batched run committed the second's
+"argument for parameter "list#2" ..." beside the first, where the sequential
+order, judging it after the first's rejection, reports "list#1"
+(`se-equal-hygiene-names`; it predates this round). `InternalIds` could not
+recognize it soundly: a number can depend on a site *after* it, which the
+batched run may already have rejected and the sequential order not. The
+messages print the spelling hygiene records instead
+(`hir::semantic::SourceName`, as native symbol names and
+`hir::contexts::BlockName` do): the parameter of `hir/range.tcl`'s argument
+messages, `NameCallables`' callables, a semantic instance's environment and
+label (mutant `hygiene-names-printed`, semantic). Messages that print a
+binding's or a reference's `name` elsewhere -- USE-AFTER-MOVE's binding,
+`hir::signatures::Name`'s function names in coroutine and trait messages --
+still can, a remaining gap: no golden suite's message names a hygiene
+rename, and no fuzz program has one.
+
+#### The erased-callable contract's witnesses
+
+The erased-callable contract is a set of errors (`hir::completions::
+ErasedErrors`, what every reader reads: an uncontracted call is charged it,
+`Subsume` and `Possible` run while it is not empty). Its graph node depended
+on every contribution's place and facts. Three over-approximations, each
+fixed in `hir/staticdeps.tcl`:
+
+* **A request that erases nothing.** What a value carries
+  (`hir::callables::CarriedErrors`) is a function of its static type alone
+  -- an exact function's *declared* errors and what its result type carries,
+  a structural type's contract -- and a rejection only turns a type into
+  `never` (`CanCarry`'s premise). So a request erasing nothing now never
+  will, and rejecting the site it is in removes nothing: it is no
+  contributor. `opaque.bot`'s sites each pass a function that raises nothing
+  to the untyped `list::any?` (an erasure site of the contract and a caller
+  of its consumer); compiled-values, callables and range-and-contract-values
+  have the same shape. The reproducer (five such sites, each rejected with
+  OPAQUE-REPRESENTATION, and `run(body)` over them): 6 rounds before, 2
+  after (`se-builds-erased-empty`; mutant `erased-empty-removed`).
+* **A function's body is not what it carries.** An argument naming a
+  function -- a literal, a reference to a binding bound to one, a native --
+  whose result type carries nothing carries exactly its declared errors
+  whatever its body becomes (`FixedCarrier`): the contract depends on the
+  sites it is written in, not on its body (it reached every site in the
+  body: `run(b1)` erasing `b1` made every consumer wait for `b1`'s site).
+  Mutant `fixed-carrier-body`.
+* **Another contributor of the same error.** The contract loses an error
+  only once every contribution erasing it is gone. It depends, per error, on
+  one *witness*: the contribution the sequential order removes last
+  (`ErasureWitnesses`; for a semantic instance, the chain of requests that
+  keeps it which is removed last, `RequestPath` -- an instance exists while
+  one of its requests does, so its other requesters are no witnesses
+  either), and on every request the budget declined (errors not known).
+  Every site holding a contribution is linked to the contract
+  (`Z:site -> C:erased`), as the ownership verdict's contributors are: when
+  a consumer turns unknown because a witness's inputs changed (and with
+  them, perhaps, its errors), its component holds the other contributors of
+  the same errors back, so the next build judges it with them still
+  present. `se-equal-erased-witness` pins that link: without it the
+  consumer is accepted, where the sequential order rejects it
+  (UNHANDLED-ERROR) -- mutant `erasure-unlinked`, semantic; the economic
+  `erased-every-contributor` restores one witness per contribution.
+
+The same holds for **what an uncontracted input may hold** at the contract
+boundary (`P:input`, `hir::completions::Possible`): a set of errors and
+whether every value is quiet, the union of each value's, which a rejection
+only shrinks. It depends per error, and for not being quiet, on one witness
+value (`PossibleUnit` says which values' parts are fixed: a function named
+by a literal or a binding, a native, a structural type); every site passing
+such a value is linked to it (`possibleLinks`), and every value whose part
+is not fixed (a call's result, a local) stays a dependency of its own. The
+link is conservative: unlike a contribution to the contract, whose witness
+can lose its errors when its inputs change, a fixed part changes only with
+its site's form, which the witness edge already covers -- no program was
+found where it decides anything, and no mutant pins it (it did hold
+`se-equal-erased-witness`'s second contributor back too, which is why that
+test makes `store` escape: with the link it could not tell whether the
+contract's own link was there; mutant `erasure-unlinked`).
+`callable-contracts.bot`'s sites each pass `raise` through `make`'s untyped
+parameter into a structural `Fn`, and each one's contract-boundary check
+read every other's `raise` (`se-builds-possible-witness`: 3 and 6 such
+sites, 2 rounds).
+
+The **semantic-instance budget** (`C:budget:B`) was a third route into
+function bodies: it depended on every fact of every call requesting one of
+B's instances. An instance's key keeps an argument function's identity and
+erases its result (`hir::specialize::KeyType`), so of an argument naming a
+function only its place is read now (`FunctionRef`): `test::case`'s and
+`test::value`'s checks no longer reach the bodies they wrap.
+
+What is real, and stays (each a reproducer the tests pin): a contributor
+whose errors no other contribution erases, ahead of a consumer that handles
+them only in part -- `se-equal-erased-consumer` (the consumer's
+UNHANDLED-ERROR exists while the contributor's body erases `raise2`, and is
+gone once it is rejected: 2 rounds, the sequential order's own) and
+`se-equal-erased-witness` (the witness's errors vanish with the site in
+`mk()`). `range-and-contract-values.bot`'s `ic-callable-errors-empty`
+(`pred_use(missing)`, `missing` declaring NotFound, demoting `p`'s trusted
+contract) is one: it is the only contributor of NotFound, and every
+`pred_use` region that lost its trusted contract is a consumer; but its
+neighbours, which pass functions declaring nothing (`int_only`, `len`), no
+longer contribute.
+
+What remains over-approximated, and why it is not refined here:
+
+* a consumer whose site's first diagnostic comes from a pass before any
+  reader of the contract (a checker TYPE, before the completion analysis):
+  its decision does not read the contract, but the graph is per region, not
+  per diagnostic, and a site's region is shared by everything it holds;
+* the budget under pressure still reads the facts of every non-function
+  argument of B's calls (a key changing from a type to `never` can split two
+  requests sharing an instance and push B over its budget); a bound on the
+  requests B can ever receive would close it for most programs;
+* a contribution whose function's result type can carry (a function
+  returning a function) still reads that function's body.
+
+#### Before and after
+
+The reproducers (the tree before this change, after it, and the sequential
+order; after it, every one batched = sequential exactly):
+
+| program | before | after | sequential |
+|---|---|---|---|
+| 3 sibling nested sites (the work item's reproducer) | 4 rounds | 2 rounds | 4 rounds |
+| 6 sibling nested sites (`se-builds-nested-siblings`) | 7 rounds | 2 rounds | 7 rounds |
+| 5 sites passing `peek` (raising nothing) to `list::any?`, and `run(b1..b5)` (the work item's reproducer) | 6 rounds | 2 rounds | 6 rounds |
+| 3 / 6 such sites, their functions declaring an error `run` does not handle (`se-builds-erased-empty`) | 4 / 7 rounds | 2 / 2 rounds | 4 / 7 rounds |
+| 3 / 6 such sites, `peek` declaring the same error in each | 4 / 7 rounds | 2 / 2 rounds | 4 / 7 rounds |
+| 3 / 6 sites passing `raise` through `make` into a structural `Fn` (`se-builds-possible-witness`) | 4 / 7 rounds | 2 / 2 rounds | 4 / 7 rounds |
+| the witness's errors vanishing with an earlier rejection (`se-equal-erased-witness`) | 3 rounds | 3 rounds | 4 rounds |
+| a TYPE failure and a USE-AFTER-MOVE naming `s1` (`se-equal-internal-ids-exact`) | 3 rounds | 2 rounds | 3 rounds |
+| two TYPE failures naming a parameter `list` hygiene renamed (`se-equal-hygiene-names`) | 2 rounds, **another message than the sequential order's** (`list#2` for `list#1`) | 2 rounds, `list` | 3 rounds |
+
+Every golden suite (85), compiled once with the tree before and once after
+(`surface::readProgramFile`, batched, rounds/builds; "same decisions": every
+site's outcome and reified diagnostic and the program's diagnostics
+identical, and the decided HIR of the same length -- with the trees' own
+paths, which UNKNOWN-NAMESPACE messages and a found-at location print,
+normalized; "same outcomes": every site rejected or accepted alike, with the
+same kind, location and related origins, its message differing only where
+it named an exact callable `block(eN)`, which it now names by source):
+
+| suite | before rounds/builds | after rounds/builds | same decisions |
+|---|---|---|---|
+| `abi-bytes.bot` | 3/3 | 3/3 | yes |
+| `abi-bytes-native.bot` | 1/1 | 1/1 | yes |
+| `abi-numeric.bot` | 2/2 | 2/2 | yes |
+| `abi-numeric-native.bot` | 1/1 | 1/1 | yes |
+| `affinity.bot` | 9/10, mispredicted 1 | 4/5 | same outcomes; 2 messages name a callable by source |
+| `bits-bytes-hashing.bot` | 1/1 | 1/1 | yes |
+| `callable-contracts.bot` | 27/31 | 4/8 | yes |
+| `callable-contracts-fallback.bot` | 2/2 | 2/2 | yes |
+| `callable-contracts-handle.bot` | 1/1 | 1/1 | yes |
+| `callable-contracts-returned.bot` | 4/4 | 2/2 | yes |
+| `callable-contracts-unerased.bot` | 1/1 | 1/1 | yes |
+| `callables.bot` | 16/16 | 3/3 | same outcomes; 8 messages name a callable by source |
+| `closure-escape.bot` | 1/1 | 1/1 | yes |
+| `closure-escape-instances.bot` | 1/1 | 1/1 | yes |
+| `collections.bot` | 4/7 | 4/7 | yes |
+| `compiled-values.bot` | 16/16 | 4/4 | same outcomes; 4 messages name a callable by source |
+| `compiled-values-struct-transport.bot` | 1/1 | 1/1 | yes |
+| `completion-regressions.bot` | 2/2 | 2/2 | yes |
+| `contexts.bot` | 3/4 | 3/4 | yes |
+| `core-semantics.bot` | 3/3 | 3/3 | yes |
+| `coroutines.bot` | 4/5 | 4/5 | yes |
+| `declared-errors.bot` | 5/9 | 3/7 | same outcomes; 2 messages name a callable by source |
+| `declared-errors-imports.bot` | 2/3 | 2/3 | yes |
+| `destructuring.bot` | 5/7 | 5/7 | yes |
+| `destructuring-instances.bot` | 1/1 | 1/1 | yes |
+| `diagnostics.bot` | 5/7 | 4/6 | yes |
+| `errors.bot` | 3/3 | 3/3 | yes |
+| `flags.bot` | 2/2 | 2/2 | yes |
+| `framework-semantics.bot` | 5/9 | 4/8 | yes |
+| `gc-sensitive-values.bot` | 1/1 | 1/1 | yes |
+| `harness.bot` | 2/2 | 2/2 | yes |
+| `hir-values.bot` | 2/2 | 2/2 | yes |
+| `imports.bot` | 4/16 | 4/16 | yes |
+| `imports-abi-child.bot` | 3/3 | 3/3 | yes |
+| `imports-abi-family.bot` | 1/1 | 1/1 | yes |
+| `imports-library-modules.bot` | 3/3 | 3/3 | yes |
+| `imports-unimported.bot` | 2/2 | 2/2 | yes |
+| `linux-io.bot` | 4/4 | 3/3 | yes |
+| `linux-io-native.bot` | 1/1 | 1/1 | yes |
+| `lists-and-sets.bot` | 3/3 | 3/3 | yes |
+| `loop-collecting.bot` | 3/3 | 3/3 | yes |
+| `loop-collecting-refined-checks.bot` | 1/1 | 1/1 | yes |
+| `loops.bot` | 2/2 | 2/2 | yes |
+| `method-equivalence.bot` | 3/3 | 3/3 | yes |
+| `method-equivalence-imported.bot` | 3/5 | 3/5 | yes |
+| `methods.bot` | 5/7 | 4/6 | yes |
+| `methods-byte-without-list.bot` | 2/2 | 2/2 | yes |
+| `methods-list-without-str.bot` | 2/2 | 2/2 | yes |
+| `methods-struct-instances.bot` | 1/1 | 1/1 | yes |
+| `methods-type-import-only.bot` | 2/2 | 2/2 | yes |
+| `modules.bot` | 3/4 | 3/4 | yes |
+| `mutable-array.bot` | 7/34 | 5/20 | same outcomes; 1 message names a callable by source |
+| `mutable-vector.bot` | 4/21 | 4/13 | yes |
+| `mutable-vector-str.bot` | 1/1 | 1/1 | yes |
+| `names-and-scoping.bot` | 2/2 | 2/2 | yes |
+| `native-aggregates.bot` | 1/1 | 1/1 | yes |
+| `native-values.bot` | 1/1 | 1/1 | yes |
+| `opaque.bot` | 11/15 | 6/10 | yes |
+| `opaque-instances.bot` | 1/1 | 1/1 | yes |
+| `ownership.bot` | 5/24 | 3/10 | yes |
+| `range-and-contract-values.bot` | 13/13 | 4/4 | same outcomes; 5 messages name a callable by source |
+| `raw-int-abi.bot` | 1/1 | 1/1 | yes |
+| `refinements.bot` | 3/10 | 3/10 | yes |
+| `representation.bot` | 2/2 | 2/2 | yes |
+| `static-compile.bot` | 26/33 | 7/14 | yes |
+| `static-compile-erased-consumer.bot` | 2/2 | 2/2 | yes |
+| `stdlib-namespaces.bot` | 3/9 | 3/9 | yes |
+| `stdlib-namespaces-entry-members.bot` | 1/1 | 1/1 | yes |
+| `stdlib-namespaces-str-only.bot` | 2/2 | 2/2 | yes |
+| `stdlib-namespaces-unimported.bot` | 2/2 | 2/2 | yes |
+| `string-natives.bot` | 1/1 | 1/1 | yes |
+| `string-representations.bot` | 1/1 | 1/1 | yes |
+| `strings.bot` | 2/2 | 2/2 | yes |
+| `struct-representation.bot` | 1/1 | 1/1 | yes |
+| `struct-representation-instances.bot` | 1/1 | 1/1 | yes |
+| `structs-and-enums.bot` | 6/19 | 4/17 | same outcomes; 2 messages name a callable by source |
+| `structs-and-enums-instances.bot` | 1/1 | 1/1 | yes |
+| `structs-and-enums-qualifiers.bot` | 1/1 | 1/1 | yes |
+| `traits.bot` | 5/10, mispredicted 2 | 8/13 | yes |
+| `traits-path.bot` | 1/2 | 1/2 | yes |
+| `types.bot` | 3/3 | 3/3 | yes |
+| `unicode-strings.bot` | 1/1 | 1/1 | yes |
+| `validators-and-proofs.bot` | 3/4 | 3/4 | yes |
+| `values.bot` | 1/1 | 1/1 | yes |
+| `warning-programs.bot` | 3/4 | 3/4 | yes |
+| **total** | **303/451** | **206/322** | |
+
+No suite records a misprediction after the change (`traits.bot` and
+`affinity.bot` did before). One suite takes more: `traits.bot`, 5/10 to
+8/13 -- the price of predicting its plan diagnostics instead of being
+contradicted by the build that reports them ([above](#the-plans-gate)).
+
+
+#### Validation
+
+On the tree after (interp):
+
+* `tests/static-economics.test` (44 tests: 9 new, `se-equal-erased-witness`
+  changed so it pins the contract's own link), `tests/static-compile.test`,
+  `tests/traits.test`, `tests/affine.test` and 23 more test files whose
+  expectations print a message this round touches (`structs.test`,
+  `semantic-instances.test`, `structural-fn-types.test`,
+  `typed-parameters.test`, `typed-callable-escape.test`,
+  `strict-references.test`, ...): 1702 tests, none failing.
+* `audit/static-decisions/tools/fuzz.tcl -n 10 -legacy 0`, seeds 1, 2 and 3:
+  30 programs, 816 sites, 480 rejected, no failure.
+* `audit/static-decisions/tools/compare.tcl` (batched against sequential,
+  every site, diagnostic and decided program equal), batched rounds/builds
+  and the sequential order's: on the tree after, `callables.bot` 3/3
+  (sequential 37/37), `compiled-values.bot` 4/4 (31/31), `range-and-contract-values.bot` 4/4
+  (24/24), `declared-errors.bot` 3/7 (29/141), `affinity.bot` 4/5 (25/26),
+  `mutable-vector.bot` 4/13 (26/227), `structs-and-enums.bot` 4/17
+  (25/314); on the tree of the first commit (the dependency analysis: the
+  later ones change only messages printing an exact callable's id or a
+  hygiene rename, and no message of these suites does), `harness.bot` 2/2
+  (2/2), `values.bot` 1/1 (1/1), `representation.bot` 2/2 (2/2),
+  `errors.bot` 3/3 (8/8), `traits.bot` 8/13 (33/74), `opaque.bot` 6/10
+  (50/198), `diagnostics.bot` 4/6 (14/22), `modules.bot` 3/4 (23/24),
+  `loops.bot` 2/2 (2/2), `collections.bot` 4/7 (19/73),
+  `static-compile.bot` 7/14 (46/161), `ownership.bot` 3/10 (25/170),
+  `callable-contracts.bot` 4/8 (42/169).
+* `audit/static-decisions/tools/mutate.tcl`: 34 mutants, every one applies
+  and is killed (`erased-empty-removed` updated to the `RequestPath` code it
+  mutates; `erasure-unlinked` survived until `se-equal-erased-witness` made
+  `store` escape). Every other audit's `mutants.txt` still applies.
+* `bench/static-decisions.tcl -parts erased -sizes 10 -check 1`: the
+  decided programs equal under batched and sequential (the 4-contributor
+  rows, sizes 10 to 200: 3/3, were 5/5).
 
 ## Method-call decisions
 
@@ -565,6 +1007,11 @@ row, not absolutely; the quiet-machine times follow).
 | 200 sites, 1 contributor, 2 consumers | 200 | 99 | 3/6 | 15.80 s | 2/2 | 7.71 s | 2.0x |
 | 200 sites, 4 contributors, 2 consumers | 200 | 101 | 6/12 | 35.37 s | 5/5 | 17.65 s | 2.0x |
 | 200 sites, contributor rejected early, 2 consumers | 200 | 99 | 3/5 | 8.48 s | 3/3 | 5.69 s | 1.5x |
+
+Since the contract depends on one witness per error
+([above](#forms-the-plans-gate-and-the-witnesses)), the rows with 4
+contributors take 3/3 at every size (the sequential order: 7/7 at 10 sites;
+the decided programs equal, `-check 1`); the others are unchanged.
 
 #### Verified structural contracts (no erased-callable consumer)
 
@@ -1419,7 +1866,8 @@ fact the previous one changes:
 * **the erased-callable contract**: a consumer waits for its contributors'
   decisions; with several contributors rejected by the checker, one build
   per contributor that precedes a consumer (the erased workload with 4
-  contributors: 5 builds at every size);
+  contributors: 5 builds at every size -- 3 since the contract depends on
+  one witness per error, [above](#forms-the-plans-gate-and-the-witnesses));
 * **the instance budget under pressure**: every call of the function is
   both contributor and consumer;
 * **internal ids**: a rejection whose message names internal ids waits for
