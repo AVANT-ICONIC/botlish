@@ -125,6 +125,56 @@ proc hir::structs::IsAffine {id {seen {}}} {
     return $result
 }
 
+# The fields, as {STRUCT FIELD} pairs from struct ID on, by which struct ID
+# holds a value of its own type inside a List, MutableVector or MutableArray
+# element -- {Tree kids} for `kids: List[Tree]` in `struct Tree`, or a path
+# through other structs -- or "" if it holds none. The steps are exactly the
+# ones an affine drop descriptor walks (hir::affine::Descriptor: struct fields
+# and those elements). A struct that meets itself through fields alone is not
+# such a path: no finite value has that type. One that meets itself through a
+# container element has finite values nested to any depth, which no finite
+# descriptor reaches: if it is affine, it is AFFINE-CONTAINER-UNSUPPORTED at
+# its declaration (apply).
+proc hir::structs::OwnedRecursion {id} {
+    set visited [dict create]
+    return [OwnedRecursionFrom $id [list nstruct $id] 0 {} visited]
+}
+
+# OwnedRecursion's walk of TYPE, reached from struct TARGET by the fields
+# PATH, CROSSED 1 once that path went through a container element. VISITED
+# (STRUCT,CROSSED -> 1) bounds it: a struct is explored at most once per
+# CROSSED. (An anonymous struct's fields have no declaring struct: "".)
+proc hir::structs::OwnedRecursionFrom {target type crossed path visitedVar} {
+    upvar 1 $visitedVar visited
+    variable registry
+    if {[hir::types::IsNamedStruct $type]} {
+        set id [lindex $type 1]
+        if {$path ne {} && $id eq $target} {
+            return [expr {$crossed ? $path : ""}]
+        }
+        if {[dict exists $visited $id,$crossed] || ![dict exists $registry $id]} {
+            return ""
+        }
+        dict set visited $id,$crossed 1
+        set owner $id
+        set fields [dict get $registry $id types]
+    } elseif {[hir::types::IsStruct $type]} {
+        set owner ""
+        set fields [lindex $type 1]
+    } elseif {[hir::types::IsList $type] || [hir::types::IsMutVec $type] || [hir::types::IsMutArray $type]} {
+        return [OwnedRecursionFrom $target [lindex $type 1] 1 $path visited]
+    } else {
+        return ""
+    }
+    foreach {name t} $fields {
+        set found [OwnedRecursionFrom $target $t $crossed [linsert $path end [list $owner $name]] visited]
+        if {$found ne ""} {
+            return $found
+        }
+    }
+    return ""
+}
+
 proc hir::structs::Fail {span message {kind TYPE}} {
     core::semanticError $kind "[dict get $span file]:[dict get $span line]:[dict get $span column]: $message"
 }
@@ -363,6 +413,27 @@ proc hir::structs::apply {decls} {
     }
     # (Affinity read while field types were still being resolved is stale.)
     set affinity [dict create]
+    foreach decl $decls {
+        set id [identity [dict get $decl name] [dict get $decl namespace]]
+        if {![IsAffine $id]} continue
+        set path [OwnedRecursion $id]
+        if {$path eq ""} continue
+        # A recursive affine type: releasing a value of it would have to
+        # recurse as deep as the value nests, and an affine drop is a static
+        # descriptor -- a finite walk of the type (hir::affine::Descriptor).
+        set first [lindex $path 0 1]
+        foreach field [dict get $decl fields] {
+            if {[dict get $field name] eq $first} {
+                set span [dict get $field typeSpan]
+            }
+        }
+        set steps [lmap step $path {
+            lassign $step owner name
+            format {%s.%s: %s} [display $owner] $name [hir::types::show [fieldType $owner $name]]
+        }]
+        Fail $span [format {struct "%s" is affine and holds values of its own type in a List, MutableVector or MutableArray (%s): a recursive affine type is not supported -- its release would have to recurse as deep as the value nests, and an affine value is released by a static, finite walk of its type (an unrestricted struct may hold itself in a container)} \
+            [dict get $decl name] [join $steps ", "]] AFFINE-CONTAINER-UNSUPPORTED
+    }
     return $entries
 }
 

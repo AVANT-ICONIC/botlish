@@ -1,0 +1,261 @@
+# recursive-types.bot -- struct types that name themselves, as a source-level
+# specification (STRUCTS.md: "a struct may name a struct declared later,
+# itself, or a cycle"):
+#
+# * A struct naming itself through its fields is a type no finite value
+#   has (each would hold a smaller one of the same type, without end), yet
+#   it is declared, and functions are typed over it, like any struct.
+# * Such a declaration coexists with the mutable collections: a program
+#   using a MutableVector or a MutableArray anywhere -- every suite does,
+#   through lib/test.bot's Suite -- compiles and runs with it, also when the
+#   struct holds a vector beside its own type.
+# * A struct holding a vector and its own type in a List or a MutableVector
+#   has finite values nested to any depth; it is copied logically like any
+#   vector-bearing struct (a binding, an argument and a result mutate
+#   independently), and a struct holding a vector beside a self-naming one
+#   shares as before.
+# * An affine struct may name itself through a field (destructured, typed
+#   over, dropped), and an affine struct may own an unrestricted struct that
+#   holds itself in a List: both run and release on every backend.
+#
+# Ported from tests/structs.test (struct-named-recursive-declaration, which
+# no suite could hold before: the share-descriptor walk of the MutableVector
+# elaboration, hir::mutvec::ShareDescriptor, recursed without bound -- TCL
+# LIMIT STACK -- on a self-naming struct in any program using a
+# MutableVector) and from the regression tests of that fix in
+# tests/mutable-vector.test (mv-recursive-struct-*) and tests/affine.test
+# (af-recursive-*; the drop-descriptor walk, hir::affine::Descriptor, had the
+# same gap). The Tcl tests stay authoritative
+# (audit/golden/migration/fragments/recursive-types.tsv maps each). What only
+# Tcl observes stays there: the share and drop descriptor strings, the
+# live-coroutine probe (the affine ports keep their programs' values, the
+# probe dropped), and the rejection of an affine struct that holds itself in
+# a container (AFFINE-CONTAINER-UNSUPPORTED at a declaration: a suite cannot
+# hold a rejected declaration).
+#
+# Imports: compiler and test for the framework; coroutine (the affine
+# programs' worker), list (list::length), mutable_array and mutable_vector,
+# the Tcl programs' own imports. No test here is about a missing import or
+# about which methods are visible.
+import compiler
+import coroutine
+import list
+import mutable_array
+import mutable_vector
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only). Each keeps the Tcl test's own
+# name unless two tests here would collide (the renames are noted).
+
+# struct-named-recursive-declaration's Node, which mv-recursive-struct-
+# declaration and mv-recursive-struct-copies/beside declare identically: one
+# declaration serves all of them.
+struct Node:
+    next: Node
+    label: str
+
+# mv-recursive-struct-declaration/vector-field: a vector beside its own type.
+struct Chain:
+    items: MutableVector[int]
+    next: Chain
+
+# mv-recursive-struct-copies: itself in a List, itself in a MutableVector,
+# and a vector-bearing struct beside them.
+struct Tree:
+    items: MutableVector[int]
+    kids: List[Tree]
+
+struct Forest:
+    items: MutableVector[int]
+    kids: MutableVector[Forest]
+
+struct Capture:
+    events: MutableVector[str]
+    n: int
+
+# affine.test's affDecls (the part these tests use): a one-yield worker
+# resumed with a Message.
+struct Message:
+    value: int
+
+struct Event:
+    value: int
+
+fn worker(seed: int, resume Message) -> Event:
+    message = yield Event {value: seed}
+    return Event {value: message.value}
+
+fn make(seed: int) -> Coroutine{args: [Message], return: Event}:
+    coroutine {step} = worker(seed)
+    step
+
+fn consume(s: Coroutine{args: [Message], return: Event}, n: int) -> int:
+    e = s(Message {value: n})
+    e.value
+
+# af-recursive-struct: Node (renamed AffineNode), an affine struct naming
+# itself; Tree (renamed Plain), an unrestricted struct holding itself in a
+# List, owned by the affine Job.
+struct AffineNode:
+    step: Coroutine{args: [Message], return: Event}
+    next: AffineNode
+
+struct Plain:
+    label: str
+    kids: List[Plain]
+
+struct Job:
+    step: Coroutine{args: [Message], return: Event}
+    tree: Plain
+
+# ---------------------------------------------------------------------------
+# Self-naming declarations (structs.test)
+
+fn register_structs_tests():
+    # struct-named-recursive-declaration: a struct may name itself; the type
+    # exists though no finite value constructs it, and a function is typed
+    # over it.
+    fn b_recursive_declaration() errors compiler::CompilerError:
+        static compile:
+            fn follow(n: Node) -> Node:
+                n.next
+            1
+    test::value("struct-named-recursive-declaration", 1, b_recursive_declaration)
+
+# ---------------------------------------------------------------------------
+# Beside the mutable collections (mutable-vector.test)
+
+fn register_mutable_vector_tests():
+    # mv-recursive-struct-declaration: the compiler crash's reproducer -- a
+    # self-naming struct and a function typed over it in a program that uses
+    # a MutableVector (/vector) or a MutableArray (/array) -- and a struct
+    # holding a vector beside its own type (/vector-field).
+    fn b_beside_vector() errors compiler::CompilerError:
+        static compile:
+            fn follow(n: Node) -> Node:
+                n.next
+            v = mutable_vector::from_list([1])
+            1
+    test::value("mv-recursive-struct-declaration/vector", 1, b_beside_vector)
+    fn b_beside_array() errors compiler::CompilerError:
+        static compile:
+            fn follow(n: Node) -> Node:
+                n.next
+            a = mutable_array::create(2, 0)
+            1
+    test::value("mv-recursive-struct-declaration/array", 1, b_beside_array)
+    fn b_vector_field() errors compiler::CompilerError:
+        static compile:
+            fn follow(c: Chain) -> Chain:
+                c.next
+
+            fn items_of(c: Chain) -> MutableVector[int]:
+                c.items
+
+            v = mutable_vector::from_list([1, 2])
+            v.push(3)
+            v.length()
+    test::value("mv-recursive-struct-declaration/vector-field", 3, b_vector_field)
+
+    # mv-recursive-struct-copies: copies of a struct holding itself in a List
+    # (/list) or in a MutableVector (/vector) -- a binding, an argument, a
+    # function's result -- mutate independently; a struct holding a vector
+    # in a program with a self-naming struct shares as before (/beside).
+    fn b_copies_list() errors compiler::CompilerError:
+        static compile:
+            fn add(t: Tree, x: int) -> Tree:
+                t.items.push(x)
+                t
+
+            leaf = Tree {items: mutable_vector::from_list([1]), kids: []}
+            root = Tree {items: mutable_vector::from_list([0]), kids: [leaf]}
+            copy = root
+            grown = add(root, 7)
+            root.items.push(9)
+            [root.items.length(), copy.items.length(), grown.items.length(), leaf.items.length(), list::length(grown.kids)]
+    test::value("mv-recursive-struct-copies/list", [2, 1, 2, 1, 1], b_copies_list)
+    fn b_copies_vector() errors compiler::CompilerError:
+        static compile:
+            fn leaf(x: int) -> Forest:
+                Forest {items: mutable_vector::from_list([x]), kids: mutable_vector::from_list([])}
+
+            fn graft(t: Forest, x: int) -> Forest:
+                t.kids.push(leaf(x))
+                t.items.push(x)
+                t
+
+            root = leaf(0)
+            copy = root
+            grown = graft(root, 5)
+            root.kids.push(leaf(1))
+            [root.items.length(), root.kids.length(), copy.kids.length(), grown.items.length(), grown.kids.length()]
+    test::value("mv-recursive-struct-copies/vector", [1, 1, 0, 2, 1], b_copies_vector)
+    fn b_copies_beside() errors compiler::CompilerError:
+        static compile:
+            fn follow(n: Node) -> Node:
+                n.next
+
+            fn record(c: Capture, e: str) -> Capture:
+                c.events.push(e)
+                c
+
+            cap = Capture {events: mutable_vector::from_list(["x0"]), n: 1}
+            cap2 = cap
+            cap3 = record(cap, "y0")
+            cap.events.push("z0")
+            [cap.events.length(), cap2.events.length(), cap3.events.length()]
+    test::value("mv-recursive-struct-copies/beside", [2, 1, 2], b_copies_beside)
+
+# ---------------------------------------------------------------------------
+# Affine self-naming structs (affine.test)
+
+fn register_affine_tests():
+    # af-recursive-struct: an affine struct naming itself through a field is
+    # destructured and typed over in a program using a MutableVector
+    # (/fields); an affine struct owning an unrestricted struct that holds
+    # itself in a List is moved, destructured and dropped (/unrestricted-tree).
+    # The Tcl test's live-coroutine probe (0 at the end: every coroutine
+    # released) is dropped.
+    fn b_affine_fields() errors compiler::CompilerError:
+        static compile:
+            fn follow(n: AffineNode) -> AffineNode:
+                {next} = n
+                next
+
+            fn step_of(n: AffineNode) -> Coroutine{args: [Message], return: Event}:
+                {step} = n
+                step
+
+            fn discard(n: AffineNode) -> int:
+                m = n
+                1
+
+            v = mutable_vector::from_list([1])
+            [consume(make(4), 5), v.length()]
+    test::value("af-recursive-struct/fields", [5, 1], b_affine_fields)
+    fn b_affine_tree() errors compiler::CompilerError:
+        static compile:
+            fn run() -> int:
+                j = Job {step: make(1), tree: Plain {label: "a", kids: [Plain {label: "b", kids: []}]}}
+                {step, tree} = j
+                e = step(Message {value: 5})
+                e.value + list::length(tree.kids)
+
+            fn keep() -> int:
+                j = Job {step: make(2), tree: Plain {label: "x", kids: []}}
+                2
+
+            [run(), keep()]
+    test::value("af-recursive-struct/unrestricted-tree", [6, 2], b_affine_tree)
+
+# ---------------------------------------------------------------------------
+
+fn register_recursive_types_tests():
+    register_structs_tests()
+    register_mutable_vector_tests()
+    register_affine_tests()
+
+with context test::suite()
+register_recursive_types_tests()
+test::report()

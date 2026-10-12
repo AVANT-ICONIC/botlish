@@ -85,6 +85,8 @@ namespace eval hir::mutvec {
     variable freshFunctions [dict create]
     # The parent map of the elaboration under way's current HIR.
     variable currentParent {}
+    # The named structs ShareDescriptor is inside of, outermost first.
+    variable shareVisiting {}
 }
 
 proc hir::mutvec::ShareNative {} { return mutable_vector#share }
@@ -299,6 +301,14 @@ proc hir::mutvec::ReceiverProblem {hir e r} {
 # of it shares no header: "h" an unrestricted collection (a vector or an
 # array header), "s"N"."(SLOT"."D)*N a struct whose listed layout slots hold
 # collection-bearing values. An affine type is never copied (it moves).
+#
+# A named struct may name itself, directly or through other structs
+# (STRUCTS.md, `struct-named-recursive-declaration`). The walk goes through
+# struct fields only, so a struct it meets again inside itself is one no
+# finite value has -- each would hold a smaller one of the same type, without
+# end -- and a descriptor is only ever applied to a value: that inner
+# occurrence shares nothing. (A struct that holds itself in a List, an array
+# or a vector is not walked into there: an element is never a place.)
 proc hir::mutvec::ShareDescriptor {type} {
     if {[hir::types::IsAffine $type]} {
         return ""
@@ -307,16 +317,30 @@ proc hir::mutvec::ShareDescriptor {type} {
         return h
     }
     if {[hir::types::IsStructLike $type]} {
-        set parts {}
-        set n 0
-        set slot 0
-        foreach name [hir::types::StructLayout $type] {
-            set d [ShareDescriptor [hir::types::StructField $type $name]]
-            if {$d ne ""} {
-                append parts "$slot.$d"
-                incr n
+        variable shareVisiting
+        set id [expr {[hir::types::IsNamedStruct $type] ? [lindex $type 1] : ""}]
+        if {$id ne ""} {
+            if {$id in $shareVisiting} {
+                return ""
             }
-            incr slot
+            lappend shareVisiting $id
+        }
+        try {
+            set parts {}
+            set n 0
+            set slot 0
+            foreach name [hir::types::StructLayout $type] {
+                set d [ShareDescriptor [hir::types::StructField $type $name]]
+                if {$d ne ""} {
+                    append parts "$slot.$d"
+                    incr n
+                }
+                incr slot
+            }
+        } finally {
+            if {$id ne ""} {
+                set shareVisiting [lrange $shareVisiting 0 end-1]
+            }
         }
         if {$n == 0} {
             return ""

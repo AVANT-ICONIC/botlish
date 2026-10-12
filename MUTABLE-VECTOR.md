@@ -282,6 +282,12 @@ same list object.
 `Rc::clone` of the backing -- one allocation, no element copied, counted as
 `shares`. Struct-bearing values are shared by descriptor (`s1.0.h`: a new
 struct whose slot 0 is shared). Where the compiler writes shares: item 11.
+The descriptor walks struct fields only, so a struct that names itself
+(STRUCTS.md) is met again inside itself only through fields -- a type no
+finite value has -- and shares nothing there: `Chain {items, next: Chain}`
+is `s1.0.h`, `Node {next: Node, label}` shares nothing
+(`mv-recursive-struct-*`; the walk once recursed without bound on it, in
+every program using a vector).
 
 ### 9. COW detach path
 

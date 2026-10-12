@@ -123,6 +123,8 @@ namespace eval hir::affine {
     # Release points on infinite loops' breaks (PathReleases): break ->
     # bindings, merged into the exit table.
     variable pathExits {}
+    # The named structs Descriptor is inside of, outermost first.
+    variable descriptorVisiting {}
 }
 
 # ---------------------------------------------------------------------------
@@ -1868,17 +1870,42 @@ proc hir::affine::Descriptor {hir type {exclude {}}} {
         return "a$inner"
     }
     if {[hir::types::IsStructLike $type]} {
+        # A named struct may name itself (STRUCTS.md). Met again inside
+        # itself, it is one no finite value has -- held through fields alone
+        # (each value would hold a smaller one, without end) -- or an
+        # unrestricted one, which owns nothing to drop: either way that inner
+        # occurrence drops nothing. An affine struct holding itself in a
+        # container element is rejected at its declaration
+        # (hir::structs::OwnedRecursion): its values nest to any depth, past
+        # every finite descriptor.
+        variable descriptorVisiting
+        set id [expr {[hir::types::IsNamedStruct $type] ? [lindex $type 1] : ""}]
+        if {$id ne ""} {
+            if {$id in $descriptorVisiting} {
+                if {[hir::types::IsAffine $type] && [hir::structs::OwnedRecursion $id] ne ""} {
+                    error "internal compiler error: the affine struct $id holds itself in a container: it has no finite drop descriptor (hir::structs::apply rejects its declaration)"
+                }
+                return ""
+            }
+            lappend descriptorVisiting $id
+        }
         set layout [hir::types::StructLayout $type]
         set parts {}
         set n 0
         set slot [llength $layout]
-        foreach name [lreverse $layout] {
-            incr slot -1
-            if {$name in $exclude} continue
-            set d [Descriptor $hir [hir::types::StructField $type $name]]
-            if {$d ne ""} {
-                append parts "$slot.$d"
-                incr n
+        try {
+            foreach name [lreverse $layout] {
+                incr slot -1
+                if {$name in $exclude} continue
+                set d [Descriptor $hir [hir::types::StructField $type $name]]
+                if {$d ne ""} {
+                    append parts "$slot.$d"
+                    incr n
+                }
+            }
+        } finally {
+            if {$id ne ""} {
+                set descriptorVisiting [lrange $descriptorVisiting 0 end-1]
             }
         }
         if {$n == 0} {
