@@ -790,7 +790,9 @@ fn register_method_sugar_tests():
 # ===========================================================================
 # Error contracts: Extendable's requirement admits ExtendFailed. This
 # namespace's Unextendable always fails with it, str::concat declares no
-# error, and linux::path::concat may fail with io::path::NotAPath.
+# error, and linux::path::concat may fail with io::path::NotAPath. Shouting's
+# requirement admits ShoutFailed, and Loud's implementation may fail with it
+# and with Hoarse (traits.test's loud::Loud: a strict superset).
 
 error ExtendFailed
 
@@ -814,6 +816,24 @@ fn unhandled_requirement_error(value: Extendable) -> int errors compiler::Compil
         value.concat("x")
         1
 
+error ShoutFailed
+error Hoarse
+
+trait Shouting:
+    fn shout(value: Shouting) -> Shouting errors ShoutFailed
+
+struct Loud:
+    v: int
+
+fn shout(value: Loud) -> Loud errors ShoutFailed, Hoarse:
+    value
+
+fn shout_or_keep(value: Shouting) -> int:
+    x = value.shout():
+        on ShoutFailed:
+            value
+    1
+
 fn register_error_contract_tests():
     # The same contract, always failing, and a smaller one both satisfy (and
     # a specialization that always fails is no error of its own).
@@ -821,6 +841,12 @@ fn register_error_contract_tests():
         static compile:
             [extend_or_keep(Unextendable {v: 1}), extend_or_keep("text")]
     test::value("trait-error-contracts/satisfied", [1, 1], fewer_or_same)
+    # A broader contract does not: one error more than the requirement's ...
+    fn broader() errors compiler::CompilerError:
+        static compile:
+            shout_or_keep(Loud {v: 2})
+    test::rejects_containing("trait-error-contracts/broader", compiler::DiagnosticCode::TraitNotSatisfied, "it may fail with Hoarse, which the requirement's error contract [ShoutFailed] does not admit", broader)
+    # ... or an error of another module the requirement does not name.
     fn other_error() errors compiler::CompilerError:
         static compile:
             fn g(s: str) -> int:

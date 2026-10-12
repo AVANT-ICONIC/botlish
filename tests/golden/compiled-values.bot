@@ -142,19 +142,23 @@ fn register_instance_result_tests():
     test::value("si-id-4/typed-store-accepted", "y", b_identity_typed_store)
 
     # si-ro-1: a read-only untyped wrapper accepts a typed array and a raw
-    # one (no raw-mutarray rejection).
+    # one (no raw-mutarray rejection), and its result is proven an Int.
     fn b_wrapper_typed() errors compiler::CompilerError:
         static compile:
             fn capacity(x):
                 mutable_array::capacity(x)
-            capacity(mutable_array::create(3, "x"))
+            fn need_int(n: int) -> int:
+                n
+            need_int(capacity(mutable_array::create(3, "x")))
     test::value("si-ro-1/typed-array", 3, b_wrapper_typed)
 
     fn b_wrapper_raw() errors compiler::CompilerError:
         static compile:
             fn capacity(x):
                 mutable_array::capacity(x)
-            capacity(mutable_array::allocate(3))
+            fn need_int(n: int) -> int:
+                n
+            need_int(capacity(mutable_array::allocate(3)))
     test::value("si-ro-1/raw-array", 3, b_wrapper_raw)
 
     # si-brg-6: an exact callable target that keeps the contract is fine:
@@ -348,18 +352,21 @@ fn register_invalid_instance_tests():
             m = mutable_array::create(2, "x")
             smash(m)
     test::rejects_containing("si-bad-1/names-the-instance-call", compiler::DiagnosticCode::Type, "call to smash with x : MutableArray[str] is invalid: value of type int is not admissible to element type str", b_smash)
-    test::rejects_containing("si-bad-1/names-the-body-location", compiler::DiagnosticCode::Type, "(in the body of smash, at 347:", b_smash)
-    test::rejects_at("si-bad-6/at-the-call", compiler::DiagnosticCode::Type, 349, 13, b_smash)
+    test::rejects_containing("si-bad-1/names-the-body-location", compiler::DiagnosticCode::Type, "(in the body of smash, at 351:", b_smash)
+    test::rejects_at("si-bad-6/at-the-call", compiler::DiagnosticCode::Type, 353, 13, b_smash)
     rejects_without("si-bad-6/no-synthetic-names", compiler::DiagnosticCode::Type, ["$", "Instance"], b_smash)
 
     # si-bad-2: the same function with a raw array, or a writer given a
-    # fitting value, is fine: one bad call does not condemn the function.
+    # fitting value, is fine: one bad call does not condemn the function
+    # (each call is proven unit).
     fn b_smash_raw() errors compiler::CompilerError:
         static compile:
             fn smash(x):
                 if mutable_array::capacity(x) > 0:
                     mutable_array::set(x, 0, 123)
-            smash(mutable_array::allocate(1))
+            fn need_unit(u: unit) -> unit:
+                u
+            need_unit(smash(mutable_array::allocate(1)))
     test::value("si-bad-2/raw-array", unit, b_smash_raw)
 
     fn b_writer_fitting() errors compiler::CompilerError:
@@ -367,16 +374,20 @@ fn register_invalid_instance_tests():
             fn writer(x, v):
                 if mutable_array::capacity(x) > 0:
                     mutable_array::set(x, 0, v)
-            writer(mutable_array::create(1, "x"), "ok")
+            fn need_unit(u: unit) -> unit:
+                u
+            need_unit(writer(mutable_array::create(1, "x"), "ok"))
     test::value("si-bad-2/fitting-value", unit, b_writer_fitting)
 
-    # si-bad-3: f<int> is valid, f<str> invalid: the incompatible call is
-    # the one rejected, alone or after a valid call.
+    # si-bad-3: f<int> is valid (proven int), f<str> invalid: the
+    # incompatible call is the one rejected, alone or after a valid call.
     fn b_f_int() errors compiler::CompilerError:
         static compile:
             fn f(x):
                 x + 1
-            f(1)
+            fn need_int(n: int) -> int:
+                n
+            need_int(f(1))
     test::value("si-bad-3/int-call", 2, b_f_int)
 
     fn b_f_str() errors compiler::CompilerError:
@@ -384,7 +395,7 @@ fn register_invalid_instance_tests():
             fn f(x):
                 x + 1
             f("a")
-    test::rejects_at("si-bad-3/str-call", compiler::DiagnosticCode::Type, 386, 15, b_f_str)
+    test::rejects_at("si-bad-3/str-call", compiler::DiagnosticCode::Type, 397, 15, b_f_str)
 
     fn b_f_both() errors compiler::CompilerError:
         static compile:
@@ -392,7 +403,7 @@ fn register_invalid_instance_tests():
                 x + 1
             f(1)
             f("a")
-    test::rejects_at("si-bad-3/str-call-after-int-call", compiler::DiagnosticCode::Type, 394, 15, b_f_both)
+    test::rejects_at("si-bad-3/str-call-after-int-call", compiler::DiagnosticCode::Type, 405, 15, b_f_both)
 
     # si-bad-4: a valid instance does not make every call valid: writer
     # with the wrong value is rejected, naming the call's types; each call
@@ -410,8 +421,10 @@ fn register_invalid_instance_tests():
             fn writer(x, v):
                 if mutable_array::capacity(x) > 0:
                     mutable_array::set(x, 0, v)
+            fn need_unit(u: unit) -> unit:
+                u
             writer(mutable_array::create(1, "x"), "ok")
-            writer(mutable_array::create(1, 1), 5)
+            need_unit(writer(mutable_array::create(1, 1), 5))
     test::value("si-bad-4/two-fitting-instances", unit, b_writer_two_instances)
 
     # si-bad-5: an invalid callee makes the calling instance invalid: the
@@ -432,14 +445,14 @@ fn register_invalid_instance_tests():
             fn f(x: int) -> str:
                 x
             f(5)
-    test::rejects_at("si-bad-7/called", compiler::DiagnosticCode::Type, 432, 17, b_invalid_called)
+    test::rejects_at("si-bad-7/called", compiler::DiagnosticCode::Type, 445, 17, b_invalid_called)
 
     fn b_invalid_uncalled() errors compiler::CompilerError:
         static compile:
             fn f(x: int) -> str:
                 x
             unit
-    test::rejects_at("si-bad-7/uncalled", compiler::DiagnosticCode::Type, 439, 17, b_invalid_uncalled)
+    test::rejects_at("si-bad-7/uncalled", compiler::DiagnosticCode::Type, 452, 17, b_invalid_uncalled)
 
     # si-decl-2: a declared parameter is never narrowed away: a call that
     # does not prove it is rejected.
@@ -677,14 +690,17 @@ fn register_bearing_tests():
     test::rejects("si-brg-8/wrong-element-write", compiler::DiagnosticCode::Type, b_wrong_element)
 
     # si-brg-9: a trusted-contract callee passed to an untyped parameter:
-    # the exact callee is analyzed, and the wrong argument rejected.
+    # the exact callee is analyzed (its result is proven an Int), and the
+    # wrong argument rejected.
     fn b_trusted_callee() errors compiler::CompilerError:
         static compile:
             fn need(m: MutableArray[str]):
                 mutable_array::capacity(m)
             fn app(f, v):
                 f(v)
-            app(need, mutable_array::create(1, "x"))
+            fn need_int(n: int) -> int:
+                n
+            need_int(app(need, mutable_array::create(1, "x")))
     test::value("si-brg-9/fitting-argument", 1, b_trusted_callee)
 
     fn b_trusted_callee_wrong() errors compiler::CompilerError:
@@ -716,7 +732,7 @@ fn register_definition_order_tests():
                 else:
                     ping(xs, n - 1)
             ping(["a"], 3)
-    test::rejects_at("si-rec-2c", compiler::DiagnosticCode::Unbound, 712, 21, b_ping_pong)
+    test::rejects_at("si-rec-2c", compiler::DiagnosticCode::Unbound, 728, 21, b_ping_pong)
 
     fn b_even_odd_forward() errors compiler::CompilerError:
         static compile:
@@ -729,7 +745,7 @@ fn register_definition_order_tests():
                     return false
                 even(n - 1)
             even(10)
-    test::rejects_at("hir-specialize-9b", compiler::DiagnosticCode::Unbound, 726, 17, b_even_odd_forward)
+    test::rejects_at("hir-specialize-9b", compiler::DiagnosticCode::Unbound, 742, 17, b_even_odd_forward)
 
     # opt-env-5: examples/surface/09-mutual-recursion.bot.
     fn b_mutual_recursion_example() errors compiler::CompilerError:
@@ -743,7 +759,7 @@ fn register_definition_order_tests():
                     return false
                 is_even(n - 1)
             [is_even(10), is_even(7)]
-    test::rejects_at("opt-env-5", compiler::DiagnosticCode::Unbound, 740, 17, b_mutual_recursion_example)
+    test::rejects_at("opt-env-5", compiler::DiagnosticCode::Unbound, 756, 17, b_mutual_recursion_example)
 
     # opt-env-5b: a forward call before the later function is bound is
     # rejected at the reference, not at run time.
@@ -755,7 +771,7 @@ fn register_definition_order_tests():
             fn late():
                 1
             x
-    test::rejects_at("opt-env-5b", compiler::DiagnosticCode::Unbound, 753, 17, b_forward_call)
+    test::rejects_at("opt-env-5b", compiler::DiagnosticCode::Unbound, 769, 17, b_forward_call)
 
     # si-dyn-3 (rejected half): a call before the definition.
     fn b_caller_first() errors compiler::CompilerError:
@@ -765,7 +781,7 @@ fn register_definition_order_tests():
             fn b(y):
                 y
             a("s")
-    test::rejects_at("si-dyn-3/caller-first", compiler::DiagnosticCode::Unbound, 764, 17, b_caller_first)
+    test::rejects_at("si-dyn-3/caller-first", compiler::DiagnosticCode::Unbound, 780, 17, b_caller_first)
 
     # si-det-1 (the illegal order): a caller declared before its callees.
     fn b_both_first() errors compiler::CompilerError:
@@ -783,7 +799,7 @@ fn register_definition_order_tests():
                 on IndexNotFound:
                     0
             identity(mutable_array::create(1, "x"))
-    test::rejects_at("si-det-1/caller-before-callees", compiler::DiagnosticCode::Unbound, 774, 17, b_both_first)
+    test::rejects_at("si-det-1/caller-before-callees", compiler::DiagnosticCode::Unbound, 790, 17, b_both_first)
 
 # ---------------------------------------------------------------------------
 # value-transport.test (the programs every backend lowers; the rest are in

@@ -168,7 +168,12 @@ fn register_context_tests(context config: Config):
             fn body() errors compiler::CompilerError:
                 static compile:
                     test::count()
-            test::value("nested", 0, body)
+            # (Code under test, never registered: its expectation is a binding,
+            # so audit/golden/tools/perturb.tcl, which alters every literal
+            # test::value expectation it finds, does not take it for one of
+            # this suite's registrations.)
+            expected = 0
+            test::value("nested", expected, body)
     test::rejects("gf-body-cannot-use-context", compiler::DiagnosticCode::ContextFunctionValue, registers_a_context_body)
 
 # ---------------------------------------------------------------------------
@@ -237,7 +242,7 @@ fn register_affine_capture_tests():
     fn captures_the_handle() errors compiler::CompilerError:
         static compile:
             step().n
-    test::rejects_at("gf-affine-capture-rejected", compiler::DiagnosticCode::AffineCaptureUnsupported, 239, 13, captures_the_handle)
+    test::rejects_at("gf-affine-capture-rejected/location", compiler::DiagnosticCode::AffineCaptureUnsupported, 244, 13, captures_the_handle)
     test::rejects_containing("gf-affine-capture-rejected/message", compiler::DiagnosticCode::AffineCaptureUnsupported, "`step` is an affine Coroutine", captures_the_handle)
 
     # gf-affine-capture-in-a-case: the same capture inside a case's block is
@@ -275,8 +280,13 @@ fn register_body_contract_tests(n: int):
         static compile:
             fn body() errors Boom, compiler::CompilerError:
                 boom(n)
-            test::value("raises", 1, body)
-    test::rejects_at("gf-body-error-contract", compiler::DiagnosticCode::Type, 278, 38, registers_a_raising_body)
+            # (Code under test, never registered: its expectation is a binding,
+            # so audit/golden/tools/perturb.tcl, which alters every literal
+            # test::value expectation it finds, does not take it for one of
+            # this suite's registrations.)
+            expected = 1
+            test::value("raises", expected, body)
+    test::rejects_at("gf-body-error-contract/location", compiler::DiagnosticCode::Type, 288, 45, registers_a_raising_body)
     test::rejects_containing("gf-body-error-contract/contract", compiler::DiagnosticCode::Type, "argument for parameter \"body\" cannot be proven to satisfy Fn{args: [], return: any, errors: [compiler::CompilerError]}", registers_a_raising_body)
     test::rejects_containing("gf-body-error-contract/names-the-error", compiler::DiagnosticCode::Type, "error set incompatible: the callable may raise Boom", registers_a_raising_body)
 
@@ -287,7 +297,7 @@ fn register_escaping_error_tests(n: int):
     fn escapes() errors compiler::CompilerError:
         static compile:
             boom(n)
-    test::rejects_at("gf-escaping-error-is-the-case-s/escapes", compiler::DiagnosticCode::UnhandledError, 289, 13, escapes)
+    test::rejects_at("gf-escaping-error-is-the-case-s/escapes", compiler::DiagnosticCode::UnhandledError, 299, 13, escapes)
     test::rejects_message("gf-escaping-error-is-the-case-s/escapes-message", compiler::DiagnosticCode::UnhandledError, "this call may produce the declared error \"Boom\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", escapes)
     # ... and handled inside the body it is an ordinary value (n = 9: Boom
     # is raised at run time).
