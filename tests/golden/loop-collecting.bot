@@ -1,0 +1,1364 @@
+# loop-collecting.bot -- collecting loops (COLLECTING-LOOPS.md), as a
+# source-level specification:
+#
+# * A loop over a domain is an expression: it collects its body's value,
+#   once per iteration, into a List. The four counted domains are
+#   `from S to E` (S, S + 1, ..., E - 1), `from S through E` (..., E),
+#   `down from S to E` (S, S - 1, ..., E + 1) and `down from S through E`
+#   (..., E). A range whose start is already past its end is empty and
+#   collects []; an inclusive end is reached exactly, never through E + 1 or
+#   E - 1.
+# * Int is arbitrary precision: bounds at and past i64::MAX / i64::MIN and
+#   across the native small-Int tag boundary (2^62) count exactly, as do
+#   bounds that are only known at run time and arithmetic on the loop
+#   variable there.
+# * Each bound is evaluated exactly once, START before END.
+# * In the body, `continue` contributes nothing and advances, a bare `break`
+#   ends the loop with the prefix collected so far, `return` leaves the
+#   whole function; loops nest (results nest), and a closure made in an
+#   iteration captures that iteration's own variable.
+# * `through`, `down`, `from`, `to`, `by` and `in` are contextual: ordinary
+#   names everywhere else, a loop variable included; so are `fold`,
+#   `reduce`, `sum` and `accumulate` (there is no reducing loop syntax).
+# * Lockstep: `loop x in xs and i from 0 to n:` advances every clause
+#   together -- one body run per common position, not a Cartesian product.
+#   The compiler must PROVE the clauses' iteration counts equal (a length,
+#   an alias of one, a list built from the same domain, equal constants,
+#   symbolically equal counts): provably different counts are
+#   LockstepUnequal, unprovable ones LockstepUnproven (two calls are never
+#   assumed equal; every clause is checked against the first). A clause's
+#   variable is not in scope in another clause's operands, and two clauses
+#   may not bind one name. continue, break and return act on the whole
+#   loop; an error raised in the body escapes the whole loop.
+# * Raw count loops (GENERIC-PREDICATE-PROOF-LOSS.md, loss point 4): natively
+#   a counted loop whose bounds are proven small runs on a raw register.
+#   That representation is invisible to source; what is observable is that
+#   the programs exercising it (bounds at the small-Int edge, beyond it,
+#   early exits, closures over the loop variable, a scanner, allocation in
+#   the body) compute the same value on every backend.
+#
+# Ported from tests/loop-collecting.test and tests/raw-count-loops.test,
+# which stay authoritative and unchanged; a golden test keeps its Tcl test's
+# name unless the fragment file (audit/golden/migration/fragments/
+# loop-collecting.tsv) records otherwise. What only the Tcl tests observe
+# (HIR, Core IR and NIR text, cardinality formulas, the native knobs, parse
+# errors, run-time TYPE errors, standalone executables) stays there.
+#
+# Evaluation-order and body-run tests of the Tcl suite observe a Tcl-side
+# effect native (test-tick, test-log) on raw Core IR; here a probe `yield`s
+# [its argument] and the body drives the coroutine, collecting [FIRST, REST]
+# -- FIRST the first yield, REST every later yield followed by the
+# coroutine's final result (tests/golden/values.bot's idiom).
+#
+# Imports: compiler (CompilerError, DiagnosticCode) and test; coroutine for
+# the probes' coroutine::done?; list for list::length in lockstep proofs and
+# list::at in the GC-stress program; str for the scanner and GC-stress
+# programs and the message matcher below.
+import compiler
+import coroutine
+import list
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations (top-level only)
+
+# loop-collecting-lockstep-body-error: the checked result type and the
+# error a failing check raises.
+error TooBig
+
+type Small = Int in 0..10
+
+# What a body did: rejected (with its diagnostic's code and message) or
+# completed.
+struct Observed:
+    rejected: bool
+    code: compiler::DiagnosticCode
+    message: str
+
+# ---------------------------------------------------------------------------
+# A rejection's message, for the Tcl tests that pin one (or a fragment of
+# one): the lockstep messages name the counts that differ or could not be
+# proven equal, and that wording is the property. BODY goes through an
+# untyped parameter, as in lib/test.bot's own helpers.
+
+fn observe(body) -> Observed:
+    v = body():
+        on compiler::CompilerError {code, message}:
+            return Observed {rejected: true, code: code, message: message}
+    Observed {rejected: false, code: compiler::DiagnosticCode::Type, message: ""}
+
+# true when FRAGMENT occurs in TEXT.
+fn contains?(text: str, fragment: str) -> bool:
+    n = str::length(text)
+    k = str::length(fragment)
+    loop i from 0 through n - k:
+        piece = str::substring(text, i, i + k):
+            on LowerUnderrun:
+                continue
+            on UpperOverrun:
+                continue
+        if piece == fragment:
+            return true
+    false
+
+# The verdict for BODY: rejected with EXPECTED and a message that is exactly
+# WANTED (WHOLE) or contains it (not WHOLE).
+fn message_verdict(expected: compiler::DiagnosticCode, wanted: str, whole: bool, body) -> test::Match:
+    head = "compiler diagnostic ".concat(test::code_name(expected))
+    shown = if whole:
+        head.concat(", message: ").concat(wanted)
+    else:
+        head.concat(", message containing: ").concat(wanted)
+    o = observe(body)
+    if not o.rejected:
+        return test::mismatch(shown, "a value", "")
+    worded = if whole:
+        o.message == wanted
+    else:
+        contains?(o.message, wanted)
+    if o.code == expected and worded:
+        return test::passed()
+    test::mismatch(shown, "compiler diagnostic ".concat(test::code_name(o.code)), o.message)
+
+# BODY's block must be rejected with EXPECTED and exactly the message WANTED.
+nomethod fn rejects_with_message(name: str, expected: compiler::DiagnosticCode, wanted: str, body) -> unit:
+    fn check() -> test::Match:
+        message_verdict(expected, wanted, true, body)
+    test::case(name, check)
+
+# BODY's block must be rejected with EXPECTED and a message containing
+# FRAGMENT.
+nomethod fn rejects_mentioning(name: str, expected: compiler::DiagnosticCode, fragment: str, body) -> unit:
+    fn check() -> test::Match:
+        message_verdict(expected, fragment, false, body)
+    test::case(name, check)
+
+# ---------------------------------------------------------------------------
+# The four counted forms. Each program is the Tcl tests' `fn f(): loop
+# HEADER: i` / `f()` with that test's literal header.
+
+# `from S to E`: S, S + 1, ..., E - 1.
+fn register_ascending_exclusive_tests():
+    fn up_to_empty() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 0 to 0:
+                    i
+            f()
+    test::value("loop-collecting-up-to-empty", [], up_to_empty)
+
+    fn up_to_one() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 0 to 1:
+                    i
+            f()
+    test::value("loop-collecting-up-to-one", [0], up_to_one)
+
+    fn up_to_three() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 0 to 3:
+                    i
+            f()
+    test::value("loop-collecting-up-to-three", [0, 1, 2], up_to_three)
+
+    fn up_to_reversed() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 3 to 1:
+                    i
+            f()
+    test::value("loop-collecting-up-to-reversed", [], up_to_reversed)
+
+    fn up_to_negative() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from -3 to 0:
+                    i
+            f()
+    test::value("loop-collecting-up-to-negative", [-3, -2, -1], up_to_negative)
+
+    fn up_to_spanning() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from -2 to 3:
+                    i
+            f()
+    test::value("loop-collecting-up-to-spanning", [-2, -1, 0, 1, 2], up_to_spanning)
+
+    fn up_to_doc() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 2 to 5:
+                    i
+            f()
+    test::value("loop-collecting-up-to-doc", [2, 3, 4], up_to_doc)
+
+# `from S through E`: S, S + 1, ..., E.
+fn register_ascending_inclusive_tests():
+    fn up_through_single() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 0 through 0:
+                    i
+            f()
+    test::value("loop-collecting-up-through-single", [0], up_through_single)
+
+    fn up_through_two() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 0 through 1:
+                    i
+            f()
+    test::value("loop-collecting-up-through-two", [0, 1], up_through_two)
+
+    fn up_through_four() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 0 through 3:
+                    i
+            f()
+    test::value("loop-collecting-up-through-four", [0, 1, 2, 3], up_through_four)
+
+    fn up_through_reversed() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 3 through 1:
+                    i
+            f()
+    test::value("loop-collecting-up-through-reversed", [], up_through_reversed)
+
+    fn up_through_just_past() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 3 through 2:
+                    i
+            f()
+    test::value("loop-collecting-up-through-just-past", [], up_through_just_past)
+
+    fn up_through_spanning() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from -2 through 2:
+                    i
+            f()
+    test::value("loop-collecting-up-through-spanning", [-2, -1, 0, 1, 2], up_through_spanning)
+
+    fn up_through_doc() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 2 through 5:
+                    i
+            f()
+    test::value("loop-collecting-up-through-doc", [2, 3, 4, 5], up_through_doc)
+
+# `down from S to E`: S, S - 1, ..., E + 1.
+fn register_descending_exclusive_tests():
+    fn down_to_three() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 3 to 0:
+                    i
+            f()
+    test::value("loop-collecting-down-to-three", [3, 2, 1], down_to_three)
+
+    fn down_to_empty() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 3 to 3:
+                    i
+            f()
+    test::value("loop-collecting-down-to-empty", [], down_to_empty)
+
+    fn down_to_reversed() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 0 to 3:
+                    i
+            f()
+    test::value("loop-collecting-down-to-reversed", [], down_to_reversed)
+
+    fn down_to_one() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 1 to 0:
+                    i
+            f()
+    test::value("loop-collecting-down-to-one", [1], down_to_one)
+
+    fn down_to_negative() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 2 to -3:
+                    i
+            f()
+    test::value("loop-collecting-down-to-negative", [2, 1, 0, -1, -2], down_to_negative)
+
+    fn down_to_neg_empty() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from -3 to -3:
+                    i
+            f()
+    test::value("loop-collecting-down-to-neg-empty", [], down_to_neg_empty)
+
+    fn down_to_doc() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 5 to 2:
+                    i
+            f()
+    test::value("loop-collecting-down-to-doc", [5, 4, 3], down_to_doc)
+
+# `down from S through E`: S, S - 1, ..., E.
+fn register_descending_inclusive_tests():
+    fn down_through_four() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 3 through 0:
+                    i
+            f()
+    test::value("loop-collecting-down-through-four", [3, 2, 1, 0], down_through_four)
+
+    fn down_through_single() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 3 through 3:
+                    i
+            f()
+    test::value("loop-collecting-down-through-single", [3], down_through_single)
+
+    fn down_through_reversed() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 0 through 3:
+                    i
+            f()
+    test::value("loop-collecting-down-through-reversed", [], down_through_reversed)
+
+    fn down_through_just() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 2 through 3:
+                    i
+            f()
+    test::value("loop-collecting-down-through-just", [], down_through_just)
+
+    fn down_through_negative() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from -1 through -3:
+                    i
+            f()
+    test::value("loop-collecting-down-through-negative", [-1, -2, -3], down_through_negative)
+
+    fn down_through_spanning() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 2 through -2:
+                    i
+            f()
+    test::value("loop-collecting-down-through-spanning", [2, 1, 0, -1, -2], down_through_spanning)
+
+    fn down_through_doc() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 5 through 2:
+                    i
+            f()
+    test::value("loop-collecting-down-through-doc", [5, 4, 3, 2], down_through_doc)
+
+# ---------------------------------------------------------------------------
+# Arbitrary-precision bounds: around and far beyond i64 and the native
+# small-Int tag boundary (SMALL_MAX = 2^62 - 1 = 4611686018427387903). An
+# inclusive end at i64::MAX or i64::MIN is reached without computing END + 1
+# or END - 1 in a machine word.
+
+fn register_big_bound_tests():
+    fn big_up_through_i64max() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 9223372036854775806 through 9223372036854775807:
+                    i
+            f()
+    test::value("loop-collecting-big-up-through-i64max", [9223372036854775806, 9223372036854775807], big_up_through_i64max)
+
+    fn big_up_through_past_i64max() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 9223372036854775806 through 9223372036854775809:
+                    i
+            f()
+    test::value("loop-collecting-big-up-through-past-i64max", [9223372036854775806, 9223372036854775807, 9223372036854775808, 9223372036854775809], big_up_through_past_i64max)
+
+    fn big_up_to_past_i64max() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 9223372036854775806 to 9223372036854775809:
+                    i
+            f()
+    test::value("loop-collecting-big-up-to-past-i64max", [9223372036854775806, 9223372036854775807, 9223372036854775808], big_up_to_past_i64max)
+
+    fn big_down_through_i64min() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from -9223372036854775807 through -9223372036854775808:
+                    i
+            f()
+    test::value("loop-collecting-big-down-through-i64min", [-9223372036854775807, -9223372036854775808], big_down_through_i64min)
+
+    fn big_down_to_past_i64min() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from -9223372036854775807 to -9223372036854775810:
+                    i
+            f()
+    test::value("loop-collecting-big-down-to-past-i64min", [-9223372036854775807, -9223372036854775808, -9223372036854775809], big_down_to_past_i64min)
+
+    fn big_up_through_small_tag() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 4611686018427387902 through 4611686018427387905:
+                    i
+            f()
+    test::value("loop-collecting-big-up-through-small-tag", [4611686018427387902, 4611686018427387903, 4611686018427387904, 4611686018427387905], big_up_through_small_tag)
+
+    fn big_down_through_small_tag() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 4611686018427387905 through 4611686018427387903:
+                    i
+            f()
+    test::value("loop-collecting-big-down-through-small-tag", [4611686018427387905, 4611686018427387904, 4611686018427387903], big_down_through_small_tag)
+
+    fn huge_single_through() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 1000000000000000000000000000000 through 1000000000000000000000000000000:
+                    i
+            f()
+    test::value("loop-collecting-huge-single-through", [1000000000000000000000000000000], huge_single_through)
+
+    fn huge_single_down_through() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from -1000000000000000000000000000000 through -1000000000000000000000000000000:
+                    i
+            f()
+    test::value("loop-collecting-huge-single-down-through", [-1000000000000000000000000000000], huge_single_down_through)
+
+    fn huge_empty_through() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 1000000000000000000000000000001 through 1000000000000000000000000000000:
+                    i
+            f()
+    test::value("loop-collecting-huge-empty-through", [], huge_empty_through)
+
+    # Arithmetic on the induction value at the i64 edge: the loop variable
+    # is an exact Int there, never a machine word that could wrap.
+    fn big_body_arithmetic() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 9223372036854775806 through 9223372036854775807:
+                    i + i
+            f()
+    test::value("loop-collecting-big-body-arithmetic", [18446744073709551612, 18446744073709551614], big_body_arithmetic)
+
+    fn big_body_arithmetic_down() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from -9223372036854775807 through -9223372036854775808:
+                    i - i - 9223372036854775807 - 9223372036854775807
+            f()
+    test::value("loop-collecting-big-body-arithmetic-down", [-18446744073709551614, -18446744073709551614], big_body_arithmetic_down)
+
+    # A provably small domain computes correctly too.
+    fn small_range_raw_arithmetic() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 100 through 98:
+                    i * i * i
+            f()
+    test::value("loop-collecting-small-range-raw-arithmetic", [1000000, 970299, 941192], small_range_raw_arithmetic)
+
+# Bounds known only at run time: NEAR_MAX, NEAR_MIN, A and B arrive as
+# parameters of this registration function (given as literals at its call),
+# so no exact value or range of a literal argument stands in for the bounds.
+fn register_dynamic_bound_tests(near_max: int, near_min: int, a: int, b: int):
+    # Past i64 at run time (where no machine-word path can be used).
+    fn dynamic_bounds_big() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                loop i from n through n + 2:
+                    i
+            f(near_max)
+    test::value("loop-collecting-dynamic-bounds-big", [9223372036854775806, 9223372036854775807, 9223372036854775808], dynamic_bounds_big)
+
+    fn dynamic_bounds_big_down() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                loop i down from n through n - 2:
+                    i
+            f(near_min)
+    test::value("loop-collecting-dynamic-bounds-big-down", [-9223372036854775807, -9223372036854775808, -9223372036854775809], dynamic_bounds_big_down)
+
+    # Small bounds in every form.
+    fn dynamic_bounds_small() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                w = loop i from a to b:
+                    i
+                x = loop i from a through b:
+                    i
+                y = loop i down from b to a:
+                    i
+                z = loop i down from b through a:
+                    i
+                [w, x, y, z]
+            f(a, b)
+    test::value("loop-collecting-dynamic-bounds-small", [[2, 3, 4], [2, 3, 4, 5], [5, 4, 3], [5, 4, 3, 2]], dynamic_bounds_small)
+
+# ---------------------------------------------------------------------------
+# The body: its value, continue, break, return, nesting, closures
+
+fn register_body_tests():
+    # The body's value is what each iteration collects.
+    fn body_value() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 1 through 3:
+                    i * i
+            f()
+    test::value("loop-collecting-body-value", [1, 4, 9], body_value)
+
+    # continue contributes nothing and advances.
+    fn continue_advances() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 0 through 5:
+                    if i == 0:
+                        continue
+                    if i == 2:
+                        continue
+                    i
+            f()
+    test::value("loop-collecting-continue", [1, 3, 4, 5], continue_advances)
+
+    # continue skips one iteration's contribution only.
+    fn continue_skip() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 5 through 1:
+                    if i == 3:
+                        continue
+                    i
+            f()
+    test::value("loop-collecting-continue-skip", [5, 4, 2, 1], continue_skip)
+
+    # A bare break ends the loop with the prefix collected so far.
+    fn break_prefix() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 0 through 10:
+                    if i == 3:
+                        break
+                    i
+            f()
+    test::value("loop-collecting-break-prefix", [0, 1, 2], break_prefix)
+
+    fn break_prefix_down() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 10 to 0:
+                    if i == 7:
+                        break
+                    i
+            f()
+    test::value("loop-collecting-break-prefix-down", [10, 9, 8], break_prefix_down)
+
+    fn break_first() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 0 through 10:
+                    break
+            f()
+    test::value("loop-collecting-break-first", [], break_first)
+
+    # return leaves the whole function.
+    fn return_propagates() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 10 through 0:
+                    if i == 4:
+                        return i
+                -1
+            f()
+    test::value("loop-collecting-return-propagates", 4, return_propagates)
+
+    # Nested loops: results nest; the inner bound may be the outer variable.
+    fn nested() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 1 through 3:
+                    loop j down from i through 1:
+                        j
+            f()
+    test::value("loop-collecting-nested", [[1], [2, 1], [3, 2, 1]], nested)
+
+    # break leaves only the innermost loop.
+    fn nested_break_local() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 1 through 3:
+                    loop j from 1 through 3:
+                        if j == 2:
+                            break
+                        i * 10 + j
+            f()
+    test::value("loop-collecting-nested-break-local", [[11], [21], [31]], nested_break_local)
+
+    fn in_list_loop() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop x in [2, 3]:
+                    loop i from 1 through x:
+                        i
+            f()
+    test::value("loop-collecting-in-list-loop", [[1, 2], [1, 2, 3]], in_list_loop)
+
+    # A closure captures its own iteration's value.
+    fn closure_per_iteration() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i down from 3 through 1:
+                    fn grab():
+                        i
+                    grab()
+            f()
+    test::value("loop-collecting-closure-per-iteration", [3, 2, 1], closure_per_iteration)
+
+# ---------------------------------------------------------------------------
+# Bounds are evaluated exactly once each, START before END. One registration
+# function per form; START and END are the probes' arguments. A
+# "bounds-once" test uses bounds that iterate several times (a bound
+# re-evaluated per iteration would add yields to the trace); a
+# "bounds-order" test uses the Tcl tests' bounds 1 and 2.
+
+fn register_bounds_up_to(name: str, start: int, end: int, expected):
+    fn probe() errors compiler::CompilerError:
+        static compile:
+            fn log(n: int) -> int:
+                yield [n]
+                n
+            fn program() -> List[int]:
+                loop i from log(start) to log(end):
+                    i
+            coroutine {step, first} = program()
+            rest = loop k from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value(name, expected, probe)
+
+fn register_bounds_up_through(name: str, start: int, end: int, expected):
+    fn probe() errors compiler::CompilerError:
+        static compile:
+            fn log(n: int) -> int:
+                yield [n]
+                n
+            fn program() -> List[int]:
+                loop i from log(start) through log(end):
+                    i
+            coroutine {step, first} = program()
+            rest = loop k from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value(name, expected, probe)
+
+fn register_bounds_down_to(name: str, start: int, end: int, expected):
+    fn probe() errors compiler::CompilerError:
+        static compile:
+            fn log(n: int) -> int:
+                yield [n]
+                n
+            fn program() -> List[int]:
+                loop i down from log(start) to log(end):
+                    i
+            coroutine {step, first} = program()
+            rest = loop k from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value(name, expected, probe)
+
+fn register_bounds_down_through(name: str, start: int, end: int, expected):
+    fn probe() errors compiler::CompilerError:
+        static compile:
+            fn log(n: int) -> int:
+                yield [n]
+                n
+            fn program() -> List[int]:
+                loop i down from log(start) through log(end):
+                    i
+            coroutine {step, first} = program()
+            rest = loop k from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value(name, expected, probe)
+
+fn register_bound_evaluation_tests():
+    register_bounds_up_to("loop-collecting-bounds-once-up-to", 0, 3, [[0], [[3], [0, 1, 2]]])
+    register_bounds_up_to("loop-collecting-bounds-order-up-to", 1, 2, [[1], [[2], [1]]])
+    register_bounds_up_through("loop-collecting-bounds-once-up-through", 0, 3, [[0], [[3], [0, 1, 2, 3]]])
+    register_bounds_up_through("loop-collecting-bounds-order-up-through", 1, 2, [[1], [[2], [1, 2]]])
+    register_bounds_down_to("loop-collecting-bounds-once-down-to", 3, 0, [[3], [[0], [3, 2, 1]]])
+    register_bounds_down_to("loop-collecting-bounds-order-down-to", 1, 2, [[1], [[2], []]])
+    register_bounds_down_through("loop-collecting-bounds-once-down-through", 3, 0, [[3], [[0], [3, 2, 1, 0]]])
+    register_bounds_down_through("loop-collecting-bounds-order-down-through", 1, 2, [[1], [[2], []]])
+
+# ---------------------------------------------------------------------------
+# Contextual keywords
+
+fn register_contextual_keyword_tests():
+    # through/down/from/to/by (and in_, as `in` is a keyword) are ordinary
+    # names outside a loop header.
+    fn keywords_are_names() errors compiler::CompilerError:
+        static compile:
+            through = 1
+            down = 2
+            from = 3
+            to = 4
+            by = 5
+            in_ = 6
+            through + down + from + to + by + in_
+    test::value("loop-collecting-parse-keywords-are-names", 21, keywords_are_names)
+
+    # A loop variable may itself be named down.
+    fn names_as_variables() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop down from 1 through 3:
+                    down
+            f()
+    test::value("loop-collecting-parse-names-as-variables", [1, 2, 3], names_as_variables)
+
+    # fold/reduce/sum/accumulate are ordinary names: there is no reducing
+    # loop syntax.
+    fn no_reducing_syntax() errors compiler::CompilerError:
+        static compile:
+            fold = 1
+            reduce = 2
+            sum = 3
+            accumulate = 4
+            fold + reduce + sum + accumulate
+    test::value("loop-collecting-no-reducing-syntax", 10, no_reducing_syntax)
+
+# ---------------------------------------------------------------------------
+# Lockstep: clauses advance together over a proven common cardinality
+
+fn register_lockstep_tests():
+    # The enumerate-shaped case.
+    fn enumerate_shaped() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop x in ["a", "b", "c"] and i from 0 to 3:
+                    [x, i]
+            f()
+    test::value("loop-collecting-lockstep-enumerate-shaped", [["a", 0], ["b", 1], ["c", 2]], enumerate_shaped)
+
+    # x in xs and i from 0 to list::length(xs).
+    fn length_proof() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                loop x in xs and i from 0 to list::length(xs):
+                    [x, i]
+            f([10, 20])
+    test::value("loop-collecting-lockstep-length-proof", [[10, 0], [20, 1]], length_proof)
+
+    # n = list::length(xs) is an alias the proof sees through.
+    fn alias_proof() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                n = list::length(xs)
+                loop x in xs and i from 0 to n:
+                    [x, i]
+            f([10, 20])
+    test::value("loop-collecting-lockstep-alias-proof", [[10, 0], [20, 1]], alias_proof)
+
+    # The numeric clause may come first.
+    fn numeric_first() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                loop i from 0 to list::length(xs) and x in xs:
+                    [i, x]
+            f([10, 20])
+    test::value("loop-collecting-lockstep-numeric-first", [[0, 10], [1, 20]], numeric_first)
+
+    # Inclusive and descending clauses with equal cardinality.
+    fn through_clauses() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 0 through 3 and j down from 3 through 0:
+                    [i, j]
+            f()
+    test::value("loop-collecting-lockstep-through-clauses", [[0, 3], [1, 2], [2, 1], [3, 0]], through_clauses)
+
+    # Different syntax, the same symbolic cardinality max(n, 0).
+    fn shifted_domains() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                loop i from 0 to n and j from 10 to 10 + n:
+                    [i, j]
+            f(3)
+    test::value("loop-collecting-lockstep-shifted-domains", [[0, 10], [1, 11], [2, 12]], shifted_domains)
+
+    # n + 1 elements on both sides.
+    fn through_vs_down() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                loop i from 0 through n and j down from n through 0:
+                    [i, j]
+            f(2)
+    test::value("loop-collecting-lockstep-through-vs-down", [[0, 2], [1, 1], [2, 0]], through_vs_down)
+
+    # Both sides clamp to zero for a negative n.
+    fn negative_n() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                loop i from 0 to n and j down from n to 0:
+                    [i, j]
+            f(-4)
+    test::value("loop-collecting-lockstep-negative-n", [], negative_n)
+
+    fn down_to_vs_up() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                loop i from 0 to n and j down from n to 0:
+                    [i, j]
+            f(3)
+    test::value("loop-collecting-lockstep-down-to-vs-up", [[0, 3], [1, 2], [2, 1]], down_to_vs_up)
+
+    # A list built by a collecting loop has its source's length.
+    fn two_lists_by_construction() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                ys = loop x in xs:
+                    x + 1
+                loop a in xs and b in ys:
+                    [a, b]
+            f([1, 2, 3])
+    test::value("loop-collecting-lockstep-two-lists-by-construction", [[1, 2], [2, 3], [3, 4]], two_lists_by_construction)
+
+    # ... and a list built from a numeric loop has its domain's count.
+    fn two_lists_numeric_built() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                ys = loop i from 0 to n:
+                    i * i
+                loop j from 0 to n and y in ys:
+                    [j, y]
+            f(3)
+    test::value("loop-collecting-lockstep-two-lists-numeric-built", [[0, 0], [1, 1], [2, 4]], two_lists_numeric_built)
+
+    # Literal lists of equal length.
+    fn two_literal_lists() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop x in [1, 2, 3] and y in ["a", "b", "c"]:
+                    [x, y]
+            f()
+    test::value("loop-collecting-lockstep-two-literal-lists", [[1, "a"], [2, "b"], [3, "c"]], two_literal_lists)
+
+    # The same list on both sides.
+    fn same_list_twice() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                loop x in xs and y in xs:
+                    [x, y]
+            f([1, 2])
+    test::value("loop-collecting-lockstep-same-list-twice", [[1, 1], [2, 2]], same_list_twice)
+
+    # An aliased list is the same list.
+    fn alias_list() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                ys = xs
+                loop x in xs and y in ys:
+                    [x, y]
+            f([1, 2])
+    test::value("loop-collecting-lockstep-alias-list", [[1, 1], [2, 2]], alias_list)
+
+    # An alias of a literal list proves its length: equal at run time is
+    # not the criterion, the proof is (and here there is one).
+    fn literal_alias_proof() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                xs = [1, 2]
+                loop x in xs and y in [3, 4]:
+                    x
+            f()
+    test::value("loop-collecting-lockstep-literal-alias-proof", [1, 2], literal_alias_proof)
+
+    # An empty lockstep loop collects the empty list.
+    fn empty() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                loop x in xs and i from 0 to list::length(xs):
+                    x
+            f([])
+    test::value("loop-collecting-lockstep-empty", [], empty)
+
+    # All-zero constant cardinalities are equal.
+    fn empty_constant() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 3 to 1 and j from 5 through 0 and k down from 0 to 4:
+                    [i, j, k]
+            f()
+    test::value("loop-collecting-lockstep-empty-constant", [], empty_constant)
+
+    # Lockstep over arbitrary-precision domains.
+    fn large_int_domain() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 9223372036854775806 through 9223372036854775808 and j down from -9223372036854775807 through -9223372036854775809:
+                    [i, j]
+            f()
+    test::value("loop-collecting-lockstep-large-int-domain", [[9223372036854775806, -9223372036854775807], [9223372036854775807, -9223372036854775808], [9223372036854775808, -9223372036854775809]], large_int_domain)
+
+    # Lockstep is not a Cartesian product: one result per position.
+    fn not_cartesian() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop x in [1, 2] and y in [3, 4]:
+                    x * 10 + y
+            f()
+    test::value("loop-collecting-lockstep-not-cartesian", [13, 24], not_cartesian)
+
+    # Lockstep and ordinary loops nest in either direction.
+    fn in_ordinary_loop() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop k from 1 through 2:
+                    loop x in [10, 20] and i from 0 to 2:
+                        x + i + k
+            f()
+    test::value("loop-collecting-lockstep-in-ordinary-loop", [[11, 22], [12, 23]], in_ordinary_loop)
+
+    fn ordinary_loop_in_lockstep() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 1 through 2 and j down from 2 through 1:
+                    loop k from 1 through i:
+                        k * j
+            f()
+    test::value("loop-collecting-ordinary-loop-in-lockstep", [[2], [1, 2]], ordinary_loop_in_lockstep)
+
+    fn in_lockstep() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop a from 0 to 2 and b down from 2 to 0:
+                    loop x in [a, b] and i from 0 to 2:
+                        x * 10 + i
+            f()
+    test::value("loop-collecting-lockstep-in-lockstep", [[0, 21], [10, 11]], in_lockstep)
+
+# ---------------------------------------------------------------------------
+# Lockstep control flow: continue, break and return act on the whole loop
+
+fn register_lockstep_control_tests():
+    # continue advances every domain together.
+    fn lockstep_continue() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                loop x in xs and i from 0 to list::length(xs):
+                    if i == 1:
+                        continue
+                    [x, i]
+            f(["a", "b", "c"])
+    test::value("loop-collecting-lockstep-continue", [["a", 0], ["c", 2]], lockstep_continue)
+
+    # break ends the whole loop with the prefix.
+    fn lockstep_break() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                loop x in xs and i from 0 to list::length(xs):
+                    if i == 2:
+                        break
+                    [x, i]
+            f(["a", "b", "c", "d"])
+    test::value("loop-collecting-lockstep-break", [["a", 0], ["b", 1]], lockstep_break)
+
+    # return leaves the function from inside.
+    fn lockstep_return() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                loop x in xs and i from 0 to list::length(xs):
+                    if i == 1:
+                        return x
+                "none"
+            f(["a", "b"])
+    test::value("loop-collecting-lockstep-return", "b", lockstep_return)
+
+# Body runs, observed with the coroutine probe: exactly one body run per
+# common position, in order; none for an empty loop. NONE is an empty List
+# given at the call, so the empty domain is not a literal.
+fn register_lockstep_body_run_tests(none: List[int]):
+    # The body of an empty lockstep loop never runs: the only yield is the
+    # sentinel [-1] after the loop.
+    fn empty_body_never_runs() errors compiler::CompilerError:
+        static compile:
+            fn log(n: int) -> int:
+                yield [n]
+                n
+            fn program(xs: List[int]) -> List[int]:
+                v = loop x in xs and i from 0 to list::length(xs):
+                    log(i)
+                yield [-1]
+                v
+            coroutine {step, first} = program(none)
+            rest = loop k from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value("loop-collecting-lockstep-empty-body-never-runs", [[-1], [[]]], empty_body_never_runs)
+
+    # One body run per common position (i from 0 to 4 with j from 4 down
+    # through 1): the trace is each position's i * 10 + j, then the
+    # collected List.
+    fn one_body_run_per_position() errors compiler::CompilerError:
+        static compile:
+            fn log(n: int) -> int:
+                yield [n]
+                n
+            fn program() -> List[int]:
+                loop i from 0 to 4 and j down from 4 through 1:
+                    log(i * 10 + j)
+            coroutine {step, first} = program()
+            rest = loop k from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value("loop-collecting-lockstep-one-body-run-per-position", [[4], [[13], [22], [31], [4, 13, 22, 31]]], one_body_run_per_position)
+
+    # continue still advances every domain exactly once: position 1
+    # (j = 3) is skipped, the others run once each.
+    fn continue_one_run() errors compiler::CompilerError:
+        static compile:
+            fn log(n: int) -> int:
+                yield [n]
+                n
+            fn program() -> List[int]:
+                loop i from 0 to 4 and j down from 4 through 1:
+                    if i == 1:
+                        continue
+                    log(j)
+            coroutine {step, first} = program()
+            rest = loop k from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value("loop-collecting-lockstep-continue-one-run", [[4], [[2], [1], [4, 2, 1]]], continue_one_run)
+
+# An error raised in the body escapes the whole lockstep loop: nothing of
+# its List survives. TOO_BIG makes every check fail, FITS none (both given
+# at the call, so no failure is statically known); the loop's caller
+# handles TooBig.
+fn register_lockstep_error_tests(too_big: int, fits: int):
+    fn body_error() errors compiler::CompilerError:
+        static compile:
+            fn check(n: int) -> Small errors TooBig:
+                if n > 10:
+                    fail TooBig
+                elif n < 0:
+                    fail TooBig
+                else:
+                    n
+            fn run(k: int) errors TooBig:
+                loop i from 0 to 3 and j down from 3 through 1:
+                    check(i + j + k)
+            fn outcome(k: int):
+                v = run(k):
+                    on TooBig:
+                        return "TooBig"
+                v
+            [outcome(too_big), outcome(fits)]
+    test::value("loop-collecting-lockstep-body-error", ["TooBig", [3, 3, 3]], body_error)
+
+# ---------------------------------------------------------------------------
+# Lockstep rejections: the cardinalities must be proven equal
+
+fn register_lockstep_rejection_tests():
+    # A clause's variable is not in scope in another clause's operands:
+    # the `i` in j's START is unbound.
+    fn scope_operands() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                loop i from 0 to list::length(xs) and j from i to 3:
+                    j
+            f([1, 2, 3])
+    test::rejects_at("loop-collecting-lockstep-scope-operands", compiler::DiagnosticCode::Unbound, 1109, 62, scope_operands)
+
+    # Two clauses may not bind the same name.
+    fn duplicate_variable() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                loop x in xs and x from 0 to list::length(xs):
+                    x
+            f([1])
+    test::rejects("loop-collecting-lockstep-duplicate-variable", compiler::DiagnosticCode::DuplicateLoopVariable, duplicate_variable)
+
+    # Provably different constant cardinalities: the message names both.
+    fn unequal_constants() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop i from 0 to 3 and j from 0 to 4:
+                    i
+            f()
+    rejects_with_message("loop-collecting-reject-unequal-constants", compiler::DiagnosticCode::LockstepUnequal, "lockstep loop requires equal iteration counts; clause 1 iterates 3 times but clause 2 iterates 4 times", unequal_constants)
+
+    # Literal lists of different length.
+    fn literal_vs_literal() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop x in [1, 2] and y in [1, 2, 3]:
+                    x
+            f()
+    test::rejects("loop-collecting-reject-literal-vs-literal", compiler::DiagnosticCode::LockstepUnequal, literal_vs_literal)
+
+    # from 0 to n versus from 0 to n + 1 are equal for n < 0: unproven, not
+    # disproven.
+    fn numeric_unknown() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                loop i from 0 to n and j from 0 to n + 1:
+                    i
+            f(3)
+    rejects_with_message("loop-collecting-reject-numeric-unknown", compiler::DiagnosticCode::LockstepUnproven, "lockstep loop requires equal iteration counts; could not prove max(n, 0) == max(n + 1, 0) (clause 1 vs clause 2)", numeric_unknown)
+
+    # Two unrelated parameters.
+    fn two_numeric_params() errors compiler::CompilerError:
+        static compile:
+            fn f(n, m):
+                loop i from 0 to n and j from 0 to m:
+                    i
+            f(3, 3)
+    rejects_mentioning("loop-collecting-reject-two-numeric-params", compiler::DiagnosticCode::LockstepUnproven, "could not prove max(n, 0) == max(m, 0)", two_numeric_params)
+
+    # Two separate calls are never assumed equal.
+    fn call_results() errors compiler::CompilerError:
+        static compile:
+            fn size():
+                3
+            fn f(xs):
+                loop i from 0 to size() and j from 0 to size():
+                    i
+            f([1])
+    test::rejects("loop-collecting-reject-call-results", compiler::DiagnosticCode::LockstepUnproven, call_results)
+
+    # Every clause is checked against the first.
+    fn third_clause() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                loop x in xs and i from 0 to list::length(xs) and j from 0 to 2:
+                    x
+            f([1])
+    rejects_mentioning("loop-collecting-reject-third-clause", compiler::DiagnosticCode::LockstepUnproven, "clause 1 vs clause 3", third_clause)
+
+# ---------------------------------------------------------------------------
+# The standalone-executable programs of loop-collecting.test (their in-process
+# value; the executables themselves stay in the Tcl test)
+
+fn register_executable_program_tests():
+    # Every numeric form, with bounds past i64::MAX.
+    fn executable_numeric() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                a = loop i from n to n + 2:
+                    i
+                b = loop i from n through n + 2:
+                    i
+                c = loop i down from n + 2 to n:
+                    i
+                d = loop i down from n + 2 through n:
+                    i
+                [a, b, c, d]
+            f(9223372036854775806)
+    test::value("loop-collecting-executable-numeric", [[9223372036854775806, 9223372036854775807], [9223372036854775806, 9223372036854775807, 9223372036854775808], [9223372036854775808, 9223372036854775807], [9223372036854775808, 9223372036854775807, 9223372036854775806]], executable_numeric)
+
+    # Lockstep with a list clause and two numeric clauses.
+    fn executable_lockstep() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                loop x in xs and i from 0 to list::length(xs) and j down from list::length(xs) through 1:
+                    [x, i, j]
+            f(["a", "b", "c"])
+    test::value("loop-collecting-executable-lockstep", [["a", 0, 3], ["b", 1, 2], ["c", 2, 1]], executable_lockstep)
+
+# ---------------------------------------------------------------------------
+# raw-count-loops.test: the programs whose native loops run on a raw
+# induction register when their bounds are proven small (and stay tagged
+# when they are not). The value on every backend is the observable part.
+
+fn register_raw_count_loop_tests():
+    # The small-Int edge (2^62 - 1 and -2^62) in all four directions: the
+    # exhaustion value 2^62 / -2^62 - 1 is never a loop value.
+    fn boundary_parity() errors compiler::CompilerError:
+        static compile:
+            fn up_to(a, b):
+                loop i from a to b:
+                    i
+            fn up_through(a, b):
+                loop i from a through b:
+                    i
+            fn down_to(a, b):
+                loop i down from a to b:
+                    i
+            fn down_through(a, b):
+                loop i down from a through b:
+                    i
+            m = 4611686018427387903
+            lo = 0 - 4611686018427387904
+            [up_through(m - 2, m), up_to(m - 2, m), down_through(lo + 2, lo), down_to(lo + 2, lo), up_through(m, m), down_through(lo, lo), up_to(m, m - 3), down_to(lo, lo + 1)]
+    test::value("raw-count-loops-boundary-parity", [[4611686018427387901, 4611686018427387902, 4611686018427387903], [4611686018427387901, 4611686018427387902], [-4611686018427387902, -4611686018427387903, -4611686018427387904], [-4611686018427387902, -4611686018427387903], [4611686018427387903], [-4611686018427387904], [], []], boundary_parity)
+
+    # A bound beyond the small-Int domain: the loop values cross into big
+    # Ints exactly.
+    fn unproven_stays_tagged() errors compiler::CompilerError:
+        static compile:
+            fn across(a):
+                loop i from a through a + 2:
+                    i
+            fn below(a):
+                loop i down from a through a - 2:
+                    i
+            m = 4611686018427387903
+            lo = 0 - 4611686018427387904
+            [across(m - 1), below(lo + 1), across(5)]
+    test::value("raw-count-loops-unproven-stays-tagged", [[4611686018427387902, 4611686018427387903, 4611686018427387904], [-4611686018427387903, -4611686018427387904, -4611686018427387905], [5, 6, 7]], unproven_stays_tagged)
+
+    # Early return, break and continue, a closure capturing the loop
+    # variable, a List holding it, nested loops whose inner bound is the
+    # outer variable, and the numeric domains of a lockstep loop. (find's
+    # early return makes its result an Int on one path, a List on others.)
+    fn exits_parity() errors compiler::CompilerError:
+        static compile:
+            fn find(a, b, t):
+                loop i from a to b:
+                    if i == t:
+                        return i * 2
+                    if i == t + 3:
+                        break
+                    if i == t - 1:
+                        continue
+                    i
+            fn down(a, b, t):
+                loop i down from a through b:
+                    if i == t:
+                        return [i]
+                    if i < t - 2:
+                        break
+                    i - t
+            fn nest(n):
+                loop i from 0 to n:
+                    fn add(x):
+                        x + i
+                    loop j down from i through 0:
+                        if j == 1:
+                            continue
+                        add(j) * 10 + list::length([i, j])
+            fn pairs(xs):
+                loop x in xs and i from 0 to list::length(xs) and k down from 10 to 10 - list::length(xs):
+                    x * i + k
+            [find(0, 10, 4), find(0, 10, 20), find(5, 9, 6), find(3, 3, 3), down(10, 0, 4), down(10, 6, 2), nest(4), pairs([7, 8, 9]), pairs([])]
+    test::value("raw-count-loops-exits-parity", [8, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 12, [], [4], [8, 7, 6, 5, 4], [[2], [12], [42, 22], [62, 52, 32]], [10, 17, 26], []], exits_parity)
+
+    # The de-closured scanner (the emailish? shape): a loop whose END is a
+    # captured length, returning from inside. str::substring's declared
+    # LowerUnderrun/UpperOverrun are handled (never taken: 0 <= i < n).
+    fn scanner_parity() errors compiler::CompilerError:
+        static compile:
+            fn first_space(s):
+                n = str::length(s)
+                fn at(i):
+                    piece = str::substring(s, i, i + 1):
+                        on UpperOverrun:
+                            ""
+                        on LowerUnderrun:
+                            ""
+                    piece
+                fn scan(start):
+                    loop i from start to n:
+                        if at(i) == " ":
+                            return i
+                    n
+                fn tail(i):
+                    e = scan(i)
+                    e - i
+                [scan(0), tail(1), tail(n)]
+            [first_space("abc def"), first_space("abcdef"), first_space("")]
+    test::value("raw-count-loops-scanner-parity", [[3, 2, 0], [6, 5, 0], [0, -1, 0]], scanner_parity)
+
+    # A loop variable live across allocating calls and a closure creation
+    # (natively: a raw register live across GC points).
+    fn gc_stress() errors compiler::CompilerError:
+        static compile:
+            fn mk(k):
+                [k, k + 1, str::concat("x", "y")]
+            fn work(n):
+                loop i from 0 to n:
+                    ys = mk(i)
+                    zs = mk(i * 2)
+                    fn g(x):
+                        [x, i]
+                    y = list::at(ys, 1):
+                        on IndexNotFound:
+                            0
+                    z = list::at(zs, 0):
+                        on IndexNotFound:
+                            0
+                    w = list::at(g(i), 1):
+                        on IndexNotFound:
+                            0
+                    y + z + w + i
+            fn total(xs):
+                loop x in xs and k down from list::length(xs) to 0:
+                    x * k
+            total(work(10))
+    test::value("raw-count-loops-gc-stress", [10, 54, 88, 112, 126, 130, 124, 108, 82, 46], gc_stress)
+
+# ---------------------------------------------------------------------------
+
+fn register_loop_collecting_tests():
+    register_ascending_exclusive_tests()
+    register_ascending_inclusive_tests()
+    register_descending_exclusive_tests()
+    register_descending_inclusive_tests()
+    register_big_bound_tests()
+    register_dynamic_bound_tests(9223372036854775806, -9223372036854775807, 2, 5)
+    register_body_tests()
+    register_bound_evaluation_tests()
+    register_contextual_keyword_tests()
+    register_lockstep_tests()
+    register_lockstep_control_tests()
+    register_lockstep_body_run_tests([])
+    register_lockstep_error_tests(20, 0)
+    register_lockstep_rejection_tests()
+    register_executable_program_tests()
+    register_raw_count_loop_tests()
+
+with context test::suite()
+register_loop_collecting_tests()
+test::report()

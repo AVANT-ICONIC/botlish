@@ -1,0 +1,44 @@
+# mutable-vector-str.bot -- MutableVector[T] copies over heap Strings, ported
+# from tests/mutable-vector.test (mv-cow-gc-stress); the rest of that file's
+# ports are mutable-vector.bot.
+#
+# Strings made at run time (str::concat) and reachable only through vector
+# elements stay valid while copies of the vector are mutated, collected and
+# read: a copy shares nothing observable with its original. The Tcl test
+# also runs the program natively under a collection at every allocation
+# (BOTLISH_NATIVE_GC_STRESS); this suite runs under that stress only when
+# the whole run does (CI's gc-stress job, through tests/golden.test).
+#
+# Imports: compiler and test for the framework; mutable_vector and str are
+# the Tcl program's own (and only) imports. The test lives apart from
+# mutable-vector.bot because `import str` there would give every
+# `q.length()` a third candidate, str::length, turning its UseAfterMove
+# rejections into NoApplicableMethod.
+import compiler
+import mutable_vector
+import str
+import test
+
+fn register_heap_string_tests():
+    # b = a is a copy; a's push and take and b's swap never show through the
+    # other, also after 50 more allocations.
+    fn b_heap_strings() errors compiler::CompilerError:
+        static compile:
+            fn f() -> List[str] errors IndexNotFound:
+                a = mutable_vector::from_list([str::concat("x", "1"), str::concat("y", "2")])
+                b = a
+                a.push(str::concat("z", "3"))
+                junk = loop i from 0 to 50:
+                    str::concat("j", "k")
+                s = b.swap(0, str::concat("w", "4"))
+                t = a.take(0)
+                [a.at(0), a.at(1), b.at(0), b.at(1), s, t]
+            r = f():
+                on IndexNotFound:
+                    []
+            r
+    test::value("mv-cow-gc-stress", ["y2", "z3", "w4", "y2", "x1", "x1"], b_heap_strings)
+
+with context test::suite()
+register_heap_string_tests()
+test::report()
