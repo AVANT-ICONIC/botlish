@@ -39,10 +39,20 @@
 # Ported from tests/one-char-string-literal.test,
 # tests/fixed-arity-list-return.test, tests/proves-naming.test,
 # tests/same-failure.test and tests/many-boolean-arguments.test (the Tcl
-# tests stay authoritative and unchanged). A test that compiles a program
-# under the default policy and runs it (the *-backend-independent tests, and
-# warnings.test's warn-backend-independent) has the same program and value
-# as its warnings-off twin, which is the golden test of both.
+# tests stay authoritative and unchanged). A Tcl test that runs a program
+# compiled under the default policy (each file's *-backend-independent) has
+# the same program and value as its warnings-off twin
+# (*-backend-independent-off), whose golden test here stands for both;
+# warnings.test's warn-backend-independent likewise maps to harness.bot's
+# warn-backend-independent-off.
+#
+# Rejections compare the diagnostic code only: no Tcl test ported here pins
+# a location or a message. A Tcl program that ends with a declaration ends
+# its block with a value, 0. Two accepted programs fail at run time in the
+# Tcl tests with a TYPE error no handler catches (a native's parameter type
+# is checked at run time); here their failing call stays reachable, under a
+# condition that is false at run time (a registration parameter), so the
+# block's acceptance is the theorem and the suite never aborts.
 #
 # Imports:
 #   char      char::scalar_value (the UnicodeChar-typed code functions)
@@ -448,7 +458,7 @@ fn register_proves_naming_tests():
             fn zero() -> bool proves a: Vetted:
                 true
             0
-    test::rejects("pn-shape-parameter-count", compiler::DiagnosticCode::ProofClause, b_shape_zero)
+    test::rejects("pn-shape-parameter-count/zero", compiler::DiagnosticCode::ProofClause, b_shape_zero)
 
     # pn-backend-independent-off (and pn-backend-independent, the same
     # program under the default policy): a predicate and a validator whose
