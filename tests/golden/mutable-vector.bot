@@ -920,7 +920,7 @@ fn register_affine_tests():
             r
     test::value("mv-affine-struct-field/value", 206, b_struct_field)
 
-    # ... while reading the field out moves nothing.
+    # ... and only a destructuring: reading the field out is rejected.
     fn b_field_move() errors compiler::CompilerError:
         static compile:
             fn f() -> int:

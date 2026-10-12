@@ -562,10 +562,11 @@ fn register_set_value_tests():
 # byte::set (byte-set.test). A set has no text form, so a byte set is
 # compared with `==` against immutable_set::from_list of its Ints.
 
-# byte::set(CHARS) must fail with the declared byte::AboveRange. CHARS is a
-# parameter: a constant out-of-range character is KNOWN-ERROR.
-fn register_above_range_case(name: str, chars: List[UnicodeChar]):
-    fn b_above_range() errors compiler::CompilerError:
+# byte::set(CHARS)'s outcome must be EXPECTED: "AboveRange" for the declared
+# byte::AboveRange, "a set" for a set. CHARS is a parameter: a constant
+# out-of-range character is KNOWN-ERROR.
+fn register_byte_set_outcome_case(name: str, chars: List[UnicodeChar], expected: str):
+    fn b_outcome() errors compiler::CompilerError:
         static compile:
             fn outcome(cs):
                 s = byte::set(cs):
@@ -573,7 +574,7 @@ fn register_above_range_case(name: str, chars: List[UnicodeChar]):
                         return "AboveRange"
                 "a set"
             outcome(chars)
-    test::value(name, "AboveRange", b_above_range)
+    test::value(name, expected, b_outcome)
 
 fn register_byte_set_tests(no_chars: List[UnicodeChar]):
     # A character's scalar value; no handler: every literal is provably a Byte.
@@ -625,9 +626,9 @@ fn register_byte_set_tests(no_chars: List[UnicodeChar]):
     # Just past the bound (U+0100), an astral character (U+1F600: never its
     # UTF-8 bytes), and an invalid character between valid ones (no partial
     # set): the declared byte::AboveRange.
-    register_above_range_case("byte-set-boundary-256-fails", ['Ā'])
-    register_above_range_case("byte-set-astral-fails", ['😀'])
-    register_above_range_case("byte-set-mixed-failure", ['A', 'Ā', 'B'])
+    register_byte_set_outcome_case("byte-set-boundary-256-fails", ['Ā'], "AboveRange")
+    register_byte_set_outcome_case("byte-set-astral-fails", ['😀'], "AboveRange")
+    register_byte_set_outcome_case("byte-set-mixed-failure", ['A', 'Ā', 'B'], "AboveRange")
 
     # The URI-unreserved payload.
     fn b_canonical() errors compiler::CompilerError:
