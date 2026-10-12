@@ -3,7 +3,7 @@
 # and running each suite costs, phase by phase, on every backend.
 #
 #   tclsh9.0 bench/golden-suites.tcl ?-backends LIST? ?-warm N? ?-profile 0|1?
-#                                    ?-jobs N? ?-format md|tsv? ?FILE.bot ...?
+#                                    ?-jobs N? ?-cache DIR? ?FILE.bot ...?
 #
 # Cold (the default): each suite in a fresh tclsh (one at a time, or -jobs N
 # at a time -- then the times include the contention), which reports:
@@ -184,7 +184,7 @@ proc measureOne {path backends profile} {
 # ---------------------------------------------------------------------------
 # The driver.
 
-set options [dict create -backends {interp compile cranelift-generic cranelift} -warm 0 -profile 1 -jobs 1 -format md -one ""]
+set options [dict create -backends {interp compile cranelift-generic cranelift} -warm 0 -profile 1 -jobs 1 -one "" -cache ""]
 set files {}
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
@@ -231,18 +231,29 @@ if {[dict get $options -warm] > 0} {
     exit 0
 }
 
-# Cold: one process per suite.
+# Cold: one process per suite. With -cache DIR, a suite whose result DIR
+# already holds (NAME.result, written by an earlier run with the same DIR) is
+# not measured again, so a long measurement can be run in pieces.
+source [file join $root audit golden tools tree.tcl]
+set cache [dict get $options -cache]
+proc cached {path} {
+    return [file join $::cache [file rootname [file tail $path]].result]
+}
 set commands [dict create]
 foreach path $files {
+    if {$cache ne "" && [file exists [cached $path]]} continue
     dict set commands $path [list [info nameofexecutable] [info script] -one $path \
         -backends [join $backends ,] -profile [dict get $options -profile]]
 }
-source [file join $root audit golden tools tree.tcl]
 set start [clock milliseconds]
 set outcomes [goldentools::runParallel [dict get $options -jobs] 7200 $commands]
 set wall [expr {([clock milliseconds] - $start) / 1000.0}]
 set results {}
 foreach path $files {
+    if {![dict exists $outcomes $path]} {
+        lappend results [goldentools::readFile [cached $path]]
+        continue
+    }
     lassign [dict get $outcomes $path] status output seconds
     set line [lsearch -inline [split $output \n] {result *}]
     if {$line eq ""} {
@@ -252,6 +263,13 @@ foreach path $files {
     set r [lindex $line 1]
     dict set r process $seconds
     lappend results $r
+    if {$cache ne ""} {
+        file mkdir $cache
+        set f [open [cached $path] w]
+        fconfigure $f -encoding utf-8
+        puts -nonewline $f $r
+        close $f
+    }
 }
 
 proc cell {r backend key} {
@@ -273,7 +291,7 @@ foreach r $results {
     }
 }
 puts "| total | [dict get $sum tests] | [dict get $sum lines] | [expr {[dict get $sum staticAccepted] + [dict get $sum staticRejected]}] ([dict get $sum staticRejected]) | [dict get $sum rounds] | [dict get $sum builds] | [dict get $sum hirExprs] | [format %.1f [dict get $sum frontend]] | [format %.1f [dict get $sum process]] | max [tcl::mathfunc::max {*}[lmap r $results {dict get $r rss}]] |"
-puts "\nElapsed: [format %.1f $wall] s with [dict get $options -jobs] job(s).\n"
+puts "\nElapsed: [format %.1f $wall] s with [dict get $options -jobs] job(s), [dict size $commands] suite(s) measured by this run[expr {$cache ne "" ? ", [expr {[llength $results] - [dict size $commands]}] read from $cache" : ""}].\n"
 
 puts "## Back ends (seconds): lowering / code generation / execution\n"
 puts "| suite | Core IR lowering | interp run | Tcl codegen | Tcl compiled run | NIR lowering | Cranelift codegen | native run | generic NIR lowering | generic codegen | generic run |"
