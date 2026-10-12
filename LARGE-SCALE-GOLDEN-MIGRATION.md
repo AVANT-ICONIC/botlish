@@ -612,10 +612,11 @@ the final tree).
 | coroutines (`audit/coroutines/tools/mutate.tcl`) | 52 | all apply, all killed (42 Tcl, 10 native) | `hir/affine.tcl`; the runner is a coroutine |
 | MutableVector (`audit/mutable-vector/tools/mutate.tcl`) | 45 | all apply, all killed (36 Tcl, 9 native) | `hir/mutvec.tcl` |
 | MutableArray (`audit/mutable-array/tools/mutate.tcl`) | 31 | all apply, all killed (25 Tcl, 6 native) | `hir/mutvec.tcl` |
+| traits (`audit/traits/tools/mutate.tcl`) | 18 | all apply, all killed | two of its mutants edit `hir/structs.tcl`/`hir/affine.tcl` text |
 
-Each native mutant rebuilds a private copy of the native backend; the
-harnesses ran on the final tree (the error-payload, structural-contract and
-static-decision ones after their layer's last change).
+Each native mutant rebuilds a private copy of the native backend. Every
+harness above ran on the final tree, and every mutant of every harness in
+`audit/*/tools/mutants.txt` (twelve files) still applies to it.
 
 Every compiler fix of the migration also ran its layer's fuzzers on the final
 tree (several seeds, once under GC stress where the harness has the switch),
