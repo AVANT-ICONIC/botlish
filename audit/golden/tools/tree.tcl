@@ -221,3 +221,74 @@ proc goldentools::runSuites {tree suites timeout {backends {interp compile crane
     }
     return $results
 }
+
+# Runs COMMANDS -- a dict KEY -> argument list -- at most JOBS at a time, each
+# with a TIMEOUT (seconds): a dict KEY -> {STATUS OUTPUT SECONDS}, as run.
+proc goldentools::runParallel {jobs timeout commands} {
+    variable pool
+    set pool(results) [dict create]
+    set pool(pending) [dict keys $commands]
+    set pool(running) 0
+    set pool(commands) $commands
+    set pool(timeout) $timeout
+    while {[llength $pool(pending)] > 0 || $pool(running) > 0} {
+        while {$pool(running) < $jobs && [llength $pool(pending)] > 0} {
+            set key [lindex $pool(pending) 0]
+            set pool(pending) [lrange $pool(pending) 1 end]
+            set channel [open |[list timeout $timeout {*}[dict get $commands $key] 2>@1] r]
+            fconfigure $channel -blocking 0 -encoding utf-8
+            set pool(output,$channel) ""
+            set pool(start,$channel) [clock milliseconds]
+            fileevent $channel readable [list goldentools::PoolRead $channel $key]
+            incr pool(running)
+        }
+        vwait ::goldentools::pool(event)
+    }
+    return $pool(results)
+}
+
+proc goldentools::PoolRead {channel key} {
+    variable pool
+    append pool(output,$channel) [read $channel]
+    if {![eof $channel]} return
+    fconfigure $channel -blocking 1
+    set status 0
+    if {[catch {close $channel} message options]} {
+        set status [lindex [dict get $options -errorcode] end]
+        if {![string is integer -strict $status]} { set status 1 }
+    }
+    set seconds [expr {([clock milliseconds] - $pool(start,$channel)) / 1000.0}]
+    dict set pool(results) $key [list $status $pool(output,$channel) $seconds]
+    unset pool(output,$channel) pool(start,$channel)
+    incr pool(running) -1
+    set pool(event) $key
+}
+
+# The verdicts of a tcltest file's verbose (-verbose ps) OUTPUT: {FAILED
+# PASSED SKIPPED INCOMPLETE}, the failed, passed and skipped test names, and
+# "" or why the file did not complete (its last line).
+proc goldentools::testVerdicts {output} {
+    set failed [lsort -unique [lmap {- n} [regexp -all -inline -line {^==== (\S+) .*FAILED$} $output] {set n}]]
+    set passed [lsort -unique [lmap {- n} [regexp -all -inline -line {^\+\+\+\+ (\S+) PASSED$} $output] {set n}]]
+    set skipped [lsort -unique [lmap {- n} [regexp -all -inline -line {^\+\+\+\+ (\S+) SKIPPED:} $output] {set n}]]
+    set incomplete ""
+    if {![regexp {Total\s+\d+\s+Passed\s+\d+\s+Skipped\s+\d+\s+Failed\s+\d+} $output]} {
+        set incomplete [lastLine $output]
+    }
+    return [list $failed $passed $skipped $incomplete]
+}
+
+# The verdicts of tests/golden/run.tcl -names OUTPUT for one suite: {STATE
+# VERDICTS}, as runSuites.
+proc goldentools::suiteVerdicts {output} {
+    set verdicts [dict create]
+    set state incomplete
+    foreach line [split $output \n] {
+        if {[regexp {^\S+ STATUS (\S+)$} $line -> s]} {
+            set state $s
+        } elseif {[regexp {^\S+ (PASS|FAIL) (.*)$} $line -> verdict name]} {
+            dict set verdicts $name $verdict
+        }
+    }
+    return [list $state $verdicts]
+}

@@ -24,6 +24,10 @@
 # compile-hir (the Tcl compiler compiling the HIR itself: main.tcl's
 # -backend compile).
 #
+# A suite may exclude backends it cannot run, with the reason, in its leading
+# comment block ("# golden-exclude: cranelift-generic -- REASON"): the runner
+# skips them for that suite and prints the exclusion (golden::exclusions).
+#
 # -lib DIR compiles against the library directory DIR instead of lib/ (a
 # private, mutated copy: audit/golden/tools/). -names prints only the test
 # names with their verdicts ("PASS name"/"FAIL name"), one per line, for
@@ -126,11 +130,44 @@ proc golden::summary {lines} {
     return ""
 }
 
-# Runs the suite at PATH on BACKENDS. Returns a dict: path, compile {ok|error
-# ...}, outcomes {BACKEND {lines|abort ...}}, status ok|failed|aborted|
-# disagree|compile-error.
+# The backends the suite at PATH excludes, with why: a dict BACKEND ->
+# REASON, from its header comment lines
+#
+#   # golden-exclude: BACKEND[,BACKEND...] -- REASON
+#
+# (LARGE-SCALE-GOLDEN-MIGRATION.md, "Backend exclusions"): a backend that
+# cannot run some test of the suite for a recorded, legitimate reason (a
+# construct it reports unsupported), never a backend that runs it wrongly. The
+# lines are read from the suite's leading comment block only.
+proc golden::exclusions {path} {
+    set excluded [dict create]
+    set f [open $path]
+    fconfigure $f -encoding utf-8
+    while {[gets $f line] >= 0} {
+        if {![string match "#*" $line]} break
+        if {[regexp {^#\s*golden-exclude:\s*([A-Za-z,\s-]+?)\s+--\s+(.+)$} $line -> list reason]} {
+            foreach backend [split [string map {" " ""} $list] ,] {
+                if {$backend ne ""} { dict set excluded $backend $reason }
+            }
+        }
+    }
+    close $f
+    return $excluded
+}
+
+# Runs the suite at PATH on BACKENDS (minus those it excludes). Returns a
+# dict: path, compile {ok|error ...}, outcomes {BACKEND {lines|abort ...}},
+# excluded {BACKEND REASON ...}, status ok|failed|aborted|disagree|
+# compile-error.
 proc golden::suite {path backends} {
-    set result [dict create path $path outcomes {}]
+    set excluded [exclusions $path]
+    set result [dict create path $path outcomes {} excluded {}]
+    foreach backend $backends {
+        if {[dict exists $excluded $backend]} {
+            dict set result excluded $backend [dict get $excluded $backend]
+        }
+    }
+    set backends [lmap backend $backends {expr {[dict exists $excluded $backend] ? [continue] : $backend}}]
     set compiled [compile $path]
     dict set result compile $compiled
     if {[lindex $compiled 0] ne "ok"} {
@@ -193,6 +230,9 @@ proc golden::main {argv} {
                 set text [expr {[lindex $outcome 0] eq "abort" ? "ABORTED [lindex $outcome 1]" : [lindex [lindex $outcome 1] end]}]
                 puts [format "%-28s %-10s %s (compile %.2fs, run %.2fs)" $name $backend $text $compileSeconds [lindex $outcome 2]]
             }
+            dict for {backend reason} [dict get $result excluded] {
+                puts [format "%-28s %-10s excluded -- %s" $name $backend $reason]
+            }
             if {$status eq "disagree"} { puts "$name: BACKENDS DISAGREE" }
             continue
         }
@@ -221,7 +261,11 @@ proc golden::main {argv} {
             foreach test $order { puts "$name [dict get $verdictOf $test] $test" }
             continue
         }
-        puts "== $name ([join $backends {, }]; compile [format %.2f $compileSeconds]s)"
+        set ran [dict keys [dict get $result outcomes]]
+        puts "== $name ([join $ran {, }]; compile [format %.2f $compileSeconds]s)"
+        dict for {backend reason} [dict get $result excluded] {
+            puts "   excluded: $backend -- $reason"
+        }
         if {[lindex $first 0] eq "lines"} {
             puts [join [lindex $first 1] \n]
         }
