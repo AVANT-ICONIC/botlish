@@ -700,6 +700,67 @@ fn bounded(x: int) -> int errors TooSmall, TooLarge:
 } -result {{} KNOWN-ERROR KNOWN-ERROR {UNHANDLED-ERROR UNHANDLED-ERROR}}
 
 # ---------------------------------------------------------------------------
+# An empty literal List never runs a loop body (STATIC-COMPLETION-PROOFS.md,
+# "Small literal-list proof", item 92). The completion analysis must keep the
+# empty literal `[]` (exactly zero elements) apart from a List it knows
+# nothing about -- as a loop's own iterable, and threaded into a callee's
+# parameter through an exact call. Both used to be "no fact" (an empty list
+# of element values), so the empty literal was charged its loop body's errors:
+# an UNHANDLED-ERROR where none can occur (found by the golden migration,
+# tests/golden/completion-regressions.bot).
+
+# EACH fails Boom for every element of XS.
+set emptyLoopEach {error Boom
+fn each(xs) errors Boom:
+    loop x in xs:
+        fail Boom
+    0
+}
+
+# The diagnostics of TEXT (-strict 0) as sorted {KIND FUNCTION} pairs,
+# FUNCTION the function whose own body holds the diagnosed expression ("top"
+# for the program's).
+proc diagWhere {text} {
+    set hir [sourceHir $text]
+    return [lsort [lmap d [hir::diagnostics $hir] {
+        set block [dict get $hir scopes [hir::get $hir [dict get $d expr] scope] invocation]
+        list [dict get $d kind] [expr {$block eq "" ? "top" : [hir::signatures::Name $hir $block]}]
+    }]]
+}
+
+test errors-empty-literal-loop-no-handler {each([]) needs no handler: its loop runs zero times, so the call can only complete normally (item 92) -- and so can a loop written over the literal [] itself; accepted strictly, value 0 on every backend} -body {
+    set text "${emptyLoopEach}fn direct() errors Boom:\n    loop x in \[\]:\n        fail Boom\n    0\neach(\[\]) + direct()\n"
+    list [diagKinds [sourceHir $text]] [parity $text] [value $text]
+} -result {{} same 0}
+
+test errors-one-element-literal-loop-known-error {each([1]) runs its body once, which always fails: still a KNOWN-ERROR, handled or not (the per-element walk is unchanged)} -body {
+    set handled "${emptyLoopEach}r = each(\[1\]):\n    on Boom:\n        1\nr\n"
+    list [diagKinds [sourceHir "${emptyLoopEach}each(\[1\])\n"]] [diagKinds [sourceHir $handled]]
+} -result {KNOWN-ERROR KNOWN-ERROR}
+
+test errors-dynamic-list-loop-needs-handler {a List parameter is not the empty literal: g's own each(ys) needs a handler although g's only caller passes [] (and nothing is diagnosed at that caller); handled, it is accepted and runs} -body {
+    set bare "${emptyLoopEach}fn g(ys: List\[int\]) -> int:\n    each(ys)\ng(\[\])\n"
+    set handled "${emptyLoopEach}fn g(ys: List\[int\]) -> int:\n    each(ys):\n        on Boom:\n            1\ng(\[\]) + g(\[2\])\n"
+    list [diagWhere $bare] [diagKinds [sourceHir $handled]] [parity $handled] [value $handled]
+} -result {{{UNHANDLED-ERROR g}} {} same 1}
+
+test errors-empty-literal-read-through-call-known-error {the same fact gives the empty literal's size, zero, through an exact call: a handled first([]) whose first reads list::at(xs, 0) always fails -- KNOWN-ERROR, exactly as a handled list::at([], 0) itself} -body {
+    set through "import list\nfn first(xs) errors IndexNotFound:\n    list::at(xs, 0)\nr = first(\[\]):\n    on IndexNotFound:\n        5\nr\n"
+    set direct "import list\nr = list::at(\[\], 0):\n    on IndexNotFound:\n        5\nr\n"
+    list [diagKinds [sourceHir $through]] [diagKinds [sourceHir $direct]]
+} -result {KNOWN-ERROR KNOWN-ERROR}
+
+test errors-byte-set-empty-literal-no-handler {byte::set([]) needs no byte::AboveRange handler: the empty literal reaches set's own loop over its parameter as zero elements -- accepted strictly, the empty set on every backend} -body {
+    set path [makeFile {import byte
+byte::set([])} errors-byte-set-empty.bot]
+    try {
+        list [diagKinds [surface::readProgramFile $path -strict 0]] [moduleParity $path] [moduleValue $path]
+    } finally {
+        removeFile errors-byte-set-empty.bot
+    }
+} -result {{} same {{}}}
+
+# ---------------------------------------------------------------------------
 # Handled calls and the native range analysis (COMPREHENSIVE-GENERATED-CODE-
 # AUDIT.md, correctness finding C1). hir/range.tcl's interprocedural range
 # fixpoint must see a handled call and its handler bodies: a handled call's

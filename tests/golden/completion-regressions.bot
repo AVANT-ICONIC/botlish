@@ -1,0 +1,125 @@
+# completion-regressions.bot -- completion-analysis defects the golden
+# migration found (manifest: category errors, class COMPILER-BUG-FOUND), each
+# pinned by the source-level outcome its fix restores, beside the Tcl test
+# that pins the same fix.
+#
+# An empty literal List never runs a loop body (STATIC-COMPLETION-PROOFS.md,
+# "Small literal-list proof", item 92): a call whose loop runs over the empty
+# literal -- written as the loop's iterable, or reaching a callee's parameter
+# through an exact call -- needs no handler for what the loop body could
+# raise. A List the compiler does not know (a parameter typed List) is not
+# the empty literal: there the handler is still required. The same fact is
+# the empty literal's size: a read of it through an exact call always fails.
+import byte
+import compiler
+import immutable_set
+import list
+import test
+
+# errors.test: the error every iteration of the loops below fails with.
+error Boom
+
+# ---------------------------------------------------------------------------
+# errors.test: the empty literal List and loop bodies.
+
+fn register_empty_literal_loop_tests():
+    # each([]) and a loop over the literal [] itself complete normally: no
+    # handler, value 0.
+    fn b_empty_literal() errors compiler::CompilerError:
+        static compile:
+            fn each(xs) errors Boom:
+                loop x in xs:
+                    fail Boom
+                0
+            fn direct() errors Boom:
+                loop x in []:
+                    fail Boom
+                0
+            each([]) + direct()
+    test::value("errors-empty-literal-loop-no-handler", 0, b_empty_literal)
+
+    # One element: the body runs once and always fails -- KNOWN-ERROR, and a
+    # handler does not make it legal.
+    fn b_one_element() errors compiler::CompilerError:
+        static compile:
+            fn each(xs) errors Boom:
+                loop x in xs:
+                    fail Boom
+                0
+            each([1])
+    test::rejects("errors-one-element-literal-loop-known-error", compiler::DiagnosticCode::KnownError, b_one_element)
+
+    fn b_one_element_handled() errors compiler::CompilerError:
+        static compile:
+            fn each(xs) errors Boom:
+                loop x in xs:
+                    fail Boom
+                0
+            r = each([1]):
+                on Boom:
+                    1
+            r
+    test::rejects("errors-one-element-literal-loop-known-error/handled", compiler::DiagnosticCode::KnownError, b_one_element_handled)
+
+    # A List parameter is not the empty literal: g's own each(ys) needs a
+    # handler although g's only caller passes [] -- rejected there, at
+    # each(ys), not at the caller.
+    fn b_dynamic() errors compiler::CompilerError:
+        static compile:
+            fn each(xs) errors Boom:
+                loop x in xs:
+                    fail Boom
+                0
+            fn g(ys: List[int]) -> int:
+                each(ys)
+            g([])
+    test::rejects_at("errors-dynamic-list-loop-needs-handler", compiler::DiagnosticCode::UnhandledError, 74, 17, b_dynamic)
+
+    # Handled, it is accepted and runs: g([]) is 0, g([2]) takes the handler.
+    fn b_dynamic_handled() errors compiler::CompilerError:
+        static compile:
+            fn each(xs) errors Boom:
+                loop x in xs:
+                    fail Boom
+                0
+            fn g(ys: List[int]) -> int:
+                each(ys):
+                    on Boom:
+                        1
+            g([]) + g([2])
+    test::value("errors-dynamic-list-loop-needs-handler/handled", 1, b_dynamic_handled)
+
+    # The same fact gives the empty literal's size, zero, through the call:
+    # first([]) always fails, so even handled it is KNOWN-ERROR, exactly as
+    # a handled list::at([], 0) itself.
+    fn b_read_through_call() errors compiler::CompilerError:
+        static compile:
+            fn first(xs) errors IndexNotFound:
+                list::at(xs, 0)
+            r = first([]):
+                on IndexNotFound:
+                    5
+            r
+    test::rejects("errors-empty-literal-read-through-call-known-error", compiler::DiagnosticCode::KnownError, b_read_through_call)
+
+    fn b_read_direct() errors compiler::CompilerError:
+        static compile:
+            r = list::at([], 0):
+                on IndexNotFound:
+                    5
+            r
+    test::rejects("errors-empty-literal-read-through-call-known-error/direct", compiler::DiagnosticCode::KnownError, b_read_direct)
+
+    # byte::set's loop over its parameter sees the empty literal: no
+    # byte::AboveRange handler. A set has no text form: compared with `==`.
+    fn b_byte_set_empty() errors compiler::CompilerError:
+        static compile:
+            byte::set([]) == immutable_set::from_list([])
+    test::value("errors-byte-set-empty-literal-no-handler", true, b_byte_set_empty)
+
+fn register_completion_regressions_tests():
+    register_empty_literal_loop_tests()
+
+with context test::suite()
+register_completion_regressions_tests()
+test::report()

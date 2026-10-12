@@ -505,12 +505,16 @@ test ns-proof-and-or-conditions {`i < 0 or i >= list::length(xs)` false, and `i 
         [diagKinds "import list\nfn f(xs, i):\n    if i < 0 and i >= list::length(xs):\n        0\n    else:\n        list::at(xs, i)\nf(\[1\], 0)"]
 } -result {{} {} UNHANDLED-ERROR UNHANDLED-ERROR}
 
+# In the loop program, f's own read after the loop stays UNHANDLED-ERROR;
+# its call f([], [1], 5) is KNOWN-ERROR: the loop over the empty literal never
+# runs (STATIC-COMPLETION-PROOFS.md item 92), so its guard never returns and
+# list::at([1], 5) always fails.
 test ns-proof-relations-do-not-outlive-their-scope {a guard established inside a loop body or a handler (which may not run) proves nothing after it; an early return at the function's own level does} -body {
     set small "import list\ntype Small = Int in 0..100\n"
     list [diagKinds "${small}fn f(xs, ys, j: Small):\n    loop x in xs:\n        if j >= list::length(ys):\n            return 0\n    list::at(ys, j)\nf(\[\], \[1\], 5)"] \
         [diagKinds "${small}fn f(xs, ys, j: Small):\n    v = list::at(xs, 0):\n        on IndexNotFound:\n            if j >= list::length(ys):\n                return 0\n            1\n    v + list::at(ys, j)\nf(\[1\], \[1\], 5)"] \
         [diagKinds "${small}fn f(ys, j: Small):\n    if j >= list::length(ys):\n        return 0\n    list::at(ys, j)\nf(\[1\], 5)"]
-} -result {UNHANDLED-ERROR UNHANDLED-ERROR {}}
+} -result {{KNOWN-ERROR UNHANDLED-ERROR} UNHANDLED-ERROR {}}
 
 test ns-proof-relations-before-call-ranges {a read the branch relations prove stays proven in a call whose exact arguments put the index out of range: that call never reaches the read} -body {
     set source "import list\nfn at_or(xs: List\[int\], i: int, d: int) -> int:\n    if i >= 0 and i < list::length(xs):\n        list::at(xs, i)\n    else:\n        d\n\[at_or(\[1, 2, 3\], 2, 0), at_or(\[1\], 5, 9), at_or(\[\], 0, 7)\]"
