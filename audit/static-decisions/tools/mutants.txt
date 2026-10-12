@@ -156,6 +156,20 @@
         }
 >>>>
 
+@@ verdict-consumers-ignored a site whose path-release diagnostic the ownership verdict withholds does not depend on it: it is judged as if no rejection could reveal that diagnostic
+## hir/staticdeps.tcl
+<<<<
+                dict set succ C:verdict path-release
+====
+>>>>
+
+@@ verdict-unlinked the ownership verdict's later contributors are not linked to it: a consumer turned unknown does not hold them back, and the next build judges it without them
+## hir/staticdeps.tcl
+<<<<
+                dict set linked $site 1
+====
+>>>>
+
 # ---------------------------------------------------------------------------
 # Economic
 
@@ -206,4 +220,16 @@
     }
     # Where it is defined: the control operands around its literal, in every
     # enclosing function up to the program.
+>>>>
+
+@@ verdict-every-diagnostic the ownership verdict depends on every diagnostic of the analysis, not on one witness: a consumer ahead of several turns unknown at the first and takes a build per rejection
+## hir/staticdeps.tcl
+<<<<
+            if {$site eq ""} {
+                dict set verdict R:$region ownership-diagnostic
+            } elseif {[dict get $position $site] > $lastAt} {
+====
+            dict set verdict R:$region ownership-diagnostic
+            if {$site eq ""} {
+            } elseif {[dict get $position $site] > $lastAt} {
 >>>>

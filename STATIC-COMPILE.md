@@ -346,6 +346,25 @@ extra one only costs a build. Its header lists every edge; in short:
   * **the semantic-instance budget** of a function: open only under
     pressure (a request declined, or half the per-block budget used), and
     then every call of the function is both contributor and consumer;
+  * **the ownership verdict** (`hir::affine::verify`'s `accepted`): release
+    scopes, and with them `AFFINE-PATH-RELEASE-UNSUPPORTED`, are computed
+    only while the ownership analysis finds nothing anywhere in the
+    program, so a site that moves a binding on a loop's break path or in a
+    handler has that diagnostic only once every site with an ownership
+    diagnostic is rejected. Its *consumers* are the sites holding such a
+    join; while the analysis reports something, the verdict depends on one
+    *witness* (the diagnostic whose site is last in post-order, or every
+    one outside a site: the verdict cannot change while one stays), and
+    every site holding one after the first consumer is linked to it, so a
+    consumer whose status becomes unknown holds back what the sequential
+    order still sees when it judges it. One consumer ahead of six
+    rejections takes 3 builds, not 8 (`se-builds-ownership-verdict`). While
+    the analysis accepts the program, the verdict depends on the regions
+    passing an affine argument whose contract can widen (an untyped
+    parameter, a callable value): a rejection only kills paths and narrows
+    types, so no other diagnostic can appear. A later finding of the golden
+    migration (`mutable-vector.bot` mispredicted; a variant decided another
+    program: `se-equal-ownership-verdict`);
   * **the contract-boundary checks** (`hir::completions::Subsume` with
     `Possible`), which run only in a body's own diagnosing walk while the
     program erases something: a site-local channel, from the site to the
@@ -1176,8 +1195,10 @@ If you change the decision schedulers (`hir/static.tcl`'s `decide`,
 the method-call decisions' seeds or build reuse (`hir/hir.tcl`), or any fact
 an analysis reads across functions -- a new summary, a new backward or
 program-wide channel (an inferred contract, the erased-callable contract,
-an instance budget, a yield type), a new diagnostic suppressed by
-reachability -- run `tests/static-economics.test`,
+an instance budget, a yield type, the ownership verdict), a new diagnostic
+suppressed by reachability or by a whole-program verdict (as
+`hir::affine::verify` withholds release scopes from a program its analysis
+rejects) -- run `tests/static-economics.test`,
 `tests/static-compile.test`, `audit/static-decisions/tools/fuzz.tcl`
 (several seeds; `-legacy 1` also checks the legacy scheduler),
 `audit/static-decisions/tools/compare.tcl` (the golden suites and the

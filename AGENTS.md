@@ -520,7 +520,13 @@ the trait and context-trait mutants. A change to native drop or release
 lowering also needs a `BOTLISH_NATIVE_GC_STRESS=1` run of
 `tests/affine.test` and `cargo test --release --manifest-path
 native/Cargo.toml --lib affine`. `bench/affine.tcl` regenerates the
-performance report.
+performance report. `hir::affine::verify` computes release scopes (and so
+`AFFINE-PATH-RELEASE-UNSUPPORTED`) only for a program its whole-program
+analysis accepts, a program-wide channel of the static decisions
+(`hir/staticdeps.tcl`'s `C:verdict`, which lists that analysis's diagnostic
+kinds): a change to that gate, to those kinds or to which joins can hold a
+path-release diagnostic also needs `tests/static-economics.test` and the
+static-decision harnesses (Static intrinsics, below).
 
 ## Enums
 
@@ -801,7 +807,9 @@ difference from `BOTLISH_STATIC_SCHEDULER=sequential`: add its edge to
 schedulers, the dependency analysis, the method-call seeds or build reuse
 (`hir/hir.tcl`), or add a fact an analysis reads across functions (a summary,
 an inferred contract, the erased-callable contract, an instance budget, a
-yield type, a diagnostic suppressed by reachability), run
+yield type, a diagnostic suppressed by reachability or by a whole-program
+verdict such as the ownership analysis's, which withholds release scopes and
+`AFFINE-PATH-RELEASE-UNSUPPORTED` from a program it rejects), run
 `tests/static-economics.test`, `tests/static-compile.test`, `tests/golden.test`
 (`golden-static-economics`), `audit/static-decisions/tools/fuzz.tcl` (several
 seeds), `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` and

@@ -163,6 +163,7 @@ missed a channel. None occurs in any suite, fuzz program or test.
 | `C:erased` (the erased-callable contract) | its contributors: the instance requests whose arguments at uncontracted parameters can carry errors (by those arguments and the call's place, up the chain of requests), the positions of contravariant erasure, the requests the budget declined |
 | `C:budget:B` | every call requesting one of B's instances, only under pressure |
 | `P:input` (what an uncontracted input may hold at the contract boundary) | what the calls of its function pass in its position, its value, or `C:erased` |
+| `C:verdict` (the ownership analysis's verdict on the whole program; [below](#the-ownership-verdict)) | while the analysis reports something, one witness: the region of its diagnostic whose site is last in post-order, or of every one outside a site; while it accepts the program, every region passing an affine argument whose contract can widen |
 
 A region is a *consumer* of `C:erased` when it calls through a value that has
 lost both identity precision and contract precision: a callee typed `any` or a
@@ -177,6 +178,99 @@ Not channels, each pinned by a `se-property-*` test where the fact lives:
 a demoted trusted contract (`hir::check` keeps the diagnostics of the check
 before the demotion), the trait monomorphization (it runs only on a program
 with no diagnostic), resolution (lexical).
+
+### The ownership verdict
+
+A later finding (the golden migration's `mutable-vector.bot`: 5 rounds, 30
+builds, one misprediction). `hir::affine::verify` computes release scopes --
+and so `AFFINE-PATH-RELEASE-UNSUPPORTED`, a binding moved on a loop's break
+path or in a handler but still owned when the loop runs out or the call
+completes -- only when its whole-program analysis found nothing
+(`set scopes [expr {!$accepted || ...`). A site with such a join therefore
+has that diagnostic only once every site with an ownership diagnostic
+(`USE-AFTER-MOVE`, `AFFINE-LIST-OPERATION-UNSUPPORTED`, ...) anywhere in the
+program is rejected. The graph had no such edge: the batched run predicted
+the site ok beside the rejections that revealed it (a misprediction, the
+decisions still the reference's), and with a diagnostic of a later pass in
+the same site -- a `KNOWN-ERROR` after its loop -- it committed that one,
+where the sequential order rejects the site with
+`AFFINE-PATH-RELEASE-UNSUPPORTED`: another program, which no audit saw
+(`se-equal-ownership-verdict`).
+
+`C:verdict` models it (`hir/staticdeps.tcl`, `Ownership`):
+
+* **consumers**: `Z:site -> C:verdict` for every site holding a counting,
+  iterating or lockstep loop, or a handled call, whose body or handlers move
+  an affine binding visible at it (the analysis's moving references) -- an
+  infinite `loop:`'s normal path never completes and an `if`'s branches each
+  end in a statement that can hold a release, so neither is one. While the
+  analysis reports an erasure, also every reference there to a binding
+  whose type is affine or mentions `any`: a rejection that narrows the
+  erased type can make it a move;
+* **while the analysis reports something**: the verdict cannot change while
+  one of its diagnostics stays, so `C:verdict` depends on one witness -- the
+  region of the diagnostic whose site is last in post-order (the sequential
+  order removes it last), or of every one outside a site (no decision
+  removes it). And every site holding one *after the first consumer* is
+  linked to it (`Z:site -> C:verdict`): the sequential order judges a
+  consumer while those are still present, so when a consumer's status
+  becomes unknown its component must hold them back. Depending on every
+  diagnostic instead would also be sound, but a consumer ahead of K of them
+  would turn unknown at the first and take K + 1 builds; depending on the
+  witness alone would not be sound (a consumer turned unknown by the
+  witness's rejection while a later one is committed in another component);
+* **while it accepts the program**: a rejection only kills paths and narrows
+  types toward `never`, and an affine value never flows into a position that
+  is not affine without an erasure diagnostic, so a new ownership diagnostic
+  can appear only where an argument contract can widen -- an affine
+  argument at an untyped parameter (its inferred contract, its instance's
+  budget) or of a callable value (its type's contract): `C:verdict -> R` of
+  each region passing one.
+
+The analysis's diagnostics are recognized by kind
+(`hir::staticdeps::ownershipKinds`, checked against `hir/affine.tcl` by
+`se-property-ownership-verdict`), without the semantic instances' carried to
+their calls ("call to F with ... is invalid: ..."), which keep an ownership
+kind but are no verdict of the whole program.
+
+| program | before | after | sequential |
+|---|---|---|---|
+| the reproducer (USE-AFTER-MOVE, the site, AFFINE-LIST-OPERATION-UNSUPPORTED) | 3 rounds, mispredicted | 3 rounds | 4 rounds |
+| the same with a KNOWN-ERROR after the site's loop, the site last | 2 rounds, the site KNOWN-ERROR (wrong) | 3 rounds, AFFINE-PATH-RELEASE-UNSUPPORTED | 4 rounds |
+| the site ahead of six ownership rejections | 3 rounds, mispredicted | 3 rounds | 8 rounds |
+| the site beside four TYPE failures (accepted program) | 2 rounds | 2 rounds | 6 rounds |
+| `tests/golden/mutable-vector.bot` (70 sites) | 5 rounds, 30 builds, mispredicted `{4 f1:44247}` | 5 rounds, 30 builds, the same 70 decisions | -- |
+
+On `mutable-vector.bot` the channel costs no build: its one consumer is
+accepted with the last ownership rejection, as before, but now as *unknown*
+rather than predicted ok, and rejected in the next round. (Its 30 builds are
+21 method trial builds, 7 in each checked round; the 15-build ceiling of
+`golden-static-economics` is exceeded for that reason, not this one.)
+
+`mutable-array.bot` (233 sites, 91 rejected) takes 6 rounds and 21 builds
+before and after, the same decisions, no misprediction either way: 14 of its
+builds are the first checked round's method trials, and rounds 3-5 a chain
+of three TYPE rejections whose messages name exact callables (`block(eN)`),
+each committed in the sequential order's own build. The channel is active
+there (three consumers) and costs no build, but its linking moves five
+rejections from round 2 to rounds 3 and 4: the ownership diagnostics after
+the first consumer share a component with three consumers of the
+erased-callable contract, which turn unknown when an erasing site that is
+also an ownership contributor (`AFFINE-ELEMENT-COPY-OUT`) is rejected.
+`structs-and-enums.bot` (6 rounds, 19 builds) has no ownership diagnostic:
+the channel is closed and nothing changes.
+
+Front end (`bench/golden-suites.tcl -backends interp -profile 0`, the tree
+before and after run side by side on a loaded 4-CPU machine, so the times
+compare within a row only): `mutable-vector.bot` 904.4 s / 897.7 s,
+`mutable-array.bot` 1620.3 s / 1590.8 s, `structs-and-enums.bot` 673.3 s /
+679.2 s -- the analysis's added walk is within the noise.
+
+Three mutants of `audit/static-decisions/tools/mutants.txt` pin the rules:
+`verdict-consumers-ignored` and `verdict-unlinked` (semantic: the first and
+the second program of `se-equal-ownership-verdict` decide otherwise than the
+sequential order) and `verdict-every-diagnostic` (economic: the site ahead
+of six of `se-builds-ownership-verdict` takes a build per rejection).
 
 ## Method-call decisions
 

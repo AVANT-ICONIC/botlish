@@ -109,6 +109,44 @@
 #                       Open only under pressure -- a request declined, or B
 #                       holding half its per-block budget -- and then every
 #                       call of B is both.
+#   C:verdict           the ownership analysis's verdict on the whole
+#                       program (hir::affine::verify's `accepted`: no
+#                       diagnostic of its whole-program analysis anywhere).
+#                       Release scopes, and so AFFINE-PATH-RELEASE-
+#                       UNSUPPORTED, are computed only under it: a site
+#                       whose binding is moved on a break path or in a
+#                       handler but still owned when the loop runs out or
+#                       the call completes has that diagnostic only while no
+#                       other code anywhere has an ownership diagnostic.
+#                       Its *consumers* (Ownership): Z:site -> C:verdict for
+#                       each site holding such a join -- a counting,
+#                       iterating or lockstep loop, or a handled call, whose
+#                       body or handlers move an affine binding visible at
+#                       it (while the analysis reports an erasure, any
+#                       reference to a binding whose type is affine or may
+#                       become affine once a rejection narrows an erased
+#                       `any`). Its successors, while the analysis reports
+#                       something: one *witness* -- the region of the
+#                       diagnostic whose site is last in post-order, or of
+#                       every one in no site's body -- because the verdict
+#                       cannot change while one of its diagnostics stays;
+#                       and every site holding one after the first consumer
+#                       is linked to it (Z:site -> C:verdict), because the
+#                       sequential order judges a consumer while those are
+#                       still present: when a consumer's status becomes
+#                       unknown, its component holds them back. (Depending
+#                       on every one instead would make a consumer unknown
+#                       at the first of several rejections that cannot
+#                       change it, one build per rejection.) While the
+#                       analysis accepts the program, a rejection only kills
+#                       paths and narrows types -- an affine value never
+#                       flows into a position that is not affine without an
+#                       erasure diagnostic -- so a diagnostic can appear
+#                       only where a call's argument contract can widen: an
+#                       affine argument at an untyped parameter (its
+#                       inferred contract, its instance's budget) or of a
+#                       callable value (its type's contract); C:verdict ->
+#                       R of each region making one.
 #
 # And one channel that is the site's own, never a summary another region
 # reads: the contract-boundary checks at the site's positions
@@ -127,7 +165,20 @@
 # site's); resolution (lexical: a site's own bindings are scoped to it, and
 # hir/static.tcl decides every resolution-stage rejection in one build).
 
-namespace eval hir::staticdeps {}
+namespace eval hir::staticdeps {
+    # The kinds of the ownership analysis's whole-program diagnostics
+    # (hir::affine::Analyze: the consumer rejections, captures, liveness and
+    # module bindings), whose presence anywhere withholds the release scopes
+    # (C:verdict). tests/static-economics.test checks the list against
+    # hir/affine.tcl.
+    variable ownershipKinds {
+        USE-AFTER-MOVE AFFINE-NOT-DEFINITELY-LIVE AFFINE-CAPTURE-UNSUPPORTED
+        AFFINE-ERASURE-UNSUPPORTED AFFINE-EQUALITY-UNSUPPORTED
+        AFFINE-LIST-OPERATION-UNSUPPORTED AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE
+        AFFINE-TEMPORARY-UNSUPPORTED AFFINE-DUPLICATION-UNSUPPORTED
+        AFFINE-ELEMENT-COPY-OUT
+    }
+}
 
 # The dependency analysis of HIR, one build of a program whose static sites
 # are SITES (hir::static::Sites, post-order) under DECISIONS (header).
@@ -714,10 +765,210 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
     }
     dict set state pressured $pressured
     dict set state budgetOf $budgetOf
+    # The ownership analysis's verdict (C:verdict).
+    lassign [Ownership $hir $state] pathRelease verdict linked diagnosed
+    dict set state pathRelease $pathRelease
+    dict set state verdict $verdict
+    dict set state verdictLinked $linked
     dict set state channels [dict create erasurePoints [llength $points] \
         erasedConsumers [dict size $consumers] budgetPressure [dict size $pressured] \
-        yieldingFunctions [dict size $yielding] constructions [llength $creates]]
+        yieldingFunctions [dict size $yielding] constructions [llength $creates] \
+        ownershipDiagnostics $diagnosed pathReleaseSites [dict size $pathRelease]]
     return $state
+}
+
+# The ownership verdict's part of the graph (header, C:verdict), from STATE
+# (Prepare's walk): a list {PATHRELEASE VERDICT LINKED DIAGNOSED} --
+# PATHRELEASE the sites (key -> 1) holding a join whose path-release
+# diagnostic the verdict withholds, VERDICT C:verdict's successors (node ->
+# edge label), LINKED the sites (key -> 1) linked to it as contributors,
+# DIAGNOSED the number of the whole-program analysis's diagnostics.
+proc hir::staticdeps::Ownership {hir state} {
+    variable ownershipKinds
+    if {![dict exists $hir affine moveRefs]} {
+        # No affine type: no release scope, no verdict.
+        return [list {} {} {} 0]
+    }
+    set exprs [dict get $hir exprs]
+    set regionOf [dict get $state regionOf]
+    set siteOf [dict get $state siteOf]
+    # The diagnostics of the whole-program analysis, each {EXPR REGION SITE}.
+    # A semantic instance's diagnostic carried to the call that requested it
+    # keeps its ownership kind (hir::semantic::Derived: "call to F with ...
+    # is invalid: ...") but is no diagnostic of that analysis.
+    set diagnosed {}
+    set erasure 0
+    foreach d [dict get $hir diagnostics] {
+        if {[dict get $d kind] ni $ownershipKinds} continue
+        set e [dict get $d expr]
+        if {[string match "call to *" [dict get $d message]]
+                && [dict exists $hir semantic calls [list generic $e]]} continue
+        set region [expr {[dict exists $regionOf $e] ? [dict get $regionOf $e] : "program"}]
+        set site [expr {[dict exists $siteOf $e] ? [dict get $siteOf $e] : ""}]
+        lappend diagnosed [list $e $region $site]
+        if {[dict get $d kind] eq "AFFINE-ERASURE-UNSUPPORTED"} {
+            set erasure 1
+        }
+    }
+    # The consumers: the sites holding a join one of whose paths may move a
+    # binding visible at it -- the moving references of the analysis; while
+    # it reports an erasure, also every reference to a binding whose type is
+    # affine (its consumer may become a move) or mentions `any` (it may
+    # become affine) once a rejection narrows the erased type.
+    set refs [dict create]
+    foreach r [dict keys [dict get $hir affine moveRefs]] {
+        dict set refs $r 1
+    }
+    if {$erasure} {
+        set may [dict create]
+        dict for {r region} $regionOf {
+            set node [dict get $exprs $r]
+            if {[dict get $node kind] ne "ref"} continue
+            set b [dict get $node binding]
+            if {$b eq "" || ![dict exists $hir bindings $b]} continue
+            if {![dict exists $may $b]} {
+                set type [hir::bindingType $hir $b]
+                dict set may $b [expr {[dict get $hir bindings $b kind] in {local param}
+                    && ([hir::types::IsAffine $type] || [MentionsAny $type])}]
+            }
+            if {[dict get $may $b]} {
+                dict set refs $r 1
+            }
+        }
+    }
+    set pathRelease [dict create]
+    set sees [dict create]
+    foreach r [dict keys $refs] {
+        if {![dict exists $regionOf $r] || ![dict exists $exprs $r binding]} continue
+        set b [dict get $exprs $r binding]
+        if {$b eq "" || ![dict exists $hir bindings $b]} continue
+        foreach x [PathJoins $hir $state $r $b sees] {
+            if {[dict exists $siteOf $x]} {
+                dict set pathRelease [dict get $siteOf $x] 1
+            }
+        }
+    }
+    set verdict [dict create]
+    set linked [dict create]
+    if {[dict size $pathRelease] == 0} {
+        # No site's diagnostics read the verdict.
+        return [list $pathRelease $verdict $linked [llength $diagnosed]]
+    }
+    set position [dict create]
+    set i 0
+    foreach key [dict get $state presentKeys] {
+        dict set position $key $i
+        incr i
+    }
+    if {$diagnosed ne {}} {
+        # The witness: the region of every diagnostic in no site's body (no
+        # decision removes one), else of the one whose site is last in
+        # post-order (the sequential order removes it last).
+        set last ""
+        set lastAt -1
+        foreach item $diagnosed {
+            lassign $item e region site
+            if {$site eq ""} {
+                dict set verdict R:$region ownership-diagnostic
+            } elseif {[dict get $position $site] > $lastAt} {
+                set lastAt [dict get $position $site]
+                set last $region
+            }
+        }
+        if {[dict size $verdict] == 0} {
+            dict set verdict R:$last ownership-diagnostic
+        }
+        # The contributors after the first consumer, linked.
+        set first [tcl::mathfunc::min {*}[lmap key [dict keys $pathRelease] {dict get $position $key}]]
+        foreach item $diagnosed {
+            set site [lindex $item 2]
+            if {$site ne "" && [dict get $position $site] > $first} {
+                dict set linked $site 1
+            }
+        }
+    } else {
+        # Accepted: the regions where a rejection could make an ownership
+        # diagnostic appear -- an affine argument at a parameter whose
+        # contract can widen (an untyped parameter's inferred contract, or a
+        # callable value's type), never a native's (its ownership roles are
+        # fixed) or a declared parameter's.
+        dict for {e region} $regionOf {
+            set node [dict get $exprs $e]
+            if {[dict get $node kind] ne "call" || ![dict get $node reachable]} continue
+            lassign [dict get $node target] tk tb
+            if {$tk eq "native"} continue
+            set declared [expr {$tk eq "block" && [dict exists $exprs $tb]
+                ? [dict get $exprs $tb declaredParamTypes] : {}}]
+            set index 0
+            foreach arg [dict get $node args] {
+                if {[lindex $declared $index] eq "" && [hir::types::IsAffine [hir::typeOf $hir $arg]]} {
+                    dict set verdict R:$region ownership-contract
+                    break
+                }
+                incr index
+            }
+        }
+    }
+    return [list $pathRelease $verdict $linked [llength $diagnosed]]
+}
+
+# The joins above reference R to binding B (Ownership) on one of whose paths
+# R may move B while B is visible at the join: a handled call R is in a
+# handler of, or a counting, iterating or lockstep loop R is in the body of
+# (an infinite `loop`'s normal path never completes; an `if`'s branches each
+# end in a statement that can hold a release). Walks out of function
+# literals; stops where B is no longer visible. SEESVAR caches ScopeSees.
+proc hir::staticdeps::PathJoins {hir state r b seesVar} {
+    upvar 1 $seesVar sees
+    set parentOf [dict get $state parentOf]
+    set regionOf [dict get $state regionOf]
+    set scope [dict get $hir bindings $b scope]
+    set joins {}
+    set child $r
+    while 1 {
+        set x [dict get $parentOf $child]
+        if {$x eq ""} {
+            # The top of a region: continue outside its function literal.
+            set q [dict get $regionOf $child]
+            if {$q eq "program" || ![dict exists $parentOf $q]} break
+            set child $q
+            continue
+        }
+        set node [dict get $hir exprs $x]
+        set at [dict get $node scope]
+        if {![dict exists $sees $at $scope]} {
+            dict set sees $at $scope [ScopeSees $hir $at $scope]
+        }
+        if {![dict get $sees $at $scope]} break
+        if {[dict get $node reachable]} {
+            switch -- [dict get $node kind] {
+                handle {
+                    if {$child ne [dict get $node call]} {
+                        lappend joins $x
+                    }
+                }
+                listloop - countloop - lockloop {
+                    if {$child in [dict get $node body]} {
+                        lappend joins $x
+                    }
+                }
+            }
+        }
+        set child $x
+    }
+    return $joins
+}
+
+# 1 if scope S is scope TARGET or nested in it (a binding of TARGET is
+# visible in S).
+proc hir::staticdeps::ScopeSees {hir s target} {
+    while {$s ne "" && [dict exists $hir scopes $s]} {
+        if {$s eq $target} {
+            return 1
+        }
+        set s [dict get $hir scopes $s parent]
+    }
+    return 0
 }
 
 # lsort comparison of two spans {START END KEY}: by start, the enclosing one
@@ -843,6 +1094,17 @@ proc hir::staticdeps::Successors {hir stateVar v} {
                 dict set succ Z:$outer nested
             }
             SubsumeSuccessors $hir state $key succ
+            if {[dict exists $state pathRelease $key]} {
+                dict set succ C:verdict path-release
+            } elseif {[dict exists $state verdictLinked $key]} {
+                dict set succ C:verdict verdict-contributor
+            }
+        }
+        C:verdict {
+            dict set state names $v "the ownership analysis's verdict on the whole program"
+            dict for {node label} [dict get $state verdict] {
+                dict set succ $node $label
+            }
         }
         P:* {
             PossibleSuccessors $hir state [string range $v 2 end] succ
@@ -1397,6 +1659,24 @@ proc hir::staticdeps::MentionsMutable {type} {
     }
     foreach part [lrange $type 1 end] {
         if {[MentionsMutable $part]} {
+            return 1
+        }
+    }
+    return 0
+}
+
+# 1 if static TYPE mentions `any` at any depth: a type an erased affine value
+# may have (a join or element type collapsed to `any`), which a rejection that
+# narrows it could make affine.
+proc hir::staticdeps::MentionsAny {type} {
+    if {$type eq "any"} {
+        return 1
+    }
+    if {[llength $type] < 2} {
+        return 0
+    }
+    foreach part [lrange $type 1 end] {
+        if {[MentionsAny $part]} {
             return 1
         }
     }

@@ -144,6 +144,63 @@ proc seTypeFail {i} {
     return [list "fn want_${i}(x: int) -> int:" "    x" "want_${i}(\"s\")"]
 }
 
+# The ownership verdict (hir/staticdeps.tcl's C:verdict): release scopes,
+# and so AFFINE-PATH-RELEASE-UNSUPPORTED, exist only while no code anywhere
+# has an ownership diagnostic. A prelude of coroutine handles and a vector of
+# them; site bodies with a whole-program ownership diagnostic (a vector
+# used after its move, a collecting loop of handles) and one whose handle is
+# moved on a counted loop's break path but still owned when the loop runs
+# out (TAIL: its last line).
+set ::seOwnership {import compiler
+import mutable_vector
+
+error Boom
+
+struct Command:
+    value: int
+
+struct Event:
+    value: int
+
+fn worker(seed: int, resume Command) -> Event:
+    command = yield Event {value: seed}
+    return Event {value: command.value + seed}
+
+fn make(seed: int) -> Coroutine{args: [Command], return: Event}:
+    coroutine {step} = worker(seed)
+    step
+
+fn empty_queue() -> MutableVector[Coroutine{args: [Command], return: Event}]:
+    mutable_vector::from_list([])
+
+fn boom() -> int errors Boom:
+    fail Boom
+
+}
+set ::seMovedVector {"fn f() -> int:" "    q = empty_queue()" "    w = q" "    mutable_vector::length(q)" "f()"}
+set ::seCollectHandles {"fn f() -> int:" "    xs = loop i from 0 to 2:" "        make(i)" "    1" "f()"}
+set ::seMovedHandle {"fn f() -> int:" "    s = make(1)" "    t = s" "    e = s(Command {value: 1})" "    e.value" "f()"}
+proc sePathRelease {{tail 1}} {
+    return [list "fn f() -> int:" "    v = empty_queue()" "    s = make(1)" "    loop i from 0 to 3:" \
+        "        if i == 1:" "            v.push(s)" "            break" "    $tail" "f()"]
+}
+
+# The ownership prelude with sites NAME BODY ..., each called under a handler
+# (NAME -text: BODY is written as it is, and not called).
+proc seOwnershipProgram {args} {
+    set text $::seOwnership
+    set calls ""
+    foreach {name body} $args {
+        if {$name eq "-text"} {
+            append text $body
+            continue
+        }
+        append text [seSite $name $body]
+        append calls "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    return "$text${calls}0\n"
+}
+
 # ---------------------------------------------------------------------------
 # The semantics are frozen
 
@@ -268,6 +325,20 @@ test se-equal-corpus {contexts, opaque structs, traits, coroutines and ownership
     set results
 } -result {{} {} {} {} {} {}}
 
+test se-equal-ownership-verdict {a site whose handle is moved on a break path is AFFINE-PATH-RELEASE-UNSUPPORTED only once no other site has an ownership diagnostic: judged after two such sites, its first diagnostic is that one, not the KNOWN-ERROR after it (the dependency analysis once missed the channel and committed KNOWN-ERROR); judged while a later one is still present, it is the KNOWN-ERROR -- even when the diagnostic the analysis watches vanishes with an earlier rejection -- the batched decisions are the sequential ones} -body {
+    set text [seOwnershipProgram moved $::seMovedVector collect $::seCollectHandles path [sePathRelease boom()]]
+    set after [list [seSame $text 0] [seOutcomes $text]]
+    # The last site's erasure (a handle into an `if` of type any) is the
+    # verdict's witness; rejecting the block in helper, before the path site,
+    # makes helper's result `never` and the erasure vanishes, while the
+    # collecting site after the path site keeps the verdict: it must be held
+    # back with the path site, not committed beside it.
+    set helper "fn helper() errors compiler::CompilerError:\n    static compile:\n        fn want(x: int) -> int:\n            x\n        want(\"s\")\n\n"
+    set erased {"fn f(c: bool) -> int errors compiler::CompilerError:" "    x = if c:" "        make(1)" "    else:" "        helper()" "    1" "f(true)"}
+    set text [seOwnershipProgram -text $helper path [sePathRelease boom()] collect $::seCollectHandles erased $erased]
+    list {*}$after [seSame $text 0] [seOutcomes $text]
+} -result {{} {USE-AFTER-MOVE AFFINE-LIST-OPERATION-UNSUPPORTED AFFINE-PATH-RELEASE-UNSUPPORTED} {} {TYPE KNOWN-ERROR AFFINE-LIST-OPERATION-UNSUPPORTED accepted}}
+
 test se-no-misprediction {the golden framework's suites of 30 cases: no build contradicts a prediction of the batched run} -body {
     lmap rejection {none unbound type} {
         dict get [seHir [seSuite 30 $rejection 1]] staticStats mispredicted
@@ -359,6 +430,32 @@ test se-builds-contributor-checked {a contributor rejected by the checker beside
     append text "0\n"
     list [seSame $text] [lsort -unique [seOutcomes $text]] [lindex [seEcon $text] 0]
 } -result {{} TYPE 2}
+
+test se-builds-ownership-verdict {the ownership verdict: a site whose path-release diagnostic it withholds waits for the sites holding its diagnostics -- no build contradicts a prediction (the golden mutable-vector suite's did) -- yet one such site ahead of six of them takes no build per rejection, and beside independent failures in a program the analysis accepts it waits for nothing} -body {
+    # The reproducer: two sites with ownership diagnostics around the one
+    # whose diagnostic they withhold.
+    set hir [seHir [seOwnershipProgram moved $::seMovedVector path [sePathRelease] collect $::seCollectHandles]]
+    set first [list [dict get $hir staticStats mispredicted] [dict get $hir staticStats rounds] \
+        [seSame [seOwnershipProgram moved $::seMovedVector path [sePathRelease] collect $::seCollectHandles] 0]]
+    # The site first, six after it.
+    set sites [list path [sePathRelease]]
+    for {set i 0} {$i < 6} {incr i} {
+        lappend sites w$i [expr {$i % 2 ? $::seCollectHandles : $::seMovedHandle}]
+    }
+    set text [seOwnershipProgram {*}$sites]
+    set hir [seHir $text]
+    set ahead [list [dict get $hir staticStats mispredicted] [dict get $hir staticStats rounds] \
+        [lindex [seEcon $text sequential] 0] [lsort -unique [seOutcomes $text]]]
+    # Accepted: the site beside four TYPE failures.
+    set sites [list path [sePathRelease]]
+    for {set i 0} {$i < 4} {incr i} {
+        lappend sites t$i [seTypeFail $i]
+    }
+    set text [seOwnershipProgram {*}$sites]
+    set hir [seHir $text]
+    set accepted [list [dict get $hir staticStats mispredicted] [dict get $hir staticStats rounds] [seOutcomes $text]]
+    list $first $ahead $accepted
+} -result {{{} 3 {}} {{} 3 8 {AFFINE-LIST-OPERATION-UNSUPPORTED AFFINE-PATH-RELEASE-UNSUPPORTED USE-AFTER-MOVE}} {{} 2 {AFFINE-PATH-RELEASE-UNSUPPORTED TYPE TYPE TYPE TYPE}}}
 
 test se-method-reuse {method-style call decisions are reused across rounds: fewer trial builds than deciding afresh, and the audit (every seeded round built again unseeded) finds the same program} -body {
     set text "import compiler\nimport list\nimport str\n\n"
@@ -507,6 +604,16 @@ test se-property-subsume-local {the contract-boundary check of what an uncontrac
     set body [info body hir::completions::Subsume]
     regexp {if \{!\$diagnose \|\| \$value eq "" \|\| \[ErasedErrors \$hir\] eq \{\}\} \{\s*return} $body
 } -result 1
+
+test se-property-ownership-verdict {release scopes, and so AFFINE-PATH-RELEASE-UNSUPPORTED, are computed only for a program the ownership analysis accepts as a whole, whose diagnostics are exactly the kinds hir/staticdeps.tcl's C:verdict lists; a semantic instance's carried to its call reads "call to" -- the facts the verdict's edges rely on} -body {
+    set f [open [file join $::sdRoot hir affine.tcl]]
+    set text [read $f]
+    close $f
+    set kinds [lsort -unique [lmap {- kind} [regexp -all -inline {\[list (?:reject )?(AFFINE-[A-Z-]+|USE-AFTER-MOVE)\M} $text] {set kind}]]
+    list [regexp {set scopes \[expr \{!\$accepted } [info body hir::affine::verify]] \
+        [expr {$kinds eq [lsort $hir::staticdeps::ownershipKinds]}] \
+        [regexp {format \{call to %s } [info body hir::semantic::Derived]]
+} -result {1 1 1}
 
 test se-property-demotion-keeps-diagnostics {a demoted trusted contract changes no diagnostic: hir::check keeps the diagnostics of the check before the demotion -- why demotion is not a channel} -body {
     regexp {set diagnostics \[dict get \$hir diagnostics\].*CheckOnce hir \$demote.*dict set hir diagnostics \$diagnostics} [info body hir::check]
