@@ -177,9 +177,11 @@ proc golden::suite {path backends} {
         return $result
     }
     set hir [lindex $compiled 1]
+    set before $::golden::genericStandIns
     foreach backend $backends {
         dict set result outcomes $backend [run $hir $backend]
     }
+    dict set result standIns [expr {$::golden::genericStandIns - $before}]
     set status ok
     set reports [lsort -unique [lmap {b o} [dict get $result outcomes] {lrange $o 0 1}]]
     foreach {backend outcome} [dict get $result outcomes] {
@@ -221,6 +223,12 @@ proc golden::main {argv} {
         set name [file tail $path]
         if {$mode eq "names"} {
             puts "$name STATUS $status"
+            if {[dict exists $result standIns] && [dict get $result standIns] > 0} {
+                # The whole suite's cranelift-generic run was replaced by
+                # cranelift's (golden::run): visible, so that a suite does not
+                # lose its generic coverage silently.
+                puts "$name STANDIN cranelift-generic"
+            }
             # The static decisions' economics (hir/static.tcl's staticStats),
             # for the economics guard of audit/golden/tools/check.tcl.
             set compiled [dict get $result compile]

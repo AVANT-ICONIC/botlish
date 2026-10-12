@@ -286,7 +286,7 @@ proc goldentools::suiteVerdicts {output} {
     foreach line [split $output \n] {
         if {[regexp {^\S+ STATUS (\S+)$} $line -> s]} {
             set state $s
-        } elseif {[regexp {^\S+ STATIC } $line]} {
+        } elseif {[regexp {^\S+ (STATIC|STANDIN) } $line]} {
             continue
         } elseif {[regexp {^\S+ (PASS|FAIL) (.*)$} $line -> verdict name]} {
             dict set verdicts $name $verdict

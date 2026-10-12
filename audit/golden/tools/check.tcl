@@ -156,10 +156,14 @@ proc runNew {tree suites timeout backends jobs} {
     set seconds [dict create]
     set reported [dict create]
     set ::staticOf [dict create]
+    set ::standInOf [dict create]
     foreach suite $suites {
         lassign [dict get $outcomes $suite] status output wall
         dict set seconds $suite $wall
         dict set ::staticOf $suite [goldentools::suiteStatic $output]
+        if {[regexp -line {^\S+ STANDIN cranelift-generic$} $output]} {
+            dict set ::standInOf $suite 1
+        }
         lassign [goldentools::suiteVerdicts $output] state names
         dict set states $suite $state
         dict set reported $suite [dict keys $names]
@@ -276,6 +280,13 @@ if {[dict get $options -mutants] eq {}} {
     # the method-call trial builds (one per candidate of an undecided
     # method-style call in a round: bounded by candidates, not tests), and no
     # build contradicting a prediction.
+    # A suite whose cranelift-generic run was replaced by cranelift's
+    # (NATIVE UNSUPPORTED struct-shape somewhere in it): its generic coverage
+    # is lost, so the tests that need the substitution belong in a companion
+    # suite that excludes cranelift-generic with that reason.
+    dict for {suite -} $::standInOf {
+        puts "GENERIC STAND-IN: $suite (cranelift ran in place of cranelift-generic for the whole suite)"
+    }
     puts "\nStatic decisions per suite (rounds, builds, method trials, mispredicted, compile s):"
     foreach suite $suites {
         set st [dict get $::staticOf $suite]
