@@ -1,0 +1,199 @@
+# method-equivalence-imported.bot -- the source half of the METHOD-ELIGIBLE
+# round-trip law (WARNINGS-METHOD-ELIGIBLE.md) and of `nomethod fn` for
+# callees and receivers that come from imported namespaces:
+#
+#     s.concat("x")   is   str::concat(s, "x")
+#
+# when the namespace is imported and its member is the one candidate of the
+# sugared call (an alias of that same function is no second candidate);
+# two imported namespaces' same-name members make a sugared call with an
+# untyped receiver AmbiguousMethodCall; an imported `nomethod` function's
+# receiver-form call is NomethodCall, and sugar skips a local `nomethod`
+# function so that an imported function of the name is the one it means;
+# mutable_array::create and mutable_array::copy are shipped nomethod.
+#
+# Ports the tests of tests/method-eligible.test (which stays authoritative
+# and unchanged) whose Tcl programs import a namespace; the others, which
+# import nothing, are in method-equivalence.bot (whose header explains the
+# [sugared, functional] pairs). Several Tcl programs import a private module
+# (written into a scratch library by the test); a suite cannot, so a stock
+# module with the same shape stands in, said at each test: a module-level
+# value of web (web::hex_digits) for a module's `value = 7`; list::get and
+# mutable_array::get for two modules' own `fn two(a, b)`; test::mismatch (a
+# nomethod function of lib/test.bot) for a module's `nomethod fn atan2`; and
+# str::concat for a module's `fn atan2` that wins over a local nomethod one.
+#
+# Imports: compiler and test (the framework; test also provides the
+# imported nomethod function); list, mutable_array and str (the Tcl
+# programs' own imports); web (its module-level value hex_digits). Every
+# method name a body uses names a member of at most one imported namespace,
+# the one its Tcl program imports for it, except `get`, which is the
+# two-candidate test's point.
+import compiler
+import list
+import mutable_array
+import str
+import test
+import web
+
+# ---------------------------------------------------------------------------
+# Shared declarations
+
+# The Tcl file's $::prelude function `two` (two parameters, returns its
+# first argument).
+fn two(a, b):
+    a
+
+# ---------------------------------------------------------------------------
+# Imported callees and receivers
+
+fn register_imported_callee_tests():
+    # me-form-qualified-name: a module-qualified name is a receiver.
+    # web::hex_digits (a module-level List of Strings) stands in for the
+    # Tcl program's private module value m::value.
+    fn qualified_name() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return web::hex_digits.two(x)
+            fn functional(x):
+                return two(web::hex_digits, x)
+            [sugared(5) == web::hex_digits, functional(5) == web::hex_digits]
+    test::value("me-form-qualified-name", [true, true], qualified_name)
+
+    # me-intrinsic-callee: an imported 2-parameter intrinsic is the callee of
+    # its sugared spelling.
+    fn intrinsic() errors compiler::CompilerError:
+        static compile:
+            fn sugared(s):
+                return s.concat("x")
+            fn functional(s):
+                return str::concat(s, "x")
+            [sugared("a"), functional("a")]
+    test::value("me-intrinsic-callee", ["ax", "ax"], intrinsic)
+
+    # me-imported-two-param-intrinsic-append: xs.append(1) is
+    # list::append(xs, 1).
+    fn append_intrinsic() errors compiler::CompilerError:
+        static compile:
+            fn sugared(xs):
+                return xs.append(1)
+            fn functional(xs):
+                return list::append(xs, 1)
+            [sugared([1]), functional([1])]
+    test::value("me-imported-two-param-intrinsic-append", [[1, 1], [1, 1]], append_intrinsic)
+
+    # me-alias-of-the-same-function-is-one-candidate: a binding of the
+    # imported function list::append adds no second candidate (the Tcl
+    # program's top-level alias is the block's first binding here).
+    fn alias() errors compiler::CompilerError:
+        static compile:
+            append = list::append
+            fn sugared(xs):
+                return xs.append(1)
+            fn functional(xs):
+                return list::append(xs, 1)
+            [sugared([1]), functional([1])]
+    test::value("me-alias-of-the-same-function-is-one-candidate", [[1, 1], [1, 1]], alias)
+
+    # me-two-candidates-sugar-is-ambiguous: two imported namespaces with a
+    # member of the same name, and an untyped receiver: the language cannot
+    # say which one the sugared call means. list::get and mutable_array::get
+    # (both declared module functions) stand in for the Tcl program's two
+    # private modules' `fn two(a, b)`.
+    fn two_candidates() errors compiler::CompilerError:
+        static compile:
+            fn t(x):
+                x.get(1, 0)
+            t(5)
+    test::rejects("me-two-candidates-sugar-is-ambiguous", compiler::DiagnosticCode::AmbiguousMethodCall, two_candidates)
+
+# ---------------------------------------------------------------------------
+# nomethod across imports
+
+fn register_imported_nomethod_tests():
+    # me-nomethod-via-module-import: an imported nomethod function behaves
+    # like a local one: its receiver-form call is NomethodCall. test::mismatch
+    # (nomethod in lib/test.bot) stands in for the Tcl program's private
+    # module's `nomethod fn atan2`.
+    fn via_import() errors compiler::CompilerError:
+        static compile:
+            fn t(x):
+                x.mismatch("a", "d")
+                0
+            t("e")
+    test::rejects("me-nomethod-via-module-import", compiler::DiagnosticCode::NomethodCall, via_import)
+
+    # me-nomethod-is-not-a-candidate-so-another-function-wins: sugar skips a
+    # local nomethod function, so the imported function of the name is the
+    # one it means; the functional call means the local one. str::concat
+    # stands in for the Tcl program's private module's `fn atan2`.
+    fn another_wins() errors compiler::CompilerError:
+        static compile:
+            nomethod fn concat(a, b):
+                a
+            ["x".concat("y"), concat("x", "y")]
+    test::value("me-nomethod-is-not-a-candidate-so-another-function-wins", ["xy", "x"], another_wins)
+
+# The shipped markings (REFACTOR-WARNINGS-CLEAN.md, P1) of mutable_array:
+# create's first argument is the new array's length and copy's the copy's
+# destination, neither a receiver. The receiver form is NomethodCall at the
+# method name with the pinned message; the functional call is the native's
+# own value.
+fn register_shipped_nomethod_tests():
+    # me-nomethod-shipped-mutable-array-create
+    fn create_sugared() errors compiler::CompilerError:
+        static compile:
+            fn t(n):
+                return n.create(7).capacity()
+            t(2)
+    test::rejects_at("me-nomethod-shipped-mutable-array-create/sugared-location", compiler::DiagnosticCode::NomethodCall, 147, 26, create_sugared)
+    test::rejects_message("me-nomethod-shipped-mutable-array-create/sugared-message", compiler::DiagnosticCode::NomethodCall, "`mutable_array::create` is declared nomethod and cannot be called with method syntax; call it as mutable_array::create(receiver, ...)", create_sugared)
+
+    fn create_functional() errors compiler::CompilerError:
+        static compile:
+            fn t(n):
+                return mutable_array::create(n, 7).capacity()
+            t(2)
+    test::value("me-nomethod-shipped-mutable-array-create/functional", 2, create_functional)
+
+    # me-nomethod-shipped-mutable-array-copy (LowerUnderrun and UpperOverrun
+    # are the runtime's builtin errors).
+    fn copy_sugared() errors compiler::CompilerError:
+        static compile:
+            fn t() errors LowerUnderrun, UpperOverrun:
+                a = mutable_array::from_list([1, 2, 3])
+                b = mutable_array::from_list([8, 9])
+                a.copy(1, b, 0, 2)
+                a.freeze(3)
+            r = t():
+                on LowerUnderrun:
+                    []
+                on UpperOverrun:
+                    []
+            r
+    test::rejects_at("me-nomethod-shipped-mutable-array-copy/sugared-location", compiler::DiagnosticCode::NomethodCall, 166, 19, copy_sugared)
+    test::rejects_message("me-nomethod-shipped-mutable-array-copy/sugared-message", compiler::DiagnosticCode::NomethodCall, "`mutable_array::copy` is declared nomethod and cannot be called with method syntax; call it as mutable_array::copy(receiver, ...)", copy_sugared)
+
+    fn copy_functional() errors compiler::CompilerError:
+        static compile:
+            fn t() errors LowerUnderrun, UpperOverrun:
+                a = mutable_array::from_list([1, 2, 3])
+                b = mutable_array::from_list([8, 9])
+                mutable_array::copy(a, 1, b, 0, 2)
+                a.freeze(3)
+            r = t():
+                on LowerUnderrun:
+                    []
+                on UpperOverrun:
+                    []
+            r
+    test::value("me-nomethod-shipped-mutable-array-copy/functional", [1, 8, 9], copy_functional)
+
+fn register_method_eligible_imported_tests():
+    register_imported_callee_tests()
+    register_imported_nomethod_tests()
+    register_shipped_nomethod_tests()
+
+with context test::suite()
+register_method_eligible_imported_tests()
+test::report()

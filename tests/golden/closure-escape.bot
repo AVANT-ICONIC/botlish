@@ -1,0 +1,912 @@
+# closure-escape.bot -- closures and fixed-shape Lists that escape their
+# function or do not, as a source-level specification: whatever a backend
+# does to compile them -- a local closure that is only ever called turned
+# into a direct call taking its captures as extra arguments (no closure
+# object at all), a sibling closure that only calls another flattened the
+# same way, a self-recursive closure turned into a loop, a closure's String
+# result consumed in place, a List literal or a callee's List result read at
+# constant indexes kept in registers (no List object) -- a program's value is
+# the one its source defines, the same on every backend:
+#
+#   * a nested function is a closure over the bindings it names -- the
+#     innermost binding of a shadowed name, a parameter several functions
+#     out, a local bound to a call's result -- and computes the same value
+#     called once, twice, on one branch only, recursively (in tail position
+#     or not), from a sibling closure, from a chain of them, and when it is
+#     created anew by every call of its enclosing function;
+#   * a closure that escapes -- returned, stored in a List, passed to an
+#     untyped callee, chosen at run time -- keeps its captures and computes
+#     the same value; a closure returned beside one that never escapes does
+#     not disturb it;
+#   * captured Strings survive deep recursion and repeated allocation;
+#   * a closure reading one character of a captured String (by
+#     str::substring, the slice errors handled) classifies ASCII and astral
+#     characters correctly, serves callers that keep its result and callers
+#     that only compare it, and its declared slice errors reach their
+#     handlers by name;
+#   * a function holding a nested closure gives the same value called
+#     directly and called through a List element (its generic and its
+#     specialized instance), and a binding a nested closure stores in a List
+#     and calls dynamically gives the same value as its direct calls;
+#   * a List literal or a callee's List result read at constant indexes,
+#     forwarded through calls, also measured or returned whole, or indexed
+#     dynamically, gives its elements, also when they are call results;
+#   * a field projection in a loop over the empty List (a List[never]
+#     instance of a function taking List[S]) runs, through a lockstep loop,
+#     a nested [[]], a second call, a projection chain and an untyped
+#     parameter with mixed callers.
+#
+# Ported from tests/native-block-escape.test, tests/native-escape.test,
+# tests/native-listloop.test, tests/blockescape-called-generic.test and
+# tests/blockescape-nested-capturers.test, which stay authoritative and
+# unchanged: they also pin what no program can observe -- Block and List
+# allocation counts (native::allocationReport), the NIR of internal variants,
+# region companions and scalar-replacement companions, which instances
+# blockescape wants, the native option matrix (-block-escape-opt,
+# -escape-opt, -string-region-opt, -exact-callable-opt 0 runs) and forced
+# BOTLISH_NATIVE_GC_STRESS runs. Each test here is the value half of one Tcl
+# test (the fragment audit/golden/migration/fragments/closure-escape.tsv maps
+# them; blockescape-nested-capturer-parity-sibling- is the program of
+# compiled-values.bot's dormant-nested-value-use-parity and maps there).
+#
+# The Tcl programs are compiled with -strict 0; these are strict. Where a
+# strict program needs it a slice or a list::at the compiler cannot prove in
+# range is handled (the handler's value is never reached with these inputs),
+# in the function that reads it; a handled call is bound first (handlers sit
+# on statements). Every input is the Tcl program's own literal, on purpose:
+# the virtualization and specialization decisions these programs exercise
+# are read from those call sites -- except the indexes of
+# char-accessor/declared-slice-errors, two of them out of range, whose
+# failures must happen at run time: they are parameters of its registration
+# function, given as literals where it is called.
+#
+# Declarations: Entry, Detail and Record, the element structs of the
+# never-element tests (the Tcl programs' S and T, renamed). The Tcl
+# programs' top-level functions are nested in each block.
+#
+# Imports: compiler (the body contract, compiler::CompilerError) and test;
+# list and str because the Tcl programs call list::at, list::length,
+# str::concat, str::substring and str::is_tcl_alpha, always qualified (no
+# method syntax is used, so the suite-wide imports change no call's meaning).
+import compiler
+import list
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only).
+
+# never-element/projection: the Tcl program's S.
+struct Entry:
+    f: int
+
+# The other never-element tests: the Tcl programs' T and S.
+struct Detail:
+    g: int
+
+struct Record:
+    f: int
+    t: Detail
+
+# ---------------------------------------------------------------------------
+# Local closures that are only ever called (native-block-escape.test)
+
+fn register_local_closure_tests():
+    # blockescape-single-1: one capture, one direct call.
+    fn one_capture() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                fn step(x):
+                    x + n
+                step(5)
+            f(10)
+    test::value("local-closure/one-capture", 15, one_capture)
+
+    # blockescape-multi-capture-1: three captures, each with its own value.
+    fn three_captures() errors compiler::CompilerError:
+        static compile:
+            fn f(x, y, z):
+                fn g(a):
+                    a + x + y + z
+                g(1)
+            f(10, 100, 1000)
+    test::value("local-closure/three-captures", 1111, three_captures)
+
+    # blockescape-multi-call-1: one closure, called twice through its
+    # binding.
+    fn called_twice() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                fn step(x):
+                    x + n
+                step(1) + step(2)
+            f(100)
+    test::value("local-closure/called-twice", 203, called_twice)
+
+    # blockescape-conditional-1: called on one branch only.
+    fn called_on_one_branch() errors compiler::CompilerError:
+        static compile:
+            fn f(n, cond):
+                fn step(x):
+                    x + n
+                if cond:
+                    step(1)
+                else:
+                    0
+            [f(10, true), f(10, false)]
+    test::value("local-closure/called-on-one-branch", [11, 0], called_on_one_branch)
+
+    # blockescape-zero-capture-1: a nested function capturing nothing.
+    fn no_capture() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                fn g():
+                    5
+                g()
+            f()
+    test::value("local-closure/no-capture", 5, no_capture)
+
+    # blockescape-shadow-1: the closure captures the innermost binding of a
+    # shadowed name. (The Tcl program's outer x is a program-level binding;
+    # here it is the block's.)
+    fn captures_shadowing_binding() errors compiler::CompilerError:
+        static compile:
+            x = "outer"
+            fn f():
+                x = "inner"
+                fn g():
+                    x
+                g()
+            f()
+    test::value("local-closure/captures-shadowing-binding", "inner", captures_shadowing_binding)
+
+    # blockescape-nested-1: a capture of a parameter two functions out.
+    fn captures_two_levels_out() errors compiler::CompilerError:
+        static compile:
+            fn outer(n):
+                fn middle():
+                    fn inner(x):
+                        x + n
+                    inner(1)
+                middle()
+            outer(41)
+    test::value("local-closure/captures-two-levels-out", 42, captures_two_levels_out)
+
+    # blockescape-multi-managed-capture-1: a String, a second String and a
+    # Bool captured together, each in its place.
+    fn three_kinds_of_capture() errors compiler::CompilerError:
+        static compile:
+            fn f(s, n, flag):
+                fn combine(x):
+                    if flag:
+                        str::concat(str::concat(s, x), n)
+                    else:
+                        str::concat(x, s)
+                str::concat(combine("-"), combine("+"))
+            f("hi", "7", true)
+    test::value("local-closure/three-kinds-of-capture", "hi-7hi+7", three_kinds_of_capture)
+
+    # blockescape-loop-creation-1: every call of f creates its own step,
+    # over that call's n (50 calls, from a recursive driver).
+    fn created_per_call() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                fn step(x):
+                    x + n
+                step(n)
+            fn driver(i):
+                if i <= 0:
+                    0
+                else:
+                    f(i) + driver(i - 1)
+            driver(50)
+    test::value("local-closure/created-per-call", 2550, created_per_call)
+
+    # blockescape-effects-1: a captured local bound to a call's result, read
+    # by two calls. (The Tcl title's "runs exactly once" is not observed:
+    # side has no effect but its value.)
+    fn call_result_capture() errors compiler::CompilerError:
+        static compile:
+            fn side(n):
+                str::concat("x", n)
+            fn f():
+                v = side("1")
+                fn step(x):
+                    str::concat(x, v)
+                str::concat(step("a"), step("b"))
+            f()
+    test::value("local-closure/call-result-capture", "ax1bx1", call_result_capture)
+
+# ---------------------------------------------------------------------------
+# Recursive closures (native-block-escape.test)
+
+fn register_recursive_closure_tests():
+    # blockescape-recursive-1: a self-recursive closure in tail position,
+    # also capturing an outer parameter.
+    fn tail_recursion() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                fn step(x):
+                    if x == 0:
+                        n
+                    else:
+                        step(x - 1)
+                step(5)
+            f(100)
+    test::value("recursive-closure/tail", 100, tail_recursion)
+
+    # blockescape-recursive-non-tail-1: the recursive call is an operand.
+    fn non_tail_recursion() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                fn fact(x):
+                    if x <= 1:
+                        n
+                    else:
+                        x * fact(x - 1)
+                fact(5)
+            f(1)
+    test::value("recursive-closure/non-tail", 120, non_tail_recursion)
+
+# ---------------------------------------------------------------------------
+# Closures calling sibling closures (native-block-escape.test)
+
+fn register_sibling_closure_tests():
+    # blockescape-sibling-1: outer calls inner, which captures v.
+    fn sibling_call() errors compiler::CompilerError:
+        static compile:
+            fn f(v):
+                fn inner(i):
+                    v + i
+                fn outer(i):
+                    inner(i) * 2
+                outer(3)
+            f(10)
+    test::value("sibling-closure/call", 26, sibling_call)
+
+    # blockescape-sibling-chain-1: c calls b calls a, which captures v.
+    fn sibling_chain() errors compiler::CompilerError:
+        static compile:
+            fn f(v):
+                fn a(i):
+                    v + i
+                fn b(i):
+                    a(i) * 2
+                fn c(i):
+                    b(i) + 1
+                c(3)
+            f(10)
+    test::value("sibling-closure/chain", 27, sibling_chain)
+
+    # blockescape-sibling-escaping-1: the calling sibling is returned and
+    # called after f has returned.
+    fn returned_caller() errors compiler::CompilerError:
+        static compile:
+            fn f(v):
+                fn inner(i):
+                    v + i
+                fn outer(i):
+                    inner(i) * 2
+                outer
+            g = f(10)
+            g(3)
+    test::value("sibling-closure/returned-caller", 26, returned_caller)
+
+# ---------------------------------------------------------------------------
+# Closures that escape (native-block-escape.test)
+
+fn register_escaping_closure_tests():
+    # blockescape-escaping-return-1: a returned closure keeps its capture.
+    fn returned() errors compiler::CompilerError:
+        static compile:
+            fn make(x):
+                fn f():
+                    x
+                f
+            add10 = make(42)
+            add10()
+    test::value("escaping-closure/returned", 42, returned)
+
+    # blockescape-stored-1: a closure also stored in a List is still called
+    # directly.
+    fn stored_in_list() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                fn step(x):
+                    x + n
+                box = [step, 0]
+                step(1) + list::length(box)
+            f(10)
+    test::value("escaping-closure/stored-in-list", 13, stored_in_list)
+
+    # blockescape-open-call-1: a closure passed to an untyped callee that
+    # calls it.
+    fn passed_to_callee() errors compiler::CompilerError:
+        static compile:
+            fn apply(g, y):
+                g(y)
+            fn f(n):
+                fn step(x):
+                    x + n
+                apply(step, 5)
+            f(10)
+    test::value("escaping-closure/passed-to-callee", 15, passed_to_callee)
+
+    # blockescape-open-call-2: the closure passed is chosen at run time.
+    fn chosen_at_run_time() errors compiler::CompilerError:
+        static compile:
+            fn apply(g, y):
+                g(y)
+            fn f(n, up):
+                fn step(x):
+                    x + n
+                fn back(x):
+                    x - n
+                fn pick(u):
+                    if u:
+                        step
+                    else:
+                        back
+                apply(pick(up), 5)
+            [f(10, true), f(10, false)]
+    test::value("escaping-closure/chosen-at-run-time", [15, -5], chosen_at_run_time)
+
+# ---------------------------------------------------------------------------
+# Captured Strings across allocation (native-block-escape.test, GC stress)
+
+fn register_string_capture_tests():
+    # blockescape-gc-stress-1: a closure created 2001 levels deep keeps its
+    # captured String.
+    fn deep_recursion() errors compiler::CompilerError:
+        static compile:
+            fn f(n, s):
+                fn step(x):
+                    str::concat(x, s)
+                if n == 0:
+                    return step("go")
+                f(n - 1, s)
+            f(2000, "!")
+    test::value("string-capture/deep-recursion", "go!", deep_recursion)
+
+    # blockescape-gc-stress-2: a captured String read through a sibling
+    # closure on every level of a recursive scan that allocates.
+    fn through_sibling_and_recursion() errors compiler::CompilerError:
+        static compile:
+            fn f(n, s):
+                fn build(x):
+                    str::concat(s, x)
+                fn scan(i):
+                    if i >= n:
+                        build("done")
+                    else:
+                        str::concat(build("x"), scan(i + 1))
+                scan(0)
+            f(3, "go-")
+    test::value("string-capture/through-sibling-and-recursion", "go-xgo-xgo-xgo-done", through_sibling_and_recursion)
+
+# ---------------------------------------------------------------------------
+# One-character accessors over a captured String (native-block-escape.test,
+# "Capture-explicit StringRegion companions")
+#
+# The Tcl programs' `at` is str::substring(s, i, i + 1) unhandled (-strict
+# 0); strictly a slice the compiler cannot prove in range is handled, here
+# inside `at`, so its callers are the Tcl programs' own.
+
+# AFTER, INSIDE, BEFORE and FIRST: the indexes declared-slice-errors reads
+# (past the end, the "z" of "az", before the start, the first character).
+fn register_char_accessor_tests(after: int, inside: int, before: int, first: int):
+    # blockescape-region-companion-minimal-1: the accessor's result is only
+    # compared.
+    fn compared_only() errors compiler::CompilerError:
+        static compile:
+            fn outer(s):
+                fn at(i):
+                    c = str::substring(s, i, i + 1):
+                        on LowerUnderrun:
+                            ""
+                        on UpperOverrun:
+                            ""
+                    c
+                fn scan(i):
+                    if at(i) == "x":
+                        true
+                    else:
+                        false
+                scan(1)
+            outer("axb")
+    test::value("char-accessor/compared-only", true, compared_only)
+
+    # blockescape-region-companion-mixed-1: one result kept (concatenated),
+    # another only compared.
+    fn kept_and_compared() errors compiler::CompilerError:
+        static compile:
+            fn outer(s):
+                fn at(i):
+                    c = str::substring(s, i, i + 1):
+                        on LowerUnderrun:
+                            ""
+                        on UpperOverrun:
+                            ""
+                    c
+                fn use(i, j):
+                    x = at(i)
+                    if at(j) == ":":
+                        str::concat(x, "!")
+                    else:
+                        str::concat(x, "?")
+                use(0, 1)
+            outer("a:b")
+    test::value("char-accessor/kept-and-compared", "a!", kept_and_compared)
+
+    # blockescape-region-companion-escaping-coexist-1: one accessor is
+    # returned and called later, another one is only called by its sibling.
+    fn returned_beside_local() errors compiler::CompilerError:
+        static compile:
+            fn makeAccessor(s):
+                fn at(i):
+                    c = str::substring(s, i, i + 1):
+                        on LowerUnderrun:
+                            ""
+                        on UpperOverrun:
+                            ""
+                    c
+                at
+            fn scanner(s2):
+                fn at2(i):
+                    c = str::substring(s2, i, i + 1):
+                        on LowerUnderrun:
+                            ""
+                        on UpperOverrun:
+                            ""
+                    c
+                fn scan(i):
+                    at2(i) == "z"
+                scan(2)
+            acc = makeAccessor("hello")
+            [acc(1), scanner("zzzzz")]
+    test::value("char-accessor/returned-beside-local", ["e", true], returned_beside_local)
+
+    # blockescape-region-companion-gc-stress-1: a recursive scan compares
+    # each character and concatenates the matching ones.
+    fn scan_and_collect() errors compiler::CompilerError:
+        static compile:
+            fn f(n, s):
+                fn at(i):
+                    c = str::substring(s, i, i + 1):
+                        on LowerUnderrun:
+                            ""
+                        on UpperOverrun:
+                            ""
+                    c
+                fn scan(i, acc):
+                    if i >= n:
+                        acc
+                    else:
+                        if at(i) == "x":
+                            scan(i + 1, str::concat(acc, at(i)))
+                        else:
+                            scan(i + 1, acc)
+                scan(0, "")
+            f(6, "xoxoxo")
+    test::value("char-accessor/scan-and-collect", "xxx", scan_and_collect)
+
+    # blockescape-region-companion-bounds-error-2: the accessor declares its
+    # slice errors and its caller handles them by name (the Tcl program as
+    # written; its indexes are this function's parameters).
+    fn declared_slice_errors() errors compiler::CompilerError:
+        static compile:
+            fn outer(s, i):
+                fn at(j) errors LowerUnderrun, UpperOverrun:
+                    str::substring(s, j, j + 1)
+                fn scan(k):
+                    c = at(k):
+                        on LowerUnderrun:
+                            return "lower"
+                        on UpperOverrun:
+                            return "upper"
+                    if c == "z":
+                        "z"
+                    else:
+                        "other"
+                scan(i)
+            [outer("ab", after), outer("az", inside), outer("ab", before), outer("ab", first)]
+    test::value("char-accessor/declared-slice-errors", ["upper", "z", "lower", "other"], declared_slice_errors)
+
+    # blockescape-region-companion-unicode-1: an astral character is one
+    # character, and not a Tcl letter (the literal holds U+1F600 itself).
+    fn astral_character() errors compiler::CompilerError:
+        static compile:
+            fn outer(s):
+                fn at(i):
+                    c = str::substring(s, i, i + 1):
+                        on LowerUnderrun:
+                            ""
+                        on UpperOverrun:
+                            ""
+                    c
+                fn scan(i):
+                    str::is_tcl_alpha(at(i))
+                [scan(0), scan(1)]
+            outer("a😀")
+    test::value("char-accessor/astral-character", [true, false], astral_character)
+
+# ---------------------------------------------------------------------------
+# A function holding a closure, called through a List element
+# (native-block-escape.test, "Enclosing-instance consistency";
+# blockescape-called-generic.test)
+
+fn register_enclosing_instance_tests():
+    # blockescape-enclosing-instances-1 and
+    # blockescape-called-generic-parity-listget (one program): f, whose
+    # nested g captures a local, called through list::at of a known List.
+    fn called_through_list() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                k = 5
+                fn g(x):
+                    x + k
+                g(a)
+            fs = [f]
+            list::at(fs, 0)(3)
+    test::value("enclosing-instance/called-through-list", 8, called_through_list)
+
+    # blockescape-enclosing-instances-3: two such functions, read at two
+    # indexes, one of them twice.
+    fn two_entries() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                k = 5
+                fn g(x):
+                    x + k
+                g(a)
+            fn h(a):
+                m = 7
+                fn q(x):
+                    x * m
+                q(a) + q(1)
+            fs = [f, h]
+            [list::at(fs, 0)(3), list::at(fs, 1)(3), list::at(fs, 0)(10)]
+    test::value("enclosing-instance/two-entries", [8, 28, 15], two_entries)
+
+    # blockescape-enclosing-instances-4: the nested closure captures a local
+    # and a parameter, and a second closure calls it; f is also called
+    # directly.
+    fn capture_chain() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                k = 5
+                fn g(x):
+                    x + k + a
+                fn r(y):
+                    g(y) * 2
+                r(a) + g(1)
+            fs = [f]
+            [list::at(fs, 0)(3), f(4)]
+    test::value("enclosing-instance/capture-chain", [31, 36], capture_chain)
+
+    # blockescape-called-generic-parity-both: g called with f's parameter
+    # and with a constant, f called through the List and directly.
+    fn listed_and_direct() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                k = 5
+                fn g(x):
+                    x + k
+                [g(a), g(1)]
+            fs = [f]
+            [list::at(fs, 0)(3), f(4)]
+    test::value("enclosing-instance/listed-and-direct", [[8, 6], [9, 6]], listed_and_direct)
+
+# ---------------------------------------------------------------------------
+# A binding a nested closure stores in a List (blockescape-nested-
+# capturers.test; its sibling program is compiled-values.bot's
+# dormant-nested-value-use-parity)
+
+fn register_nested_capturer_tests():
+    # blockescape-nested-capturer-parity-self-: rec calls itself directly,
+    # and bounce, nested in it, puts rec in a List and calls it dynamically
+    # with a bignum. (The Tcl program is -strict 0, its list::at unhandled;
+    # strictly the IndexNotFound it may raise is handled by `other`.)
+    fn self_in_list() errors compiler::CompilerError:
+        static compile:
+            fn h(x):
+                x + 1
+            fn other(a, p):
+                0
+            fn outer(k):
+                fn rec(n, p):
+                    fn bounce(m):
+                        fs = [other, rec]
+                        g = list::at(fs, k):
+                            on IndexNotFound:
+                                other
+                        g(m * 10000000000000000000000, p)
+                    if n > 100:
+                        h(n)
+                    else:
+                        if n == 5:
+                            bounce(n)
+                        else:
+                            if n <= 0:
+                                0
+                            else:
+                                if p("a"):
+                                    h(n) + rec(n - 1, p)
+                                else:
+                                    0
+                rec(10, str::is_tcl_alpha)
+            outer(1)
+    test::value("nested-capturer/self-in-list", 50000000000000000000046, self_in_list)
+
+    # blockescape-nested-capturer-parity-nestedcall-: a closure nested in a
+    # sibling only calls f.
+    fn sibling_called() errors compiler::CompilerError:
+        static compile:
+            fn outer(k):
+                fn f(n):
+                    n + k
+                fn c(m):
+                    fn d(z):
+                        f(z)
+                    f(m) + d(m)
+                c(7)
+            outer(1)
+    test::value("nested-capturer/sibling-called", 16, sibling_called)
+
+# ---------------------------------------------------------------------------
+# Fixed-shape Lists read at constant indexes (native-escape.test)
+#
+# A list::at of a local literal at a constant index is proven in range; one
+# of a callee's result, or at a dynamic index, may fail with IndexNotFound
+# and is handled (the Tcl programs, -strict 0, handle nothing).
+
+fn register_list_escape_tests():
+    # escape-local-1: a literal pair read at 0 and 1.
+    fn literal_pair() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                pair = [10, 20]
+                x = list::at(pair, 0)
+                y = list::at(pair, 1)
+                x + y
+            f()
+    test::value("list-literal/pair-read-by-index", 30, literal_pair)
+
+    # escape-local-2: a literal triple, every element read.
+    fn literal_triple() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                t = [1, 2, 3]
+                list::at(t, 0) + list::at(t, 1) + list::at(t, 2)
+            f()
+    test::value("list-literal/triple-read-by-index", 6, literal_triple)
+
+    # escape-effects-1: a literal whose elements are call results.
+    fn call_result_literal() errors compiler::CompilerError:
+        static compile:
+            fn side(n):
+                str::concat("x", n)
+            fn f():
+                pair = [side("1"), side("2")]
+                a = list::at(pair, 0)
+                b = list::at(pair, 1)
+                str::concat(a, b)
+            f()
+    test::value("list-literal/call-result-elements", "x1x2", call_result_literal)
+
+    # escape-dynamic-1: a literal read at an index known only to f's caller.
+    fn literal_dynamic_index() errors compiler::CompilerError:
+        static compile:
+            fn f(i):
+                pair = [10, 20]
+                v = list::at(pair, i):
+                    on IndexNotFound:
+                        -1
+                v
+            f(1)
+    test::value("list-literal/dynamic-index", 20, literal_dynamic_index)
+
+    # escape-remote-1: a callee's pair read at 0 and 1.
+    fn returned_pair() errors compiler::CompilerError:
+        static compile:
+            fn pair():
+                [1, 2]
+            fn f():
+                p = pair()
+                x = list::at(p, 0):
+                    on IndexNotFound:
+                        -100
+                y = list::at(p, 1):
+                    on IndexNotFound:
+                        -100
+                x + y
+            f()
+    test::value("returned-list/pair-read-by-index", 3, returned_pair)
+
+    # escape-remote-3: the pair forwarded through a second function.
+    fn forwarded_pair() errors compiler::CompilerError:
+        static compile:
+            fn base():
+                [7, 8]
+            fn middle():
+                base()
+            fn f():
+                p = middle()
+                a = list::at(p, 0):
+                    on IndexNotFound:
+                        -100
+                b = list::at(p, 1):
+                    on IndexNotFound:
+                        -100
+                a + b
+            f()
+    test::value("returned-list/forwarded", 15, forwarded_pair)
+
+    # escape-fallback-1: one caller reads an element, another returns the
+    # whole List.
+    fn read_and_whole() errors compiler::CompilerError:
+        static compile:
+            fn pair():
+                [1, 2]
+            fn scalarCaller():
+                p = pair()
+                v = list::at(p, 0):
+                    on IndexNotFound:
+                        -1
+                v
+            fn listCaller():
+                pair()
+            [scalarCaller(), listCaller()]
+    test::value("returned-list/read-and-whole", [1, [1, 2]], read_and_whole)
+
+    # escape-mixed-1: one result both read at an index and measured.
+    fn read_and_measured() errors compiler::CompilerError:
+        static compile:
+            fn make_pair():
+                [1, 2]
+            fn f():
+                p = make_pair()
+                x = list::at(p, 0):
+                    on IndexNotFound:
+                        -1
+                y = list::length(p)
+                [x, y]
+            f()
+    test::value("returned-list/read-and-measured", [1, 2], read_and_measured)
+
+    # escape-effects-2: a callee's pair whose elements are call results. (The
+    # Tcl program reads both elements inside str::concat's arguments;
+    # handled calls are bound first.)
+    fn call_result_returned() errors compiler::CompilerError:
+        static compile:
+            fn side(n):
+                str::concat("x", n)
+            fn pair(a, b):
+                [side(a), side(b)]
+            fn f():
+                p = pair("1", "2")
+                a = list::at(p, 0):
+                    on IndexNotFound:
+                        ""
+                b = list::at(p, 1):
+                    on IndexNotFound:
+                        ""
+                str::concat(a, b)
+            f()
+    test::value("returned-list/call-result-elements", "x1x2", call_result_returned)
+
+    # escape-escaping-1: a callee's pair returned as it is.
+    fn returned_whole() errors compiler::CompilerError:
+        static compile:
+            fn pair():
+                [1, 2]
+            fn f():
+                pair()
+            f()
+    test::value("returned-list/returned-whole", [1, 2], returned_whole)
+
+    # escape-gc-stress-1: a pair of fresh Strings returned 2000 levels deep
+    # and read at 0 and 1.
+    fn string_elements_deep() errors compiler::CompilerError:
+        static compile:
+            fn pair(a, b):
+                [str::concat(a, "!"), str::concat(b, "?")]
+            fn f(n):
+                if n == 0:
+                    p = pair("x", "y")
+                    a = list::at(p, 0):
+                        on IndexNotFound:
+                            ""
+                    b = list::at(p, 1):
+                        on IndexNotFound:
+                            ""
+                    return str::concat(a, b)
+                f(n - 1)
+            f(2000)
+    test::value("returned-list/string-elements-deep-recursion", "x!y?", string_elements_deep)
+
+# ---------------------------------------------------------------------------
+# A projection of a List[never] loop element (native-listloop.test)
+
+fn register_never_element_tests():
+    # native-listloop-never-element-projection: total([]) is the List[never]
+    # instance of total, whose loop projects x.f of an element that cannot
+    # exist.
+    fn projection() errors compiler::CompilerError:
+        static compile:
+            fn total(xs: List[Entry]) -> int:
+                ys = loop x in xs:
+                    x.f
+                list::length(ys)
+            total([])
+    test::value("never-element/projection", 0, projection)
+
+    # native-listloop-never-element-neighbours (one golden test per program):
+    # a lockstep loop.
+    fn lockstep() errors compiler::CompilerError:
+        static compile:
+            fn total(xs: List[Record]) -> int:
+                ys = loop x in xs and i from 0 to list::length(xs):
+                    x.f + i
+                list::length(ys)
+            total([])
+    test::value("never-element/lockstep", 0, lockstep)
+
+    # ... a nested [[]]: one (empty) inner List.
+    fn nested() errors compiler::CompilerError:
+        static compile:
+            fn total(xss: List[List[Record]]) -> int:
+                ys = loop xs in xss:
+                    zs = loop x in xs:
+                        x.f
+                    list::length(zs)
+                list::length(ys)
+            total([[]])
+    test::value("never-element/nested", 1, nested)
+
+    # ... the empty literal passed on through a second call.
+    fn passed_on() errors compiler::CompilerError:
+        static compile:
+            fn total(xs: List[Record]) -> int:
+                ys = loop x in xs:
+                    x.f
+                list::length(ys)
+            fn outer(xs: List[Record]) -> int:
+                total(xs)
+            outer([])
+    test::value("never-element/passed-on", 0, passed_on)
+
+    # ... a projection chain.
+    fn chain() errors compiler::CompilerError:
+        static compile:
+            fn total(xs: List[Record]) -> int:
+                ys = loop x in xs:
+                    x.t.g
+                list::length(ys)
+            total([])
+    test::value("never-element/chain", 0, chain)
+
+    # ... an untyped parameter, called with a one-Record List and with [].
+    fn mixed_callers() errors compiler::CompilerError:
+        static compile:
+            fn total(xs) -> int:
+                ys = loop x in xs:
+                    x.t.g + x.f
+                list::length(ys)
+            [total([Record {f: 1, t: Detail {g: 2}}]), total([])]
+    test::value("never-element/mixed-callers", [1, 0], mixed_callers)
+
+# ---------------------------------------------------------------------------
+
+with context test::suite()
+register_local_closure_tests()
+register_recursive_closure_tests()
+register_sibling_closure_tests()
+register_escaping_closure_tests()
+register_string_capture_tests()
+register_char_accessor_tests(5, 1, -1, 0)
+register_enclosing_instance_tests()
+register_nested_capturer_tests()
+register_list_escape_tests()
+register_never_element_tests()
+test::report()

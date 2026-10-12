@@ -1,0 +1,240 @@
+# struct-representation-instances.bot -- struct arguments an untyped callee
+# projects, as a source-level specification: the part of
+# struct-representation.bot's subject (struct scalar replacement,
+# STRUCT-SCALAR-REPLACEMENT.md) whose programs hand a struct to a function
+# with an untyped parameter that reads its fields.
+# golden-exclude: cranelift-generic -- NATIVE UNSUPPORTED struct-shape: the unspecialized native baseline has no slot for a projection only a semantic instance proves (`fn consume(x): x.a`; STRUCTS.md, "Known limitations"; tests/helpers.tcl's GenericBaselineUndefined); tests/struct-scalar-replacement.test runs these programs on interp, specialized cranelift and -struct-opt 0 native code only (srValue, srStressed)
+#
+# Whether a backend carries such an argument as its fields or as an object,
+# the callee reads back exactly the fields it was given:
+#
+#   * an anonymous literal, a named struct, a four-field struct, a local
+#     handed on after a literal, a struct forwarded through a chain of three
+#     callees, the joined value of a branch whose arms build one shape, and a
+#     struct rebuilt on every step of a self-tail loop and of a non-tail
+#     recursion;
+#   * structs of 1, 2, 3, 4, 8 and 16 fields (field fK is i + K, summed by
+#     the callee: N + N(N-1)/2);
+#   * pointer-bearing fields (a String and a List) while the callee
+#     allocates before it reads them.
+#
+# Ported from tests/struct-scalar-replacement.test (sr-*; audit/golden/
+# migration/fragments/struct-representation-instances.tsv maps them). These
+# tests live apart from struct-representation.bot only because the
+# unspecialized cranelift-generic baseline reports every one of them NATIVE
+# UNSUPPORTED struct-shape (checked one by one): in the main suite one such
+# program would make the runner stand the specialized outcome in for the
+# whole suite on that backend. The Tcl tests stay active and authoritative
+# for what a program cannot observe: the NIR (structnew, structget, a
+# callee's field-wise pnames), the struct census, the -struct-opt 0 and
+# -struct-policy legacy lowerings and the BOTLISH_NATIVE_GC_STRESS runs.
+# Every program is strict, as in Tcl.
+#
+# Imports: compiler and test are the framework's; str for the String fields
+# of sr-gc-across-call.
+import compiler
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only).
+
+# sr-argument-named: a named argument (the Tcl program's P).
+struct Operands:
+    a: int
+    b: int
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test: struct arguments
+
+fn register_struct_argument_tests():
+    # sr-argument-anonymous: a literal argument the callee projects.
+    fn anonymous_argument() errors compiler::CompilerError:
+        static compile:
+            fn consume(x):
+                x.a + x.b
+
+            consume({a: 1, b: 2})
+    test::value("sr-argument-anonymous", 3, anonymous_argument)
+
+    # sr-argument-named: a named struct argument.
+    fn named_argument() errors compiler::CompilerError:
+        static compile:
+            fn consume(p):
+                p.a * p.b
+
+            consume(Operands {a: 3, b: 4})
+    test::value("sr-argument-named", 12, named_argument)
+
+    # sr-argument-four-fields: a four-field argument.
+    fn four_field_argument() errors compiler::CompilerError:
+        static compile:
+            fn consume(x):
+                x.a + x.b + x.c + x.d
+
+            consume({a: 1, b: 2, c: 3, d: 4})
+    test::value("sr-argument-four-fields", 10, four_field_argument)
+
+    # sr-argument-local-forwarded: a literal and a local handed to the same
+    # callee, the local projected after.
+    fn local_forwarded() errors compiler::CompilerError:
+        static compile:
+            fn consume(x):
+                x.a + x.b
+
+            y = {a: 10, b: 20}
+            consume({a: 1, b: 2}) + consume(y) + y.a
+    test::value("sr-argument-local-forwarded", 43, local_forwarded)
+
+    # sr-argument-chain: a forwarding chain of callees.
+    fn forwarding_chain() errors compiler::CompilerError:
+        static compile:
+            fn h(x):
+                x.a
+
+            fn g(x):
+                h(x)
+
+            fn f(x):
+                g(x)
+
+            f({a: 1, b: 2})
+    test::value("sr-argument-chain", 1, forwarding_chain)
+
+    # sr-branch-join-argument: the joined value of an if whose arms build
+    # one shape, handed to a callee.
+    fn join_argument() errors compiler::CompilerError:
+        static compile:
+            fn consume(x):
+                x.value
+
+            fn f(c):
+                v = if c:
+                    {value: "a", n: 1}
+                else:
+                    {value: "b", n: 2}
+                consume(v)
+
+            [f(true), f(false)]
+    test::value("sr-branch-join-argument", ["a", "b"], join_argument)
+
+    # sr-argument-self-recursion: a struct argument rebuilt on every step of
+    # a self-tail loop and of a non-tail recursion.
+    fn tail_state() errors compiler::CompilerError:
+        static compile:
+            fn walk(state, i):
+                if i >= 5:
+                    return state.total
+                walk({total: state.total + i, n: i}, i + 1)
+
+            walk({total: 0, n: 0}, 0)
+    test::value("sr-argument-self-recursion/tail", 10, tail_state)
+
+    fn non_tail_state() errors compiler::CompilerError:
+        static compile:
+            fn walk(state, i):
+                if i >= 5:
+                    return state.total
+                1 + walk({total: state.total + i, n: i}, i + 1)
+
+            walk({total: 0, n: 0}, 0)
+    test::value("sr-argument-self-recursion/non-tail", 15, non_tail_state)
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test: struct widths, the argument form (the Tcl
+# test's widthSource(N, argument) programs, written out: field fK is i + K,
+# the callee sums every field, f(1); the empty struct's argument form, which
+# projects nothing, is in struct-representation.bot with the local and
+# returned forms)
+
+fn register_width_argument_tests():
+    fn one_field() errors compiler::CompilerError:
+        static compile:
+            fn use(r):
+                r.f0
+
+            fn f(i):
+                use({f0: i + 0})
+
+            f(1)
+    test::value("sr-width-1-values/argument", 1, one_field)
+
+    fn two_fields() errors compiler::CompilerError:
+        static compile:
+            fn use(r):
+                r.f0 + r.f1
+
+            fn f(i):
+                use({f0: i + 0, f1: i + 1})
+
+            f(1)
+    test::value("sr-width-2-values/argument", 3, two_fields)
+
+    fn three_fields() errors compiler::CompilerError:
+        static compile:
+            fn use(r):
+                r.f0 + r.f1 + r.f2
+
+            fn f(i):
+                use({f0: i + 0, f1: i + 1, f2: i + 2})
+
+            f(1)
+    test::value("sr-width-3-values/argument", 6, three_fields)
+
+    fn four_fields() errors compiler::CompilerError:
+        static compile:
+            fn use(r):
+                r.f0 + r.f1 + r.f2 + r.f3
+
+            fn f(i):
+                use({f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3})
+
+            f(1)
+    test::value("sr-width-4-values/argument", 10, four_fields)
+
+    fn eight_fields() errors compiler::CompilerError:
+        static compile:
+            fn use(r):
+                r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5 + r.f6 + r.f7
+
+            fn f(i):
+                use({f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3, f4: i + 4, f5: i + 5, f6: i + 6, f7: i + 7})
+
+            f(1)
+    test::value("sr-width-8-values/argument", 36, eight_fields)
+
+    fn sixteen_fields() errors compiler::CompilerError:
+        static compile:
+            fn use(r):
+                r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5 + r.f6 + r.f7 + r.f8 + r.f9 + r.f10 + r.f11 + r.f12 + r.f13 + r.f14 + r.f15
+
+            fn f(i):
+                use({f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3, f4: i + 4, f5: i + 5, f6: i + 6, f7: i + 7, f8: i + 8, f9: i + 9, f10: i + 10, f11: i + 11, f12: i + 12, f13: i + 13, f14: i + 14, f15: i + 15})
+
+            f(1)
+    test::value("sr-width-16-values/argument", 136, sixteen_fields)
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test: pointer-bearing fields while the callee
+# allocates (the Tcl test's gcSource(across-call) program)
+
+fn register_struct_allocation_tests():
+    # sr-gc-across-call: a struct of a String and a List argument, the
+    # callee allocating before it reads them.
+    fn across_call() errors compiler::CompilerError:
+        static compile:
+            fn consume(x, y):
+                junk = [str::concat("j", "k"), str::concat("m", "n")]
+                [x.s, x.l, y, junk]
+
+            consume({s: str::concat("a", "b"), l: [str::concat("c", "d")]}, str::concat("e", "f"))
+    test::value("sr-gc-across-call", ["ab", ["cd"], "ef", ["jk", "mn"]], across_call)
+
+fn register_struct_representation_instances_tests():
+    register_struct_argument_tests()
+    register_width_argument_tests()
+    register_struct_allocation_tests()
+
+with context test::suite()
+register_struct_representation_instances_tests()
+test::report()
