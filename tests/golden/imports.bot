@@ -1,0 +1,524 @@
+# imports.bot -- imports and namespaces (IMPORTS.md) in a file that imports
+# the namespaces it uses: the source-level specification of
+#
+#   * authorization: `import ns` authorizes the qualified names `ns::member`
+#     of exactly that namespace -- its functions, its intrinsics (str has
+#     no module file: its members are compiler-provided), its structs and
+#     its types; an unknown member of an authorized namespace is
+#     UnknownSymbol, and for an intrinsic-only namespace the diagnostic
+#     lists the intrinsics;
+#   * an import injects no short name: list's at and append stay unbound,
+#     an ordinary binding or function of that spelling is the program's
+#     own, and the words `import` and `namespace` are ordinary names in a
+#     body;
+#   * a module's types are its own: a module spells its own types short,
+#     an importer spells them qualified, and the entry program's own
+#     U8Value is a different type from abi::U8Value;
+#   * method-call sugar: after `import ns`, `x.f(args)` may be `ns::f(x,
+#     args)`, with the value of the qualified call; local functions,
+#     parameters and root natives stay candidates beside the imported ones;
+#     candidates are never ranked (a local `at` beside list::at, a field
+#     beside a function: AmbiguousMethodCall), a typed candidate that does
+#     not accept the receiver is not applicable (NoApplicableMethod when
+#     none is), and importing abi makes no function of abi::x86_64 a
+#     candidate;
+#   * qualified calls are exact: two namespaces may define the same member
+#     name, and their qualified calls are never ambiguous;
+#   * importing a module and its dependency gives both (the module's own
+#     imports grant its importer nothing: imports-library-modules.bot).
+#
+# Ported from tests/imports.test and tests/surface-modules.test, which stay
+# authoritative (audit/golden/migration/fragments/imports.tsv maps every
+# test). Where a Tcl test writes a private module into a scratch library, a
+# standard module of the same shape stands in for it: list and
+# mutable_array (two namespaces whose `at` accepts an untyped receiver),
+# list and str (each with a `length`), abi (an integer domain U8Value and a
+# struct U8), web and ascii (web imports ascii).
+#
+# Imports: compiler and test (the framework); abi (qualified structs and
+# types; its child abi::x86_64 is deliberately not imported); ascii and web
+# (a module and its dependency, both imported); char, immutable_set, list,
+# mutable_array and str (the namespaces of the method-sugar tests). The Tcl
+# tests' other import sets are suites of their own: imports-unimported.bot
+# (the framework only), imports-abi-family.bot (abi, abi::x86_64 and a type
+# import), imports-abi-child.bot (abi::x86_64 and type imports without abi)
+# and imports-library-modules.bot (web without ascii, linux without
+# linux::abi, mathish).
+import abi
+import ascii
+import char
+import compiler
+import immutable_set
+import list
+import mutable_array
+import str
+import test
+import web
+
+# The entry program's own integer domain named like abi's (imports-abi-
+# program-with-own-u8value: the name is the property, so it is not renamed;
+# this suite has no `import type abi::U8Value`, which would collide with
+# it).
+type U8Value = Int in 0..5
+
+# Registers NAME/qualified and NAME/method: a qualified call and its method
+# spelling, both with the value EXPECTED.
+nomethod fn register_spellings(name: str, expected, qualified, method):
+    test::value(str::concat(name, "/qualified"), expected, qualified)
+    test::value(str::concat(name, "/method"), expected, method)
+
+# ---------------------------------------------------------------------------
+# Contextual words
+
+fn register_contextual_word_tests():
+    # imports-ast-import-is-contextual: `import` that does not begin a file
+    # header line is an ordinary name: bound and read, or a function called.
+    fn b_import_binding() errors compiler::CompilerError:
+        static compile:
+            import = 5
+            import
+    test::value("imports-ast-import-is-contextual/binding", 5, b_import_binding)
+    fn b_import_call() errors compiler::CompilerError:
+        static compile:
+            fn import(x):
+                x + 1
+            import(1)
+    test::value("imports-ast-import-is-contextual/call", 2, b_import_call)
+
+    # surface-modules-namespace-is-an-ordinary-name: `namespace` is not a
+    # keyword.
+    fn b_namespace_binding() errors compiler::CompilerError:
+        static compile:
+            namespace = 3
+            namespace
+    test::value("surface-modules-namespace-is-an-ordinary-name", 3, b_namespace_binding)
+
+# ---------------------------------------------------------------------------
+# Authorization: what `import ns` makes nameable
+
+fn register_authorization_tests():
+    # imports-intrinsic-only-namespace: str has no module file; `import str`
+    # authorizes its intrinsics.
+    fn b_intrinsic_namespace() errors compiler::CompilerError:
+        static compile:
+            str::length("abc")
+    test::value("imports-intrinsic-only-namespace", 3, b_intrinsic_namespace)
+
+    # imports-unknown-member-vs-missing-import: the namespace is authorized
+    # first, then the member looked up: with the import, an unknown member
+    # is UnknownSymbol, of an intrinsic namespace and of a module (the
+    # MissingImport half is imports-unimported.bot's).
+    fn b_unknown_intrinsic_member() errors compiler::CompilerError:
+        static compile:
+            str::reverse("a")
+    test::rejects("imports-unknown-member-vs-missing-import/intrinsic-namespace", compiler::DiagnosticCode::UnknownSymbol, b_unknown_intrinsic_member)
+    fn b_unknown_module_member() errors compiler::CompilerError:
+        static compile:
+            list::nothere(1)
+    test::rejects("imports-unknown-member-vs-missing-import/module-namespace", compiler::DiagnosticCode::UnknownSymbol, b_unknown_module_member)
+
+    # imports-unknown-member-names-the-intrinsics: the diagnostic lists an
+    # intrinsic namespace's members.
+    test::rejects_message("imports-unknown-member-names-the-intrinsics", compiler::DiagnosticCode::UnknownSymbol, "namespace \"str\" has no definition \"reverse\" (its members are the intrinsics: char_at, concat, encode_utf8, is_tcl_alnum, is_tcl_alpha, length, lowercase, substring)", b_unknown_intrinsic_member)
+
+    # imports-struct-and-type-references-are-authorized: with `import abi`,
+    # a qualified struct construction and a qualified struct annotation
+    # resolve (the MissingImport halves are imports-unimported.bot's).
+    fn b_qualified_construction() errors compiler::CompilerError:
+        static compile:
+            x = abi::U8 {value: 5}
+            x.value
+    test::value("imports-struct-and-type-references-are-authorized/construction", 5, b_qualified_construction)
+    fn b_qualified_struct_annotation() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::U8):
+                x.value
+            f(abi::U8 {value: 5})
+    test::value("imports-struct-and-type-references-are-authorized/annotation", 5, b_qualified_struct_annotation)
+
+    # imports-type-qualified-reference: a module's integer domain as a
+    # qualified annotation needs only the import of its namespace (the
+    # MissingImport half is imports-unimported.bot's).
+    fn b_qualified_type_annotation() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::U8Value):
+                x + 1
+            f(5)
+    test::value("imports-type-qualified-reference/imported", 6, b_qualified_type_annotation)
+
+    # imports-nested-import-is-exact: `import abi` does not import its
+    # child namespace abi::x86_64 (the other directions are
+    # imports-abi-child.bot's and imports-abi-family.bot's).
+    fn b_child_not_imported() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::to_int(abi::x86_64::register64(1))
+    test::rejects("imports-nested-import-is-exact/child-not-imported", compiler::DiagnosticCode::MissingImport, b_child_not_imported)
+
+    # imports-type-own-names-in-own-namespace: lib/abi.bot spells its own
+    # types short (struct U8 {value: U8Value}, fn u8(...) -> U8) with no
+    # import of its own namespace; the importer reads the field.
+    fn b_own_short_types() errors compiler::CompilerError:
+        static compile:
+            abi::u8(4).value
+    test::value("imports-type-own-names-in-own-namespace", 4, b_own_short_types)
+
+    # imports-abi-program-with-own-u8value: the program's own U8Value (0..5,
+    # declared above) coexists with abi::U8Value (0..255).
+    fn b_own_u8value() errors compiler::CompilerError:
+        static compile:
+            fn f(x: U8Value):
+                x
+            [f(3), abi::u8(200).value]
+    test::value("imports-abi-program-with-own-u8value", [3, 200], b_own_u8value)
+
+# ---------------------------------------------------------------------------
+# Imports inject no short names
+
+fn register_short_name_tests():
+    # imports-inject-no-short-names: `import list` authorizes list::at and
+    # list::append, never a short at or append.
+    fn b_qualified_at() errors compiler::CompilerError:
+        static compile:
+            r = list::at([5, 6], 1):
+                on IndexNotFound:
+                    0
+            r
+    test::value("imports-inject-no-short-names/qualified", 6, b_qualified_at)
+    fn b_short_at() errors compiler::CompilerError:
+        static compile:
+            at([5, 6], 1)
+    test::rejects("imports-inject-no-short-names/at", compiler::DiagnosticCode::Unbound, b_short_at)
+    fn b_short_append() errors compiler::CompilerError:
+        static compile:
+            append([1], 2)
+    test::rejects("imports-inject-no-short-names/append", compiler::DiagnosticCode::Unbound, b_short_append)
+
+    # imports-ordinary-binding-still-works: a binding spelled like an
+    # imported member is independent of the import.
+    fn b_binding_named_at() errors compiler::CompilerError:
+        static compile:
+            at = 5
+            at
+    test::value("imports-ordinary-binding-still-works", 5, b_binding_named_at)
+
+    # imports-entry-program-defines-what-a-module-could-not: the entry
+    # program is in no namespace and may define its own `at` (a module
+    # list.bot may not: lib/list.bot's namespace owns the intrinsic); a
+    # plain call is that function, list being imported or not.
+    fn b_own_at() errors compiler::CompilerError:
+        static compile:
+            fn at(xs, i):
+                0
+            [at([1], 0)]
+    test::value("imports-entry-program-defines-what-a-module-could-not", [0], b_own_at)
+
+# ---------------------------------------------------------------------------
+# Method candidates from imported namespaces
+
+fn register_spelling_tests():
+    # imports-method-$name (the Tcl test's table): after the import, the
+    # method spelling and the qualified spelling have one value.
+    fn b_list_get_qualified() errors compiler::CompilerError:
+        static compile:
+            list::get([10, 20, 30], 1, 0)
+    fn b_list_get_method() errors compiler::CompilerError:
+        static compile:
+            [10, 20, 30].get(1, 0)
+    register_spellings("imports-method-list-at", 20, b_list_get_qualified, b_list_get_method)
+
+    fn b_list_append_qualified() errors compiler::CompilerError:
+        static compile:
+            list::append([1], 2)
+    fn b_list_append_method() errors compiler::CompilerError:
+        static compile:
+            [1].append(2)
+    register_spellings("imports-method-list-append", [1, 2], b_list_append_qualified, b_list_append_method)
+
+    fn b_list_length_qualified() errors compiler::CompilerError:
+        static compile:
+            list::length([1, 2])
+    fn b_list_length_method() errors compiler::CompilerError:
+        static compile:
+            [1, 2].length()
+    register_spellings("imports-method-list-length", 2, b_list_length_qualified, b_list_length_method)
+
+    fn b_str_concat_qualified() errors compiler::CompilerError:
+        static compile:
+            str::concat("ab", "cd")
+    fn b_str_concat_method() errors compiler::CompilerError:
+        static compile:
+            "ab".concat("cd")
+    register_spellings("imports-method-str-concat", "abcd", b_str_concat_qualified, b_str_concat_method)
+
+    fn b_str_length_qualified() errors compiler::CompilerError:
+        static compile:
+            str::length("abc")
+    fn b_str_length_method() errors compiler::CompilerError:
+        static compile:
+            "abc".length()
+    register_spellings("imports-method-str-length", 3, b_str_length_qualified, b_str_length_method)
+
+    fn b_str_substring_qualified() errors compiler::CompilerError:
+        static compile:
+            str::substring("hello", 1, 3)
+    fn b_str_substring_method() errors compiler::CompilerError:
+        static compile:
+            "hello".substring(1, 3)
+    register_spellings("imports-method-str-substring", "el", b_str_substring_qualified, b_str_substring_method)
+
+    fn b_set_contains_qualified() errors compiler::CompilerError:
+        static compile:
+            immutable_set::contains(immutable_set::from_list([1]), 1)
+    fn b_set_contains_method() errors compiler::CompilerError:
+        static compile:
+            immutable_set::from_list([1]).contains(1)
+    register_spellings("imports-method-set-contains", true, b_set_contains_qualified, b_set_contains_method)
+
+    fn b_char_scalar_qualified() errors compiler::CompilerError:
+        static compile:
+            char::scalar_value('A')
+    fn b_char_scalar_method() errors compiler::CompilerError:
+        static compile:
+            'A'.scalar_value()
+    register_spellings("imports-method-char-scalar", 65, b_char_scalar_qualified, b_char_scalar_method)
+
+    # imports-method-at-intrinsic: xs.at(i) is list::at(xs, i), the
+    # intrinsic with its declared error, handled alike.
+    fn b_at_intrinsic_qualified() errors compiler::CompilerError:
+        static compile:
+            r = list::at([10, 20], 1):
+                on IndexNotFound:
+                    0
+            r
+    fn b_at_intrinsic_method() errors compiler::CompilerError:
+        static compile:
+            r = [10, 20].at(1):
+                on IndexNotFound:
+                    0
+            r
+    register_spellings("imports-method-at-intrinsic", 20, b_at_intrinsic_qualified, b_at_intrinsic_method)
+
+    # imports-method-library-function: a function of an imported module
+    # (lib/list.bot's get) is a candidate like an intrinsic.
+    fn b_library_function_qualified() errors compiler::CompilerError:
+        static compile:
+            list::get([1, 2], 5, 9)
+    fn b_library_function_method() errors compiler::CompilerError:
+        static compile:
+            [1, 2].get(5, 9)
+    register_spellings("imports-method-library-function", 9, b_library_function_qualified, b_library_function_method)
+
+    # imports-method-mutable-array: a.set/a.at/a.get on a local MutableArray
+    # place equal the qualified calls.
+    fn b_mutable_array_qualified() errors compiler::CompilerError:
+        static compile:
+            a = mutable_array::allocate(2)
+            mutable_array::set(a, 0, 5)
+            mutable_array::set(a, 1, 6)
+            [mutable_array::at(a, 0), mutable_array::at(a, 1), mutable_array::get(a, 2, -1)]
+    fn b_mutable_array_method() errors compiler::CompilerError:
+        static compile:
+            a = mutable_array::allocate(2)
+            a.set(0, 5)
+            a.set(1, 6)
+            [a.at(0), a.at(1), a.get(2, -1)]
+    register_spellings("imports-method-mutable-array", [5, 6, -1], b_mutable_array_qualified, b_mutable_array_method)
+
+fn register_candidate_tests():
+    # imports-method-does-not-need-an-alias: a local binding naming an
+    # imported function is not needed for method visibility, and where
+    # present it is a candidate like any local (at = list::length makes
+    # `.at()` list::length; length = list::length is the very candidate the
+    # import provides, not a second one).
+    fn b_alias_named_at() errors compiler::CompilerError:
+        static compile:
+            at = list::length
+            [1, 2].at()
+    test::value("imports-method-does-not-need-an-alias/at", 2, b_alias_named_at)
+    fn b_alias_named_length() errors compiler::CompilerError:
+        static compile:
+            length = list::length
+            [1, 2].length()
+    test::value("imports-method-does-not-need-an-alias/length", 2, b_alias_named_length)
+
+    # imports-method-nested-is-exact: `import abi` makes no function of
+    # abi::x86_64 a candidate: abi::u8(7).from_u8() is a projection of a
+    # field U8 lacks, like any unknown name (the value half, with
+    # abi::x86_64 imported, is imports-abi-family.bot's).
+    fn b_unknown_method() errors compiler::CompilerError:
+        static compile:
+            x = abi::u8(1)
+            x.nothere()
+    test::rejects("imports-method-nested-is-exact/unknown-name", compiler::DiagnosticCode::UnknownField, b_unknown_method)
+    fn b_child_function_method() errors compiler::CompilerError:
+        static compile:
+            abi::u8(7).from_u8()
+    test::rejects("imports-method-nested-is-exact/child-not-imported", compiler::DiagnosticCode::UnknownField, b_child_function_method)
+
+    # imports-method-keeps-lexical-candidates: a local function, a
+    # parameter and the root native `list` stay candidates beside the
+    # imported ones.
+    fn b_local_function_method() errors compiler::CompilerError:
+        static compile:
+            fn inc(x):
+                x + 1
+            3.inc()
+    test::value("imports-method-keeps-lexical-candidates/local-function", 4, b_local_function_method)
+    fn b_parameter_method() errors compiler::CompilerError:
+        static compile:
+            fn apply1(x, f):
+                x.f()
+            fn dbl(n):
+                n + n
+            apply1(4, dbl)
+    test::value("imports-method-keeps-lexical-candidates/parameter", 8, b_parameter_method)
+    fn b_root_native_method() errors compiler::CompilerError:
+        static compile:
+            5.list(6, 7).length()
+    test::value("imports-method-keeps-lexical-candidates/root-native", 3, b_root_native_method)
+
+    # imports-method-field-ambiguity-unchanged: a struct field and a
+    # function of one name make s.cb(1) ambiguous; (s.cb)(s, 1) calls the
+    # field and cb(s, 1) the function.
+    fn b_field_or_function() errors compiler::CompilerError:
+        static compile:
+            fn cb(s, a):
+                a + 1
+            fn mk():
+                {cb: cb}
+            s = mk()
+            s.cb(1)
+    test::rejects("imports-method-field-ambiguity-unchanged/method", compiler::DiagnosticCode::AmbiguousMethodCall, b_field_or_function)
+    fn b_field_call() errors compiler::CompilerError:
+        static compile:
+            fn cb(s, a):
+                a + 1
+            fn mk():
+                {cb: cb}
+            s = mk()
+            (s.cb)(s, 1)
+    test::value("imports-method-field-ambiguity-unchanged/field-call", 2, b_field_call)
+    fn b_function_call() errors compiler::CompilerError:
+        static compile:
+            fn cb(s, a):
+                a + 1
+            fn mk():
+                {cb: cb}
+            s = mk()
+            cb(s, 1)
+    test::value("imports-method-field-ambiguity-unchanged/function-call", 2, b_function_call)
+
+    # imports-method-lexical-and-imported-are-distinct-candidates: a local
+    # `at` and list::at both accept a List: two candidates, no local-wins
+    # rule; plain and qualified calls are exact.
+    fn b_local_and_imported() errors compiler::CompilerError:
+        static compile:
+            fn at(xs, i):
+                0
+            [1, 2].at(0)
+    test::rejects("imports-method-lexical-and-imported-are-distinct-candidates/method", compiler::DiagnosticCode::AmbiguousMethodCall, b_local_and_imported)
+    fn b_local_and_imported_calls() errors compiler::CompilerError:
+        static compile:
+            fn at(xs, i):
+                0
+            [at([1, 2], 0), list::at([1, 2], 1)]
+    test::value("imports-method-lexical-and-imported-are-distinct-candidates/calls", [0, 2], b_local_and_imported_calls)
+
+    # imports-method-no-applicable: list::length and str::length are typed;
+    # neither accepts an Int receiver.
+    fn b_no_applicable() errors compiler::CompilerError:
+        static compile:
+            5.length()
+    test::rejects("imports-method-no-applicable", compiler::DiagnosticCode::NoApplicableMethod, b_no_applicable)
+
+    # imports-method-list-and-mutable-array: with both imported, a List
+    # receiver picks list::at and a MutableArray receiver mutable_array::at.
+    fn b_list_and_array() errors compiler::CompilerError:
+        static compile:
+            a = mutable_array::create(2, 7)
+            xs = [1, 2, 3]
+            x = xs.at(1):
+                on IndexNotFound:
+                    0
+            y = a.at(0):
+                on IndexNotFound:
+                    0
+            [x, y]
+    test::value("imports-method-list-and-mutable-array", [2, 7], b_list_and_array)
+
+# ---------------------------------------------------------------------------
+# Qualified calls are exact
+
+fn register_qualified_call_tests():
+    # imports-method-qualified-calls-never-ambiguous: list::at and
+    # mutable_array::at both accept an untyped receiver (as a method call
+    # `xs.at(0)` in first_of_each would be ambiguous), yet each qualified
+    # call is its namespace's function.
+    fn b_qualified_never_ambiguous() errors compiler::CompilerError:
+        static compile:
+            fn first_of_each(xs, a):
+                x = list::at(xs, 0):
+                    on IndexNotFound:
+                        -1
+                y = mutable_array::at(a, 0):
+                    on IndexNotFound:
+                        -1
+                [x, y]
+            first_of_each([2], mutable_array::create(1, 101))
+    test::value("imports-method-qualified-calls-never-ambiguous", [2, 101], b_qualified_never_ambiguous)
+
+    # surface-modules-two-namespaces-same-symbol: list::length and
+    # str::length resolve independently.
+    fn b_same_member_name() errors compiler::CompilerError:
+        static compile:
+            [list::length([1, 2]), str::length("abc")]
+    test::value("surface-modules-two-namespaces-same-symbol", [2, 3], b_same_member_name)
+
+# ---------------------------------------------------------------------------
+# A module and its dependency, both imported
+
+fn register_dependency_tests():
+    # imports-non-transitive-namespace: web imports ascii; this file
+    # imports both, so both are authorized (the half without `import ascii`
+    # is imports-library-modules.bot's).
+    fn b_both_imported() errors compiler::CompilerError:
+        static compile:
+            [web::is_unreserved(45), ascii::is_alphanumeric(65)]
+    test::value("imports-non-transitive-namespace/both-imported", [true, true], b_both_imported)
+
+    # imports-non-transitive-methods: a directly imported ascii makes
+    # ascii::is_alphanumeric a candidate.
+    fn b_direct_import_method() errors compiler::CompilerError:
+        static compile:
+            x = 65
+            x.is_alphanumeric()
+    test::value("imports-non-transitive-methods/imported", true, b_direct_import_method)
+
+# ---------------------------------------------------------------------------
+# Programs
+
+fn register_program_tests():
+    # imports-entry-program-programs-run: a program with imports runs on
+    # every backend.
+    fn b_program_runs() errors compiler::CompilerError:
+        static compile:
+            text = str::concat("a", "b")
+            value = list::at([1, 2], 0):
+                on IndexNotFound:
+                    0
+            [text, value]
+    test::value("imports-entry-program-programs-run", ["ab", 1], b_program_runs)
+
+fn register_imports_tests():
+    register_contextual_word_tests()
+    register_authorization_tests()
+    register_short_name_tests()
+    register_spelling_tests()
+    register_candidate_tests()
+    register_qualified_call_tests()
+    register_dependency_tests()
+    register_program_tests()
+
+with context test::suite()
+register_imports_tests()
+test::report()

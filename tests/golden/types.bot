@@ -32,24 +32,28 @@
 # Ported from tests/source-types.test, tests/typed-parameters.test,
 # tests/applied-types.test, tests/symbolic-type-identity.test and
 # tests/empty-collection-admissibility.test, which stay authoritative and
-# unchanged (tests/golden/manifest.tsv maps every test). Most Tcl tests there
-# assert only that a program compiles (strict) or that it is rejected with a
-# TYPE diagnostic whose message contains a fragment; here an accepted program
-# also runs, on every backend, and its value is compared, and a rejected one
-# is a rejected block compared by its compiler::DiagnosticCode and the same
-# fragment. What only the compiler's internals show (the static type text
-# hir::typeOf displays, range facts, metadata, HIR text) stays in Tcl; a
-# call's exact static refinement type is observed here by passing [call] to a
-# List[T] parameter, which admits it only when its element type is exactly T
-# (List admissibility is invariant: applied-type-invariant-*). Declaration
-# errors (a non-subset domain, a cycle, a duplicate) are rejected before any
-# block is decided and stay in Tcl.
+# unchanged (audit/golden/migration/fragments/types.tsv maps every test).
+# Most Tcl tests there assert only that a program compiles (strict) or that
+# it is rejected with a TYPE diagnostic whose message contains a fragment;
+# here an accepted program also runs, on every backend, and its value is
+# compared, and a rejected one is a rejected block compared by its
+# compiler::DiagnosticCode and the message fragment its Tcl test globs (the
+# exact message, and the location, where the Tcl test pins them). What only
+# the compiler's internals show (the static type text hir::typeOf displays,
+# range facts, metadata, HIR and NIR text, specialization labels) stays in
+# Tcl; a call's exact static refinement type is observed here by passing
+# [call] to a List[T] parameter, which admits it only when its element type is
+# exactly T (List admissibility is invariant: applied-type-invariant-*).
+# Declaration errors (a non-subset domain, a cycle, a duplicate) are rejected
+# before any block is decided and stay in Tcl, as do the -strict 0 programs
+# whose declared error escapes to the program boundary (here every such error
+# is handled inside its block, its inputs parameters of the registration
+# function so that no constant decides the call).
 #
 # Imports: compiler and test (the framework); list (list::at, list::length,
-# list::get); immutable_set (from_list); str (str::encode_utf8, and
-# str::length/substring for the message matcher); byte and web (the
-# symbolic-type-identity tests load lib/byte.bot and lib/web.bot as their Tcl
-# programs do); `import type byte::Byte` (the short spelling of
+# list::get); immutable_set (from_list); str (str::encode_utf8); byte and web
+# (the symbolic-type-identity tests load lib/byte.bot and lib/web.bot as
+# their Tcl programs do); `import type byte::Byte` (the short spelling of
 # symbolic-type-identity-short-type-name-is-the-same-type): bare `Byte` is
 # byte::Byte throughout this file, so the Tcl programs' own `type Byte =
 # Int in 0..255` is LocalByte here. No test is about a missing import or
@@ -144,59 +148,6 @@ struct Record:
     f: int
 
 # ---------------------------------------------------------------------------
-# A suite-local registration helper: a rejection whose message is part of the
-# property (a Tcl test that globs several fragments, or pins the message and
-# the location together). test::rejects_containing serves one fragment.
-
-# The index of the first occurrence of FRAGMENT in TEXT at or after START, or
-# -1.
-fn index_from(text: str, fragment: str, start: int) -> int:
-    n = str::length(text)
-    k = str::length(fragment)
-    loop i from start through n - k:
-        piece = str::substring(text, i, i + k):
-            on LowerUnderrun:
-                continue
-            on UpperOverrun:
-                continue
-        if piece == fragment:
-            return i
-    -1
-
-# Whether FRAGMENTS, from the one at INDEX on, occur in TEXT in order from
-# START, each after the end of the one before: the Tcl glob "*F1*F2*...*".
-fn occurs_in_order?(text: str, fragments: List[str], index: int, start: int) -> bool:
-    if index >= list::length(fragments):
-        return true
-    fragment = list::at(fragments, index):
-        on IndexNotFound:
-            return true
-    found = index_from(text, fragment, start)
-    if found < 0:
-        return false
-    occurs_in_order?(text, fragments, index + 1, found + str::length(fragment))
-
-# BODY's block must be rejected with diagnostic code EXPECTED and a message in
-# which FRAGMENTS occur in order -- at LINE and COLUMN of this file when LINE
-# is positive.
-nomethod fn rejects_naming(name: str, expected: compiler::DiagnosticCode, line: int, column: int, fragments: List[str], body) -> unit:
-    fn check() -> test::Match:
-        place = compiler::SourceLocation {line: line, column: column}
-        head = if line > 0:
-            test::diagnostic_text(expected, place)
-        else:
-            "compiler diagnostic ".concat(test::code_name(expected))
-        shown = head.concat(" with a message containing, in order, ").concat(test::describe(fragments))
-        actual = body():
-            on compiler::CompilerError {code, primary, message}:
-                located = line <= 0 or (primary.line == line and primary.column == column)
-                if code == expected and located and occurs_in_order?(message, fragments, 0, 0):
-                    return test::passed()
-                return test::mismatch(shown, test::diagnostic_text(code, primary), message)
-        test::mismatch(shown, "value ".concat(test::describe(actual)), "")
-    test::case(name, check)
-
-# ---------------------------------------------------------------------------
 # source-types.test: declarations
 
 fn register_source_type_declaration_tests():
@@ -282,13 +233,15 @@ fn register_result_contract_tests():
     test::value("source-type-result-contract-valid", [7], b_result_valid)
 
     # source-type-result-contract-invalid: an unprovable result is rejected
-    # at the definition (f is never called), at its parameter list.
+    # at the definition (f is never called), at its parameter list, with the
+    # message Tcl pins (the facts the analysis proved included).
     fn b_result_invalid() errors compiler::CompilerError:
         static compile:
             fn f() -> Small:
                 20
             1
-    rejects_naming("source-type-result-contract-invalid", compiler::DiagnosticCode::Type, 288, 17, ["function result does not prove declared type int[Small]"], b_result_invalid)
+    test::rejects_at("source-type-result-contract-invalid/location", compiler::DiagnosticCode::Type, 240, 17, b_result_invalid)
+    test::rejects_message("source-type-result-contract-invalid/message", compiler::DiagnosticCode::Type, "function result does not prove declared type int[Small] (facts: [20, 20] {20})", b_result_invalid)
 
     # source-type-sparse-result-contract: bit_and(x, 12)'s exact result set
     # {0, 4, 8, 12} proves the sparse Sparse result; the call is exactly a
@@ -304,7 +257,8 @@ fn register_result_contract_tests():
     test::value("source-type-sparse-result-contract", [12], b_sparse_result)
 
     # source-type-interval-cannot-prove-sparse: an interval hull [0, 12] alone
-    # does not prove the sparse Sparse result (h is never called).
+    # does not prove the sparse Sparse result (h is never called): rejected
+    # at h's parameter list, with the message Tcl pins.
     fn b_hull_not_sparse() errors compiler::CompilerError:
         static compile:
             fn h(x) -> Sparse:
@@ -315,7 +269,8 @@ fn register_result_contract_tests():
                     y
                 z
             1
-    rejects_naming("source-type-interval-cannot-prove-sparse", compiler::DiagnosticCode::Type, 310, 17, ["function result does not prove declared type int[Sparse]"], b_hull_not_sparse)
+    test::rejects_at("source-type-interval-cannot-prove-sparse/location", compiler::DiagnosticCode::Type, 264, 17, b_hull_not_sparse)
+    test::rejects_message("source-type-interval-cannot-prove-sparse/message", compiler::DiagnosticCode::Type, "function result does not prove declared type int[Sparse] (facts: [0, 12])", b_hull_not_sparse)
 
     # source-type-exact-set-accepted-by-broad-int: an exact set {0, 78, 999}
     # reached by equality narrowing of an untyped parameter is admitted by a
@@ -347,7 +302,7 @@ fn register_result_contract_tests():
                     else:
                         999
             [check(0), check(78)]
-    test::rejects_at("source-type-exact-set-member-rejected-by-narrow-type", compiler::DiagnosticCode::Type, 341, 21, b_exact_set_narrow)
+    test::rejects_at("source-type-exact-set-member-rejected-by-narrow-type", compiler::DiagnosticCode::Type, 296, 21, b_exact_set_narrow)
 
 # ---------------------------------------------------------------------------
 # source-types.test: checked conversions into a source domain
@@ -706,23 +661,23 @@ fn register_typed_parameter_invalid_tests():
     test::rejects_containing("typed-param-invalid-wrong-primitive-type", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_wrong_primitive)
 
     # typed-param-invalid-unknown-type: an unresolved parameter type is a
-    # semantic Type error naming the parameter (the suite declares no
-    # MissingType).
+    # semantic Type error naming the type and the parameter (the suite
+    # declares no MissingType).
     fn b_unknown_type() errors compiler::CompilerError:
         static compile:
             fn f(x: MissingType):
                 x
             1
-    rejects_naming("typed-param-invalid-unknown-type", compiler::DiagnosticCode::Type, 0, 0, ["unknown or invalid type", "for parameter \"x\""], b_unknown_type)
+    test::rejects_containing("typed-param-invalid-unknown-type", compiler::DiagnosticCode::Type, "unknown or invalid type MissingType for parameter \"x\"", b_unknown_type)
 
     # typed-param-invalid-diagnostic-names-parameter: the diagnostic names the
-    # parameter, its declared type and the argument.
+    # parameter, its declared type and the argument's value.
     fn b_names_parameter() errors compiler::CompilerError:
         static compile:
             fn identity_small(x: Small) -> Small:
                 x
             identity_small(11)
-    rejects_naming("typed-param-invalid-diagnostic-names-parameter", compiler::DiagnosticCode::Type, 0, 0, ["parameter \"x\"", "int[Small]", "11"], b_names_parameter)
+    test::rejects_message("typed-param-invalid-diagnostic-names-parameter", compiler::DiagnosticCode::Type, "argument for parameter \"x\" cannot be proven to satisfy int[Small] (argument type: int, facts: [11, 11] {11})", b_names_parameter)
 
     # typed-param-mixed-1: beside an untyped parameter, the typed one is
     # still checked.
@@ -787,7 +742,8 @@ fn register_applied_type_resolution_tests():
     test::rejects_containing("applied-type-unknown-argument", compiler::DiagnosticCode::Type, "unknown type \"Missing\"", b_unknown_argument)
 
     # applied-type-source-defined-argument: a source-defined type is a valid
-    # type argument.
+    # type argument, and a value known as List[Small] satisfies a List[Small]
+    # parameter (applied-type-param-accepted: the same Tcl program).
     fn b_source_defined_argument() errors compiler::CompilerError:
         static compile:
             fn consume(xs: List[Small]) -> int:
@@ -796,7 +752,9 @@ fn register_applied_type_resolution_tests():
     test::value("applied-type-source-defined-argument", 1, b_source_defined_argument)
 
     # applied-type-structural-not-nominal: two independent List[Small]
-    # applications denote the same type.
+    # applications denote the same type, so make_smalls()'s List[Small] is
+    # accepted by consume across the function boundary
+    # (applied-type-return-propagation: the same Tcl program).
     fn b_structural() errors compiler::CompilerError:
         static compile:
             fn make_smalls() -> List[Small]:
@@ -828,23 +786,10 @@ fn register_applied_type_contract_tests():
             f([1, "x"])
     test::rejects_containing("applied-type-construct-heterogeneous", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_heterogeneous)
 
-    # applied-type-construct-empty: [] satisfies any declared List[T].
-    fn b_construct_empty() errors compiler::CompilerError:
-        static compile:
-            fn consume(xs: List[Small]) -> int:
-                1
-            consume([])
-    test::value("applied-type-construct-empty", 1, b_construct_empty)
-
-    # applied-type-param-accepted: a value known as List[Small] satisfies a
-    # List[Small] parameter (the program of
-    # applied-type-source-defined-argument, as in Tcl).
-    fn b_param_accepted() errors compiler::CompilerError:
-        static compile:
-            fn consume(xs: List[Small]) -> int:
-                1
-            consume([one(), two()])
-    test::value("applied-type-param-accepted", 1, b_param_accepted)
+    # applied-type-construct-empty ([] satisfies any declared List[T]) is
+    # empty-list-satisfies-source-defined-domain below: the same program.
+    # applied-type-param-accepted (a value known as List[Small] satisfies a
+    # List[Small] parameter) is applied-type-source-defined-argument above.
 
     # applied-type-param-rejected-broad: an untyped [1, 2] is List[int], not
     # List[Small].
@@ -962,17 +907,9 @@ fn register_applied_type_flow_tests(first: int, past_end: int):
             r
     test::value("applied-type-alias-preserved", 1, b_alias)
 
-    # applied-type-return-propagation: make_smalls()'s List[Small] is
-    # accepted by consume across the function boundary (the program of
-    # applied-type-structural-not-nominal, as in Tcl).
-    fn b_return_propagation() errors compiler::CompilerError:
-        static compile:
-            fn make_smalls() -> List[Small]:
-                [one(), two()]
-            fn consume(xs: List[Small]) -> int:
-                1
-            consume(make_smalls())
-    test::value("applied-type-return-propagation", 1, b_return_propagation)
+    # applied-type-return-propagation (make_smalls()'s List[Small] accepted by
+    # consume across the function boundary) is
+    # applied-type-structural-not-nominal above: the same program.
 
     # applied-type-erasure-vs-consume: a declared broad result (`-> list`)
     # loses List[Small], so consume rejects the erased value ...
@@ -1024,7 +961,8 @@ fn register_applied_type_flow_tests(first: int, past_end: int):
             apply(consume, [one()])
     test::value("applied-type-callable-escape-still-rejected/accepted", 0, b_escape_accepted)
 
-    # ... and any other is rejected at the call of apply.
+    # ... and any other is rejected at the call of apply, the diagnostic
+    # attributing it to that call through consume's parameter.
     fn b_escape_rejected() errors compiler::CompilerError:
         static compile:
             fn consume(xs: List[Small]) -> int:
@@ -1032,7 +970,7 @@ fn register_applied_type_flow_tests(first: int, past_end: int):
             fn apply(f, v):
                 f(v)
             apply(consume, [3])
-    rejects_naming("applied-type-callable-escape-still-rejected/rejected", compiler::DiagnosticCode::Type, 0, 0, ["call to apply", " is invalid: argument for parameter", "cannot be proven to satisfy"], b_escape_rejected)
+    test::rejects_containing("applied-type-callable-escape-still-rejected/rejected", compiler::DiagnosticCode::Type, "call to apply with f : consume/1 -> int, v : List[int] is invalid: argument for parameter \"xs\" cannot be proven to satisfy List[int[Small]]", b_escape_rejected)
 
     # applied-type-callable-escape-exact-alias-still-legal: f = consume is an
     # exact alias, fully first-class.
@@ -1091,7 +1029,9 @@ fn register_symbolic_type_identity_tests():
 # declared type"; each test here requires the one its boundary reports.
 
 fn register_empty_collection_tests():
-    # empty-list-satisfies-source-defined-domain
+    # empty-list-satisfies-source-defined-domain: [] satisfies List[Small], a
+    # source-defined domain (also applied-type-construct-empty: [] satisfies
+    # any declared List[T]).
     fn b_empty_small() errors compiler::CompilerError:
         static compile:
             fn consume(xs: List[Small]) -> int:
@@ -1286,16 +1226,19 @@ fn register_empty_collection_tests():
     test::value("empty-caller-element-read-handled", 7, b_read_handled)
 
     # empty-caller-element-read-propagated: the empty caller's read failure
-    # propagated through a declared errors clause and handled by the caller
-    # ...
+    # propagated through a declared errors clause and handled by its caller
+    # run, whose parameter carries the empty [] (a handled first([]) itself
+    # is KnownError: the empty literal reaches xs as zero elements) ...
     fn b_read_propagated() errors compiler::CompilerError:
         static compile:
             fn first(xs: List[Record]) -> int errors IndexNotFound:
                 list::at(xs, 0).f
-            r = first([]):
-                on IndexNotFound:
-                    5
-            r
+            fn run(ys: List[Record]) -> int:
+                r = first(ys):
+                    on IndexNotFound:
+                        5
+                r
+            run([])
     test::value("empty-caller-element-read-propagated/declared-error", 5, b_read_propagated)
 
     # ... and list::get with a default.

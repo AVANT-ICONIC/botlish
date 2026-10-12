@@ -1,0 +1,601 @@
+# framework-semantics.bot -- the golden framework's own source-level
+# semantics (manifest: category harness), as golden tests: the properties of
+# lib/test.bot and of the convention every suite follows that ordinary
+# Botlish source can state about itself.
+#
+# Ported from tests/golden-framework.test, which stays authoritative and
+# active: these are duplicates of its source halves. What only the Tcl
+# harness observes stays there -- how often a body ran, coroutine releases
+# and their order, a suite's report rendering a FAIL line, a whole program
+# rejected outside any block (a registration outside a block, the
+# MISSING-CONTEXT of an unsatisfied context trait), the case list of
+# lib/compiler.bot read at test time, NIR and allocations.
+#
+# The specification, in order:
+#
+# * Suites are context values. An application installs its own contexts
+#   beside the suite, and a registration function reads them; a test body
+#   captures what was read (Config). A body is a function value, so a body
+#   that needs a context cannot be registered (CONTEXT-FUNCTION-VALUE): the
+#   offending registration is written inside a static compile block, which
+#   reifies that whole-program rejection as the block's own.
+# * Why a case is a function value: a coroutine starts eagerly, running its
+#   body to the first yield at construction (ProbeLog records it, standing
+#   in for the Tcl test-only native golden_probe).
+# * A case's own coroutines -- completed, failed and handled, abandoned
+#   suspended, left suspended by an early return -- give their values (the
+#   release census is the Tcl test's).
+# * Affine values follow the ordinary ownership rules inside a body: a body
+#   cannot capture the registration function's coroutine; a block that owns
+#   its coroutine passes; a move is UseAfterMove.
+# * What a body may complete with: a body declaring another error does not
+#   fit a helper (TYPE at the registration, naming the error); the same
+#   error escaping a block is that block's UnhandledError; handled it is a
+#   value.
+# * The report's texts: test::describe, test::int_text, test::code_name.
+# * The framework keeps the compiler's precision: a range proof, a known
+#   error, error narrowing by an exact value, the affine analysis and method
+#   resolution decide a body's code exactly as they decide plain code.
+# * The suite is an ordinary context: it implements, structurally, an
+#   application's context trait spelled like test::registered (Listed).
+#
+# Imports:
+#   compiler        compiler::DiagnosticCode and compiler::CompilerError.
+#   list            list::length and list::at in the precision tests and the
+#                   context trait's operation.
+#   mutable_vector  the application contexts' vectors (Config, ProbeLog);
+#                   with list, the two length candidates that make an
+#                   untyped `.length()` ambiguous (gf-precision-method-
+#                   resolution): the Tcl gfPrecision programs import both.
+#   test            the framework under test.
+#
+# Declarations keep the Tcl programs' names (each Tcl program is its own
+# entry program; here they share one namespace and do not collide), so the
+# diagnostics' messages name the same errors. Two names are new: ProbeLog
+# with note/noted (the Tcl golden_probe native) and eager (the Tcl
+# program's body()).
+import compiler
+import list
+import mutable_vector
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations (top-level only)
+
+# gf-application-context: the application's own context, installed below
+# beside the suite.
+context struct Config:
+    levels: MutableVector[int]
+
+fn levels() -> MutableVector[int]:
+    mutable_vector::from_list([3, 4])
+
+fn level_count(context config: Config) -> int:
+    mutable_vector::length(config.levels)
+
+# gf-eager-coroutine-start: what golden_probe(x) recorded, as an ordinary
+# context the coroutine writes (a body cannot use one: the registration
+# function reads it).
+context struct ProbeLog:
+    notes: MutableVector[int]
+
+fn no_notes() -> MutableVector[int]:
+    mutable_vector::from_list([])
+
+fn note(x: int, context log: ProbeLog) -> int:
+    log.notes.push(x)
+    x
+
+fn noted(context log: ProbeLog) -> List[int]:
+    loop x in log.notes:
+        x
+
+# The coroutines of the Tcl programs (gf-eager-coroutine-start,
+# gf-coroutine-cleanup, gf-affine-capture-*, gf-precision-affine).
+struct Event:
+    n: int
+
+error Broken
+
+# Notes 1 before its first yield, and would note 2 after it.
+fn eager() -> Event:
+    note(1)
+    yield Event {n: 1}
+    note(2)
+    Event {n: 2}
+
+fn finite(k: int) -> Event:
+    yield Event {n: k}
+    Event {n: k + 1}
+
+fn breaking(k: int) -> Event errors Broken:
+    yield Event {n: k}
+    if k > 0:
+        fail Broken
+    Event {n: 0}
+
+# gf-body-error-contract, gf-escaping-error-is-the-case-s.
+error Boom
+
+fn boom(x: int) -> int errors Boom:
+    if x > 3:
+        fail Boom
+    x
+
+# gf-describe: a value with no text form.
+struct Point:
+    x: int
+
+# gf-precision-error-narrowing.
+error Small
+error Large
+
+fn pick(x: int) -> int errors Small, Large:
+    if x < 5:
+        fail Small
+    if x > 100:
+        fail Large
+    x
+
+# gf-context-trait-surface: an application context trait whose one
+# operation is spelled like test::registered, one of the two library
+# functions that declare the Suite context parameter.
+context trait Listed:
+    fn registered() -> List[test::TestCase]
+
+fn how_many(context c: Listed) -> int:
+    list::length(c.registered())
+
+# ---------------------------------------------------------------------------
+# Suites are context values
+
+fn register_context_tests(context config: Config):
+    # gf-application-context: the suite is one ordinary context among
+    # others. The registration function reads the application's Config and
+    # the body captures the count read; no priority or lookup interaction.
+    count = level_count()
+    fn config_read_at_registration() errors compiler::CompilerError:
+        static compile:
+            count * 10
+    test::value("gf-application-context", 20, config_read_at_registration)
+
+    # gf-body-cannot-use-context: a body is a function value, so it cannot
+    # require a context -- it cannot register, or reach the suite, while it
+    # runs. The Tcl program registers such a body and is rejected as a
+    # whole; here that registration is the code under test, inside a block.
+    fn registers_a_context_body() errors compiler::CompilerError:
+        static compile:
+            fn body() errors compiler::CompilerError:
+                static compile:
+                    test::count()
+            test::value("nested", 0, body)
+    test::rejects("gf-body-cannot-use-context", compiler::DiagnosticCode::ContextFunctionValue, registers_a_context_body)
+
+# ---------------------------------------------------------------------------
+# Eager coroutines and deferral
+
+fn register_eager_start_tests():
+    # gf-eager-coroutine-start: why a case is a function value. Constructing
+    # a coroutine runs its body to the first yield at once: the log holds
+    # nothing before the construction, the pre-yield note after it, and
+    # never the note after the yield (the coroutine is released suspended,
+    # unresumed, and a release runs no code).
+    before = noted()
+    coroutine {first} = eager()
+    after = noted()
+    n = first.n
+    fn starts_at_construction() errors compiler::CompilerError:
+        static compile:
+            [before, after, n]
+    test::value("gf-eager-coroutine-start", [[], [1], 1], starts_at_construction)
+
+# ---------------------------------------------------------------------------
+# Coroutine cleanup: the cases' values (the Tcl test counts the releases)
+
+fn register_coroutine_cleanup_tests(k: int):
+    # gf-coroutine-cleanup: a case's coroutine completes ...
+    fn completes() errors compiler::CompilerError:
+        static compile:
+            coroutine {step, first} = finite(k)
+            first.n + step().n
+    test::value("gf-coroutine-cleanup/completes", 3, completes)
+    # ... fails, the failure handled inside the body ...
+    fn fails() errors compiler::CompilerError:
+        static compile:
+            coroutine {step, first} = breaking(k):
+                on Broken:
+                    Event {n: -1}
+            last = step():
+                on Broken:
+                    Event {n: -2}
+            first.n * 10 + last.n
+    test::value("gf-coroutine-cleanup/fails-handled", 8, fails)
+    # ... is abandoned suspended ...
+    fn abandons() errors compiler::CompilerError:
+        static compile:
+            coroutine {first} = finite(k)
+            first.n
+    test::value("gf-coroutine-cleanup/abandons", 1, abandons)
+    # ... or is left suspended by an early return.
+    fn leaves_early() errors compiler::CompilerError:
+        static compile:
+            coroutine {step, first} = finite(k)
+            if first.n > 0:
+                return first.n
+            step().n
+    test::value("gf-coroutine-cleanup/leaves-early", 1, leaves_early)
+
+# ---------------------------------------------------------------------------
+# Affine captures: the ordinary ownership rules decide
+
+fn register_affine_capture_tests():
+    # gf-affine-capture-rejected: a body that captures a coroutine handle the
+    # registration function owns is the ordinary AFFINE-CAPTURE-UNSUPPORTED,
+    # at the captured use: the framework neither needs nor gets an
+    # exception.
+    coroutine {step, first} = finite(1)
+    fn captures_the_handle() errors compiler::CompilerError:
+        static compile:
+            step().n
+    test::rejects_at("gf-affine-capture-rejected", compiler::DiagnosticCode::AffineCaptureUnsupported, 239, 13, captures_the_handle)
+    test::rejects_containing("gf-affine-capture-rejected/message", compiler::DiagnosticCode::AffineCaptureUnsupported, "`step` is an affine Coroutine", captures_the_handle)
+
+    # gf-affine-capture-in-a-case: the same capture inside a case's block is
+    # that case's rejection; a block that owns its coroutine passes; an
+    # ordinary move inside a block is UseAfterMove.
+    fn captures() errors compiler::CompilerError:
+        static compile:
+            coroutine {step} = finite(1)
+            fn later() -> int:
+                step().n
+            later()
+    test::rejects("gf-affine-capture-in-a-case/capture", compiler::DiagnosticCode::AffineCaptureUnsupported, captures)
+    fn owns() errors compiler::CompilerError:
+        static compile:
+            coroutine {step, first} = finite(1)
+            first.n + step().n
+    test::value("gf-affine-capture-in-a-case/owns", 3, owns)
+    fn moves() errors compiler::CompilerError:
+        static compile:
+            coroutine {step} = finite(1)
+            other = step
+            step().n + other().n
+    test::rejects("gf-affine-capture-in-a-case/moved", compiler::DiagnosticCode::UseAfterMove, moves)
+
+# ---------------------------------------------------------------------------
+# What a body may complete with
+
+fn register_body_contract_tests(n: int):
+    # gf-body-error-contract: a body that may raise a declared error other
+    # than compiler::CompilerError does not fit a helper: the registration
+    # is rejected (TYPE) at the body argument, naming the error -- there is
+    # no catch-all to turn it into data. The Tcl program is rejected as a
+    # whole; here the registration is the code under test, inside a block.
+    fn registers_a_raising_body() errors compiler::CompilerError:
+        static compile:
+            fn body() errors Boom, compiler::CompilerError:
+                boom(n)
+            test::value("raises", 1, body)
+    test::rejects_at("gf-body-error-contract", compiler::DiagnosticCode::Type, 278, 38, registers_a_raising_body)
+    test::rejects_containing("gf-body-error-contract/contract", compiler::DiagnosticCode::Type, "argument for parameter \"body\" cannot be proven to satisfy Fn{args: [], return: any, errors: [compiler::CompilerError]}", registers_a_raising_body)
+    test::rejects_containing("gf-body-error-contract/names-the-error", compiler::DiagnosticCode::Type, "error set incompatible: the callable may raise Boom", registers_a_raising_body)
+
+fn register_escaping_error_tests(n: int):
+    # gf-escaping-error-is-the-case-s: the same error escaping a body's block
+    # (the body declares only CompilerError) is that block's own rejection,
+    # UnhandledError -- one failing case, not a broken suite ...
+    fn escapes() errors compiler::CompilerError:
+        static compile:
+            boom(n)
+    test::rejects_at("gf-escaping-error-is-the-case-s/escapes", compiler::DiagnosticCode::UnhandledError, 289, 13, escapes)
+    test::rejects_message("gf-escaping-error-is-the-case-s/escapes-message", compiler::DiagnosticCode::UnhandledError, "this call may produce the declared error \"Boom\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", escapes)
+    # ... and handled inside the body it is an ordinary value (n = 9: Boom
+    # is raised at run time).
+    fn handled() errors compiler::CompilerError:
+        static compile:
+            r = boom(n):
+                on Boom:
+                    -1
+            r
+    test::value("gf-escaping-error-is-the-case-s/handled", -1, handled)
+
+# ---------------------------------------------------------------------------
+# Text
+
+fn register_text_tests():
+    # gf-describe: the report's texts of values: Ints (negative and
+    # arbitrary precision), Strings as literals with escapes, Bools, nested
+    # Lists; anything else a placeholder.
+    fn describes() errors compiler::CompilerError:
+        static compile:
+            [test::describe(0), test::describe(-305), test::describe(123456789012345678901234567890), test::describe("a\"b\\c\nd\te"), test::describe(true), test::describe(false), test::describe([[1, -2], [], ["s"]]), test::describe(Point {x: 1}), test::describe(compiler::DiagnosticCode::Type)]
+    test::value("gf-describe", ["0", "-305", "123456789012345678901234567890", "\"a\\\"b\\\\c\\nd\\te\"", "true", "false", "[[1, -2], [], [\"s\"]]", "a value with no text form", "a value with no text form"], describes)
+
+    # gf-int-text: int_text at the boundaries the representations change at
+    # (small Int, i64), both signs.
+    fn int_texts() errors compiler::CompilerError:
+        static compile:
+            [test::int_text(9), test::int_text(10), test::int_text(4611686018427387903), test::int_text(4611686018427387904), test::int_text(9223372036854775807), test::int_text(9223372036854775808), test::int_text(-9223372036854775808), test::int_text(-9223372036854775809)]
+    test::value("gf-int-text", ["9", "10", "4611686018427387903", "4611686018427387904", "9223372036854775807", "9223372036854775808", "-9223372036854775808", "-9223372036854775809"], int_texts)
+
+    # gf-code-name-complete: test::code_name spells every
+    # compiler::DiagnosticCode case of lib/compiler.bot, in its own words, in
+    # declaration order. (A snapshot of today's 87 cases: Botlish has no enum
+    # reflection, so the completeness check -- the case list read from
+    # lib/compiler.bot -- is the Tcl test's.)
+    fn spells_every_code() errors compiler::CompilerError:
+        static compile:
+            [
+                test::code_name(compiler::DiagnosticCode::AffineCaptureUnsupported),
+                test::code_name(compiler::DiagnosticCode::AffineContainerUnsupported),
+                test::code_name(compiler::DiagnosticCode::AffineDuplicationUnsupported),
+                test::code_name(compiler::DiagnosticCode::AffineElementCopyOut),
+                test::code_name(compiler::DiagnosticCode::AffineEqualityUnsupported),
+                test::code_name(compiler::DiagnosticCode::AffineErasureUnsupported),
+                test::code_name(compiler::DiagnosticCode::AffineFieldMoveRequiresDestructure),
+                test::code_name(compiler::DiagnosticCode::AffineGenericNestedUnsupported),
+                test::code_name(compiler::DiagnosticCode::AffineInstanceBudget),
+                test::code_name(compiler::DiagnosticCode::AffineListOperationUnsupported),
+                test::code_name(compiler::DiagnosticCode::AffineNotDefinitelyLive),
+                test::code_name(compiler::DiagnosticCode::AffinePathReleaseUnsupported),
+                test::code_name(compiler::DiagnosticCode::AffineTemporaryUnsupported),
+                test::code_name(compiler::DiagnosticCode::AmbiguousContextImplementation),
+                test::code_name(compiler::DiagnosticCode::AmbiguousMethodCall),
+                test::code_name(compiler::DiagnosticCode::AmbiguousQualifier),
+                test::code_name(compiler::DiagnosticCode::Arity),
+                test::code_name(compiler::DiagnosticCode::BreakOutsideLoop),
+                test::code_name(compiler::DiagnosticCode::ContextBindingCollision),
+                test::code_name(compiler::DiagnosticCode::ContextFunctionValue),
+                test::code_name(compiler::DiagnosticCode::ContextInstallationUnsupported),
+                test::code_name(compiler::DiagnosticCode::ContextTraitMisuse),
+                test::code_name(compiler::DiagnosticCode::ContextTraitPosition),
+                test::code_name(compiler::DiagnosticCode::ContinueOutsideLoop),
+                test::code_name(compiler::DiagnosticCode::CoroutineContract),
+                test::code_name(compiler::DiagnosticCode::CoroutineNotFunction),
+                test::code_name(compiler::DiagnosticCode::CoroutineResultMismatch),
+                test::code_name(compiler::DiagnosticCode::CoroutineResumeArity),
+                test::code_name(compiler::DiagnosticCode::CoroutineResumeConflict),
+                test::code_name(compiler::DiagnosticCode::CoroutineResumeType),
+                test::code_name(compiler::DiagnosticCode::CoroutineResumeUnderconstrained),
+                test::code_name(compiler::DiagnosticCode::CoroutineRhsNotYielding),
+                test::code_name(compiler::DiagnosticCode::Duplicate),
+                test::code_name(compiler::DiagnosticCode::DuplicateContextParameter),
+                test::code_name(compiler::DiagnosticCode::DuplicateField),
+                test::code_name(compiler::DiagnosticCode::DuplicateFlag),
+                test::code_name(compiler::DiagnosticCode::DuplicateFlagDeclaration),
+                test::code_name(compiler::DiagnosticCode::DuplicateLoopVariable),
+                test::code_name(compiler::DiagnosticCode::FlagBindingCollision),
+                test::code_name(compiler::DiagnosticCode::FlagCalleeUnknown),
+                test::code_name(compiler::DiagnosticCode::FlagFunctionValue),
+                test::code_name(compiler::DiagnosticCode::KnownError),
+                test::code_name(compiler::DiagnosticCode::LockstepUnequal),
+                test::code_name(compiler::DiagnosticCode::LockstepUnproven),
+                test::code_name(compiler::DiagnosticCode::MissingContext),
+                test::code_name(compiler::DiagnosticCode::MissingErrorPayload),
+                test::code_name(compiler::DiagnosticCode::MissingField),
+                test::code_name(compiler::DiagnosticCode::MissingImport),
+                test::code_name(compiler::DiagnosticCode::ModuleContext),
+                test::code_name(compiler::DiagnosticCode::ModuleImmutable),
+                test::code_name(compiler::DiagnosticCode::MutablePlaceCapture),
+                test::code_name(compiler::DiagnosticCode::MutablePlaceReceiver),
+                test::code_name(compiler::DiagnosticCode::NoApplicableMethod),
+                test::code_name(compiler::DiagnosticCode::NomethodCall),
+                test::code_name(compiler::DiagnosticCode::NotAContext),
+                test::code_name(compiler::DiagnosticCode::NotAStruct),
+                test::code_name(compiler::DiagnosticCode::NotAnEnum),
+                test::code_name(compiler::DiagnosticCode::OpaqueConstruction),
+                test::code_name(compiler::DiagnosticCode::OpaqueRepresentation),
+                test::code_name(compiler::DiagnosticCode::ProofClause),
+                test::code_name(compiler::DiagnosticCode::RefinementMintAuthority),
+                test::code_name(compiler::DiagnosticCode::ReturnOutsideCallable),
+                test::code_name(compiler::DiagnosticCode::TraitImplOrder),
+                test::code_name(compiler::DiagnosticCode::TraitInstanceBudget),
+                test::code_name(compiler::DiagnosticCode::TraitNestedPolymorphic),
+                test::code_name(compiler::DiagnosticCode::TraitNotSatisfied),
+                test::code_name(compiler::DiagnosticCode::TraitPolymorphicFunctionValue),
+                test::code_name(compiler::DiagnosticCode::TraitPolymorphicRecursion),
+                test::code_name(compiler::DiagnosticCode::TraitStorageUnsupported),
+                test::code_name(compiler::DiagnosticCode::TraitUnknownOperation),
+                test::code_name(compiler::DiagnosticCode::TraitViewMisuse),
+                test::code_name(compiler::DiagnosticCode::TraitWitnessJoin),
+                test::code_name(compiler::DiagnosticCode::Type),
+                test::code_name(compiler::DiagnosticCode::Unbound),
+                test::code_name(compiler::DiagnosticCode::UndeclaredError),
+                test::code_name(compiler::DiagnosticCode::UnexpectedErrorPayload),
+                test::code_name(compiler::DiagnosticCode::UnhandledError),
+                test::code_name(compiler::DiagnosticCode::UnknownEnumCase),
+                test::code_name(compiler::DiagnosticCode::UnknownField),
+                test::code_name(compiler::DiagnosticCode::UnknownFlag),
+                test::code_name(compiler::DiagnosticCode::UnknownNamespace),
+                test::code_name(compiler::DiagnosticCode::UnknownStruct),
+                test::code_name(compiler::DiagnosticCode::UnknownSymbol),
+                test::code_name(compiler::DiagnosticCode::UnprovenField),
+                test::code_name(compiler::DiagnosticCode::UnwrappedYield),
+                test::code_name(compiler::DiagnosticCode::UseAfterMove),
+                test::code_name(compiler::DiagnosticCode::YieldOutsideFunction),
+            ]
+    test::value("gf-code-name-complete", [
+        "AffineCaptureUnsupported",
+        "AffineContainerUnsupported",
+        "AffineDuplicationUnsupported",
+        "AffineElementCopyOut",
+        "AffineEqualityUnsupported",
+        "AffineErasureUnsupported",
+        "AffineFieldMoveRequiresDestructure",
+        "AffineGenericNestedUnsupported",
+        "AffineInstanceBudget",
+        "AffineListOperationUnsupported",
+        "AffineNotDefinitelyLive",
+        "AffinePathReleaseUnsupported",
+        "AffineTemporaryUnsupported",
+        "AmbiguousContextImplementation",
+        "AmbiguousMethodCall",
+        "AmbiguousQualifier",
+        "Arity",
+        "BreakOutsideLoop",
+        "ContextBindingCollision",
+        "ContextFunctionValue",
+        "ContextInstallationUnsupported",
+        "ContextTraitMisuse",
+        "ContextTraitPosition",
+        "ContinueOutsideLoop",
+        "CoroutineContract",
+        "CoroutineNotFunction",
+        "CoroutineResultMismatch",
+        "CoroutineResumeArity",
+        "CoroutineResumeConflict",
+        "CoroutineResumeType",
+        "CoroutineResumeUnderconstrained",
+        "CoroutineRhsNotYielding",
+        "Duplicate",
+        "DuplicateContextParameter",
+        "DuplicateField",
+        "DuplicateFlag",
+        "DuplicateFlagDeclaration",
+        "DuplicateLoopVariable",
+        "FlagBindingCollision",
+        "FlagCalleeUnknown",
+        "FlagFunctionValue",
+        "KnownError",
+        "LockstepUnequal",
+        "LockstepUnproven",
+        "MissingContext",
+        "MissingErrorPayload",
+        "MissingField",
+        "MissingImport",
+        "ModuleContext",
+        "ModuleImmutable",
+        "MutablePlaceCapture",
+        "MutablePlaceReceiver",
+        "NoApplicableMethod",
+        "NomethodCall",
+        "NotAContext",
+        "NotAStruct",
+        "NotAnEnum",
+        "OpaqueConstruction",
+        "OpaqueRepresentation",
+        "ProofClause",
+        "RefinementMintAuthority",
+        "ReturnOutsideCallable",
+        "TraitImplOrder",
+        "TraitInstanceBudget",
+        "TraitNestedPolymorphic",
+        "TraitNotSatisfied",
+        "TraitPolymorphicFunctionValue",
+        "TraitPolymorphicRecursion",
+        "TraitStorageUnsupported",
+        "TraitUnknownOperation",
+        "TraitViewMisuse",
+        "TraitWitnessJoin",
+        "Type",
+        "Unbound",
+        "UndeclaredError",
+        "UnexpectedErrorPayload",
+        "UnhandledError",
+        "UnknownEnumCase",
+        "UnknownField",
+        "UnknownFlag",
+        "UnknownNamespace",
+        "UnknownStruct",
+        "UnknownSymbol",
+        "UnprovenField",
+        "UnwrappedYield",
+        "UseAfterMove",
+        "YieldOutsideFunction",
+    ], spells_every_code)
+
+# ---------------------------------------------------------------------------
+# The framework keeps the compiler's precision: the Tcl test compiles each
+# code both plainly and as a golden body and compares the verdicts; here is
+# the golden body's verdict.
+
+fn register_precision_tests():
+    # gf-precision-range-proof: an index the counted loop proves in range
+    # needs no IndexNotFound handler.
+    fn range_proof() errors compiler::CompilerError:
+        static compile:
+            xs = [1, 2, 3]
+            loop i from 0 to list::length(xs):
+                list::at(xs, i)
+    test::value("gf-precision-range-proof", [1, 2, 3], range_proof)
+
+    # gf-precision-known-error: a call proven to fail is KnownError.
+    fn known_error() errors compiler::CompilerError:
+        static compile:
+            list::at([1, 2], 5)
+    test::rejects("gf-precision-known-error", compiler::DiagnosticCode::KnownError, known_error)
+
+    # gf-precision-error-narrowing: the argument's exact value (9) rules out
+    # Large, so only Small needs a handler.
+    fn error_narrowing() errors compiler::CompilerError:
+        static compile:
+            x = 9
+            r = pick(x):
+                on Small:
+                    0
+            r
+    test::value("gf-precision-error-narrowing", 9, error_narrowing)
+
+    # gf-precision-affine: a coroutine moved to another binding and then
+    # resumed is UseAfterMove; the moved-to binding is fine.
+    fn resumes_after_move() errors compiler::CompilerError:
+        static compile:
+            coroutine {step} = finite(1)
+            other = step
+            step().n
+    test::rejects("gf-precision-affine/use-after-move", compiler::DiagnosticCode::UseAfterMove, resumes_after_move)
+    fn resumes_moved_binding() errors compiler::CompilerError:
+        static compile:
+            coroutine {step} = finite(1)
+            other = step
+            other().n
+    test::value("gf-precision-affine/moved-binding", 2, resumes_moved_binding)
+
+    # gf-precision-method-resolution: a typed receiver picks its one
+    # admitting candidate (list::length, not mutable_vector::length); an
+    # untyped one is ambiguous between the two imported candidates.
+    fn typed_receiver() errors compiler::CompilerError:
+        static compile:
+            xs = [1, 2]
+            xs.length()
+    test::value("gf-precision-method-resolution/typed", 2, typed_receiver)
+    fn untyped_receiver() errors compiler::CompilerError:
+        static compile:
+            fn first(v):
+                v.length()
+            first([1])
+    test::rejects("gf-precision-method-resolution/untyped", compiler::DiagnosticCode::AmbiguousMethodCall, untyped_receiver)
+
+# ---------------------------------------------------------------------------
+# The context-trait surface
+
+fn register_context_trait_tests():
+    # gf-context-trait-surface: the installed suite implements, structurally,
+    # the application's context trait Listed (its operation spelled like
+    # test::registered): how_many() reads the very cases the suite holds --
+    # as many as test::count() says, and more than none, since every other
+    # test is registered by now. (Config and ProbeLog, the other installed
+    # contexts, spell no `registered`.) The negative half -- a trait spelled
+    # like test::count() is not satisfied -- is a whole-program
+    # MISSING-CONTEXT at the top-level call, which no block can reify: it
+    # stays in Tcl.
+    listed = how_many()
+    counted = test::count()
+    fn suite_satisfies_listed() errors compiler::CompilerError:
+        static compile:
+            [listed == counted, listed > 0]
+    test::value("gf-context-trait-surface", [true, true], suite_satisfies_listed)
+
+with context Config {levels: levels()}
+with context ProbeLog {notes: no_notes()}
+with context test::suite()
+register_context_tests()
+register_eager_start_tests()
+register_coroutine_cleanup_tests(1)
+register_affine_capture_tests()
+register_body_contract_tests(1)
+register_escaping_error_tests(9)
+register_text_tests()
+register_precision_tests()
+register_context_trait_tests()
+test::report()

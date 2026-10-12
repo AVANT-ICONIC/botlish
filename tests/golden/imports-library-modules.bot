@@ -1,0 +1,156 @@
+# imports-library-modules.bot -- modules that import other modules
+# (IMPORTS.md; the module system of surface/modules.tcl): the source-level
+# specification of
+#
+#   * a module's imports are its own: web imports ascii (and `import type
+#     byte::Byte`) and linux imports linux::abi; an importer of web or linux
+#     gets web's and linux's members and nothing of their imports -- no
+#     qualified ascii:: or linux::abi:: name (MissingImport, naming the
+#     import to add), no ascii function as a method candidate, no short
+#     type name Byte -- while their dependencies are loaded transitively
+#     and serve them;
+#   * a module's top-level values (web::hex_digits,
+#     web::additional_unreserved_chars) are immutable values read
+#     qualified from another file, and a local named like a namespace
+#     shadows none of its qualified names;
+#   * a user function calling a module function that reads a module value,
+#     directly or through another user function, works on every backend;
+#   * an unknown member of a module is UnknownSymbol.
+#
+# Ported from tests/imports.test and tests/surface-modules.test, which stay
+# authoritative (audit/golden/migration/fragments/imports-library-modules.tsv
+# maps every test). The Tcl tests' private modules (leafc and midb, base and
+# mid, user2, constants, counter, a) are the standard modules here: web and
+# ascii (a module and its dependency), linux and linux::abi (a module and
+# its intrinsic dependency), mathish (lib/mathish.bot, one function inc).
+#
+# Imports: compiler and test (the framework); immutable_set and list (to
+# read web's module values); linux (whose import linux::abi is not this
+# file's; linux is only loaded here, no syscall runs); mathish; web (whose
+# imports ascii and `type byte::Byte` are not this file's).
+import compiler
+import immutable_set
+import linux
+import list
+import mathish
+import test
+import web
+
+# surface-modules-c2-user-fn-to-module-closure: top-level user functions of
+# the entry program reaching a module function that reads a module value
+# (web::is_unreserved reads web::additional_unreserved_chars), directly or
+# through another user function, and one reaching a module function that
+# reads none (mathish::inc).
+fn unreserved_wrapper(x):
+    web::is_unreserved(x)
+
+fn unreserved_wrapper2(x):
+    unreserved_wrapper(x)
+
+fn inc_wrapper(x):
+    mathish::inc(x)
+
+fn register_non_transitive_tests():
+    # imports-non-transitive-namespace: web imports ascii; this file
+    # imports web only, so web works (through ascii) ...
+    fn b_through_the_importer() errors compiler::CompilerError:
+        static compile:
+            web::is_unreserved(48)
+    test::value("imports-non-transitive-namespace/through-the-importer", true, b_through_the_importer)
+    # ... and ascii is not imported (the half with both imported is
+    # imports.bot's).
+    fn b_dependency_qualified() errors compiler::CompilerError:
+        static compile:
+            ascii::is_alphanumeric(65)
+    test::rejects_message("imports-non-transitive-namespace/dependency-not-imported", compiler::DiagnosticCode::MissingImport, "namespace \"ascii\" is not imported; add `import ascii` to use `ascii::is_alphanumeric`", b_dependency_qualified)
+
+    # imports-non-transitive-methods: ascii's functions are no method
+    # candidates here merely because web imports ascii.
+    fn b_dependency_method() errors compiler::CompilerError:
+        static compile:
+            x = 65
+            x.is_alphanumeric()
+    test::rejects("imports-non-transitive-methods/dependency-not-imported", compiler::DiagnosticCode::NotAStruct, b_dependency_method)
+
+    # imports-type-non-transitive: web's `import type byte::Byte` serves web
+    # (is_unreserved takes a Byte) and binds no short Byte here.
+    fn b_type_through_the_importer() errors compiler::CompilerError:
+        static compile:
+            web::is_unreserved(126)
+    test::value("imports-type-non-transitive/through-the-importer", true, b_type_through_the_importer)
+    fn b_dependency_type() errors compiler::CompilerError:
+        static compile:
+            fn f(x: Byte):
+                x
+            1
+    test::rejects("imports-type-non-transitive/type-not-imported", compiler::DiagnosticCode::Type, b_dependency_type)
+
+    # imports-linux-abi-intrinsic-namespace: `import linux` is an import of
+    # the module lib/linux.bot (this suite compiles), which does not import
+    # linux::abi (the half with linux::abi imported is
+    # imports-abi-child.bot's).
+    fn b_intrinsic_child_not_imported() errors compiler::CompilerError:
+        static compile:
+            x = linux::abi::syscall({})
+            1
+    test::rejects_message("imports-linux-abi-intrinsic-namespace/child-not-imported", compiler::DiagnosticCode::MissingImport, "namespace \"linux::abi\" is not imported; add `import linux::abi` to use `linux::abi::syscall` (imports are exact: `import linux` does not import \"linux::abi\")", b_intrinsic_child_not_imported)
+
+fn register_module_tests():
+    # surface-modules-transitive-dependency: web's own qualified references
+    # (ascii::is_alphanumeric) are loaded transitively and run.
+    fn b_transitive_dependency() errors compiler::CompilerError:
+        static compile:
+            [web::is_unreserved(65), web::is_unreserved(32)]
+    test::value("surface-modules-transitive-dependency", [true, false], b_transitive_dependency)
+
+    # surface-modules-local-cannot-shadow-qualified: a local named like the
+    # namespace does not hide mathish::inc.
+    fn b_local_named_like_namespace() errors compiler::CompilerError:
+        static compile:
+            mathish = 999
+            mathish::inc(1)
+    test::value("surface-modules-local-cannot-shadow-qualified", 2, b_local_named_like_namespace)
+
+    # surface-modules-unknown-symbol: an undefined function of a real
+    # namespace is UnknownSymbol.
+    fn b_unknown_symbol() errors compiler::CompilerError:
+        static compile:
+            mathish::does_not_exist()
+    test::rejects_containing("surface-modules-unknown-symbol", compiler::DiagnosticCode::UnknownSymbol, "has no definition \"does_not_exist\"", b_unknown_symbol)
+
+    # surface-modules-immutable-values-parity: module values -- a List of
+    # Strings and a set built by a helper at the module's initialization --
+    # read qualified from this file, beside a local named like the
+    # namespace.
+    fn b_module_values() errors compiler::CompilerError:
+        static compile:
+            web = 999
+            digit = list::at(web::hex_digits, 10):
+                on IndexNotFound:
+                    "?"
+            [web, list::length(web::hex_digits), digit, immutable_set::contains(web::additional_unreserved_chars, 45)]
+    test::value("surface-modules-immutable-values-parity", [999, 16, "A", true], b_module_values)
+
+    # surface-modules-uri-escape-native-parity: web::uri_escape_text, an
+    # ordinary module function, escapes the same text on every backend.
+    fn b_uri_escape() errors compiler::CompilerError:
+        static compile:
+            s = "a b/c%d~e_f.g@h"
+            web::uri_escape_text(s)
+    test::value("surface-modules-uri-escape-native-parity", "a%20b%2Fc%25d~e_f.g%40h", b_uri_escape)
+
+    # surface-modules-c2-user-fn-to-module-closure, surface-modules-c2-values:
+    # the user functions above reach the module function from the
+    # entry program, and so does the program root.
+    fn b_user_functions_reach_module_values() errors compiler::CompilerError:
+        static compile:
+            [unreserved_wrapper(45), unreserved_wrapper2(45), inc_wrapper(5), web::is_unreserved(32)]
+    test::value("surface-modules-c2-user-fn-to-module-closure", [true, true, 6, false], b_user_functions_reach_module_values)
+
+fn register_library_modules_tests():
+    register_non_transitive_tests()
+    register_module_tests()
+
+with context test::suite()
+register_library_modules_tests()
+test::report()

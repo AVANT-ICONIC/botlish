@@ -1,0 +1,865 @@
+# abi-numeric.bot -- the ABI numeric domains (ABI-NUMERIC-DOMAINS.md) and the
+# generic bitwise Int primitives, as a source-level specification:
+#
+#   abi::I8 I16 I32 I64 U8 U16 U32 U64 Isize Usize       (lib/abi.bot)
+#   abi::i8(value: int) ... abi::usize(value: int)
+#       errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange
+#   x.value                                              back to Int
+#   abi::x86_64::from_i8(x) ... from_usize(x) -> abi::x86_64::Register64
+#   bit_and, bit_or, bit_xor, shift_left, shift_right    (root natives)
+#
+# * Domains. Each creator accepts exactly its declared interval -- I8
+#   -128..127, I16, I32, I64 and Isize the signed 16-, 32- and 64-bit ranges,
+#   U8 0..255, U16, U32, and U64 and Usize the full 0..2^64-1 (never reduced
+#   to the signed range) -- and fails with the declared error of the bound
+#   it violates, AbiIntegerBelowRange or AbiIntegerAboveRange, however far
+#   out the Int is. An accepted value comes back through .value unchanged.
+# * No fixed width. An ABI value is an ordinary arbitrary-precision Int plus
+#   the static proof that it lies in its domain: u8 255's .value + 1 is 256,
+#   never 0, and a result re-enters a domain only through the checked
+#   creator.
+# * Static proofs. A provably in-range constant creation needs no handler; a
+#   provably out-of-range one is a compile-time KnownError naming exactly the
+#   violated bound's error; an unprovable Int must be handled or declared. A
+#   parameter's declared domain survives into its function (x: abi::U8 makes
+#   0 <= x.value <= 255 known), so widening needs no handler and narrowing
+#   can fail only on the side the domains differ. Direct construction
+#   (abi::U8 {value: ...}) is sound without privacy: the field must be proven
+#   in its domain statically.
+# * Nominal. Ten distinct named struct types: a parameter of one accepts no
+#   other (U64 is not a Usize, I64 not an Isize, I32 not a U32, an Int not a
+#   U32), equality holds within a type and never across ABI types or with a
+#   plain Int, and collection lengths stay plain Ints.
+# * Register encoding. abi::x86_64::from_* is total and nominal (no handler,
+#   only its own ABI type): signed values are sign-extended, unsigned ones
+#   zero-extended, and the word holds the 64 bits' signed reading, so U64
+#   2^64-1 and I64 -1 travel as the same bits; to_int reads every word back
+#   signed. register64(Int) is still the signed route and rejects the upper
+#   U64 half.
+# * Bitwise primitives. bit_and, bit_or and bit_xor are total over every Int
+#   (two's complement for negative operands, BigInts included); shift_left
+#   and shift_right are exact multiplication and floor division by 2^k.
+#
+# The program's own declarations below sit beside the module's (a program
+# may declare a U8Value, an I32Value, an AbiU8Value or an error
+# AbiIntegerAboveRange of its own: the module's are abi::U8Value and
+# abi::AbiIntegerAboveRange); every test of the suite compiles beside them.
+#
+# Ported from tests/abi-numeric.test and tests/scalarbits.test, which stay
+# authoritative and unchanged. They also pin what no program observes: the
+# module's source types and domains, the absence of compiler knowledge of
+# the family, NIR and allocation counts, -strict 0 diagnostic sets, the
+# duplicate top-level declaration error, run-time TYPE failures, GC-stress
+# reruns, the seeded fuzz and the example files. The one live syscall
+# (getpid with encoded argument words) is abi-numeric-native.bot's.
+#
+# Imports: compiler and test (the framework); abi and abi::x86_64 are the
+# Tcl programs' own imports; byte is the field-domain programs'
+# (byte::from_int) and list the collection and GC-stress programs'. Every
+# call is written qualified (no method syntax), so the suite-wide imports
+# change no call's meaning, and no test is about a missing import.
+import abi
+import abi::x86_64
+import byte
+import compiler
+import list
+import test
+
+# ---------------------------------------------------------------------------
+# The program's own namesakes of the module's declarations (the names are
+# the theorem: abi-numeric-namespaced-types). U8Value and AbiU8Value have
+# abi::U8Value's interval; I32Value is deliberately narrower than
+# abi::I32Value, so a test can tell which of the two a spelling means.
+type U8Value = Int in 0..255
+type I32Value = Int in 0..9
+type AbiU8Value = Int in 0..255
+error AbiIntegerAboveRange
+
+# ---------------------------------------------------------------------------
+# Namespaced types: the module's declarations are members of namespace abi
+
+fn register_namespaced_type_tests():
+    # A program's own U8Value (and I32Value) beside the raw transport, which
+    # loads lib/abi.bot.
+    fn own_types() errors compiler::CompilerError:
+        static compile:
+            fn f(x: U8Value) -> int:
+                x
+            abi::x86_64::to_int(abi::x86_64::register64(f(39)))
+    test::value("abi-numeric-namespaced-types/own-types", 39, own_types)
+
+    # A type named like the module's own.
+    fn abi_like_name() errors compiler::CompilerError:
+        static compile:
+            fn f(x: AbiU8Value) -> int:
+                x
+            abi::x86_64::to_int(abi::x86_64::register64(f(39)))
+    test::value("abi-numeric-namespaced-types/abi-like-name", 39, abi_like_name)
+
+    # The program's U8Value and abi::U8Value in one signature.
+    fn beside_module_type() errors compiler::CompilerError:
+        static compile:
+            fn f(x: U8Value, y: abi::U8Value) -> int:
+                x + y
+            f(3, 200)
+    test::value("abi-numeric-namespaced-types/beside-module-type", 203, beside_module_type)
+
+    # The qualified spelling is the module's type, not the program's
+    # narrower namesake: 200 is outside I32Value's 0..9 but inside
+    # abi::I32Value.
+    fn narrow_own_type_beside_module_type() errors compiler::CompilerError:
+        static compile:
+            fn f(x: I32Value, y: abi::I32Value) -> int:
+                x + y
+            f(3, 200)
+    test::value("abi-numeric-namespaced-types/narrow-own-type-beside-module-type", 203, narrow_own_type_beside_module_type)
+
+    # ... and the unqualified spelling is the program's own.
+    fn own_type_is_the_programs() errors compiler::CompilerError:
+        static compile:
+            fn f(x: I32Value) -> int:
+                x
+            f(200)
+    test::rejects("abi-numeric-namespaced-types/own-type-is-the-programs", compiler::DiagnosticCode::Type, own_type_is_the_programs)
+
+    # The program's own error AbiIntegerAboveRange (declared above) beside
+    # abi::AbiIntegerAboveRange: errors are module-qualified too.
+    fn error_name() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::to_int(abi::x86_64::register64(39))
+    test::value("abi-numeric-namespaced-types/error-name", 39, error_name)
+
+# ---------------------------------------------------------------------------
+# Checked creation and the way back to Int: every boundary of every domain
+#
+# Each test classifies, for one creator, min-1, min, min+1, -1, 0, 1, an
+# interior value on each side (min/2 and max/2, rounded down), max-1, max,
+# max+1 and -2^128 and 2^128 (plus the 2^63 transition for the 64-bit
+# domains): "below" or "above" for the declared error of the violated
+# bound, else [the value back through .value, its register word]. A signed
+# value's word is the value; an unsigned value's is the value below 2^63,
+# else the same 64 bits read signed (value - 2^64).
+
+fn register_boundary_tests():
+    fn i8_boundaries() errors compiler::CompilerError:
+        static compile:
+            fn classify(n: int):
+                x = abi::i8(n):
+                    on abi::AbiIntegerBelowRange:
+                        return "below"
+                    on abi::AbiIntegerAboveRange:
+                        return "above"
+                [x.value, abi::x86_64::from_i8(x).word]
+            xs = [0 - 129, 0 - 128, 0 - 127, 0 - 1, 0, 1, 0 - 64, 63, 126, 127, 128, 0 - 340282366920938463463374607431768211456, 340282366920938463463374607431768211456]
+            loop x in xs:
+                classify(x)
+    test::value("abi-numeric-boundaries-i8", [
+        "below", [-128, -128], [-127, -127], [-1, -1], [0, 0], [1, 1], [-64, -64], [63, 63], [126, 126], [127, 127], "above",
+        "below", "above"
+    ], i8_boundaries)
+
+    fn i16_boundaries() errors compiler::CompilerError:
+        static compile:
+            fn classify(n: int):
+                x = abi::i16(n):
+                    on abi::AbiIntegerBelowRange:
+                        return "below"
+                    on abi::AbiIntegerAboveRange:
+                        return "above"
+                [x.value, abi::x86_64::from_i16(x).word]
+            xs = [0 - 32769, 0 - 32768, 0 - 32767, 0 - 1, 0, 1, 0 - 16384, 16383, 32766, 32767, 32768, 0 - 340282366920938463463374607431768211456, 340282366920938463463374607431768211456]
+            loop x in xs:
+                classify(x)
+    test::value("abi-numeric-boundaries-i16", [
+        "below", [-32768, -32768], [-32767, -32767], [-1, -1], [0, 0], [1, 1], [-16384, -16384], [16383, 16383], [32766, 32766], [32767, 32767], "above",
+        "below", "above"
+    ], i16_boundaries)
+
+    fn i32_boundaries() errors compiler::CompilerError:
+        static compile:
+            fn classify(n: int):
+                x = abi::i32(n):
+                    on abi::AbiIntegerBelowRange:
+                        return "below"
+                    on abi::AbiIntegerAboveRange:
+                        return "above"
+                [x.value, abi::x86_64::from_i32(x).word]
+            xs = [0 - 2147483649, 0 - 2147483648, 0 - 2147483647, 0 - 1, 0, 1, 0 - 1073741824, 1073741823, 2147483646, 2147483647, 2147483648, 0 - 340282366920938463463374607431768211456, 340282366920938463463374607431768211456]
+            loop x in xs:
+                classify(x)
+    test::value("abi-numeric-boundaries-i32", [
+        "below", [-2147483648, -2147483648], [-2147483647, -2147483647], [-1, -1], [0, 0], [1, 1], [-1073741824, -1073741824], [1073741823, 1073741823], [2147483646, 2147483646], [2147483647, 2147483647], "above",
+        "below", "above"
+    ], i32_boundaries)
+
+    fn i64_boundaries() errors compiler::CompilerError:
+        static compile:
+            fn classify(n: int):
+                x = abi::i64(n):
+                    on abi::AbiIntegerBelowRange:
+                        return "below"
+                    on abi::AbiIntegerAboveRange:
+                        return "above"
+                [x.value, abi::x86_64::from_i64(x).word]
+            xs = [0 - 9223372036854775809, 0 - 9223372036854775808, 0 - 9223372036854775807, 0 - 1, 0, 1, 0 - 4611686018427387904, 4611686018427387903, 9223372036854775806, 9223372036854775807, 9223372036854775808, 0 - 340282366920938463463374607431768211456, 340282366920938463463374607431768211456, 9223372036854775808, 0 - 9223372036854775809]
+            loop x in xs:
+                classify(x)
+    test::value("abi-numeric-boundaries-i64", [
+        "below", [-9223372036854775808, -9223372036854775808], [-9223372036854775807, -9223372036854775807], [-1, -1], [0, 0], [1, 1], [-4611686018427387904, -4611686018427387904], [4611686018427387903, 4611686018427387903], [9223372036854775806, 9223372036854775806], [9223372036854775807, 9223372036854775807], "above",
+        "below", "above",
+        "above", "below"
+    ], i64_boundaries)
+
+    fn u8_boundaries() errors compiler::CompilerError:
+        static compile:
+            fn classify(n: int):
+                x = abi::u8(n):
+                    on abi::AbiIntegerBelowRange:
+                        return "below"
+                    on abi::AbiIntegerAboveRange:
+                        return "above"
+                [x.value, abi::x86_64::from_u8(x).word]
+            xs = [0 - 1, 0, 1, 0 - 1, 0, 1, 0, 127, 254, 255, 256, 0 - 340282366920938463463374607431768211456, 340282366920938463463374607431768211456]
+            loop x in xs:
+                classify(x)
+    test::value("abi-numeric-boundaries-u8", [
+        "below", [0, 0], [1, 1], "below", [0, 0], [1, 1], [0, 0], [127, 127], [254, 254], [255, 255], "above",
+        "below", "above"
+    ], u8_boundaries)
+
+    fn u16_boundaries() errors compiler::CompilerError:
+        static compile:
+            fn classify(n: int):
+                x = abi::u16(n):
+                    on abi::AbiIntegerBelowRange:
+                        return "below"
+                    on abi::AbiIntegerAboveRange:
+                        return "above"
+                [x.value, abi::x86_64::from_u16(x).word]
+            xs = [0 - 1, 0, 1, 0 - 1, 0, 1, 0, 32767, 65534, 65535, 65536, 0 - 340282366920938463463374607431768211456, 340282366920938463463374607431768211456]
+            loop x in xs:
+                classify(x)
+    test::value("abi-numeric-boundaries-u16", [
+        "below", [0, 0], [1, 1], "below", [0, 0], [1, 1], [0, 0], [32767, 32767], [65534, 65534], [65535, 65535], "above",
+        "below", "above"
+    ], u16_boundaries)
+
+    fn u32_boundaries() errors compiler::CompilerError:
+        static compile:
+            fn classify(n: int):
+                x = abi::u32(n):
+                    on abi::AbiIntegerBelowRange:
+                        return "below"
+                    on abi::AbiIntegerAboveRange:
+                        return "above"
+                [x.value, abi::x86_64::from_u32(x).word]
+            xs = [0 - 1, 0, 1, 0 - 1, 0, 1, 0, 2147483647, 4294967294, 4294967295, 4294967296, 0 - 340282366920938463463374607431768211456, 340282366920938463463374607431768211456]
+            loop x in xs:
+                classify(x)
+    test::value("abi-numeric-boundaries-u32", [
+        "below", [0, 0], [1, 1], "below", [0, 0], [1, 1], [0, 0], [2147483647, 2147483647], [4294967294, 4294967294], [4294967295, 4294967295], "above",
+        "below", "above"
+    ], u32_boundaries)
+
+    fn u64_boundaries() errors compiler::CompilerError:
+        static compile:
+            fn classify(n: int):
+                x = abi::u64(n):
+                    on abi::AbiIntegerBelowRange:
+                        return "below"
+                    on abi::AbiIntegerAboveRange:
+                        return "above"
+                [x.value, abi::x86_64::from_u64(x).word]
+            xs = [0 - 1, 0, 1, 0 - 1, 0, 1, 0, 9223372036854775807, 18446744073709551614, 18446744073709551615, 18446744073709551616, 0 - 340282366920938463463374607431768211456, 340282366920938463463374607431768211456, 9223372036854775807, 9223372036854775808, 9223372036854775809]
+            loop x in xs:
+                classify(x)
+    test::value("abi-numeric-boundaries-u64", [
+        "below", [0, 0], [1, 1], "below", [0, 0], [1, 1], [0, 0], [9223372036854775807, 9223372036854775807], [18446744073709551614, -2], [18446744073709551615, -1], "above",
+        "below", "above",
+        [9223372036854775807, 9223372036854775807], [9223372036854775808, -9223372036854775808], [9223372036854775809, -9223372036854775807]
+    ], u64_boundaries)
+
+    fn isize_boundaries() errors compiler::CompilerError:
+        static compile:
+            fn classify(n: int):
+                x = abi::isize(n):
+                    on abi::AbiIntegerBelowRange:
+                        return "below"
+                    on abi::AbiIntegerAboveRange:
+                        return "above"
+                [x.value, abi::x86_64::from_isize(x).word]
+            xs = [0 - 9223372036854775809, 0 - 9223372036854775808, 0 - 9223372036854775807, 0 - 1, 0, 1, 0 - 4611686018427387904, 4611686018427387903, 9223372036854775806, 9223372036854775807, 9223372036854775808, 0 - 340282366920938463463374607431768211456, 340282366920938463463374607431768211456, 9223372036854775808, 0 - 9223372036854775809]
+            loop x in xs:
+                classify(x)
+    test::value("abi-numeric-boundaries-isize", [
+        "below", [-9223372036854775808, -9223372036854775808], [-9223372036854775807, -9223372036854775807], [-1, -1], [0, 0], [1, 1], [-4611686018427387904, -4611686018427387904], [4611686018427387903, 4611686018427387903], [9223372036854775806, 9223372036854775806], [9223372036854775807, 9223372036854775807], "above",
+        "below", "above",
+        "above", "below"
+    ], isize_boundaries)
+
+    fn usize_boundaries() errors compiler::CompilerError:
+        static compile:
+            fn classify(n: int):
+                x = abi::usize(n):
+                    on abi::AbiIntegerBelowRange:
+                        return "below"
+                    on abi::AbiIntegerAboveRange:
+                        return "above"
+                [x.value, abi::x86_64::from_usize(x).word]
+            xs = [0 - 1, 0, 1, 0 - 1, 0, 1, 0, 9223372036854775807, 18446744073709551614, 18446744073709551615, 18446744073709551616, 0 - 340282366920938463463374607431768211456, 340282366920938463463374607431768211456, 9223372036854775807, 9223372036854775808, 9223372036854775809]
+            loop x in xs:
+                classify(x)
+    test::value("abi-numeric-boundaries-usize", [
+        "below", [0, 0], [1, 1], "below", [0, 0], [1, 1], [0, 0], [9223372036854775807, 9223372036854775807], [18446744073709551614, -2], [18446744073709551615, -1], "above",
+        "below", "above",
+        [9223372036854775807, 9223372036854775807], [9223372036854775808, -9223372036854775808], [9223372036854775809, -9223372036854775807]
+    ], usize_boundaries)
+
+# ---------------------------------------------------------------------------
+# Int -> creator -> Int is exact, and ABI values never wrap
+
+fn register_round_trip_tests():
+    # No sign reinterpretation: U8 255 is 255, I8 -1 is -1, U64 0, 1, 2^63-1,
+    # 2^63 and 2^64-1 are themselves.
+    fn round_trip_is_exact() errors compiler::CompilerError:
+        static compile:
+            [abi::u8(255).value, abi::i8(0 - 1).value, abi::u64(0).value, abi::u64(1).value, abi::u64(9223372036854775807).value, abi::u64(9223372036854775808).value, abi::u64(18446744073709551615).value, abi::usize(18446744073709551615).value, abi::i64(0 - 9223372036854775808).value, abi::isize(9223372036854775807).value, abi::u32(4294967295).value, abi::i16(0 - 32768).value]
+    test::value("abi-numeric-round-trip-is-exact", [255, -1, 0, 1, 9223372036854775807, 9223372036854775808, 18446744073709551615, 18446744073709551615, -9223372036854775808, 9223372036854775807, 4294967295, -32768], round_trip_is_exact)
+
+    # An ABI value's Int is ordinary arbitrary-precision Int, and a result
+    # re-enters a domain only through the checked creator.
+    fn no_wrapping() errors compiler::CompilerError:
+        static compile:
+            fn back_to_u8(n: int):
+                r = abi::u8(n):
+                    on abi::AbiIntegerBelowRange:
+                        return "below"
+                    on abi::AbiIntegerAboveRange:
+                        return "above"
+                r.value
+            x = abi::u8(255)
+            y = abi::i8(0 - 128)
+            z = abi::u64(18446744073709551615)
+            [x.value + 1, y.value - 1, z.value + 1, x.value * 2, back_to_u8(x.value + 1), back_to_u8(y.value), back_to_u8(x.value - 1)]
+    test::value("abi-numeric-no-wrapping", [256, -129, 18446744073709551616, 510, "above", "below", 254], no_wrapping)
+
+# ---------------------------------------------------------------------------
+# Static proofs: constants
+
+# The compile-time rejection of a provably out-of-range constant names the
+# violated bound's error, and only it (the ";" ends the list).
+fn below_range_only() -> str:
+    "always produces the declared error(s) abi::AbiIntegerBelowRange;"
+
+fn above_range_only() -> str:
+    "always produces the declared error(s) abi::AbiIntegerAboveRange;"
+
+fn register_constant_proof_tests():
+    # Both extremes of every domain, in family order, need no handler.
+    fn in_range() errors compiler::CompilerError:
+        static compile:
+            [
+                abi::i8(0 - 128).value, abi::i8(127).value,
+                abi::i16(0 - 32768).value, abi::i16(32767).value,
+                abi::i32(0 - 2147483648).value, abi::i32(2147483647).value,
+                abi::i64(0 - 9223372036854775808).value, abi::i64(9223372036854775807).value,
+                abi::u8(0).value, abi::u8(255).value,
+                abi::u16(0).value, abi::u16(65535).value,
+                abi::u32(0).value, abi::u32(4294967295).value,
+                abi::u64(0).value, abi::u64(18446744073709551615).value,
+                abi::isize(0 - 9223372036854775808).value, abi::isize(9223372036854775807).value,
+                abi::usize(0).value, abi::usize(18446744073709551615).value
+            ]
+    test::value("abi-numeric-constant-proofs/in-range", [
+        -128, 127,
+        -32768, 32767,
+        -2147483648, 2147483647,
+        -9223372036854775808, 9223372036854775807,
+        0, 255,
+        0, 65535,
+        0, 4294967295,
+        0, 18446744073709551615,
+        -9223372036854775808, 9223372036854775807,
+        0, 18446744073709551615
+    ], in_range)
+
+    # min - 1 and max + 1 of every domain.
+    fn i8_below() errors compiler::CompilerError:
+        static compile:
+            abi::i8(0 - 129)
+    test::rejects_containing("abi-numeric-constant-proofs/i8-below", compiler::DiagnosticCode::KnownError, below_range_only(), i8_below)
+    fn i8_above() errors compiler::CompilerError:
+        static compile:
+            abi::i8(128)
+    test::rejects_containing("abi-numeric-constant-proofs/i8-above", compiler::DiagnosticCode::KnownError, above_range_only(), i8_above)
+
+    fn i16_below() errors compiler::CompilerError:
+        static compile:
+            abi::i16(0 - 32769)
+    test::rejects_containing("abi-numeric-constant-proofs/i16-below", compiler::DiagnosticCode::KnownError, below_range_only(), i16_below)
+    fn i16_above() errors compiler::CompilerError:
+        static compile:
+            abi::i16(32768)
+    test::rejects_containing("abi-numeric-constant-proofs/i16-above", compiler::DiagnosticCode::KnownError, above_range_only(), i16_above)
+
+    fn i32_below() errors compiler::CompilerError:
+        static compile:
+            abi::i32(0 - 2147483649)
+    test::rejects_containing("abi-numeric-constant-proofs/i32-below", compiler::DiagnosticCode::KnownError, below_range_only(), i32_below)
+    fn i32_above() errors compiler::CompilerError:
+        static compile:
+            abi::i32(2147483648)
+    test::rejects_containing("abi-numeric-constant-proofs/i32-above", compiler::DiagnosticCode::KnownError, above_range_only(), i32_above)
+
+    fn i64_below() errors compiler::CompilerError:
+        static compile:
+            abi::i64(0 - 9223372036854775809)
+    test::rejects_containing("abi-numeric-constant-proofs/i64-below", compiler::DiagnosticCode::KnownError, below_range_only(), i64_below)
+    fn i64_above() errors compiler::CompilerError:
+        static compile:
+            abi::i64(9223372036854775808)
+    test::rejects_containing("abi-numeric-constant-proofs/i64-above", compiler::DiagnosticCode::KnownError, above_range_only(), i64_above)
+
+    fn u8_below() errors compiler::CompilerError:
+        static compile:
+            abi::u8(0 - 1)
+    test::rejects_containing("abi-numeric-constant-proofs/u8-below", compiler::DiagnosticCode::KnownError, below_range_only(), u8_below)
+    fn u8_above() errors compiler::CompilerError:
+        static compile:
+            abi::u8(256)
+    test::rejects_containing("abi-numeric-constant-proofs/u8-above", compiler::DiagnosticCode::KnownError, above_range_only(), u8_above)
+
+    fn u16_below() errors compiler::CompilerError:
+        static compile:
+            abi::u16(0 - 1)
+    test::rejects_containing("abi-numeric-constant-proofs/u16-below", compiler::DiagnosticCode::KnownError, below_range_only(), u16_below)
+    fn u16_above() errors compiler::CompilerError:
+        static compile:
+            abi::u16(65536)
+    test::rejects_containing("abi-numeric-constant-proofs/u16-above", compiler::DiagnosticCode::KnownError, above_range_only(), u16_above)
+
+    fn u32_below() errors compiler::CompilerError:
+        static compile:
+            abi::u32(0 - 1)
+    test::rejects_containing("abi-numeric-constant-proofs/u32-below", compiler::DiagnosticCode::KnownError, below_range_only(), u32_below)
+    fn u32_above() errors compiler::CompilerError:
+        static compile:
+            abi::u32(4294967296)
+    test::rejects_containing("abi-numeric-constant-proofs/u32-above", compiler::DiagnosticCode::KnownError, above_range_only(), u32_above)
+
+    fn u64_below() errors compiler::CompilerError:
+        static compile:
+            abi::u64(0 - 1)
+    test::rejects_containing("abi-numeric-constant-proofs/u64-below", compiler::DiagnosticCode::KnownError, below_range_only(), u64_below)
+    fn u64_above() errors compiler::CompilerError:
+        static compile:
+            abi::u64(18446744073709551616)
+    test::rejects_containing("abi-numeric-constant-proofs/u64-above", compiler::DiagnosticCode::KnownError, above_range_only(), u64_above)
+
+    fn isize_below() errors compiler::CompilerError:
+        static compile:
+            abi::isize(0 - 9223372036854775809)
+    test::rejects_containing("abi-numeric-constant-proofs/isize-below", compiler::DiagnosticCode::KnownError, below_range_only(), isize_below)
+    fn isize_above() errors compiler::CompilerError:
+        static compile:
+            abi::isize(9223372036854775808)
+    test::rejects_containing("abi-numeric-constant-proofs/isize-above", compiler::DiagnosticCode::KnownError, above_range_only(), isize_above)
+
+    fn usize_below() errors compiler::CompilerError:
+        static compile:
+            abi::usize(0 - 1)
+    test::rejects_containing("abi-numeric-constant-proofs/usize-below", compiler::DiagnosticCode::KnownError, below_range_only(), usize_below)
+    fn usize_above() errors compiler::CompilerError:
+        static compile:
+            abi::usize(18446744073709551616)
+    test::rejects_containing("abi-numeric-constant-proofs/usize-above", compiler::DiagnosticCode::KnownError, above_range_only(), usize_above)
+
+    # An unprovable Int must be handled ...
+    fn unhandled() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int):
+                abi::u32(n)
+            f(3)
+    test::rejects("abi-numeric-constant-proofs/unhandled", compiler::DiagnosticCode::UnhandledError, unhandled)
+
+    # ... or declared.
+    fn declared() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) -> abi::U32 errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
+                abi::u32(n)
+            1
+    test::value("abi-numeric-constant-proofs/declared", 1, declared)
+
+# ---------------------------------------------------------------------------
+# Static proofs: a parameter's declared domain, and explicit conversions
+
+fn register_field_domain_tests():
+    # Inside fn f(x: abi::U8), 0 <= x.value <= 255 is known: byte::from_int
+    # needs no handler, as a direct argument ...
+    fn byte_direct() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::U8) -> int:
+                byte::from_int(x.value)
+            f(abi::u8(3))
+    test::value("abi-numeric-field-domain-survives/byte", 3, byte_direct)
+
+    # ... and through a local.
+    fn byte_through_local() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::U8) -> int:
+                v = x.value
+                byte::from_int(v)
+            f(abi::u8(3))
+    test::value("abi-numeric-field-domain-survives/byte-through-local", 3, byte_through_local)
+
+    # Widening U8 -> U16 needs no handler.
+    fn widen() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::U8) -> abi::U16:
+                abi::u16(x.value)
+            f(abi::u8(3)).value
+    test::value("abi-numeric-field-domain-survives/widen-to-u16", 3, widen)
+
+    # Narrowing U8 -> I8 can only fail above: declaring AbiIntegerAboveRange
+    # alone is enough ...
+    fn narrow_declared() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::U8) -> abi::I8 errors abi::AbiIntegerAboveRange:
+                abi::i8(x.value)
+            r = f(abi::u8(3)):
+                on abi::AbiIntegerAboveRange:
+                    abi::i8(0)
+            r.value
+    test::value("abi-numeric-field-domain-survives/narrow-to-i8-declared", 3, narrow_declared)
+
+    # ... and declaring nothing is the unhandled AbiIntegerAboveRange.
+    fn narrow_undeclared() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::U8) -> abi::I8:
+                abi::i8(x.value)
+            1
+    test::rejects_containing("abi-numeric-field-domain-survives/narrow-to-i8-undeclared", compiler::DiagnosticCode::UnhandledError, "may produce the declared error \"abi::AbiIntegerAboveRange\"", narrow_undeclared)
+
+    # An I8's value + 128 is in 0..255.
+    fn signed_offset() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::I8) -> int:
+                byte::from_int(x.value + 128)
+            f(abi::i8(3))
+    test::value("abi-numeric-field-domain-survives/signed-offset", 131, signed_offset)
+
+fn register_explicit_conversion_tests():
+    # The explicit route between domains is through Int: U64 -> Usize needs
+    # no handler and keeps the value ...
+    fn u64_to_usize() errors compiler::CompilerError:
+        static compile:
+            fn f(u: abi::U64) -> abi::Usize:
+                abi::usize(u.value)
+            f(abi::u64(7)).value
+    test::value("abi-numeric-explicit-conversion-through-int/u64-to-usize", 7, u64_to_usize)
+
+    # ... I64 -> U64 can only fail below ...
+    fn i64_to_u64() errors compiler::CompilerError:
+        static compile:
+            fn f(i: abi::I64) -> abi::U64 errors abi::AbiIntegerBelowRange:
+                abi::u64(i.value)
+            r = f(abi::i64(7)):
+                on abi::AbiIntegerBelowRange:
+                    abi::u64(0)
+            r.value
+    test::value("abi-numeric-explicit-conversion-through-int/i64-to-u64", 7, i64_to_u64)
+
+    # ... and U64's maximum is a Usize unchanged.
+    fn u64_max_to_usize() errors compiler::CompilerError:
+        static compile:
+            fn f(u: abi::U64) -> abi::Usize:
+                abi::usize(u.value)
+            f(abi::u64(18446744073709551615)).value
+    test::value("abi-numeric-explicit-conversion-through-int/u64-max-to-usize", 18446744073709551615, u64_max_to_usize)
+
+fn register_construction_tests():
+    # Direct construction needs the field proven in its domain statically
+    # (no run-time guard exists).
+    fn above_domain() errors compiler::CompilerError:
+        static compile:
+            abi::U8 {value: 256}
+    test::rejects("abi-numeric-construction-needs-proof/above-domain", compiler::DiagnosticCode::Type, above_domain)
+
+    fn unproven() errors compiler::CompilerError:
+        static compile:
+            fn wrap(x: int):
+                abi::U8 {value: x}
+            1
+    test::rejects("abi-numeric-construction-needs-proof/unproven", compiler::DiagnosticCode::Type, unproven)
+
+    fn u8_max() errors compiler::CompilerError:
+        static compile:
+            abi::U8 {value: 255}.value
+    test::value("abi-numeric-construction-needs-proof/u8-max", 255, u8_max)
+
+    fn u64_max() errors compiler::CompilerError:
+        static compile:
+            abi::U64 {value: 18446744073709551615}.value
+    test::value("abi-numeric-construction-needs-proof/u64-max", 18446744073709551615, u64_max)
+
+    fn below_domain() errors compiler::CompilerError:
+        static compile:
+            abi::I8 {value: 0 - 129}
+    test::rejects("abi-numeric-construction-needs-proof/below-domain", compiler::DiagnosticCode::Type, below_domain)
+
+# ---------------------------------------------------------------------------
+# Nominal: distinct types, never interchangeable
+
+fn register_nominal_tests():
+    # A U64 is not a Usize, though their domains are equal: the rejection is
+    # at the argument, and it names the nominal mismatch, not field or
+    # Int-range details.
+    fn u64_for_usize() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::Usize):
+                x.value
+            f(abi::u64(1))
+    test::rejects_at("abi-numeric-nominal-parameters/u64-for-usize", compiler::DiagnosticCode::Type, 621, 15, u64_for_usize)
+    test::rejects_message("abi-numeric-nominal-parameters/u64-for-usize-message", compiler::DiagnosticCode::Type, "argument for parameter \"x\" cannot be proven to satisfy abi::Usize (argument type: abi::U64); abi::U64 and abi::Usize are distinct named struct types: a named struct type is nominal, and no value is ever converted from one to another implicitly", u64_for_usize)
+
+    fn i64_for_isize() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::Isize):
+                x.value
+            f(abi::i64(1))
+    test::rejects("abi-numeric-nominal-parameters/i64-for-isize", compiler::DiagnosticCode::Type, i64_for_isize)
+
+    fn i32_for_u32() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::U32):
+                x.value
+            f(abi::i32(1))
+    test::rejects("abi-numeric-nominal-parameters/i32-for-u32", compiler::DiagnosticCode::Type, i32_for_u32)
+
+    fn int_for_u32() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::U32):
+                x.value
+            f(5)
+    test::rejects("abi-numeric-nominal-parameters/int-for-u32", compiler::DiagnosticCode::Type, int_for_u32)
+
+    fn usize_for_usize() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::Usize):
+                x.value
+            f(abi::usize(1))
+    test::value("abi-numeric-nominal-parameters/usize-for-usize", 1, usize_for_usize)
+
+    # Structural equality within a type, never across ABI types (whatever
+    # their domains) or with the plain Int.
+    fn nominal_equality() errors compiler::CompilerError:
+        static compile:
+            [abi::u8(1) == abi::u8(1), abi::u8(1) == abi::u8(2), abi::i64(1) == abi::isize(1), abi::u64(1) == abi::usize(1), abi::i32(1) == abi::u32(1), abi::u8(1) == 1, abi::u8(255)]
+    largest_u8 = abi::U8 {value: 255}
+    test::value("abi-numeric-nominal-equality", [true, false, false, false, false, false, largest_u8], nominal_equality)
+
+    # Collection lengths are ordinary Ints, made a Usize only explicitly.
+    fn collections_stay_int() errors compiler::CompilerError:
+        static compile:
+            n = list::length([1, 2, 3])
+            [n + 0, abi::usize(n).value]
+    test::value("abi-numeric-collections-stay-int", [3, 3], collections_stay_int)
+
+# ---------------------------------------------------------------------------
+# Register encoding (abi::x86_64): the exact x86-64 bit patterns
+
+fn register_encoding_tests():
+    # Every ABI value encodes as its register bit pattern -- signed values
+    # sign-extended, unsigned values zero-extended -- and the word is that
+    # pattern's signed reading (the pattern of each case in its comment).
+    fn bit_patterns() errors compiler::CompilerError:
+        static compile:
+            [
+                abi::x86_64::from_i8(abi::i8(0 - 1)).word,                          # ffffffffffffffff
+                abi::x86_64::from_i8(abi::i8(0 - 128)).word,                        # ffffffffffffff80
+                abi::x86_64::from_i8(abi::i8(127)).word,                            # 000000000000007f
+                abi::x86_64::from_i16(abi::i16(0 - 1)).word,                        # ffffffffffffffff
+                abi::x86_64::from_i16(abi::i16(0 - 32768)).word,                    # ffffffffffff8000
+                abi::x86_64::from_i32(abi::i32(0 - 1)).word,                        # ffffffffffffffff
+                abi::x86_64::from_i32(abi::i32(0 - 2147483648)).word,               # ffffffff80000000
+                abi::x86_64::from_i32(abi::i32(2147483647)).word,                   # 000000007fffffff
+                abi::x86_64::from_i64(abi::i64(0 - 1)).word,                        # ffffffffffffffff
+                abi::x86_64::from_i64(abi::i64(0 - 9223372036854775808)).word,      # 8000000000000000
+                abi::x86_64::from_isize(abi::isize(0 - 1)).word,                    # ffffffffffffffff
+                abi::x86_64::from_u8(abi::u8(255)).word,                            # 00000000000000ff
+                abi::x86_64::from_u16(abi::u16(65535)).word,                        # 000000000000ffff
+                abi::x86_64::from_u32(abi::u32(4294967295)).word,                   # 00000000ffffffff
+                abi::x86_64::from_u64(abi::u64(0)).word,                            # 0000000000000000
+                abi::x86_64::from_u64(abi::u64(9223372036854775807)).word,          # 7fffffffffffffff
+                abi::x86_64::from_u64(abi::u64(9223372036854775808)).word,          # 8000000000000000
+                abi::x86_64::from_u64(abi::u64(9223372036854775809)).word,          # 8000000000000001
+                abi::x86_64::from_u64(abi::u64(18446744073709551615)).word,         # ffffffffffffffff
+                abi::x86_64::from_usize(abi::usize(9223372036854775808)).word,      # 8000000000000000
+                abi::x86_64::from_usize(abi::usize(18446744073709551615)).word      # ffffffffffffffff
+            ]
+    test::value("abi-numeric-register-bit-patterns", [
+        -1, -128, 127,
+        -1, -32768,
+        -1, -2147483648, 2147483647,
+        -1, -9223372036854775808,
+        -1,
+        255, 65535, 4294967295,
+        0, 9223372036854775807, -9223372036854775808, -9223372036854775807, -1,
+        -9223372036854775808, -1
+    ], bit_patterns)
+
+    # to_int reads every word signed: U64 2^64-1 and I64 -1 are the same
+    # bits (equal Register64s) and both read back as -1; U64 2^63 reads back
+    # as -2^63; the ABI value's own .value is never touched.
+    fn transport_not_interpretation() errors compiler::CompilerError:
+        static compile:
+            u = abi::x86_64::from_u64(abi::u64(18446744073709551615))
+            i = abi::x86_64::from_i64(abi::i64(0 - 1))
+            h = abi::x86_64::from_u64(abi::u64(9223372036854775808))
+            [u == i, abi::x86_64::to_int(u), abi::x86_64::to_int(i), abi::x86_64::to_int(h), abi::u64(18446744073709551615).value]
+    test::value("abi-numeric-bits-are-transport-not-interpretation", [true, -1, -1, -9223372036854775808, 18446744073709551615], transport_not_interpretation)
+
+    # An encoder needs no handler (its parameter's domain proves the
+    # construction) ...
+    fn encoders_total() errors compiler::CompilerError:
+        static compile:
+            fn enc(a: abi::U64, b: abi::Usize, c: abi::I8, d: abi::U32):
+                [abi::x86_64::from_u64(a), abi::x86_64::from_usize(b), abi::x86_64::from_i8(c), abi::x86_64::from_u32(d)]
+            loop r in enc(abi::u64(1), abi::usize(2), abi::i8(3), abi::u32(4)):
+                r.word
+    test::value("abi-numeric-encoders-are-total-and-nominal/total", [1, 2, 3, 4], encoders_total)
+
+    # ... and accepts only its own ABI type.
+    fn usize_encoder_of_u64() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::from_usize(abi::u64(1))
+    test::rejects("abi-numeric-encoders-are-total-and-nominal/usize-of-u64", compiler::DiagnosticCode::Type, usize_encoder_of_u64)
+
+    fn i32_encoder_of_u32() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::from_i32(abi::u32(1))
+    test::rejects("abi-numeric-encoders-are-total-and-nominal/i32-of-u32", compiler::DiagnosticCode::Type, i32_encoder_of_u32)
+
+    fn u32_encoder_of_int() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::from_u32(5)
+    test::rejects("abi-numeric-encoders-are-total-and-nominal/u32-of-int", compiler::DiagnosticCode::Type, u32_encoder_of_int)
+
+    # The signed Int creator is still a route into Register64, unchanged ...
+    fn register64_value() errors compiler::CompilerError:
+        static compile:
+            [abi::x86_64::to_int(abi::x86_64::register64(39)), abi::x86_64::register64(0 - 1) == abi::x86_64::from_u64(abi::u64(18446744073709551615))]
+    test::value("abi-numeric-register64-unchanged/value", [39, true], register64_value)
+
+    # ... and still rejects the upper U64 half that from_u64 encodes.
+    fn register64_upper_half() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::register64(18446744073709551615)
+    test::rejects("abi-numeric-register64-unchanged/upper-half", compiler::DiagnosticCode::KnownError, register64_upper_half)
+
+# ---------------------------------------------------------------------------
+# ABI values in Lists, and upper-half U64 words beyond the small Ints (with
+# BOTLISH_NATIVE_GC_STRESS=1 the native backends collect at every allocation
+# site; the Tcl test also reruns its program so)
+
+fn register_gc_stress_tests():
+    fn values_in_lists() errors compiler::CompilerError:
+        static compile:
+            fn big(n: int) errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
+                abi::x86_64::from_u64(abi::u64(n + 9223372036854775808))
+            fn top(i: int) -> abi::U64 errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
+                abi::u64(18446744073709551615 - i)
+            xs = loop i from 0 to 50:
+                top(i):
+                    on abi::AbiIntegerBelowRange:
+                        abi::u64(0)
+                    on abi::AbiIntegerAboveRange:
+                        abi::u64(0)
+            ws = loop i from 0 to 50:
+                r = big(i):
+                    on abi::AbiIntegerBelowRange:
+                        abi::x86_64::register64(0)
+                    on abi::AbiIntegerAboveRange:
+                        abi::x86_64::register64(0)
+                abi::x86_64::to_int(r)
+            [list::at(xs, 49).value, list::at(ws, 49), abi::x86_64::to_int(abi::x86_64::from_usize(abi::usize(list::at(xs, 0).value)))]
+    test::value("abi-numeric-gc-stress", [18446744073709551566, -9223372036854775759, -1], values_in_lists)
+
+fn register_abi_numeric_tests():
+    register_namespaced_type_tests()
+    register_boundary_tests()
+    register_round_trip_tests()
+    register_constant_proof_tests()
+    register_field_domain_tests()
+    register_explicit_conversion_tests()
+    register_construction_tests()
+    register_nominal_tests()
+    register_encoding_tests()
+    register_gc_stress_tests()
+
+# ---------------------------------------------------------------------------
+# scalarbits.test: the generic bitwise Int primitives, on run-time operands
+# (the registration's parameters, so no operation is folded away)
+
+# bit_and(X, Y) is EXPECTED.
+fn register_bit_and(name: str, x: int, y: int, expected: int):
+    fn applied() errors compiler::CompilerError:
+        static compile:
+            bit_and(x, y)
+    test::value(name, expected, applied)
+
+# bit_or(X, Y) is EXPECTED.
+fn register_bit_or(name: str, x: int, y: int, expected: int):
+    fn applied() errors compiler::CompilerError:
+        static compile:
+            bit_or(x, y)
+    test::value(name, expected, applied)
+
+# bit_xor(X, Y) is EXPECTED.
+fn register_bit_xor(name: str, x: int, y: int, expected: int):
+    fn applied() errors compiler::CompilerError:
+        static compile:
+            bit_xor(x, y)
+    test::value(name, expected, applied)
+
+# shift_left(X, K) is EXPECTED.
+fn register_shift_left(name: str, x: int, k: int, expected: int):
+    fn applied() errors compiler::CompilerError:
+        static compile:
+            shift_left(x, k)
+    test::value(name, expected, applied)
+
+# shift_right(X, K) is EXPECTED.
+fn register_shift_right(name: str, x: int, k: int, expected: int):
+    fn applied() errors compiler::CompilerError:
+        static compile:
+            shift_right(x, k)
+    test::value(name, expected, applied)
+
+fn register_scalarbits_tests():
+    # AND masks to the mask's own bits (0xab & 0xf0, 0xab & 0x0f).
+    register_bit_and("scalarbits-bitand-1/high-mask", 171, 240, 160)
+    register_bit_and("scalarbits-bitand-1/low-mask", 171, 15, 11)
+    register_bit_or("scalarbits-bitor-1", 5, 8, 13)
+    register_bit_xor("scalarbits-bitxor-1", 255, 15, 240)
+    # Two's complement for a negative operand: -5 is ...11111011.
+    register_bit_and("scalarbits-bitand-negative", -5, 240, 240)
+    # Outside the small-Int range: 10^30 is a multiple of 16.
+    register_bit_and("scalarbits-bitand-bigint", 1000000000000000000000000000000, 15, 0)
+    # shift_left is exact multiplication by 2^k ...
+    register_shift_left("scalarbits-shift-left-1/by-four", 1, 4, 16)
+    register_shift_left("scalarbits-shift-left-1/by-zero", 1, 0, 1)
+    # ... and shift_right exact floor division by 2^k.
+    register_shift_right("scalarbits-shift-right-1/by-four", 171, 4, 10)
+    register_shift_right("scalarbits-shift-right-1/to-zero", 15, 4, 0)
+    # Every primitive on every backend.
+    register_bit_and("scalarbits-bitwise-differential/bit-and", 171, 15, 11)
+    register_bit_or("scalarbits-bitwise-differential/bit-or", 171, 15, 175)
+    register_bit_xor("scalarbits-bitwise-differential/bit-xor", 171, 15, 164)
+    register_shift_left("scalarbits-bitwise-differential/shift-left", 3, 5, 96)
+    register_shift_right("scalarbits-bitwise-differential/shift-right", 200, 3, 25)
+
+with context test::suite()
+register_abi_numeric_tests()
+register_scalarbits_tests()
+test::report()

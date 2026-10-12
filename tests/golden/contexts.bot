@@ -36,9 +36,12 @@
 # What Botlish source cannot observe stays there: HIR, NIR, CLIF and machine
 # code, requirement tables, allocation counts, forced GC stress, standalone
 # executables, the rejections of a top-level call or installation
-# (MISSING-CONTEXT, DUPLICATE-CONTEXT, AMBIGUOUS-CONTEXT-IMPLEMENTATION:
-# a block is never at the top level), Strings holding U+0000 (no escape
-# spells one) and programs that need several incompatible installations.
+# (MISSING-CONTEXT, DUPLICATE-CONTEXT, AMBIGUOUS-CONTEXT-IMPLEMENTATION,
+# CONTEXT-TYPE-NOT-EXACT: a block is never at the top level), top-level
+# declarations a test rejects, Strings holding U+0000 (no escape spells one),
+# programs that need several incompatible installations (or none: this
+# program installs linux::io's LinuxIO), and the corpus program
+# examples/io/child-path.bot.
 #
 # Contexts. A body is a function value and may not require any context
 # (ContextFunctionValue at its registration), so code that needs an
@@ -383,19 +386,21 @@ fn register_context_names_tests():
             fn f(context x: Ordinary):
                 x.v
             1
-    test::rejects_at("contexts-not-a-context-param/struct", compiler::DiagnosticCode::NotAContext, 0, 0, not_a_context_struct)
+    test::rejects_at("contexts-not-a-context-param/struct", compiler::DiagnosticCode::NotAContext, 386, 29, not_a_context_struct)
+    test::rejects_message("contexts-not-a-context-param/struct-message", compiler::DiagnosticCode::NotAContext, "context parameter \"x\": Ordinary is not a context (only a value of a type declared \"context struct\" can be a context)", not_a_context_struct)
     fn not_a_context_int() errors compiler::CompilerError:
         static compile:
             fn f(context x: int):
                 x
             1
-    test::rejects_at("contexts-not-a-context-param/int", compiler::DiagnosticCode::NotAContext, 0, 0, not_a_context_int)
+    test::rejects_at("contexts-not-a-context-param/int", compiler::DiagnosticCode::NotAContext, 393, 29, not_a_context_int)
+    test::rejects_message("contexts-not-a-context-param/int-message", compiler::DiagnosticCode::NotAContext, "context parameter \"x\": int is not a context (only a value of a type declared \"context struct\" can be a context)", not_a_context_int)
     fn not_a_context_unknown() errors compiler::CompilerError:
         static compile:
             fn f(context x: Nope):
                 x
             1
-    test::rejects_at("contexts-not-a-context-param/unknown-type", compiler::DiagnosticCode::Type, 0, 0, not_a_context_unknown)
+    test::rejects_at("contexts-not-a-context-param/unknown-type", compiler::DiagnosticCode::Type, 400, 29, not_a_context_unknown)
 
     # contexts-no-context-api: the internal context natives have no source
     # spelling: `context#load` is the name `context` (unbound here) and a
@@ -489,19 +494,22 @@ fn register_context_parameter_tests():
             fn f(io, context io: Counter):
                 io
             1
-    test::rejects_at("contexts-binding-collision/parameter", compiler::DiagnosticCode::ContextBindingCollision, 0, 0, collides_with_parameter)
+    test::rejects_at("contexts-binding-collision/parameter", compiler::DiagnosticCode::ContextBindingCollision, 494, 30, collides_with_parameter)
+    test::rejects_message("contexts-binding-collision/parameter-message", compiler::DiagnosticCode::ContextBindingCollision, "context parameter \"io\" has the name of a parameter or flag of the same function: context parameters are ordinary locals of the function and share its one namespace", collides_with_parameter)
     fn collides_with_flag() errors compiler::CompilerError:
         static compile:
             fn f(flags :io, context io: Counter):
                 io
             1
-    test::rejects_at("contexts-binding-collision/flag", compiler::DiagnosticCode::ContextBindingCollision, 0, 0, collides_with_flag)
+    test::rejects_at("contexts-binding-collision/flag", compiler::DiagnosticCode::ContextBindingCollision, 501, 37, collides_with_flag)
+    test::rejects_message("contexts-binding-collision/flag-message", compiler::DiagnosticCode::ContextBindingCollision, "context parameter \"io\" has the name of a parameter or flag of the same function: context parameters are ordinary locals of the function and share its one namespace", collides_with_flag)
     fn collides_with_context() errors compiler::CompilerError:
         static compile:
             fn f(context io: Counter, io: Clock):
                 io
             1
-    test::rejects_at("contexts-binding-collision/context", compiler::DiagnosticCode::ContextBindingCollision, 0, 0, collides_with_context)
+    test::rejects_at("contexts-binding-collision/context", compiler::DiagnosticCode::ContextBindingCollision, 508, 39, collides_with_context)
+    test::rejects_message("contexts-binding-collision/context-message", compiler::DiagnosticCode::ContextBindingCollision, "context parameter \"io\" has the name of another context parameter: context parameters are ordinary locals of the function and share its one namespace", collides_with_context)
     fn collides_with_body() errors compiler::CompilerError:
         static compile:
             fn f(context io: Counter):
@@ -526,7 +534,8 @@ fn register_context_parameter_tests():
             fn bad(context a: Clock, b: Clock):
                 1
             1
-    test::rejects_at("contexts-duplicate-param-type", compiler::DiagnosticCode::DuplicateContextParameter, 0, 0, duplicate_type)
+    test::rejects_at("contexts-duplicate-param-type", compiler::DiagnosticCode::DuplicateContextParameter, 534, 41, duplicate_type)
+    test::rejects_message("contexts-duplicate-param-type/message", compiler::DiagnosticCode::DuplicateContextParameter, "context Clock is declared twice (as \"a\" and \"b\"): a function receives at most one value of each context type, whatever the local names", duplicate_type)
 
     # contexts-method-sugar: the context is an obligation of the selected
     # call, never an extra receiver.
@@ -614,7 +623,8 @@ fn register_function_value_tests():
             fn apply(g):
                 g()
             apply(read_value)
-    test::rejects_at("contexts-function-value/pass", compiler::DiagnosticCode::ContextFunctionValue, 0, 0, passed)
+    test::rejects_at("contexts-function-value/pass", compiler::DiagnosticCode::ContextFunctionValue, 625, 19, passed)
+    test::rejects_message("contexts-function-value/pass-message", compiler::DiagnosticCode::ContextFunctionValue, "function read_value requires context Counter, so it can only be called (or bound to another name as a statement): it cannot be passed, returned or stored as a value, because a call through an unknown function value could not prove that context installed", passed)
     fn closure() errors compiler::CompilerError:
         static compile:
             fn make():
@@ -1016,7 +1026,7 @@ fn register_path_proof_tests():
                 else:
                     -1
             f("x")
-    test::rejects_at("path-predicate-proof/false-edge", compiler::DiagnosticCode::Type, 0, 0, predicate_false_edge)
+    test::rejects_at("path-predicate-proof/false-edge", compiler::DiagnosticCode::Type, 1025, 26, predicate_false_edge)
 
     # path-validator-proof: the normal completion proves for the rest of the
     # path; the error edge proves nothing.
@@ -1041,7 +1051,7 @@ fn register_path_proof_tests():
                         return need(s)
                 0
             f("x")
-    test::rejects_at("path-validator-proof/error-edge", compiler::DiagnosticCode::Type, 0, 0, validator_error_edge)
+    test::rejects_at("path-validator-proof/error-edge", compiler::DiagnosticCode::Type, 1051, 37, validator_error_edge)
 
     # path-validator-terminating-handler: a handler that returns adds no
     # normal path.
@@ -1065,7 +1075,7 @@ fn register_path_proof_tests():
                         unit
                 need(s)
             f("x")
-    test::rejects_at("path-validator-rejoining-handler/unit", compiler::DiagnosticCode::Type, 0, 0, rejoining_unit)
+    test::rejects_at("path-validator-rejoining-handler/unit", compiler::DiagnosticCode::Type, 1076, 22, rejoining_unit)
     fn rejoining_reproved() errors compiler::CompilerError:
         static compile:
             fn f(s: str, fallback: str) -> int:
@@ -1111,14 +1121,14 @@ fn register_path_proof_tests():
                     need(s)
                 g(s)
             f("x")
-    test::rejects_at("path-validator-identity/shadowing", compiler::DiagnosticCode::Type, 0, 0, shadowing)
+    test::rejects_at("path-validator-identity/shadowing", compiler::DiagnosticCode::Type, 1121, 26, shadowing)
     fn other_value() errors compiler::CompilerError:
         static compile:
             fn f(s: str, t: str) -> int errors io::path::NotAPath:
                 linux::path::validate(s)
                 need(t)
             f("x", "y")
-    test::rejects_at("path-validator-identity/other-value", compiler::DiagnosticCode::Type, 0, 0, other_value)
+    test::rejects_at("path-validator-identity/other-value", compiler::DiagnosticCode::Type, 1129, 22, other_value)
 
     # path-string-forgetting: a validated value is still the same String.
     fn string_forgetting() errors compiler::CompilerError:
@@ -1197,7 +1207,7 @@ fn register_path_trait_tests():
                 linux::path::validate(s)
                 need(child(s))
             f("x")
-    test::rejects_at("path-generic-result-one-way", compiler::DiagnosticCode::Type, 0, 0, generic_result)
+    test::rejects_at("path-generic-result-one-way", compiler::DiagnosticCode::Type, 1208, 22, generic_result)
 
     # path-windows-shaped-witness: the same generic child, given a WinPath,
     # joins with WinPath's own concat.
