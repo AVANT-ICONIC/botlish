@@ -170,6 +170,14 @@
 ====
 >>>>
 
+@@ mentions-last-only only the last mention of each binding is kept (the flat `dict lappend` the analysis once had): a binding's narrowing mentions before it, a mutation among them, are no edges
+## hir/staticdeps.tcl
+<<<<
+                    dict lappend mentions $b $e
+====
+                    dict set mentions $b [list $e]
+>>>>
+
 # ---------------------------------------------------------------------------
 # Economic
 
@@ -232,4 +240,14 @@
             dict set verdict R:$region ownership-diagnostic
             if {$site eq ""} {
             } elseif {[dict get $position $site] > $lastAt} {
+>>>>
+
+@@ callable-shared a binding holding a callable whose contract mentions a vector is a shared mutable binding: every region calling `empty_queue() -> MutableVector[...]` depends on every other
+## hir/staticdeps.tcl
+<<<<
+            if {[hir::types::IsExactBlock $type] || [hir::types::IsExactNative $type]
+                    || [hir::types::IsFn $type] || [hir::types::IsCoroutine $type]} {
+                return 0
+            }
+====
 >>>>

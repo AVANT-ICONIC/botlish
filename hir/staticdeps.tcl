@@ -58,11 +58,13 @@
 #                (tests/static-economics.test pins both).
 #   B:binding -> its definition (the bound value's subtree; a loop
 #                variable's loop operands; a handler payload's handled call),
-#                and the narrowing mentions of it in its own region: a
+#                and every narrowing mention of it in its own region: a
 #                mention's enclosing call (a native's parameter types, a
-#                validator's proof narrow it), or the whole statement when the
-#                mention is inside a branch, loop or handler (the narrowing
-#                after a join depends on every branch's completion).
+#                validator's proof narrow it; a mutation makes it a place no
+#                nested function may capture, MUTABLE-PLACE-CAPTURE), or the
+#                whole statement when the mention is inside a branch, loop or
+#                handler (the narrowing after a join depends on every
+#                branch's completion).
 #
 # Backward and program-wide channels -- facts of a function its *callers* or
 # the whole program determine:
@@ -73,6 +75,11 @@
 #   shared binding      an affine or mutable value: a use anywhere (a move,
 #                       a capture, a mutation through a place) changes what
 #                       the others see: B -> R of every region mentioning it.
+#                       A binding holding a callable is none, whatever its
+#                       contract mentions (MentionsMutable): a function
+#                       value has no place to mutate and is never moved, and
+#                       the vector a call of it returns is a new value, owned
+#                       by the binding that receives it.
 #   yield type          an unconstrained function's yields are typed by the
 #                       coroutines that reach it -- `any` once a
 #                       struct-protocol one does (hir/coroutines.tcl): R ->
@@ -160,10 +167,20 @@
 #
 # What is not a channel, and why: a demoted trusted contract (hir::check
 # keeps the diagnostics of the check before the demotion, so a demotion
-# changes no diagnostic); the trait monomorphization (it runs only on a
-# program with no diagnostic, and its own diagnostics are internal, never a
+# changes no diagnostic); the trait monomorphization's build (it runs only on
+# a program with no diagnostic, and its own diagnostics are internal, never a
 # site's); resolution (lexical: a site's own bindings are scoped to it, and
 # hir/static.tcl decides every resolution-stage rejection in one build).
+#
+# Not modelled yet: the monomorphization's *plan* (hir::traits::Plan) runs
+# under the same gate, and its diagnostics are a site's (TRAIT-IMPL-ORDER,
+# AFFINE-GENERIC-NESTED-UNSUPPORTED, TRAIT-INSTANCE-BUDGET, ...): such a site
+# fails only once no other diagnostic is left anywhere, which no edge says.
+# The batched run then predicts it ok and the next build contradicts that
+# (tests/golden/traits.bot, affinity.bot: `mispredicted`); in every case
+# measured the decisions stay the sequential order's -- a build reports plan
+# diagnostics only when it has no other (STATIC-DECISION-ECONOMICS.md,
+# "Every mention").
 
 namespace eval hir::staticdeps {
     # The kinds of the ownership analysis's whole-program diagnostics
@@ -407,10 +424,21 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
     set state [dict create byFile $byFile spanParent $spanParent \
         presentKeys [lmap site $present {dict get $site key}] \
         regionOf {} parentOf {} litRegion {} ownRefs {} ownLits {} ownTargets {} \
-        ownSites {} ownCalls {} siteHome {} siteDepth {} depth {program 0} mentions {} \
-        subtree {} names {} paramOwner {} children {} channels {}]
+        ownSites {} siteHome {} siteDepth {} depth {program 0} \
+        subtree {} names {} paramOwner {} channels {}]
     # The walk: every expression's region and parent; per region the
     # bindings, literals, call targets and sites its own code mentions.
+    # The lists keyed by a site, region or binding (site -> its expressions,
+    # region -> its function literals, binding -> its references, region ->
+    # its calls) are built in variables of their own and stored nested once
+    # the walk is done: `dict lappend state FIELD KEY VALUE` would append KEY
+    # and VALUE to one flat list, of which a lookup by KEY keeps only the last
+    # pair -- the analysis once dropped every mention of a binding but the
+    # last that way (tests/static-economics.test, se-equal-every-mention).
+    set siteExprs [dict create]
+    set children [dict create]
+    set mentions [dict create]
+    set ownCalls [dict create]
     set regionOf [dict create]
     set parentOf [dict create]
     set litRegion [dict create]
@@ -430,7 +458,7 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
         set site [SiteAt $byFile $spanParent [dict get $node origin]]
         if {$site ne ""} {
             dict set siteOf $e $site
-            dict lappend state siteExprs $site $e
+            dict lappend siteExprs $site $e
             dict set state ownSites $region $site 1
             set d [dict get $depth $region]
             if {![dict exists $state siteDepth $site] || $d < [dict get $state siteDepth $site]} {
@@ -443,7 +471,7 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
                 dict set litRegion $e $region
                 dict set state ownLits $region $e 1
                 dict set depth $e [expr {[dict get $depth $region] + 1}]
-                dict lappend state children $region $e
+                dict lappend children $region $e
                 set i 0
                 foreach p [dict get $node params] {
                     dict set state paramOwner $p [list block $e $i]
@@ -458,7 +486,7 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
                 set b [dict get $node binding]
                 if {$b ne "" && [dict get $hir bindings $b kind] ne "root"} {
                     dict set state ownRefs $region $b 1
-                    dict lappend state mentions $b $e
+                    dict lappend mentions $b $e
                 }
             }
             call {
@@ -466,7 +494,7 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
                 if {$tk eq "block"} {
                     dict set state ownTargets $region $tb 1
                 }
-                dict lappend state ownCalls $region $e
+                dict lappend ownCalls $region $e
             }
             listloop {
                 dict set state paramOwner [dict get $node elementBinding] [list loop $e]
@@ -497,6 +525,10 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
             lappend stack [list $c $region $e]
         }
     }
+    dict set state siteExprs $siteExprs
+    dict set state children $children
+    dict set state mentions $mentions
+    dict set state ownCalls $ownCalls
     dict set state regionOf $regionOf
     dict set state parentOf $parentOf
     dict set state litRegion $litRegion
@@ -1645,8 +1677,21 @@ proc hir::staticdeps::CanCarry {hir type {seen {}}} {
     return 0
 }
 
-# 1 if static TYPE mentions a mutable value (a MutableVector or a
-# MutableArray, at any depth): a value whose places another use can change.
+# 1 if a value of static TYPE holds a mutable value (a MutableVector or a
+# MutableArray: the value itself, an element, a field, at any depth): a value
+# whose places another use can change (BindingSuccessors' shared binding).
+#
+# A callable -- an exact function or native, a structural Fn, a coroutine
+# handle -- holds none, whatever its contract mentions: a function value has
+# no place (no field or element a mutation could reach: a call's result is a
+# temporary, and what the function captures is a binding of its own, a node
+# of the graph mentioned by the function's region), the vector its call
+# returns is a new value owned by whatever receives it, and the vector a
+# parameter takes is the caller's argument (a logical copy). So a function
+# `empty_queue() -> MutableVector[...]` is no shared binding -- the bindings
+# holding what it returns are. Nor is a callable ever moved by a use: a
+# function value is unrestricted, and a coroutine handle is affine on its
+# own account (hir::types::IsAffine, which BindingSuccessors asks first).
 proc hir::staticdeps::MentionsMutable {type} {
     if {$type in {mutvec mutarray}} {
         return 1
@@ -1654,8 +1699,39 @@ proc hir::staticdeps::MentionsMutable {type} {
     if {[llength $type] < 2} {
         return 0
     }
-    if {[lindex $type 0] in {mutvec mutarray}} {
-        return 1
+    switch -- [lindex $type 0] {
+        mutvec - mutarray {
+            return 1
+        }
+        block - native - fn - coroutine {
+            if {[hir::types::IsExactBlock $type] || [hir::types::IsExactNative $type]
+                    || [hir::types::IsFn $type] || [hir::types::IsCoroutine $type]} {
+                return 0
+            }
+        }
+        struct {
+            if {[hir::types::IsStruct $type]} {
+                # Its fields' types (the field names are no types).
+                foreach {name t} [lindex $type 1] {
+                    if {[MentionsMutable $t]} {
+                        return 1
+                    }
+                }
+                return 0
+            }
+        }
+        list {
+            if {[hir::types::IsList $type]} {
+                # Its element type and, when it has one, each element of
+                # its positional shape.
+                foreach t [concat [list [lindex $type 1]] [hir::types::shapeOf $type]] {
+                    if {[MentionsMutable $t]} {
+                        return 1
+                    }
+                }
+                return 0
+            }
+        }
     }
     foreach part [lrange $type 1 end] {
         if {[MentionsMutable $part]} {

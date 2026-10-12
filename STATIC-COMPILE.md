@@ -320,10 +320,18 @@ extra one only costs a build. Its header lists every edge; in short:
   enclosing code exactly its captures (`se-property-nested-entry`,
   `se-property-capture-narrowing`). That is why bodies nested in one
   registration function are as independent as top-level ones;
+* a binding depends on its definition and on every narrowing mention of it
+  in its own region (a condition, a native's parameter types, a mutation:
+  a nested function may not capture a vector its function mutates) -- every
+  mention, not only the last, which is all an earlier version kept
+  (`se-equal-every-mention`);
 * the backward channels: an untyped parameter's contract (inferred from its
   uses in the function and the functions nested in it), a shared affine or
-  mutable binding (every region mentioning it), a yielding function's yield
-  type (the struct-protocol coroutine constructions that reach it);
+  mutable binding (every region mentioning it; a binding holding a function
+  is none, whatever the function's contract mentions: a function value has
+  no place to mutate and is never moved, and the vector its call returns is
+  a new value owned by the binding receiving it), a yielding function's
+  yield type (the struct-protocol coroutine constructions that reach it);
 * the program-wide channels, modelled as nodes with contributors and
   consumers rather than as a stop sign:
   * **the erased-callable contract** (`hir::completions::erasedErrorsOf`).
@@ -372,9 +380,13 @@ extra one only costs a build. Its header lists every edge; in short:
 
 Not channels: a demoted trusted contract (`hir::check` keeps the
 diagnostics of the check before the demotion,
-`se-property-demotion-keeps-diagnostics`), the trait monomorphization (it
-runs only on a program with no diagnostic, and its own are internal), and
-resolution (lexical).
+`se-property-demotion-keeps-diagnostics`), the trait monomorphization's
+build (it runs only on a program with no diagnostic, and its own are
+internal), and resolution (lexical). Missing, not yet modelled: the gate of
+that monomorphization's *plan*, whose diagnostics (TRAIT-IMPL-ORDER,
+AFFINE-GENERIC-NESTED-UNSUPPORTED, ...) are a site's and appear only once no
+other diagnostic is left -- the golden traits.bot and affinity.bot record a
+misprediction for it (STATIC-DECISION-ECONOMICS.md, "Every mention").
 
 ### Method-style call decisions across rounds
 

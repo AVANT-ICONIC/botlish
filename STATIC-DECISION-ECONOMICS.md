@@ -159,7 +159,7 @@ missed a channel. None occurs in any suite, fuzz program or test.
 |---|---|
 | `Z:site` | its region (*position*: its rejection can make the code after it unreachable, where completion and ownership diagnostics are not reported), the sites nested in it, its own contract-boundary checks |
 | `R:region` (a function literal or a program's top-level code) | everything its own code mentions: bindings, the functions it defines and calls (their summaries), every method-call candidate, its parameters and captures, the control operands around its literal, the narrowings of each capture between its definition and the region -- *not* the rest of the enclosing function: a function is analyzed from its own entry |
-| `B:binding` | its definition, its narrowing mentions in its own region; an untyped parameter also every reachable use in its function and the functions nested in it (its inferred contract); an affine or mutable binding every region mentioning it |
+| `B:binding` | its definition, every narrowing mention in its own region ([every mention](#every-mention)); an untyped parameter also every reachable use in its function and the functions nested in it (its inferred contract); an affine or mutable binding -- never one holding a callable -- every region mentioning it |
 | `C:erased` (the erased-callable contract) | its contributors: the instance requests whose arguments at uncontracted parameters can carry errors (by those arguments and the call's place, up the chain of requests), the positions of contravariant erasure, the requests the budget declined |
 | `C:budget:B` | every call requesting one of B's instances, only under pressure |
 | `P:input` (what an uncontracted input may hold at the contract boundary) | what the calls of its function pass in its position, its value, or `C:erased` |
@@ -176,8 +176,9 @@ it).
 
 Not channels, each pinned by a `se-property-*` test where the fact lives:
 a demoted trusted contract (`hir::check` keeps the diagnostics of the check
-before the demotion), the trait monomorphization (it runs only on a program
-with no diagnostic), resolution (lexical).
+before the demotion), the trait monomorphization's build (it runs only on a
+program with no diagnostic), resolution (lexical). The gate of its *plan* is
+a channel, not modelled yet ([every mention](#every-mention)).
 
 ### The ownership verdict
 
@@ -271,6 +272,132 @@ Three mutants of `audit/static-decisions/tools/mutants.txt` pin the rules:
 the second program of `se-equal-ownership-verdict` decide otherwise than the
 sequential order) and `verdict-every-diagnostic` (economic: the site ahead
 of six of `se-builds-ownership-verdict` takes a build per rejection).
+
+### Every mention
+
+A later finding (the review of the ownership verdict's change).
+`hir::staticdeps::Prepare` collected four lists keyed by a site, a region or
+a binding with `dict lappend state FIELD KEY VALUE` -- which appends KEY
+*and* VALUE to one flat list under FIELD. Every lookup then read that list as
+a dict, in which the last pair for a key wins: the analysis kept one entry
+per key.
+
+* **A binding's mentions** (`B:binding`'s narrowing mentions in its own
+  region, a capture's narrowing mentions between its definition and the
+  capturing function, the shared-binding edges): only the last mention of
+  each binding was an edge. A nested function's capture of a vector is
+  `MUTABLE-PLACE-CAPTURE` while its function mutates the vector anywhere
+  (`hir::mutvec::verify`), and a block before it holding the mutation was no
+  edge of the capture's: the batched run rejected the capture in the build
+  that rejected the mutating block -- where the sequential order rejects that
+  block and then *accepts* the capture, the mutation gone with its body.
+  Another program, recorded nowhere: the final build had no body left whose
+  prediction it could contradict. With a site between the two (holding the
+  capture back), the run predicted the capture failing and the next build
+  contradicted it (`mispredicted`). `se-equal-every-mention` pins both.
+* **A site's expressions** (its own contract-boundary checks,
+  `SubsumeSuccessors`; its first expression id, `firstIds`, which bounds the
+  internal-id messages committed without the sequential order's build): one
+  expression per site, the last walked -- so a callable acquiring a
+  structural type anywhere but there was no edge to the erased-callable
+  contract, and the id bound was the site's last id, not its first.
+* **A region's calls** (the candidates of its method-style calls, which the
+  trial builds try): only its last call's.
+* **A region's function literals** (an untyped parameter's uses in the
+  functions nested in its function, `Descendants`): masked -- a region
+  reaches every literal it defines anyway (`defines`).
+
+The four lists are now built in variables of their own and stored nested
+(`mentions-last-only` reintroduces the first: semantic, killed by
+`se-equal-every-mention`).
+
+**A binding holding a function is not shared.** With every mention an edge,
+the shared-binding rule (an affine or mutable binding: `B -> R` of every
+region mentioning it) is whole -- and its test was too coarse:
+`MentionsMutable` walked every part of a type, so a function whose contract
+mentions a vector -- the ownership prelude's `empty_queue() ->
+MutableVector[...]`, called by every site that needs a queue -- counted as a
+shared mutable binding, and every region calling it depended on every other
+(`se-builds-ownership-verdict`'s reproducer: 3 rounds became 4; the economic
+mutant `callable-shared` restores the coarse test). A callable's type -- an
+exact function or native, a structural `Fn`, a coroutine handle -- now holds
+no mutable value, wherever it stands (a binding, a field, an element), and
+the walk names the forms it descends (a struct's field types, a List's
+element and shape) rather than every part, so that a field name is never
+read as a type. It is sound because nothing one use of a function binding
+does changes what another use sees:
+
+* a function value has no place: a mutation's receiver is a local, a
+  parameter or a context parameter, or a field path from one
+  (`hir::mutvec::Path`), and a callable has no field; a call's result is a
+  temporary (`MUTABLE-PLACE-RECEIVER`);
+* the vector a call returns is a new value, owned by the binding receiving
+  it -- which is a shared binding on its own account -- and the vector a
+  parameter takes is the caller's argument, a logical copy
+  (`mutable_vector#share`);
+* what the function captures is a binding of its own, mentioned by the
+  function's region (`capture`): a captured vector is a shared binding of its
+  own, and the capture of a vector its function mutates is
+  `MUTABLE-PLACE-CAPTURE`, which the narrowing mentions above reach;
+* a function value is unrestricted (`hir::types::IsAffine`: an exact or
+  structural function type never is, whatever its result), so no use moves
+  it; a coroutine handle is affine on its own account, which
+  `BindingSuccessors` asks first;
+* what the uses of a function do share -- its summary, its untyped
+  parameters' inferred contracts, its semantic instances and their budget,
+  what its calls erase, its yield type -- each has its own edge (`calls`
+  and `defines` to its literal's region, `untyped-parameter`, `C:budget`,
+  `C:erased`, the yield edge), none of which is the shared-binding edge.
+
+| program | before | after | sequential |
+|---|---|---|---|
+| a capture of a vector that an earlier, rejected block mutates (`se-equal-every-mention`) | 2 rounds, the capture rejected (`MUTABLE-PLACE-CAPTURE`): another program | 2 rounds, the capture accepted | 2 rounds |
+| the same with a site between them | 2 rounds, mispredicted `{2 f1:311}` | 2 rounds | 2 rounds |
+| `se-builds-ownership-verdict`'s reproducer | 3 rounds | 3 rounds (4 with every mention but functions still shared) | 4 rounds |
+
+Every committed golden suite (61; each compiled once with the tree before
+and after, `surface::readProgramFile`, batched): the same site outcomes in
+every one, and the same rounds and builds in all but these:
+
+| suite | before rounds/builds | after rounds/builds | why |
+|---|---|---|---|
+| `affinity.bot` | 8/9 | 9/10, mispredicted `{8 f1:40943}` | two COROUTINE-CONTRACT sites wait for the erasing sites before them (a coroutine handle leaving its construction: the contract-boundary check, one of the expressions the analysis used to drop); so they are rejected last, and the site whose AFFINE-GENERIC-NESTED-UNSUPPORTED only the plan reports (below) is predicted beside them |
+| `framework-semantics.bot` | 3/7 | 5/9 | four sites holding coroutine handles at contract-boundary positions wait for the erasing site `f1:6473`; one message naming internal ids now waits for the sequential order's own build (`firstIds` is the site's first id) |
+| `linux-io.bot` | 3/3 | 4/4 | `structural_without_error`'s `apply0(argv)` -- `argv` acquiring a structural `Fn` type, a contract-boundary check whose TYPE diagnostic reads what the program erases -- waits for the erasing sites before it |
+| `mutable-array.bot` | 6/21 | 7/34 | contract-boundary sites wait for the erasing `f1:108837` and `f1:118817`, three id-bearing messages for the sequential order's builds; the method-style calls in the waiting sites are decided again in two more checked rounds (5 trials each) |
+| `mutable-vector.bot` | 5/30 | 4/21 | fewer: no site is linked to another any more through a function returning a vector (whose last mention used to be a shared-binding edge), so round 2 commits all 23 failing sites. With every mention but functions still shared it took 13/110: every site capturing `empty_queue` depended on every other, one rejection per round |
+| `ownership.bot` | 4/11 | 5/24 | 21 sites holding coroutine handles at contract-boundary positions wait for the erasing sites `f1:10166`, then `f1:18503`; the three method-style calls sit in sites with such positions, so their cones reach the erased contract and they are decided again in every checked round (5 trials each) |
+| `traits.bot` | 5/10, mispredicted `{4 f1:33553} {4 f1:34023}` | the same | the plan (below) |
+| **total** | **186/290** | **191/311** | |
+
+The added builds are the contract-boundary edge doing its job: a site that
+holds a callable or a handle acquiring a structural type has that check's
+diagnostics only while the program erases something, and reads what it
+erases (`SubsumeSuccessors`); the old analysis looked at one expression of
+each site and so saw the edge only by chance. Whether the check can change
+a site's *first* diagnostic is not decided here -- that would refine the
+channel, not repair the walk.
+
+**Not modelled yet: the plan's gate.** `hir::traits::Plan` -- the trait
+monomorphization's plan, which runs only on a program with no diagnostic at
+all -- reports ordinary site diagnostics (TRAIT-IMPL-ORDER,
+AFFINE-GENERIC-NESTED-UNSUPPORTED, TRAIT-INSTANCE-BUDGET, ...). A site
+holding one fails only once every other diagnostic is gone, and no edge says
+so: `traits.bot` mispredicted before this change and still does, and
+`affinity.bot`'s new schedule exposes it. A three-site program (two TYPE
+failures around an AFFINE-GENERIC-NESTED-UNSUPPORTED one) mispredicts on
+the tree before this change. The decisions stay the sequential order's in
+every case measured (a build reports plan diagnostics only when it reports
+nothing else), but the channel is missing and is the next one to add, in the
+manner of `C:verdict`.
+
+Validation: `tests/static-economics.test` 35/35 and
+`tests/static-compile.test` 83/83 (interp); `compare.tcl` on collections,
+diagnostics, errors, harness, modules, ownership, representation, values,
+loops, lists-and-sets, flags, coroutines and mutable-vector: every suite
+batched = sequential exactly, no misprediction; the fuzzer, seeds 1 (10
+programs), 2 and 3 (20 each, seed 3 with legacy): 50 programs, 1348 sites,
+0 failures; `mutate.tcl` (in three `-only` runs): 22 mutants, 22 applied and killed.
 
 ## Method-call decisions
 

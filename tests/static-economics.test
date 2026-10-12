@@ -339,6 +339,20 @@ test se-equal-ownership-verdict {a site whose handle is moved on a break path is
     list {*}$after [seSame $text 0] [seOutcomes $text]
 } -result {{} {USE-AFTER-MOVE AFFINE-LIST-OPERATION-UNSUPPORTED AFFINE-PATH-RELEASE-UNSUPPORTED} {} {TYPE KNOWN-ERROR AFFINE-LIST-OPERATION-UNSUPPORTED accepted}}
 
+test se-equal-every-mention {every mention of a binding is an edge of the analysis, not only its last: a nested function's capture of a vector is MUTABLE-PLACE-CAPTURE while a block before it mutates the vector, and is accepted once that block is rejected (the mutation is gone with its body) -- the analysis once kept only the last mention of each binding (a flat `dict lappend`), so the capture did not depend on the mutating block: it was rejected beside it, another program than the sequential order's, or, with a site between them, predicted and contradicted by the next build} -body {
+    set prelude "import compiler\nimport mutable_vector\n\nfn want_int(x: int) -> int:\n    x\n\nfn f() -> int errors compiler::CompilerError:\n    v = mutable_vector::from_list(\[1\])\n    static compile:\n        v.push(2)\n        want_int(\"s\")\n"
+    set capture "    fn g() -> int errors compiler::CompilerError:\n        static compile:\n            v.length()\n    r = g():\n        on compiler::CompilerError:\n            -1\n"
+    set tail "r = f():\n    on compiler::CompilerError:\n        0\nr\n"
+    set results {}
+    foreach text [list "$prelude$capture    r + v.length()\n\n$tail" \
+            "$prelude    w = static compile:\n        1\n$capture    r + w + v.length()\n\n$tail"] {
+        set hir [seHir $text]
+        lappend results [seSame $text] [seOutcomes $text] [dict get $hir staticStats mispredicted] \
+            [dict get $hir staticStats rounds]
+    }
+    set results
+} -result {{} {TYPE accepted} {} 2 {} {TYPE accepted accepted} {} 2}
+
 test se-no-misprediction {the golden framework's suites of 30 cases: no build contradicts a prediction of the batched run} -body {
     lmap rejection {none unbound type} {
         dict get [seHir [seSuite 30 $rejection 1]] staticStats mispredicted
