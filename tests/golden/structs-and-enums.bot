@@ -896,16 +896,16 @@ fn register_enum_syntax_tests():
     # case without a comma -- each declaring the cases it lists.
     fn b_no_trailing() errors compiler::CompilerError:
         static compile:
-            NoTrailingComma::B
-    test::value("enum-syntax-comma-list/no-trailing-comma", NoTrailingComma::B, b_no_trailing)
+            [NoTrailingComma::A, NoTrailingComma::B]
+    test::value("enum-syntax-comma-list/no-trailing-comma", [NoTrailingComma::A, NoTrailingComma::B], b_no_trailing)
     fn b_one_line() errors compiler::CompilerError:
         static compile:
-            OneLineCases::C
-    test::value("enum-syntax-comma-list/one-line", OneLineCases::C, b_one_line)
+            [OneLineCases::A, OneLineCases::B, OneLineCases::C]
+    test::value("enum-syntax-comma-list/one-line", [OneLineCases::A, OneLineCases::B, OneLineCases::C], b_one_line)
     fn b_blank_line() errors compiler::CompilerError:
         static compile:
-            BlankLineCases::A
-    test::value("enum-syntax-comma-list/blank-line", BlankLineCases::A, b_blank_line)
+            [BlankLineCases::A, BlankLineCases::B]
+    test::value("enum-syntax-comma-list/blank-line", [BlankLineCases::A, BlankLineCases::B], b_blank_line)
     fn b_single_case() errors compiler::CompilerError:
         static compile:
             SingleCase::A

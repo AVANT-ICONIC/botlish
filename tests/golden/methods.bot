@@ -21,7 +21,10 @@
 # be imported (and the one that needs a type import alone) need other file
 # headers and live in the sibling suites methods-byte-without-list.bot,
 # methods-list-without-str.bot and methods-type-import-only.bot; the halves
-# of those Tcl tests with the namespace imported are here.
+# of those Tcl tests with the namespace imported are here. The programs
+# whose receiver is a struct seen through an untyped parameter are in
+# methods-struct-instances.bot, which cranelift-generic cannot run
+# (NATIVE UNSUPPORTED struct-shape), so that every program here runs on it.
 #
 # Conventions of the port:
 # * A Tcl table's shared prelude ($::fns, $::refined, $::chainFns, ...) is
@@ -1110,7 +1113,10 @@ fn register_shadowing_tests():
     test::rejects_containing("method-no-overloads-no-ranking/free", compiler::DiagnosticCode::Duplicate, "duplicate binding \"f\"", b_no_overloads_free)
 
 # ---------------------------------------------------------------------------
-# Fields: plain access is unchanged; the field-call form keeps its meaning
+# Fields: plain access is unchanged; the field-call form keeps its meaning.
+# (The programs whose receiver is a struct seen through an untyped
+# parameter are in methods-struct-instances.bot: unspecialized native code
+# cannot lower them.)
 
 fn register_field_tests():
     # method-field-plain-access-unchanged: x.field is a projection whatever
@@ -1168,27 +1174,11 @@ fn register_field_tests():
     test::value("method-field-call-parenthesized-is-the-field/parenthesized", 42, b_parenthesized)
     test::value("method-field-call-parenthesized-is-the-field/bound-field", 42, b_bound_field)
 
-    # method-field-of-another-kind-does-not-compete: an Int field cannot be
-    # called, so the function is the only candidate.
-    fn b_another_kind_method() errors compiler::CompilerError:
-        static compile:
-            fn cb(s):
-                s.v + 100
-            s = {cb: 7, v: 3}
-            s.cb()
-    fn b_another_kind_free() errors compiler::CompilerError:
-        static compile:
-            fn cb(s):
-                s.v + 100
-            s = {cb: 7, v: 3}
-            cb(s)
-    test::value("method-field-of-another-kind-does-not-compete/method", 103, b_another_kind_method)
-    test::value("method-field-of-another-kind-does-not-compete/free", 103, b_another_kind_free)
-
     # method-field-call-ambiguity-in-an-instance: an untyped receiver is
     # typed by the call that supplies it; the instance sees the callable
     # field and the visible function, and the ambiguity is diagnosed at that
-    # call. Without the function it is the field call.
+    # call. (Without the function it is the field call:
+    # methods-struct-instances.bot.)
     fn b_instance_ambiguous() errors compiler::CompilerError:
         static compile:
             fn inc(a):
@@ -1198,42 +1188,7 @@ fn register_field_tests():
             fn call_it(s):
                 s.cb(41)
             call_it({cb: inc, v: 2})
-    fn b_instance_field_call() errors compiler::CompilerError:
-        static compile:
-            fn inc(a):
-                a + 1
-            fn call_it(s):
-                s.cb(41)
-            call_it({cb: inc, v: 2})
     test::rejects_containing("method-field-call-ambiguity-in-an-instance/ambiguous", compiler::DiagnosticCode::Type, "method-style call \"cb\" is ambiguous", b_instance_ambiguous)
-    test::value("method-field-call-ambiguity-in-an-instance/field-call", 42, b_instance_field_call)
-
-    # method-field-of-another-kind-does-not-compete-in-an-instance.
-    fn b_another_kind_instance() errors compiler::CompilerError:
-        static compile:
-            fn cb(p):
-                p.v + 100
-            fn call_it(s):
-                s.cb()
-            call_it({cb: 5, v: 2})
-    test::value("method-field-of-another-kind-does-not-compete-in-an-instance", 102, b_another_kind_instance)
-
-    # method-field-struct-receiver-method: a struct receiver with no field of
-    # that name: the function applies.
-    fn b_struct_receiver_method() errors compiler::CompilerError:
-        static compile:
-            fn total(p, extra):
-                p.x + p.y + extra
-            p = {x: 1, y: 2}
-            p.total(10)
-    fn b_struct_receiver_free() errors compiler::CompilerError:
-        static compile:
-            fn total(p, extra):
-                p.x + p.y + extra
-            p = {x: 1, y: 2}
-            total(p, 10)
-    test::value("method-field-struct-receiver-method/method", 13, b_struct_receiver_method)
-    test::value("method-field-struct-receiver-method/free", 13, b_struct_receiver_free)
 
     # method-field-then-method: a field projection is a receiver like any
     # other.
@@ -1671,7 +1626,8 @@ fn register_errors_tests():
 # ---------------------------------------------------------------------------
 # Equivalent sources: the same outcome. (The Tcl tests also compare the two
 # spellings' HIR, core IR, NIR and analyses, which Botlish cannot observe;
-# their values are pinned here.)
+# their values are pinned here. method-same-program-struct-receiver is in
+# methods-struct-instances.bot.)
 
 fn register_same_program_tests():
     # method-same-program-NAME.
@@ -1762,23 +1718,6 @@ fn register_same_program_tests():
             [run(1), run(5)]
     test::value("method-same-program-construction/method", [1, 5], b_construction_method)
     test::value("method-same-program-construction/free", [1, 5], b_construction_free)
-
-    fn b_struct_receiver_method() errors compiler::CompilerError:
-        static compile:
-            fn area(r, scale):
-                r.w * r.h * scale
-            fn run(n):
-                {w: n, h: 3}.area(2)
-            [run(1), run(4)]
-    fn b_struct_receiver_free() errors compiler::CompilerError:
-        static compile:
-            fn area(r, scale):
-                r.w * r.h * scale
-            fn run(n):
-                area({w: n, h: 3}, 2)
-            [run(1), run(4)]
-    test::value("method-same-program-struct-receiver/method", [6, 24], b_struct_receiver_method)
-    test::value("method-same-program-struct-receiver/free", [6, 24], b_struct_receiver_free)
 
     fn b_recursion_method() errors compiler::CompilerError:
         static compile:
