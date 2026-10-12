@@ -1,0 +1,1787 @@
+# callable-contracts.bot -- completion facts through callables, as a
+# source-level specification (STATIC-COMPLETION-PROOFS.md, "Precision and the
+# erased-callable contract"; VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md;
+# EXACT-CALLABLE-CLOSED-CALLER.md):
+#
+# * A callable that declares errors never loses them on the way through an
+#   untyped helper (`fn call(f, x): f(x)`): an exact callable argument is
+#   recovered at the call (its own errors, narrowed by the facts at hand), a
+#   parameter or capture is charged where it was passed, and any other
+#   callee is charged the program's erased-callable contract (every error of
+#   every callable the program passes into an untyped parameter) and falls
+#   back to the callee's declared contract. Along every path a wrong handler
+#   is UnhandledError at the handled call, and the right ones are accepted
+#   and run, on every backend, with exactly the identities the analysis
+#   allowed. A fallback is a may-set: never KnownError, never hiding one.
+# * A call through a structural Fn or Coroutine type is bounded by that
+#   type's contract, whatever callable it holds and whatever the program
+#   erases elsewhere: a handler for the contract's errors is enough, and an
+#   enclosing function must admit exactly those. The bound is sound because
+#   a value acquiring the type is checked against it: a closure that may
+#   raise outside the contract through a callable it captured or receives is
+#   a Type error where it acquires the type.
+# * Exact callables passed through a helper's parameter -- Botlish blocks, a
+#   native, a value-capturing closure, the refined-checks scan -- compile to
+#   code every backend agrees on.
+#
+# Ported from tests/higher-order-completions.test (hoc-*),
+# tests/structural-contract-completions.test (scc-*) and
+# tests/exact-callable-executable.test (exact-callable-executable-*). The Tcl
+# tests stay authoritative; what only they observe stays there: the
+# analysis' effective-error stamps (hir::completions::effectiveErrorsOf), the
+# erased-callable contract itself, affine error edges, specialization
+# clones, every diagnostic of a program after its first (a rejected block
+# reifies one), allocation reports, and the standalone AOT executable.
+#
+# The erased-callable contract belongs to the whole program, and an accepted
+# block is part of the program: every error any block here erases is charged
+# to every call in the suite that has neither an identity nor a contract.
+# Every test in this file is robust to that -- its calls are exact,
+# recovered, contracted, or rejected at a pinned location. The few whose Tcl
+# program is accepted only because it erases exactly what it erases are in
+# suites of their own: callable-contracts-returned.bot (a returned closure's
+# call, charged the contract, with handlers for hocDecls' errors only),
+# callable-contracts-fallback.bot (hocWrapper's functions, which admit only
+# E1 and E3) and callable-contracts-unerased.bot (programs that need an
+# erased-callable contract with nothing foreign in it).
+#
+# Driver inputs. Where a Tcl program's driver (its top-level expression)
+# chooses with a literal what a run raises, the literal is an argument of
+# the registration function, captured by the body, so the error is raised
+# and handled at run time on every backend (values.bot's convention).
+# Literals inside the programs' own functions, and the drivers of programs
+# whose theorem is static, are the programs' own.
+#
+# Imports:
+#   compiler        compiler::CompilerError and DiagnosticCode (every body)
+#   coroutine       the coroutine programs (hocCoroutine, sccAffine,
+#                   sccAffinePayload, sccCoroutine, sccHandle import it)
+#   immutable_set   the refined-checks scan's local character set
+#   list            list::at in the value-capturing exact closure
+#   mutable_array   mutable_array::generate (hoc-mutable-array-factory,
+#                   scc-native-factory) and its `.capacity()`
+#   mutable_vector  scc's MutableVector transport (no_jobs, vector_first)
+#   str             str::length in the payload handlers; str::substring,
+#                   str::concat and the exact natives str::is_tcl_alpha /
+#                   str::is_tcl_alnum of the exact-callable programs
+#   test            the framework
+import compiler
+import coroutine
+import immutable_set
+import list
+import mutable_array
+import mutable_vector
+import str
+import test
+
+# ===========================================================================
+# higher-order-completions.test: completion analysis through untyped
+# callables degrades conservatively.
+
+# Three errors (hocDecls): a payload-free one and two payload-bearing twins
+# with the same fields. hocAlways, hocMaybe, hocWrapper and hocCoroutine
+# declare the same E1 (hocMaybe the same E2, hocWrapper the same E3): their
+# ports use these.
+error E1
+
+error E2:
+    code: int
+
+error E3:
+    code: int
+
+# The payload-bearing reproducer's errors (hocOriginalPayload's E1 and E2,
+# renamed: E1 and E2 above are declared differently).
+error OriginE1:
+    origin: str
+
+error OriginE2:
+    origin: str
+
+# The messages of the coroutine programs (hocCoroutine; sccAffine and
+# sccCoroutine declare the same two structs).
+struct Message:
+    value: int
+
+struct Event:
+    value: int
+
+# The file's shared prelude (hocDecls), at the top level as in every program
+# of the Tcl file: raise fails E1, E2 or E3 according to its selector, call
+# is the untyped helper, and the others pass raise on along the paths
+# below. generic and partial hand raise to call: the program erases E1, E2
+# and E3.
+fn raise(x) -> int errors E1, E2, E3:
+    if x == 1:
+        fail E1
+    if x == 2:
+        fail E2 {code: 20}
+    if x == 3:
+        fail E3 {code: 30}
+    0
+
+fn call(f, x):
+    f(x)
+
+fn generic(x: int) -> int errors E1, E2, E3:
+    call(raise, x)
+
+fn g1(x: int) -> int errors E1, E2, E3:
+    generic(x)
+
+fn g2(x: int) -> int errors E1, E2, E3:
+    g1(x)
+
+fn partial(x: int) -> int errors E1, E3:
+    call(raise, x):
+        on E2 {code}:
+            code + 1
+
+fn outer(f, x):
+    fn inner(y):
+        f(y)
+    inner(x)
+
+fn make(f):
+    fn inner(y):
+        f(y)
+    inner
+
+fn use(kf: Fn{args: [int], return: any, errors: [E1, E2, E3]}, x: int) errors E1, E2, E3:
+    kf(x)
+
+fn rec(f, n: int, x):
+    if n < 1:
+        f(x)
+    else:
+        rec(f, n - 1, x)
+
+# ---------------------------------------------------------------------------
+# A8: the original reproducer, payload-bearing (errors.bot ports the
+# payload-free one: hoc-original-payload-free).
+
+fn register_hoc_original_tests(k0: int, k1: int, k2: int):
+    # hoc-original-payload: OriginE1 escapes generic through call, so a
+    # handler for OriginE2 alone is UnhandledError -- in bad, at generic(x)
+    # (the location), for OriginE1 (the identity, which only the message
+    # names).
+    fn original_payload() errors compiler::CompilerError:
+        static compile:
+            fn raise(x) -> int errors OriginE1, OriginE2:
+                if x == 1:
+                    fail OriginE1 {origin: "one"}
+                if x == 2:
+                    fail OriginE2 {origin: "two"}
+                0
+            fn call(f, x):
+                f(x)
+            fn generic(x) -> int errors OriginE1, OriginE2:
+                call(raise, x)
+            fn bad(x):
+                generic(x):
+                    on OriginE2 {origin}:
+                        -1 + 0 * str::length(origin)
+            0
+    test::rejects_at("hoc-original-payload", compiler::DiagnosticCode::UnhandledError, 1, 1, original_payload)
+    test::rejects_containing("hoc-original-payload/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"OriginE1\"", original_payload)
+
+    # hoc-original-payload-both-handled: with both handled it is accepted,
+    # and each payload reaches its handler.
+    fn original_payload_both() errors compiler::CompilerError:
+        static compile:
+            fn raise(x) -> int errors OriginE1, OriginE2:
+                if x == 1:
+                    fail OriginE1 {origin: "one"}
+                if x == 2:
+                    fail OriginE2 {origin: "two"}
+                0
+            fn call(f, x):
+                f(x)
+            fn generic(x) -> int errors OriginE1, OriginE2:
+                call(raise, x)
+            fn bad(x):
+                generic(x):
+                    on OriginE1 {origin}:
+                        -2 + 0 * str::length(origin)
+                    on OriginE2 {origin}:
+                        -1 + 0 * str::length(origin)
+            [bad(k0), bad(k1), bad(k2)]
+    test::value("hoc-original-payload-both-handled", [0, -2, -1], original_payload_both)
+
+# ---------------------------------------------------------------------------
+# A9 and A11: the wrong handler, and the right ones, along every path
+# (hocPaths). observe(k) makes one handled call, k selecting what raise
+# does. Each path is tested four ways:
+#
+#   hoc-wrong-handler-PATH       handlers for E2 and E3 only: E1 unhandled
+#   hoc-wrong-twin-PATH          handlers for E1 and E2 only: the payload-
+#                                bearing E3 is not handled by its same-shaped
+#                                twin's handler
+#   hoc-wrong-twin-reverse-PATH  handlers for E1 and E3 only: E2 unhandled
+#   hoc-all-handled-PATH         every error handled (in the order E3, E1,
+#                                E2): accepted, and the value shows each
+#                                identity raised and caught on every backend
+#                                -- also hoc-differential-PATH's observable
+#                                half (its other half, that each observed
+#                                identity is in the analysis' effective
+#                                errors, stays in Tcl)
+#
+# The three wrong ones are rejected UnhandledError (the Tcl tests compare the
+# kind only; observe declares nothing, so the unhandled error leaves it and
+# is diagnosed at the driver's first call). The returned path (a closure
+# returned by make: its call is charged the erased-callable contract) is
+# callable-contracts-returned.bot's.
+
+# direct: call(raise, k) -- the exact argument is recovered at the call.
+fn register_hoc_direct_tests(k0: int, k1: int, k2: int, k3: int):
+    fn wrong_handler() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = call(raise, k):
+                    on E2 {code}:
+                        return ["E2", code]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-handler-direct", compiler::DiagnosticCode::UnhandledError, wrong_handler)
+
+    fn wrong_twin() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = call(raise, k):
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-direct", compiler::DiagnosticCode::UnhandledError, wrong_twin)
+
+    fn wrong_twin_reverse() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = call(raise, k):
+                    on E1:
+                        return ["E1"]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-reverse-direct", compiler::DiagnosticCode::UnhandledError, wrong_twin_reverse)
+
+    fn all_handled() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = call(raise, k):
+                    on E3 d:
+                        return ["E3", d.code]
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::value("hoc-all-handled-direct", [[0], ["E1"], ["E2", 20], ["E3", 30]], all_handled)
+
+# declaring: generic(k) -- a declaring function whose body hands raise to
+# call.
+fn register_hoc_declaring_tests(k0: int, k1: int, k2: int, k3: int):
+    fn wrong_handler() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = generic(k):
+                    on E2 {code}:
+                        return ["E2", code]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-handler-declaring", compiler::DiagnosticCode::UnhandledError, wrong_handler)
+
+    fn wrong_twin() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = generic(k):
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-declaring", compiler::DiagnosticCode::UnhandledError, wrong_twin)
+
+    fn wrong_twin_reverse() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = generic(k):
+                    on E1:
+                        return ["E1"]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-reverse-declaring", compiler::DiagnosticCode::UnhandledError, wrong_twin_reverse)
+
+    fn all_handled() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = generic(k):
+                    on E3 d:
+                        return ["E3", d.code]
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::value("hoc-all-handled-declaring", [[0], ["E1"], ["E2", 20], ["E3", 30]], all_handled)
+
+# layers: g2(k) -- two declaring layers over generic.
+fn register_hoc_layers_tests(k0: int, k1: int, k2: int, k3: int):
+    fn wrong_handler() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = g2(k):
+                    on E2 {code}:
+                        return ["E2", code]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-handler-layers", compiler::DiagnosticCode::UnhandledError, wrong_handler)
+
+    fn wrong_twin() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = g2(k):
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-layers", compiler::DiagnosticCode::UnhandledError, wrong_twin)
+
+    fn wrong_twin_reverse() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = g2(k):
+                    on E1:
+                        return ["E1"]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-reverse-layers", compiler::DiagnosticCode::UnhandledError, wrong_twin_reverse)
+
+    fn all_handled() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = g2(k):
+                    on E3 d:
+                        return ["E3", d.code]
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::value("hoc-all-handled-layers", [[0], ["E1"], ["E2", 20], ["E3", 30]], all_handled)
+
+# capture: outer(raise, k) -- raise reaches an untyped call as a capture of
+# outer's inner closure.
+fn register_hoc_capture_tests(k0: int, k1: int, k2: int, k3: int):
+    fn wrong_handler() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = outer(raise, k):
+                    on E2 {code}:
+                        return ["E2", code]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-handler-capture", compiler::DiagnosticCode::UnhandledError, wrong_handler)
+
+    fn wrong_twin() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = outer(raise, k):
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-capture", compiler::DiagnosticCode::UnhandledError, wrong_twin)
+
+    fn wrong_twin_reverse() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = outer(raise, k):
+                    on E1:
+                        return ["E1"]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-reverse-capture", compiler::DiagnosticCode::UnhandledError, wrong_twin_reverse)
+
+    fn all_handled() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = outer(raise, k):
+                    on E3 d:
+                        return ["E3", d.code]
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::value("hoc-all-handled-capture", [[0], ["E1"], ["E2", 20], ["E3", 30]], all_handled)
+
+# structural: use(make(raise), k) -- a closure that calls raise through its
+# capture, passed as a structural Fn whose contract admits E1, E2 and E3:
+# the call through it is bounded by that contract.
+fn register_hoc_structural_tests(k0: int, k1: int, k2: int, k3: int):
+    fn wrong_handler() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = use(make(raise), k):
+                    on E2 {code}:
+                        return ["E2", code]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-handler-structural", compiler::DiagnosticCode::UnhandledError, wrong_handler)
+
+    fn wrong_twin() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = use(make(raise), k):
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-structural", compiler::DiagnosticCode::UnhandledError, wrong_twin)
+
+    fn wrong_twin_reverse() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = use(make(raise), k):
+                    on E1:
+                        return ["E1"]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-reverse-structural", compiler::DiagnosticCode::UnhandledError, wrong_twin_reverse)
+
+    fn all_handled() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = use(make(raise), k):
+                    on E3 d:
+                        return ["E3", d.code]
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::value("hoc-all-handled-structural", [[0], ["E1"], ["E2", 20], ["E3", 30]], all_handled)
+
+    # hoc-structural-boundary: the structural path as first written -- use's
+    # contract is `errors: []` (and use declares nothing). The closure
+    # make(raise) raises E1, E2 and E3 through its capture, so it does not fit
+    # that contract: a Type error where it acquires the type (the argument),
+    # whatever handles the call to use. The local use shadows the prelude's.
+    fn structural_boundary() errors compiler::CompilerError:
+        static compile:
+            fn use(kf: Fn{args: [int], return: any, errors: []}, x: int):
+                kf(x)
+            fn observe(k: int):
+                r = use(make(raise), k):
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects_at("hoc-structural-boundary", compiler::DiagnosticCode::Type, 1, 1, structural_boundary)
+    test::rejects_containing("hoc-structural-boundary/identity", compiler::DiagnosticCode::Type, "declared error \"E1\"", structural_boundary)
+
+# recursion: rec(raise, 2, k) -- raise forwarded through two recursive calls
+# before the untyped call.
+fn register_hoc_recursion_tests(k0: int, k1: int, k2: int, k3: int):
+    fn wrong_handler() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = rec(raise, 2, k):
+                    on E2 {code}:
+                        return ["E2", code]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-handler-recursion", compiler::DiagnosticCode::UnhandledError, wrong_handler)
+
+    fn wrong_twin() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = rec(raise, 2, k):
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-recursion", compiler::DiagnosticCode::UnhandledError, wrong_twin)
+
+    fn wrong_twin_reverse() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = rec(raise, 2, k):
+                    on E1:
+                        return ["E1"]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-reverse-recursion", compiler::DiagnosticCode::UnhandledError, wrong_twin_reverse)
+
+    fn all_handled() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = rec(raise, 2, k):
+                    on E3 d:
+                        return ["E3", d.code]
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::value("hoc-all-handled-recursion", [[0], ["E1"], ["E2", 20], ["E3", 30]], all_handled)
+
+# ---------------------------------------------------------------------------
+# Handled calls inside handled calls and declaring functions, the top level,
+# and a native that calls a factory.
+
+fn register_hoc_composition_tests(k0: int, k1: int, k2: int, k3: int):
+    # hoc-nested-handled: partial handles E2 itself (answering code + 1);
+    # its caller must still handle E1 and E3. Without the E1 handler it is
+    # UnhandledError at partial(k); with it, accepted.
+    fn nested_unhandled() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = partial(k):
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-nested-handled/unhandled", compiler::DiagnosticCode::UnhandledError, nested_unhandled)
+
+    fn nested_handled() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                r = partial(k):
+                    on E1:
+                        return ["E1"]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::value("hoc-nested-handled/handled", [[0], ["E1"], [21], ["E3", 30]], nested_handled)
+
+    # hoc-undeclared-through-helper: narrow declares E2 only but lets raise's
+    # E1 and E3 through the untyped call, and top handles E2 only. The Tcl
+    # test's program has four diagnostics -- E1 and E3 in narrow's own body
+    # and again at the call of top -- and a block reifies its first: in the
+    # program as written that is the driver's top(0), for E1; with the
+    # driver calling nothing (/narrow), narrow's own call(raise, x), for E1.
+    fn undeclared_through_helper() errors compiler::CompilerError:
+        static compile:
+            fn narrow(x: int) -> int errors E2:
+                call(raise, x)
+            fn top(k: int):
+                narrow(k):
+                    on E2 {code}:
+                        code
+            top(0)
+    test::rejects_at("hoc-undeclared-through-helper", compiler::DiagnosticCode::UnhandledError, 1, 1, undeclared_through_helper)
+    test::rejects_containing("hoc-undeclared-through-helper/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"E1\"", undeclared_through_helper)
+
+    fn undeclared_in_narrow() errors compiler::CompilerError:
+        static compile:
+            fn narrow(x: int) -> int errors E2:
+                call(raise, x)
+            fn top(k: int):
+                narrow(k):
+                    on E2 {code}:
+                        code
+            0
+    test::rejects_at("hoc-undeclared-through-helper/narrow", compiler::DiagnosticCode::UnhandledError, 1, 1, undeclared_in_narrow)
+    test::rejects_containing("hoc-undeclared-through-helper/narrow/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"E1\"", undeclared_in_narrow)
+
+    # hoc-top-level: an unhandled error through the untyped helper outside
+    # any declaring function is UnhandledError at the call (it used to escape
+    # at run time), for E1 first.
+    fn top_level() errors compiler::CompilerError:
+        static compile:
+            call(raise, 1)
+    test::rejects_at("hoc-top-level", compiler::DiagnosticCode::UnhandledError, 1, 1, top_level)
+    test::rejects_containing("hoc-top-level/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"E1\"", top_level)
+
+    # hoc-mutable-array-factory: a factory closure that calls an erased
+    # callable: mutable_array::generate charges what it may raise. Unhandled
+    # at gen(raise, 1) it is UnhandledError; handled, each handler runs.
+    fn factory_unhandled() errors compiler::CompilerError:
+        static compile:
+            fn gen(f, k):
+                fn factory(i):
+                    f(k)
+                mutable_array::capacity(mutable_array::generate(1, factory))
+            gen(raise, 1)
+    test::rejects("hoc-mutable-array-factory/unhandled", compiler::DiagnosticCode::UnhandledError, factory_unhandled)
+
+    fn factory_handled() errors compiler::CompilerError:
+        static compile:
+            fn gen(f, k):
+                fn factory(i):
+                    f(k)
+                mutable_array::capacity(mutable_array::generate(1, factory))
+            fn top(k: int):
+                gen(raise, k):
+                    on E1:
+                        -1
+                    on E2 d:
+                        -2
+                    on E3 d:
+                        -3
+            [top(k0), top(k1), top(k3)]
+    test::value("hoc-mutable-array-factory/handled", [1, -1, -3], factory_handled)
+
+# ---------------------------------------------------------------------------
+# A7: KnownError stays sound (hocAlways: always fails E1, whatever its
+# argument -- so these drivers' literals choose nothing).
+
+fn register_hoc_known_error_tests():
+    # hoc-known-error-direct: a statically known failure of an exact call is
+    # KnownError, handled or not.
+    fn known_error_direct() errors compiler::CompilerError:
+        static compile:
+            fn always(x: int) -> int errors E1:
+                fail E1
+            fn call(f, x):
+                f(x)
+            fn top(k: int):
+                always(k):
+                    on E1:
+                        -1
+            top(0)
+    test::rejects("hoc-known-error-direct", compiler::DiagnosticCode::KnownError, known_error_direct)
+
+    # hoc-known-error-not-through-helper: through the untyped helper the
+    # failure is a may-fact: no KnownError is invented, and the handler runs.
+    fn known_error_not_through_helper() errors compiler::CompilerError:
+        static compile:
+            fn always(x: int) -> int errors E1:
+                fail E1
+            fn call(f, x):
+                f(x)
+            fn top(k: int):
+                call(always, k):
+                    on E1:
+                        -1
+            [top(0), top(5)]
+    test::value("hoc-known-error-not-through-helper", [-1, -1], known_error_not_through_helper)
+
+# ---------------------------------------------------------------------------
+# A6/A10: exact analysis keeps its precision where it has it (hocMaybe:
+# maybe fails E1 when its first argument is negative and E2 when its second
+# is; with the second argument 1 only E1 is possible, and so is success).
+# errors.bot ports hoc-precise-without-erasure.
+
+fn register_hoc_precision_tests(negative: int, five: int, one: int):
+    # hoc-precise-with-erasure: the program also erases maybe into call2
+    # elsewhere (other): use0's maybe(k, 1) still needs a handler for E1
+    # alone.
+    fn precise_with_erasure() errors compiler::CompilerError:
+        static compile:
+            fn maybe(x: int, y: int) -> int errors E1, E2:
+                if x < 0:
+                    fail E1
+                if y < 0:
+                    fail E2 {code: 1}
+                x
+            fn call2(f, x, y):
+                f(x, y)
+            fn use0(k: int):
+                maybe(k, 1):
+                    on E1:
+                        -1
+            fn other(k: int):
+                call2(maybe, k, -1):
+                    on E1:
+                        -1
+                    on E2 d:
+                        d.code
+            [use0(negative), use0(five), other(one)]
+    test::value("hoc-precise-with-erasure", [-1, 5, 1], precise_with_erasure)
+
+    # hoc-precise-recovery: an exact callable argument is recovered:
+    # call2(maybe, k, 1) is analyzed as maybe(k, 1), so E1 alone is enough.
+    fn precise_recovery() errors compiler::CompilerError:
+        static compile:
+            fn maybe(x: int, y: int) -> int errors E1, E2:
+                if x < 0:
+                    fail E1
+                if y < 0:
+                    fail E2 {code: 1}
+                x
+            fn call2(f, x, y):
+                f(x, y)
+            fn use0(k: int):
+                maybe(k, 1):
+                    on E1:
+                        -1
+            fn via(k: int):
+                call2(maybe, k, 1):
+                    on E1:
+                        -1
+            [via(negative), via(five)]
+    test::value("hoc-precise-recovery", [-1, 5], precise_recovery)
+
+    # hoc-precise-recovery-wrong-handler: recovery keeps the identity:
+    # call2(maybe, 1, k) can only fail E2, so a handler for E1 alone is
+    # UnhandledError, in via, for E2.
+    fn precise_recovery_wrong_handler() errors compiler::CompilerError:
+        static compile:
+            fn maybe(x: int, y: int) -> int errors E1, E2:
+                if x < 0:
+                    fail E1
+                if y < 0:
+                    fail E2 {code: 1}
+                x
+            fn call2(f, x, y):
+                f(x, y)
+            fn use0(k: int):
+                maybe(k, 1):
+                    on E1:
+                        -1
+            fn via(k: int):
+                call2(maybe, 1, k):
+                    on E1:
+                        -1
+            0
+    test::rejects_at("hoc-precise-recovery-wrong-handler", compiler::DiagnosticCode::UnhandledError, 1, 1, precise_recovery_wrong_handler)
+    test::rejects_containing("hoc-precise-recovery-wrong-handler/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"E2\"", precise_recovery_wrong_handler)
+
+# ---------------------------------------------------------------------------
+# Affine values on the error edge of a call an erased callable may raise
+# through (hocCoroutine): a coroutine live across call(raise, x) when it
+# fails is released on that edge, and the run continues -- on every backend.
+# The Tcl test also counts the live Tcl coroutines afterwards (a test-only
+# native) and, natively, the allocation report; the program's third element
+# is that count's stand-in, 0, as in its native variant.
+
+fn register_hoc_affine_tests(k0: int, k1: int):
+    fn affine_error_edge() errors compiler::CompilerError:
+        static compile:
+            fn raise(x) -> int errors E1:
+                if x == 1:
+                    fail E1
+                0
+            fn worker(base: int, resume Message) -> Event:
+                message = yield Event {value: base}
+                Event {value: message.value}
+            fn call(f, x):
+                f(x)
+            fn probe(x) -> int errors E1:
+                coroutine {step, first} = worker(10)
+                r = call(raise, x)
+                e = step(Message {value: r + first.value})
+                e.value
+            fn top(x):
+                probe(x):
+                    on E1:
+                        -1
+            [top(k0), top(k1), 0]
+    test::value("hoc-affine-error-edge", [10, -1, 0], affine_error_edge)
+
+fn register_higher_order_completions_tests():
+    register_hoc_original_tests(0, 1, 2)
+    register_hoc_direct_tests(0, 1, 2, 3)
+    register_hoc_declaring_tests(0, 1, 2, 3)
+    register_hoc_layers_tests(0, 1, 2, 3)
+    register_hoc_capture_tests(0, 1, 2, 3)
+    register_hoc_structural_tests(0, 1, 2, 3)
+    register_hoc_recursion_tests(0, 1, 2, 3)
+    register_hoc_composition_tests(0, 1, 2, 3)
+    register_hoc_known_error_tests()
+    register_hoc_precision_tests(-1, 5, 1)
+    register_hoc_affine_tests(0, 1)
+
+
+# ===========================================================================
+# structural-contract-completions.test: the verified callable contract
+# boundary. Three precisions side by side: an exact or recovered callable is
+# charged its effective errors (which may narrow), an unidentified call
+# through a structural type its contract's errors, and an unidentified
+# uncontracted call the erased-callable contract.
+
+# The file's three errors (sccPrelude's E1, E2 and E3, renamed: E2 and E3
+# above carry payloads of their own). Its other programs' E1 and E2 are
+# declared alike and use these too.
+error C1
+
+error C2
+
+error C3:
+    code: int
+
+# Callables stored behind structural contracts, in every transport.
+struct Job:
+    run: Fn{args: [], return: int}
+
+struct Job1:
+    run: Fn{args: [], return: int, errors: [C1]}
+
+struct Job12:
+    run: Fn{args: [], return: int, errors: [C1, C2]}
+
+struct Job3:
+    run: Fn{args: [], return: int, errors: [C3]}
+
+struct JobAny:
+    run: Fn{args: [], return: any}
+
+struct Inner:
+    run: Fn{args: [], return: int}
+
+struct Outer:
+    inner: Inner
+
+# The file's shared prelude (sccPrelude), at the top level as in its
+# programs: one raising function per error, and poison, which erases raise2
+# through the untyped call (the hoc prelude's, the same function) and
+# handles it -- so the program's erased-callable contract has C2, which no
+# contracted call below may be charged. The prelude's make(f, x) is local to
+# each block that uses it: what a closure may raise through its capture is
+# what every call of make passes, so a shared make would carry one test's
+# callables into another's.
+fn raise1(x: int) -> int errors C1:
+    if x == 1:
+        fail C1
+    x
+
+fn raise2(x: int) -> int errors C2:
+    if x == 2:
+        fail C2
+    x
+
+fn raise3(x: int) -> int errors C3:
+    if x == 3:
+        fail C3 {code: 30}
+    x
+
+fn poison(k: int) -> int:
+    call(raise2, k):
+        on C2:
+            -2
+
+fn quiet() -> int:
+    7
+
+fn eleven() -> int:
+    11
+
+fn one1() -> int errors C1:
+    raise1(1)
+
+fn fails1() -> int errors C1:
+    fail C1
+
+fn dispatch(j: Job) -> int:
+    (j.run)()
+
+fn dispatch1(j: Job1) -> int errors C1:
+    (j.run)()
+
+fn run_all(jobs: List[Job]) -> List[int]:
+    loop j in jobs:
+        (j.run)()
+
+fn no_jobs() -> MutableVector[Job]:
+    mutable_vector::from_list([])
+
+fn vector_first(v: MutableVector[Job]) -> int:
+    j = v.at(0):
+        on IndexNotFound:
+            return -1
+    (j.run)()
+
+fn invoke(f: Fn{args: [], return: int, errors: []}) -> int:
+    f()
+
+fn invoke1(f: Fn{args: [], return: int, errors: [C1]}) -> int errors C1:
+    f()
+
+fn factory() -> Fn{args: [], return: int}:
+    quiet
+
+fn nested(o: Outer) -> int:
+    (o.inner.run)()
+
+fn dispatch_any(j: JobAny):
+    (j.run)()
+
+fn invoke_any(f: Fn{args: [], return: any}):
+    f()
+
+fn invoke_any1(f: Fn{args: [], return: any, errors: [C1]}) errors C1:
+    f()
+
+# ---------------------------------------------------------------------------
+# Every transport of a structural callable, with C2 erased.
+
+fn register_scc_transport_tests(two: int):
+    # scc-transports: a struct field, a List element, a MutableVector
+    # element, a parameter, a returned callable and a nested field: none is
+    # charged C2, all are accepted, and every backend agrees.
+    fn transports() errors compiler::CompilerError:
+        static compile:
+            fn d1() -> int:
+                dispatch1(Job1 {run: quiet}):
+                    on C1:
+                        -1
+            v = no_jobs()
+            v.push(Job {run: eleven})
+            g = factory()
+            [poison(two), dispatch(Job {run: quiet}), run_all([Job {run: quiet}, Job {run: eleven}]), vector_first(v), invoke(quiet), g(), nested(Outer {inner: Inner {run: eleven}}), d1()]
+    test::value("scc-transports", [-2, 7, [7, 11], 11, 7, 7, 11, 7], transports)
+
+    # scc-returned-bound: a callable returned as a structural type and called
+    # after a binding is bounded by that type: accepted (no handler).
+    fn returned_bound() errors compiler::CompilerError:
+        static compile:
+            fn use() -> int:
+                g = factory()
+                g()
+            [poison(two), use()]
+    test::value("scc-returned-bound", [-2, 7], returned_bound)
+
+# ---------------------------------------------------------------------------
+# Not an `errors: []` special case: one error, several errors, a payload.
+
+fn register_scc_contract_error_tests(two: int, three: int):
+    # scc-one-error-handled: a contract admitting C1: a handler for C1 is
+    # enough although C2 is erased elsewhere.
+    fn one_error_handled() errors compiler::CompilerError:
+        static compile:
+            fn h(j: Job1) -> int:
+                (j.run)():
+                    on C1:
+                        -1
+            [poison(two), h(Job1 {run: one1}), h(Job1 {run: quiet})]
+    test::value("scc-one-error-handled", [-2, -1, 7], one_error_handled)
+
+    # scc-one-error-wrong-handler: a handler for C2 only is not: C1 remains
+    # (UnhandledError in h, for C1), and C2 is never charged.
+    fn one_error_wrong_handler() errors compiler::CompilerError:
+        static compile:
+            fn h(j: Job1) -> int:
+                (j.run)():
+                    on C2:
+                        -2
+            [poison(two)]
+    test::rejects_at("scc-one-error-wrong-handler", compiler::DiagnosticCode::UnhandledError, 1, 1, one_error_wrong_handler)
+    test::rejects_containing("scc-one-error-wrong-handler/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"C1\"", one_error_wrong_handler)
+
+    # scc-one-error-declared: an enclosing function declaring C1 compiles;
+    # one declaring C2 only does not (UnhandledError in d, for C1).
+    fn one_error_admitted() errors compiler::CompilerError:
+        static compile:
+            fn d(j: Job1) -> int errors C1:
+                (j.run)()
+            [poison(two)]
+    test::value("scc-one-error-declared/admitted", [-2], one_error_admitted)
+
+    fn one_error_other_declared() errors compiler::CompilerError:
+        static compile:
+            fn d(j: Job1) -> int errors C2:
+                (j.run)()
+            [poison(two)]
+    test::rejects_at("scc-one-error-declared/other", compiler::DiagnosticCode::UnhandledError, 1, 1, one_error_other_declared)
+    test::rejects_containing("scc-one-error-declared/other/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"C1\"", one_error_other_declared)
+
+    # scc-multi-error: a contract [C1, C2] in a program that erases C3 (this
+    # program's poison erases raise3; the prelude's still erases raise2):
+    # exactly C1 and C2. h handling both is accepted; bad handling C1 only is
+    # UnhandledError in bad, for C2.
+    fn multi_error_handled() errors compiler::CompilerError:
+        static compile:
+            fn poison(k: int) -> int:
+                call(raise3, k):
+                    on C3:
+                        -3
+            fn h(j: Job12) -> int:
+                (j.run)():
+                    on C1:
+                        -1
+                    on C2:
+                        -2
+            [poison(three)]
+    test::value("scc-multi-error/handled", [-3], multi_error_handled)
+
+    fn multi_error_unhandled() errors compiler::CompilerError:
+        static compile:
+            fn poison(k: int) -> int:
+                call(raise3, k):
+                    on C3:
+                        -3
+            fn h(j: Job12) -> int:
+                (j.run)():
+                    on C1:
+                        -1
+                    on C2:
+                        -2
+            fn bad(j: Job12) -> int:
+                (j.run)():
+                    on C1:
+                        -1
+            [poison(three)]
+    test::rejects_at("scc-multi-error/unhandled", compiler::DiagnosticCode::UnhandledError, 1, 1, multi_error_unhandled)
+    test::rejects_containing("scc-multi-error/unhandled/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"C2\"", multi_error_unhandled)
+
+    # scc-payload-error: a payload-bearing contract error: handled with
+    # destructuring, the payload transported, nothing else charged.
+    fn payload_error() errors compiler::CompilerError:
+        static compile:
+            fn h(j: Job3) -> int:
+                (j.run)():
+                    on C3 {code}:
+                        code
+            fn three() -> int errors C3:
+                raise3(3)
+            [poison(two), h(Job3 {run: three}), h(Job3 {run: quiet})]
+    test::value("scc-payload-error", [-2, 30, 7], payload_error)
+
+    # scc-exact-narrows-contract: a recovered exact callable narrows a
+    # structural call below its contract: invoke12(one1) raises C1 only, so C1
+    # alone is handled.
+    fn exact_narrows_contract() errors compiler::CompilerError:
+        static compile:
+            fn invoke12(f: Fn{args: [], return: int, errors: [C1, C2]}) -> int errors C1, C2:
+                f()
+            fn use() -> int:
+                invoke12(one1):
+                    on C1:
+                        -1
+            [poison(two), use()]
+    test::value("scc-exact-narrows-contract", [-2, -1], exact_narrows_contract)
+
+# ---------------------------------------------------------------------------
+# The boundary: a callable that raises beyond a contract never acquires it.
+
+# sccContravariant's structural type, both ways: a function taking a
+# callable that may fail C1, and an int, with a contract of no error
+# (Forwarder) or of C1 (Forwarder1) (sccContravariant's Job, renamed).
+struct Forwarder:
+    run: Fn{args: [Fn{args: [int], return: int, errors: [C1]}, int], return: any, errors: []}
+
+struct Forwarder1:
+    run: Fn{args: [Fn{args: [int], return: int, errors: [C1]}, int], return: any, errors: [C1]}
+
+# scc-any-parameter-call's structural type of a two-argument function.
+struct Apply:
+    run: Fn{args: [any, any], return: any}
+
+fn register_scc_boundary_tests(two: int, one: int, zero: int):
+    # scc-boundary-captured: a closure that calls an erased error-bearing
+    # callable it captured, given Fn{errors: []}: Type at the argument, in
+    # use, for C1; with C1 admitted it is accepted and the call is charged
+    # C1.
+    fn boundary_captured() errors compiler::CompilerError:
+        static compile:
+            fn make(f, x):
+                fn inner():
+                    f(x)
+                inner
+            fn use():
+                invoke_any(make(raise1, 1))
+            0
+    test::rejects_at("scc-boundary-captured/rejected", compiler::DiagnosticCode::Type, 1, 1, boundary_captured)
+    test::rejects_containing("scc-boundary-captured/rejected/identity", compiler::DiagnosticCode::Type, "declared error \"C1\"", boundary_captured)
+
+    fn boundary_captured_admitted() errors compiler::CompilerError:
+        static compile:
+            fn make(f, x):
+                fn inner():
+                    f(x)
+                inner
+            fn use():
+                invoke_any1(make(raise1, 1)):
+                    on C1:
+                        -1
+            use()
+    test::value("scc-boundary-captured/admitted", -1, boundary_captured_admitted)
+
+    # scc-boundary-struct-field: the same closure stored in a field typed
+    # errors: []: Type at the field, for C1.
+    fn boundary_struct_field() errors compiler::CompilerError:
+        static compile:
+            fn make(f, x):
+                fn inner():
+                    f(x)
+                inner
+            j = JobAny {run: make(raise1, 1)}
+            0
+    test::rejects_at("scc-boundary-struct-field", compiler::DiagnosticCode::Type, 1, 1, boundary_struct_field)
+    test::rejects_containing("scc-boundary-struct-field/identity", compiler::DiagnosticCode::Type, "declared error \"C1\"", boundary_struct_field)
+
+    # scc-boundary-unknown-captures-possible: a closure from another
+    # activation: its captures stand for every value their calls pass --
+    # this make is only ever given error-free callables, so errors: [] fits.
+    fn boundary_unknown_captures_possible() errors compiler::CompilerError:
+        static compile:
+            fn make(f, x):
+                fn inner():
+                    f(x)
+                inner
+            fn plain(x) -> int:
+                x * 3
+            [poison(two), dispatch_any(JobAny {run: make(plain, 2)})]
+    test::value("scc-boundary-unknown-captures-possible", [-2, 6], boundary_unknown_captures_possible)
+
+    # scc-boundary-created-here: a closure created in the same body sees its
+    # captures' facts: one capturing an error-free callable fits errors: [].
+    fn boundary_created_here() errors compiler::CompilerError:
+        static compile:
+            fn wrap(f, x) -> JobAny:
+                fn inner():
+                    f(x)
+                JobAny {run: inner}
+            fn plain(x) -> int:
+                x * 3
+            [poison(two), dispatch_any(wrap(plain, 2))]
+    test::value("scc-boundary-created-here", [-2, 6], boundary_created_here)
+
+    # scc-boundary-created-here-bad: ... and one whose captured parameter
+    # receives an error-bearing callable is rejected in that body (the
+    # parameter stands for every value its calls pass): Type in wrap, for C2.
+    fn boundary_created_here_bad() errors compiler::CompilerError:
+        static compile:
+            fn wrap(f, x) -> JobAny:
+                fn inner():
+                    f(x)
+                JobAny {run: inner}
+            [poison(two), dispatch_any(wrap(raise2, 2))]
+    test::rejects_at("scc-boundary-created-here-bad", compiler::DiagnosticCode::Type, 1, 1, boundary_created_here_bad)
+    test::rejects_containing("scc-boundary-created-here-bad/identity", compiler::DiagnosticCode::Type, "declared error \"C2\"", boundary_created_here_bad)
+
+    # scc-contravariant-rejected: call1 calls its untyped parameter; given
+    # Fn{args: [Fn{... errors: [C1]}, int], errors: []} it is rejected (Type
+    # at the field, for C1), where it used to escape at run time. This
+    # program's raise1 fails for every positive argument.
+    fn contravariant_rejected() errors compiler::CompilerError:
+        static compile:
+            fn raise1(x: int) -> int errors C1:
+                if x > 0:
+                    fail C1
+                x
+            fn call1(f, x):
+                f(x)
+            fn go(j: Forwarder, k: int):
+                (j.run)(raise1, k)
+            go(Forwarder {run: call1}, 1)
+    test::rejects_at("scc-contravariant-rejected", compiler::DiagnosticCode::Type, 1, 1, contravariant_rejected)
+    test::rejects_containing("scc-contravariant-rejected/identity", compiler::DiagnosticCode::Type, "declared error \"C1\"", contravariant_rejected)
+
+    # scc-contravariant-admitted: with the contract admitting C1 it fits, the
+    # call through it is charged C1, and the error is caught.
+    fn contravariant_admitted() errors compiler::CompilerError:
+        static compile:
+            fn raise1(x: int) -> int errors C1:
+                if x > 0:
+                    fail C1
+                x
+            fn call1(f, x):
+                f(x)
+            fn go(j: Forwarder1, k: int) errors C1:
+                (j.run)(raise1, k)
+            fn top(k: int):
+                go(Forwarder1 {run: call1}, k):
+                    on C1:
+                        -1
+            [top(one), top(zero)]
+    test::value("scc-contravariant-admitted", [-1, 0], contravariant_admitted)
+
+    # scc-any-parameter-call: a function that calls an `any` parameter,
+    # given Fn{args: [any, any], errors: []} in a program that erases errors:
+    # Type (a call through that type may pass it anything). The program
+    # without the erasure is callable-contracts-unerased.bot's.
+    fn any_parameter_call() errors compiler::CompilerError:
+        static compile:
+            s = Job {run: quiet}
+            fn apply(f, x):
+                f(x)
+            a = Apply {run: apply}
+            0
+    test::rejects_at("scc-any-parameter-call/erasing", compiler::DiagnosticCode::Type, 1, 1, any_parameter_call)
+
+# ---------------------------------------------------------------------------
+# Type-level compatibility is unchanged and still strict.
+
+fn register_scc_compat_tests():
+    # scc-compat-strict: Fn{errors: [C1]} into a Fn{errors: []} slot and
+    # Fn{errors: [C1, C2]} into Fn{errors: [C1]} are rejected (Type, in give1
+    # and give12); fewer errors into more is accepted (widen). One block per
+    # function: a block reifies its first diagnostic only.
+    fn compat_give1() errors compiler::CompilerError:
+        static compile:
+            fn give1(f: Fn{args: [], return: int, errors: [C1]}) -> Fn{args: [], return: int}:
+                f
+            0
+    test::rejects_at("scc-compat-strict/give1", compiler::DiagnosticCode::Type, 1, 1, compat_give1)
+
+    fn compat_give12() errors compiler::CompilerError:
+        static compile:
+            fn give12(f: Fn{args: [], return: int, errors: [C1, C2]}) -> Fn{args: [], return: int, errors: [C1]}:
+                f
+            0
+    test::rejects_at("scc-compat-strict/give12", compiler::DiagnosticCode::Type, 1, 1, compat_give12)
+
+    fn compat_widen() errors compiler::CompilerError:
+        static compile:
+            fn widen(f: Fn{args: [], return: int}) -> Fn{args: [], return: int, errors: [C1]}:
+                f
+            0
+    test::value("scc-compat-strict/widen", 0, compat_widen)
+
+    # scc-compat-exact-declared: an exact function declaring C1 into a
+    # Fn{errors: []} field: rejected by the type checker, as before (Type at
+    # the field).
+    fn compat_exact_declared() errors compiler::CompilerError:
+        static compile:
+            j = Job {run: one1}
+            0
+    test::rejects_at("scc-compat-exact-declared", compiler::DiagnosticCode::Type, 1, 1, compat_exact_declared)
+
+# ---------------------------------------------------------------------------
+# May versus must.
+
+fn register_scc_may_must_tests(two: int):
+    # scc-no-known-error: a contract admitting C1 called with a callable that
+    # always fails: a may-fact, never KnownError; the handler runs.
+    fn no_known_error() errors compiler::CompilerError:
+        static compile:
+            fn h(j: Job1) -> int:
+                (j.run)():
+                    on C1:
+                        -1
+            [poison(two), h(Job1 {run: fails1})]
+    test::value("scc-no-known-error", [-2, -1], no_known_error)
+
+    # scc-known-error-exact-unchanged: an exact always-failing call is still
+    # KnownError (in h, at fails1()).
+    fn known_error_exact_unchanged() errors compiler::CompilerError:
+        static compile:
+            fn h() -> int:
+                fails1():
+                    on C1:
+                        -1
+            [poison(two)]
+    test::rejects_at("scc-known-error-exact-unchanged", compiler::DiagnosticCode::KnownError, 1, 1, known_error_exact_unchanged)
+
+# ---------------------------------------------------------------------------
+# Ownership: affine error edges use the same boundary.
+
+# sccAffine's boxes (Box is sccCoroutine's too).
+struct Box:
+    run: Fn{args: [], return: int}
+
+struct Box1:
+    run: Fn{args: [], return: int, errors: [C1]}
+
+# sccAffinePayload: an error whose payload is a coroutine handle, and a box
+# whose contract admits it (sccAffinePayload's Box, renamed).
+error Carry:
+    stream: Coroutine{args: [], return: int}
+
+struct CarryBox:
+    run: Fn{args: [], return: int, errors: [Carry]}
+
+fn register_scc_affine_tests(two: int):
+    # scc-affine-runs: a coroutine live across a structural call (across,
+    # across1) and across an untyped one (across_untyped): every backend
+    # releases it on the contract's error edge and on the untyped one, and
+    # runs on. (The edges themselves and the release counts stay in Tcl.)
+    fn affine_runs() errors compiler::CompilerError:
+        static compile:
+            fn raise2(x) -> int errors C2:
+                if x == 2:
+                    fail C2
+                0
+            fn call(f, x):
+                f(x)
+            fn poison(k: int) -> int:
+                call(raise2, k):
+                    on C2:
+                        -2
+            fn worker(base: int, resume Message) -> Event:
+                message = yield Event {value: base}
+                Event {value: message.value}
+            fn seven() -> int:
+                7
+            fn fails1() -> int errors C1:
+                fail C1
+            fn across(b: Box) -> int:
+                coroutine {step, first} = worker(10)
+                r = (b.run)()
+                e = step(Message {value: r + first.value})
+                e.value
+            fn across1(b: Box1) -> int errors C1:
+                coroutine {step, first} = worker(10)
+                r = (b.run)()
+                e = step(Message {value: r + first.value})
+                e.value
+            fn across_untyped(f) -> int errors C2:
+                coroutine {step, first} = worker(10)
+                r = call(f, 2)
+                e = step(Message {value: r + first.value})
+                e.value
+            fn top1(b: Box1) -> int:
+                across1(b):
+                    on C1:
+                        -1
+            fn top2() -> int:
+                across_untyped(raise2):
+                    on C2:
+                        -2
+            [poison(two), across(Box {run: seven}), top1(Box1 {run: seven}), top1(Box1 {run: fails1}), top2()]
+    test::value("scc-affine-runs", [-2, 17, 17, -1, -2], affine_runs)
+
+    # scc-affine-payload: a contract admitting an affine-payload error: the
+    # payload's stream moves to the handler (h) or is released with it (top),
+    # a coroutine live across the call is released on the Carry edge, and
+    # nothing is charged for the unrelated erased C2 -- on every backend.
+    fn affine_payload() errors compiler::CompilerError:
+        static compile:
+            fn r2(x) -> int errors C2:
+                if x == 2:
+                    fail C2
+                0
+            fn call(f, x):
+                f(x)
+            fn poison(k: int) -> int:
+                call(r2, k):
+                    on C2:
+                        -2
+            fn counter(start: int) -> int:
+                yield start
+                start + 1
+            fn fails_with_stream() -> int errors Carry:
+                coroutine {step, first} = counter(10)
+                fail Carry {stream: step}
+            fn quiet() -> int:
+                7
+            fn h(b: CarryBox) -> int:
+                (b.run)():
+                    on Carry {stream}:
+                        stream()
+            fn live(b: CarryBox) -> int errors Carry:
+                coroutine {step, first} = counter(100)
+                r = (b.run)()
+                r + step()
+            fn top(b: CarryBox) -> int:
+                live(b):
+                    on Carry:
+                        -1
+            [poison(two), h(CarryBox {run: fails_with_stream}), h(CarryBox {run: quiet}), top(CarryBox {run: fails_with_stream}), top(CarryBox {run: quiet})]
+    test::value("scc-affine-payload", [-2, 11, 7, -1, 108], affine_payload)
+
+# ---------------------------------------------------------------------------
+# Coroutines: a handle is resumed through its Coroutine type alone once it
+# leaves the body that constructed it -- the same boundary.
+
+# sccCoroutine's error.
+error Boom
+
+# sccHandle: its error and messages.
+error E
+
+struct M:
+    value: int
+
+struct Ev:
+    value: int
+
+fn register_scc_coroutine_tests(three: int, minus_three: int, two: int):
+    # scc-coroutine-poison: an error-bearing coroutine given to an untyped
+    # function (invoke) does not reach the Fn{args: [], return: int} field
+    # call of run_box: accepted, and the call is charged nothing. (That
+    # invoke is specialized for the coroutine, and run_box's stamp, stay in
+    # Tcl.)
+    fn coroutine_poison() errors compiler::CompilerError:
+        static compile:
+            fn worker(base: int, resume Message) -> Event errors Boom:
+                message = yield Event {value: base}
+                if message.value < 0:
+                    fail Boom
+                Event {value: message.value}
+            fn invoke(c, m) errors Boom:
+                c(m)
+            fn use_worker(k: int) -> int errors Boom:
+                coroutine {step, first} = worker(1)
+                e = invoke(step, Message {value: k}):
+                    on Boom:
+                        return -1
+                e.value
+            fn top(k: int) -> int:
+                use_worker(k):
+                    on Boom:
+                        -9
+            fn seven() -> int:
+                7
+            fn run_box(b: Box) -> int:
+                (b.run)()
+            [top(three), top(minus_three), run_box(Box {run: seven})]
+    test::value("scc-coroutine-poison", [3, -1, 7], coroutine_poison)
+
+    # scc-coroutine-boundary-escape: a handle whose root may raise E through
+    # a callable passed to its construction, leaving its body as
+    # Coroutine{errors: []}: Type where it leaves (in make), for E.
+    fn coroutine_boundary_escape() errors compiler::CompilerError:
+        static compile:
+            fn raise_e(m) -> int errors E:
+                fail E
+            fn worker(f, resume M) -> Ev:
+                m = yield Ev {value: 0}
+                x = f(m)
+                Ev {value: 1}
+            fn drive(c: Coroutine{args: [M], return: Ev, errors: []}) -> int:
+                e = c(M {value: 1})
+                e.value
+            fn make(f) -> int:
+                coroutine {step, first} = worker(f)
+                drive(step)
+            make(raise_e)
+    test::rejects_at("scc-coroutine-boundary-escape", compiler::DiagnosticCode::Type, 1, 1, coroutine_boundary_escape)
+    test::rejects_containing("scc-coroutine-boundary-escape/identity", compiler::DiagnosticCode::Type, "declared error \"E\"", coroutine_boundary_escape)
+
+    # scc-coroutine-param-resume: a handle that fits its contract (its root
+    # is given an error-free callable), resumed through a Coroutine{errors:
+    # []} parameter in a program that erases C2 elsewhere: charged nothing,
+    # accepted, and it runs.
+    fn coroutine_param_resume() errors compiler::CompilerError:
+        static compile:
+            fn raise_e(m) -> int errors E:
+                fail E
+            fn worker(f, resume M) -> Ev:
+                m = yield Ev {value: 0}
+                x = f(m)
+                Ev {value: 1}
+            fn drive(c: Coroutine{args: [M], return: Ev, errors: []}) -> int:
+                e = c(M {value: 1})
+                e.value
+            fn make(f) -> int:
+                coroutine {step, first} = worker(f)
+                drive(step)
+            fn plain(m) -> int:
+                0
+            fn r2(x) -> int errors C2:
+                if x == 2:
+                    fail C2
+                0
+            fn call(f, x):
+                f(x)
+            fn poison(k: int) -> int:
+                call(r2, k):
+                    on C2:
+                        -2
+            [poison(two), make(plain)]
+    test::value("scc-coroutine-param-resume", [-2, 1], coroutine_param_resume)
+
+    # scc-coroutine-boundary-local: a handle resumed only in the body that
+    # constructed it is analyzed there: accepted, the resume charged E and
+    # handled. (The Tcl program keeps the unused make and its drive through
+    # Coroutine{errors: []}: make has no caller, so nothing it may be given
+    # breaks that contract.)
+    fn coroutine_boundary_local() errors compiler::CompilerError:
+        static compile:
+            fn raise_e(m) -> int errors E:
+                fail E
+            fn worker(f, resume M) -> Ev:
+                m = yield Ev {value: 0}
+                x = f(m)
+                Ev {value: 1}
+            fn drive(c: Coroutine{args: [M], return: Ev, errors: []}) -> int:
+                e = c(M {value: 1})
+                e.value
+            fn make(f) -> int:
+                coroutine {step, first} = worker(f)
+                drive(step)
+            fn local(f) -> int:
+                coroutine {step, first} = worker(f)
+                e = step(M {value: 1}):
+                    on E:
+                        return -1
+                e.value
+            local(raise_e)
+    test::value("scc-coroutine-boundary-local", -1, coroutine_boundary_local)
+
+# ---------------------------------------------------------------------------
+# Natives calling a callable argument, recursion, traits, and the
+# uncontracted path.
+
+# scc-trait-operation: a trait whose implementation for Job calls Job's
+# contracted field, and its trait-polymorphic consumer -- top-level only
+# (a trait, its requirement's implementation in this namespace, and a
+# trait-polymorphic function cannot be nested).
+trait Runner:
+    fn go(self: Runner) -> int
+
+fn go(j: Job) -> int:
+    (j.run)()
+
+fn launch(r: Runner) -> int:
+    r.go()
+
+fn register_scc_callee_tests(two: int):
+    # scc-native-factory: mutable_array::generate with a factory of type
+    # Fn{..., errors: [C1]}: charged C1 (handled), never the erased C2.
+    fn native_factory() errors compiler::CompilerError:
+        static compile:
+            fn gen(f: Fn{args: [int], return: int, errors: [C1]}) -> int:
+                a = mutable_array::generate(3, f):
+                    on C1:
+                        return -1
+                a.capacity()
+            [poison(two), gen(raise1)]
+    test::value("scc-native-factory", [-2, -1], native_factory)
+
+    # scc-recursive-contract: a recursive function forwarding its
+    # Fn{errors: []} parameter: never charged the erased contract.
+    fn recursive_contract() errors compiler::CompilerError:
+        static compile:
+            fn rec_invoke(f: Fn{args: [], return: int}, n: int) -> int:
+                if n < 1:
+                    f()
+                else:
+                    rec_invoke(f, n - 1)
+            [poison(two), rec_invoke(quiet, 3)]
+    test::value("scc-recursive-contract", [-2, 7], recursive_contract)
+
+    # scc-recursive-fallback: a transparent recursive function (it calls the
+    # untyped call) forwarding a Fn{errors: []} parameter whose value only its
+    # contract bounds (a struct field): its recursion fallback charges what
+    # that value carries -- its contract, never the erased one.
+    fn recursive_fallback() errors compiler::CompilerError:
+        static compile:
+            fn plain(x) -> int:
+                0
+            fn rec2(f: Fn{args: [], return: int}, n: int) -> int:
+                if n < 1:
+                    x = call(plain, n)
+                    f()
+                else:
+                    rec2(f, n - 1)
+            fn start(j: Job) -> int:
+                rec2(j.run, 2)
+            [poison(two), start(Job {run: quiet})]
+    test::value("scc-recursive-fallback", [-2, 7], recursive_fallback)
+
+    # scc-trait-operation: the trait call r.go() of launch (above), whose
+    # implementation calls the contracted field, is not charged C2.
+    fn trait_operation() errors compiler::CompilerError:
+        static compile:
+            [poison(two), launch(Job {run: quiet})]
+    test::value("scc-trait-operation", [-2, 7], trait_operation)
+
+    # scc-uncontracted-message: an uncontracted unidentified call -- h,
+    # read from a List[any] -- names both losses in its message (this
+    # program's own raise, make and call, declared like the hoc prelude's but
+    # for raise's one error).
+    fn uncontracted_message() errors compiler::CompilerError:
+        static compile:
+            fn raise(x) -> int errors C1:
+                if x == 1:
+                    fail C1
+                0
+            fn make(f):
+                fn inner(y):
+                    f(y)
+                inner
+            fn call(f, x):
+                f(x)
+            fn holder(f) -> List[any]:
+                [make(f)]
+            fn bad(k: int):
+                loop h in holder(raise):
+                    h(k)
+            0
+    test::rejects_containing("scc-uncontracted-message", compiler::DiagnosticCode::UnhandledError, "cannot identify, and that no callable contract bounds", uncontracted_message)
+
+fn register_structural_contract_completions_tests():
+    register_scc_transport_tests(2)
+    register_scc_contract_error_tests(2, 3)
+    register_scc_boundary_tests(2, 1, 0)
+    register_scc_compat_tests()
+    register_scc_may_must_tests(2)
+    register_scc_affine_tests(2)
+    register_scc_coroutine_tests(3, -3, 2)
+    register_scc_callee_tests(2)
+
+# ===========================================================================
+# exact-callable-executable.test: exact-callable-keyed code (direct calls
+# through callable parameters, EXACT-CALLABLE-CLOSED-CALLER.md) gives the
+# same value on every backend, for an exact Botlish block, an exact native,
+# both through one helper, a value-capturing exact closure and the
+# refined-checks scan. The Tcl tests also compile each program to a
+# standalone executable and run it relocated, with an empty PATH and under
+# GC stress: that stays in Tcl (and so does the real bench/refined-checks.bot,
+# a corpus program no suite can import). Each program's driver arguments are
+# its registration function's inputs.
+
+fn register_exact_botlish_test(start: int, limit: int):
+    # exact-callable-executable-botlish: an exact Botlish block called
+    # through a helper's parameter.
+    fn exact_botlish() errors compiler::CompilerError:
+        static compile:
+            fn inc(x: int):
+                x + 1
+            fn apply_loop(f, i, n):
+                loop j from i to n:
+                    if f(j) > 41:
+                        return j + 1
+                n
+            apply_loop(inc, start, limit)
+    test::value("exact-callable-executable-botlish", 42, exact_botlish)
+
+fn register_exact_native_test(letters: str, word: str):
+    # exact-callable-executable-native: an exact native called through a
+    # helper's parameter, over one-character regions of a String.
+    fn exact_native() errors compiler::CompilerError:
+        static compile:
+            fn count_while(p, s):
+                loop i from 0 to str::length(s):
+                    if p(str::substring(s, i, i + 1)):
+                        continue
+                    return i
+                str::length(s)
+            [count_while(str::is_tcl_alpha, letters), count_while(str::is_tcl_alnum, word)]
+    test::value("exact-callable-executable-native", [3, 3], exact_native)
+
+fn register_exact_mixed_test(identifier: str, letters: str):
+    # exact-callable-executable-mixed: one helper, an exact Botlish block and
+    # an exact native: two exact instances.
+    fn exact_mixed() errors compiler::CompilerError:
+        static compile:
+            fn bot_alpha(c: str):
+                str::is_tcl_alpha(c) or c == "_"
+            fn count_while(p, s):
+                loop i from 0 to str::length(s):
+                    if p(str::substring(s, i, i + 1)):
+                        continue
+                    return i
+                str::length(s)
+            [count_while(bot_alpha, identifier), count_while(str::is_tcl_alpha, letters)]
+    test::value("exact-callable-executable-mixed", [4, 3], exact_mixed)
+
+fn register_exact_capturing_test(given_tag: str, given_words: List[str], margin: int):
+    # exact-callable-executable-capturing: an exact closure capturing a
+    # String, a List and an Int, passed to a helper.
+    fn exact_capturing() errors compiler::CompilerError:
+        static compile:
+            fn run(tag: str, words: List[str], n: int):
+                fn heavy(x: str):
+                    w = list::at(words, 0):
+                        on IndexNotFound:
+                            ""
+                    str::length(str::concat(tag, x)) > str::length(w) + n
+                fn first(p, xs: List[str]):
+                    loop x in xs:
+                        if p(str::concat(x, tag)):
+                            return x
+                    ""
+                first(heavy, ["a", "bbbb", "ccccccc"])
+            run(given_tag, given_words, margin)
+    test::value("exact-callable-executable-capturing", "bbbb", exact_capturing)
+
+fn register_exact_scan_test(international: str, plain: str, short: str):
+    # exact-callable-executable-refined-checks-scan: refined-checks'
+    # scan_while shape -- a de-closured closure given two exact predicates,
+    # one a capturing Botlish block, one a native -- over Unicode text.
+    fn exact_scan() errors compiler::CompilerError:
+        static compile:
+            local_extra_chars = immutable_set::from_list([".", "_", "%", "+", "-"])
+            fn my_emailish?(v: str):
+                n = str::length(v)
+                fn char_at(i):
+                    if i < 0 or i >= n:
+                        return ""
+                    str::substring(v, i, i + 1)
+                fn local_char?(c: str):
+                    str::is_tcl_alnum(c) or immutable_set::contains(local_extra_chars, c)
+                fn label_char?(c):
+                    str::is_tcl_alnum(c) or c == "-"
+                fn scan_while(start: int, predicate):
+                    loop i from start to n:
+                        if predicate(char_at(i)):
+                            continue
+                        return i
+                    n
+                fn tld?(i):
+                    e = scan_while(i, str::is_tcl_alpha)
+                    if e == n:
+                        e - i >= 2
+                    else:
+                        false
+                fn domain?(start):
+                    loop j from start to n:
+                        if char_at(j) == ".":
+                            if j == start:
+                                return false
+                            if char_at(j - 1) == ".":
+                                return false
+                            if tld?(j + 1):
+                                return true
+                        else:
+                            if not label_char?(char_at(j)):
+                                return false
+                    false
+                local_end = scan_while(0, local_char?)
+                if local_end == 0:
+                    false
+                else:
+                    if local_end >= n:
+                        false
+                    else:
+                        if char_at(local_end) == "@":
+                            domain?(local_end + 1)
+                        else:
+                            false
+            [my_emailish?(international), my_emailish?(plain), my_emailish?(short)]
+    test::value("exact-callable-executable-refined-checks-scan", [true, false, true], exact_scan)
+
+fn register_exact_callable_executable_tests():
+    register_exact_botlish_test(0, 100)
+    register_exact_native_test("abc1", "ab1_")
+    register_exact_mixed_test("ab_c1", "abc1")
+    register_exact_capturing_test("xy", ["pqr", "st"], 3)
+    register_exact_scan_test("café@例え.テスト", "not-an-email", "a.b@c.io")
+
+with context test::suite()
+register_higher_order_completions_tests()
+register_structural_contract_completions_tests()
+register_exact_callable_executable_tests()
+test::report()
