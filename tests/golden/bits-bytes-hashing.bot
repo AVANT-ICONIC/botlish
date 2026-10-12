@@ -411,6 +411,9 @@ fn register_astral_length_tests(smile: str):
             str::length("🙂")
     test::value("csv-records-astral-length-1", 1, b_astral_length)
 
+    # The same character as an input String: natively a literal
+    # one-character String is a packed short String, with its own length
+    # operation.
     fn b_astral_length_dynamic() errors compiler::CompilerError:
         static compile:
             str::length(smile)
