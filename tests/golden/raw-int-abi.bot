@@ -1,0 +1,951 @@
+# raw-int-abi.bot -- Int values that cross the raw Int ABI (RAW-INT-ABI.md),
+# as a source-level specification: whatever calling convention a backend
+# picks for an Int parameter or an Int result, the program's value is the
+# exact arbitrary-precision one, the same on every backend.
+#
+# Natively an exact closed function instance passes an Int parameter, and
+# returns its successful Int result, as a raw machine integer when the
+# position's proven Range fits the tagged small-Int domain (-2^62 .. 2^62-1)
+# and some consumer wants it raw; every other position stays a tagged
+# (boxed) value, and conversions happen exactly at the frontiers. None of
+# that is visible to a program: what is visible is that
+#
+#   * a small-domain position computes the exact value (recursion, helpers,
+#     negative Ranges, raw arithmetic and comparisons, aliases, branch joins,
+#     early returns, chains of raw calls);
+#   * a value just outside the small domain (2^62, as a result or as an
+#     argument) and a result beyond i64 (42 * 10^18 from a raw parameter)
+#     are exact too: a position whose Range does not fit stays tagged and the
+#     arithmetic promotes, never wraps;
+#   * open, escaping and dynamically called functions (a function stored in a
+#     List, called through a parameter) agree with their direct exact calls;
+#   * the demand rule's every outcome -- a position selected raw, suppressed
+#     (eligible but only consumed tagged), or boxed (a mixed raw and tagged
+#     use), through aliases, branches, returns, transports, forwarding
+#     cycles, counted loops and handlers -- gives the same value;
+#   * an error-capable function with a raw successful result still fails
+#     with its declared error, which the caller's handler receives;
+#   * raw values live across allocations and allocating recursive frames
+#     (the CI gc-stress job runs this suite with a collection forced at every
+#     allocation site);
+#   * a de-closured nested function's internal variant (it captures its
+#     outer function's locals) computes the same values, at the small-Int
+#     edge 2^62-1 too (raw-internal-abi.test).
+#
+# Ported from tests/raw-int-abi.test and tests/raw-internal-abi.test, which
+# stay authoritative and unchanged: they also pin what no program can
+# observe -- the ABI plan per instance and its reasons, the NIR signatures
+# (rawparams/rawresult) and conversion counts, the native option matrix
+# every program is checked under (-raw-int-abi-opt, -raw-demand-opt,
+# -tiny-leaf-inline-opt, -block-escape-opt, -raw-mixed-policy, the
+# rawCountLoopOpt and rawInternalAbiOpt knobs), the standalone executables'
+# output and BOTLISH_NATIVE_GC_STRESS runs. Each test here is the value half
+# of one Tcl test (or of one of its programs); its name is the Tcl test's.
+#
+# Inputs are the Tcl programs' own constants on purpose: the raw ABI is
+# chosen from the Ranges those constant arguments give each instance, so a
+# port that hid them behind the registration function's parameters would
+# make every position unbounded and exercise only the tagged convention.
+# None of these programs has a statically known failure (the handled
+# failures of the error tests are decided at run time).
+#
+# Imports: compiler (the body contract, compiler::CompilerError) and test;
+# list and str because the Tcl programs call list::length, list::append,
+# str::length, str::concat and str::substring (always qualified: no method
+# syntax is used, so the suite-wide imports change no call's meaning).
+import compiler
+import list
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only).
+
+# raw-int-abi.test's `error Negative` (raw-error-capable-result,
+# raw-error-path-and-caller-handle, raw-executable-mixed), renamed: one
+# payload-free declaration serves the three programs.
+error RawAbiNegative
+
+# raw-int-abi.test's `error Bad` (demand-loops-and-handlers-agree's handled
+# program), renamed.
+error RawAbiBad
+
+# ---------------------------------------------------------------------------
+# raw-int-abi.test: raw parameters and results inside and at the edge of the
+# small-Int domain
+
+fn register_small_domain_tests():
+    # raw-fib-parity: fib, the central case: a raw parameter and a raw
+    # result through two recursive calls per frame.
+    fn fib_parity() errors compiler::CompilerError:
+        static compile:
+            fn fib(n):
+                if n < 2:
+                    n
+                else:
+                    fib(n - 1) + fib(n - 2)
+
+            fib(22)
+    test::value("raw-fib-parity", 17711, fib_parity)
+
+    # raw-helper-both: a closed non-recursive helper with a raw parameter
+    # and a raw result.
+    fn helper_both() errors compiler::CompilerError:
+        static compile:
+            fn inc_bounded(n):
+                n + 1
+
+            inc_bounded(5) + inc_bounded(6)
+    test::value("raw-helper-both", 13, helper_both)
+
+    # raw-param-tagged-result: the parameter fits the small domain, the
+    # result (6 * 3 * 10^18, 8 * 3 * 10^18) does not even fit an i64: it is
+    # exact.
+    fn param_tagged_result() errors compiler::CompilerError:
+        static compile:
+            fn big(n):
+                m = n + 1
+                m * 3000000000000000000
+
+            big(5) + big(7)
+    test::value("raw-param-tagged-result", 42000000000000000000, param_tagged_result)
+
+    # raw-result-tagged-param: an unbounded argument (an accumulated sum) to
+    # a function with a constant successful result.
+    fn result_tagged_param() errors compiler::CompilerError:
+        static compile:
+            fn count(n, acc):
+                if n == 0:
+                    acc
+                else:
+                    count(n - 1, acc + n)
+
+            fn seven(v):
+                7
+
+            seven(count(500, 0)) + 1
+    test::value("raw-result-tagged-param", 8, result_tagged_param)
+
+    # raw-mixed-parameters: a small Int, an unbounded Int and a String
+    # parameter in one signature.
+    fn mixed_parameters() errors compiler::CompilerError:
+        static compile:
+            fn count(n, acc):
+                if n == 0:
+                    acc
+                else:
+                    count(n - 1, acc + n)
+
+            fn f(a, b, s):
+                if a > 100:
+                    0
+                else:
+                    str::length(s) + b
+
+            f(3, count(500, 0), "abc")
+    test::value("raw-mixed-parameters", 125253, mixed_parameters)
+
+    # raw-negative-range: a negative Range is as exact as a nonnegative one.
+    fn negative_range() errors compiler::CompilerError:
+        static compile:
+            fn neg(n):
+                n * 2 - 7
+
+            neg(0 - 100) + neg(100)
+    test::value("raw-negative-range", -14, negative_range)
+
+    # raw-outside-small-result: a result reaching 2^62 fits an i64 but not
+    # the small domain: it comes back exact.
+    fn outside_small_result() errors compiler::CompilerError:
+        static compile:
+            fn succ(n):
+                if n < 0:
+                    0
+                else:
+                    4611686018427387904
+
+            succ(4611686018427387903)
+    test::value("raw-outside-small-result", 4611686018427387904, outside_small_result)
+
+    # raw-outside-small-parameter: an argument of 2^62 passes exactly, and
+    # the sum past it promotes.
+    fn outside_small_parameter() errors compiler::CompilerError:
+        static compile:
+            fn ident(n):
+                n
+
+            ident(4611686018427387904) + ident(1)
+    test::value("raw-outside-small-parameter", 4611686018427387905, outside_small_parameter)
+
+# ---------------------------------------------------------------------------
+# raw-int-abi.test: open, escaping and dynamically called functions
+
+fn register_open_and_dynamic_tests():
+    # raw-open-instance-stays-tagged: a function whose value escapes (stored
+    # in a List) and its direct exact call agree.
+    fn open_instance() errors compiler::CompilerError:
+        static compile:
+            fn open_one(n):
+                n * 2
+
+            fn stash():
+                [open_one]
+
+            a = open_one(5) + 1
+            [a, list::length(stash())]
+    test::value("raw-open-instance-stays-tagged", [11, 1], open_instance)
+
+    # raw-dynamic-call-uses-generic-entry: a function called through a
+    # parameter (its generic entry) computes the same value.
+    fn dynamic_call() errors compiler::CompilerError:
+        static compile:
+            fn add1(n):
+                n + 1
+
+            fn twice(f, x):
+                f(f(x))
+
+            fn stash():
+                [add1]
+
+            [twice(add1, 3), list::length(stash())]
+    test::value("raw-dynamic-call-uses-generic-entry", [5, 1], dynamic_call)
+
+    # raw-exact-callable-target-is-raw: a call through a parameter whose
+    # argument is a known function, beside the same function escaping.
+    fn exact_callable_target() errors compiler::CompilerError:
+        static compile:
+            fn open_one(n):
+                n * 2
+
+            fn apply_dyn(f, v):
+                f(v)
+
+            fn stash():
+                [open_one]
+
+            [apply_dyn(open_one, 6) + 1, list::length(stash())]
+    test::value("raw-exact-callable-target-is-raw", [13, 1], exact_callable_target)
+
+# ---------------------------------------------------------------------------
+# raw-int-abi.test: recursion
+
+fn register_recursion_tests():
+    # raw-mixed-recursion: a small measure and an accumulator in one
+    # recursive signature.
+    fn mixed_recursion() errors compiler::CompilerError:
+        static compile:
+            fn sum(n, acc):
+                if n == 0:
+                    acc
+                else:
+                    sum(n - 1, acc + 1)
+
+            sum(1000, 0)
+    test::value("raw-mixed-recursion", 1000, mixed_recursion)
+
+    # raw-non-tail-recursion-with-allocation: the parameter and the result
+    # stay valid across a recursive call that also allocates.
+    fn non_tail_recursion_with_allocation() errors compiler::CompilerError:
+        static compile:
+            fn build(n):
+                if n < 1:
+                    0
+                else:
+                    s = str::concat("ab", "cd")
+                    if str::length(s) > 3:
+                        build(n - 1) + n
+                    else:
+                        0
+
+            build(30)
+    test::value("raw-non-tail-recursion-with-allocation", 465, non_tail_recursion_with_allocation)
+
+    # raw-tail-recursion-keeps-self-tail: a self tail call (natively a loop
+    # backedge) with a small parameter.
+    fn tail_recursion() errors compiler::CompilerError:
+        static compile:
+            fn down(n, acc):
+                if n == 0:
+                    acc
+                else:
+                    down(n - 1, acc + 2)
+
+            down(50, 0)
+    test::value("raw-tail-recursion-keeps-self-tail", 100, tail_recursion)
+
+    # raw-recursive-mixed-bound: one parameter grows without bound across
+    # the recursion (1000000007^5 is far past i64), the other is a small
+    # measure; the result counts the frames.
+    fn recursive_mixed_bound() errors compiler::CompilerError:
+        static compile:
+            fn g(n, k):
+                if n < 1:
+                    0
+                else:
+                    g(n - 1, k * 1000000007) + 1
+
+            g(5, 1)
+    test::value("raw-recursive-mixed-bound", 5, recursive_mixed_bound)
+
+    # raw-branch-join-of-a-tagged-only-int-stays-tagged: a branch join of a
+    # constant and an unbounded Int.
+    fn branch_join_tagged() errors compiler::CompilerError:
+        static compile:
+            fn count(n, acc):
+                if n < 1:
+                    acc
+                else:
+                    count(n - 1, acc + n)
+
+            fn mix(c, v):
+                if c:
+                    1
+                else:
+                    v
+
+            [mix(true, count(40, 0)), mix(false, count(40, 0))]
+    test::value("raw-branch-join-of-a-tagged-only-int-stays-tagged", [1, 820], branch_join_tagged)
+
+    # raw-callee-of-a-constant-is-still-called: a call whose successful
+    # result is a proven constant.
+    fn callee_of_a_constant() errors compiler::CompilerError:
+        static compile:
+            fn seven(v):
+                7
+
+            seven(3) + 1
+    test::value("raw-callee-of-a-constant-is-still-called", 8, callee_of_a_constant)
+
+# ---------------------------------------------------------------------------
+# raw-int-abi.test: continuous raw regions and their frontiers
+
+fn register_region_tests():
+    # raw-chain-one-continuous-region: f -> g -> h, each passing a small Int
+    # on.
+    fn chain_region() errors compiler::CompilerError:
+        static compile:
+            fn h(z):
+                z * 2
+
+            fn g(y):
+                h(y + 1) + 3
+
+            fn f(x):
+                g(x * 2) - 1
+
+            f(3) + f(4)
+    test::value("raw-chain-one-continuous-region", 36, chain_region)
+
+    # raw-mixed-frontier-converts-exactly-at-the-boundary: small values
+    # flowing into and out of an unbounded computation inside one function.
+    fn mixed_frontier() errors compiler::CompilerError:
+        static compile:
+            fn count(n, acc):
+                if n == 0:
+                    acc
+                else:
+                    count(n - 1, acc + n)
+
+            fn bump(x):
+                x + 1
+
+            fn seven(v):
+                7
+
+            fn mid(x):
+                y = bump(x)
+                w = seven(count(500, y))
+                bump(w)
+
+            mid(2) + mid(3)
+    test::value("raw-mixed-frontier-converts-exactly-at-the-boundary", 16, mixed_frontier)
+
+    # raw-alias-stays-raw: local aliases of a parameter passed on.
+    fn alias_stays_raw() errors compiler::CompilerError:
+        static compile:
+            fn inner(v):
+                v * 3
+
+            fn outer(x):
+                y = x
+                z = y
+                inner(z) + inner(y)
+
+            outer(2) + outer(5)
+    test::value("raw-alias-stays-raw", 42, alias_stays_raw)
+
+    # raw-branch-merge-stays-raw: both branches of a tail `if` join.
+    fn branch_merge() errors compiler::CompilerError:
+        static compile:
+            fn pick(a, b):
+                if a < b:
+                    a + 1
+                else:
+                    b * 2
+
+            pick(1, 5) + pick(7, 3)
+    test::value("raw-branch-merge-stays-raw", 8, branch_merge)
+
+    # raw-return-statement-is-raw: an early return beside the tail value.
+    fn return_statement() errors compiler::CompilerError:
+        static compile:
+            fn clamp(n):
+                if n > 10:
+                    return 10
+                n * 2
+
+            clamp(3) + clamp(40)
+    test::value("raw-return-statement-is-raw", 16, return_statement)
+
+    # raw-comparison-consumes-raw-directly: every comparison operator on two
+    # small parameters.
+    fn comparisons() errors compiler::CompilerError:
+        static compile:
+            fn cmp(a, b):
+                if a < b and a <= b and b > a and b >= a and a != b:
+                    1
+                else:
+                    0
+
+            cmp(1, 2) + cmp(5, 3)
+    test::value("raw-comparison-consumes-raw-directly", 1, comparisons)
+
+# ---------------------------------------------------------------------------
+# raw-int-abi.test: raw-demand suppression -- a raw-eligible position is
+# selected raw only when a raw consumer wants it; every outcome of the rule
+# computes the same value
+
+fn register_demand_tests():
+    # demand-tagged-only-parameter: a small parameter only stored in a List.
+    fn tagged_only_parameter() errors compiler::CompilerError:
+        static compile:
+            fn wrap(n):
+                [n]
+
+            list::length(wrap(3))
+    test::value("demand-tagged-only-parameter", 1, tagged_only_parameter)
+
+    # demand-tagged-only-result: a bounded result every caller stores, its
+    # parameter also returned.
+    fn tagged_only_result() errors compiler::CompilerError:
+        static compile:
+            fn pick(n):
+                if n < 3:
+                    n
+                else:
+                    3
+
+            [pick(1), pick(2)]
+    test::value("demand-tagged-only-result", [1, 2], tagged_only_result)
+
+    # demand-raw-parameter: a parameter used by arithmetic, its result
+    # stored.
+    fn raw_parameter() errors compiler::CompilerError:
+        static compile:
+            fn inc(n):
+                n + 1
+
+            list::length([inc(2)])
+    test::value("demand-raw-parameter", 1, raw_parameter)
+
+    # demand-raw-result: a bounded result (a String's length) compared by
+    # the caller.
+    fn raw_result() errors compiler::CompilerError:
+        static compile:
+            fn six(s):
+                str::length(s)
+
+            if six(str::concat("a", "b")) < 5:
+                1
+            else:
+                2
+    test::value("demand-raw-result", 1, raw_result)
+
+    # demand-mixed-use-is-boxed: one parameter used by arithmetic and
+    # stored.
+    fn mixed_use() errors compiler::CompilerError:
+        static compile:
+            fn both(n):
+                x = n + 1
+                [n, x]
+
+            list::length(both(4))
+    test::value("demand-mixed-use-is-boxed", 2, mixed_use)
+
+    # demand-propagates-through-aliases: the one arithmetic use is behind an
+    # alias chain.
+    fn through_aliases() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                y = n
+                z = y
+                z + 1
+
+            list::length([f(1)])
+    test::value("demand-propagates-through-aliases", 1, through_aliases)
+
+    # demand-branches-raw-only-raw-mixed-boxed-tagged-only-tagged: branches
+    # that use a parameter by arithmetic only, by storage only, or one of
+    # each.
+    fn branch_demand() errors compiler::CompilerError:
+        static compile:
+            fn some(n, c):
+                if c:
+                    list::length([n])
+                else:
+                    n + 1
+
+            fn none(n, c):
+                if c:
+                    list::length([n])
+                else:
+                    list::length([n, n])
+
+            fn only(n, c):
+                if c:
+                    n + 1
+                else:
+                    n * 2
+
+            [some(5, true), some(5, false), none(5, true), none(5, false), only(5, true), only(5, false)]
+    test::value("demand-branches-raw-only-raw-mixed-boxed-tagged-only-tagged", [1, 6, 1, 2, 6, 10], branch_demand)
+
+    # demand-dead-branch-raw-use-does-not-count: the arithmetic use is in a
+    # branch the Ranges prove dead.
+    fn dead_branch() errors compiler::CompilerError:
+        static compile:
+            fn f(n, c):
+                if c > 100:
+                    n + 1
+                else:
+                    list::length([n])
+
+            f(7, 3)
+    test::value("demand-dead-branch-raw-use-does-not-count", 1, dead_branch)
+
+    # demand-return-propagates: a returned parameter, its result added to by
+    # the caller (raw) ...
+    fn return_raw() errors compiler::CompilerError:
+        static compile:
+            fn keep(n):
+                return n
+
+            keep(3) + 1
+    test::value("demand-return-propagates/raw", 4, return_raw)
+
+    # ... or only stored (tagged).
+    fn return_tagged() errors compiler::CompilerError:
+        static compile:
+            fn keep(n):
+                return n
+
+            [keep(3)]
+    test::value("demand-return-propagates/tagged", [3], return_tagged)
+
+    # demand-transport-chain-stays-raw: f's result through g's and h's
+    # parameters into arithmetic.
+    fn transport_chain() errors compiler::CompilerError:
+        static compile:
+            fn f(k):
+                if k > 0:
+                    4
+                else:
+                    5
+
+            fn h(z):
+                z + 1
+
+            fn g(y):
+                h(y)
+
+            g(f(1))
+    test::value("demand-transport-chain-stays-raw", 5, transport_chain)
+
+    # demand-tagged-chain-is-all-tagged: the same chain ending in storage.
+    fn tagged_chain() errors compiler::CompilerError:
+        static compile:
+            fn f(k):
+                if k > 0:
+                    4
+                else:
+                    5
+
+            fn h(z):
+                [z]
+
+            fn g(y):
+                h(y)
+
+            list::length(g(f(1)))
+    test::value("demand-tagged-chain-is-all-tagged", 1, tagged_chain)
+
+    # demand-forwarding-cycle-cannot-bootstrap-raw: a recursive position
+    # that only forwards its value to itself and returns it.
+    fn forwarding_cycle() errors compiler::CompilerError:
+        static compile:
+            fn f(n, c):
+                if c == 0:
+                    n
+                else:
+                    list::length([f(n, c - 1)])
+
+            [f(3, 5)]
+    test::value("demand-forwarding-cycle-cannot-bootstrap-raw", [1], forwarding_cycle)
+
+    # demand-loops-and-handlers-agree: a parameter that bounds a counted
+    # loop and is compared inside it ...
+    fn loop_bound() errors compiler::CompilerError:
+        static compile:
+            fn find(n):
+                loop i from 0 to n:
+                    if i * i > n:
+                        return i
+                -1
+
+            [find(10), find(100)]
+    test::value("demand-loops-and-handlers-agree/loop", [4, 11], loop_bound)
+
+    # ... and an error-capable callee's result behind a handler.
+    fn handled() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors RawAbiBad:
+                if n < 0:
+                    fail RawAbiBad
+                else:
+                    n + 1
+
+            fn safe(n):
+                r = check(n):
+                    on RawAbiBad:
+                        0
+                r + 1
+
+            [safe(3), safe(0 - 1)]
+    test::value("demand-loops-and-handlers-agree/handled", [5, 1], handled)
+
+    # demand-mixed-use-propagates-through-transport: a callee that both
+    # computes with and stores the parameter its caller forwards.
+    fn mixed_transport() errors compiler::CompilerError:
+        static compile:
+            fn h(z):
+                x = z + 1
+                [z, x]
+
+            fn g(y):
+                h(y)
+
+            list::length(g(3))
+    test::value("demand-mixed-use-propagates-through-transport", 2, mixed_transport)
+
+    # demand-discarded-raw-result-is-a-tagged-use: a call statement whose
+    # result is discarded, then the same call's result used.
+    fn discarded_result() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                n + 1
+
+            fn g(x):
+                f(x)
+                f(x) * 2
+
+            g(3) + g(4)
+    test::value("demand-discarded-raw-result-is-a-tagged-use", 18, discarded_result)
+
+    # demand-program-frontier-is-not-a-mixed-use: one function's result
+    # used by another's arithmetic and by the program.
+    fn frontier_not_mixed() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                n * 2
+
+            fn g(x):
+                f(x) + 1
+
+            [f(4), g(5)]
+    test::value("demand-program-frontier-is-not-a-mixed-use", [8, 11], frontier_not_mixed)
+
+    # demand-program-frontier: one raw region whose result is the program's.
+    fn program_frontier() errors compiler::CompilerError:
+        static compile:
+            fn h(z):
+                z * 2
+
+            fn g(y):
+                h(y + 1) + 3
+
+            fn f(x):
+                g(x * 2) - 1
+
+            f(3)
+    test::value("demand-program-frontier", 16, program_frontier)
+
+    # demand-suppressed-signature-is-consistent: a suppressed parameter
+    # called from two sites of another function.
+    fn suppressed_signature() errors compiler::CompilerError:
+        static compile:
+            fn wrap(n):
+                [n]
+
+            fn twice(n):
+                list::length(wrap(n)) + list::length(wrap(n + 1))
+
+            twice(4) + twice(5)
+    test::value("demand-suppressed-signature-is-consistent", 4, suppressed_signature)
+
+# ---------------------------------------------------------------------------
+# raw-int-abi.test: errors -- the failure status travels beside a raw
+# successful result, never inside it
+
+fn register_error_tests():
+    # raw-error-capable-result: a function that may fail, with a small
+    # successful result, accumulated by a recursive caller; both drives
+    # reach check(-1) and fail, and the handlers receive the failure.
+    fn error_capable_result() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors RawAbiNegative:
+                if n < 0:
+                    fail RawAbiNegative
+                else:
+                    n * 2
+
+            fn drive(i, acc) -> int errors RawAbiNegative:
+                if i > 4:
+                    acc
+                else:
+                    drive(i + 1, acc + (check(3 - i) + 0))
+
+            r = drive(0, 0):
+                on RawAbiNegative:
+                    -77
+            ok = drive(2, 0):
+                on RawAbiNegative:
+                    -1
+            [r, ok]
+    test::value("raw-error-capable-result", [-77, -1], error_capable_result)
+
+    # raw-error-path-and-caller-handle: success, the error path and the
+    # caller's handler in one program.
+    fn error_path() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors RawAbiNegative:
+                if n < 0:
+                    fail RawAbiNegative
+                else:
+                    n + 100
+
+            fn drive(i) -> int errors RawAbiNegative:
+                if i > 3:
+                    0
+                else:
+                    check(2 - i) + drive(i + 1)
+
+            a = drive(0):
+                on RawAbiNegative:
+                    -5
+            b = drive(10):
+                on RawAbiNegative:
+                    -6
+            [a, b]
+    test::value("raw-error-path-and-caller-handle", [-5, 0], error_path)
+
+# ---------------------------------------------------------------------------
+# raw-int-abi.test: raw Ints live across allocation (the values the GC-stress
+# runs check)
+
+fn register_gc_tests():
+    # raw-gc-raw-live-across-allocation: a small parameter, a String and a
+    # List live across unrelated allocations.
+    fn live_across_allocation() errors compiler::CompilerError:
+        static compile:
+            fn work(n, s, xs):
+                t = str::concat(s, "x")
+                u = list::append(xs, 7)
+                v = str::concat(t, t)
+                flag = if str::length(v) > list::length(u):
+                    1
+                else:
+                    0
+                n * 2 + flag
+
+            work(3, "a", [1, 2]) + work(4, "bc", [9])
+    test::value("raw-gc-raw-live-across-allocation", 16, live_across_allocation)
+
+    # raw-gc-recursive-allocating-frames: 200 recursive frames, each
+    # allocating, each adding its small parameter to the callee's result.
+    fn recursive_allocating_frames() errors compiler::CompilerError:
+        static compile:
+            fn depth(n, s):
+                if n == 0:
+                    str::length(s)
+                else:
+                    t = str::concat(s, "z")
+                    depth(n - 1, t) + n
+
+            depth(200, "")
+    test::value("raw-gc-recursive-allocating-frames", 20300, recursive_allocating_frames)
+
+# ---------------------------------------------------------------------------
+# raw-int-abi.test: the programs of the standalone-executable tests (their
+# values on every backend; the executables stay in Tcl)
+
+fn register_executable_program_tests():
+    # raw-executable-mixed: raw, tagged and error-capable instances in one
+    # program.
+    fn executable_mixed() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors RawAbiNegative:
+                if n < 0:
+                    fail RawAbiNegative
+                else:
+                    n * 2
+
+            fn drive(i, acc) -> int errors RawAbiNegative:
+                if i > 4:
+                    acc
+                else:
+                    drive(i + 1, acc + check(3 - i))
+
+            fn work(n: int, s: str, xs: List[int]):
+                t = str::concat(s, "x")
+                u = list::append(xs, n)
+                n + str::length(t) + list::length(u)
+
+            r = drive(0, 0):
+                on RawAbiNegative:
+                    -77
+            ok = drive(2, 0):
+                on RawAbiNegative:
+                    -1
+            [r, ok, work(3, "a", [1, 2])]
+    test::value("raw-executable-mixed", [-77, -1, 8], executable_mixed)
+
+    # raw-executable-demand: suppressed, mixed, transported and raw
+    # instances in one program.
+    fn executable_demand() errors compiler::CompilerError:
+        static compile:
+            fn wrap(n):
+                [n]
+
+            fn pick(n):
+                if n < 3:
+                    n
+                else:
+                    3
+
+            fn both(n):
+                x = n + 1
+                [n, x]
+
+            fn h(z):
+                z + 1
+
+            fn g(y):
+                h(y)
+
+            fn f(n, c):
+                if c == 0:
+                    n
+                else:
+                    list::length([f(n, c - 1)])
+
+            fn chain(x):
+                g(x * 2) - 1
+
+            [list::length(wrap(3)), pick(1), pick(2), list::length(both(4)), g(pick(2)), f(3, 5), chain(3)]
+    test::value("raw-executable-demand", [1, 1, 2, 2, 3, 1, 6], executable_demand)
+
+fn register_raw_int_abi_tests():
+    register_small_domain_tests()
+    register_open_and_dynamic_tests()
+    register_recursion_tests()
+    register_region_tests()
+    register_demand_tests()
+    register_error_tests()
+    register_gc_tests()
+    register_executable_program_tests()
+
+# ---------------------------------------------------------------------------
+# raw-internal-abi.test: de-closured nested functions (capturing their outer
+# function's locals) with small Int parameters and results
+
+fn register_raw_internal_abi_tests():
+    # raw-internal-abi-recursion: a non-tail self-recursive and a self-tail
+    # nested function over captured locals, and a parameter at the small-Int
+    # edge 2^62-1 (shift).
+    fn internal_recursion() errors compiler::CompilerError:
+        static compile:
+            fn outer(s, base):
+                n = str::length(s)
+                fn depth(x):
+                    if x <= 0:
+                        base
+                    else:
+                        depth(x - 1) + n
+                fn walk(x, acc):
+                    if x <= 0:
+                        acc
+                    else:
+                        walk(x - 1, acc + x * n)
+                fn shift(x):
+                    x - 4611686018427387900 + depth(3)
+                [depth(5) + 1, walk(4, 0) - 1, shift(4611686018427387903) * 2]
+            [outer("ab", 7), outer("", 0 - 5)]
+    test::value("raw-internal-abi-recursion", [[18, 19, 32], [-4, -1, -4]], internal_recursion)
+
+    # raw-internal-abi-result: a nested function's small result (an index
+    # found by a counted loop) compared and subtracted by its caller. at's
+    # handlers make the strict program legal; they are never taken (i is
+    # always within s).
+    fn internal_result() errors compiler::CompilerError:
+        static compile:
+            fn scanner(s):
+                n = str::length(s)
+                fn at(i):
+                    piece = str::substring(s, i, i + 1):
+                        on UpperOverrun:
+                            ""
+                        on LowerUnderrun:
+                            ""
+                    piece
+                fn skip(start):
+                    loop i from start to n:
+                        if at(i) != " ":
+                            return i
+                    n
+                fn word(start):
+                    e = skip(start)
+                    if e == n:
+                        0
+                    else:
+                        e - start + 1
+                [word(0), word(n), word(1)]
+            [scanner("   ab"), scanner(""), scanner("x")]
+    test::value("raw-internal-abi-result", [[4, 0, 3], [0, 0, 0], [1, 0, 0]], internal_result)
+
+    # raw-internal-abi-gc-stress: a small parameter and a counted loop's
+    # variable live across allocating calls in nested functions.
+    fn internal_gc() errors compiler::CompilerError:
+        static compile:
+            fn mk(k):
+                [k, str::concat("a", "b")]
+            fn run(s, lim):
+                n = str::length(s)
+                fn step(x):
+                    ys = mk(x)
+                    zs = mk(x + n)
+                    x * 2 + list::length(ys) + list::length(zs) - list::length(mk(n))
+                fn count(lo):
+                    loop i from lo to n:
+                        if step(i) > lim:
+                            return i
+                    n
+                c = count(0)
+                count(1) * 100 + c
+            [run("abcdef", 6), run("abcdef", 100), run("", 0)]
+    test::value("raw-internal-abi-gc-stress", [303, 606, 0], internal_gc)
+
+with context test::suite()
+register_raw_int_abi_tests()
+register_raw_internal_abi_tests()
+test::report()

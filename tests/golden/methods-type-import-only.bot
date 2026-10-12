@@ -22,7 +22,7 @@ fn register_visibility_tests():
         static compile:
             x = 200
             x.complement()
-    test::rejects_containing("method-not-visible-no-type-import-needed-or-used/type-import", compiler::DiagnosticCode::NotAStruct, "no function named \"complement\" is visible here either", b_type_import)
+    test::rejects_containing("method-not-visible-no-type-import-needed-or-used/type-import", compiler::DiagnosticCode::NotAStruct, "cannot project field \"complement\" from a value of type int: only a struct has fields; as a method-style call, no function named \"complement\" is visible here either", b_type_import)
 
 with context test::suite()
 register_visibility_tests()

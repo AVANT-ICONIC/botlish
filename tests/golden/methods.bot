@@ -37,9 +37,11 @@
 #   collecting [FIRST, REST]: FIRST the first probe's id, REST every later
 #   id followed by the program's value (the Tcl value [15, 12], value 15
 #   and digits 1 then 2, is the trace [1, [2, 15]]), as in values.bot.
-# * The method-errors tests, whose property is the run-time behaviour of
-#   handled declared errors, take their inputs as parameters of their
-#   registration functions, given as literals at the calls.
+# * The tests whose handled declared errors are raised at run time (the
+#   method-errors tests, and the library tests of byte::from_int and
+#   list::find that fail) take their inputs as parameters of their
+#   registration functions, given as literals at the calls, so no failure
+#   is decided from a constant.
 #
 # Imports: compiler and test (the framework); byte, list and str (the Tcl
 # programs' own imports: their members are method candidates, so they are
@@ -564,29 +566,6 @@ fn register_library_tests():
     test::value("method-library-imported-chain/method", 48, b_imported_chain_method)
     test::value("method-library-imported-chain/free", 48, b_imported_chain_free)
 
-    fn b_imported_error_capable_method() errors compiler::CompilerError:
-        static compile:
-            fn conv(n):
-                b = n.from_int():
-                    on byte::AboveRange:
-                        0
-                    on byte::BelowRange:
-                        1
-                b
-            [conv(200), conv(300), conv(0 - 5)]
-    fn b_imported_error_capable_free() errors compiler::CompilerError:
-        static compile:
-            fn conv(n):
-                b = byte::from_int(n):
-                    on byte::AboveRange:
-                        0
-                    on byte::BelowRange:
-                        1
-                b
-            [conv(200), conv(300), conv(0 - 5)]
-    test::value("method-library-imported-error-capable/method", [200, 0, 1], b_imported_error_capable_method)
-    test::value("method-library-imported-error-capable/free", [200, 0, 1], b_imported_error_capable_free)
-
     fn b_higher_order_method() errors compiler::CompilerError:
         static compile:
             d = [1, 2, 3].find(big):
@@ -601,21 +580,6 @@ fn register_library_tests():
             d
     test::value("method-library-higher-order/method", 2, b_higher_order_method)
     test::value("method-library-higher-order/free", 2, b_higher_order_free)
-
-    fn b_higher_order_not_found_method() errors compiler::CompilerError:
-        static compile:
-            d = [0, 1].find(big):
-                on list::NotFound:
-                    99
-            d
-    fn b_higher_order_not_found_free() errors compiler::CompilerError:
-        static compile:
-            d = list::find([0, 1], big):
-                on list::NotFound:
-                    99
-            d
-    test::value("method-library-higher-order-not-found/method", 99, b_higher_order_not_found_method)
-    test::value("method-library-higher-order-not-found/free", 99, b_higher_order_not_found_free)
 
     fn b_aliased_module_function_method() errors compiler::CompilerError:
         static compile:
@@ -680,6 +644,55 @@ fn register_library_tests():
     test::value("method-qualified-references-inside-method-calls/method", [210, 245], b_qualified_references_method)
     test::value("method-qualified-references-inside-method-calls/free", [210, 245], b_qualified_references_free)
 
+# The library tests whose handled declared errors are raised at run time,
+# for the run-time inputs FITS, ABOVE and BELOW (in byte::from_int's range,
+# above it, below it) and MISSES (a List with no element big accepts).
+fn register_library_error_tests(fits: int, above: int, below: int, misses: List[int]):
+    # The tables' prelude ($::libBindings, after its imports).
+    fn big(x):
+        x > 1
+
+    # method-library-imported-error-capable: an error-capable module
+    # function, its declared errors handled.
+    fn b_imported_error_capable_method() errors compiler::CompilerError:
+        static compile:
+            fn conv(n):
+                b = n.from_int():
+                    on byte::AboveRange:
+                        0
+                    on byte::BelowRange:
+                        1
+                b
+            [conv(fits), conv(above), conv(below)]
+    fn b_imported_error_capable_free() errors compiler::CompilerError:
+        static compile:
+            fn conv(n):
+                b = byte::from_int(n):
+                    on byte::AboveRange:
+                        0
+                    on byte::BelowRange:
+                        1
+                b
+            [conv(fits), conv(above), conv(below)]
+    test::value("method-library-imported-error-capable/method", [200, 0, 1], b_imported_error_capable_method)
+    test::value("method-library-imported-error-capable/free", [200, 0, 1], b_imported_error_capable_free)
+
+    # method-library-higher-order-not-found: list::find's NotFound, handled.
+    fn b_higher_order_not_found_method() errors compiler::CompilerError:
+        static compile:
+            d = misses.find(big):
+                on list::NotFound:
+                    99
+            d
+    fn b_higher_order_not_found_free() errors compiler::CompilerError:
+        static compile:
+            d = list::find(misses, big):
+                on list::NotFound:
+                    99
+            d
+    test::value("method-library-higher-order-not-found/method", 99, b_higher_order_not_found_method)
+    test::value("method-library-higher-order-not-found/free", 99, b_higher_order_not_found_free)
+
 # ---------------------------------------------------------------------------
 # Visibility: only a function visible by that name enables the spelling.
 # (The rejections that need a namespace not to be imported are in the
@@ -728,7 +741,7 @@ fn register_visibility_tests():
             later(5)
             fn later(a):
                 a
-    test::rejects_containing("method-not-visible-forward-reference/method", compiler::DiagnosticCode::NotAStruct, "no function named \"later\" is visible here either", b_forward_reference_method)
+    test::rejects_containing("method-not-visible-forward-reference/method", compiler::DiagnosticCode::NotAStruct, "cannot project field \"later\" from a value of type int: only a struct has fields; as a method-style call, no function named \"later\" is visible here either", b_forward_reference_method)
     test::rejects_containing("method-not-visible-forward-reference/free", compiler::DiagnosticCode::Unbound, "unbound name \"later\"", b_forward_reference_free)
 
     # method-not-visible-on-struct-receiver: a struct receiver's absent field
@@ -1788,6 +1801,7 @@ fn register_method_sugar_tests():
     register_rewrite_tests()
     register_natives_tests()
     register_library_tests()
+    register_library_error_tests(200, 300, 0 - 5, [0, 1])
     register_visibility_tests()
     register_alias_tests()
     register_failure_tests()

@@ -30,8 +30,8 @@ fn register_visibility_tests():
     fn b_list_imported() errors compiler::CompilerError:
         static compile:
             "abc".concat("d")
-    test::rejects_containing("method-not-visible-other-namespace-import/bound-list-member", compiler::DiagnosticCode::NotAStruct, "no function named \"concat\" is visible here either", b_bound_list_member)
-    test::rejects_containing("method-not-visible-other-namespace-import/list-imported", compiler::DiagnosticCode::NotAStruct, "no function named \"concat\" is visible here either", b_list_imported)
+    test::rejects_containing("method-not-visible-other-namespace-import/bound-list-member", compiler::DiagnosticCode::NotAStruct, "cannot project field \"concat\" from a value of type str: only a struct has fields; as a method-style call, no function named \"concat\" is visible here either", b_bound_list_member)
+    test::rejects_containing("method-not-visible-other-namespace-import/list-imported", compiler::DiagnosticCode::NotAStruct, "cannot project field \"concat\" from a value of type str: only a struct has fields; as a method-style call, no function named \"concat\" is visible here either", b_list_imported)
 
     # method-not-visible-no-type-import-needed-or-used: byte::complement
     # takes a Byte, but with nothing of byte imported 200.complement() has
@@ -40,7 +40,7 @@ fn register_visibility_tests():
         static compile:
             x = 200
             x.complement()
-    test::rejects_containing("method-not-visible-no-type-import-needed-or-used/no-import", compiler::DiagnosticCode::NotAStruct, "no function named \"complement\" is visible here either", b_no_import)
+    test::rejects_containing("method-not-visible-no-type-import-needed-or-used/no-import", compiler::DiagnosticCode::NotAStruct, "cannot project field \"complement\" from a value of type int: only a struct has fields; as a method-style call, no function named \"complement\" is visible here either", b_no_import)
 
 with context test::suite()
 register_visibility_tests()

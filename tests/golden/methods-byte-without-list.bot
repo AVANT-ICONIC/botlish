@@ -46,7 +46,7 @@ fn register_alias_tests():
         static compile:
             transform = byte::complement
             [1].length()
-    test::rejects_containing("method-alias-does-not-import/other-namespace", compiler::DiagnosticCode::NotAStruct, "no function named \"length\" is visible here either", b_other_namespace)
+    test::rejects_containing("method-alias-does-not-import/other-namespace", compiler::DiagnosticCode::NotAStruct, "cannot project field \"length\" from a value of type List[int]: only a struct has fields; as a method-style call, no function named \"length\" is visible here either", b_other_namespace)
 
 with context test::suite()
 register_visibility_tests()

@@ -53,7 +53,7 @@
 # compiler::CompilerError; DiagnosticCode cases; compiler::SourceLocation is
 # also the module struct of destructure-module-struct-source); list for
 # list::at, list::length and the method sugar `xs.length()`; str for
-# str::length (and the message checks below); mutable_array for the
+# str::length (destructure-fields-of-different-types); mutable_array for the
 # MutableArray fields and sources; coroutine for coroutine::done?, which
 # drives the evaluation probe `bump`.
 import compiler
@@ -182,10 +182,10 @@ fn mk_anon():
     {a: bump(1, 1), b: "x", c: bump(2, 3)}
 
 # ---------------------------------------------------------------------------
-# Diagnostic checks beyond lib/test.bot's codes and locations: the Tcl tests
-# that pin a message (or a message glob), and the ones that require two
-# programs to be rejected with the same diagnostic. Each check reaches its
-# verdict through test::passed / test::mismatch / test::equal.
+# The one diagnostic check beyond lib/test.bot's helpers: the Tcl tests that
+# require two programs to be rejected with the same diagnostic (same code,
+# same message). It reaches its verdict through test::passed / test::mismatch
+# / test::equal.
 
 # A block's outcome as a diagnostic: whether BODY's block was rejected, and
 # if so with which code and message.
@@ -199,51 +199,6 @@ fn rejection_of(body) -> Rejection:
         on compiler::CompilerError {code, message}:
             return Rejection {rejected: true, code: code, message: message}
     Rejection {rejected: false, code: compiler::DiagnosticCode::Type, message: ""}
-
-# Whether TEXT starts with PREFIX.
-fn starts_with(text: str, prefix: str) -> bool:
-    head = text.substring(0, str::length(prefix)):
-        on LowerUnderrun:
-            return false
-        on UpperOverrun:
-            return false
-    head == prefix
-
-# Whether TEXT ends with SUFFIX.
-fn ends_with(text: str, suffix: str) -> bool:
-    length = str::length(text)
-    tail = text.substring(length - str::length(suffix), length):
-        on LowerUnderrun:
-            return false
-        on UpperOverrun:
-            return false
-    tail == suffix
-
-# NAME: BODY's block is rejected with EXPECTED and exactly the message WANTED.
-nomethod fn rejects_saying(name: str, expected: compiler::DiagnosticCode, wanted: str, body) -> unit:
-    fn check() -> test::Match:
-        seen = rejection_of(body)
-        if not seen.rejected:
-            return test::mismatch("compiler diagnostic ".concat(test::code_name(expected)), "the block was accepted", "")
-        if seen.code != expected:
-            return test::mismatch("compiler diagnostic ".concat(test::code_name(expected)), "compiler diagnostic ".concat(test::code_name(seen.code)), seen.message)
-        test::equal(wanted, seen.message)
-    test::case(name, check)
-
-# NAME: BODY's block is rejected with EXPECTED and a message matching the
-# glob PREFIX*SUFFIX (it starts with PREFIX and ends with SUFFIX).
-nomethod fn rejects_matching(name: str, expected: compiler::DiagnosticCode, prefix: str, suffix: str, body) -> unit:
-    fn check() -> test::Match:
-        seen = rejection_of(body)
-        if not seen.rejected:
-            return test::mismatch("compiler diagnostic ".concat(test::code_name(expected)), "the block was accepted", "")
-        if seen.code != expected:
-            return test::mismatch("compiler diagnostic ".concat(test::code_name(expected)), "compiler diagnostic ".concat(test::code_name(seen.code)), seen.message)
-        long_enough = str::length(seen.message) >= str::length(prefix) + str::length(suffix)
-        if long_enough and seen.message.starts_with(prefix) and seen.message.ends_with(suffix):
-            return test::passed()
-        test::mismatch("a message matching ".concat(prefix).concat("*").concat(suffix), seen.message, "")
-    test::case(name, check)
 
 # NAME: the blocks of ONE and OTHER are both rejected, with the same code and
 # the same message.
@@ -270,7 +225,7 @@ fn register_list_policy_tests():
         static compile:
             xs = [1, 2]
             {a} = xs
-    rejects_matching("destructure-list-struct-syntax-on-list-source-is-not-list-policy", compiler::DiagnosticCode::NotAStruct, "cannot project field \"a\" from a value of type List", ": only a struct has fields", struct_syntax_on_list)
+    test::rejects_message("destructure-list-struct-syntax-on-list-source-is-not-list-policy", compiler::DiagnosticCode::NotAStruct, "cannot project field \"a\" from a value of type List[int]: only a struct has fields", struct_syntax_on_list)
 
     # destructure-list-ordinary-list-uses: a List literal followed by `=`
     # anywhere else keeps its meaning.
@@ -1547,28 +1502,28 @@ fn register_rejection_message_tests():
     fn missing_field() errors compiler::CompilerError:
         static compile:
             {missing} = Rec {a: 1, b: "x", c: 3, d: 4}
-    rejects_saying("destructure-reject-missing-field-message", compiler::DiagnosticCode::UnknownField, "struct type Rec has no field \"missing\" (known fields: a, b, c, d)", missing_field)
+    test::rejects_message("destructure-reject-missing-field-message", compiler::DiagnosticCode::UnknownField, "struct type Rec has no field \"missing\" (known fields: a, b, c, d)", missing_field)
 
     # destructure-reject-anonymous-missing-field-message: for an anonymous
     # struct too.
     fn anonymous_missing_field() errors compiler::CompilerError:
         static compile:
             {missing} = {a: 1, b: 2}
-    rejects_saying("destructure-reject-anonymous-missing-field-message", compiler::DiagnosticCode::UnknownField, "struct type struct{a: int, b: int} has no field \"missing\" (known fields: a, b)", anonymous_missing_field)
+    test::rejects_message("destructure-reject-anonymous-missing-field-message", compiler::DiagnosticCode::UnknownField, "struct type struct{a: int, b: int} has no field \"missing\" (known fields: a, b)", anonymous_missing_field)
 
     # destructure-reject-int-source-message: a non-struct source reports the
     # projection type error, naming the field and the type.
     fn int_source() errors compiler::CompilerError:
         static compile:
             {a} = 42
-    rejects_saying("destructure-reject-int-source-message", compiler::DiagnosticCode::NotAStruct, "cannot project field \"a\" from a value of type int: only a struct has fields", int_source)
+    test::rejects_message("destructure-reject-int-source-message", compiler::DiagnosticCode::NotAStruct, "cannot project field \"a\" from a value of type int: only a struct has fields", int_source)
 
     # destructure-reject-list-source-message: a List source with struct
     # syntax is a plain NotAStruct, never the List policy diagnostic.
     fn list_source() errors compiler::CompilerError:
         static compile:
             {a, b} = [1, 2]
-    rejects_matching("destructure-reject-list-source-message", compiler::DiagnosticCode::NotAStruct, "cannot project field \"a\" from a value of type ", ": only a struct has fields", list_source)
+    test::rejects_message("destructure-reject-list-source-message", compiler::DiagnosticCode::NotAStruct, "cannot project field \"a\" from a value of type List[int]: only a struct has fields", list_source)
 
     # destructure-reject-unproven-shape-message: a source whose struct type is
     # not known (a parameter of a function that also escapes as a value) is
@@ -1602,14 +1557,14 @@ fn register_location_tests():
         static compile:
             x = {good: 1}
             {good, mising} = x
-    test::rejects_at("destructure-location-second-field", compiler::DiagnosticCode::UnknownField, 1604, 20, second_field)
+    test::rejects_at("destructure-location-second-field", compiler::DiagnosticCode::UnknownField, 1559, 20, second_field)
 
     # destructure-location-first-field: at the first entry's field.
     fn first_field() errors compiler::CompilerError:
         static compile:
             x = {good: 1}
             {mising, good} = x
-    test::rejects_at("destructure-location-first-field", compiler::DiagnosticCode::UnknownField, 1611, 14, first_field)
+    test::rejects_at("destructure-location-first-field", compiler::DiagnosticCode::UnknownField, 1566, 14, first_field)
 
     # destructure-location-renamed-field: at the field read, not the binding
     # made.
@@ -1617,20 +1572,20 @@ fn register_location_tests():
         static compile:
             x = {good: 1}
             {good, mising: other} = x
-    test::rejects_at("destructure-location-renamed-field", compiler::DiagnosticCode::UnknownField, 1619, 20, renamed_field)
+    test::rejects_at("destructure-location-renamed-field", compiler::DiagnosticCode::UnknownField, 1574, 20, renamed_field)
 
     # destructure-location-non-struct: a non-struct source, at the field.
     fn non_struct() errors compiler::CompilerError:
         static compile:
             {a} = 5
-    test::rejects_at("destructure-location-non-struct", compiler::DiagnosticCode::NotAStruct, 1625, 14, non_struct)
+    test::rejects_at("destructure-location-non-struct", compiler::DiagnosticCode::NotAStruct, 1580, 14, non_struct)
 
     # destructure-location-nested: at the nested pattern's field.
     fn nested() errors compiler::CompilerError:
         static compile:
             x = {u: {a: 1}}
             {u: {nope}} = x
-    test::rejects_at("destructure-location-nested", compiler::DiagnosticCode::UnknownField, 1632, 18, nested)
+    test::rejects_at("destructure-location-nested", compiler::DiagnosticCode::UnknownField, 1587, 18, nested)
 
     # destructure-location-indented: inside a function body.
     fn indented() errors compiler::CompilerError:
@@ -1639,7 +1594,7 @@ fn register_location_tests():
                 x = {a: 1}
                 {a, z} = x
             f()
-    test::rejects_at("destructure-location-indented", compiler::DiagnosticCode::UnknownField, 1640, 21, indented)
+    test::rejects_at("destructure-location-indented", compiler::DiagnosticCode::UnknownField, 1595, 21, indented)
 
     # destructure-location-multiline-pattern: a field name on its own line is
     # located there.
@@ -1650,7 +1605,7 @@ fn register_location_tests():
                 good,
                 mising,
             } = x
-    test::rejects_at("destructure-location-multiline-pattern", compiler::DiagnosticCode::UnknownField, 1651, 17, multiline_pattern)
+    test::rejects_at("destructure-location-multiline-pattern", compiler::DiagnosticCode::UnknownField, 1606, 17, multiline_pattern)
 
 # ---------------------------------------------------------------------------
 # Duplicates: the ordinary duplicate-binding rule, with no shadowing or
@@ -1676,7 +1631,7 @@ fn register_duplicate_tests():
     fn destination_location() errors compiler::CompilerError:
         static compile:
             {a: x, b: x} = {a: 1, b: 2}
-    test::rejects_at("destructure-duplicate-destination-location", compiler::DiagnosticCode::Duplicate, 1678, 23, destination_location)
+    test::rejects_at("destructure-duplicate-destination-location", compiler::DiagnosticCode::Duplicate, 1633, 23, destination_location)
 
     # destructure-duplicate-destination-shorthand: a shorthand entry colliding
     # with a renaming one, in either order.
@@ -2792,12 +2747,12 @@ fn register_nested_tests():
     fn int_field() errors compiler::CompilerError:
         static compile:
             {u: {a}} = {u: 5}
-    rejects_saying("destructure-nested-struct-field-is-struct-only/int", compiler::DiagnosticCode::NotAStruct, "cannot project field \"a\" from a value of type int: only a struct has fields", int_field)
+    test::rejects_message("destructure-nested-struct-field-is-struct-only/int", compiler::DiagnosticCode::NotAStruct, "cannot project field \"a\" from a value of type int: only a struct has fields", int_field)
 
     fn list_field() errors compiler::CompilerError:
         static compile:
             {u: {a}} = {u: [1, 2]}
-    rejects_matching("destructure-nested-struct-field-is-struct-only/list", compiler::DiagnosticCode::NotAStruct, "cannot project field \"a\" from a value of type ", ": only a struct has fields", list_field)
+    test::rejects_message("destructure-nested-struct-field-is-struct-only/list", compiler::DiagnosticCode::NotAStruct, "cannot project field \"a\" from a value of type List[int]: only a struct has fields", list_field)
 
 # ---------------------------------------------------------------------------
 # Modules
@@ -3942,7 +3897,7 @@ fn register_unit_rejection_tests():
             fn f():
                 {a, nope} = {a: 1}
             f()
-    test::rejects_at("destructure-value-static-error-locations/unknown-field", compiler::DiagnosticCode::UnknownField, 3943, 21, location_unknown_field)
+    test::rejects_at("destructure-value-static-error-locations/unknown-field", compiler::DiagnosticCode::UnknownField, 3898, 21, location_unknown_field)
 
     fn location_continuation() errors compiler::CompilerError:
         static compile:
@@ -3950,14 +3905,14 @@ fn register_unit_rejection_tests():
                 {good,
               mising} = {good: 1}
             f()
-    test::rejects_at("destructure-value-static-error-locations/continuation-line", compiler::DiagnosticCode::UnknownField, 3951, 15, location_continuation)
+    test::rejects_at("destructure-value-static-error-locations/continuation-line", compiler::DiagnosticCode::UnknownField, 3906, 15, location_continuation)
 
     fn location_duplicate() errors compiler::CompilerError:
         static compile:
             fn f():
                 {a: x, b: x} = {a: 1, b: 2}
             f()
-    test::rejects_at("destructure-value-static-error-locations/duplicate", compiler::DiagnosticCode::Duplicate, 3958, 27, location_duplicate)
+    test::rejects_at("destructure-value-static-error-locations/duplicate", compiler::DiagnosticCode::Duplicate, 3913, 27, location_duplicate)
 
     fn location_inner() errors compiler::CompilerError:
         static compile:
@@ -3965,7 +3920,7 @@ fn register_unit_rejection_tests():
                 {a, nope} = {a: 1}
                 1
             f()
-    test::rejects_at("destructure-value-static-error-locations/inner", compiler::DiagnosticCode::UnknownField, 3965, 21, location_inner)
+    test::rejects_at("destructure-value-static-error-locations/inner", compiler::DiagnosticCode::UnknownField, 3920, 21, location_inner)
 
 
 # ---------------------------------------------------------------------------
