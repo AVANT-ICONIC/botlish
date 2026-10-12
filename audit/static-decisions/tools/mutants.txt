@@ -2,9 +2,11 @@
 # mutate.tcl; STATIC-COMPILE.md, "Decision economics"): deliberate bugs in
 # the batched scheduler (hir/static.tcl), its dependency analysis
 # (hir/staticdeps.tcl) and the reuse of method-call decisions
-# (hir/static.tcl's MethodSeeds, hir/hir.tcl). The first group changes what
-# is decided (semantic); the second only how many builds it takes
-# (economic: the milestone's contract is economic, so these are bugs too).
+# (hir/static.tcl's MethodSeeds, hir/hir.tcl), and in what a diagnostic
+# prints that differs between builds (hir/semantic.tcl's SourceName). The
+# first group changes what is decided (semantic); the second only how many
+# builds it takes (economic: the milestone's contract is economic, so these
+# are bugs too).
 #
 #   @@ NAME DESCRIPTION
 #   ## FILE
@@ -204,6 +206,14 @@
 <<<<
                 dict set succ C:erased erasure-contributor
 ====
+>>>>
+
+@@ hygiene-names-printed a diagnostic prints a binding hygiene renamed by its NAME#N, whose number counts that name's renames across the whole program: another site's rejection renumbers it, so a rejection committed beside an earlier one carries another message than the sequential order's
+## hir/semantic.tcl
+<<<<
+        return [dict get $hir bindings $b spelling]
+====
+        return [dict get $hir bindings $b name]
 >>>>
 
 # ---------------------------------------------------------------------------

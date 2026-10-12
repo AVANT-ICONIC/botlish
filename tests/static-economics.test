@@ -445,6 +445,15 @@ test se-equal-internal-ids-exact {only a message naming an internal id the way t
         [dict get [hir::static::PredictionOf {kind TYPE message "s1 is block(e12)/1 -> int, function e9/0 -> int"}] message]
 } -result {{} {TYPE USE-AFTER-MOVE} 2 {} {e12 e7 e9} {s1 is block(#)/1 -> int, function #/0 -> int}}
 
+test se-equal-hygiene-names {a diagnostic names a binding hygiene renamed (hir/hygiene.tcl's NAME#N: here a parameter `list` shadowing the root `list` a list literal calls) by its source spelling: the number counts that name's renames across the whole program, another site's among them -- the batched run, committing b's rejection beside a's, once printed `list#2` where the sequential order, judging b after a's rejection, prints `list#1`} -body {
+    set text "import compiler\n\nfn want(v: int) -> int:\n    v\n\n"
+    append text [seSite a {"fn f(list: int) -> int:" "    x = \[1\]" "    list" {want("s")}}]
+    append text [seSite b {"fn g(list: int) -> int:" "    y = \[2\]" "    list" {g("s")}}]
+    append text "ra = a():\n    on compiler::CompilerError:\n        -1\nrb = b():\n    on compiler::CompilerError:\n        -1\nra + rb\n"
+    set messages [lmap {key site} [hir::static::sites [seHir $text]] {dict get $site diagnostic message}]
+    list [seSame $text] [seOutcomes $text] [lindex $messages 1]
+} -result {{} {TYPE TYPE} {argument for parameter "list" cannot be proven to satisfy int (argument type: str)}}
+
 test se-equal-erased-witness {the erased-callable contract is a set of errors, which loses one only once every contribution erasing it is gone: it depends on one witness per error (the contribution the sequential order removes last) -- and every other contributor is linked to it: here the consumer turns unknown when the block in mk() is rejected (the witness, in w(), erases mk()'s result, which then never exists), and the other contributor of E2, l(), must not be rejected in the same run, or the next build judges the consumer without E2 -- the batched decisions are the sequential ones} -body {
     set text "import compiler\nimport list\n\nerror E1\nerror E2\n\nfn harmless() -> int:\n    1\n\nfn raise2() -> int errors E2:\n    fail E2\n\nfn raise2b() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn want(x: int) -> int:\n    x\n\nfn mk() errors compiler::CompilerError:\n    static compile:\n        want(\"z\")\n        raise2b\n\n"
     append text [seSite y {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]

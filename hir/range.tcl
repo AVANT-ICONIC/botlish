@@ -1670,7 +1670,7 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
                 dict set hir violatedDeclared $paramBinding $arg
             }
             hir::Diagnose hir TRAIT-NOT-SATISFIED [hir::traits::NotSatisfiedMessage $hir \
-                [dict get $hir bindings $paramBinding name] $argType $declaredType] $arg
+                [hir::semantic::SourceName $hir $paramBinding] $argType $declaredType] $arg
             continue
         }
         if {$declaredType ne {} && !$inferred && [hir::types::IsFn $declaredType] && [hir::types::IsCoroutine $argType]} {
@@ -1698,7 +1698,7 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
             }
             hir::Diagnose hir TYPE [format \
                 {argument for parameter "%s" cannot be proven to satisfy %s%s (argument type: %s%s)%s%s} \
-                [dict get $hir bindings $paramBinding name] [hir::types::show $declaredType] \
+                [hir::semantic::SourceName $hir $paramBinding] [hir::types::show $declaredType] \
                 [expr {$inferred ? ", the parameter type inferred from the function body" : ""}] \
                 [hir::semantic::ShowType $hir $argType] [FactsClause $argType $declaredType $argRange] [MismatchClause $argType $declaredType] \
                 [expr {$inferred ? [hir::signatures::because $hir $targetBlock $i] : ""}]] $arg
@@ -1726,7 +1726,7 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
         }
         hir::Diagnose hir TYPE [format \
             {argument for parameter "%s" is statically incompatible with %s, the parameter type inferred from the function body (argument type: %s%s)%s} \
-            [dict get $hir bindings $paramBinding name] [hir::types::show $checkedType] \
+            [hir::semantic::SourceName $hir $paramBinding] [hir::types::show $checkedType] \
             [hir::semantic::ShowType $hir $argType] [FactsClause $argType $checkedType $argRange] \
             [hir::signatures::because $hir $targetBlock $i]] $arg
     }
