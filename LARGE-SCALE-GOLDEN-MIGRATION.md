@@ -29,8 +29,11 @@ one report (10 companions exclude a backend with a recorded reason).
 On the final tree, **all 4702 ported (Tcl test, golden test) pairs agree: old
 passes, new passes** (audit/golden/tools/check.tcl, every ported Tcl test proven
 to have run by name, every golden suite on all four backends), and the full Tcl
-suite passes in both passes (PASS_COUNTS). Every golden test is demonstrably
-capable of failing (audit/golden/tools/perturb.tcl: PERTURB_SUMMARY). The
+suite passes in both passes (7280 tests on interp; on compile 7276, the 4
+others interp-only by constraint; 0 failed). Every golden test is demonstrably
+capable of failing (audit/golden/tools/perturb.tcl: every one of the 4572 fails
+with inverted verdicts, every one of the 4047 with a textual expectation fails
+with it altered). The
 framework's 20 mutants are all killed; of a 48-mutant cross-suite sample, 45
 are detected by both layers, 2 only by Tcl (both explained: not
 source-observable) and 1 by neither ported side ([Mutation](#mutation)).
@@ -522,9 +525,13 @@ independent ways, one compilation each:
   case becomes another case of its enum; a rejection's code changes (Type <->
   Unbound); a `rejects_at` column moves. Every altered test must FAIL.
 
-Every migration suite passed both before it was accepted (registrations with
-computed names or `unit`/`[]` expectations cannot be altered textually; invert
-covers them, and several migrators altered those by hand). PERTURB_RESULT
+Every migration suite passed both before it was accepted, and the final tree
+passes both over all 88 suites (interp; the three suites that exclude the Tcl
+backends on cranelift): **invert -- 4572 of 4572 tests FAIL; alter -- 4047
+tests altered, 4047 FAIL**. The 212 registrations alter cannot change
+textually (computed names, `unit`/`[]` or computed expectations, suite-local
+helpers, `test::case`) are covered by invert, and several migrators altered
+those by hand. No test is vacuous.
 
 ## Mutation
 
@@ -606,8 +613,14 @@ the final tree).
 | MutableVector (`audit/mutable-vector/tools/mutate.tcl`) | 45 | MUTANTS_MV | `hir/mutvec.tcl` |
 | MutableArray (`audit/mutable-array/tools/mutate.tcl`) | 31 | MUTANTS_MA | `hir/mutvec.tcl` |
 
-Every compiler fix of the migration also ran its layer's fuzzers (several
-seeds, once under GC stress where the harness has the switch): FUZZ_RESULTS.
+Every compiler fix of the migration also ran its layer's fuzzers on the final
+tree (several seeds, once under GC stress where the harness has the switch),
+none with a disagreement: affine 3 x 30 programs, coroutines 2 x 50,
+MutableVector 3 x 40 (one GC-stressed), MutableArray 3 x 40 (one GC-stressed),
+static intrinsics 3 seeds (one GC-stressed), static decisions (with the
+economics fixes), structural contracts and error payloads (with the completion
+fixes), and the golden fuzzer 4 x 20 programs (one GC-stressed) after
+`lib/test.bot` changed.
 
 ## Freeze classification
 
