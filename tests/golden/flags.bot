@@ -1,0 +1,1308 @@
+# flags.bot -- function flags (FLAGS.md), as a source-level specification:
+#
+#     fn open(path, flags :append, :cloexec)    a flag section, after the ordinary parameters
+#     open("f", :append)                        a call names the flags it sets
+#
+# A flag is an immutable Bool parameter that is true exactly when its name is
+# written at the call -- in any order, after the ordinary arguments -- and
+# false otherwise. Every call establishes its own flags. A flag binding is an
+# ordinary Bool: it is assigned, passed, stored, returned and captured like
+# one, and it lives in the one local namespace the ordinary parameters live
+# in. A wrapper or a recursive call forwards a flag only by naming it. Method
+# spelling `r.f(:a)` is the free call `f(r, :a)`, with the same evaluation
+# order, and flags add no evaluation. An alias `g = f` keeps f's flag
+# interface. A function that declares flags is not a value: it may be called
+# or bound to another name, never passed, returned or stored. The static
+# diagnostics: UnknownFlag and DuplicateFlag at the supplied flag,
+# DuplicateFlagDeclaration and FlagBindingCollision at the declared flag,
+# Arity counting the ordinary arguments only (a method's receiver included),
+# FlagCalleeUnknown when the callee's declaration is not statically known,
+# FlagFunctionValue at a flag function used as a value. There is no flag type.
+#
+# Ported from tests/flags.test. Its flags-diagnostic-unknown-second and
+# flags-diagnostic-unknown-callee are in diagnostics.bot and collections.bot.
+# The Tcl tests stay authoritative and unchanged; what source cannot observe
+# stays there only: parsing and syntax errors, the HIR facts and Core IR,
+# the number of diagnostics of a non-strict build, warnings and the
+# standalone executable's output.
+#
+# Conventions:
+#
+# * Each Tcl test compiles one program; here that program is the test's
+#   block, its declarations included. The Tcl tests' shared ::observe prelude
+#   (`fn observe(x, flags :a, :b, :c): [x, a, b, c]`) is declared in every
+#   block that uses it, without the prelude's `import list`, which only
+#   method sugar `.get` needs (the suite imports list).
+# * Diagnostics compare the DiagnosticCode and, where the Tcl test pins it,
+#   the location: the Tcl program's line and column, translated to this
+#   file's. The message is compared only where its wording is the property
+#   (rejects_saying, below).
+# * Evaluation order: the Tcl tests log each probe into an installed context,
+#   which a body cannot use. Here a probe yields [ID] (a deep yield), and the
+#   block drives one coroutine per spelling, collecting [FIRST, REST]: FIRST
+#   the first probe's yield, REST every later yield followed by the
+#   spelling's value.
+# * The differential tests call `body` with the 8 subsets of {a, b, c} in the
+#   Tcl test's order (mask 0..7, a = bit 0, b = bit 1, c = bit 2: none, :a,
+#   :b, :a :b, :c, :a :c, :b :c, :a :b :c), and with the 6 spelling orders of
+#   all three flags (abc, acb, bac, bca, cab, cba).
+#
+# Imports: compiler and test (the framework); list (method sugar `.get`
+# resolves to list::get, and list::get and list::at are called qualified);
+# coroutine (coroutine::done? in the evaluation-order driver).
+import compiler
+import coroutine
+import list
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations (top-level only)
+
+# The error a flag selects at run time (flags-semantics-handled-call's Bad).
+error FlaggedFailure
+
+# ---------------------------------------------------------------------------
+# A custom check: a rejection whose wording is the property.
+
+# BODY's block must be rejected with diagnostic code EXPECTED at LINE and
+# COLUMN of this file, with exactly the message WORDING.
+nomethod fn rejects_saying(name: str, expected: compiler::DiagnosticCode, line: int, column: int, wording: str, body) -> unit:
+    fn check() -> test::Match:
+        wanted = test::diagnostic_text(expected, compiler::SourceLocation {line: line, column: column})
+        actual = body():
+            on compiler::CompilerError {code, primary, message}:
+                return test::equal([wanted, wording], [test::diagnostic_text(code, primary), message])
+        test::mismatch(wanted, "the block was accepted", "")
+    test::case(name, check)
+
+# ---------------------------------------------------------------------------
+# A flag is true exactly when it is supplied (flags-semantics-*)
+
+# The flags-semantics table: observe(7, ...) with every spelling of a flag
+# set -- one flag, two in either order, all three in three orders, a
+# trailing comma.
+fn register_observe_tests():
+    fn none() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            observe(7)
+    test::value("flags-semantics-none", [7, false, false, false], none)
+
+    fn only_a() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            observe(7, :a)
+    test::value("flags-semantics-a", [7, true, false, false], only_a)
+
+    fn only_b() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            observe(7, :b)
+    test::value("flags-semantics-b", [7, false, true, false], only_b)
+
+    fn only_c() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            observe(7, :c)
+    test::value("flags-semantics-c", [7, false, false, true], only_c)
+
+    fn a_then_b() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            observe(7, :a, :b)
+    test::value("flags-semantics-ab", [7, true, true, false], a_then_b)
+
+    fn b_then_a() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            observe(7, :b, :a)
+    test::value("flags-semantics-ba", [7, true, true, false], b_then_a)
+
+    fn c_then_a() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            observe(7, :c, :a)
+    test::value("flags-semantics-ca", [7, true, false, true], c_then_a)
+
+    fn all() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            observe(7, :a, :b, :c)
+    test::value("flags-semantics-all", [7, true, true, true], all)
+
+    fn all_reversed() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            observe(7, :c, :b, :a)
+    test::value("flags-semantics-all-reversed", [7, true, true, true], all_reversed)
+
+    fn all_rotated() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            observe(7, :b, :c, :a)
+    test::value("flags-semantics-all-rotated", [7, true, true, true], all_rotated)
+
+    fn trailing_comma() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            observe(7, :b,)
+    test::value("flags-semantics-trailing-comma", [7, false, true, false], trailing_comma)
+
+# Flag sections of other shapes, and a flag as a Bool in conditions.
+fn register_flag_section_tests():
+    # A function with zero ordinary parameters.
+    fn only_flags() errors compiler::CompilerError:
+        static compile:
+            fn only(flags :a, :b):
+                [a, b]
+            [only(), only(:a), only(:b), only(:b, :a)]
+    test::value("flags-semantics-only-flags", [[false, false], [true, false], [false, true], [true, true]], only_flags)
+
+    # Several ordinary parameters and several flags.
+    fn many_ordinary() errors compiler::CompilerError:
+        static compile:
+            fn f(x, y, z, flags :p, :q):
+                [x + y + z, p, q]
+            f(1, 2, 3, :q)
+    test::value("flags-semantics-many-ordinary", [6, false, true], many_ordinary)
+
+    # The flag binding is a Bool: usable in if, and, or, not, ==.
+    fn type_is_bool() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a, :b):
+                x = if a and not b:
+                    1
+                else:
+                    0
+                y = if a == b:
+                    10
+                else:
+                    20
+                z = if a or b:
+                    100
+                else:
+                    200
+                x + y + z
+            [f(), f(:a), f(:b), f(:a, :b)]
+    test::value("flags-semantics-type-is-bool", [210, 121, 120, 110], type_is_bool)
+
+    # Every call establishes its own flag values.
+    fn fresh_per_call() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            [observe(1, :a), observe(2), observe(3, :b), observe(4), observe(5, :a, :c)]
+    test::value("flags-semantics-fresh-per-call", [[1, true, false, false], [2, false, false, false], [3, false, true, false], [4, false, false, false], [5, true, false, true]], fresh_per_call)
+
+# A flag binding is an ordinary immutable Bool.
+fn register_flag_binding_tests():
+    # Assignable, passable, storable, returnable.
+    fn bindings() errors compiler::CompilerError:
+        static compile:
+            fn show(v):
+                v
+            fn f(flags :trace):
+                t = trace
+                s = {lit: trace}
+                [t, show(trace), s.lit, trace]
+            [f(), f(:trace)]
+    test::value("flags-semantics-bindings", [[false, false, false, false], [true, true, true, true]], bindings)
+
+    # Stored in a struct value.
+    fn struct_field() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a, :b):
+                {first: a, second: b}
+            r = f(:b)
+            [r.first, r.second]
+    test::value("flags-semantics-struct-field", [false, true], struct_field)
+
+    # Returned like any Bool.
+    fn returned() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :t):
+                t
+            [f(), f(:t)]
+    test::value("flags-semantics-return", [false, true], returned)
+
+    # Passed to another function as an ordinary Bool argument.
+    fn passed_on() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag, a, b):
+                if flag:
+                    return a
+                return b
+            fn f(flags :big):
+                pick(big, 100, 1)
+            [f(), f(:big)]
+    test::value("flags-semantics-passed-on", [1, 100], passed_on)
+
+    # The flags of nested calls are independent.
+    fn nested_calls() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            [observe(observe(1, :a).get(0, -1) + 1, :b), observe(2, :c).get(3, -1)]
+    test::value("flags-semantics-nested-calls", [[2, false, true, false], true], nested_calls)
+
+    # A nested function captures a flag like any binding.
+    fn closure_captures() errors compiler::CompilerError:
+        static compile:
+            fn outer(x, flags :boost):
+                fn inner(y):
+                    if boost:
+                        return x + y + 100
+                    return x + y
+                inner(1)
+            [outer(1), outer(1, :boost)]
+    test::value("flags-semantics-closure-captures", [2, 102], closure_captures)
+
+    # A declared flag that is never read is not an error.
+    fn unused_flag() errors compiler::CompilerError:
+        static compile:
+            fn f(x, flags :unused):
+                x
+            [f(1), f(1, :unused)]
+    test::value("flags-semantics-unused-flag", [1, 1], unused_flag)
+
+# A flag reaches a callee only by being named at the call.
+fn register_flag_forwarding_tests():
+    # A wrapper forwards a flag only by naming it in its own call.
+    fn wrapper_explicit() errors compiler::CompilerError:
+        static compile:
+            fn inner(flags :v):
+                v
+            fn forwarding(flags :v):
+                if v:
+                    return inner(:v)
+                return inner()
+            fn silent(flags :v):
+                inner()
+            [forwarding(), forwarding(:v), silent(), silent(:v)]
+    test::value("flags-semantics-wrapper-explicit", [false, true, false, false], wrapper_explicit)
+
+    # A recursive call may supply a different flag set.
+    fn recursion_different_sets() errors compiler::CompilerError:
+        static compile:
+            fn walk(n, flags :trace, :twice):
+                if n == 0:
+                    return [trace, twice]
+                if n == 1:
+                    return walk(0, :trace)
+                if n == 2:
+                    return walk(1)
+                return walk(n - 1, :twice)
+            [walk(0), walk(0, :twice), walk(1, :twice), walk(2, :twice), walk(3)]
+    test::value("flags-semantics-recursion-different-sets", [[false, false], [false, true], [true, false], [true, false], [true, false]], recursion_different_sets)
+
+    # A recursive call carries the flag on by naming it.
+    fn recursion_carry() errors compiler::CompilerError:
+        static compile:
+            fn count(n, flags :down):
+                if n == 0:
+                    return 0
+                if down:
+                    return 1 + count(n - 1, :down)
+                return 10 + count(n - 1)
+            [count(3), count(3, :down)]
+    test::value("flags-semantics-recursion-carry", [30, 3], recursion_carry)
+
+# Flag names belong to their function; colons elsewhere are unchanged; a
+# flagged call can be handled.
+fn register_flag_spelling_tests():
+    # Two functions may both declare :append, unrelated.
+    fn same_spelling() errors compiler::CompilerError:
+        static compile:
+            fn open(flags :append):
+                [1, append]
+            fn log(flags :append, :other):
+                [2, append, other]
+            [open(:append), log(:other), log(:append), open()]
+    test::value("flags-semantics-same-spelling-different-functions", [[1, true], [2, false, true], [2, true, false], [1, false]], same_spelling)
+
+    # :no_cache is just a flag whose name starts with no_.
+    fn no_negated_spellings() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :no_cache):
+                no_cache
+            [f(), f(:no_cache)]
+    test::value("flags-semantics-no-negated-spellings", [false, true], no_negated_spellings)
+
+    # A type annotation and a struct literal keep their colons.
+    fn unrelated_colons() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int):
+                x
+            g = {a: 1, b: 2}
+            if g.a == 1:
+                f(g.b)
+            else:
+                0
+    test::value("flags-semantics-unrelated-colons", 2, unrelated_colons)
+
+    # A call with flags can be a handled call: the flag selects the failure.
+    fn handled_call() errors compiler::CompilerError:
+        static compile:
+            fn f(x, flags :fail_it) errors FlaggedFailure:
+                if fail_it:
+                    fail FlaggedFailure
+                x
+            r = f(5, :fail_it):
+                on FlaggedFailure:
+                    -1
+            s = f(5):
+                on FlaggedFailure:
+                    -1
+            [r, s]
+    test::value("flags-semantics-handled-call", [-1, 5], handled_call)
+
+# ---------------------------------------------------------------------------
+# Static diagnostics, at the flag's own spelling (flags-diagnostic-*)
+
+fn register_diagnostic_tests():
+    # A flag the callee does not declare: at `:flush`.
+    fn unknown() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :quiet):
+                quiet
+            f(:flush)
+    test::rejects_at("flags-diagnostic-unknown", compiler::DiagnosticCode::UnknownFlag, 379, 15, unknown)
+
+    # Any flag, to a function that declares none: at `:flush`.
+    fn unknown_none() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                x
+            f(1, :flush)
+    test::rejects_at("flags-diagnostic-unknown-none", compiler::DiagnosticCode::UnknownFlag, 387, 18, unknown_none)
+
+    # A native declares no flags: at `:a`.
+    fn unknown_native() errors compiler::CompilerError:
+        static compile:
+            list::at([1], 0, :a)
+    test::rejects_at("flags-diagnostic-unknown-native", compiler::DiagnosticCode::UnknownFlag, 393, 30, unknown_native)
+
+    # A flag supplied twice: at the second `:quiet`.
+    fn duplicate_call() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :quiet):
+                quiet
+            f(:quiet, :quiet)
+    test::rejects_at("flags-diagnostic-duplicate-call", compiler::DiagnosticCode::DuplicateFlag, 401, 23, duplicate_call)
+
+    # ... also with another flag between: at the second `:a`.
+    fn duplicate_three() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a, :b):
+                a
+            f(:a, :b, :a)
+    test::rejects_at("flags-diagnostic-duplicate-three", compiler::DiagnosticCode::DuplicateFlag, 409, 23, duplicate_three)
+
+    # A flag declared twice in one section: at the second `:a`.
+    fn duplicate_decl() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a, :a):
+                a
+            f()
+    test::rejects_at("flags-diagnostic-duplicate-decl", compiler::DiagnosticCode::DuplicateFlagDeclaration, 415, 28, duplicate_decl)
+
+    # A flag named like an ordinary parameter: at the flag `:x`.
+    fn collision() errors compiler::CompilerError:
+        static compile:
+            fn f(x, flags :x):
+                x
+            f(1)
+    test::rejects_at("flags-diagnostic-collision", compiler::DiagnosticCode::FlagBindingCollision, 423, 27, collision)
+
+    # The same with a longer name: at the flag `:mode`.
+    fn collision_mode() errors compiler::CompilerError:
+        static compile:
+            fn f(mode, flags :mode):
+                mode
+            f(1)
+    test::rejects_at("flags-diagnostic-collision-mode", compiler::DiagnosticCode::FlagBindingCollision, 431, 30, collision_mode)
+
+    # Arity counts the ordinary arguments only: two for one, at the call.
+    fn arity_too_many() errors compiler::CompilerError:
+        static compile:
+            fn f(x, flags :a):
+                a
+            f(1, 2)
+    test::rejects_at("flags-diagnostic-arity-too-many", compiler::DiagnosticCode::Arity, 441, 13, arity_too_many)
+
+    # ... and a flag does not count as one: none for two, at the call.
+    fn arity_too_few() errors compiler::CompilerError:
+        static compile:
+            fn f(x, y, flags :a):
+                a
+            f(:a)
+    test::rejects_at("flags-diagnostic-arity-too-few", compiler::DiagnosticCode::Arity, 449, 13, arity_too_few)
+
+    # A struct field's value is no declared function: at `:a`.
+    fn field_callee() errors compiler::CompilerError:
+        static compile:
+            s = {cb: 1}
+            s.cb(:a)
+    test::rejects_at("flags-diagnostic-field-callee", compiler::DiagnosticCode::FlagCalleeUnknown, 456, 18, field_callee)
+
+    # Through method spelling: an unknown flag, at `:z`.
+    fn through_method_unknown() errors compiler::CompilerError:
+        static compile:
+            fn f(x, flags :a):
+                a
+            3.f(:z)
+    test::rejects_at("flags-diagnostic-through-method-unknown", compiler::DiagnosticCode::UnknownFlag, 464, 17, through_method_unknown)
+
+    # Through method spelling: a duplicate flag, at the second `:a`.
+    fn through_method_duplicate() errors compiler::CompilerError:
+        static compile:
+            fn f(x, flags :a):
+                a
+            3.f(:a, :a)
+    test::rejects_at("flags-diagnostic-through-method-duplicate", compiler::DiagnosticCode::DuplicateFlag, 472, 21, through_method_duplicate)
+
+    # Through method spelling, the receiver is an ordinary argument: 3.f(4)
+    # is two of them for one, at the call (its receiver).
+    fn through_method_arity() errors compiler::CompilerError:
+        static compile:
+            fn f(x, flags :a):
+                a
+            3.f(4, :a)
+    test::rejects_at("flags-diagnostic-through-method-arity", compiler::DiagnosticCode::Arity, 481, 13, through_method_arity)
+
+    # A method name that is no visible function is the field-call fallback,
+    # whose callee is not statically known: at `:a`.
+    fn method_without_function() errors compiler::CompilerError:
+        static compile:
+            x = 3
+            x.nothere(:a)
+    test::rejects_at("flags-diagnostic-method-without-function", compiler::DiagnosticCode::FlagCalleeUnknown, 489, 23, method_without_function)
+
+    # One local namespace: the ordinary parameter b wins the name, and the
+    # flag :b is diagnosed at its own spelling.
+    fn one_namespace() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, flags :b, :c):
+                a
+            0
+    test::rejects_at("flags-diagnostic-one-namespace-ordinary-first", compiler::DiagnosticCode::FlagBindingCollision, 496, 30, one_namespace)
+
+# There is no flag type to name (flags-no-flag-type): a parameter annotated
+# FlagSet or Flag is a Type error of its declaration.
+fn register_no_flag_type_tests():
+    fn flagset() errors compiler::CompilerError:
+        static compile:
+            fn f(x: FlagSet):
+                x
+            1
+    test::rejects_at("flags-no-flag-type/flagset", compiler::DiagnosticCode::Type, 506, 17, flagset)
+
+    fn flag() errors compiler::CompilerError:
+        static compile:
+            fn f(x: Flag):
+                x
+            1
+    test::rejects_at("flags-no-flag-type/flag", compiler::DiagnosticCode::Type, 513, 17, flag)
+
+# ---------------------------------------------------------------------------
+# A function with flags is not a value (flags-value-*)
+#
+# Where the Tcl program's last value holds the function (returned, in-list,
+# in-struct, bare-alias), the block binds it and ends with a plain value
+# instead: the rejection happens before anything runs, and a body never
+# produces a function value for the report.
+
+fn register_flag_function_value_tests():
+    # Passed as an argument.
+    fn argument() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a):
+                a
+            fn apply(g):
+                g()
+            apply(f)
+    test::rejects("flags-value-argument", compiler::DiagnosticCode::FlagFunctionValue, argument)
+
+    # Returned from a function.
+    fn returned() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a):
+                a
+            fn make():
+                f
+            made = make()
+            0
+    test::rejects("flags-value-returned", compiler::DiagnosticCode::FlagFunctionValue, returned)
+
+    # Stored in a List.
+    fn in_list() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a):
+                a
+            held = [f]
+            0
+    test::rejects("flags-value-in-list", compiler::DiagnosticCode::FlagFunctionValue, in_list)
+
+    # Stored in a struct.
+    fn in_struct() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a):
+                a
+            held = {cb: f}
+            0
+    test::rejects("flags-value-in-struct", compiler::DiagnosticCode::FlagFunctionValue, in_struct)
+
+    # Selected by an if.
+    fn in_if() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a):
+                a
+            fn g():
+                1
+            h = if true:
+                f
+            else:
+                g
+            h()
+    test::rejects("flags-value-in-if", compiler::DiagnosticCode::FlagFunctionValue, in_if)
+
+    # An alias is fine; the alias stored in a List is not.
+    fn bare_alias() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a):
+                a
+            g = f
+            held = [g]
+            0
+    test::rejects("flags-value-bare-alias", compiler::DiagnosticCode::FlagFunctionValue, bare_alias)
+
+    # The diagnostic names the function and its flags, at the function's use
+    # `f` in the List.
+    fn diagnostic_text() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a, :b):
+                a
+            x = [f]
+            0
+    rejects_saying("flags-value-diagnostic-text", compiler::DiagnosticCode::FlagFunctionValue, 596, 18, "function f declares flags (:a, :b), so it can only be called directly or bound to another name (g = f): it cannot be passed, returned or stored as a value, which would lose its flag interface", diagnostic_text)
+
+    # Functions without flags remain ordinary values.
+    fn plain_functions() errors compiler::CompilerError:
+        static compile:
+            fn inc(x):
+                x + 1
+            fn apply(g, v):
+                g(v)
+            apply(inc, 1)
+    test::value("flags-value-plain-functions-unchanged", 2, plain_functions)
+
+# ---------------------------------------------------------------------------
+# An alias keeps the flag interface (flags-alias-*)
+
+fn register_alias_tests():
+    # g = observe; g takes observe's flags.
+    fn alias_call() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            g = observe
+            [g(1), g(2, :a), g(3, :c, :b)]
+    test::value("flags-alias-call", [[1, false, false, false], [2, true, false, false], [3, false, true, true]], alias_call)
+
+    # An alias of an alias.
+    fn alias_chain() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            g = observe
+            h = g
+            h(4, :b)
+    test::value("flags-alias-chain", [4, false, true, false], alias_chain)
+
+    # An unknown flag through an alias names the called spelling g: at `:z`.
+    fn alias_unknown_flag() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            g = observe
+            g(1, :z)
+    rejects_saying("flags-alias-unknown-flag", compiler::DiagnosticCode::UnknownFlag, 639, 18, "function g does not accept flag :z (accepted flags: :a, :b, :c)", alias_unknown_flag)
+
+    # Method sugar through an alias uses the alias's interface.
+    fn alias_method() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            g = observe
+            [5.g(:b), 6.g(:a, :c)]
+    test::value("flags-alias-method", [[5, false, true, false], [6, true, false, true]], alias_method)
+
+    # A duplicate flag is diagnosed through an alias ...
+    fn alias_duplicate() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            g = observe
+            g(1, :a, :a)
+    test::rejects("flags-alias-duplicate-and-arity/duplicate", compiler::DiagnosticCode::DuplicateFlag, alias_duplicate)
+
+    # ... and so is arity: g(:a) has no ordinary argument for observe's x.
+    fn alias_arity() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            g = observe
+            g(:a)
+    test::rejects("flags-alias-duplicate-and-arity/arity", compiler::DiagnosticCode::Arity, alias_arity)
+
+    # An alias of a function without flags accepts none.
+    fn alias_of_plain() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                x
+            g = f
+            g(1, :a)
+    test::rejects("flags-alias-of-plain-function", compiler::DiagnosticCode::UnknownFlag, alias_of_plain)
+
+    # A name bound to what is not statically one function cannot take flags.
+    fn alias_unknown_target() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                x
+            fn h(x):
+                x
+            g = if true:
+                f
+            else:
+                h
+            g(1, :a)
+    test::rejects("flags-alias-unknown-target", compiler::DiagnosticCode::FlagCalleeUnknown, alias_unknown_target)
+
+# ---------------------------------------------------------------------------
+# Method spelling is the ordinary call (flags-method-*)
+#
+# Each block computes [METHOD, FREE]: the method spelling and the free
+# spelling of one call, which must agree (the Tcl tests compile them as two
+# programs and compare); the value is pinned too. The flags-method-parity
+# prelude declares observe and add.
+
+fn register_method_tests():
+    # receiver.f(:a) is f(receiver, :a).
+    fn equals_free() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            [9.observe(:a), observe(9, :a)]
+    test::value("flags-method-equals-free", [[9, true, false, false], [9, true, false, false]], equals_free)
+
+    fn parity_none() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            fn add(a, b):
+                a + b
+            [1.observe(), observe(1)]
+    test::value("flags-method-parity-none", [[1, false, false, false], [1, false, false, false]], parity_none)
+
+    fn parity_one() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            fn add(a, b):
+                a + b
+            [2.observe(:b), observe(2, :b)]
+    test::value("flags-method-parity-one", [[2, false, true, false], [2, false, true, false]], parity_one)
+
+    fn parity_two() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            fn add(a, b):
+                a + b
+            [3.observe(:c, :a), observe(3, :c, :a)]
+    test::value("flags-method-parity-two", [[3, true, false, true], [3, true, false, true]], parity_two)
+
+    fn parity_expr() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            fn add(a, b):
+                a + b
+            [(1 + 2).observe(:a, :b, :c), observe(1 + 2, :a, :b, :c)]
+    test::value("flags-method-parity-expr", [[3, true, true, true], [3, true, true, true]], parity_expr)
+
+    fn parity_chain() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            fn add(a, b):
+                a + b
+            [1.add(2).observe(:b), observe(add(1, 2), :b)]
+    test::value("flags-method-parity-chain", [[3, false, true, false], [3, false, true, false]], parity_chain)
+
+    fn parity_chain2() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            fn add(a, b):
+                a + b
+            [1.observe(:a).get(1, -1), list::get(observe(1, :a), 1, -1)]
+    test::value("flags-method-parity-chain2", [true, true], parity_chain2)
+
+    fn parity_nested() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            fn add(a, b):
+                a + b
+            [observe(1.add(1).observe(:c).get(0, -1), :a), observe(list::get(observe(add(1, 1), :c), 0, -1), :a)]
+    test::value("flags-method-parity-nested", [[2, true, false, false], [2, true, false, false]], parity_nested)
+
+# ---------------------------------------------------------------------------
+# Evaluation order: method and free spellings evaluate the same arguments in
+# the same order, and flags evaluate nothing (flags-evaluation-*)
+#
+# probe(ID, RESULT) yields [ID] and returns RESULT; each block's value is
+# [METHOD, FREE] (or the two spellings the Tcl test compares), each the
+# [FIRST, REST] trace of driving that spelling's coroutine.
+
+fn register_evaluation_tests():
+    # The receiver (1), then the argument (2); the same value.
+    fn receiver_and_args() errors compiler::CompilerError:
+        static compile:
+            fn probe(id, result):
+                yield [id]
+                result
+            fn f(a, b, flags :x, :y):
+                [a, b, x, y]
+            fn method_spelling():
+                probe(1, 10).f(probe(2, 5), :y)
+            fn free_spelling():
+                f(probe(1, 10), probe(2, 5), :y)
+            coroutine {step: method_step, first: method_first} = method_spelling()
+            method_rest = loop i from 0 to 10:
+                if coroutine::done?(method_step):
+                    break
+                method_step()
+            coroutine {step: free_step, first: free_first} = free_spelling()
+            free_rest = loop i from 0 to 10:
+                if coroutine::done?(free_step):
+                    break
+                free_step()
+            [[method_first, method_rest], [free_first, free_rest]]
+    test::value("flags-evaluation-receiver-and-args", [[[1], [[2], [10, 5, false, true]]], [[1], [[2], [10, 5, false, true]]]], receiver_and_args)
+
+    # A call with flags and the same call without them evaluate the same
+    # arguments (3, then 4) and nothing else.
+    fn flags_add_no_events() errors compiler::CompilerError:
+        static compile:
+            fn probe(id, result):
+                yield [id]
+                result
+            fn f(a, b, flags :x, :y):
+                [a, b, x, y]
+            fn flagged():
+                f(probe(3, 1), probe(4, 2), :y, :x)
+            fn unflagged():
+                f(probe(3, 1), probe(4, 2))
+            coroutine {step: flagged_step, first: flagged_first} = flagged()
+            flagged_rest = loop i from 0 to 10:
+                if coroutine::done?(flagged_step):
+                    break
+                flagged_step()
+            coroutine {step: unflagged_step, first: unflagged_first} = unflagged()
+            unflagged_rest = loop i from 0 to 10:
+                if coroutine::done?(unflagged_step):
+                    break
+                unflagged_step()
+            [[flagged_first, flagged_rest], [unflagged_first, unflagged_rest]]
+    test::value("flags-evaluation-flags-add-no-events", [[[3], [[4], [1, 2, true, true]]], [[3], [[4], [1, 2, false, false]]]], flags_add_no_events)
+
+    # The order the flags are written in changes neither the events nor the
+    # value.
+    fn flag_order_irrelevant() errors compiler::CompilerError:
+        static compile:
+            fn probe(id, result):
+                yield [id]
+                result
+            fn f(a, b, flags :x, :y):
+                [a, b, x, y]
+            fn x_then_y():
+                probe(1, 1).f(probe(2, 2), :x, :y)
+            fn y_then_x():
+                probe(1, 1).f(probe(2, 2), :y, :x)
+            coroutine {step: xy_step, first: xy_first} = x_then_y()
+            xy_rest = loop i from 0 to 10:
+                if coroutine::done?(xy_step):
+                    break
+                xy_step()
+            coroutine {step: yx_step, first: yx_first} = y_then_x()
+            yx_rest = loop i from 0 to 10:
+                if coroutine::done?(yx_step):
+                    break
+                yx_step()
+            [[xy_first, xy_rest], [yx_first, yx_rest]]
+    test::value("flags-evaluation-flag-order-irrelevant-to-events", [[[1], [[2], [1, 2, true, true]]], [[1], [[2], [1, 2, true, true]]]], flag_order_irrelevant)
+
+    # A chain of method calls with flags: receiver 1, then receiver 3 and
+    # argument 4.
+    fn receiver_chain() errors compiler::CompilerError:
+        static compile:
+            fn probe(id, result):
+                yield [id]
+                result
+            fn f(a, b, flags :x, :y):
+                [a, b, x, y]
+            fn method_spelling():
+                v = probe(1, 1).f(2, :x).get(0, -1)
+                probe(3, v).f(probe(4, 4), :y)
+            fn free_spelling():
+                v = list::get(f(probe(1, 1), 2, :x), 0, -1)
+                f(probe(3, v), probe(4, 4), :y)
+            coroutine {step: method_step, first: method_first} = method_spelling()
+            method_rest = loop i from 0 to 10:
+                if coroutine::done?(method_step):
+                    break
+                method_step()
+            coroutine {step: free_step, first: free_first} = free_spelling()
+            free_rest = loop i from 0 to 10:
+                if coroutine::done?(free_step):
+                    break
+                free_step()
+            [[method_first, method_rest], [free_first, free_rest]]
+    test::value("flags-evaluation-receiver-chain", [[[1], [[3], [4], [1, 4, false, true]]], [[1], [[3], [4], [1, 4, false, true]]]], receiver_chain)
+
+# ---------------------------------------------------------------------------
+# Differential: every flag subset, every spelling order and the method
+# spelling, for six function bodies (flags-differential-*)
+
+# observe: the flags themselves.
+fn register_differential_observe_tests():
+    fn all_subsets() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                [x, a, b, c]
+            [body(10), body(10, :a), body(10, :b), body(10, :a, :b), body(10, :c), body(10, :a, :c), body(10, :b, :c), body(10, :a, :b, :c)]
+    test::value("flags-differential-observe-all-subsets", [[10, false, false, false], [10, true, false, false], [10, false, true, false], [10, true, true, false], [10, false, false, true], [10, true, false, true], [10, false, true, true], [10, true, true, true]], all_subsets)
+
+    fn call_order() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                [x, a, b, c]
+            [body(10, :a, :b, :c), body(10, :a, :c, :b), body(10, :b, :a, :c), body(10, :b, :c, :a), body(10, :c, :a, :b), body(10, :c, :b, :a)]
+    test::value("flags-differential-observe-call-order", [[10, true, true, true], [10, true, true, true], [10, true, true, true], [10, true, true, true], [10, true, true, true], [10, true, true, true]], call_order)
+
+    fn method() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                [x, a, b, c]
+            free = [body(10), body(10, :a), body(10, :b), body(10, :a, :b), body(10, :c), body(10, :a, :c), body(10, :b, :c), body(10, :a, :b, :c)]
+            method = [10.body(), 10.body(:a), 10.body(:b), 10.body(:a, :b), 10.body(:c), 10.body(:a, :c), 10.body(:b, :c), 10.body(:a, :b, :c)]
+            [free, method]
+    test::value("flags-differential-observe-method", [[[10, false, false, false], [10, true, false, false], [10, false, true, false], [10, true, true, false], [10, false, false, true], [10, true, false, true], [10, false, true, true], [10, true, true, true]], [[10, false, false, false], [10, true, false, false], [10, false, true, false], [10, true, true, false], [10, false, false, true], [10, true, false, true], [10, false, true, true], [10, true, true, true]]], method)
+
+# branches: nested ifs on the flags with early returns.
+fn register_differential_branches_tests():
+    fn all_subsets() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                if a:
+                    if b:
+                        return x + 1
+                    return x + 2
+                if c:
+                    return x + 3
+                x
+            [body(10), body(10, :a), body(10, :b), body(10, :a, :b), body(10, :c), body(10, :a, :c), body(10, :b, :c), body(10, :a, :b, :c)]
+    test::value("flags-differential-branches-all-subsets", [10, 12, 10, 11, 13, 12, 13, 11], all_subsets)
+
+    fn call_order() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                if a:
+                    if b:
+                        return x + 1
+                    return x + 2
+                if c:
+                    return x + 3
+                x
+            [body(10, :a, :b, :c), body(10, :a, :c, :b), body(10, :b, :a, :c), body(10, :b, :c, :a), body(10, :c, :a, :b), body(10, :c, :b, :a)]
+    test::value("flags-differential-branches-call-order", [11, 11, 11, 11, 11, 11], call_order)
+
+    fn method() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                if a:
+                    if b:
+                        return x + 1
+                    return x + 2
+                if c:
+                    return x + 3
+                x
+            free = [body(10), body(10, :a), body(10, :b), body(10, :a, :b), body(10, :c), body(10, :a, :c), body(10, :b, :c), body(10, :a, :b, :c)]
+            method = [10.body(), 10.body(:a), 10.body(:b), 10.body(:a, :b), 10.body(:c), 10.body(:a, :c), 10.body(:b, :c), 10.body(:a, :b, :c)]
+            [free, method]
+    test::value("flags-differential-branches-method", [[10, 12, 10, 11, 13, 12, 13, 11], [10, 12, 10, 11, 13, 12, 13, 11]], method)
+
+# weights: each flag selects a weight.
+fn register_differential_weights_tests():
+    fn all_subsets() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                wa = if a:
+                    1
+                else:
+                    0
+                wb = if b:
+                    10
+                else:
+                    0
+                wc = if c:
+                    100
+                else:
+                    0
+                x + wa + wb + wc
+            [body(10), body(10, :a), body(10, :b), body(10, :a, :b), body(10, :c), body(10, :a, :c), body(10, :b, :c), body(10, :a, :b, :c)]
+    test::value("flags-differential-weights-all-subsets", [10, 11, 20, 21, 110, 111, 120, 121], all_subsets)
+
+    fn call_order() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                wa = if a:
+                    1
+                else:
+                    0
+                wb = if b:
+                    10
+                else:
+                    0
+                wc = if c:
+                    100
+                else:
+                    0
+                x + wa + wb + wc
+            [body(10, :a, :b, :c), body(10, :a, :c, :b), body(10, :b, :a, :c), body(10, :b, :c, :a), body(10, :c, :a, :b), body(10, :c, :b, :a)]
+    test::value("flags-differential-weights-call-order", [121, 121, 121, 121, 121, 121], call_order)
+
+    fn method() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                wa = if a:
+                    1
+                else:
+                    0
+                wb = if b:
+                    10
+                else:
+                    0
+                wc = if c:
+                    100
+                else:
+                    0
+                x + wa + wb + wc
+            free = [body(10), body(10, :a), body(10, :b), body(10, :a, :b), body(10, :c), body(10, :a, :c), body(10, :b, :c), body(10, :a, :b, :c)]
+            method = [10.body(), 10.body(:a), 10.body(:b), 10.body(:a, :b), 10.body(:c), 10.body(:a, :c), 10.body(:b, :c), 10.body(:a, :b, :c)]
+            [free, method]
+    test::value("flags-differential-weights-method", [[10, 11, 20, 21, 110, 111, 120, 121], [10, 11, 20, 21, 110, 111, 120, 121]], method)
+
+# forwarded: the flags passed on as ordinary Bool arguments.
+fn register_differential_forwarded_tests():
+    fn all_subsets() errors compiler::CompilerError:
+        static compile:
+            fn weigh(p, q, r):
+                s = if p:
+                    1
+                else:
+                    0
+                t = if q:
+                    2
+                else:
+                    0
+                u = if r:
+                    4
+                else:
+                    0
+                s + t + u
+            fn body(x, flags :a, :b, :c):
+                weigh(a, b, c) + x
+            [body(10), body(10, :a), body(10, :b), body(10, :a, :b), body(10, :c), body(10, :a, :c), body(10, :b, :c), body(10, :a, :b, :c)]
+    test::value("flags-differential-forwarded-all-subsets", [10, 11, 12, 13, 14, 15, 16, 17], all_subsets)
+
+    fn call_order() errors compiler::CompilerError:
+        static compile:
+            fn weigh(p, q, r):
+                s = if p:
+                    1
+                else:
+                    0
+                t = if q:
+                    2
+                else:
+                    0
+                u = if r:
+                    4
+                else:
+                    0
+                s + t + u
+            fn body(x, flags :a, :b, :c):
+                weigh(a, b, c) + x
+            [body(10, :a, :b, :c), body(10, :a, :c, :b), body(10, :b, :a, :c), body(10, :b, :c, :a), body(10, :c, :a, :b), body(10, :c, :b, :a)]
+    test::value("flags-differential-forwarded-call-order", [17, 17, 17, 17, 17, 17], call_order)
+
+    fn method() errors compiler::CompilerError:
+        static compile:
+            fn weigh(p, q, r):
+                s = if p:
+                    1
+                else:
+                    0
+                t = if q:
+                    2
+                else:
+                    0
+                u = if r:
+                    4
+                else:
+                    0
+                s + t + u
+            fn body(x, flags :a, :b, :c):
+                weigh(a, b, c) + x
+            free = [body(10), body(10, :a), body(10, :b), body(10, :a, :b), body(10, :c), body(10, :a, :c), body(10, :b, :c), body(10, :a, :b, :c)]
+            method = [10.body(), 10.body(:a), 10.body(:b), 10.body(:a, :b), 10.body(:c), 10.body(:a, :c), 10.body(:b, :c), 10.body(:a, :b, :c)]
+            [free, method]
+    test::value("flags-differential-forwarded-method", [[10, 11, 12, 13, 14, 15, 16, 17], [10, 11, 12, 13, 14, 15, 16, 17]], method)
+
+# structured: the flags stored in a struct and read back.
+fn register_differential_structured_tests():
+    fn all_subsets() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                s = {u: a, v: b, w: c}
+                if s.u and s.w:
+                    return x * 2
+                if s.v:
+                    return x * 3
+                x
+            [body(10), body(10, :a), body(10, :b), body(10, :a, :b), body(10, :c), body(10, :a, :c), body(10, :b, :c), body(10, :a, :b, :c)]
+    test::value("flags-differential-structured-all-subsets", [10, 10, 30, 30, 10, 20, 30, 20], all_subsets)
+
+    fn call_order() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                s = {u: a, v: b, w: c}
+                if s.u and s.w:
+                    return x * 2
+                if s.v:
+                    return x * 3
+                x
+            [body(10, :a, :b, :c), body(10, :a, :c, :b), body(10, :b, :a, :c), body(10, :b, :c, :a), body(10, :c, :a, :b), body(10, :c, :b, :a)]
+    test::value("flags-differential-structured-call-order", [20, 20, 20, 20, 20, 20], call_order)
+
+    fn method() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                s = {u: a, v: b, w: c}
+                if s.u and s.w:
+                    return x * 2
+                if s.v:
+                    return x * 3
+                x
+            free = [body(10), body(10, :a), body(10, :b), body(10, :a, :b), body(10, :c), body(10, :a, :c), body(10, :b, :c), body(10, :a, :b, :c)]
+            method = [10.body(), 10.body(:a), 10.body(:b), 10.body(:a, :b), 10.body(:c), 10.body(:a, :c), 10.body(:b, :c), 10.body(:a, :b, :c)]
+            [free, method]
+    test::value("flags-differential-structured-method", [[10, 10, 30, 30, 10, 20, 30, 20], [10, 10, 30, 30, 10, 20, 30, 20]], method)
+
+# recursive: the flags change from one recursive call to the next.
+fn register_differential_recursive_tests():
+    fn all_subsets() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                if x == 0:
+                    if a:
+                        return 1
+                    return 0
+                if b:
+                    return body(x - 1, :a, :b)
+                if c:
+                    return body(x - 1, :c)
+                body(x - 1)
+            [body(10), body(10, :a), body(10, :b), body(10, :a, :b), body(10, :c), body(10, :a, :c), body(10, :b, :c), body(10, :a, :b, :c)]
+    test::value("flags-differential-recursive-all-subsets", [0, 0, 1, 1, 0, 0, 1, 1], all_subsets)
+
+    fn call_order() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                if x == 0:
+                    if a:
+                        return 1
+                    return 0
+                if b:
+                    return body(x - 1, :a, :b)
+                if c:
+                    return body(x - 1, :c)
+                body(x - 1)
+            [body(10, :a, :b, :c), body(10, :a, :c, :b), body(10, :b, :a, :c), body(10, :b, :c, :a), body(10, :c, :a, :b), body(10, :c, :b, :a)]
+    test::value("flags-differential-recursive-call-order", [1, 1, 1, 1, 1, 1], call_order)
+
+    fn method() errors compiler::CompilerError:
+        static compile:
+            fn body(x, flags :a, :b, :c):
+                if x == 0:
+                    if a:
+                        return 1
+                    return 0
+                if b:
+                    return body(x - 1, :a, :b)
+                if c:
+                    return body(x - 1, :c)
+                body(x - 1)
+            free = [body(10), body(10, :a), body(10, :b), body(10, :a, :b), body(10, :c), body(10, :a, :c), body(10, :b, :c), body(10, :a, :b, :c)]
+            method = [10.body(), 10.body(:a), 10.body(:b), 10.body(:a, :b), 10.body(:c), 10.body(:a, :c), 10.body(:b, :c), 10.body(:a, :b, :c)]
+            [free, method]
+    test::value("flags-differential-recursive-method", [[0, 0, 1, 1, 0, 0, 1, 1], [0, 0, 1, 1, 0, 0, 1, 1]], method)
+
+fn register_differential_tests():
+    register_differential_observe_tests()
+    register_differential_branches_tests()
+    register_differential_weights_tests()
+    register_differential_forwarded_tests()
+    register_differential_structured_tests()
+    register_differential_recursive_tests()
+
+# ---------------------------------------------------------------------------
+# Natively, flags are ordinary Bool parameters (flags-native-*)
+
+fn register_native_tests():
+    # Constant flags at each call, as a specialized instance takes them.
+    fn specialization_runs() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            [observe(1, :a), observe(2, :b), observe(3, :c), observe(4)]
+    test::value("flags-native-specialization-runs", [[1, true, false, false], [2, false, true, false], [3, false, false, true], [4, false, false, false]], specialization_runs)
+
+    # Flagged calls in a loop body, from a function called once.
+    fn matches_interpreter_on_loops() errors compiler::CompilerError:
+        static compile:
+            fn mark(i, flags :odd, :big):
+                if odd and big:
+                    return i * 100
+                if odd:
+                    return i * 10
+                if big:
+                    return i + 1000
+                i
+            fn run(n):
+                out = loop i from 0 to n:
+                    if i == 0:
+                        mark(i)
+                    elif i == 1:
+                        mark(i, :odd)
+                    elif i == 2:
+                        mark(i, :big)
+                    else:
+                        mark(i, :big, :odd)
+                out
+            run(5)
+    test::value("flags-native-matches-interpreter-on-loops", [0, 10, 1002, 300, 400], matches_interpreter_on_loops)
+
+# ---------------------------------------------------------------------------
+# One local namespace (flags-namespace-*)
+
+fn register_namespace_tests():
+    # A body binding of a flag's name is a duplicate binding, as for any
+    # parameter: at the binding `a = 1`.
+    fn body_binding() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a):
+                a = 1
+                a
+            f()
+    test::rejects_at("flags-namespace-body-binding", compiler::DiagnosticCode::Duplicate, 1229, 17, body_binding)
+
+    # A nested scope may shadow a flag, as it may shadow a parameter.
+    fn shadowing_in_nested_scope() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a):
+                g = if a:
+                    a = 5
+                    a
+                else:
+                    7
+                g
+            [f(), f(:a)]
+    test::value("flags-namespace-shadowing-in-nested-scope", [7, 5], shadowing_in_nested_scope)
+
+    # A flag name never leaks to another function: g's `a` is unbound.
+    fn outer_name_not_shared() errors compiler::CompilerError:
+        static compile:
+            fn f(flags :a):
+                a
+            fn g():
+                a
+            g()
+    test::rejects_at("flags-namespace-outer-name-not-shared", compiler::DiagnosticCode::Unbound, 1253, 17, outer_name_not_shared)
+
+# ---------------------------------------------------------------------------
+# The value halves of whole-program tests (their other halves stay in Tcl)
+
+fn register_whole_program_value_tests():
+    # flags-warnings-none's program: used and unused flags (its theorem, no
+    # warning under -warnings error, is Tcl's).
+    fn used_and_unused() errors compiler::CompilerError:
+        static compile:
+            fn f(x, flags :used, :unused):
+                if used:
+                    return x
+                x + 1
+            fn g(flags :t):
+                t
+            [f(1), f(2, :used), g(), g(:t)]
+    test::value("flags-warnings-none/value", [2, 2, false, true], used_and_unused)
+
+    # flags-standalone-executable's program, in process (the executable's
+    # output is Tcl's).
+    fn standalone_program() errors compiler::CompilerError:
+        static compile:
+            fn observe(x, flags :a, :b, :c):
+                [x, a, b, c]
+            fn walk(n, flags :a):
+                if n == 0:
+                    return [a]
+                walk(n - 1, :a)
+            [observe(1, :c), 3.observe(:a, :b), walk(2)]
+    test::value("flags-standalone-executable/in-process-value", [[1, false, false, true], [3, true, true, false], [true]], standalone_program)
+
+# ---------------------------------------------------------------------------
+
+fn register_flags_tests():
+    register_observe_tests()
+    register_flag_section_tests()
+    register_flag_binding_tests()
+    register_flag_forwarding_tests()
+    register_flag_spelling_tests()
+    register_diagnostic_tests()
+    register_no_flag_type_tests()
+    register_flag_function_value_tests()
+    register_alias_tests()
+    register_method_tests()
+    register_evaluation_tests()
+    register_differential_tests()
+    register_native_tests()
+    register_namespace_tests()
+    register_whole_program_value_tests()
+
+with context test::suite()
+register_flags_tests()
+test::report()
