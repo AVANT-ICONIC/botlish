@@ -1,0 +1,1682 @@
+# compiled-values.bot -- what a program computes does not depend on how the
+# compiler analyzes, specializes or lowers it, as a source-level
+# specification:
+#
+# * Semantic instances (OPPORTUNISTIC-SEMANTIC-INSTANCES.md). An untyped
+#   function is analyzed per exact call under the argument types that reach
+#   it, with no source-level generics: identity carries MutableArray[T], a
+#   list helper relates its element and result types, mutual recursion
+#   through passed functions terminates, and each result is precise enough to
+#   satisfy a typed parameter that admits only a value proven of that type.
+#   An instance is checked, never trusted: a call whose instance is invalid
+#   is rejected at that call (naming it, and every call it reaches), one
+#   invalid call never condemns the function, a body invalid for its declared
+#   contract is rejected whether or not it is called, and an instance may
+#   not erase a typed callable's parameter contract (into any, a raw array, a
+#   join, a structural callee).
+# * Definition order (STRICT-REFERENCE-DETERMINISM.md): a call of a function
+#   declared later in the same scope -- lexical mutual recursion included --
+#   is UNBOUND at the reference, before any analysis or backend.
+# * Value transport (VALUE-TRANSPORT-MATERIALIZATION.md) and short-String
+#   demand (SHORT-STRING-TIERS.md): a struct or List value carried virtually
+#   as its fields, or materialized late, nested values opened into their
+#   outer value, and String parameters kept packed or tagged, compute the
+#   value the reference interpreter computes, on every backend.
+# * Dormant instances (GENERIC-PREDICATE-PROOF-LOSS.md, loss point 2): a
+#   de-closured closure's never-entered generic entry changes no value.
+# * Tail calls and environments (the Tcl compiler's optimizations): self
+#   tail calls through branches and returns, closures calling themselves,
+#   functions reading captured values through callers and nested recursive
+#   functions reading an enclosing parameter compute what the program says;
+#   a parameter used as both an Int and a String has no sound type.
+# * The direct HIR-to-native path (DIRECT-HIR-NATIVE-PATH.md): source ->
+#   HIR -> native computes what source -> HIR -> core IR -> interpreter
+#   computes, for scoping and hygiene, a local named like a native, module
+#   calls, closures, declared errors, returning loops, MutableArrays,
+#   semantic instances, exact callables, argument cycles, Unicode Strings,
+#   bignums and source refinements.
+#
+# Ported from tests/semantic-instances.test, tests/value-transport.test,
+# tests/short-demand.test, tests/dormant-instances.test,
+# tests/compiler-opt.test, tests/direct-hir-native.test and
+# tests/hir-specialize.test: the value halves of their programs; what only
+# Tcl can observe (HIR types and censuses, NIR text and op counts, generated
+# Tcl code, native option variants, GC-stress runs in process, standalone
+# executables) stays there. The Tcl tests stay authoritative and unchanged.
+# The value-transport programs whose untyped struct projections only a
+# semantic instance proves are in compiled-values-struct-transport.bot
+# (cranelift-generic cannot lower them, and run.tcl would otherwise stand
+# cranelift in for this whole suite's generic run).
+#
+# Imports: compiler and test (the framework); list, mutable_array and str
+# (the Tcl programs' own qualified calls); mathish (the module-call programs
+# of direct-hir-native.test); web (direct-hir-executable-source-refinements:
+# web::emailish? and web::uri_escape_text). No test here is about an import
+# or about which methods are visible: the bodies call qualified names only.
+#
+# Conventions:
+#
+# * A Tcl test's static-type observation (the semantic type of a program's
+#   last expression) is ported as a typed parameter that admits only a value
+#   proven of that type: `fn need_str(s: str)` rejects an argument whose
+#   static type is `any` (TYPE, "cannot be proven to satisfy str"), so a body
+#   that passes the result to it and is accepted shows the type the instance
+#   computed, and its value shows the run.
+# * Programs keep the Tcl test's literals: a call's literal argument is not
+#   folded (semantic instances never key an exact value), and the
+#   representation choices under test (a packed ASCII parameter, a struct
+#   built from literals) depend on them. The one top-level arithmetic of
+#   constants (direct-hir-differential-arithmetic, and the scalar program of
+#   direct-hir-executable-parity-scalar-and-recursion) takes its operands as
+#   parameters of its registration function, so each backend does the
+#   arithmetic at run time.
+import compiler
+import list
+import mathish
+import mutable_array
+import str
+import test
+import web
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only).
+
+# direct-hir-native.test: the declared errors of direct-hir-differential-
+# errors (TooSmall, TooBig) and of direct-hir-executable-parity-shadowing-
+# and-errors (TooBig; one declaration serves both).
+error TooSmall
+error TooBig
+
+# value-transport.test: vt-nested-identity's Pt and Seg, a nominal struct
+# nested in a nominal struct.
+struct TransportPoint:
+    x: int
+    y: int
+
+struct TransportSegment:
+    p: TransportPoint
+    q: TransportPoint
+
+# ---------------------------------------------------------------------------
+# Suite-local registration helper
+
+# BODY's block must be rejected with EXPECTED, with a message that names
+# none of FRAGMENTS (si-bad-6: a diagnostic shows no synthetic names).
+nomethod fn rejects_without(name: str, expected: compiler::DiagnosticCode, fragments: List[str], body) -> unit:
+    fn check() -> test::Match:
+        shown = "compiler diagnostic ".concat(test::code_name(expected)).concat(" naming none of ").concat(test::describe(fragments))
+        actual = body():
+            on compiler::CompilerError {code, primary, message}:
+                named = loop fragment in fragments:
+                    if not test::contains_text?(message, fragment):
+                        continue
+                    fragment
+                if code == expected and list::length(named) == 0:
+                    return test::passed()
+                return test::mismatch(shown, test::diagnostic_text(code, primary), message)
+        test::mismatch(shown, "value ".concat(test::describe(actual)), "")
+    test::case(name, check)
+
+# ---------------------------------------------------------------------------
+# semantic-instances.test: what an accepted instance computes
+
+fn register_instance_result_tests():
+    # si-id-4 (accepted half): identity(m) of a MutableArray[str] is a
+    # MutableArray[str] (a copy: arrays are values), so a store of a String
+    # through it is accepted and the element read back is a str.
+    fn b_identity_typed_store() errors compiler::CompilerError:
+        static compile:
+            fn identity(x):
+                x
+            fn need_str(s: str) -> str:
+                s
+            m = mutable_array::create(2, "x")
+            n = identity(m)
+            w = mutable_array::set(n, 0, "y"):
+                on IndexNotFound:
+                    unit
+            v = mutable_array::at(n, 0):
+                on IndexNotFound:
+                    "z"
+            need_str(v)
+    test::value("si-id-4/typed-store-accepted", "y", b_identity_typed_store)
+
+    # si-ro-1: a read-only untyped wrapper accepts a typed array and a raw
+    # one (no raw-mutarray rejection).
+    fn b_wrapper_typed() errors compiler::CompilerError:
+        static compile:
+            fn capacity(x):
+                mutable_array::capacity(x)
+            capacity(mutable_array::create(3, "x"))
+    test::value("si-ro-1/typed-array", 3, b_wrapper_typed)
+
+    fn b_wrapper_raw() errors compiler::CompilerError:
+        static compile:
+            fn capacity(x):
+                mutable_array::capacity(x)
+            capacity(mutable_array::allocate(3))
+    test::value("si-ro-1/raw-array", 3, b_wrapper_raw)
+
+    # si-brg-6: an exact callable target that keeps the contract is fine:
+    # erase(m, sink) of a MutableArray[str] is a MutableArray[str] (a raw
+    # array is rejected by need's parameter).
+    fn b_exact_target_keeps_contract() errors compiler::CompilerError:
+        static compile:
+            fn need(m: MutableArray[str]) -> List[str]:
+                mutable_array::freeze(m, 1)
+            fn erase(x, f):
+                f(x)
+            fn sink(y):
+                y
+            need(erase(mutable_array::create(1, "x"), sink))
+    test::value("si-brg-6", ["x"], b_exact_target_keeps_contract)
+
+    # si-brg-7 (accepted half): a typed callable stored in a List by an
+    # untyped function keeps its contract element-wise: the element, called
+    # with an Int, gives an Int.
+    fn b_stash_preserves() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            fn need_int(n: int) -> int:
+                n
+            fn stash(x):
+                [x]
+            g = list::at(stash(typed), 0):
+                on IndexNotFound:
+                    typed
+            need_int(g(1))
+    test::value("si-brg-7/element-contract-kept", 2, b_stash_preserves)
+
+    # si-hof-3: a typed predicate passes through list::find's untyped
+    # parameter; the result is the element type.
+    fn b_find_typed_str() errors compiler::CompilerError:
+        static compile:
+            fn is_b(s: str):
+                s == "b"
+            fn need_str(s: str) -> str:
+                s
+            r = list::find(["a", "b"], is_b):
+                on list::NotFound:
+                    "none"
+            need_str(r)
+    test::value("si-hof-3/str-predicate", "b", b_find_typed_str)
+
+    fn b_find_typed_int() errors compiler::CompilerError:
+        static compile:
+            fn big(n: int):
+                n > 5
+            fn need_int(n: int) -> int:
+                n
+            r = list::find([1, 9], big):
+                on list::NotFound:
+                    0
+            need_int(r)
+    test::value("si-hof-3/int-predicate", 9, b_find_typed_int)
+
+    # si-rec-2: mutual recursion between instances -- functions that pass
+    # each other as arguments, no lexical forward reference -- terminates
+    # and types both, in either definition order.
+    fn b_ping_first() errors compiler::CompilerError:
+        static compile:
+            fn need(xs: List[str]) -> List[str]:
+                xs
+            fn ping(xs, n, next):
+                if n == 0:
+                    xs
+                else:
+                    next(xs, n - 1, ping)
+            fn pong(xs, n, prev):
+                if n == 0:
+                    xs
+                else:
+                    prev(xs, n - 1, pong)
+            need(ping(["a"], 3, pong))
+    test::value("si-rec-2/ping-first", ["a"], b_ping_first)
+
+    fn b_pong_first() errors compiler::CompilerError:
+        static compile:
+            fn need(xs: List[str]) -> List[str]:
+                xs
+            fn pong(xs, n, prev):
+                if n == 0:
+                    xs
+                else:
+                    prev(xs, n - 1, pong)
+            fn ping(xs, n, next):
+                if n == 0:
+                    xs
+                else:
+                    next(xs, n - 1, ping)
+            need(ping(["a"], 3, pong))
+    test::value("si-rec-2/pong-first", ["a"], b_pong_first)
+
+    # si-rec-4: even?/odd? over Ints, as functions that pass each other.
+    fn b_even_odd() errors compiler::CompilerError:
+        static compile:
+            fn need(b: bool) -> bool:
+                b
+            fn even?(n, other):
+                if n == 0:
+                    true
+                else:
+                    other(n - 1, even?)
+            fn odd?(n, other):
+                if n == 0:
+                    false
+                else:
+                    other(n - 1, odd?)
+            need(even?(4, odd?))
+    test::value("si-rec-4", true, b_even_odd)
+
+    # si-dyn-3 (accepted half): the callee-first order is the program.
+    fn b_callee_first() errors compiler::CompilerError:
+        static compile:
+            fn need_str(s: str) -> str:
+                s
+            fn b(y):
+                y
+            fn a(x):
+                b(x)
+            need_str(a("s"))
+    test::value("si-dyn-3/callee-first", "s", b_callee_first)
+
+    # si-run-1: identity, first and a writer run identically on every
+    # backend; the writer mutates its own copy (arrays are values). The Tcl
+    # program is -strict 0: strictly, the calls of the error-declaring
+    # first and writer are handled.
+    fn b_runtime_parity() errors compiler::CompilerError:
+        static compile:
+            fn identity(x):
+                x
+            fn first(xs) errors IndexNotFound:
+                list::at(xs, 0)
+            fn writer(x, v) errors IndexNotFound:
+                mutable_array::set(x, 0, v)
+                x
+            m = mutable_array::create(2, "x")
+            n = identity(m)
+            w = writer(n, "y"):
+                on IndexNotFound:
+                    mutable_array::create(2, "none")
+            p = first(["p", "q"]):
+                on IndexNotFound:
+                    "none"
+            one = first([1, 2]):
+                on IndexNotFound:
+                    0
+            [p, one, mutable_array::get(w, 0, "none"), mutable_array::get(n, 0, "none"), mutable_array::capacity(identity(m))]
+    test::value("si-run-1", ["p", 1, "y", "x", 2], b_runtime_parity)
+
+    # si-run-2: list::find with instances runs identically on every backend.
+    fn b_find_parity() errors compiler::CompilerError:
+        static compile:
+            fn is_b(s):
+                s == "b"
+            r = list::find(["a", "b"], is_b):
+                on list::NotFound:
+                    "none"
+            r
+    test::value("si-run-2", "b", b_find_parity)
+
+# ---------------------------------------------------------------------------
+# semantic-instances.test: invalid instances are rejected at the call
+
+fn register_invalid_instance_tests():
+    # si-id-4 (rejected half): a store of an Int through identity's result
+    # is checked against the element type it carries.
+    fn b_identity_wrong_store() errors compiler::CompilerError:
+        static compile:
+            fn identity(x):
+                x
+            m = mutable_array::create(2, "x")
+            n = identity(m)
+            w = mutable_array::set(n, 0, 123):
+                on IndexNotFound:
+                    unit
+            w
+    test::rejects_containing("si-id-4/wrong-store-rejected", compiler::DiagnosticCode::Type, "not admissible to element type str", b_identity_wrong_store)
+
+    # si-bad-1, si-bad-6: smash, an untyped writer of an Int into
+    # MutableArray[str], is rejected at the call smash(m): the message names
+    # the instance call and why, and where in smash's body; it shows no
+    # synthetic names. (One program, four observations.)
+    fn b_smash() errors compiler::CompilerError:
+        static compile:
+            fn smash(x):
+                mutable_array::set(x, 0, 123)
+            m = mutable_array::create(2, "x")
+            smash(m)
+    test::rejects_containing("si-bad-1/names-the-instance-call", compiler::DiagnosticCode::Type, "call to smash with x : MutableArray[str] is invalid: value of type int is not admissible to element type str", b_smash)
+    test::rejects_containing("si-bad-1/names-the-body-location", compiler::DiagnosticCode::Type, "(in the body of smash, at 0:", b_smash)
+    test::rejects_at("si-bad-6/at-the-call", compiler::DiagnosticCode::Type, 0, 0, b_smash)
+    rejects_without("si-bad-6/no-synthetic-names", compiler::DiagnosticCode::Type, ["$", "Instance"], b_smash)
+
+    # si-bad-2: the same function with a raw array, or a writer given a
+    # fitting value, is fine: one bad call does not condemn the function.
+    fn b_smash_raw() errors compiler::CompilerError:
+        static compile:
+            fn smash(x):
+                if mutable_array::capacity(x) > 0:
+                    mutable_array::set(x, 0, 123)
+            smash(mutable_array::allocate(1))
+    test::value("si-bad-2/raw-array", unit, b_smash_raw)
+
+    fn b_writer_fitting() errors compiler::CompilerError:
+        static compile:
+            fn writer(x, v):
+                if mutable_array::capacity(x) > 0:
+                    mutable_array::set(x, 0, v)
+            writer(mutable_array::create(1, "x"), "ok")
+    test::value("si-bad-2/fitting-value", unit, b_writer_fitting)
+
+    # si-bad-3: f<int> is valid, f<str> invalid: the incompatible call is
+    # the one rejected, alone or after a valid call.
+    fn b_f_int() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                x + 1
+            f(1)
+    test::value("si-bad-3/int-call", 2, b_f_int)
+
+    fn b_f_str() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                x + 1
+            f("a")
+    test::rejects_at("si-bad-3/str-call", compiler::DiagnosticCode::Type, 0, 0, b_f_str)
+
+    fn b_f_both() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                x + 1
+            f(1)
+            f("a")
+    test::rejects_at("si-bad-3/str-call-after-int-call", compiler::DiagnosticCode::Type, 0, 0, b_f_both)
+
+    # si-bad-4: a valid instance does not make every call valid: writer
+    # with the wrong value is rejected, naming the call's types; each call
+    # with fitting values is its own valid instance.
+    fn b_writer_wrong() errors compiler::CompilerError:
+        static compile:
+            fn writer(x, v):
+                if mutable_array::capacity(x) > 0:
+                    mutable_array::set(x, 0, v)
+            writer(mutable_array::create(1, "x"), 5)
+    test::rejects_containing("si-bad-4/wrong-value", compiler::DiagnosticCode::Type, "call to writer with x : MutableArray[str], v : int is invalid", b_writer_wrong)
+
+    fn b_writer_two_instances() errors compiler::CompilerError:
+        static compile:
+            fn writer(x, v):
+                if mutable_array::capacity(x) > 0:
+                    mutable_array::set(x, 0, v)
+            writer(mutable_array::create(1, "x"), "ok")
+            writer(mutable_array::create(1, 1), 5)
+    test::value("si-bad-4/two-fitting-instances", unit, b_writer_two_instances)
+
+    # si-bad-5: an invalid callee makes the calling instance invalid: the
+    # diagnostic names both calls.
+    fn b_chain() errors compiler::CompilerError:
+        static compile:
+            fn a(x):
+                mutable_array::set(x, 0, 1)
+            fn b(x):
+                a(x)
+            b(mutable_array::create(1, "x"))
+    test::rejects_containing("si-bad-5", compiler::DiagnosticCode::Type, "call to b with x : MutableArray[str] is invalid: call to a with x : MutableArray[str] is invalid:", b_chain)
+
+    # si-bad-7: an instance cannot rescue a definition invalid for its
+    # declared contract: the declaration is rejected, called or not.
+    fn b_invalid_called() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> str:
+                x
+            f(5)
+    test::rejects_at("si-bad-7/called", compiler::DiagnosticCode::Type, 0, 0, b_invalid_called)
+
+    fn b_invalid_uncalled() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> str:
+                x
+            unit
+    test::rejects_at("si-bad-7/uncalled", compiler::DiagnosticCode::Type, 0, 0, b_invalid_uncalled)
+
+    # si-decl-2: a declared parameter is never narrowed away: a call that
+    # does not prove it is rejected.
+    fn b_declared_param() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int):
+                x
+            f("a")
+    test::rejects("si-decl-2", compiler::DiagnosticCode::Type, b_declared_param)
+
+    # si-hof-4: List[str] with an Int predicate is rejected through
+    # ordinary body analysis, untyped or typed.
+    fn b_find_untyped_big() errors compiler::CompilerError:
+        static compile:
+            fn big(n):
+                n > 5
+            r = list::find(["a", "b"], big):
+                on list::NotFound:
+                    "x"
+            r
+    test::rejects_containing("si-hof-4/untyped-predicate", compiler::DiagnosticCode::Type, "call to list::find with xs : List[str], predicate : big/1 -> bool is invalid", b_find_untyped_big)
+
+    fn b_find_typed_big() errors compiler::CompilerError:
+        static compile:
+            fn big(n: int):
+                n > 5
+            r = list::find(["a", "b"], big):
+                on list::NotFound:
+                    "x"
+            r
+    test::rejects_containing("si-hof-4/typed-predicate", compiler::DiagnosticCode::Type, "call to list::find with xs : List[str]", b_find_typed_big)
+
+    # si-hof-7: a callable of the wrong argument type is rejected for
+    # any?, all? and none? too.
+    fn b_any() errors compiler::CompilerError:
+        static compile:
+            fn pos(n: int):
+                n > 0
+            list::any?(["a"], pos)
+    test::rejects_containing("si-hof-7/any?", compiler::DiagnosticCode::Type, "is invalid", b_any)
+
+    fn b_all() errors compiler::CompilerError:
+        static compile:
+            fn pos(n: int):
+                n > 0
+            list::all?(["a"], pos)
+    test::rejects_containing("si-hof-7/all?", compiler::DiagnosticCode::Type, "is invalid", b_all)
+
+    fn b_none() errors compiler::CompilerError:
+        static compile:
+            fn pos(n: int):
+                n > 0
+            list::none?(["a"], pos)
+    test::rejects_containing("si-hof-7/none?", compiler::DiagnosticCode::Type, "is invalid", b_none)
+
+    # si-hof-8: a handler whose value does not fit the now-precise find
+    # result is the ordinary handled-result rule.
+    fn b_handler_value() errors compiler::CompilerError:
+        static compile:
+            fn is_b(s):
+                s == "b"
+            r = list::find(["a"], is_b):
+                on list::NotFound:
+                    0
+            r
+    test::rejects_containing("si-hof-8", compiler::DiagnosticCode::Type, "not admissible as str", b_handler_value)
+
+    # si-cap-2: a bad write inside a nested closure of an instance is found
+    # by the instance (the closure is part of its region).
+    fn b_closure_write() errors compiler::CompilerError:
+        static compile:
+            fn mk(m) errors IndexNotFound:
+                fn put(v):
+                    local = m
+                    mutable_array::set(local, 0, v)
+                    local
+                put(5)
+            mk(mutable_array::create(1, "x"))
+    test::rejects_containing("si-cap-2", compiler::DiagnosticCode::Type, "call to mk with m : MutableArray[str] is invalid: value of type any is not admissible", b_closure_write)
+
+    # si-fn-2: a structural Fn argument seeds the untyped parameter with its
+    # contract, and an argument the contract does not admit is rejected at
+    # the call.
+    fn b_structural_contract() errors compiler::CompilerError:
+        static compile:
+            fn apply(f, x):
+                f(x)
+            fn inc(n: int):
+                n + 1
+            fn dec(n: int):
+                n - 1
+            fn pick(fs, i) errors IndexNotFound:
+                list::at(fs, i)
+            g = pick([inc, dec], 1):
+                on IndexNotFound:
+                    inc
+            apply(g, "s")
+    test::rejects_containing("si-fn-2", compiler::DiagnosticCode::Type, "call to apply with f : Fn{args: [int], return: int, errors: []}, x : str is invalid: argument 1 cannot be proven to satisfy int", b_structural_contract)
+
+    # si-nogen-1 (the reifiable program): there are no type variables: T is
+    # an unknown type.
+    fn b_type_variable() errors compiler::CompilerError:
+        static compile:
+            fn f(x: T):
+                x
+            f(1)
+    test::rejects("si-nogen-1/type-variable", compiler::DiagnosticCode::Type, b_type_variable)
+
+# ---------------------------------------------------------------------------
+# semantic-instances.test: bearing soundness (an instance may not erase a
+# typed callable's parameter contract)
+
+fn register_bearing_tests():
+    # si-brg-1: a declared any (or list) result erases a callable's contract.
+    fn b_erase_any() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            fn erase(x) -> any:
+                x
+            erase(typed)
+    test::rejects_containing("si-brg-1/any-result", compiler::DiagnosticCode::Type, "would erase the typed parameter requirements", b_erase_any)
+
+    fn b_erase_list() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            fn erase(x) -> list:
+                [x]
+            erase(typed)
+    test::rejects_containing("si-brg-1/list-result", compiler::DiagnosticCode::Type, "would erase the typed parameter requirements", b_erase_list)
+
+    # si-brg-2: storing a typed callable into raw storage is an erasure.
+    fn b_erase_raw() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            fn erase(x):
+                raw = mutable_array::allocate(1)
+                mutable_array::set(raw, 0, x)
+                raw
+            erase(typed)
+    test::rejects_containing("si-brg-2", compiler::DiagnosticCode::Type, "call to erase with x : typed/1 -> int is invalid: \"typed\" has typed parameter requirements that cannot be preserved", b_erase_raw)
+
+    # si-brg-3: a join with an erasing value is rejected.
+    fn b_erase_join() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            fn erase(x, c):
+                if c:
+                    x
+                else:
+                    0
+            erase(typed, true)
+    test::rejects_containing("si-brg-3", compiler::DiagnosticCode::Type, "cannot be preserved in an \"if\" branch", b_erase_join)
+
+    # si-brg-4: a kind test does not recover a writable untyped alias inside
+    # the instance.
+    fn b_kind_test() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                if mutarray?(x):
+                    mutable_array::set(x, 0, 123)
+                else:
+                    unit
+            m = mutable_array::from_list(["a"])
+            f(m)
+            mutable_array::at(m, 0)
+    test::rejects_containing("si-brg-4", compiler::DiagnosticCode::Type, "call to f with x : MutableArray[str] is invalid: value of type int is not admissible", b_kind_test)
+
+    # si-brg-5: an unknown (structural) callee of a typed callable is an
+    # erasure: no exact target, no instance.
+    fn b_structural_callee() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            fn erase(x, f: Fn{args: [any], return: any, errors: []}):
+                f(x)
+            fn sink(y):
+                y
+            fn sink2(y):
+                unit
+            fn pick(fs, i) errors IndexNotFound:
+                list::at(fs, i)
+            f = pick([sink, sink2], 1):
+                on IndexNotFound:
+                    sink
+            erase(typed, f)
+    test::rejects_containing("si-brg-5", compiler::DiagnosticCode::Type, "\"typed\" has typed parameter requirements that cannot be preserved", b_structural_callee)
+
+    # si-brg-7 (rejected half): erasing the List that holds the typed
+    # callable is rejected.
+    fn b_stash_erased() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            fn stash(x) -> list:
+                [x]
+            stash(typed)
+    test::rejects("si-brg-7/erased-list-rejected", compiler::DiagnosticCode::Type, b_stash_erased)
+
+    # si-brg-8: the erasures rejected without instances stay rejected; a
+    # typed array is a value (MUTABLE-ARRAY.md), so only its wrong-element
+    # write still is.
+    fn b_any_parameter() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            fn f(x: any):
+                x
+            f(typed)
+    test::rejects("si-brg-8/any-parameter", compiler::DiagnosticCode::Type, b_any_parameter)
+
+    fn b_any_result() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            fn f() -> any:
+                typed
+            f()
+    test::rejects("si-brg-8/any-result", compiler::DiagnosticCode::Type, b_any_result)
+
+    fn b_raw_array_parameter() errors compiler::CompilerError:
+        static compile:
+            fn f(x: mutarray):
+                x
+            mutable_array::capacity(f(mutable_array::create(1, "a")))
+    test::value("si-brg-8/raw-array-parameter", 1, b_raw_array_parameter)
+
+    fn b_wrong_element() errors compiler::CompilerError:
+        static compile:
+            m = mutable_array::create(1, "a")
+            mutable_array::set(m, 0, 1)
+    test::rejects("si-brg-8/wrong-element-write", compiler::DiagnosticCode::Type, b_wrong_element)
+
+    # si-brg-9: a trusted-contract callee passed to an untyped parameter:
+    # the exact callee is analyzed, and the wrong argument rejected.
+    fn b_trusted_callee() errors compiler::CompilerError:
+        static compile:
+            fn need(m: MutableArray[str]):
+                mutable_array::capacity(m)
+            fn app(f, v):
+                f(v)
+            app(need, mutable_array::create(1, "x"))
+    test::value("si-brg-9/fitting-argument", 1, b_trusted_callee)
+
+    fn b_trusted_callee_wrong() errors compiler::CompilerError:
+        static compile:
+            fn need(m: MutableArray[str]):
+                mutable_array::capacity(m)
+            fn app(f, v):
+                f(v)
+            app(need, mutable_array::create(1, 1))
+    test::rejects_containing("si-brg-9/wrong-argument", compiler::DiagnosticCode::Type, "is invalid", b_trusted_callee_wrong)
+
+# ---------------------------------------------------------------------------
+# semantic-instances.test, hir-specialize.test, compiler-opt.test:
+# definition order
+
+fn register_definition_order_tests():
+    # si-rec-2c, hir-specialize-9b: lexical mutual recursion is rejected
+    # before any analysis, at the forward reference.
+    fn b_ping_pong() errors compiler::CompilerError:
+        static compile:
+            fn ping(xs, n):
+                if n == 0:
+                    xs
+                else:
+                    pong(xs, n - 1)
+            fn pong(xs, n):
+                if n == 0:
+                    xs
+                else:
+                    ping(xs, n - 1)
+            ping(["a"], 3)
+    test::rejects_at("si-rec-2c", compiler::DiagnosticCode::Unbound, 0, 0, b_ping_pong)
+
+    fn b_even_odd_forward() errors compiler::CompilerError:
+        static compile:
+            fn even(n):
+                if n == 0:
+                    return true
+                odd(n - 1)
+            fn odd(n):
+                if n == 0:
+                    return false
+                even(n - 1)
+            even(10)
+    test::rejects_at("hir-specialize-9b", compiler::DiagnosticCode::Unbound, 0, 0, b_even_odd_forward)
+
+    # opt-env-5: examples/surface/09-mutual-recursion.bot.
+    fn b_mutual_recursion_example() errors compiler::CompilerError:
+        static compile:
+            fn is_even(n):
+                if n == 0:
+                    return true
+                is_odd(n - 1)
+            fn is_odd(n):
+                if n == 0:
+                    return false
+                is_even(n - 1)
+            [is_even(10), is_even(7)]
+    test::rejects_at("opt-env-5", compiler::DiagnosticCode::Unbound, 0, 0, b_mutual_recursion_example)
+
+    # opt-env-5b: a forward call before the later function is bound is
+    # rejected at the reference, not at run time.
+    fn b_forward_call() errors compiler::CompilerError:
+        static compile:
+            fn early():
+                late()
+            x = early()
+            fn late():
+                1
+            x
+    test::rejects_at("opt-env-5b", compiler::DiagnosticCode::Unbound, 0, 0, b_forward_call)
+
+    # si-dyn-3 (rejected half): a call before the definition.
+    fn b_caller_first() errors compiler::CompilerError:
+        static compile:
+            fn a(x):
+                b(x)
+            fn b(y):
+                y
+            a("s")
+    test::rejects_at("si-dyn-3/caller-first", compiler::DiagnosticCode::Unbound, 0, 0, b_caller_first)
+
+    # si-det-1 (the illegal order): a caller declared before its callees.
+    fn b_both_first() errors compiler::CompilerError:
+        static compile:
+            fn both(xs) errors IndexNotFound:
+                identity(first(xs))
+            fn first(xs) errors IndexNotFound:
+                list::at(xs, 0)
+            fn identity(x):
+                x
+            a = both(["a"]):
+                on IndexNotFound:
+                    "z"
+            b = both([1]):
+                on IndexNotFound:
+                    0
+            identity(mutable_array::create(1, "x"))
+    test::rejects_at("si-det-1/caller-before-callees", compiler::DiagnosticCode::Unbound, 0, 0, b_both_first)
+
+# ---------------------------------------------------------------------------
+# value-transport.test (the programs every backend lowers; the rest are in
+# compiled-values-struct-transport.bot)
+
+fn register_value_transport_tests():
+    # vt-direction-asymmetry-values (return half): chainRet W=6 E=3 -- a
+    # six-field struct built at the bottom of a chain of returns, crossing
+    # three return edges, summed in the driver (tests/transport-shapes.tcl).
+    fn b_chain_ret_6_3() errors compiler::CompilerError:
+        static compile:
+            fn ret0(i):
+                {f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3, f4: i + 4, f5: i + 5}
+            fn ret1(i):
+                ret0(i)
+            fn ret2(i):
+                ret1(i)
+            fn drive(i, n, acc):
+                if i >= n:
+                    return acc
+                r = ret2(i)
+                drive(i + 1, n, acc + r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5)
+            drive(0, 10, 0)
+    test::value("vt-direction-asymmetry-values/return-chain", 420, b_chain_ret_6_3)
+
+    # vt-nested-local: an inner literal only projected joins the outer
+    # value.
+    fn b_nested_local() errors compiler::CompilerError:
+        static compile:
+            fn drive(i, n, acc):
+                if i >= n:
+                    return acc
+                r = {a: i, b: i + 1, inner: {c: i + 2, d: i + 3}}
+                drive(i + 1, n, acc + r.a + r.b + r.inner.c + r.inner.d)
+            drive(0, 10, 0)
+    test::value("vt-nested-local", 240, b_nested_local)
+
+    # vt-nested-two-inner: two inner values, two independent decisions.
+    fn b_nested_two_inner() errors compiler::CompilerError:
+        static compile:
+            fn drive(i, n, acc):
+                if i >= n:
+                    return acc
+                r = {left: {a: i, b: i + 1}, right: {c: i + 2, d: i + 3}}
+                drive(i + 1, n, acc + r.left.a + r.left.b + r.right.c + r.right.d)
+            drive(0, 10, 0)
+    test::value("vt-nested-two-inner", 240, b_nested_two_inner)
+
+    # vt-nested-deep: a cut opens several levels.
+    fn b_nested_deep() errors compiler::CompilerError:
+        static compile:
+            fn drive(i, n, acc):
+                if i >= n:
+                    return acc
+                r = {a: i, x: {b: i + 1, y: {c: i + 2, d: i + 3}}}
+                drive(i + 1, n, acc + r.a + r.x.b + r.x.y.c + r.x.y.d)
+            drive(0, 10, 0)
+    test::value("vt-nested-deep", 240, b_nested_deep)
+
+    # vt-nested-short-return: nestedChainRet INNERW=2 E=1 -- a nested value
+    # returned across one edge, every leaf summed.
+    fn b_nested_ret_1() errors compiler::CompilerError:
+        static compile:
+            fn ret0(i):
+                {a: i, b: i + 1, inner: {c0: i + 2, c1: i + 3}}
+            fn drive(i, n, acc):
+                if i >= n:
+                    return acc
+                r = ret0(i)
+                drive(i + 1, n, acc + r.a + r.b + r.inner.c0 + r.inner.c1)
+            drive(0, 10, 0)
+    test::value("vt-nested-short-return", 240, b_nested_ret_1)
+
+    # vt-nested-return-budget-values: the same nested value over 5, 6 and 8
+    # return edges (opened, bundled, an object): the same sum.
+    fn b_nested_ret_5() errors compiler::CompilerError:
+        static compile:
+            fn ret0(i):
+                {a: i, b: i + 1, inner: {c0: i + 2, c1: i + 3}}
+            fn ret1(i):
+                ret0(i)
+            fn ret2(i):
+                ret1(i)
+            fn ret3(i):
+                ret2(i)
+            fn ret4(i):
+                ret3(i)
+            fn drive(i, n, acc):
+                if i >= n:
+                    return acc
+                r = ret4(i)
+                drive(i + 1, n, acc + r.a + r.b + r.inner.c0 + r.inner.c1)
+            drive(0, 10, 0)
+    test::value("vt-nested-return-budget-values/5-edges", 240, b_nested_ret_5)
+
+    fn b_nested_ret_6() errors compiler::CompilerError:
+        static compile:
+            fn ret0(i):
+                {a: i, b: i + 1, inner: {c0: i + 2, c1: i + 3}}
+            fn ret1(i):
+                ret0(i)
+            fn ret2(i):
+                ret1(i)
+            fn ret3(i):
+                ret2(i)
+            fn ret4(i):
+                ret3(i)
+            fn ret5(i):
+                ret4(i)
+            fn drive(i, n, acc):
+                if i >= n:
+                    return acc
+                r = ret5(i)
+                drive(i + 1, n, acc + r.a + r.b + r.inner.c0 + r.inner.c1)
+            drive(0, 10, 0)
+    test::value("vt-nested-return-budget-values/6-edges", 240, b_nested_ret_6)
+
+    fn b_nested_ret_8() errors compiler::CompilerError:
+        static compile:
+            fn ret0(i):
+                {a: i, b: i + 1, inner: {c0: i + 2, c1: i + 3}}
+            fn ret1(i):
+                ret0(i)
+            fn ret2(i):
+                ret1(i)
+            fn ret3(i):
+                ret2(i)
+            fn ret4(i):
+                ret3(i)
+            fn ret5(i):
+                ret4(i)
+            fn ret6(i):
+                ret5(i)
+            fn ret7(i):
+                ret6(i)
+            fn drive(i, n, acc):
+                if i >= n:
+                    return acc
+                r = ret7(i)
+                drive(i + 1, n, acc + r.a + r.b + r.inner.c0 + r.inner.c1)
+            drive(0, 10, 0)
+    test::value("vt-nested-return-budget-values/8-edges", 240, b_nested_ret_8)
+
+    # vt-positional-list-uses-the-same-model: listChain W=6 E=3 -- a
+    # fixed-shape six-element List forwarded down three argument edges.
+    fn b_list_chain() errors compiler::CompilerError:
+        static compile:
+            fn fwd0(r, k) errors IndexNotFound:
+                list::at(r, 0) + list::at(r, 1) + list::at(r, 2) + list::at(r, 3) + list::at(r, 4) + list::at(r, 5) + k
+            fn fwd1(r, k) errors IndexNotFound:
+                fwd0(r, k)
+            fn fwd2(r, k) errors IndexNotFound:
+                fwd1(r, k)
+            fn drive(i, n, acc) errors IndexNotFound:
+                if i >= n:
+                    return acc
+                drive(i + 1, n, acc + fwd2([i + 0, i + 1, i + 2, i + 3, i + 4, i + 5], i))
+            total = drive(0, 10, 0):
+                on IndexNotFound:
+                    -1
+            total
+    test::value("vt-positional-list-uses-the-same-model", 465, b_list_chain)
+
+    # vt-nested-stored-inner: an inner value stored in a List keeps its own
+    # object.
+    fn b_stored_inner() errors compiler::CompilerError:
+        static compile:
+            fn drive(i, n, acc):
+                if i >= n:
+                    return acc
+                r = {a: i, inner: {c: i + 2, d: i + 3}}
+                xs = list::append([], r.inner)
+                drive(i + 1, n, acc + r.a + list::length(xs))
+            drive(0, 10, 0)
+    test::value("vt-nested-stored-inner", 55, b_stored_inner)
+
+    # vt-nested-shared-inner: a nested value bound to a name and used as a
+    # field is shared, not scalarized into the tree.
+    fn b_shared_inner() errors compiler::CompilerError:
+        static compile:
+            fn drive(i, n, acc):
+                if i >= n:
+                    return acc
+                inner = {c: i + 2, d: i + 3}
+                r = {a: i, inner: inner}
+                drive(i + 1, n, acc + r.a + r.inner.c + inner.d)
+            drive(0, 10, 0)
+    test::value("vt-nested-shared-inner", 185, b_shared_inner)
+
+    # vt-nested-materialization-rebuilds: materializing an outer value with
+    # an opened inner one rebuilds the inner object first.
+    fn b_materialization_rebuilds() errors compiler::CompilerError:
+        static compile:
+            fn drive(i, n, acc):
+                if i >= n:
+                    return acc
+                r = {a: i, inner: {c: i + 2, d: i + 3}}
+                xs = list::append([], r)
+                drive(i + 1, n, acc + r.a + r.inner.c + list::length(xs))
+            drive(0, 10, 0)
+    test::value("vt-nested-materialization-rebuilds", 120, b_materialization_rebuilds)
+
+    # vt-nested-identity: an opened named inner struct is rebuilt with its
+    # own nominal identity (Pt and Seg are TransportPoint and
+    # TransportSegment here).
+    fn b_nested_identity() errors compiler::CompilerError:
+        static compile:
+            fn run(i: int):
+                s = TransportSegment {p: TransportPoint {x: i, y: 1}, q: TransportPoint {x: 2, y: i}}
+                t = list::append([], s)
+                [s.p.x, s.q.y, list::at(t, 0), list::at(t, 0) == TransportSegment {p: TransportPoint {x: i, y: 1}, q: TransportPoint {x: 2, y: i}}]
+            run(7)
+    test::value("vt-nested-identity", [7, 7, TransportSegment {p: TransportPoint {x: 7, y: 1}, q: TransportPoint {x: 2, y: 7}}, true], b_nested_identity)
+
+    # vt-gc-frontier-strings, vt-gc-nested-list-mutarray,
+    # vt-gc-nested-materialized-later, vt-gc-nested-strings: pointer-bearing
+    # fields of frontier-materialized and opened nested values (the Tcl
+    # vtGc programs, verbatim).
+    fn b_gc_frontier_strings() errors compiler::CompilerError:
+        static compile:
+            fn f0(r, k):
+                str::concat(r.a, r.b) + k
+            fn f1(r, k):
+                f0(r, k)
+            fn f2(r, k):
+                f1(r, k)
+            fn run(i):
+                r = {a: str::concat("a", "b"), b: str::concat("c", "d"), c: i, d: [1, 2], e: str::concat("e", "f"), f: i + 1}
+                junk = [str::concat("j", "k"), str::concat("m", "n")]
+                local = r.c + r.f
+                [local, r.d, r.e, junk, r.a]
+            run(2)
+    test::value("vt-gc-frontier-strings", [5, [1, 2], "ef", ["jk", "mn"], "ab"], b_gc_frontier_strings)
+
+    fn b_gc_nested_list_mutarray() errors compiler::CompilerError:
+        static compile:
+            fn mk(i):
+                m = mutable_array::create(2, "z")
+                mutable_array::set(m, 0, str::concat("q", "r"))
+                {arr: m, inner: {items: [str::concat("a", "b"), str::concat("c", "d")], tag: str::concat("t", "g")}}
+            fn run(i):
+                r = mk(i)
+                junk = str::concat(str::concat("j", "k"), "m")
+                [mutable_array::get(r.arr, 0, ""), r.inner.items, r.inner.tag, junk]
+            run(1)
+    test::value("vt-gc-nested-list-mutarray", ["qr", ["ab", "cd"], "tg", "jkm"], b_gc_nested_list_mutarray)
+
+    fn b_gc_nested_materialized_later() errors compiler::CompilerError:
+        static compile:
+            fn run(i):
+                r = {s: str::concat("a", "b"), inner: {t: str::concat("c", "d"), u: [str::concat("e", "f")]}}
+                junk = [str::concat("j", "k"), str::concat("m", "n"), str::concat("o", "p")]
+                xs = list::append([], r)
+                [r.s, r.inner.t, list::at(xs, 0).inner.u, junk]
+            run(1)
+    test::value("vt-gc-nested-materialized-later", ["ab", "cd", ["ef"], ["jk", "mn", "op"]], b_gc_nested_materialized_later)
+
+    fn b_gc_nested_strings() errors compiler::CompilerError:
+        static compile:
+            fn mk(i):
+                {s: str::concat("a", "b"), inner: {t: str::concat("c", "d"), u: [str::concat("e", "f")]}, n: i}
+            fn run(i):
+                r = mk(i)
+                junk = [str::concat("j", "k"), str::concat("m", "n")]
+                [r.s, r.inner.t, r.inner.u, r.n, junk]
+            run(4)
+    test::value("vt-gc-nested-strings", ["ab", "cd", ["ef"], 4, ["jk", "mn"]], b_gc_nested_strings)
+
+# ---------------------------------------------------------------------------
+# short-demand.test: packed or tagged String positions compute the same
+# values
+
+fn register_short_demand_tests():
+    # sd-materialize-only-parameter-stays-tagged: a parameter whose only use
+    # is a List append.
+    fn b_materialize_only() errors compiler::CompilerError:
+        static compile:
+            fn keep(xs, s):
+                list::append(xs, s)
+            [keep([], "ab"), keep([], "cd")]
+    test::value("sd-materialize-only-parameter-stays-tagged", [["ab"], ["cd"]], b_materialize_only)
+
+    # sd-scalar-use-keeps-it-packed: one scalar consumer among tagged uses.
+    fn b_scalar_use() errors compiler::CompilerError:
+        static compile:
+            fn mixed(s, xs):
+                [str::length(s), list::append(xs, s), list::append(xs, s)]
+            mixed("xyz", [])
+    test::value("sd-scalar-use-keeps-it-packed", [3, ["xyz"], ["xyz"]], b_scalar_use)
+
+    # sd-equality-is-a-scalar-use: == against a literal, then stored.
+    fn b_equality_scalar() errors compiler::CompilerError:
+        static compile:
+            fn tag(s, xs):
+                [s == "yes", list::append(xs, s)]
+            [tag("yes", []), tag("no", [])]
+    test::value("sd-equality-is-a-scalar-use", [[true, ["yes"]], [false, ["no"]]], b_equality_scalar)
+
+    # sd-equality-with-an-unrestricted-string-is-not-a-scalar-use: s == t
+    # where t is a concat result.
+    fn b_equality_unrestricted() errors compiler::CompilerError:
+        static compile:
+            fn same(s, t):
+                s == t
+            [same("ab", str::concat("a", "b")), same("", str::concat("", ""))]
+    test::value("sd-equality-with-an-unrestricted-string-is-not-a-scalar-use", [true, true], b_equality_unrestricted)
+
+    # sd-local-without-a-scalar-use-is-not-a-register: a local literal that
+    # is only stored.
+    fn b_local_stored() errors compiler::CompilerError:
+        static compile:
+            fn keep(xs):
+                s = "hello"
+                list::append(xs, s)
+            keep([])
+    test::value("sd-local-without-a-scalar-use-is-not-a-register", ["hello"], b_local_stored)
+
+    # sd-local-with-a-scalar-use-is-a-register: a local bound to a call
+    # result, compared with a parameter, then stored.
+    fn b_local_compared() errors compiler::CompilerError:
+        static compile:
+            fn word(flag):
+                if flag:
+                    "yes"
+                else:
+                    "no"
+            fn probe(flag, t, xs):
+                s = word(flag)
+                [s == t, list::append(xs, s)]
+            [probe(true, "yes", []), probe(false, "yes", [])]
+    test::value("sd-local-with-a-scalar-use-is-a-register", [[true, ["yes"]], [false, ["no"]]], b_local_compared)
+
+    # sd-round-trip-parameter-stays-tagged: a one-character parameter used
+    # only by tagged operations (the refined-checks shape).
+    fn b_round_trip() errors compiler::CompilerError:
+        static compile:
+            fn classify(c):
+                str::is_tcl_alpha(c)
+            fn drive(t, i) errors LowerUnderrun, UpperOverrun:
+                classify(str::substring(t, i, i + 1))
+            [drive("a1", 0), drive("a1", 1)]
+    test::value("sd-round-trip-parameter-stays-tagged", [true, false], b_round_trip)
+
+    # sd-non-ascii-scalar-parameter-with-consumers-stays-short: a
+    # one-character non-ASCII parameter compared and measured.
+    fn b_non_ascii() errors compiler::CompilerError:
+        static compile:
+            fn probe(c):
+                [c == "λ", str::length(c)]
+            [probe("λ"), probe("é")]
+    test::value("sd-non-ascii-scalar-parameter-with-consumers-stays-short", [[true, 1], [false, 1]], b_non_ascii)
+
+    # sd-region-companion-call-is-not-a-flow: text handed to a
+    # region-producing helper.
+    fn b_region_companion() errors compiler::CompilerError:
+        static compile:
+            fn peek(text, index):
+                if index < 0 or index >= str::length(text):
+                    return ""
+                str::substring(text, index, index + 1)
+            fn count_a(text, index, acc):
+                c = peek(text, index)
+                if c == "":
+                    acc
+                else:
+                    step = if c == "a":
+                        1
+                    else:
+                        0
+                    count_a(text, index + 1, acc + step)
+            [count_a("banana", 0, 0), count_a("", 0, 0), count_a("xyz", 0, 0)]
+    test::value("sd-region-companion-call-is-not-a-flow", [3, 0, 0], b_region_companion)
+
+# ---------------------------------------------------------------------------
+# dormant-instances.test: a dormant generic entry changes no value
+
+fn register_dormant_instance_tests():
+    # dormant-parity-scan: the emailish? scanner shape (scan's generic
+    # instance is the never-entered Block-value entry of a de-closured
+    # closure).
+    fn b_scan() errors compiler::CompilerError:
+        static compile:
+            fn outer(v, start0):
+                n = str::length(v)
+                fn get(i):
+                    c = str::substring(v, i, i + 1):
+                        on LowerUnderrun:
+                            ""
+                        on UpperOverrun:
+                            ""
+                    c
+                fn scan(start, pred):
+                    loop i from start to n:
+                        if pred(get(i)):
+                            continue
+                        return i
+                    n
+                scan(start0, str::is_tcl_alpha)
+            [outer("abc1", 0), outer("x", 0), outer("", 0)]
+    test::value("dormant-parity-scan", [3, 1, 0], b_scan)
+
+    # dormant-parity-transitive: an instance reachable only through the
+    # dormant entry (apply<any, str, int>).
+    fn b_transitive() errors compiler::CompilerError:
+        static compile:
+            fn idx(x):
+                x * 2
+            fn apply(p, c, i):
+                if p(c):
+                    idx(i + 0)
+                else:
+                    0 - 1
+            fn outer(v, start0):
+                n = str::length(v)
+                fn get(i):
+                    c = str::substring(v, i, i + 1):
+                        on LowerUnderrun:
+                            ""
+                        on UpperOverrun:
+                            ""
+                    c
+                fn scan(start, pred):
+                    loop i from start to n:
+                        if apply(pred, get(i), i) >= 0:
+                            continue
+                        return i
+                    n
+                scan(start0, str::is_tcl_alpha)
+            [outer("abc1", 0), outer("x", 1), outer("ab", 2)]
+    test::value("dormant-parity-transitive", [3, 1, 2], b_transitive)
+
+    # dormant-parity-theorem: a String parameter scan passes on to a
+    # closure whose String position stays generic.
+    fn b_theorem() errors compiler::CompilerError:
+        static compile:
+            fn outer(v, start0):
+                n = str::length(v)
+                fn get(i):
+                    c = str::substring(v, i, i + 1):
+                        on LowerUnderrun:
+                            ""
+                        on UpperOverrun:
+                            ""
+                    c
+                fn ok(t):
+                    str::length(t) + str::length(v)
+                fn scan(start, pred, tag):
+                    first = ok(tag)
+                    loop i from start to n:
+                        if pred(get(i)):
+                            continue
+                        return i
+                    n
+                scan(start0, str::is_tcl_alpha, "t")
+            [outer("abc1", 0), outer("x", 0)]
+    test::value("dormant-parity-theorem", [3, 1], b_theorem)
+
+    # dormant-parity-adder: a capturing closure called only with an Int,
+    # whose generic entry creates the inner closure with an unknown n.
+    fn b_adder() errors compiler::CompilerError:
+        static compile:
+            base = 100
+            fn adder(n):
+                fn add(x):
+                    x + n + base
+                add
+            add5 = adder(5)
+            add5(1)
+    test::value("dormant-parity-adder", 106, b_adder)
+
+    # dormant-parity-escape: two literals of the same shape, one escaping
+    # (a real, open entry), one only ever called (a dormant entry).
+    fn b_escape() errors compiler::CompilerError:
+        static compile:
+            fn mk(k):
+                fn g(y):
+                    y + k
+                g
+            fn f(a):
+                k = 5
+                fn g(y):
+                    y + k
+                [g(a), mk(k)(a)]
+            [f(3), f(10)]
+    test::value("dormant-parity-escape", [[8, 8], [15, 15]], b_escape)
+
+    # dormant-nested-value-use-parity: f's binding stored in a List by a
+    # nested closure and called dynamically, next to a direct call. (The
+    # Tcl program is -strict 0, its list::at unhandled; strictly, the
+    # IndexNotFound it may raise is handled by the other function.)
+    fn b_nested_value_use() errors compiler::CompilerError:
+        static compile:
+            fn h(x):
+                x + 1
+            fn other(a, p):
+                0
+            fn outer(k):
+                fn f(n, p):
+                    if p("a"):
+                        h(n) + k
+                    else:
+                        0
+                fn c(m, p):
+                    fn d(z):
+                        fs = [other, f]
+                        g = list::at(fs, k):
+                            on IndexNotFound:
+                                other
+                        g(z * 10000000000000000000000, p)
+                    f(m, p) + d(m)
+                c(7, str::is_tcl_alpha)
+            outer(1)
+    test::value("dormant-nested-value-use-parity", 70000000000000000000011, b_nested_value_use)
+
+# ---------------------------------------------------------------------------
+# compiler-opt.test: tail calls, environments and frames
+
+fn register_compiler_optimization_tests():
+    # opt-tail-4: a return of a self call inside a loop.
+    fn b_return_in_loop() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                loop:
+                    if n == 0:
+                        return 0
+                    return f(n - 1)
+            f(5)
+    test::value("opt-tail-4", 0, b_return_in_loop)
+
+    # opt-tail-5: tail calls through if branches and returns.
+    fn b_collatz() errors compiler::CompilerError:
+        static compile:
+            fn parity(n):
+                if n < 2:
+                    return n
+                parity(n - 2)
+            fn half(n, h):
+                if h + h >= n:
+                    return h
+                half(n, h + 1)
+            fn collatz(n, steps):
+                if n == 1:
+                    return steps
+                if n == 2 * (n - n + 0) + n and false:
+                    return 0
+                even = parity(n) == 0
+                if even:
+                    return collatz(half(n, 0), steps + 1)
+                else:
+                    collatz(3 * n + 1, steps + 1)
+            [collatz(27, 0), collatz(1, 0)]
+    test::value("opt-tail-5", [111, 0], b_collatz)
+
+    # opt-tail-6: closures calling themselves in tail position keep their
+    # own environment.
+    fn b_closure_tail() errors compiler::CompilerError:
+        static compile:
+            fn make(step):
+                fn walk(n, acc):
+                    if n == 0:
+                        return acc
+                    walk(n - 1, acc + step)
+                walk
+            a = make(2)
+            b = make(10)
+            [a(5, 0), b(5, 0), a(3, 1)]
+    test::value("opt-tail-6", [10, 50, 7], b_closure_tail)
+
+    # opt-tail-7-static: a parameter used both as an Int and as a String by
+    # its own body has no sound contract: a compile-time error naming both
+    # uses.
+    fn b_unsound_parameter() errors compiler::CompilerError:
+        static compile:
+            fn f(n, acc):
+                if n == 0:
+                    return acc
+                f(n - 1, str::concat(acc, n))
+            f(3, "x")
+    test::rejects_containing("opt-tail-7-static/names-the-int-use", compiler::DiagnosticCode::Type, "cannot infer a sound type for parameter \"n\" of f: argument 1 of native - requires int", b_unsound_parameter)
+    test::rejects_containing("opt-tail-7-static/names-the-str-use", compiler::DiagnosticCode::Type, "argument 2 of native str::concat requires str", b_unsound_parameter)
+
+    # opt-env-2: a function that reads a captured value, called through
+    # another.
+    fn b_captured_through_caller() errors compiler::CompilerError:
+        static compile:
+            k = 7
+            fn addk(n):
+                n + k
+            fn go(n):
+                addk(n)
+            go(1)
+    test::value("opt-env-2", 8, b_captured_through_caller)
+
+    # opt-env-3: an if condition calling a function, with a closure in a
+    # branch.
+    fn b_closure_in_branch() errors compiler::CompilerError:
+        static compile:
+            fn yes(x):
+                true
+            if yes(1):
+                fn inner():
+                    2
+                inner()
+            else:
+                3
+    test::value("opt-env-3", 2, b_closure_in_branch)
+
+    # opt-env-5c: a nested function calls itself and reaches the enclosing
+    # function's parameter.
+    fn b_nested_recursion() errors compiler::CompilerError:
+        static compile:
+            fn outer(k):
+                fn count(n):
+                    if n == 0:
+                        return k
+                    count(n - 1)
+                fn twice(n):
+                    count(n) + count(n)
+                [count(6), twice(3)]
+            outer(5)
+    test::value("opt-env-5c", [5, 10], b_nested_recursion)
+
+    # opt-life-3: a closure returned from an integer?-guarded branch keeps
+    # its frame (the Tcl program's else branch, the Int 0, is a closure
+    # returning 0 here: strictly, f's result is called).
+    fn b_returned_closure() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                if integer?(x):
+                    fn g():
+                        x
+                    g
+                else:
+                    fn h():
+                        0
+                    h
+            f(5)()
+    test::value("opt-life-3", 5, b_returned_closure)
+
+# ---------------------------------------------------------------------------
+# direct-hir-native.test: the direct HIR-to-native path computes what the
+# reference branch computes
+
+fn register_direct_native_path_tests(one: int, two: int, three: int, seven: int, ten: int):
+    # direct-hir-hygiene-source-three-way: a later same-scope binding is
+    # visible only after it; early keeps the outer x.
+    fn b_hygiene() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            inner = if true:
+                early = x
+                x = 2
+                fn late():
+                    x
+                [early, late(), x]
+            [inner, x]
+    test::value("direct-hir-hygiene-source-three-way", [[1, 2, 2], 1], b_hygiene)
+
+    # direct-hir-shadowing-three-way, direct-hir-executable-parity-
+    # shadowing-and-errors (its first program): an earlier outer reference
+    # and a later shadow.
+    fn b_shadowing() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            fn early():
+                x
+            inner = if true:
+                x = 2
+                fn late():
+                    x
+                [early(), late(), x]
+            [inner, x, early()]
+    test::value("direct-hir-shadowing-three-way", [[1, 2, 2], 1, 1], b_shadowing)
+
+    # direct-hir-shadowed-native-name: a local function named like the root
+    # native integer? is the local function.
+    fn b_shadowed_native() errors compiler::CompilerError:
+        static compile:
+            fn integer?(s):
+                str::length(s)
+            [integer?("abc"), str::length("xy")]
+    test::value("direct-hir-shadowed-native-name", [3, 2], b_shadowed_native)
+
+    # direct-hir-module-identity-in-native-hir: a module-qualified call and
+    # the container intrinsics.
+    fn b_module_identity() errors compiler::CompilerError:
+        static compile:
+            a = mutable_array::create(3, 0)
+            mutable_array::set(a, 1, 7)
+            [mathish::inc(41), mutable_array::at(a, 1)]
+    test::value("direct-hir-module-identity-in-native-hir", [42, 7], b_module_identity)
+
+    # direct-hir-differential-arithmetic (operands at run time).
+    fn b_arithmetic() errors compiler::CompilerError:
+        static compile:
+            [one + two, ten * ten - one]
+    test::value("direct-hir-differential-arithmetic", [3, 99], b_arithmetic)
+
+    # direct-hir-differential-self-recursion.
+    fn b_fib() errors compiler::CompilerError:
+        static compile:
+            fn fib(n):
+                if n < 2:
+                    return n
+                fib(n - 1) + fib(n - 2)
+            [fib(15), fib(20)]
+    test::value("direct-hir-differential-self-recursion", [610, 6765], b_fib)
+
+    # direct-hir-differential-closures: closures returning closures.
+    fn b_closures() errors compiler::CompilerError:
+        static compile:
+            fn counter_from(start):
+                fn step(k):
+                    fn add(y):
+                        start + k + y
+                    add
+                step
+            s1 = counter_from(10)
+            s2 = counter_from(20)
+            [s1(1)(2), s2(1)(2), s1(3)(4)]
+    test::value("direct-hir-differential-closures", [13, 23, 17], b_closures)
+
+    # direct-hir-differential-module-call, direct-hir-executable-parity-
+    # closure-module-mutarray (its module program).
+    fn b_module_call() errors compiler::CompilerError:
+        static compile:
+            [mathish::inc(41), mathish::inc(1)]
+    test::value("direct-hir-differential-module-call", [42, 2], b_module_call)
+
+    # direct-hir-differential-errors: declared errors handled at the call.
+    fn b_errors() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors TooSmall, TooBig:
+                if n < 0:
+                    fail TooSmall
+                else:
+                    if n > 10:
+                        fail TooBig
+                    else:
+                        n
+            fn classify(n):
+                r = check(n):
+                    on TooSmall:
+                        -1
+                    on TooBig:
+                        -2
+                r
+            [classify(20), classify(5), classify(-3)]
+    test::value("direct-hir-differential-errors", [-2, 5, -1], b_errors)
+
+    # direct-hir-differential-returning-loops.
+    fn b_returning_loops() errors compiler::CompilerError:
+        static compile:
+            fn first_over(xs, limit):
+                loop x in xs:
+                    if x > limit:
+                        return x
+                0
+            fn sum_to(n):
+                loop i from 0 to n:
+                    if i == 3:
+                        continue
+                    if i > 7:
+                        break
+                n
+            [first_over([1, 5, 9, 12], 8), first_over([1], 8), sum_to(20)]
+    test::value("direct-hir-differential-returning-loops", [9, 0, 20], b_returning_loops)
+
+    # direct-hir-differential-mutable-array.
+    fn b_mutable_array() errors compiler::CompilerError:
+        static compile:
+            fn fill(n):
+                a = mutable_array::create(n, 0)
+                loop i from 0 to n:
+                    mutable_array::set(a, i, i * i)
+                a
+            a = fill(6)
+            [mutable_array::get(a, 5, -1), mutable_array::freeze(a, mutable_array::capacity(a))]
+    test::value("direct-hir-differential-mutable-array", [25, [0, 1, 4, 9, 16, 25]], b_mutable_array)
+
+    # direct-hir-differential-semantic-instances.
+    fn b_semantic_instances() errors compiler::CompilerError:
+        static compile:
+            fn identity(v):
+                v
+            fn is_big(n):
+                n > 10
+            fn find_big(xs):
+                r = list::find(xs, is_big):
+                    on list::NotFound:
+                        0
+                r
+            [identity(3), identity("s"), find_big([1, 20, 3]), find_big([5])]
+    test::value("direct-hir-differential-semantic-instances", [3, "s", 20, 0], b_semantic_instances)
+
+    # direct-hir-differential-exact-callables.
+    fn b_exact_callables() errors compiler::CompilerError:
+        static compile:
+            fn apply(f, v):
+                f(v)
+            fn inc(n):
+                n + 1
+            [apply(inc, 1), apply(str::length, "abcd")]
+    test::value("direct-hir-differential-exact-callables", [2, 4], b_exact_callables)
+
+    # direct-hir-differential-argument-cycle: two functions passing each
+    # other.
+    fn b_argument_cycle() errors compiler::CompilerError:
+        static compile:
+            fn ping(next, n):
+                if n < 1:
+                    return 0
+                next(ping, n - 1) + 1
+            fn pong(next, n):
+                if n < 1:
+                    return 0
+                next(pong, n - 1) + 2
+            ping(pong, 5)
+    test::value("direct-hir-differential-argument-cycle", 7, b_argument_cycle)
+
+    # direct-hir-executable-parity-scalar-and-recursion: a scalar program
+    # (Int operands at run time; an astral String) and bignum self
+    # recursion.
+    fn b_scalars() errors compiler::CompilerError:
+        static compile:
+            [one + two, "hé🙂", two * three * seven]
+    test::value("direct-hir-executable-parity-scalar-and-recursion/scalars", [3, "hé🙂", 42], b_scalars)
+
+    fn b_factorial() errors compiler::CompilerError:
+        static compile:
+            fn fact(n: int):
+                if n < 2:
+                    return 1
+                n * fact(n - 1)
+            [fact(20), fact(25)]
+    test::value("direct-hir-executable-parity-scalar-and-recursion/bignum-recursion", [2432902008176640000, 15511210043330985984000000], b_factorial)
+
+    # direct-hir-executable-parity-closure-module-mutarray: the closure and
+    # MutableArray programs (its module program is
+    # direct-hir-differential-module-call above).
+    fn b_adder() errors compiler::CompilerError:
+        static compile:
+            fn make_adder(x: int):
+                fn add(y: int):
+                    x + y
+                add
+            add10 = make_adder(10)
+            [add10(32), add10(1)]
+    test::value("direct-hir-executable-parity-closure-module-mutarray/closure", [42, 11], b_adder)
+
+    fn b_arrays() errors compiler::CompilerError:
+        static compile:
+            a = mutable_array::create(3, 0)
+            mutable_array::set(a, 1, 7)
+            b = mutable_array::from_list([4, 5, 6])
+            [mutable_array::at(a, 1), mutable_array::at(b, 2), mutable_array::freeze(a, 3)]
+    test::value("direct-hir-executable-parity-closure-module-mutarray/mutable-array", [7, 6, [0, 7, 0]], b_arrays)
+
+    # direct-hir-executable-parity-shadowing-and-errors: declared errors
+    # handled at the call site (its shadowing program is
+    # direct-hir-shadowing-three-way above).
+    fn b_typed_errors() errors compiler::CompilerError:
+        static compile:
+            fn check(n: int) -> int errors TooBig:
+                if n > 10:
+                    fail TooBig
+                else:
+                    n
+            fn classify(n: int):
+                r = check(n):
+                    on TooBig:
+                        -2
+                r
+            [classify(20), classify(5)]
+    test::value("direct-hir-executable-parity-shadowing-and-errors/declared-errors", [-2, 5], b_typed_errors)
+
+    # direct-hir-executable-source-refinements: source refinements and
+    # their proof-producing predicates (lib/web.bot).
+    fn b_source_refinements() errors compiler::CompilerError:
+        static compile:
+            fn check(s: str) -> bool:
+                web::emailish?(s)
+            [web::uri_escape_text("a b/c"), check("a@b.co"), check("nope")]
+    test::value("direct-hir-executable-source-refinements", ["a%20b%2Fc", true, false], b_source_refinements)
+
+with context test::suite()
+register_instance_result_tests()
+register_invalid_instance_tests()
+register_bearing_tests()
+register_definition_order_tests()
+register_value_transport_tests()
+register_short_demand_tests()
+register_dormant_instance_tests()
+register_compiler_optimization_tests()
+register_direct_native_path_tests(1, 2, 3, 7, 10)
+test::report()
