@@ -454,12 +454,12 @@ test se-equal-hygiene-names {a diagnostic names a binding hygiene renamed (hir/h
     list [seSame $text] [seOutcomes $text] [lindex $messages 1]
 } -result {{} {TYPE TYPE} {argument for parameter "list" cannot be proven to satisfy int (argument type: str)}}
 
-test se-equal-erased-witness {the erased-callable contract is a set of errors, which loses one only once every contribution erasing it is gone: it depends on one witness per error (the contribution the sequential order removes last) -- and every other contributor is linked to it: here the consumer turns unknown when the block in mk() is rejected (the witness, in w(), erases mk()'s result, which then never exists), and the other contributor of E2, l(), must not be rejected in the same run, or the next build judges the consumer without E2 -- the batched decisions are the sequential ones} -body {
+test se-equal-erased-witness {the erased-callable contract is a set of errors, which loses one only once every contribution erasing it is gone: it depends on one witness per error (the contribution the sequential order removes last) -- and every other contributor is linked to it: here the consumer turns unknown when the block in mk() is rejected (the witness, in w(), erases mk()'s result, which then never exists), and the other contributor of E2, l(), must not be rejected in the same run, or the next build judges the consumer without E2 -- the batched decisions are the sequential ones. store() escapes (`keep`), so what its parameter may hold is no input of the contract boundary (P:input), whose own witness link would hold l() back as well} -body {
     set text "import compiler\nimport list\n\nerror E1\nerror E2\n\nfn harmless() -> int:\n    1\n\nfn raise2() -> int errors E2:\n    fail E2\n\nfn raise2b() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn want(x: int) -> int:\n    x\n\nfn mk() errors compiler::CompilerError:\n    static compile:\n        want(\"z\")\n        raise2b\n\n"
     append text [seSite y {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
     append text [seSite l {"s = store(raise2)" {want("l")}}]
     append text [seSite w {"store(mk())"}]
-    append text "r1 = y():\n    on compiler::CompilerError:\n        -1\nr2 = l():\n    on compiler::CompilerError:\n        -1\nr3 = w():\n    on compiler::CompilerError:\n        -1\nr1 + r2 + r3\n"
+    append text "keep = \[store\]\nr1 = y():\n    on compiler::CompilerError:\n        -1\nr2 = l():\n    on compiler::CompilerError:\n        -1\nr3 = w():\n    on compiler::CompilerError:\n        -1\nr1 + r2 + r3\n"
     list [seSame $text] [seOutcomes $text]
 } -result {{} {TYPE UNHANDLED-ERROR TYPE accepted}}
 
