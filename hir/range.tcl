@@ -1700,7 +1700,7 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
                 {argument for parameter "%s" cannot be proven to satisfy %s%s (argument type: %s%s)%s%s} \
                 [dict get $hir bindings $paramBinding name] [hir::types::show $declaredType] \
                 [expr {$inferred ? ", the parameter type inferred from the function body" : ""}] \
-                [hir::types::show $argType] [FactsClause $argType $declaredType $argRange] [MismatchClause $argType $declaredType] \
+                [hir::semantic::ShowType $hir $argType] [FactsClause $argType $declaredType $argRange] [MismatchClause $argType $declaredType] \
                 [expr {$inferred ? [hir::signatures::because $hir $targetBlock $i] : ""}]] $arg
             continue
         }
@@ -1727,7 +1727,7 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
         hir::Diagnose hir TYPE [format \
             {argument for parameter "%s" is statically incompatible with %s, the parameter type inferred from the function body (argument type: %s%s)%s} \
             [dict get $hir bindings $paramBinding name] [hir::types::show $checkedType] \
-            [hir::types::show $argType] [FactsClause $argType $checkedType $argRange] \
+            [hir::semantic::ShowType $hir $argType] [FactsClause $argType $checkedType $argRange] \
             [hir::signatures::because $hir $targetBlock $i]] $arg
     }
 }
@@ -1945,7 +1945,7 @@ proc hir::range::VerifyStructuralCall {hirVar ranges e node calleeType callee ar
         hir::Diagnose hir TYPE [format \
             {argument %d cannot be proven to satisfy %s, the parameter type the callee's function type %s requires (argument type: %s%s)%s} \
             $index [hir::types::show $declaredType] [hir::types::show $calleeType] \
-            [hir::types::show $argType] [FactsClause $argType $declaredType $argRange] [MismatchClause $argType $declaredType]] $arg
+            [hir::semantic::ShowType $hir $argType] [FactsClause $argType $declaredType $argRange] [MismatchClause $argType $declaredType]] $arg
     }
 }
 

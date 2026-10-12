@@ -854,7 +854,13 @@ proc hir::semantic::Environment {hir id} {
 # hir::types::show with an exact callable named by its source function
 # (`block(e49)/1 -> bool` reads `is_b/1 -> bool`).
 proc hir::semantic::ShowType {hir type} {
-    set text [hir::types::show $type]
+    return [NameCallables $hir [hir::types::show $type]]
+}
+
+# TEXT (a type's text, hir::types::show or showContract) with every exact
+# callable `block(e49)` named by its source function -- `function e49` for
+# one without a name.
+proc hir::semantic::NameCallables {hir text} {
     while {[regexp {block\((e[0-9]+)\)} $text -> block]} {
         set name [hir::signatures::Name $hir $block]
         if {$name eq "a function"} {
