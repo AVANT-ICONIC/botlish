@@ -35,8 +35,8 @@
 #   method sugar `.get` needs (the suite imports list).
 # * Diagnostics compare the DiagnosticCode and, where the Tcl test pins it,
 #   the location: the Tcl program's line and column, translated to this
-#   file's. The message is compared only where its wording is the property
-#   (rejects_saying, below).
+#   file's. The message is compared only where it carries the property
+#   (test::rejects_containing; rejects_saying, below, with the location).
 # * Evaluation order: the Tcl tests log each probe into an installed context,
 #   which a body cannot use. Here a probe yields [ID] (a deep yield), and the
 #   block drives one coroutine per spelling, collecting [FIRST, REST]: FIRST
@@ -62,8 +62,8 @@ import test
 error FlaggedFailure
 
 # ---------------------------------------------------------------------------
-# A custom check: a rejection whose wording is the property.
-
+# A custom check: a rejection whose wording is the property, at the location
+# the Tcl test pins too (test::rejects_message compares no location).
 # BODY's block must be rejected with diagnostic code EXPECTED at LINE and
 # COLUMN of this file, with exactly the message WORDING.
 nomethod fn rejects_saying(name: str, expected: compiler::DiagnosticCode, line: int, column: int, wording: str, body) -> unit:
@@ -499,21 +499,21 @@ fn register_diagnostic_tests():
     test::rejects_at("flags-diagnostic-one-namespace-ordinary-first", compiler::DiagnosticCode::FlagBindingCollision, 496, 30, one_namespace)
 
 # There is no flag type to name (flags-no-flag-type): a parameter annotated
-# FlagSet or Flag is a Type error of its declaration.
+# FlagSet or Flag is a Type error, an unknown type of that name.
 fn register_no_flag_type_tests():
     fn flagset() errors compiler::CompilerError:
         static compile:
             fn f(x: FlagSet):
                 x
             1
-    test::rejects_at("flags-no-flag-type/flagset", compiler::DiagnosticCode::Type, 506, 17, flagset)
+    test::rejects_containing("flags-no-flag-type/flagset", compiler::DiagnosticCode::Type, "unknown or invalid type FlagSet", flagset)
 
     fn flag() errors compiler::CompilerError:
         static compile:
             fn f(x: Flag):
                 x
             1
-    test::rejects_at("flags-no-flag-type/flag", compiler::DiagnosticCode::Type, 513, 17, flag)
+    test::rejects_containing("flags-no-flag-type/flag", compiler::DiagnosticCode::Type, "unknown or invalid type Flag ", flag)
 
 # ---------------------------------------------------------------------------
 # A function with flags is not a value (flags-value-*)

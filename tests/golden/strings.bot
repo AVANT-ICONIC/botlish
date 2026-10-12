@@ -11,8 +11,8 @@
 #     BigInt -- fails with the builtin declared error IndexNotFound, handled
 #     like any declared error; a call whose index is not proven in range
 #     leaves IndexNotFound as an obligation of its caller (UnhandledError
-#     when nothing handles it), and a read guarded by `i < str::length(s)`
-#     is proven and needs no handler;
+#     when nothing handles it), and a read under a guard that proves
+#     0 <= i < str::length(s) needs no handler;
 #   * str::char_at is a first-class value that reads and fails like a call.
 # UnicodeChar (UNICODE-CHAR-LITERALS.md):
 #   * a single-quoted literal is exactly one Unicode scalar value ('A', 'é',
@@ -49,8 +49,8 @@
 # tests/ascii.test, tests/web-unreserved.test and
 # tests/emailish-predicate.test (audit/golden/migration/fragments/strings.tsv
 # maps every Tcl test to its golden test). collections.bot already holds
-# str-char-at-values and char-typed-callable-escape-rejected. Most Tcl
-# programs there were compiled -strict 0 or checked only that a strict
+# str-char-at-values and char-typed-callable-escape-rejected. Many of the
+# Tcl programs were compiled -strict 0 or checked only that a strict
 # compile succeeds; here every accepted block is strict and its value is
 # pinned on every backend. A Tcl "parity" twin of an interp-only test of the
 # same program is served by that program's one golden test (the runner
@@ -221,8 +221,8 @@ fn register_char_at_tests(empty: str):
     test::value("str-char-at-allocates-nothing", 129474, b_scan_sum)
 
 # str-char-at-index-not-found-LABEL: str::char_at(TEXT, INDEX) fails with
-# IndexNotFound, which the handler turns into -1.
-fn register_char_at_out_of_range(label: str, text: str, index: int):
+# IndexNotFound, which the handler turns into -1 (EXPECTED).
+fn register_char_at_out_of_range(label: str, text: str, index: int, expected: int):
     fn b_out_of_range() errors compiler::CompilerError:
         static compile:
             fn at(s, i):
@@ -231,15 +231,15 @@ fn register_char_at_out_of_range(label: str, text: str, index: int):
                         return -1
                 1
             at(text, index)
-    test::value("str-char-at-index-not-found-".concat(label), -1, b_out_of_range)
+    test::value("str-char-at-index-not-found-".concat(label), expected, b_out_of_range)
 
 fn register_str_char_at_tests():
     register_char_at_tests("")
-    register_char_at_out_of_range("negative", "é", -1)
-    register_char_at_out_of_range("at-length", "é", 1)
-    register_char_at_out_of_range("past-length", "ab", 5)
-    register_char_at_out_of_range("empty", "", 0)
-    register_char_at_out_of_range("bigint", "ab", 1208925819614629174706176)
+    register_char_at_out_of_range("negative", "é", -1, -1)
+    register_char_at_out_of_range("at-length", "é", 1, -1)
+    register_char_at_out_of_range("past-length", "ab", 5, -1)
+    register_char_at_out_of_range("empty", "", 0, -1)
+    register_char_at_out_of_range("bigint", "ab", 1208925819614629174706176, -1)
 
 # ---------------------------------------------------------------------------
 # unicode-char.test: UnicodeChar, character literals and List[UnicodeChar]
@@ -526,8 +526,8 @@ fn register_ascii_contract_tests():
             ascii::is_digit(48)
     test::value("ascii-accepts-provably-in-range-literal", true, b_in_range_literal)
 
-    # ascii-rejects-codepoint-int: char::scalar_value('7') is 55 but only an
-    # int, with no Byte fact.
+    # ascii-rejects-codepoint-int: char::scalar_value('7') is 55, but its
+    # static facts do not bound it to 0..255 (no Byte proof).
     fn b_codepoint_int() errors compiler::CompilerError:
         static compile:
             ascii::is_digit(char::scalar_value('7'))
