@@ -197,10 +197,13 @@ type Byte = Int in 0..255
 error Refused
 
 # ---------------------------------------------------------------------------
-# A custom check: a rejection whose message is (part of) the property. The
-# Tcl tests compare messages with `string match` globs whose only wildcard is
-# `*`; a glob is written here as its literal pieces, a `*` between each two:
-# ["", "x", ""] is *x*, [whole] an exact message, [head, tail] head*tail.
+# A custom check: a rejection whose message matches a glob. A message that is
+# the property in full or contains it is checked by test::rejects_message or
+# test::rejects_containing; two Tcl tests compare with a `string match` glob
+# of several pieces (ma-generate-contract: a head and a tail around the block
+# id the message shows; mat-atk-17: two phrases in order). A glob, whose only
+# wildcard is `*`, is written here as its literal pieces, a `*` between each
+# two: ["", "x", "y", ""] is *x*y*, [head, tail] head*tail.
 
 # The first index at or after FROM where NEEDLE occurs in TEXT, ending at or
 # before LIMIT, or -1.
@@ -593,7 +596,7 @@ fn register_place_tests():
                 mutable_array::create(1, 0)
             mk().set(0, 1)
             1
-    rejects_matching("ma-place-receiver/call-result", compiler::DiagnosticCode::MutablePlaceReceiver, ["the receiver of mutable_array::set is not a place: it is a temporary value, so the updated array would be lost (a MutableArray is a value; bind it to a name, mutate the name, and use the name afterwards)"], b_call_result)
+    test::rejects_message("ma-place-receiver/call-result", compiler::DiagnosticCode::MutablePlaceReceiver, "the receiver of mutable_array::set is not a place: it is a temporary value, so the updated array would be lost (a MutableArray is a value; bind it to a name, mutate the name, and use the name afterwards)", b_call_result)
 
     # Nor is a List element ...
     fn b_list_element() errors compiler::CompilerError:
@@ -1315,7 +1318,7 @@ fn register_store_tests(index: int):
         static compile:
             m = mutable_array::create(2, "x")
             mutable_array::set(m, 1, 123)
-    rejects_matching("mat-set-2", compiler::DiagnosticCode::Type, ["", "value of type int is not admissible to element type str of MutableArray[str]", ""], b_message)
+    test::rejects_containing("mat-set-2", compiler::DiagnosticCode::Type, "value of type int is not admissible to element type str of MutableArray[str]", b_message)
 
     # A store never widens T.
     fn b_never_widens() errors compiler::CompilerError:
@@ -1559,7 +1562,7 @@ fn register_copy_tests():
             a = mutable_array::from_list([g])
             b = mutable_array::allocate(2)
             mutable_array::copy(b, 0, a, 0, 1)
-    rejects_matching("mat-cp-5/callable-elements", compiler::DiagnosticCode::Type, ["", "cannot erase element contract of MutableArray[Fn", ""], b_callable_elements)
+    test::rejects_containing("mat-cp-5/callable-elements", compiler::DiagnosticCode::Type, "cannot erase element contract of MutableArray[Fn", b_callable_elements)
 
     # A narrower source domain may be copied into a wider destination, never
     # the reverse.
@@ -1907,7 +1910,7 @@ fn register_erasure_tests():
                 on IndexNotFound:
                     ""
             r
-    rejects_matching("mat-atk-2", compiler::DiagnosticCode::Type, ["", "call to f with x : MutableArray[str] is invalid: value of type int is not admissible to element type str", ""], b_untyped_write)
+    test::rejects_containing("mat-atk-2", compiler::DiagnosticCode::Type, "call to f with x : MutableArray[str] is invalid: value of type int is not admissible to element type str", b_untyped_write)
 
     # An any parameter, an any or raw result hold a copy.
     fn b_any_parameter() errors compiler::CompilerError:
@@ -2158,7 +2161,7 @@ fn register_erasure_tests():
                 on IndexNotFound:
                     ""
             v
-    rejects_matching("mat-atk-14", compiler::DiagnosticCode::Type, ["", "a kind test proves the kind, never the element type", ""], b_kind_test_typed)
+    test::rejects_containing("mat-atk-14", compiler::DiagnosticCode::Type, "a kind test proves the kind, never the element type", b_kind_test_typed)
 
     # freeze/get results are safe uses.
     fn b_frozen_rows() errors compiler::CompilerError:
@@ -2599,7 +2602,7 @@ fn register_affine_read_tests():
                 c = mutable_array::at(a, 0)
                 1
             0
-    rejects_matching("ma-affine-at/at", compiler::DiagnosticCode::AffineElementCopyOut, ["mutable_array::at would copy an affine element out of `a` (MutableArray[Coroutine{args: [Command], return: Event, errors: []}]) while the array still owns it, making a second owner: move it out instead -- `swap(i, replacement)` exchanges it for another, and a loop over the array consumes it, moving each element out in order (there are no references to elements)"], b_at)
+    test::rejects_message("ma-affine-at/at", compiler::DiagnosticCode::AffineElementCopyOut, "mutable_array::at would copy an affine element out of `a` (MutableArray[Coroutine{args: [Command], return: Event, errors: []}]) while the array still owns it, making a second owner: move it out instead -- `swap(i, replacement)` exchanges it for another, and a loop over the array consumes it, moving each element out in order (there are no references to elements)", b_at)
 
     fn b_field_path() errors compiler::CompilerError:
         static compile:

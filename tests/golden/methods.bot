@@ -1,0 +1,1866 @@
+# methods.bot -- method-call sugar (METHOD-SUGAR.md) as a source-level
+# specification:
+#
+#     receiver.f(a, b)   is   f(receiver, a, b)
+#
+# when a function `f` is visible at the call: a function or binding of an
+# enclosing scope established before the call, a root native, or a member
+# of a namespace the file imports directly. The method spelling is then the
+# ordinary call -- the same callee, value, errors, diagnostics and
+# evaluation order -- and when no function `f` is visible it is the field
+# projection it always was, with a hint that no function was found. There is
+# no search by receiver type, no ranking and no bound-method value.
+#
+# Ports tests/method-sugar.test (which stays authoritative and unchanged).
+# Its tests run a method spelling and the free spelling of one program on
+# every backend and require one outcome; here each spelling is a golden test
+# (suffixed /method and /free) with the same expected value, and every suite
+# runs on every backend. A Tcl test that compares the two spellings'
+# rejections (`[stripLocations $m] eq [stripLocations $f]`) is one
+# `rejects_alike` test below. The rejections that need a namespace not to
+# be imported (and the one that needs a type import alone) need other file
+# headers and live in the sibling suites methods-byte-without-list.bot,
+# methods-list-without-str.bot and methods-type-import-only.bot; the halves
+# of those Tcl tests with the namespace imported are here.
+#
+# Conventions of the port:
+# * A Tcl table's shared prelude ($::fns, $::refined, $::chainFns, ...) is
+#   declared in the registration function of that table, so every body
+#   nested there sees it exactly as the Tcl program's top-level functions;
+#   a test with a prelude of its own declares it in its block.
+# * Evaluation order: the Tcl programs log each probe into an installed
+#   context (a MutableArray of digits), which a body cannot use. Here a
+#   probe `yield`s its id and the block drives the program as a coroutine,
+#   collecting [FIRST, REST]: FIRST the first probe's id, REST every later
+#   id followed by the program's value (the Tcl value [15, 12], value 15
+#   and digits 1 then 2, is the trace [1, [2, 15]]), as in values.bot.
+# * The method-errors tests, whose property is the run-time behaviour of
+#   handled declared errors, take their inputs as parameters of their
+#   registration functions, given as literals at the calls.
+#
+# Imports: compiler and test (the framework); byte, list and str (the Tcl
+# programs' own imports: their members are method candidates, so they are
+# what most tests are about); coroutine (coroutine::done? in the
+# evaluation-order driver). The suite-wide imports add candidates to every
+# body. Where a Tcl program imports one of list and str or neither, a
+# `.length()` call has the other's length as one more candidate, which its
+# receiver's kind rejects (as method-basic-both-in-one requires);
+# test::count and test::run take no argument, so they are no candidates of
+# a method call; and test::describe, which accepts any receiver, would make
+# a Tcl program's `x.describe()` ambiguous, so method-types-dynamic-receiver
+# calls that function `echo`. Every other method name a Tcl program here
+# uses is a member of no imported namespace, or of exactly the one that
+# program imports for it.
+import byte
+import compiler
+import coroutine
+import list
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Shared declarations (top-level only)
+
+# The refinement of the method-types tests ($::refined) and of
+# method-same-program-typed.
+type Small = Int in 0..10
+
+# The declared errors of the method-errors tests ($::errorFns) and the one
+# function that raises them, called by every block of those tests.
+error TooSmall
+error TooBig
+
+fn check(n, limit) -> int errors TooSmall, TooBig:
+    if n < 0:
+        fail TooSmall
+    if n > limit:
+        fail TooBig
+    n
+
+# ---------------------------------------------------------------------------
+# A custom check: two spellings of one program rejected alike
+
+# TEXT with every "(at LINE:COLUMN)" it mentions written "(at L:C)": a
+# message may mention where a related call is, and the method spelling puts
+# its receiver where the free call has its callee.
+fn unlocated(text: str) -> str:
+    n = str::length(text)
+    loop i from 0 to n:
+        opening = text.substring(i, i + 4):
+            on LowerUnderrun:
+                continue
+            on UpperOverrun:
+                continue
+        if opening != "(at ":
+            continue
+        loop j from i + 4 to n:
+            c = text.char_at(j):
+                on IndexNotFound:
+                    continue
+            if c == ')':
+                head = text.substring(0, i):
+                    on LowerUnderrun:
+                        ""
+                    on UpperOverrun:
+                        ""
+                tail = text.substring(j + 1, n):
+                    on LowerUnderrun:
+                        ""
+                    on UpperOverrun:
+                        ""
+                return head.concat("(at L:C)").concat(tail.unlocated())
+    text
+
+# METHOD_BODY and FREE_BODY, the method and the free spelling of one
+# program, must both be rejected with diagnostic code EXPECTED and the same
+# message up to the locations it mentions: "the method spelling fails
+# exactly as the free spelling fails".
+nomethod fn rejects_alike(name: str, expected: compiler::DiagnosticCode, method_body, free_body) -> unit:
+    shown = "compiler diagnostic ".concat(test::code_name(expected)).concat(" in both spellings, with one message")
+    fn against_free(method_code: compiler::DiagnosticCode, method_message: str) -> test::Match:
+        free = free_body():
+            on compiler::CompilerError {code, primary, message}:
+                if method_code != expected:
+                    return test::mismatch(shown, "the method spelling: compiler diagnostic ".concat(test::code_name(method_code)), method_message)
+                if code != expected:
+                    return test::mismatch(shown, "the free spelling: ".concat(test::diagnostic_text(code, primary)), message)
+                if method_message.unlocated() != message.unlocated():
+                    return test::mismatch(shown, "two messages", method_message.concat(" / ").concat(message))
+                return test::passed()
+        test::mismatch(shown, "the free spelling: value ".concat(test::describe(free)), "")
+    fn alike() -> test::Match:
+        method = method_body():
+            on compiler::CompilerError {code, message}:
+                return against_free(code, message)
+        test::mismatch(shown, "the method spelling: value ".concat(test::describe(method)), "")
+    test::case(name, alike)
+
+# ---------------------------------------------------------------------------
+# The basic rewrite: receiver.f(a, b) is f(receiver, a, b)
+
+fn register_rewrite_tests():
+    # The tables' prelude ($::fns).
+    fn add(a, b):
+        a + b
+    fn add3(a, b, c):
+        a + b + c
+    fn inc(a):
+        a + 1
+    fn twice(a):
+        a * 2
+    fn pack(a, b, c):
+        [a, b, c]
+
+    # method-basic-NAME: the method and the free spelling agree.
+    fn b_unary_method() errors compiler::CompilerError:
+        static compile:
+            5.inc()
+    fn b_unary_free() errors compiler::CompilerError:
+        static compile:
+            inc(5)
+    test::value("method-basic-unary/method", 6, b_unary_method)
+    test::value("method-basic-unary/free", 6, b_unary_free)
+
+    fn b_binary_method() errors compiler::CompilerError:
+        static compile:
+            5.add(4)
+    fn b_binary_free() errors compiler::CompilerError:
+        static compile:
+            add(5, 4)
+    test::value("method-basic-binary/method", 9, b_binary_method)
+    test::value("method-basic-binary/free", 9, b_binary_free)
+
+    fn b_ternary_method() errors compiler::CompilerError:
+        static compile:
+            5.add3(4, 3)
+    fn b_ternary_free() errors compiler::CompilerError:
+        static compile:
+            add3(5, 4, 3)
+    test::value("method-basic-ternary/method", 12, b_ternary_method)
+    test::value("method-basic-ternary/free", 12, b_ternary_free)
+
+    # The receiver is the first argument.
+    fn b_receiver_first_method() errors compiler::CompilerError:
+        static compile:
+            1.pack(2, 3)
+    fn b_receiver_first_free() errors compiler::CompilerError:
+        static compile:
+            pack(1, 2, 3)
+    test::value("method-basic-receiver-first/method", [1, 2, 3], b_receiver_first_method)
+    test::value("method-basic-receiver-first/free", [1, 2, 3], b_receiver_first_free)
+
+    fn b_on_a_name_method() errors compiler::CompilerError:
+        static compile:
+            x = 7
+            x.add(x)
+    fn b_on_a_name_free() errors compiler::CompilerError:
+        static compile:
+            x = 7
+            add(x, x)
+    test::value("method-basic-on-a-name/method", 14, b_on_a_name_method)
+    test::value("method-basic-on-a-name/free", 14, b_on_a_name_free)
+
+    fn b_result_bound_method() errors compiler::CompilerError:
+        static compile:
+            y = 2.add(3)
+            y.twice()
+    fn b_result_bound_free() errors compiler::CompilerError:
+        static compile:
+            y = add(2, 3)
+            twice(y)
+    test::value("method-basic-result-bound/method", 10, b_result_bound_method)
+    test::value("method-basic-result-bound/free", 10, b_result_bound_free)
+
+    fn b_as_argument_method() errors compiler::CompilerError:
+        static compile:
+            inc(3.add(4))
+    fn b_as_argument_free() errors compiler::CompilerError:
+        static compile:
+            inc(add(3, 4))
+    test::value("method-basic-as-argument/method", 8, b_as_argument_method)
+    test::value("method-basic-as-argument/free", 8, b_as_argument_free)
+
+    fn b_argument_pos_method() errors compiler::CompilerError:
+        static compile:
+            add(1, 2.add(3))
+    fn b_argument_pos_free() errors compiler::CompilerError:
+        static compile:
+            add(1, add(2, 3))
+    test::value("method-basic-argument-pos/method", 6, b_argument_pos_method)
+    test::value("method-basic-argument-pos/free", 6, b_argument_pos_free)
+
+    # A method call is a postfix: it binds tighter than *, + and unary -.
+    fn b_arithmetic_method() errors compiler::CompilerError:
+        static compile:
+            1 + 2.inc() * 3
+    fn b_arithmetic_free() errors compiler::CompilerError:
+        static compile:
+            1 + inc(2) * 3
+    test::value("method-basic-arithmetic/method", 10, b_arithmetic_method)
+    test::value("method-basic-arithmetic/free", 10, b_arithmetic_free)
+
+    fn b_unary_minus_method() errors compiler::CompilerError:
+        static compile:
+            -5.inc()
+    fn b_unary_minus_free() errors compiler::CompilerError:
+        static compile:
+            -inc(5)
+    test::value("method-basic-unary-minus/method", -6, b_unary_minus_method)
+    test::value("method-basic-unary-minus/free", -6, b_unary_minus_free)
+
+    fn b_not_operand_method() errors compiler::CompilerError:
+        static compile:
+            not 3.add(1) == 4
+    fn b_not_operand_free() errors compiler::CompilerError:
+        static compile:
+            not add(3, 1) == 4
+    test::value("method-basic-not-operand/method", false, b_not_operand_method)
+    test::value("method-basic-not-operand/free", false, b_not_operand_free)
+
+    fn b_parenthesized_method() errors compiler::CompilerError:
+        static compile:
+            (2 + 3).inc()
+    fn b_parenthesized_free() errors compiler::CompilerError:
+        static compile:
+            inc(2 + 3)
+    test::value("method-basic-parenthesized/method", 6, b_parenthesized_method)
+    test::value("method-basic-parenthesized/free", 6, b_parenthesized_free)
+
+    fn b_call_receiver_method() errors compiler::CompilerError:
+        static compile:
+            inc(1).add(2)
+    fn b_call_receiver_free() errors compiler::CompilerError:
+        static compile:
+            add(inc(1), 2)
+    test::value("method-basic-call-receiver/method", 4, b_call_receiver_method)
+    test::value("method-basic-call-receiver/free", 4, b_call_receiver_free)
+
+    fn b_trailing_comma_method() errors compiler::CompilerError:
+        static compile:
+            1.add(2,)
+    fn b_trailing_comma_free() errors compiler::CompilerError:
+        static compile:
+            add(1, 2,)
+    test::value("method-basic-trailing-comma/method", 3, b_trailing_comma_method)
+    test::value("method-basic-trailing-comma/free", 3, b_trailing_comma_free)
+
+    # A member of an imported namespace is a candidate without any binding;
+    # a receiver of known kind picks the right `length` of the two imported
+    # namespaces that have one.
+    fn b_list_receiver_method() errors compiler::CompilerError:
+        static compile:
+            [1, 2, 3].length()
+    fn b_list_receiver_free() errors compiler::CompilerError:
+        static compile:
+            list::length([1, 2, 3])
+    test::value("method-basic-list-receiver/method", 3, b_list_receiver_method)
+    test::value("method-basic-list-receiver/free", 3, b_list_receiver_free)
+
+    fn b_string_receiver_method() errors compiler::CompilerError:
+        static compile:
+            "abc".length()
+    fn b_string_receiver_free() errors compiler::CompilerError:
+        static compile:
+            str::length("abc")
+    test::value("method-basic-string-receiver/method", 3, b_string_receiver_method)
+    test::value("method-basic-string-receiver/free", 3, b_string_receiver_free)
+
+    fn b_both_in_one_method() errors compiler::CompilerError:
+        static compile:
+            ["abc", "de"].length() + "abc".length()
+    fn b_both_in_one_free() errors compiler::CompilerError:
+        static compile:
+            list::length(["abc", "de"]) + str::length("abc")
+    test::value("method-basic-both-in-one/method", 5, b_both_in_one_method)
+    test::value("method-basic-both-in-one/free", 5, b_both_in_one_free)
+
+    # method-multiline-arguments: the arguments span lines through the
+    # ordinary argument grammar (trailing comma included).
+    fn b_multiline_arguments_method() errors compiler::CompilerError:
+        static compile:
+            1.add3(
+                2,
+                3,
+            )
+    fn b_multiline_arguments_free() errors compiler::CompilerError:
+        static compile:
+            add3(1, 2, 3)
+    test::value("method-multiline-arguments/method", 6, b_multiline_arguments_method)
+    test::value("method-multiline-arguments/free", 6, b_multiline_arguments_free)
+
+    # method-multiline-chain: a chain written across lines inside brackets.
+    fn b_multiline_chain_method() errors compiler::CompilerError:
+        static compile:
+            [
+                1.inc()
+                    .twice()
+                    .add(3),
+                2
+            ]
+    fn b_multiline_chain_free() errors compiler::CompilerError:
+        static compile:
+            [
+                add(twice(inc(1)), 3),
+                2
+            ]
+    test::value("method-multiline-chain/method", [7, 2], b_multiline_chain_method)
+    test::value("method-multiline-chain/free", [7, 2], b_multiline_chain_free)
+
+# ---------------------------------------------------------------------------
+# Natives and intrinsics by their real names: a root native is visible
+# everywhere by its name, an intrinsic of an imported namespace by its
+# member name (and a binding of one by the bound name: the same function,
+# one candidate).
+
+fn register_natives_tests():
+    # The one $::fns function these tests use.
+    fn twice(a):
+        a * 2
+
+    # method-natives-NAME.
+    fn b_list_at_method() errors compiler::CompilerError:
+        static compile:
+            xs = [10, 20, 30]
+            xs.at(1)
+    fn b_list_at_free() errors compiler::CompilerError:
+        static compile:
+            xs = [10, 20, 30]
+            list::at(xs, 1)
+    test::value("method-natives-list-at/method", 20, b_list_at_method)
+    test::value("method-natives-list-at/free", 20, b_list_at_free)
+
+    fn b_list_at_expr_method() errors compiler::CompilerError:
+        static compile:
+            [10, 20, 30].at(1 + 1)
+    fn b_list_at_expr_free() errors compiler::CompilerError:
+        static compile:
+            list::at([10, 20, 30], 1 + 1)
+    test::value("method-natives-list-at-expr/method", 30, b_list_at_expr_method)
+    test::value("method-natives-list-at-expr/free", 30, b_list_at_expr_free)
+
+    fn b_substring_method() errors compiler::CompilerError:
+        static compile:
+            "HeLLo World".substring(0, 5)
+    fn b_substring_free() errors compiler::CompilerError:
+        static compile:
+            str::substring("HeLLo World", 0, 5)
+    test::value("method-natives-substring/method", "HeLLo", b_substring_method)
+    test::value("method-natives-substring/free", "HeLLo", b_substring_free)
+
+    fn b_lowercase_method() errors compiler::CompilerError:
+        static compile:
+            "HeLLo".lowercase()
+    fn b_lowercase_free() errors compiler::CompilerError:
+        static compile:
+            str::lowercase("HeLLo")
+    test::value("method-natives-lowercase/method", "hello", b_lowercase_method)
+    test::value("method-natives-lowercase/free", "hello", b_lowercase_free)
+
+    fn b_list_append_method() errors compiler::CompilerError:
+        static compile:
+            [1, 2].append(3)
+    fn b_list_append_free() errors compiler::CompilerError:
+        static compile:
+            list::append([1, 2], 3)
+    test::value("method-natives-list-append/method", [1, 2, 3], b_list_append_method)
+    test::value("method-natives-list-append/free", [1, 2, 3], b_list_append_free)
+
+    fn b_concat_method() errors compiler::CompilerError:
+        static compile:
+            "ab".concat("cd")
+    fn b_concat_free() errors compiler::CompilerError:
+        static compile:
+            str::concat("ab", "cd")
+    test::value("method-natives-concat/method", "abcd", b_concat_method)
+    test::value("method-natives-concat/free", "abcd", b_concat_free)
+
+    fn b_chained_method() errors compiler::CompilerError:
+        static compile:
+            "HeLLo World".substring(6, 11).lowercase()
+    fn b_chained_free() errors compiler::CompilerError:
+        static compile:
+            str::lowercase(str::substring("HeLLo World", 6, 11))
+    test::value("method-natives-chained/method", "world", b_chained_method)
+    test::value("method-natives-chained/free", "world", b_chained_free)
+
+    # A variadic root native: the receiver is its first argument.
+    fn b_variadic_method() errors compiler::CompilerError:
+        static compile:
+            5.list(6, 7)
+    fn b_variadic_free() errors compiler::CompilerError:
+        static compile:
+            list(5, 6, 7)
+    test::value("method-natives-variadic/method", [5, 6, 7], b_variadic_method)
+    test::value("method-natives-variadic/free", [5, 6, 7], b_variadic_free)
+
+    fn b_variadic_0_method() errors compiler::CompilerError:
+        static compile:
+            5.list()
+    fn b_variadic_0_free() errors compiler::CompilerError:
+        static compile:
+            list(5)
+    test::value("method-natives-variadic-0/method", [5], b_variadic_0_method)
+    test::value("method-natives-variadic-0/free", [5], b_variadic_0_free)
+
+    fn b_chained_natives_method() errors compiler::CompilerError:
+        static compile:
+            [3, 1, 2].length().twice()
+    fn b_chained_natives_free() errors compiler::CompilerError:
+        static compile:
+            twice(list::length([3, 1, 2]))
+    test::value("method-natives-chained-natives/method", 6, b_chained_natives_method)
+    test::value("method-natives-chained-natives/free", 6, b_chained_natives_free)
+
+    fn b_two_namespaces_method() errors compiler::CompilerError:
+        static compile:
+            ["ab"].length() + "ab".length()
+    fn b_two_namespaces_free() errors compiler::CompilerError:
+        static compile:
+            list::length(["ab"]) + str::length("ab")
+    test::value("method-natives-two-namespaces/method", 3, b_two_namespaces_method)
+    test::value("method-natives-two-namespaces/free", 3, b_two_namespaces_free)
+
+    # method-natives-aliased-NAME: an intrinsic bound to a name is visible by
+    # that name, and is the same candidate as the imported member.
+    fn b_aliased_list_at_method() errors compiler::CompilerError:
+        static compile:
+            at = list::at
+            xs = [10, 20, 30]
+            xs.at(1)
+    fn b_aliased_list_at_free() errors compiler::CompilerError:
+        static compile:
+            at = list::at
+            xs = [10, 20, 30]
+            at(xs, 1)
+    test::value("method-natives-aliased-list-at/method", 20, b_aliased_list_at_method)
+    test::value("method-natives-aliased-list-at/free", 20, b_aliased_list_at_free)
+
+    fn b_aliased_substring_method() errors compiler::CompilerError:
+        static compile:
+            substring = str::substring
+            "HeLLo World".substring(0, 5)
+    fn b_aliased_substring_free() errors compiler::CompilerError:
+        static compile:
+            substring = str::substring
+            substring("HeLLo World", 0, 5)
+    test::value("method-natives-aliased-substring/method", "HeLLo", b_aliased_substring_method)
+    test::value("method-natives-aliased-substring/free", "HeLLo", b_aliased_substring_free)
+
+    fn b_aliased_list_append_method() errors compiler::CompilerError:
+        static compile:
+            append = list::append
+            [1, 2].append(3)
+    fn b_aliased_list_append_free() errors compiler::CompilerError:
+        static compile:
+            append = list::append
+            append([1, 2], 3)
+    test::value("method-natives-aliased-list-append/method", [1, 2, 3], b_aliased_list_append_method)
+    test::value("method-natives-aliased-list-append/free", [1, 2, 3], b_aliased_list_append_free)
+
+    fn b_aliased_renamed_method() errors compiler::CompilerError:
+        static compile:
+            size = str::length
+            "abcd".size()
+    fn b_aliased_renamed_free() errors compiler::CompilerError:
+        static compile:
+            size = str::length
+            size("abcd")
+    test::value("method-natives-aliased-renamed/method", 4, b_aliased_renamed_method)
+    test::value("method-natives-aliased-renamed/free", 4, b_aliased_renamed_free)
+
+    fn b_aliased_chained_method() errors compiler::CompilerError:
+        static compile:
+            lowercase = str::lowercase
+            substring = str::substring
+            "HeLLo World".substring(6, 11).lowercase()
+    fn b_aliased_chained_free() errors compiler::CompilerError:
+        static compile:
+            lowercase = str::lowercase
+            substring = str::substring
+            lowercase(substring("HeLLo World", 6, 11))
+    test::value("method-natives-aliased-chained/method", "world", b_aliased_chained_method)
+    test::value("method-natives-aliased-chained/free", "world", b_aliased_chained_free)
+
+    fn b_aliased_both_namespaces_method() errors compiler::CompilerError:
+        static compile:
+            length = list::length
+            [3, 1, 2].length().twice()
+    fn b_aliased_both_namespaces_free() errors compiler::CompilerError:
+        static compile:
+            length = list::length
+            twice(length([3, 1, 2]))
+    test::value("method-natives-aliased-both-namespaces/method", 6, b_aliased_both_namespaces_method)
+    test::value("method-natives-aliased-both-namespaces/free", 6, b_aliased_both_namespaces_free)
+
+# ---------------------------------------------------------------------------
+# Library functions: a module function of an imported namespace (`import
+# byte`, `import list`) is a candidate by its member name, error-capable
+# ones and handled calls included.
+
+fn register_library_tests():
+    # The tables' prelude ($::libBindings, after its imports).
+    fn big(x):
+        x > 1
+
+    # method-library-NAME.
+    fn b_imported_module_function_method() errors compiler::CompilerError:
+        static compile:
+            200.complement()
+    fn b_imported_module_function_free() errors compiler::CompilerError:
+        static compile:
+            byte::complement(200)
+    test::value("method-library-imported-module-function/method", 55, b_imported_module_function_method)
+    test::value("method-library-imported-module-function/free", 55, b_imported_module_function_free)
+
+    fn b_imported_chain_method() errors compiler::CompilerError:
+        static compile:
+            200.complement().high_nibble()
+    fn b_imported_chain_free() errors compiler::CompilerError:
+        static compile:
+            byte::high_nibble(byte::complement(200))
+    test::value("method-library-imported-chain/method", 48, b_imported_chain_method)
+    test::value("method-library-imported-chain/free", 48, b_imported_chain_free)
+
+    fn b_imported_error_capable_method() errors compiler::CompilerError:
+        static compile:
+            fn conv(n):
+                b = n.from_int():
+                    on byte::AboveRange:
+                        0
+                    on byte::BelowRange:
+                        1
+                b
+            [conv(200), conv(300), conv(0 - 5)]
+    fn b_imported_error_capable_free() errors compiler::CompilerError:
+        static compile:
+            fn conv(n):
+                b = byte::from_int(n):
+                    on byte::AboveRange:
+                        0
+                    on byte::BelowRange:
+                        1
+                b
+            [conv(200), conv(300), conv(0 - 5)]
+    test::value("method-library-imported-error-capable/method", [200, 0, 1], b_imported_error_capable_method)
+    test::value("method-library-imported-error-capable/free", [200, 0, 1], b_imported_error_capable_free)
+
+    fn b_higher_order_method() errors compiler::CompilerError:
+        static compile:
+            d = [1, 2, 3].find(big):
+                on list::NotFound:
+                    0
+            d
+    fn b_higher_order_free() errors compiler::CompilerError:
+        static compile:
+            d = list::find([1, 2, 3], big):
+                on list::NotFound:
+                    0
+            d
+    test::value("method-library-higher-order/method", 2, b_higher_order_method)
+    test::value("method-library-higher-order/free", 2, b_higher_order_free)
+
+    fn b_higher_order_not_found_method() errors compiler::CompilerError:
+        static compile:
+            d = [0, 1].find(big):
+                on list::NotFound:
+                    99
+            d
+    fn b_higher_order_not_found_free() errors compiler::CompilerError:
+        static compile:
+            d = list::find([0, 1], big):
+                on list::NotFound:
+                    99
+            d
+    test::value("method-library-higher-order-not-found/method", 99, b_higher_order_not_found_method)
+    test::value("method-library-higher-order-not-found/free", 99, b_higher_order_not_found_free)
+
+    fn b_aliased_module_function_method() errors compiler::CompilerError:
+        static compile:
+            complement = byte::complement
+            200.complement()
+    fn b_aliased_module_function_free() errors compiler::CompilerError:
+        static compile:
+            complement = byte::complement
+            complement(200)
+    test::value("method-library-aliased-module-function/method", 55, b_aliased_module_function_method)
+    test::value("method-library-aliased-module-function/free", 55, b_aliased_module_function_free)
+
+    fn b_aliased_higher_order_method() errors compiler::CompilerError:
+        static compile:
+            find = list::find
+            d = [1, 2, 3].find(big):
+                on list::NotFound:
+                    0
+            d
+    fn b_aliased_higher_order_free() errors compiler::CompilerError:
+        static compile:
+            find = list::find
+            d = find([1, 2, 3], big):
+                on list::NotFound:
+                    0
+            d
+    test::value("method-library-aliased-higher-order/method", 2, b_aliased_higher_order_method)
+    test::value("method-library-aliased-higher-order/free", 2, b_aliased_higher_order_free)
+
+    # method-type-never-imported: the receiver is a byte::Byte; its type is
+    # never named or imported, the function visible by name is enough.
+    fn b_type_never_imported_method() errors compiler::CompilerError:
+        static compile:
+            fn show(b):
+                b.high_nibble()
+            [show(200.complement()), 200.complement().high_nibble()]
+    fn b_type_never_imported_free() errors compiler::CompilerError:
+        static compile:
+            fn show(b):
+                byte::high_nibble(b)
+            [show(byte::complement(200)), byte::high_nibble(byte::complement(200))]
+    test::value("method-type-never-imported/method", [48, 48], b_type_never_imported_method)
+    test::value("method-type-never-imported/free", [48, 48], b_type_never_imported_free)
+
+    # method-qualified-references-inside-method-calls: module-qualified
+    # references in a receiver or an argument load their modules as in any
+    # call.
+    fn b_qualified_references_method() errors compiler::CompilerError:
+        static compile:
+            fn add(a, b):
+                a + b
+            fn id(x):
+                x
+            [byte::complement(200).add(byte::complement(100)), id(5).add(byte::high_nibble(255))]
+    fn b_qualified_references_free() errors compiler::CompilerError:
+        static compile:
+            fn add(a, b):
+                a + b
+            fn id(x):
+                x
+            [add(byte::complement(200), byte::complement(100)), add(id(5), byte::high_nibble(255))]
+    test::value("method-qualified-references-inside-method-calls/method", [210, 245], b_qualified_references_method)
+    test::value("method-qualified-references-inside-method-calls/free", [210, 245], b_qualified_references_free)
+
+# ---------------------------------------------------------------------------
+# Visibility: only a function visible by that name enables the spelling.
+# (The rejections that need a namespace not to be imported are in the
+# sibling suites; here are the halves where it is imported.)
+
+fn register_visibility_tests():
+    # method-not-visible-module-function: with `import list`, list::any? is
+    # a candidate, and the qualified name is authorized.
+    fn b_module_function_imported_method() errors compiler::CompilerError:
+        static compile:
+            fn big(x):
+                x > 1
+            [1, 2, 3].any?(big)
+    fn b_module_function_imported_qualified() errors compiler::CompilerError:
+        static compile:
+            fn big(x):
+                x > 1
+            list::any?([1, 2, 3], big)
+    test::value("method-not-visible-module-function/imported-method", true, b_module_function_imported_method)
+    test::value("method-not-visible-module-function/imported-qualified", true, b_module_function_imported_qualified)
+
+    # method-not-visible-other-namespace-import: `import str` makes
+    # str::concat a candidate.
+    fn b_other_namespace_str_imported() errors compiler::CompilerError:
+        static compile:
+            "abc".concat("d")
+    test::value("method-not-visible-other-namespace-import/str-imported", "abcd", b_other_namespace_str_imported)
+
+    # method-not-visible-no-type-import-needed-or-used: `import byte` makes
+    # byte::complement a candidate for an Int receiver.
+    fn b_no_type_import_module_import() errors compiler::CompilerError:
+        static compile:
+            x = 200
+            x.complement()
+    test::value("method-not-visible-no-type-import-needed-or-used/module-import", 55, b_no_type_import_module_import)
+
+    # method-not-visible-forward-reference: a function defined later is not
+    # visible yet, by the ordinary rule.
+    fn b_forward_reference_method() errors compiler::CompilerError:
+        static compile:
+            5.later()
+            fn later(a):
+                a
+    fn b_forward_reference_free() errors compiler::CompilerError:
+        static compile:
+            later(5)
+            fn later(a):
+                a
+    test::rejects_containing("method-not-visible-forward-reference/method", compiler::DiagnosticCode::NotAStruct, "no function named \"later\" is visible here either", b_forward_reference_method)
+    test::rejects_containing("method-not-visible-forward-reference/free", compiler::DiagnosticCode::Unbound, "unbound name \"later\"", b_forward_reference_free)
+
+    # method-not-visible-on-struct-receiver: a struct receiver's absent field
+    # is still the field error, now with the visibility hint.
+    fn b_on_struct_receiver() errors compiler::CompilerError:
+        static compile:
+            s = {v: 1}
+            s.w(1)
+    test::rejects_containing("method-not-visible-on-struct-receiver", compiler::DiagnosticCode::UnknownField, "struct type struct{v: int} has no field \"w\" (known fields: v); as a method-style call, no function named \"w\" is visible here either", b_on_struct_receiver)
+
+    # method-visible-in-nested-scope: a function visible in an enclosing
+    # scope is visible in a nested function, a branch and a loop body.
+    fn b_nested_scope_method() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            fn twice(a):
+                a * 2
+            fn nest(n):
+                r = if n > 0:
+                    n.inc()
+                else:
+                    0
+                r
+            fn run(xs):
+                loop x in xs:
+                    x.twice()
+            [nest(3), nest(0), run([1, 2, 3])]
+    fn b_nested_scope_free() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            fn twice(a):
+                a * 2
+            fn nest(n):
+                r = if n > 0:
+                    inc(n)
+                else:
+                    0
+                r
+            fn run(xs):
+                loop x in xs:
+                    twice(x)
+            [nest(3), nest(0), run([1, 2, 3])]
+    test::value("method-visible-in-nested-scope/method", [4, 0, [2, 4, 6]], b_nested_scope_method)
+    test::value("method-visible-in-nested-scope/free", [4, 0, [2, 4, 6]], b_nested_scope_free)
+
+    # method-visible-recursion: a function reaches itself through the sugar.
+    fn b_recursion_method() errors compiler::CompilerError:
+        static compile:
+            fn sum_to(n, acc):
+                if n == 0:
+                    return acc
+                (n - 1).sum_to(acc + n)
+            10.sum_to(0)
+    fn b_recursion_free() errors compiler::CompilerError:
+        static compile:
+            fn sum_to(n, acc):
+                if n == 0:
+                    return acc
+                sum_to(n - 1, acc + n)
+            sum_to(10, 0)
+    test::value("method-visible-recursion/method", 55, b_recursion_method)
+    test::value("method-visible-recursion/free", 55, b_recursion_free)
+
+# ---------------------------------------------------------------------------
+# The visible name is the method name
+
+fn register_alias_tests():
+    # method-alias-name-is-the-local-name: a function bound to another name
+    # is called by that name; the import still makes the member name a
+    # candidate, and the alias and the member are one candidate.
+    fn b_alias_method() errors compiler::CompilerError:
+        static compile:
+            transform = byte::complement
+            200.transform()
+    fn b_alias_free() errors compiler::CompilerError:
+        static compile:
+            transform = byte::complement
+            transform(200)
+    fn b_member_method() errors compiler::CompilerError:
+        static compile:
+            transform = byte::complement
+            200.complement()
+    fn b_member_free() errors compiler::CompilerError:
+        static compile:
+            transform = byte::complement
+            byte::complement(200)
+    fn b_both_method() errors compiler::CompilerError:
+        static compile:
+            transform = byte::complement
+            [200.transform(), 200.complement()]
+    fn b_both_free() errors compiler::CompilerError:
+        static compile:
+            transform = byte::complement
+            [transform(200), byte::complement(200)]
+    test::value("method-alias-name-is-the-local-name/alias-method", 55, b_alias_method)
+    test::value("method-alias-name-is-the-local-name/alias-free", 55, b_alias_free)
+    test::value("method-alias-name-is-the-local-name/member-method", 55, b_member_method)
+    test::value("method-alias-name-is-the-local-name/member-free", 55, b_member_free)
+    test::value("method-alias-name-is-the-local-name/both-method", [55, 55], b_both_method)
+    test::value("method-alias-name-is-the-local-name/both-free", [55, 55], b_both_free)
+
+    # method-alias-does-not-import: the import, not a binding of one of its
+    # functions, makes the namespace's other members visible. (Its other
+    # half, that nothing of another namespace becomes visible, needs a file
+    # without list and str: methods-byte-without-list.bot.)
+    fn b_alias_other_member() errors compiler::CompilerError:
+        static compile:
+            transform = byte::complement
+            200.high_nibble()
+    test::value("method-alias-does-not-import/other-member", 192, b_alias_other_member)
+
+    # method-alias-of-local-function: both names of a local function are
+    # visible, each by ordinary lookup.
+    fn b_local_alias_method() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            transform = inc
+            [5.transform(), 5.inc()]
+    fn b_local_alias_free() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            transform = inc
+            [transform(5), inc(5)]
+    test::value("method-alias-of-local-function/method", [6, 6], b_local_alias_method)
+    test::value("method-alias-of-local-function/free", [6, 6], b_local_alias_free)
+
+# ---------------------------------------------------------------------------
+# Every failure is the free spelling's failure
+
+fn register_failure_tests():
+    # The functions of the tables' prelude ($::strictFns) these tests call.
+    fn takes_text(t: str):
+        t
+    fn later_text(a, t: str):
+        a
+
+    # method-failure-wrong-receiver-type: parameter 1 rejects the receiver
+    # exactly as it rejects the free call's first argument.
+    fn b_wrong_receiver_method() errors compiler::CompilerError:
+        static compile:
+            5.takes_text()
+    fn b_wrong_receiver_free() errors compiler::CompilerError:
+        static compile:
+            takes_text(5)
+    rejects_alike("method-failure-wrong-receiver-type", compiler::DiagnosticCode::Type, b_wrong_receiver_method, b_wrong_receiver_free)
+
+    # method-failure-wrong-later-argument: a wrong later argument is the
+    # ordinary argument error.
+    fn b_wrong_later_method() errors compiler::CompilerError:
+        static compile:
+            5.later_text(7)
+    fn b_wrong_later_free() errors compiler::CompilerError:
+        static compile:
+            later_text(5, 7)
+    rejects_alike("method-failure-wrong-later-argument", compiler::DiagnosticCode::Type, b_wrong_later_method, b_wrong_later_free)
+
+    # method-failure-diagnostics: those diagnostics are the ordinary call
+    # diagnostics, about parameter "t". (Its arity half is a run-time
+    # failure no handler catches: it stays in the Tcl suite.)
+    test::rejects_containing("method-failure-diagnostics/receiver", compiler::DiagnosticCode::Type, "parameter \"t\"", b_wrong_receiver_method)
+    test::rejects_containing("method-failure-diagnostics/later-argument", compiler::DiagnosticCode::Type, "parameter \"t\"", b_wrong_later_method)
+
+# ---------------------------------------------------------------------------
+# Types: the ordinary call decides
+
+fn register_types_tests():
+    # The tables' prelude ($::refined; Small is declared at the top).
+    fn one() -> Small:
+        1
+    fn wide(x: int):
+        x + 100
+    fn narrow(x: Small):
+        x + 1
+    fn mk(n):
+        n + 20
+
+    # method-types-NAME: a refinement type accepts or rejects the receiver
+    # exactly as the free call's argument. (method-types-refinement-outcomes
+    # pins the method spellings' outcomes: these tests.)
+    fn b_refined_to_parent_method() errors compiler::CompilerError:
+        static compile:
+            one().wide()
+    fn b_refined_to_parent_free() errors compiler::CompilerError:
+        static compile:
+            wide(one())
+    test::value("method-types-refined-to-parent/method", 101, b_refined_to_parent_method)
+    test::value("method-types-refined-to-parent/free", 101, b_refined_to_parent_free)
+
+    fn b_literal_in_domain_method() errors compiler::CompilerError:
+        static compile:
+            5.narrow()
+    fn b_literal_in_domain_free() errors compiler::CompilerError:
+        static compile:
+            narrow(5)
+    test::value("method-types-literal-in-domain/method", 6, b_literal_in_domain_method)
+    test::value("method-types-literal-in-domain/free", 6, b_literal_in_domain_free)
+
+    fn b_literal_out_of_domain_method() errors compiler::CompilerError:
+        static compile:
+            50.narrow()
+    fn b_literal_out_of_domain_free() errors compiler::CompilerError:
+        static compile:
+            narrow(50)
+    rejects_alike("method-types-literal-out-of-domain", compiler::DiagnosticCode::Type, b_literal_out_of_domain_method, b_literal_out_of_domain_free)
+
+    fn b_unproven_method() errors compiler::CompilerError:
+        static compile:
+            mk(1).narrow()
+    fn b_unproven_free() errors compiler::CompilerError:
+        static compile:
+            narrow(mk(1))
+    rejects_alike("method-types-unproven-parent-to-child", compiler::DiagnosticCode::Type, b_unproven_method, b_unproven_free)
+
+    fn b_refined_to_same_method() errors compiler::CompilerError:
+        static compile:
+            one().narrow()
+    fn b_refined_to_same_free() errors compiler::CompilerError:
+        static compile:
+            narrow(one())
+    test::value("method-types-refined-to-same/method", 2, b_refined_to_same_method)
+    test::value("method-types-refined-to-same/free", 2, b_refined_to_same_free)
+
+    fn b_chained_domains_method() errors compiler::CompilerError:
+        static compile:
+            one().narrow().wide()
+    fn b_chained_domains_free() errors compiler::CompilerError:
+        static compile:
+            wide(narrow(one()))
+    test::value("method-types-chained-domains/method", 102, b_chained_domains_method)
+    test::value("method-types-chained-domains/free", 102, b_chained_domains_free)
+
+    # method-types-generic-functions: an untyped function accepts any
+    # receiver, as in the free call.
+    fn b_generic_method() errors compiler::CompilerError:
+        static compile:
+            fn pair(a, b):
+                [a, b]
+            [1.pair("x"), "s".pair(2), [1].pair(unit), {v: 1}.pair(3)]
+    fn b_generic_free() errors compiler::CompilerError:
+        static compile:
+            fn pair(a, b):
+                [a, b]
+            [pair(1, "x"), pair("s", 2), pair([1], unit), pair({v: 1}, 3)]
+    test::value("method-types-generic-functions/method", [[1, "x"], ["s", 2], [[1], unit], [{v: 1}, 3]], b_generic_method)
+    test::value("method-types-generic-functions/free", [[1, "x"], ["s", 2], [[1], unit], [{v: 1}, 3]], b_generic_free)
+
+    # method-types-dynamic-receiver: an untyped receiver is accepted exactly
+    # where the free call is. (The Tcl program's `describe` is `echo` here:
+    # `import test` makes test::describe a second visible function that
+    # accepts any receiver, and two valid candidates are
+    # AMBIGUOUS-METHOD-CALL.)
+    fn b_dynamic_receiver_method() errors compiler::CompilerError:
+        static compile:
+            fn echo(a):
+                a
+            fn via(x):
+                x.echo()
+            [via(1), via("s"), via([1])]
+    fn b_dynamic_receiver_free() errors compiler::CompilerError:
+        static compile:
+            fn echo(a):
+                a
+            fn via_free(x):
+                echo(x)
+            [via_free(1), via_free("s"), via_free([1])]
+    test::value("method-types-dynamic-receiver/method", [1, "s", [1]], b_dynamic_receiver_method)
+    test::value("method-types-dynamic-receiver/free", [1, "s", [1]], b_dynamic_receiver_free)
+
+    # method-types-dynamic-receiver-into-typed-parameter: an untyped
+    # receiver does not prove a declared parameter type, in either spelling.
+    fn b_into_typed_method() errors compiler::CompilerError:
+        static compile:
+            fn takes_text(t: str):
+                t
+            fn via(x):
+                x.takes_text()
+            [via("s"), via(5)]
+    fn b_into_typed_free() errors compiler::CompilerError:
+        static compile:
+            fn takes_text(t: str):
+                t
+            fn via(x):
+                takes_text(x)
+            [via("s"), via(5)]
+    rejects_alike("method-types-dynamic-receiver-into-typed-parameter", compiler::DiagnosticCode::Type, b_into_typed_method, b_into_typed_free)
+
+# ---------------------------------------------------------------------------
+# Shadowing and duplicates: ordinary lexical resolution
+
+fn register_shadowing_tests():
+    # method-shadowing-local: an inner function shadowing an outer one is
+    # what the sugar sees. (The Tcl test's non-callable local `f = 5` is a
+    # run-time NOT-CALLABLE: it stays in the Tcl suite.)
+    fn b_local_method() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                a + 100
+            fn g(x):
+                fn f(a):
+                    a + 1
+                x.f()
+            g(1)
+    fn b_local_free() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                a + 100
+            fn g(x):
+                fn f(a):
+                    a + 1
+                f(x)
+            g(1)
+    test::value("method-shadowing-local/method", 2, b_local_method)
+    test::value("method-shadowing-local/free", 2, b_local_free)
+
+    # method-shadowing-parameter-function: a function-valued parameter named
+    # like a function is the callee.
+    fn b_parameter_function_method() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                a + 100
+            fn plus_one(a):
+                a + 1
+            fn g(f, x):
+                x.f()
+            g(plus_one, 1)
+    fn b_parameter_function_free() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                a + 100
+            fn plus_one(a):
+                a + 1
+            fn g(f, x):
+                f(x)
+            g(plus_one, 1)
+    test::value("method-shadowing-parameter-function/method", 2, b_parameter_function_method)
+    test::value("method-shadowing-parameter-function/free", 2, b_parameter_function_free)
+
+    # method-shadowing-later-binding-cannot-reach-back: a binding made after
+    # the call does not change what the call sees.
+    fn b_later_binding_method() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                a + 100
+            fn g(x):
+                r = x.f()
+                f = 5
+                r
+            g(1)
+    fn b_later_binding_free() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                a + 100
+            fn g(x):
+                r = f(x)
+                f = 5
+                r
+            g(1)
+    test::value("method-shadowing-later-binding-cannot-reach-back/method", 101, b_later_binding_method)
+    test::value("method-shadowing-later-binding-cannot-reach-back/free", 101, b_later_binding_free)
+
+    # method-no-overloads-no-ranking: a second binding of a name in one scope
+    # is the ordinary DUPLICATE, whichever spelling calls it.
+    fn b_no_overloads_method() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                a
+            fn f(a, b):
+                a + b
+            1.f()
+    fn b_no_overloads_free() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                a
+            fn f(a, b):
+                a + b
+            f(1)
+    test::rejects_containing("method-no-overloads-no-ranking/method", compiler::DiagnosticCode::Duplicate, "duplicate binding \"f\"", b_no_overloads_method)
+    test::rejects_containing("method-no-overloads-no-ranking/free", compiler::DiagnosticCode::Duplicate, "duplicate binding \"f\"", b_no_overloads_free)
+
+# ---------------------------------------------------------------------------
+# Fields: plain access is unchanged; the field-call form keeps its meaning
+
+fn register_field_tests():
+    # method-field-plain-access-unchanged: x.field is a projection whatever
+    # functions are visible (the Tcl test's two spellings are one program).
+    fn b_plain_access() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            fn cb(a):
+                a + 100
+            fn v(a):
+                a + 1000
+            s = {cb: 1, v: 3}
+            [s.v, s.cb]
+    test::value("method-field-plain-access-unchanged", [3, 1], b_plain_access)
+
+    # method-field-call-without-function: with no function `cb` visible, the
+    # callable field is called.
+    fn b_without_function_method() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            s = {cb: inc, v: 3}
+            s.cb(41)
+    fn b_without_function_free() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            s = {cb: inc, v: 3}
+            (s.cb)(41)
+    test::value("method-field-call-without-function/method", 42, b_without_function_method)
+    test::value("method-field-call-without-function/free", 42, b_without_function_free)
+
+    # method-field-call-parenthesized-is-the-field: (s.cb)(a) calls the
+    # field even where a function cb is visible, as a bound field value
+    # does. (method-field-call-ambiguity-resolved-by-either-spelling's
+    # parenthesized spelling is the first program.)
+    fn b_parenthesized() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            fn cb(a):
+                a + 100
+            s = {cb: inc, v: 3}
+            (s.cb)(41)
+    fn b_bound_field() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            fn cb(a):
+                a + 100
+            s = {cb: inc, v: 3}
+            f = s.cb
+            f(41)
+    test::value("method-field-call-parenthesized-is-the-field/parenthesized", 42, b_parenthesized)
+    test::value("method-field-call-parenthesized-is-the-field/bound-field", 42, b_bound_field)
+
+    # method-field-of-another-kind-does-not-compete: an Int field cannot be
+    # called, so the function is the only candidate.
+    fn b_another_kind_method() errors compiler::CompilerError:
+        static compile:
+            fn cb(s):
+                s.v + 100
+            s = {cb: 7, v: 3}
+            s.cb()
+    fn b_another_kind_free() errors compiler::CompilerError:
+        static compile:
+            fn cb(s):
+                s.v + 100
+            s = {cb: 7, v: 3}
+            cb(s)
+    test::value("method-field-of-another-kind-does-not-compete/method", 103, b_another_kind_method)
+    test::value("method-field-of-another-kind-does-not-compete/free", 103, b_another_kind_free)
+
+    # method-field-call-ambiguity-in-an-instance: an untyped receiver is
+    # typed by the call that supplies it; the instance sees the callable
+    # field and the visible function, and the ambiguity is diagnosed at that
+    # call. Without the function it is the field call.
+    fn b_instance_ambiguous() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            fn cb(a):
+                a + 100
+            fn call_it(s):
+                s.cb(41)
+            call_it({cb: inc, v: 2})
+    fn b_instance_field_call() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            fn call_it(s):
+                s.cb(41)
+            call_it({cb: inc, v: 2})
+    test::rejects_containing("method-field-call-ambiguity-in-an-instance/ambiguous", compiler::DiagnosticCode::Type, "method-style call \"cb\" is ambiguous", b_instance_ambiguous)
+    test::value("method-field-call-ambiguity-in-an-instance/field-call", 42, b_instance_field_call)
+
+    # method-field-of-another-kind-does-not-compete-in-an-instance.
+    fn b_another_kind_instance() errors compiler::CompilerError:
+        static compile:
+            fn cb(p):
+                p.v + 100
+            fn call_it(s):
+                s.cb()
+            call_it({cb: 5, v: 2})
+    test::value("method-field-of-another-kind-does-not-compete-in-an-instance", 102, b_another_kind_instance)
+
+    # method-field-struct-receiver-method: a struct receiver with no field of
+    # that name: the function applies.
+    fn b_struct_receiver_method() errors compiler::CompilerError:
+        static compile:
+            fn total(p, extra):
+                p.x + p.y + extra
+            p = {x: 1, y: 2}
+            p.total(10)
+    fn b_struct_receiver_free() errors compiler::CompilerError:
+        static compile:
+            fn total(p, extra):
+                p.x + p.y + extra
+            p = {x: 1, y: 2}
+            total(p, 10)
+    test::value("method-field-struct-receiver-method/method", 13, b_struct_receiver_method)
+    test::value("method-field-struct-receiver-method/free", 13, b_struct_receiver_free)
+
+    # method-field-then-method: a field projection is a receiver like any
+    # other.
+    fn b_field_then_method_method() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            s = {v: 3, w: {z: 9}}
+            [s.v.inc(), s.w.z.inc().inc()]
+    fn b_field_then_method_free() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            s = {v: 3, w: {z: 9}}
+            [inc(s.v), inc(inc(s.w.z))]
+    test::value("method-field-then-method/method", [4, 11], b_field_then_method_method)
+    test::value("method-field-then-method/free", [4, 11], b_field_then_method_free)
+
+    # method-no-bound-method-values: x.f is a field projection, never a bound
+    # function: exactly the error it was before.
+    fn b_bound_method_int() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            g = 5.inc
+            g(1)
+    fn b_bound_method_struct() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            s = {v: 1}
+            g = s.inc
+            g(1)
+    test::rejects_containing("method-no-bound-method-values/int-receiver", compiler::DiagnosticCode::NotAStruct, "cannot project field \"inc\" from a value of type int", b_bound_method_int)
+    test::rejects_containing("method-no-bound-method-values/struct-receiver", compiler::DiagnosticCode::UnknownField, "struct type struct{v: int} has no field \"inc\"", b_bound_method_struct)
+
+# ---------------------------------------------------------------------------
+# Evaluation: the receiver is the first argument, evaluated once
+
+fn register_evaluation_tests():
+    # A probe yields its id, then returns its result; with the tables'
+    # prelude ($::logFns: add and first).
+    fn probe(id: int, result: int) -> int:
+        yield id
+        result
+    fn add(a, b):
+        a + b
+    fn first(a, b):
+        a
+
+    # method-evaluation-NAME: evaluation order and counts equal the free
+    # call's.
+    fn b_receiver_once_method() errors compiler::CompilerError:
+        static compile:
+            fn program() -> int:
+                probe(1, 10).add(probe(2, 5))
+            coroutine {step, first: head} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [head, rest]
+    fn b_receiver_once_free() errors compiler::CompilerError:
+        static compile:
+            fn program() -> int:
+                add(probe(1, 10), probe(2, 5))
+            coroutine {step, first: head} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [head, rest]
+    test::value("method-evaluation-receiver-once/method", [1, [2, 15]], b_receiver_once_method)
+    test::value("method-evaluation-receiver-once/free", [1, [2, 15]], b_receiver_once_free)
+
+    fn b_receiver_is_call_method() errors compiler::CompilerError:
+        static compile:
+            fn program() -> int:
+                probe(1, 1).add(probe(2, 2)).add(probe(3, 3))
+            coroutine {step, first: head} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [head, rest]
+    fn b_receiver_is_call_free() errors compiler::CompilerError:
+        static compile:
+            fn program() -> int:
+                add(add(probe(1, 1), probe(2, 2)), probe(3, 3))
+            coroutine {step, first: head} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [head, rest]
+    test::value("method-evaluation-receiver-is-a-method-call/method", [1, [2, 3, 6]], b_receiver_is_call_method)
+    test::value("method-evaluation-receiver-is-a-method-call/free", [1, [2, 3, 6]], b_receiver_is_call_free)
+
+    fn b_argument_is_call_method() errors compiler::CompilerError:
+        static compile:
+            fn program() -> int:
+                probe(1, 1).add(probe(2, 2).add(probe(3, 3)))
+            coroutine {step, first: head} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [head, rest]
+    fn b_argument_is_call_free() errors compiler::CompilerError:
+        static compile:
+            fn program() -> int:
+                add(probe(1, 1), add(probe(2, 2), probe(3, 3)))
+            coroutine {step, first: head} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [head, rest]
+    test::value("method-evaluation-argument-is-a-method-call/method", [1, [2, 3, 6]], b_argument_is_call_method)
+    test::value("method-evaluation-argument-is-a-method-call/free", [1, [2, 3, 6]], b_argument_is_call_free)
+
+    fn b_not_duplicated_method() errors compiler::CompilerError:
+        static compile:
+            fn program() -> int:
+                probe(4, 7).first(0)
+            coroutine {step, first: head} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [head, rest]
+    fn b_not_duplicated_free() errors compiler::CompilerError:
+        static compile:
+            fn program() -> int:
+                first(probe(4, 7), 0)
+            coroutine {step, first: head} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [head, rest]
+    test::value("method-evaluation-receiver-effect-not-duplicated/method", [4, [7]], b_not_duplicated_method)
+    test::value("method-evaluation-receiver-effect-not-duplicated/free", [4, [7]], b_not_duplicated_free)
+
+    # The call's value is discarded; the program's value is 0.
+    fn b_result_ignored_method() errors compiler::CompilerError:
+        static compile:
+            fn program() -> int:
+                probe(1, 1).first(probe(2, 2))
+                0
+            coroutine {step, first: head} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [head, rest]
+    fn b_result_ignored_free() errors compiler::CompilerError:
+        static compile:
+            fn program() -> int:
+                first(probe(1, 1), probe(2, 2))
+                0
+            coroutine {step, first: head} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [head, rest]
+    test::value("method-evaluation-result-ignored/method", [1, [2, 0]], b_result_ignored_method)
+    test::value("method-evaluation-result-ignored/free", [1, [2, 0]], b_result_ignored_free)
+
+# method-standalone-executable: the typed program of the Tcl test's
+# executables, run in process (the executables themselves stay in the Tcl
+# suite): run(n) is twice(add(probe(1, n), probe(2, 5))), for n = 1 and 20.
+# The Tcl value [12012, 50012] is value * 1000 + logged digits; here each run
+# is a coroutine, traced [1, [2, 12]] and [1, [2, 50]].
+fn register_standalone_tests():
+    fn b_standalone_method() errors compiler::CompilerError:
+        static compile:
+            fn probe(id: int, result: int) -> int:
+                yield id
+                result
+            fn add(a: int, b: int) -> int:
+                a + b
+            fn twice(a: int) -> int:
+                a * 2
+            fn run(n: int) -> int:
+                probe(1, n).add(probe(2, 5)).twice()
+            coroutine {step: one, first: one_head} = run(1)
+            one_rest = loop i from 0 to 10:
+                if coroutine::done?(one):
+                    break
+                one()
+            coroutine {step: two, first: two_head} = run(20)
+            two_rest = loop i from 0 to 10:
+                if coroutine::done?(two):
+                    break
+                two()
+            [[one_head, one_rest], [two_head, two_rest]]
+    fn b_standalone_free() errors compiler::CompilerError:
+        static compile:
+            fn probe(id: int, result: int) -> int:
+                yield id
+                result
+            fn add(a: int, b: int) -> int:
+                a + b
+            fn twice(a: int) -> int:
+                a * 2
+            fn run(n: int) -> int:
+                twice(add(probe(1, n), probe(2, 5)))
+            coroutine {step: one, first: one_head} = run(1)
+            one_rest = loop i from 0 to 10:
+                if coroutine::done?(one):
+                    break
+                one()
+            coroutine {step: two, first: two_head} = run(20)
+            two_rest = loop i from 0 to 10:
+                if coroutine::done?(two):
+                    break
+                two()
+            [[one_head, one_rest], [two_head, two_rest]]
+    test::value("method-standalone-executable/method", [[1, [2, 12]], [1, [2, 50]]], b_standalone_method)
+    test::value("method-standalone-executable/free", [[1, [2, 12]], [1, [2, 50]]], b_standalone_free)
+
+# ---------------------------------------------------------------------------
+# Chaining: nested ordinary calls, one step at a time
+
+fn register_chain_tests():
+    # The tables' prelude ($::chainFns, after its imports).
+    fn inc(a):
+        a + 1
+    fn add(a, b):
+        a + b
+    fn to_list(a):
+        [a, a]
+    fn size(xs):
+        list::length(xs)
+    fn text(n):
+        s = "abcdefghij"
+        if n < 0 or n > str::length(s):
+            return s
+        str::substring(s, 0, n)
+    fn shout(s):
+        str::lowercase(s)
+    count = list::length
+
+    # method-chain-NAME: a chain is the nested ordinary calls.
+    fn b_two_steps_method() errors compiler::CompilerError:
+        static compile:
+            1.inc().inc()
+    fn b_two_steps_free() errors compiler::CompilerError:
+        static compile:
+            inc(inc(1))
+    test::value("method-chain-two-steps/method", 3, b_two_steps_method)
+    test::value("method-chain-two-steps/free", 3, b_two_steps_free)
+
+    fn b_with_arguments_method() errors compiler::CompilerError:
+        static compile:
+            1.inc().add(5).add(6)
+    fn b_with_arguments_free() errors compiler::CompilerError:
+        static compile:
+            add(add(inc(1), 5), 6)
+    test::value("method-chain-with-arguments/method", 13, b_with_arguments_method)
+    test::value("method-chain-with-arguments/free", 13, b_with_arguments_free)
+
+    fn b_type_changes_method() errors compiler::CompilerError:
+        static compile:
+            3.to_list().size().inc()
+    fn b_type_changes_free() errors compiler::CompilerError:
+        static compile:
+            inc(size(to_list(3)))
+    test::value("method-chain-type-changes/method", 3, b_type_changes_method)
+    test::value("method-chain-type-changes/free", 3, b_type_changes_free)
+
+    fn b_int_to_string_method() errors compiler::CompilerError:
+        static compile:
+            4.text().shout().length()
+    fn b_int_to_string_free() errors compiler::CompilerError:
+        static compile:
+            str::length(shout(text(4)))
+    test::value("method-chain-int-to-string/method", 4, b_int_to_string_method)
+    test::value("method-chain-int-to-string/free", 4, b_int_to_string_free)
+
+    fn b_string_to_list_method() errors compiler::CompilerError:
+        static compile:
+            "ab".to_list().count().text()
+    fn b_string_to_list_free() errors compiler::CompilerError:
+        static compile:
+            text(count(to_list("ab")))
+    test::value("method-chain-string-to-list/method", "ab", b_string_to_list_method)
+    test::value("method-chain-string-to-list/free", "ab", b_string_to_list_free)
+
+    fn b_long_method() errors compiler::CompilerError:
+        static compile:
+            0.inc().inc().inc().inc().inc().inc().inc().inc()
+    fn b_long_free() errors compiler::CompilerError:
+        static compile:
+            inc(inc(inc(inc(inc(inc(inc(inc(0))))))))
+    test::value("method-chain-long/method", 8, b_long_method)
+    test::value("method-chain-long/free", 8, b_long_free)
+
+# ---------------------------------------------------------------------------
+# Errors and completions: unchanged (TooSmall, TooBig and check are declared
+# at the top)
+
+# method-errors-NAME: a handled error-capable method call behaves as the
+# free call, for the run-time inputs A, B and C (run's value: n, or -1 for
+# TooSmall, -2 for TooBig).
+fn register_handled_error_test(name: str, a: int, b: int, c: int, expected):
+    fn b_method() errors compiler::CompilerError:
+        static compile:
+            fn run(n):
+                r = n.check(10):
+                    on TooSmall:
+                        -1
+                    on TooBig:
+                        -2
+                r
+            [run(a), run(b), run(c)]
+    fn b_free() errors compiler::CompilerError:
+        static compile:
+            fn run(n):
+                r = check(n, 10):
+                    on TooSmall:
+                        -1
+                    on TooBig:
+                        -2
+                r
+            [run(a), run(b), run(c)]
+    test::value(name.concat("/method"), expected, b_method)
+    test::value(name.concat("/free"), expected, b_free)
+
+# method-errors-propagation: an unhandled declared error propagates out of a
+# method chain through the function's own errors clause, as through nested
+# free calls, for the run-time inputs A, B and C.
+fn register_propagation_test(a: int, b: int, c: int):
+    fn b_method() errors compiler::CompilerError:
+        static compile:
+            fn outer(n) -> int errors TooSmall, TooBig:
+                n.check(10).check(100)
+            fn run(n):
+                r = outer(n):
+                    on TooSmall:
+                        -1
+                    on TooBig:
+                        -2
+                r
+            [run(a), run(b), run(c)]
+    fn b_free() errors compiler::CompilerError:
+        static compile:
+            fn outer(n) -> int errors TooSmall, TooBig:
+                check(check(n, 10), 100)
+            fn run(n):
+                r = outer(n):
+                    on TooSmall:
+                        -1
+                    on TooBig:
+                        -2
+                r
+            [run(a), run(b), run(c)]
+    test::value("method-errors-propagation/method", [7, -1, -2], b_method)
+    test::value("method-errors-propagation/free", [7, -1, -2], b_free)
+
+# method-errors-handled-inside-a-chain: a handled call whose result feeds a
+# chain, for the run-time inputs A, B and C.
+fn register_handled_in_chain_test(a: int, b: int, c: int):
+    fn b_method() errors compiler::CompilerError:
+        static compile:
+            fn safe(n):
+                n.check(10):
+                    on TooSmall:
+                        0
+                    on TooBig:
+                        10
+            fn twice(n):
+                n + n
+            fn run(n):
+                n.safe().twice()
+            [run(a), run(b), run(c)]
+    fn b_free() errors compiler::CompilerError:
+        static compile:
+            fn safe(n):
+                check(n, 10):
+                    on TooSmall:
+                        0
+                    on TooBig:
+                        10
+            fn twice(n):
+                n + n
+            fn run(n):
+                twice(safe(n))
+            [run(a), run(b), run(c)]
+    test::value("method-errors-handled-inside-a-chain/method", [10, 0, 20], b_method)
+    test::value("method-errors-handled-inside-a-chain/free", [10, 0, 20], b_free)
+
+fn register_errors_tests():
+    register_handled_error_test("method-errors-success-expected-and-second", 5, 0 - 1, 50, [5, -1, -2])
+    register_handled_error_test("method-errors-boundary-values", 0, 10, 11, [0, 10, -2])
+    register_propagation_test(7, 0 - 5, 70)
+    register_handled_in_chain_test(5, 0 - 3, 99)
+
+    # method-errors-unhandled-is-rejected-alike: an unhandled declared error
+    # is the same static rejection in both spellings.
+    fn b_unhandled_method() errors compiler::CompilerError:
+        static compile:
+            fn run(n):
+                n.check(10)
+            [run(1), run(2)]
+    fn b_unhandled_free() errors compiler::CompilerError:
+        static compile:
+            fn run(n):
+                check(n, 10)
+            [run(1), run(2)]
+    rejects_alike("method-errors-unhandled-is-rejected-alike", compiler::DiagnosticCode::UnhandledError, b_unhandled_method, b_unhandled_free)
+
+    # method-errors-handler-must-name-declared-errors: the handler checks are
+    # the free call's (no error named Missing is declared).
+    fn b_undeclared_method() errors compiler::CompilerError:
+        static compile:
+            fn run(n):
+                r = n.check(10):
+                    on Missing:
+                        0
+                r
+            run(1)
+    fn b_undeclared_free() errors compiler::CompilerError:
+        static compile:
+            fn run(n):
+                r = check(n, 10):
+                    on Missing:
+                        0
+                r
+            run(1)
+    rejects_alike("method-errors-handler-must-name-declared-errors", compiler::DiagnosticCode::UndeclaredError, b_undeclared_method, b_undeclared_free)
+
+# ---------------------------------------------------------------------------
+# Equivalent sources: the same outcome. (The Tcl tests also compare the two
+# spellings' HIR, core IR, NIR and analyses, which Botlish cannot observe;
+# their values are pinned here.)
+
+fn register_same_program_tests():
+    # method-same-program-NAME.
+    fn b_scalar_chain_method() errors compiler::CompilerError:
+        static compile:
+            fn inc(x):
+                x + 1
+            fn twice(x):
+                x * 2
+            fn run(n):
+                n.inc().twice().inc()
+            [run(1), run(20), run(5)]
+    fn b_scalar_chain_free() errors compiler::CompilerError:
+        static compile:
+            fn inc(x):
+                x + 1
+            fn twice(x):
+                x * 2
+            fn run(n):
+                inc(twice(inc(n)))
+            [run(1), run(20), run(5)]
+    test::value("method-same-program-scalar-chain/method", [5, 43, 13], b_scalar_chain_method)
+    test::value("method-same-program-scalar-chain/free", [5, 43, 13], b_scalar_chain_free)
+
+    fn b_two_argument_method() errors compiler::CompilerError:
+        static compile:
+            fn add(a, b):
+                a + b
+            fn run(n):
+                n.add(3).add(n.add(1))
+            [run(1), run(20)]
+    fn b_two_argument_free() errors compiler::CompilerError:
+        static compile:
+            fn add(a, b):
+                a + b
+            fn run(n):
+                add(add(n, 3), add(n, 1))
+            [run(1), run(20)]
+    test::value("method-same-program-two-argument/method", [6, 44], b_two_argument_method)
+    test::value("method-same-program-two-argument/free", [6, 44], b_two_argument_free)
+
+    fn b_lists_and_strings_method() errors compiler::CompilerError:
+        static compile:
+            fn total(xs):
+                list::length(xs)
+            fn name(n):
+                s = "abcdef"
+                if n < 0 or n > str::length(s):
+                    return s
+                str::substring(s, 0, n)
+            [[1, 2, 3].total(), 4.name().lowercase()]
+    fn b_lists_and_strings_free() errors compiler::CompilerError:
+        static compile:
+            fn total(xs):
+                list::length(xs)
+            fn name(n):
+                s = "abcdef"
+                if n < 0 or n > str::length(s):
+                    return s
+                str::substring(s, 0, n)
+            [total([1, 2, 3]), str::lowercase(name(4))]
+    test::value("method-same-program-lists-and-strings/method", [3, "abcd"], b_lists_and_strings_method)
+    test::value("method-same-program-lists-and-strings/free", [3, "abcd"], b_lists_and_strings_free)
+
+    fn b_construction_method() errors compiler::CompilerError:
+        static compile:
+            fn pair(a, b):
+                [a, b]
+            fn first(p):
+                v = list::at(p, 0):
+                    on IndexNotFound:
+                        0
+                v
+            fn run(n):
+                n.pair(n + 1).first()
+            [run(1), run(5)]
+    fn b_construction_free() errors compiler::CompilerError:
+        static compile:
+            fn pair(a, b):
+                [a, b]
+            fn first(p):
+                v = list::at(p, 0):
+                    on IndexNotFound:
+                        0
+                v
+            fn run(n):
+                first(pair(n, n + 1))
+            [run(1), run(5)]
+    test::value("method-same-program-construction/method", [1, 5], b_construction_method)
+    test::value("method-same-program-construction/free", [1, 5], b_construction_free)
+
+    fn b_struct_receiver_method() errors compiler::CompilerError:
+        static compile:
+            fn area(r, scale):
+                r.w * r.h * scale
+            fn run(n):
+                {w: n, h: 3}.area(2)
+            [run(1), run(4)]
+    fn b_struct_receiver_free() errors compiler::CompilerError:
+        static compile:
+            fn area(r, scale):
+                r.w * r.h * scale
+            fn run(n):
+                area({w: n, h: 3}, 2)
+            [run(1), run(4)]
+    test::value("method-same-program-struct-receiver/method", [6, 24], b_struct_receiver_method)
+    test::value("method-same-program-struct-receiver/free", [6, 24], b_struct_receiver_free)
+
+    fn b_recursion_method() errors compiler::CompilerError:
+        static compile:
+            fn step(n, acc):
+                if n == 0:
+                    return acc
+                (n - 1).step(acc + n)
+            [10.step(0), 3.step(1)]
+    fn b_recursion_free() errors compiler::CompilerError:
+        static compile:
+            fn step(n, acc):
+                if n == 0:
+                    return acc
+                step(n - 1, acc + n)
+            [step(10, 0), step(3, 1)]
+    test::value("method-same-program-recursion/method", [55, 7], b_recursion_method)
+    test::value("method-same-program-recursion/free", [55, 7], b_recursion_free)
+
+    fn b_closures_method() errors compiler::CompilerError:
+        static compile:
+            fn make(n):
+                fn add(x):
+                    x + n
+                add
+            fn apply(f, x):
+                f(x)
+            fn run(n):
+                make(n).apply(10)
+            [run(1), run(2)]
+    fn b_closures_free() errors compiler::CompilerError:
+        static compile:
+            fn make(n):
+                fn add(x):
+                    x + n
+                add
+            fn apply(f, x):
+                f(x)
+            fn run(n):
+                apply(make(n), 10)
+            [run(1), run(2)]
+    test::value("method-same-program-closures/method", [11, 12], b_closures_method)
+    test::value("method-same-program-closures/free", [11, 12], b_closures_free)
+
+    fn b_typed_method() errors compiler::CompilerError:
+        static compile:
+            fn narrow(x: Small) -> int:
+                x + 1
+            fn wide(x: int) -> int:
+                x * 2
+            fn run(n: Small) -> int:
+                n.narrow().wide()
+            [run(1), run(9)]
+    fn b_typed_free() errors compiler::CompilerError:
+        static compile:
+            fn narrow(x: Small) -> int:
+                x + 1
+            fn wide(x: int) -> int:
+                x * 2
+            fn run(n: Small) -> int:
+                wide(narrow(n))
+            [run(1), run(9)]
+    test::value("method-same-program-typed/method", [4, 20], b_typed_method)
+    test::value("method-same-program-typed/free", [4, 20], b_typed_free)
+
+# ---------------------------------------------------------------------------
+
+fn register_method_sugar_tests():
+    register_rewrite_tests()
+    register_natives_tests()
+    register_library_tests()
+    register_visibility_tests()
+    register_alias_tests()
+    register_failure_tests()
+    register_types_tests()
+    register_shadowing_tests()
+    register_field_tests()
+    register_evaluation_tests()
+    register_standalone_tests()
+    register_chain_tests()
+    register_errors_tests()
+    register_same_program_tests()
+
+with context test::suite()
+register_method_sugar_tests()
+test::report()

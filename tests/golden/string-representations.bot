@@ -1,0 +1,900 @@
+# string-representations.bot -- String values whose native representation
+# changes, as a source-level specification: whatever a backend chooses to
+# carry a String as -- the empty String, a one-character String (ASCII or
+# not) carried as one scalar (ShortString1), an ASCII String of at most
+# eight characters packed into one word, a slice of another String, or the
+# ordinary String object -- a Botlish program observes only its value:
+#
+#   * a character is a Unicode scalar value: str::length counts scalars,
+#     never UTF-8 bytes or UTF-16 units (an astral character is one), and a
+#     one-character str::substring is that scalar;
+#   * lengths are exact at every size (0..9 and 12 characters), DEL (U+007F)
+#     and U+0080 are one character each;
+#   * equality is content equality: equal characters in equal number; a
+#     prefix, a longer String, a reordering and a case change are unequal,
+#     between two short ASCII Strings, a short ASCII String and a
+#     one-character slice, and a short String and a computed one;
+#   * a String keeps its value through branch joins, aliases, chains of
+#     calls, a self-tail loop's state, recursion, a call through a function
+#     value, a closure's capture, a captured top-level binding and a block's
+#     result;
+#   * storing a String (a List element, a struct field, a MutableArray slot)
+#     and every general operation (concat, lowercase, hash) see the same
+#     String: equal Strings hash equal;
+#   * the empty String is a value, never a failure: an error-capable
+#     function returning "" succeeds, its handled failure is the declared
+#     error, and a one-character slice past the end of a computed String
+#     fails with the ordinary declared error (UpperOverrun) wherever it is
+#     handled;
+#   * values stay intact across allocation (a String live while other
+#     Strings, Lists and structs are allocated, and across 200 recursive
+#     allocating frames).
+#
+# Ported from tests/short-string.test (the ShortString1 scalar tier) and
+# tests/packed-ascii.test (the packed-ASCII tier): the value halves of their
+# parity tests, each program as the Tcl test writes it (the "short-" and
+# "pa-" prefixes name the tier the program was written to exercise). The
+# Tcl tests stay authoritative for what a program cannot observe and this
+# suite does not repeat: the representation plan and its NIR (shortparams,
+# asciiresult, conversion counts), agreement of the native option matrix
+# (-short-string-opt, -ascii-pack-opt, -tiny-leaf-inline-opt,
+# -short-demand-opt), the BOTLISH_NATIVE_GC_STRESS runs and the standalone
+# executables. Tests whose program needs a String holding U+0000 stay in
+# Tcl only: Botlish has no escape for it, and a raw NUL byte would make
+# this file binary to grep and diff (the policy of the manifest's
+# short-nul-is-not-empty). audit/golden/migration/fragments/
+# string-representations.tsv maps every Tcl test to its golden test.
+#
+# Every program is strict, as in Tcl: constant slices the compiler proves in
+# range need no handler; where the Tcl program keeps a failure dynamic
+# (str::concat of literals, a computed index) its own handler turns the
+# declared error into a value. The literals are the inputs on purpose: they
+# are what decides the representation, so they are not made registration
+# parameters.
+#
+# Imports: compiler and test are the framework's; str and list for the
+# operations under test (str::length, ::substring, ::concat, ::lowercase;
+# list::append, ::length, ::at); mutable_array for the MutableArray-slot
+# tests.
+import compiler
+import list
+import mutable_array
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only).
+
+# The error of the error-capable functions (`guarded`): they fail on a
+# negative input. The Tcl programs call it Bad.
+error NegativeInput
+
+# A String beside an Int, stored in a struct field (the Tcl programs' Pair).
+struct Pair:
+    left: str
+    right: int
+
+# pa-top-level-literal-captured: a top-level literal binding, captured by a
+# function (the Tcl program's own top-level `greeting`).
+greeting = "hello"
+
+# ---------------------------------------------------------------------------
+# What a character is
+
+fn register_unicode_model_tests():
+    # short-unicode-model-is-the-scalar-value: a non-ASCII character is one
+    # character: length counts scalars (U+00E4, U+20AC, U+03BB, U+732B,
+    # U+1F600 and "e"), never their 2, 3, 2, 3 or 4 UTF-8 bytes.
+    fn scalar_lengths() errors compiler::CompilerError:
+        static compile:
+            [str::length("ä"), str::length("€"), str::length("λ"), str::length("猫"), str::length("😀"), str::length("e")]
+    test::value("short-unicode-model-is-the-scalar-value", [1, 1, 1, 1, 1, 1], scalar_lengths)
+
+    # short-unicode-model-astral-is-one-character: a supplementary-plane
+    # character is one character, and the one-character slice at its index
+    # is exactly it.
+    fn astral_one_character() errors compiler::CompilerError:
+        static compile:
+            [str::length("😀"), str::length(str::substring("a😀b", 1, 2)), str::substring("a😀b", 1, 2) == "😀"]
+    test::value("short-unicode-model-astral-is-one-character", [1, 1, true], astral_one_character)
+
+    # short-slice-non-ascii: a one-character slice of a non-ASCII String is
+    # the scalar, not a byte (BMP and astral, at index 0 and 1).
+    fn non_ascii_slices() errors compiler::CompilerError:
+        static compile:
+            fn first(t) errors UpperOverrun:
+                str::substring(t, 0, 1)
+
+            fn second(t) errors UpperOverrun:
+                str::substring(t, 1, 2)
+
+            ["ä" == first("äx"), second("a€") == "€", str::length(second("a猫")), first("😀z") == "😀"]
+    test::value("short-slice-non-ascii", [true, true, 1, true], non_ascii_slices)
+
+    # pa-unicode-model-is-untouched: through a closed helper and a slice,
+    # U+00E9, U+20AC and an astral character still count as one character
+    # each, and the first-character slice of "é!", "😀!" is that character.
+    fn unicode_model_untouched() errors compiler::CompilerError:
+        static compile:
+            fn size(s):
+                str::length(s)
+
+            fn first(t) errors UpperOverrun:
+                str::substring(t, 0, 1)
+
+            [size("é"), size("€"), size("😀"), first("é!") == "é", first("😀!") == "😀", size(first("x😀"))]
+    test::value("pa-unicode-model-is-untouched", [1, 1, 1, true, true, 1], unicode_model_untouched)
+
+# ---------------------------------------------------------------------------
+# Length and equality at the representation boundaries
+
+fn register_length_and_equality_tests():
+    # pa-length-of-every-size: the length of an ASCII String of 0..8
+    # characters (the packed sizes) and of 9 and 12 (past them), through a
+    # closed helper.
+    fn every_size() errors compiler::CompilerError:
+        static compile:
+            fn size(s):
+                str::length(s)
+
+            [size(""), size("a"), size("ab"), size("abc"), size("abcd"), size("abcde"), size("abcdef"), size("abcdefg"), size("abcdefgh"), size("abcdefghi"), size("abcdefghijkl")]
+    test::value("pa-length-of-every-size", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12], every_size)
+
+    # pa-del-and-high-ascii: DEL (U+007F, the last ASCII character) and
+    # U+0080 (the first that is not ASCII) are one character each and equal
+    # to themselves. Botlish has no escape for either: each literal below
+    # holds the raw character (UTF-8 7F, and C2 80). (The Tcl test's NUL
+    # items stay in Tcl: see the header.)
+    fn del_and_high_ascii() errors compiler::CompilerError:
+        static compile:
+            fn size(s):
+                str::length(s)
+
+            fn same(a, b):
+                a == b
+
+            [size(""), size(""), same("", ""), same("", "")]
+    test::value("pa-del-and-high-ascii", [1, 1, true, true], del_and_high_ascii)
+
+    # pa-equality-by-content: equal Strings are equal; a prefix, a longer
+    # String, a reordering, the last of eight characters and the case of
+    # one make them unequal, and "" equals only "".
+    fn equality_by_content() errors compiler::CompilerError:
+        static compile:
+            fn same(a, b):
+                a == b
+
+            [same("", ""), same("a", "a"), same("ab", "ab"), same("ab", "abc"), same("abc", "ab"), same("ab", "ba"), same("abcdefgh", "abcdefgh"), same("abcdefgh", "abcdefgi"), same("A", "a"), same("", "a")]
+    test::value("pa-equality-by-content", [true, true, true, false, false, false, true, false, false, false], equality_by_content)
+
+    # pa-equality-with-a-one-character-slice: a short ASCII String against a
+    # one-character slice: equal only to the same one ASCII character, never
+    # to a longer String, the empty String or a non-ASCII character.
+    fn equality_with_a_slice() errors compiler::CompilerError:
+        static compile:
+            fn same(a, b):
+                a == b
+
+            fn slice(t, i) errors LowerUnderrun, UpperOverrun:
+                str::substring(t, i, i + 1)
+
+            [same("a", slice("äa", 1)), same("ab", slice("ab", 0)), same("", slice("ab", 0)), same("a", slice("äa", 0))]
+    test::value("pa-equality-with-a-one-character-slice", [true, false, false, false], equality_with_a_slice)
+
+    # short-equality-with-a-computed-string: an empty or one-character
+    # String against a String of unknown length (a concat result): equal to
+    # the equal content, unequal to a longer one.
+    fn short_equality_with_computed() errors compiler::CompilerError:
+        static compile:
+            fn same(s, t):
+                s == t
+
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "x"
+
+            [same(pick(true), str::concat("", "")), same(pick(false), str::concat("x", "")), same(pick(false), str::concat("x", "y"))]
+    test::value("short-equality-with-a-computed-string", [true, true, false], short_equality_with_computed)
+
+    # pa-equality-with-a-computed-string: a short ASCII String against a
+    # concat result: equal content is equal, a longer one is not.
+    fn packed_equality_with_computed() errors compiler::CompilerError:
+        static compile:
+            fn same(s, t):
+                s == t
+
+            [same("ab", str::concat("a", "b")), same("", str::concat("", "")), same("ab", str::concat("a", "bc"))]
+    test::value("pa-equality-with-a-computed-string", [true, true, false], packed_equality_with_computed)
+
+# ---------------------------------------------------------------------------
+# Transport: joins, aliases, calls, loops, function values, captures
+
+fn register_transport_tests():
+    # pa-join-and-alias: a String from a branch join ("yes" or "no"),
+    # aliased three times, keeps its length and equalities.
+    fn join_and_alias() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    "yes"
+                else:
+                    "no"
+
+            fn alias(flag):
+                x = pick(flag)
+                y = x
+                z = y
+                [str::length(z), z == "yes", z == "no"]
+
+            [alias(true), alias(false)]
+    test::value("pa-join-and-alias", [[3, true, false], [2, false, true]], join_and_alias)
+
+    # pa-forwarded-through-a-call-chain: "" or "word" forwarded through
+    # f -> g -> h arrives unchanged.
+    fn call_chain() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "word"
+
+            fn h(s):
+                [str::length(s), s == "word", s == ""]
+
+            fn g(s):
+                h(s)
+
+            fn f(s):
+                g(s)
+
+            [f(pick(true)), f(pick(false))]
+    test::value("pa-forwarded-through-a-call-chain", [[0, false, true], [4, true, false]], call_chain)
+
+    # pa-joined-with-a-non-ascii-character: an ASCII parameter joined with
+    # a non-ASCII literal ("λ") in one result: each branch's value, and the
+    # length of the ASCII one.
+    fn joined_with_non_ascii() errors compiler::CompilerError:
+        static compile:
+            fn widen(c, flag):
+                if flag:
+                    c
+                else:
+                    "λ"
+
+            [widen("a", true), widen("b", false), str::length(widen("b", true))]
+    test::value("pa-joined-with-a-non-ascii-character", ["a", "λ", 1], joined_with_non_ascii)
+
+    # short-self-tail-loop-state: a String ("" or "y") carried around a
+    # self-tail loop as its state is the value of the last iteration.
+    fn short_loop_state() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "y"
+
+            fn spin(s, n):
+                if n == 0:
+                    s
+                else:
+                    spin(pick(n == 2), n - 1)
+
+            spin("", 5)
+    test::value("short-self-tail-loop-state", "y", short_loop_state)
+
+    # pa-self-tail-loop-state: the same loop over "odd" or "even".
+    fn packed_loop_state() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    "odd"
+                else:
+                    "even"
+
+            fn spin(s, n):
+                if n == 0:
+                    s
+                else:
+                    spin(pick(n == 2), n - 1)
+
+            spin("", 5)
+    test::value("pa-self-tail-loop-state", "even", packed_loop_state)
+
+    # short-final-result-is-the-string: a one-character String from a join
+    # is the result as it is ("y"). (The Tcl program's result is the
+    # program's; here it is the block's.)
+    fn short_final_result() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "y"
+
+            pick(false)
+    test::value("short-final-result-is-the-string", "y", short_final_result)
+
+    # pa-final-result-is-the-string: the same for a short ASCII String
+    # ("tail").
+    fn packed_final_result() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "tail"
+
+            pick(false)
+    test::value("pa-final-result-is-the-string", "tail", packed_final_result)
+
+    # short-through-a-function-value: a String-returning function called
+    # through a function value and directly gives the same Strings.
+    fn short_function_value() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "y"
+
+            fn apply(f, x):
+                f(x)
+
+            [apply(pick, true), apply(pick, false), pick(false)]
+    test::value("short-through-a-function-value", ["", "y", "y"], short_function_value)
+
+    # pa-through-a-function-value: the same with "" or "yes".
+    fn packed_function_value() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "yes"
+
+            fn apply(f, x):
+                f(x)
+
+            [apply(pick, true), apply(pick, false), pick(false)]
+    test::value("pa-through-a-function-value", ["", "yes", "yes"], packed_function_value)
+
+    # short-captured-by-a-closure: a local String ("" or "y") captured by a
+    # nested function is the captured value.
+    fn short_capture() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "y"
+
+            fn captured(flag):
+                s = pick(flag)
+                fn add(x):
+                    str::concat(s, x)
+                add("!")
+
+            [captured(true), captured(false)]
+    test::value("short-captured-by-a-closure", ["!", "y!"], short_capture)
+
+    # pa-captured-by-a-closure: the same with "" or "yes".
+    fn packed_capture() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "yes"
+
+            fn captured(flag):
+                s = pick(flag)
+                fn add(x):
+                    str::concat(s, x)
+                add("!")
+
+            [captured(true), captured(false)]
+    test::value("pa-captured-by-a-closure", ["!", "yes!"], packed_capture)
+
+    # pa-top-level-literal-captured: a top-level literal binding (this
+    # file's `greeting`, above) captured by a function keeps its length and
+    # equality.
+    fn top_level_literal() errors compiler::CompilerError:
+        static compile:
+            fn use():
+                [str::length(greeting), greeting == "hello"]
+
+            use()
+    test::value("pa-top-level-literal-captured", [5, true], top_level_literal)
+
+    # short-forwarded-length-and-equality: "" or "y" forwarded through an
+    # identity function: lengths and equality (the source of the Tcl
+    # test's standalone executable).
+    fn short_forwarded() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "y"
+
+            fn fwd(s):
+                s
+
+            [str::length(fwd(pick(true))), str::length(fwd(pick(false))), fwd(pick(false)) == "y"]
+    test::value("short-forwarded-length-and-equality", [0, 1, true], short_forwarded)
+
+    # pa-forwarded-length-and-equality: the same with "" or "yes".
+    fn packed_forwarded() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "yes"
+
+            fn fwd(s):
+                s
+
+            [str::length(fwd(pick(true))), str::length(fwd(pick(false))), fwd(pick(false)) == "yes"]
+    test::value("pa-forwarded-length-and-equality", [0, 3, true], packed_forwarded)
+
+# ---------------------------------------------------------------------------
+# Storage and general String operations
+
+fn register_storage_tests():
+    # short-forwarded-then-stored-in-a-list: a one-character String
+    # forwarded through two calls and then appended to a List is that
+    # String in the List.
+    fn short_forwarded_then_stored() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "λ"
+
+            fn g(s):
+                s
+
+            fn f(s):
+                g(s)
+
+            fn store(s):
+                list::append([], f(s))
+
+            store(pick(false))
+    test::value("short-forwarded-then-stored-in-a-list", ["λ"], short_forwarded_then_stored)
+
+    # short-stored-in-a-list: "" and "λ" as List elements: the List, its
+    # length and an element read back.
+    fn short_stored() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "λ"
+
+            xs = [pick(true), pick(false)]
+            [xs, list::length(xs), list::at(xs, 1) == "λ"]
+    test::value("short-stored-in-a-list", [["", "λ"], 2, true], short_stored)
+
+    # short-literal-local-stored-in-a-list: a local bound to "x" is measured
+    # and appended to a List.
+    fn short_literal_local() errors compiler::CompilerError:
+        static compile:
+            fn keep(xs):
+                s = "x"
+                [str::length(s), list::append(xs, s)]
+
+            keep([])
+    test::value("short-literal-local-stored-in-a-list", [1, ["x"]], short_literal_local)
+
+    # pa-literal-local-stored-in-a-list: the same with "hello".
+    fn packed_literal_local() errors compiler::CompilerError:
+        static compile:
+            fn keep(xs):
+                s = "hello"
+                [str::length(s), list::append(xs, s)]
+
+            keep([])
+    test::value("pa-literal-local-stored-in-a-list", [5, ["hello"]], packed_literal_local)
+
+    # short-parameter-stored-and-measured: an empty-or-one-character
+    # parameter stored in a List, then measured and compared: the stored
+    # element is the parameter.
+    fn short_parameter_stored() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "y"
+
+            fn probe(s):
+                t = list::append([], s)
+                [t, str::length(s), s == "y"]
+
+            probe(pick(true))
+    test::value("short-parameter-stored-and-measured", [[""], 0, false], short_parameter_stored)
+
+    # pa-parameter-stored-in-a-list: short ASCII arguments ("ab", "cd")
+    # appended to a List by a helper.
+    fn packed_parameter_stored() errors compiler::CompilerError:
+        static compile:
+            fn keep(xs, s):
+                list::append(xs, s)
+
+            [keep([], "ab"), keep([], "cd")]
+    test::value("pa-parameter-stored-in-a-list", [["ab"], ["cd"]], packed_parameter_stored)
+
+    # pa-parameter-measured-and-stored-twice: one short ASCII parameter,
+    # measured once and stored twice: both stored copies are it.
+    fn packed_parameter_twice() errors compiler::CompilerError:
+        static compile:
+            fn mixed(s, xs):
+                [str::length(s), list::append(xs, s), list::append(xs, s)]
+
+            mixed("xyz", [])
+    test::value("pa-parameter-measured-and-stored-twice", [3, ["xyz"], ["xyz"]], packed_parameter_twice)
+
+    # short-general-string-operations: concat, lowercase and hash of an
+    # empty or one-character (non-ASCII) String: the operations of the
+    # String itself, and its hash equals the literal's.
+    fn short_general_operations() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "Λ"
+
+            [str::concat(pick(true), "!"), str::lowercase(pick(false)), str::concat(pick(false), pick(false)), hash(pick(false)) == hash("Λ")]
+    test::value("short-general-string-operations", ["!", "λ", "ΛΛ", true], short_general_operations)
+
+    # pa-stored-and-general-string-operations: "" and "ABC" stored in a
+    # List, concatenated, lowercased and hashed (equal to the literal's
+    # hash).
+    fn packed_general_operations() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "ABC"
+
+            xs = [pick(true), pick(false)]
+            [xs, list::length(xs), str::concat(pick(false), "!"), str::lowercase(pick(false)), hash(pick(false)) == hash("ABC")]
+    test::value("pa-stored-and-general-string-operations", [["", "ABC"], 2, "ABC!", "abc", true], packed_general_operations)
+
+    # short-in-struct-field-and-mutable-array: "" or "λ" stored in a struct
+    # field and in a MutableArray slot reads back as itself (and the other
+    # slot's "z" is untouched).
+    fn short_struct_and_array() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "λ"
+
+            fn store(flag):
+                p = Pair {left: pick(flag), right: 1}
+                a = mutable_array::allocate(2)
+                mutable_array::set(a, 0, pick(flag))
+                mutable_array::set(a, 1, "z")
+                [p.left, str::length(p.left), mutable_array::at(a, 0), mutable_array::at(a, 1) == "z"]
+
+            [store(true), store(false)]
+    test::value("short-in-struct-field-and-mutable-array", [["", 0, "", true], ["λ", 1, "λ", true]], short_struct_and_array)
+
+    # pa-in-struct-field-and-mutable-array: the same with "" or "word".
+    fn packed_struct_and_array() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "word"
+
+            fn store(flag):
+                p = Pair {left: pick(flag), right: 1}
+                a = mutable_array::allocate(2)
+                mutable_array::set(a, 0, pick(flag))
+                mutable_array::set(a, 1, "z")
+                [p.left, str::length(p.left), mutable_array::at(a, 0), mutable_array::at(a, 1) == "z"]
+
+            [store(true), store(false)]
+    test::value("pa-in-struct-field-and-mutable-array", [["", 0, "", true], ["word", 4, "word", true]], packed_struct_and_array)
+
+# ---------------------------------------------------------------------------
+# Slices
+
+fn register_slice_tests():
+    # short-slice-value-and-length: the first-character slice of "abc" is
+    # "a", of length 1 (the constant call is proven not to fail: no
+    # handler).
+    fn slice_value_and_length() errors compiler::CompilerError:
+        static compile:
+            fn first(t) errors UpperOverrun:
+                str::substring(t, 0, 1)
+
+            fn show(t) errors UpperOverrun:
+                c = first(t)
+                [c, str::length(c)]
+
+            show("abc")
+    test::value("short-slice-value-and-length", ["a", 1], slice_value_and_length)
+
+    # short-peek-guarded-slice: peek is "" past the end (its guard) and the
+    # one-character slice otherwise: "a" of "abc", "" of "".
+    fn peek_guarded_slice() errors compiler::CompilerError:
+        static compile:
+            fn peek(text, index):
+                if index < 0 or index >= str::length(text):
+                    return ""
+
+                str::substring(text, index, index + 1)
+
+            fn first_is_a(text):
+                c = peek(text, 0)
+                [str::length(c), c == "a", c == ""]
+
+            [first_is_a("abc"), first_is_a("")]
+    test::value("short-peek-guarded-slice", [[1, true, false], [0, false, true]], peek_guarded_slice)
+
+    # pa-peek-traversal: the String-traversal idiom (peek one character at a
+    # time until "") counts the "a"s of "banana", "" and "xyz".
+    fn peek_traversal() errors compiler::CompilerError:
+        static compile:
+            fn peek(text, index):
+                if index < 0 or index >= str::length(text):
+                    return ""
+
+                str::substring(text, index, index + 1)
+
+            fn count_a(text, index, acc):
+                c = peek(text, index)
+                if c == "":
+                    acc
+                else:
+                    step = if c == "a":
+                        1
+                    else:
+                        0
+                    count_a(text, index + 1, acc + step)
+
+            [count_a("banana", 0, 0), count_a("", 0, 0), count_a("xyz", 0, 0)]
+    test::value("pa-peek-traversal", [3, 0, 0], peek_traversal)
+
+# ---------------------------------------------------------------------------
+# The empty String is a value, never a failure
+
+fn register_error_tests():
+    # short-slice-empty-index-error-is-unchanged: the first-character slice
+    # of a computed empty String fails with the ordinary declared error,
+    # UpperOverrun, which the caller's handler receives.
+    fn empty_slice_error() errors compiler::CompilerError:
+        static compile:
+            fn first(t) errors UpperOverrun:
+                str::substring(t, 0, 1)
+
+            fn outcome():
+                r = first(str::concat("", "")):
+                    on UpperOverrun:
+                        return "UpperOverrun"
+                r
+
+            outcome()
+    test::value("short-slice-empty-index-error-is-unchanged", "UpperOverrun", empty_slice_error)
+
+    # short-slice-failure-propagates-as-declared-error: a one-character
+    # slice at a computed index past the end, two calls down, fails with
+    # UpperOverrun through both callers to the handler; the earlier
+    # successful slices do not stand for it.
+    fn slice_failure_propagates() errors compiler::CompilerError:
+        static compile:
+            fn at(t, i) errors LowerUnderrun, UpperOverrun:
+                str::substring(t, i, i + 1)
+
+            fn drive(i) errors LowerUnderrun, UpperOverrun:
+                [at("ab", i), str::length(at("ab", i))]
+
+            fn all() errors LowerUnderrun, UpperOverrun:
+                [drive(0), drive(1), drive(str::length(str::concat("a", "b")))]
+
+            fn outcome():
+                r = all():
+                    on LowerUnderrun:
+                        return "LowerUnderrun"
+                    on UpperOverrun:
+                        return "UpperOverrun"
+                r
+
+            outcome()
+    test::value("short-slice-failure-propagates-as-declared-error", "UpperOverrun", slice_failure_propagates)
+
+    # empty-success-with-handler-in-the-caller: an error-capable function
+    # whose success is "": the handled call's value is "" (length 0) when
+    # it succeeds and the handler's "handled" when it fails.
+    fn empty_success_with_handler() errors compiler::CompilerError:
+        static compile:
+            fn guarded(n) -> str errors NegativeInput:
+                if n < 0:
+                    fail NegativeInput
+                else:
+                    ""
+
+            fn run(n):
+                r = guarded(n):
+                    on NegativeInput:
+                        "handled"
+                [r, str::length(r)]
+
+            [run(0), run(-1)]
+    test::value("empty-success-with-handler-in-the-caller", [["", 0], ["handled", 7]], empty_success_with_handler)
+
+    # pa-error-capable-result: an error-capable function whose success is ""
+    # or "yes": "" is a successful value (length 0, equal to ""), never the
+    # failure, and the handler receives the failure.
+    fn error_capable_result() errors compiler::CompilerError:
+        static compile:
+            fn guarded(n) -> str errors NegativeInput:
+                if n < 0:
+                    fail NegativeInput
+                else:
+                    if n == 0:
+                        ""
+                    else:
+                        "yes"
+
+            fn run(n):
+                r = guarded(n):
+                    on NegativeInput:
+                        "caught"
+                r
+
+            [run(-1), run(0), run(3), str::length(run(0)), run(0) == ""]
+    test::value("pa-error-capable-result", ["caught", "", "yes", 0, true], error_capable_result)
+
+# ---------------------------------------------------------------------------
+# Values across allocation
+
+fn register_allocation_tests():
+    # short-live-across-allocation: a one-character String parameter stays
+    # itself while Strings, a List and a struct are allocated around it.
+    fn short_live() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "λ"
+
+            fn work(s, xs):
+                p = Pair {left: "keep", right: 7}
+                t = str::concat("a", "b")
+                u = list::append(xs, 1)
+                v = str::concat(t, t)
+                [str::length(s), s == "λ", str::length(v), list::length(u), p.left, p.right, s]
+
+            [work(pick(false), [1, 2]), work(pick(true), [9])]
+    test::value("short-live-across-allocation", [[1, true, 4, 3, "keep", 7, "λ"], [0, false, 4, 2, "keep", 7, ""]], short_live)
+
+    # pa-live-across-allocation: the same with "" or "packed".
+    fn packed_live() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "packed"
+
+            fn work(s, xs):
+                p = Pair {left: "keep", right: 7}
+                t = str::concat("a", "b")
+                u = list::append(xs, 1)
+                v = str::concat(t, t)
+                [str::length(s), s == "packed", str::length(v), list::length(u), p.left, p.right, s]
+
+            [work(pick(false), [1, 2]), work(pick(true), [9])]
+    test::value("pa-live-across-allocation", [[6, true, 4, 3, "keep", 7, "packed"], [0, false, 4, 2, "keep", 7, ""]], packed_live)
+
+    # short-stored-before-and-after-allocation: the same String stored in a
+    # List before and again after other allocations: both Lists hold it.
+    fn short_stored_around_allocation() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "猫"
+
+            fn work(s):
+                first = list::append([], s)
+                filler = str::concat("x", "y")
+                second = list::append(first, s)
+                more = str::concat(filler, filler)
+                [first, second, str::length(more), s]
+
+            [work(pick(false)), work(pick(true))]
+    test::value("short-stored-before-and-after-allocation", [[["猫"], ["猫", "猫"], 4, "猫"], [[""], ["", ""], 4, ""]], short_stored_around_allocation)
+
+    # pa-stored-before-and-after-allocation: the same with "" or "cat".
+    fn packed_stored_around_allocation() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    ""
+                else:
+                    "cat"
+
+            fn work(s):
+                first = list::append([], s)
+                filler = str::concat("x", "y")
+                second = list::append(first, s)
+                more = str::concat(filler, filler)
+                [first, second, str::length(more), s]
+
+            [work(pick(false)), work(pick(true))]
+    test::value("pa-stored-before-and-after-allocation", [[["cat"], ["cat", "cat"], 4, "cat"], [[""], ["", ""], 4, ""]], packed_stored_around_allocation)
+
+    # short-recursive-transport: a one-character String parameter across
+    # 200 recursive frames, each allocating: 200 appended characters plus
+    # 200 one-character parameters.
+    fn short_recursive() errors compiler::CompilerError:
+        static compile:
+            fn step(n):
+                if n == 0:
+                    ""
+                else:
+                    "λ"
+
+            fn depth(n, s, acc):
+                if n == 0:
+                    str::length(acc)
+                else:
+                    t = str::concat(acc, "z")
+                    depth(n - 1, step(n - 1), t) + str::length(s)
+
+            depth(200, step(1), "")
+    test::value("short-recursive-transport", 400, short_recursive)
+
+    # pa-recursive-transport: the same with "word": 200 appended characters
+    # plus 200 four-character parameters.
+    fn packed_recursive() errors compiler::CompilerError:
+        static compile:
+            fn step(n):
+                if n == 0:
+                    ""
+                else:
+                    "word"
+
+            fn depth(n, s, acc):
+                if n == 0:
+                    str::length(acc)
+                else:
+                    t = str::concat(acc, "z")
+                    depth(n - 1, step(n - 1), t) + str::length(s)
+
+            depth(200, step(1), "")
+    test::value("pa-recursive-transport", 1000, packed_recursive)
+
+# ---------------------------------------------------------------------------
+
+fn register_string_representation_tests():
+    register_unicode_model_tests()
+    register_length_and_equality_tests()
+    register_transport_tests()
+    register_storage_tests()
+    register_slice_tests()
+    register_error_tests()
+    register_allocation_tests()
+
+with context test::suite()
+register_string_representation_tests()
+test::report()

@@ -91,8 +91,8 @@ import type byte::Byte
 type Small = Int in 0..10
 
 # ---------------------------------------------------------------------------
-# Custom check: a rejection whose message the Tcl test pins a fragment of (a
-# Tcl glob *A* or *A*B*). lib/test.bot compares codes and locations only.
+# Custom check: a rejection at its location whose message holds the Tcl
+# glob's fragments in order (test::rejects_containing takes one, unlocated).
 
 # The position just past the first occurrence of FRAGMENT in TEXT at or
 # after START, or -1 when there is none.

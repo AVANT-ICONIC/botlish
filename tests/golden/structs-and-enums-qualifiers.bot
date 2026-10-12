@@ -1,0 +1,49 @@
+# structs-and-enums-qualifiers.bot -- a qualifier that names both an enum and
+# a namespace: the source-level specification that `X::Name` is
+# AmbiguousQualifier when the file declares an enum X and X is also a
+# namespace it can reach -- an imported module's (byte, imported here) or an
+# intrinsic one's (mutable_array, never imported here) -- and that neither
+# reading is preferred.
+#
+# Ported from tests/enums.test's enum-module-diagnostics (its "ambiguous" and
+# "intrinsic-namespace" programs; structs-and-enums.bot holds the test's
+# other stock-module ports). A suite of their own: an entry-program enum
+# named after a namespace makes every qualifier of that namespace in the
+# file ambiguous, so the enums byte and mutable_array cannot share a file
+# with code that calls byte:: or mutable_array:: functions.
+#
+# Imports: compiler and test (the framework); byte (the imported namespace
+# the enum byte shadows -- the Tcl program's private module geo, replaced by
+# a stock module this suite otherwise never uses). mutable_array is not
+# imported, as in the Tcl program: its natives are an intrinsic namespace.
+import byte
+import compiler
+import test
+
+# The Tcl program's `enum geo` beside `import geo`.
+enum byte:
+    A,
+
+# The Tcl program's enum named after the intrinsic namespace mutable_array,
+# with a case spelled like that namespace's native.
+enum mutable_array:
+    create,
+
+fn register_ambiguous_qualifier_tests():
+    # enum-module-diagnostics/ambiguous: byte is the imported module and the
+    # entry program's enum.
+    fn b_ambiguous() errors compiler::CompilerError:
+        static compile:
+            byte::A
+    test::rejects("enum-module-diagnostics/ambiguous", compiler::DiagnosticCode::AmbiguousQualifier, b_ambiguous)
+
+    # enum-module-diagnostics/intrinsic-namespace: mutable_array is the
+    # intrinsic namespace and the entry program's enum.
+    fn b_intrinsic_namespace() errors compiler::CompilerError:
+        static compile:
+            mutable_array::create(2, 0)
+    test::rejects("enum-module-diagnostics/intrinsic-namespace", compiler::DiagnosticCode::AmbiguousQualifier, b_intrinsic_namespace)
+
+with context test::suite()
+register_ambiguous_qualifier_tests()
+test::report()

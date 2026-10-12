@@ -1,0 +1,1333 @@
+# structs-and-enums.bot -- structs and enums as values: the source-level
+# specification of
+#
+#   * anonymous struct values `{x: a, y: b}`: no declaration, free newlines
+#     and an optional trailing comma inside the braces, the empty struct `{}`,
+#     nesting, projection `value.field` binding tighter than any operator and
+#     chaining with calls and literals;
+#   * struct equality: structural for anonymous structs (the same field set
+#     and equal values, whatever the written order; recursive through Lists,
+#     Strings and structs; never equal to a List), nominal for named ones (the
+#     same declaration; two declarations with identical fields never compare
+#     equal, nor a named struct and an anonymous one), and a hash that agrees
+#     with it;
+#   * evaluation: field initializers run in SOURCE order, a failing field
+#     completes the whole struct expression with its error (no struct is
+#     built), and struct values capture, sit in fields as callables and join
+#     as `if` values like any value;
+#   * named structs `struct Name:` / `Name {...}`: construction in any field
+#     order, a declaration that is a type and never a value binding, usable
+#     before it is written, in annotations, nested, with a typed callable
+#     field;
+#   * the field diagnostics: DuplicateField (named and anonymous), Type for a
+#     field value not proven admissible (no run-time guard is inserted for an
+#     untyped one), UnknownStruct, UnknownField of a projection, NotAStruct of
+#     a projection from another kind, Type for a nominal mismatch, and a
+#     module that does not declare the struct;
+#   * static projection: never a run-time lookup -- a projection from an
+#     `any` receiver whose function may run generically (it escapes) is
+#     UnprovenField, a semantic instance's call with a non-struct is Type at
+#     the call, and a function nobody can run may hold an unproven projection
+#     (the instances that prove projections run in
+#     structs-and-enums-instances.bot);
+#   * structs in containers (List, MutableArray, ImmutableSet) and a
+#     typed callable's contract that an untyped struct boundary cannot erase;
+#   * enums `enum Name:`: the ENUMS.md acceptance program, the comma-separated
+#     case list, `enum` as a contextual word, case resolution `Name::Case`
+#     (NotAnEnum for a qualifying type that is not an enum, UnknownNamespace
+#     for a qualifier naming nothing, UnknownEnumCase for a case the enum
+#     lacks -- a renamed case included --, a case that is no constructor, no
+#     ordinal, String or reflection operation), case and type names that
+#     never collide with functions, declaration order that does not matter,
+#     and a stock module's enum under the import rules (the two ambiguous
+#     qualifiers are in structs-and-enums-qualifiers.bot);
+#   * enum cases as ordinary unrestricted values: copies, parameters and
+#     results, generic identity, erasure to `any`, struct fields and
+#     destructuring, closures, case-order invariance, List, MutableArray,
+#     MutableVector and ImmutableSet elements, a trait witness, a context
+#     member and a coroutine's outward values.
+#
+# Ported from tests/structs.test and tests/enums.test, which stay
+# authoritative (audit/golden/migration/fragments/structs-and-enums.tsv maps
+# every test; tests/structs-syntax.test is parser-only and stays in Tcl).
+# What only Tcl observes stays there: HIR and NIR text, inferred types and
+# affinities, allocation counts, GC-stress agreement, display order, parser
+# errors and run-time-only failures. Every program here is strict; a
+# run-time theorem about a declared error takes its inputs as parameters of
+# its registration function, so no exact-value fact decides it.
+#
+# Imports: compiler and test (the framework); coroutine (the evaluation-order
+# probe and enum-coroutine-events); list, mutable_array, mutable_vector,
+# immutable_set and str (the container tests; str::concat builds
+# heap-allocated Strings for the GC-stress programs). The method calls of the
+# bodies (`.at`, `.length`, `.set`, `.swap`, `.push`, `.pop`, `.apply`,
+# `.label`) resolve against these imports; no test here is about a missing
+# import or about which methods are visible.
+import compiler
+import coroutine
+import immutable_set
+import list
+import mutable_array
+import mutable_vector
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only). Each keeps the Tcl test's own
+# name unless two tests here would collide (the renames are noted).
+
+# structs.test's $person and $accounts: two declarations with identical
+# fields.
+struct Person:
+    name: str
+    age: int
+
+struct Account:
+    name: str
+    age: int
+
+# struct-named-nested: a named struct nesting a named struct.
+struct Team:
+    lead: Person
+    size: int
+
+# struct-named-function-field: a field holding a typed callable.
+struct Op:
+    apply: Fn{args: [int], return: int, errors: []}
+    label: str
+
+# struct-bearing-attacks: an `any` field and a typed callable field.
+struct Box:
+    value: any
+
+struct Holder:
+    handler: Fn{args: [str], return: int, errors: []}
+
+# struct-eval-error-completion and struct-eval-field-error-propagates.
+error Boom
+
+# enums.test's $vehicle, and the Other enum with a Car case of the
+# generic-identity, erasure and same-spelling tests.
+enum VehicleType:
+    Boat,
+    Car,
+    Truck,
+    Tank,
+    Tractor,
+    Airplane,
+
+enum Other:
+    Car,
+
+# The acceptance program's Vehicle (ENUMS.md, "Acceptance"); enum-struct-fields
+# and enum-native-gc-stress declare the same field set {kind, name}, which
+# only their display order would tell apart: one declaration serves all three.
+struct Vehicle:
+    name: str
+    kind: VehicleType
+
+# enum-principal-rejections: two enums with a case of the same spelling.
+enum A:
+    Same,
+
+enum B:
+    Same,
+
+# enum-syntax-comma-list: the four case-list spellings, each the Tcl
+# program's enum E (renamed: one declaration per spelling).
+enum NoTrailingComma:
+    A,
+    B
+
+enum OneLineCases:
+    A, B, C,
+
+enum BlankLineCases:
+    A,
+
+    B,
+
+enum SingleCase:
+    A
+
+# enum-qualifier-not-an-enum: a struct, a refined Int domain and a trait --
+# types that are not enums (the Tcl programs' P, Small and T; P and T
+# renamed, the trait's operation too).
+struct Plain:
+    a: int
+
+type Small = Int in 0..3
+
+trait Measured:
+    fn measure(x: Measured) -> int
+
+# enum-case-and-function-same-spelling: a function spelled like a case.
+fn Car():
+    7
+
+# enum-declaration-order: a type and a function of the same name.
+fn Color():
+    1
+
+enum Color:
+    Red,
+
+# enum-rename-case: the enum after Car was renamed Automobile (the Tcl
+# program's E).
+enum RenamedVehicle:
+    Automobile,
+    Boat,
+
+# enum-reorder-invariant: one enum in three case orders (the Tcl programs'
+# E, renamed per order).
+enum OrderAB:
+    A,
+    B,
+
+enum OrderBA:
+    B,
+    A,
+
+enum OrderCBDA:
+    C,
+    B,
+    D,
+    A,
+
+# enum-native-no-allocation: an enum struct field.
+struct Item:
+    kind: VehicleType
+    weight: int
+
+# enum-context-field: an enum context member, installed below.
+context struct Settings:
+    mode: VehicleType
+    verbose: bool
+
+fn mode(context s: Settings) -> VehicleType:
+    s.mode
+
+# enum-coroutine-events: a coroutine's outward cases.
+enum Event:
+    Start,
+    Tick,
+    Stop,
+
+# enum-trait-witness: VehicleType witnesses Labeled by the label function of
+# its declaring namespace (this file); describe is trait-polymorphic, so it
+# lives at the top level.
+trait Labeled:
+    fn label(value: Labeled) -> str
+
+fn label(value: VehicleType) -> str:
+    if value == VehicleType::Boat:
+        "boat"
+    else:
+        "other"
+
+fn describe(x: Labeled) -> str:
+    x.label()
+
+# ---------------------------------------------------------------------------
+# Anonymous struct values (structs.test)
+
+fn register_anonymous_struct_tests():
+    # struct-anon-projection: an anonymous struct needs no declaration; a
+    # literal may span lines and end with a comma.
+    fn b_projection() errors compiler::CompilerError:
+        static compile:
+            x = {
+                left: 1,
+                right: 2,
+            }
+            x.left
+    test::value("struct-anon-projection", 1, b_projection)
+
+    # struct-anon-trailing-comma: the trailing comma is optional, and
+    # newlines and indentation are free inside the braces: three spellings of
+    # one value.
+    fn b_trailing() errors compiler::CompilerError:
+        static compile:
+            {a: 1, b: 2,}
+    test::value("struct-anon-trailing-comma/trailing", {a: 1, b: 2}, b_trailing)
+    fn b_plain() errors compiler::CompilerError:
+        static compile:
+            {a: 1, b: 2}
+    test::value("struct-anon-trailing-comma/plain", {a: 1, b: 2}, b_plain)
+    fn b_multiline() errors compiler::CompilerError:
+        static compile:
+            {
+              a: 1,
+              b: 2
+            }
+    test::value("struct-anon-trailing-comma/multiline", {a: 1, b: 2}, b_multiline)
+
+    # struct-anon-empty: the empty struct is a legal value with one shape:
+    # equal to itself, unequal to a struct with a field.
+    fn b_empty() errors compiler::CompilerError:
+        static compile:
+            {}
+    test::value("struct-anon-empty/value", {}, b_empty)
+    fn b_empty_equality() errors compiler::CompilerError:
+        static compile:
+            [{} == {}, {} == {a: 1}]
+    test::value("struct-anon-empty/equality", [true, false], b_empty_equality)
+
+    # struct-anon-nested: anonymous structs nest; a chained projection reads
+    # the inner value.
+    fn b_nested() errors compiler::CompilerError:
+        static compile:
+            x = {a: 1, inner: {b: "z", c: [1, 2]}}
+            x.inner.c
+    test::value("struct-anon-nested", [1, 2], b_nested)
+
+    # struct-anon-projection-of-literal: a literal is projected directly, and
+    # projections chain.
+    fn b_literal_flat() errors compiler::CompilerError:
+        static compile:
+            {f: 1}.f
+    test::value("struct-anon-projection-of-literal/flat", 1, b_literal_flat)
+    fn b_literal_chained() errors compiler::CompilerError:
+        static compile:
+            {a: {b: 7}}.a.b
+    test::value("struct-anon-projection-of-literal/chained", 7, b_literal_chained)
+
+    # struct-anon-call-then-projection: projection binds tighter than * and
+    # +, and chains with calls: 5 + 7 * 2.
+    fn b_call_projection() errors compiler::CompilerError:
+        static compile:
+            fn mk(n):
+                {v: n, w: n + 1}
+            mk(5).v + mk(6).w * 2
+    test::value("struct-anon-call-then-projection", 19, b_call_projection)
+
+# ---------------------------------------------------------------------------
+# Struct equality and hashing (structs.test)
+
+fn register_struct_equality_tests():
+    # struct-eq-order-independent: the same field set and equal values are
+    # equal, whatever the written order.
+    fn b_order_independent() errors compiler::CompilerError:
+        static compile:
+            [{x: 1, y: 2} == {y: 2, x: 1}, {x: 1, y: "a"} == {y: "a", x: 1}]
+    test::value("struct-eq-order-independent", [true, true], b_order_independent)
+
+    # struct-eq-different: a different value, a different field set, a
+    # different field name and a different field kind are each unequal.
+    fn b_different() errors compiler::CompilerError:
+        static compile:
+            [{x: 1} == {x: 2}, {x: 1} == {x: 1, y: 2}, {x: 1} == {y: 1}, {x: 1} == {x: "1"}]
+    test::value("struct-eq-different", [false, false, false, false], b_different)
+
+    # struct-eq-nested: equality recurses through Lists, Strings and structs.
+    fn b_eq_nested() errors compiler::CompilerError:
+        static compile:
+            [{a: [1, {b: "z"}]} == {a: [1, {b: "z"}]}, {a: [1, {b: "z"}]} == {a: [1, {b: "y"}]}]
+    test::value("struct-eq-nested", [true, false], b_eq_nested)
+
+    # struct-eq-not-a-list: a struct is never a List, whatever it holds.
+    fn b_not_a_list() errors compiler::CompilerError:
+        static compile:
+            [{a: 1} == [1], {} == []]
+    test::value("struct-eq-not-a-list", [false, false], b_not_a_list)
+
+    # struct-eq-named: named structs are equal iff of the same declaration
+    # with equal fields, whatever the construction order.
+    fn b_eq_named() errors compiler::CompilerError:
+        static compile:
+            [Person {name: "a", age: 1} == Person {age: 1, name: "a"}, Person {name: "a", age: 1} == Person {age: 2, name: "a"}]
+    test::value("struct-eq-named", [true, false], b_eq_named)
+
+    # struct-eq-nominal: two declarations with identical fields are different
+    # types and never equal.
+    fn b_eq_nominal() errors compiler::CompilerError:
+        static compile:
+            a = Person {name: "a", age: 1}
+            b = Account {name: "a", age: 1}
+            a == b
+    test::value("struct-eq-nominal", false, b_eq_nominal)
+
+    # struct-eq-named-vs-anonymous: a named struct never equals an anonymous
+    # one with the same fields, in either operand order.
+    fn b_named_vs_anonymous() errors compiler::CompilerError:
+        static compile:
+            a = Person {name: "a", age: 1}
+            b = {name: "a", age: 1}
+            [a == b, b == a]
+    test::value("struct-eq-named-vs-anonymous", [false, false], b_named_vs_anonymous)
+
+    # struct-eq-hash-consistent: hash agrees with equality across written
+    # orders, and these unequal structs hash differently.
+    fn b_hash() errors compiler::CompilerError:
+        static compile:
+            [hash({x: 1, y: "a"}) == hash({y: "a", x: 1}), hash({x: 1}) == hash({x: 2}), hash({x: 1}) == hash({y: 1})]
+    test::value("struct-eq-hash-consistent", [true, false, false], b_hash)
+
+# ---------------------------------------------------------------------------
+# Evaluation order, completions, closures (structs.test). The completion
+# tests' inputs ONE, TWO and MINUS_FIVE arrive as parameters: whether the
+# field fails is decided at run time. The if-value test's /dynamic variant
+# takes its condition's operands the same way, so the branches really join.
+
+fn register_struct_evaluation_tests(one: int, two: int, minus_five: int):
+    # struct-eval-source-order: field initializers run in SOURCE order (z, a,
+    # m), not the canonical layout order (a, m, z). The Tcl program draws
+    # tickets from a context-held counter; here each initializer is a probe
+    # that yields its own id inside a coroutine (values.bot's log probe), and
+    # the trace [FIRST, REST] -- FIRST the first yielded id, REST the later
+    # ones and the final struct -- is the order. program declares `-> any`:
+    # its yields (Ints) and its result (the struct) share one outward type.
+    fn b_source_order() errors compiler::CompilerError:
+        static compile:
+            fn ticket(n: int) -> int:
+                yield n
+                n
+            fn program() -> any:
+                {z: ticket(0), a: ticket(1), m: ticket(2)}
+            coroutine {step, first} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value("struct-eval-source-order", [0, [1, 2, {a: 1, m: 2, z: 0}]], b_source_order)
+
+    # struct-eval-error-completion: a failing call completes the struct
+    # expression with its error, which the handler replaces.
+    fn b_error_completion() errors compiler::CompilerError:
+        static compile:
+            fn mayfail(n) errors Boom:
+                if n > 1:
+                    fail Boom
+                {v: n}
+            fn run(n):
+                r = mayfail(n):
+                    on Boom:
+                        {v: 99}
+                r.v
+            [run(one), run(two), run(minus_five)]
+    test::value("struct-eval-error-completion", [1, 99, -5], b_error_completion)
+
+    # struct-eval-field-error-propagates: an error inside a field initializer
+    # leaves no struct built and reaches the caller's handler.
+    fn b_field_error() errors compiler::CompilerError:
+        static compile:
+            fn mayfail(n) errors Boom:
+                if n > 1:
+                    fail Boom
+                n
+            fn build(n) errors Boom:
+                {first: 1, second: mayfail(n), third: 3}
+            fn run(n):
+                r = build(n):
+                    on Boom:
+                        {first: 0, second: 0, third: 0}
+                r.second
+            [run(one), run(two)]
+    test::value("struct-eval-field-error-propagates", [1, 0], b_field_error)
+
+    # struct-closure-capture: a struct value is captured like any value
+    # (/block-local), and returned closures keep their own
+    # (/returned-closures).
+    fn b_capture() errors compiler::CompilerError:
+        static compile:
+            x = {value: "hello"}
+            fn get():
+                x.value
+            get()
+    test::value("struct-closure-capture/block-local", "hello", b_capture)
+    fn b_returned_closures() errors compiler::CompilerError:
+        static compile:
+            fn mk(v):
+                x = {value: v}
+                fn get():
+                    x.value
+                get
+            g = mk("a")
+            h = mk("b")
+            [g(), h()]
+    test::value("struct-closure-capture/returned-closures", ["a", "b"], b_returned_closures)
+
+    # struct-field-callable: a function value in a field is called through
+    # the projection.
+    fn b_field_callable() errors compiler::CompilerError:
+        static compile:
+            fn inc(n: int) -> int:
+                n + 1
+            h = {f: inc, v: 41}
+            h.f(h.v)
+    test::value("struct-field-callable", 42, b_field_callable)
+
+    # struct-if-value: a struct is an ordinary `if` value; branches with one
+    # field set join fieldwise, so the projection compiles. /literal is the
+    # Tcl program (a condition the compiler can decide); /dynamic takes the
+    # condition's operands as parameters.
+    fn b_if_literal() errors compiler::CompilerError:
+        static compile:
+            v = if 1 == 2:
+                {value: "a"}
+            else:
+                {value: "b"}
+            v.value
+    test::value("struct-if-value/literal", "b", b_if_literal)
+    fn b_if_dynamic() errors compiler::CompilerError:
+        static compile:
+            v = if one == two:
+                {value: "a"}
+            else:
+                {value: "b"}
+            v.value
+    test::value("struct-if-value/dynamic", "b", b_if_dynamic)
+
+# ---------------------------------------------------------------------------
+# Named structs (structs.test)
+
+fn register_named_struct_tests():
+    # struct-named-construct: named construction applies the initializer
+    # syntax (lines, trailing comma) to the declared schema.
+    fn b_construct() errors compiler::CompilerError:
+        static compile:
+            p = Person {
+                name: "Ada",
+                age: 36,
+            }
+            p
+    test::value("struct-named-construct", Person {name: "Ada", age: 36}, b_construct)
+
+    # struct-named-any-order: fields may be written in any order; each
+    # projection reads its own field.
+    fn b_any_order() errors compiler::CompilerError:
+        static compile:
+            p = Person {age: 36, name: "Ada"}
+            [p, p.name, p.age]
+    test::value("struct-named-any-order", [Person {name: "Ada", age: 36}, "Ada", 36], b_any_order)
+
+    # struct-named-type-not-value: a struct declaration introduces a type,
+    # not a value binding: a value named Person coexists with the
+    # construction (/binding), and the bare name is unbound (/unbound).
+    fn b_type_binding() errors compiler::CompilerError:
+        static compile:
+            Person = 5
+            p = Person {name: "a", age: 2}
+            [p, Person]
+    test::value("struct-named-type-not-value/binding", [Person {name: "a", age: 2}, 5], b_type_binding)
+    fn b_type_unbound() errors compiler::CompilerError:
+        static compile:
+            x = Person
+            x
+    test::rejects_at("struct-named-type-not-value/unbound", compiler::DiagnosticCode::Unbound, 516, 17, b_type_unbound)
+
+    # struct-named-annotations: a named struct is an ordinary parameter type.
+    fn b_birthday() errors compiler::CompilerError:
+        static compile:
+            fn birthday(p: Person) -> int:
+                p.age + 1
+            birthday(Person {name: "a", age: 1})
+    test::value("struct-named-annotations/birthday", 2, b_birthday)
+    fn b_same_name() errors compiler::CompilerError:
+        static compile:
+            fn same_name(a: Person, b: Person) -> bool:
+                a.name == b.name
+            same_name(Person {name: "a", age: 1}, Person {name: "a", age: 2})
+    test::value("struct-named-annotations/same-name", true, b_same_name)
+
+    # struct-named-nested: named structs nest in named and anonymous
+    # structs; a chained projection reads through them.
+    fn b_named_nested() errors compiler::CompilerError:
+        static compile:
+            t = Team {size: 2, lead: Person {name: "Ada", age: 36}}
+            x = {person: Person {name: "B", age: 1}, active: true}
+            [t, x, t.lead.age]
+    test::value("struct-named-nested", [Team {lead: Person {name: "Ada", age: 36}, size: 2}, {active: true, person: Person {name: "B", age: 1}}, 36], b_named_nested)
+
+    # struct-named-function-field: a named struct field holds a typed
+    # callable, called through the projection.
+    fn b_function_field() errors compiler::CompilerError:
+        static compile:
+            fn inc(n: int) -> int:
+                n + 1
+            o = Op {label: "inc", apply: inc}
+            o.apply(41)
+    test::value("struct-named-function-field", 42, b_function_field)
+
+# struct-named-declared-after-use: struct declarations are types, so order in
+# the file does not matter: LatePerson (the Tcl program's Person, renamed) is
+# declared below this function.
+fn register_struct_declaration_order_tests():
+    fn b_declared_after_use() errors compiler::CompilerError:
+        static compile:
+            p = LatePerson {name: "a", age: 2}
+            p.age
+    test::value("struct-named-declared-after-use", 2, b_declared_after_use)
+
+struct LatePerson:
+    name: str
+    age: int
+
+# ---------------------------------------------------------------------------
+# Field diagnostics (structs.test): each pinned by code and location.
+
+fn register_struct_diagnostic_tests():
+    # struct-error-duplicate-field-named: at the second `age`.
+    fn b_duplicate_named() errors compiler::CompilerError:
+        static compile:
+            p = Person {name: "Ada", age: 1, age: 2}
+            p
+    test::rejects_at("struct-error-duplicate-field-named", compiler::DiagnosticCode::DuplicateField, 574, 46, b_duplicate_named)
+
+    # struct-error-duplicate-field-anon: at the second `a`.
+    fn b_duplicate_anon() errors compiler::CompilerError:
+        static compile:
+            x = {a: 1, a: 2}
+            x
+    test::rejects_at("struct-error-duplicate-field-anon", compiler::DiagnosticCode::DuplicateField, 581, 24, b_duplicate_anon)
+
+    # struct-error-wrong-field-type: a value not proven admissible for the
+    # declared field type is a static Type error, at the field.
+    fn b_wrong_field_type() errors compiler::CompilerError:
+        static compile:
+            p = Person {name: 5, age: 1}
+            p
+    test::rejects_at("struct-error-wrong-field-type", compiler::DiagnosticCode::Type, 589, 25, b_wrong_field_type)
+
+    # struct-error-no-implicit-guard: an untyped value is not proven, and no
+    # run-time guard is inserted for it: Type at the field inside make.
+    fn b_no_implicit_guard() errors compiler::CompilerError:
+        static compile:
+            fn make(x):
+                Person {name: x, age: 36}
+            make("a")
+    test::rejects_at("struct-error-no-implicit-guard", compiler::DiagnosticCode::Type, 598, 25, b_no_implicit_guard)
+
+    # struct-error-unknown-struct: a construction of an undeclared struct
+    # (/undeclared) or of a type that is not a struct (/builtin), at the
+    # name.
+    fn b_unknown_struct() errors compiler::CompilerError:
+        static compile:
+            q = Nope {a: 1}
+            q
+    test::rejects_at("struct-error-unknown-struct/undeclared", compiler::DiagnosticCode::UnknownStruct, 607, 17, b_unknown_struct)
+    fn b_builtin_struct() errors compiler::CompilerError:
+        static compile:
+            q = int {a: 1}
+            q
+    test::rejects_at("struct-error-unknown-struct/builtin", compiler::DiagnosticCode::UnknownStruct, 612, 17, b_builtin_struct)
+
+    # struct-error-missing-projected-field: a projection of a field the
+    # static struct type lacks, named or anonymous, at the field name.
+    fn b_missing_projected_named() errors compiler::CompilerError:
+        static compile:
+            p = Person {name: "a", age: 1}
+            p.height
+    test::rejects_at("struct-error-missing-projected-field/named", compiler::DiagnosticCode::UnknownField, 621, 15, b_missing_projected_named)
+    fn b_missing_projected_anon() errors compiler::CompilerError:
+        static compile:
+            x = {a: 1}
+            x.b
+    test::rejects_at("struct-error-missing-projected-field/anonymous", compiler::DiagnosticCode::UnknownField, 626, 15, b_missing_projected_anon)
+
+    # struct-error-projection-from-non-struct: only a struct has fields.
+    fn b_non_struct() errors compiler::CompilerError:
+        static compile:
+            x = 5
+            x.f
+    test::rejects_at("struct-error-projection-from-non-struct", compiler::DiagnosticCode::NotAStruct, 633, 15, b_non_struct)
+
+    # struct-error-nominal-mismatch: a struct of another declaration
+    # (/named) or an anonymous one (/anonymous) is never a Person: Type at
+    # the argument.
+    fn b_nominal_named() errors compiler::CompilerError:
+        static compile:
+            fn birthday(p: Person) -> int:
+                p.age + 1
+            birthday(Account {name: "a", age: 1})
+    test::rejects_at("struct-error-nominal-mismatch/named", compiler::DiagnosticCode::Type, 643, 22, b_nominal_named)
+    fn b_nominal_anon() errors compiler::CompilerError:
+        static compile:
+            fn birthday(p: Person) -> int:
+                p.age + 1
+            birthday({name: "a", age: 1})
+    test::rejects_at("struct-error-nominal-mismatch/anonymous", compiler::DiagnosticCode::Type, 649, 22, b_nominal_anon)
+
+    # struct-error-unknown-projection-in-function: an unknown field is
+    # diagnosed inside a function nobody calls.
+    fn b_projection_in_function() errors compiler::CompilerError:
+        static compile:
+            fn f(p: Person):
+                p.height
+            1
+    test::rejects_at("struct-error-unknown-projection-in-function", compiler::DiagnosticCode::UnknownField, 657, 19, b_projection_in_function)
+
+    # struct-module-unknown-struct: a qualified struct the module does not
+    # declare. The Tcl test's private module geo (declaring Point) is the
+    # stock module compiler here (declaring SourceLocation); its message is
+    # the property.
+    fn b_module_unknown_struct() errors compiler::CompilerError:
+        static compile:
+            p = compiler::Nope {line: 1}
+            p
+    test::rejects_containing("struct-module-unknown-struct", compiler::DiagnosticCode::UnknownSymbol, "namespace \"compiler\" has no struct \"Nope\" (it declares: SourceLocation)", b_module_unknown_struct)
+
+# ---------------------------------------------------------------------------
+# Static projection: never a run-time lookup (structs.test). The accepted
+# instance programs are in structs-and-enums-instances.bot.
+
+fn register_static_projection_tests():
+    # struct-projection-any-rejected: first's value escapes (it is the
+    # block's value), so first may run generically: UnprovenField at value.
+    fn b_any_rejected() errors compiler::CompilerError:
+        static compile:
+            fn first(x):
+                x.value
+            first
+    test::rejects_at("struct-projection-any-rejected", compiler::DiagnosticCode::UnprovenField, 681, 19, b_any_rejected)
+
+    # struct-projection-instance-non-struct-call: the instance for an Int
+    # argument cannot project: Type at the call.
+    fn b_non_struct_call() errors compiler::CompilerError:
+        static compile:
+            fn first(x):
+                x.value
+            first(5)
+    test::rejects_at("struct-projection-instance-non-struct-call", compiler::DiagnosticCode::Type, 691, 13, b_non_struct_call)
+
+    # struct-projection-escaped-function-rejected: a function whose value
+    # escapes may run generically.
+    fn b_escaped() errors compiler::CompilerError:
+        static compile:
+            fn first(x):
+                x.value
+            f = first
+            f({value: 1})
+    test::rejects("struct-projection-escaped-function-rejected", compiler::DiagnosticCode::UnprovenField, b_escaped)
+
+    # struct-projection-unused-function-ok: a function nobody can run cannot
+    # execute its projection.
+    fn b_unused() errors compiler::CompilerError:
+        static compile:
+            fn first(x):
+                x.value
+            1
+    test::value("struct-projection-unused-function-ok", 1, b_unused)
+
+    # struct-projection-recursive-bad-call-still-rejected: the recursive
+    # function's instance for a non-struct argument is the call's error.
+    fn b_recursive_bad_call() errors compiler::CompilerError:
+        static compile:
+            fn walk(s, i):
+                if i >= 3:
+                    return s.value
+                walk(s, i + 1)
+            walk(5, 0)
+    test::rejects_at("struct-projection-recursive-bad-call-still-rejected", compiler::DiagnosticCode::Type, 721, 13, b_recursive_bad_call)
+
+    # struct-projection-recursive-escape-rejected: a recursive function whose
+    # value escapes can run generically.
+    fn b_recursive_escape() errors compiler::CompilerError:
+        static compile:
+            fn walk(s, i):
+                if i >= 3:
+                    return s.value
+                walk(s, i + 1)
+            f = walk
+            f({value: 1}, 0)
+    test::rejects("struct-projection-recursive-escape-rejected", compiler::DiagnosticCode::UnprovenField, b_recursive_escape)
+
+# ---------------------------------------------------------------------------
+# Containers and contracts (structs.test)
+
+fn register_struct_container_tests():
+    # struct-list-of-anonymous-run: list::at of a List of anonymous structs
+    # keeps the struct type for an index that is at's parameter.
+    fn b_list_of_anonymous() errors compiler::CompilerError:
+        static compile:
+            xs = [{name: "a", age: 1}, {age: 2, name: "b"}]
+            fn at(i) errors IndexNotFound:
+                list::at(xs, i).name
+            [at(0), at(1)]
+    test::value("struct-list-of-anonymous-run", ["a", "b"], b_list_of_anonymous)
+
+    # struct-mutarray-of-structs: a MutableArray of structs; its read is
+    # typed, so the projection compiles.
+    fn b_mutarray_of_structs() errors compiler::CompilerError:
+        static compile:
+            m = mutable_array::from_list([{x: 1}, {x: 2}])
+            e = mutable_array::at(m, 1).x
+            e
+    test::value("struct-mutarray-of-structs", 2, b_mutarray_of_structs)
+
+    # struct-immutable-set-of-structs: an ImmutableSet of structs
+    # deduplicates by struct equality: the two equal {a: 1} are one member.
+    # (The Tcl program only builds s; its value, list::length([1]), does not
+    # read it.)
+    fn b_set_of_structs() errors compiler::CompilerError:
+        static compile:
+            s = immutable_set::from_list([{a: 1}, {a: 1}, {a: 2}])
+            s == immutable_set::from_list([{a: 2}, {a: 1}])
+    test::value("struct-immutable-set-of-structs", true, b_set_of_structs)
+
+    # struct-native-gc-stress: named and nested anonymous structs with
+    # heap-allocated Strings in a 40-element List keep their fields (the Tcl
+    # test also compares the cranelift run under BOTLISH_NATIVE_GC_STRESS=1).
+    fn b_gc_program() errors compiler::CompilerError:
+        static compile:
+            fn build(n):
+                if n < 1:
+                    return []
+                p = Person {name: str::concat("n", "x"), age: n}
+                q = {who: p, tags: [str::concat("a", "b"), str::concat("c", "d")], n: {depth: n}}
+                rest = build(n - 1)
+                list::append(rest, q)
+            xs = build(40)
+            if list::length(xs) == 40:
+                [list::length(xs), list::at(xs, 0).who.age, list::at(xs, 39).n.depth, list::at(xs, 5).tags]
+            else:
+                []
+    test::value("struct-native-gc-stress", [40, 1, 40, ["ab", "cd"]], b_gc_program)
+
+    # struct-bearing-attacks: a typed callable's contract cannot be erased
+    # through an untyped struct boundary -- a struct holding it in a List
+    # (/list-element), in an `any` field (/any-field), passed to an `any`
+    # parameter (/any-parameter), or in a field of an incompatible callable
+    # type (/typed-field). The message names the reason.
+    fn b_bearing_list() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            s = {handler: typed}
+            xs = [s, 5]
+            xs
+    test::rejects_containing("struct-bearing-attacks/list-element", compiler::DiagnosticCode::Type, "has typed parameter requirements that cannot be preserved passed as an ordinary call argument", b_bearing_list)
+    fn b_bearing_any_field() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            b = Box {value: typed}
+            b
+    test::rejects_containing("struct-bearing-attacks/any-field", compiler::DiagnosticCode::Type, "\"typed\" has typed parameter requirements that cannot be preserved stored in field \"value\" of a struct", b_bearing_any_field)
+    fn b_bearing_any_parameter() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            s = {handler: typed}
+            fn f(v: any):
+                v
+            f(s)
+    test::rejects_containing("struct-bearing-attacks/any-parameter", compiler::DiagnosticCode::Type, "has typed parameter requirements that cannot be preserved passed as an ordinary call argument", b_bearing_any_parameter)
+    fn b_bearing_typed_field() errors compiler::CompilerError:
+        static compile:
+            fn typed(k: int) -> int:
+                k + 1
+            h = Holder {handler: typed}
+            h
+    test::rejects_containing("struct-bearing-attacks/typed-field", compiler::DiagnosticCode::Type, "field \"handler\" of struct Holder cannot be proven to satisfy its declared type Fn{args: [str], return: int, errors: []}", b_bearing_typed_field)
+
+# ---------------------------------------------------------------------------
+# The ENUMS.md acceptance program and its rejections (enums.test)
+
+fn register_enum_acceptance_tests():
+    # enum-principal-acceptance: the acceptance program, its functions
+    # nested (with the Tcl adaptations: the parenthesized multi-line `or`,
+    # example's declared IndexNotFound).
+    fn b_acceptance() errors compiler::CompilerError:
+        static compile:
+            fn same(value):
+                value
+
+            fn is_land_vehicle(kind: VehicleType) -> bool:
+                (kind == VehicleType::Car or
+                    kind == VehicleType::Truck or
+                    kind == VehicleType::Tank or
+                    kind == VehicleType::Tractor)
+
+            fn example() -> List[VehicleType] errors IndexNotFound:
+                a = VehicleType::Car
+                b = same(a)
+
+                vehicle = Vehicle {
+                    name: "example",
+                    kind: b,
+                }
+
+                array = mutable_array::create(2, vehicle.kind)
+                vector = mutable_vector::from_list([
+                    array.at(0),
+                    VehicleType::Boat,
+                ])
+
+                [
+                    vector.at(0),
+                    vector.at(1),
+                    a,
+                ]
+
+            xs = example():
+                on IndexNotFound:
+                    []
+            cars = loop x in xs:
+                x == VehicleType::Car
+            [xs, cars, is_land_vehicle(VehicleType::Car), is_land_vehicle(VehicleType::Boat), is_land_vehicle(VehicleType::Airplane)]
+    test::value("enum-principal-acceptance", [[VehicleType::Car, VehicleType::Boat, VehicleType::Car], [true, false, true], true, false, false], b_acceptance)
+
+    # enum-principal-rejections: the acceptance program's rejections a block
+    # can hold -- another enum's case where A is required (/cross-enum-
+    # argument), at the argument, and a case the enum lacks (/unknown-case),
+    # at the qualified name.
+    fn b_cross_enum() errors compiler::CompilerError:
+        static compile:
+            fn wants_a(x: A):
+                x
+
+            wants_a(B::Same)
+    test::rejects_at("enum-principal-rejections/cross-enum-argument", compiler::DiagnosticCode::Type, 881, 21, b_cross_enum)
+    fn b_unknown_case() errors compiler::CompilerError:
+        static compile:
+            VehicleType::Unknown
+    test::rejects_at("enum-principal-rejections/unknown-case", compiler::DiagnosticCode::UnknownEnumCase, 885, 13, b_unknown_case)
+
+# ---------------------------------------------------------------------------
+# Grammar (enums.test)
+
+fn register_enum_syntax_tests():
+    # enum-syntax-comma-list: the cases are one comma-separated list -- no
+    # trailing comma, all on one line, a blank line after a comma, a single
+    # case without a comma -- each declaring the cases it lists.
+    fn b_no_trailing() errors compiler::CompilerError:
+        static compile:
+            NoTrailingComma::B
+    test::value("enum-syntax-comma-list/no-trailing-comma", NoTrailingComma::B, b_no_trailing)
+    fn b_one_line() errors compiler::CompilerError:
+        static compile:
+            OneLineCases::C
+    test::value("enum-syntax-comma-list/one-line", OneLineCases::C, b_one_line)
+    fn b_blank_line() errors compiler::CompilerError:
+        static compile:
+            BlankLineCases::A
+    test::value("enum-syntax-comma-list/blank-line", BlankLineCases::A, b_blank_line)
+    fn b_single_case() errors compiler::CompilerError:
+        static compile:
+            SingleCase::A
+    test::value("enum-syntax-comma-list/single-case", SingleCase::A, b_single_case)
+
+    # enum-syntax-bare-kind-not-a-type: the bare word enum is not a type
+    # (there are no anonymous enum types): Type at the parameter list.
+    fn b_bare_kind() errors compiler::CompilerError:
+        static compile:
+            fn f(x: enum):
+                x
+            f(1)
+    test::rejects_at("enum-syntax-bare-kind-not-a-type", compiler::DiagnosticCode::Type, 916, 17, b_bare_kind)
+
+    # enum-syntax-contextual-word: enum is an ordinary name everywhere but a
+    # declaration's first word: a binding, a parameter, a field.
+    fn b_contextual() errors compiler::CompilerError:
+        static compile:
+            enum = 3
+            fn f(enum):
+                enum + 1
+            x = {enum: 2}
+            [f(enum), x.enum]
+    test::value("enum-syntax-contextual-word", [4, 2], b_contextual)
+
+# ---------------------------------------------------------------------------
+# Case resolution (enums.test)
+
+fn register_enum_resolution_tests():
+    # enum-qualifier-not-an-enum: a case qualified by a type that is not an
+    # enum -- a struct, a refined domain, a trait, a built-in type -- is
+    # NotAnEnum (a type is not a namespace), at the qualified name.
+    fn b_struct_qualifier() errors compiler::CompilerError:
+        static compile:
+            Plain::Car
+    test::rejects_at("enum-qualifier-not-an-enum/struct", compiler::DiagnosticCode::NotAnEnum, 941, 13, b_struct_qualifier)
+    fn b_type_qualifier() errors compiler::CompilerError:
+        static compile:
+            Small::Car
+    test::rejects_at("enum-qualifier-not-an-enum/type", compiler::DiagnosticCode::NotAnEnum, 945, 13, b_type_qualifier)
+    fn b_trait_qualifier() errors compiler::CompilerError:
+        static compile:
+            Measured::Car
+    test::rejects_at("enum-qualifier-not-an-enum/trait", compiler::DiagnosticCode::NotAnEnum, 949, 13, b_trait_qualifier)
+    fn b_int_qualifier() errors compiler::CompilerError:
+        static compile:
+            int::Car
+    test::rejects_at("enum-qualifier-not-an-enum/int", compiler::DiagnosticCode::NotAnEnum, 953, 13, b_int_qualifier)
+    fn b_fn_qualifier() errors compiler::CompilerError:
+        static compile:
+            Fn::Car
+    test::rejects_at("enum-qualifier-not-an-enum/fn", compiler::DiagnosticCode::NotAnEnum, 957, 13, b_fn_qualifier)
+
+    # enum-qualifier-unknown: a qualifier that names nothing is an unknown
+    # namespace. (The Tcl program's Vehicle is a struct of this suite's
+    # acceptance program: the qualifier is spelled Vehicles here.)
+    fn b_unknown_qualifier() errors compiler::CompilerError:
+        static compile:
+            Vehicles::Car
+    test::rejects_at("enum-qualifier-unknown", compiler::DiagnosticCode::UnknownNamespace, 965, 13, b_unknown_qualifier)
+
+    # enum-case-and-function-same-spelling: the top-level function Car and
+    # the cases VehicleType::Car and Other::Car are three different lookups.
+    fn b_same_spelling() errors compiler::CompilerError:
+        static compile:
+            [Car(), VehicleType::Car, Other::Car, VehicleType::Car == Other::Car]
+    test::value("enum-case-and-function-same-spelling", [7, VehicleType::Car, Other::Car, false], b_same_spelling)
+
+    # enum-declaration-order (/type-and-function): an enum type name never
+    # collides with a function of that name (both at the top level).
+    fn b_type_and_function() errors compiler::CompilerError:
+        static compile:
+            [Color(), Color::Red]
+    test::value("enum-declaration-order/type-and-function", [1, Color::Red], b_type_and_function)
+
+    # enum-case-is-not-a-constructor: a payload-free case takes no braces:
+    # NotAStruct at the qualified name.
+    fn b_case_braces() errors compiler::CompilerError:
+        static compile:
+            VehicleType::Car {}
+    test::rejects_at("enum-case-is-not-a-constructor", compiler::DiagnosticCode::NotAStruct, 986, 13, b_case_braces)
+
+    # enum-rename-case: renaming a case is an API rename: the old name fails
+    # resolution.
+    fn b_renamed_case() errors compiler::CompilerError:
+        static compile:
+            RenamedVehicle::Car
+    test::rejects_at("enum-rename-case", compiler::DiagnosticCode::UnknownEnumCase, 993, 13, b_renamed_case)
+
+    # enum-no-intrinsic-mappings: no ordinal, integer, String or reflection
+    # operation exists for an enum: a method call on a case is NotAStruct, an
+    # enum namespace is unknown, and a conversion is an unknown case.
+    fn b_ordinal() errors compiler::CompilerError:
+        static compile:
+            VehicleType::Car.ordinal()
+    test::rejects("enum-no-intrinsic-mappings/ordinal", compiler::DiagnosticCode::NotAStruct, b_ordinal)
+    fn b_name() errors compiler::CompilerError:
+        static compile:
+            VehicleType::Car.name()
+    test::rejects("enum-no-intrinsic-mappings/name", compiler::DiagnosticCode::NotAStruct, b_name)
+    fn b_to_string() errors compiler::CompilerError:
+        static compile:
+            VehicleType::Car.to_string()
+    test::rejects("enum-no-intrinsic-mappings/to-string", compiler::DiagnosticCode::NotAStruct, b_to_string)
+    fn b_raw_value() errors compiler::CompilerError:
+        static compile:
+            VehicleType::Car.raw_value()
+    test::rejects("enum-no-intrinsic-mappings/raw-value", compiler::DiagnosticCode::NotAStruct, b_raw_value)
+    fn b_case_name() errors compiler::CompilerError:
+        static compile:
+            VehicleType::Car.case_name()
+    test::rejects("enum-no-intrinsic-mappings/case-name", compiler::DiagnosticCode::NotAStruct, b_case_name)
+    fn b_enum_cases() errors compiler::CompilerError:
+        static compile:
+            enum::cases(VehicleType)
+    test::rejects("enum-no-intrinsic-mappings/enum-cases", compiler::DiagnosticCode::UnknownNamespace, b_enum_cases)
+    fn b_from_string() errors compiler::CompilerError:
+        static compile:
+            VehicleType::from_string("Car")
+    test::rejects("enum-no-intrinsic-mappings/from-string", compiler::DiagnosticCode::UnknownEnumCase, b_from_string)
+    fn b_from_int() errors compiler::CompilerError:
+        static compile:
+            VehicleType::from_int(1)
+    test::rejects("enum-no-intrinsic-mappings/from-int", compiler::DiagnosticCode::UnknownEnumCase, b_from_int)
+
+    # enum-module-diagnostics: a module's enum follows the import rules of
+    # its namespace. The Tcl test's private modules (geo's VehicleType,
+    # shapes' Point) are the stock module compiler's enum DiagnosticCode and
+    # struct SourceLocation here: a case the module's enum lacks
+    # (/unknown-case), the enum's short name without `import type`
+    # (/unqualified), and a module's struct as a qualifier (/struct-qualifier).
+    fn b_module_unknown_case() errors compiler::CompilerError:
+        static compile:
+            compiler::DiagnosticCode::Truck
+    test::rejects("enum-module-diagnostics/unknown-case", compiler::DiagnosticCode::UnknownEnumCase, b_module_unknown_case)
+    fn b_module_unqualified() errors compiler::CompilerError:
+        static compile:
+            DiagnosticCode::Type
+    test::rejects("enum-module-diagnostics/unqualified", compiler::DiagnosticCode::UnknownNamespace, b_module_unqualified)
+    fn b_module_struct_qualifier() errors compiler::CompilerError:
+        static compile:
+            compiler::SourceLocation::Car
+    test::rejects("enum-module-diagnostics/struct-qualifier", compiler::DiagnosticCode::NotAnEnum, b_module_struct_qualifier)
+
+# enum-declaration-order (/before-declaration): an enum is a type
+# declaration, usable before it is written: LateEnum (the Tcl program's E,
+# renamed) is declared below this function.
+fn register_enum_declaration_order_tests():
+    fn b_before_declaration() errors compiler::CompilerError:
+        static compile:
+            x = LateEnum::A
+            [x, LateEnum::B]
+    test::value("enum-declaration-order/before-declaration", [LateEnum::A, LateEnum::B], b_before_declaration)
+
+enum LateEnum:
+    A,
+    B,
+
+# ---------------------------------------------------------------------------
+# Cases as values (enums.test)
+
+fn register_enum_value_tests():
+    # enum-copies: a case is an ordinary unrestricted value: every copy stays
+    # usable.
+    fn b_copies() errors compiler::CompilerError:
+        static compile:
+            a = VehicleType::Car
+            b = a
+            c = b
+            [a, b, c, a == c]
+    test::value("enum-copies", [VehicleType::Car, VehicleType::Car, VehicleType::Car, true], b_copies)
+
+    # enum-calls-returns: enums are ordinary parameter and result types.
+    fn b_calls_returns() errors compiler::CompilerError:
+        static compile:
+            fn is_car(value: VehicleType) -> bool:
+                value == VehicleType::Car
+
+            fn default_vehicle() -> VehicleType:
+                VehicleType::Truck
+
+            [is_car(VehicleType::Car), is_car(default_vehicle()), default_vehicle()]
+    test::value("enum-calls-returns", [true, false, VehicleType::Truck], b_calls_returns)
+
+    # enum-generic-identity: a generic function passes a case through and
+    # keeps its nominal identity.
+    fn b_generic_identity() errors compiler::CompilerError:
+        static compile:
+            fn same(x):
+                x
+            a = VehicleType::Car
+            b = same(a)
+            c = same(Other::Car)
+            [a, b, c, a == b, b == c]
+    test::value("enum-generic-identity", [VehicleType::Car, VehicleType::Car, Other::Car, true, false], b_generic_identity)
+
+    # enum-erasure: a case enters `any` (an untyped position, a
+    # heterogeneous List) and keeps its identity.
+    fn b_erasure() errors compiler::CompilerError:
+        static compile:
+            fn erase(x: any) -> any:
+                x
+            xs = [VehicleType::Car, 1, "s", Other::Car]
+            [erase(VehicleType::Car) == VehicleType::Car, erase(Other::Car) == VehicleType::Car, xs]
+    test::value("enum-erasure", [true, false, [VehicleType::Car, 1, "s", Other::Car]], b_erasure)
+
+    # enum-struct-fields: an enum is an ordinary struct field; destructuring
+    # exposes an ordinary case value.
+    fn b_struct_fields() errors compiler::CompilerError:
+        static compile:
+            v = Vehicle {kind: VehicleType::Tank, name: "t"}
+            {kind: k} = v
+            w = Vehicle {name: "t", kind: k}
+            [v.kind, k, v == w, k == VehicleType::Tank, {kind: VehicleType::Boat}]
+    test::value("enum-struct-fields", [VehicleType::Tank, VehicleType::Tank, true, true, {kind: VehicleType::Boat}], b_struct_fields)
+
+    # enum-closures: a closure captures a case like any other value.
+    fn b_closures() errors compiler::CompilerError:
+        static compile:
+            fn matcher(target: VehicleType):
+                fn matches(v: VehicleType) -> bool:
+                    v == target
+                matches
+            is_tank = matcher(VehicleType::Tank)
+            [is_tank(VehicleType::Tank), is_tank(VehicleType::Car)]
+    test::value("enum-closures", [true, false], b_closures)
+
+# enum-reorder-invariant: reordering or adding cases changes no
+# program-visible behavior: the one program over the enum in each case order
+# (OrderAB, OrderBA, OrderCBDA) has the same value.
+fn register_enum_reorder_tests():
+    fn b_order_ab() errors compiler::CompilerError:
+        static compile:
+            x = OrderAB::B
+            y = OrderAB::A
+            [x, y, x == y, x == OrderAB::B, hash(x) == hash(OrderAB::B), immutable_set::contains(immutable_set::from_list([x, y, x]), OrderAB::B)]
+    test::value("enum-reorder-invariant/order-ab", [OrderAB::B, OrderAB::A, false, true, true, true], b_order_ab)
+    fn b_order_ba() errors compiler::CompilerError:
+        static compile:
+            x = OrderBA::B
+            y = OrderBA::A
+            [x, y, x == y, x == OrderBA::B, hash(x) == hash(OrderBA::B), immutable_set::contains(immutable_set::from_list([x, y, x]), OrderBA::B)]
+    test::value("enum-reorder-invariant/order-ba", [OrderBA::B, OrderBA::A, false, true, true, true], b_order_ba)
+    fn b_order_cbda() errors compiler::CompilerError:
+        static compile:
+            x = OrderCBDA::B
+            y = OrderCBDA::A
+            [x, y, x == y, x == OrderCBDA::B, hash(x) == hash(OrderCBDA::B), immutable_set::contains(immutable_set::from_list([x, y, x]), OrderCBDA::B)]
+    test::value("enum-reorder-invariant/order-cbda", [OrderCBDA::B, OrderCBDA::A, false, true, true, true], b_order_cbda)
+
+# ---------------------------------------------------------------------------
+# Cases in collections (enums.test)
+
+fn register_enum_collection_tests():
+    # enum-list: List[VehicleType]: construction, iteration, membership by
+    # equality.
+    fn b_list() errors compiler::CompilerError:
+        static compile:
+            fn has(xs: List[VehicleType], v: VehicleType) -> bool:
+                loop x in xs:
+                    if x == v:
+                        return true
+                false
+            xs = [VehicleType::Car, VehicleType::Boat, VehicleType::Car]
+            land = loop x in xs:
+                if x == VehicleType::Boat:
+                    continue
+                x
+            [xs, land, list::length(land), has(xs, VehicleType::Boat), has(xs, VehicleType::Tank)]
+    test::value("enum-list", [[VehicleType::Car, VehicleType::Boat, VehicleType::Car], [VehicleType::Car, VehicleType::Car], 2, true, false], b_list)
+
+    # enum-mutable-array: MutableArray[VehicleType]: repeated and factory
+    # construction, at, set, swap.
+    fn b_mutable_array() errors compiler::CompilerError:
+        static compile:
+            fn vehicle_for_index(i: int) -> VehicleType:
+                if i == 0:
+                    VehicleType::Boat
+                else:
+                    VehicleType::Car
+
+            fn run() -> List[VehicleType] errors IndexNotFound:
+                a = mutable_array::create(3, VehicleType::Car)
+                g = mutable_array::generate(3, vehicle_for_index)
+                a.set(1, VehicleType::Tank)
+                old = g.swap(2, VehicleType::Truck)
+                [a.at(0), a.at(1), a.at(2), g.at(0), g.at(2), old]
+
+            run():
+                on IndexNotFound:
+                    []
+    test::value("enum-mutable-array", [VehicleType::Car, VehicleType::Tank, VehicleType::Car, VehicleType::Boat, VehicleType::Truck, VehicleType::Car], b_mutable_array)
+
+    # enum-mutable-vector: MutableVector[VehicleType]: push, pop, swap, at,
+    # iteration.
+    fn b_mutable_vector() errors compiler::CompilerError:
+        static compile:
+            fn run() -> List[VehicleType] errors IndexNotFound:
+                v = mutable_vector::from_list([VehicleType::Boat])
+                v.push(VehicleType::Car)
+                v.push(VehicleType::Tank)
+                top = v.pop()
+                old = v.swap(0, VehicleType::Tractor)
+                seen = loop x in v:
+                    x
+                [top, old, v.at(0), v.length() == 2] == [top, old, v.at(0), true]
+                list::append(seen, top)
+
+            run():
+                on IndexNotFound:
+                    []
+    test::value("enum-mutable-vector", [VehicleType::Tractor, VehicleType::Car, VehicleType::Tank], b_mutable_vector)
+
+    # enum-collections-unrestricted: collections of cases stay unrestricted:
+    # create repeats the case, and every copy stays usable.
+    fn b_unrestricted() errors compiler::CompilerError:
+        static compile:
+            a = mutable_array::create(2, VehicleType::Car)
+            b = a
+            v = mutable_vector::from_list([VehicleType::Car])
+            w = v
+            xs = [VehicleType::Car]
+            ys = xs
+            [mutable_array::get(a, 0, VehicleType::Boat), mutable_array::get(b, 1, VehicleType::Boat), xs == ys]
+    test::value("enum-collections-unrestricted", [VehicleType::Car, VehicleType::Car, true], b_unrestricted)
+
+    # enum-native-gc-stress: cases in 30 structs with heap-allocated Strings
+    # keep their identity (the Tcl test also compares the cranelift run under
+    # BOTLISH_NATIVE_GC_STRESS=1); the set of kinds compares by ==.
+    fn b_gc_program() errors compiler::CompilerError:
+        static compile:
+            fn build(n: int) -> List[Vehicle]:
+                loop i from 0 to n:
+                    k = if i == 0:
+                        VehicleType::Boat
+                    else:
+                        VehicleType::Car
+                    Vehicle {kind: k, name: str::concat("v", "x")}
+            xs = build(30)
+            kinds = loop v in xs:
+                v.kind
+            [list::length(xs), kinds == kinds, immutable_set::from_list(kinds)]
+    test::value("enum-native-gc-stress", [30, true, immutable_set::from_list([VehicleType::Boat, VehicleType::Car])], b_gc_program)
+
+# ---------------------------------------------------------------------------
+# Enums with traits, contexts, coroutines and native code (enums.test)
+
+fn register_enum_composition_tests():
+    # enum-trait-witness: VehicleType witnesses Labeled through the label
+    # function of its declaring namespace; describe is the top-level
+    # trait-polymorphic function.
+    fn b_trait_witness() errors compiler::CompilerError:
+        static compile:
+            [describe(VehicleType::Boat), describe(VehicleType::Car)]
+    test::value("enum-trait-witness", ["boat", "other"], b_trait_witness)
+
+    # enum-context-field: an enum is an ordinary context member. A body
+    # cannot need a context, so the registration reads the installed Settings
+    # (twice, as the Tcl program does) and the body compares what it read.
+    observed = mode()
+    observed_is_tank = mode() == VehicleType::Tank
+    fn b_context_field() errors compiler::CompilerError:
+        static compile:
+            [observed, observed_is_tank]
+    test::value("enum-context-field", [VehicleType::Tank, true], b_context_field)
+
+    # enum-coroutine-events: a coroutine yields and returns cases; enums add
+    # nothing to coroutine semantics.
+    fn b_coroutine_events() errors compiler::CompilerError:
+        static compile:
+            fn events(n: int) -> Event:
+                yield Event::Start
+                loop i from 0 to n:
+                    yield Event::Tick
+                Event::Stop
+            coroutine {step: s, first: first} = events(2)
+            second = s()
+            third = s()
+            fourth = s()
+            [first, second, third, fourth, coroutine::done?(s)]
+    test::value("enum-coroutine-events", [Event::Start, Event::Tick, Event::Tick, Event::Stop, true], b_coroutine_events)
+
+    # enum-native-no-allocation: ordinary enum operations through an enum
+    # struct field, 100 steps deep (the Tcl test also pins zero native
+    # allocations and the field's scalar replacement).
+    fn b_no_allocation() errors compiler::CompilerError:
+        static compile:
+            fn next(k: VehicleType) -> VehicleType:
+                if k == VehicleType::Car:
+                    VehicleType::Truck
+                else:
+                    VehicleType::Car
+
+            fn step(item: Item) -> Item:
+                Item {kind: next(item.kind), weight: item.weight + 1}
+
+            fn run(n: int, k: VehicleType, acc: int) -> int:
+                if n == 0:
+                    return acc
+                item = step(Item {kind: k, weight: n})
+                if item.kind == VehicleType::Truck:
+                    run(n - 1, item.kind, acc + 1)
+                else:
+                    run(n - 1, item.kind, acc)
+
+            run(100, VehicleType::Car, 0)
+    test::value("enum-native-no-allocation", 50, b_no_allocation)
+
+with context test::suite()
+with context Settings {mode: VehicleType::Tank, verbose: false}
+register_anonymous_struct_tests()
+register_struct_equality_tests()
+register_struct_evaluation_tests(1, 2, -5)
+register_named_struct_tests()
+register_struct_declaration_order_tests()
+register_struct_diagnostic_tests()
+register_static_projection_tests()
+register_struct_container_tests()
+register_enum_acceptance_tests()
+register_enum_syntax_tests()
+register_enum_resolution_tests()
+register_enum_declaration_order_tests()
+register_enum_value_tests()
+register_enum_reorder_tests()
+register_enum_collection_tests()
+register_enum_composition_tests()
+test::report()

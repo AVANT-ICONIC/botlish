@@ -1,0 +1,47 @@
+# methods-list-without-str.bot -- method-call sugar (METHOD-SUGAR.md) in a
+# file that imports list but neither str nor byte: importing a namespace
+# makes only that namespace's functions candidates. Another namespace's
+# member of the method's name stays invisible, whatever else is imported or
+# bound, and a module that declares the receiver's type contributes nothing
+# unless it is imported.
+#
+# Ports the halves of tests/method-sugar.test (which stays authoritative and
+# unchanged) whose programs import list or nothing and need str and byte
+# absent (the halves with them imported are in methods.bot):
+# method-not-visible-other-namespace-import and
+# method-not-visible-no-type-import-needed-or-used (its program without any
+# import).
+#
+# Imports: compiler and test (the framework); list (the Tcl programs' own
+# import). The absence of `import str` and `import byte` is the property:
+# str::concat and byte::complement must not be candidates. (The framework's
+# own imports add no member named concat or complement.)
+import compiler
+import list
+import test
+
+fn register_visibility_tests():
+    # method-not-visible-other-namespace-import: with only list imported,
+    # "abc".concat("d") finds no function `concat`, bound list member or not.
+    fn b_bound_list_member() errors compiler::CompilerError:
+        static compile:
+            at = list::at
+            "abc".concat("d")
+    fn b_list_imported() errors compiler::CompilerError:
+        static compile:
+            "abc".concat("d")
+    test::rejects_containing("method-not-visible-other-namespace-import/bound-list-member", compiler::DiagnosticCode::NotAStruct, "no function named \"concat\" is visible here either", b_bound_list_member)
+    test::rejects_containing("method-not-visible-other-namespace-import/list-imported", compiler::DiagnosticCode::NotAStruct, "no function named \"concat\" is visible here either", b_list_imported)
+
+    # method-not-visible-no-type-import-needed-or-used: byte::complement
+    # takes a Byte, but with nothing of byte imported 200.complement() has
+    # no function `complement` in scope.
+    fn b_no_import() errors compiler::CompilerError:
+        static compile:
+            x = 200
+            x.complement()
+    test::rejects_containing("method-not-visible-no-type-import-needed-or-used/no-import", compiler::DiagnosticCode::NotAStruct, "no function named \"complement\" is visible here either", b_no_import)
+
+with context test::suite()
+register_visibility_tests()
+test::report()
