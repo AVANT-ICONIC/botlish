@@ -840,6 +840,11 @@ On the tree after (interp):
 * `bench/static-decisions.tcl -parts erased -sizes 10 -check 1`: the
   decided programs equal under batched and sequential (the 4-contributor
   rows, sizes 10 to 200: 3/3, were 5/5).
+* `tests/golden/run.tcl -backends interp` on the suites whose messages or
+  decisions changed most (callables, compiled-values,
+  range-and-contract-values, affinity, declared-errors, structs-and-enums,
+  mutable-array, traits, callable-contracts, opaque): 1086 tests, all
+  passing.
 
 ## Method-call decisions
 
