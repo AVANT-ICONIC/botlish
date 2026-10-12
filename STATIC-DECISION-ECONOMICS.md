@@ -157,8 +157,9 @@ missed a channel. None occurs in any suite, fuzz program or test.
 
 | node | depends on |
 |---|---|
-| `Z:site` | its region (*position*: its rejection can make the code after it unreachable, where completion and ownership diagnostics are not reported), the sites nested in it, its own contract-boundary checks |
-| `R:region` (a function literal or a program's top-level code) | everything its own code mentions: bindings, the functions it defines and calls (their summaries), every method-call candidate, its parameters and captures, the control operands around its literal, the narrowings of each capture between its definition and the region -- *not* the rest of the enclosing function: a function is analyzed from its own entry |
+| `D:site` (the site's own diagnostics: what a site depends on is what this node reaches) | `Z:site`, and its own contract-boundary checks where one can report, while a report may be its first diagnostic ([what the checks read](#what-the-contract-boundary-checks-read)) |
+| `Z:site` (the site as the code around it sees it) | its region (*position*: its rejection can make the code after it unreachable, where completion and ownership diagnostics are not reported), the sites nested in it |
+| `R:region` (a function literal or a program's top-level code) | everything its own code mentions: bindings, the functions it defines and calls (their summaries), every method-call candidate and what the candidates' trial builds judge of the contract boundary, its parameters and captures, the control operands around its literal, the narrowings of each capture between its definition and the region -- *not* the rest of the enclosing function: a function is analyzed from its own entry |
 | `B:binding` | its definition, every narrowing mention in its own region ([every mention](#every-mention)); an untyped parameter also every reachable use in its function and the functions nested in it (its inferred contract); an affine or mutable binding -- never one holding a callable -- every region mentioning it |
 | `C:erased` (the erased-callable contract) | its contributors: the instance requests whose arguments at uncontracted parameters can carry errors (by those arguments and the call's place, up the chain of requests), the positions of contravariant erasure, the requests the budget declined |
 | `C:budget:B` | every call requesting one of B's instances, only under pressure |
@@ -376,7 +377,10 @@ diagnostics only while the program erases something, and reads what it
 erases (`SubsumeSuccessors`); the old analysis looked at one expression of
 each site and so saw the edge only by chance. Whether the check can change
 a site's *first* diagnostic is not decided here -- that would refine the
-channel, not repair the walk.
+channel, not repair the walk. ([What the contract-boundary checks
+read](#what-the-contract-boundary-checks-read) is that refinement: every
+suite of this table is back at its count before this change, and
+`affinity.bot` predicts right again.)
 
 **Not modelled yet: the plan's gate.** `hir::traits::Plan` -- the trait
 monomorphization's plan, which runs only on a program with no diagnostic at
@@ -384,7 +388,9 @@ all -- reports ordinary site diagnostics (TRAIT-IMPL-ORDER,
 AFFINE-GENERIC-NESTED-UNSUPPORTED, TRAIT-INSTANCE-BUDGET, ...). A site
 holding one fails only once every other diagnostic is gone, and no edge says
 so: `traits.bot` mispredicted before this change and still does, and
-`affinity.bot`'s new schedule exposes it. A three-site program (two TYPE
+`affinity.bot`'s new schedule exposed it (with the refined contract-boundary
+channel below, its schedule is the old one again and predicts right; the
+plan's channel is still missing). A three-site program (two TYPE
 failures around an AFFINE-GENERIC-NESTED-UNSUPPORTED one) mispredicts on
 the tree before this change. The decisions stay the sequential order's in
 every case measured (a build reports plan diagnostics only when it reports
@@ -398,6 +404,160 @@ loops, lists-and-sets, flags, coroutines and mutable-vector: every suite
 batched = sequential exactly, no misprediction; the fuzzer, seeds 1 (10
 programs), 2 and 3 (20 each, seed 3 with legacy): 50 programs, 1348 sites,
 0 failures; `mutate.tcl` (in three `-only` runs): 22 mutants, 22 applied and killed.
+
+### What the contract-boundary checks read
+
+A refinement of the channel [every mention](#every-mention) made whole.
+Counting every position of a site, every site holding a coroutine handle or
+a callable at a contract-boundary position depended on the erased-callable
+contract and waited for every erasing site's rejection -- and so did every
+method-style call in a function holding such a site, whose cone went
+`R -> holds Z -> subsume C:erased -> erasure Z`: decided again in every
+checked round. Five golden suites took 30 builds more (the table above).
+The edge mostly encoded the check's *gate* (whether anything is erased);
+what it reads of the contract's content reaches a site through other edges
+too.
+
+**Who reads a report.** `hir::completions::ReportOutside` is called by
+`Subsume` and `SubsumeHandle` alone, in the completion walk
+(`hir::completions::checkBlock`, which `hir::errorsets::verify` alone
+calls), and only while the program erases something. No analysis reads a
+report: the semantic instances' check and the ownership analysis run before
+that walk, the later passes read no diagnostic. Three things do:
+
+1. the site's own diagnostics -- of which the scheduler reads whether the
+   site fails and, if it does, its first diagnostic (`Simulate`'s status,
+   the rejection it commits, the prediction the next build checks);
+2. the trial builds of a method-style call (`hir::MethodCallProblems`: the
+   diagnostics inside the call, minus those every candidate shares);
+3. the "no diagnostic at all" gate of the trait monomorphization's plan --
+   not modelled, as [before](#every-mention).
+
+The channel now follows exactly these (`hir/staticdeps.tcl`'s header):
+
+* **A site's checks are its own diagnostics'.** A site is two nodes:
+  `Z:site`, its form as the code around it sees it (position, nesting, the
+  ownership verdict's edges), and `D:site`, its own diagnostics, with
+  `D:site -> Z:site` and the contract-boundary edges. What a site depends on
+  is what `D:site` reaches; a region holding the site reaches `Z:site`
+  only. A region's facts read a held site's form -- its body, or the
+  reified failure that replaces it -- never its reports (1 and 3 above are
+  not facts of a region; 2 is the next rule).
+* **What a method-style call's trials judge** (`method-trial`).
+  A candidate's parameter types are the structural types the call's own
+  arguments acquire (`hir::callables::ArgContexts`), so the check of an
+  argument may report in one candidate's trial and not in another's, and
+  decide the call. `R:region -> C:erased` and `-> P:input` for every call
+  with several candidates of which an argument has a callable part some
+  parameter type could make structural (`CallableParts`: what
+  `hir::completions::Align` finds for every target at once); for a handle
+  argument only while a candidate is a coroutine operation, whose positions
+  the check skips -- a handle's check reads no parameter type. Every other
+  check inside the call reports alike in every trial, a problem every
+  candidate shares, which decides nothing: the arguments are analyzed
+  before the call from the same facts, and resolution numbers them alike for
+  any candidate (the candidate is one callee `ref`). The graph before saw a
+  call's trials only through a site's own positions, at the chosen
+  candidate's parameter types, and not at all outside every site -- a gap
+  `se-equal-method-trial` shows: `n.apply(mutable_array::generate)` with a
+  lexical `apply` typing its callable `Fn{args: [int, any], ...}` (generate
+  calls its second argument, uncontracted there, so it may raise whatever
+  the program erases) and `pick::apply` leaving it untyped. While a
+  contributor erases `raise_e` only `pick::apply` fits; once the contributor
+  is rejected both fit, AMBIGUOUS-METHOD-CALL. The tree before this change
+  reused the decision and accepted the block, where the sequential order
+  rejects it.
+* **Only where a check can report.** Not at a coroutine operation's own
+  operand -- the handle a resume resumes, the thunk a construction runs:
+  `SubsumeCall` skips their positions. (A resume written out from a call of
+  a handle, `hir::coroutines::ElaborateResumes`, was checked as that call:
+  the handle was its callee, its messages arguments -- so the operand alone
+  is skipped.) At a handle only when its construction is in the body
+  (`hir::coroutines::thunkOfHandle`; `SubsumeHandle` returns at once
+  otherwise). What `thunkOfHandle` finds no other site's rejection changes:
+  it follows the value's binding through the bindings defining it -- all
+  visible at the handle, so declared in the site, in a site around it or
+  outside every site (a site's own bindings are scoped to it) -- to a
+  `coroutine#create` call, whose thunk is the block literal it is given.
+* **Only while a report can be the first diagnostic.** `hir::CheckOnce`
+  records the diagnostics reported before the completion walk
+  (`beforeCompletions`: the range of their indices), and every report is
+  appended after them. A site that fails in this build with its first
+  diagnostic among them keeps that first diagnostic whatever the program
+  erases -- what decides it is read through the site's other edges -- so
+  `D:site` takes no contract-boundary edge. A site that is ok, or fails
+  first with the completion walk's diagnostic or a later pass's, keeps the
+  edges: a report may become (or stop being) its first diagnostic, also
+  when the program begins to erase something. So does a site failing first
+  with a method-style call's rejection: `DecideMethodCalls` prepends it and
+  shifts the range past it, since its message names each candidate's first
+  problem in its trial, which may be a report. (`hir::check`'s demotion
+  rerun keeps the first check's range with its diagnostics.)
+
+Why the scheduler stays exact: `Simulate` reads of a site its status and,
+while it fails, its first diagnostic. A failing site without
+contract-boundary edges keeps both as long as nothing its other edges reach
+is rejected; an ok site keeps every edge; components and predictions are
+computed from the same relation, and fewer edges only split components no
+remaining edge links. The method decisions' reuse reads the cones from the
+regions, which keep every edge their trials read.
+
+| suite | before | after | before [every mention](#every-mention) |
+|---|---|---|---|
+| `ownership.bot` | 5/24 (15 method trials) | 4/11 (5) | 4/11 |
+| `mutable-array.bot` | 7/34 (24) | 6/21 (14) | 6/21 |
+| `framework-semantics.bot` | 5/9 | 3/7 | 3/7 |
+| `linux-io.bot` | 4/4 | 3/3 | 3/3 |
+| `affinity.bot` | 9/10, mispredicted `{8 f1:40943}` | 8/9 | 8/9 |
+| the other seven suites of the validation sample | 20/26 | 20/26 | -- |
+
+In ownership.bot, the 21 sites holding handles at contract-boundary
+positions fail first with USE-AFTER-MOVE, COROUTINE-RESUME-CONFLICT, ... --
+the ownership and coroutine checks, before the completion walk -- and are
+committed with the erasing `f1:10166`; the three method-style calls
+(`q.swap(999, step)`, `q.length()`: a handle and vectors of handles as
+arguments, no candidate a coroutine operation) are decided once, in the
+first checked round, and reused after it. In linux-io.bot, `structural_without_error`'s TYPE is the
+type checker's (argv's declared error does not fit `Fn{args: [], return:
+list}`), not the contract-boundary report.
+
+**The rules only work together.** With any one of the three rules on a
+site's own edges removed -- the `D:site`/`Z:site` split, the handle and
+operand rule, the gate -- ownership.bot took 9 rounds (28, 16 and 16
+builds) and affinity.bot 16 rounds, 17 builds: more than with none of them.
+Fewer edges commit more rejections from one build, and a message naming
+internal ids (`block(eN)`) is committed only while no site numbered before
+its ids differs from the sequential order's build: an ok site turned
+unknown before it -- one still waiting for the erased contract -- holds it
+back to the sequential order's own build, one per round. Only with every
+rule do the handle sites stop turning unknown.
+
+Tests (`tests/static-economics.test`): `se-equal-subsume-gate` (a handle
+leaving its construction, whose report vanishes with the contributor: judged
+after it), `se-equal-method-trial` (above), `se-builds-subsume-gate` (three
+USE-AFTER-MOVE handle sites rejected with the contributor: 2 rounds, 3
+without the gate), `se-builds-subsume-checks` (a relayed parameter handle and
+a locally resumed one: 2 rounds, 3 with either edge), `se-builds-held-site-checks`
+(a failing site before an accepted one holding a handle check, one function:
+2 rounds, 3 when the region follows the held site's checks),
+`se-property-subsume-positions` (the facts above, where they live). Mutants
+(`audit/static-decisions/tools/mutants.txt`): semantic
+`subsume-gate-every-failing`, `subsume-constructed-handle-ignored`,
+`method-trial-ignored`; economic `subsume-gate-ignored`,
+`subsume-handle-from-elsewhere`, `subsume-coroutine-operand`,
+`held-site-checks`.
+
+Validation: `tests/static-economics.test` 41/41 and
+`tests/static-compile.test` 83/83 (interp); `compare.tcl` on ownership,
+affinity, framework-semantics, linux-io and the other seven suites of the
+validation sample: batched = sequential exactly, no misprediction (affinity
+failed it before, on its misprediction); the fuzzer, seeds 1 (10 programs),
+2 and 3 (20 each, seed 3 with legacy): 50 programs, 1348 sites, 0 failures;
+`mutate.tcl`: the six new mutants applied and killed, each by the test
+named for it (`subsume-constructed-handle-ignored`, which drops a constructed
+handle's edges, survives and is not kept: a handle's report carries what
+the program erases only through a call of an uncontracted value its thunk
+reaches -- an erased consumer's region, reached already).
 
 ## Method-call decisions
 

@@ -27,23 +27,27 @@
 # ---------
 # Nodes are *regions* (R: a function literal, or the program's top-level
 # code), *bindings* (B: the facts of one binding as its readers see them),
-# *sites* (Z: a static site present as a body) and *channels* (C: a
+# *sites* (Z: a static site present as a body, its form as the code around
+# it sees it; D: the site's own diagnostics) and *channels* (C: a
 # program-wide fact). An edge u -> v says u's facts may depend on v's. A
-# site Y depends on Z when Z's node is reachable from Y's.
+# site Y depends on Z when Z's node is reachable from Y's diagnostics, D:Y.
 #
+#   D:site    -> Z of the site, and its own contract-boundary checks (below):
+#                what only the site's own diagnostics read, never a region
+#                holding it.
 #   Z:site    -> R of the region the site's body stands in (its position: the
 #                code before and after it in the same function, which its
 #                rejection can make unreachable -- completion and ownership
 #                diagnostics are not reported in unreachable code), the site
-#                whose body holds it (nested static compile), and its own
-#                contract-boundary checks (below).
+#                whose body holds it (nested static compile).
 #   R:region  -> everything its own code mentions (its own code: the region's
 #                expressions, not those of the functions defined in it):
 #                every binding referenced (B), every function literal in it
 #                (R: its summary -- result, errors, contexts, completion
 #                facts), every exact call target (R), every candidate of a
-#                method-style call (B: the trial builds try each one), every
-#                site whose body is in it (Z); its parameters and captures
+#                method-style call (B: the trial builds try each one) and
+#                what those builds judge of the contract boundary (below),
+#                every site whose body is in it (Z); its parameters and captures
 #                (B); the control operands enclosing its literal in the
 #                enclosing functions (conditions, loop operands, handled
 #                calls); and, for each captured binding, the narrowing
@@ -160,10 +164,42 @@
 # (hir::completions::Subsume) run only in the diagnosing walk of a body and
 # only while the program erases something, analyzing a callable there with
 # each uncontracted input standing for what it can hold (Possible). So
-# Z:site -> C:erased and -> P:input for the inputs of the callables at its
+# D:site -> C:erased and -> P:input for the inputs of the callables at its
 # positions (and the outward finals of a yield in it: every construction
 # reaching it); P:input -> what its calls pass in its position (a parameter
-# of a function only ever called), its value (a local), or C:erased.
+# of a function only ever called), its value (a local), or C:erased. Only
+# where a check can report:
+#
+#   * not at a coroutine operation's own operand, its handle or a
+#     construction's thunk (hir::completions::SubsumeCall skips it);
+#   * at a coroutine handle only when its construction is in this body
+#     (hir::coroutines::thunkOfHandle; hir::completions::SubsumeHandle checks
+#     nothing else) -- found through bindings visible at the handle, so
+#     declared in the site, around it or outside every site: the same answer
+#     while the site is present;
+#   * none at all while the site's first diagnostic in this build was
+#     reported before the completion walk (HIR's beforeCompletions): every
+#     report is appended after it, so whatever the program erases, the site
+#     keeps that first diagnostic -- all the scheduler reads of a failing
+#     site -- for as long as its other edges' facts hold. A site that is ok,
+#     or whose first diagnostic is the completion walk's (or a method-style
+#     call's rejection, which is prepended and reads its trials), keeps the
+#     edges: a report may become its first diagnostic, also once the
+#     program begins to erase something.
+#
+# What reads the reports besides the site's own diagnostics is the trial
+# builds of a method-style call, for the checks inside the call
+# (hir::MethodCallProblems): R:region -> C:erased and -> P:input (the
+# method-trial edges) for a call with several candidates of which an
+# argument has a callable part a candidate's parameter type may make
+# structural (CallableParts), or a handle whose construction is in this
+# body while a candidate is a coroutine operation. Every other check inside
+# the call reports the same in every trial, a problem every candidate shares
+# that decides nothing. So Z:site, the site as its region sees it, has no
+# contract-boundary edge: a method-style call's cone no longer reaches what
+# the program erases through every site around it. (The remaining reader,
+# the "no diagnostic at all" gate of the trait monomorphization's plan,
+# below, is not modelled.)
 #
 # What is not a channel, and why: a demoted trusted contract (hir::check
 # keeps the diagnostics of the check before the demotion, so a demotion
@@ -230,7 +266,7 @@ proc hir::staticdeps::Deps {hir sites decisions {methods 0}} {
     set roots {}
     foreach key [dict get $state presentKeys] {
         if {[dict exists $state siteHome $key]} {
-            lappend roots Z:$key
+            lappend roots D:$key
         }
     }
     foreach q [dict keys $mregions] {
@@ -311,12 +347,12 @@ proc hir::staticdeps::Deps {hir sites decisions {methods 0}} {
     }
     set result [dict create]
     foreach key [dict get $state presentKeys] {
-        if {![dict exists $sccOf Z:$key]} {
+        if {![dict exists $sccOf D:$key]} {
             dict set result $key {}
             continue
         }
         dict set result $key [lsearch -all -inline -not -glob \
-            [lsearch -all -inline -not -exact [dict get $sccSites [dict get $sccOf Z:$key]] $key] M:*]
+            [lsearch -all -inline -not -exact [dict get $sccSites [dict get $sccOf D:$key]] $key] M:*]
     }
     # Per method-style call: the sites and the method-call regions its own
     # region reaches (hir/static.tcl's MethodSeeds).
@@ -353,8 +389,9 @@ proc hir::staticdeps::Deps {hir sites decisions {methods 0}} {
 # edge label and the node it reaches (Deps' header names the labels).
 proc hir::staticdeps::Explain {deps y z} {
     set labels [dict get $deps labels]
-    set from [dict create Z:$y ""]
-    set queue [list Z:$y]
+    set start [expr {[dict exists $labels D:$y] ? "D:$y" : "Z:$y"}]
+    set from [dict create $start ""]
+    set queue [list $start]
     set target Z:$z
     while {$queue ne {}} {
         set v [lindex $queue 0]
@@ -375,7 +412,9 @@ proc hir::staticdeps::Explain {deps y z} {
     set v $target
     while {[dict get $from $v] ne ""} {
         lassign [dict get $from $v] u label
-        set steps [linsert $steps 0 "$label [Name $deps $v]"]
+        if {$label ne "itself"} {
+            set steps [linsert $steps 0 "$label [Name $deps $v]"]
+        }
         set v $u
     }
     return [join $steps " -> "]
@@ -562,6 +601,81 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
         }
     }
     dict set state candidates $candidates
+    # What the trial builds of each method-style call judge that reads the
+    # contract boundary (R:region's method-trial edges): the checks at the
+    # call's own arguments, whose structural type is the candidate's
+    # parameter's -- so may differ from one candidate's trial to another's.
+    # Every part of an argument that some candidate's parameter could give a
+    # structural Fn type (CallableParts) is analyzed there against what the
+    # program erases (hir::completions::SubsumedRaises), its captures and
+    # parameters standing for what they may hold (P:). A coroutine handle's
+    # check reads no parameter type (hir::completions::SubsumeHandle): the
+    # same report, at the same expression, in every trial, and a problem
+    # every candidate shares decides nothing (hir::DecideMethodCalls) --
+    # unless a candidate is a coroutine operation, whose positions the check
+    # skips (hir::completions::SubsumeCall). Checks deeper in the call are
+    # each trial's alike: the arguments are analyzed before the call, from
+    # the same facts.
+    set methodTrial [dict create]
+    if {[dict exists $hir methodCalls]} {
+        set operations [CoroutineOperations]
+        dict for {key info} [dict get $hir methodCalls] {
+            set e [dict get $info expr]
+            if {![dict exists $regionOf $e]} continue
+            set q [dict get $regionOf $e]
+            set operation 0
+            foreach display [dict get $info candidates] {
+                if {$display in $operations} {
+                    set operation 1
+                }
+            }
+            foreach arg [dict get $exprs $e args] {
+                set type [hir::typeOf $hir $arg]
+                if {[hir::types::IsCoroutine $type]} {
+                    set thunk [expr {$operation ? [hir::coroutines::thunkOfHandle $hir $arg] : ""}]
+                    if {$thunk ne ""} {
+                        dict set methodTrial $q C:erased 1
+                        foreach c [dict get $exprs $thunk captures] {
+                            dict set methodTrial $q P:$c 1
+                        }
+                    }
+                    continue
+                }
+                foreach part [CallableParts $type] {
+                    dict set methodTrial $q C:erased 1
+                    if {[hir::types::IsExactBlock $part] && [dict exists $exprs [lindex $part 1]]} {
+                        set block [dict get $exprs [lindex $part 1]]
+                        foreach b [concat [dict get $block params] [dict get $block captures]] {
+                            dict set methodTrial $q P:$b 1
+                        }
+                    }
+                }
+            }
+        }
+    }
+    dict set state methodTrial $methodTrial
+    # The sites whose first diagnostic in this build was reported before the
+    # completion walk (HIR's beforeCompletions): no contract-boundary report
+    # can come before it, whatever the program erases (D:site).
+    set early [dict create]
+    if {[dict exists $hir beforeCompletions]} {
+        lassign [dict get $hir beforeCompletions] from to
+        set judged [dict create]
+        set i 0
+        foreach d [dict get $hir diagnostics] {
+            # Its owner as hir::static::Attribute names it.
+            set owner [expr {[hir::static::Internal $d] ? ""
+                : [hir::static::Owner $present [hir::static::PrimaryOrigin $hir $d]]}]
+            if {$owner ne "" && ![dict exists $judged $owner]} {
+                dict set judged $owner 1
+                if {$i >= $from && $i < $to} {
+                    dict set early $owner 1
+                }
+            }
+            incr i
+        }
+    }
+    dict set state early $early
     # Functions used as values (some reference is not a callee): their
     # uncontracted parameters are checked against the erased-callable
     # contract, never against their calls' arguments (hir::completions::
@@ -1115,6 +1229,14 @@ proc hir::staticdeps::Successors {hir stateVar v} {
     upvar 1 $stateVar state
     set succ [dict create]
     switch -glob -- $v {
+        D:* {
+            set key [string range $v 2 end]
+            dict set state names $v "the diagnostics of site [SiteName $hir $key]"
+            dict set succ Z:$key itself
+            if {![dict exists $state early $key]} {
+                SubsumeSuccessors $hir state $key succ
+            }
+        }
         Z:* {
             set key [string range $v 2 end]
             dict set state names $v "site [SiteName $hir $key]"
@@ -1125,7 +1247,6 @@ proc hir::staticdeps::Successors {hir stateVar v} {
             if {$outer ne ""} {
                 dict set succ Z:$outer nested
             }
-            SubsumeSuccessors $hir state $key succ
             if {[dict exists $state pathRelease $key]} {
                 dict set succ C:verdict path-release
             } elseif {[dict exists $state verdictLinked $key]} {
@@ -1193,8 +1314,9 @@ proc hir::staticdeps::Successors {hir stateVar v} {
 # type, its body is analyzed with each uncontracted input standing for what
 # it can hold (Possible) -- only while the program's erased-callable
 # contract is not empty, and only in the walk that reports the site's own
-# diagnostics (never a summary another region reads). So the site depends
-# on that contract and on the Possible of those inputs (P:).
+# diagnostics (never a summary another region reads). So the site's
+# diagnostics (D:) depend on that contract and on the Possible of those
+# inputs (P:), at the positions where a check can report (header).
 proc hir::staticdeps::SubsumeSuccessors {hir stateVar key succVar} {
     upvar 1 $stateVar state $succVar succ
     set exprs {}
@@ -1220,6 +1342,18 @@ proc hir::staticdeps::SubsumeSuccessors {hir stateVar key succVar} {
             }
         }
         set pairs [hir::completions::Positions $hir $e $finals]
+        if {[CoroutineOperation $hir $e]} {
+            # A coroutine operation's own operand -- its handle, a
+            # construction's thunk -- stays where it is: no check
+            # (hir::completions::SubsumeCall). (A resume written out from a
+            # call of a handle, hir::coroutines::ElaborateResumes, was checked
+            # as that call: the handle its callee, the messages its arguments.)
+            set operand [lindex [dict get $node args] 0]
+            set pairs [lmap pair $pairs {
+                if {[lindex $pair 0] eq $operand} continue
+                set pair
+            }]
+        }
         if {[dict get $node kind] eq "block" && [dict get $node body] ne {}} {
             lappend pairs [list [lindex [dict get $node body] end] [hir::completions::ResultFinal $hir $e]]
         }
@@ -1228,9 +1362,18 @@ proc hir::staticdeps::SubsumeSuccessors {hir stateVar key succVar} {
             if {$value eq "" || ![dict exists $hir exprs $value]} continue
             set type [hir::typeOf $hir $value]
             if {[hir::types::IsCoroutine $type]} {
-                dict set succ C:erased subsume
+                # Checked only when its construction is in this body
+                # (hir::completions::SubsumeHandle): the thunk's analysis
+                # under its captures' Possible. thunkOfHandle follows the
+                # value's binding through the bindings it is defined by --
+                # all visible here, so declared in this site's body, in a site
+                # around it or outside every site (a site's own bindings are
+                # scoped to it) -- to a construction: what it finds depends
+                # on no other site's form, and while this site is present it
+                # finds the same.
                 set thunk [hir::coroutines::thunkOfHandle $hir $value]
                 if {$thunk ne ""} {
+                    dict set succ C:erased subsume
                     foreach c [dict get $hir exprs $thunk captures] {
                         dict set succ P:$c subsume
                     }
@@ -1250,6 +1393,62 @@ proc hir::staticdeps::SubsumeSuccessors {hir stateVar key succVar} {
             }
         }
     }
+}
+
+# The coroutine operations whose positions the contract-boundary check skips
+# (hir::completions::SubsumeCall).
+proc hir::staticdeps::CoroutineOperations {} {
+    return [list [core::coroutines::createNative] [core::coroutines::startNative] \
+        [core::coroutines::resumeNative] [core::coroutines::doneNative] [core::coroutines::releaseNative]]
+}
+
+# 1 if expression E is a call of a coroutine operation (CoroutineOperations).
+proc hir::staticdeps::CoroutineOperation {hir e} {
+    set node [dict get $hir exprs $e]
+    if {[dict get $node kind] ne "call"} {
+        return 0
+    }
+    lassign [dict get $node target] tk tb
+    return [expr {$tk eq "native" && [dict exists $hir symbols $tb]
+        && [dict get $hir symbols $tb name] in [CoroutineOperations]}]
+}
+
+# The callable types in a value of static TYPE that a position of some
+# static type could give a structural Fn type (hir::completions::Align, for
+# every FINAL at once): the value itself when it is an exact callable or a
+# Fn, and what such a callable returns; a List's elements, a set's, a
+# vector's or an array's element; an anonymous struct's fields.
+proc hir::staticdeps::CallableParts {type {depth 0}} {
+    if {$depth > 8 || $type in {never any ""}} {
+        return {}
+    }
+    set deeper [expr {$depth + 1}]
+    if {[hir::types::IsExactBlock $type] || [hir::types::IsExactNative $type] || [hir::types::IsFn $type]} {
+        set result [list $type]
+        set returned [hir::completions::ResultOf $type]
+        if {$returned ne ""} {
+            lappend result {*}[CallableParts $returned $deeper]
+        }
+        return $result
+    }
+    if {[hir::types::IsList $type]} {
+        set result {}
+        foreach t [concat [list [lindex $type 1]] [hir::types::shapeOf $type]] {
+            lappend result {*}[CallableParts $t $deeper]
+        }
+        return $result
+    }
+    if {[hir::types::IsSet $type] || [hir::types::IsMutVec $type] || [hir::types::IsMutArray $type]} {
+        return [CallableParts [lindex $type 1] $deeper]
+    }
+    if {[hir::types::IsStruct $type]} {
+        set result {}
+        dict for {name t} [lindex $type 1] {
+            lappend result {*}[CallableParts $t $deeper]
+        }
+        return $result
+    }
+    return {}
 }
 
 # The sites nested, at any depth, in site KEY's body (present ones).
@@ -1355,6 +1554,13 @@ proc hir::staticdeps::RegionSuccessors {hir stateVar q succVar} {
     }
     if {[dict exists $state erasedConsumers $q]} {
         dict set succ C:erased erased-consumer
+    }
+    if {[dict exists $state methodTrial $q]} {
+        foreach n [dict keys [dict get $state methodTrial $q]] {
+            if {![dict exists $succ $n]} {
+                dict set succ $n method-trial
+            }
+        }
     }
     if {[dict exists $state budgetOf $q]} {
         foreach b [dict keys [dict get $state budgetOf $q]] {

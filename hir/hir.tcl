@@ -795,6 +795,12 @@ proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
         hir::DiagnoseAt final $kind $message $e $origin
         set added [lindex [dict get $final diagnostics] end]
         dict set final diagnostics [concat [list $added] $diagnostics]
+        if {[dict exists $final beforeCompletions]} {
+            # Not one of them: what each candidate's trial build reported
+            # inside the call decided it.
+            lassign [dict get $final beforeCompletions] from to
+            dict set final beforeCompletions [list [expr {$from + 1}] [expr {$to + 1}]]
+        }
     }
     # The decided calls (not the rejected ones' stand-ins), for a later build
     # of a changed program that can reuse them (hir/static.tcl). Bookkeeping
@@ -883,11 +889,13 @@ proc hir::check {hirVar} {
         return
     }
     set diagnostics [dict get $hir diagnostics]
+    set before [dict get $hir beforeCompletions]
     set demote [lsort -unique [dict keys [dict get $hir violatedContracts]]]
     set hir $pre
     CheckOnce hir $demote
     dict unset hir violatedContracts
     dict set hir diagnostics $diagnostics
+    dict set hir beforeCompletions $before
     dict set hir demotedContracts $demote
 }
 
@@ -908,6 +916,13 @@ proc hir::CheckOnce {hirVar demote} {
     hir::mutvec::verify hir
     hir::syscall::verify hir
     hir::semantic::verify hir
+    # {FROM TO}: the diagnostics at indices FROM to TO - 1 were reported
+    # before the completion walk -- by resolution and the checks above --
+    # and so are no contract-boundary report (hir::completions::Subsume),
+    # which only that walk makes. Bookkeeping for hir/staticdeps.tcl (a
+    # site's first diagnostic among them does not read the contract
+    # boundary), never read by an analysis.
+    dict set hir beforeCompletions [list 0 [llength [dict get $hir diagnostics]]]
     hir::errorsets::verify hir
     hir::modulebinding::validate hir
     hir::structs::promoteOpacity hir

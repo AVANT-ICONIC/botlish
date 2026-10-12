@@ -178,6 +178,24 @@
                     dict set mentions $b [list $e]
 >>>>
 
+@@ subsume-gate-every-failing every failing site's diagnostics drop their contract-boundary edges, whatever reported its first diagnostic: a site failing with a contract-boundary report is committed while a rejection can still make the report vanish
+## hir/staticdeps.tcl
+<<<<
+                if {$i >= $from && $i < $to} {
+                    dict set early $owner 1
+                }
+====
+                dict set early $owner 1
+>>>>
+
+@@ method-trial-ignored a method-style call's region does not depend on what the program erases through the contract-boundary checks of its trial builds: a decision that the rejection of an erasing site changes is reused
+## hir/staticdeps.tcl
+<<<<
+    if {[dict exists $state methodTrial $q]} {
+====
+    if {0} {
+>>>>
+
 # ---------------------------------------------------------------------------
 # Economic
 
@@ -250,4 +268,51 @@
                 return 0
             }
 ====
+>>>>
+
+@@ subsume-gate-ignored a site whose first diagnostic was reported before the completion walk still depends on what the program erases: it waits for every erasing site's rejection
+## hir/staticdeps.tcl
+<<<<
+            if {![dict exists $state early $key]} {
+                SubsumeSuccessors $hir state $key succ
+====
+            if {1} {
+                SubsumeSuccessors $hir state $key succ
+>>>>
+
+@@ subsume-handle-from-elsewhere every coroutine handle at a position is a contract-boundary edge, also one the body did not construct (whose check returns at once)
+## hir/staticdeps.tcl
+<<<<
+                set thunk [hir::coroutines::thunkOfHandle $hir $value]
+                if {$thunk ne ""} {
+                    dict set succ C:erased subsume
+====
+                set thunk [hir::coroutines::thunkOfHandle $hir $value]
+                dict set succ C:erased subsume
+                if {$thunk ne ""} {
+>>>>
+
+@@ subsume-coroutine-operand a coroutine operation's own operand (a resumed handle, a construction's thunk) is a contract-boundary edge, though the check skips it
+## hir/staticdeps.tcl
+<<<<
+        if {[CoroutineOperation $hir $e]} {
+====
+        if {0} {
+>>>>
+
+@@ held-site-checks a site as its region sees it carries its contract-boundary edges: every site and method-style call of a function holding it depends on what the program erases
+## hir/staticdeps.tcl
+<<<<
+            set outer [dict get $state spanParent $key]
+            if {$outer ne ""} {
+                dict set succ Z:$outer nested
+            }
+====
+            set outer [dict get $state spanParent $key]
+            if {$outer ne ""} {
+                dict set succ Z:$outer nested
+            }
+            if {![dict exists $state early $key]} {
+                SubsumeSuccessors $hir state $key succ
+            }
 >>>>

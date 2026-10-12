@@ -310,10 +310,12 @@ extra one only costs a build. Its header lists every edge; in short:
 * a site depends on the region its body stands in (its *position*: a
   rejection can make the code after it unreachable, where completion and
   ownership diagnostics are not reported), on the sites nested in it, and
-  on its own contract-boundary checks;
+  -- its own diagnostics, never the region holding it -- on its own
+  contract-boundary checks (below);
 * a region depends on everything its own code mentions -- bindings, the
   functions it defines and calls (their summaries), every candidate of a
-  method-style call, its parameters and captures, the control operands
+  method-style call and what its trial builds judge of the contract
+  boundary, its parameters and captures, the control operands
   around its literal, and the narrowings of each captured binding between
   its definition and the region -- but *not* on the rest of the function
   around it: a function is analyzed from its own entry, and sees of the
@@ -375,8 +377,17 @@ extra one only costs a build. Its header lists every edge; in short:
     program: `se-equal-ownership-verdict`);
   * **the contract-boundary checks** (`hir::completions::Subsume` with
     `Possible`), which run only in a body's own diagnosing walk while the
-    program erases something: a site-local channel, from the site to the
-    erased contract and to the inputs of the callables at its positions.
+    program erases something: a site-local channel, from the site's own
+    diagnostics to the erased contract and to the inputs of the callables
+    at its positions -- only where a check can report (not at a coroutine
+    operation's own operand, at a handle only in the body that constructs
+    it), and only while the site's first diagnostic may be a report: none
+    while it fails with a diagnostic reported before the completion walk,
+    which every report follows (`se-builds-subsume-gate`). The region holding
+    the site reads none of it -- a method-style call's trial builds read
+    the checks at the call's own arguments, which the candidates' parameter
+    types decide, and the call's region depends on those instead
+    (`se-equal-method-trial`, `se-builds-held-site-checks`).
 
 Not channels: a demoted trusted contract (`hir::check` keeps the
 diagnostics of the check before the demotion,

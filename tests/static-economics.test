@@ -201,6 +201,86 @@ proc seOwnershipProgram {args} {
     return "$text${calls}0\n"
 }
 
+# The contract-boundary checks (hir::completions::Subsume) and the edges a
+# site's diagnostics take from them (hir/staticdeps.tcl, D:site): a
+# contributor block that erases raise_e (E) through the untyped `call` and is
+# rejected by the checker, which leaves the program erasing nothing; a
+# coroutine whose root calls a callable passed to its construction (worker),
+# one that calls none (counter), and a function taking a handle whose
+# contract admits no error (drive). mutable_array::generate calls its second
+# argument: given a Fn type leaving that argument uncontracted, it may raise
+# whatever the program erases (hir::completions::ArgumentFact) -- the one
+# report no erased consumer's region leads to.
+set ::seBoundary {import compiler
+import mutable_array
+
+error E
+
+struct M:
+    value: int
+
+struct Ev:
+    value: int
+
+fn raise_e(x) -> int errors E:
+    fail E
+
+fn call(f, x):
+    f(x)
+
+fn want_int(x: int) -> int:
+    x
+
+fn worker(f, resume M) -> Ev:
+    m = yield Ev {value: 0}
+    x = f(m)
+    Ev {value: 1}
+
+fn counter(resume M) -> Ev:
+    m = yield Ev {value: 0}
+    Ev {value: m.value}
+
+fn drive(c: Coroutine{args: [M], return: Ev, errors: []}) -> int:
+    e = c(M {value: 1})
+    e.value
+
+}
+set ::seBoundaryContributor {"r = call(raise_e, 0):" "    on E:" "        0" "want_int(\"s\")"}
+
+# The boundary prelude with sites NAME BODY ... (or -text {NAME TEXT}: a
+# function NAME written as TEXT, as seHost makes one), each called under a
+# handler.
+proc seBoundaryProgram {args} {
+    set text $::seBoundary
+    set calls ""
+    foreach {name body} $args {
+        if {$name eq "-text"} {
+            lassign $body name body
+            append text $body
+        } else {
+            append text [seSite $name $body]
+        }
+        append calls "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    return "$text${calls}0\n"
+}
+
+# A function HOST holding the blocks NAME BODY ..., in that order: its result
+# is their sum.
+proc seHost {host args} {
+    set text "fn ${host}() -> int errors compiler::CompilerError:\n"
+    set names {}
+    foreach {name body} $args {
+        append text "    $name = static compile:\n"
+        foreach line $body {
+            append text "        $line\n"
+        }
+        lappend names $name
+    }
+    append text "    [join $names { + }]\n\n"
+    return [list $host $text]
+}
+
 # ---------------------------------------------------------------------------
 # The semantics are frozen
 
@@ -353,6 +433,34 @@ test se-equal-every-mention {every mention of a binding is an edge of the analys
     set results
 } -result {{} {TYPE accepted} {} 2 {} {TYPE accepted accepted} {} 2}
 
+test se-equal-subsume-gate {a block whose first diagnostic is a contract-boundary report depends on what the program erases: mutable_array::generate given Fn{args: [int, any], ...}, and a coroutine handle leaving its construction in make (a function used as a value, whose parameter stands for whatever the program erases), are TYPE while the contributor erases raise_e and accepted once it is rejected -- judged after that rejection, as in the sequential order (a block whose first diagnostic came before the completion walk, or a handle from elsewhere, has no such edge: se-builds-subsume-*)} -body {
+    set results {}
+    foreach body [list {"fn adopt(f: Fn{args: [int, any], return: any, errors: []}) -> int:" "    1" "adopt(mutable_array::generate)"} \
+            {"fn make(f) -> int:" "    coroutine {step, first} = worker(f)" "    drive(step)" "keep = make" "0"}] {
+        set text [seBoundaryProgram contributor $::seBoundaryContributor site $body]
+        set open [seBoundaryProgram contributor [lrange $::seBoundaryContributor 0 2] site $body]
+        lappend results [seSame $text] [seOutcomes $text] [seOutcomes $open]
+    }
+    set results
+} -result {{} {TYPE accepted} {accepted TYPE} {} {TYPE accepted} {accepted TYPE}}
+
+test se-equal-method-trial {a method-style call's trial builds judge the contract-boundary check of each argument at that candidate's parameter type: mutable_array::generate (it calls its second argument) given apply's Fn type, which leaves that argument uncontracted, may raise whatever the program erases -- so only pick::apply fits while the contributor erases raise_e, and both fit (AMBIGUOUS-METHOD-CALL) once it is rejected. The call's region depends on what the program erases (method-trial) and its decision is not reused across that rejection; the analysis once followed only the chosen candidate's parameter types, at a block's own positions, and the batched run accepted the block} -body {
+    withPrivateLibrary {
+        set f [open [file join $::core::libraryDir pick.bot] w]
+        fconfigure $f -encoding utf-8
+        puts -nonewline $f "fn apply(n: int, f) -> int:\n    n\n"
+        close $f
+        set lexical "fn apply(n: int, f: Fn\{args: \[int, any\], return: any, errors: \[\]\}) -> int:\n    n\n\nfn call(f, x):\n"
+        set texts {}
+        foreach contributor [list $::seBoundaryContributor [lrange $::seBoundaryContributor 0 2]] {
+            lappend texts [string map [list "import mutable_array\n" "import mutable_array\nimport pick\n" \
+                "fn call(f, x):\n" $lexical] \
+                [seBoundaryProgram contributor $contributor trial {"n = 3" "n.apply(mutable_array::generate)"}]]
+        }
+        list [seSame [lindex $texts 0]] [seOutcomes [lindex $texts 0]] [seOutcomes [lindex $texts 1]]
+    }
+} -result {{} {TYPE AMBIGUOUS-METHOD-CALL} {accepted accepted}}
+
 test se-no-misprediction {the golden framework's suites of 30 cases: no build contradicts a prediction of the batched run} -body {
     lmap rejection {none unbound type} {
         dict get [seHir [seSuite 30 $rejection 1]] staticStats mispredicted
@@ -470,6 +578,24 @@ test se-builds-ownership-verdict {the ownership verdict: a site whose path-relea
     set accepted [list [dict get $hir staticStats mispredicted] [dict get $hir staticStats rounds] [seOutcomes $text]]
     list $first $ahead $accepted
 } -result {{{} 3 {}} {{} 3 8 {AFFINE-LIST-OPERATION-UNSUPPORTED AFFINE-PATH-RELEASE-UNSUPPORTED USE-AFTER-MOVE}} {{} 2 {AFFINE-PATH-RELEASE-UNSUPPORTED TYPE TYPE TYPE TYPE}}}
+
+test se-builds-subsume-gate {a block whose first diagnostic was reported before the completion walk keeps it whatever the program erases (every contract-boundary report is appended after it): three blocks whose coroutine handle leaves its construction, each USE-AFTER-MOVE, are rejected in the build that rejects the contributor -- 2 rounds, where waiting for it took 3 (the sequential order 5)} -body {
+    set moved {"fn mk() -> int:" "    coroutine {step} = counter()" "    n = drive(step)" "    e = step(M {value: 2})" "    n" "mk()"}
+    set text [seBoundaryProgram contributor $::seBoundaryContributor m1 $moved m2 $moved m3 $moved]
+    list [seSame $text 0] [seOutcomes $text] [lindex [seEcon $text] 0]
+} -result {{} {TYPE USE-AFTER-MOVE USE-AFTER-MOVE USE-AFTER-MOVE} 2}
+
+test se-builds-subsume-checks {only a check that can report is an edge: a handle a function receives as a parameter was checked where it left its construction (hir::completions::SubsumeHandle checks a handle only in the body that constructs it), and a coroutine operation's own operand -- the handle a resume resumes, the thunk a construction runs -- is never checked; so the accepted block holding both does not wait for the contributor's rejection, nor does the failing block after it in the same function -- 2 rounds, where either edge took 3} -body {
+    set ok {"fn relay(c: Coroutine{args: [M], return: Ev, errors: []}) -> int:" "    drive(c)" "fn local() -> int:" "    coroutine {step: s} = counter()" "    e = s(M {value: 1})" "    e.value" "local()"}
+    set text [seBoundaryProgram contributor $::seBoundaryContributor -text [seHost host a $ok b [list {want_int("s")}]]]
+    list [seSame $text 0] [seOutcomes $text] [lindex [seEcon $text] 0]
+} -result {{} {TYPE accepted TYPE} 2}
+
+test se-builds-held-site-checks {a block's contract-boundary checks are its own diagnostics, never a fact of the function holding it: a failing block before an accepted one whose handle leaves its construction (a check that reads what the program erases) is rejected with the contributor, although their function holds both -- 2 rounds, where following the held block's checks took 3} -body {
+    set leaves {"fn mk() -> int:" "    coroutine {step: s} = counter()" "    drive(s)" "mk()"}
+    set text [seBoundaryProgram contributor $::seBoundaryContributor -text [seHost host b [list {want_int("s")}] a $leaves]]
+    list [seSame $text 0] [seOutcomes $text] [lindex [seEcon $text] 0]
+} -result {{} {TYPE TYPE accepted} 2}
 
 test se-method-reuse {method-style call decisions are reused across rounds: fewer trial builds than deciding afresh, and the audit (every seeded round built again unseeded) finds the same program} -body {
     set text "import compiler\nimport list\nimport str\n\n"
@@ -618,6 +744,29 @@ test se-property-subsume-local {the contract-boundary check of what an uncontrac
     set body [info body hir::completions::Subsume]
     regexp {if \{!\$diagnose \|\| \$value eq "" \|\| \[ErasedErrors \$hir\] eq \{\}\} \{\s*return} $body
 } -result 1
+
+test se-property-subsume-positions {what the contract-boundary edges rely on (hir/staticdeps.tcl, D:site): the check skips exactly the coroutine operations the analysis lists, checks a handle only when its construction is in the body, and reports only in the completion walk -- before which hir::CheckOnce records the diagnostics so far (beforeCompletions), shifted past the method-style call rejections hir::DecideMethodCalls prepends} -body {
+    set skipped [lsort [regexp -all -inline {core::coroutines::[a-z]+Native} [info body hir::completions::SubsumeCall]]]
+    set listed [lsort [regexp -all -inline {core::coroutines::[a-z]+Native} [info body hir::staticdeps::CoroutineOperations]]]
+    set reporters {}
+    set walkers {}
+    foreach file [lsort [glob -directory [file join $::sdRoot hir] *.tcl]] {
+        set f [open $file]
+        set text [read $f]
+        close $f
+        if {[regexp {ReportOutside hir\M} $text]} {
+            lappend reporters [file tail $file]
+        }
+        if {[regexp {completions::checkBlock hir\M} $text]} {
+            lappend walkers [file tail $file]
+        }
+    }
+    list [expr {$skipped eq $listed && [llength $skipped] == 5}] \
+        [regexp {set thunk \[hir::coroutines::thunkOfHandle \$hir \$value\]\s*if \{\$thunk eq ""\} \{\s*return} [info body hir::completions::SubsumeHandle]] \
+        $reporters $walkers \
+        [regexp {dict set hir beforeCompletions \[list 0 \[llength \[dict get \$hir diagnostics\]\]\]\s*hir::errorsets::verify hir\n} [info body hir::CheckOnce]] \
+        [regexp {dict set final diagnostics \[concat \[list \$added\] \$diagnostics\]\s*if \{\[dict exists \$final beforeCompletions\]\}} [info body hir::DecideMethodCalls]]
+} -result {1 1 completions.tcl errorsets.tcl 1 1}
 
 test se-property-ownership-verdict {release scopes, and so AFFINE-PATH-RELEASE-UNSUPPORTED, are computed only for a program the ownership analysis accepts as a whole, whose diagnostics are exactly the kinds hir/staticdeps.tcl's C:verdict lists; a semantic instance's carried to its call reads "call to" -- the facts the verdict's edges rely on} -body {
     set f [open [file join $::sdRoot hir affine.tcl]]

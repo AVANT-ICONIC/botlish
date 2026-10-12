@@ -809,7 +809,11 @@ schedulers, the dependency analysis, the method-call seeds or build reuse
 an inferred contract, the erased-callable contract, an instance budget, a
 yield type, a diagnostic suppressed by reachability or by a whole-program
 verdict such as the ownership analysis's, which withholds release scopes and
-`AFFINE-PATH-RELEASE-UNSUPPORTED` from a program it rejects), run
+`AFFINE-PATH-RELEASE-UNSUPPORTED` from a program it rejects), or move a check
+across the completion walk in `hir::CheckOnce` or make a diagnostic depend on
+another's presence (a site's contract-boundary edges read
+`beforeCompletions`: a first diagnostic reported before that walk is no
+contract-boundary report and stays first whatever the program erases), run
 `tests/static-economics.test`, `tests/static-compile.test`, `tests/golden.test`
 (`golden-static-economics`), `audit/static-decisions/tools/fuzz.tcl` (several
 seeds), `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` and
