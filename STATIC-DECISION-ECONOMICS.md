@@ -563,7 +563,8 @@ a locally resumed one: 2 rounds, 3 with either edge), `se-builds-held-site-check
 
 Validation: `tests/static-economics.test` 41/41 and
 `tests/static-compile.test` 83/83 (interp); `compare.tcl` on ownership,
-affinity, framework-semantics, linux-io and the other seven suites of the
+affinity, framework-semantics, linux-io, mutable-array (batched 6/21,
+sequential 69/1089 in 3.2 hours) and the other seven suites of the
 validation sample: batched = sequential exactly, no misprediction (affinity
 failed it before, on its misprediction); the fuzzer, seeds 1 (10 programs),
 2 and 3 (20 each, seed 3 with legacy): 50 programs, 1348 sites, 0 failures;
