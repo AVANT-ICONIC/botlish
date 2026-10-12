@@ -322,12 +322,14 @@
 ## hir/staticdeps.tcl
 <<<<
             if {$carried ne {} && $chain ne {}} {
-                lappend units [list $carried key [lsort -unique $chain]]
-            }
+                lassign [RequestPath $requests $regionOf $siteOf $position $id paths] path rank
+                if {$path ne {}} {
+                    lappend units [list $carried key [lsort -unique $chain] $path $rank]
 ====
             if {$chain ne {}} {
-                lappend units [list [expr {$carried eq {} ? "*" : $carried}] key [lsort -unique $chain]]
-            }
+                lassign [RequestPath $requests $regionOf $siteOf $position $id paths] path rank
+                if {$path ne {}} {
+                    lappend units [list [expr {$carried eq {} ? "*" : $carried}] key [lsort -unique $chain] $path $rank]
 >>>>
 
 @@ erased-every-contributor the erased-callable contract depends on every contribution, not on one witness per error: rejecting any contributor's site makes every consumer unknown, though another contribution still erases the same errors
