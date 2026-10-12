@@ -502,14 +502,21 @@ computed from the same relation, and fewer edges only split components no
 remaining edge links. The method decisions' reuse reads the cones from the
 regions, which keep every edge their trials read.
 
+Every golden suite (83), compiled once with the tree before and after
+(`surface::readProgramFile`, batched): the same sites, diagnostics and decided
+HIR in all of them, the same rounds and builds in all but these:
+
 | suite | before | after | before [every mention](#every-mention) |
 |---|---|---|---|
-| `ownership.bot` | 5/24 (15 method trials) | 4/11 (5) | 4/11 |
-| `mutable-array.bot` | 7/34 (24) | 6/21 (14) | 6/21 |
+| `affinity.bot` | 9/10, mispredicted `{8 f1:40943}` | 8/9 | 8/9 |
+| `callables.bot` | 16/16 | 14/14 | -- |
 | `framework-semantics.bot` | 5/9 | 3/7 | 3/7 |
 | `linux-io.bot` | 4/4 | 3/3 | 3/3 |
-| `affinity.bot` | 9/10, mispredicted `{8 f1:40943}` | 8/9 | 8/9 |
-| the other seven suites of the validation sample | 20/26 | 20/26 | -- |
+| `mutable-array.bot` | 7/34 (24 method trials) | 6/21 (14) | 6/21 |
+| `ownership.bot` | 5/24 (15 method trials) | 4/11 (5) | 4/11 |
+| `static-compile.bot` | 26/33 | 20/27 | -- |
+
+(`traits.bot` keeps its two mispredictions: the plan's gate.)
 
 In ownership.bot, the 21 sites holding handles at contract-boundary
 positions fail first with USE-AFTER-MOVE, COROUTINE-RESUME-CONFLICT, ... --
@@ -521,16 +528,23 @@ first checked round, and reused after it. In linux-io.bot, `structural_without_e
 type checker's (argv's declared error does not fit `Fn{args: [], return:
 list}`), not the contract-boundary report.
 
-**The rules only work together.** With any one of the three rules on a
-site's own edges removed -- the `D:site`/`Z:site` split, the handle and
-operand rule, the gate -- ownership.bot took 9 rounds (28, 16 and 16
-builds) and affinity.bot 16 rounds, 17 builds: more than with none of them.
-Fewer edges commit more rejections from one build, and a message naming
-internal ids (`block(eN)`) is committed only while no site numbered before
-its ids differs from the sequential order's build: an ok site turned
-unknown before it -- one still waiting for the erased contract -- holds it
-back to the sequential order's own build, one per round. Only with every
-rule do the handle sites stop turning unknown.
+**What each rule buys** (each removed in turn): without the
+`D:site`/`Z:site` split, ownership.bot takes 4/23 and mutable-array.bot 6/27
+-- their method-style calls decided again in every checked round (15 and 18
+trials); without the gate, ownership.bot 5/12, linux-io.bot 4/4 and
+mutable-array.bot 7/22; framework-semantics.bot and affinity.bot recover with
+either. The handle and operand rule changes no golden suite: it is the
+check's own precision (`se-builds-subsume-checks`).
+
+**A measurement trap.** `hir::static::InternalIds` (`\m[ebsyt][0-9]+\M`)
+also matches a word of a file path a message quotes -- USE-AFTER-MOVE's
+"moved here ... (PATH:LINE:COLUMN)" -- and the batched run then holds such a
+rejection for the sequential order's own build. Checked out under a
+directory named like `.../045414a6-a785-56f8-b501-.../` (`b501`),
+ownership.bot takes 10/29 before this change and 9/16 after, affinity.bot
+17/18 and 16/17: conservative, never another program, but the economics
+depend on where the tree lies. Not changed here; every number of this
+section was measured in checkouts whose paths have no such word.
 
 Tests (`tests/static-economics.test`): `se-equal-subsume-gate` (a handle
 leaving its construction, whose report vanishes with the contributor: judged
@@ -553,11 +567,13 @@ affinity, framework-semantics, linux-io and the other seven suites of the
 validation sample: batched = sequential exactly, no misprediction (affinity
 failed it before, on its misprediction); the fuzzer, seeds 1 (10 programs),
 2 and 3 (20 each, seed 3 with legacy): 50 programs, 1348 sites, 0 failures;
-`mutate.tcl`: the six new mutants applied and killed, each by the test
-named for it (`subsume-constructed-handle-ignored`, which drops a constructed
-handle's edges, survives and is not kept: a handle's report carries what
-the program erases only through a call of an uncontracted value its thunk
-reaches -- an erased consumer's region, reached already).
+`tests/golden.test` 9/9 (the validation sample and
+`golden-static-economics`); `mutate.tcl`: 28 mutants, 28 applied and killed
+(the six new ones each by the test named for it; a seventh,
+`subsume-constructed-handle-ignored`, which drops a constructed handle's
+edges, survives and is not kept: a handle's report carries what the program
+erases only through a call of an uncontracted value its thunk reaches -- an
+erased consumer's region, reached already).
 
 ## Method-call decisions
 
