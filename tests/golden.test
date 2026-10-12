@@ -97,7 +97,12 @@ foreach path [lsort [glob -directory [file join $::projectRoot tests golden] *.b
         if {[lindex $first 0] eq "lines"} {
             set names [lmap line [golden::verdicts [lindex $first 1]] {string range $line 5 end}]
             set listed [expr {[dict exists $::goldenPorted $suite] ? [dict get $::goldenPorted $suite] : {}}]
-            if {[lsort $names] ne [lsort $listed]} {
+            if {[llength $names] != [llength [lsort -unique $names]]} {
+                lappend problems "a test name is reported twice"
+            }
+            # Several Tcl tests may map to one golden test: the manifest
+            # lists it once per row.
+            if {[lsort -unique $names] ne [lsort -unique $listed]} {
                 foreach n $names { if {$n ni $listed} { lappend problems "not in the manifest: $n" } }
                 foreach n $listed { if {$n ni $names} { lappend problems "in the manifest, not reported: $n" } }
             }
@@ -112,13 +117,18 @@ foreach path [lsort [glob -directory [file join $::projectRoot tests golden] *.b
 # The static decisions' economics over every suite (STATIC-COMPILE.md,
 # "Decision economics"; STATIC-DECISION-ECONOMICS.md): whole-program builds
 # grow with the suites' semantic dependency depth, not with how many blocks
-# they hold or how they are laid out. A loose ceiling, not the exact count
-# (a harmless new build in some phase should not fail it): the suites took
-# 79 builds and 28 rounds before the batched scheduler, one of them 194
-# builds in its natural layout, and take 37 builds and 24 rounds with it.
+# they hold or how they are laid out. Loose ceilings, not exact counts (a
+# harmless new build in some phase should not fail them): at most 15 builds in
+# any one suite, and on average at most 6 per suite. The eight suites of the
+# validation sample took 79 builds before the batched scheduler (one of them
+# 194 in its natural layout) and 37 with it, 4.6 per suite; the large-scale
+# migration (LARGE-SCALE-GOLDEN-MIGRATION.md) multiplied the suites and kept
+# the average (a suite of hundreds of tests takes a handful of builds). A
+# suite that needs more is a compiler regression or a real dependency to
+# explain, never a ceiling to raise automatically.
 testConstraint goldenAllSuites [expr {[dict size $goldenStatic] > 0
     && [dict size $goldenStatic] == [llength [glob -directory [file join $::projectRoot tests golden] *.bot]]}]
-test golden-static-economics {the golden suites' static decisions take at most 50 whole-program builds in all and at most 15 in any one suite, with no build contradicting a prediction of the batched scheduler} -constraints goldenAllSuites -body {
+test golden-static-economics {the golden suites' static decisions take at most 15 whole-program builds in any one suite and on average at most 6 per suite, with no build contradicting a prediction of the batched scheduler} -constraints goldenAllSuites -body {
     set problems {}
     set total 0
     dict for {suite stats} $goldenStatic {
@@ -131,8 +141,8 @@ test golden-static-economics {the golden suites' static decisions take at most 5
             lappend problems "$suite: mispredicted [dict get $stats mispredicted]"
         }
     }
-    if {$total > 50} {
-        lappend problems "$total builds in all"
+    if {$total > 6 * [dict size $goldenStatic]} {
+        lappend problems "$total builds in all over [dict size $goldenStatic] suites"
     }
     expr {$problems eq {} ? "ok" : [join $problems \n]}
 } -result ok

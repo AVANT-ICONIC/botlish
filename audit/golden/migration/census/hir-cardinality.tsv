@@ -1,0 +1,8 @@
+old_file	old_test	subsystem	status	confidence	observes	source_theorem	outcome	tcl_retained	tags	notes
+tests/hir-cardinality.test	cardinality-no-break-continue-exact	hir-core-nir	KEEP-INTERNAL	high	hir::cardinality::of the sole listloop of 'loop x in [1, 2, 3]: x + 1' is exact	-	none	hir::cardinality output-length fact (exact/max) of a listloop	STRICT0	loop value not asserted
+tests/hir-cardinality.test	cardinality-continue-is-max	hir-core-nir	KEEP-INTERNAL	high	a listloop with a reachable continue is max	-	none	hir::cardinality output-length fact (exact/max) of a listloop	STRICT0	-
+tests/hir-cardinality.test	cardinality-bare-break-is-max	hir-core-nir	KEEP-INTERNAL	high	a listloop with a reachable bare break is max	-	none	hir::cardinality output-length fact (exact/max) of a listloop	STRICT0	-
+tests/hir-cardinality.test	cardinality-both-still-max	hir-core-nir	KEEP-INTERNAL	high	a listloop with both continue and break is max	-	none	hir::cardinality output-length fact (exact/max) of a listloop	STRICT0	-
+tests/hir-cardinality.test	cardinality-nested-inner-break-does-not-affect-outer	hir-core-nir	KEEP-INTERNAL	high	outer listloop exact, inner listloop (with break) max	-	none	hir::cardinality output-length fact (exact/max) of a listloop	STRICT0	-
+tests/hir-cardinality.test	cardinality-return-does-not-weaken-exact	hir-core-nir	KEEP-INTERNAL	high	a listloop left only by return stays exact	-	none	hir::cardinality output-length fact (exact/max) of a listloop	STRICT0	-
+tests/hir-cardinality.test	cardinality-analyze-covers-every-listloop	hir-core-nir	KEEP-INTERNAL	high	hir::cardinality::analyze returns facts {exact max} for the two listloops	-	none	hir::cardinality output-length fact (exact/max) of a listloop	STRICT0	-
