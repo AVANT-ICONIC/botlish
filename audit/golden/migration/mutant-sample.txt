@@ -1,0 +1,56 @@
+# The cross-suite mutant sample of the large-scale golden migration
+# (LARGE-SCALE-GOLDEN-MIGRATION.md, "Mutation sample"): existing mutants of
+# every migrated subsystem with a mutation harness, each run by
+# audit/golden/migration/sample.tcl through audit/golden/tools/check.tcl against
+# the Tcl files its harness targets (old side) and the golden suites their
+# ported rows live in (new side).
+#
+# MUTANTSFILE:NAME  TCL-FILES (comma-separated)
+audit/coroutines/tools/mutants.txt:first-yield-discarded           coroutines.test
+audit/coroutines/tools/mutants.txt:failed-loses-error              coroutines.test
+audit/coroutines/tools/mutants.txt:completed-reruns-body           coroutines.test
+audit/coroutines/tools/mutants.txt:message-wrong-yield             coroutines.test
+audit/coroutines/tools/mutants.txt:move-keeps-source               coroutines.test
+audit/coroutines/tools/mutants.txt:done-consumes                   coroutines.test
+audit/coroutines/tools/mutants.txt:release-never                   coroutines.test
+audit/affine/tools/mutants.txt:struct-affine-unrestricted          affine.test
+audit/affine/tools/mutants.txt:alias-becomes-move                  affine.test
+audit/affine/tools/mutants.txt:list-no-consume                     affine.test
+audit/affine/tools/mutants.txt:destructure-aliases                 affine.test
+audit/affine/tools/mutants.txt:explicit-fn-accepts-coroutine       affine.test
+audit/enums/tools/mutants.txt:equal-ignores-enum-tcl               enums.test
+audit/enums/tools/mutants.txt:equal-by-ordinal-tcl                 enums.test
+audit/enums/tools/mutants.txt:bare-case-accepted                   enums.test
+audit/enums/tools/mutants.txt:unknown-case-string                  enums.test
+audit/enums/tools/mutants.txt:hash-ignores-enum-tcl                enums.test
+audit/enums/tools/mutants.txt:equal-ignores-enum-native            enums.test
+audit/error-payloads/tools/mutants.txt:fail-ignores-payload-tcl    error-payloads.test,errors.test,namespaced-errors.test
+audit/error-payloads/tools/mutants.txt:missing-payload-accepted    error-payloads.test,errors.test,namespaced-errors.test
+audit/error-payloads/tools/mutants.txt:dispatch-by-shape-tcl       error-payloads.test,errors.test,namespaced-errors.test
+audit/error-payloads/tools/mutants.txt:whole-binding-loses-field-tcl error-payloads.test,errors.test,namespaced-errors.test
+audit/error-payloads/tools/mutants.txt:renaming-binds-original     error-payloads.test,errors.test,namespaced-errors.test
+audit/error-payloads/tools/mutants.txt:handler-dispatch-short-name-tcl error-payloads.test,errors.test,namespaced-errors.test
+audit/error-payloads/tools/mutants.txt:untyped-callable-reports-no-errors error-payloads.test,higher-order-completions.test,structural-contract-completions.test
+audit/mutable-array/tools/mutants.txt:copy-aliases-tcl             mutable-array.test,mutable-array-type.test,mutarray-construction.test
+audit/mutable-array/tools/mutants.txt:affine-at-accepted           mutable-array.test,mutable-array-type.test,mutarray-construction.test
+audit/mutable-array/tools/mutants.txt:failed-swap-keeps-replacement mutable-array.test,mutable-array-type.test,mutarray-construction.test
+audit/mutable-array/tools/mutants.txt:param-mutation-leaks          mutable-array.test,mutable-array-type.test,mutarray-construction.test
+audit/mutable-vector/tools/mutants.txt:share-aliases-tcl           mutable-vector.test
+audit/mutable-vector/tools/mutants.txt:callee-mutation-leaks       mutable-vector.test
+audit/mutable-vector/tools/mutants.txt:push-copies                 mutable-vector.test
+audit/mutable-vector/tools/mutants.txt:at-accepts-affine           mutable-vector.test
+audit/mutable-vector/tools/mutants.txt:share-aliases-native        mutable-vector.test
+audit/static-compile/tools/mutants.txt:wrong-code                  static-compile.test
+audit/static-compile/tools/mutants.txt:loses-primary               static-compile.test
+audit/static-compile/tools/mutants.txt:success-returns-unit        static-compile.test
+audit/static-compile/tools/mutants.txt:runtime-errors-wrapped      static-compile.test
+audit/structural-contracts/tools/mutants.txt:structural-call-adds-erased structural-contract-completions.test,higher-order-completions.test
+audit/structural-contracts/tools/mutants.txt:boundary-unchecked    structural-contract-completions.test,higher-order-completions.test
+audit/structural-contracts/tools/mutants.txt:contravariant-erasure-dropped structural-contract-completions.test,higher-order-completions.test
+audit/traits/tools/mutants.txt:every-type-satisfies                traits.test
+audit/traits/tools/mutants.txt:caller-namespace-implements         traits.test
+audit/traits/tools/mutants.txt:ignore-result-mismatch              traits.test
+audit/traits/tools/mutants.txt:break-opacity                       traits.test
+audit/context-traits/tools/mutants.txt:any-context-satisfies-any-trait context-traits.test
+audit/context-traits/tools/mutants.txt:missing-provider-silent     context-traits.test
+audit/context-traits/tools/mutants.txt:caller-imports-provide      context-traits.test

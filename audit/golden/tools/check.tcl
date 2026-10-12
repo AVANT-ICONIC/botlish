@@ -7,7 +7,7 @@
 #
 #   tclsh9.0 audit/golden/tools/check.tcl ?-full 0|1? ?-jobs N?
 #       ?-subsystem NAME,...? ?-suites FILE.bot,...? ?-files FILE.test,...?
-#       ?-backends LIST? ?-timeout SECONDS? ?-names-out PATH?
+#       ?-shard I/N? ?-backends LIST? ?-timeout SECONDS? ?-names-out PATH?
 #       ?-mutants SPECS? ?-only-mutated 0|1? ?-all-suites 0|1?
 #
 # Without -mutants: on this checkout, as it is. Old side: each Tcl test file
@@ -29,7 +29,10 @@
 # its row. -names-out PATH writes every discovered "FILE NAME VERDICT".
 #
 # -subsystem / -files restrict the rows (by the manifest's subsystem column or
-# old_file); -suites restricts the golden suites (and the rows to theirs).
+# old_file); -suites restricts the golden suites (and the rows to theirs);
+# -shard I/N keeps the I-th of N slices of the golden suites (every N-th suite
+# file in name order, from 1) and their rows -- CI runs the slices as parallel
+# jobs.
 #
 # With -mutants SPECS (a list of MUTANTSFILE:NAME): for each mutant, a private
 # copy of the checkout (tree.tcl) gets the mutant's edits and both sides run
@@ -51,7 +54,7 @@ source [file join [file dirname [file normalize [info script]]] tree.tcl]
 set root $::goldentools::root
 
 set options [dict create -mutants {} -only-mutated 1 -all-suites 0 -backends {interp compile cranelift-generic cranelift} \
-    -timeout 3600 -jobs 3 -full 0 -subsystem {} -suites {} -files {} -names-out {}]
+    -timeout 3600 -jobs 3 -full 0 -subsystem {} -suites {} -files {} -shard {} -names-out {}]
 foreach {option value} $argv {
     if {![dict exists $options $option]} { error "unknown option $option" }
     dict set options $option $value
@@ -188,6 +191,19 @@ if {[dict get $options -files] ne {}} {
 }
 if {[dict get $options -suites] ne {}} {
     set wanted [split [dict get $options -suites] ,]
+    set rows [lmap row $rows {expr {[dict get $row suite] in $wanted ? $row : [continue]}}]
+}
+if {[dict get $options -shard] ne {}} {
+    if {![regexp {^(\d+)/(\d+)$} [dict get $options -shard] -> shardIndex shardCount]
+            || $shardIndex < 1 || $shardIndex > $shardCount} {
+        error "-shard wants I/N with 1 <= I <= N"
+    }
+    set allSuites [lmap p [lsort [glob -directory [file join $root tests golden] *.bot]] {file tail $p}]
+    set wanted {}
+    foreach suite $allSuites k [lsearch -all $allSuites *] {
+        if {$k % $shardCount == $shardIndex - 1} { lappend wanted $suite }
+    }
+    dict set options -suites [join $wanted ,]
     set rows [lmap row $rows {expr {[dict get $row suite] in $wanted ? $row : [continue]}}]
 }
 set ported [lmap row $rows {expr {[isPorted $row] ? $row : [continue]}}]

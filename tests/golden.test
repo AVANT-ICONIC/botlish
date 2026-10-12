@@ -1,5 +1,7 @@
 # golden.test -- the Botlish golden suites (tests/golden/*.bot,
-# GOLDEN-TEST-FRAMEWORK.md) as part of the Tcl suite: every suite compiles,
+# GOLDEN-TEST-FRAMEWORK.md) as part of the Tcl suite -- by default the eight
+# suites of the framework's validation sample, every suite with
+# BOTLISH_GOLDEN_SUITES=all (see goldenSelected below): every suite compiles,
 # runs on the backends of this pass, reports no failed test, and reports
 # exactly the tests tests/golden/manifest.tsv lists for it -- so a ported
 # test cannot disappear, or one be added, without the manifest saying so.
@@ -62,11 +64,29 @@ proc goldenManifest {} {
 }
 
 set goldenPorted [goldenManifest]
+
+# Which suites this file runs. By default the eight suites of the framework's
+# validation sample (GOLDEN-TEST-FRAMEWORK.md): this file runs inside both
+# passes of tests/all.tcl, and the large-scale migration's suites
+# (LARGE-SCALE-GOLDEN-MIGRATION.md) multiply the front-end work far beyond
+# them -- which suites a local run includes is the next milestone's decision,
+# so the local default stays what it was. BOTLISH_GOLDEN_SUITES=all runs every
+# tests/golden/*.bot (CI's golden jobs run every suite on every backend
+# through audit/golden/tools/check.tcl); a list of file names runs those.
+set goldenAll [lsort [glob -directory [file join $::projectRoot tests golden] *.bot]]
+set goldenSample {collections.bot diagnostics.bot errors.bot harness.bot modules.bot ownership.bot representation.bot values.bot}
+if {![info exists ::env(BOTLISH_GOLDEN_SUITES)] || $::env(BOTLISH_GOLDEN_SUITES) eq ""} {
+    set goldenSelected [lmap p $goldenAll {expr {[file tail $p] in $goldenSample ? $p : [continue]}}]
+} elseif {$::env(BOTLISH_GOLDEN_SUITES) eq "all"} {
+    set goldenSelected $goldenAll
+} else {
+    set goldenSelected [lmap p $goldenAll {expr {[file tail $p] in [split $::env(BOTLISH_GOLDEN_SUITES) ", "] ? $p : [continue]}}]
+}
 # Suite file -> the economics of its static decisions (hir/static.tcl's
 # staticStats), for golden-static-economics below.
 set goldenStatic [dict create]
 
-foreach path [lsort [glob -directory [file join $::projectRoot tests golden] *.bot]] {
+foreach path $goldenSelected {
     set suite [file tail $path]
     test golden-$suite "the golden suite $suite: compiles once, passes every test on [join $goldenBackends {, }] (the same report on each), and reports exactly the manifest's tests" -constraints goldenBackends -body {
         set result [golden::suite $path $goldenBackends]
@@ -127,8 +147,8 @@ foreach path [lsort [glob -directory [file join $::projectRoot tests golden] *.b
 # suite that needs more is a compiler regression or a real dependency to
 # explain, never a ceiling to raise automatically.
 testConstraint goldenAllSuites [expr {[dict size $goldenStatic] > 0
-    && [dict size $goldenStatic] == [llength [glob -directory [file join $::projectRoot tests golden] *.bot]]}]
-test golden-static-economics {the golden suites' static decisions take at most 15 whole-program builds in any one suite and on average at most 6 per suite, with no build contradicting a prediction of the batched scheduler} -constraints goldenAllSuites -body {
+    && [dict size $goldenStatic] == [llength $goldenSelected]}]
+test golden-static-economics {the golden suites' static decisions take at most 15 whole-program builds in any one suite and on average at most 6 per suite, with no build contradicting a prediction of the batched scheduler (over the suites this run selected)} -constraints goldenAllSuites -body {
     set problems {}
     set total 0
     dict for {suite stats} $goldenStatic {
