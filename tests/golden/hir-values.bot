@@ -1,0 +1,277 @@
+# hir-values.bot -- the source-visible meaning of the HIR test fixtures, as a
+# source-level specification of lexical resolution:
+#
+# * Every scope has its own bindings. A binding in a nested scope (a called
+#   function's body, a branch) shadows an outer binding of its name only
+#   inside that scope, and every reference denotes the nearest binding of its
+#   name established before it. A root native is an ordinary binding a
+#   program may shadow: a call by its name then calls the program's function.
+# * Resolution is sequential: a later binding of a name never captures an
+#   earlier reference, whether the reference is direct or inside a closure
+#   created (and called) before the later binding.
+# * A scope binds a name once. A second binding is Duplicate, with the
+#   message the reference interpreter raises for it; two parameters of one
+#   name are Duplicate "(block parameters)"; rebinding a parameter in the
+#   function's body is Duplicate (at that binding), while shadowing it in a
+#   nested branch is not.
+# * A name nothing binds is Unbound ("unbound name"); a reference to a
+#   function declared later in the same scope -- the edge mutual recursion
+#   needs -- is Unbound with the "declared later" hint.
+# * A function declared in a loop body is a new callable: a `break` in it is
+#   outside any loop of its own (BreakOutsideLoop), even though the function
+#   is called from the loop.
+# * A function recurs through its own binding, and an untyped function's
+#   type tests refine its argument in the branch where they hold.
+#
+# Ported from tests/hir-aot.test, tests/hir-lowering.test,
+# tests/hir-resolution.test and tests/hir-samples.test. There the programs are
+# core IR (or HIR text, examples/hir/*.hir, lowered to core IR), and the tests
+# inspect the HIR (binding identities, captures, duplicate flags, the
+# diagnostic list of a -strict 0 build) or compare the interp and compile
+# backends on the lowered core IR. The HIR facts stay in the Tcl tests, which
+# are authoritative and unchanged; here each program is written in source and
+# compiled strictly, its value is pinned on every backend (the runner's
+# agreement of the four backends stands in for the interp/compile
+# differential), and a rejected program's DiagnosticCode -- and its message
+# where the Tcl test pins the wording -- is compared. Programs of these files
+# that are already golden tests elsewhere are not repeated:
+# examples/01-adder.ir (core-semantics.bot acceptance-01-adder),
+# examples/03-lexical-closure.ir (values.bot closure-2),
+# examples/hir/02-closures.hir (compiled-values.bot dormant-parity-adder) and
+# hir-resolve-10c's forward call (diagnostics.bot sr-later-sibling-function).
+#
+# Conventions:
+#
+# * A core IR block called where it is written is a nested function called
+#   once (a second binding of a name directly in the enclosing scope would be
+#   Duplicate, not a shadow).
+# * Source cannot bind an operator (`+` is not a name): the programs that
+#   shadow the root `+` shadow the root native `mod` (the same
+#   int x int -> int shape) instead.
+# * The recursive and refining programs compute at run time: their inputs
+#   are parameters of their registration function, given as the core IR
+#   program's literals at the call, so no exact-value fact of a literal
+#   stands in for the computation the Tcl differential compares. The
+#   scoping programs keep their literals: the values only identify which
+#   binding each reference denotes.
+# * No scope enclosing a block binds a name its program binds or references
+#   (an outer binding would be read instead, or turn the plain "unbound name"
+#   into a "declared later" one).
+#
+# Imports: compiler and test (the framework) only; the programs use root
+# natives alone.
+import compiler
+import test
+
+# ---------------------------------------------------------------------------
+# Every scope has its own bindings; resolution is sequential
+
+fn register_lexical_scope_tests():
+    # hir-sample-backends-01-scopes (examples/hir/01-scopes): a nested
+    # scope's x shadows the outer x only inside it, and p's reference
+    # denotes the nearest x, h's; a program function named like a root
+    # native shadows it (the sample rebinds `+` to a block listing its
+    # arguments).
+    fn nearest_binding() errors compiler::CompilerError:
+        static compile:
+            x = 10
+            fn h():
+                x = 20
+                fn p():
+                    x
+                p()
+            inner = h()
+            fn mod(a, b):
+                [a, b]
+            mod(inner, x)
+    test::value("nearest-binding-in-nested-scopes", [20, 10], nearest_binding)
+
+    # hir-lower-compile-shadowing: the x bound in a called scope leaves the
+    # outer x unchanged, and the call by a shadowed root native's name calls
+    # the program's function (the core IR rebinds `+` to a block returning
+    # "shadowed").
+    fn shadowing() errors compiler::CompilerError:
+        static compile:
+            x = 10
+            fn mod(a, b):
+                "shadowed"
+            fn h():
+                x = 20
+                x
+            inner = h()
+            [inner, x, mod(1, 2)]
+    test::value("shadowing-in-called-scope-and-of-root-native", [20, 10, "shadowed"], shadowing)
+
+    # hir-resolve-10: resolution is sequential. g's `y = x` reads the outer
+    # x, which g's later `x = 2` does not capture...
+    fn later_binding() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            fn g():
+                y = x
+                x = 2
+                [y, x]
+            g()
+    test::value("sequential-resolution/later-binding", [1, 2], later_binding)
+
+    # ... and neither does it through a closure: h, created and called
+    # before k's `x = 2`, reads the outer x.
+    fn closure_before_binding() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            fn k():
+                fn h():
+                    x
+                y = h()
+                x = 2
+                y
+            k()
+    test::value("sequential-resolution/closure-called-before", 1, closure_before_binding)
+
+# ---------------------------------------------------------------------------
+# A scope binds a name once
+
+fn register_duplicate_binding_tests():
+    # hir-resolve-5: a second binding of x in one scope is Duplicate, with
+    # the message the core IR interpreter raises for the same program.
+    fn second_binding() errors compiler::CompilerError:
+        static compile:
+            x = 10
+            x = 20
+    test::rejects_message("duplicate-binding-message", compiler::DiagnosticCode::Duplicate, "duplicate binding \"x\" in the same lexical scope", second_binding)
+
+    # hir-resolve-7: rebinding the parameter x in the function's body is
+    # Duplicate, at `x = 1`; the earlier `x = 2` in the branch is not (it
+    # would be reported first)...
+    fn parameter_rebinding() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                if true:
+                    x = 2
+                x = 1
+            f(0)
+    test::rejects_at("parameter-rebinding/body-duplicate", compiler::DiagnosticCode::Duplicate, 151, 17, parameter_rebinding)
+
+    # ... because a branch is a nested scope, whose binding shadows the
+    # parameter.
+    fn branch_shadow() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                if true:
+                    x = 2
+                    x
+                else:
+                    x
+            f(0)
+    test::value("parameter-rebinding/branch-shadow-allowed", 2, branch_shadow)
+
+    # hir-resolve-8: two parameters of one name are Duplicate, with the core
+    # IR interpreter's message.
+    fn duplicate_parameters() errors compiler::CompilerError:
+        static compile:
+            fn f(x, x):
+                x
+            0
+    test::rejects_message("duplicate-parameters-message", compiler::DiagnosticCode::Duplicate, "duplicate binding \"x\" in the same lexical scope (block parameters)", duplicate_parameters)
+
+# ---------------------------------------------------------------------------
+# Unbound names
+
+fn register_unbound_tests():
+    # hir-resolve-9: a name nothing binds is Unbound, and the message names
+    # it.
+    fn unbound_name() errors compiler::CompilerError:
+        static compile:
+            nope
+    test::rejects_message("unbound-name-message", compiler::DiagnosticCode::Unbound, "unbound name \"nope\"", unbound_name)
+
+    # hir-aot-8a (examples/surface/09-mutual-recursion.bot): mutual
+    # recursion needs a forward edge, is_even's call of is_odd, which is
+    # Unbound with the "declared later" hint.
+    fn mutual_recursion() errors compiler::CompilerError:
+        static compile:
+            fn is_even(n):
+                if n == 0:
+                    return true
+                is_odd(n - 1)
+            fn is_odd(n):
+                if n == 0:
+                    return false
+                is_even(n - 1)
+            [is_even(10), is_even(7)]
+    test::rejects_containing("mutual-recursion-forward-reference", compiler::DiagnosticCode::Unbound, "unbound name \"is_odd\": \"is_odd\" is declared later", mutual_recursion)
+
+# ---------------------------------------------------------------------------
+# A function is a new callable
+
+fn register_loop_control_tests():
+    # hir-resolve-18 (its break half): h's `break` is outside any loop of
+    # h's own, though h is declared in, and called from, the loop's body.
+    fn break_in_function() errors compiler::CompilerError:
+        static compile:
+            loop:
+                fn h():
+                    break
+                h()
+    test::rejects_at("break-in-function-declared-in-loop", compiler::DiagnosticCode::BreakOutsideLoop, 214, 21, break_in_function)
+
+# ---------------------------------------------------------------------------
+# Recursion and refinement (inputs computed at run time)
+
+fn register_recursion_tests(fib_input: int, sum_input: int):
+    # hir-lower-compile-recursion: fib(8) through fib's own binding.
+    fn fibonacci() errors compiler::CompilerError:
+        static compile:
+            fn fib(n):
+                if n < 2:
+                    n
+                else:
+                    fib(n - 1) + fib(n - 2)
+            fib(fib_input)
+    test::value("recursion-fib", 21, fibonacci)
+
+    # hir-sample-backends-03-recursion (examples/hir/03-recursion): the sum
+    # of 0..10 through sum's own binding.
+    fn summation() errors compiler::CompilerError:
+        static compile:
+            fn sum(n):
+                if n == 0:
+                    0
+                else:
+                    n + sum(n - 1)
+            sum(sum_input)
+    test::value("recursion-sum", 55, summation)
+
+fn register_refinement_tests(number: int, text: str, empty: List[int]):
+    # hir-sample-backends-04-refinement (examples/hir/04-refinement): an
+    # untyped describe's integer? and string? tests refine v in the branch
+    # where they hold (v + 1 for an Int, v itself for a String); a test the
+    # static types decide (integer?(five)) selects its branch.
+    fn refinement() errors compiler::CompilerError:
+        static compile:
+            fn describe(v):
+                if integer?(v):
+                    v + 1
+                else:
+                    if string?(v):
+                        v
+                    else:
+                        "other"
+            five = 5
+            known = if integer?(five):
+                "yes"
+            else:
+                "no"
+            [describe(number), describe(text), describe(empty), known]
+    test::value("type-tests-refine-branches", [42, "hi", "other", "yes"], refinement)
+
+# ---------------------------------------------------------------------------
+
+with context test::suite()
+register_lexical_scope_tests()
+register_duplicate_binding_tests()
+register_unbound_tests()
+register_loop_control_tests()
+register_recursion_tests(8, 10)
+register_refinement_tests(41, "hi", [])
+test::report()

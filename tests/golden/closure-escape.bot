@@ -32,9 +32,14 @@
 #     forwarded through calls, also measured or returned whole, or indexed
 #     dynamically, gives its elements, also when they are call results;
 #   * a field projection in a loop over the empty List (a List[never]
-#     instance of a function taking List[S]) runs, through a lockstep loop,
-#     a nested [[]], a second call, a projection chain and an untyped
-#     parameter with mixed callers.
+#     instance of a function taking List[S]) runs, also through a lockstep
+#     loop, a nested [[]], a second call and a projection chain.
+#
+# closure-escape-instances.bot holds the one program of these Tcl tests
+# whose projection only a semantic instance proves (an untyped parameter
+# with mixed callers): its own suite, so that this suite's cranelift-generic
+# run stays a real one (run.tcl substitutes cranelift for a whole suite
+# whose unspecialized lowering reports struct-shape).
 #
 # Ported from tests/native-block-escape.test, tests/native-escape.test,
 # tests/native-listloop.test, tests/blockescape-called-generic.test and
@@ -61,7 +66,8 @@
 # function, given as literals where it is called.
 #
 # Declarations: Entry, Detail and Record, the element structs of the
-# never-element tests (the Tcl programs' S and T, renamed). The Tcl
+# never-element tests (the Tcl programs' S and T, renamed;
+# closure-escape-instances.bot declares its own Detail and Record). The Tcl
 # programs' top-level functions are nested in each block.
 #
 # Imports: compiler (the body contract, compiler::CompilerError) and test;
@@ -886,15 +892,8 @@ fn register_never_element_tests():
             total([])
     test::value("never-element/chain", 0, chain)
 
-    # ... an untyped parameter, called with a one-Record List and with [].
-    fn mixed_callers() errors compiler::CompilerError:
-        static compile:
-            fn total(xs) -> int:
-                ys = loop x in xs:
-                    x.t.g + x.f
-                list::length(ys)
-            [total([Record {f: 1, t: Detail {g: 2}}]), total([])]
-    test::value("never-element/mixed-callers", [1, 0], mixed_callers)
+    # (The fifth program, an untyped parameter with mixed callers, is
+    # closure-escape-instances.bot's never-element/mixed-callers.)
 
 # ---------------------------------------------------------------------------
 
