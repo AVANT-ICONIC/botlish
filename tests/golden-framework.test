@@ -891,6 +891,66 @@ test gf-library-warning-clean {lib/test.bot, and a suite using every helper, com
     return ok
 } -result ok
 
+# The message helpers, promoted from the suite-local matchers the migration's
+# suites wrote (LARGE-SCALE-GOLDEN-MIGRATION.md, "Library helpers"): the exact
+# message, or a fragment of it, beside the code; each kind of mismatch.
+set gfMessages {import compiler
+import test
+
+fn register_messages():
+    fn unbound() errors compiler::CompilerError:
+        static compile:
+            missing + 1
+    fn adds() errors compiler::CompilerError:
+        static compile:
+            20 + 22
+    test::rejects_message("exact message", compiler::DiagnosticCode::Unbound, "unbound name \"missing\"", unbound)
+    test::rejects_message("another message", compiler::DiagnosticCode::Unbound, "unbound name", unbound)
+    test::rejects_message("another code", compiler::DiagnosticCode::Type, "unbound name \"missing\"", unbound)
+    test::rejects_message("message expected, block accepted", compiler::DiagnosticCode::Unbound, "unbound name \"missing\"", adds)
+    test::rejects_containing("fragment", compiler::DiagnosticCode::Unbound, "\"missing\"", unbound)
+    test::rejects_containing("whole message as fragment", compiler::DiagnosticCode::Unbound, "unbound name \"missing\"", unbound)
+    test::rejects_containing("empty fragment", compiler::DiagnosticCode::Unbound, "", unbound)
+    test::rejects_containing("absent fragment", compiler::DiagnosticCode::Unbound, "present", unbound)
+    test::rejects_containing("fragment, another code", compiler::DiagnosticCode::Type, "missing", unbound)
+    test::rejects_containing("fragment expected, block accepted", compiler::DiagnosticCode::Unbound, "missing", adds)
+
+with context test::suite()
+register_messages()
+test::report()
+}
+
+test gf-message-helpers {test::rejects_message compares the code and the exact message, test::rejects_containing the code and a fragment of the message: passes, a wrong message, a wrong code and an accepted block, on every backend; the suite compiles under -warnings error} -body {
+    surface::compile $gfMessages suite.bot -warnings error
+    join [gfReport $gfMessages] \n
+} -result {PASS exact message
+FAIL another message
+  expected: compiler diagnostic Unbound with the message "unbound name"
+  actual: compiler diagnostic Unbound at line 7, column 13
+  detail: unbound name "missing"
+FAIL another code
+  expected: compiler diagnostic Type with the message "unbound name \"missing\""
+  actual: compiler diagnostic Unbound at line 7, column 13
+  detail: unbound name "missing"
+FAIL message expected, block accepted
+  expected: compiler diagnostic Unbound with the message "unbound name \"missing\""
+  actual: value 42
+PASS fragment
+PASS whole message as fragment
+PASS empty fragment
+FAIL absent fragment
+  expected: compiler diagnostic Unbound with a message containing "present"
+  actual: compiler diagnostic Unbound at line 7, column 13
+  detail: unbound name "missing"
+FAIL fragment, another code
+  expected: compiler diagnostic Type with a message containing "missing"
+  actual: compiler diagnostic Unbound at line 7, column 13
+  detail: unbound name "missing"
+FAIL fragment expected, block accepted
+  expected: compiler diagnostic Unbound with a message containing "missing"
+  actual: value 42
+4 passed, 6 failed}
+
 
 # ---------------------------------------------------------------------------
 # The framework keeps the compiler's precision, and adds nothing at run time

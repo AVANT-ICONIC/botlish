@@ -21,8 +21,9 @@
 #           else its first String literal + "~", else true/false swapped, else
 #           its first enum case qualified Name::Case swapped with another case
 #           written in the suite -- or not alterable), test::rejects' and
-#           test::rejects_at's code (Type <-> Unbound, any other -> Type), and
-#           test::rejects_at's column + 1. Every altered test must FAIL: the
+#           test::rejects_at's, test::rejects_message's and
+#           test::rejects_containing's code (Type <-> Unbound, any other ->
+#           Type), and test::rejects_at's column + 1. Every altered test must FAIL: the
 #           comparison is sensitive to the expectation it was written with.
 #           test::holds, test::rejects_any, test::case and suite-local
 #           registration helpers have no textual expectation to alter here;
@@ -191,7 +192,7 @@ proc alterSuite {text} {
     set edits {}
     set altered {}
     set skipped {}
-    foreach {match -} [regexp -all -inline -indices {\mtest::(value|holds|rejects|rejects_at|rejects_any|case)\(} $text] {
+    foreach {match -} [regexp -all -inline -indices {\mtest::(value|holds|rejects|rejects_at|rejects_any|rejects_message|rejects_containing|case)\(} $text] {
         lassign $match start stop
         set helper [string range $text [expr {$start + 6}] [expr {$stop - 1}]]
         set call [callArguments $text $stop]
@@ -212,7 +213,7 @@ proc alterSuite {text} {
                 lappend edits [list {*}$range $new]
                 lappend altered $name
             }
-            rejects - rejects_at {
+            rejects - rejects_at - rejects_message - rejects_containing {
                 set range [lindex $ranges 1]
                 set new [alterCode [string range $text {*}$range]]
                 if {$new eq ""} {

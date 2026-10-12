@@ -26,12 +26,13 @@ proc count {pattern text} {
 }
 
 set columns {
-    cases       {^\s+test::(value|holds|rejects|rejects_at|rejects_any|case)\(}
+    cases       {^\s+test::(value|holds|rejects|rejects_at|rejects_any|rejects_message|rejects_containing|case)\(}
     value       {^\s+test::value\(}
     holds       {^\s+test::holds\(}
     rejects     {^\s+test::rejects\(}
     rejects_at  {^\s+test::rejects_at\(}
     rejects_any {^\s+test::rejects_any\(}
+    rejects_msg {^\s+test::rejects_(message|containing)\(}
     custom      {^\s+test::case\(}
     ownhelper   {^\s+(?:[a-z]+_rejects_[a-z_]+|register_[a-z_]+)\("}
     bodies      {^\s*fn \S+\(\) errors compiler::CompilerError:}

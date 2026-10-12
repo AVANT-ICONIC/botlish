@@ -97,11 +97,13 @@ test::report()
 | `test::rejects(name, code, body)` | the block is rejected with that `compiler::DiagnosticCode` |
 | `test::rejects_at(name, code, line, column, body)` | ... reported at that line and column of the suite file |
 | `test::rejects_any(name, body)` | the block is rejected |
+| `test::rejects_message(name, code, message, body)` | ... with exactly that message (when the wording is the property) |
+| `test::rejects_containing(name, code, fragment, body)` | ... with a message containing the fragment |
 | `test::case(name, check)` | `check()`, a `Fn{args: [], return: test::Match}`, returns a match (`test::passed()`, or `test::mismatch(expected, actual, detail)`; `test::equal`, `test::satisfies` and `test::diagnostic` compute one) |
 
 Compare a diagnostic's `code` (and `primary` location, when the Tcl test pins
-it), never its message, unless the Tcl test is about the wording: then write
-a `test::case` that compares `message` too.
+it), never its message, unless the Tcl test is about the wording: then use
+`test::rejects_message` (or `test::rejects_containing` for a fragment).
 
 ## Writing the code under test
 
