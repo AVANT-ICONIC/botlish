@@ -42,8 +42,9 @@
 # suites of their own: callable-contracts-returned.bot (a returned closure's
 # call, charged the contract, with handlers for hocDecls' errors only),
 # callable-contracts-fallback.bot (hocWrapper's functions, which admit only
-# E1 and E3) and callable-contracts-unerased.bot (programs that need an
-# erased-callable contract with nothing foreign in it).
+# E1 and E3), callable-contracts-handle.bot (a coroutine construction given
+# an untyped parameter, in a function admitting only E) and
+# callable-contracts-unerased.bot (a program that erases nothing at all).
 #
 # Driver inputs. Where a Tcl program's driver (its top-level expression)
 # chooses with a literal what a run raises, the literal is an argument of
@@ -1413,8 +1414,15 @@ fn register_scc_affine_tests(two: int):
 # Coroutines: a handle is resumed through its Coroutine type alone once it
 # leaves the body that constructed it -- the same boundary.
 
-# sccCoroutine's error.
+# sccCoroutine's error, and its untyped helper (sccCoroutine's invoke,
+# renamed: the prelude has an invoke). It is top-level as in the Tcl
+# program: a generic function given an affine argument -- the coroutine
+# handle -- is specialized for it only at the top level
+# (AffineGenericNestedUnsupported inside a block).
 error Boom
+
+fn invoke_untyped(c, m) errors Boom:
+    c(m)
 
 # sccHandle: its error and messages.
 error E
@@ -1427,10 +1435,10 @@ struct Ev:
 
 fn register_scc_coroutine_tests(three: int, minus_three: int, two: int):
     # scc-coroutine-poison: an error-bearing coroutine given to an untyped
-    # function (invoke) does not reach the Fn{args: [], return: int} field
-    # call of run_box: accepted, and the call is charged nothing. (That
-    # invoke is specialized for the coroutine, and run_box's stamp, stay in
-    # Tcl.)
+    # function (invoke_untyped) does not reach the Fn{args: [], return: int}
+    # field call of run_box: accepted, and the call is charged nothing. (That
+    # invoke_untyped is specialized for the coroutine, and run_box's stamp,
+    # stay in Tcl.)
     fn coroutine_poison() errors compiler::CompilerError:
         static compile:
             fn worker(base: int, resume Message) -> Event errors Boom:
@@ -1438,11 +1446,9 @@ fn register_scc_coroutine_tests(three: int, minus_three: int, two: int):
                 if message.value < 0:
                     fail Boom
                 Event {value: message.value}
-            fn invoke(c, m) errors Boom:
-                c(m)
             fn use_worker(k: int) -> int errors Boom:
                 coroutine {step, first} = worker(1)
-                e = invoke(step, Message {value: k}):
+                e = invoke_untyped(step, Message {value: k}):
                     on Boom:
                         return -1
                 e.value
