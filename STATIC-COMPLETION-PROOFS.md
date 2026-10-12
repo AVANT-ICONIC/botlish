@@ -496,6 +496,29 @@ byte::set(['A', 'Ā', 'B'])      -> KNOWN-ERROR at 'Ā'; 'B' never analyzed
 byte::set(['-', '.', '_', '~']) -> effectiveErrors {}, no handler needed
 ```
 
+## Loop domains
+
+A loop's iteration domain -- a `listloop`'s `iterable` (a consuming loop
+over a `MutableVector`/`MutableArray` is a listloop too), a `countloop`'s
+`start` and `end`, a `lockloop`'s operands in written order
+(`hir::loopOperands`) -- runs once, in the enclosing body, before the first
+iteration, exactly like the statements before the loop.
+`hir::completions::LoopDomain` walks it so, ahead of everything the loop's
+own proof considers (the literal-list fact, the per-element walk, the body):
+what an operand raises is charged and diagnosed where it is written, and an
+operand that cannot complete normally makes the loop itself `never` there --
+the operands after it and the body are never reached, charged or diagnosed.
+So `loop x in g(n):` has exactly the completions of `xs = g(n)` followed by
+`loop x in xs:`, in every loop form.
+
+The walk used to skip a listloop's iterable: a fallible call written there
+was never charged, the program compiled strictly and the error escaped at
+run time as an uncaught error (`CORE SEMANTIC UNCAUGHT-ERROR`), while the
+bound-first spelling was rejected; and a counted or lockstep operand that
+never completes did not stop its loop, charging what came after it
+(`tests/errors.test`'s `errors-loop-*`,
+`tests/golden/completion-regressions.bot`).
+
 ## UTF-8 result type
 
 `core/strings.tcl`'s `encode_utf8` (`str -> List`, one UTF-8 byte per

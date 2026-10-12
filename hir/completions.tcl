@@ -1882,9 +1882,37 @@ proc hir::completions::RestoreRelations {ctxVar relations} {
     dict set ctx minSizes $minSizes
 }
 
-# A countloop's start/end are evaluated once, in the enclosing scope,
-# exactly like EvalListloop's own iterable -- walked here to record whatever
-# errors/diagnostics/facts they themselves contribute, and for their Ranges.
+# Walks a collecting loop's iteration domain: OPERANDS, the ExprIds a
+# listloop's iterable, a countloop's start and end or a lockloop's domain
+# operands (hir::loopOperands) name, which run once, in this order, in the
+# enclosing scope, before the first iteration -- an ordinary sequence, like
+# the statements before the loop (Seq). Their Ranges in order, or `never`
+# when one cannot complete normally: the loop never starts, so the operands
+# after it and the body are never reached, charged or diagnosed, and the
+# loop is itself `never` there -- exactly the statement `xs = g(n)` bound
+# before `loop x in xs:` would be. What an operand raises (a call, a
+# handled call's unhandled remainder) is charged and diagnosed where it is
+# written, like any other expression of the enclosing body: a domain is
+# never skipped, or a fallible call in it would escape unchecked.
+proc hir::completions::LoopDomain {hirVar ctxVar diagnose enclosing guard operands} {
+    upvar 1 $hirVar hir $ctxVar ctx
+    set ranges {}
+    foreach operand $operands {
+        set r [Eval hir ctx $diagnose $enclosing $guard $operand]
+        if {$r eq {never}} {
+            return never
+        }
+        lappend ranges $r
+    }
+    return $ranges
+}
+
+# A countloop's start/end are evaluated once, in the enclosing scope, in
+# that order and before the first iteration, exactly like EvalListloop's own
+# iterable -- walked here to record whatever errors/diagnostics/facts they
+# themselves contribute, and for their Ranges. One that cannot complete
+# normally makes the whole loop `never` there (LoopDomain): the end after a
+# start that never completes, and the body, never run.
 # The body is then walked once, EvalLoop's own conservative treatment (item
 # 91's "no general loop theorem proving": no per-iteration concrete facts),
 # but under the induction binding's interval -- the very counted-loop theorem
@@ -1899,8 +1927,11 @@ proc hir::completions::RestoreRelations {ctxVar relations} {
 # case.
 proc hir::completions::EvalCountloop {hirVar ctxVar diagnose enclosing guard e node} {
     upvar 1 $hirVar hir $ctxVar ctx
-    set start [Eval hir ctx $diagnose $enclosing $guard [dict get $node start]]
-    set end [Eval hir ctx $diagnose $enclosing $guard [dict get $node end]]
+    set ranges [LoopDomain hir ctx $diagnose $enclosing $guard [list [dict get $node start] [dict get $node end]]]
+    if {$ranges eq {never}} {
+        return never
+    }
+    lassign $ranges start end
     set saved [dict get $ctx bindings]
     set savedBounds [dict get $ctx indexBounds]
     set relations [Relations $ctx]
@@ -1943,15 +1974,21 @@ proc hir::completions::NoteIndexBound {hirVar ctxVar binding startRange end dire
 
 # A lockloop's domain operands are evaluated once, in written order, in the
 # enclosing scope (walked here for whatever errors/diagnostics/facts they
-# contribute); the body is then walked once, EvalCountloop's own
+# contribute; one that cannot complete normally makes the loop `never`
+# there, LoopDomain); the body is then walked once, EvalCountloop's own
 # conservative treatment: each numeric domain's binding gets the same
 # interval hir/range.tcl gives it, each list domain's element binding stays
 # unseeded.
 proc hir::completions::EvalLockloop {hirVar ctxVar diagnose enclosing guard e node} {
     upvar 1 $hirVar hir $ctxVar ctx
+    set operands [hir::loopOperands $node]
+    set results [LoopDomain hir ctx $diagnose $enclosing $guard $operands]
+    if {$results eq {never}} {
+        return never
+    }
     set ranges [dict create]
-    foreach operand [hir::loopOperands $node] {
-        dict set ranges $operand [Eval hir ctx $diagnose $enclosing $guard $operand]
+    foreach operand $operands r $results {
+        dict set ranges $operand $r
     }
     set saved [dict get $ctx bindings]
     set savedBounds [dict get $ctx indexBounds]
@@ -1972,6 +2009,11 @@ proc hir::completions::EvalLockloop {hirVar ctxVar diagnose enclosing guard e no
     return [hir::range::unknown]
 }
 
+# A listloop's ITERABLE is evaluated first, once, in the enclosing scope
+# (LoopDomain): what it raises is charged and diagnosed there, and one that
+# cannot complete normally makes the whole loop `never` before any of what
+# follows is considered -- the body is never walked.
+#
 # listloop's small-exact-literal-list proof (items 36-40, 92): when ITERABLE
 # is itself a call to the variadic `list` native whose every argument is a
 # plain `const`, within hir::range's own exact-value budget, this walks the
@@ -2001,6 +2043,9 @@ proc hir::completions::EvalLockloop {hirVar ctxVar diagnose enclosing guard e no
 proc hir::completions::EvalListloop {hirVar ctxVar diagnose enclosing guard e node} {
     upvar 1 $hirVar hir $ctxVar ctx
     set iterable [dict get $node iterable]
+    if {[LoopDomain hir ctx $diagnose $enclosing $guard [list $iterable]] eq {never}} {
+        return never
+    }
     set fact [LiteralListOf $hir $ctx $iterable]
     if {$fact eq {list}} {
         return [hir::range::unknown]

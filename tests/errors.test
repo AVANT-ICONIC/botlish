@@ -761,6 +761,282 @@ byte::set([])} errors-byte-set-empty.bot]
 } -result {{} same {{}}}
 
 # ---------------------------------------------------------------------------
+# A loop's iteration domain -- a listloop's iterable, a counted loop's
+# bounds, a lockstep loop's operands, a consuming loop's collection -- runs
+# once, in the enclosing body, before the first iteration
+# (STATIC-COMPLETION-PROOFS.md, "Loop domains"). The completion walk never
+# evaluated a listloop's iterable, so a fallible call written there was never
+# charged: `loop x in g(n):` compiled strictly and its error escaped at run
+# time as an uncaught error (CORE SEMANTIC UNCAUGHT-ERROR), while the same
+# call bound first (`xs = g(n)` then `loop x in xs:`) was rejected. A domain
+# operand that cannot complete normally makes the loop itself unable to
+# complete there, exactly as the bound-first statement does: the operands
+# after it and the body are never reached.
+
+# G fails Boom for a positive N, else is the List [1, 2]; H the same with N
+# itself; BANG fails Bang (which no function below declares) for a positive
+# N. The consuming forms need the collection modules, imported in the header.
+set loopDomainDecls {import mutable_array
+import mutable_vector
+error Boom
+error Bang
+fn g(n: int) -> List[int] errors Boom:
+    if n > 0:
+        fail Boom
+    [1, 2]
+fn h(n: int) -> int errors Boom:
+    if n > 0:
+        fail Boom
+    n
+fn bang(n: int) -> int errors Bang:
+    if n > 0:
+        fail Bang
+    n
+}
+
+# The kinds of TEXT's diagnostics (-strict 0) whose expression is (in) a
+# loop's domain operand: a listloop's iterable, a countloop's bound, a
+# lockloop's operand, or one of their subexpressions.
+proc domainDiagKinds {text} {
+    set hir [sourceHir $text]
+    set pending {}
+    dict for {e node} [dict get $hir exprs] {
+        switch -- [dict get $node kind] {
+            listloop { lappend pending [dict get $node iterable] }
+            countloop { lappend pending [dict get $node start] [dict get $node end] }
+            lockloop { lappend pending {*}[hir::loopOperands $node] }
+        }
+    }
+    set within [dict create]
+    while {[llength $pending]} {
+        set pending [lassign $pending e]
+        dict set within $e 1
+        lappend pending {*}[hir::children $hir $e]
+    }
+    return [lsort [lmap d [hir::diagnostics $hir] {
+        if {![dict exists $within [dict get $d expr]]} continue
+        dict get $d kind
+    }]]
+}
+
+# The defect's reproducer, inline and bound first: untyped g and f, f(1).
+set loopIterableInline "error Boom\nfn g(n) errors Boom:\n    if n > 0:\n        fail Boom\n    \[1\]\nfn f(n):\n    loop x in g(n):\n        0\n    0\nf(1)\n"
+set loopIterableBound "error Boom\nfn g(n) errors Boom:\n    if n > 0:\n        fail Boom\n    \[1\]\nfn f(n):\n    xs = g(n)\n    loop x in xs:\n        0\n    0\nf(1)\n"
+
+test errors-loop-iterable-call-charged {a fallible call written as a loop's iterable is charged where it is written: f's loop x in g(n) is UNHANDLED-ERROR at the iterable call (and f(1), which always fails, KNOWN-ERROR), strict compilation rejects the program instead of running into an uncaught error; with an argument nothing decides, the iterable call alone is UNHANDLED-ERROR} -body {
+    set dynamic "${loopDomainDecls}fn f(n: int) -> int:\n    loop x in g(n):\n        0\n    0\nf(0)\n"
+    set strict [catch {surface::compile $loopIterableInline t.bot} message options]
+    list [diagWhere $loopIterableInline] [domainDiagKinds $loopIterableInline] \
+        $strict [lrange [dict get $options -errorcode] 0 2] \
+        [diagWhere $dynamic] [domainDiagKinds $dynamic]
+} -cleanup {
+    unset -nocomplain dynamic strict message options
+} -result {{{KNOWN-ERROR top} {UNHANDLED-ERROR f}} UNHANDLED-ERROR 1 {CORE SEMANTIC KNOWN-ERROR} {{UNHANDLED-ERROR f}} UNHANDLED-ERROR}
+
+test errors-loop-iterable-handled-runs {handled: f declares Boom and its caller handles it, with an argument the compiler cannot decide -- accepted strictly, and the handler runs exactly when the iterable call fails (k(0) + k(1) is 5 + 7) on every backend} -body {
+    set text "${loopDomainDecls}fn f(n: int) -> int errors Boom:\n    loop x in g(n):\n        0\n    5\nfn k(m: int) -> int:\n    r = f(m):\n        on Boom:\n            7\n    r\nk(0) + k(1)\n"
+    list [diagKinds [sourceHir $text]] [parity $text] [value $text]
+} -cleanup {
+    unset -nocomplain text
+} -result {{} same 12}
+
+test errors-loop-iterable-always-fails-known-error {an iterable call that can never complete normally makes the loop unable to complete: KNOWN-ERROR at the iterable call (at the top level, and in f's body) and at f's call, which a handler does not make legal} -body {
+    set top "${loopDomainDecls}loop x in g(1):\n    0\n0\n"
+    set handled "${loopDomainDecls}fn f() -> int errors Boom:\n    loop x in g(1):\n        0\n    0\nr = f():\n    on Boom:\n        1\nr\n"
+    list [diagWhere $top] [domainDiagKinds $top] [diagWhere $handled] [domainDiagKinds $handled]
+} -cleanup {
+    unset -nocomplain top handled
+} -result {{{KNOWN-ERROR top}} KNOWN-ERROR {{KNOWN-ERROR f} {KNOWN-ERROR top}} KNOWN-ERROR}
+
+test errors-loop-domain-forms-charged {every loop form charges what its domain raises where it is written: a collecting loop's iterable, a lockstep loop's list operand, a counted loop's bound and a consuming loop's MutableVector or MutableArray are each UNHANDLED-ERROR at the operand in f; the lockstep loop handled by its caller runs on every backend} -body {
+    set forms {
+        collecting {fn f(n: int) -> List[int]:
+    loop x in g(n):
+        x + 1
+f(0)
+}
+        lockstep {fn f(n: int) -> List[int]:
+    loop x in [h(n), 5] and i from 0 to 2:
+        x + i
+f(0)
+}
+        counted {fn f(n: int) -> List[int]:
+    loop i from 0 to h(n):
+        i
+f(0)
+}
+        vector {fn make(n: int) -> MutableVector[int] errors Boom:
+    mutable_vector::from_list([h(n), 2])
+fn f(n: int) -> List[int]:
+    loop x in make(n):
+        x
+f(0)
+}
+        array {fn make(n: int) -> MutableArray[int] errors Boom:
+    mutable_array::create(2, h(n))
+fn f(n: int) -> List[int]:
+    loop x in make(n):
+        x
+f(0)
+}
+    }
+    set handled "${loopDomainDecls}fn f(n: int) -> List\[int\] errors Boom:\n    loop x in \[h(n), 5\] and i from 0 to 2:\n        x + i\nfn k(m: int) -> List\[int\]:\n    r = f(m):\n        on Boom:\n            \[7\]\n    r\n\[k(0), k(1)\]\n"
+    list {*}[lmap {name form} $forms {
+        list $name [diagWhere "$loopDomainDecls$form"] [domainDiagKinds "$loopDomainDecls$form"]
+    }] [list handled [diagKinds [sourceHir $handled]] [parity $handled] [value $handled]]
+} -cleanup {
+    unset -nocomplain forms handled
+} -result {{collecting {{UNHANDLED-ERROR f}} UNHANDLED-ERROR} {lockstep {{UNHANDLED-ERROR f}} UNHANDLED-ERROR} {counted {{UNHANDLED-ERROR f}} UNHANDLED-ERROR} {vector {{UNHANDLED-ERROR f}} UNHANDLED-ERROR} {array {{UNHANDLED-ERROR f}} UNHANDLED-ERROR} {handled {} same {[[0, 6], [7]]}}}
+
+test errors-loop-domain-never-stops-there {a domain operand that cannot complete normally stops the loop there: in a counted loop from h(1) to bang(n) and a lockstep loop over [h(1), 5] and [bang(n), 6], h(1) always fails, so bang(n)'s undeclared Bang is never charged -- KNOWN-ERROR at h(1) and at f(0), nothing UNHANDLED} -body {
+    set counted "${loopDomainDecls}fn f(n: int) -> List\[int\] errors Boom:\n    loop i from h(1) to bang(n):\n        i\nf(0)\n"
+    set lockstep "${loopDomainDecls}fn f(n: int) -> List\[int\] errors Boom:\n    loop x in \[h(1), 5\] and y in \[bang(n), 6\]:\n        x + y\nf(0)\n"
+    list [diagWhere $counted] [domainDiagKinds $counted] [diagWhere $lockstep] [domainDiagKinds $lockstep]
+} -cleanup {
+    unset -nocomplain counted lockstep
+} -result {{{KNOWN-ERROR f} {KNOWN-ERROR top}} KNOWN-ERROR {{KNOWN-ERROR f} {KNOWN-ERROR top}} KNOWN-ERROR}
+
+test errors-loop-iterable-bound-first-agrees {the inline spelling of every program above has exactly the diagnostics of the same program with the loop's domain bound to locals first (the reproducer, a dynamic argument, a handled call, an always-failing iterable, the collecting, lockstep and counted forms, a consuming loop over a MutableVector and over a MutableArray, and an operand that stops the loop)} -body {
+    set pairs [list reproducer $loopIterableInline $loopIterableBound]
+    foreach {name inline bound} {
+        dynamic {fn f(n: int) -> int:
+    loop x in g(n):
+        0
+    0
+f(0)
+} {fn f(n: int) -> int:
+    xs = g(n)
+    loop x in xs:
+        0
+    0
+f(0)
+}
+        handled {fn f(n: int) -> int errors Boom:
+    loop x in g(n):
+        0
+    5
+fn k(m: int) -> int:
+    r = f(m):
+        on Boom:
+            7
+    r
+k(0) + k(1)
+} {fn f(n: int) -> int errors Boom:
+    xs = g(n)
+    loop x in xs:
+        0
+    5
+fn k(m: int) -> int:
+    r = f(m):
+        on Boom:
+            7
+    r
+k(0) + k(1)
+}
+        always {fn f() -> int errors Boom:
+    loop x in g(1):
+        0
+    0
+r = f():
+    on Boom:
+        1
+r
+} {fn f() -> int errors Boom:
+    xs = g(1)
+    loop x in xs:
+        0
+    0
+r = f():
+    on Boom:
+        1
+r
+}
+        collecting {fn f(n: int) -> List[int]:
+    loop x in g(n):
+        x + 1
+f(0)
+} {fn f(n: int) -> List[int]:
+    xs = g(n)
+    loop x in xs:
+        x + 1
+f(0)
+}
+        lockstep {fn f(n: int) -> List[int]:
+    loop x in [h(n), 5] and i from 0 to 2:
+        x + i
+f(0)
+} {fn f(n: int) -> List[int]:
+    a = h(n)
+    loop x in [a, 5] and i from 0 to 2:
+        x + i
+f(0)
+}
+        counted {fn f(n: int) -> List[int]:
+    loop i from 0 to h(n):
+        i
+f(0)
+} {fn f(n: int) -> List[int]:
+    e = h(n)
+    loop i from 0 to e:
+        i
+f(0)
+}
+        vector {fn make(n: int) -> MutableVector[int] errors Boom:
+    mutable_vector::from_list([h(n), 2])
+fn f(n: int) -> List[int]:
+    loop x in make(n):
+        x
+f(0)
+} {fn make(n: int) -> MutableVector[int] errors Boom:
+    mutable_vector::from_list([h(n), 2])
+fn f(n: int) -> List[int]:
+    v = make(n)
+    loop x in v:
+        x
+f(0)
+}
+        array {fn make(n: int) -> MutableArray[int] errors Boom:
+    mutable_array::create(2, h(n))
+fn f(n: int) -> List[int]:
+    loop x in make(n):
+        x
+f(0)
+} {fn make(n: int) -> MutableArray[int] errors Boom:
+    mutable_array::create(2, h(n))
+fn f(n: int) -> List[int]:
+    a = make(n)
+    loop x in a:
+        x
+f(0)
+}
+        stops {fn f(n: int) -> List[int] errors Boom:
+    loop i from h(1) to bang(n):
+        i
+f(0)
+} {fn f(n: int) -> List[int] errors Boom:
+    s = h(1)
+    e = bang(n)
+    loop i from s to e:
+        i
+f(0)
+}
+    } {
+        lappend pairs $name "$loopDomainDecls$inline" "$loopDomainDecls$bound"
+    }
+    set differ {}
+    foreach {name inline bound} $pairs {
+        set a [diagWhere $inline]
+        set b [diagWhere $bound]
+        if {$a ne $b} {
+            lappend differ [list $name inline $a bound $b]
+        }
+    }
+    list [expr {[llength $pairs] / 3}] $differ
+} -cleanup {
+    unset -nocomplain pairs name inline bound differ a b
+} -result {10 {}}
+
+# ---------------------------------------------------------------------------
 # Handled calls and the native range analysis (COMPREHENSIVE-GENERATED-CODE-
 # AUDIT.md, correctness finding C1). hir/range.tcl's interprocedural range
 # fixpoint must see a handled call and its handler bodies: a handled call's
