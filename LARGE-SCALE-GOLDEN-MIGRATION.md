@@ -10,29 +10,30 @@ STATIC-DECISION-ECONOMICS.md and the native `imod` GC-safepoint repair.
 
 ## Outcome
 
-**Every one of the 7266 Tcl tests that run on this revision is examined and
+**Every one of the 7280 Tcl tests that run on this revision is examined and
 classified; every source-observable one has a Botlish-native golden
 specification or a recorded reason; the Tcl suite is unchanged, independent and
 still authoritative.** `tests/golden/manifest.tsv` is now the complete map
-(8713 rows): 3246 Tcl tests are source-observable, of which 2205 are ported
-whole (MIGRATED), 1038 have their source theorem ported while their Tcl test
-keeps an internal theorem (SPLIT), and 3 are blocked by a documented compiler or
-framework limitation; 4020 observe what Botlish source cannot (2130 compiler or
-runtime internals, 509 parser and header behavior, 470 warnings, 583 several
-programs, a corpus file or the process environment, 119 run-time-only failures,
-209 otherwise not expressible). The golden corpus grew from 8 suites and 223
-tests to **85 suite files and 4557 golden tests** (62,742 lines), organized by
+(8735 rows): 3252 Tcl tests are source-observable, of which 2209 are ported
+whole (MIGRATED), 1041 have their source theorem ported while their Tcl test
+keeps an internal theorem (SPLIT), and 2 are blocked by a documented compiler
+limitation; 4028 observe what Botlish source cannot (2139 compiler or runtime
+internals, 509 parser and header behavior, 470 warnings, 582 several programs,
+a corpus file or the process environment, 119 run-time-only failures, 209
+otherwise not expressible). The golden corpus grew from 8 suites and 223 tests
+to **88 suite files and 4572 golden tests** (63,300 lines), organized by
 language concept, every suite an ordinary strict program that passes on the Tcl
 interpreter, the Tcl compiler, generic Cranelift and specialized Cranelift with
 one report (10 companions exclude a backend with a recorded reason).
 
-On one checkout, **all 4687 ported (Tcl test, golden test) pairs agree: old
+On the final tree, **all 4702 ported (Tcl test, golden test) pairs agree: old
 passes, new passes** (audit/golden/tools/check.tcl, every ported Tcl test proven
-to have run by name, every golden suite on all four backends). Every golden test
-is demonstrably capable of failing (audit/golden/tools/perturb.tcl: it fails
-with inverted verdicts, and with its expectation, code or column altered). The
-framework's 20 mutants are all killed; the cross-suite mutant sample's results
-are in [Mutation](#mutation).
+to have run by name, every golden suite on all four backends), and the full Tcl
+suite passes in both passes (PASS_COUNTS). Every golden test is demonstrably
+capable of failing (audit/golden/tools/perturb.tcl: PERTURB_SUMMARY). The
+framework's 20 mutants are all killed; of a 48-mutant cross-suite sample, 45
+are detected by both layers, 2 only by Tcl (both explained: not
+source-observable) and 1 by neither ported side ([Mutation](#mutation)).
 
 The ordinary framework -- a context holding a `MutableVector` of deferred
 `Fn{args: [], return: test::Match}` checks, a coroutine runner, explicit
@@ -42,20 +43,19 @@ trick**. The library grew by exactly two helpers (`test::rejects_message`,
 `test::rejects_containing`) after four suites had reimplemented them
 independently.
 
-The migration found and fixed **five compiler defects** in their own layers
-(two completion-analysis precision/soundness defects, two static-decision
-dependency defects of which one could make the batched scheduler build a
-different program than the sequential reference, and a front-end crash on
-recursive struct types), each with Tcl and golden regressions; and it found
-**static-decision economics regressions** the previous milestone's claims did
-not cover (independent blocks still serialized through the erased-callable
-contract and through nested sibling blocks). See [Compiler findings](#compiler-findings).
+The migration found and fixed **six compiler defects** in their own layers (two
+completion-analysis precision/soundness defects; three static-decision defects,
+two of which could make the batched scheduler commit a different decision or
+build a different program than the sequential reference; a front-end crash on
+recursive struct types), each with Tcl and golden regressions; and it found and
+fixed **static-decision economics regressions** the previous milestone's
+claims did not cover (independent blocks still serialized through the
+erased-callable contract, nested sibling blocks, the trait plan's gate and
+internal-id messages): the 85 suites' static decisions went from 303 rounds /
+451 builds to 206 / 322 (all 88 suites now: 211 / 329, of which 81 method-call
+trials, and no misprediction). See [Compiler findings](#compiler-findings).
 
-Performance, measured on the finished corpus (section [Performance](#performance)):
-compiling the golden corpus is the cost -- the Tcl front end and the two Tcl
-code generators (Core IR lowering plus the Tcl compiler, and NIR lowering)
-dominate; Cranelift code generation is about a tenth of a percent and native
-execution of every test is milliseconds. **(measured numbers below)**
+PERF_SUMMARY
 
 ## Contents
 
@@ -86,9 +86,9 @@ the developer workflow around it:
 
 | layer | what it is now | how it is checked |
 |---|---|---|
-| Botlish golden suites | 85 `tests/golden/*.bot` programs, 4557 tests: the source-level specification of user-visible Botlish semantics | `tests/golden/run.tcl` (every backend, one report), CI's four golden shards (`check.tcl -shard I/4`) |
-| Tcl duplicate E2E corpus | the 2038 Tcl tests whose whole theorem a golden test now carries (`tcl_layer` DUPLICATED-E2E, future freeze class FROZEN-DUPLICATE-ORACLE) | unchanged: `tests/all.tcl`, both passes; side by side with their golden tests in CI's golden shards |
-| Tcl internal / not-expressible / multi-program tests | 5228 Tcl tests (`tcl_layer` ACTIVE-INTERNAL 3638, ACTIVE-NOT-EXPRESSIBLE 1007, ACTIVE-MULTI-PROGRAM 583) | unchanged: `tests/all.tcl` |
+| Botlish golden suites | 88 `tests/golden/*.bot` programs, 4572 tests: the source-level specification of user-visible Botlish semantics | `tests/golden/run.tcl` (every backend, one report), CI's four golden shards (`check.tcl -shard I/4`) |
+| Tcl duplicate E2E corpus | the 2042 Tcl tests whose whole theorem a golden test now carries (`tcl_layer` DUPLICATED-E2E, future freeze class FROZEN-DUPLICATE-ORACLE) | unchanged: `tests/all.tcl`, both passes; side by side with their golden tests in CI's golden shards |
+| Tcl internal / not-expressible / multi-program tests | 5238 Tcl tests (`tcl_layer` ACTIVE-INTERNAL 3650, ACTIVE-NOT-EXPRESSIBLE 1006, ACTIVE-MULTI-PROGRAM 582) | unchanged: `tests/all.tcl` |
 | fuzzers, mutants, audits | unchanged, plus the migration's tools | the harnesses' own runs; the cross-suite mutant sample |
 
 The two layers stay independent: no Tcl test calls the golden library, no golden
@@ -104,8 +104,9 @@ three passes, each checked by tools rather than by trust:
 1. **Ground truth.** Every Tcl test file ran once, verbosely, on this revision
    (`-verbose ps`, a private `-tmpdir` each, three at a time): 7250 tests ran and
    passed, loop-generated names included (a static count of `test` invocations
-   is 6107). `audit/golden/migration/tcl-names.txt` is the name authority (7266
-   after the migration's own new tests).
+   is 6107). `audit/golden/migration/tcl-names.txt` is the name authority: 7280
+   on the final tree, from its full interp regression (the 30 new tests are the
+   regressions of the migration's compiler fixes).
 2. **Census.** One classification row per Tcl test, per test file
    (`audit/golden/migration/census/*.tsv`, 169 files): what it observes (its
    helpers resolved: `sourceAgree`, `outcomeUnderHir`, Core IR text, `-strict
@@ -123,7 +124,7 @@ three passes, each checked by tools rather than by trust:
    `perturb.tcl` shows every test can fail; its static economics are measured;
    its Tcl originals still pass. Companion suites were created where a test needs
    a different import set, its own program-wide facts or a backend exclusion
-   (31 of the 85 files).
+   (33 of the 88 files).
 
 `audit/golden/migration/merge.tcl` builds `tests/golden/manifest.tsv` from the
 pre-migration manifest, the census, the fragments and the names; the census and
@@ -138,12 +139,12 @@ Per subsystem (`tclsh9.0 audit/golden/tools/ledger.tcl`):
 | subsystem | Tcl tests | source-observable | migrated | split | internal | warning | parser | runtime-only | multi-program | not expressible | blocked | golden rows |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | abi | 175 | 86 | 76 | 10 | 18 | 0 | 0 | 7 | 62 | 2 | 0 | 167 |
-| affine | 110 | 98 | 44 | 54 | 11 | 0 | 0 | 0 | 1 | 0 | 0 | 213 |
-| collections | 581 | 319 | 261 | 58 | 131 | 0 | 0 | 23 | 106 | 2 | 0 | 443 |
-| contexts | 75 | 41 | 22 | 19 | 14 | 0 | 0 | 2 | 8 | 10 | 0 | 89 |
+| affine | 112 | 99 | 44 | 55 | 11 | 0 | 0 | 0 | 1 | 1 | 0 | 215 |
+| collections | 584 | 321 | 263 | 58 | 132 | 0 | 0 | 23 | 106 | 2 | 0 | 449 |
+| contexts | 75 | 42 | 22 | 20 | 14 | 0 | 0 | 2 | 8 | 9 | 0 | 90 |
 | coroutines | 56 | 46 | 41 | 5 | 8 | 0 | 0 | 0 | 0 | 2 | 0 | 63 |
 | diagnostics | 198 | 187 | 150 | 37 | 6 | 0 | 0 | 0 | 1 | 4 | 0 | 287 |
-| errors | 267 | 220 | 183 | 37 | 20 | 0 | 0 | 6 | 17 | 4 | 0 | 418 |
+| errors | 267 | 222 | 184 | 38 | 19 | 0 | 0 | 6 | 16 | 4 | 0 | 423 |
 | functions | 411 | 330 | 255 | 75 | 63 | 0 | 0 | 12 | 2 | 4 | 0 | 407 |
 | gc | 167 | 75 | 4 | 71 | 63 | 0 | 0 | 0 | 29 | 0 | 0 | 80 |
 | harness | 85 | 18 | 8 | 10 | 28 | 0 | 0 | 2 | 24 | 13 | 0 | 30 |
@@ -153,17 +154,17 @@ Per subsystem (`tclsh9.0 audit/golden/tools/ledger.tcl`):
 | opaque | 107 | 80 | 77 | 3 | 10 | 0 | 0 | 2 | 9 | 6 | 0 | 115 |
 | parser | 496 | 9 | 2 | 7 | 13 | 0 | 474 | 0 | 0 | 0 | 0 | 12 |
 | refinements | 262 | 161 | 121 | 40 | 75 | 0 | 0 | 1 | 8 | 17 | 0 | 251 |
-| static-compile | 59 | 33 | 23 | 10 | 26 | 0 | 0 | 0 | 0 | 0 | 0 | 44 |
+| static-compile | 68 | 33 | 23 | 10 | 35 | 0 | 0 | 0 | 0 | 0 | 0 | 44 |
 | strings | 433 | 267 | 158 | 109 | 7 | 0 | 0 | 11 | 116 | 32 | 0 | 286 |
-| surface | 685 | 645 | 574 | 70 | 9 | 0 | 0 | 22 | 0 | 9 | 1 | 951 |
+| surface | 685 | 645 | 575 | 70 | 9 | 0 | 0 | 22 | 0 | 9 | 0 | 952 |
 | traits | 68 | 53 | 39 | 13 | 6 | 0 | 0 | 0 | 1 | 8 | 1 | 79 |
 | warnings | 638 | 10 | 3 | 7 | 85 | 470 | 0 | 0 | 57 | 16 | 0 | 10 |
-| **total** | **7266** | **3246** | **2205** | **1038** | **2130** | **470** | **509** | **119** | **583** | **209** | **3** | **4687** |
+| **total** | **7280** | **3252** | **2209** | **1041** | **2139** | **470** | **509** | **119** | **582** | **209** | **2** | **4702** |
 
 The subsystem is the census's reading of what a test is about, not its file
 (warnings tests' program halves are counted under warnings; the parser's
 lowering tests that observe values under parser). A golden row is one (Tcl test,
-golden test) pair: 826 Tcl tests became several golden tests (a broad Tcl test
+golden test) pair: 830 Tcl tests became several golden tests (a broad Tcl test
 split into one coherent outcome each), and 120 golden tests stand for several
 Tcl tests (interp/compile/parity twins of one program).
 
@@ -201,12 +202,13 @@ rows may name one golden test).
 
 ## The golden corpus
 
-85 suite files: the validation sample's 8 (unchanged), 45 suites of the
-migration's batches, `completion-regressions.bot` (the regressions of the
-compiler defects the migration fixed), and 31 companions. A suite is named for
-its concept, not its Tcl file (`destructuring.bot`, `callable-contracts.bot`,
-`affinity.bot`, ...); the manifest keeps the mapping back. A companion exists for
-one of three reasons, each stated in its header:
+88 suite files: the validation sample's 8 (unchanged but for one test moved
+out of `representation.bot`, [below](#backends-and-exclusions)), 45 suites of the
+migration's batches, two regression suites of the compiler defects the migration
+fixed (`completion-regressions.bot`, `recursive-types.bot`), and 33 companions.
+A suite is named for its concept, not its Tcl file (`destructuring.bot`,
+`callable-contracts.bot`, `affinity.bot`, ...); the manifest keeps the mapping
+back. A companion exists for one of three reasons, each stated in its header:
 
 * **its imports or top-level names** (16 files): imports decide
   method-candidate visibility and `MissingImport`, and an entry program's own
@@ -218,107 +220,22 @@ one of three reasons, each stated in its header:
   `mutable-vector-str.bot` -- adding `import str` to `mutable-vector.bot` turns
   three USE-AFTER-MOVE rejections into NO-APPLICABLE-METHOD, because
   `str::length` becomes a candidate -- ...);
-* **a program-wide fact** (5 files): the erased-callable contract is
+* **a program-wide fact** (7 files): the erased-callable contract is
   everything the *whole* program passes into untyped parameters, so a test of
   what an uncontracted call is charged needs a program that erases exactly its
   own callables (`callable-contracts-returned.bot`, `-fallback`, `-handle`,
-  `-unerased`, `static-compile-erased-consumer.bot`);
+  `-unerased`, `-contravariant`, `-contravariant-rejected`,
+  `static-compile-erased-consumer.bot`);
 * **a backend exclusion** (10 files, [below](#backends-and-exclusions)), so that
   the main suite keeps its full matrix.
 
-Per suite (front-end and wall seconds from the full side-by-side run, three
-suites at a time on a 4-core machine shared with other compilation jobs: compare
-within the table only; the quiet-machine measurements are in
-[Performance](#performance)):
+Per suite (cold, one process per suite, one at a time, on a quiet 4-core
+machine: `bench/golden-suites.tcl`; the interp, compile and Cranelift columns are
+each backend's preparation plus its run of the whole suite, after the shared
+front end; `x` an excluded backend, which the benchmark runs anyway and which
+reports its unsupported operation):
 
-| suite | golden tests | Tcl tests | from Tcl files | lines | static blocks | rounds | builds (method trials) | front end s* | 4-backend wall s* |
-|---|---|---|---|---|---|---|---|---|---|
-| abi-bytes-native.bot | 3 | 3 | abi-bytes | 87 | 3 | 1 | 1 (0) | 3.3 | 5.5 |
-| abi-bytes.bot | 103 | 57 | abi-bytes, abi-mutable-bytes | 1098 | 103 | 3 | 3 (0) | 22.6 | 117.0 |
-| abi-numeric-native.bot | 1 | 1 | abi-numeric | 40 | 1 | 1 | 1 (0) | 1.7 | 4.0 |
-| abi-numeric.bot | 87 | 34 | abi-numeric, scalarbits | 865 | 76 | 2 | 2 (0) | 16.6 | 121.7 |
-| affinity.bot | 67 | 32 | affine | 1110 | 67 | 9 | 10 (0) | 43.2 | 84.4 |
-| bits-bytes-hashing.bot | 47 | 51 | native-bitshift, native-byte, native-csv-records, native-executable +1 | 525 | 35 | 1 | 1 (0) | 5.8 | 52.7 |
-| callable-contracts-fallback.bot | 4 | 3 | higher-order-completions | 112 | 4 | 2 | 2 (0) | 5.7 | 15.8 |
-| callable-contracts-handle.bot | 1 | 1 | structural-contract-completions | 61 | 1 | 1 | 1 (0) | 1.1 | 3.9 |
-| callable-contracts-returned.bot | 4 | 6 | higher-order-completions | 150 | 4 | 4 | 4 (0) | 8.9 | 23.0 |
-| callable-contracts-unerased.bot | 1 | 1 | structural-contract-completions | 44 | 1 | 1 | 1 (0) | 2.0 | 8.2 |
-| callable-contracts.bot | 95 | 81 | exact-callable-executable, higher-order-completions, structural-contract-completions | 1801 | 81 | 27 | 31 (2) | 267.6 | 405.4 |
-| callables.bot | 113 | 101 | closure-int-keys, exact-callable-key, structural-fn-types, typed-callable-escape | 1780 | 111 | 16 | 16 (0) | 421.7 | 504.3 |
-| closure-escape-instances.bot | 1 | 1 | native-listloop | 48 | 1 | 1 | 1 (0) | 2.3 | 10.0 |
-| closure-escape.bot | 49 | 47 | blockescape-called-generic, blockescape-nested-capturers, native-block-escape, native-escape +1 | 911 | 49 | 1 | 1 (0) | 6.3 | 56.7 |
-| collections.bot | 44 | 23 | enums, flags, immutable-set, list-stdlib +9 | 718 | 44 | 4 | 7 (2) | 12.1 | 25.5 |
-| compiled-values-struct-transport.bot | 17 | 16 | value-transport | 368 | 17 | 1 | 1 (0) | 8.4 | 52.3 |
-| compiled-values.bot | 118 | 95 | blockescape-nested-capturers, compiler-opt, direct-hir-native, dormant-instances +6 | 1698 | 114 | 16 | 16 (0) | 583.7 | 972.3 |
-| completion-regressions.bot | 23 | 11 | errors | 381 | 23 | 2 | 2 (0) | 3.4 | 8.2 |
-| contexts.bot | 87 | 48 | context-traits, contexts, linux-path | 1258 | 80 | 3 | 4 (0) | 36.1 | 116.5 |
-| core-semantics.bot | 141 | 119 | acceptance, backends, bindings, blocks +8 | 1810 | 126 | 3 | 3 (0) | 27.7 | 159.3 |
-| coroutines.bot | 62 | 47 | coroutines | 1456 | 61 | 4 | 5 (0) | 23.9 | 94.9 |
-| declared-errors-imports.bot | 10 | 2 | namespaced-errors | 133 | 10 | 2 | 3 (0) | 3.2 | 7.7 |
-| declared-errors.bot | 113 | 72 | error-payloads, errors, namespaced-errors | 1942 | 106 | 5 | 9 (3) | 95.4 | 279.8 |
-| destructuring-instances.bot | 55 | 22 | struct-destructuring | 686 | 55 | 1 | 1 (0) | 2.3 | 11.3 |
-| destructuring.bot | 378 | 179 | struct-destructuring | 3680 | 356 | 5 | 7 (1) | 129.9 | 528.2 |
-| diagnostics.bot | 27 | 24 | enums, flags, hir-resolution, imports +9 | 511 | 28 | 5 | 7 (1) | 19.9 | 43.9 |
-| errors.bot | 24 | 20 | error-payloads, errors, higher-order-completions, mutable-array-type +3 | 607 | 26 | 3 | 3 (0) | 4.7 | 13.4 |
-| flags.bot | 100 | 98 | flags | 1308 | 100 | 2 | 2 (0) | 6.6 | 185.4 |
-| framework-semantics.bot | 29 | 17 | golden-framework | 611 | 26 | 5 | 9 (2) | 60.0 | 93.0 |
-| gc-sensitive-values.bot | 22 | 24 | native-alloc, native-root-liveness, native-stack-map, string-allocation | 519 | 22 | 1 | 1 (0) | 2.0 | 17.4 |
-| harness.bot | 13 | 13 | argv, calls, coroutines, hir-lowering +6 | 363 | 14 | 2 | 2 (0) | 5.4 | 37.7 |
-| hir-values.bot | 14 | 12 | hir-aot, hir-lowering, hir-resolution, hir-samples | 277 | 14 | 2 | 2 (0) | 3.5 | 14.8 |
-| imports-abi-child.bot | 17 | 10 | imports, surface-modules | 169 | 17 | 3 | 3 (0) | 4.0 | 9.8 |
-| imports-abi-family.bot | 6 | 5 | imports, surface-modules | 89 | 6 | 1 | 1 (0) | 5.2 | 17.2 |
-| imports-library-modules.bot | 12 | 11 | imports, surface-modules | 156 | 12 | 3 | 3 (0) | 9.1 | 38.7 |
-| imports-unimported.bot | 16 | 6 | imports | 136 | 14 | 2 | 2 (0) | 2.1 | 6.7 |
-| imports.bot | 59 | 36 | imports, surface-modules | 524 | 58 | 4 | 16 (11) | 108.3 | 167.6 |
-| linux-io-native.bot | 5 | 4 | linux-syscall | 121 | 5 | 1 | 1 (0) | 3.1 | 5.5 |
-| linux-io.bot | 55 | 26 | argv, linux-syscall | 501 | 47 | 4 | 4 (0) | 12.0 | 29.0 |
-| lists-and-sets.bot | 86 | 89 | byte-set, immutable-set, list-stdlib, lists +2 | 778 | 72 | 3 | 3 (0) | 18.7 | 93.7 |
-| loop-collecting-refined-checks.bot | 1 | 1 | raw-count-loops | 50 | 1 | 1 | 1 (0) | 3.2 | 43.3 |
-| loop-collecting.bot | 110 | 110 | loop-collecting, raw-count-loops | 1366 | 106 | 3 | 3 (0) | 12.5 | 85.9 |
-| loops.bot | 55 | 72 | loop-counted, loop-in, loops | 783 | 55 | 2 | 2 (0) | 8.7 | 64.0 |
-| method-equivalence-imported.bot | 13 | 9 | method-eligible | 199 | 11 | 3 | 5 (1) | 15.5 | 41.1 |
-| method-equivalence.bot | 45 | 36 | method-eligible | 584 | 42 | 3 | 3 (0) | 4.4 | 14.3 |
-| methods-byte-without-list.bot | 3 | 2 | method-sugar | 54 | 3 | 2 | 2 (0) | 4.5 | 15.1 |
-| methods-list-without-str.bot | 3 | 2 | method-sugar | 47 | 3 | 2 | 2 (0) | 4.5 | 13.8 |
-| methods-struct-instances.bot | 8 | 5 | method-sugar | 109 | 8 | 1 | 1 (0) | 0.9 | 4.8 |
-| methods-type-import-only.bot | 1 | 1 | method-sugar | 29 | 1 | 2 | 2 (0) | 3.8 | 11.3 |
-| methods.bot | 195 | 104 | method-sugar | 1819 | 198 | 5 | 7 (1) | 134.6 | 347.9 |
-| modules.bot | 31 | 12 | context-traits, contexts, imports, namespaced-errors +5 | 572 | 33 | 3 | 4 (0) | 21.0 | 70.2 |
-| mutable-array.bot | 233 | 115 | mutable-array-type, mutable-array, mutarray-construction | 2930 | 233 | 7 | 34 (24) | 1031.2 | 1495.8 |
-| mutable-vector-str.bot | 1 | 1 | mutable-vector | 44 | 1 | 1 | 1 (0) | 2.1 | 6.5 |
-| mutable-vector.bot | 74 | 41 | mutable-vector | 1206 | 70 | 4 | 21 (14) | 178.9 | 338.2 |
-| names-and-scoping.bot | 58 | 61 | hir-syntax, strict-references, surface-lowering | 861 | 58 | 2 | 2 (0) | 4.5 | 26.3 |
-| native-aggregates.bot | 70 | 69 | native-mutarray, native-param-aggregate, native-refinement-propagation, native-tiny-leaf-inline | 1223 | 57 | 1 | 1 (0) | 9.6 | 90.3 |
-| native-values.bot | 89 | 62 | backends, native-bitwise-fold, native | 1102 | 79 | 1 | 1 (0) | 11.7 | 119.1 |
-| opaque-instances.bot | 1 | 1 | opaque-struct | 37 | 1 | 1 | 1 (0) | 2.5 | 6.7 |
-| opaque.bot | 91 | 73 | opaque-struct | 1124 | 91 | 11 | 15 (2) | 117.4 | 207.4 |
-| ownership.bot | 38 | 13 | affine, coroutines, mutable-array, mutable-vector | 700 | 38 | 5 | 24 (15) | 140.2 | 195.3 |
-| range-and-contract-values.bot | 78 | 68 | checked-domain-proof-provenance, closed-closure-entry-facts, conjunctive-entry-facts, exact-value-facts +5 | 1149 | 76 | 13 | 13 (0) | 193.8 | 303.3 |
-| raw-int-abi.bot | 52 | 50 | raw-int-abi, raw-internal-abi | 951 | 52 | 1 | 1 (0) | 5.0 | 60.4 |
-| refinements.bot | 66 | 52 | refined-signatures, refined, refinement-values | 1036 | 66 | 3 | 10 (5) | 111.7 | 195.7 |
-| representation.bot | 14 | 12 | abi-numeric, enums, loop-counted, native-bitshift +7 | 357 | 14 | 2 | 2 (0) | 4.7 | 20.8 |
-| static-compile-erased-consumer.bot | 2 | 1 | static-economics | 59 | 2 | 2 | 2 (0) | 2.3 | 8.0 |
-| static-compile.bot | 81 | 58 | static-compile, static-economics | 1452 | 153 | 26 | 33 (4) | 479.5 | 616.5 |
-| stdlib-namespaces-entry-members.bot | 4 | 2 | stdlib-namespaces | 64 | 4 | 1 | 1 (0) | 1.8 | 5.5 |
-| stdlib-namespaces-str-only.bot | 1 | 1 | stdlib-namespaces | 25 | 1 | 2 | 2 (0) | 3.4 | 7.4 |
-| stdlib-namespaces-unimported.bot | 2 | 1 | stdlib-namespaces | 32 | 2 | 2 | 2 (0) | 3.3 | 7.8 |
-| stdlib-namespaces.bot | 114 | 49 | module-static-values, stdlib-namespaces | 1065 | 110 | 3 | 9 (5) | 70.8 | 185.5 |
-| string-natives.bot | 82 | 81 | native-string-region, native-string-traversal, native-string-view, native-uri-escape | 1077 | 45 | 1 | 1 (0) | 9.0 | 88.0 |
-| string-representations.bot | 48 | 50 | packed-ascii, short-string | 900 | 48 | 1 | 1 (0) | 6.8 | 59.8 |
-| strings.bot | 94 | 102 | ascii, emailish-predicate, native-tcl-unicode, str-char-at +2 | 932 | 67 | 2 | 2 (0) | 13.3 | 110.6 |
-| struct-representation-instances.bot | 15 | 14 | struct-scalar-replacement | 240 | 15 | 1 | 1 (0) | 3.3 | 13.3 |
-| struct-representation.bot | 110 | 98 | struct-scalar-replacement, virtual-construction | 1732 | 107 | 1 | 1 (0) | 17.2 | 259.9 |
-| structs-and-enums-instances.bot | 4 | 4 | structs | 84 | 4 | 1 | 1 (0) | 1.6 | 7.2 |
-| structs-and-enums-qualifiers.bot | 2 | 1 | enums | 49 | 2 | 1 | 1 (0) | 2.0 | 8.2 |
-| structs-and-enums.bot | 111 | 77 | enums, structs | 1335 | 111 | 6 | 19 (11) | 139.9 | 230.0 |
-| traits-path.bot | 2 | 2 | traits | 73 | 2 | 1 | 2 (0) | 3.2 | 7.9 |
-| traits.bot | 67 | 43 | traits | 1024 | 79 | 5 | 10 (3) | 67.8 | 120.6 |
-| types.bot | 96 | 93 | applied-types, empty-collection-admissibility, source-types, symbolic-type-identity +1 | 1269 | 94 | 3 | 3 (0) | 26.0 | 89.2 |
-| unicode-strings.bot | 56 | 56 | native-tcl-unicode | 190 | 5 | 1 | 1 (0) | 3.4 | 17.0 |
-| validators-and-proofs.bot | 153 | 54 | proof-loop-intervals, proven-bounds, refinement-validators | 1748 | 153 | 3 | 4 (0) | 23.5 | 125.0 |
-| values.bot | 32 | 36 | blocks, calls, control, elif +8 | 1005 | 26 | 1 | 1 (0) | 7.2 | 51.8 |
-| warning-programs.bot | 42 | 37 | fixed-arity-list-return, many-boolean-arguments, one-char-string-literal, proves-naming +1 | 623 | 42 | 3 | 4 (0) | 9.0 | 25.8 |
-| total (85 suites) | 4557 | 3280 | | 62742 | 4359 | 303 | 451 (107) | 4921 | 10265 |
+SUITE_TABLE
 
 Every suite ends with `with context test::suite()`, its registration calls and
 `test::report()`; every test body is a nested function `fn NAME() errors
@@ -328,15 +245,15 @@ are semantic (the Tcl name when it already is, the manifest keeps the old one).
 
 ## What stays in Tcl, and why
 
-4020 Tcl tests (55%) stay Tcl-only, each for an observational reason recorded in
-its row; 1038 more keep an active internal half beside their golden test:
+4028 Tcl tests (55%) stay Tcl-only, each for an observational reason recorded in
+its row; 1041 more keep an active internal half beside their golden test:
 
 | reason | Tcl tests | what they observe |
 |---|---|---|
-| KEEP-INTERNAL | 2130 | HIR/Core IR/NIR text and facts, plans, ranges, instances, allocation and release counts, stack maps, safepoints, root maps, caches, build counts, scheduler internals, the Rust/Cranelift layers |
+| KEEP-INTERNAL | 2139 | HIR/Core IR/NIR text and facts, plans, ranges, instances, allocation and release counts, stack maps, safepoints, root maps, caches, build counts, scheduler internals, the Rust/Cranelift layers |
 | KEEP-PARSER | 509 | lexer and parser output, syntax errors, header and import-placement failures, HIR text readers |
 | KEEP-WARNING | 470 | every warning (kind, wording, count, location) -- warnings are not reified |
-| KEEP-MULTI-PROGRAM | 583 | several programs or installations, `main.tcl` and executables, stdout, argv/environment, private generated modules, option matrices -- and 164 tests whose subject is a corpus file (CORPUS-SUBJECT, below) |
+| KEEP-MULTI-PROGRAM | 582 | several programs or installations, `main.tcl` and executables, stdout, argv/environment, private generated modules, option matrices -- and 164 tests whose subject is a corpus file (CORPUS-SUBJECT, below) |
 | KEEP-RUNTIME-ONLY | 119 | a failure no Botlish handler can observe ([below](#run-time-only-failures)) |
 | KEEP-NOT-EXPRESSIBLE | 209 | unchecked Core IR or `-strict 0` semantics with no strict equivalent, Tcl API behavior, value display text, diagnostics anchored outside any block |
 
@@ -377,21 +294,22 @@ trait-polymorphic-recursion-rejected is BLOCKED with that reproducer).
 
 ## Strength
 
-Per ported Tcl test (its golden rows together): **1240 equal, 799 stronger,
-1013 split, 191 weaker**.
+Per ported Tcl test (its golden rows together; a test with any weaker row
+counts as weaker, else any split row as split, else any stronger row as
+stronger): **1244 equal, 799 stronger, 1015 split, 192 weaker**.
 
 * **Stronger** (799): the golden test runs where the Tcl test did not (most Tcl
   tests ran one or two backends; every golden test runs four), pins a
   `DiagnosticCode` and location where the Tcl test matched a message glob,
   compares a value the Tcl test only computed, uses run-time inputs where the Tcl
-  program's constants let the compiler fold the theorem away (506 rows
+  program's constants let the compiler fold the theorem away (509 rows
   DYNAMIC-INPUT), or replaces a vacuous Tcl assertion
   ([Old-test findings](#old-test-findings)).
-* **Split** (1013): the source theorem is ported; the Tcl test stays active for
+* **Split** (1015): the source theorem is ported; the Tcl test stays active for
   what only it observes (`tcl_retained`): NIR or allocation shape, release
   counters, the full `-strict 0` diagnostic list, the program-boundary uncaught
   error, GC-stress equality, warning counts.
-* **Weaker** (191 Tcl tests, 287 rows), each saying what was lost: the message
+* **Weaker** (192 Tcl tests, 289 rows), each saying what was lost: the message
   wording is not compared while code and location are (156 rows; the README rule
   -- messages are reports, not properties -- and mostly OLD-TEST-OVERSPECIFIED);
   a rejected block reifies only its *first* diagnostic, so "exactly one
@@ -400,7 +318,8 @@ Per ported Tcl test (its golden rows together): **1240 equal, 799 stronger,
   value, so a test of a native passed through a parameter uses `mod` (5); the
   program-boundary uncaught-error behavior (4); a value's display text or order
   (4); a `-strict 0` program whose strict form differs (3); other specific
-  losses (46, each in its notes). A whole port that is weaker keeps its Tcl test
+  losses (48, each in its notes; the latest two, `af-recursive-struct`'s,
+  lose its live-coroutine count, a release counter). A whole port that is weaker keeps its Tcl test
   active (`tcl_layer` ACTIVE-NOT-EXPRESSIBLE).
 
 No source-semantic property was weakened silently: every weaker row names its
@@ -457,63 +376,64 @@ never by bending a port around them.
 | 2 | **Soundness.** `EvalListloop` never evaluated the loop's iterable: a call in `loop x in g(n):` that may fail was never charged, so a strict program compiled and its declared error escaped at run time uncaught (and counted/lockstep operands that never complete still let the body be charged). | `hir/completions.tcl` | the fix of #1 | be97243: `LoopDomain` walks every loop's domain (iterable, bounds, lockstep operands) in the enclosing scope first; a `never` operand makes the loop `never`. No existing program was newly rejected. |
 | 3 | **Static decisions: wrong decision.** `hir::affine::verify` computes release scopes (and so AFFINE-PATH-RELEASE-UNSUPPORTED) only when the whole program has no affine diagnostic; `hir/staticdeps.tcl` did not model that channel, so the batched scheduler mispredicted -- and, when the site also had a later diagnostic, *committed a different decision than the sequential reference* (KNOWN-ERROR instead of AFFINE-PATH-RELEASE-UNSUPPORTED), recorded nowhere. | `hir/staticdeps.tcl` | mutable-vector.bot (mispredicted) | 984baec: the ownership verdict is a program-wide channel (`C:verdict`); 3 tests, 3 mutants. |
 | 4 | **Static decisions: wrong program.** `Prepare` built its mentions, site expressions, region calls and function literals with `dict lappend` into flat lists read as dicts, so only the last entry per key survived: the analysis dropped edges, and a batched build could commit a capture the sequential order accepts (a different program, recorded nowhere) or mispredict. | `hir/staticdeps.tcl` | the fix of #3 | 6fe0859: every entry kept; a function value is not a shared mutable place (soundness argued in STATIC-DECISION-ECONOMICS.md, "Every mention"). Outcomes of all suites unchanged; some suites take more builds through the restored contract-boundary edges. |
-| 5 | **Crash.** `hir::mutvec::ShareDescriptor` recursed without bound (TCL LIMIT STACK) on a program declaring a recursive struct type and using `MutableVector` anywhere -- which every golden suite does, through `lib/test.bot`. | `hir/mutvec.tcl` | `structs.test` struct-named-recursive-declaration | RECURSIVE_TYPES_FIX |
+| 5 | **Crash.** `hir::mutvec::ShareDescriptor` recursed without bound (TCL LIMIT STACK) on a program declaring a recursive struct type and using `MutableVector` anywhere -- which every golden suite does, through `lib/test.bot`. | `hir/mutvec.tcl` | `structs.test` struct-named-recursive-declaration | e4107e3: `ShareDescriptor` and the affine drop `Descriptor` keep the structs they are inside of (a struct met again inside itself contributes nothing; descriptors of every non-recursive type unchanged). An *affine* struct holding its own type in a container element has values nested to any depth that no finite static descriptor reaches: its declaration is now rejected (AFFINE-CONTAINER-UNSUPPORTED, naming the field path) -- before, it compiled while unused and crashed the compiler once a release was needed. **A new restriction, flagged for your decision** (STRUCTS.md, AFFINE-VALUES.md). 5 Tcl tests, `recursive-types.bot` (9). |
+| 6 | **Static decisions: wrong message.** Hygiene renames a capturing binding `NAME#N`, N counted over the whole program, every static site's body included; a TYPE message printing that name differed between builds, so the batched scheduler committed `"list#2"` where the sequential reference reports `"list#1"` -- a different `CompilerError.message` value. | `hir/semantic.tcl`, `hir/range.tcl` | `se-equal-hygiene-names` (found while making TYPE messages name callables by source) | dc8bf3d: such messages print the binding's source spelling (`hir::semantic::SourceName`). Other producers that print a binding's name (USE-AFTER-MOVE, `hir::signatures::Name`) remain a documented gap (STATIC-DECISION-ECONOMICS.md); no golden suite's message names a hygiene rename. |
 
 Static-decision **economics** findings (not wrong results): the previous
 milestone established that builds scale with dependency depth, not with the
-number of independent rejected blocks; the migrated corpus found three shapes
-where they still scale with the number of blocks:
+number of independent rejected blocks; the migrated corpus found four shapes
+where they still scaled with the number of blocks, all fixed (17f0323, 6d22ef7;
+STATIC-DECISION-ECONOMICS.md records the analysis, 17 new static-decision
+mutants pin it):
 
-* **the erased-callable contract**: a rejected block that passes a callable into
-  an untyped parameter is both an erasure site and a consumer of the
-  program-wide erased-callable contract, so such blocks were decided one per
-  build even when none of the erased callables declares an error
-  (callable-contracts.bot 27 rounds / 31 builds, compiled-values.bot 16/16,
-  callables.bot 16/16, range-and-contract-values.bot 13/13, opaque.bot 11/15);
-* **nested sibling blocks**: TYPE rejections in sibling functions inside one
-  enclosing `static compile:` block were decided one per round (static-compile.bot
-  26 rounds after #4);
-* **internal ids**: a TYPE message that prints an exact callable as `block(eN)`
-  is committed only in the sequential order's own build, by design; seven such
-  blocks cost callables.bot seven rounds, and one USE-AFTER-MOVE message that
-  names no internal id was classified as naming one;
+| shape | example before | fix | after |
+|---|---|---|---|
+| **the erased-callable contract**: a rejected block that passes a callable into an untyped parameter is both an erasure site and a consumer of the program-wide contract, so such blocks were decided one per build even when the callables declare nothing | callable-contracts.bot 27 rounds / 31 builds, callables.bot 16/16, compiled-values.bot 16/16, range-and-contract-values.bot 13/13 | the contract (and what an uncontracted input may hold) is a set of errors: it depends per error on one witness contribution; a request erasing nothing is none; an argument naming a function is read by its place, not its body | 4/8, 3/3, 4/4, 4/4 |
+| **nested sibling blocks**: a nested site depended on its enclosing site's form and through it on every sibling | static-compile.bot 26/33 | a site's form (`F:`) is apart from what its diagnostics read (`Z:`): an edge reading code goes to the form, which changes only by the site's own rejection | 7/14 |
+| **internal ids**: a TYPE message printing an exact callable as `block(eN)` is committed only in the sequential order's own build; and a USE-AFTER-MOVE naming a binding `s1` was taken for one | callables.bot (7 rounds of such messages), affinity.bot, declared-errors.bot | those messages name the callable by source (`two/2 -> bool`); `InternalIds` recognizes only `block(eN)` and `function eN` | |
+| **the trait plan's gate** (mispredictions only; decisions already equal): `hir::traits::Plan` runs only on a diagnostic-free program | traits.bot, affinity.bot (mispredicted) | a program-wide channel `C:plan` | no misprediction in any suite; traits.bot now takes 8 rounds / 13 builds (5/10 while mispredicting): its plan diagnostics are decided one per build, as the sequential order decides them (the plan is one computation over the whole program) |
 
-plus an unmodelled channel that only mispredicts (decisions still equal
-sequential): `hir::traits::Plan` runs only on a diagnostic-free program
-(traits.bot, affinity.bot). ECONOMICS_FIX
+Over the 85 suites the economics were first measured on: **303 rounds / 451
+builds before, 206 / 322 after**; all 88 suites now take 211 rounds and 329 builds,
+81 of them method-call trial builds, with no misprediction. The remaining
+outliers are method-call trials (mutable-array.bot 5 rounds / 20 builds, 14 of
+them trials of chained calls with several candidates; structs-and-enums.bot 4/17;
+imports.bot 4/16), which a block's dependency analysis does not make cheaper.
+Every suite's decisions are the sequential reference's
+(`audit/static-decisions/tools/compare.tcl`: COMPARE_RESULT).
 
 ## The framework at scale
 
 The design of GOLDEN-TEST-FRAMEWORK.md held at 20 times the sample's size
 without a change of shape: no test syntax, no global registry (every suite
-registers explicitly through ordinary functions; 819 registration functions),
-no catch-all error (1112 explicit `on E` handlers express which declared error
+registers explicitly through ordinary functions; 825 registration functions),
+no catch-all error (1118 explicit `on E` handlers express which declared error
 a test expects -- they are the theorem, not boilerplate), no test-only native,
-no layout trick (bodies are where they read best; 154 of 4279 are at a suite's
-top level). Counted over all 85 suites (`audit/golden/tools/census.tcl`):
+no layout trick (bodies are where they read best; 154 of 4293 are at a suite's
+top level). Counted over all 88 suites (`audit/golden/tools/census.tcl`):
 
 | construct | count |
 |---|---|
-| `test::value` registrations | 2902 |
+| `test::value` registrations | 2915 |
 | `test::rejects` | 688 |
-| `test::rejects_at` (an absolute location of the suite file) | 288 |
-| `test::rejects_message` / `test::rejects_containing` | 338 |
+| `test::rejects_at` (an absolute location of the suite file) | 289 |
+| `test::rejects_message` / `test::rejects_containing` | 339 |
 | `test::holds` / `test::rejects_any` | 0 / 0 |
 | custom `test::case` | 28 |
 | calls of suite-local registration helpers (tables, message+location, same-diagnostic) | 292 |
-| test bodies (`fn NAME() errors compiler::CompilerError:`) | 4279 |
-| `static compile:` blocks | 4359 |
-| explicit run-time error handlers | 1112 |
-| top-level declarations (struct, enum, error, refined type, trait, context struct, ...) | 513 |
-| lines per registered case, declarations and comments included | 14.8 |
+| test bodies (`fn NAME() errors compiler::CompilerError:`) | 4293 |
+| `static compile:` blocks | 4373 |
+| explicit run-time error handlers | 1118 |
+| top-level declarations (struct, enum, error, refined type, trait, context struct, ...) | 527 |
+| lines per registered case, declarations and comments included | 14.9 |
 
-Per manifest row: 4403 simple helper, 245 suite-local helper, 39 custom; 1456
-rows need the static boundary semantically (a rejection or an escaping error),
-3231 use it by convention; 669 handle a run-time error explicitly; 421 pin a
-location, 836 a message, 23 related locations; 506 use run-time inputs to defeat
-folding or KnownError; 1386 port a `-strict 0` Tcl program strictly. The
+Per manifest row (4702): 4418 simple helper, 245 suite-local helper, 39 custom;
+1458 rows need the static boundary semantically (a rejection or an escaping
+error), 3244 use it by convention; 671 handle a run-time error explicitly; 421
+pin a location, 837 a message, 23 related locations; 509 use run-time inputs to
+defeat folding or KnownError; 1386 port a `-strict 0` Tcl program strictly. The
 ceremony every test repeats -- a named body, `errors compiler::CompilerError`,
-`static compile:`, a registration line -- appears 4279 times; it is the evidence
+`static compile:`, a registration line -- appears 4293 times; it is the evidence
 for a later general `syntactic fn` decision, and was not changed.
 
 **Library additions.** Exactly two helpers, after evidence (point 24):
@@ -545,7 +465,7 @@ their codes, and all 20 framework mutants still apply and are killed.
   had KELVIN SIGN (U+212A) silently NFC-normalized to ASCII `K` by the editing
   path, which would have made the test check ASCII (caught by dumping bytes);
   unicode-strings.bot's header warns about it;
-* **absolute locations**: 288 `rejects_at` tests name suite-file lines; agents
+* **absolute locations**: 289 `rejects_at` tests name suite-file lines; agents
   re-derived them mechanically after every edit (one wrote a token-locating
   script). Block-relative provenance would remove this.
 
@@ -578,7 +498,14 @@ run whenever one of its programs hit the struct-shape limitation; several
 migrators found that this silently removed generic coverage from entire suites
 and isolated the affected tests into the companions above. The stand-in is now
 reported (`run.tcl -names` prints `STANDIN`, `check.tcl` lists GENERIC
-STAND-IN suites). STANDIN_RESULT
+STAND-IN suites). On the final tree it
+found one more, in the validation sample itself: `representation.bot`'s port of
+`value-transport.test`'s vt-late-materialized-is-equal-to-eager reads fields of
+untyped parameters, so none of that suite's Int, String and hashing boundary
+tests had ever run on cranelift-generic. The test moved to
+`compiled-values-struct-transport.bot`, beside value-transport's other
+untyped-projection programs (203f017); `representation.bot` now passes on all
+four backends and no suite relies on a stand-in.
 
 ## Non-vacuity
 
