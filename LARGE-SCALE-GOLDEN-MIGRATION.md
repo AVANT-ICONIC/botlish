@@ -606,12 +606,16 @@ the final tree).
 | golden framework (`audit/golden/tools/mutate.tcl`) | 20 | all apply, all killed | `lib/test.bot` gained two helpers |
 | static decisions (`audit/static-decisions/tools/mutate.tcl`) | 34 (17 before; 17 added with the fixes) | all apply, all killed | `hir/staticdeps.tcl`, `hir/static.tcl` |
 | structural contracts (`audit/structural-contracts/tools/mutate.tcl`) | 18 | all apply, all killed | `hir/completions.tcl` |
-| error payloads (`audit/error-payloads/tools/mutate.tcl`) | 44 | MUTANTS_EP | `hir/completions.tcl` |
-| static intrinsics (`audit/static-compile/tools/mutate.tcl`) | 21 | MUTANTS_SC | `hir/static.tcl` |
-| affine values (`audit/affine/tools/mutate.tcl`) | 29 | MUTANTS_AF | `hir/affine.tcl`, `hir/structs.tcl` |
-| coroutines (`audit/coroutines/tools/mutate.tcl`) | 52 | MUTANTS_CO | `hir/affine.tcl`; the runner is a coroutine |
-| MutableVector (`audit/mutable-vector/tools/mutate.tcl`) | 45 | MUTANTS_MV | `hir/mutvec.tcl` |
-| MutableArray (`audit/mutable-array/tools/mutate.tcl`) | 31 | MUTANTS_MA | `hir/mutvec.tcl` |
+| error payloads (`audit/error-payloads/tools/mutate.tcl`) | 44 | all apply, all killed (the 43 Tcl-backend ones, and the native `propagation-drops-payload-native` with its private rebuild) | `hir/completions.tcl` |
+| static intrinsics (`audit/static-compile/tools/mutate.tcl`) | 21 | all apply, all killed | `hir/static.tcl` |
+| affine values (`audit/affine/tools/mutate.tcl`) | 29 | all apply, all killed (27 Tcl, 2 native) | `hir/affine.tcl`, `hir/structs.tcl` |
+| coroutines (`audit/coroutines/tools/mutate.tcl`) | 52 | all apply, all killed (42 Tcl, 10 native) | `hir/affine.tcl`; the runner is a coroutine |
+| MutableVector (`audit/mutable-vector/tools/mutate.tcl`) | 45 | all apply, all killed (36 Tcl, 9 native) | `hir/mutvec.tcl` |
+| MutableArray (`audit/mutable-array/tools/mutate.tcl`) | 31 | all apply, all killed (25 Tcl, 6 native) | `hir/mutvec.tcl` |
+
+Each native mutant rebuilds a private copy of the native backend; the
+harnesses ran on the final tree (the error-payload, structural-contract and
+static-decision ones after their layer's last change).
 
 Every compiler fix of the migration also ran its layer's fuzzers on the final
 tree (several seeds, once under GC stress where the harness has the switch),
