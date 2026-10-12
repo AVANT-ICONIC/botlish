@@ -45,13 +45,19 @@
 # only), callable-contracts-fallback.bot (hocWrapper's functions, which
 # admit only E1 and E3), callable-contracts-handle.bot (a coroutine
 # construction given an untyped parameter, in a function admitting only E)
-# and callable-contracts-unerased.bot (a program that erases nothing).
+# and callable-contracts-unerased.bot (a program that erases nothing). So
+# are the two whose outcome another block's erasure could supply:
+# sccContravariant's rejection and the charge of its accepted call are E1
+# put there by contravariant erasure alone, while C1, its name here, is
+# erased directly by blocks of this suite
+# (callable-contracts-contravariant-rejected.bot and
+# callable-contracts-contravariant.bot).
 #
 # Static decisions. Nearly every block here both erases (it passes an
 # error-declaring callable to an untyped helper: call, outer, make, rec, ...)
 # and consumes the erased-callable contract (the helpers' generic bodies call
 # their untyped parameters), so the decision scheduler decides the rejected
-# ones one per build: 27 rounds and 31 builds on this tree (reported with the
+# ones one per build: 26 rounds and 30 builds on this tree (reported with the
 # migration; the layout is the natural one and is not bent to avoid it).
 #
 # Driver inputs. Where a Tcl program's driver (its top-level expression)
@@ -191,7 +197,7 @@ fn register_hoc_original_tests(k0: int, k1: int, k2: int):
                     on OriginE2 {origin}:
                         -1 + 0 * str::length(origin)
             0
-    test::rejects_at("hoc-original-payload", compiler::DiagnosticCode::UnhandledError, 190, 17, original_payload)
+    test::rejects_at("hoc-original-payload", compiler::DiagnosticCode::UnhandledError, 196, 17, original_payload)
     test::rejects_containing("hoc-original-payload/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"OriginE1\"", original_payload)
 
     # hoc-original-payload-both-handled: with both handled it is accepted,
@@ -524,7 +530,7 @@ fn register_hoc_structural_tests(k0: int, k1: int, k2: int, k3: int):
                         return ["E3", d.code]
                 [r]
             [observe(k0), observe(k1), observe(k2), observe(k3)]
-    test::rejects_at("hoc-structural-boundary", compiler::DiagnosticCode::Type, 518, 25, structural_boundary)
+    test::rejects_at("hoc-structural-boundary", compiler::DiagnosticCode::Type, 524, 25, structural_boundary)
     test::rejects_containing("hoc-structural-boundary/identity", compiler::DiagnosticCode::Type, "declared error \"E1\"", structural_boundary)
 
 # recursion: rec(raise, 2, k) -- raise forwarded through two recursive calls
@@ -625,7 +631,7 @@ fn register_hoc_composition_tests(k0: int, k1: int, k2: int, k3: int):
                     on E2 {code}:
                         code
             top(0)
-    test::rejects_at("hoc-undeclared-through-helper", compiler::DiagnosticCode::UnhandledError, 627, 13, undeclared_through_helper)
+    test::rejects_at("hoc-undeclared-through-helper", compiler::DiagnosticCode::UnhandledError, 633, 13, undeclared_through_helper)
     test::rejects_containing("hoc-undeclared-through-helper/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"E1\"", undeclared_through_helper)
 
     fn undeclared_in_narrow() errors compiler::CompilerError:
@@ -637,7 +643,7 @@ fn register_hoc_composition_tests(k0: int, k1: int, k2: int, k3: int):
                     on E2 {code}:
                         code
             0
-    test::rejects_at("hoc-undeclared-through-helper/narrow", compiler::DiagnosticCode::UnhandledError, 634, 17, undeclared_in_narrow)
+    test::rejects_at("hoc-undeclared-through-helper/narrow", compiler::DiagnosticCode::UnhandledError, 640, 17, undeclared_in_narrow)
     test::rejects_containing("hoc-undeclared-through-helper/narrow/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"E1\"", undeclared_in_narrow)
 
     # hoc-top-level: an unhandled error through the untyped helper outside
@@ -646,7 +652,7 @@ fn register_hoc_composition_tests(k0: int, k1: int, k2: int, k3: int):
     fn top_level() errors compiler::CompilerError:
         static compile:
             call(raise, 1)
-    test::rejects_at("hoc-top-level", compiler::DiagnosticCode::UnhandledError, 648, 13, top_level)
+    test::rejects_at("hoc-top-level", compiler::DiagnosticCode::UnhandledError, 654, 13, top_level)
     test::rejects_containing("hoc-top-level/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"E1\"", top_level)
 
     # hoc-mutable-array-factory: a factory closure that calls an erased
@@ -791,7 +797,7 @@ fn register_hoc_precision_tests(negative: int, five: int, one: int):
                     on E1:
                         -1
             0
-    test::rejects_at("hoc-precise-recovery-wrong-handler", compiler::DiagnosticCode::UnhandledError, 790, 17, precise_recovery_wrong_handler)
+    test::rejects_at("hoc-precise-recovery-wrong-handler", compiler::DiagnosticCode::UnhandledError, 796, 17, precise_recovery_wrong_handler)
     test::rejects_containing("hoc-precise-recovery-wrong-handler/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"E2\"", precise_recovery_wrong_handler)
 
 # ---------------------------------------------------------------------------
@@ -1012,7 +1018,7 @@ fn register_scc_contract_error_tests(two: int, three: int):
                     on C2:
                         -2
             [poison(two)]
-    test::rejects_at("scc-one-error-wrong-handler", compiler::DiagnosticCode::UnhandledError, 1011, 18, one_error_wrong_handler)
+    test::rejects_at("scc-one-error-wrong-handler", compiler::DiagnosticCode::UnhandledError, 1017, 18, one_error_wrong_handler)
     test::rejects_containing("scc-one-error-wrong-handler/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"C1\"", one_error_wrong_handler)
 
     # scc-one-error-declared: an enclosing function declaring C1 compiles;
@@ -1029,7 +1035,7 @@ fn register_scc_contract_error_tests(two: int, three: int):
             fn d(j: Job1) -> int errors C2:
                 (j.run)()
             [poison(two)]
-    test::rejects_at("scc-one-error-declared/other", compiler::DiagnosticCode::UnhandledError, 1030, 18, one_error_other_declared)
+    test::rejects_at("scc-one-error-declared/other", compiler::DiagnosticCode::UnhandledError, 1036, 18, one_error_other_declared)
     test::rejects_containing("scc-one-error-declared/other/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"C1\"", one_error_other_declared)
 
     # scc-multi-error: a contract [C1, C2] in a program that erases C3 (this
@@ -1068,7 +1074,7 @@ fn register_scc_contract_error_tests(two: int, three: int):
                     on C1:
                         -1
             [poison(three)]
-    test::rejects_at("scc-multi-error/unhandled", compiler::DiagnosticCode::UnhandledError, 1067, 18, multi_error_unhandled)
+    test::rejects_at("scc-multi-error/unhandled", compiler::DiagnosticCode::UnhandledError, 1073, 18, multi_error_unhandled)
     test::rejects_containing("scc-multi-error/unhandled/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"C2\"", multi_error_unhandled)
 
     # scc-payload-error: a payload-bearing contract error: handled with
@@ -1101,20 +1107,11 @@ fn register_scc_contract_error_tests(two: int, three: int):
 # ---------------------------------------------------------------------------
 # The boundary: a callable that raises beyond a contract never acquires it.
 
-# sccContravariant's structural type, both ways: a function taking a
-# callable that may fail C1, and an int, with a contract of no error
-# (Forwarder) or of C1 (Forwarder1) (sccContravariant's Job, renamed).
-struct Forwarder:
-    run: Fn{args: [Fn{args: [int], return: int, errors: [C1]}, int], return: any, errors: []}
-
-struct Forwarder1:
-    run: Fn{args: [Fn{args: [int], return: int, errors: [C1]}, int], return: any, errors: [C1]}
-
 # scc-any-parameter-call's structural type of a two-argument function.
 struct Apply:
     run: Fn{args: [any, any], return: any}
 
-fn register_scc_boundary_tests(two: int, one: int, zero: int):
+fn register_scc_boundary_tests(two: int):
     # scc-boundary-captured: a closure that calls an erased error-bearing
     # callable it captured, given Fn{errors: []}: Type at the argument, in
     # use, for C1; with C1 admitted it is accepted and the call is charged
@@ -1128,7 +1125,7 @@ fn register_scc_boundary_tests(two: int, one: int, zero: int):
             fn use():
                 invoke_any(make(raise1, 1))
             0
-    test::rejects_at("scc-boundary-captured/rejected", compiler::DiagnosticCode::Type, 1129, 28, boundary_captured)
+    test::rejects_at("scc-boundary-captured/rejected", compiler::DiagnosticCode::Type, 1126, 28, boundary_captured)
     test::rejects_containing("scc-boundary-captured/rejected/identity", compiler::DiagnosticCode::Type, "declared error \"C1\"", boundary_captured)
 
     fn boundary_captured_admitted() errors compiler::CompilerError:
@@ -1154,7 +1151,7 @@ fn register_scc_boundary_tests(two: int, one: int, zero: int):
                 inner
             j = JobAny {run: make(raise1, 1)}
             0
-    test::rejects_at("scc-boundary-struct-field", compiler::DiagnosticCode::Type, 1155, 30, boundary_struct_field)
+    test::rejects_at("scc-boundary-struct-field", compiler::DiagnosticCode::Type, 1152, 30, boundary_struct_field)
     test::rejects_containing("scc-boundary-struct-field/identity", compiler::DiagnosticCode::Type, "declared error \"C1\"", boundary_struct_field)
 
     # scc-boundary-unknown-captures-possible: a closure from another
@@ -1194,45 +1191,15 @@ fn register_scc_boundary_tests(two: int, one: int, zero: int):
                     f(x)
                 JobAny {run: inner}
             [poison(two), dispatch_any(wrap(raise2, 2))]
-    test::rejects_at("scc-boundary-created-here-bad", compiler::DiagnosticCode::Type, 1195, 30, boundary_created_here_bad)
+    test::rejects_at("scc-boundary-created-here-bad", compiler::DiagnosticCode::Type, 1192, 30, boundary_created_here_bad)
     test::rejects_containing("scc-boundary-created-here-bad/identity", compiler::DiagnosticCode::Type, "declared error \"C2\"", boundary_created_here_bad)
 
-    # scc-contravariant-rejected: call1 calls its untyped parameter; given
-    # Fn{args: [Fn{... errors: [C1]}, int], errors: []} it is rejected (Type
-    # at the field, for C1), where it used to escape at run time. This
-    # program's raise1 fails for every positive argument.
-    fn contravariant_rejected() errors compiler::CompilerError:
-        static compile:
-            fn raise1(x: int) -> int errors C1:
-                if x > 0:
-                    fail C1
-                x
-            fn call1(f, x):
-                f(x)
-            fn go(j: Forwarder, k: int):
-                (j.run)(raise1, k)
-            go(Forwarder {run: call1}, 1)
-    test::rejects_at("scc-contravariant-rejected", compiler::DiagnosticCode::Type, 1214, 32, contravariant_rejected)
-    test::rejects_containing("scc-contravariant-rejected/identity", compiler::DiagnosticCode::Type, "declared error \"C1\"", contravariant_rejected)
-
-    # scc-contravariant-admitted: with the contract admitting C1 it fits, the
-    # call through it is charged C1, and the error is caught.
-    fn contravariant_admitted() errors compiler::CompilerError:
-        static compile:
-            fn raise1(x: int) -> int errors C1:
-                if x > 0:
-                    fail C1
-                x
-            fn call1(f, x):
-                f(x)
-            fn go(j: Forwarder1, k: int) errors C1:
-                (j.run)(raise1, k)
-            fn top(k: int):
-                go(Forwarder1 {run: call1}, k):
-                    on C1:
-                        -1
-            [top(one), top(zero)]
-    test::value("scc-contravariant-admitted", [-1, 0], contravariant_admitted)
+    # scc-contravariant-rejected and scc-contravariant-admitted
+    # (sccContravariant) are callable-contracts-contravariant-rejected.bot's
+    # and callable-contracts-contravariant.bot's: programs whose
+    # erased-callable contract comes from contravariant erasure alone. This
+    # one erases C1 directly, so ports here could not show that contravariant
+    # erasure is counted at all.
 
     # scc-any-parameter-call: a function that calls an `any` parameter,
     # given Fn{args: [any, any], errors: []} in a program that erases errors:
@@ -1245,7 +1212,7 @@ fn register_scc_boundary_tests(two: int, one: int, zero: int):
                 f(x)
             a = Apply {run: apply}
             0
-    test::rejects_at("scc-any-parameter-call/erasing", compiler::DiagnosticCode::Type, 1246, 29, any_parameter_call)
+    test::rejects_at("scc-any-parameter-call/erasing", compiler::DiagnosticCode::Type, 1213, 29, any_parameter_call)
 
 # ---------------------------------------------------------------------------
 # Type-level compatibility is unchanged and still strict.
@@ -1260,14 +1227,14 @@ fn register_scc_compat_tests():
             fn give1(f: Fn{args: [], return: int, errors: [C1]}) -> Fn{args: [], return: int}:
                 f
             0
-    test::rejects_at("scc-compat-strict/give1", compiler::DiagnosticCode::Type, 1260, 21, compat_give1)
+    test::rejects_at("scc-compat-strict/give1", compiler::DiagnosticCode::Type, 1227, 21, compat_give1)
 
     fn compat_give12() errors compiler::CompilerError:
         static compile:
             fn give12(f: Fn{args: [], return: int, errors: [C1, C2]}) -> Fn{args: [], return: int, errors: [C1]}:
                 f
             0
-    test::rejects_at("scc-compat-strict/give12", compiler::DiagnosticCode::Type, 1267, 22, compat_give12)
+    test::rejects_at("scc-compat-strict/give12", compiler::DiagnosticCode::Type, 1234, 22, compat_give12)
 
     fn compat_widen() errors compiler::CompilerError:
         static compile:
@@ -1283,7 +1250,7 @@ fn register_scc_compat_tests():
         static compile:
             j = Job {run: one1}
             0
-    test::rejects_at("scc-compat-exact-declared", compiler::DiagnosticCode::Type, 1284, 22, compat_exact_declared)
+    test::rejects_at("scc-compat-exact-declared", compiler::DiagnosticCode::Type, 1251, 22, compat_exact_declared)
 
 # ---------------------------------------------------------------------------
 # May versus must.
@@ -1309,7 +1276,7 @@ fn register_scc_may_must_tests(two: int):
                     on C1:
                         -1
             [poison(two)]
-    test::rejects_at("scc-known-error-exact-unchanged", compiler::DiagnosticCode::KnownError, 1308, 17, known_error_exact_unchanged)
+    test::rejects_at("scc-known-error-exact-unchanged", compiler::DiagnosticCode::KnownError, 1275, 17, known_error_exact_unchanged)
 
 # ---------------------------------------------------------------------------
 # Ownership: affine error edges use the same boundary.
@@ -1489,7 +1456,7 @@ fn register_scc_coroutine_tests(three: int, minus_three: int, two: int):
                 coroutine {step, first} = worker(f)
                 drive(step)
             make(raise_e)
-    test::rejects_at("scc-coroutine-boundary-escape", compiler::DiagnosticCode::Type, 1490, 23, coroutine_boundary_escape)
+    test::rejects_at("scc-coroutine-boundary-escape", compiler::DiagnosticCode::Type, 1457, 23, coroutine_boundary_escape)
     test::rejects_containing("scc-coroutine-boundary-escape/identity", compiler::DiagnosticCode::Type, "declared error \"E\"", coroutine_boundary_escape)
 
     # scc-coroutine-param-resume: a handle that fits its contract (its root
@@ -1648,7 +1615,7 @@ fn register_scc_callee_tests(two: int):
 fn register_structural_contract_completions_tests():
     register_scc_transport_tests(2)
     register_scc_contract_error_tests(2, 3)
-    register_scc_boundary_tests(2, 1, 0)
+    register_scc_boundary_tests(2)
     register_scc_compat_tests()
     register_scc_may_must_tests(2)
     register_scc_affine_tests(2)

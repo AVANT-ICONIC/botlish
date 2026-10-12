@@ -1,0 +1,99 @@
+# callable-contracts-contravariant.bot -- tests/structural-contract-completions.test's
+# scc-contravariant-admitted (sccContravariant's accepted program) in a
+# program whose erased-callable contract is what contravariant erasure puts
+# there and nothing else.
+#
+# call1 calls its untyped parameter f. Given the structural type
+# Fn{args: [Fn{args: [int], return: int, errors: [E1]}, int], ...}, call1
+# may be passed, through that type, a callable that fails E1, and its
+# untyped f forgets that: contravariant erasure, which puts E1 into the
+# program's erased-callable contract -- what call1 is charged for calling f.
+# With the type's contract admitting E1 call1 fits, the call through it is
+# charged E1, and the error is caught (with a contract of no error it is a
+# Type error: callable-contracts-contravariant-rejected.bot). The Tcl test
+# also reads the program's erased-callable contract (erasedErrorsOf == E1):
+# here that is what a function calling an `any` parameter (apply,
+# scc-any-parameter-call's) is charged where it acquires a structural type
+# -- Type, for E1, under a contract of no error, and accepted under one
+# admitting E1.
+#
+# Why a suite of its own: callable-contracts.bot passes C1-raising callables
+# into untyped parameters directly (scc-boundary-captured's make(raise1, 1)),
+# so its erased-callable contract has C1 whatever contravariant erasure adds
+# or fails to add, and these tests there could not tell whether
+# contravariant erasure is counted at all
+# (audit/structural-contracts/tools/mutants.txt's
+# contravariant-erasure-dropped went unnoticed there). This program, like
+# the Tcl test's, passes no callable to an untyped parameter except through
+# Job's structural type, so its erased-callable contract is E1, from
+# contravariant erasure alone. The rejected program is a suite of its own:
+# were it accepted, its driver go(Job {run: call1}, 1) would raise E1 at run
+# time, which nothing handles, and abort the suite holding it -- never this
+# one, whose verdicts it would hide.
+#
+# Driver inputs: the admitted program's top(1)/top(0) are the registration
+# function's inputs, captured by the body, so E1 is raised and handled at
+# run time on every backend.
+#
+# Imports: compiler and test (every suite).
+import compiler
+import test
+
+error E1
+
+# sccContravariant's Job with its contract admitting E1 (ERRORS [E1]).
+struct Job:
+    run: Fn{args: [Fn{args: [int], return: int, errors: [E1]}, int], return: any, errors: [E1]}
+
+# scc-any-parameter-call's structural type of a two-argument function, with
+# a contract of no error (Apply) and one admitting E1 (Apply1).
+struct Apply:
+    run: Fn{args: [any, any], return: any}
+
+struct Apply1:
+    run: Fn{args: [any, any], return: any, errors: [E1]}
+
+fn register_scc_contravariant_tests(one: int, zero: int):
+    # scc-contravariant-admitted: with the contract admitting E1 it fits, the
+    # call through it is charged E1, and the error is caught.
+    fn contravariant_admitted() errors compiler::CompilerError:
+        static compile:
+            fn raise1(x: int) -> int errors E1:
+                if x > 0:
+                    fail E1
+                x
+            fn call1(f, x):
+                f(x)
+            fn go(j: Job, k: int) errors E1:
+                (j.run)(raise1, k)
+            fn top(k: int):
+                go(Job {run: call1}, k):
+                    on E1:
+                        -1
+            [top(one), top(zero)]
+    test::value("scc-contravariant-admitted", [-1, 0], contravariant_admitted)
+
+    # ... and the program's erased-callable contract is E1: apply, which
+    # calls its `any` parameter, given Fn{args: [any, any], return: any} (a
+    # call through which may pass it anything), is Type at the field, for
+    # E1; given the same type admitting E1, it fits.
+    fn erased_contract() errors compiler::CompilerError:
+        static compile:
+            fn apply(f, x):
+                f(x)
+            a = Apply {run: apply}
+            0
+    test::rejects_at("scc-contravariant-admitted/erased", compiler::DiagnosticCode::Type, 84, 29, erased_contract)
+    test::rejects_containing("scc-contravariant-admitted/erased/identity", compiler::DiagnosticCode::Type, "declared error \"E1\"", erased_contract)
+
+    fn erased_contract_exactly() errors compiler::CompilerError:
+        static compile:
+            fn apply(f, x):
+                f(x)
+            a = Apply1 {run: apply}
+            0
+    test::value("scc-contravariant-admitted/erased-exactly", 0, erased_contract_exactly)
+
+with context test::suite()
+register_scc_contravariant_tests(1, 0)
+test::report()

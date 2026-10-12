@@ -236,6 +236,8 @@ tests/affine.test af-principal-list pass
 tests/affine.test af-principal-preserve pass
 tests/affine.test af-principal-struct pass
 tests/affine.test af-principal-theorem pass
+tests/affine.test af-recursive-container-rejected pass
+tests/affine.test af-recursive-struct pass
 tests/affine.test af-restrictions pass
 tests/applied-types.test applied-type-alias-preserved pass
 tests/applied-types.test applied-type-bare-list-arity pass
@@ -3325,6 +3327,9 @@ tests/mutable-vector.test mv-principal-unrestricted pass
 tests/mutable-vector.test mv-receiver-captured pass
 tests/mutable-vector.test mv-receiver-places pass
 tests/mutable-vector.test mv-receiver-temporary pass
+tests/mutable-vector.test mv-recursive-struct-copies pass
+tests/mutable-vector.test mv-recursive-struct-declaration pass
+tests/mutable-vector.test mv-recursive-struct-descriptor pass
 tests/mutable-vector.test mv-runtime-source pass
 tests/mutable-vector.test mv-show pass
 tests/mutable-vector.test mv-take-order pass
