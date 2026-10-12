@@ -2,7 +2,14 @@
 # developer runs them (LARGE-SCALE-GOLDEN-MIGRATION.md, "Performance"): fresh
 # processes, one at a time, wall seconds, on this checkout.
 #
-#   tclsh9.0 bench/golden-workflows.tcl ?-parts LIST? ?-backend B? ?-out FILE?
+#   tclsh9.0 bench/golden-workflows.tcl ?-parts LIST? ?-backend B? ?-jobs N?
+#                                       ?-out FILE?
+#
+# -jobs N runs N processes at a time in the tcl-e2e, tcl-e2e-files and golden
+# parts (the fastest realistic configuration on an N-core machine: one file or
+# suite per process, nothing shared but the machine); the summary line is then
+# the wall time of the whole part, and each item's seconds include the
+# contention. The scenarios always run one process at a time.
 #
 # Parts:
 #
@@ -23,13 +30,14 @@
 set root [file dirname [file dirname [file normalize [info script]]]]
 source [file join $root audit golden tools tree.tcl]
 
-set options [dict create -parts {tcl-e2e tcl-e2e-files golden scenarios} -backend interp -out ""]
+set options [dict create -parts {tcl-e2e tcl-e2e-files golden scenarios} -backend interp -jobs 1 -out ""]
 foreach {option value} $argv {
     if {![dict exists $options $option]} { error "unknown option $option" }
     dict set options $option $value
 }
 set parts [dict get $options -parts]
 set backend [dict get $options -backend]
+set jobs [dict get $options -jobs]
 set ::env(LANG) C.utf8
 set ::env(LC_ALL) C.utf8
 set measurements {}
@@ -68,56 +76,87 @@ proc portedByFile {} {
     return $byFile
 }
 
+# The command that runs Tcl test FILE (only the tests MATCH, when given)
+# with the private temporary directory TMP.
+proc tclCommand {file match tmp} {
+    set command [list env CORE_BACKEND=interp tclsh9.0 [file join $::root $file] -tmpdir $tmp]
+    if {$match ne ""} {
+        lappend command -match [lmap n $match {string map {* \\* ? \\? [ \\[ ] \\]} $n}]
+    }
+    return $command
+}
+
+proc tclVerdict {output} {
+    set ok [regexp {Total\s+(\d+)\s+Passed\s+(\d+)\s+Skipped\s+\d+\s+Failed\s+0} $output -> total passed]
+    return [expr {$ok ? "ok $passed/$total" : "FAILED"}]
+}
+
+proc goldenCommand {suite backend} {
+    return [list tclsh9.0 [file join $::root tests golden run.tcl] -backends $backend -quiet [file join $::root tests golden $suite]]
+}
+
+# Runs COMMANDS (a dict KEY -> command) JOBS at a time: {WALL OUTCOMES}.
+proc runAll {commands} {
+    set start [clock milliseconds]
+    set outcomes [goldentools::runParallel $::jobs 7200 $commands]
+    return [list [expr {([clock milliseconds] - $start) / 1000.0}] $outcomes]
+}
+
 proc runTclFile {file match} {
     set tmp [file tempdir botlish-bench-tcl]
-    set ::env(CORE_BACKEND) interp
     try {
-        set command [list tclsh9.0 [file join $::root $file] -tmpdir $tmp]
-        if {$match ne ""} {
-            lappend command -match [lmap n $match {string map {* \\* ? \\? [ \\[ ] \\]} $n}]
-        }
-        lassign [timed {*}$command] seconds status output
+        lassign [timed {*}[tclCommand $file $match $tmp]] seconds status output
     } finally {
         file delete -force $tmp
-        unset ::env(CORE_BACKEND)
     }
-    set ok [regexp {Total\s+(\d+)\s+Passed\s+(\d+)\s+Skipped\s+\d+\s+Failed\s+0} $output -> total passed]
-    return [list $seconds [expr {$ok ? "ok $passed/$total" : "FAILED"}]]
+    return [list $seconds [tclVerdict $output]]
 }
 
 proc runGolden {suite backend} {
-    lassign [timed tclsh9.0 [file join $::root tests golden run.tcl] -backends $backend -quiet [file join $::root tests golden $suite]] seconds status output
+    lassign [timed {*}[goldenCommand $suite $backend]] seconds status output
     return [list $seconds [expr {$status == 0 ? "ok" : "FAILED"}]]
 }
 
-if {"tcl-e2e" in $parts || "tcl-e2e-files" in $parts} {
+foreach part {tcl-e2e tcl-e2e-files} {
+    if {$part ni $parts} continue
     set byFile [portedByFile]
-    set total 0
-    set totalFiles 0
+    set commands [dict create]
+    set tmps {}
     dict for {file names} $byFile {
-        if {"tcl-e2e" in $parts} {
-            lassign [runTclFile $file $names] s st
-            record tcl-e2e "[file tail $file] ([llength $names])" $s $st
-            set total [expr {$total + $s}]
-        }
-        if {"tcl-e2e-files" in $parts} {
-            lassign [runTclFile $file ""] s st
-            record tcl-e2e-files [file tail $file] $s $st
-            set totalFiles [expr {$totalFiles + $s}]
-        }
+        set tmp [file tempdir botlish-bench-tcl]
+        lappend tmps $tmp
+        dict set commands $file [tclCommand $file [expr {$part eq "tcl-e2e" ? $names : ""}] $tmp]
     }
-    puts [format "Tcl E2E subset: %d files, %d tests, %.1f s with -match; %.1f s as whole files" \
-        [dict size $byFile] [tcl::mathop::+ 0 {*}[lmap {f n} $byFile {llength $n}]] $total $totalFiles]
+    try {
+        lassign [runAll $commands] wall outcomes
+    } finally {
+        foreach tmp $tmps { file delete -force $tmp }
+    }
+    set sum 0
+    dict for {file names} $byFile {
+        lassign [dict get $outcomes $file] status output seconds
+        record $part "[file tail $file] ([llength $names])" $seconds [tclVerdict $output]
+        set sum [expr {$sum + $seconds}]
+    }
+    puts [format "%s: %d files, %d ported tests, wall %.1f s with %d job(s) (per-file seconds summed %.1f)" \
+        [expr {$part eq "tcl-e2e" ? "Tcl E2E subset, -match" : "Tcl E2E files, whole"}] [dict size $byFile] \
+        [tcl::mathop::+ 0 {*}[lmap {f n} $byFile {llength $n}]] $wall $jobs $sum]
 }
 
 if {"golden" in $parts} {
-    set total 0
+    set commands [dict create]
     foreach path [lsort [glob -directory [file join $root tests golden] *.bot]] {
-        lassign [runGolden [file tail $path] $backend] s st
-        record golden-$backend [file tail $path] $s $st
-        set total [expr {$total + $s}]
+        dict set commands [file tail $path] [goldenCommand [file tail $path] $backend]
     }
-    puts [format "Golden corpus on %s: %.1f s, one process per suite" $backend $total]
+    lassign [runAll $commands] wall outcomes
+    set sum 0
+    dict for {suite outcome} $outcomes {
+        lassign $outcome status output seconds
+        record golden-$backend $suite $seconds [expr {$status == 0 ? "ok" : "FAILED"}]
+        set sum [expr {$sum + $seconds}]
+    }
+    puts [format "Golden corpus on %s: %d suites, wall %.1f s with %d job(s), one process per suite (per-suite seconds summed %.1f)" \
+        $backend [dict size $commands] $wall $jobs $sum]
 }
 
 if {"scenarios" in $parts} {
