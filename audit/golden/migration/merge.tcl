@@ -186,19 +186,30 @@ proc complete {row census} {
         lappend problems "unknown status $status: $key"
         return $row
     }
-    if {[dict get $row tcl_layer] eq "-"} {
-        set layer [dict get $layerOf $status]
-        # A whole port that is weaker than its Tcl test leaves the Tcl test
-        # observing more: it stays active.
-        if {$status eq "MIGRATED" && [dict get $row strength] eq "weaker"} {
-            set layer ACTIVE-NOT-EXPRESSIBLE
-        }
-        dict set row tcl_layer $layer
-    }
-    if {[dict get $row freeze] eq "-"} {
-        dict set row freeze [expr {[dict get $row tcl_layer] eq "DUPLICATED-E2E" ? "FROZEN-DUPLICATE-ORACLE" : "ACTIVE-TCL-INTERNAL"}]
-    }
     return $row
+}
+
+# ROWS (one Tcl test's completed rows) with the Tcl test's layer and freeze
+# class, decided once per Tcl test: its status's layer, except that a whole
+# port with any weaker golden row leaves the Tcl test observing more than
+# the golden tests do -- it stays active. A value a row already carries is
+# kept (and ledger.tcl reports rows that disagree).
+proc classify {rows} {
+    global layerOf
+    set status [dict get [lindex $rows 0] status]
+    if {![dict exists $layerOf $status]} { return $rows }
+    set layer [dict get $layerOf $status]
+    if {$status eq "MIGRATED"} {
+        foreach row $rows {
+            if {[dict get $row strength] eq "weaker"} { set layer ACTIVE-NOT-EXPRESSIBLE }
+        }
+    }
+    set freeze [expr {$layer eq "DUPLICATED-E2E" ? "FROZEN-DUPLICATE-ORACLE" : "ACTIVE-TCL-INTERNAL"}]
+    return [lmap row $rows {
+        if {[dict get $row tcl_layer] eq "-"} { dict set row tcl_layer $layer }
+        if {[dict get $row freeze] eq "-"} { dict set row freeze $freeze }
+        set row
+    }]
 }
 
 proc fromCensus {census} {
@@ -241,9 +252,7 @@ foreach key $keys {
     if {![dict exists $discovered $key]} {
         lappend problems "STALE: the Tcl test did not run: $key"
     }
-    foreach row $rows {
-        lappend out [complete $row $c]
-    }
+    lappend out {*}[classify [lmap row $rows {complete $row $c}]]
 }
 
 foreach p $problems { puts "PROBLEM: $p" }
