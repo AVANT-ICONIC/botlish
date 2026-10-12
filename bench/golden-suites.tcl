@@ -115,9 +115,12 @@ proc measureOne {path backends profile} {
     interp recursionlimit {} 100000
     if {$profile} {
         foreach {phase name} $::phases {
-            # A proc defined later (lazily) is wrapped when it exists.
             prof::wrap $phase $name
         }
+    } else {
+        # The Tcl compiler's code generation is told apart from its run by
+        # this wrapper alone: always installed.
+        prof::wrap tcl-codegen core::compiler::compileUnit
     }
     set f [open $path]
     fconfigure $f -encoding utf-8

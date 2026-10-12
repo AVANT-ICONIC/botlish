@@ -898,7 +898,9 @@ fn register_lockstep_tests():
     test::value("loop-collecting-lockstep-alias-list", [[1, 1], [2, 2]], alias_list)
 
     # An alias of a literal list proves its length: equal at run time is
-    # not the criterion, the proof is (and here there is one).
+    # not the criterion, the proof is (and here there is one). Ports
+    # loop-collecting-reject-equal-lengths-still-rejected, whose name
+    # predates this proof: it pins acceptance.
     fn literal_alias_proof() errors compiler::CompilerError:
         static compile:
             fn f():
@@ -1109,7 +1111,7 @@ fn register_lockstep_rejection_tests():
                 loop i from 0 to list::length(xs) and j from i to 3:
                     j
             f([1, 2, 3])
-    test::rejects_at("loop-collecting-lockstep-scope-operands", compiler::DiagnosticCode::Unbound, 1109, 62, scope_operands)
+    test::rejects_at("loop-collecting-lockstep-scope-operands", compiler::DiagnosticCode::Unbound, 1111, 62, scope_operands)
 
     # Two clauses may not bind the same name.
     fn duplicate_variable() errors compiler::CompilerError:
