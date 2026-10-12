@@ -178,6 +178,29 @@
                     dict set mentions $b [list $e]
 >>>>
 
+@@ plan-consumers-ignored a site the monomorphization plan may diagnose does not depend on its gate: it is judged as if no rejection could reveal that diagnostic
+## hir/staticdeps.tcl
+<<<<
+                dict set succ C:plan plan
+====
+>>>>
+
+@@ plan-clone-calls-ignored a call in the body of a function the plan may clone, of a function specialized only once, is no consumer unless it has an affine instance now: a clone a rejection elsewhere creates diagnoses it unpredicted
+## hir/staticdeps.tcl
+<<<<
+        if {[dict get $cloned $region]
+====
+        if {0 && [dict get $cloned $region]
+>>>>
+
+@@ plan-open-witness while the gate is open (only the plan's diagnostics), the plan's sites wait for one witness like a closed gate's: one whose rejection closes it again is committed beside the others
+## hir/staticdeps.tcl
+<<<<
+    if {$planned} {
+====
+    if {0} {
+>>>>
+
 # ---------------------------------------------------------------------------
 # Economic
 
@@ -250,4 +273,38 @@
                 return 0
             }
 ====
+>>>>
+
+@@ plan-every-diagnostic the plan's closed gate depends on every failing site, not on one witness: a site it may diagnose ahead of several failures turns unknown at the first and takes a build per rejection
+## hir/staticdeps.tcl
+<<<<
+    if {$last ne ""} {
+        dict set plan Z:$last plan-gate
+    } else {
+====
+    if {$last ne ""} {
+        foreach key $owned {
+            dict set plan Z:$key plan-gate
+        }
+    } else {
+>>>>
+
+@@ plan-failing-consumers a site failing the checker is still a consumer of the plan's closed gate: it joins the witness's component, and its dependents turned unknown hold the witness back
+## hir/staticdeps.tcl
+<<<<
+        dict unset consumers $key
+====
+>>>>
+
+@@ plan-clone-any-untyped every top-level function with an untyped parameter may be cloned for an affine argument, whatever its calls pass: a site in one giving a value to a nested generic function is a consumer, and its reach joins the witness's component
+## hir/staticdeps.tcl
+<<<<
+    if {"" ni $declared} {
+        return 0
+    }
+====
+    if {"" ni $declared} {
+        return 0
+    }
+    return 1
 >>>>

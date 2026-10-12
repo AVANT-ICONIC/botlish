@@ -154,6 +154,48 @@
 #                       inferred contract, its instance's budget) or of a
 #                       callable value (its type's contract); C:verdict ->
 #                       R of each region making one.
+#   C:plan              the gate of the trait monomorphization's plan
+#                       (hir::traits::Plan): hir::BuildFull runs it only on
+#                       a build with no diagnostic at all, and its
+#                       diagnostics (TRAIT-IMPL-ORDER, TRAIT-NOT-SATISFIED
+#                       in a clone, AFFINE-GENERIC-NESTED-UNSUPPORTED, the
+#                       budget kinds) are a site's: a site holding one fails
+#                       only once no other diagnostic is left anywhere. Its
+#                       *consumers* (PlanGate): Z:site -> C:plan for each
+#                       site holding an expression the plan may diagnose --
+#                       a trait operation (in the generic program or in an
+#                       instance's view, where a clone's body is planned), a
+#                       call giving an affine argument to an untyped
+#                       parameter of a function specialized only once (one
+#                       not bound at the top level, or requiring a context
+#                       trait) -- or any call of such a function in the body
+#                       of one the plan may clone (CloneMay: a trait-typed
+#                       parameter, a context-trait requirement, or an untyped
+#                       parameter some call passes an affine value or one
+#                       whose type mentions `any`), whose argument may be
+#                       affine in a clone a rejection elsewhere creates --
+#                       and a call whose instance request was declined.
+#                       While the gate is closed (a diagnostic is not of a
+#                       kind the plan reports, planKinds), a site failing
+#                       now is none: its first diagnostic stays while its
+#                       own facts do, and a plan diagnostic is never beside
+#                       another one; C:plan depends on one *witness*, the
+#                       last failing site in post-order (Z:), because the
+#                       gate stays closed while any one diagnostic stays
+#                       and the sequential order removes that one last.
+#                       (Every failing site instead would make a consumer
+#                       unknown at the first of several rejections that
+#                       cannot open the gate, one build per rejection.)
+#                       While it may be open (every diagnostic of a plan
+#                       kind), C:plan depends on every diagnostic's site
+#                       (or, in none, the region it is read from): a
+#                       rejection can close the gate again -- a diagnostic it
+#                       causes anywhere, say the UNHANDLED-ERROR of a
+#                       top-level call of the rejected site's function, in
+#                       no site -- or change another plan diagnostic (a
+#                       clone's instances and placement are its callers'),
+#                       so the plan's own diagnostics are decided one per
+#                       build, as in the sequential order.
 #
 # And one channel that is the site's own, never a summary another region
 # reads: the contract-boundary checks at the site's positions
@@ -169,18 +211,9 @@
 # keeps the diagnostics of the check before the demotion, so a demotion
 # changes no diagnostic); the trait monomorphization's build (it runs only on
 # a program with no diagnostic, and its own diagnostics are internal, never a
-# site's); resolution (lexical: a site's own bindings are scoped to it, and
-# hir/static.tcl decides every resolution-stage rejection in one build).
-#
-# Not modelled yet: the monomorphization's *plan* (hir::traits::Plan) runs
-# under the same gate, and its diagnostics are a site's (TRAIT-IMPL-ORDER,
-# AFFINE-GENERIC-NESTED-UNSUPPORTED, TRAIT-INSTANCE-BUDGET, ...): such a site
-# fails only once no other diagnostic is left anywhere, which no edge says.
-# The batched run then predicts it ok and the next build contradicts that
-# (tests/golden/traits.bot, affinity.bot: `mispredicted`); in every case
-# measured the decisions stay the sequential order's -- a build reports plan
-# diagnostics only when it has no other (STATIC-DECISION-ECONOMICS.md,
-# "Every mention").
+# site's -- its plan's are C:plan); resolution (lexical: a site's own
+# bindings are scoped to it, and hir/static.tcl decides every
+# resolution-stage rejection in one build).
 
 namespace eval hir::staticdeps {
     # The kinds of the ownership analysis's whole-program diagnostics
@@ -194,6 +227,15 @@ namespace eval hir::staticdeps {
         AFFINE-LIST-OPERATION-UNSUPPORTED AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE
         AFFINE-TEMPORARY-UNSUPPORTED AFFINE-DUPLICATION-UNSUPPORTED
         AFFINE-ELEMENT-COPY-OUT
+    }
+    # The kinds of the monomorphization plan's diagnostics (hir::traits::
+    # Plan), which a build reports only when it has no other diagnostic
+    # (C:plan). tests/static-economics.test checks the list against
+    # hir/traits.tcl.
+    variable planKinds {
+        AFFINE-GENERIC-NESTED-UNSUPPORTED AFFINE-INSTANCE-BUDGET TRAIT-IMPL-ORDER
+        TRAIT-INSTANCE-BUDGET TRAIT-INTERNAL TRAIT-NOT-SATISFIED
+        TRAIT-POLYMORPHIC-RECURSION
     }
 }
 
@@ -422,7 +464,7 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
         }
     }
     set state [dict create byFile $byFile spanParent $spanParent \
-        presentKeys [lmap site $present {dict get $site key}] \
+        presentKeys [lmap site $present {dict get $site key}] presentSites $present \
         regionOf {} parentOf {} litRegion {} ownRefs {} ownLits {} ownTargets {} \
         ownSites {} siteHome {} siteDepth {} depth {program 0} \
         subtree {} names {} paramOwner {} channels {}]
@@ -802,11 +844,235 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
     dict set state pathRelease $pathRelease
     dict set state verdict $verdict
     dict set state verdictLinked $linked
+    # The monomorphization plan's gate (C:plan).
+    lassign [PlanGate $hir $state] planConsumers plan
+    dict set state planConsumers $planConsumers
+    dict set state plan $plan
     dict set state channels [dict create erasurePoints [llength $points] \
         erasedConsumers [dict size $consumers] budgetPressure [dict size $pressured] \
         yieldingFunctions [dict size $yielding] constructions [llength $creates] \
-        ownershipDiagnostics $diagnosed pathReleaseSites [dict size $pathRelease]]
+        ownershipDiagnostics $diagnosed pathReleaseSites [dict size $pathRelease] \
+        planSites [dict size $planConsumers]]
     return $state
+}
+
+# The monomorphization plan's part of the graph (header, C:plan), from STATE
+# (Prepare's walk): a list {CONSUMERS PLAN} -- CONSUMERS the sites (key -> 1)
+# holding an expression hir::traits::Plan may diagnose, PLAN C:plan's
+# successors (node -> edge label).
+proc hir::staticdeps::PlanGate {hir state} {
+    variable planKinds
+    set exprs [dict get $hir exprs]
+    set regionOf [dict get $state regionOf]
+    set siteOf [dict get $state siteOf]
+    # The expressions the plan may diagnose, in the generic program or in an
+    # instance's view (a clone's body is planned in its instances' views):
+    # a trait operation (TRAIT-NOT-SATISFIED, TRAIT-IMPL-ORDER); a call
+    # giving an affine argument to an untyped parameter of a function
+    # specialized only once -- one not bound at the top level, or one
+    # requiring a context trait (AFFINE-GENERIC-NESTED-UNSUPPORTED) -- or a
+    # call of such a function in the body of one the plan may clone; a call
+    # whose instance request was declined, of a trait-polymorphic function or
+    # with an affine argument at an untyped parameter (TRAIT-INSTANCE-BUDGET,
+    # AFFINE-INSTANCE-BUDGET). A call that may become one only through a
+    # change of its own facts depends on that change already (a budget's
+    # through C:budget); the plan's placement errors
+    # (TRAIT-POLYMORPHIC-RECURSION) are at a top-level function's literal,
+    # in no site.
+    set top [dict create]
+    foreach r [dict get $hir roots] {
+        set node [dict get $exprs $r]
+        if {[dict get $node kind] eq "bind" && [dict get $node value] ne ""
+                && [dict get $exprs [dict get $node value] kind] eq "block"} {
+            dict set top [dict get $node value] 1
+        }
+    }
+    set at [dict create]
+    set cloned [dict create]
+    set contextTraits [dict create]
+    dict for {e region} $regionOf {
+        set node [dict get $exprs $e]
+        if {[dict get $node kind] ne "call"} continue
+        if {[dict exists $node traitCall] && ![dict exists [dict get $node traitCall] unknown]} {
+            dict set at $e 1
+            continue
+        }
+        # In the body of a function the plan may clone (CloneMay), a call of
+        # a function specialized only once with an untyped parameter: in a
+        # clone's view its argument may be affine, whatever it is here.
+        lassign [dict get $node target] tk tb
+        if {$tk ne "block" || ![dict exists $exprs $tb] || "" ni [dict get $exprs $tb declaredParamTypes]} continue
+        if {![dict exists $cloned $region]} {
+            set q $region
+            while {$q ne "program" && [dict get $state litRegion $q] ne "program"} {
+                set q [dict get $state litRegion $q]
+            }
+            dict set cloned $region [expr {$q ne "program" && [dict exists $top $q]
+                && [CloneMay $hir $state contextTraits $q]}]
+        }
+        if {[dict get $cloned $region]
+                && (![dict exists $top $tb] || [ContextTraits contextTraits $hir $tb] ne {})} {
+            dict set at $e 1
+        }
+    }
+    if {[dict exists $hir semantic instances]} {
+        set instances [dict get $hir semantic instances]
+        dict for {id inst} $instances {
+            if {![dict exists $inst snapshot exprs]} continue
+            dict for {e rec} [dict get $inst snapshot exprs] {
+                if {[dict exists $rec traitCall] && [dict get $rec traitCall] ne ""
+                        && ![dict exists [dict get $rec traitCall] unknown]} {
+                    dict set at $e 1
+                }
+            }
+        }
+        dict for {callKey id} [dict get $hir semantic calls] {
+            set inst [dict get $instances $id]
+            set block [dict get $inst block]
+            if {[hir::traits::AffineWitnesses $hir $block [dict get $inst args]] ne {}
+                    && (![dict exists $top $block] || [ContextTraits contextTraits $hir $block] ne {})} {
+                dict set at [lindex $callKey 1] 1
+            }
+        }
+        dict for {callKey reason} [dict get $hir semantic declined] {
+            lassign $callKey caller e
+            if {![dict exists $exprs $e target]} continue
+            lassign [dict get $exprs $e target] tk tb
+            # (In an instance's view, conservatively: its arguments are not
+            # the generic program's.)
+            if {$caller ne "generic" || ($tk eq "block" && [dict exists $exprs $tb]
+                    && ([hir::traits::IsPolymorphic $hir $tb] || [hir::traits::AffineArgumentsUntyped $hir $e $tb]))} {
+                dict set at $e 1
+            }
+        }
+    }
+    set consumers [dict create]
+    dict for {e _} $at {
+        if {[dict exists $siteOf $e]} {
+            dict set consumers [dict get $siteOf $e] 1
+        }
+    }
+    set plan [dict create]
+    if {[dict size $consumers] == 0 || [dict get $hir diagnostics] eq {}} {
+        # No site's diagnostics read the gate, or it is open and the plan
+        # found nothing: there is no decision left to make.
+        return [list $consumers $plan]
+    }
+    set position [dict create]
+    set i 0
+    foreach key [dict get $state presentKeys] {
+        dict set position $key $i
+        incr i
+    }
+    # Each diagnostic's site, as hir::static::Attribute attributes it (none
+    # for the compiler's own failures), else the node its facts are read
+    # from: a function literal's own region for a check of the function
+    # (its result), the region holding the expression for anything else.
+    set planned 1
+    set owned {}
+    set unowned {}
+    foreach d [dict get $hir diagnostics] {
+        if {[dict get $d kind] ni $planKinds} {
+            set planned 0
+        }
+        set owner [expr {[hir::static::Internal $d] ? ""
+            : [hir::static::Owner [dict get $state presentSites] [hir::static::PrimaryOrigin $hir $d]]}]
+        if {$owner ne ""} {
+            lappend owned $owner
+            continue
+        }
+        set e [dict get $d expr]
+        if {[dict exists $exprs $e] && [dict get $exprs $e kind] eq "block"} {
+            lappend unowned R:$e
+        } else {
+            lappend unowned R:[expr {[dict exists $regionOf $e] ? [dict get $regionOf $e] : "program"}]
+        }
+    }
+    if {$planned} {
+        # Every diagnostic may be the plan's: the gate is open, and a
+        # rejection may close it again (a diagnostic it causes anywhere) or
+        # change another plan diagnostic (a clone's instances and placement
+        # are its callers'): every one, so the plan's diagnostics are
+        # decided in the sequential order's own builds.
+        foreach key $owned {
+            dict set plan Z:$key plan-diagnostic
+        }
+        foreach node $unowned {
+            dict set plan $node plan-diagnostic
+        }
+        return [list $consumers $plan]
+    }
+    # The gate is closed. A site failing now reads nothing of it: its first
+    # diagnostic stays while its own facts do, and a plan diagnostic is never
+    # beside another one. The others are judged by the gate, which stays
+    # closed while any one diagnostic stays: one witness, the site whose
+    # diagnostic the sequential order removes last (the last failing site in
+    # post-order), whose own diagnostics change only with what its node
+    # reaches.
+    foreach key $owned {
+        dict unset consumers $key
+    }
+    set last ""
+    foreach key $owned {
+        if {$last eq "" || [dict get $position $key] > [dict get $position $last]} {
+            set last $key
+        }
+    }
+    if {$last ne ""} {
+        dict set plan Z:$last plan-gate
+    } else {
+        foreach node $unowned {
+            dict set plan $node plan-gate
+        }
+    }
+    return [list $consumers $plan]
+}
+
+# 1 if the monomorphization plan may clone top-level function Q of HIR
+# (STATE: Prepare's walk; CACHEVAR: ContextTraits' cache): Q has a
+# trait-typed parameter or requires a context trait (cloned per witness or
+# per selection), or an untyped parameter that may get an affine argument --
+# an instance of Q already has one, or a call of Q passes a value there whose
+# type is affine or mentions `any`, which a rejection elsewhere can narrow to
+# an affine type (a value of any other type stays what it is).
+proc hir::staticdeps::CloneMay {hir state cacheVar q} {
+    upvar 1 $cacheVar cache
+    if {[hir::traits::IsPolymorphic $hir $q] || [ContextTraits cache $hir $q] ne {}} {
+        return 1
+    }
+    set declared [dict get $hir exprs $q declaredParamTypes]
+    if {"" ni $declared} {
+        return 0
+    }
+    if {[dict exists $hir semantic instances]} {
+        dict for {id inst} [dict get $hir semantic instances] {
+            if {[dict get $inst block] eq $q && [hir::traits::AffineWitnesses $hir $q [dict get $inst args]] ne {}} {
+                return 1
+            }
+        }
+    }
+    if {[dict exists $state callsOf $q]} {
+        foreach call [dict get $state callsOf $q] {
+            foreach arg [dict get $hir exprs $call args] d $declared {
+                if {$arg eq "" || $d ne {}} continue
+                set type [hir::typeOf $hir $arg]
+                if {[hir::types::IsAffine $type] || [MentionsAny $type]} {
+                    return 1
+                }
+            }
+        }
+    }
+    return 0
+}
+
+# hir::traits::ContextTraitsOf block E of HIR, cached in the caller's
+# CACHEVAR (block -> traits).
+proc hir::staticdeps::ContextTraits {cacheVar hir e} {
+    upvar 1 $cacheVar cache
+    if {![dict exists $cache $e]} {
+        dict set cache $e [hir::traits::ContextTraitsOf $hir $e]
+    }
+    return [dict get $cache $e]
 }
 
 # The ownership verdict's part of the graph (header, C:verdict), from STATE
@@ -1131,10 +1397,19 @@ proc hir::staticdeps::Successors {hir stateVar v} {
             } elseif {[dict exists $state verdictLinked $key]} {
                 dict set succ C:verdict verdict-contributor
             }
+            if {[dict exists $state planConsumers $key]} {
+                dict set succ C:plan plan
+            }
         }
         C:verdict {
             dict set state names $v "the ownership analysis's verdict on the whole program"
             dict for {node label} [dict get $state verdict] {
+                dict set succ $node $label
+            }
+        }
+        C:plan {
+            dict set state names $v "the monomorphization plan's gate (no diagnostic anywhere)"
+            dict for {node label} [dict get $state plan] {
                 dict set succ $node $label
             }
         }

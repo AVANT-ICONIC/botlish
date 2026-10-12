@@ -164,6 +164,7 @@ missed a channel. None occurs in any suite, fuzz program or test.
 | `C:budget:B` | every call requesting one of B's instances, only under pressure |
 | `P:input` (what an uncontracted input may hold at the contract boundary) | what the calls of its function pass in its position, its value, or `C:erased` |
 | `C:verdict` (the ownership analysis's verdict on the whole program; [below](#the-ownership-verdict)) | while the analysis reports something, one witness: the region of its diagnostic whose site is last in post-order, or of every one outside a site; while it accepts the program, every region passing an affine argument whose contract can widen |
+| `C:plan` (the gate of the trait monomorphization's plan; [below](#the-plans-gate)) | while some diagnostic is not of a kind the plan reports, one witness: the last failing site in post-order; while every one is, every diagnostic's site (or region) |
 
 A region is a *consumer* of `C:erased` when it calls through a value that has
 lost both identity precision and contract precision: a callee typed `any` or a
@@ -178,7 +179,7 @@ Not channels, each pinned by a `se-property-*` test where the fact lives:
 a demoted trusted contract (`hir::check` keeps the diagnostics of the check
 before the demotion), the trait monomorphization's build (it runs only on a
 program with no diagnostic), resolution (lexical). The gate of its *plan* is
-a channel, not modelled yet ([every mention](#every-mention)).
+a channel, `C:plan` ([below](#the-plans-gate)).
 
 ### The ownership verdict
 
@@ -378,18 +379,13 @@ each site and so saw the edge only by chance. Whether the check can change
 a site's *first* diagnostic is not decided here -- that would refine the
 channel, not repair the walk.
 
-**Not modelled yet: the plan's gate.** `hir::traits::Plan` -- the trait
+**The plan's gate**, not modelled then: `hir::traits::Plan` -- the trait
 monomorphization's plan, which runs only on a program with no diagnostic at
 all -- reports ordinary site diagnostics (TRAIT-IMPL-ORDER,
-AFFINE-GENERIC-NESTED-UNSUPPORTED, TRAIT-INSTANCE-BUDGET, ...). A site
-holding one fails only once every other diagnostic is gone, and no edge says
-so: `traits.bot` mispredicted before this change and still does, and
-`affinity.bot`'s new schedule exposes it. A three-site program (two TYPE
-failures around an AFFINE-GENERIC-NESTED-UNSUPPORTED one) mispredicts on
-the tree before this change. The decisions stay the sequential order's in
-every case measured (a build reports plan diagnostics only when it reports
-nothing else), but the channel is missing and is the next one to add, in the
-manner of `C:verdict`.
+AFFINE-GENERIC-NESTED-UNSUPPORTED, TRAIT-INSTANCE-BUDGET, ...), and no edge
+said so: `traits.bot` mispredicted before this change and still did, and
+`affinity.bot`'s new schedule exposed it. It is `C:plan` now ([the plan's
+gate](#the-plans-gate)).
 
 Validation: `tests/static-economics.test` 35/35 and
 `tests/static-compile.test` 83/83 (interp); `compare.tcl` on collections,
@@ -398,6 +394,151 @@ loops, lists-and-sets, flags, coroutines and mutable-vector: every suite
 batched = sequential exactly, no misprediction; the fuzzer, seeds 1 (10
 programs), 2 and 3 (20 each, seed 3 with legacy): 50 programs, 1348 sites,
 0 failures; `mutate.tcl` (in three `-only` runs): 22 mutants, 22 applied and killed.
+
+### The plan's gate
+
+A later finding (the golden migration's `traits.bot`: `mispredicted {4
+f1:34496} {4 f1:34966}`, and `affinity.bot` once [every
+mention](#every-mention) changed its schedule: `{8 f1:40943}`).
+`hir::BuildFull` runs the trait monomorphization's plan (`hir::traits::Plan`)
+only when the build has no diagnostic at all, and the plan's diagnostics --
+TRAIT-IMPL-ORDER, TRAIT-NOT-SATISFIED in a clone's view,
+AFFINE-GENERIC-NESTED-UNSUPPORTED, TRAIT-INSTANCE-BUDGET,
+AFFINE-INSTANCE-BUDGET, TRAIT-POLYMORPHIC-RECURSION -- are ordinary site
+diagnostics. A site holding one therefore fails only once every other
+diagnostic anywhere is gone. The graph had no edge for that: the batched run
+predicted the site ok beside the last rejections and the next build
+contradicted it. Worse, while the gate is open a rejection can close it again
+(below), and the batched run then committed a plan diagnostic the sequential
+order never reaches -- another program (`se-equal-plan-gate`'s second
+program).
+
+`C:plan` models it (`hir/staticdeps.tcl`, `PlanGate`):
+
+* **consumers**: `Z:site -> C:plan` for every site holding an expression the
+  plan may diagnose -- a trait operation (in the generic program, or in an
+  instance's view: a clone's body is planned in its instances' views); a call
+  giving an affine argument (in some instance) to an untyped parameter of a
+  function specialized only once, one not bound at the top level or one
+  requiring a context trait; any call of such a function in the body of a
+  function the plan may clone, whose argument may become affine in a clone a
+  rejection elsewhere creates without any fact of the site's own changing
+  (`se-equal-plan-clone`: a caller's `if` whose other branch's site is
+  rejected narrows its value to a coroutine handle) -- a function bound at
+  the top level with a trait-typed parameter or a context-trait requirement,
+  or with an untyped parameter some call passes an affine value or a value
+  whose type mentions `any` (`CloneMay`: a value of any other type stays what
+  it is; counting every untyped parameter made `lists-and-sets.bot`'s
+  `register_find_case(name, xs, expected)`, called with Lists of ints, hold
+  its last failure back a round, `se-builds-plan-gate`'s third program); and
+  a call whose instance request was declined (the budget kinds;
+  a request newly declined is a change of the call's own facts, which
+  `C:budget` covers). Every golden suite is a coroutine program (the test
+  runner), so "every site" would merge every component: the consumers are
+  the few sites that hold such an expression (`planSites` in the trace's
+  channels, the closed gate's failing sites not counted: 4 or 5 in
+  `traits.bot`'s rounds, 1 in `affinity.bot`'s);
+* **while the gate is closed** (some diagnostic is not of a kind the plan
+  reports, `hir::staticdeps::planKinds`): the gate stays closed while any one
+  diagnostic stays, so `C:plan` depends on one *witness*, the last failing
+  site in post-order (`Z:` -- exactly what its own diagnostics depend on; the
+  sequential order removes it last). A site failing now is no consumer: its
+  first diagnostic stays while its own facts do, and a plan diagnostic is
+  never beside another one -- so no linking either, unlike the ownership
+  verdict, whose withheld diagnostic and a later pass's coexist in one site.
+  (As a consumer, a failing site joins the witness's component, and its own
+  dependents, turned unknown by its rejection, would hold the witness back:
+  `se-builds-plan-gate`'s second program, 2 rounds, 3 that way.) The witness
+  is a site, not the diagnostic's region: in the golden suites the
+  diagnostics in no site's body (a function's result check over a body that
+  is a site, a `test::rejects` call rejecting a function holding one) are
+  caused by sites and vanish with them, and their regions are the
+  registration functions, which reach every test through `test::rejects`'s
+  instance budget -- with them as witnesses `traits.bot` took 10 rounds;
+* **while it may be open** (every diagnostic of a plan kind -- a build whose
+  only diagnostics are the checker's TRAIT-NOT-SATISFIED counts too, which
+  only costs builds): `C:plan` depends on every diagnostic's site (or, in
+  none, its region), so the plan's own diagnostics are decided one per
+  build, as the sequential order does. Two reasons, each a program of
+  `se-equal-plan-gate` or a mutant: a rejection can close the gate again --
+  a diagnostic it causes anywhere, here the UNHANDLED-ERROR of a top-level
+  call of the rejected site's function, in no site, after which the
+  sequential order *accepts* a second, independent TRAIT-IMPL-ORDER site
+  (`plan-open-witness` rejects it); and it can change another plan
+  diagnostic through the clone's view (a clone's instances and placement are
+  its callers').
+
+| program | before | after | sequential |
+|---|---|---|---|
+| a nested generic given a handle between two TYPE failures (`se-equal-plan-gate`) | 3 rounds, mispredicted | 3 rounds | 4 rounds |
+| two independent TRAIT-IMPL-ORDER sites, the first one's function called unhandled at the top level (`se-equal-plan-gate`) | 2 rounds, the second site rejected (wrong) | 2 rounds, the second accepted | 2 rounds |
+| a clone created by a caller's rejection (`se-equal-plan-clone`) | 3 rounds, mispredicted | 3 rounds | 4 rounds |
+| the nested generic ahead of six TYPE failures (`se-builds-plan-gate`) | 3 rounds, mispredicted | 3 rounds | 8 rounds |
+| a trait-polymorphic site failing the checker, its caller's site, an ok one, a TYPE failure (`se-builds-plan-gate`) | 2 rounds | 2 rounds | 3 rounds |
+| an erasing site the checker rejects, an erased-callable consumer, a site in a function only ever given an int, a TYPE failure (`se-builds-plan-gate`) | 2 rounds | 2 rounds (3 counting every untyped parameter) | 3 rounds |
+
+Every golden suite of this tree (83), compiled once with the tree before and
+after (`surface::readProgramFile`, batched): the same site outcomes in every
+one, no misprediction after, and the same rounds and builds in all but these:
+
+| suite | before rounds/builds | after rounds/builds | sequential | why |
+|---|---|---|---|---|
+| `affinity.bot` | 9/10, mispredicted `{8 f1:40943}` | 9/10 | 25/26 | its one consumer (`b_nested_untyped`) depends on the witness: it is unknown, not predicted ok, when the last failing site is rejected, and is rejected in the next round as before |
+| `traits.bot` | 5/10, mispredicted `{4 f1:34496} {4 f1:34966}` | 6/11 | 33/74 | its two TRAIT-IMPL-ORDER sites appear once the gate opens and are decided one per build (the open gate's rule) -- a round more, which the sequential order spends too |
+| **total** | **300/448** | **301/449** | | |
+
+`compare.tcl` agrees on 82 of the 83: batched = sequential exactly, no
+misprediction. 78 were compared with the consumer rule before `CloneMay`
+(every untyped parameter), whose graph is the final one in every build of
+theirs (both rules run side by side on each build of every suite: they
+differ in `lists-and-sets.bot`, `methods.bot` and `stdlib-namespaces.bot`
+only); those three and `mutable-vector.bot` with the final one. The
+sequential reference of `mutable-array.bot` had not finished after three
+hours (its batched decisions are the tree before's, in the same 7 rounds and
+34 builds, with no misprediction). The comparisons take hours: a sequential
+`destructuring.bot` alone is 205 builds, 56 minutes on the loaded machine.
+
+The plan's diagnostics are recognized by kind (`planKinds`, checked against
+`hir::traits::Plan` and `SetAction` by `se-property-plan-gate`, which also
+pins the gate in `hir::BuildFull` and that the plan's diagnostics end the
+build). Six mutants of `audit/static-decisions/tools/mutants.txt` pin the
+rules: `plan-consumers-ignored`, `plan-clone-calls-ignored` and
+`plan-open-witness` (semantic: mispredicted, or another program than the
+sequential order's) and `plan-every-diagnostic`, `plan-failing-consumers`
+and `plan-clone-any-untyped` (economic: `se-builds-plan-gate`'s programs take
+more rounds).
+
+Validation: `tests/static-economics.test` 39/39 and
+`tests/static-compile.test` 83/83 (interp); `compare.tcl` on the golden
+suites: 82 of 83 batched = sequential exactly, no misprediction, the 83rd
+not finished (above); the fuzzer,
+seeds 1 (10 programs), 2 and 3 (20 each, seed 3 with legacy): 50 programs,
+1348 sites, 0 failures -- it draws no site the plan diagnoses (no trait, no
+handle given to a nested generic function). A variant with such a fragment
+(a handle of a generator of its own given to a nested generic function), not
+committed: seeds 11-13, 36 programs, 1028 sites, 0 failures batched against
+sequential; it does not reproduce the gap on the tree before either (its
+plan sites reach the erasing fragments through the contract-boundary edge,
+and the round before the plan's usually has one failing site, which needs no
+analysis), so the tests above are the evidence. `mutate.tcl` (two `-only`
+runs): 28 mutants, 28 applied and killed. `tests/golden.test` with
+`BOTLISH_GOLDEN_SUITES=traits.bot,affinity.bot`: every test of both passes
+on interp, compile, cranelift-generic and cranelift; the file fails alike
+before and after on 134 test names those suites report that this branch's
+manifest does not list yet, and `golden-static-economics` on `affinity.bot`'s
+9 rounds (the ceiling is 8; `compiled-values.bot` with 16 and
+`static-compile.bot` with 26 exceed it too, before and after) -- no longer on
+the two mispredictions.
+
+Found along the way, not changed here: the fuzzer's layout check (every
+layout the same verdicts) does not hold for every set its pool can draw. A
+List-of-`any` consumer written before an erasing fragment the checker
+rejects is judged while that fragment still erases (rejected,
+UNHANDLED-ERROR), written after it once it is gone (accepted) -- the
+sequential order's own outcome, the same under every scheduler. The variant
+above drew such a set at seed 11 (with its plan fragments replaced by valid
+bodies, the same difference), so its runs check batched against sequential,
+misprediction and the round bound, not layouts.
 
 ## Method-call decisions
 

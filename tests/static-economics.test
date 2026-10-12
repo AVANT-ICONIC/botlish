@@ -201,6 +201,207 @@ proc seOwnershipProgram {args} {
     return "$text${calls}0\n"
 }
 
+# The monomorphization plan's gate (hir/staticdeps.tcl's C:plan): the plan
+# (hir::traits::Plan) runs only on a build with no diagnostic at all, so its
+# diagnostics appear only once every other one is gone. A site body (for the
+# ownership prelude) giving a coroutine handle to an untyped parameter of a
+# nested function: AFFINE-GENERIC-NESTED-UNSUPPORTED, the plan's.
+set ::seNestedGeneric {"fn outer() -> int:" "    fn inner(c):" "        c(Command {value: 1})" "    e = inner(make(1))" "    e.value" "outer()"}
+
+# Two trait-polymorphic functions whose bodies are sites holding a trait
+# operation, each first needed (its specialization placed) before its
+# implementation is declared: TRAIT-IMPL-ORDER at both, the plan's. Nothing
+# else links them; the first one's caller is called at the top level without
+# a handler, so its rejection makes that call an UNHANDLED-ERROR -- a
+# diagnostic in no site, which closes the gate again.
+set ::sePlanOrder {import compiler
+
+trait LateNamed:
+    fn late_name(value: LateNamed) -> str
+
+struct LatePerson:
+    v: str
+
+fn late_named(v: LateNamed) -> str errors compiler::CompilerError:
+    static compile:
+        v.late_name()
+
+fn early() -> str errors compiler::CompilerError:
+    late_named(LatePerson {v: "a"})
+
+fn late_name(p: LatePerson) -> str:
+    p.v
+
+trait OtherNamed:
+    fn other_name(value: OtherNamed) -> str
+
+struct OtherPerson:
+    v: str
+
+fn other_named(v: OtherNamed) -> str errors compiler::CompilerError:
+    static compile:
+        v.other_name()
+
+fn early_other() -> str errors compiler::CompilerError:
+    other_named(OtherPerson {v: "b"})
+
+fn other_name(p: OtherPerson) -> str:
+    p.v
+
+a = early()
+b = early_other():
+    on compiler::CompilerError:
+        "rejected"
+0
+}
+
+# A generic top-level function whose body is a site giving its untyped
+# parameter to a nested generic function: specialized for a coroutine handle
+# (a clone, AFFINE-VALUES.md) only once its caller's argument is one -- here
+# when a rejection makes the other branch of the `if` producing it `never`.
+# In the clone's view the nested call is AFFINE-GENERIC-NESTED-UNSUPPORTED,
+# the plan's, though nothing of the site's own changed.
+set ::sePlanClone $::seOwnership
+append ::sePlanClone {fn want_int(x: int) -> int:
+    x
+
+fn first() -> int errors compiler::CompilerError:
+    static compile:
+        want_int("a")
+
+fn keep(h) -> int errors compiler::CompilerError:
+    static compile:
+        fn inner(c) -> int:
+            1
+        inner(h)
+
+fn pick() errors compiler::CompilerError:
+    static compile:
+        want_int("b")
+
+fn caller(flag: bool) -> int errors compiler::CompilerError:
+    x = if flag:
+        make(1)
+    else:
+        pick()
+    keep(x)
+
+r1 = first():
+    on compiler::CompilerError:
+        -1
+r2 = caller(true):
+    on compiler::CompilerError:
+        -1
+0
+}
+
+# Sites in trait-polymorphic functions holding a trait operation: one also
+# failing the checker (TYPE), one that does not, one calling the first
+# function, and a TYPE failure after them all.
+set ::sePlanFailing {import compiler
+
+trait Shape:
+    fn area(shape: Shape) -> int
+
+struct Square:
+    side: int
+
+fn area(s: Square) -> int:
+    s.side
+
+fn want_int(x: int) -> int:
+    x
+
+fn f_poly(s: Shape) -> int errors compiler::CompilerError:
+    static compile:
+        s.area() + want_int("f")
+
+fn p_poly(s: Shape) -> int errors compiler::CompilerError:
+    static compile:
+        s.area()
+
+fn d() -> int errors compiler::CompilerError:
+    static compile:
+        f_poly(Square {side: 2})
+
+fn w() -> int errors compiler::CompilerError:
+    static compile:
+        want_int("w")
+
+r_p = p_poly(Square {side: 3}):
+    on compiler::CompilerError:
+        -1
+r_d = d():
+    on compiler::CompilerError:
+        -1
+r_w = w():
+    on compiler::CompilerError:
+        -1
+0
+}
+
+# A function with an untyped parameter that no call can give an affine value
+# (here an int) is never cloned for one: the site in it giving a callable to
+# a nested generic function is no consumer of the plan's gate. (As one, its
+# reach -- the erased-callable contract it consumes -- would join the
+# erasing block's component to the last failure's.)
+set ::sePlanNoClone {import compiler
+import list
+
+error E2
+
+fn raise_e2() -> int errors E2:
+    fail E2
+
+fn harmless() -> int:
+    1
+
+fn store(f) -> int:
+    1
+
+fn want_int(x: int) -> int:
+    x
+
+fn erasing() -> int errors compiler::CompilerError:
+    static compile:
+        r = store(raise_e2)
+        want_int("e")
+
+fn consumer() -> int errors compiler::CompilerError:
+    static compile:
+        fn run(fs: List[any]) errors IndexNotFound:
+            f = list::at(fs, 0)
+            f()
+        r = run([harmless]):
+            on IndexNotFound:
+                -2
+        1
+
+fn register(n: int, xs) -> int errors compiler::CompilerError:
+    static compile:
+        fn each(f, ys) -> int:
+            f()
+        each(harmless, xs)
+
+fn last() -> int errors compiler::CompilerError:
+    static compile:
+        want_int("w")
+
+r1 = erasing():
+    on compiler::CompilerError:
+        -1
+r2 = consumer():
+    on compiler::CompilerError:
+        -1
+r3 = register(1, 2):
+    on compiler::CompilerError:
+        -1
+r4 = last():
+    on compiler::CompilerError:
+        -1
+0
+}
+
 # ---------------------------------------------------------------------------
 # The semantics are frozen
 
@@ -353,6 +554,23 @@ test se-equal-every-mention {every mention of a binding is an edge of the analys
     set results
 } -result {{} {TYPE accepted} {} 2 {} {TYPE accepted accepted} {} 2}
 
+test se-equal-plan-gate {a site the monomorphization plan diagnoses fails only once no diagnostic is left anywhere: between two TYPE failures, its AFFINE-GENERIC-NESTED-UNSUPPORTED appears in the build after both are rejected, which the batched run does not predict ok (the dependency analysis once had no edge for the gate: the next build contradicted it); and while the gate is open, a rejection can close it again -- here the UNHANDLED-ERROR of a top-level call of the rejected site's function -- so of two independent TRAIT-IMPL-ORDER sites the second is accepted, as in the sequential order, not rejected beside the first} -body {
+    set text [seOwnershipProgram a [seTypeFail 0] nested $::seNestedGeneric c [seTypeFail 1]]
+    set hir [seHir $text]
+    set gate [list [seSame $text] [seOutcomes $text] [dict get $hir staticStats mispredicted] \
+        [dict get $hir staticStats rounds]]
+    # (Not against the legacy scheduler: it knows no gate, and rejects both.)
+    set hir [seHir $::sePlanOrder]
+    list {*}$gate [seSame $::sePlanOrder 0] [seOutcomes $::sePlanOrder] \
+        [lmap d [dict get $hir diagnostics] {dict get $d kind}]
+} -result {{} {TYPE AFFINE-GENERIC-NESTED-UNSUPPORTED TYPE} {} 3 {} {TRAIT-IMPL-ORDER accepted} UNHANDLED-ERROR}
+
+test se-equal-plan-clone {a site the plan diagnoses only in a clone's view: a generic function's site giving its parameter to a nested generic function is specialized for a coroutine handle once a rejection narrows its caller's argument to one -- the site is the plan's consumer though nothing of its own changes, and no build contradicts a prediction} -body {
+    set hir [seHir $::sePlanClone]
+    list [seSame $::sePlanClone 0] [seOutcomes $::sePlanClone] [dict get $hir staticStats mispredicted] \
+        [dict get $hir staticStats rounds]
+} -result {{} {TYPE AFFINE-GENERIC-NESTED-UNSUPPORTED TYPE} {} 3}
+
 test se-no-misprediction {the golden framework's suites of 30 cases: no build contradicts a prediction of the batched run} -body {
     lmap rejection {none unbound type} {
         dict get [seHir [seSuite 30 $rejection 1]] staticStats mispredicted
@@ -470,6 +688,22 @@ test se-builds-ownership-verdict {the ownership verdict: a site whose path-relea
     set accepted [list [dict get $hir staticStats mispredicted] [dict get $hir staticStats rounds] [seOutcomes $text]]
     list $first $ahead $accepted
 } -result {{{} 3 {}} {{} 3 8 {AFFINE-LIST-OPERATION-UNSUPPORTED AFFINE-PATH-RELEASE-UNSUPPORTED USE-AFTER-MOVE}} {{} 2 {AFFINE-PATH-RELEASE-UNSUPPORTED TYPE TYPE TYPE TYPE}}}
+
+test se-builds-plan-gate {the plan's gate: a site the plan diagnoses waits for one witness, the last failing site, not for every failure -- ahead of six TYPE failures it takes 3 rounds (the sequential order 8) and no build contradicts a prediction; a site failing the checker reads nothing of the gate, so its own dependents do not hold back the witness: 2 rounds; nor does a site in a function no affine value can reach: 2 rounds} -body {
+    set sites [list nested $::seNestedGeneric]
+    for {set i 0} {$i < 6} {incr i} {
+        lappend sites t$i [seTypeFail $i]
+    }
+    set text [seOwnershipProgram {*}$sites]
+    set hir [seHir $text]
+    set ahead [list [dict get $hir staticStats mispredicted] [dict get $hir staticStats rounds] \
+        [lindex [seEcon $text sequential] 0] [lsort -unique [seOutcomes $text]]]
+    set hir [seHir $::sePlanFailing]
+    set failing [list [seSame $::sePlanFailing] [dict get $hir staticStats mispredicted] \
+        [dict get $hir staticStats rounds] [seOutcomes $::sePlanFailing]]
+    set hir [seHir $::sePlanNoClone]
+    list $ahead {*}$failing [seSame $::sePlanNoClone] [dict get $hir staticStats rounds] [seOutcomes $::sePlanNoClone]
+} -result {{{} 3 8 {AFFINE-GENERIC-NESTED-UNSUPPORTED TYPE}} {} {} 2 {TYPE accepted accepted TYPE} {} 2 {TYPE accepted accepted TYPE}}
 
 test se-method-reuse {method-style call decisions are reused across rounds: fewer trial builds than deciding afresh, and the audit (every seeded round built again unseeded) finds the same program} -body {
     set text "import compiler\nimport list\nimport str\n\n"
@@ -627,6 +861,18 @@ test se-property-ownership-verdict {release scopes, and so AFFINE-PATH-RELEASE-U
     list [regexp {set scopes \[expr \{!\$accepted } [info body hir::affine::verify]] \
         [expr {$kinds eq [lsort $hir::staticdeps::ownershipKinds]}] \
         [regexp {format \{call to %s } [info body hir::semantic::Derived]]
+} -result {1 1 1}
+
+test se-property-plan-gate {the monomorphization plan runs only on a build with no diagnostic at all (hir::BuildFull), its diagnostics end the build (monomorphize returns with them), and they are of exactly the kinds hir/staticdeps.tcl's C:plan lists -- the facts the gate's edges rely on} -body {
+    set kinds {}
+    foreach p {hir::traits::Plan hir::traits::SetAction} {
+        foreach {- kind} [regexp -all -inline {\[list ([A-Z]+(?:-[A-Z]+)+) } [info body $p]] {
+            lappend kinds $kind
+        }
+    }
+    list [regexp {\[dict get \$hir diagnostics\] eq ""\} \{[^\}]*set hir \[hir::traits::monomorphize } [info body hir::BuildFull]] \
+        [regexp {if \{\[dict exists \$p diagnostics\]\} \{\s*foreach d \[dict get \$p diagnostics\] \{\s*lassign \$d kind message e\s*hir::Diagnose hir \$kind \$message \$e\s*\}\s*return \$hir} [info body hir::traits::monomorphize]] \
+        [expr {[lsort -unique $kinds] eq [lsort $hir::staticdeps::planKinds]}]
 } -result {1 1 1}
 
 test se-property-demotion-keeps-diagnostics {a demoted trusted contract changes no diagnostic: hir::check keeps the diagnostics of the check before the demotion -- why demotion is not a channel} -body {

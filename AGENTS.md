@@ -390,6 +390,12 @@ instance key of a trait parameter (`hir/semantic.tcl`), the plan or build 2
 `audit/traits/tools/mutants.txt` to still apply: update a mutant's text when
 you change the code it mutates, and keep it a mutant of the same rule).
 `audit/traits/tools/evidence.tcl` regenerates `audit/traits/principal/`.
+The plan runs only on a build with no diagnostic at all (`hir::BuildFull`'s
+gate), a program-wide channel of the static decisions (`hir/staticdeps.tcl`'s
+`C:plan`, which lists the plan's diagnostic kinds and the expressions it can
+report them at): a change to that gate, to those kinds or to where the plan
+reports them also needs `tests/static-economics.test` and the
+static-decision harnesses (Static intrinsics, below).
 
 ## Context traits
 
@@ -809,7 +815,9 @@ schedulers, the dependency analysis, the method-call seeds or build reuse
 an inferred contract, the erased-callable contract, an instance budget, a
 yield type, a diagnostic suppressed by reachability or by a whole-program
 verdict such as the ownership analysis's, which withholds release scopes and
-`AFFINE-PATH-RELEASE-UNSUPPORTED` from a program it rejects), run
+`AFFINE-PATH-RELEASE-UNSUPPORTED` from a program it rejects, or behind a gate
+such as the trait monomorphization plan's, which runs only on a program with
+no diagnostic), run
 `tests/static-economics.test`, `tests/static-compile.test`, `tests/golden.test`
 (`golden-static-economics`), `audit/static-decisions/tools/fuzz.tcl` (several
 seeds), `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` and

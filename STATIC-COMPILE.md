@@ -373,6 +373,37 @@ extra one only costs a build. Its header lists every edge; in short:
     types, so no other diagnostic can appear. A later finding of the golden
     migration (`mutable-vector.bot` mispredicted; a variant decided another
     program: `se-equal-ownership-verdict`);
+  * **the monomorphization plan's gate** (`hir::traits::Plan`, which
+    `hir::BuildFull` runs only on a build with no diagnostic at all): its
+    diagnostics (TRAIT-IMPL-ORDER, TRAIT-NOT-SATISFIED in a clone,
+    AFFINE-GENERIC-NESTED-UNSUPPORTED, the budget kinds) are a site's, and
+    appear only once no other diagnostic is left anywhere. Its *consumers*
+    are the sites holding an expression the plan may diagnose: a trait
+    operation (in the generic program or in an instance's view); a call
+    giving an affine argument to an untyped parameter of a function
+    specialized only once (nested, or requiring a context trait), or any
+    call of such a function in the body of a function the plan may clone --
+    a trait-typed parameter, a context-trait requirement, or an untyped
+    parameter some call passes an affine value or one whose type mentions
+    `any` -- whose argument may be affine in a clone a rejection elsewhere
+    creates (`se-equal-plan-clone`); a call whose instance request was
+    declined.
+    While the gate is closed (some diagnostic is not the plan's), a consumer
+    that is not failing depends on one witness, the last failing site in
+    post-order -- the gate stays closed while any one diagnostic stays, and
+    that one is removed last; a site failing now reads nothing of the gate
+    (a plan diagnostic is never beside another one), so it is no consumer
+    then. One consumer ahead of six rejections takes 3 rounds, not 8
+    (`se-builds-plan-gate`). While the gate is open (only the plan's
+    diagnostics), every consumer depends on every one of them: a rejection
+    can close the gate again (here, the UNHANDLED-ERROR of a top-level call
+    of the rejected site's function, in no site) or change another one (a
+    clone's instances and placement are its callers'), so the plan's own
+    diagnostics are decided one per build, as in the sequential order
+    (`se-equal-plan-gate`: otherwise a second TRAIT-IMPL-ORDER site is
+    rejected where the sequential order accepts it). A later finding of the
+    golden migration (`traits.bot`, `affinity.bot` mispredicted;
+    STATIC-DECISION-ECONOMICS.md, "The plan's gate");
   * **the contract-boundary checks** (`hir::completions::Subsume` with
     `Possible`), which run only in a body's own diagnosing walk while the
     program erases something: a site-local channel, from the site to the
@@ -382,11 +413,7 @@ Not channels: a demoted trusted contract (`hir::check` keeps the
 diagnostics of the check before the demotion,
 `se-property-demotion-keeps-diagnostics`), the trait monomorphization's
 build (it runs only on a program with no diagnostic, and its own are
-internal), and resolution (lexical). Missing, not yet modelled: the gate of
-that monomorphization's *plan*, whose diagnostics (TRAIT-IMPL-ORDER,
-AFFINE-GENERIC-NESTED-UNSUPPORTED, ...) are a site's and appear only once no
-other diagnostic is left -- the golden traits.bot and affinity.bot record a
-misprediction for it (STATIC-DECISION-ECONOMICS.md, "Every mention").
+internal: its plan's are the channel above), and resolution (lexical).
 
 ### Method-style call decisions across rounds
 
