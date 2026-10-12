@@ -155,9 +155,11 @@ proc runNew {tree suites timeout backends jobs} {
     set states [dict create]
     set seconds [dict create]
     set reported [dict create]
+    set ::staticOf [dict create]
     foreach suite $suites {
         lassign [dict get $outcomes $suite] status output wall
         dict set seconds $suite $wall
+        dict set ::staticOf $suite [goldentools::suiteStatic $output]
         lassign [goldentools::suiteVerdicts $output] state names
         dict set states $suite $state
         dict set reported $suite [dict keys $names]
@@ -265,6 +267,28 @@ if {[dict get $options -mutants] eq {}} {
         }
         foreach n [lsort -unique $listed] {
             if {$n ni [dict get $reported $suite]} { puts "UNREPORTED GOLDEN TEST: $suite $n"; set exit 1 }
+        }
+    }
+    # The static decisions' economics per suite (STATIC-DECISION-ECONOMICS.md;
+    # tests/golden.test's golden-static-economics over the validation sample):
+    # builds grow with real dependency depth, never with the number of tests.
+    # Per suite at most 8 decision rounds and at most 15 whole builds besides
+    # the method-call trial builds (one per candidate of an undecided
+    # method-style call in a round: bounded by candidates, not tests), and no
+    # build contradicting a prediction.
+    puts "\nStatic decisions per suite (rounds, builds, method trials, mispredicted, compile s):"
+    foreach suite $suites {
+        set st [dict get $::staticOf $suite]
+        if {$st eq ""} { puts [format "    %-48s (no static site, or not compiled)" $suite]; continue }
+        set problems {}
+        if {[dict get $st rounds] > 8} { lappend problems "more than 8 rounds" }
+        if {[dict get $st builds] - [dict get $st trials] > 15} { lappend problems "more than 15 builds besides method trials" }
+        if {[dict get $st mispredicted] > 0} { lappend problems "mispredicted" }
+        puts [format "    %-48s %3d %4d %4d %3d %8.1f %s" $suite [dict get $st rounds] [dict get $st builds] \
+            [dict get $st trials] [dict get $st mispredicted] [dict get $st compile] [join $problems {; }]]
+        if {$problems ne {}} {
+            puts "STATIC ECONOMICS: $suite: [join $problems {; }]"
+            set exit 1
         }
     }
     if {[dict get $options -full]} {

@@ -32,7 +32,9 @@
 # private, mutated copy: audit/golden/tools/). -names prints only the test
 # names with their verdicts ("PASS name"/"FAIL name"), one per line, for
 # tools that compare suites, after a "SUITE STATUS STATUS" line (ok,
-# failed, aborted, disagree or compile-error). -quiet prints one summary line
+# failed, aborted, disagree or compile-error) and a "SUITE STATIC rounds R
+# builds B trials T mispredicted M compile SECONDS" line (the static
+# decisions' economics, when the suite has static sites). -quiet prints one summary line
 # per program and backend.
 
 namespace eval golden {
@@ -219,6 +221,13 @@ proc golden::main {argv} {
         set name [file tail $path]
         if {$mode eq "names"} {
             puts "$name STATUS $status"
+            # The static decisions' economics (hir/static.tcl's staticStats),
+            # for the economics guard of audit/golden/tools/check.tcl.
+            set compiled [dict get $result compile]
+            if {[lindex $compiled 0] eq "ok" && [dict exists [lindex $compiled 1] staticStats]} {
+                set stats [dict get [lindex $compiled 1] staticStats]
+                puts "$name STATIC rounds [dict get $stats rounds] builds [dict get $stats builds] trials [dict get $stats methodTrials] mispredicted [llength [expr {[dict exists $stats mispredicted] ? [dict get $stats mispredicted] : {}}]] compile [format %.2f [lindex $compiled 2]]"
+            }
         }
         if {$status eq "compile-error"} {
             puts "== $name: COMPILE ERROR [lindex [dict get $result compile] 1]"

@@ -286,9 +286,22 @@ proc goldentools::suiteVerdicts {output} {
     foreach line [split $output \n] {
         if {[regexp {^\S+ STATUS (\S+)$} $line -> s]} {
             set state $s
+        } elseif {[regexp {^\S+ STATIC } $line]} {
+            continue
         } elseif {[regexp {^\S+ (PASS|FAIL) (.*)$} $line -> verdict name]} {
             dict set verdicts $name $verdict
         }
     }
     return [list $state $verdicts]
+}
+
+# The static economics line of tests/golden/run.tcl -names OUTPUT: a dict
+# rounds, builds, trials, mispredicted, compile -- or "" (no static site).
+proc goldentools::suiteStatic {output} {
+    foreach line [split $output \n] {
+        if {[regexp {^\S+ STATIC (.*)$} $line -> fields]} {
+            return $fields
+        }
+    }
+    return ""
 }

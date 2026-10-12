@@ -138,24 +138,29 @@ foreach path $goldenSelected {
 # "Decision economics"; STATIC-DECISION-ECONOMICS.md): whole-program builds
 # grow with the suites' semantic dependency depth, not with how many blocks
 # they hold or how they are laid out. Loose ceilings, not exact counts (a
-# harmless new build in some phase should not fail them): at most 15 builds in
-# any one suite, and on average at most 6 per suite. The eight suites of the
-# validation sample took 79 builds before the batched scheduler (one of them
-# 194 in its natural layout) and 37 with it, 4.6 per suite; the large-scale
-# migration (LARGE-SCALE-GOLDEN-MIGRATION.md) multiplied the suites and kept
-# the average (a suite of hundreds of tests takes a handful of builds). A
-# suite that needs more is a compiler regression or a real dependency to
-# explain, never a ceiling to raise automatically.
+# harmless new build in some phase should not fail them): per suite at most 8
+# decision rounds and at most 15 whole builds besides the method-call trial
+# builds (one per candidate of an undecided method-style call in a round:
+# bounded by the candidates, never by the number of tests), and on average at
+# most 6 builds per suite in all. The eight suites of the validation sample
+# took 79 builds before the batched scheduler (one of them 194 in its natural
+# layout) and 37 with it, 4.6 per suite. The large-scale migration
+# (LARGE-SCALE-GOLDEN-MIGRATION.md) found suites whose method-heavy code costs
+# more trial builds (one suite 30 builds in 5 rounds) and traced every one to
+# the method decisions or the deliberate internal-id ordering, none to a
+# missed dependency; audit/golden/tools/check.tcl applies the same ceilings to
+# every suite in CI. A suite that needs more is a compiler regression or a
+# real dependency to explain, never a ceiling to raise automatically.
 testConstraint goldenAllSuites [expr {[dict size $goldenStatic] > 0
     && [dict size $goldenStatic] == [llength $goldenSelected]}]
-test golden-static-economics {the golden suites' static decisions take at most 15 whole-program builds in any one suite and on average at most 6 per suite, with no build contradicting a prediction of the batched scheduler (over the suites this run selected)} -constraints goldenAllSuites -body {
+test golden-static-economics {the golden suites' static decisions take at most 8 rounds and 15 whole-program builds besides method-call trials in any one suite and on average at most 6 builds per suite, with no build contradicting a prediction of the batched scheduler (over the suites this run selected)} -constraints goldenAllSuites -body {
     set problems {}
     set total 0
     dict for {suite stats} $goldenStatic {
         set builds [dict get $stats builds]
         incr total $builds
-        if {$builds > 15} {
-            lappend problems "$suite: $builds builds ([dict get $stats rounds] rounds)"
+        if {[dict get $stats rounds] > 8 || $builds - [dict get $stats methodTrials] > 15} {
+            lappend problems "$suite: $builds builds, [dict get $stats methodTrials] method trials ([dict get $stats rounds] rounds)"
         }
         if {[dict get $stats mispredicted] ne {}} {
             lappend problems "$suite: mispredicted [dict get $stats mispredicted]"
