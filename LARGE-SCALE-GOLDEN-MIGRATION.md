@@ -38,11 +38,11 @@ passes in both passes (7280 tests on interp; on compile 7276, the 4 others
 interp-only by constraint; 0 failed). Every golden test is demonstrably capable
 of failing (audit/golden/tools/perturb.tcl: every one of the 4572 fails with
 inverted verdicts, every one of the 4047 with a textual expectation fails with
-it altered). FRAMEWORK_MUTANTS_OUTCOME; of a 48-mutant cross-suite sample, 45
-are detected by both layers, 2 only by Tcl (both explained: not
-source-observable) and 1 by neither ported side, after three gaps its first run
-found (42 / 3 / 3) were closed and their mutants re-run
-([Mutation](#mutation)).
+it altered). All 20 framework mutants apply and are killed on the final tree;
+of a 48-mutant cross-suite sample, 45 are detected by both layers, 2 only by
+Tcl (both explained: not source-observable) and 1 by neither ported side,
+after three gaps its first run found (42 / 3 / 3) were closed and their
+mutants re-run ([Mutation](#mutation)).
 
 The ordinary framework -- a context holding a `MutableVector` of deferred
 `Fn{args: [], return: test::Match}` checks, a coroutine runner, explicit
@@ -52,19 +52,25 @@ trick**. The library grew by exactly two helpers (`test::rejects_message`,
 `test::rejects_containing`, with the substring scan they use,
 `test::contains_text?`) after four suites had reimplemented them independently.
 
-The migration found and fixed **six compiler defects** in their own layers (two
-completion-analysis precision/soundness defects; three static-decision defects,
-each of which could make the batched scheduler commit a different decision,
-message or program than the sequential reference; a front-end crash on
-recursive struct types), each with a Tcl regression -- the completion and
-recursive-struct fixes also with golden regressions; and it found and
-fixed **static-decision economics regressions** the previous milestone's
-claims did not cover (independent blocks still serialized through the
-erased-callable contract, nested sibling blocks and internal-id messages, and
-an unmodelled channel, the trait plan's gate): the 85 suites' static decisions
-went from 303 rounds / 451 builds to 206 / 322 (all 88 suites now: 211 / 329,
-of which 81 method-call trials, and no misprediction). It also found, and did
-not fix, a compilation-isolation defect. See [Compiler findings](#compiler-findings).
+The migration found and fixed **seven compiler defects** in their own layers
+(two completion-analysis precision/soundness defects; three static-decision
+defects, each of which could make the batched scheduler commit a different
+decision, message or program than the sequential reference; a front-end crash
+on recursive struct types; an ahead-of-time backend defect: a program holding
+an empty struct could not be built into an executable), each with a Tcl
+regression -- the completion and recursive-struct fixes also with golden
+regressions; and it found and fixed **static-decision economics
+regressions** the previous milestone's claims did not cover (independent
+blocks still serialized through the erased-callable contract, nested sibling
+blocks and internal-id messages, and an unmodelled channel, the trait plan's
+gate), and one its own dependency fix introduced, which the static-decision
+fuzzer found on new seeds (a coroutine construction waiting for a contract it
+does not read): the 85 suites' static decisions went from 303 rounds / 451
+builds to 206 / 322 (all 88 suites now: 210 / 328, of which 81 method-call
+trials, and no misprediction). It also found, and did not fix, two defects
+older than the migration: compilation isolation, and a `static compile:`
+verdict that depends on where an unrelated function is written. See
+[Compiler findings](#compiler-findings).
 
 Performance, measured on the finished corpus ([Performance](#performance)):
 executing every golden test takes a tenth of a second natively; compiling the
@@ -270,7 +276,10 @@ each backend's preparation plus its run of the whole suite, after the shared
 front end; `excl.` an excluded backend, which the benchmark does not run: it
 would only report the construct it refuses, not a cost; the Tcl-tests column is
 a per-suite count, so its total counts the 34 Tcl tests ported into more than
-one suite once per suite -- 3250 distinct):
+one suite once per suite -- 3250 distinct; rounds and builds are the final
+tree's: the recorded run predates the coroutine-construction fix, which took
+framework-semantics.bot from 4 rounds / 8 builds to 3/7 and changed no other
+suite):
 
 | suite | golden tests | Tcl tests | from Tcl files | lines | static sites (rejected) | rounds | builds (method trials) | front end s | interp s | compile s | cranelift-generic s | cranelift s | peak RSS MB |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -304,7 +313,7 @@ one suite once per suite -- 3250 distinct):
 | diagnostics.bot | 27 | 24 | enums, flags, hir-resolution, imports +9 | 511 | 28 (28) | 4 | 6 (1) | 7.1 | 1.7 | 3.9 | 0.6 | 1.3 | 128 |
 | errors.bot | 24 | 20 | error-payloads, errors, higher-order-completions, mutable-array-type +3 | 607 | 26 (11) | 3 | 3 (0) | 4.1 | 1.7 | 5.0 | 0.7 | 1.4 | 134 |
 | flags.bot | 100 | 98 | flags | 1308 | 100 (32) | 2 | 2 (0) | 7.3 | 18.2 | 39.5 | 2.0 | 8.8 | 450 |
-| framework-semantics.bot | 29 | 17 | golden-framework | 611 | 26 (9) | 4 | 8 (2) | 20.0 | 4.2 | 4.4 | 0.8 | 1.9 | 139 |
+| framework-semantics.bot | 29 | 17 | golden-framework | 611 | 26 (9) | 3 | 7 (2) | 20.0 | 4.2 | 4.4 | 0.8 | 1.9 | 139 |
 | gc-sensitive-values.bot | 22 | 24 | native-alloc, native-root-liveness, native-stack-map, string-allocation | 519 | 22 (0) | 1 | 1 (0) | 2.5 | 3.4 | 4.3 | 0.6 | 1.7 | 126 |
 | harness.bot | 13 | 13 | argv, calls, coroutines, hir-lowering +6 | 363 | 14 (2) | 2 | 2 (0) | 1.5 | 1.3 | 3.0 | 0.5 | 1.2 | 101 |
 | hir-values.bot | 14 | 12 | hir-aot, hir-lowering, hir-resolution, hir-samples | 277 | 14 (6) | 2 | 2 (0) | 1.4 | 0.7 | 1.4 | 0.4 | 1.0 | 86 |
@@ -362,7 +371,7 @@ one suite once per suite -- 3250 distinct):
 | validators-and-proofs.bot | 153 | 54 | proof-loop-intervals, proven-bounds, refinement-validators | 1748 | 153 (76) | 3 | 4 (0) | 18.3 | 17.6 | 34.4 | 2.0 | 7.0 | 440 |
 | values.bot | 32 | 36 | blocks, calls, control, elif +8 | 1005 | 26 (0) | 1 | 1 (0) | 4.3 | 5.4 | 14.9 | 1.1 | 3.0 | 280 |
 | warning-programs.bot | 42 | 37 | fixed-arity-list-return, many-boolean-arguments, one-char-string-literal, proves-naming +1 | 623 | 42 (14) | 3 | 4 (0) | 6.2 | 1.1 | 4.5 | 0.7 | 1.7 | 148 |
-| total (88 suites) | 4572 | 3287 | | 63212 | 4378 (1390) | 211 | 329 (81) | 1518.4 | 774.0 | 1404.0 | 93.5 | 402.6 | |
+| total (88 suites) | 4572 | 3287 | | 63212 | 4378 (1390) | 210 | 328 (81) | 1518.4 | 774.0 | 1404.0 | 93.5 | 402.6 | |
 
 Every suite ends with `with context test::suite()`, its registration calls and
 `test::report()`; every test body is a function `fn NAME() errors
@@ -515,7 +524,8 @@ bending a port around them, each with a Tcl regression of the mechanism; the
 completion and recursive-type defects (1, 2, 5) also with a golden regression
 of the source behavior (`tests/golden/completion-regressions.bot`,
 `tests/golden/recursive-types.bot`), the static-decision defects (3, 4, 6) with
-static-economics tests and mutants.
+static-economics tests and mutants, the ahead-of-time defect (7) with a
+native-executable test (golden suites run on the JIT path).
 
 | # | defect | layer | found by | fix |
 |---|---|---|---|---|
@@ -525,6 +535,7 @@ static-economics tests and mutants.
 | 4 | **Static decisions: wrong program.** `Prepare` built its mentions, site expressions, region calls and function literals with `dict lappend` into flat lists read as dicts, so only the last entry per key survived: the analysis dropped edges, and a batched build could commit a capture the sequential order accepts (a different program, recorded nowhere) or mispredict. | `hir/staticdeps.tcl` | the fix of #3 | 6fe0859: every entry kept; a function value is not a shared mutable place (soundness argued in STATIC-DECISION-ECONOMICS.md, "Every mention"). Outcomes of all suites unchanged; some suites take more builds through the restored contract-boundary edges. |
 | 5 | **Crash.** `hir::mutvec::ShareDescriptor` recursed without bound (TCL LIMIT STACK) on a program declaring a recursive struct type and a function typed over it and using a `MutableVector` or `MutableArray` anywhere -- which every golden suite does, through `lib/test.bot`. | `hir/mutvec.tcl` | `structs.test` struct-named-recursive-declaration | e4107e3: `ShareDescriptor` and the affine drop `Descriptor` keep the structs they are inside of (a struct met again inside itself contributes nothing; descriptors of every non-recursive type unchanged). An *affine* struct holding its own type in a container element has values nested to any depth that no finite static descriptor reaches: its declaration is now rejected (AFFINE-CONTAINER-UNSUPPORTED, naming the field path) -- before, it compiled while unused and crashed the compiler once a release was needed. **A new restriction, flagged for your decision** (STRUCTS.md, AFFINE-VALUES.md). 5 Tcl tests, `recursive-types.bot` (9). |
 | 6 | **Static decisions: wrong message.** Hygiene renames a capturing binding `NAME#N`, N counted over the whole program, every static site's body included; a TYPE message printing that name differed between builds, so the batched scheduler committed `"list#2"` where the sequential reference reports `"list#1"` -- a different `CompilerError.message` value. | `hir/semantic.tcl`, `hir/range.tcl` | `se-equal-hygiene-names` (found while making TYPE messages name callables by source) | dc8bf3d: such messages print the binding's source spelling (`hir::semantic::SourceName`). Other producers that print a binding's name (USE-AFTER-MOVE, `hir::signatures::Name`) remain a documented gap (STATIC-DECISION-ECONOMICS.md); no golden suite's message names a hygiene rename. |
+| 7 | **Ahead-of-time build failure.** An executable's startup code listed each struct shape's fields as `vec![...]`; for a shape with no fields -- the empty anonymous struct `{}` -- that is an untyped `vec![]`, which rustc rejects (E0282), so no program holding an empty struct could be built ahead of time (the JIT path was unaffected). | `native/src/codegen/aot.rs` | `bench/golden-aot.tcl` on `structs-and-enums.bot` | c50b9d1: the field list is typed `Vec<&str>`; `tests/native-executable.test` native-executable-empty-shape (fails before, at the link). structs-and-enums.bot now builds and passes 111/111 as an executable. |
 
 Static-decision **economics** findings (not wrong results): the previous
 milestone established that builds scale with dependency depth, not with the
@@ -532,7 +543,8 @@ number of independent rejected blocks; the migrated corpus found three shapes
 where they still scaled with the number of blocks, and one unmodelled channel
 that caused mispredictions, all fixed (17f0323, 6d22ef7;
 STATIC-DECISION-ECONOMICS.md records the analysis; 11 new static-decision
-mutants pin it, 17 across all the static-decision fixes):
+mutants pin it, 17 across all the static-decision fixes), and later one the
+migration's own fix of #4 had introduced (one more mutant):
 
 | shape | example before | fix | after |
 |---|---|---|---|
@@ -540,9 +552,10 @@ mutants pin it, 17 across all the static-decision fixes):
 | **nested sibling blocks**: a nested site depended on its enclosing site's form and through it on every sibling | static-compile.bot 26/33 | a site's form (`F:`) is apart from what its diagnostics read (`Z:`): an edge reading code goes to the form, which changes only by the site's own rejection | 7/14 |
 | **internal ids**: a TYPE message printing an exact callable as `block(eN)` is committed only in the sequential order's own build; and a USE-AFTER-MOVE naming a binding `s1` was taken for one | callables.bot (7 rounds of such messages), affinity.bot, declared-errors.bot | those messages name the callable by source (`two/2 -> bool`); `InternalIds` recognizes only `block(eN)` and `function eN` | callables.bot 3/3, compiled-values.bot 4/4, range-and-contract-values.bot 4/4 |
 | **the trait plan's gate** (mispredictions only; decisions already equal): `hir::traits::Plan` runs only on a diagnostic-free program | traits.bot, affinity.bot (mispredicted) | a program-wide channel `C:plan` | no misprediction in any suite; traits.bot now takes 8 rounds / 13 builds (5/10 while mispredicting): its plan diagnostics are decided one per build, as the sequential order decides them (the plan is one computation over the whole program) |
+| **a coroutine construction** (introduced by the fix of #4, found afterwards by the static-decision fuzzer's seed 29 on the final tree): restoring every mention restored the contract-boundary edge of every coroutine-typed position, so a site holding a handle waited for any rejected erasing site written before it, although a thunk capturing only the function it calls never reads the contract | the fuzzer's seed 29, program 13: 3 rounds nested, 2 split (2 in every layout on the tree before the migration); framework-semantics.bot 4/8 | the edge only where the thunk captures a value of an uncontracted type (what `SubsumeHandle` reads the contract through); `se-builds-coroutine-construction`, the economic mutant `coroutine-subsume-unconditional` | 2 rounds in every layout; framework-semantics.bot 3/7; the 24 suites that mention a coroutine decide exactly as before |
 
 Over the 85 suites the economics were first measured on: **303 rounds / 451
-builds before, 206 / 322 after**; all 88 suites now take 211 rounds and 329 builds,
+builds before, 206 / 322 after**; all 88 suites now take 210 rounds and 328 builds,
 81 of them method-call trial builds, with no misprediction. The remaining
 outliers are method-call trials (mutable-array.bot 5 rounds / 20 builds, 14 of
 them trials of chained calls with several candidates; structs-and-enums.bot 4/17;
@@ -550,11 +563,16 @@ imports.bot 4/16), which a block's dependency analysis does not make cheaper.
 Every suite's decisions are the sequential reference's
 (`audit/static-decisions/tools/compare.tcl tests/golden/*.bot` on the final
 tree: all 88 suites agree -- every site's outcome and reified diagnostic, the
-program's diagnostics and the decided HIR -- with no misprediction). The
+program's diagnostics and the decided HIR -- with no misprediction; after the
+coroutine-construction fix below, the 24 suites that mention a coroutine --
+the only ones whose sites can hold a handle: it takes the construction syntax,
+and no library function returns one -- decide exactly as before,
+`out/static-decisions-final.txt`). The
 reference order is what batching saves: sequentially the corpus takes 1082
 rounds and 3850 builds, 35,857 s of front end (mutable-array.bot alone 1089
-builds, 17,777 s), against 211 rounds, 329 builds and 1,347 s batched -- about
-27 times the time (both measured under the same, contended load).
+builds, 17,777 s), against 211 rounds, 329 builds and 1,347 s batched before
+that fix -- about 27 times the time (both measured under the same, contended
+load).
 
 **Found, not fixed: compilation isolation** (by the front-end coupling study
 behind [Compiler performance](#compiler-performance-what-dominates-and-what-would-remove-it),
@@ -573,6 +591,24 @@ alone in its own process (`check.tcl`), so no golden result depends on the
 leak; Tcl tests that compile several programs per process could pass for the
 wrong reason. It is not a migration blocker and is not fixed here
 ([Recommendations](#recommendations), 2).
+
+**Found, not fixed: a `static compile:` verdict that depends on layout** (the
+static-decision fuzzer's seeds 17 and 41 on the final tree; the same on the
+tree before the migration, under both schedulers). A block calling through
+an uncontracted value is charged the erased-callable contract, a program-wide
+fact. The sequential order, which defines every outcome (STATIC-COMPILE.md,
+step 3), rejects the first block in post-order with a diagnostic of its own,
+so such a block written before a block that erases an error, and is itself
+rejected later, is judged while that erasure is still in the program, and
+keeps the rejection although the final program erases nothing. Written the
+other way round, it is accepted. Reduced to two functions -- `consumer` (a
+call through an `any` list element, in a function declaring only
+`IndexNotFound`) and `eraser` (passing an E2-declaring function to an untyped
+parameter, then a TYPE error) -- the program's value is `[-1, -1]` with
+`consumer` first and `[1, -1]` with `eraser` first
+(STATIC-DECISION-ECONOMICS.md, "Coroutine constructions, and a verdict that
+depends on layout"). The schedulers agree with each other; the question is
+the order's definition, a language decision ([Recommendations](#recommendations), 7).
 
 ## The framework at scale
 
@@ -615,7 +651,8 @@ the substring scan they need) -- four suites (diagnostics, errors,
 loop-collecting, mutable-vector) had written the same matcher independently.
 `tests/golden-framework.test` pins every verdict of both on every backend
 (gf-message-helpers), the library stays warning-clean, `perturb.tcl` alters
-their codes, and all 20 framework mutants still apply and are killed.
+their codes, and all 20 framework mutants still apply and are killed on the
+final tree (`out/framework-mutants.txt`).
 
 **Recurring friction** (recorded, not solved -- the brief's item 23 asks to track it):
 
@@ -784,8 +821,8 @@ the final tree).
 
 | harness | mutants | result | why it ran |
 |---|---|---|---|
-| golden framework (`audit/golden/tools/mutate.tcl`) | 20 | all apply, all killed | `lib/test.bot` gained two helpers |
-| static decisions (`audit/static-decisions/tools/mutate.tcl`) | 34 (17 before; 17 added with the fixes) | all apply, all killed | `hir/staticdeps.tcl`, `hir/static.tcl` |
+| golden framework (`audit/golden/tools/mutate.tcl -suites 0`; `out/framework-mutants.txt`) | 20 | all apply, all killed by `golden-framework.test` and the framework fuzzer (`-suites 0` leaves out running all 88 suites per mutant, a full four-backend corpus run each) | `lib/test.bot` gained two helpers |
+| static decisions (`audit/static-decisions/tools/mutate.tcl`) | 35 (17 before; 18 added with the fixes) | all apply, all killed (the 34 before the coroutine-construction fix on the tree before it; its own mutant, `coroutine-subsume-unconditional`, by `se-builds-coroutine-construction`) | `hir/staticdeps.tcl`, `hir/static.tcl` |
 | structural contracts (`audit/structural-contracts/tools/mutate.tcl`) | 18 | all apply, all killed | `hir/completions.tcl` |
 | error payloads (`audit/error-payloads/tools/mutate.tcl`) | 44 | all apply, all killed (the 43 Tcl-backend ones, and the native `propagation-drops-payload-native` with its private rebuild) | `hir/completions.tcl` |
 | static intrinsics (`audit/static-compile/tools/mutate.tcl`) | 21 | all apply, all killed | `hir/static.tcl` |
@@ -800,13 +837,21 @@ harness above ran on the final tree, and every mutant of every harness in
 `audit/*/tools/mutants.txt` (twelve files) still applies to it.
 
 Every compiler fix of the migration also ran its layer's fuzzers on the final
-tree (several seeds, once under GC stress where the harness has the switch),
-none with a disagreement: affine 3 x 30 programs, coroutines 2 x 50,
-MutableVector 3 x 40 (one GC-stressed), MutableArray 3 x 40 (one GC-stressed),
-static intrinsics 3 seeds (one GC-stressed), static decisions (with the
-economics fixes), structural contracts and error payloads (with the completion
-fixes), and the golden fuzzer 4 x 20 programs (one GC-stressed) after
-`lib/test.bot` changed.
+tree (several seeds, once under GC stress where the harness has the switch;
+`out/harnesses.txt`, `out/fuzz-final-tree.txt`), none with a disagreement:
+affine 3 x 30 programs, coroutines 2 x 50, MutableVector 3 x 40 (one
+GC-stressed), MutableArray 3 x 40 (one GC-stressed), static intrinsics 3
+seeds (one GC-stressed), structural contracts 3 x 40 and its three fault modes
+(carrier, unknown, drop), error payloads 3 x 40 (one GC-stressed) and `-fault
+unhandled`, and the golden fuzzer 4 x 20 programs (one GC-stressed) after
+`lib/test.bot` changed. The static-decision fuzzer, run on new seeds there
+(17 and 29, beside 3), found two failures ([Compiler
+findings](#compiler-findings)): seed 29's, a layout taking one round more,
+came from the migration's own fix of #4 and is fixed; seed 17's, a verdict
+that depends on layout, is older than the migration. After the fix
+(`out/static-decisions-final.txt`): seeds 1, 2, 3 and 29 pass; seeds 17 and
+41 fail with that layout-dependent verdict only, the same as on the tree
+before the migration.
 
 ## Performance
 
@@ -973,12 +1018,29 @@ instances, rejected blocks over several rounds, method-call trials
 
 ### Ahead-of-time executables (indicative)
 
-An AOT-compiled suite runs in milliseconds but does not help: its build
-(object emission and linking against the runtime) took 3-4 times the JIT
-path's lowering, code generation and run on four suites (representation.bot
-4.6 against 1.1 s, string-natives.bot 19.4 against 6.1 s), the front end is
-unchanged, and 5 of 9 suites tried are not AOT-ready -- untyped test programs
-need runtime-guarded instances, from which AOT never falls back.
+`bench/golden-aot.tcl` (new; `out/bench-golden-aot.txt`): each suite in a
+fresh process, its front end once, then `native::executable` (readiness,
+specialization, NIR lowering, object emission and linking against the
+runtime) and one run of the executable, against the JIT path
+(`native::evalHir`: NIR lowering, code generation and one run) of the same
+HIR.
+
+* **57 of the 88 suites are AOT-ready** (2,029 of the 4572 tests); 31 are
+  not: a region of an untyped test program needs a runtime-guarded instance
+  (27) or stays open (4), and AOT never falls back.
+* An executable runs its suite in milliseconds (0.38 s for all 57, at most
+  0.12 s), but building it takes a median 4.4 times the JIT path's lowering,
+  code generation and run (3.1 to 6.1; 409 s against 105 s over the 57), and
+  the front end -- most of the cost -- is unchanged. AOT-compiling the suites
+  to run them makes a one-shot run slower; it would pay only for running an
+  unchanged suite repeatedly.
+* It found one defect, fixed (#7 in [Compiler findings](#compiler-findings)):
+  a program holding an empty struct could not be built ahead of time;
+  structs-and-enums.bot now builds and passes 111/111 as an executable.
+* `linux-io.bot`'s executable reports 5 failures its JIT run does not: its
+  argv tests pin `botlish-runner`, the program name the JIT driver passes,
+  and an executable sees its own path. An environment difference the tests
+  pin, not a defect.
 
 ### Compiler performance: what dominates and what would remove it
 
@@ -1016,7 +1078,7 @@ branches, not merged -- the milestone does not optimize the compiler, the brief'
    times per build; the second signature round re-types the whole program to
    confirm unchanged seeds; a whole second `hir::check` after a demoted
    trusted contract (about 21% of callables.bot after fixes 1-2); the
-   library modules are re-analyzed in every one of the 329 builds; 81 builds
+   library modules are re-analyzed in every one of the 328 builds; 81 builds
    are method-call trials.
 
 The figures are the studies' own measurements, recorded in
@@ -1160,15 +1222,19 @@ The milestone's 75 report points, in order (section links hold the detail).
     hidden by `-strict 0` (`setcontains-total-empty-set`,
     `setcontains-total-runtime-present-and-absent`, `mutarray-sem-2`)
     ([Old-test findings](#old-test-findings)). None was edited.
-21. **Compiler bugs found.** Six, all fixed with Tcl regressions, the two
+21. **Compiler bugs found.** Seven, all fixed with Tcl regressions, the two
     completion fixes and the recursive-struct fix also with golden ones
     (`completion-regressions.bot`, `recursive-types.bot`; the static-decision
     fixes are internal to the scheduler) ([Compiler findings](#compiler-findings)): two completion-analysis
     (precision; soundness: a loop's iterable was never charged), three static
     decisions (a wrong batched decision; dropped dependency edges that could
     build a different program; batched/sequential messages differing through
-    hygiene renames), one front-end crash (recursive structs). Plus the
-    static-decision economics regressions, fixed.
+    hygiene renames), one front-end crash (recursive structs), one
+    ahead-of-time backend defect (an empty struct's executable did not link).
+    Plus the static-decision economics regressions, fixed -- one of them
+    introduced by the migration's own dependency fix and found by the fuzzer
+    on the final tree. Found, not fixed (both older than the migration):
+    compilation isolation, and a verdict that depends on layout.
 22. **Runtime bugs found.** None: every suite passes under GC stress on every
     native backend it runs (81 on both, the 7 struct-shape companions on
     cranelift only), and no golden/Tcl disagreement traced to a runtime.
@@ -1211,7 +1277,7 @@ The milestone's 75 report points, in order (section links hold the detail).
 40. **Static rounds/builds per suite.** In the suite table; the outliers are
     method-call trials (`mutable-array.bot` 5/20, `structs-and-enums.bot` 4/17,
     `imports.bot` 4/16) and the trait plan (`traits.bot` 8/13).
-41. **Total golden static rounds/builds.** 211 rounds, 329 builds (81 method-call
+41. **Total golden static rounds/builds.** 210 rounds, 328 builds (81 method-call
     trials), no misprediction (206/322 over the 85 suites measured before the
     economics fixes, which took 303/451).
 42. **Total golden compile time.** 1,518 s of front end over the 88 suites (cold, one at a time); with the Tcl backends' preparation, about 3,685 s of compilation (3,697 s with Cranelift code generation).
@@ -1240,8 +1306,9 @@ The milestone's 75 report points, in order (section links hold the detail).
     checkpoint, the four suites changed since on the final tree); the
     MutableVector, MutableArray, static-intrinsic and golden fuzzers each had a
     GC-stressed seed.
-57. **Framework mutants.** 20 of 20 apply and are killed.
-58. **Static-decision mutants.** 34 of 34 (17 new) killed.
+57. **Framework mutants.** 20 of 20 apply and are killed on the final tree
+    (`golden-framework.test` and the framework fuzzer as detectors).
+58. **Static-decision mutants.** 35 of 35 (18 new) killed.
 59. **Structural-contract mutants.** 18 of 18 killed.
 60. **Coroutine mutants.** 52 of 52 (42 Tcl, 10 native) apply and are killed; the affine (29), MutableVector (45), MutableArray (31), static-intrinsic (21) and error-payload (44) harnesses, owed by the compiler fixes, likewise.
 61. **Broad old/new mutant spot-check.** 48 mutants of ten harnesses: 29 BOTH,
@@ -1333,13 +1400,22 @@ implications, not decisions.
    them --, the coroutine trace driver, no code-point escape, no vector
    equality); and, for a Botlish front end, maps, enum payloads and `match`,
    String ordering and conversions, file I/O.
-7. **A decision for you:** the recursive-struct fix (e4107e3) rejects, at its
-   declaration, an affine struct that holds its own type in a container
-   element (AFFINE-CONTAINER-UNSUPPORTED). Before, such a declaration compiled
-   while unused and crashed the compiler once a release was needed; a finite
-   static drop descriptor cannot express it. If such structs should be
-   supported, they need a recursive drop (a runtime walk), which the affine
-   design (static descriptors only) currently excludes.
+7. **Decisions for you:**
+   * The recursive-struct fix (e4107e3) rejects, at its declaration, an affine
+     struct that holds its own type in a container element
+     (AFFINE-CONTAINER-UNSUPPORTED). Before, such a declaration compiled while
+     unused and crashed the compiler once a release was needed; a finite
+     static drop descriptor cannot express it. If such structs should be
+     supported, they need a recursive drop (a runtime walk), which the affine
+     design (static descriptors only) currently excludes.
+   * A `static compile:` verdict can depend on where an unrelated function is
+     written ([Compiler findings](#compiler-findings)): a consumer of the
+     erased-callable contract judged before a contributor the sequential order
+     rejects later keeps a rejection the final program would not produce.
+     Making verdicts layout-independent means changing the sequential order's
+     definition for program-wide channels (judge such a consumer only once no
+     undecided contributor precedes it, or judge again to a fixpoint), or else
+     narrowing the fuzzer's layout claim and documenting the dependence.
 
 ## Files
 
@@ -1384,15 +1460,21 @@ Tools (`audit/golden/tools/`, `bench/`):
 * `bench/golden-workflows.tcl` -- the Tcl E2E subset and the golden corpus as
   a developer runs them (`-jobs N` for N processes at a time), and targeted
   edit scenarios.
+* `bench/golden-aot.tcl` -- each suite as an ahead-of-time executable against
+  the JIT path: readiness, build and run time, the report's summary on
+  both.
 
 The measurements and runs behind the numbers here:
 `audit/golden/migration/out/` (the benchmarks' outputs and the measurement
 log, the three side-by-side shards and the final-tree re-check of the two
-suites changed after them, the batched-against-sequential comparison, the
-perturbation run, the mutation and fuzz harnesses, native coverage, the
-regression summaries of both passes, cargo, GC stress, the mutant sample, the
-suite table, and the three compiler studies' records, `study-*.json`, with
-their measurements and the experiments behind them). The semantic-instance
+suites changed after them, the batched-against-sequential comparison and
+the static-decision validation after the coroutine-construction fix, the
+perturbation run, the mutation and fuzz harnesses (`harnesses.txt`,
+`framework-mutants.txt`, `fuzz-final-tree.txt`), native coverage, the
+regression summaries of both passes, cargo, GC stress, the mutant sample and
+its re-run, the AOT run, the suite table, and the three compiler studies'
+records, `study-*.json`, with their measurements and the experiments behind
+them). The semantic-instance
 branches' own measurements are in their commits and in their
 OPPORTUNISTIC-SEMANTIC-INSTANCES.md.
 
@@ -1413,7 +1495,8 @@ regressions in `completion-regressions.bot`), `hir/mutvec.tcl`,
 `hir/semantic.tcl`, `hir/range.tcl`, `hir/callables.tcl` (the static-decision
 and message fixes: Tcl tests and mutants, guarded on the golden side by the
 economics ceilings of `check.tcl`/`golden.test` and by `compare.tcl`);
-`audit/static-decisions/tools/mutants.txt` (17 new mutants);
+`native/src/codegen/aot.rs` (`tests/native-executable.test`);
+`audit/static-decisions/tools/mutants.txt` (18 new mutants);
 STATIC-COMPLETION-PROOFS.md, STATIC-DECISION-ECONOMICS.md, STATIC-COMPILE.md,
 STRUCTS.md, AFFINE-VALUES.md, MUTABLE-VECTOR.md and AGENTS.md record the rules.
 

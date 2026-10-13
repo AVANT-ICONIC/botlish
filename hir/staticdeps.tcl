@@ -1729,11 +1729,18 @@ proc hir::staticdeps::SubsumeSuccessors {hir stateVar key succVar} {
             if {$value eq "" || ![dict exists $hir exprs $value]} continue
             set type [hir::typeOf $hir $value]
             if {[hir::types::IsCoroutine $type]} {
-                dict set succ C:erased subsume
+                # SubsumeHandle: the thunk's facts, a capture of an
+                # uncontracted type standing for what it can hold (Possible,
+                # which reads the contract); every other capture and callee
+                # reads it only through its own region (R -> C:erased). No
+                # thunk, no check.
                 set thunk [hir::coroutines::thunkOfHandle $hir $value]
                 if {$thunk ne ""} {
                     foreach c [dict get $hir exprs $thunk captures] {
                         dict set succ P:$c subsume
+                        if {[hir::completions::CleanInput $hir $c]} {
+                            dict set succ C:erased subsume
+                        }
                     }
                 }
                 continue

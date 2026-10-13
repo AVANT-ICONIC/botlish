@@ -1,0 +1,82 @@
+# The fuzzers the report's harness section cites, on the final tree (LARGE-SCALE-GOLDEN-MIGRATION.md, Mutation, "The harnesses").
+# Each section: the command, its exit status and wall seconds, then its output. The static-decision runs here predate
+# the coroutine-construction edge fix: their failures are the findings; the runs after it are in static-decisions-final.txt.
+
+== fuzz-structural-contracts-3: tclsh9.0 audit/structural-contracts/tools/fuzz.tcl -seed 3 (exit 0, 16 s)
+accepted 30 rejected 10 (TYPE 5, UNHANDLED-ERROR 5)
+programs 40 disagreements 0
+
+== fuzz-structural-contracts-17: tclsh9.0 audit/structural-contracts/tools/fuzz.tcl -seed 17 (exit 0, 16 s)
+accepted 30 rejected 10 (TYPE 6, UNHANDLED-ERROR 5)
+programs 40 disagreements 0
+
+== fuzz-structural-contracts-29: tclsh9.0 audit/structural-contracts/tools/fuzz.tcl -seed 29 (exit 0, 16 s)
+accepted 31 rejected 9 (TYPE 6, UNHANDLED-ERROR 4)
+programs 40 disagreements 0
+
+== fuzz-structural-contracts-fault-carrier: tclsh9.0 audit/structural-contracts/tools/fuzz.tcl -seed 5 -fault carrier (exit 0, 10 s)
+accepted 9 rejected 31 (TYPE 37)
+programs 40 disagreements 0
+
+== fuzz-structural-contracts-fault-unknown: tclsh9.0 audit/structural-contracts/tools/fuzz.tcl -seed 5 -fault unknown (exit 0, 10 s)
+accepted 7 rejected 33 (UNHANDLED-ERROR 33)
+programs 40 disagreements 0
+
+== fuzz-structural-contracts-fault-drop: tclsh9.0 audit/structural-contracts/tools/fuzz.tcl -seed 5 -fault drop (exit 0, 6 s)
+accepted 0 rejected 40 (UNHANDLED-ERROR 40)
+programs 40 disagreements 0
+
+== fuzz-error-payloads-3: tclsh9.0 audit/error-payloads/tools/fuzz.tcl -seed 3 (exit 0, 54 s)
+accepted 29 rejected 11 (MISSING-ERROR-PAYLOAD 1, MISSING-FIELD 1, TYPE 3, UNHANDLED-ERROR 2, UNKNOWN-FIELD 3, USE-AFTER-MOVE 1)
+handler faults by path: 
+namespaced programs: 13 (modules alpha, beta, gamma)
+programs 40 disagreements 0
+
+== fuzz-error-payloads-17: tclsh9.0 audit/error-payloads/tools/fuzz.tcl -seed 17 (exit 0, 54 s)
+accepted 30 rejected 10 (MISSING-ERROR-PAYLOAD 1, MISSING-FIELD 2, TYPE 2, UNEXPECTED-ERROR-PAYLOAD 1, UNHANDLED-ERROR 1, UNKNOWN-FIELD 2, USE-AFTER-MOVE 1)
+handler faults by path: 
+namespaced programs: 14 (modules alpha, beta, gamma)
+programs 40 disagreements 0
+
+== fuzz-error-payloads-29-gc: tclsh9.0 audit/error-payloads/tools/fuzz.tcl -seed 29 -gc-stress 1 (exit 0, 71 s)
+accepted 29 rejected 11 (DUPLICATE-FIELD 1, MISSING-ERROR-PAYLOAD 1, MISSING-FIELD 2, TYPE 3, UNEXPECTED-ERROR-PAYLOAD 1, UNHANDLED-ERROR 1, UNKNOWN-FIELD 1, USE-AFTER-MOVE 1)
+handler faults by path: unhandled/partial 1
+namespaced programs: 14 (modules alpha, beta, gamma)
+programs 40 disagreements 0
+
+== fuzz-error-payloads-fault-unhandled: tclsh9.0 audit/error-payloads/tools/fuzz.tcl -seed 5 -fault unhandled (exit 0, 13 s)
+accepted 2 rejected 38 (UNHANDLED-ERROR 38)
+handler faults by path: unhandled/generic 7, unhandled/mid 4, unhandled/mid2 8, unhandled/partial 6, unhandled/raise 13
+namespaced programs: 14 (modules alpha, beta, gamma)
+programs 40 disagreements 0
+
+== fuzz-golden-3: tclsh9.0 audit/golden/tools/fuzz.tcl -n 20 -seed 3 (exit 0, 95 s)
+20 programs, 110 cases (47 passing, 63 failing) on interp, compile, cranelift: 0 disagreements
+
+== fuzz-golden-17: tclsh9.0 audit/golden/tools/fuzz.tcl -n 20 -seed 17 (exit 0, 103 s)
+20 programs, 122 cases (50 passing, 72 failing) on interp, compile, cranelift: 0 disagreements
+
+== fuzz-golden-29: tclsh9.0 audit/golden/tools/fuzz.tcl -n 20 -seed 29 (exit 0, 81 s)
+20 programs, 98 cases (40 passing, 58 failing) on interp, compile, cranelift: 0 disagreements
+
+== fuzz-golden-41-gc: tclsh9.0 audit/golden/tools/fuzz.tcl -n 20 -seed 41 -gc-stress 1 (exit 0, 100 s)
+20 programs, 111 cases (41 passing, 70 failing) on interp, compile, cranelift: 0 disagreements
+
+== fuzz-static-decisions-3: tclsh9.0 audit/static-decisions/tools/fuzz.tcl -seed 3 (exit 0, 149 s)
+layout pairs taking different rounds: 1
+seed 3: 20 programs, 580 sites, 372 rejected, 0 failures
+fragments: anyconsumer 56 badcontributor 8 chain 40 consumer 32 contracted 24 contributor 24 earlycontributor 16 erasing 60 field 36 known 4 method 16 move 24 nestedok 36 possible 24 type 24 unbound 40 unhandled 44 valid 72
+
+== fuzz-static-decisions-17: tclsh9.0 audit/static-decisions/tools/fuzz.tcl -seed 17 (exit 1, 98 s)
+program 6: 7 sites, rounds nested=3/3 top=3/3 split=3/3 deep=3/3
+    FAIL layout split gives other verdicts than nested: 0 {rejected TYPE 0 12} 1 {rejected UNKNOWN-FIELD 1 2} 2 {rejected TYPE 0 12} 3 accepted 4 accepted 5 accepted 6 {rejected TYPE 3 7} / 0 {rejected TYPE 0 12} 1 {rejected UNKNOWN-FIELD 1 2} 2 {rejected TYPE 0 12} 3 accepted 4 accepted 5 {rejected UNHANDLED-ERROR 3 4} 6 {rejected TYPE 3 7}
+layout pairs taking different rounds: 0
+seed 17: 20 programs, 484 sites, 263 rejected, 1 failures
+fragments: anyconsumer 36 badcontributor 36 chain 28 consumer 16 contracted 40 contributor 16 earlycontributor 20 erasing 36 field 24 known 4 method 20 move 24 nestedok 24 possible 12 type 28 unbound 4 unhandled 20 valid 96
+
+== fuzz-static-decisions-29: tclsh9.0 audit/static-decisions/tools/fuzz.tcl -seed 29 (exit 1, 115 s)
+program 13: 4 sites, rounds nested=3/3 top=3/3 split=2/2 deep=3/3
+    FAIL layout split takes 2 rounds, nested 3 (1 blocks linked by the erased-callable contract)
+layout pairs taking different rounds: 1
+seed 29: 20 programs, 548 sites, 296 rejected, 1 failures
+fragments: anyconsumer 60 badcontributor 20 chain 36 consumer 16 contracted 44 contributor 16 earlycontributor 20 erasing 36 field 28 known 28 method 16 move 20 nestedok 24 possible 20 type 20 unbound 24 unhandled 24 valid 96

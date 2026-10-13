@@ -374,3 +374,18 @@
 ====
     return [regexp -all -inline {\m[ebsyt][0-9]+\M} $message]
 >>>>
+
+@@ coroutine-subsume-unconditional every coroutine construction depends on the erased-callable contract, whatever its thunk captures: one capturing only the function it calls waits for a rejected contributor (a build more; the fuzzer's seed 29, program 13, nested)
+## hir/staticdeps.tcl
+<<<<
+                set thunk [hir::coroutines::thunkOfHandle $hir $value]
+                if {$thunk ne ""} {
+                    foreach c [dict get $hir exprs $thunk captures] {
+                        dict set succ P:$c subsume
+====
+                set thunk [hir::coroutines::thunkOfHandle $hir $value]
+                dict set succ C:erased subsume
+                if {$thunk ne ""} {
+                    foreach c [dict get $hir exprs $thunk captures] {
+                        dict set succ P:$c subsume
+>>>>

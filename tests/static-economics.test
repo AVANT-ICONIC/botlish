@@ -616,6 +616,16 @@ test se-builds-possible-witness {sites that each pass the same error-declaring f
     set results
 } -result {{2 2} {} UNHANDLED-ERROR {2 2} {} UNHANDLED-ERROR}
 
+test se-builds-coroutine-construction {a coroutine construction whose thunk captures nothing of an uncontracted type -- here only the function it calls -- does not wait for a rejected contributor of the erased-callable contract: its boundary check reads the contract only through what its callee's region reads (the static-decision fuzzer's seed 29, program 13: one build fewer nested, as in its split layout)} -body {
+    set producer "fn producer():\n    yield 1\n    2\n\n"
+    set move [list "coroutine {step} = producer()" "other = step" "step()" "0"]
+    set text $::seErased$producer
+    append text [seSite contributor [concat $::seContributor [seTypeFail 99]]]
+    append text [seSite moved $move]
+    append text "r1 = contributor():\n    on compiler::CompilerError:\n        -1\nr2 = moved():\n    on compiler::CompilerError:\n        -1\n0\n"
+    list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
+} -result {{} {TYPE USE-AFTER-MOVE} 2}
+
 test se-method-reuse {method-style call decisions are reused across rounds: fewer trial builds than deciding afresh, and the audit (every seeded round built again unseeded) finds the same program} -body {
     set text "import compiler\nimport list\nimport str\n\n"
     set names {}

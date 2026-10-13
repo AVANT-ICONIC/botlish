@@ -846,6 +846,70 @@ On the tree after (interp):
   mutable-array, traits, callable-contracts, opaque): 1086 tests, all
   passing.
 
+### Coroutine constructions, and a verdict that depends on layout
+
+Two findings of the fuzzer on new seeds, after the large-scale golden
+migration (LARGE-SCALE-GOLDEN-MIGRATION.md) -- seeds 1 to 3, the ones this
+work was validated with, drew neither.
+
+**A coroutine construction waited for the contract it does not read**
+(seed 29, program 13). It took 3 rounds nested, top and deep, but 2 split,
+with one block the contract links: a layout difference the model allows
+only from two. On the tree before [Every mention](#every-mention) it took 2
+rounds in every layout. That change restored the contract-boundary edge of
+every coroutine-typed position (`SubsumeSuccessors`), and the witnesses
+([above](#forms-the-plans-gate-and-the-witnesses)) link an erasing site to
+the contract, so a site holding a handle -- here a USE-AFTER-MOVE of one --
+waited for any rejected erasing site written before it.
+
+A handle's boundary check (`hir::completions::SubsumeHandle`) runs while the
+contract is not empty and analyzes the coroutine's thunk with each capture's
+fact. It reads the contract itself only through a capture of an uncontracted
+type (`CleanInput`: `Possible`, which falls back to the contract). Every
+other capture is an exact or contracted value, and the thunk's callees read
+the contract through their own regions (`R -> C:erased`), on which the site
+already depends. And it cannot report an error the contract does not bring
+in: with the contract empty it does not run at all. So a thunk capturing
+only the function it calls -- `coroutine {step} = producer()` -- no longer
+has an edge to the contract; one capturing an uncontracted value keeps it,
+and every capture keeps its `P:` edge as before.
+
+* Seed 29's program 13: 2 rounds in every layout, decided as the sequential
+  order decides it.
+* `se-builds-coroutine-construction` pins the reproducer (2 rounds, batched =
+  sequential); the economic mutant `coroutine-subsume-unconditional` (the old
+  edge back) is killed by it.
+* The 24 golden suites that mention a coroutine -- the only ones whose sites
+  can hold a handle (it takes the construction syntax, and no library
+  function returns one) -- compiled batched with the edge before and after: every site's
+  outcome and reified diagnostic, the program's diagnostics and the decided
+  HIR identical, no misprediction; `framework-semantics.bot` 4 rounds / 8
+  builds -> 3/7 (its coroutine site no longer waits for the erasing site),
+  every other suite the same. The corpus now takes 210 rounds and 328 builds.
+* `tests/static-economics.test` 45/45, `tests/static-compile.test` 83/83,
+  `tests/golden.test` 9/9; the fuzzer, seeds 1, 2, 3 and 29: no failure;
+  seeds 17 and 41: only the layout-dependent verdict below, the same on the
+  tree before this change and on the tree before the migration.
+
+**A consumer's verdict depends on where its contributor is written** (seed
+17's program 6 and seed 41's program 0; open). Under both schedulers, and on the tree before this
+work as on the tree after it, the split layout accepts a block the nested
+layout rejects. Reduced: two functions, each holding one block --
+`consumer` (a call through an `any` element, in a function declaring only
+`IndexNotFound`) and `eraser` (`store(raise_e2)`, passing an E2-declaring
+function into an untyped parameter, then a TYPE error). Written `consumer`
+first, the sequential order judges `consumer` while `eraser`'s erasure is
+still in the program and rejects it (UNHANDLED-ERROR); `eraser` is rejected
+next, and the final program erases nothing. Written `eraser` first, its
+rejection comes first and `consumer` is accepted. The program's value is
+`[-1, -1]` in one order and `[1, -1]` in the other. [Item
+70](#70-remaining-unavoidable-dependency-cases) notes that the sequential
+order judges each consumer after the contributors before it; this is the
+consequence for the verdict, not only for the rounds. It is the sequential
+order's definition at work (STATIC-COMPILE.md, step 3), not a scheduler's
+error, and making the verdict independent of layout is a decision about
+that definition; it is recorded, not made.
+
 ## Method-call decisions
 
 A round's method-style calls with several candidates are decided by trial
