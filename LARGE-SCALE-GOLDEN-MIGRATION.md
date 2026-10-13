@@ -10,19 +10,19 @@ STATIC-DECISION-ECONOMICS.md and the native `imod` GC-safepoint repair.
 
 ## Outcome
 
-**Every one of the 7280 Tcl tests that run on this revision is examined and
+**Every one of the 7282 Tcl tests that run on this revision is examined and
 classified; every source-observable one has a Botlish-native golden
 specification or a recorded reason; the Tcl suite stays independent and
 authoritative** -- no Tcl test was deleted, skipped, weakened or frozen; it
-gained 30 tests (29 regressions of the migration's compiler fixes and one for
+gained 32 tests (31 regressions of the migration's compiler fixes and one for
 the new library helpers), and three expectations changed with those fixes
 ([Compiler findings](#compiler-findings)). `tests/golden/manifest.tsv` is now
-the complete map (8735 rows): 3252 Tcl tests are source-observable, of which
+the complete map (8737 rows): 3252 Tcl tests are source-observable, of which
 2209 are ported whole (MIGRATED; 167 of them with a weaker golden row, so their
 Tcl tests stay active), 1041 have their source theorem ported while their Tcl
 test keeps an internal theorem (SPLIT), and 2 are blocked by a documented
-compiler limitation; 4028 observe what Botlish source cannot (2139 compiler or
-runtime internals, 509 parser and header behavior, 470 warnings, 582 several
+compiler limitation; 4030 observe what Botlish source cannot (2140 compiler or
+runtime internals, 509 parser and header behavior, 470 warnings, 583 several
 programs, a corpus file or the process environment, 119 run-time-only failures,
 209 otherwise not expressible). The golden corpus grew from 8 suites and 223
 tests to **88 suite files and 4572 golden tests** (63,212 lines), organized by
@@ -35,7 +35,8 @@ one report (10 companions exclude a backend with a recorded reason).
 every golden suite on every backend it does not exclude; the two suites changed
 after that run were checked again on the final tree), and the full Tcl suite
 passes in both passes (7280 tests on interp; on compile 7276, the 4 others
-interp-only by constraint; 0 failed). Every golden test is demonstrably capable
+interp-only by constraint; 0 failed; the 2 tests added after that run, the
+AOT and coroutine-construction regressions, pass in their files). Every golden test is demonstrably capable
 of failing (audit/golden/tools/perturb.tcl: every one of the 4572 fails with
 inverted verdicts, every one of the 4047 with a textual expectation fails with
 it altered). All 20 framework mutants apply and are killed on the final tree;
@@ -121,7 +122,7 @@ the developer workflow around it:
 |---|---|---|
 | Botlish golden suites | 88 `tests/golden/*.bot` programs, 4572 tests: the source-level specification of user-visible Botlish semantics | `tests/golden/run.tcl` (every backend, one report), CI's four golden shards (`check.tcl -shard I/4`) |
 | Tcl duplicate E2E corpus | the 2042 Tcl tests whose whole theorem a golden test now carries (`tcl_layer` DUPLICATED-E2E, future freeze class FROZEN-DUPLICATE-ORACLE) | unchanged: `tests/all.tcl`, both passes; side by side with their golden tests in CI's golden shards |
-| Tcl internal / not-expressible / multi-program tests | 5238 Tcl tests (`tcl_layer` ACTIVE-INTERNAL 3650, ACTIVE-NOT-EXPRESSIBLE 1006, ACTIVE-MULTI-PROGRAM 582) | unchanged: `tests/all.tcl` |
+| Tcl internal / not-expressible / multi-program tests | 5240 Tcl tests (`tcl_layer` ACTIVE-INTERNAL 3651, ACTIVE-NOT-EXPRESSIBLE 1006, ACTIVE-MULTI-PROGRAM 583) | unchanged: `tests/all.tcl` |
 | fuzzers, mutants, audits | unchanged but for 17 static-decision mutants added with the compiler fixes; plus the migration's tools | the harnesses' own runs; the cross-suite mutant sample |
 
 The two layers stay independent: no Tcl test calls the golden library except the
@@ -139,12 +140,12 @@ three passes, each checked by tools rather than by trust:
 1. **Ground truth.** Every Tcl test file ran once, verbosely, on this revision
    (`-verbose ps`, a private `-tmpdir` each, three at a time): 7250 tests ran and
    passed, loop-generated names included (a static count of `test` invocations
-   is 6107). `audit/golden/migration/tcl-names.txt` is the name authority: 7280
-   on the final tree, from its full interp regression (of the 30 new tests, 29
-   are regressions of the migration's compiler fixes and gf-message-helpers pins
-   the new library helpers).
+   is 6107). `audit/golden/migration/tcl-names.txt` is the name authority: 7282
+   on the final tree -- 7280 from its full interp regression, and the 2 tests
+   added after it (of the 32 new tests, 31 are regressions of the migration's
+   compiler fixes and gf-message-helpers pins the new library helpers).
 2. **Census.** One classification row per Tcl test, per test file
-   (`audit/golden/migration/census/*.tsv`, 169 files, 7264 rows; the 16
+   (`audit/golden/migration/census/*.tsv`, 169 files, 7266 rows; the 16
    regression tests added with the completion and recursive-struct fixes are
    classified by their suites' fragments): what it observes (its
    helpers resolved: `sourceAgree`, `outcomeUnderHir`, Core IR text, `-strict
@@ -188,16 +189,16 @@ Per subsystem (`tclsh9.0 audit/golden/tools/ledger.tcl`):
 | harness | 85 | 18 | 8 | 10 | 28 | 0 | 0 | 2 | 24 | 13 | 0 | 30 |
 | hir-core-nir | 1258 | 118 | 1 | 117 | 1042 | 0 | 15 | 13 | 4 | 66 | 0 | 155 |
 | modules | 216 | 106 | 72 | 34 | 16 | 0 | 20 | 1 | 71 | 2 | 0 | 205 |
-| native | 919 | 344 | 91 | 252 | 479 | 0 | 0 | 17 | 67 | 12 | 1 | 382 |
+| native | 920 | 344 | 91 | 252 | 479 | 0 | 0 | 17 | 68 | 12 | 1 | 382 |
 | opaque | 107 | 80 | 77 | 3 | 10 | 0 | 0 | 2 | 9 | 6 | 0 | 115 |
 | parser | 496 | 9 | 2 | 7 | 13 | 0 | 474 | 0 | 0 | 0 | 0 | 12 |
 | refinements | 262 | 161 | 121 | 40 | 75 | 0 | 0 | 1 | 8 | 17 | 0 | 251 |
-| static-compile | 68 | 33 | 23 | 10 | 35 | 0 | 0 | 0 | 0 | 0 | 0 | 44 |
+| static-compile | 69 | 33 | 23 | 10 | 36 | 0 | 0 | 0 | 0 | 0 | 0 | 44 |
 | strings | 433 | 267 | 158 | 109 | 7 | 0 | 0 | 11 | 116 | 32 | 0 | 286 |
 | surface | 685 | 645 | 575 | 70 | 9 | 0 | 0 | 22 | 0 | 9 | 0 | 952 |
 | traits | 68 | 53 | 39 | 13 | 6 | 0 | 0 | 0 | 1 | 8 | 1 | 79 |
 | warnings | 638 | 10 | 3 | 7 | 85 | 470 | 0 | 0 | 57 | 16 | 0 | 10 |
-| **total** | **7280** | **3252** | **2209** | **1041** | **2139** | **470** | **509** | **119** | **582** | **209** | **2** | **4702** |
+| **total** | **7282** | **3252** | **2209** | **1041** | **2140** | **470** | **509** | **119** | **583** | **209** | **2** | **4702** |
 
 The subsystem is the census's reading of what a test is about, not its file:
 a warning test's ported program half counts under the subsystem it observes
@@ -383,15 +384,15 @@ are semantic (the Tcl name when it already is, the manifest keeps the old one).
 
 ## What stays in Tcl, and why
 
-4028 Tcl tests (55%) stay Tcl-only, each for an observational reason recorded in
+4030 Tcl tests (55%) stay Tcl-only, each for an observational reason recorded in
 its row; 1041 more keep an active internal half beside their golden test:
 
 | reason | Tcl tests | what they observe |
 |---|---|---|
-| KEEP-INTERNAL | 2139 | HIR/Core IR/NIR text and facts, plans, ranges, instances, allocation and release counts, stack maps, safepoints, root maps, caches, build counts, scheduler internals, the Rust/Cranelift layers |
+| KEEP-INTERNAL | 2140 | HIR/Core IR/NIR text and facts, plans, ranges, instances, allocation and release counts, stack maps, safepoints, root maps, caches, build counts, scheduler internals, the Rust/Cranelift layers |
 | KEEP-PARSER | 509 | lexer and parser output, syntax errors, header and import-placement failures, HIR text readers |
 | KEEP-WARNING | 470 | every warning (kind, wording, count, location) -- warnings are not reified |
-| KEEP-MULTI-PROGRAM | 582 | several programs or installations, `main.tcl` and executables, stdout, argv/environment, private generated modules, option matrices -- and 164 tests whose subject is a corpus file (CORPUS-SUBJECT, below) |
+| KEEP-MULTI-PROGRAM | 583 | several programs or installations, `main.tcl` and executables, stdout, argv/environment, private generated modules, option matrices -- and 164 tests whose subject is a corpus file (CORPUS-SUBJECT, below) |
 | KEEP-RUNTIME-ONLY | 119 | a failure no Botlish handler can observe ([below](#run-time-only-failures)) |
 | KEEP-NOT-EXPRESSIBLE | 209 | unchecked Core IR or `-strict 0` semantics with no strict equivalent, Tcl API behavior, value display text, diagnostics anchored outside any block |
 
@@ -1103,10 +1104,10 @@ Points 65 to 69, as data for the next milestone (nothing is frozen):
 | class | Tcl tests | what it would mean |
 |---|---|---|
 | FROZEN-DUPLICATE-ORACLE (`tcl_layer` DUPLICATED-E2E) | 2042 | the whole theorem is carried by golden tests that pass on every backend their suite runs (33 of these only by companions that exclude cranelift-generic or the Tcl backends); a candidate to run in CI only, frozen except when a disagreement reveals a bug |
-| ACTIVE-TCL-INTERNAL | 5238 | stays actively maintained and keeps receiving new tests |
-| of which ACTIVE-INTERNAL | 3650 | compiler/runtime internals, warnings, and the internal half of every SPLIT test |
+| ACTIVE-TCL-INTERNAL | 5240 | stays actively maintained and keeps receiving new tests |
+| of which ACTIVE-INTERNAL | 3651 | compiler/runtime internals, warnings, and the internal half of every SPLIT test |
 | of which ACTIVE-NOT-EXPRESSIBLE | 1006 | parser and header behavior, run-time-only failures, outer-anchored diagnostics, unchecked/`-strict 0` semantics, and every *weaker* port's original |
-| of which ACTIVE-MULTI-PROGRAM | 582 | several programs, `main.tcl`, executables, stdout/argv, private modules, corpus files |
+| of which ACTIVE-MULTI-PROGRAM | 583 | several programs, `main.tcl`, executables, stdout/argv, private modules, corpus files |
 
 Per subsystem (Tcl tests, share that would stay active):
 
@@ -1125,9 +1126,9 @@ Per subsystem (Tcl tests, share that would stay active):
 | affine | 112 | 42 | 70 | 62% |
 | strings | 433 | 157 | 276 | 64% |
 | modules | 216 | 68 | 148 | 69% |
-| static-compile | 68 | 19 | 49 | 72% |
+| static-compile | 69 | 19 | 50 | 72% |
 | contexts | 75 | 20 | 55 | 73% |
-| native | 919 | 89 | 830 | 90% |
+| native | 920 | 89 | 831 | 90% |
 | harness | 85 | 8 | 77 | 91% |
 | gc | 167 | 4 | 163 | 98% |
 | hir-core-nir | 1258 | 1 | 1257 | 100% |
@@ -1166,10 +1167,10 @@ The milestone's 75 report points, in order (section links hold the detail).
    (one verbose run per file; a static count of `test` invocations is 6107).
 2. **Starting golden test count.** 223 golden tests in 8 suites (the validation
    sample, 134 Tcl tests ported).
-3. **Tcl tests examined.** All 7280 that run on the final tree (the 7250 and
-   30 added: 29 regressions of the migration's compiler fixes and
+3. **Tcl tests examined.** All 7282 that run on the final tree (the 7250 and
+   32 added: 31 regressions of the migration's compiler fixes and
    `gf-message-helpers` for the new library helpers): one classification row
-   each -- 7264 in the census, the 16 regressions added with the completion
+   each -- 7266 in the census, the 16 regressions added with the completion
    and recursive-type fixes in their suites' fragments -- and no "not
    examined" remainder ([The census](#the-census)).
 4. **Source-observable.** 3252.
@@ -1179,7 +1180,7 @@ The milestone's 75 report points, in order (section links hold the detail).
    test) pairs.
 7. **Split into multiple golden cases.** 830 Tcl tests became several golden
    tests; 120 golden tests stand for several Tcl tests.
-8. **Tcl-only internal.** 2139 KEEP-INTERNAL (and 470 KEEP-WARNING); 3650 Tcl
+8. **Tcl-only internal.** 2140 KEEP-INTERNAL (and 470 KEEP-WARNING); 3651 Tcl
    tests are ACTIVE-INTERNAL counting the internal halves of SPLIT tests.
 9. **Not expressible.** 209 KEEP-NOT-EXPRESSIBLE (unchecked Core IR or `-strict
    0` semantics without a strict equivalent, Tcl API behavior, display text, 9
@@ -1191,7 +1192,7 @@ The milestone's 75 report points, in order (section links hold the detail).
     NOT-CALLABLE 5, ARITHMETIC 5, NATIVE-ONLY 4, native stack limits 4; the
     codes are tags: two tests carry several, one none).
 11. **Parser/header-only.** 509.
-12. **Multi-program.** 582 (164 of them CORPUS-SUBJECT: a corpus file is the
+12. **Multi-program.** 583 (164 of them CORPUS-SUBJECT: a corpus file is the
     subject).
 13. **Temporarily blocked.** 2 (BLOCKED-GENERAL-COMPILER), none blocked by the
     test library.
@@ -1295,7 +1296,7 @@ The milestone's 75 report points, in order (section links hold the detail).
 54. **Backend exclusions.** 10 companions: 7 exclude cranelift-generic (NATIVE
     UNSUPPORTED struct-shape), 3 exclude interp and compile (machine addresses
     and the syscall instruction); no suite relies on a generic stand-in.
-55. **Native coverage.** `tests/native-coverage.tcl`: 7280 tests -- 2955 native,
+55. **Native coverage.** `tests/native-coverage.tcl`: 7280 tests (before the last 2 were added) -- 2955 native,
     4196 independent, 69 passed-partial, 60 unsupported, 0 failed (before: 7250 --
     2946, 4175, 69, 60, 0): nothing moved to an unsupported path. Every golden
     suite runs natively in CI's golden shards (on each native backend it does
@@ -1328,7 +1329,7 @@ The milestone's 75 report points, in order (section links hold the detail).
     both report none (the nine Tcl tests added by the last fixes were found
     missing this way and classified).
 65. **FROZEN-DUPLICATE-ORACLE candidates.** 2042 Tcl tests.
-66. **ACTIVE-TCL-INTERNAL.** 5238.
+66. **ACTIVE-TCL-INTERNAL.** 5240.
 67. **ACTIVE-NOT-EXPRESSIBLE.** 1006.
 68. **Active Tcl tests that should keep receiving coverage.** The internal layers
     ([Freeze classification](#freeze-classification)): warnings, analysis facts,
@@ -1432,7 +1433,7 @@ The specification and its map:
 The evidence the manifest is derived from (`audit/golden/migration/`):
 
 * `census/*.tsv` -- one classification row per Tcl test, per Tcl file (169
-  files, 7264 rows; the 16 regression tests added with the completion and
+  files, 7266 rows; the 16 regression tests added with the completion and
   recursive-type fixes are classified by their suites' fragments).
 * `batches/*.tsv` -- the 45 migration batches (the work plan).
 * `fragments/*.tsv` -- the manifest rows of each suite the migration added

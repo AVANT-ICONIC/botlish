@@ -3605,6 +3605,7 @@ tests/native-escape.test escape-remote-1 pass
 tests/native-escape.test escape-remote-2 pass
 tests/native-escape.test escape-remote-3 pass
 tests/native-executable.test native-executable-closure pass
+tests/native-executable.test native-executable-empty-shape pass
 tests/native-executable.test native-executable-generic-entry pass
 tests/native-executable.test native-executable-link-failure pass
 tests/native-executable.test native-executable-modules pass
@@ -5391,6 +5392,7 @@ tests/static-economics.test se-builds-accepted pass
 tests/static-economics.test se-builds-contract pass
 tests/static-economics.test se-builds-contributor-checked pass
 tests/static-economics.test se-builds-contributor-early pass
+tests/static-economics.test se-builds-coroutine-construction pass
 tests/static-economics.test se-builds-erased pass
 tests/static-economics.test se-builds-erased-empty pass
 tests/static-economics.test se-builds-legacy-pathology pass
