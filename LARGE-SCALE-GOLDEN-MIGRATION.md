@@ -823,7 +823,7 @@ the final tree).
 | harness | mutants | result | why it ran |
 |---|---|---|---|
 | golden framework (`audit/golden/tools/mutate.tcl -suites 0`; `out/framework-mutants.txt`) | 20 | all apply, all killed by `golden-framework.test` and the framework fuzzer (`-suites 0` leaves out running all 88 suites per mutant, a full four-backend corpus run each) | `lib/test.bot` gained two helpers |
-| static decisions (`audit/static-decisions/tools/mutate.tcl`) | 35 (17 before; 18 added with the fixes) | all apply, all killed (the 34 before the coroutine-construction fix on the tree before it; its own mutant, `coroutine-subsume-unconditional`, by `se-builds-coroutine-construction`) | `hir/staticdeps.tcl`, `hir/static.tcl` |
+| static decisions (`audit/static-decisions/tools/mutate.tcl`) | 35 (17 before; 18 added with the fixes) | all apply, all killed on the final tree (`out/static-decisions-final.txt`; the coroutine-construction fix's own mutant, `coroutine-subsume-unconditional`, by `se-builds-coroutine-construction`) | `hir/staticdeps.tcl`, `hir/static.tcl` |
 | structural contracts (`audit/structural-contracts/tools/mutate.tcl`) | 18 | all apply, all killed | `hir/completions.tcl` |
 | error payloads (`audit/error-payloads/tools/mutate.tcl`) | 44 | all apply, all killed (the 43 Tcl-backend ones, and the native `propagation-drops-payload-native` with its private rebuild) | `hir/completions.tcl` |
 | static intrinsics (`audit/static-compile/tools/mutate.tcl`) | 21 | all apply, all killed | `hir/static.tcl` |

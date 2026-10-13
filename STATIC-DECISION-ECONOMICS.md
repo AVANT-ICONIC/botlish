@@ -889,7 +889,9 @@ and every capture keeps its `P:` edge as before.
 * `tests/static-economics.test` 45/45, `tests/static-compile.test` 83/83,
   `tests/golden.test` 9/9; the fuzzer, seeds 1, 2, 3 and 29: no failure;
   seeds 17 and 41: only the layout-dependent verdict below, the same on the
-  tree before this change and on the tree before the migration.
+  tree before this change and on the tree before the migration;
+  `audit/static-decisions/tools/mutate.tcl`: 35 mutants, every one applies
+  and is killed.
 
 **A consumer's verdict depends on where its contributor is written** (seed
 17's program 6 and seed 41's program 0; open). Under both schedulers, and on the tree before this
