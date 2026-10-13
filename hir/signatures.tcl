@@ -435,20 +435,14 @@ proc hir::signatures::ResultSink {hir block} {
     return flow
 }
 
-# The name block E is bound to, for messages ("a function" if anonymous).
+# The name block E is bound to, for messages ("a function" if anonymous): its
+# source name (hir::semantic::CallableName), never a hygiene rename.
 proc hir::signatures::Name {hir e} {
     if {$e eq "program"} {
         return "the program"
     }
-    set scope [dict get $hir exprs $e scope]
-    foreach b [dict get $hir scopes $scope bindings] {
-        set declaredBy [dict get $hir bindings $b declaredBy]
-        if {$declaredBy ne "" && [dict exists $hir exprs $declaredBy]
-                && [dict get $hir exprs $declaredBy value] eq $e} {
-            return [dict get $hir bindings $b name]
-        }
-    }
-    return "a function"
+    set name [hir::semantic::CallableName $hir $e]
+    return [expr {$name eq "" ? "a function" : $name}]
 }
 
 # Walks expression E, whose value flows into SINK:
@@ -1162,7 +1156,7 @@ proc hir::signatures::Diagnose {hirVar A solution} {
         }
         hir::Diagnose hir TYPE [format \
             {cannot infer a sound type for parameter "%s" of %s: %s, but %s, and no type satisfies both} \
-            [dict get $hir bindings $p name] [Name $hir $block] \
+            [hir::semantic::SourceName $hir $p] [Name $hir $block] \
             [Describe $hir $first] [Describe $hir $second]] $at
     }
 }

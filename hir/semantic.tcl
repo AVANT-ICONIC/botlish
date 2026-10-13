@@ -855,12 +855,32 @@ proc hir::semantic::Environment {hir id} {
 # renames of that name across the whole program -- the bindings of every
 # static site's body among them, so it is not the same in every build:
 # STATIC-COMPILE.md, "Internal ids"), else its name (a module's own
-# definition: the qualified name).
+# definition: the qualified name, which hir/hygiene.tcl's qualifyModules
+# made of a hygiene rename too -- NS::NAME#N is written NS::NAME).
 proc hir::semantic::SourceName {hir b} {
     if {[dict exists $hir bindings $b spelling] && ![hir::isModuleBinding $hir $b]} {
         return [dict get $hir bindings $b spelling]
     }
-    return [dict get $hir bindings $b name]
+    set name [dict get $hir bindings $b name]
+    set i [string last :: $name]
+    if {[dict exists $hir bindings $b spelling] && $i >= 0} {
+        set name [string range $name 0 [expr {$i + 1}]][namespace tail [dict get $hir bindings $b spelling]]
+    }
+    return $name
+}
+
+# The name reference or binding statement E (a `ref` or `bind` node) is
+# written with, for a diagnostic: hygiene renames a binding's references and
+# binding statements with it (hir/hygiene.tcl's RenameTo), so a node that
+# carries its binding's name is named by SourceName; any other (an unresolved
+# reference) keeps its own.
+proc hir::semantic::RefName {hir e} {
+    set node [dict get $hir exprs $e]
+    set b [dict get $node binding]
+    if {$b ne "" && [dict get $hir bindings $b name] eq [dict get $node name]} {
+        return [SourceName $hir $b]
+    }
+    return [dict get $node name]
 }
 
 # The source name of the function block E is bound to (SourceName), or ""

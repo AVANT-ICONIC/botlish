@@ -3,10 +3,11 @@
 # the batched scheduler (hir/static.tcl), its dependency analysis
 # (hir/staticdeps.tcl) and the reuse of method-call decisions
 # (hir/static.tcl's MethodSeeds, hir/hir.tcl), and in what a diagnostic
-# prints that differs between builds (hir/semantic.tcl's SourceName). The
-# first group changes what is decided (semantic); the second only how many
-# builds it takes (economic: the milestone's contract is economic, so these
-# are bugs too).
+# prints that differs between builds (hir/semantic.tcl's SourceName and
+# RefName, and every message naming a binding, a reference or a function by
+# them). The first group changes what is decided (semantic); the second only
+# how many builds it takes (economic: the milestone's contract is economic,
+# so these are bugs too).
 #
 #   @@ NAME DESCRIPTION
 #   ## FILE
@@ -214,6 +215,186 @@
         return [dict get $hir bindings $b spelling]
 ====
         return [dict get $hir bindings $b name]
+>>>>
+
+@@ hygiene-module-name a module's own definition hygiene renamed before qualifying it is named by its qualified NAME#N (hir::semantic::SourceName)
+## hir/semantic.tcl
+<<<<
+    if {[dict exists $hir bindings $b spelling] && $i >= 0} {
+====
+    if {0} {
+>>>>
+
+@@ hygiene-ref-name-printed a reference or binding statement is named by its own name, which hygiene renamed with its binding: every message printing hir::semantic::RefName prints NAME#N again
+## hir/semantic.tcl
+<<<<
+    if {$b ne "" && [dict get $hir bindings $b name] eq [dict get $node name]} {
+        return [SourceName $hir $b]
+    }
+====
+    if {0} {
+        return [SourceName $hir $b]
+    }
+>>>>
+
+@@ hygiene-use-after-move USE-AFTER-MOVE (and AFFINE-NOT-DEFINITELY-LIVE) names the used reference by its NAME#N (hir/affine.tcl's Use)
+## hir/affine.tcl
+<<<<
+    variable consumed
+    set name [hir::semantic::RefName $hir $e]
+====
+    variable consumed
+    set name [dict get $hir exprs $e name]
+>>>>
+
+@@ hygiene-move-text an ownership message's "moved here" names the moving reference by its NAME#N (hir/affine.tcl's MoveText)
+## hir/affine.tcl
+<<<<
+    set source [hir::semantic::RefName $hir $move]
+====
+    set source [dict get $node name]
+>>>>
+
+@@ hygiene-affine-named an ownership message names the affine value by its NAME#N (hir/affine.tcl's Named: erasure, duplication, equality, List and copy-out messages)
+## hir/affine.tcl
+<<<<
+        return "`[hir::semantic::RefName $hir $e]`"
+====
+        return "`[dict get $hir exprs $e name]`"
+>>>>
+
+@@ hygiene-affine-parameter an erasure into a declared parameter names the parameter by its NAME#N (hir/affine.tcl's CallConsumer)
+## hir/affine.tcl
+<<<<
+        set paramName [hir::semantic::SourceName $hir [lindex [dict get $hir exprs $target params] $index]]
+        return [Erasure
+====
+        set paramName [dict get $hir bindings [lindex [dict get $hir exprs $target params] $index] name]
+        return [Erasure
+>>>>
+
+@@ hygiene-affine-capture AFFINE-CAPTURE-UNSUPPORTED names the captured reference by its NAME#N
+## hir/affine.tcl
+<<<<
+                    "`[hir::semantic::RefName $hir $e]` is an affine [hir::types::show [BindingType $hir $b]], which cannot be captured
+====
+                    "`[dict get $node name]` is an affine [hir::types::show [BindingType $hir $b]], which cannot be captured
+>>>>
+
+@@ hygiene-field-move AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE spells the destructuring it suggests with the struct's NAME#N
+## hir/affine.tcl
+<<<<
+                set shown [expr {$kind eq "ref" ? [hir::semantic::RefName $hir $e] : "value"}]
+====
+                set shown [expr {$kind eq "ref" ? [dict get $hir exprs $e name] : "value"}]
+>>>>
+
+@@ hygiene-path-release AFFINE-PATH-RELEASE-UNSUPPORTED names the binding by its NAME#N (hir/affine.tcl's PathPoint)
+## hir/affine.tcl
+<<<<
+    set node [dict get $hir exprs $x]
+    set name [hir::semantic::SourceName $hir $b]
+====
+    set node [dict get $hir exprs $x]
+    set name [dict get $hir bindings $b name]
+>>>>
+
+@@ hygiene-coroutine-not-function COROUTINE-NOT-FUNCTION names the handle by its NAME#N
+## hir/range.tcl
+<<<<
+"\"[hir::semantic::RefName $hir $arg]\""
+====
+"\"[dict get $hir exprs $arg name]\""
+>>>>
+
+@@ hygiene-resume-arity COROUTINE-RESUME-ARITY spells the resume it asks for with the handle's NAME#N
+## hir/range.tcl
+<<<<
+[hir::semantic::RefName $hir $callee] : "step"
+====
+[dict get $hir exprs $callee name] : "step"
+>>>>
+
+@@ hygiene-function-name hir::signatures::Name names a function by its NAME#N: the inferred-contract reasons of TYPE messages and the trait messages naming a function
+## hir/signatures.tcl
+<<<<
+    set name [hir::semantic::CallableName $hir $e]
+    return [expr {$name eq "" ? "a function" : $name}]
+====
+    foreach b [dict get $hir scopes [dict get $hir exprs $e scope] bindings] {
+        set declaredBy [dict get $hir bindings $b declaredBy]
+        if {$declaredBy ne "" && [dict exists $hir exprs $declaredBy]
+                && [dict get $hir exprs $declaredBy value] eq $e} {
+            return [dict get $hir bindings $b name]
+        }
+    }
+    return "a function"
+>>>>
+
+@@ hygiene-parameter-conflict a parameter no type satisfies is named by its NAME#N (hir::signatures::Diagnose)
+## hir/signatures.tcl
+<<<<
+            [hir::semantic::SourceName $hir $p] [Name $hir $block] \
+====
+            [dict get $hir bindings $p name] [Name $hir $block] \
+>>>>
+
+@@ hygiene-erased-requirements a typed callable whose requirements would be erased is named by its NAME#N (hir::callables::Name)
+## hir/callables.tcl
+<<<<
+            return [hir::semantic::SourceName $hir $b]
+====
+            return [dict get $binding name]
+>>>>
+
+@@ hygiene-lockstep a lockstep loop's iteration counts name a List's binding by its NAME#N (hir::cardinality::ShowAtom)
+## hir/cardinality.tcl
+<<<<
+                return "length([hir::semantic::SourceName $hir $id])"
+====
+                return "length([dict get $hir bindings $id name])"
+>>>>
+
+@@ hygiene-mutable-receiver MUTABLE-PLACE-RECEIVER names the receiver's binding by its NAME#N (hir::mutvec::ReceiverProblem)
+## hir/mutvec.tcl
+<<<<
+    set shown [hir::semantic::SourceName $hir $b]
+====
+    set shown [dict get $binding name]
+>>>>
+
+@@ hygiene-mutable-capture MUTABLE-PLACE-CAPTURE names the captured place by its NAME#N
+## hir/mutvec.tcl
+<<<<
+                "`[hir::semantic::RefName $hir $e]` is a $what place
+====
+                "`[dict get $node name]` is a $what place
+>>>>
+
+@@ hygiene-context-trait-binding CONTEXT-TRAIT-MISUSE names the context-trait binding by its NAME#N
+## hir/contexts.tcl
+<<<<
+        set name [hir::semantic::RefName $hir $e]
+        hir::Diagnose hir CONTEXT-TRAIT-MISUSE \
+====
+        set name [dict get $node name]
+        hir::Diagnose hir CONTEXT-TRAIT-MISUSE \
+>>>>
+
+@@ hygiene-trait-function-bind a body's last binding statement whose value denotes a trait-polymorphic function is named by its NAME#N (hir::traits::VerifyFunctionValues)
+## hir/traits.tcl
+<<<<
+                [hir::semantic::RefName $hir $e] [hir::signatures::Name $hir [FunctionOf $hir [dict get $node binding]]]] $e
+====
+                [dict get $node name] [hir::signatures::Name $hir [FunctionOf $hir [dict get $node binding]]]] $e
+>>>>
+
+@@ hygiene-trait-witness a trait view's parameter witness is named by the parameter's NAME#N (hir::traits::ShowWitness)
+## hir/traits.tcl
+<<<<
+            return "the witness of parameter \"[hir::semantic::SourceName $hir $b]\" of [hir::signatures::Name $hir $block]"
+====
+            return "the witness of parameter \"[dict get $hir bindings $b name]\" of [hir::signatures::Name $hir $block]"
 >>>>
 
 # ---------------------------------------------------------------------------
