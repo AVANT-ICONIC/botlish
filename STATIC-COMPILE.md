@@ -303,12 +303,12 @@ Two details keep the diagnostics exact:
   message can name a callable by its source it does (`two/2 -> bool`,
   `hir::semantic::NameCallables`), and a binding hygiene renamed
   (`NAME#N`, numbered across the whole program, so by sites after it as
-  well) is printed as written (`hir::semantic::SourceName`;
-  `se-equal-hygiene-names`) -- in the checker's argument and the semantic
-  instances' messages; the other messages printing a binding's `name`
-  (USE-AFTER-MOVE's, `hir::signatures::Name`'s) still can print one, a
-  known gap (STATIC-DECISION-ECONOMICS.md, "Callables and bindings named by
-  their source").
+  well) is printed as written in every message: a binding by
+  `hir::semantic::SourceName` (a module's own definition `NS::NAME`), a
+  reference or a binding statement by `hir::semantic::RefName`, a function
+  by `hir::semantic::CallableName` (`se-equal-hygiene-*`;
+  STATIC-DECISION-ECONOMICS.md, "Callables and bindings named by their
+  source").
 
 ### The dependency graph
 

@@ -581,11 +581,48 @@ messages print the spelling hygiene records instead
 (`hir::semantic::SourceName`, as native symbol names and
 `hir::contexts::BlockName` do): the parameter of `hir/range.tcl`'s argument
 messages, `NameCallables`' callables, a semantic instance's environment and
-label (mutant `hygiene-names-printed`, semantic). Messages that print a
-binding's or a reference's `name` elsewhere -- USE-AFTER-MOVE's binding,
-`hir::signatures::Name`'s function names in coroutine and trait messages --
-still can, a remaining gap: no golden suite's message names a hygiene
-rename, and no fuzz program has one.
+label (mutant `hygiene-names-printed`, semantic).
+
+Every other message that printed a binding's, a reference's or a function's
+`name` prints the spelling too. A reference and a binding statement carry
+their binding's name, renamed with it (`RenameTo`), so
+`hir::semantic::RefName` names one by its binding's `SourceName`;
+`hir::signatures::Name` -- the inferred-contract reasons' "argument 1 of f"
+and the trait messages' functions -- is `CallableName`;
+`hir::callables::Name`, `hir::contexts::BlockName` (the coroutine and
+context chains) and `hir::cardinality::show` read `SourceName`. And
+`SourceName` itself printed a module's own definition by its qualified
+`name`, which `qualifyModules` builds from a hygiene rename as well: a
+module function `list` beside a list literal is `hm::list#2` in one build
+and `hm::list#1` in the next, and is written `hm::list` now. The messages:
+USE-AFTER-MOVE and AFFINE-NOT-DEFINITELY-LIVE with their "moved here" lines;
+`hir::affine::Named`'s erasure, duplication, equality, List and copy-out
+messages; an erasure into a declared parameter, or into an untyped one whose
+instance was declined; AFFINE-CAPTURE-UNSUPPORTED;
+AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE's suggested destructuring;
+AFFINE-PATH-RELEASE-UNSUPPORTED; COROUTINE-NOT-FUNCTION;
+COROUTINE-RESUME-ARITY; TYPE's inferred-contract reasons and parameter
+conflicts; an erased typed callable; LOCKSTEP-UNEQUAL's and -UNPROVEN's
+counts; MUTABLE-PLACE-RECEIVER; MUTABLE-PLACE-CAPTURE; CONTEXT-TRAIT-MISUSE;
+both forms of TRAIT-POLYMORPHIC-FUNCTION-VALUE; a trait view's parameter
+witness (TRAIT-WITNESS-JOIN); MODULE-IMMUTABLE's order message. Each has a
+reproducer whose batched decisions differed from the sequential order's
+before (`se-equal-hygiene-*`, 19 programs: two sites each renaming a binding
+`list` beside a list literal; a trait-polymorphic function is top-level
+only, so a site before it renames it, or a site inside it its parameter) and
+a semantic mutant that reverts it (`hygiene-*`, 20 besides
+`hygiene-names-printed`), except two: the untyped parameter of a declined
+instance (only a nesting limit or a missing creation environment declines
+one for an affine argument) and MODULE-IMMUTABLE's order message (a forward
+reference is UNBOUND before it). Only the messages change: every reproducer
+takes the rounds it took before, 2 batched against the sequential order's 3
+(3 against 4 where the trait plan's build runs). No golden suite's message
+names a hygiene rename, so none changes. What still prints a `name` in
+`hir/` prints one hygiene never renames (a root native's, an error's, a
+field's) or is no message (Core IR, HIR text, native symbols, inspection
+tables such as `hir::signatures::of`, the dependency trace). Warnings
+(`hir/warnings.tcl`) print some functions' binding `name` too, but a warning
+is no decision: it is reported once, for the decided program.
 
 #### The erased-callable contract's witnesses
 
