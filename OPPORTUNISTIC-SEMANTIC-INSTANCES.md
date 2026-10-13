@@ -702,15 +702,150 @@ programs, about 1.5 ms each on `csv_records`, whose 68 instances walk 91 times)
 plus one verification of each instance on its view (about 1.4 ms each), on top of
 the unchanged generic analysis. Profile of `csv_records` (502 ms instrumented):
 `hir::semantic::Walk` 136 ms, `verify` 93 ms (`View` 30 ms, `verifyBlocks` 62 ms).
-Copying the HIR for a walk is not the cost (a 1287-expression HIR copies and
-modifies in 88 us). Work already done to keep it down: an instance that read no
-in-progress answer needs one walk instead of two (`assumes`), only the final
-walk is snapshotted, trivial requests never create instances, and identical keys
-are cached. The semantic key was **not** coarsened: no evidence yet says the growth
+Copying the HIR for a walk looked negligible at this size (a 1287-expression HIR
+copies and modifies in 88 us), and that conclusion was wrong: the copy is
+O(program) per walk, so it grows with instances x program size and dominated the
+larger programs -- see "Analysis in place", which removed it, and the view's
+copy per verified instance with it. Work already done to keep it down: an
+instance that read no in-progress answer needs one walk instead of two
+(`assumes`), only the final walk is snapshotted, trivial requests never create
+instances, and identical keys are cached. The semantic key was **not**
+coarsened: no evidence yet says the growth
 is worth trading precision for; the levers, if it must shrink, are declining
 instances with no bearing/higher-order content or reusing instances across the
 signature rounds. Memory: the retained analysis state is about 435 KB of
 text over the 17 programs (about 26 KB per program), never a cloned HIR.
+
+## Analysis in place
+
+A walk used to run on a scratch value copy of the request-time HIR (`state base`).
+Its first write -- `hir::types::Expr`'s `reachable` -- duplicated the whole
+expression table, its first binding write the binding table, its first interned
+type the two type tables, and the copy was freed when the walk ended: O(program)
+per walk, so O(walks x program) per whole-program typing, which
+`hir::signatures::infer` runs at least twice per checked build and every static
+decision build runs again. On `callables.bot` (5,271 expressions; over all its
+builds 1,460 instance walks, of regions of 21 expressions on average) a profile
+of the tree before this change put the copies and their frees at about 6.8 s of
+the 8.7 s `Analyze` took (expression table 3.4 s and its free 2.1 s, bindings
+0.7 s, type tables 0.6 s). `verify` then built a `View` of the HIR per used
+instance -- a second O(program) copy each -- and so did the trait plan.
+
+Walks and views now run on the HIR itself (`hir/semantic.tcl`, "Analysis in
+place"; `hir/hir.tcl`, "Regions written in place"):
+
+* **The save set.** What a walk of an instance of block B can write is fixed by
+  `hir/types.tcl`'s writers: the expressions of B's region (`Region`: B, its body
+  and the bodies of the closures it creates), the records of the bindings its
+  binds and its handlers' payloads bind (their `type`), the branch scopes of its
+  ifs (their `refinements`), and new TypeIds and SymbolIds (`intern`,
+  `hir::resolve::nativeSymbol`). `SaveSet` lists them per block (cached per run).
+  Before each walk `Save` takes `hir::SaveRegion`: references to those nodes and
+  records, the id counters and the diagnostics -- never a copy of a table, so it
+  costs what it lists. After the walk (its result read, its final facts
+  snapshotted) `Restore` runs `hir::RestoreRegion`: every node and record goes back
+  on its own key (so at its own position), the TypeIds and SymbolIds allocated
+  since are dropped (`hir::StashIds`), and a writer that allocated any other kind
+  of id, or added or removed an entry of a table or of the top level, is an
+  internal error. The HIR is then the very HIR the request was made on, its key
+  order and TypeId numbering included.
+* **Suspension for nested walks.** A call in a walk can request another instance,
+  whose analysis must start from the request-time HIR too (it used to start from
+  the same `base`). `Suspend` keeps the walk's writes and its interned ids in its
+  frame and restores its region; the nested analysis runs (and restores its own
+  walks); `Resume` puts the suspended walk's state back. Every frame is restored by
+  its own token, so each walk -- nested or not, first pass or later -- starts from
+  exactly the request-time HIR and interns the same TypeIds a copy did. The
+  helpers are leaf calls: the Tcl nesting under `hir::semantic::Call` is what it
+  was, so the `nesting` declines (`[info level]`) are unchanged.
+* **Views in place.** `verify` and `hir::traits::Plan` read the HIR as an
+  instance's final walk left it. `Apply` writes the instance's snapshot into the
+  HIR and returns a token (the region's saved nodes and bindings, and the top
+  level); the checks run on the HIR itself; `Unapply` rebuilds the top level as it
+  was (dropping `semanticContext`, restoring what the checks wrote there:
+  `affine`, `violatedDeclared`) and restores the region, and returns the
+  diagnostics and violated contracts the checks found. The plan applies one
+  instance's view at a time on its own variable and undoes it before the next.
+  `View` (a copy with the view applied) remains for tooling.
+* **Check mode.** `hir::semantic::checkInPlace 1` (tests and audits) holds a
+  reference to the request-time HIR and compares the HIR with it at every walk's
+  start, after every restore, at the end of every top-level request and around
+  every view (`hir::SameHir`: the top-level keys in order, every table entry by
+  entry -- by reference first, since a restored entry is the saved object).
+* **Tests.** `tests/semantic-instances.test`'s `si-inplace-*`: the semantic table
+  keeps its keys and order; a check-mode compile of recursion, instance cycles,
+  the aggregate bound, typed arrays, chains, a second whole-program walk, captures,
+  a trait-polymorphic and an affine program raises nothing and gives the same HIR
+  string; nested walks of the walking instance's own block (one region written at
+  every level) and a closure's instance requested inside its creator's walk give
+  the instances walking copies gave; instance-only types stay out of the program's
+  type tables; no walk copies the expression table (one table per whole-program
+  walk) and no view does (at most one copy per verification); the save and
+  restore primitives, their error guards and a suspension round trip; and
+  `si-inplace-writers`, a census of every HIR write a walk can reach
+  (`hir/types.tcl`, `hir::traits::TypeCall`, `hir::resolve::nativeSymbol`) by line
+  text -- a new writer must extend `SaveSet` and `hir::RestoreRegion` first, then
+  the census.
+
+Nothing an analysis decides changed: the final HIR string (every type, fact,
+TypeId, the semantic table, `staticSites` and `staticStats` but for its `depMs`
+timing, the diagnostics) is identical before and after on every program measured
+below and on the whole corpus -- the 88 golden suites, the examples and
+benchmarks, every library module compiled as a program and a one-line loader per
+module: 152 identical HIRs and 8 identical compile errors (modules that are not
+programs), the after side compiled in check mode; `mutable-array.bot`, whose
+check-mode compile was stopped over the time budget, compared unchecked. The
+golden reports of eight suites agree on every backend, their static economics
+(rounds, builds, trials, mispredictions) included, and so does the specialized
+NIR of `callables.bot` and `affinity.bot`.
+
+Measured with a three-phase proc wrapper (bench/golden-suites.tcl's
+`prof::wrap` on `hir::signatures::infer`, `hir::semantic::verify` and
+`hir::traits::monomorphize`), the tree before and after interleaved, two runs
+each, means in seconds, on a 4-core machine shared with other work (about
++-15%). The synthetic families: **a**, N functions alternating untyped `u_k(x)`
+(calling `u_{k-1}(x)`) and typed `t_k(x: str)` (calling `u_k(x)`: one instance
+`u_k<str>` each, its own call a cache hit); **b**, the same with `y = [x]` in
+every untyped body (an instance's walk writes a binding and interns a type only
+instances see, as real programs' do); **m**, N units of an untyped helper
+`h_k(x, y)` (a list, a bind, an if, a call of `h_{k-1}`) called with four
+argument type combinations by a typed `c_k`.
+
+| program | expressions | walks | front end | signatures | semantic-instances (verify) |
+|---|---|---|---|---|---|
+| a, N=800 | 4,001 | 400 | 2.63 -> 2.01 | 1.06 -> 0.61 | 0.40 -> 0.05 |
+| a, N=1600 | 8,001 | 800 | 17.73 -> 6.38 | 7.89 -> 3.33 | 6.75 -> 0.16 |
+| b, N=400 | 2,801 | 200 | 2.02 -> 1.37 | 0.53 -> 0.33 | 0.63 -> 0.07 |
+| b, N=800 | 5,601 | 400 | 8.57 -> 3.05 | 3.12 -> 0.82 | 3.65 -> 0.10 |
+| b, N=1600 | 11,201 | 800 | 35.70 -> 7.74 | 16.87 -> 3.73 | 15.36 -> 0.18 |
+| m, N=100 | 5,658 | 400 | 6.95 -> 2.77 | 2.28 -> 0.62 | 2.85 -> 0.27 |
+| m, N=200 | 11,258 | 800 | 28.62 -> 5.84 | 12.95 -> 1.61 | 12.00 -> 0.55 |
+| `harness.bot` | 2,250 | 39 | 1.68 -> 1.60 | 0.37 -> 0.35 | 0.06 -> 0.03 |
+| `errors.bot` | 2,731 | 50 | 5.24 -> 4.46 | 1.11 -> 0.89 | 0.37 -> 0.11 |
+| `collections.bot` | 3,443 | 70 | 16.13 -> 13.32 | 5.21 -> 3.43 | 1.90 -> 0.73 |
+| `callables.bot` | 5,271 | 228 | 28.56 -> 14.48 | 13.41 -> 4.61 | 4.20 -> 0.52 |
+
+(Walks are the final build's; `callables.bot` and `collections.bot` run 6 and 12
+whole-program typings for their static decisions.) Between N=800 and N=1600 the
+front end grew with exponent 2.06 before and 1.35 after on family b (2.75 and
+1.67 on a, 2.04 and 1.08 on m between N=100 and 200), and the verification
+phase with 2.07 before and 0.84 after: the view's copy is gone. With the layer
+off (`hir::semantic::enabled 0`) the same programs take 6.6-7.2 s (b, N=1600),
+5.0-6.3 s (a, N=1600) and 4.4 s (m, N=200): the layer now costs about a second
+on each instead of 11-29 s. A proc-wrapping profile of b, N=1600 puts every
+`hir::semantic` procedure together at 26.7 s self time before and 0.66 s after
+(0.25 s of it `End`'s search for the used instances, below); what still grows
+faster than linearly there is outside the layer: `hir::signatures::Name` (2.25 s
+in 1,600 calls, a scan of the program scope's bindings per call: present with
+the layer off too) and the repeated attempts of `hir::types::Block` for a bound
+function (0.76 s). On `callables.bot` the layer's self time went from 11.5 s
+(`Walk` 5.1 s, `verify` 3.3 s, `Analyze` 2.2 s, ...) to 1.4 s.
+
+Still O(instances x program), not changed here: `End`'s search for the used
+instances (over all calls per instance), native codegen specialization (a scratch
+of the HIR per region inference, `hir/specialize.tcl`), and every
+`hir::types::infer` pass starting fresh instance state (`Begin`) and walking every
+requested instance again.
 
 ## Full regression
 
@@ -866,9 +1001,13 @@ implemented here.
    its generic analysis (sound for every closure of the block); closures created in
    an instance's walk are typed in place with the instance's environment. Not in
    the key.
-7. **Is the original HIR cloned?** No. A walk uses a scratch value copy of the HIR
-   (dict copy-on-write) that is dropped; what is kept per instance is a snapshot of
-   the volatile per-expression facts of its region (side table).
+7. **Is the original HIR cloned?** No, and it is not copied either: a walk runs on
+   the request-time HIR in place and restores what it wrote (its region's facts,
+   its binds' binding types, its ifs' branch refinements, the TypeIds and
+   SymbolIds it interned) before anything else reads the HIR ("Analysis in
+   place"). (A walk used to run on a scratch value copy, whose first write
+   duplicated the whole expression table.) What is kept per instance is a
+   snapshot of the volatile per-expression facts of its region (side table).
 8. **Where are entry/result facts stored?** `hir semantic`: `instances` (args,
    result, snapshot, passes, ...), `keys`, `calls` ((context, call) -> instance),
    `envs`, census counters. No HIR field changes.

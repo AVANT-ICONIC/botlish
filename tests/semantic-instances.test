@@ -53,7 +53,11 @@ proc siLast {src} {
 
 # The used semantic instances of SRC as sorted "name<args> -> result [status]".
 proc siInstances {src} {
-    set hir [siCompile $src]
+    siRows [siCompile $src]
+}
+
+# The used semantic instances of HIR, as siInstances lists them.
+proc siRows {hir} {
     lsort [lmap row [hir::semantic::census $hir] {
         format {%s<%s> -> %s [%s]} [dict get $row name] \
             [join [lmap t [dict get $row args] {hir::semantic::ShowType $hir $t}] {, }] \
@@ -553,6 +557,217 @@ test si-det-2 {compiling twice gives identical tables} -body {
     set src "import list\nfn first(xs) errors IndexNotFound:\n    list::at(xs, 0)\na = first(\[\"x\"\])\nb = first(\[1\])\nunit"
     expr {[dict get [siCompile $src] semantic instances] eq [dict get [siCompile $src] semantic instances]}
 } -result 1
+
+# ---------------------------------------------------------------------------
+# analysis in place (hir/semantic.tcl, "Analysis in place"): an instance's
+# walks and its view run on the HIR itself and leave it exactly as they found
+# it. The pinned expectations below are the ones the tree that walked a copy
+# of the HIR gave.
+
+# Compiles SRC with hir::semantic::checkInPlace 1: every walk, nested walk
+# and view checks that it starts from, and leaves, the request-time HIR.
+proc siChecked {src} {
+    set saved $hir::semantic::checkInPlace
+    set hir::semantic::checkInPlace 1
+    try {
+        return [siCompile $src]
+    } finally {
+        set hir::semantic::checkInPlace $saved
+    }
+}
+
+# The object pointer of Tcl value V (the identity of the table, not its
+# contents).
+proc siPointer {v} {
+    lindex [regexp -inline {0x[0-9a-fA-F]+} [tcl::unsupported::representation $v]] 0
+}
+
+set siRec1 "fn count(xs, n):\n    if n == 0:\n        xs\n    else:\n        count(xs, n - 1)\ncount(\[\"a\"\], 3)"
+set siInplaceCorpus [list \
+    $siRec1 \
+    "fn ping(xs, n, next):\n    if n == 0:\n        xs\n    else:\n        next(xs, n - 1, ping)\nfn pong(xs, n, prev):\n    if n == 0:\n        xs\n    else:\n        prev(xs, n - 1, pong)\nping(\[\"a\"\], 3, pong)" \
+    "fn wrap(x, n):\n    if n == 0:\n        x\n    else:\n        wrap(\[x\], n - 1)\nwrap(\"a\", 5)" \
+    "import mutable_array\nfn identity(x):\n    x\na = identity(mutable_array::create(2, \"x\"))\nb = identity(mutable_array::create(2, 1))\nunit" \
+    "import list\nimport mutable_array\nfn identity(x):\n    x\nfn first(xs) errors IndexNotFound:\n    list::at(xs, 0)\nfn both(xs) errors IndexNotFound:\n    identity(first(xs))\nboth(\[\"a\"\])\nboth(\[1\])\nidentity(mutable_array::create(1, \"x\"))" \
+    "fn f(n) -> int:\n    if n == 0:\n        return 0\n    r = f(n - 1)\n    fn g(x):\n        x + n\n    g(1) + r\n\nf(3)" \
+    "import list\nfn mk(x) errors IndexNotFound:\n    fn get(i) errors IndexNotFound:\n        list::at(x, i)\n    get(0)\nv = mk(\[\"a\"\]):\n    on IndexNotFound:\n        \"z\"\nv" \
+    "trait Named:\n    fn name(value: Named) -> str\n\nstruct Person:\n    value: str\n\nfn name(value: Person) -> str:\n    value.value\n\nfn describe(value: Named) -> str:\n    value.name()\n\n\[describe(Person {value: \"a\"}), describe(Person {value: \"b\"})\]\n" \
+    "import coroutine\n\nstruct Message:\n    value: int\n\nstruct Event:\n    value: int\n\nfn worker(seed: int, resume Message) -> Event:\n    message = yield Event {value: seed}\n    return Event {value: message.value}\n\nfn make(seed: int) -> Coroutine{args: \[Message\], return: Event}:\n    coroutine {step} = worker(seed)\n    step\n\nfn inner(c, m):\n    c(m)\n\nfn outer(c, m):\n    inner(c, m)\n\nx = outer(make(1), Message {value: 4})\nx.value\n"]
+
+test si-inplace-shape {the semantic table a run keeps has exactly the keys, in the order, it had when walks copied the HIR: the in-place bookkeeping (saveSets) ends with the run} -body {
+    dict keys [dict get [siCompile $siRec1] semantic]
+} -result {envs pendingEnv instances keys byBlock calls declined deps next instsOf requests trivial hits walks declinedCount used rounds status diagnostics}
+
+test si-inplace-check-corpus {checked: recursion, instance cycles, the aggregate bound, typed arrays, chains, a second whole-program walk, captures, a trait-polymorphic and an affine program -- every walk and view starts from and leaves the request-time HIR, and the HIR is the unchecked one} -body {
+    lmap src $siInplaceCorpus {
+        expr {[siChecked $src] eq [siCompile $src] ? "same" : "differs"}
+    }
+} -result {same same same same same same same same same}
+
+test si-inplace-nested-same-region {nested walks of instances of the walking instance's own block (one region written by every level): the budget still declines past 16, the instance-only types stay out of the program's tables, and the instances are the ones walking copies gave} -body {
+    set hir [siChecked "fn wrap(x, y, n):\n    if n == 0:\n        \[x, y\]\n    else:\n        a = wrap(\[x\], y, n - 1)\n        wrap(x, \[y\], n - 1)\nwrap(\"s\", 1, 9)"]
+    list [dict values [dict get $hir semantic byBlock]] [lsort -unique [dict values [dict get $hir semantic declined]]] \
+        [dict get $hir semantic walks] \
+        [lmap t {{list list} {list {list list}} {list {list {list list}}}} {dict exists $hir typeIds $t}] \
+        [siRows $hir]
+} -result {16 budget-block 23 {0 0 0} {{wrap<List[List[List[list]]], List[List[List[list]]], int> -> List[List[List[list]]] [valid]} {wrap<List[List[List[list]]], List[List[list]], int> -> List[List[List[list]]] [valid]} {wrap<List[List[List[list]]], List[list], int> -> List[List[list]] [valid]} {wrap<List[List[List[list]]], any, int> -> list [valid]} {wrap<List[List[List[list]]], list, int> -> List[list] [valid]} {wrap<List[List[list]], List[List[List[list]]], int> -> List[List[List[list]]] [valid]} {wrap<List[List[list]], List[List[list]], int> -> List[List[List[list]]] [valid]} {wrap<List[List[list]], List[list], int> -> List[List[list]] [valid]} {wrap<List[List[list]], any, int> -> list [valid]} {wrap<List[List[list]], list, int> -> List[list] [valid]} {wrap<List[list], List[List[List[list]]], int> -> List[List[list]] [valid]} {wrap<List[list], List[List[list]], int> -> List[List[list]] [valid]} {wrap<List[list], List[list], int> -> List[List[list]] [valid]} {wrap<List[list], any, int> -> list [valid]} {wrap<List[list], list, int> -> List[list] [valid]} {wrap<list, any, int> -> any [valid]}}}
+
+test si-inplace-closure-in-instance {a closure created in an instance's body and called there: its instance is requested from inside that walk (a suspended walk, the nested one from the request-time HIR), checked, with the instances walking copies gave} -body {
+    set hir [siChecked "fn f(x):\n    y = \[x\]\n    fn g(z):\n        \[y, z\]\n    g(x)\nf(\"s\")"]
+    list [siRows $hir] [hir::types::show [hir::typeOf $hir [lindex [hir::roots $hir] end]]] \
+        [dict get $hir semantic walks] [lsort [lmap {key id} [dict get $hir semantic calls] {lindex $key 0}]]
+} -result {{{f<str> -> list [valid]} {g<str> -> list [valid]}} list 2 {generic s0}}
+
+test si-inplace-typeids {the TypeIds an instance's walk interns are dropped with it: the program keeps exactly its own types, numbered without a gap, while the instance's snapshot keeps what it proved} -body {
+    set hir [siChecked "fn f(x):\n    y = \[\[x\]\]\n    0\nf(\"s\")"]
+    list [dict exists $hir typeIds {list {list str}}] [dict exists $hir typeIds {list str}] \
+        [expr {[dict get $hir counters type] == [dict size [dict get $hir types]]}] \
+        [dict values [dict get $hir semantic instances s0 snapshot bindings]]
+} -result {0 0 1 {{list {list str}}}}
+
+proc siCountInfer {args} { incr ::siInfers }
+proc siCountVerify {args} { incr ::siVerifies }
+
+test si-inplace-no-copy {neither an instance's walk nor its view copies the HIR's expression table: every walk of one whole-program walk sees the same table, every view of one verification at most two (the first write of a shared one copies it once)} -setup {
+    rename hir::semantic::Save hir::semantic::SaveUnwrapped
+    proc hir::semantic::Save {hirVar id} {
+        upvar 1 $hirVar h
+        lappend ::siWalkTables [siPointer [dict get $h exprs]]
+        uplevel 1 [list hir::semantic::SaveUnwrapped $hirVar $id]
+    }
+    rename hir::semantic::Apply hir::semantic::ApplyUnwrapped
+    proc hir::semantic::Apply {hirVar id} {
+        upvar 1 $hirVar h
+        dict lappend ::siViewTables $::siVerifies [siPointer [dict get $h exprs]]
+        uplevel 1 [list hir::semantic::ApplyUnwrapped $hirVar $id]
+    }
+    set ::siWalkTables {}
+    set ::siViewTables {}
+    set ::siInfers 0
+    set ::siVerifies 0
+    trace add execution hir::types::infer enter siCountInfer
+    trace add execution hir::semantic::verify enter siCountVerify
+} -body {
+    set src ""
+    for {set k 0} {$k < 20} {incr k} {
+        append src "fn u$k\(x):\n    [expr {$k == 0 ? "x" : "u[expr {$k - 1}](x)"}]\nfn t$k\(x: str):\n    u$k\(x)\n"
+    }
+    append src "t19(\"s\")\n"
+    siCompile $src
+    set views [lmap {verify pointers} $::siViewTables {llength [lsort -unique $pointers]}]
+    list [expr {[llength $::siWalkTables] >= 20}] [expr {[llength [lsort -unique $::siWalkTables]] <= $::siInfers}] \
+        [expr {[llength [concat {*}[dict values $::siViewTables]]] >= 20}] [expr {[tcl::mathfunc::max {*}$views] <= 2}]
+} -cleanup {
+    trace remove execution hir::types::infer enter siCountInfer
+    trace remove execution hir::semantic::verify enter siCountVerify
+    rename hir::semantic::Save {}
+    rename hir::semantic::SaveUnwrapped hir::semantic::Save
+    rename hir::semantic::Apply {}
+    rename hir::semantic::ApplyUnwrapped hir::semantic::Apply
+    unset -nocomplain ::siWalkTables ::siViewTables ::siInfers ::siVerifies src views
+} -result {1 1 1 1}
+
+test si-inplace-primitives {hir::SaveRegion and RestoreRegion put back every node, binding and scope record, the counters and the diagnostics, and drop the TypeIds and SymbolIds allocated since; another id kind or a new entry is an error; Suspend and Resume set a walk aside and back} -body {
+    set hir [siCompile "fn f(x):\n    y = x\n    if y == 1:\n        y\n    else:\n        0\nf(1)"]
+    set block [siBlock $hir f]
+    set before $hir
+    lassign [hir::semantic::SaveSet $hir $block] exprs bindings scopes
+    set token [hir::SaveRegion hir $exprs $bindings $scopes]
+    dict set hir exprs [lindex $exprs end] reachable 0
+    dict set hir bindings [lindex $bindings 0] type [hir::types::intern hir {list {list str}}]
+    dict set hir scopes [lindex $scopes 0] refinements [list [lindex $bindings 0] int]
+    set symbols [dict size [dict get $hir symbols]]
+    hir::resolve::nativeSymbol hir si-inplace-test-native
+    hir::Diagnose hir TYPE "a test diagnostic" $block
+    set wrote [list [expr {[dict size [dict get $hir symbols]] == $symbols + 1}] [expr {$hir ne $before}]]
+    hir::RestoreRegion hir $token
+    set restored [string equal $hir $before]
+    set token [hir::SaveRegion hir $exprs $bindings $scopes]
+    hir::NewId hir expr
+    catch {hir::RestoreRegion hir $token} allocated
+    set hir $before
+    set token [hir::SaveRegion hir $exprs $bindings $scopes]
+    dict set hir bindings b-si-inplace [dict create id b-si-inplace]
+    catch {hir::RestoreRegion hir $token} outside
+    set hir $before
+    hir::semantic::Begin {}
+    try {
+        set id [hir::semantic::Create $block int [list $block int]]
+        hir::semantic::Save hir $id
+        set written [hir::types::intern hir {list {list str}}]
+        dict set hir exprs $block inferredResultType $written
+        hir::semantic::Suspend hir $id
+        set suspended [hir::SameHir $hir $before]
+        hir::semantic::Resume hir
+        set resumed [list [expr {[dict get $hir exprs $block inferredResultType] eq $written}] [hir::type $hir $written]]
+        hir::semantic::Restore hir
+        set walk [list $suspended $resumed [hir::SameHir $hir $before]]
+    } finally {
+        hir::semantic::End
+    }
+    list $wrote $restored $allocated $outside $walk
+} -cleanup {
+    unset -nocomplain hir before block exprs bindings scopes token symbols wrote restored allocated outside id written suspended resumed walk
+} -result {{1 1} 1 {hir: a region walk allocated expr ids} {hir: a region walk wrote outside its region} {1 {1 {list {list str}}} 1}}
+
+test si-inplace-writers {every HIR write an instance's walk can make is one hir::semantic::SaveSet saves and hir::RestoreRegion restores: a new writer in hir/types.tcl, hir::traits::TypeCall or hir::resolve::nativeSymbol must extend them first} -body {
+    # (Each writer's command, its continuation lines joined and its spaces
+    # collapsed.)
+    set pattern {dict (set|unset|lappend) hir |hir::NewId hir}
+    set found {}
+    set f [open [file join $::projectRoot hir types.tcl]]
+    foreach line [split [regsub -all {\\\n\s*} [read $f] { }] \n] {
+        if {[regexp $pattern $line]} {
+            lappend found [regsub -all {\s+} [string trim $line] { }]
+        }
+    }
+    close $f
+    foreach command {hir::traits::TypeCall hir::resolve::nativeSymbol} {
+        foreach line [split [regsub -all {\\\n\s*} [info body $command] { }] \n] {
+            if {[regexp $pattern $line]} {
+                lappend found "$command: [regsub -all {\s+} [string trim $line] { }]"
+            }
+        }
+    }
+    set expected {
+        {set t [hir::NewId hir type]}
+        {dict set hir types $t $type}
+        {dict set hir typeIds $type $t}
+        {dict set hir semantic $snapshot}
+        {dict set hir exprs $e type [intern hir $type]}
+        {dict set hir exprs $e reachable [dict get $ctx reachable]}
+        {dict set hir bindings $payload type [intern hir $payloadType]}
+        {dict set hir exprs $e handlerTypes $handlerTypes}
+        {dict set hir exprs $valueExpr reachable [dict get $ctx reachable]}
+        {dict set hir bindings $b type [intern hir $value]}
+        {dict set hir exprs $e inferredResultType [intern hir $result]}
+        {dict set hir exprs $e resultType [intern hir $result]}
+        {dict set hir exprs $e target ""}
+        {dict set hir exprs $e known ""}
+        {dict set hir exprs $e calleeErrors $calleeErrors}
+        {dict set hir exprs $e target $target}
+        {dict set hir exprs $e known $known}
+        {dict set hir exprs $e calleeErrors $calleeErrors}
+        {dict set hir exprs $e refinements $refinements}
+        {dict set hir scopes [dict get $node ${role}Scope] refinements [dict get $refinements $outcome]}
+        {hir::traits::TypeCall: dict unset hir exprs $e traitCall}
+        {hir::traits::TypeCall: dict set hir exprs $e traitCall $record}
+        {hir::traits::TypeCall: dict set hir exprs [dict get $node callee] type [hir::types::intern hir $contract]}
+        {hir::traits::TypeCall: dict set hir exprs [dict get $node callee] traitCallee 1}
+        {hir::traits::TypeCall: dict set hir exprs $e traitCall $record}
+        {hir::resolve::nativeSymbol: set y [hir::NewId hir symbol]}
+        {hir::resolve::nativeSymbol: dict set hir symbols $y [dict create id $y kind native name $name provenance [list core native $name]]}
+    }
+    set expected [lmap w $expected {set w}]
+    if {$found eq $expected} {
+        return ok
+    }
+    list "the HIR writers an instance's walk reaches changed: extend hir::semantic::SaveSet and hir::RestoreRegion before adding a writer, then this list" \
+        added [lmap w $found {expr {$w in $expected ? [continue] : $w}}] \
+        removed [lmap w $expected {expr {$w in $found ? [continue] : $w}}]
+} -cleanup {
+    unset -nocomplain pattern found f line command expected
+} -result ok
 
 # ---------------------------------------------------------------------------
 # runtime parity: the instances are analysis-only, so behavior is unchanged

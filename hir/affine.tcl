@@ -171,7 +171,7 @@ proc hir::affine::BindingType {hir b} {
         if {$block ne "" && [dict exists $hir exprs $block] && [dict get $hir exprs $block kind] eq "block"} {
             set index [lsearch -exact [dict get $hir exprs $block params] $b]
             if {[dict exists $hir semanticContext] && [dict get $hir semanticContext] ne "generic"} {
-                # A view of a semantic instance (hir::semantic::View): its
+                # A view of a semantic instance (hir::semantic::Apply): its
                 # own block's parameters have the instance's entry types.
                 set inst [dict get $hir semantic instances [dict get $hir semanticContext]]
                 if {[dict get $inst block] eq $block} {

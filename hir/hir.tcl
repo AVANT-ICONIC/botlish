@@ -271,6 +271,141 @@ proc hir::NewId {hirVar kind} {
     return [dict get $prefixes $kind]$n
 }
 
+# ---------------------------------------------------------------------------
+# Regions written in place (hir/semantic.tcl)
+#
+# A semantic instance's walk, and the view of an instance its verification
+# runs on, write facts into the expressions of one region, into the records
+# of the bindings and scopes that region declares, and new TypeIds and
+# SymbolIds; nothing else of the HIR changes. So they run on the HIR in place
+# instead of on a copy of it: SaveRegion records what such a writer may
+# change -- references to the listed nodes and records, the id counters and
+# the diagnostics, never a copy of a table, so it costs what it lists -- and
+# RestoreRegion puts it all back, leaving the HIR exactly as it was (every
+# restored entry is the very object that was saved, at its own position).
+
+# The sizes of HIR's top level and of its tables: what RestoreRegion holds
+# a writer to.
+proc hir::Sizes {hir} {
+    return [list [dict size $hir] [dict size [dict get $hir exprs]] [dict size [dict get $hir bindings]] \
+        [dict size [dict get $hir scopes]] [dict size [dict get $hir symbols]] \
+        [dict size [dict get $hir types]] [dict size [dict get $hir typeIds]]]
+}
+
+# What a writer of expressions EXPRS, bindings BINDINGS and scopes SCOPES of
+# HIR may change, for RestoreRegion: {exprs {E NODE ..} bindings {B RECORD
+# ..} scopes {S RECORD ..} counters C diagnostics D sizes S} (a binding or
+# scope that does not exist is not listed).
+proc hir::SaveRegion {hirVar exprs bindings scopes} {
+    upvar 1 $hirVar hir
+    set savedExprs [dict create]
+    foreach e $exprs {
+        dict set savedExprs $e [dict get $hir exprs $e]
+    }
+    set savedBindings [dict create]
+    foreach b $bindings {
+        if {[dict exists $hir bindings $b]} {
+            dict set savedBindings $b [dict get $hir bindings $b]
+        }
+    }
+    set savedScopes [dict create]
+    foreach s $scopes {
+        if {[dict exists $hir scopes $s]} {
+            dict set savedScopes $s [dict get $hir scopes $s]
+        }
+    }
+    return [dict create exprs $savedExprs bindings $savedBindings scopes $savedScopes \
+        counters [dict get $hir counters] diagnostics [dict get $hir diagnostics] sizes [Sizes $hir]]
+}
+
+# The TypeIds and SymbolIds HIR allocated after COUNTERS (a SaveRegion
+# token's), the only ids a region writer may allocate: a flat list of TABLE
+# ID VALUE, each table's in allocation order.
+proc hir::StashIds {hirVar counters} {
+    upvar 1 $hirVar hir
+    variable prefixes
+    set result {}
+    foreach {kind table} {type types symbol symbols} {
+        set from [expr {[dict exists $counters $kind] ? [dict get $counters $kind] : 0}]
+        set to [expr {[dict exists $hir counters $kind] ? [dict get $hir counters $kind] : 0}]
+        for {set n [expr {$from + 1}]} {$n <= $to} {incr n} {
+            set id [dict get $prefixes $kind]$n
+            if {[dict exists $hir $table $id]} {
+                lappend result $table $id [dict get $hir $table $id]
+            }
+        }
+    }
+    return $result
+}
+
+# Puts back what TOKEN (SaveRegion's) saved of HIR: every node, binding and
+# scope record (on its existing key, so at its own position), the counters
+# and the diagnostics, and drops the TypeIds and SymbolIds allocated since.
+# A writer that allocated another kind of id, or added or removed an entry
+# of a table or of the top level, wrote outside its region: an error.
+proc hir::RestoreRegion {hirVar token} {
+    upvar 1 $hirVar hir
+    dict for {e node} [dict get $token exprs] {
+        dict set hir exprs $e $node
+    }
+    dict for {b record} [dict get $token bindings] {
+        dict set hir bindings $b $record
+    }
+    dict for {s record} [dict get $token scopes] {
+        dict set hir scopes $s $record
+    }
+    set saved [dict get $token counters]
+    foreach {table id value} [StashIds hir $saved] {
+        if {$table eq "types"} {
+            dict unset hir typeIds $value
+        }
+        dict unset hir $table $id
+    }
+    dict for {kind n} [dict get $hir counters] {
+        if {$kind in {type symbol}} {
+            continue
+        }
+        if {![dict exists $saved $kind] || [dict get $saved $kind] != $n} {
+            error "hir: a region walk allocated $kind ids"
+        }
+    }
+    dict set hir counters $saved
+    dict set hir diagnostics [dict get $token diagnostics]
+    if {[Sizes $hir] ne [dict get $token sizes]} {
+        error "hir: a region walk wrote outside its region"
+    }
+}
+
+# 1 if HIR A is HIR B: the same top-level keys in the same order, the same
+# tables entry by entry (a restored entry is the very object that was saved,
+# so the comparison is by reference first) and the same other values. The
+# check mode of hir/semantic.tcl's in-place walks (checkInPlace) only: it
+# reads every entry.
+proc hir::SameHir {a b} {
+    if {[dict keys $a] ne [dict keys $b]} {
+        return 0
+    }
+    set tables {exprs bindings scopes symbols types typeIds}
+    foreach k $tables {
+        set x [dict get $a $k]
+        set y [dict get $b $k]
+        if {[dict size $x] != [dict size $y] || [dict keys $x] ne [dict keys $y]} {
+            return 0
+        }
+        dict for {id v} $x {
+            if {$v ne [dict get $y $id]} {
+                return 0
+            }
+        }
+    }
+    dict for {k v} $a {
+        if {$k ni $tables && $v ne [dict get $b $k]} {
+            return 0
+        }
+    }
+    return 1
+}
+
 proc hir::Diagnose {hirVar kind message expr {related {}}} {
     upvar 1 $hirVar hir
     set diagnostic [dict create kind $kind message $message expr $expr]

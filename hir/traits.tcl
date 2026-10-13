@@ -1752,11 +1752,20 @@ proc hir::traits::Plan {hir syntax} {
     set implUses {}
     set queue [list live]
     set seen [dict create live 1]
+    # Each context's code is read on WORK: the HIR itself, put in an
+    # instance's view in place for that instance's context and restored
+    # before the next (hir::semantic::Apply, Unapply) -- never a copy per
+    # context.
+    set work $hir
+    set token ""
     while {$queue ne {}} {
+        if {$token ne ""} {
+            hir::semantic::Unapply work $token
+            set token ""
+        }
         set context [lindex $queue 0]
         set queue [lrange $queue 1 end]
         if {$context eq "live"} {
-            set view $hir
             set h ""
             set caller generic
             set ckey live
@@ -1765,13 +1774,12 @@ proc hir::traits::Plan {hir syntax} {
                 # A function whose requirement includes a context trait and
                 # no trait parameter: one clone, analyzed generically.
                 set h [lindex $context 1]
-                set view $hir
                 set caller generic
                 set params {}
                 set rt [expr {[dict get $hir exprs $h resultType] eq "" ? "any" : [hir::type $hir [dict get $hir exprs $h resultType]]}]
             } else {
                 set inst [dict get $instances $context]
-                set view [hir::semantic::View $hir $context]
+                set token [hir::semantic::Apply work $context]
                 set h [dict get $inst block]
                 set caller $context
                 set params [CloneWitnesses $hir $h [dict get $inst args]]
@@ -1808,7 +1816,7 @@ proc hir::traits::Plan {hir syntax} {
         # a context-trait-dependent call there is never executed).
         set provided [expr {$ckey eq "live" ? {} : [lindex $ckey 2]}]
         foreach e [expr {[dict exists $byHome $h] ? [dict get $byHome $h] : {}}] {
-            set node [dict get $view exprs $e]
+            set node [dict get $work exprs $e]
             if {![dict exists $node sid]} {
                 continue
             }
@@ -1860,7 +1868,7 @@ proc hir::traits::Plan {hir syntax} {
                         if {[dict exists $record unknown]} {
                             continue
                         }
-                        set receiverType [hir::typeOf $view [dict get $record receiver]]
+                        set receiverType [hir::typeOf $work [dict get $record receiver]]
                         if {![hir::types::IsView $receiverType] || ![IsConcreteWitness [hir::types::ViewWitness $receiverType]]} {
                             lappend diagnostics [list TRAIT-INTERNAL "trait operation [dict get $record requirement] has no concrete witness here" $e]
                             continue
@@ -1948,7 +1956,7 @@ proc hir::traits::Plan {hir syntax} {
                             # argument (AFFINE-VALUES.md): this call's
                             # specialization, if its instance has one.
                             if {![dict exists $calls [list $caller $e]]} {
-                                if {[AffineArgumentsUntyped $view $e $tb]} {
+                                if {[AffineArgumentsUntyped $work $e $tb]} {
                                     lappend diagnostics [list AFFINE-INSTANCE-BUDGET [format {this call gives an affine argument to an untyped parameter of %s but has no static specialization (the compiler's semantic-instance budget declined it), and there is no runtime ownership or callable-kind dispatch to fall back to (declare the parameter's type)} \
                                         [dict get $polys $tb name]] $e]
                                 }
@@ -1984,7 +1992,7 @@ proc hir::traits::Plan {hir syntax} {
                     if {![hir::types::IsTraitConstraint $declared]} {
                         continue
                     }
-                    set rt [expr {[dict get $node resultType] eq "" ? "any" : [hir::type $view [dict get $node resultType]]}]
+                    set rt [expr {[dict get $node resultType] eq "" ? "any" : [hir::type $work [dict get $node resultType]]}]
                     if {$rt eq "never"} {
                         SetAction actions diagnostics $ckey $sid [list result -] $e
                     } elseif {[hir::types::IsView $rt] && [IsConcreteWitness [hir::types::ViewWitness $rt]]} {

@@ -2958,7 +2958,7 @@ proc hir::types::Call {hirVar ctxVar e} {
                     # this call's concrete argument types. The call is
                     # typed with what that analysis proves; the callee's own
                     # contract and generic result are untouched.
-                    set result [hir::semantic::Call $hir $ctx $e $block $argTypes $result]
+                    set result [hir::semantic::Call hir $ctx $e $block $argTypes $result]
                 }
             }
         } elseif {$spec} {

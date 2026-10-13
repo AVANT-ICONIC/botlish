@@ -128,12 +128,14 @@
 # Validity
 # --------
 # Analysis (Walk) and verification are separate. Walk types the body under the
-# entry environment and yields the result; each instance's final walk is
-# snapshotted (the volatile per-expression facts of its region, not a HIR
-# clone). verify then runs, on a view of the HIR carrying that snapshot, the
-# same checks every function body gets for its own definition: the typed-call
-# admissibility proofs and MutableArray store/copy rules
-# (hir::range::verifyBlocks) and the bearing/non-erasure audit
+# entry environment, on the request-time HIR in place (and restored right
+# after: "Analysis in place" below -- no walk copies the HIR), and yields the
+# result; each instance's final walk is snapshotted (the volatile
+# per-expression facts of its region, a small side table). verify then runs,
+# on the HIR put in the view of that snapshot in place (Apply, undone by
+# Unapply), the same checks every function body gets for its own
+# definition: the typed-call admissibility proofs and MutableArray
+# store/copy rules (hir::range::verifyBlocks) and the bearing/non-erasure audit
 # (hir::callables::verifyBlocks). A diagnostic there means "this function is
 # invalid for this call": it is reported at the CALL that needed the instance
 # (status invalid); the source function is not rejected and other calls are
@@ -164,6 +166,17 @@ namespace eval hir::semantic {
     # TypeIds are stored as type forms.
     variable fields {type reachable target known calleeErrors handlerTypes refinements resultType inferredResultType traitCall}
     variable typeFields {type resultType inferredResultType}
+    # 1 asserts, at every walk's start and end and around every view, that
+    # the HIR is exactly the request-time HIR it must be ("Analysis in
+    # place" below): tests and audits only -- it reads the whole HIR each
+    # time, and its reference to the request-time HIR makes each request's
+    # first write copy the tables it writes.
+    variable checkInPlace 0
+    variable checkActive 0
+    variable checkBase {}
+    # The walks in progress, innermost last, one {id ID set {EXPRS BINDINGS
+    # SCOPES} token TOKEN ?work WORK?} each (Save, Suspend).
+    variable frames {}
 }
 
 # ---------------------------------------------------------------------------
@@ -176,9 +189,11 @@ proc hir::semantic::Enabled {} {
 
 proc hir::semantic::Begin {envs} {
     variable state
+    variable frames
     set state [dict create envs $envs pendingEnv {} instances {} keys {} byBlock {} \
-        calls {} declined {} stack {} queue {} deps {} base "" next 0 regions {} instsOf {} \
+        calls {} declined {} stack {} queue {} deps {} next 0 regions {} saveSets {} instsOf {} \
         requests 0 trivial 0 hits 0 walks 0 declinedCount {}]
+    set frames {}
 }
 
 # Ends the run: the state a HIR keeps as its `semantic` field (instances,
@@ -186,8 +201,10 @@ proc hir::semantic::Begin {envs} {
 # instances reachable from the program's own calls).
 proc hir::semantic::End {} {
     variable state
+    variable frames
     set s $state
     set state {}
+    set frames {}
     set used {}
     set work {}
     dict for {key id} [dict get $s calls] {
@@ -207,7 +224,7 @@ proc hir::semantic::End {} {
         }
     }
     dict set s used [lsort -dictionary $used]
-    foreach key {base stack queue regions} {
+    foreach key {stack queue regions saveSets} {
         dict unset s $key
     }
     return $s
@@ -259,11 +276,14 @@ proc hir::semantic::RecordEnv {hir outer e self selfType} {
 # Requests
 
 # The result type of the exact call E of BLOCK with ARGTYPES seen by
-# context CTX of HIR (the generic walk, or a semantic instance's walk):
-# BLOCKRESULT (the call's ordinary generic result) unless a semantic instance
-# proves a more precise one. Records the call -> instance edge that
-# hir::callables and hir::range::VerifyCall consult.
-proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
+# context CTX of the HIR in variable HIRVAR (the generic walk, or a semantic
+# instance's walk): BLOCKRESULT (the call's ordinary generic result) unless a
+# semantic instance proves a more precise one. Records the call -> instance
+# edge that hir::callables and hir::range::VerifyCall consult. The instance
+# walks this needs run on that HIR in place and leave it as they found it
+# ("Analysis in place").
+proc hir::semantic::Call {hirVar ctx e block argTypes blockResult} {
+    upvar 1 $hirVar hir
     variable state
     variable enabled
     variable maxPerBlock
@@ -330,11 +350,11 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
     if {$caller eq "generic" && [dict get $state queue] ne {} && [dict get $state stack] eq {}} {
         # Instances whose environment changed since the last request are
         # settled before this walk reads any answer.
-        dict set state base $hir
+        CheckBegin hir
         try {
-            Drain
+            Drain hir
         } finally {
-            dict set state base ""
+            CheckEnd hir
         }
     }
     set callKey [list $caller $e]
@@ -380,15 +400,23 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
         } else {
             set id [Create $block $entry $key]
             if {[dict get $state stack] eq {}} {
-                dict set state base $hir
+                CheckBegin hir
                 try {
-                    Analyze $id
-                    Drain
+                    Analyze hir $id
+                    Drain hir
                 } finally {
-                    dict set state base ""
+                    CheckEnd hir
                 }
             } else {
-                Analyze $id
+                # A request from inside the walk of instance CALLER: the
+                # nested analysis starts from the request-time HIR too, with
+                # CALLER's walk so far set aside until it returns.
+                Suspend hir $caller
+                try {
+                    Analyze hir $id
+                } finally {
+                    Resume hir
+                }
             }
         }
     }
@@ -483,8 +511,11 @@ proc hir::semantic::Bump {field {key ""}} {
 
 # Analyzes instance ID to its fixpoint. Self recursion re-walks until the
 # result stops growing; a change that other analyzing instances already read
-# marks them dirty, one that finished instances read queues them.
-proc hir::semantic::Analyze {id} {
+# marks them dirty, one that finished instances read queues them. Every walk
+# runs on the HIR in variable HIRVAR in place and is undone before the next
+# one (Save, Restore).
+proc hir::semantic::Analyze {hirVar id} {
+    upvar 1 $hirVar hir
     variable state
     variable passLimit
     dict lappend state stack $id
@@ -494,36 +525,44 @@ proc hir::semantic::Analyze {id} {
             incr passes
             dict set state instances $id dirty 0
             dict set state instances $id assumes 0
-            lassign [Walk $id] walked scratch
-            dict incr state walks
-            set old [dict get $state instances $id result]
-            set new [hir::types::lub $old $walked]
-            if {$new ne $old && $passes >= $passLimit} {
-                set new any
-            }
-            if {$new ne $old} {
-                dict set state instances $id result $new
-                if {[dict exists $state deps $id]} {
-                    foreach reader [dict keys [dict get $state deps $id]] {
-                        if {$reader eq $id} {
-                            continue
-                        }
-                        if {$reader in [dict get $state stack]} {
-                            dict set state instances $reader dirty 1
-                        } else {
-                            Requeue $reader
+            Save hir $id
+            set final 0
+            try {
+                set walked [Walk hir $id]
+                dict incr state walks
+                set old [dict get $state instances $id result]
+                set new [hir::types::lub $old $walked]
+                if {$new ne $old && $passes >= $passLimit} {
+                    set new any
+                }
+                if {$new ne $old} {
+                    dict set state instances $id result $new
+                    if {[dict exists $state deps $id]} {
+                        foreach reader [dict keys [dict get $state deps $id]] {
+                            if {$reader eq $id} {
+                                continue
+                            }
+                            if {$reader in [dict get $state stack]} {
+                                dict set state instances $reader dirty 1
+                            } else {
+                                Requeue $reader
+                            }
                         }
                     }
                 }
+                if {![dict get $state instances $id assumes]
+                        || ($new eq $old && ![dict get $state instances $id dirty])} {
+                    dict set state instances $id snapshot [Snapshot $hir $id]
+                    set final 1
+                } elseif {$passes >= $passLimit + 3} {
+                    dict set state instances $id result any
+                    dict set state instances $id snapshot [Snapshot $hir $id]
+                    set final 1
+                }
+            } finally {
+                Restore hir
             }
-            if {![dict get $state instances $id assumes]
-                    || ($new eq $old && ![dict get $state instances $id dirty])} {
-                dict set state instances $id snapshot [Snapshot $scratch $id]
-                break
-            }
-            if {$passes >= $passLimit + 3} {
-                dict set state instances $id result any
-                dict set state instances $id snapshot [Snapshot $scratch $id]
+            if {$final} {
                 break
             }
         }
@@ -542,8 +581,10 @@ proc hir::semantic::Requeue {id} {
 }
 
 # Re-analyzes instances whose inputs grew, oldest first, until none is
-# queued (a top-level request returns only settled answers).
-proc hir::semantic::Drain {} {
+# queued (a top-level request returns only settled answers), on the HIR in
+# variable HIRVAR.
+proc hir::semantic::Drain {hirVar} {
+    upvar 1 $hirVar hir
     variable state
     set guard 0
     while {[dict get $state queue] ne {}} {
@@ -555,21 +596,22 @@ proc hir::semantic::Drain {} {
         if {[incr guard] > 5000} {
             error "hir::semantic: instance worklist did not converge"
         }
-        Analyze $id
+        Analyze hir $id
     }
 }
 
 # One walk of instance ID's block body under its entry environment: the
-# ordinary semantic inference (hir::types::Sequence) over a scratch copy of
-# the request-time HIR, with the block's parameters seeded by the entry types
-# and its captures by the recorded creation environment. Returns {RESULT
-# SCRATCH}.
-proc hir::semantic::Walk {id} {
+# ordinary semantic inference (hir::types::Sequence) over the request-time
+# HIR in variable HIRVAR, in place -- it writes only what Save saved, and
+# Restore puts that back: the HIR is never copied -- with the block's
+# parameters seeded by the entry types and its captures by the recorded
+# creation environment. Returns RESULT.
+proc hir::semantic::Walk {hirVar id} {
+    upvar 1 $hirVar hir
     variable state
-    set scratch [dict get $state base]
     set inst [dict get $state instances $id]
     set block [dict get $inst block]
-    set node [dict get $scratch exprs $block]
+    set node [dict get $hir exprs $block]
     set ctx [hir::types::NewContext]
     dict set ctx inst $id
     set types [dict get $inst env]
@@ -577,15 +619,147 @@ proc hir::semantic::Walk {id} {
         dict set types $b $t
     }
     dict set ctx types $types
-    set body [hir::types::Sequence scratch ctx [dict get $node body]]
+    set body [hir::types::Sequence hir ctx [dict get $node body]]
     set result [hir::types::lub $body [dict get $ctx returnType]]
-    dict set scratch exprs $block inferredResultType [hir::types::intern scratch $result]
+    dict set hir exprs $block inferredResultType [hir::types::intern hir $result]
     set declared [dict get $node declaredResult]
     if {$declared ne {}} {
         set result [hir::traits::ViewResult $declared $result]
     }
-    dict set scratch exprs $block resultType [hir::types::intern scratch $result]
-    return [list $result $scratch]
+    dict set hir exprs $block resultType [hir::types::intern hir $result]
+    return $result
+}
+
+# ---------------------------------------------------------------------------
+# Analysis in place
+#
+# An instance's walk types its block's region again, under the instance's
+# entry environment, on the very HIR the request was made on: the generic
+# walk's (hir::types::infer's own variable), passed down by name. Nothing is
+# copied. Before a walk, Save records references to everything it may write
+# (SaveSet, hir::SaveRegion); after it, once its result is read and its
+# final facts snapshotted, Restore puts them back, drops the TypeIds and
+# SymbolIds it interned (hir::RestoreRegion) and so leaves the HIR as the
+# request found it -- what a walk on a copy of it would have left. A request
+# made inside a walk (a call in the instance's body) is analyzed from that
+# same request-time HIR: Suspend sets the walk's writes and ids aside and
+# restores its region, the nested analysis runs (and restores its own), and
+# Resume puts the walk's state back. Each frame of the nesting is restored
+# by its own token, so every walk -- nested or not, its first pass or a
+# later one -- starts from exactly the request-time HIR, its TypeIds
+# included. With checkInPlace 1 every one of these steps checks that against
+# a reference to the request-time HIR (hir::SameHir).
+
+# Records what the walk of instance ID about to run on the HIR in variable
+# HIRVAR may change, as the innermost frame.
+proc hir::semantic::Save {hirVar id} {
+    upvar 1 $hirVar hir
+    variable state
+    variable frames
+    CheckSame hir "walk of $id starts"
+    lassign [SaveSet $hir [dict get $state instances $id block]] exprs bindings scopes
+    lappend frames [dict create id $id set [list $exprs $bindings $scopes] \
+        token [hir::SaveRegion hir $exprs $bindings $scopes]]
+}
+
+# Undoes the innermost frame's walk on the HIR in variable HIRVAR.
+proc hir::semantic::Restore {hirVar} {
+    upvar 1 $hirVar hir
+    variable frames
+    set frame [lindex $frames end]
+    set frames [lrange $frames 0 end-1]
+    hir::RestoreRegion hir [dict get $frame token]
+    CheckSame hir "walk of [dict get $frame id] restored"
+}
+
+# Sets the walk in progress of instance CALLER (the innermost frame) aside
+# for a request it makes: what it wrote and the ids it interned are kept in
+# the frame, and the HIR in variable HIRVAR is the request-time HIR again.
+proc hir::semantic::Suspend {hirVar caller} {
+    upvar 1 $hirVar hir
+    variable frames
+    set frame [lindex $frames end]
+    if {[dict get $frame id] ne $caller} {
+        error "hir::semantic: request from $caller inside the walk of [dict get $frame id]"
+    }
+    set work [hir::SaveRegion hir {*}[dict get $frame set]]
+    dict set work ids [hir::StashIds hir [dict get $frame token counters]]
+    hir::RestoreRegion hir [dict get $frame token]
+    dict set frame work $work
+    lset frames end $frame
+}
+
+# Puts the innermost frame's suspended walk back into the HIR in variable
+# HIRVAR (Suspend), once the request it made has been analyzed.
+proc hir::semantic::Resume {hirVar} {
+    upvar 1 $hirVar hir
+    variable frames
+    set frame [lindex $frames end]
+    set work [dict get $frame work]
+    dict for {e node} [dict get $work exprs] {
+        dict set hir exprs $e $node
+    }
+    dict for {b record} [dict get $work bindings] {
+        dict set hir bindings $b $record
+    }
+    dict for {s record} [dict get $work scopes] {
+        dict set hir scopes $s $record
+    }
+    foreach {table id value} [dict get $work ids] {
+        dict set hir $table $id $value
+        if {$table eq "types"} {
+            dict set hir typeIds $value $id
+        }
+    }
+    dict set hir counters [dict get $work counters]
+    dict set hir diagnostics [dict get $work diagnostics]
+    dict unset frame work
+    lset frames end $frame
+}
+
+# Check mode (checkInPlace): CheckBegin takes the HIR in variable HIRVAR as
+# the request-time HIR of a top-level request, CheckSame asserts that the
+# HIR is it (WHAT says where), CheckEnd does so once more and ends the
+# request. Never `$checkBase ne ""`: that would build the string of the
+# whole HIR.
+proc hir::semantic::CheckBegin {hirVar} {
+    variable checkInPlace
+    if {!$checkInPlace} {
+        return
+    }
+    upvar 1 $hirVar hir
+    variable checkBase
+    variable checkActive
+    set checkBase $hir
+    set checkActive 1
+}
+
+proc hir::semantic::CheckSame {hirVar what} {
+    variable checkActive
+    if {!$checkActive} {
+        return
+    }
+    upvar 1 $hirVar hir
+    variable checkBase
+    if {![hir::SameHir $hir $checkBase]} {
+        error "hir::semantic: $what: not the request-time HIR"
+    }
+}
+
+proc hir::semantic::CheckEnd {hirVar} {
+    variable checkInPlace
+    if {!$checkInPlace} {
+        return
+    }
+    upvar 1 $hirVar hir
+    variable checkActive
+    variable checkBase
+    try {
+        CheckSame hir "the request ends"
+    } finally {
+        set checkActive 0
+        set checkBase {}
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -608,17 +782,61 @@ proc hir::semantic::Region {hir e} {
     return $result
 }
 
+# What a walk of an instance of block BLOCK may write in HIR (hir/types.tcl's
+# writers, which tests/semantic-instances.test's si-inplace-writers
+# enumerates): the expressions of BLOCK's region; the records of the bindings
+# its binds and its handlers' payloads bind (their types); and the branch
+# scopes of its ifs (their refinements). {EXPRS BINDINGS SCOPES}, cached for
+# the run in progress.
+proc hir::semantic::SaveSet {hir block} {
+    variable state
+    if {$state ne "" && [dict exists $state saveSets $block]} {
+        return [dict get $state saveSets $block]
+    }
+    set exprs [Region $hir $block]
+    set bindings {}
+    set scopes {}
+    foreach e $exprs {
+        set node [dict get $hir exprs $e]
+        switch -- [dict get $node kind] {
+            bind {
+                if {![dict get $node duplicate] && [dict get $node binding] ne ""} {
+                    lappend bindings [dict get $node binding]
+                }
+            }
+            handle {
+                if {[dict exists $node handlerPayloads]} {
+                    foreach payload [dict get $node handlerPayloads] {
+                        if {$payload ne ""} {
+                            lappend bindings $payload
+                        }
+                    }
+                }
+            }
+            if {
+                lappend scopes [dict get $node thenScope] [dict get $node elseScope]
+            }
+        }
+    }
+    set result [list $exprs [lsort -unique $bindings] [lsort -unique $scopes]]
+    if {$state ne ""} {
+        dict set state saveSets $block $result
+    }
+    return $result
+}
+
 # The volatile facts of instance ID's final walk over its region (a small
-# per-instance side table; the HIR is never cloned).
-proc hir::semantic::Snapshot {scratch id} {
+# per-instance side table), read from the HIR the walk is in progress on --
+# in place: the HIR is never copied, and Restore undoes the walk right after.
+proc hir::semantic::Snapshot {hir id} {
     variable state
     variable fields
     variable typeFields
     set block [dict get $state instances $id block]
     set exprs [dict create]
     set bindings [dict create]
-    foreach e [Region $scratch $block] {
-        set node [dict get $scratch exprs $e]
+    foreach e [Region $hir $block] {
+        set node [dict get $hir exprs $e]
         set rec [dict create]
         foreach f $fields {
             if {![dict exists $node $f]} {
@@ -626,27 +844,38 @@ proc hir::semantic::Snapshot {scratch id} {
             }
             set v [dict get $node $f]
             if {$f in $typeFields} {
-                set v [expr {$v eq "" ? "" : [dict get $scratch types $v]}]
+                set v [expr {$v eq "" ? "" : [dict get $hir types $v]}]
             }
             dict set rec $f $v
         }
         dict set exprs $e $rec
         if {[dict get $node kind] eq "bind" && ![dict get $node duplicate]} {
             set b [dict get $node binding]
-            if {$b ne "" && [dict exists $scratch bindings $b type]
-                    && [dict get $scratch bindings $b type] ne ""} {
-                dict set bindings $b [dict get $scratch types [dict get $scratch bindings $b type]]
+            if {$b ne "" && [dict exists $hir bindings $b type]
+                    && [dict get $hir bindings $b type] ne ""} {
+                dict set bindings $b [dict get $hir types [dict get $hir bindings $b type]]
             }
         }
     }
     return [dict create exprs $exprs bindings $bindings]
 }
 
-# HIR viewed as instance ID's final walk left it: the region's facts replaced
-# by the snapshot, calls resolved in the instance's own context.
-proc hir::semantic::View {hir id} {
+# Puts the HIR in variable HIRVAR, in place, in the view of instance ID's
+# final walk: the region's facts replaced by the snapshot, calls resolved in
+# the instance's own context (semanticContext). Returns the token Unapply
+# takes to undo it: the region's nodes and bindings (hir::SaveRegion) and
+# the top level as it was.
+proc hir::semantic::Apply {hirVar id} {
+    upvar 1 $hirVar hir
     variable typeFields
     set snapshot [dict get $hir semantic instances $id snapshot]
+    set token [dict create keys [dict keys $hir] top {} \
+        region [hir::SaveRegion hir [dict keys [dict get $snapshot exprs]] [dict keys [dict get $snapshot bindings]] {}]]
+    dict for {k v} $hir {
+        if {$k ni {exprs bindings types typeIds counters diagnostics}} {
+            dict set token top $k $v
+        }
+    }
     dict for {e rec} [dict get $snapshot exprs] {
         dict for {f v} $rec {
             if {$f in $typeFields} {
@@ -664,6 +893,38 @@ proc hir::semantic::View {hir id} {
     if {[dict exists $hir violatedContracts]} {
         dict unset hir violatedContracts
     }
+    return $token
+}
+
+# Undoes Apply's TOKEN on the HIR in variable HIRVAR, and what the checks run
+# on the view wrote: the top level is rebuilt as it was (in its order), then
+# the region restored. Returns what those checks found, {diagnostics D
+# violatedContracts V}.
+proc hir::semantic::Unapply {hirVar token} {
+    upvar 1 $hirVar hir
+    set violated {}
+    if {[dict exists $hir violatedContracts]} {
+        set violated [dict get $hir violatedContracts]
+    }
+    set out [dict create diagnostics [dict get $hir diagnostics] violatedContracts $violated]
+    set rebuilt [dict create]
+    foreach k [dict get $token keys] {
+        if {[dict exists $token top $k]} {
+            dict set rebuilt $k [dict get $token top $k]
+        } else {
+            dict set rebuilt $k [dict get $hir $k]
+        }
+    }
+    set hir $rebuilt
+    unset rebuilt
+    hir::RestoreRegion hir [dict get $token region]
+    return $out
+}
+
+# HIR viewed as instance ID's final walk left it (Apply), as a value: for
+# tooling.
+proc hir::semantic::View {hir id} {
+    Apply hir $id
     return $hir
 }
 
@@ -707,6 +968,7 @@ proc hir::semantic::GenericResult {hir e} {
 # is invalid under that call's concrete types (header, "Validity").
 proc hir::semantic::verify {hirVar} {
     upvar 1 $hirVar hir
+    variable checkInPlace
     if {![dict exists $hir semantic]} {
         return
     }
@@ -721,31 +983,45 @@ proc hir::semantic::verify {hirVar} {
     }
     set own [dict create]
     foreach id $used {
-        set view [View $hir $id]
+        # The checks run on the HIR itself, put in the instance's view and
+        # restored afterwards (Apply, Unapply): it is never copied.
         set block [dict get $semantic instances $id block]
-        set blocks [lmap e [Region $view $block] {
-            if {[dict get $view exprs $e kind] ne "block"} continue
+        set region [Region $hir $block]
+        set blocks [lmap e $region {
+            if {[dict get $hir exprs $e kind] ne "block"} continue
             set e
         }]
-        hir::range::verifyBlocks view $blocks
-        hir::callables::verifyBlocks view $blocks
-        hir::structs::verifyExprs view [Region $view $block]
-        if {[hir::types::AnyAffine [dict get $semantic instances $id args]]} {
-            # An instance that owns an affine argument (AFFINE-VALUES.md):
-            # the ownership discipline, with the instance's own types -- a
-            # generic function that would duplicate or erase the value it
-            # was given is invalid for the call that gives it one.
-            hir::affine::verifyInstance view $block [Region $view $block]
+        if {$checkInPlace} {
+            set ref $hir
         }
-        dict set own $id [lmap d [dict get $view diagnostics] {
+        set token [Apply hir $id]
+        try {
+            hir::range::verifyBlocks hir $blocks
+            hir::callables::verifyBlocks hir $blocks
+            hir::structs::verifyExprs hir $region
+            if {[hir::types::AnyAffine [dict get $semantic instances $id args]]} {
+                # An instance that owns an affine argument (AFFINE-VALUES.md):
+                # the ownership discipline, with the instance's own types -- a
+                # generic function that would duplicate or erase the value it
+                # was given is invalid for the call that gives it one.
+                hir::affine::verifyInstance hir $block $region
+            }
+        } finally {
+            set out [Unapply hir $token]
+        }
+        if {$checkInPlace} {
+            if {![hir::SameHir $hir $ref]} {
+                error "hir::semantic: the view of $id: not the HIR it was applied to"
+            }
+            unset ref
+        }
+        dict set own $id [lmap d [dict get $out diagnostics] {
             if {[dict exists $definitional [list [dict get $d expr] [dict get $d message]]]} continue
             dict set d curable [expr {[dict get $d kind] eq "UNPROVEN-FIELD"}]
             set d
         }]
-        if {[dict exists $view violatedContracts]} {
-            dict for {p arg} [dict get $view violatedContracts] {
-                dict set hir violatedContracts $p $arg
-            }
+        dict for {p arg} [dict get $out violatedContracts] {
+            dict set hir violatedContracts $p $arg
         }
     }
     # 2. A call to an invalid instance makes the calling instance invalid.
