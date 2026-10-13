@@ -17,9 +17,9 @@
 #                            lowering, every build, analysis and decision
 #   interp                   HIR -> Core IR lowering (hir::lower), then the
 #                            reference interpreter's run
-#   compile                  the Tcl compiler's code generation
-#                            (core::compiler::compileUnit) and the rest of its
-#                            run (execution)
+#   compile                  the Tcl compiler's code generation from the HIR
+#                            itself (core::compiler::compileHir) and the
+#                            unit's run (core::compiler::evalUnit)
 #   cranelift, -generic      NIR lowering (Tcl), Cranelift code generation and
 #                            one execution (native::measure, one run)
 #   peak RSS                 the process's VmHWM after everything
@@ -62,7 +62,6 @@ set phases {
     traits-monomorphize hir::traits::monomorphize
     finish surface::lower::Finish
     core-ir-lowering hir::lower
-    tcl-codegen core::compiler::compileUnit
 }
 
 namespace eval prof {
@@ -118,10 +117,6 @@ proc measureOne {path backends profile} {
         foreach {phase name} $::phases {
             prof::wrap $phase $name
         }
-    } else {
-        # The Tcl compiler's code generation is told apart from its run by
-        # this wrapper alone: always installed.
-        prof::wrap tcl-codegen core::compiler::compileUnit
     }
     set f [open $path]
     fconfigure $f -encoding utf-8
@@ -157,9 +152,8 @@ proc measureOne {path backends profile} {
             continue
         }
         switch -- $backend {
-            interp - compile {
-                prof::reset
-                core::useBackend $backend
+            interp {
+                core::useBackend interp
                 set us [lindex [time {set ir [hir::lower $hir]}] 0]
                 if {[catch {
                     set runUs [lindex [time {set value [core::evalProgram $ir]}] 0]
@@ -167,9 +161,21 @@ proc measureOne {path backends profile} {
                     dict set result $backend [dict create error [dict get $opts -errorcode]]
                     continue
                 }
-                set codegen [expr {[dict exists $::prof::self tcl-codegen] ? [dict get $::prof::self tcl-codegen] : 0}]
-                dict set result $backend [dict create lowering [seconds $us] codegen [seconds $codegen] \
-                    execution [seconds [expr {$runUs - $codegen}]]]
+                dict set result $backend [dict create lowering [seconds $us] codegen 0 \
+                    execution [seconds $runUs]]
+            }
+            compile {
+                # The Tcl compiler compiles the HIR itself, once, and runs
+                # the unit (as golden::run's evalHir does).
+                if {[catch {
+                    set codegen [lindex [time {set unit [core::compiler::compileHir $hir]}] 0]
+                    set runUs [lindex [time {set value [core::compiler::evalUnit $unit]}] 0]
+                } message opts]} {
+                    dict set result $backend [dict create error [dict get $opts -errorcode]]
+                    continue
+                }
+                dict set result $backend [dict create lowering 0 codegen [seconds $codegen] \
+                    execution [seconds $runUs]]
             }
             cranelift - cranelift-generic {
                 set options [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
