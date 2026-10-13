@@ -109,7 +109,9 @@ former core IR path: the Performance section says so once for all of its
 figures, and the report points and recommendations that quote one say so
 where they do. The merge's six new Tcl tests (14a1143's four
 `direct-hir-compile-*` guards; baa10c1's two `tests/traits.test` tests of a
-handled call whose result is a trait view) are not in this report's counts.
+handled call whose result is a trait view) are not in this report's counts;
+[After the merge with main](#after-the-merge-with-main) gives the merged
+tree's counts and its validation.
 
 ## Contents
 
@@ -128,6 +130,7 @@ handled call whose result is a trait view) are not in this report's counts.
 * [Mutation](#mutation)
 * [Performance](#performance)
 * [Freeze classification](#freeze-classification)
+* [After the merge with main](#after-the-merge-with-main)
 * [Report](#report) -- the 75 points of the milestone report, in order
 * [Recommendations](#recommendations)
 * [Files](#files)
@@ -1232,6 +1235,60 @@ Per subsystem (Tcl tests, share that would stay active):
   liveness, GC: gc 98%, native 90%), release and drop order, the static
   scheduler's economics, and the process boundary (`main.tcl`, executables,
   argv, stdout).
+
+## After the merge with main
+
+Main's four commits since the migration's base were merged into it
+(cc7f69b): 14a1143 (the Tcl compiler compiles HIR; [Outcome](#outcome)),
+baa10c1 (a handler against a trait view is admitted by subtype, never by
+integer facts) and two regenerations of the scalar assembly audit corpus.
+The merge had no textual conflict. What it changed for the migration:
+
+* **Six new Tcl tests, classified.** 14a1143's four `direct-hir-compile-*`
+  guards: three KEEP-INTERNAL (the compiler's entry points never rebuild
+  HIR; the context set across runs of one unit), one KEEP-MULTI-PROGRAM
+  (`main.tcl -code`). baa10c1's two `tests/traits.test` tests, ported to
+  `traits.bot`: `trait-view-handler-admission` whole (MIGRATED: the
+  same-view handler's value on all four backends, both TYPE rejections with
+  their messages) and `trait-witness-join-handled` SPLIT (its
+  TRAIT-WITNESS-JOIN rejection of a handled call ports through a top-level
+  wrapper whose body is the block; the handler's TYPE beside the join stays
+  Tcl-only: once the wrapper's block is rejected the call has no normal
+  result, so no suite reaches the handler check). Four golden tests:
+  `traits.bot` passes on all four backends (71 tests), `perturb.tcl` fails
+  all 71 inverted and altered, and with baa10c1's `hir/range.tcl` change
+  reverted the suite no longer compiles.
+* **The census and fragments describe the merged harness.** 154 rows of 13
+  files said "golden: opt-in compile-hir backend", "compile on the lowered
+  Core IR" or "a Core IR differential"; they now say what runs (the golden
+  `compile` and the Tcl harness's compile adapter both compile the HIR a
+  program was lowered from), keeping each dated verification as history with
+  a re-measurement on the merged tree. No status or strength changed.
+* **`bench/golden-suites.tcl`** times the `compile` backend as it now runs
+  (`compileHir`, then `evalUnit`); the corpus was not re-measured with it.
+* **Counts on the merged tree** (`audit/golden/tools/ledger.tcl`): 7288 Tcl
+  tests (7250 at the start, 32 added by the migration, 6 by main), 8745
+  manifest rows, 4706 (Tcl test, golden test) pairs, 4576 golden tests in 88
+  suites; 3254 source-observable Tcl tests (2210 MIGRATED, 1042 SPLIT, 2
+  blocked); by layer DUPLICATED-E2E 2043, ACTIVE-INTERNAL 3655,
+  ACTIVE-NOT-EXPRESSIBLE 1006, ACTIVE-MULTI-PROGRAM 584 (ACTIVE-TCL-INTERNAL
+  5245).
+* **Validation of the merged tree** (native runs used a release build of the
+  merged native source, which main did not change):
+  `audit/golden/tools/check.tcl -full 1` -- every Tcl file whole, every suite
+  on every backend it does not exclude: **4706 of 4706 pairs old pass, new
+  pass; all 7288 Tcl tests ran and passed; 0 missing, 0 stale, 0 failing; all
+  88 suites ok, none relying on a stand-in** (`out/check-merged-tree.txt`, its
+  discovered names equal `tcl-names.txt`); the full Tcl suite on the compile
+  backend, which now compiles HIR: 7288 tests, 7284 passed, 4 skipped
+  (interp-only by constraint), 0 failed (`out/regression-compile-merged.txt`);
+  `tests/golden.test` 9/9; the warning gate passes; `merge.tcl -check 1`
+  clean.
+
+The performance figures, mutation runs and fuzzers above were not repeated
+on the merged tree: main changed the compile backend and three lines of
+`hir/range.tcl` (covered by `traits.bot` and `tests/traits.test`), and
+comments elsewhere in `hir/`.
 
 ## Report
 
