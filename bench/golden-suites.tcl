@@ -112,6 +112,7 @@ proc measureOne {path backends profile} {
     source [file join $::root compiler compiler.tcl]
     source [file join $::root surface surface.tcl]
     source [file join $::root native native.tcl]
+    source [file join $::root tests golden run.tcl]
     interp recursionlimit {} 100000
     if {$profile} {
         foreach {phase name} $::phases {
@@ -146,13 +147,26 @@ proc measureOne {path backends profile} {
         dict set result $counter [expr {[dict exists $hir staticStats $counter] ? [dict get $hir staticStats $counter] : 0}]
     }
     set tests ""
+    # The backends the suite excludes (its golden-exclude header lines,
+    # tests/golden/run.tcl) are not run: they would report the construct
+    # they refuse, not a cost.
+    set excluded [golden::exclusions $path]
     foreach backend $backends {
+        if {[dict exists $excluded $backend]} {
+            dict set result $backend [dict create excluded [dict get $excluded $backend]]
+            continue
+        }
         switch -- $backend {
             interp - compile {
                 prof::reset
                 core::useBackend $backend
                 set us [lindex [time {set ir [hir::lower $hir]}] 0]
-                set runUs [lindex [time {set value [core::evalProgram $ir]}] 0]
+                if {[catch {
+                    set runUs [lindex [time {set value [core::evalProgram $ir]}] 0]
+                } message opts]} {
+                    dict set result $backend [dict create error [dict get $opts -errorcode]]
+                    continue
+                }
                 set codegen [expr {[dict exists $::prof::self tcl-codegen] ? [dict get $::prof::self tcl-codegen] : 0}]
                 dict set result $backend [dict create lowering [seconds $us] codegen [seconds $codegen] \
                     execution [seconds [expr {$runUs - $codegen}]]]
@@ -296,6 +310,7 @@ foreach path $files {
 
 proc cell {r backend key} {
     if {![dict exists $r $backend]} { return - }
+    if {[dict exists $r $backend excluded]} { return excluded }
     if {[dict exists $r $backend error]} { return [dict get $r $backend error] }
     return [format %.2f [dict get $r $backend $key]]
 }
@@ -313,7 +328,7 @@ foreach r $results {
     }
 }
 puts "| total | [dict get $sum tests] | [dict get $sum lines] | [expr {[dict get $sum staticAccepted] + [dict get $sum staticRejected]}] ([dict get $sum staticRejected]) | [dict get $sum rounds] | [dict get $sum builds] | [dict get $sum hirExprs] | [format %.1f [dict get $sum frontend]] | [format %.1f [dict get $sum process]] | max [tcl::mathfunc::max {*}[lmap r $results {dict get $r rss}]] |"
-puts "\nElapsed: [format %.1f $wall] s with [dict get $options -jobs] job(s), [dict size $commands] suite(s) measured by this run[expr {$cache ne "" ? ", [expr {[llength $results] - [dict size $commands]}] read from $cache" : ""}].\n"
+puts "\nElapsed: [format %.1f $wall] s with [dict get $options -jobs] job(s), [dict size $measured] suite(s) measured by this run[expr {$cache ne "" ? ", [expr {[llength $results] - [dict size $measured]}] read from $cache" : ""}].\n"
 
 puts "## Back ends (seconds): lowering / code generation / execution\n"
 puts "| suite | Core IR lowering | interp run | Tcl codegen | Tcl compiled run | NIR lowering | Cranelift codegen | native run | generic NIR lowering | generic codegen | generic run |"
