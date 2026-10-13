@@ -1,0 +1,94 @@
+# csv-argv.bot -- the csv example as an input-driven program: the CSV text
+# is the first process argument (argv()[1]), not a literal.
+#
+# This is a fuzz-campaign program (FUZZING-ARGV-PROGRAMS.md), not an
+# example: the function definitions below are copied verbatim from
+# examples/stdlib/csv.bot (same names, same bodies) and only the driver
+# differs -- it reads argv() instead of the fixed sample string. The
+# InvalidArgumentEncoding handler mirrors ARGV.md's documented pattern.
+#
+# Behavior contract (the differential oracle's baseline):
+#   * no argument (or only argv[0])        -> csv_parse("")
+#   * any argument bytes, valid UTF-8      -> csv_parse(argument)
+#   * invalid UTF-8 anywhere in argv       -> csv_parse("") (the fallback
+#     vector is [], so there is no first argument)
+#   * a scan error (impossible by construction, as in the example)  -> []
+import list
+import str
+
+# The character at index, or "" past the end.
+fn peek(text, index) errors LowerUnderrun:
+    if index >= str::length(text):
+        return ""
+
+    str::substring(text, index, index + 1)
+
+# An unquoted field that started at start, scanned up to index:
+# {field, index of the "," or "\n" that ends it, or the end}.
+fn scan_unquoted(text, start, index) errors LowerUnderrun, UpperOverrun:
+    character = peek(text, index)
+    if character == "" or character == "," or character == "\n":
+        return {field: str::substring(text, start, index), index: index}
+
+    scan_unquoted(text, start, index + 1)
+
+# A quoted field whose decoded content so far is field, scanned from index
+# (inside the quotes): {field, index just after the closing quote}.
+fn scan_quoted(text, index, field) errors LowerUnderrun:
+    character = peek(text, index)
+    if character == "\"":
+        if peek(text, index + 1) == "\"":
+            return scan_quoted(text, index + 2, str::concat(field, "\""))
+
+        return {field: field, index: index + 1}
+
+    scan_quoted(text, index + 1, str::concat(field, character))
+
+# The field starting at index: {field, index just after it}.
+fn scan_field(text, index) errors LowerUnderrun, UpperOverrun:
+    if peek(text, index) == "\"":
+        return scan_quoted(text, index + 1, "")
+
+    scan_unquoted(text, index, index)
+
+# The rest of the record whose fields so far are fields, from index:
+# {fields, stop: index just after the record's "\n", or the end}.
+fn scan_record(text, index, fields) errors LowerUnderrun, UpperOverrun:
+    scanned = scan_field(text, index)
+    more = list::append(fields, scanned.field)
+    stop = scanned.index
+    delimiter = peek(text, stop)
+    if delimiter == ",":
+        return scan_record(text, stop + 1, more)
+
+    if delimiter == "\n":
+        return {fields: more, stop: stop + 1}
+
+    {fields: more, stop: stop}
+
+# The records from index on, appended to records.
+fn scan_records(text, index, records) errors LowerUnderrun, UpperOverrun:
+    if index >= str::length(text):
+        return records
+
+    scanned = scan_record(text, index, [])
+    scan_records(text, scanned.stop, list::append(records, scanned.fields))
+
+fn csv_parse(text) errors LowerUnderrun, UpperOverrun:
+    scan_records(text, 0, [])
+
+args = argv():
+    on InvalidArgumentEncoding:
+        []
+
+text = if list::length(args) > 1:
+    list::get(args, 1, "")
+else:
+    ""
+
+result = csv_parse(text):
+    on LowerUnderrun:
+        []
+    on UpperOverrun:
+        []
+result

@@ -46,7 +46,7 @@ CSV_SAMPLES=(
     'é,例え.テスト\nü,ö\n'                 # unicode fields
     'x,\n,y\n'                           # empty fields between delimiters
 )
-for t in csv csv_chunked csv_geometric csv_records; do
+for t in csv csv-argv csv_chunked csv_geometric csv_records; do
     i=0
     for s in "${CSV_SAMPLES[@]}"; do
         i=$((i+1)); seedhex "$t" "csv-sample-$i" "$(printf '%b' "$s" | xxd -p | tr -d '\n')"
@@ -66,8 +66,27 @@ TEXT_SAMPLES=(
 i=0; for s in "${TEXT_SAMPLES[@]}"; do
     i=$((i+1)); seed ai_text_clean "text-sample-$i" "$s"
 done
-# csv.bot's sample also matters to a text scanner:
 seed ai_text_clean "csv-sample-1" 'name,age\nAlice,30\nBob,40\n'
+
+# The argv-driven ai-text-clean variant gets the same text corpus.
+i=0; for s in "${TEXT_SAMPLES[@]}"; do
+    i=$((i+1)); seed ai-text-clean-argv "text-sample-$i" "$s"
+done
+seed ai-text-clean-argv "csv-sample-1" 'name,age\nAlice,30\nBob,40\n'
+
+# The argv-driven replace variant: haystack\0needle\0replacement vectors
+# from its own sample triples, plus needle/replacement swap shapes.
+REPLACE_VECTORS=(
+    'abc\0x\0y'
+    'abc\0b\0X'
+    'aaaa\0aa\0b'
+    'abcabc\0abc\0'
+    '\0x\0y'
+    'aaa\0a\0aa'
+)
+i=0; for s in "${REPLACE_VECTORS[@]}"; do
+    i=$((i+1)); seedhex string-replace-argv "replace-sample-$i" "$(printf '%b' "$s" | xxd -p | tr -d '\n')"
+done
 
 # String examples: their own driver strings.
 seed string_reverse "reverse-sample-1" 'abcd'
@@ -76,6 +95,12 @@ seed string_reverse "reverse-sample-3" ''
 seed string_replace "replace-sample-1" 'abcabc'
 seed string_replace "replace-sample-2" 'aaaa'
 seed string_replace "replace-sample-3" 'needle'
+
+# The argv-driven reverse variant gets the same texts as its argument.
+seed string-reverse-argv "reverse-sample-1" 'abcd'
+seed string-reverse-argv "reverse-sample-2" 'äöü'
+seed string-reverse-argv "reverse-sample-3" 'abcdcba'
+seed string-reverse-argv "reverse-sample-4" 'a'
 
 # Numeric-flavored examples: integer edge strings (SOURCE-DEFINED-INTEGER-DOMAINS.md
 # documents arbitrary-precision Int; the boundary strings are the interesting bytes).
