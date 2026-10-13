@@ -78,14 +78,38 @@ executing every golden test takes a tenth of a second natively; compiling the
 corpus is the whole cost, and it is Tcl -- 1,518 s of front end (type
 inference and semantic-instance verification half of it) and 2,166 s of the
 backends' Tcl preparation (Core IR lowering, the Tcl compiler's code generation,
-NIR lowering), of which the quadratic Core IR lowering and the `compile`
-backend's rebuild of the HIR are defects. On one backend the golden corpus
+NIR lowering). The quadratic Core IR lowering is a defect, and so was the
+`compile` backend's detour through Core IR (lowering the whole program, then
+rebuilding HIR from it), which that backend no longer takes since main's
+14a1143 (below). On one backend the golden corpus
 costs about three times the Tcl tests it duplicates (517 against 180 s, four
 processes at a time). Studies of that cost found it algorithmic --
 whole-program copies per semantic instance, quadratic lowering, redundant
 walks -- and a prototype on a branch, not merged, halves callables.bot's front
 end and cuts traits.bot's by 29% and collections.bot's by 17%
 ([Compiler performance](#compiler-performance-what-dominates-and-what-would-remove-it)).
+
+**Main's Tcl-compiler change, merged after the measurements.** The counts,
+runs and measurements in this report are of the migration's tree before
+main's 14a1143 and baa10c1 were merged into it (cc7f69b). 14a1143 made the
+Tcl compiler compile the front end's HIR as built (`core::compiler::compileHir`,
+then `evalUnit`; DIRECT-HIR-NATIVE-PATH.md, "The Tcl compiler compiles HIR").
+Until then the `compile` backend, as `tests/golden/run.tcl` and the Tcl
+suite's harness used it, took the core IR path: it lowered the whole HIR to
+Core IR (`hir::lower`) and ran that under `core::useBackend compile`, which
+compiled HIR rebuilt from the Core IR (`hir::build`: a whole `hir::BuildOnce`
+with `hir::check`); the direct path was `run.tcl`'s opt-in `compile-hir`
+backend, one suite per process (GOLDEN-TEST-FRAMEWORK.md, C7, fixed by the
+same commit). Now `compile` is the direct path and `compile-hir` is gone; the
+core IR path itself remains, for core IR text a person wrote, not for a front
+end's HIR (AGENTS.md, "Compiler architecture"). Every `compile` timing here,
+and every total or ratio that includes one (the 2,166 s of the backends' Tcl
+preparation, every figure for all four backends), measured `compile` on that
+former core IR path: the Performance section says so once for all of its
+figures, and the report points and recommendations that quote one say so
+where they do. The merge's six new Tcl tests (14a1143's four
+`direct-hir-compile-*` guards; baa10c1's two `tests/traits.test` tests of a
+handled call whose result is a trait view) are not in this report's counts.
 
 ## Contents
 
@@ -145,7 +169,8 @@ three passes, each checked by tools rather than by trust:
    added after it (of the 32 new tests, 31 are regressions of the migration's
    compiler fixes and gf-message-helpers pins the new library helpers).
 2. **Census.** One classification row per Tcl test, per test file
-   (`audit/golden/migration/census/*.tsv`, 169 files, 7266 rows; the 16
+   (`audit/golden/migration/census/*.tsv`, 169 files, 7266 rows on the
+   measured tree, one more for each of the merge's six new Tcl tests; the 16
    regression tests added with the completion and recursive-struct fixes are
    classified by their suites' fragments): what it observes (its
    helpers resolved: `sourceAgree`, `outcomeUnderHir`, Core IR text, `-strict
@@ -274,7 +299,10 @@ back. A companion exists for one of three reasons, each stated in its header:
 Per suite (cold, one process per suite, one at a time, on a quiet 4-core
 machine: `bench/golden-suites.tcl`; the interp, compile and Cranelift columns are
 each backend's preparation plus its run of the whole suite, after the shared
-front end; `excl.` an excluded backend, which the benchmark does not run: it
+front end -- the compile column is `compile` on its former core IR path
+([Outcome](#outcome)): code generation from HIR rebuilt from the suite's Core
+IR, the rebuild itself, and the run, but not that path's own Core IR lowering
+of the suite ([Where a suite's time goes](#where-a-suites-time-goes)); `excl.` an excluded backend, which the benchmark does not run: it
 would only report the construct it refuses, not a cost; the Tcl-tests column is
 a per-suite count, so its total counts the 34 Tcl tests ported into more than
 one suite once per suite -- 3250 distinct; rounds and builds are the final
@@ -862,6 +890,9 @@ Measured on the session's 4-core machine, otherwise idle, in fresh processes
 `bench-golden-framework-compile.md`, `quiet-pipeline.log`). Earlier runs made
 while other work shared the machine (the side-by-side shards) are quoted only
 for ratios and, marked as such, for the differential tool's own wall time.
+All of it measures the tree before the merge of main's 14a1143 (cc7f69b): the
+`compile` backend here, and every total or ratio below that includes it, is
+`compile` on its former core IR path ([Outcome](#outcome)).
 
 ### Where a suite's time goes
 
@@ -873,25 +904,55 @@ compiled once and run on all four backends; totals over the 88 suites:
 | front end (`surface::readProgramFile`: parsing, lowering, the static decisions, every build's analyses) | 1,518 | 32% |
 | interp: HIR to Core IR lowering (`hir::lower`) | 583 | 12% |
 | interp: the reference interpreter's run of every test | 191 | 4% |
-| compile: the Tcl compiler's code generation (including its rebuild of HIR from the Core IR, below) | 1,099 | 23% |
-| compile: the compiled run | 305 | 6% |
+| compile: the Tcl compiler's code generation from HIR rebuilt from the Core IR, with reading the Core IR back into syntax and the per-block lowering (the former core IR path, below) | 1,099 | 23% |
+| compile: the rebuild's resolution and analyses, then the compiled run (below) | 305 | 6% |
 | cranelift: NIR lowering (Tcl, including the specialization analyses) | 396 | 8% |
 | cranelift: Cranelift code generation | 6.6 | 0.1% |
 | cranelift: native execution of every test | 0.09 | 0.002% |
 | cranelift-generic: NIR lowering / code generation / execution | 87 / 6.1 / 0.1 | 2% |
-| other (process start-up, freeing, the profiler, measurement) | about 600 | 12% |
+| other: nearly all of it the `compile` path's own `hir::lower` of each suite, timed but not printed (below); then process start-up, freeing, measurement | about 600 | 12% |
 | **total**, one process per suite, sequentially | **4,790** | |
 
 * **Executing the tests costs nothing; compiling them is everything, and it
   is Tcl.** All 4572 tests run natively in a tenth of a second and Cranelift
   generates their code in 13 s; the front end, the Core IR lowering, the Tcl
-  compiler and the NIR lowering -- all Tcl -- are 3,685 of the 4,790 s.
+  compiler and the NIR lowering -- all Tcl -- are 3,685 of the 4,790 s,
+  and the compiled run's 305 s and "other" hold more Tcl compilation (the
+  next two bullets).
 * **The backends' Tcl preparation costs more than the front end** (2,166 s
-  against 1,518 s), and two of its largest items are algorithmic defects the
-  milestone's compiler studies found ([Compiler performance](#compiler-performance-what-dominates-and-what-would-remove-it)):
-  `hir::lower` is quadratic, and the `compile` backend as the golden runner
-  and the Tcl harness use it rebuilds the HIR from the Core IR and re-lowers it
-  per block.
+  against 1,518 s: interp's Core IR lowering, the Tcl compiler's code
+  generation and the two NIR lowerings), and its two largest items hold
+  algorithmic defects the milestone's compiler studies found ([Compiler performance](#compiler-performance-what-dominates-and-what-would-remove-it)):
+  `hir::lower` is quadratic (the 583 s), and the Tcl compiler's code
+  generation (the 1,099 s) re-enters that lowering for every block's body
+  and, on the `compile` backend's former core IR path, first read HIR back
+  from the Core IR for the rebuild. The rest of that path -- its own
+  lowering of the whole program and the rebuild's analyses -- is not in the
+  2,166 s (next bullet). Main's 14a1143 has since taken `compile` off that
+  path: the Tcl compiler compiles the front end's HIR, with no whole-program
+  lowering and no rebuild. The per-block lowering remains (the Tcl compiler
+  lowers every block's body to Core IR for the block's value:
+  `core::compiler::CompileBlock`, `hir::lower::body`).
+* **The `compile` rows are the former core IR path, as profiled.** The
+  profiler charges each profiled phase its own time, and the bench took the
+  compiled run as the backend's whole run less code generation's own time,
+  so the rebuild's resolution and analyses (`hir::BuildOnce`, with
+  `hir::check`) are in the compiled run's 305 s, not in code generation's
+  1,099 s, which keeps what the profile does not name: reading the Core IR
+  back into syntax and the per-block `hir::lower::body`. The 305 s is
+  therefore not only the compiled code's execution time: on the two small suites
+  re-run after the merge on the tree before it, with the bench's compile
+  profile printed, the rebuild's profiled phases were 98% of it
+  (traits-path.bot 0.60 of 0.62 s, callable-contracts-handle.bot 0.50 of
+  0.51 s); corpus-wide the split was not recorded. The path's own
+  whole-program `hir::lower` of each suite was timed outside the profiled run
+  and not printed, so it is in "other": per suite what the table leaves over
+  tracks interp's lowering of the same HIR (597.5 s in all against 583.5 s;
+  methods.bot 25.44 against 25.45 s), and the three suites that exclude both
+  Tcl backends leave 0.09-0.19 s. `bench/golden-suites.tcl` now times
+  `core::compiler::compileHir` as code generation (the per-block lowering
+  included) and `evalUnit` as the run, with no whole-program lowering and no
+  rebuild; the corpus has not been re-measured with it.
 * Per suite the front end takes 0.9 to 352 s (median 4.1 s; 0.33 s per golden
   test); the five largest suites hold 43% of it (mutable-array.bot 352 s,
   destructuring.bot 107, static-compile.bot 71, methods.bot 64,
@@ -928,7 +989,7 @@ compile once, run), one process at a time and four at a time:
 | the same 138 Tcl files, whole | 2,054 s | 558 s | native-csv-records.test, 213 s |
 | golden corpus on interp | 2,041 s | 517 s | mutable-array.bot, 358 s |
 | golden corpus on cranelift | -- | 531 s | mutable-array.bot, 351 s |
-| golden corpus on all four backends | 4,790 s (above, profiled) | 1,188 s | mutable-array.bot, 562 s |
+| golden corpus on all four backends (`compile` on its former core IR path) | 4,790 s (above, profiled) | 1,188 s | mutable-array.bot, 562 s |
 
 * Golden on one backend costs about three times the Tcl subset it duplicates
   (2,041 / 653 s sequentially, 517 / 180 s in parallel; 0.45 against 0.20 s
@@ -938,9 +999,11 @@ compile once, run), one process at a time and four at a time:
   floor: mutable-array.bot alone is 60-70% of a parallel one-backend run.
   Splitting the largest suites would lower it; the compiler fixes below
   would lower everything.
-* The sequential figure for all four backends is the profiled run above (the
-  profiler is part of its 600 s "other"); the parallel run's per-suite seconds,
-  unprofiled but contended, sum to 4,592 s.
+* The sequential figure for all four backends is the profiled run above
+  (the profiler's own overhead is inside its timed steps; its about 600 s of
+  "other" is nearly all the `compile` path's own Core IR lowering); the
+  parallel run's per-suite seconds, unprofiled but contended, sum to
+  4,592 s.
 * Of the backends, cranelift-generic is the cheapest after the front end
   (94 s). Specialized cranelift (403 s) costs about half of interp (774 s) in
   the profiled run, but in the one-backend workflow runs the two cost about the
@@ -1069,10 +1132,21 @@ branches, not merged -- the milestone does not optimize the compiler, the brief'
 3. **`hir::lower` is quadratic**: it walks every expression
    (`hir::affine::temporaries`) per call node -- 0.29 of 0.30 s of lowering on
    traits-path.bot, 583 s corpus-wide.
-4. **The `compile` backend rebuilds HIR from Core IR** (a whole BuildOnce and
-   `hir::check`, 31-61% of a small suite's own front end) and re-enters the
-   quadratic lowering per block; the opt-in `compile-hir` path skips the
-   rebuild.
+4. **The `compile` backend rebuilt HIR from Core IR** (a whole BuildOnce and
+   `hir::check`, 31-61% of a small suite's own front end), after lowering the
+   whole program to Core IR (item 3), and its code generation re-entered the
+   quadratic lowering per block; the opt-in `compile-hir` path skipped the
+   rebuild but still lowered the whole program first. **The rebuild and the
+   whole-program lowering are done**, by main's 14a1143 (merged after these
+   studies): the Tcl compiler compiles the front end's HIR, `compile` is that
+   path and `compile-hir` is gone. The per-block lowering is not: the Tcl compiler
+   still lowers every block's body to Core IR for the block's value
+   (`core::compiler::CompileBlock`, `hir::lower::body`). Of the study's 718
+   (`compile-hir`) and 719 (`compile`) `temporaries` calls on
+   traits-path.bot, 322 were the whole-program lowering (the study's count
+   for one `hir::lower` of that suite); the rest are the per-block lowering,
+   and on the merged tree `core::compiler::compileHir` makes 396 on that
+   suite (counted after the merge).
 5. **Hygiene rescans every binding and expression per rename**: 11% of the
    front end corpus-wide.
 6. Smaller: `hir::contexts::Walk` rebuilds the same parent maps about ten
@@ -1281,17 +1355,17 @@ The milestone's 75 report points, in order (section links hold the detail).
 41. **Total golden static rounds/builds.** 210 rounds, 328 builds (81 method-call
     trials), no misprediction (206/322 over the 85 suites measured before the
     economics fixes, which took 303/451).
-42. **Total golden compile time.** 1,518 s of front end over the 88 suites (cold, one at a time); with the Tcl backends' preparation, about 3,685 s of compilation (3,697 s with Cranelift code generation).
-43. **Backend execution times.** Executing every test: interp 191 s, the Tcl compiler's code 305 s, cranelift 0.09 s, cranelift-generic 0.1 s.
-44. **Tcl compiler codegen time.** 1,099 s, including the `compile` backend's rebuild of HIR from Core IR.
+42. **Total golden compile time.** 1,518 s of front end over the 88 suites (cold, one at a time); with the Tcl backends' preparation, about 3,685 s of compilation (3,697 s with Cranelift code generation; the Tcl compiler's share on its former core IR path, without that path's own lowering and the rebuild's analyses: point 44).
+43. **Backend execution times.** Executing every test: interp 191 s, the Tcl compiler's 305 s (on its former core IR path, where this figure holds the rebuild's analyses -- 98% of it on the two small suites re-checked after the merge -- so it is not only the compiled code's execution time: point 44, [Where a suite's time goes](#where-a-suites-time-goes)), cranelift 0.09 s, cranelift-generic 0.1 s.
+44. **Tcl compiler codegen time.** 1,099 s, on the `compile` backend's former core IR path (before main's 14a1143): code generation from HIR rebuilt from the Core IR, with what the profile does not name -- the rebuild's reading of the Core IR back into syntax and the per-block `hir::lower::body`. The profiler charged the rebuild's resolution and analyses (`hir::BuildOnce`) to the compiled run (point 43); the path's own whole-program Core IR lowering was timed outside the profiled run and not printed, so it is in "other" ([Where a suite's time goes](#where-a-suites-time-goes)). Not re-measured on the direct path.
 45. **NIR lowering time.** 396 s specialized, 87 s generic (Tcl).
 46. **Cranelift codegen time.** 6.6 s specialized, 6.1 s generic.
 47. **Native execution time.** 0.09 s and 0.1 s for all 4572 tests.
 48. **Tcl interpreter execution time.** 191 s (after 583 s of Core IR lowering).
-49. **Cold full golden wall time.** One process per suite: 2,041 s on interp, 4,790 s on all four backends, sequentially; 517 s (interp), 531 s (cranelift) and 1,188 s (all four) four at a time.
+49. **Cold full golden wall time.** One process per suite: 2,041 s on interp, 4,790 s on all four backends, sequentially; 517 s (interp), 531 s (cranelift) and 1,188 s (all four) four at a time (all four: `compile` on its former core IR path).
 50. **Warm full golden wall time.** All 88 front ends in one process: 2,055 s, then 2,440 s on a second pass -- slower than cold (1,518 s); no warm advantage today.
 51. **Cold relevant Tcl E2E wall time.** The 3250 ported Tcl tests (`-match`): 653 s sequentially, 180 s four at a time; their 138 files whole: 2,054 s and 558 s.
-52. **Warm/relevant Tcl results.** The Tcl suite has no warm mode (one tclsh per file); the full suite took 3,070 s (interp pass) and 3,315 s (compile pass) of per-file time, two files at a time on a shared machine.
+52. **Warm/relevant Tcl results.** The Tcl suite has no warm mode (one tclsh per file); the full suite took 3,070 s (interp pass) and 3,315 s (compile pass, before 14a1143: its harness then compiled HIR rebuilt from each lowered program's Core IR) of per-file time, two files at a time on a shared machine.
 53. **Targeted-subsystem workflows.** Four scenarios: for edits of `hir/affine.tcl`, `hir/completions.tcl`, `core/evaluator.tcl` the covering Tcl files are faster -- 2.8 and 3.5 times for the two analyses, 1.5 times for the evaluator (50/38/45 s against 137/134/68 s); for `native/lower.tcl` the golden suites are 2.6 times faster (33 against 85 s).
 54. **Backend exclusions.** 10 companions: 7 exclude cranelift-generic (NATIVE
     UNSUPPORTED struct-shape), 3 exclude interp and compile (machine addresses
@@ -1338,11 +1412,11 @@ The milestone's 75 report points, in order (section links hold the detail).
 69. **Layers represented only in Tcl.** HIR/Core IR/NIR shape and analysis facts
     (100% active), the parser, warnings, native memory behavior (gc 98%, native
     90% active), release order, scheduler economics, the process boundary.
-70. **Compiler bottlenecks.** Type inference (38% of the front end) and instance verification (13%) -- the semantic-instance layer's whole-program copies, quadratic --, hygiene's rescans (11%), the completion analysis (8%); outside the front end, the quadratic Core IR lowering (583 s) and the `compile` backend's HIR rebuild. All algorithmic; prototypes and plans in [Compiler performance](#compiler-performance-what-dominates-and-what-would-remove-it).
+70. **Compiler bottlenecks.** Type inference (38% of the front end) and instance verification (13%) -- the semantic-instance layer's whole-program copies, quadratic --, hygiene's rescans (11%), the completion analysis (8%); outside the front end, the quadratic Core IR lowering (583 s, which the Tcl compiler also re-enters per block) and the `compile` backend's HIR rebuild (gone from that backend since main's 14a1143, with its whole-program lowering). All algorithmic; prototypes and plans in [Compiler performance](#compiler-performance-what-dominates-and-what-would-remove-it).
 71. **Tcl-harness overhead.** About 0.07-0.1 s per Tcl file (start-up and loading), 2% of the subset; the cost of running whole files instead of the ported tests is 3x.
-72. **Golden-harness overhead.** `lib/test.bot` compiled with every suite (0.85 s, about 75 s in all) and re-analyzed in every build; framework execution microseconds; the parallel floor of the largest suite (mutable-array.bot, 324-562 s four at a time).
-73. **Estimated local feedback-loop winner.** Today the Tcl E2E subset in parallel (180 s) is the fastest full source-level loop, about three times faster than the golden corpus on one backend (517-531 s, bounded by mutable-array.bot); for targeted edits Tcl files win for analyses and golden suites win for native lowering. The golden layer's gap is compiler cost: the measured in-place branch halves callables.bot's front end and cuts others' by 5-30% (the walk alone: -19% over the 12 largest suites), and the quadratic Core IR lowering and the compile backend's rebuild are the next items. No policy is chosen here.
-74. **Evidence for front-end self-hosting.** (a) Where the time is: per-build whole-program analyses, 76-83% of a small suite's front end, with super-linear algorithms that would stay super-linear in Botlish; Tcl's constant factor is real but second. (b) Coupling: the HIR is not self-contained (about 11 process-wide registries the backends read), and there is no complete interchange format (`hir::format` drops modules, the `semantic` and `coroutines` tables, bounds verdicts, spans); native lowering reuses `hir/` analyses including type inference. (c) The natural cut is the whole build loop (`hir::buildSyntax`'s inputs in, analyzed HIR out); parsing alone is 3% of the corpus's front end (9-21% of a small suite's, mostly re-parsing `lib/test.bot`), lowering and module loading a few percent more. (d) Tcl can orchestrate across a process boundary (an AOT executable: 2-4 ms start-up, argv in, one String out). (e) Prerequisites: maps, enum payloads and `match`, String ordering and conversions, file I/O and exit status, fast character access on non-ASCII text. (f) The Tcl backends' preparation costs more than the front end, so a Botlish front end alone would not make the golden corpus fast. ((a) to (d) are the coupling study's measurements, `audit/golden/migration/out/study-frontend-coupling.json`.)
+72. **Golden-harness overhead.** `lib/test.bot` compiled with every suite (0.85 s, about 75 s in all) and re-analyzed in every build; framework execution microseconds; the parallel floor of the largest suite (mutable-array.bot, 324-562 s four at a time; the 562 s on all four backends, `compile` on its former core IR path).
+73. **Estimated local feedback-loop winner.** Today the Tcl E2E subset in parallel (180 s) is the fastest full source-level loop, about three times faster than the golden corpus on one backend (517-531 s, bounded by mutable-array.bot); for targeted edits Tcl files win for analyses and golden suites win for native lowering. The golden layer's gap is compiler cost: the measured in-place branch halves callables.bot's front end and cuts others' by 5-30% (the walk alone: -19% over the 12 largest suites), and the quadratic Core IR lowering, which the Tcl compiler still re-enters per block, is the next item (the compile backend's whole-program lowering and rebuild, the other one then, are gone from that backend since main's 14a1143). No policy is chosen here.
+74. **Evidence for front-end self-hosting.** (a) Where the time is: per-build whole-program analyses, 76-83% of a small suite's front end, with super-linear algorithms that would stay super-linear in Botlish; Tcl's constant factor is real but second. (b) Coupling: the HIR is not self-contained (about 11 process-wide registries the backends read), and there is no complete interchange format (`hir::format` drops modules, the `semantic` and `coroutines` tables, bounds verdicts, spans); native lowering reuses `hir/` analyses including type inference. (c) The natural cut is the whole build loop (`hir::buildSyntax`'s inputs in, analyzed HIR out); parsing alone is 3% of the corpus's front end (9-21% of a small suite's, mostly re-parsing `lib/test.bot`), lowering and module loading a few percent more. (d) Tcl can orchestrate across a process boundary (an AOT executable: 2-4 ms start-up, argv in, one String out). (e) Prerequisites: maps, enum payloads and `match`, String ordering and conversions, file I/O and exit status, fast character access on non-ASCII text. (f) The Tcl backends' preparation costs more than the front end (2,166 against 1,518 s, measured with `compile` on its former core IR path; not re-measured since 14a1143), so a Botlish front end alone would not make the golden corpus fast. ((a) to (d) are the coupling study's measurements, `audit/golden/migration/out/study-frontend-coupling.json`.)
 75. **Recommended next milestone.** [Recommendations](#recommendations).
 
 ## Recommendations
@@ -1356,8 +1430,9 @@ implications, not decisions.
    semantic-instance layer's whole-program copies (a verified branch,
    `ccr-7eabe55c-semantic-in-place-views`, ready for the full validation its
    commit lists), the guarded one-walk fix, the quadratic `hir::lower`, the
-   `compile` backend's HIR rebuild, hygiene's rescans, then the staged plan's
-   indexes and the native specializer's copies. Re-measure the corpus with
+   `compile` backend's whole-program lowering and HIR rebuild (done: main's
+   14a1143, merged after these measurements), hygiene's rescans, then the
+   staged plan's indexes and the native specializer's copies. Re-measure the corpus with
    `bench/golden-suites.tcl` and `bench/golden-workflows.tcl` after each; the
    local-default question should be decided on those numbers, not today's.
 2. **Fix compilation isolation.** A compilation's declarations live in
@@ -1372,7 +1447,9 @@ implications, not decisions.
    NIR check. It enables compile-once across processes (in the coupling
    study, a reloaded HIR plus a replay of `hir::format`'s declaration header
    ran in a fresh process on two suites: traits-path.bot on compile,
-   compile-hir and cranelift, harness.bot on those and interp;
+   compile-hir and cranelift, harness.bot on those and interp -- `compile`
+   then the core IR path, `compile-hir` the direct one, which is `compile`
+   since 14a1143;
    `out/study-frontend-coupling.json`) and is the precondition of a Botlish front end: the hot code is
    the whole per-build analysis loop, which must move as a unit behind that
    format, and native lowering keeps reusing `hir/` analyses unless their
@@ -1385,7 +1462,9 @@ implications, not decisions.
    For targeted work the covering Tcl files are faster for analysis edits and
    the golden suites for native-lowering edits. Of the backends' Tcl
    preparation, cranelift-generic's is the cheapest (94 s), then specialized
-   cranelift (403 s), interp (774 s) and compile (1,404 s); end to end, interp
+   cranelift (403 s), interp (774 s) and compile (1,404 s, on its former core
+   IR path: with its rebuild of the HIR, without its own whole-program Core IR
+   lowering); end to end, interp
    and cranelift cost the same today (517 against 531 s in parallel), because
    the front end dominates. The full four-backend matrix belongs in CI (four
    shards today).
@@ -1433,7 +1512,8 @@ The specification and its map:
 The evidence the manifest is derived from (`audit/golden/migration/`):
 
 * `census/*.tsv` -- one classification row per Tcl test, per Tcl file (169
-  files, 7266 rows; the 16 regression tests added with the completion and
+  files, 7266 rows on the measured tree, one more for each of the merge's six
+  new Tcl tests; the 16 regression tests added with the completion and
   recursive-type fixes are classified by their suites' fragments).
 * `batches/*.tsv` -- the 45 migration batches (the work plan).
 * `fragments/*.tsv` -- the manifest rows of each suite the migration added
@@ -1457,7 +1537,11 @@ Tools (`audit/golden/tools/`, `bench/`):
 * `bench/golden-suites.tcl` -- per-suite compile and run economics, cold
   (`-cache DIR` keeps each suite's result, so a long measurement can run in
   pieces) or warm (`-warm N`), with a front-end phase profile; it honors a
-  suite's backend exclusions.
+  suite's backend exclusions. Since dfb89ea (after the merge of main's
+  14a1143) it times the `compile` backend as `core::compiler::compileHir`
+  (code generation) and `evalUnit` (the run), as `tests/golden/run.tcl`'s
+  `compile` runs it; the recorded run timed the core IR path (`hir::lower`,
+  then `core::evalProgram` under `core::useBackend compile`).
 * `bench/golden-workflows.tcl` -- the Tcl E2E subset and the golden corpus as
   a developer runs them (`-jobs N` for N processes at a time), and targeted
   edit scenarios.
