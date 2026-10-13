@@ -293,31 +293,31 @@ foreach {name method free expected} {
     imported-chain            {200.complement().high_nibble()}  {byte::high_nibble(byte::complement(200))}  {value 48}
     imported-error-capable   {fn conv(n):
     b = n.from_int():
-        on AboveRange:
+        on byte::AboveRange:
             0
-        on BelowRange:
+        on byte::BelowRange:
             1
     b
 [conv(200), conv(300), conv(0 - 5)]}  {fn conv(n):
     b = byte::from_int(n):
-        on AboveRange:
+        on byte::AboveRange:
             0
-        on BelowRange:
+        on byte::BelowRange:
             1
     b
 [conv(200), conv(300), conv(0 - 5)]}  {value {[200, 0, 1]}}
     higher-order             {d = [1, 2, 3].find(big):
-    on NotFound:
+    on list::NotFound:
         0
 d}  {d = list::find([1, 2, 3], big):
-    on NotFound:
+    on list::NotFound:
         0
 d}  {value 2}
     higher-order-not-found   {d = [0, 1].find(big):
-    on NotFound:
+    on list::NotFound:
         99
 d}  {d = list::find([0, 1], big):
-    on NotFound:
+    on list::NotFound:
         99
 d}  {value 99}
     aliased-module-function  {complement = byte::complement
@@ -325,11 +325,11 @@ d}  {value 99}
 complement(200)}  {value 55}
     aliased-higher-order     {find = list::find
 d = [1, 2, 3].find(big):
-    on NotFound:
+    on list::NotFound:
         0
 d}  {find = list::find
 d = find([1, 2, 3], big):
-    on NotFound:
+    on list::NotFound:
         0
 d}  {value 2}
 } {
@@ -482,17 +482,16 @@ test method-failure-locations {a failing method call is located at the receiver 
 # module's functions are not visible to the program that loads it.
 
 test method-in-a-module {a module function uses the sugar on its own earlier functions; the program imports the module and uses its functions as methods (an alias of one stays the same single candidate); without the import none of the module's names is visible} -body {
-    set libPath [file join $::core::libraryDir methodsugarlib.bot]
-    set ch [open $libPath w]
-    fconfigure $ch -encoding utf-8
-    puts -nonewline $ch {fn inc(a):
+    withPrivateLibrary {
+        set ch [open [file join $::core::libraryDir methodsugarlib.bot] w]
+        fconfigure $ch -encoding utf-8
+        puts -nonewline $ch {fn inc(a):
     a + 1
 
 fn inc_twice(a):
     a.inc().inc()
 }
-    close $ch
-    try {
+        close $ch
         set imp "import methodsugarlib\n"
         set bind "${imp}inc_twice = methodsugarlib::inc_twice\n"
         list [bothSpellings "${imp}5.inc_twice()" "${imp}methodsugarlib::inc_twice(5)"] \
@@ -501,8 +500,6 @@ fn inc_twice(a):
             [bothSpellings "${imp}5.inc().inc_twice()" "${imp}methodsugarlib::inc_twice(methodsugarlib::inc(5))"] \
             [rejection "5.inc()"] \
             [rejection "methodsugarlib::inc_twice(5).inc()"]
-    } finally {
-        file delete $libPath
     }
 } -match glob -result {{value 7} {value 7} {value 9} {value 8} {NOT-A-STRUCT: *cannot project field "inc"*no function named "inc" is visible here either*} {MISSING-IMPORT: *namespace "methodsugarlib" is not imported*}}
 
@@ -672,15 +669,17 @@ test method-no-bound-method-values {x.f is a field projection, never a bound fun
 # Evaluation: the receiver is the first argument, evaluated once
 
 set ::logFns {import mutable_array
-fn probe(log, id, result):
-    if mutable_array::capacity(log) > 0:
-        n = mutable_array::at(log, 0)
-        mutable_array::set(log, 0, n * 10 + id)
+context struct Log:
+    digits: MutableArray[int]
+fn probe(id, result, context log: Log):
+    n = mutable_array::get(log.digits, 0, 0)
+    mutable_array::set(log.digits, 0, n * 10 + id):
+        on IndexNotFound:
+            unit
     result
-fn fresh():
-    log = mutable_array::allocate(1)
-    mutable_array::set(log, 0, 0)
-    log
+fn logged(context log: Log):
+    mutable_array::get(log.digits, 0, 0)
+with context Log {digits: mutable_array::create(1, 0)}
 fn add(a, b):
     a + b
 fn add3(a, b, c):
@@ -690,36 +689,24 @@ fn first(a, b):
 }
 
 foreach {name method free expected} {
-    receiver-once {log = fresh()
-v = probe(log, 1, 10).add(probe(log, 2, 5))
-[v, mutable_array::get(log, 0, 0)]}  {log = fresh()
-v = add(probe(log, 1, 10), probe(log, 2, 5))
-[v, mutable_array::get(log, 0, 0)]}  {value {[15, 12]}}
-    receiver-before-arguments {log = fresh()
-v = probe(log, 1, 1).add3(probe(log, 2, 2), probe(log, 3, 3))
-[v, mutable_array::get(log, 0, 0)]}  {log = fresh()
-v = add3(probe(log, 1, 1), probe(log, 2, 2), probe(log, 3, 3))
-[v, mutable_array::get(log, 0, 0)]}  {value {[6, 123]}}
-    receiver-is-a-method-call {log = fresh()
-v = probe(log, 1, 1).add(probe(log, 2, 2)).add(probe(log, 3, 3))
-[v, mutable_array::get(log, 0, 0)]}  {log = fresh()
-v = add(add(probe(log, 1, 1), probe(log, 2, 2)), probe(log, 3, 3))
-[v, mutable_array::get(log, 0, 0)]}  {value {[6, 123]}}
-    argument-is-a-method-call {log = fresh()
-v = probe(log, 1, 1).add(probe(log, 2, 2).add(probe(log, 3, 3)))
-[v, mutable_array::get(log, 0, 0)]}  {log = fresh()
-v = add(probe(log, 1, 1), add(probe(log, 2, 2), probe(log, 3, 3)))
-[v, mutable_array::get(log, 0, 0)]}  {value {[6, 123]}}
-    receiver-effect-not-duplicated {log = fresh()
-v = probe(log, 4, 7).first(0)
-[v, mutable_array::get(log, 0, 0)]}  {log = fresh()
-v = first(probe(log, 4, 7), 0)
-[v, mutable_array::get(log, 0, 0)]}  {value {[7, 4]}}
-    result-ignored {log = fresh()
-probe(log, 1, 1).first(probe(log, 2, 2))
-mutable_array::get(log, 0, 0)}  {log = fresh()
-first(probe(log, 1, 1), probe(log, 2, 2))
-mutable_array::get(log, 0, 0)}  {value 12}
+    receiver-once {v = probe(1, 10).add(probe(2, 5))
+[v, logged()]}  {v = add(probe(1, 10), probe(2, 5))
+[v, logged()]}  {value {[15, 12]}}
+    receiver-before-arguments {v = probe(1, 1).add3(probe(2, 2), probe(3, 3))
+[v, logged()]}  {v = add3(probe(1, 1), probe(2, 2), probe(3, 3))
+[v, logged()]}  {value {[6, 123]}}
+    receiver-is-a-method-call {v = probe(1, 1).add(probe(2, 2)).add(probe(3, 3))
+[v, logged()]}  {v = add(add(probe(1, 1), probe(2, 2)), probe(3, 3))
+[v, logged()]}  {value {[6, 123]}}
+    argument-is-a-method-call {v = probe(1, 1).add(probe(2, 2).add(probe(3, 3)))
+[v, logged()]}  {v = add(probe(1, 1), add(probe(2, 2), probe(3, 3)))
+[v, logged()]}  {value {[6, 123]}}
+    receiver-effect-not-duplicated {v = probe(4, 7).first(0)
+[v, logged()]}  {v = first(probe(4, 7), 0)
+[v, logged()]}  {value {[7, 4]}}
+    result-ignored {probe(1, 1).first(probe(2, 2))
+logged()}  {first(probe(1, 1), probe(2, 2))
+logged()}  {value 12}
 } {
     test method-evaluation-$name "$name: receiver and argument evaluation order and counts equal the free call's" -body {
         bothSpellings $::logFns$method $::logFns$free
@@ -968,34 +955,56 @@ proc executableValue {text} {
 }
 
 set ::typedMethod {import mutable_array
-fn probe(log: MutableArray[int], id: int, result: int) -> int:
-    if mutable_array::capacity(log) > 0:
-        n = mutable_array::at(log, 0)
-        mutable_array::set(log, 0, n * 10 + id)
+context struct Log:
+    digits: MutableArray[int]
+fn probe(id: int, result: int, context log: Log) -> int:
+    n = mutable_array::get(log.digits, 0, 0)
+    mutable_array::set(log.digits, 0, n * 10 + id):
+        on IndexNotFound:
+            unit
     result
+fn logged(context log: Log) -> int:
+    mutable_array::get(log.digits, 0, 0)
+fn reset(context log: Log) -> unit:
+    mutable_array::set(log.digits, 0, 0):
+        on IndexNotFound:
+            unit
+    unit
 fn add(a: int, b: int) -> int:
     a + b
 fn twice(a: int) -> int:
     a * 2
 fn run(n: int) -> int:
-    log = mutable_array::create(1, 0)
-    v = probe(log, 1, n).add(probe(log, 2, 5)).twice()
-    v * 1000 + mutable_array::get(log, 0, 0)
+    reset()
+    v = probe(1, n).add(probe(2, 5)).twice()
+    v * 1000 + logged()
+with context Log {digits: mutable_array::create(1, 0)}
 [run(1), run(20)]}
 set ::typedFree {import mutable_array
-fn probe(log: MutableArray[int], id: int, result: int) -> int:
-    if mutable_array::capacity(log) > 0:
-        n = mutable_array::at(log, 0)
-        mutable_array::set(log, 0, n * 10 + id)
+context struct Log:
+    digits: MutableArray[int]
+fn probe(id: int, result: int, context log: Log) -> int:
+    n = mutable_array::get(log.digits, 0, 0)
+    mutable_array::set(log.digits, 0, n * 10 + id):
+        on IndexNotFound:
+            unit
     result
+fn logged(context log: Log) -> int:
+    mutable_array::get(log.digits, 0, 0)
+fn reset(context log: Log) -> unit:
+    mutable_array::set(log.digits, 0, 0):
+        on IndexNotFound:
+            unit
+    unit
 fn add(a: int, b: int) -> int:
     a + b
 fn twice(a: int) -> int:
     a * 2
 fn run(n: int) -> int:
-    log = mutable_array::create(1, 0)
-    v = twice(add(probe(log, 1, n), probe(log, 2, 5)))
-    v * 1000 + mutable_array::get(log, 0, 0)
+    reset()
+    v = twice(add(probe(1, n), probe(2, 5)))
+    v * 1000 + logged()
+with context Log {digits: mutable_array::create(1, 0)}
 [run(1), run(20)]}
 
 test method-standalone-executable {the standalone executables of the method and free spellings print the value (and evaluation log) every in-process backend computes} -constraints executableAot -body {

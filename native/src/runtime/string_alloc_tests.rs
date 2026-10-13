@@ -3,7 +3,8 @@
 //! A counting global allocator (per-thread counters, so parallel tests do not
 //! disturb each other) proves the structural claims: a dynamic String is one
 //! heap allocation and one free, never a block plus a text buffer, for every
-//! producer in the runtime.
+//! producer in the runtime. ops.rs's MutableArray allocation pins measure
+//! with the same counters (`measure`, `counting_vm`).
 
 use super::metrics::{AllocMode, GcReason};
 use super::ops::*;
@@ -43,14 +44,30 @@ unsafe impl GlobalAlloc for Counting {
 static COUNTING: Counting = Counting;
 
 /// (allocator calls, frees, bytes requested) of F on this thread.
-fn measure<R>(f: impl FnOnce() -> R) -> (R, usize, usize, usize) {
+pub(super) fn measure<R>(f: impl FnOnce() -> R) -> (R, usize, usize, usize) {
     let (a0, f0, b0) = (ALLOCS.with(Cell::get), FREES.with(Cell::get), BYTES.with(Cell::get));
     let r = f();
     (r, ALLOCS.with(Cell::get) - a0, FREES.with(Cell::get) - f0, BYTES.with(Cell::get) - b0)
 }
 
 fn vm() -> Box<Vm> {
-    let mut vm = Vm::new(std::rc::Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new() }), AllocMode::Off);
+    warmed(Vm::new(std::rc::Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }), AllocMode::Off))
+}
+
+/// `vm()` for a test that counts allocator calls in a `measure` window: it
+/// never collects on BOTLISH_NATIVE_GC_STRESS=1, since a collection inside
+/// the window would add the collector's own scratch allocations and frees
+/// (and reclaim garbage a test frees on purpose later) to what the window
+/// attributes to the operation under test. Off before the warm-up, too: a
+/// warm-up whose Strings are collected as it goes never grows the heap's
+/// object list.
+pub(super) fn counting_vm() -> Box<Vm> {
+    let mut vm = Vm::new(std::rc::Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }), AllocMode::Off);
+    vm.heap.set_stress_for_test(false);
+    warmed(vm)
+}
+
+fn warmed(mut vm: Box<Vm>) -> Box<Vm> {
     // The heap's own object list grows by doubling; warm it so the measured
     // windows contain only String allocations.
     for _ in 0..600 {
@@ -73,7 +90,7 @@ fn one_block(allocs: usize, bytes: usize, text_bytes: usize, what: &str) {
 
 #[test]
 fn every_nonempty_constructor_is_one_allocation() {
-    let mut vm = vm();
+    let mut vm = counting_vm();
     for text in ["a", "hello", "\u{e9}", "\u{2026}", "\u{1f600}", "e\u{301}", "\0", &"x".repeat(100), &"\u{2026}".repeat(40)] {
         let (v, a, _, b) = measure(|| vm.new_str(text));
         one_block(a, b, text.len(), &format!("new_str({text:?})"));
@@ -83,7 +100,7 @@ fn every_nonempty_constructor_is_one_allocation() {
 
 #[test]
 fn scalar_materialization_is_one_allocation_of_the_utf8_width() {
-    let mut vm = vm();
+    let mut vm = counting_vm();
     for (c, width) in [('a', 1), ('\0', 1), ('\u{e9}', 2), ('\u{2026}', 3), ('\u{1f600}', 4), ('\u{10ffff}', 4)] {
         let (v, a, _, b) = measure(|| rt_short_to_str(&mut *vm, c as u64));
         one_block(a, b, width, &format!("shorttostr({c:?})"));
@@ -94,7 +111,7 @@ fn scalar_materialization_is_one_allocation_of_the_utf8_width() {
 
 #[test]
 fn packed_ascii_materialization_is_one_allocation_of_its_length() {
-    let mut vm = vm();
+    let mut vm = counting_vm();
     for text in ["a", "ab", "abc", "abcd", "abcde", "abcdef", "abcdefg", "abcdefgh", "\0\0"] {
         let w = pack_ascii(text.as_bytes());
         let (v, a, _, b) = measure(|| rt_ascii_to_str(&mut *vm, w));
@@ -106,7 +123,7 @@ fn packed_ascii_materialization_is_one_allocation_of_its_length() {
 
 #[test]
 fn empty_is_the_canonical_static_string_and_allocates_nothing() {
-    let mut vm = vm();
+    let mut vm = counting_vm();
     let (e1, a, f, _) = measure(|| rt_short_to_str(&mut *vm, (-1i64) as u64));
     assert_eq!((a, f), (0, 0));
     let (e2, a, _, _) = measure(|| rt_ascii_to_str(&mut *vm, 0));
@@ -123,7 +140,7 @@ fn empty_is_the_canonical_static_string_and_allocates_nothing() {
 
 #[test]
 fn concat_substring_lower_and_decode_are_one_allocation_each() {
-    let mut vm = vm();
+    let mut vm = counting_vm();
     let (ab, cd) = (vm.new_str("héllo"), vm.new_str(" wörld…"));
     let (v, a, _, b) = measure(|| rt_str_cat(&mut *vm, ab, cd));
     one_block(a, b, "héllo wörld…".len(), "concat");
@@ -166,7 +183,7 @@ fn concat_substring_lower_and_decode_are_one_allocation_each() {
 #[test]
 fn flat_construct_is_one_allocation_whatever_the_piece_count() {
     use super::construct::{TAG_REGION, TAG_SPAN, rt_construct};
-    let mut vm = vm();
+    let mut vm = counting_vm();
     let (a, b, c) = (vm.new_str("ab"), vm.new_str("\u{2026}"), vm.new_str("xyz\u{1f600}"));
     let words = [TAG_SPAN, a, TAG_SPAN, b, TAG_REGION, c, small(1), small(4), TAG_SPAN, c];
     let (v, allocs, _, bytes) = measure(|| rt_construct(&mut *vm, 0, words.len() as u64, words.as_ptr()));
@@ -179,7 +196,7 @@ fn flat_construct_is_one_allocation_whatever_the_piece_count() {
 
 #[test]
 fn large_strings_are_still_one_block() {
-    let mut vm = vm();
+    let mut vm = counting_vm();
     vm.heap.defer_collection_for_test();
     for n in [1usize << 12, 1 << 16, 1 << 20, 3 << 20] {
         let text = "q".repeat(n);
@@ -200,7 +217,7 @@ fn large_strings_are_still_one_block() {
 
 #[test]
 fn collection_frees_one_block_per_string() {
-    let mut vm = vm();
+    let mut vm = counting_vm();
     let keep = vm.new_str("kept alive");
     vm.temp_roots.push(keep);
     // Baseline: what a collection frees on its own (its scratch vectors) with
@@ -221,8 +238,16 @@ fn collection_frees_one_block_per_string() {
 fn strings_survive_collection_unchanged() {
     let mut vm = vm();
     let texts = ["", "a", "\0", "\u{2026}", "\u{1f600}", "hello world", "e\u{301}x"];
-    let held: Vec<Value> = texts.iter().map(|t| vm.new_str(t)).collect();
-    vm.temp_roots.extend(held.iter().copied());
+    // Each String is rooted as soon as it exists: the next one's
+    // allocation may collect (always, under BOTLISH_NATIVE_GC_STRESS=1).
+    let held: Vec<Value> = texts
+        .iter()
+        .map(|t| {
+            let v = vm.new_str(t);
+            vm.temp_roots.push(v);
+            v
+        })
+        .collect();
     for _ in 0..3 {
         // Churn: garbage between collections, with the held Strings rooted.
         for i in 0..200 {
@@ -252,7 +277,7 @@ fn text_is_inline_at_a_constant_offset() {
 
 #[test]
 fn string_census_counts_objects_frees_and_reused_empties() {
-    let mut vm = Vm::new(std::rc::Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new() }), AllocMode::Summary);
+    let mut vm = Vm::new(std::rc::Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }), AllocMode::Summary);
     vm.new_str("abc");
     vm.new_str("");
     vm.new_str_scalar('x');
@@ -371,8 +396,10 @@ fn constructors_agree_with_the_oracle_on_boundary_lengths() {
                 let a = rng.text(n, ascii_only);
                 let (bn, bascii) = (rng.next() as usize % 40, rng.next() % 2 == 0);
                 let b = rng.text(bn, bascii);
-                let (va, vb) = (vm.new_str(&a), vm.new_str(&b));
-                vm.temp_roots.extend([va, vb]);
+                let va = vm.new_str(&a);
+                vm.temp_roots.push(va);
+                let vb = vm.new_str(&b);
+                vm.temp_roots.push(vb);
                 check(va, &a);
                 let cat = rt_str_cat(&mut *vm, va, vb);
                 check(cat, &format!("{a}{b}"));

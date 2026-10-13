@@ -1,0 +1,1135 @@
+# golden-framework.test -- the Botlish golden test framework, lib/test.bot
+# (GOLDEN-TEST-FRAMEWORK.md): an ordinary library, tested here like any other
+# Botlish program. Every suite program below is compiled once and run on the
+# Tcl interpreter, the Tcl compiler and Cranelift, and the backends must
+# agree on its report.
+#
+# What a Botlish program cannot observe -- how often a test body ran,
+# coroutine releases -- is observed from here: on the Tcl backends through a
+# test-only native, golden_probe(x), that records x and returns it; natively
+# through the allocation sites of the body (native::allocationReport), the
+# probe written out of the program first (it does not exist natively).
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+source [file join $::projectRoot tests golden run.tcl]
+
+interp recursionlimit {} 100000
+
+testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64}}]
+
+# Native coroutines exist on x86-64 Linux only (COROUTINES.md), and the
+# runner is a coroutine: elsewhere the framework runs on the Tcl backends.
+set gfBackends [expr {[testConstraint linuxX86_64] ? {interp compile cranelift} : {interp compile}}]
+
+proc gfProbeImpl {v} {
+    lappend ::gfProbes [core::value::intOf $v]
+    return $v
+}
+set ::gfProbes {}
+if {"golden_probe" ni [core::native::names]} {
+    core::registerNative golden_probe -arity 1 -impl gfProbeImpl \
+        -param-types {int} -result-type int
+}
+
+# The suite program SOURCE compiled once (warnings off), or a Tcl error.
+proc gfCompile {source} {
+    lassign [golden::compileSource $source] status hir
+    if {$status ne "ok"} {
+        error "suite does not compile: $hir"
+    }
+    return $hir
+}
+
+# SOURCE's report (its value: a List of Strings) as a Tcl list of lines, the
+# same on every backend of BACKENDS -- or "abort: MESSAGE" when every
+# backend's run fails the same way. A disagreement is a Tcl error.
+proc gfReport {source {backends ""}} {
+    if {$backends eq ""} { set backends $::gfBackends }
+    set hir [gfCompile $source]
+    set outcomes [lmap b $backends {
+        set o [golden::run $hir $b]
+        if {[lindex $o 0] eq "abort"} {
+            # (The message names the backend's own error code; the class
+            # of failure is what must agree.)
+            list abort [lindex [regexp -inline {\(([A-Z]+ [A-Z-]+)[^)]*\)$} [lindex $o 1]] 1]
+        } else {
+            lrange $o 0 1
+        }
+    }]
+    if {[llength [lsort -unique $outcomes]] != 1} {
+        error "backends disagree: [join [lmap b $backends o $outcomes {list $b $o}] { / }]"
+    }
+    lassign [lindex $outcomes 0] kind payload
+    if {$kind eq "abort"} {
+        return "abort: $payload"
+    }
+    return $payload
+}
+
+# The value of SOURCE (any value) as core::value::show prints it, the same
+# on every backend.
+proc gfValue {source {backends ""}} {
+    if {$backends eq ""} { set backends $::gfBackends }
+    set hir [gfCompile $source]
+    set outcomes [lmap b $backends {lrange [outcomeUnderHir $b $hir] 0 1}]
+    if {[llength [lsort -unique $outcomes]] != 1} {
+        error "backends disagree: [join [lmap b $backends o $outcomes {list $b $o}] { / }]"
+    }
+    return [lindex $outcomes 0 1]
+}
+
+# The strict compile error of SOURCE as "KIND: message", or "no error".
+proc gfStaticError {source} {
+    if {[catch {surface::compile $source suite.bot -warnings off} message options]} {
+        return "[lindex [dict get $options -errorcode] end]: $message"
+    }
+    return "no error"
+}
+
+# Runs SOURCE (which calls golden_probe) on a Tcl backend: {VALUE PROBES},
+# PROBES the values golden_probe recorded, in order.
+proc gfProbed {source backend} {
+    set hir [gfCompile $source]
+    set ::gfProbes {}
+    set outcome [outcomeUnderHir $backend $hir]
+    return [list [lindex $outcome 1] $::gfProbes]
+}
+
+# SOURCE with golden_probe(X) written as X: the program the native backend
+# runs (the probe is a Tcl-side test native).
+proc gfUnprobed {source} {
+    return [regsub -all {golden_probe\(([^()]*)\)} $source {\1}]
+}
+
+# The native allocations SOURCE's run makes at sites on line LINE of the
+# suite file (summed over those sites).
+proc gfNativeAllocationsAt {source line} {
+    set hir [gfCompile [gfUnprobed $source]]
+    set report [native::allocationReport $hir sites]
+    set total 0
+    foreach site [dict get $report sites] {
+        set location [dict get $site location]
+        if {[dict get $location file] eq "suite.bot" && [dict get $location line] == $line} {
+            incr total [dict get $site allocations]
+        }
+    }
+    return $total
+}
+
+# Every coroutine SOURCE's run creates and releases, on the Tcl backends:
+# "created N released IDS", IDS the release order (ids relative to the run).
+proc gfReleases {source backend} {
+    set hir [gfCompile $source]
+    set before $::core::coroutines::nextId
+    set ::core::coroutines::releaseCalls {}
+    try {
+        set outcome [outcomeUnderHir $backend $hir]
+        set created [expr {$::core::coroutines::nextId - $before}]
+        # In release order: a release a mutant delays (to the program's end)
+        # shows as a moved id.
+        set released [lmap id $::core::coroutines::releaseCalls {expr {$id - $before}}]
+    } finally {
+        set ::core::coroutines::releaseCalls none
+    }
+    return [list [lindex $outcome 1] "created $created released $released"]
+}
+
+# The native coroutine census of SOURCE's run.
+proc gfNativeCoroutines {source} {
+    set hir [gfCompile $source]
+    set report [native::allocationReport $hir summary]
+    return [dict get $report coroutines]
+}
+
+proc withGcStress {script} {
+    set had [info exists ::env(BOTLISH_NATIVE_GC_STRESS)]
+    set saved [expr {$had ? $::env(BOTLISH_NATIVE_GC_STRESS) : ""}]
+    set ::env(BOTLISH_NATIVE_GC_STRESS) 1
+    try {
+        return [uplevel 1 $script]
+    } finally {
+        if {$had} {
+            set ::env(BOTLISH_NATIVE_GC_STRESS) $saved
+        } else {
+            unset ::env(BOTLISH_NATIVE_GC_STRESS)
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# The basic shape: one suite, every kind of verdict
+
+set gfMixed {import compiler
+import list
+import test
+
+error Boom
+
+fn boom(x: int) -> int errors Boom:
+    if x > 3:
+        fail Boom
+    x
+
+fn register_mixed():
+    fn adds() errors compiler::CompilerError:
+        static compile:
+            20 + 22
+    test::value("adds", 42, adds)
+    fn off_by_one() errors compiler::CompilerError:
+        static compile:
+            20 + 21
+    test::value("off by one", 42, off_by_one)
+    fn unbound() errors compiler::CompilerError:
+        static compile:
+            missing + 1
+    test::rejects("unbound", compiler::DiagnosticCode::Unbound, unbound)
+    test::rejects("unbound, expecting Type", compiler::DiagnosticCode::Type, unbound)
+    test::rejects_at("unbound at its column", compiler::DiagnosticCode::Unbound, 23, 13, unbound)
+    test::rejects_at("unbound, wrong column", compiler::DiagnosticCode::Unbound, 23, 14, unbound)
+    test::rejects_any("unbound, any diagnostic", unbound)
+    test::value("value expected, block rejected", 1, unbound)
+    test::rejects("rejection expected, block accepted", compiler::DiagnosticCode::Unbound, adds)
+    test::rejects_at("located rejection expected, block accepted", compiler::DiagnosticCode::Unbound, 23, 13, adds)
+    test::rejects_any("any rejection expected, block accepted", adds)
+    fn lists() errors compiler::CompilerError:
+        static compile:
+            [1, 2].append(3)
+    test::value("lists", [1, 2, 3], lists)
+    fn positive?(n):
+        n > 0
+    test::holds("positive", "a positive number", positive?, adds)
+    test::holds("positive, another value", "a positive number", positive?, off_by_one)
+    fn negative?(n):
+        n < 0
+    test::holds("negative, failing", "a negative number", negative?, adds)
+}
+append gfMixed {
+with context test::suite()
+register_mixed()
+test::report()
+}
+
+test gf-verdicts {every helper's pass and mismatch, as data: the report names what was expected, what was observed and the diagnostic's message} -body {
+    join [gfReport $gfMixed] \n
+} -result {PASS adds
+FAIL off by one
+  expected: 42
+  actual: 41
+PASS unbound
+FAIL unbound, expecting Type
+  expected: compiler diagnostic Type
+  actual: compiler diagnostic Unbound at line 23, column 13
+  detail: unbound name "missing"
+PASS unbound at its column
+FAIL unbound, wrong column
+  expected: compiler diagnostic Unbound at line 23, column 14
+  actual: compiler diagnostic Unbound at line 23, column 13
+  detail: unbound name "missing"
+PASS unbound, any diagnostic
+FAIL value expected, block rejected
+  expected: 1
+  actual: compiler diagnostic Unbound at line 23, column 13
+  detail: unbound name "missing"
+FAIL rejection expected, block accepted
+  expected: compiler diagnostic Unbound
+  actual: value 42
+FAIL located rejection expected, block accepted
+  expected: compiler diagnostic Unbound at line 23, column 13
+  actual: value 42
+FAIL any rejection expected, block accepted
+  expected: a compiler diagnostic
+  actual: value 42
+PASS lists
+PASS positive
+PASS positive, another value
+FAIL negative, failing
+  expected: a negative number
+  actual: 42
+7 passed, 8 failed}
+
+# ---------------------------------------------------------------------------
+# Registration records; running executes
+
+# A suite whose one case's body records golden_probe(n) when it runs; END is
+# the program's last statement.
+proc gfCounted {end} {
+    return [string map [list END $end] {import compiler
+import test
+
+fn register_counted(n: int):
+    fn body() errors compiler::CompilerError:
+        static compile:
+            [golden_probe(n), n]
+    test::value("counted", [7, 7], body)
+
+with context test::suite()
+register_counted(7)
+END
+}]
+}
+
+test gf-context-required {a registration function needs the installed suite: without one, the call is the ordinary MISSING-CONTEXT, not a test-specific diagnostic} -body {
+    gfStaticError {import compiler
+import test
+
+fn body() errors compiler::CompilerError:
+    static compile:
+        1
+test::value("one", 1, body)
+}
+} -match glob -result {MISSING-CONTEXT: suite.bot:7:1: test::Suite is required by this call but is not installed here*}
+
+test gf-registration-does-not-run {registering a case stores its check: the body has not run when registration returns (the probe recorded nothing), on the Tcl backends} -body {
+    lmap backend {interp compile} {gfProbed [gfCounted {test::count()}] $backend}
+} -result {{1 {}} {1 {}}}
+
+test gf-registration-does-not-run-native {natively: registration allocates the body's closure and the case, but nothing at the body's own List literal (line 7)} -constraints linuxX86_64 -body {
+    list [gfNativeAllocationsAt [gfCounted {test::count()}] 7] [gfNativeAllocationsAt [gfCounted {test::report()}] 7]
+} -result {0 1}
+
+test gf-run-executes-once {one run calls each check exactly once} -body {
+    lmap backend {interp compile} {gfProbed [gfCounted {test::report()}] $backend}
+} -result {{{["PASS counted", "1 passed, 0 failed"]} 7} {{["PASS counted", "1 passed, 0 failed"]} 7}}
+
+test gf-registration-would-abort {a body whose run would abort the whole program (a run-time TYPE no handler catches) is registered without running: the registering program completes; the running one aborts} -body {
+    set source {import compiler
+import test
+
+fn register_poisoned(text: str):
+    fn body() errors compiler::CompilerError:
+        static compile:
+            1 + text
+    test::value("poisoned", 1, body)
+
+with context test::suite()
+register_poisoned("x")
+END
+}
+    list [gfValue [string map {END test::count()} $source]] \
+        [gfReport [string map {END test::report()} $source]]
+} -result {1 {abort: CORE SEMANTIC}}
+
+test gf-repeated-runs {re-running starts every registered case again: two runs, two calls of each check, identical reports} -body {
+    lmap backend {interp compile} {gfProbed [gfCounted {[test::report(), test::report()]}] $backend}
+} -result {{{[["PASS counted", "1 passed, 0 failed"], ["PASS counted", "1 passed, 0 failed"]]} {7 7}} {{[["PASS counted", "1 passed, 0 failed"], ["PASS counted", "1 passed, 0 failed"]]} {7 7}}}
+
+test gf-repeated-runs-native {natively, two runs execute the body twice} -constraints linuxX86_64 -body {
+    gfNativeAllocationsAt [gfCounted {[test::report(), test::report()]}] 7
+} -result 2
+
+test gf-registration-order {cases run, and report, in registration order} -body {
+    golden::verdicts [gfReport {import compiler
+import test
+
+fn register_five():
+    fn one() errors compiler::CompilerError:
+        static compile:
+            1
+    test::value("e", 1, one)
+    test::value("b", 1, one)
+    test::value("d", 1, one)
+    test::value("a", 1, one)
+    test::value("c", 1, one)
+
+with context test::suite()
+register_five()
+test::report()
+}]
+} -result {{PASS e} {PASS b} {PASS d} {PASS a} {PASS c}}
+
+test gf-empty-suite {an empty suite reports no case: the runner completes during its construction, sending the empty batch} -body {
+    list [gfReport {import test
+with context test::suite()
+test::report()
+}] [gfValue {import coroutine
+import test
+with context test::suite()
+coroutine {step, first} = test::run()
+[first, coroutine::done?(step)]
+}]
+} -result {{{0 passed, 0 failed}} {[[], true]}}
+
+test gf-failures-continue {a mismatch is data: pass, value mismatch, pass, compiler-diagnostic mismatch, pass are five results} -body {
+    gfReport {import compiler
+import test
+
+fn register_alternating():
+    fn one() errors compiler::CompilerError:
+        static compile:
+            1
+    fn unbound() errors compiler::CompilerError:
+        static compile:
+            nothing
+    test::value("first", 1, one)
+    test::value("second", 2, one)
+    test::value("third", 1, one)
+    test::rejects("fourth", compiler::DiagnosticCode::Type, unbound)
+    test::value("fifth", 1, one)
+
+with context test::suite()
+register_alternating()
+test::report()
+}
+} -result {{PASS first} {FAIL second} {  expected: 2} {  actual: 1} {PASS third} {FAIL fourth} {  expected: compiler diagnostic Type} {  actual: compiler diagnostic Unbound at line 10, column 13} {  detail: unbound name "nothing"} {PASS fifth} {3 passed, 2 failed}}
+
+test gf-runner-protocol {the runner coroutine sends one result per segment, as a one-element List, then the empty List, and is done} -body {
+    gfValue {import compiler
+import coroutine
+import test
+
+fn register_two():
+    fn one() errors compiler::CompilerError:
+        static compile:
+            1
+    test::value("a", 1, one)
+    test::value("b", 2, one)
+
+with context test::suite()
+register_two()
+coroutine {step, first} = test::run()
+d0 = coroutine::done?(step)
+second = step()
+d1 = coroutine::done?(step)
+third = step()
+d2 = coroutine::done?(step)
+names = loop r in [first, second, third]:
+    loop x in r:
+        [x.name, x.passed]
+[names, d0, d1, d2]
+}
+} -result {[[[["a", true]], [["b", false]], []], false, false, true]}
+
+test gf-runner-abandoned {a driver may stop early: the runner is an ordinary coroutine, released (once) when its handle dies; the cases after the stop do not run} -body {
+    set source {import compiler
+import test
+
+fn register_two():
+    fn one() errors compiler::CompilerError:
+        static compile:
+            golden_probe(1)
+    fn two() errors compiler::CompilerError:
+        static compile:
+            golden_probe(2)
+    test::value("one", 1, one)
+    test::value("two", 2, two)
+
+with context test::suite()
+register_two()
+coroutine {step, first} = test::run()
+first == []
+}
+    lmap backend {interp compile} {
+        concat [gfReleases $source $backend] [lindex [gfProbed $source $backend] 1]
+    }
+} -result {{false {created 1 released 1} 1} {false {created 1 released 1} 1}}
+
+# ---------------------------------------------------------------------------
+# Suites are context values: isolation
+
+test gf-one-suite-per-program {a context is installed once per program (CONTEXTS.md): a second suite in the same program is the ordinary DUPLICATE-CONTEXT -- suites are isolated by being separate programs} -body {
+    gfStaticError {import test
+with context test::suite()
+with context test::suite()
+test::report()
+}
+} -match glob -result {DUPLICATE-CONTEXT: *}
+
+test gf-isolation {two suite programs run one after the other in one process, each twice, on every backend: neither sees the other's cases, and a re-created suite starts empty (no state survives a program)} -body {
+    set a {import compiler
+import test
+
+fn register_a():
+    fn one() errors compiler::CompilerError:
+        static compile:
+            1
+    test::value("a1", 1, one)
+    test::value("a2", 1, one)
+
+with context test::suite()
+register_a()
+test::report()
+}
+    set b {import compiler
+import test
+
+fn register_b():
+    fn two() errors compiler::CompilerError:
+        static compile:
+            2
+    test::value("b1", 2, two)
+
+with context test::suite()
+register_b()
+test::report()
+}
+    list [gfReport $a] [gfReport $b] [gfReport $a] [gfReport $b]
+} -result {{{PASS a1} {PASS a2} {2 passed, 0 failed}} {{PASS b1} {1 passed, 0 failed}} {{PASS a1} {PASS a2} {2 passed, 0 failed}} {{PASS b1} {1 passed, 0 failed}}}
+
+test gf-composition {registration functions compose as ordinary functions: one calls two others, and their cases run in call order} -body {
+    golden::verdicts [gfReport {import compiler
+import test
+
+fn register_math():
+    fn sum() errors compiler::CompilerError:
+        static compile:
+            2 + 3
+    test::value("math: sum", 5, sum)
+
+fn register_errors():
+    fn missing() errors compiler::CompilerError:
+        static compile:
+            nowhere
+    test::rejects("errors: unbound", compiler::DiagnosticCode::Unbound, missing)
+
+fn register_all():
+    register_errors()
+    register_math()
+    register_errors()
+
+with context test::suite()
+register_all()
+test::report()
+}]
+} -result {{PASS errors: unbound} {PASS math: sum} {PASS errors: unbound}}
+
+test gf-application-context {the suite is one ordinary context among others: a program installs its own context too, a registration function reads it and its tests capture the value read; no priority or lookup interaction} -body {
+    gfReport {import compiler
+import mutable_vector
+import test
+
+context struct Config:
+    levels: MutableVector[int]
+
+fn levels() -> MutableVector[int]:
+    mutable_vector::from_list([3, 4])
+
+fn level_count(context config: Config) -> int:
+    mutable_vector::length(config.levels)
+
+fn register_config_tests(context config: Config):
+    count = level_count()
+    fn counted() errors compiler::CompilerError:
+        static compile:
+            count * 10
+    test::value("config read at registration", 20, counted)
+
+with context Config {levels: levels()}
+with context test::suite()
+register_config_tests()
+summary = test::report()
+summary
+}
+} -result {{PASS config read at registration} {1 passed, 0 failed}}
+
+test gf-body-cannot-use-context {a body is a function value, so it cannot require a context (CONTEXT-FUNCTION-VALUE): it cannot register, or reach the suite, while it runs} -body {
+    gfStaticError {import compiler
+import test
+
+fn register_nested():
+    fn body() errors compiler::CompilerError:
+        static compile:
+            test::count()
+    test::value("nested", 0, body)
+
+with context test::suite()
+register_nested()
+test::report()
+}
+} -match glob -result {CONTEXT-FUNCTION-VALUE: *}
+
+# ---------------------------------------------------------------------------
+# Eager coroutines and deferral
+
+test gf-eager-coroutine-start {why a case is a function value: constructing a coroutine runs its body to the first yield at once, so a registry of started coroutines would run every test while registering it (the probe fires at construction)} -body {
+    lmap backend {interp compile} {gfProbed {import coroutine
+
+struct Event:
+    n: int
+
+fn body() -> Event:
+    golden_probe(1)
+    yield Event {n: 1}
+    Event {n: 2}
+
+coroutine {step, first} = body()
+first.n
+} $backend}
+} -result {{1 1} {1 1}}
+
+test gf-coroutine-body-deferred {a case whose body constructs and drives a coroutine: registering it runs nothing; running it runs the coroutine's body once} -body {
+    set source {import compiler
+import test
+
+struct Event:
+    n: int
+
+fn producer(k: int) -> Event:
+    golden_probe(k)
+    yield Event {n: k}
+    Event {n: k + 1}
+
+fn register_coroutine_case(k: int):
+    fn body() errors compiler::CompilerError:
+        static compile:
+            coroutine {step, first} = producer(k)
+            first.n + step().n
+    test::value("coroutine", 11, body)
+
+with context test::suite()
+register_coroutine_case(5)
+END
+}
+    list {*}[lmap backend {interp compile} {gfProbed [string map {END test::count()} $source] $backend}] \
+        {*}[lmap backend {interp compile} {gfProbed [string map {END test::report()} $source] $backend}]
+} -result {{1 {}} {1 {}} {{["PASS coroutine", "1 passed, 0 failed"]} 5} {{["PASS coroutine", "1 passed, 0 failed"]} 5}}
+
+# ---------------------------------------------------------------------------
+# Coroutine cleanup
+
+# A suite whose cases own coroutines that complete, fail (handled inside the
+# body) and are abandoned suspended.
+set gfCoroutineSuite {import compiler
+import test
+
+struct Event:
+    n: int
+
+error Broken
+
+fn finite(k: int) -> Event:
+    yield Event {n: k}
+    Event {n: k + 1}
+
+fn breaking(k: int) -> Event errors Broken:
+    yield Event {n: k}
+    if k > 0:
+        fail Broken
+    Event {n: 0}
+
+fn register_coroutine_cases(k: int):
+    fn completes() errors compiler::CompilerError:
+        static compile:
+            coroutine {step, first} = finite(k)
+            first.n + step().n
+    test::value("completes", 3, completes)
+    fn fails() errors compiler::CompilerError:
+        static compile:
+            coroutine {step, first} = breaking(k):
+                on Broken:
+                    Event {n: -1}
+            last = step():
+                on Broken:
+                    Event {n: -2}
+            first.n * 10 + last.n
+    test::value("fails, handled", 8, fails)
+    fn abandons() errors compiler::CompilerError:
+        static compile:
+            coroutine {first} = finite(k)
+            first.n
+    test::value("abandons", 1, abandons)
+    fn leaves_early() errors compiler::CompilerError:
+        static compile:
+            coroutine {step, first} = finite(k)
+            if first.n > 0:
+                return first.n
+            step().n
+    test::value("leaves early", 1, leaves_early)
+
+with context test::suite()
+register_coroutine_cases(1)
+test::report()
+}
+
+test gf-coroutine-cleanup {every coroutine a run creates -- the runner and each case's own, completed, failed, abandoned while suspended, and left suspended by an early return -- is released exactly once, deterministically and in order (each case's before the next case runs, the runner's last), on the Tcl backends: the interpreter and the Tcl compiler (compiling the HIR itself, as main.tcl's -backend compile does)} -body {
+    lmap backend {interp compile} {gfReleases $gfCoroutineSuite $backend}
+} -result {{{["PASS completes", "PASS fails, handled", "PASS abandons", "PASS leaves early", "4 passed, 0 failed"]} {created 5 released 2 3 4 5 1}} {{["PASS completes", "PASS fails, handled", "PASS abandons", "PASS leaves early", "4 passed, 0 failed"]} {created 5 released 2 3 4 5 1}}}
+
+test gf-coroutine-cleanup-native {natively: five coroutines, five releases (the abandoned and the early-returning case's while suspended), none swept by the collector; the same under GC stress} -constraints linuxX86_64 -body {
+    set plain [gfNativeCoroutines $gfCoroutineSuite]
+    set stressed [withGcStress {gfNativeCoroutines $gfCoroutineSuite}]
+    list [dict get $plain released] [dict get $plain sweptSuspended] \
+        [dict get $stressed released] [dict get $stressed sweptSuspended] \
+        [expr {[dict get $plain stacksMapped] + [dict get $plain stacksReused]}]
+} -result {5 0 5 0 5}
+
+
+# ---------------------------------------------------------------------------
+# Affine captures: the ordinary ownership rules decide
+
+test gf-affine-capture-rejected {a body that captures a coroutine handle owned by the registration function is the ordinary AFFINE-CAPTURE-UNSUPPORTED: the framework neither needs nor gets an exception} -body {
+    gfStaticError {import compiler
+import test
+
+struct Event:
+    n: int
+
+fn finite(k: int) -> Event:
+    yield Event {n: k}
+    Event {n: k + 1}
+
+fn register_capturing():
+    coroutine {step, first} = finite(1)
+    fn body() errors compiler::CompilerError:
+        step().n
+    test::value("captures", 2, body)
+
+with context test::suite()
+register_capturing()
+test::report()
+}
+} -match glob -result {AFFINE-CAPTURE-UNSUPPORTED: suite.bot:14:9: `step` is an affine Coroutine*}
+
+test gf-affine-capture-in-a-case {the same capture written inside a case's static compile block is that case's rejection, AffineCaptureUnsupported; a body that owns its coroutine passes; and an ordinary move inside a block is UseAfterMove} -body {
+    gfReport {import compiler
+import test
+
+struct Event:
+    n: int
+
+fn finite(k: int) -> Event:
+    yield Event {n: k}
+    Event {n: k + 1}
+
+fn register_affine():
+    fn captures() errors compiler::CompilerError:
+        static compile:
+            coroutine {step} = finite(1)
+            fn later() -> int:
+                step().n
+            later()
+    test::rejects("capture", compiler::DiagnosticCode::AffineCaptureUnsupported, captures)
+    fn owns() errors compiler::CompilerError:
+        static compile:
+            coroutine {step, first} = finite(1)
+            first.n + step().n
+    test::value("owns", 3, owns)
+    fn moves() errors compiler::CompilerError:
+        static compile:
+            coroutine {step} = finite(1)
+            other = step
+            step().n + other().n
+    test::rejects("moved", compiler::DiagnosticCode::UseAfterMove, moves)
+
+with context test::suite()
+register_affine()
+test::report()
+}
+} -result {{PASS capture} {PASS owns} {PASS moved} {3 passed, 0 failed}}
+
+# ---------------------------------------------------------------------------
+# What a body may complete with
+
+test gf-body-error-contract {a body that may raise a declared error other than compiler::CompilerError does not fit a helper: the registration call is rejected (TYPE), naming the error -- there is no catch-all to turn it into data} -body {
+    gfStaticError {import compiler
+import test
+
+error Boom
+
+fn boom(x: int) -> int errors Boom:
+    if x > 3:
+        fail Boom
+    x
+
+fn register_raising(n: int):
+    fn body() errors Boom, compiler::CompilerError:
+        boom(n)
+    test::value("raises", 1, body)
+
+with context test::suite()
+register_raising(1)
+test::report()
+}
+} -match glob -result {TYPE: suite.bot:14:30: argument for parameter "body" cannot be proven to satisfy Fn{args: \[\], return: any, errors: \[compiler::CompilerError\]}*error set incompatible: the callable may raise Boom*}
+
+test gf-escaping-error-is-the-case-s {the same error escaping a body's static compile block (the body declares only CompilerError) is that block's own rejection, UnhandledError -- one failing case, not a broken suite; handled inside the body it is an ordinary value} -body {
+    gfReport {import compiler
+import test
+
+error Boom
+
+fn boom(x: int) -> int errors Boom:
+    if x > 3:
+        fail Boom
+    x
+
+fn register_raising(n: int):
+    fn escapes() errors compiler::CompilerError:
+        static compile:
+            boom(n)
+    test::value("escapes", 1, escapes)
+    fn handled() errors compiler::CompilerError:
+        static compile:
+            r = boom(n):
+                on Boom:
+                    -1
+            r
+    test::value("handled", -1, handled)
+
+with context test::suite()
+register_raising(9)
+test::report()
+}
+} -result {{FAIL escapes} {  expected: 1} {  actual: compiler diagnostic UnhandledError at line 14, column 13} {  detail: this call may produce the declared error "Boom", which is neither handled here nor admitted by the enclosing function's own "errors" declaration} {PASS handled} {1 passed, 1 failed}}
+
+test gf-runtime-only-failure-aborts {a run-time-only failure in a body (an Int added to a String: no declared error, no handler) is not a test result: it aborts the whole run, on every backend, and no report is produced} -body {
+    gfReport {import compiler
+import test
+
+fn register_aborting(text: str):
+    fn fine() errors compiler::CompilerError:
+        static compile:
+            1
+    test::value("fine", 1, fine)
+    fn aborts() errors compiler::CompilerError:
+        static compile:
+            1 + text
+    test::value("aborts", 1, aborts)
+
+with context test::suite()
+register_aborting("x")
+test::report()
+}
+} -result {abort: CORE SEMANTIC}
+
+# ---------------------------------------------------------------------------
+# Text
+
+test gf-describe {the report's texts of values: Ints (negative and arbitrary precision), Strings as literals with escapes, Bools, nested Lists; anything else a placeholder} -body {
+    gfValue {import compiler
+import test
+struct Point:
+    x: int
+[test::describe(0), test::describe(-305), test::describe(123456789012345678901234567890), test::describe("a\"b\\c\nd\te"), test::describe(true), test::describe(false), test::describe([[1, -2], [], ["s"]]), test::describe(Point {x: 1}), test::describe(compiler::DiagnosticCode::Type)]
+}
+} -result {["0", "-305", "123456789012345678901234567890", "\"a\\\"b\\\\c\\nd\\te\"", "true", "false", "[[1, -2], [], [\"s\"]]", "a value with no text form", "a value with no text form"]}
+
+test gf-int-text {int_text at the boundaries the representations change at (small Int, i64), both signs} -body {
+    gfValue {import test
+[test::int_text(9), test::int_text(10), test::int_text(4611686018427387903), test::int_text(4611686018427387904), test::int_text(9223372036854775807), test::int_text(9223372036854775808), test::int_text(-9223372036854775808), test::int_text(-9223372036854775809)]
+}
+} -result {["9", "10", "4611686018427387903", "4611686018427387904", "9223372036854775807", "9223372036854775808", "-9223372036854775808", "-9223372036854775809"]}
+
+test gf-code-name-complete {test::code_name spells every compiler::DiagnosticCode case of lib/compiler.bot, in its own words: a new case without a name fails here} -body {
+    set channel [open [file join $::projectRoot lib compiler.bot]]
+    set text [read $channel]
+    close $channel
+    regexp {enum DiagnosticCode:\n((?:    [A-Za-z]+,?\n)+)} $text -> block
+    set cases [lmap line [split [string trim $block] \n] {string trim $line " ,"}]
+    set calls [join [lmap c $cases {format {test::code_name(compiler::DiagnosticCode::%s)} $c}] ", "]
+    set shown [gfValue "import compiler\nimport test\n\[$calls\]\n"]
+    set expected "\[[join [lmap c $cases {format {"%s"} $c}] {, }]\]"
+    list [llength $cases] [expr {$shown eq $expected}]
+} -result {87 1}
+
+# ---------------------------------------------------------------------------
+# GC stress and warnings
+
+test gf-gc-stress {natively under GC stress: many registered checks capturing Strings and structs, CompilerError payloads, coroutines and failing results retained until the report; the report equals the Tcl backends'} -constraints linuxX86_64 -body {
+    set source {import compiler
+import str
+import test
+
+struct Pair:
+    label: str
+    n: int
+
+struct Event:
+    n: int
+
+fn finite(k: int) -> Event:
+    yield Event {n: k}
+    Event {n: k + 1}
+
+fn register_many(k: int, label: str):
+    pair = Pair {label: label.concat("!"), n: k}
+    fn text() errors compiler::CompilerError:
+        static compile:
+            [pair.label, label]
+    test::value(label, [label.concat("!"), label], text)
+    fn wrong() errors compiler::CompilerError:
+        static compile:
+            [pair.n, k + 1]
+    test::value(label.concat(" mismatch"), [k, k], wrong)
+    fn rejected() errors compiler::CompilerError:
+        static compile:
+            pair.missing
+    test::rejects(label.concat(" rejected"), compiler::DiagnosticCode::Type, rejected)
+    fn driven() errors compiler::CompilerError:
+        static compile:
+            coroutine {step, first} = finite(pair.n)
+            first.n + step().n
+    test::value(label.concat(" coroutine"), k + k + 1, driven)
+
+fn register_all(k: int):
+    if k == 0:
+        return
+    register_many(k, "case ".concat(test::int_text(k)))
+    register_all(k - 1)
+
+with context test::suite()
+register_all(12)
+test::report()
+}
+    set hir [gfCompile $source]
+    set tcl [golden::run $hir interp]
+    set native [withGcStress {golden::run $hir cranelift}]
+    set coroutines [withGcStress {dict get [native::allocationReport $hir summary] coroutines}]
+    list [lindex [lindex $tcl 1] end] [expr {[lindex $native 1] eq [lindex $tcl 1]}] \
+        [dict get $coroutines released] [dict get $coroutines sweptSuspended]
+} -result {{24 passed, 24 failed} 1 13 0}
+
+test gf-library-warning-clean {lib/test.bot, and a suite using every helper, compile under -warnings error: the registration helpers are nomethod (their first argument is a name, not a receiver)} -body {
+    surface::compile [string map {"test::report()" "test::report()"} $gfMixed] suite.bot -warnings error
+    return ok
+} -result ok
+
+
+# ---------------------------------------------------------------------------
+# The framework keeps the compiler's precision, and adds nothing at run time
+
+# The compiler's verdict on CODE as the body of a function its registration
+# function calls directly -- "ok VALUE" or the diagnostic's kind -- beside
+# the verdict of the same CODE as a golden case's body (test::value against
+# EXPECTED): the report line, with the diagnostic code when rejected. The
+# prelude declares what the code uses.
+proc gfPrecision {prelude code expected} {
+    set indented [join [lmap line [split $code \n] {string cat "            " $line}] \n]
+    set plainIndented [join [lmap line [split $code \n] {string cat "        " $line}] \n]
+    set plain "import list\nimport mutable_vector\n$prelude\nfn register_probe(n: int):\n    fn body():\n$plainIndented\n    body()\n\nregister_probe(9)\n"
+    set suite "import compiler\nimport list\nimport mutable_vector\nimport test\n$prelude\nfn register_probe(n: int):\n    fn body() errors compiler::CompilerError:\n        static compile:\n$indented\n    test::value(\"probe\", $expected, body)\n\nwith context test::suite()\nregister_probe(9)\ntest::report()\n"
+    if {[catch {surface::compile $plain plain.bot -warnings off} hir options]} {
+        set plainVerdict [lindex [dict get $options -errorcode] end]
+    } else {
+        set plainVerdict "ok [lindex [outcomeUnderHir interp $hir] 1]"
+    }
+    set report [gfReport $suite]
+    set suiteVerdict [lindex $report 0]
+    if {[string match "FAIL *" $suiteVerdict]} {
+        regexp {compiler diagnostic (\S+)} [lindex $report 2] -> code
+        set suiteVerdict "rejected $code"
+    }
+    return [list $plainVerdict $suiteVerdict]
+}
+
+test gf-precision-range-proof {a range proof: an index the counted loop proves in range needs no IndexNotFound handler, in a plain function and in a golden body alike} -body {
+    gfPrecision "" "xs = \[1, 2, 3\]\nloop i from 0 to list::length(xs):\n    list::at(xs, i)" {[1, 2, 3]}
+} -result {{ok [1, 2, 3]} {PASS probe}}
+
+test gf-precision-known-error {KNOWN-ERROR: a call proven to fail is the plain program's KNOWN-ERROR and the golden body's KnownError rejection} -body {
+    gfPrecision "" "list::at(\[1, 2\], 5)" 0
+} -result {KNOWN-ERROR {rejected KnownError}}
+
+test gf-precision-error-narrowing {error narrowing: a call whose argument's exact value rules out one of its declared errors needs no handler for it, plain or in a golden body} -body {
+    gfPrecision "error Small\nerror Large\nfn pick(x: int) -> int errors Small, Large:\n    if x < 5:\n        fail Small\n    if x > 100:\n        fail Large\n    x\n" "x = 9\nr = pick(x):\n    on Small:\n        0\nr" 9
+} -result {{ok 9} {PASS probe}}
+
+test gf-precision-affine {affine analysis: a coroutine moved to another binding and then resumed is USE-AFTER-MOVE in both; the moved-to binding is fine in both} -body {
+    set prelude "struct Event:\n    n: int\nfn finite(k: int) -> Event:\n    yield Event {n: k}\n    Event {n: k + 1}\n"
+    list [gfPrecision $prelude "coroutine {step} = finite(1)\nother = step\nstep().n" 2] \
+        [gfPrecision $prelude "coroutine {step} = finite(1)\nother = step\nother().n" 2]
+} -result {{USE-AFTER-MOVE {rejected UseAfterMove}} {{ok 2} {PASS probe}}}
+
+test gf-precision-method-resolution {method resolution: a typed receiver picks its one admitting candidate (list::length, not mutable_vector::length) in both; an untyped one is AMBIGUOUS-METHOD-CALL in both} -body {
+    list [gfPrecision "" "xs = \[1, 2\]\nxs.length()" 2] \
+        [gfPrecision "" "fn first(v):\n    v.length()\nfirst(\[1\])" 1]
+} -result {{{ok 2} {PASS probe}} {AMBIGUOUS-METHOD-CALL {rejected AmbiguousMethodCall}}}
+
+# The NIR of every function of HIR's native lowering, a dict name -> text:
+# its header and lines without HIR expression ids, with every program-wide
+# number replaced by what it numbers -- a callee or function value by its
+# name, a struct shape by its declaration, a declared error by its name
+# (from any `faildeclared N "NAME"` of the program) or else by its order of
+# appearance -- since a suite's program also holds lib/test.bot's functions,
+# shapes and compiler::CompilerError. Instances of one name are keyed NAME,
+# NAME#2, ...; references name the function without the suffix. (Lower HIR
+# right after compiling it: the lowering reads the latest compilation's
+# module state.)
+proc gfNirFunctions {hir} {
+    set functions [dict create]
+    set numbers [dict create]
+    set errors [dict create]
+    set shapes [dict create]
+    set current ""
+    set inside 0
+    foreach line [split [native::nir $hir] \n] {
+        if {[regexp {^shape (\d+) (.*)$} $line -> number shape]} {
+            dict set shapes $number $shape
+        }
+        if {[regexp {^func (\d+) "([^"]*)" (.*)$} $line -> number name header]} {
+            # Instances of one function share its name: number the later ones.
+            set base $name
+            for {set k 2} {[dict exists $functions $name]} {incr k} { set name "$base#$k" }
+            set current $name
+            set inside 1
+            dict set numbers $number $base
+            dict set functions $name [list [regsub -all { ?@e\d+} $header ""]]
+        } elseif {$line eq "end"} {
+            set inside 0
+        } elseif {$inside} {
+            dict lappend functions $current [regsub -all { ?@e\d+} $line ""]
+        }
+        if {[regexp {faildeclared (\d+) "([^"]+)"} $line -> number name]} {
+            dict set errors $number $name
+        }
+    }
+    set result [dict create]
+    dict for {name lines} $functions {
+        set order [dict create]
+        set mapped {}
+        foreach line $lines {
+            if {[regexp {^(.*\m(?:call|callenv|closure|tailcall|fnvalue)) (\d+)(.*)$} $line -> before number after] && [dict exists $numbers $number]} {
+                set line "$before <[dict get $numbers $number]>$after"
+            }
+            if {[regexp {^(.*\mstructnew) (\d+)(.*)$} $line -> before number after] && [dict exists $shapes $number]} {
+                set line "$before <[dict get $shapes $number]>$after"
+            }
+            if {[regexp {^(.*\m(?:declarederroreq|faildeclared)) (\d+)(.*)$} $line -> before number after]} {
+                if {[dict exists $errors $number]} {
+                    set line "$before <[dict get $errors $number]>$after"
+                } else {
+                    if {![dict exists $order $number]} { dict set order $number "e[dict size $order]" }
+                    set line "$before <[dict get $order $number]>$after"
+                }
+            }
+            lappend mapped $line
+        }
+        dict set result $name [join $mapped \n]
+    }
+    return $result
+}
+
+# The NIR text of function NAME in the native lowering of SOURCE
+# (gfNirFunctions).
+proc gfFunctionNir {source name} {
+    set functions [gfNirFunctions [gfCompile $source]]
+    if {![dict exists $functions $name]} {
+        error "no function $name"
+    }
+    return [dict get $functions $name]
+}
+
+test gf-nir-body-identical {an accepted golden body is its code: natively, the body function's NIR equals the same closure's written without the framework and without static compile (only the HIR ids differ)} -constraints linuxX86_64 -body {
+    set suite {import compiler
+import test
+
+fn register_nir(n: int):
+    fn body() errors compiler::CompilerError:
+        static compile:
+            n * 3 + 1
+    test::value("nir", 22, body)
+
+with context test::suite()
+register_nir(7)
+test::report()
+}
+    set plain {fn keep(f) -> int:
+    f()
+
+fn register_nir(n: int) -> int:
+    fn body():
+        n * 3 + 1
+    keep(body)
+
+register_nir(7)
+}
+    set a [gfFunctionNir $suite body]
+    set b [gfFunctionNir $plain body]
+    list [expr {$a eq $b}] [regexp {op rimul} $a] [regexp {static|compiler|CompilerError} $a]
+} -result {1 1 0}
+
+
+# SOURCE with every non-empty line indented by N spaces.
+proc gfIndent {source n} {
+    set pad [string repeat " " $n]
+    return [join [lmap line [split $source \n] {if {$line eq ""} {string cat} else {string cat $pad $line}}] \n]
+}
+
+# The native allocations of HIR at the functions NAMES (by function and
+# object kind: a dict "FUNCTION KIND" -> count), one run.
+proc gfFunctionAllocations {hir names} {
+    set counts [dict create]
+    foreach site [dict get [native::allocationReport $hir sites] sites] {
+        set function [dict get $site func]
+        regsub {#\d+$} $function "" function
+        if {$function in $names} {
+            dict incr counts "$function [dict get $site objectKind]" [dict get $site allocations]
+        }
+    }
+    return $counts
+}
+
+# A migrated golden body, CODE (with the suite-level IMPORTS and DECLS it
+# needs; a registration function taking PARAMS, called with ARGS, which the
+# body may capture), compiled twice: inside the convention (a body declaring
+# compiler::CompilerError around a static compile: block, registered with
+# test::value) and plainly (the same code as an ordinary nested function,
+# called once through an untyped parameter). Returns the suite's verdict
+# line, whether the NIR of each of NAMES (the body and the functions its
+# block declares; "" for the anonymous function a coroutine construction
+# makes) is equal in both programs, and whether their native allocations
+# are.
+proc gfMigratedBody {imports decls params args code expected names} {
+    set suite "import compiler\n${imports}import test\n\n$decls\nfn register_nir($params):\n    fn body() errors compiler::CompilerError:\n        static compile:\n[gfIndent $code 12]\n    test::value(\"nir\", $expected, body)\n\nwith context test::suite()\nregister_nir($args)\ntest::report()\n"
+    set plain "${imports}\n$decls\nfn keep(f):\n    f()\n\nfn register_nir($params):\n    fn body():\n[gfIndent $code 8]\n    keep(body)\n\nregister_nir($args)\n"
+    set hir [gfCompile $suite]
+    set suiteNir [gfNirFunctions $hir]
+    set suiteAllocations [gfFunctionAllocations $hir $names]
+    set verdict [lindex [lindex [golden::run $hir cranelift] 1] 0]
+    set hir [gfCompile $plain]
+    set plainNir [gfNirFunctions $hir]
+    set plainAllocations [gfFunctionAllocations $hir $names]
+    # A name the library uses too (test::value's nested check) has several
+    # instances in the suite's program: one of them must equal the plain one.
+    set equal [lmap name $names {
+        set texts [dict values [dict filter $suiteNir script {key -} {regexp "^[string map {. \\.} $name](#\\d+)?\$" $key}]]
+        expr {[dict exists $plainNir $name] && [dict get $plainNir $name] in $texts}
+    }]
+    return [list $verdict $equal [expr {$suiteAllocations eq $plainAllocations}]]
+}
+
+test gf-nir-migrated-bodies {representative migrated golden bodies are their code: for a closure (values.bot 03-closure), closures made per loop iteration (loop-in-closure-per-iteration), an error propagated through a declaring caller and handled (errors-propagation-through-declaring-caller) and a coroutine protocol (ownership.bot co-principal), every function the body defines has the same native NIR, and the same native allocations, as the same code written plainly without the framework and without static compile} -constraints linuxX86_64 -body {
+    set cases [list \
+        closure {} {} {} {} "fn make_adder(x):\n    fn add(y):\n        x + y\n\n    add\n\nadd10 = make_adder(10)\nadd10(32)" 42 {body make_adder add} \
+        loop-closures {} {} {} {} "fs = loop x in \[1, 2, 3\]:\n    fn f():\n        x\n    f\nresults = loop g in fs:\n    g()\nresults" {[1, 2, 3]} {body f} \
+        handled-errors {} "error TooSmall\nerror TooBig\n" "big: int" 20 "fn check(n) -> int errors TooSmall, TooBig:\n    if n < 0:\n        fail TooSmall\n    else:\n        if n > 10:\n            fail TooBig\n        else:\n            n\nfn middle(n) -> int errors TooSmall, TooBig:\n    check(n)\nr = middle(big):\n    on TooSmall:\n        -1\n    on TooBig:\n        -2\nr" -2 {body check middle} \
+        coroutine "import coroutine\n" "struct Message:\n    value: int\n\nstruct Event:\n    value: int\n" {} {} "fn deep(base: int, resume Message) -> int:\n    message = yield Event {value: base}\n    message.value\nfn worker(base: int, resume Message) -> Event:\n    x = deep(base)\n    message = yield Event {value: x}\n    return Event {value: message.value}\ncoroutine {step, first} = worker(10)\nsecond = step(Message {value: 20})\nfinal = step(Message {value: 30})\nagain = step(Message {value: 999})\n\[first.value, second.value, final.value, again.value, coroutine::done?(step)\]" {[10, 20, 30, 30, true]} {body deep worker {}}]
+    lmap {label imports decls params args code expected names} $cases {
+        list $label {*}[gfMigratedBody $imports $decls $params $args $code $expected $names]
+    }
+} -result {{closure {PASS nir} {1 1 1} 1} {loop-closures {PASS nir} {1 1} 1} {handled-errors {PASS nir} {1 1 1} 1} {coroutine {PASS nir} {1 1 1 1} 1}}
+
+test gf-fuzz-bounded {a bounded run of the framework's model-based fuzzer (audit/golden/tools/fuzz.tcl): generated suites, every backend, the report its independent model predicts} -body {
+    set output [exec [info nameofexecutable] [file join $::projectRoot audit golden tools fuzz.tcl] -n 3 -seed 101 -backends $::gfBackends 2>@1]
+    regexp {(\d+) disagreements$} [string trim $output] -> disagreements
+    set disagreements
+} -result 0
+
+
+test gf-context-trait-surface {the suite is an ordinary context: it implements, structurally, a context trait whose operations are spelled like the library's functions that declare the Suite context parameter -- and only two do (case, registered): an application trait spelled like count() is not satisfied by the suite} -body {
+    list [gfStaticError {import test
+
+context trait Counted:
+    fn count() -> int
+
+fn how_many(context c: Counted) -> int:
+    c.count()
+
+with context test::suite()
+how_many()
+}] [gfValue {import list
+import test
+
+context trait Listed:
+    fn registered() -> List[test::TestCase]
+
+fn how_many(context c: Listed) -> int:
+    list::length(c.registered())
+
+with context test::suite()
+how_many()
+}]
+} -match glob -result {{MISSING-CONTEXT: *Counted is required by this call*} 0}
+
+cleanupTests

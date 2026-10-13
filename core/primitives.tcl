@@ -1,8 +1,10 @@
 # primitives.tcl -- native arithmetic, comparison and equality.
 #
 # Integer operations use Tcl's arbitrary-precision integers. Operands are
-# always canonical decimal text (guaranteed by value.tcl), so no Tcl numeric
-# parsing quirks (octal, whitespace, floats) can apply.
+# always canonical decimal text or integers Tcl computed (guaranteed by
+# value.tcl's `int` and `intFromNumber`), so no Tcl numeric parsing quirks
+# (octal, whitespace, floats) can apply. Integer results are built with
+# intFromNumber: they stay Tcl numbers, never turned into text here.
 
 namespace eval core::primitives {}
 
@@ -16,17 +18,17 @@ proc core::primitives::Ints {name args} {
 
 proc core::primitives::add {a b} {
     lassign [Ints + $a $b] x y
-    return [core::value::int [expr {$x + $y}]]
+    return [core::value::intFromNumber [expr {$x + $y}]]
 }
 
 proc core::primitives::subtract {a b} {
     lassign [Ints - $a $b] x y
-    return [core::value::int [expr {$x - $y}]]
+    return [core::value::intFromNumber [expr {$x - $y}]]
 }
 
 proc core::primitives::multiply {a b} {
     lassign [Ints * $a $b] x y
-    return [core::value::int [expr {$x * $y}]]
+    return [core::value::intFromNumber [expr {$x * $y}]]
 }
 
 proc core::primitives::less {a b} {
@@ -62,7 +64,7 @@ proc core::primitives::modulo {a b} {
     if {$r < 0} {
         set r [expr {$r + abs($y)}]
     }
-    return [core::value::int $r]
+    return [core::value::intFromNumber $r]
 }
 
 proc core::primitives::valueEqual {a b} {
@@ -95,6 +97,7 @@ core::native::register mod  -arity 2 -impl core::primitives::modulo \
     -param-types {int int} -result-type int -result-range nonneg -runtime bigint -context-free 1
 
 core::native::register ==   -arity 2 -impl core::primitives::valueEqual \
-    -param-types {any any} -result-type bool -runtime structural-equality -context-free 1
+    -param-types {any any} -result-type bool -runtime structural-equality -context-free 1 \
+    -ownership {equality equality}
 core::native::register list -arity * -impl core::primitives::makeList \
-    -result-type list -runtime list-alloc -result-shape elements -context-free 1
+    -result-type list -runtime list-alloc -result-shape elements -context-free 1 -ownership {element}

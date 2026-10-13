@@ -179,7 +179,7 @@ mod tests {
 
     fn new_vm() -> Box<Vm> {
         Vm::new(
-            std::rc::Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new() }),
+            std::rc::Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }),
             AllocMode::Off,
         )
     }
@@ -226,8 +226,12 @@ mod tests {
         let r = rt_linux_x86_64_syscall(p, nr, zero, zero, zero, zero, zero, zero);
         assert_eq!(int_small(r), Some(this_pid()));
         // BigInt operands (the i64 extremes) are read as their words too.
+        // Rooted (as compiled code's stack maps root operands): BIG_MAX's
+        // allocation may collect, always under BOTLISH_NATIVE_GC_STRESS=1.
         let big_min = vm.new_int(i64::MIN);
+        vm.temp_roots.push(big_min);
         let big_max = vm.new_int(i64::MAX);
+        vm.temp_roots.push(big_max);
         let r = rt_linux_x86_64_syscall(p, nr, big_min, big_max, zero, zero, zero, zero);
         assert_eq!(int_small(r), Some(this_pid()));
     }
@@ -262,7 +266,11 @@ mod tests {
         use crate::runtime::ops::rt_int_sub;
         let mut vm = new_vm();
         let p = &mut *vm as *mut Vm;
+        // Every BigInt here is rooted (as compiled code's stack maps root
+        // operands) before the next allocation, which may collect (always,
+        // under BOTLISH_NATIVE_GC_STRESS=1).
         let two_64 = vm.new_big(num_bigint::BigInt::from(1u128 << 64));
+        vm.temp_roots.push(two_64);
         // Signed values are sign-extended: the word is the value itself.
         for (value, bits) in [
             (-1i64, 0xffff_ffff_ffff_ffffu64), // I8/I16/I32/I64/Isize -1
@@ -290,6 +298,7 @@ mod tests {
             ((1u128 << 64) - 1, 0xffff_ffff_ffff_ffff),    // U64/Usize max
         ] {
             let v = vm.new_big(num_bigint::BigInt::from(value));
+            vm.temp_roots.push(v);
             let word = rt_int_sub(p, v, two_64);
             assert_eq!(register_word(word).map(|w| w as u64), Some(bits), "{value}");
             // A word outside the 63-bit small range stays a BigInt in
@@ -311,5 +320,87 @@ mod tests {
             let v = rax_value(&mut vm, raw);
             assert_eq!(int_to_big(v).to_string(), expected);
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // write(2) over an owned byte storage (ABI-BYTES.md): the second live
+    // syscall the suite makes, to a pipe this test owns (or an invalid
+    // descriptor), through the generic boundary -- the runtime knows no
+    // syscall number; 1 is test data, as in Botlish source.
+
+    const WRITE: i64 = 1;
+
+    fn small(n: i64) -> Value {
+        make_small(n)
+    }
+
+    #[test]
+    fn writing_a_byte_storage_through_the_generic_boundary_reaches_the_pipe_exactly() {
+        use std::io::Read;
+        use std::os::fd::AsRawFd;
+        let mut vm = new_vm();
+        let p: *mut Vm = &mut *vm;
+        let payload = [0x41u8, 0x00, 0x42, 0xff, 0x00, 0x80];
+        let storage = vm.new_bytes(&payload);
+        let address = crate::runtime::ops::rt_bytes_addr(p, storage);
+        let length = crate::runtime::ops::rt_bytes_len(p, storage);
+        let (mut reader, writer) = std::io::pipe().unwrap();
+        let fd = writer.as_raw_fd() as i64;
+        let written =
+            rt_linux_x86_64_syscall(p, small(WRITE), small(fd), address, length, small(0), small(0), small(0));
+        assert_eq!(written, small(payload.len() as i64));
+        drop(writer);
+        let mut received = Vec::new();
+        reader.read_to_end(&mut received).unwrap();
+        assert_eq!(received, payload);
+    }
+
+    #[test]
+    fn a_zero_length_write_and_an_invalid_descriptor_are_the_kernels_raw_results() {
+        let mut vm = new_vm();
+        let p: *mut Vm = &mut *vm;
+        let empty = vm.new_bytes(&[]);
+        let address = crate::runtime::ops::rt_bytes_addr(p, empty);
+        let (reader, writer) = std::io::pipe().unwrap();
+        use std::os::fd::AsRawFd;
+        let fd = writer.as_raw_fd() as i64;
+        // Count 0 on a valid descriptor: 0, whatever the (one-past) address.
+        let zero = rt_linux_x86_64_syscall(p, small(WRITE), small(fd), address, small(0), small(0), small(0), small(0));
+        assert_eq!(zero, small(0));
+        // An invalid descriptor, even with a zero count: -EBADF, kept negative.
+        let bad = rt_linux_x86_64_syscall(p, small(WRITE), small(1000), address, small(0), small(0), small(0), small(0));
+        assert_eq!(bad, small(-9));
+        drop((reader, writer));
+    }
+
+    #[test]
+    fn the_storage_stays_valid_while_the_kernel_reads_it_even_with_a_collection_running() {
+        use std::io::Read;
+        use std::os::fd::AsRawFd;
+        let mut vm = new_vm();
+        vm.heap.set_stress_for_test(true);
+        let p: *mut Vm = &mut *vm;
+        let payload: Vec<u8> = (0..=255u8).cycle().take(4000).collect();
+        let storage = vm.new_bytes(&payload);
+        // Rooted for the syscall (what `op keepalive` guarantees in generated
+        // code) while allocations -- each a collection under stress -- happen
+        // between taking the address and making the call.
+        vm.temp_roots.push(storage);
+        let address = crate::runtime::ops::rt_bytes_addr(p, storage);
+        for i in 0..50 {
+            let _garbage = vm.new_bytes(&vec![i as u8; 4000]);
+        }
+        let (mut reader, writer) = std::io::pipe().unwrap();
+        let fd = writer.as_raw_fd() as i64;
+        // A pipe holds 64 KiB: 4000 bytes never block.
+        let written = rt_linux_x86_64_syscall(
+            p, small(WRITE), small(fd), address, small(payload.len() as i64), small(0), small(0), small(0),
+        );
+        assert_eq!(written, small(4000));
+        drop(writer);
+        let mut received = Vec::new();
+        reader.read_to_end(&mut received).unwrap();
+        assert_eq!(received, payload);
+        vm.temp_roots.clear();
     }
 }

@@ -1,0 +1,10 @@
+# per suite: static blocks {accepted rejected rounds} from hir::static::decide, whole builds, compile seconds (quiet machine)
+collections.bot decisions {22 22 3} builds hir::BuildOnce 11 hir::DecideMethodCalls 2 hir::BuildFull 3 13.39 s
+diagnostics.bot decisions {0 28 5} builds hir::BuildOnce 12 hir::DecideMethodCalls 3 hir::BuildFull 5 13.047 s
+errors.bot decisions {14 11 4} builds hir::BuildOnce 7 hir::DecideMethodCalls 3 hir::BuildFull 4 7.831 s
+harness.bot decisions {12 2 2} builds hir::BuildOnce 3 hir::DecideMethodCalls 1 hir::BuildFull 2 2.315 s
+modules.bot decisions {7 26 3} builds hir::BuildOnce 6 hir::DecideMethodCalls 2 hir::BuildFull 3 13.143 s
+ownership.bot decisions {13 24 4} builds hir::BuildOnce 26 hir::DecideMethodCalls 3 hir::BuildFull 4 36.237 s
+representation.bot decisions {13 1 2} builds hir::BuildOnce 4 hir::DecideMethodCalls 2 hir::BuildFull 2 5.12 s
+values.bot decisions {26 0 1} builds hir::BuildOnce 2 hir::DecideMethodCalls 1 hir::BuildFull 1 6.048 s
+codes: KNOWN-ERROR 7 UNKNOWN-FIELD 1 TYPE 13 AMBIGUOUS-METHOD-CALL 2 UNKNOWN-ENUM-CASE 3 AFFINE-ELEMENT-COPY-OUT 2 FLAG-CALLEE-UNKNOWN 1 UNHANDLED-ERROR 7 UNBOUND 10 USE-AFTER-MOVE 5 DUPLICATE 1 BREAK-OUTSIDE-LOOP 1 MISSING-FIELD 1 MISSING-IMPORT 2 UNKNOWN-NAMESPACE 1 NOMETHOD-CALL 1 NOT-A-STRUCT 1 UNKNOWN-FLAG 1 LOCKSTEP-UNPROVEN 1 LOCKSTEP-UNEQUAL 1 OPAQUE-CONSTRUCTION 2 OPAQUE-REPRESENTATION 8 UNDECLARED-ERROR 3 MISSING-ERROR-PAYLOAD 1 UNEXPECTED-ERROR-PAYLOAD 2 CONTEXT-INSTALLATION-UNSUPPORTED 5 CONTEXT-TRAIT-MISUSE 8 TRAIT-UNKNOWN-OPERATION 1 TRAIT-WITNESS-JOIN 2 REFINEMENT-MINT-AUTHORITY 2 COROUTINE-RESUME-CONFLICT 2 AFFINE-CAPTURE-UNSUPPORTED 2 COROUTINE-NOT-FUNCTION 1 AFFINE-ERASURE-UNSUPPORTED 3 AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE 2 AFFINE-LIST-OPERATION-UNSUPPORTED 4 AFFINE-EQUALITY-UNSUPPORTED 2 AFFINE-CONTAINER-UNSUPPORTED 1 AFFINE-DUPLICATION-UNSUPPORTED 1

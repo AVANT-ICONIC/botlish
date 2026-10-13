@@ -41,9 +41,10 @@ structModifier = "opaque"
   `opaqueSpan` (the modifier word's span), and everything else about it is the
   ordinary node. A duplicate modifier, `opaque` before `fn`/`type`/`error`, and an
   `opaque struct` nested in a function or branch are located syntax errors.
-  `opaque context struct` and `opaque resource struct` are *not* accepted (they
-  are `expected end of line, found name "context"`): neither `context` nor
-  `resource` exists as a language feature.
+  `opaque resource struct` is *not* accepted (`expected end of line, found name
+  "resource"`): `resource` does not exist as a language feature. `context` does
+  since CONTEXTS.md: `opaque context struct` is two independent modifiers of
+  the one declaration (`context struct` alone is a context without opacity).
 * The ordinary form is unchanged, and an ordinary struct is no more restrictive
   than before: everything below applies only to a struct written `opaque
   struct`. Protection is **per struct**, never per module: a module may declare
@@ -63,7 +64,7 @@ There is no `namespace` declaration, so there is nothing to spell differently.
 Authority is **exact**: the declaring module only. No friend declaration,
 package visibility, access list or namespace inheritance exists, and none was
 invented. A parent module has none over its child's opaque structs, a child none
-over its parent's, `import abi` grants nothing over `abi::Bytes`, a transitive
+over its parent's, `import abi` grants nothing over `abi::bytes::Bytes`, a transitive
 dependency grants nothing, and a struct that merely *holds* an opaque value (in a
 field, a list) grants nothing over it. Imports authorize naming cross-module
 symbols; they never grant representation authority.
@@ -346,9 +347,10 @@ opaque resource context struct Something:   contextual authority / lifetime = th
   has to reimplement representation privacy, because the representation check is
   one predicate over (declaring owner, accessing namespace), independent of the
   other properties.
-* Not implemented here, and not accepted by the parser: `context`, `resource`,
-  cleanup functions, `with`, ownership anchoring, context storage requirements,
-  actor ownership, transfer restrictions.
+* Not implemented here, and not accepted by the parser: `resource`, cleanup
+  functions, resource `with`, ownership anchoring, actor ownership, transfer
+  restrictions. (`context` and `with context` came later, as the table entry
+  and independent property this section planned: CONTEXTS.md.)
 
 ## Known limitations
 
@@ -378,7 +380,7 @@ opaque resource context struct Something:   contextual authority / lifetime = th
 
 `context struct`, `resource struct`, `with`, RAII, destructors, drop semantics,
 borrow checking, lifetime parameters, affine/linear types, move semantics,
-actor/thread transfer restrictions, `abi::Bytes`, `MutableBytes`, `CString`, raw
+actor/thread transfer restrictions, `abi::bytes::Bytes`, `MutableBytes`, `CString`, raw
 pointers, FFI pointer retention, friend modules, per-field visibility, protected
 fields, inheritance, visibility levels, reflection, generated getters/setters,
 namespace aliases, new struct equality semantics, custom hash semantics. No

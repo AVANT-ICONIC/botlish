@@ -1,5 +1,9 @@
 # Standard namespaces: `eq` removed, intrinsics namespaced, `at`/`get`
 
+> **Note (MUTABLE-ARRAY.md).** `mutable_array::create` and `from_list` are
+> registered intrinsics now (with the new `generate` and `swap`), each with
+> ownership roles; `lib/mutable_array.bot` keeps only `get`.
+
 A language/library cleanup milestone with four parts:
 
 1. the obsolete `eq` string-equality native is gone (String equality is `==`);
@@ -72,12 +76,16 @@ and `ns-qualified-inventory` pin the after-state in a fresh process):
 | `hash` | language primitive (the structural hash `==` agrees with; any value) | root, unchanged |
 | `argv` | platform/process primitive (ARGV.md) | root, unchanged |
 | `eq` | historical leftover | **removed** (§1) |
-| `length substring lowercase concat encode_utf8 is_tcl_alpha is_tcl_alnum` | standard type op (String) | `str::*` |
+| `length substring lowercase concat encode_utf8 char_at is_tcl_alpha is_tcl_alnum` | standard type op (String) | `str::*` |
 | `list_length list_get list_append` | standard type op (List) | `list::length`, `list::at`, `list::append` |
 | `mutable_array_allocate _capacity _get _set _copy _freeze` | standard type op (MutableArray) | `mutable_array::allocate/capacity/at/set/copy/freeze` |
 | `immutable_set_from_list immutable_set_contains` | standard type op (ImmutableSet) | `immutable_set::from_list/contains` |
 | `char_codepoint` | standard type op (UnicodeChar; the primitive behind `lib/char.bot`'s existing `char::codepoint`) | `char::scalar_value` (the follow-up removed the `char::codepoint` wrapper, §11) |
 | `linux::abi::syscall` | platform-ABI, already qualified | unchanged |
+| (added later, ABI-BYTES.md) `byte_store::from_list`, `byte_store::byte_count` | standard type ops of the byte-storage value kind behind `abi::bytes::Bytes` (like `immutable_set::*` for `ImmutableSet`) | `byte_store::*` |
+| (added later, ABI-BYTES.md) `abi::x86_64::from_bytes` | platform-ABI raw address bridge, already qualified | `abi::x86_64::from_bytes` |
+| (added later, MUTABLE-BYTES.md) `mutable_byte_store::zeroed/_from/_count/_set/_copy`, `mutable_byte_store::freeze`, `mutable_byte_store::freeze_prefix` | standard type ops of the writable byte-storage value kind behind `abi::bytes::MutableBytes` | `byte_store::*` |
+| (added later, MUTABLE-BYTES.md) `abi::x86_64::from_mutable_bytes` | platform-ABI writable raw address bridge, already qualified | `abi::x86_64::from_mutable_bytes` |
 
 Source-declared types still register their constructor/predicate natives at
 the root for the duration of one compilation (`hir/sourcetypes.tcl`); those
@@ -100,12 +108,13 @@ hierarchy (`ns-no-nested-stdlib`):
 
 | Namespace | Intrinsics (qualified root natives) | Library members (`lib/*.bot`) |
 |-----------|-------------------------------------|-------------------------------|
-| `str` | `length substring lowercase concat encode_utf8 is_tcl_alpha is_tcl_alnum` | none (no module file) |
+| `str` | `length substring lowercase concat encode_utf8 char_at is_tcl_alpha is_tcl_alnum` | none (no module file) |
 | `list` | `length at append` | `get` (new), `find any? all? none?` ... (existing `lib/list.bot`) |
 | `mutable_array` | `allocate capacity at set copy freeze` | `from_list create` (moved from the old `mutarray` module), `get` (new) |
 | `immutable_set` | `from_list contains` | none |
 | `char` | `scalar_value` | none (no module file since §11) |
 | `linux::abi` | `syscall` | (unchanged) |
+| `coroutine` | `done?` (COROUTINES.md; its other operations are internal `coroutine#...` root natives no source spells) | none (no module file) |
 
 `lib/mutarray.bot` was renamed to `lib/mutable_array.bot` (its namespace
 `mutable_array` is its path): one family, one namespace. `mutarray::create`/`from_list`

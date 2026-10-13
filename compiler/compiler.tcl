@@ -1,15 +1,16 @@
 # compiler.tcl -- compiles HIR to Tcl procedures.
 #
 #   source compiler/compiler.tcl       ;# also loads core and hir
-#   core::useBackend compile
+#   core::compiler::evalHir $hir       ;# a front end's HIR
+#   core::useBackend compile           ;# core IR text, through core::evalProgram
 #
 # The compiler is a second implementation of the same semantics as the
 # interpreter in core/evaluator.tcl. It shares the runtime (values, natives,
 # environments, call boundary) but none of the interpreter's evaluation
 # machinery.
 #
-# It does no semantic analysis of its own. Each unit is first built into HIR
-# (hir/), which owns
+# It does no semantic analysis of its own. Each unit is HIR (hir/): the
+# front end's, or core IR text read into HIR (see "Entry points"), which owns
 #
 #   lexical resolution and binding identity   (which binding a name denotes,
 #                                             whether it is bound yet,
@@ -90,6 +91,9 @@ namespace eval core::compiler {
     variable hir {}
     variable pending {}
     variable bindLog {}
+    # ExprId -> 1: the construction operands a release names as pending
+    # temporaries (hir::affine::temporaries, AFFINE-VALUES.md).
+    variable temps {}
     # Block ExprId -> proc name.
     variable blockProcs [dict create]
     # The currently executing unit's own program/module frame (its own
@@ -128,14 +132,31 @@ namespace eval core::compiler {
 namespace eval core::compiler::code {}
 
 # ---------------------------------------------------------------------------
-# Backend entry points
+# Entry points
+#
+# The compiler compiles HIR. A program a front end built (surface::
+# readProgramFile, surface::compile, hir::readFile) is compiled from that very
+# HIR: evalHir, or compileHir once and evalUnit/runUnit as often as needed.
+# Nothing on that path lowers the HIR to core IR and builds HIR again from it
+# (DIRECT-HIR-NATIVE-PATH.md, "The Tcl compiler compiles HIR";
+# tests/direct-hir-native.test's direct-hir-compile-* guards).
+#
+# The core IR entry points -- the registered backend (core::useBackend
+# compile, then core::evalProgram / core::evalIn: runProgram, runSequence)
+# and generatedCode, unitHir, programTypes, bindingTypes -- take core IR
+# *text* a person wrote (examples/*.ir, bench/*.ir, the Core IR tests):
+# hir::build reads it into HIR, which is HIR construction from an input
+# notation. Do not hand them the core IR hir::lower produced from a HIR you
+# have: that rebuilds a weaker HIR (no declared types, module identity,
+# `errors` clauses or source locations). Compile the HIR instead.
 
-# Runs EXPRS in the existing environment ENV. Returns a completion.
+# Runs core IR text EXPRS in the existing environment ENV. Returns a
+# completion.
 proc core::compiler::runSequence {exprs env} {
     return [Run [compileUnit sequence $exprs] $env]
 }
 
-# Runs checked EXPRS as a program in the fresh program scope ENV.
+# Runs checked core IR text EXPRS as a program in the fresh program scope ENV.
 proc core::compiler::runProgram {exprs env} {
     return [Run [compileUnit program $exprs] $env]
 }
@@ -145,16 +166,13 @@ proc core::compiler::Run {unit env} {
     return [core::completion::fromTclCode $status $result $options]
 }
 
-# Compiles EXPRS (once per mode) and returns the name of the unit proc.
+# Compiles core IR text EXPRS (once per mode) and returns the name of the
+# unit proc.
 proc core::compiler::compileUnit {mode exprs} {
     variable cache
     set key [list $mode $exprs]
     if {![dict exists $cache $key]} {
-        set unit [GenerateUnit $mode $exprs]
-        # The procs are defined only after the whole unit compiled cleanly.
-        namespace eval ::core::compiler::code [dict get $unit code]
-        dict set unit name ::core::compiler::code::[dict get $unit name]
-        dict set cache $key $unit
+        dict set cache $key [Define [GenerateUnit $mode [hir::build $exprs -mode $mode -strict 0]]]
     }
     return [dict get $cache $key name]
 }
@@ -165,19 +183,47 @@ proc core::compiler::Cached {mode exprs field} {
     return [dict get $cache [list $mode $exprs] $field]
 }
 
+# Defines the procs of the generated UNIT (only after the whole unit compiled
+# cleanly) and returns UNIT with its fully qualified name.
+proc core::compiler::Define {unit} {
+    namespace eval ::core::compiler::code [dict get $unit code]
+    dict set unit name ::core::compiler::code::[dict get $unit name]
+    return $unit
+}
+
+# Compiles the HIR program HIR (as built, in its own mode) and returns the
+# unit dict {name UNIT-PROC code CODE types PROGRAM-TYPES bindings BINDINGS
+# hir HIR}: what generatedCode, programTypes, bindingTypes and unitHir report
+# for core IR text, here for the HIR itself. Its procs are defined. The HIR is
+# trusted: it may come from hir::parse rather than a front end.
+proc core::compiler::compileHir {hir} {
+    return [Define [GenerateUnit [hir::mode $hir] $hir]]
+}
+
+# Runs the program-mode UNIT (compileHir's) in the existing environment ENV,
+# as runProgram runs core IR text. Returns a completion.
+proc core::compiler::runUnit {unit env} {
+    return [Run [dict get $unit name] $env]
+}
+
 # Compiles and runs the program-mode HIR program HIR as a checked program,
-# as core::evalProgram does for its lowered IR. Returns the value. The HIR is
-# trusted: it may come from hir::parse rather than hir::build.
+# as core::evalProgram does for core IR. Returns the value.
 proc core::compiler::evalHir {hir} {
     if {[hir::mode $hir] ne "program"} {
         error "core::compiler::evalHir: expected a program-mode HIR"
     }
-    set exprs [hir::lower $hir]
-    foreach expr $exprs {
-        core::ir::check $expr
+    return [evalUnit [compileHir $hir]]
+}
+
+# Runs the program-mode UNIT (compileHir's) as a checked program in a fresh
+# program scope, as core::evalProgram does for core IR: every run starts with
+# an empty context set and coroutine store and ends with both restored, so
+# UNIT may run any number of times in one process. Returns the value.
+proc core::compiler::evalUnit {unit} {
+    set hir [dict get $unit hir]
+    if {[hir::mode $hir] ne "program"} {
+        error "core::compiler::evalUnit: expected a program-mode unit"
     }
-    set unit [GenerateUnit program $exprs $hir]
-    namespace eval ::core::compiler::code [dict get $unit code]
     set names {}
     set programScopes [list [hir::top $hir]]
     if {[dict exists $hir modules]} {
@@ -197,32 +243,38 @@ proc core::compiler::evalHir {hir} {
     core::env::declare $env $names
     set value ""
     try {
-        set completion [Run ::core::compiler::code::[dict get $unit name] $env]
-        set value [core::completion::atProgramBoundary $completion]
+        set value [core::contexts::fresh {
+            core::coroutines::fresh {
+                core::completion::atProgramBoundary [runUnit $unit $env]
+            }
+        }]
     } finally {
         core::releaseProgram $mark $value
     }
     return $value
 }
 
-# The generated Tcl code for EXPRS, for inspection.
+# The generated Tcl code for core IR text EXPRS, for inspection (for a HIR:
+# compileHir's `code`).
 proc core::compiler::generatedCode {exprs {mode program}} {
     return [Cached $mode $exprs code]
 }
 
-# The HIR the unit for EXPRS was compiled from.
+# The HIR the unit for core IR text EXPRS was compiled from.
 proc core::compiler::unitHir {exprs {mode program}} {
     return [Cached $mode $exprs hir]
 }
 
-# Inferred static types of the program-level bindings of EXPRS: NAME -> TYPE.
+# Inferred static types of the program-level bindings of core IR text EXPRS:
+# NAME -> TYPE (for a HIR: compileHir's `types`).
 proc core::compiler::programTypes {exprs} {
     return [Cached program $exprs types]
 }
 
-# Every binding compiled for the program EXPRS, at any depth, with its
-# inferred static type: a list of {NAME TYPE} in compilation order. Types
-# include branch refinements and flow facts known where the bind occurs.
+# Every binding compiled for the core IR text program EXPRS, at any depth,
+# with its inferred static type: a list of {NAME TYPE} in compilation order.
+# Types include branch refinements and flow facts known where the bind occurs
+# (for a HIR: compileHir's `bindings`).
 proc core::compiler::bindingTypes {exprs} {
     return [Cached program $exprs bindings]
 }
@@ -573,20 +625,22 @@ proc core::compiler::Coerce {op repr} {
 # ---------------------------------------------------------------------------
 # Units and blocks
 
-# Returns the unit dict {name code types bindings hir}. UNIT-HIR is the HIR
-# of EXPRS, built here if not given.
-proc core::compiler::GenerateUnit {mode exprs {unitHir ""}} {
+# Returns the unit dict {name code types bindings hir} of the HIR UNIT-HIR,
+# compiled in MODE (its procs not yet defined: Define). The compiler never
+# builds HIR itself: its callers hand it the HIR (compileHir) or read core IR
+# text into HIR first (compileUnit).
+proc core::compiler::GenerateUnit {mode unitHir} {
     variable hir
     variable pending
     variable bindLog
     variable blockProcs
-    if {$unitHir eq ""} {
-        set unitHir [hir::build $exprs -mode $mode -strict 0]
-    }
     set hir $unitHir
     variable envless
     variable selfTailCalls
     variable refining
+    variable temps
+    # The construction operands a release names (hir::affine::temporaries).
+    set temps [hir::affine::temporaries $hir]
     set envless {}
     set selfTailCalls {}
     set refining [RefiningConditions]
@@ -744,6 +798,7 @@ proc core::compiler::CompileBlockBody {outerVar e procName} {
 
 proc core::compiler::CompileSequence {ctxVar exprs} {
     upvar 1 $ctxVar ctx
+    variable hir
     set result [Op box unit unit]
     foreach e $exprs {
         set result [CompileExpr ctx $e]
@@ -751,8 +806,62 @@ proc core::compiler::CompileSequence {ctxVar exprs} {
             # The rest of the sequence cannot run.
             break
         }
+        # The affine values dead after this statement (AFFINE-VALUES.md;
+        # COROUTINES.md, "Release at the last use"), its own discarded value
+        # included. The statement's value is already computed: it stays the
+        # sequence's value.
+        foreach item [hir::affine::releasesAfter $hir $e] {
+            CompileRelease ctx $item [expr {$item eq $e ? $result : ""}]
+        }
     }
     return $result
+}
+
+# Releases what release item ITEM of the code being compiled holds
+# (hir::affine::DropPlan): a local binding's value, a pending temporary's
+# (the operand its construction recorded, ctx `temps`), or -- OP given --
+# that operand's value (a statement's own discarded value).
+proc core::compiler::CompileRelease {ctxVar item {op ""}} {
+    upvar 1 $ctxVar ctx
+    variable hir
+    set plan [hir::affine::DropPlan $hir $item]
+    if {$plan eq ""} {
+        return
+    }
+    if {$op ne ""} {
+        set word [BoxWord $op]
+    } elseif {[string match e* $item]} {
+        if {![dict exists $ctx temps $item]} {
+            # Not evaluated on this path: nothing to release.
+            return
+        }
+        set word [BoxWord [dict get $ctx temps $item]]
+    } else {
+        set b $item
+        set name [B $b name]
+        set scope [dict get $ctx scopes [B $b scope]]
+        if {[dict get $scope materialized]} {
+            set word "\[core::env::lookupLocal \$[dict get $scope frame] [Word $name]\]"
+        } else {
+            lassign [dict get $scope locals $b] repr local
+            set word [BoxWord [Op $repr $local any]]
+        }
+    }
+    if {[lindex $plan 0] eq "coroutine"} {
+        Emit ctx "core::coroutines::releaseImpl $word"
+    } else {
+        Emit ctx "core::affine::dropImpl $word [Word [core::value::str [lindex $plan 1]]]"
+    }
+}
+
+# Records OP, the operand of construction operand E, when a release names E
+# as a pending temporary (hir::affine::temporaries): CompileRelease reads it.
+proc core::compiler::NoteTemp {ctxVar e op} {
+    upvar 1 $ctxVar ctx
+    variable temps
+    if {[dict exists $temps $e]} {
+        dict set ctx temps $e $op
+    }
 }
 
 proc core::compiler::CompileExpr {ctxVar e} {
@@ -766,6 +875,15 @@ proc core::compiler::CompileExpr {ctxVar e} {
 
 proc core::compiler::CompileForm {ctxVar e} {
     upvar 1 $ctxVar ctx
+    variable hir
+    # The coroutines an exit statement takes out of scope (COROUTINES.md,
+    # "Release on every early exit"): released before its value, or, those
+    # the value refers to, after it.
+    lassign [hir::affine::releasesOnExit $hir $e] before after
+    foreach b $before {
+        CompileRelease ctx $b
+    }
+
     switch -- [Kind $e] {
         const {
             set value [N $e value]
@@ -784,7 +902,7 @@ proc core::compiler::CompileForm {ctxVar e} {
             return [CompileBlock ctx $e]
         }
         call {
-            return [CompileCall ctx $e]
+            return [ReleasingOnError ctx $e {CompileCall ctx $e}]
         }
         if {
             return [CompileIf ctx $e]
@@ -805,6 +923,9 @@ proc core::compiler::CompileForm {ctxVar e} {
             set value [CompileExpr ctx [N $e value]]
             if {[OpType $value] eq "never"} {
                 return $value
+            }
+            foreach b $after {
+                CompileRelease ctx $b
             }
             if {[dict get $ctx inBlock]} {
                 Emit ctx "return [BoxWord $value]"
@@ -834,6 +955,9 @@ proc core::compiler::CompileForm {ctxVar e} {
                 set value [CompileExpr ctx [N $e value]]
                 if {[OpType $value] eq "never"} {
                     return $value
+                }
+                foreach b $after {
+                    CompileRelease ctx $b
                 }
             }
             if {$var ne ""} {
@@ -868,6 +992,19 @@ proc core::compiler::CompileForm {ctxVar e} {
             return [Op box "\$$t" result]
         }
         fail {
+            if {[N $e value] ne ""} {
+                # ERROR-PAYLOADS.md: the payload is evaluated, then carried by
+                # the error identity -- errorId(NAME, PAYLOAD), never text.
+                set value [CompileExpr ctx [N $e value]]
+                if {[OpType $value] eq "never"} {
+                    return $value
+                }
+                foreach b $after {
+                    CompileRelease ctx $b
+                }
+                Emit ctx "return -code 5 \[core::value::errorId [Word [N $e name]] [BoxWord $value]\]"
+                return [Never]
+            }
             Emit ctx "return -code 5 [Word [core::value::errorId [N $e name]]]"
             return [Never]
         }
@@ -875,6 +1012,73 @@ proc core::compiler::CompileForm {ctxVar e} {
             return [CompileHandle ctx $e]
         }
     }
+}
+
+# The operand of call E compiled by COMPILE (a script evaluated in the
+# caller), releasing the coroutines whose handles a declared error the call
+# propagates takes out of scope (hir::affine::releasesOnError): the
+# call's code runs in a `catch`; a propagate-error completion (code 5) of
+# such an error releases them, and every abrupt completion goes on unchanged
+# (`return -options`, CompileHandle's technique). The value is computed
+# inside the catch, keeping its representation.
+proc core::compiler::ReleasingOnError {ctxVar e compile} {
+    upvar 1 $ctxVar ctx
+    variable hir
+    set byName [hir::affine::releasesOnError $hir $e]
+    if {$byName eq ""} {
+        return [uplevel 1 $compile]
+    }
+    set stVar [NewTemp]
+    set resVar [NewTemp]
+    set optsVar [NewTemp]
+    set valueVar [NewTemp]
+    set savedLines [dict get $ctx lines]
+    dict set ctx lines {}
+    Indent ctx 1
+    set value [uplevel 1 $compile]
+    if {[OpType $value] ne "never"} {
+        Emit ctx "set $valueVar [lindex $value 1]"
+    }
+    Indent ctx -1
+    set callLines [dict get $ctx lines]
+    dict set ctx lines $savedLines
+    Emit ctx "set $stVar \[catch \{"
+    foreach line $callLines { dict lappend ctx lines $line }
+    Emit ctx "\} $resVar $optsVar\]"
+    Emit ctx "if {\$$stVar != 0} \{"
+    Indent ctx 1
+    ReleaseOnErrorCode ctx $byName $stVar $resVar
+    Emit ctx "return -options \$$optsVar \$$resVar"
+    Indent ctx -1
+    Emit ctx "\}"
+    if {[OpType $value] eq "never"} {
+        return $value
+    }
+    return [lreplace $value 1 1 "\$$valueVar"]
+}
+
+# In code where the Tcl completion STVAR/RESVAR of a call is abrupt: releases
+# the coroutines of BYNAME (hir::affine::releasesOnError) when it is the
+# propagate-error of one of its names.
+proc core::compiler::ReleaseOnErrorCode {ctxVar byName stVar resVar} {
+    upvar 1 $ctxVar ctx
+    Emit ctx "if {\$$stVar == 5} \{"
+    Indent ctx 1
+    Emit ctx "switch -exact -- \[lindex \$$resVar 1\] \{"
+    Indent ctx 1
+    dict for {name bindings} $byName {
+        Emit ctx "[Word $name] \{"
+        Indent ctx 1
+        foreach b $bindings {
+            CompileRelease ctx $b
+        }
+        Indent ctx -1
+        Emit ctx "\}"
+    }
+    Indent ctx -1
+    Emit ctx "\}"
+    Indent ctx -1
+    Emit ctx "\}"
 }
 
 # Struct construction (STRUCTS.md): the field values are compiled, and so
@@ -889,6 +1093,7 @@ proc core::compiler::CompileStruct {ctxVar e} {
         if {[OpType $op] eq "never"} {
             return $op
         }
+        NoteTemp ctx $field $op
         lappend ops $op
     }
     set head {}
@@ -1025,6 +1230,7 @@ proc core::compiler::CompileCall {ctxVar e {calleeVar ""} {argsVar ""}} {
         if {[OpType $op] eq "never"} {
             return $op
         }
+        NoteTemp ctx $arg $op
         lappend argOps $op
     }
 
@@ -1088,6 +1294,13 @@ proc core::compiler::CompileNativeCall {ctxVar e callee name argOps} {
     }
     if {[N $e known] ne ""} {
         return [Op bool [N $e known] bool]
+    }
+    if {[dict get $meta completion]} {
+        # A native that returns a completion (core/coroutines.tcl's start and
+        # resume: a coroutine segment may end with the body's own declared
+        # error): only the generic call boundary turns it into compiled
+        # code's Tcl completion code 5.
+        return [GenericCall ctx $callee $argOps]
     }
     if {[dict get $meta errors] ne "" && ![hir::completions::BoundsProven $hir $e]} {
         # A native with declared errors (`argv`, `list::at`) completes with
@@ -1292,7 +1505,7 @@ proc core::compiler::CompileIf {ctxVar e} {
     set condition [N $e condition]
     set refining [expr {[Kind $condition] eq "call" && [Kind [N $condition callee]] eq "ref"}]
     if {$refining} {
-        set test [CompileCall ctx $condition callee argOps]
+        set test [ReleasingOnError ctx $condition {CompileCall ctx $condition callee argOps}]
         if {[OpType $test] ne "never"} {
             set test [lreplace $test 2 2 [Type $condition]]
         }
@@ -1422,6 +1635,7 @@ proc core::compiler::CompileLoop {ctxVar e} {
 # from every iteration's own (non-`never`) body value, in order.
 proc core::compiler::CompileListLoop {ctxVar e} {
     upvar 1 $ctxVar ctx
+    variable hir
     set iterable [CompileExpr ctx [N $e iterable]]
     if {[OpType $iterable] eq "never"} {
         return $iterable
@@ -1431,7 +1645,17 @@ proc core::compiler::CompileListLoop {ctxVar e} {
     set items [NewTemp]
     set item [NewTemp]
     set parentFrame [CurrentFrameExpr $ctx]
-    Emit ctx "set $items \[core::value::items \[core::value::expect list [BoxWord $iterable] {loop iterable}\]\]"
+    set consuming [hir::mutvec::IsConsumingLoop $hir $e]
+    if {$consuming} {
+        # A loop consuming an affine MutableVector or MutableArray
+        # (MUTABLE-VECTOR.md, MUTABLE-ARRAY.md): each iteration moves the
+        # collection's first element out into the loop variable; what an
+        # early exit leaves is released by that exit.
+        Emit ctx "set $items [BoxWord $iterable]"
+        NoteTemp ctx [N $e iterable] [Op box "\$$items" any]
+    } else {
+        Emit ctx "set $items \[core::value::items \[core::value::expect list [BoxWord $iterable] {loop iterable}\]\]"
+    }
     Emit ctx "set $acc \{\}"
     # $result must start unset on every logical execution of this listloop,
     # not merely once per compiled proc: when this listloop is itself
@@ -1439,7 +1663,12 @@ proc core::compiler::CompileListLoop {ctxVar e} {
     # line) is re-executed once per outer iteration within the *same* Tcl
     # proc activation, where a once-set Tcl variable otherwise stays set.
     Emit ctx "unset -nocomplain $result"
-    Emit ctx "foreach $item \$$items \{"
+    if {$consuming} {
+        Emit ctx "while \{\[core::mutvec::remaining \$$items\] > 0\} \{"
+        Emit ctx "    set $item \[core::mutvec::drainFront \$$items\]"
+    } else {
+        Emit ctx "foreach $item \$$items \{"
+    }
     Indent ctx 1
     set scopeId [N $e bodyScope]
     OpenScope ctx $scopeId $parentFrame
@@ -1681,10 +1910,12 @@ proc core::compiler::CompileLockLoop {ctxVar e} {
 # fromTclCode case 1 already uses for an ordinary Tcl error.
 proc core::compiler::CompileHandle {ctxVar e} {
     upvar 1 $ctxVar ctx
+    variable hir
     set callExpr [N $e call]
     set names [N $e handlerNames]
     set scopes [N $e handlerScopes]
     set bodies [N $e handlerBodies]
+    set payloads [expr {[dict exists [dict get $hir exprs $e] handlerPayloads] ? [N $e handlerPayloads] : {}}]
     set parentFrame [CurrentFrameExpr $ctx]
 
     set stVar [NewTemp]
@@ -1720,10 +1951,26 @@ proc core::compiler::CompileHandle {ctxVar e} {
     Indent ctx 1
     Emit ctx "switch -exact -- \[lindex \$$resVar 1\] \{"
     Indent ctx 1
+    set index 0
     foreach name $names scopeId $scopes body $bodies {
+        set payload [lindex $payloads $index]
+        incr index
         Emit ctx "[Word $name] \{"
         Indent ctx 1
         OpenScope ctx $scopeId $parentFrame
+        if {$payload ne ""} {
+            # The handler's payload binding (ERROR-PAYLOADS.md): the payload
+            # the selected error identity carries, bound like a loop's
+            # element binding.
+            set item [NewTemp]
+            Emit ctx "set $item \[core::value::errorIdPayload \$$resVar\]"
+            if {[dict get $ctx scopes $scopeId materialized]} {
+                set frame [dict get $ctx scopes $scopeId frame]
+                Emit ctx "core::env::define \$$frame [Word [B $payload name]] \$$item"
+            } else {
+                dict set ctx scopes $scopeId locals $payload [list box "\$$item"]
+            }
+        }
         DeclareScope ctx $scopeId
         set hValue [CompileSequence ctx $body]
         PopScope ctx
@@ -1731,6 +1978,19 @@ proc core::compiler::CompileHandle {ctxVar e} {
             Emit ctx "set $result [BoxWord $hValue]"
             set live 1
         }
+        Indent ctx -1
+        Emit ctx "\}"
+    }
+    variable hir
+    dict for {name bindings} [hir::affine::releasesOnError $hir $e] {
+        # A declared error the handlers do not handle, leaving the scope of
+        # coroutine handles (COROUTINES.md): released on its way out.
+        Emit ctx "[Word $name] \{"
+        Indent ctx 1
+        foreach b $bindings {
+            CompileRelease ctx $b
+        }
+        Emit ctx "return -options \$$optsVar \$$resVar"
         Indent ctx -1
         Emit ctx "\}"
     }

@@ -35,11 +35,13 @@
 # types are would let one program's declaration leak into, or collide
 # with, another's.
 #
-# apply's own answer: a call given a non-empty DECLS first Resets --
-# unregisters -- every type/native the *previous* such call registered
-# (`generation`, below), then registers DECLS fresh; a call given an empty
-# DECLS does nothing at all, neither resetting nor registering (see apply's
-# own comment for exactly why that half matters just as much). hir::
+# apply's own answer: a call that declares any source type -- a non-empty
+# DECLS, or a non-empty STRUCTDECLS (struct declarations, hir/structs.tcl,
+# which share this type namespace) -- first Resets -- unregisters -- every
+# type/native the *previous* such call registered (`generation`, below),
+# then registers its declarations fresh; a call given neither does nothing
+# at all, neither resetting nor registering (see apply's own comment for
+# exactly why that half matters just as much). hir::
 # buildSyntax (hir/hir.tcl) calls apply exactly once, right before hir::
 # resolve::program, on every top-level build (an ordinary source compile,
 # or hir::read reconstructing a serialized HIR -- see hir/read.tcl). This
@@ -50,7 +52,11 @@
 #   * two sequential, non-overlapping compiles never see each other's
 #     domain for the same spelling -- item 110: by the time the second
 #     program's hir::buildSyntax call starts, the first's registration has
-#     already been cleared.
+#     already been cleared;
+#   * that holds when the second program declares only structs as well: a
+#     module rewritten from `refined type Item = int` to `struct Item:`
+#     compiles in the same process (hir/read.tcl's struct-only text resets
+#     the same way).
 # What this does NOT give: two *live* HIR objects, from two different
 # hir::buildSyntax calls, whose compiled Tcl procs or native code both
 # still need a same-spelled-but-different-domain source type to resolve
@@ -83,21 +89,20 @@ proc hir::sourcetypes::Reset {} {
     set generation {}
 }
 
-proc hir::sourcetypes::Fail {span message} {
-    core::semanticError TYPE "[dict get $span file]:[dict get $span line]:[dict get $span column]: $message"
+proc hir::sourcetypes::Fail {span message {kind TYPE}} {
+    core::semanticError $kind "[dict get $span file]:[dict get $span line]:[dict get $span column]: $message"
 }
 
 # "" when the earlier declaration (span FIRST) of a name redeclared at SPAN
-# is in the same file; otherwise where it is, and why it counts: error names
-# are one flat, program-wide namespace, so a module the program loads --
-# possibly only through another module (abi, through abi::x86_64) -- takes
-# its error names for the whole program. (Types are namespace members,
-# IMPORTS.md.) Used by hir/errordecls.tcl.
+# is in the same file; otherwise where it is. Declarations are namespace
+# members -- types (IMPORTS.md) and, since ERROR-PAYLOADS.md's
+# "Module-qualified error identity", errors too -- so a clash is normally
+# within one file. Used by hir/errordecls.tcl.
 proc hir::sourcetypes::ElsewhereClause {first span} {
     if {$first eq "" || $span eq "" || [dict get $first file] eq [dict get $span file]} {
         return ""
     }
-    return [format { at %s:%s:%s (error names are global: every module the program loads, including one it reaches only through another module, declares its error names for the whole program)} \
+    return [format { at %s:%s:%s} \
         [dict get $first file] [dict get $first line] [dict get $first column]]
 }
 
@@ -114,12 +119,12 @@ proc hir::sourcetypes::apply {decls {structDecls {}}} {
         # neither resetting nor adding anything, and report no source types
         # of THIS call's own (a caller building an HIR from these decls
         # gets an accurate, empty `sourceTypes` field for it -- see hir::
-        # buildSyntax). This matters because hir::build (core IR, no
-        # surface syntax) and every internal re-hir::build of an
-        # already-lowered program (the Tcl compiler backend's own
-        # GenerateUnit, hir/specialize.tcl) all call through
-        # here too, with no type decls of their own (core IR has no type-
-        # declaration syntax) -- Resetting unconditionally on every call
+        # buildSyntax). This matters because hir::build (core IR text, no
+        # surface syntax -- including the core IR hir::lower made of an
+        # already-compiled program, read back by the round-trip tests)
+        # calls through here too, with no type decls of its own (core IR
+        # has no type-declaration syntax) -- Resetting unconditionally on
+        # every call
         # would unregister a program's own already-verified source types
         # out from under its *own* later compilation/native-lowering pass,
         # not just a genuinely different program's. Only a call that itself
@@ -127,12 +132,37 @@ proc hir::sourcetypes::apply {decls {structDecls {}}} {
         # see this file's own header, "Compilation isolation".
         return {}
     }
-    set order {}
+    # Any source type declaration -- an integer domain, a refinement, an
+    # enum or a struct -- makes this a program of its own, so it reclaims the
+    # registry even when it declares only structs: a previous compilation's
+    # `refined type Item` must not stay registered to collide with this
+    # one's `struct Item` (hir::structs::apply rejects a struct name that is
+    # already a declared type) or to stay resolvable under a name this
+    # program does not declare.
+    Reset
+    # Enum declarations (ENUMS.md, hir/enums.tcl) ride in DECLS as `kind
+    # enum` entries. They are registered first: an enum names no other type,
+    # while a refinement's carrier, a struct's field or an applied type may
+    # name an enum. Their names are checked against the other type
+    # declarations of this batch below (one type namespace).
+    set enumDecls {}
+    set typeDecls {}
+    foreach decl $decls {
+        if {[dict exists $decl kind] && [dict get $decl kind] eq "enum"} {
+            lappend enumDecls $decl
+        } else {
+            lappend typeDecls $decl
+        }
+    }
+    set decls $typeDecls
+    set order [hir::enums::apply $enumDecls]
     if {$decls ne ""} {
-        Reset
         set byName [dict create]
         foreach decl $decls {
             set id [Identity $decl]
+            if {[hir::enums::declared $id]} {
+                Fail [dict get $decl nameSpan] "type \"$id\" is already declared (as an enum)"
+            }
             if {[dict exists $byName $id]} {
                 Fail [dict get $decl nameSpan] "type \"$id\" is already declared[ElsewhereClause [dict get $byName $id nameSpan] [dict get $decl nameSpan]]"
             }
@@ -141,7 +171,7 @@ proc hir::sourcetypes::apply {decls {structDecls {}}} {
         set registered [dict create]
         set visiting [dict create]
         foreach decl $decls {
-            Resolve [Identity $decl] $byName registered visiting order
+            Resolve [Identity $decl] $byName registered visiting order $structDecls
         }
     }
     if {$structDecls ne ""} {
@@ -158,6 +188,11 @@ proc hir::sourcetypes::apply {decls {structDecls {}}} {
 # `NAMESPACE::Name` for a type of a module, the bare name for the entry
 # program's own (a type is a member of its namespace, IMPORTS.md).
 proc hir::sourcetypes::Identity {decl} {
+    if {[dict exists $decl resolved] && [dict get $decl resolved]} {
+        # Read back from HIR text (hir::read::TypeDeclLine): NAME is
+        # already the canonical identity.
+        return [dict get $decl name]
+    }
     set ns [dict get $decl namespace]
     set name [dict get $decl name]
     return [expr {$ns eq "" ? $name : "${ns}::$name"}]
@@ -196,24 +231,244 @@ proc hir::sourcetypes::ParentIdentity {decl byName} {
 # here: it must already be a builtin or an earlier-resolved-in-this-batch
 # type, checked (with a proper diagnostic) when RegisterOne actually looks it
 # up as a parent.
-proc hir::sourcetypes::Resolve {id byName registeredVar visitingVar orderVar} {
+proc hir::sourcetypes::Resolve {id byName registeredVar visitingVar orderVar {structDecls {}}} {
     upvar 1 $registeredVar registered $visitingVar visiting $orderVar order
     if {[dict exists $registered $id] || ![dict exists $byName $id]} {
         return
     }
+    set decl [dict get $byName $id]
     if {[dict exists $visiting $id]} {
-        Fail [dict get [dict get $byName $id] nameSpan] \
+        # The chain of declarations from ID's first visit back to ID.
+        set chain [lrange [dict keys $visiting] [lsearch -exact [dict keys $visiting] $id] end]
+        if {[IsRefined $decl] || [lsearch -exact [lmap c $chain {IsRefined [dict get $byName $c]}] 1] >= 0} {
+            Fail [dict get $decl nameSpan] \
+                "cyclic refinement: \"$id\" is its own carrier through [join [concat $chain [list $id]] { -> }] (a refinement's carrier chain must end in a type that is not a refinement of it)" \
+                CYCLIC-REFINEMENT
+        }
+        Fail [dict get $decl nameSpan] \
             "type declaration cycle: \"$id\" depends on its own declaration through its chain of parents"
     }
     dict set visiting $id 1
-    set decl [dict get $byName $id]
-    set parentId [ParentIdentity $decl $byName]
-    if {$parentId ne "Int" && $parentId ne ""} {
-        Resolve $parentId $byName registered visiting order
+    if {[IsRefined $decl]} {
+        CheckDeclaredName $decl
+        # The batch's declarations the carrier names are registered first
+        # (same-module forward visibility, as for a domain's parent).
+        foreach dependency [CarrierDependencies $decl $byName] {
+            Resolve $dependency $byName registered visiting order $structDecls
+        }
+        dict set registered $id [RegisterRefinement $decl $structDecls]
+    } else {
+        set parentId [ParentIdentity $decl $byName]
+        if {$parentId ne "Int" && $parentId ne ""} {
+            Resolve $parentId $byName registered visiting order $structDecls
+        }
+        dict set registered $id [RegisterOne $decl $parentId]
     }
-    dict set registered $id [RegisterOne $decl $parentId]
     lappend order [dict get $registered $id]
     dict unset visiting $id
+}
+
+# 1 if DECL (a TypeDeclOf dict) declares a refinement type
+# (`refined type NAME = CARRIER`, REFINEMENT-VALUES.md).
+proc hir::sourcetypes::IsRefined {decl} {
+    return [expr {[dict exists $decl kind] && [dict get $decl kind] eq "refined"}]
+}
+
+# The identities of the declarations of BYNAME that the carrier type
+# expression of refinement DECL names (bare, qualified, or inside an applied
+# type's argument), with the visibility a type annotation has.
+proc hir::sourcetypes::CarrierDependencies {decl byName} {
+    if {[dict exists $decl resolved] && [dict get $decl resolved]} {
+        # HIR text prints types in dependency order already.
+        return {}
+    }
+    set ns [dict get $decl namespace]
+    set result {}
+    foreach spelled [TypeExprNames [dict get $decl carrier]] {
+        set id [hir::types::CanonicalTypeName $spelled $ns]
+        if {[string first :: $spelled] < 0 && $ns ne "" && [dict exists $byName ${ns}::$spelled]} {
+            set id ${ns}::$spelled
+        }
+        if {[dict exists $byName $id] && $id ni $result} {
+            lappend result $id
+        }
+    }
+    return $result
+}
+
+# The type names a surface type expression (surface::parser::TypeExpr) spells.
+proc hir::sourcetypes::TypeExprNames {typeExpr} {
+    if {[llength $typeExpr] == 1} {
+        return [list $typeExpr]
+    }
+    lassign $typeExpr head arg
+    if {$head eq "fn"} {
+        set names {}
+        foreach t [dict get $arg args] { lappend names {*}[TypeExprNames $t] }
+        lappend names {*}[TypeExprNames [dict get $arg return]]
+        return $names
+    }
+    return [concat [list $head] [TypeExprNames $arg]]
+}
+
+# Validates and registers the refinement type DECL (REFINEMENT-VALUES.md):
+#
+#   refined type NAME = CARRIER
+#
+# a new nominal type -- never an alias -- whose values are exactly values of
+# CARRIER known, by a proof, to satisfy NAME's proposition. Its registry
+# entry (core::type::register -refinement) records the canonical identity
+# (`NAMESPACE::Name`), the canonical carrier type, the owner -- the exact
+# declaring module, the one module that may mint it -- and the declaration's
+# span. Its base and parents are the carrier's own, so forgetting to the
+# carrier (and transitively to the carrier's carrier) is ordinary subtyping
+# of the existing type lattice; nothing about the carrier's runtime
+# representation changes. STRUCTDECLS are the batch's struct declarations,
+# only to word the diagnostic of a struct carrier.
+# Rejects a refinement DECL whose name is a built-in type's (a TYPE error):
+# checked before its carrier is looked at, so `refined type str = str` is a
+# name collision, not a cycle through itself.
+proc hir::sourcetypes::CheckDeclaredName {decl} {
+    set name [dict get $decl name]
+    if {[dict exists $decl resolved] && [dict get $decl resolved]} {
+        return
+    }
+    if {$name in {Int any never Fn} || [core::type::isBuiltinName $name]
+            || [dict exists $::hir::types::constructors $name]} {
+        Fail [dict get $decl nameSpan] \
+            "type \"$name\" cannot be declared: the name is already a built-in type"
+    }
+}
+
+proc hir::sourcetypes::RegisterRefinement {decl structDecls} {
+    variable generation
+    set name [dict get $decl name]
+    set id [Identity $decl]
+    set ns [dict get $decl namespace]
+    if {[dict exists $decl resolved] && [dict get $decl resolved]} {
+        # Read back from HIR text: the carrier is a printed resolved type,
+        # already validated when the HIR was first built.
+        set carrier [hir::read::ParseType [dict get $decl carrier] [dict get $decl line]]
+        core::type::register $id -base [core::type::base $carrier] -parents [core::type::evidenceOf $carrier] \
+            -refinement [dict create carrier $carrier owner $ns span [dict get $decl nameSpan]] -source 1
+        lappend generation [list type $id]
+        return [dict create kind refined name $id carrier $carrier owner $ns]
+    }
+    set carrierText [hir::resolve::ShowTypeExpr [dict get $decl carrier]]
+    foreach spelled [TypeExprNames [dict get $decl carrier]] {
+        foreach struct $structDecls {
+            set structId [expr {[dict get $struct namespace] eq "" ? [dict get $struct name]
+                : "[dict get $struct namespace]::[dict get $struct name]"}]
+            if {$spelled eq $structId || ($spelled eq [dict get $struct name] && [dict get $struct namespace] eq $ns)} {
+                Fail [dict get $decl carrierSpan] \
+                    "invalid refinement carrier $carrierText for \"$id\": $structId is a struct type, and refinements of struct values are not supported yet (this milestone's carriers are scalar value types: str, int, bool, UnicodeChar, and integer-domain or refinement types over them)" \
+                    REFINEMENT-CARRIER
+            }
+        }
+    }
+    if {[catch {hir::resolve::ResolveTypeExpr [dict get $decl carrier] $ns} carrier options]} {
+        Fail [dict get $decl carrierSpan] "unknown carrier type $carrierText for refinement \"$id\": $carrier" \
+            [hir::resolve::TypeErrorKind $options TYPE]
+    }
+    if {[hir::types::MentionsTrait $carrier]} {
+        Fail [dict get $decl carrierSpan] \
+            "invalid refinement carrier $carrierText for \"$id\": a trait is a static constraint, not a value type with a representation of its own (TRAITS.md)" \
+            REFINEMENT-CARRIER
+    }
+    set why [RefinementCarrierEligible $carrier]
+    if {$why ne ""} {
+        Fail [dict get $decl carrierSpan] \
+            "invalid refinement carrier $carrierText for \"$id\": $why" REFINEMENT-CARRIER
+    }
+    core::type::register $id -base [core::type::base $carrier] -parents [core::type::evidenceOf $carrier] \
+        -refinement [dict create carrier $carrier owner $ns span [dict get $decl nameSpan]] -source 1
+    lappend generation [list type $id]
+    return [dict create kind refined name $id carrier $carrier owner $ns]
+}
+
+# "" if a value of static type TYPE may carry a refinement (REFINEMENT-
+# VALUES.md, RefinementCarrierEligible(T)), else the reason it may not.
+#
+# A refinement states a fact about a value that must stay true for as long
+# as the value exists: no later operation may change what the proof was
+# about. That is a property of the type's *semantics*, decided here from
+# its form -- never from its spelling:
+#
+#   * value stability (ValueStability): a scalar value (str, int, bool,
+#     UnicodeChar, unit), an integer domain or a refinement over one, and
+#     an aggregate (List, ImmutableSet, struct) of stable values are
+#     stable; a MutableArray -- reference semantics, its slots change in
+#     place -- is not, nor is anything reaching one; `any` (e.g. a struct
+#     field declared `any`) and callables are not proven stable;
+#   * representation: this milestone's refinements live on the core type
+#     lattice, whose types are a primitive kind refined by named facts, so a
+#     carrier must also be a core type. A stable aggregate is reported as
+#     such, but not supported yet.
+proc hir::sourcetypes::RefinementCarrierEligible {type} {
+    if {$type in {any never}} {
+        return "a refinement carrier must be a concrete value type, not $type"
+    }
+    set stable [ValueStability $type]
+    if {$stable ne ""} {
+        return "[hir::types::show $type] $stable, so a proof about one value would not stay true; a refinement needs a carrier whose values never change"
+    }
+    if {[hir::types::IsEnum $type]} {
+        # ENUMS.md: an enum is a stable scalar value, but a refinement lives
+        # on the core type lattice -- a primitive kind refined by named facts
+        # -- where the carrier's nominal identity would be lost (a refined
+        # enum would be `enum`, any enum). Carrying it needs a refinement
+        # representation over nominal types this milestone does not add.
+        return "[hir::types::show $type] is an enum, a stable value type, but refinements of an enum are not supported yet: a refinement is represented over a primitive kind, which would lose the enum's nominal identity (this milestone's carriers are scalar value types: str, int, bool, UnicodeChar, and integer-domain or refinement types over them)"
+    }
+    if {[hir::types::IsSpecific $type] || $type eq "struct"} {
+        return "[hir::types::show $type] is a stable value type, but refinements of aggregate, struct or callable values are not supported yet (this milestone's carriers are scalar value types: str, int, bool, UnicodeChar, and integer-domain or refinement types over them)"
+    }
+    if {[core::type::base $type] ni {str int bool UnicodeChar unit}} {
+        return "values of kind [core::type::base $type] are not supported as refinement carriers (this milestone's carriers are scalar value types: str, int, bool, UnicodeChar, and integer-domain or refinement types over them)"
+    }
+    return ""
+}
+
+# "" if every value of static type TYPE is transitively immutable (no
+# operation can change it after it exists), else why not, as a clause.
+proc hir::sourcetypes::ValueStability {type {visiting {}}} {
+    if {$type eq "any"} {
+        return "may be any value, including a mutable one"
+    }
+    if {[hir::types::IsMutArray $type] || $type eq "mutarray"} {
+        return "has reference semantics (a MutableArray's slots change in place)"
+    }
+    if {[hir::types::IsMutVec $type] || $type eq "mutvec"} {
+        return "is a MutableVector, whose contents its owning place changes in place"
+    }
+    if {[hir::types::IsFn $type] || [hir::types::IsExactBlock $type] || [hir::types::IsExactNative $type]
+            || $type in {block native}} {
+        return "is a callable, which has no stable value to refine"
+    }
+    if {[hir::types::IsList $type] || [hir::types::IsSet $type]} {
+        set why [ValueStability [lindex $type 1] $visiting]
+        return [expr {$why eq "" ? "" : "has an element type, [hir::types::show [lindex $type 1]], that $why"}]
+    }
+    if {$type in {list immutableSet result struct}} {
+        return "may hold values of any kind, including mutable ones"
+    }
+    if {[hir::types::IsStruct $type]} {
+        foreach {field t} [lindex $type 1] {
+            set why [ValueStability $t $visiting]
+            if {$why ne ""} { return "has a field \"$field\" that $why" }
+        }
+        return ""
+    }
+    if {[hir::types::IsNamedStruct $type]} {
+        set id [lindex $type 1]
+        if {$id in $visiting} { return "" }
+        foreach {field t} [hir::structs::fieldTypes $id] {
+            set why [ValueStability $t [concat $visiting [list $id]]]
+            if {$why ne ""} { return "has a field \"$field\" that $why" }
+        }
+        return ""
+    }
+    return ""
 }
 
 # Validates DECL's parent (PARENTID, its resolved identity, "" if none is
@@ -283,6 +538,10 @@ proc hir::sourcetypes::RegisterOne {decl parentId} {
 proc hir::sourcetypes::explain {hir} {
     set stanzas {}
     foreach entry [hir::sourceTypes $hir] {
+        if {![dict exists $entry domain]} {
+            # A struct, enum or refinement declaration: no integer domain.
+            continue
+        }
         set domain [dict get $entry domain]
         set lines [list "type [dict get $entry name]" "    parent: [dict get $entry parent]"]
         if {[lindex $domain 0] eq {interval}} {

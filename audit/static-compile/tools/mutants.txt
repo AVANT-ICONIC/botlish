@@ -1,0 +1,259 @@
+# Mutants of `static compile:` (audit/static-compile/tools/mutate.tcl;
+# STATIC-COMPILE.md): the mutants the milestone brief names (item 82), each
+# a deliberate bug in the frontend (surface/lower.tcl, surface/modules.tcl),
+# the static processor (hir/static.tcl), the resolver (hir/resolve.tcl),
+# the completion proofs (hir/completions.tcl) or the warnings
+# (hir/warnings.tcl).
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. Lines starting with # outside an edit are
+# comments.
+
+@@ body-resolved-normally the static body is lowered as an ordinary block before any static processing, so its diagnostics are the enclosing program's
+## surface/lower.tcl
+<<<<
+            return [hir::syntax::staticNode $origin [dict get $node operation] \
+                [Origin [dict get $node operationSpan] [dict get $node id]/operation] \
+                [Origin [dict get $body span] [dict get $body id]/body] \
+                [Sequence [dict get $body body]] $deferred]
+====
+            return [hir::syntax::ifNode $origin [hir::syntax::rootRef $origin true] \
+                [Origin [dict get $body span] [dict get $body id]/body] \
+                [Sequence [dict get $body body]] $origin {}]
+>>>>
+
+@@ error-escapes-fatal a diagnostic in a static body is never attributed to its site: it escapes as the enclosing program's fatal diagnostic
+## hir/static.tcl
+<<<<
+        set owner [Owner $present $origin]
+        if {[Internal $diagnostic]} {
+====
+        set owner ""
+        if {[Internal $diagnostic]} {
+>>>>
+
+@@ loader-error-escapes a qualified reference the file may not make, inside a static body, is still the file's fatal loader error
+## surface/modules.tcl
+<<<<
+        set site [StaticSiteOf $sites [lindex $ref 2]]
+        if {$site eq ""} {
+====
+        set site ""
+        if {$site eq ""} {
+>>>>
+
+@@ wrong-code every rejection is reified with the code of TYPE, whatever the diagnostic's kind
+## hir/static.tcl
+<<<<
+    return [dict get $codes $kind]
+====
+    return [dict get $codes TYPE]
+>>>>
+
+@@ loses-primary the primary location is the static block's own, not the diagnostic's
+## hir/static.tcl
+<<<<
+    set primary [Location $origin [dict get $diagnostic origin]]
+====
+    set primary [Location $origin $origin]
+>>>>
+
+@@ loses-related the related locations are dropped: related is always []
+## hir/static.tcl
+<<<<
+        {*}[lmap r [dict get $diagnostic related] {Location $origin $r}]] list]
+====
+        ] list]
+>>>>
+
+@@ string-not-error a rejected block becomes the diagnostic's message as a String value instead of the error compiler::CompilerError
+## hir/static.tcl
+<<<<
+        return [list [Reified $node [lindex [dict get $decisions $key] 1]]]
+====
+        return [list [hir::syntax::constNode [dict get $node origin] str [dict get [lindex [dict get $decisions $key] 1] message]]]
+>>>>
+
+@@ success-returns-unit an accepted block's value is unit, not its body's
+## hir/static.tcl
+<<<<
+proc hir::static::Accepted {node body position} {
+    if {[hir::syntax::scopeBindNames $body] eq {}} {
+====
+proc hir::static::Accepted {node body position} {
+    lappend body [hir::syntax::rootRef [dict get $node origin] unit]
+    if {[hir::syntax::scopeBindNames $body] eq {}} {
+>>>>
+
+@@ runtime-errors-wrapped a body that may fail at run time with an application error is treated as rejected (its declared error becomes CompilerError)
+## hir/static.tcl
+<<<<
+    set owners [dict create "" {}]
+    foreach diagnostic [dict get $hir diagnostics] {
+====
+    set owners [dict create "" {}]
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict exists $node effectiveErrors] && [dict get $node effectiveErrors] ne {}} {
+            dict lappend hir diagnostics [dict create kind UNHANDLED-ERROR message "may fail" expr $e]
+        }
+    }
+    foreach diagnostic [dict get $hir diagnostics] {
+>>>>
+
+@@ keeps-runtime-wrapper an accepted block keeps a run-time wrapper: its body runs as an immediately called closure
+## hir/static.tcl
+<<<<
+proc hir::static::Accepted {node body position} {
+    if {[hir::syntax::scopeBindNames $body] eq {}} {
+====
+proc hir::static::Accepted {node body position} {
+    set origin [dict get $node origin]
+    return [list [hir::syntax::callNode $origin [hir::syntax::blockNode [dict get $node bodyOrigin] {} $body]]]
+    if {[hir::syntax::scopeBindNames $body] eq {}} {
+>>>>
+
+@@ executes-prefix a rejected block runs its body's statements before the last, then fails
+## hir/static.tcl
+<<<<
+        return [list [Reified $node [lindex [dict get $decisions $key] 1]]]
+====
+        if {$position eq "statement"} {
+            return [concat [lrange [Sequence [dict get $node body] $decisions] 0 end-1] \
+                [list [Reified $node [lindex [dict get $decisions $key] 1]]]]
+        }
+        return [list [Reified $node [lindex [dict get $decisions $key] 1]]]
+>>>>
+
+@@ leaks-binding a rejected block leaves its body's value bindings behind in the enclosing scope
+## hir/static.tcl
+<<<<
+        return [list [Reified $node [lindex [dict get $decisions $key] 1]]]
+====
+        if {$position eq "statement"} {
+            set binds [lmap n [dict get $node body] {
+                expr {[dict get $n kind] eq "bind" && [dict get $n value kind] ne "block" ? $n : [continue]}
+            }]
+            return [concat $binds [list [Reified $node [lindex [dict get $decisions $key] 1]]]]
+        }
+        return [list [Reified $node [lindex [dict get $decisions $key] 1]]]
+>>>>
+
+@@ leaks-declaration a rejected block leaves its body's function declarations behind (a binding, a method-call candidate)
+## hir/static.tcl
+<<<<
+        return [list [Reified $node [lindex [dict get $decisions $key] 1]]]
+====
+        if {$position eq "statement"} {
+            set fns [lmap n [dict get $node body] {
+                expr {[dict get $n kind] eq "bind" && [dict get $n value kind] eq "block" ? $n : [continue]}
+            }]
+            return [concat $fns [list [Reified $node [lindex [dict get $decisions $key] 1]]]]
+        }
+        return [list [Reified $node [lindex [dict get $decisions $key] 1]]]
+>>>>
+
+@@ leaks-affine-move every site that fails in a round is rejected at once, so a rejected body's move decides a later block's verdict
+## hir/static.tcl
+<<<<
+            if {$deps eq "" || $first in [dict get $deps sites $key]} {
+                # Without an analysis every other site is unknown.
+====
+            if {0} {
+                # Without an analysis every other site is unknown.
+>>>>
+
+@@ outermost-owner a diagnostic belongs to the outermost site holding it, not the innermost
+## hir/static.tcl
+<<<<
+        if {$at >= $start && $at <= [dict get $span end] && $start > $best} {
+            set owner [dict get $site key]
+            set best $start
+        }
+====
+        if {$at >= $start && $at <= [dict get $span end] && ($best < 0 || $start < $best)} {
+            set owner [dict get $site key]
+            set best $start
+        }
+>>>>
+
+@@ known-error-rejects-reified KNOWN-ERROR counts a rejected block's reified failure as proof that its function never completes normally
+## hir/completions.tcl
+<<<<
+    set normal [expr {$result ne {never} || [dict get $ctx returned] || [dict get $ctx intended]}]
+====
+    set normal [expr {$result ne {never} || [dict get $ctx returned]}]
+>>>>
+
+@@ known-error-disabled KNOWN-ERROR is disabled globally
+## hir/completions.tcl
+<<<<
+    dict set hir exprs $e mayReturnNormally $normal
+    if {!$normal} {
+        set declared [hir::get $hir $target declaredErrors]
+====
+    dict set hir exprs $e mayReturnNormally $normal
+    if {0} {
+        set declared [hir::get $hir $target declaredErrors]
+>>>>
+
+@@ warning-becomes-error a warning in a static body rejects the block like a diagnostic
+## hir/static.tcl
+<<<<
+    set hir [hir::BuildFull $nodes $options $given $halt checked $seeds]
+====
+    set hir [hir::BuildFull $nodes $options $given $halt checked $seeds]
+    if {[dict get $hir diagnostics] eq ""} {
+        foreach w [hir::warnings::collect $hir] {
+            dict lappend hir diagnostics [dict create kind TYPE message [dict get $w message] expr "" origin [dict get $w primary]]
+        }
+    }
+>>>>
+
+@@ internal-becomes-compiler-error a failure of the compiler while it builds a round is reified as the first undecided site's CompilerError
+## hir/static.tcl
+<<<<
+        set hir [Round $nodes $options $given $decisions 1 checked $seeds]
+====
+        if {[catch {Round $nodes $options $given $decisions 1 checked $seeds} hir]} {
+            set victim ""
+            foreach site $sites {
+                if {![dict exists $decisions [dict get $site key]]} {
+                    set victim $site
+                    break
+                }
+            }
+            if {$victim eq ""} {
+                error $hir
+            }
+            dict set decisions [dict get $victim key] [list rejected [dict create kind TYPE message $hir \
+                origin [dict get $victim bodyOrigin] related {}]]
+            continue
+        }
+>>>>
+
+@@ internal-diagnostic-reified a diagnostic the compiler marks as its own failure is reified like any other
+## hir/static.tcl
+<<<<
+    return [expr {[dict exists $diagnostic internal]
+        || [string match *-INTERNAL [dict get $diagnostic kind]]}]
+====
+    return 0
+>>>>
+
+@@ same-failure-counts-reified SAME-FAILURE counts a rejected block's reified failure as a fail site the programmer wrote
+## hir/warnings.tcl
+<<<<
+        if {[dict exists $node static]} {
+            continue
+        }
+        if {[dict get $node kind] eq "fail" && [dict get $node reachable]
+====
+        if {[dict get $node kind] eq "fail" && [dict get $node reachable]
+>>>>

@@ -12,8 +12,8 @@
 #   core IR text --hir::build--> HIR              (an input notation: examples,
 #                                                  tests; same builder)
 #
-#   HIR --hir::lower--> core IR --> Tcl reference interpreter (core/) and the
-#                                   Tcl compiler (compiler/)
+#   HIR --hir::lower--> core IR --> Tcl reference interpreter (core/)
+#   HIR --core::compiler::compileHir--> Tcl procs (compiler/)
 #   HIR --native::lowered--> NIR --> native: JIT, object, standalone executable
 #                                    (native/), later a bytecode interpreter
 #
@@ -52,7 +52,20 @@
 #   modules      NAMESPACE -> ScopeId of that namespace's own module
 #                section scope (surface/modules.tcl, hir/resolve.tcl's
 #                ResolveQualifiedRef); absent for a program with no modules
-#   diagnostics  list of {kind KIND message TEXT expr ExprId}
+#   diagnostics  list of {kind KIND message TEXT expr ExprId}, optionally
+#                with `origin` (the primary location, when not EXPR's) and
+#                `related` (further locations the diagnostic names, as
+#                origins in message order: a used value's move), and
+#                `internal 1` on a failure of the compiler itself
+#   staticSites  the static intrinsics of a source program and their
+#                decisions (hir/static.tcl, STATIC-COMPILE.md): site key ->
+#                {key origin operation outcome accepted|rejected ?diagnostic
+#                D?}; absent for a program without any. `staticRounds` is the
+#                number of builds the decisions took. No analysis, lowering
+#                or backend reads either: an accepted block is ordinary
+#                syntax, a rejected one an ordinary `fail` (whose expression
+#                carries `static {operation OP kind KIND}`, provenance read
+#                by KNOWN-ERROR, SAME-FAILURE and diagnostics only)
 #   warnings     compiler-internal side table of compiler warnings
 #                (hir/warnings.tcl, WARNINGS-SAME-RETURN.md): a list of
 #                {code message primary secondary data} records, attached by the
@@ -97,7 +110,12 @@
 #   block     bodyScope, params (BindingIds), body (ExprIds),
 #             captures (BindingIds), staticRefs (BindingIds: module-static
 #             references, disjoint from captures -- hir::isModuleBinding,
-#             MODULE-STATIC-RETAINED-VALUES.md), resultType (TypeId)
+#             MODULE-STATIC-RETAINED-VALUES.md), resultType (TypeId),
+#             nomethod (1, only on a `nomethod fn`: its author's declaration
+#             that it is never the callee of method syntax; printed by
+#             hir::format as `nomethod` and read back by hir::parse; the
+#             binding of the function carries `nomethod 1` too, which method
+#             resolution reads -- WARNINGS-METHOD-ELIGIBLE.md)
 #   call      callee, args (ExprIds), target ("" | {native SymbolId} |
 #             {block ExprId}), known ("" | 1 | 0: result decided statically).
 #             A call written `receiver.name(args)` with a function `name`
@@ -108,7 +126,18 @@
 #             ambiguity check and diagnostics only (no analysis, lowering or
 #             backend reads it).
 #             Without such a function the written callee is a `project`
-#             marked `methodCallee 1` (diagnostic wording only)
+#             marked `methodCallee 1` (diagnostic wording only). A call the
+#             source frontend built also carries `written` {form F ns NS}: how
+#             it was spelled (F: function `f(x)`, method `x.f()`, list `[x]`,
+#             operator `x + y`, which no later stage can recover) and the
+#             namespace of the code it is in (NS: "" for the entry program),
+#             recorded in every compilation mode for the METHOD-ELIGIBLE
+#             warning (hir/warnings.tcl, WARNINGS-METHOD-ELIGIBLE.md) and read
+#             by nothing else: no analysis, lowering, backend or hir::format
+#             sees it. Calls from core IR carry no `written`.
+#             A method-style call whose only visible functions of that name are
+#             declared `nomethod` stays a call of the written field value and
+#             is the resolution diagnostic NOMETHOD-CALL
 #   if        condition, thenScope, thenBody, elseScope, elseBody,
 #             refinements (dict OUTCOME -> BindingId FACT pairs)
 #   loop      bodyScope, body
@@ -202,6 +231,23 @@ if {[info commands ::core::evalProgram] eq ""} {
 namespace eval hir {
     variable home [file dirname [file normalize [info script]]]
     variable prefixes [dict create expr e scope s binding b symbol y type t file f node n]
+    # Whole-program build counters (STATIC-COMPILE.md, "Decision economics"):
+    # `builds` counts every hir::BuildOnce, `methodTrials` and `methodFinals`
+    # the method-call decisions' trial and final builds among them, and
+    # `methodReused` the builds those decisions did not repeat because the
+    # one they needed had already been made (DecideMethodCalls). Measurement
+    # only: read as differences by hir/static.tcl and the benchmarks, never
+    # by an analysis.
+    variable buildStats [dict create builds 0 methodTrials 0 methodFinals 0 methodReused 0]
+    # 0 makes DecideMethodCalls build every trial and final build again even
+    # when it is the build it started from (measurement and audits only).
+    variable methodBuildReuse 1
+}
+
+# The build counters (hir::buildStats) as they are now.
+proc hir::BuildStats {} {
+    variable buildStats
+    return $buildStats
 }
 
 # ---------------------------------------------------------------------------
@@ -225,9 +271,17 @@ proc hir::NewId {hirVar kind} {
     return [dict get $prefixes $kind]$n
 }
 
-proc hir::Diagnose {hirVar kind message expr} {
+proc hir::Diagnose {hirVar kind message expr {related {}}} {
     upvar 1 $hirVar hir
-    dict lappend hir diagnostics [dict create kind $kind message $message expr $expr]
+    set diagnostic [dict create kind $kind message $message expr $expr]
+    if {$related ne {}} {
+        # The diagnostic's related locations (origins, in the order its
+        # message names them): the further places it is about, beside its
+        # primary location -- e.g. where a used value was moved. Data, so a
+        # consumer never parses them out of the message (STATIC-COMPILE.md).
+        dict set diagnostic related $related
+    }
+    dict lappend hir diagnostics $diagnostic
 }
 
 # Diagnose, locating the diagnostic at ORIGIN (an expression origin, e.g. a
@@ -253,7 +307,8 @@ proc hir::DiagnoseAt {hirVar kind message expr origin} {
 #                   a program that fails to resolve is never typed, analyzed
 #                   or specialized.
 #   -strict 0       keep diagnostics in the HIR; the error stays a run-time
-#                   error of the lowered program (used by the compiler)
+#                   error of the program (the compiler's core IR text entry
+#                   points, the test harness)
 #
 # Malformed IR always raises {CORE MALFORMED}.
 #
@@ -298,8 +353,8 @@ proc hir::build {exprs args} {
 #                   CANONICAL ...}}, one per file, keyed by the namespace the
 #                   file is the module of ("" for the entry program). Given
 #                   (even empty), it replaces the compilation's table; omitted,
-#                   the table is left as it is (core IR builds, internal
-#                   rebuilds). Consulted by resolution only: no import is ever
+#                   the table is left as it is (core IR text builds, trial
+#                   builds). Consulted by resolution only: no import is ever
 #                   an expression.
 #
 #   -struct-decls D surface/lower.tcl's StructDeclOf dicts (one per "struct
@@ -310,8 +365,8 @@ proc hir::build {exprs args} {
 #                   STRUCTS.md), so `Name { ... }` and a `Name` annotation
 #                   resolve through it. A caller that passes this option, even
 #                   empty, starts a fresh struct registry (the surface
-#                   frontends always do); one that omits it (core IR builds,
-#                   internal rebuilds) leaves the registry as it is. Kept as
+#                   frontends always do); one that omits it (core IR text
+#                   builds, trial builds) leaves the registry as it is. Kept as
 #                   `struct` entries of HIR's `sourceTypes`.
 #
 #   -error-decls D  surface/lower.tcl's ErrorDeclOf dicts (one per "error
@@ -329,7 +384,7 @@ proc hir::build {exprs args} {
 proc hir::buildSyntax {nodes args} {
     set options [Options hir::buildSyntax \
         {-mode program -strict 1 -origin "" -files {} -modules {} \
-            -type-decls {} -error-decls {} -struct-decls {} -imports {} -halt-on-resolution-errors 0} $args]
+            -type-decls {} -error-decls {} -struct-decls {} -trait-decls {} -imports {} -halt-on-resolution-errors 0} $args]
     set mode [dict get $options -mode]
     if {$mode ni {program sequence}} {
         error "hir::build: -mode must be program or sequence"
@@ -341,14 +396,70 @@ proc hir::buildSyntax {nodes args} {
     # candidate functions have been decided (DecideMethodCalls) -- which needs
     # the typed HIR of trial builds, so no build may raise before it.
     set halt [expr {[dict get $options -strict] || [dict get $options -halt-on-resolution-errors]}]
-    set hir [BuildOnce $nodes $options $given {} $halt checked]
-    if {$checked && [dict exists $hir methodCalls]} {
-        set hir [DecideMethodCalls $nodes $options $given $hir]
+    if {[hir::static::present $nodes [dict get $options -modules]]} {
+        # Static intrinsics (STATIC-COMPILE.md): each site is decided by
+        # ordinary builds of the program before the program itself is
+        # built; the result is the build of the decided syntax.
+        set hir [hir::static::decide $nodes $options $given $halt]
+    } else {
+        set hir [BuildFull $nodes $options $given $halt checked]
     }
     if {[dict get $options -strict] && [dict get $hir diagnostics] ne ""} {
         # Resolution failed, or a static check did: the first diagnostic.
         core::semanticError [dict get [lindex [dict get $hir diagnostics] 0] kind] \
             [dict get [lindex [dict get $hir diagnostics] 0] message]
+    }
+    return $hir
+}
+
+# The whole build of the syntax NODES (hir::buildSyntax's OPTIONS and GIVEN,
+# with no static node left: hir/static.tcl expands them first), stopping
+# after resolution when HALT and a name is unresolved. Sets CHECKEDVAR to
+# whether the static checks ran. Raises nothing for a diagnostic.
+#
+# SEEDS (key -> candidate display) are method-style calls already decided:
+# hir/static.tcl passes the decisions of its previous round that no change
+# since can have touched (STATIC-COMPILE.md, "Method-call decisions across
+# rounds"). They are the first build's choices and DecideMethodCalls takes
+# them as decided; without seeds the build is the one it always was.
+proc hir::BuildFull {nodes options given halt checkedVar {seeds {}}} {
+    upvar 1 $checkedVar checked
+    set traits [expr {[dict get $options -trait-decls] ne {}}]
+    # A source program that may construct coroutines may give a generic
+    # function an affine argument, which the monomorphization below
+    # specializes (AFFINE-VALUES.md).
+    set affine [expr {[dict exists $given -trait-decls]
+        && [hir::traits::UsesCoroutines $nodes [dict get $options -modules]]}]
+    if {$traits || $affine} {
+        # A trait program (TRAITS.md): every syntax node gets an identity
+        # the monomorphization below can name it by.
+        lassign [hir::traits::Stamp $nodes [dict get $options -modules]] nodes modules syntax
+        dict set options -modules $modules
+        dict set given -modules $modules
+    }
+    set hir [BuildOnce $nodes $options $given $seeds $halt checked]
+    if {$checked && [dict exists $hir methodCalls]} {
+        set hir [DecideMethodCalls $nodes $options $given $hir $seeds]
+    }
+    if {($traits || ($affine && [hir::traits::NeedsAffinePlan $hir])) && $checked && [dict get $hir diagnostics] eq ""} {
+        # Checked as written, with trait views; now the program every
+        # backend compiles: the same syntax built again, monomorphized.
+        set hir [hir::traits::monomorphize $nodes $options $given $hir $syntax]
+    }
+    if {$checked} {
+        # Calls of coroutine handles typed as resumes, written out as the
+        # resume operation (AFFINE-VALUES.md): what every backend compiles.
+        hir::coroutines::ElaborateResumes hir
+        # MutableVector places (MUTABLE-VECTOR.md): the logical copies a
+        # vector-bearing value makes leaving or entering a place, the
+        # snapshot an unrestricted vector's loop iterates, and the drop
+        # descriptors affine clear/swap carry. Never for HIR built from core
+        # IR (hir::build): core IR is what an elaboration lowers to -- it
+        # already says all of this, and it has lost the static types (an
+        # affine element type, a declared vector type) the elaboration reads.
+        if {[lindex [dict get $options -origin] 0] ne "ir"} {
+            hir::mutvec::Elaborate hir
+        }
     }
     return $hir
 }
@@ -361,6 +472,8 @@ proc hir::buildSyntax {nodes args} {
 # whether the static checks ran. Raises nothing for a diagnostic.
 proc hir::BuildOnce {nodes options given choices halt checkedVar} {
     upvar 1 $checkedVar checked
+    variable buildStats
+    dict incr buildStats builds
     set checked 0
     if {[dict exists $given -imports]} {
         hir::imports::apply [dict get $options -imports]
@@ -371,11 +484,49 @@ proc hir::BuildOnce {nodes options given choices halt checkedVar} {
         # of its own: no struct of an earlier compilation may stay visible.
         hir::structs::Reset
     }
+    if {[dict exists $given -type-decls]} {
+        # Likewise for enums (ENUMS.md), which ride in -type-decls: a
+        # program declaring none must not see an earlier compilation's
+        # (hir::sourcetypes::apply registers this program's own, if any).
+        hir::enums::Reset
+    }
+    set traitDecls ""
+    if {[dict exists $given -trait-decls]} {
+        # Likewise for traits (TRAITS.md): their names first, so every other
+        # type declaration that mentions one recognizes (and rejects) it;
+        # their requirements once every type they may name is registered.
+        hir::traits::declare [dict get $options -trait-decls]
+    }
     set sourceTypes [hir::sourcetypes::apply [dict get $options -type-decls] [dict get $options -struct-decls]]
+    if {[dict exists $given -trait-decls]} {
+        set traitDecls [hir::traits::resolve $sourceTypes]
+    }
+    if {[dict get $options -error-decls] ne {}} {
+        # The payload field types (ERROR-PAYLOADS.md) name the program's
+        # own types: resolved once those are registered.
+        hir::errordecls::resolvePayloads
+    }
     set hir [hir::resolve::program $nodes [dict get $options -mode] [dict get $options -origin] \
         [dict get $options -modules] $choices]
     dict set hir sourceTypes $sourceTypes
     dict set hir errorDecls $errorDecls
+    set payloads [hir::errordecls::entries]
+    if {[dict size $payloads]} {
+        # The payload descriptors of the payload-bearing errors
+        # (ERROR-PAYLOADS.md); absent when the program declares none.
+        dict set hir errorPayloads $payloads
+    }
+    if {$traitDecls ne ""} {
+        dict set hir traits $traitDecls
+    }
+    if {$traitDecls ne "" || [dict exists $given -trait-decls]} {
+        # The implementation candidates conformance reads: every unit's own
+        # top-level definitions, by source name, before hygiene renames them
+        # -- also the location-independent identities a specialization of a
+        # generic function for an affine argument resolves its references by
+        # (hir::traits::IdentOf, AFFINE-VALUES.md).
+        hir::traits::index $hir
+    }
     hir::hygiene::apply hir
     dict for {f path} [dict get $options -files] {
         dict set hir files $f [dict create id $f path $path]
@@ -397,7 +548,10 @@ proc hir::BuildOnce {nodes options given choices halt checkedVar} {
 # still carry (an error it declares that nobody handled yet, or that provably
 # always fails) and the ambiguity check itself.
 proc hir::MethodObligationKinds {} {
-    return {UNHANDLED-ERROR KNOWN-ERROR UNDECLARED-ERROR AMBIGUOUS-METHOD-CALL}
+    # MISSING-CONTEXT: a context the selected function needs is an obligation
+    # of the call (CONTEXTS.md), never evidence that the candidate does not
+    # fit -- exactly like a declared error nobody handled yet.
+    return {UNHANDLED-ERROR KNOWN-ERROR UNDECLARED-ERROR AMBIGUOUS-METHOD-CALL MISSING-CONTEXT}
 }
 
 # The diagnostics of HIR (a trial build) located in the call EXPR or anything
@@ -465,11 +619,32 @@ proc hir::MethodCallProblems {hir expr} {
 # repeat with the calls decided so far fixed, because a call's receiver may
 # be another undecided call's result. Only calls with several candidates ever
 # cost a build; a program without one is built once. Returns the final HIR.
-proc hir::DecideMethodCalls {nodes options given hir} {
+#
+# A build whose choices resolve every call to the candidate HIR (the build
+# this procedure starts from) already resolved it to is HIR itself
+# (SameChoices): it is not made again -- a trial of the stand-in candidates,
+# and the final build when nothing else was built since (so the
+# per-compilation registries are still that build's).
+proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
+    variable buildStats
+    variable methodBuildReuse
     set calls [dict get $hir methodCalls]
     set decided [dict create]
+    # Calls decided before this build (BuildFull's SEEDS) are decided -- a
+    # call still there, with that candidate still among its candidates.
+    dict for {key choice} $seeds {
+        if {[dict exists $calls $key] && $choice in [dict get $calls $key candidates]} {
+            dict set decided $key $choice
+        }
+    }
+    # Whether the last build made is HIR (no trial was built since).
+    set lastIsInitial 1
     set validity [dict create]
     set problemsOf [dict create]
+    # A method-style call on a trait view is an operation of the trait
+    # (TRAITS.md): the candidates visible by name take no part in it, so it
+    # is never ambiguous, whatever the code imports -- decided as is.
+    TraitCallsDecided $hir $calls decided
     while 1 {
         set undecided [lmap {key info} $calls {
             if {[dict exists $decided $key] || [string is integer -strict $key]} continue
@@ -482,13 +657,26 @@ proc hir::DecideMethodCalls {nodes options given hir} {
         }
         set validity [dict create]
         set problemsOf [dict create]
+        # Key -> the receiver types the call had in the trial builds: a call
+        # whose receiver another undecided call can change (a candidate's
+        # parameter kind narrows the receiver's binding for what follows)
+        # is decided only once its receiver is the same in every build.
+        set receivers [dict create]
         for {set t 0} {$t < $rounds} {incr t} {
             set choices $decided
             foreach key $undecided {
                 set candidates [dict get $calls $key candidates]
                 dict set choices $key [lindex $candidates [expr {min($t, [llength $candidates] - 1)}]]
             }
-            set trial [BuildOnce $nodes $options $given $choices 0 checked]
+            if {$methodBuildReuse && [SameChoices $hir $choices]} {
+                set trial $hir
+                set checked 1
+                dict incr buildStats methodReused
+            } else {
+                set trial [BuildOnce $nodes $options $given $choices 0 checked]
+                dict incr buildStats methodTrials
+                set lastIsInitial 0
+            }
             if {!$checked} {
                 # Not typeable: no call can be decided on types.
                 set undecided {}
@@ -497,9 +685,14 @@ proc hir::DecideMethodCalls {nodes options given hir} {
             foreach key $undecided {
                 set candidates [dict get $calls $key candidates]
                 if {$t >= [llength $candidates] || ![dict exists $trial methodCalls $key]} continue
-                dict set problemsOf $key [lindex $candidates $t] \
-                    [MethodCallProblems $trial [dict get $trial methodCalls $key expr]]
+                set callExpr [dict get $trial methodCalls $key expr]
+                dict set problemsOf $key [lindex $candidates $t] [MethodCallProblems $trial $callExpr]
+                set callArgs [dict get $trial exprs $callExpr args]
+                if {$callArgs ne ""} {
+                    dict lappend receivers $key [hir::typeOf $trial [lindex $callArgs 0]]
+                }
             }
+            TraitCallsDecided $trial $calls decided
         }
         if {$undecided eq ""} break
         # A problem every candidate shares says nothing about which fits.
@@ -534,9 +727,21 @@ proc hir::DecideMethodCalls {nodes options given hir} {
         set progress 0
         foreach key $undecided {
             set valid [dict keys [dict filter [dict get $validity $key] value 1]]
-            if {[llength $valid] == 1} {
+            set stable [expr {![dict exists $receivers $key] || [llength [lsort -unique [dict get $receivers $key]]] <= 1}]
+            if {[llength $valid] == 1 && $stable} {
                 dict set decided $key [lindex $valid 0]
                 set progress 1
+            }
+        }
+        if {!$progress} {
+            # Every call's receiver depends on another undecided call: the
+            # unique valid candidates decide, as before.
+            foreach key $undecided {
+                set valid [dict keys [dict filter [dict get $validity $key] value 1]]
+                if {[llength $valid] == 1} {
+                    dict set decided $key [lindex $valid 0]
+                    set progress 1
+                }
             }
         }
         if {!$progress} break
@@ -553,9 +758,22 @@ proc hir::DecideMethodCalls {nodes options given hir} {
         }
         lappend rejected $key $valid
     }
-    set final [BuildOnce $nodes $options $given $choices 0 checked]
+    if {$methodBuildReuse && $lastIsInitial && [SameChoices $hir $choices]} {
+        set final $hir
+        dict set final methodChoices $choices
+        dict incr buildStats methodReused
+    } else {
+        set final [BuildOnce $nodes $options $given $choices 0 checked]
+        dict incr buildStats methodFinals
+    }
     foreach {key valid} $rejected {
         if {![dict exists $final methodCalls $key]} continue
+        if {[UnknownTraitOperationInside [dict get $problemsOf $key]]} {
+            # A receiver computed by an operation its trait does not declare
+            # (TRAIT-UNKNOWN-OPERATION, typed any as a stand-in) fails every
+            # candidate: that diagnostic is the cause and is already reported.
+            continue
+        }
         set info [dict get $final methodCalls $key]
         set e [dict get $info expr]
         set name [dict get $info name]
@@ -579,7 +797,64 @@ proc hir::DecideMethodCalls {nodes options given hir} {
         set added [lindex [dict get $final diagnostics] end]
         dict set final diagnostics [concat [list $added] $diagnostics]
     }
+    # The decided calls (not the rejected ones' stand-ins), for a later build
+    # of a changed program that can reuse them (hir/static.tcl). Bookkeeping
+    # of the decision, never read by an analysis.
+    dict set final methodDecided $decided
     return $final
+}
+
+# 1 if a build given the method-call choices CHOICES (key -> candidate
+# display) resolves every multi-candidate method call of HIR (a typed build:
+# its `methodCalls`) to the candidate HIR resolved it to -- a call CHOICES
+# does not name, or names with a display that is not one of its candidates,
+# stands in with its first candidate (hir::resolve::MethodChoice). Such a
+# build is HIR itself: hir::BuildOnce is a pure function of its inputs, and
+# the choices are the only one that differs.
+proc hir::SameChoices {hir choices} {
+    dict for {key info} [dict get $hir methodCalls] {
+        set candidates [dict get $info candidates]
+        set want [lindex $candidates 0]
+        if {[dict exists $choices $key] && [dict get $choices $key] in $candidates} {
+            set want [dict get $choices $key]
+        }
+        if {$want ne [dict get $info chosen]} {
+            return 0
+        }
+    }
+    return 1
+}
+
+# 1 if every candidate's problems (PERCANDIDATE, as MethodCallProblems gives
+# them) include an operation a trait does not declare.
+proc hir::UnknownTraitOperationInside {perCandidate} {
+    if {[dict size $perCandidate] == 0} {
+        return 0
+    }
+    dict for {candidate problems} $perCandidate {
+        if {[lsearch -exact -index 0 $problems TRAIT-UNKNOWN-OPERATION] < 0} {
+            return 0
+        }
+    }
+    return 1
+}
+
+# Marks, in the caller's DECIDEDVAR, every multi-candidate method call of
+# CALLS (a methodCalls table) that HIR (a typed build) types as a trait
+# operation: such a call is decided by its receiver's trait, never by the
+# candidates, so it keeps the candidate its build stood in with.
+proc hir::TraitCallsDecided {hir calls decidedVar} {
+    upvar 1 $decidedVar decided
+    if {![dict exists $hir methodCalls]} {
+        return
+    }
+    dict for {key info} $calls {
+        if {[dict exists $decided $key] || ![dict exists $hir methodCalls $key]} continue
+        set e [dict get $hir methodCalls $key expr]
+        if {[dict exists $hir exprs $e traitCall]} {
+            dict set decided $key [dict get $hir methodCalls $key chosen]
+        }
+    }
 }
 
 # Types resolved HIR (inferring every block's intrinsic contract,
@@ -591,8 +866,9 @@ proc hir::DecideMethodCalls {nodes options given hir} {
 # like any other; the whole typing is then redone with those parameters'
 # trusted contracts demoted to checked-only, keeping the original
 # diagnostics. With -strict 1 the first diagnostic is raised either way;
-# with -strict 0 (the core-IR compile path, whose diagnostics stay in the
-# HIR and become AOT blockers) this is what keeps every backend from
+# with -strict 0 (a lenient front-end or core IR text build, whose
+# diagnostics stay in the HIR and become AOT blockers) this is what keeps
+# every backend from
 # compiling a body that assumes a contract its own program breaks --
 # exactly what such a program meant before its parameter had one.
 #
@@ -603,7 +879,6 @@ proc hir::DecideMethodCalls {nodes options given hir} {
 # assumption of a broken contract can recover: native::prepareHir does.
 proc hir::check {hirVar} {
     upvar 1 $hirVar hir
-    hir::containers::index hir
     set pre $hir
     CheckOnce hir {}
     if {![dict exists $hir violatedContracts]} {
@@ -620,118 +895,25 @@ proc hir::check {hirVar} {
 
 proc hir::CheckOnce {hirVar demote} {
     upvar 1 $hirVar hir
+    # The coroutine protocols (hir/coroutines.tcl) type every yield, so they
+    # are inferred before the types are.
+    hir::coroutines::analyze hir
     hir::signatures::infer hir $demote
     hir::range::verifyDeclaredResults hir
     hir::range::verifyDeclaredParams hir
     hir::callables::verify hir
     hir::lockstep::verify hir
     hir::structs::verify hir
+    hir::contexts::verify hir
+    hir::coroutines::verify hir
+    hir::affine::verify hir
+    hir::mutvec::verify hir
     hir::syscall::verify hir
     hir::semantic::verify hir
     hir::errorsets::verify hir
     hir::modulebinding::validate hir
     hir::structs::promoteOpacity hir
-}
-
-# Resolves TARGETS (flat NATIVE-NAME NAMESPACE NAME triples,
-# hir::buildSyntax's -module-native-targets) into HIR's own
-# moduleNativeTargets field: NATIVE-NAME -> {BLOCK-EXPRID ARITY}, consulted
-# by hir::types::BindingType. NAMESPACE::NAME must already be a module
-# definition somewhere in this same HIR (hir::resolve has already run, so
-# its `modules` table, hir/resolve.tcl, is populated): a caller-side bug (a
-# namespace/name the loader never actually merged in) is a plain Tcl
-# error, not a user-facing diagnostic.
-proc hir::ResolveModuleNativeTargets {hirVar targets} {
-    upvar 1 $hirVar hir
-    if {$targets eq ""} {
-        return
-    }
-    set resolved [dict create]
-    set bridged [dict create]
-    foreach {nativeName ns name} $targets {
-        if {![dict exists $hir modules $ns]} {
-            error "hir::buildSyntax: -module-native-targets: module \"$ns\" was not loaded into this program"
-        }
-        set bodyScope [dict get $hir modules $ns]
-        # hir::hygiene::qualifyModules (run between hir::resolve::program
-        # and here -- hir::buildSyntax) has already renamed every binding
-        # this scope declares, and its own `names` entry, from NAME to
-        # "${ns}::${name}"; look it up under that spelling.
-        set qualified "${ns}::${name}"
-        if {![dict exists $hir scopes $bodyScope names $qualified]} {
-            error "hir::buildSyntax: -module-native-targets: module \"$ns\" has no definition \"$name\""
-        }
-        set b [dict get $hir scopes $bodyScope names $qualified]
-        set bindExpr [dict get $hir bindings $b declaredBy]
-        set value [dict get $hir exprs $bindExpr value]
-        if {[dict get $hir exprs $value kind] ne "block"} {
-            error "hir::buildSyntax: -module-native-targets: \"${ns}::${name}\" is not bound to a function"
-        }
-        dict set resolved $nativeName [list $value [llength [dict get $hir exprs $value params]]]
-        set root [dict get $hir scopes [dict get $hir top] parent]
-        dict set bridged [dict get $hir scopes $root names $nativeName] $b
-    }
-    dict set hir moduleNativeTargets $resolved
-    BridgeProvenance hir $bridged
-}
-
-# Records, for every reference to a bridged native's root binding (BRIDGED:
-# root BindingId -> the target module function's own BindingId; an alias
-# spelling shares its canonical name's root binding, so both are covered),
-# what that reference now denotes on this backend: the module function's
-# Block value, which lives in the module function's own binding -- not the
-# native's root binding, which every region reaches for free.
-#
-#   * `bridge` (on the ref) is that module BindingId: the one place native
-#     lowering (native/lower.tcl's ModuleBridgeBinding) reads the bridged
-#     function's value from.
-#   * Every block enclosing the reference reaches that module binding
-#     exactly as a module-qualified reference to it
-#     (hir::resolve::ResolveQualifiedRef) already makes them reach it -- so a
-#     caller reaches the bridged function the same way an ordinary
-#     `NAMESPACE::NAME` call from the same place would. The bridged target is
-#     always itself a module function (a module section's own binding, MODULE
-#     -STATIC-RETAINED-VALUES.md's `staticRefs`), so this records module-
-#     static provenance the same way hir::resolve::Capture does, never an
-#     ordinary lexical capture -- the bridge's target no longer forces every
-#     caller's enclosing function to become closure-valued merely to reach
-#     it.
-#
-# Only the function's own binding is recorded, never anything *it*
-# references: the function's module dependencies were resolved into its own
-# body's own staticRefs/captures by ordinary resolution, where it is defined
-# (its module section), and stay there. hir::resolve cannot do this itself:
-# the bridge's targets are only resolved here, after resolution and hygiene
-# (a bridged reference may also precede the target's own module section).
-proc hir::BridgeProvenance {hirVar bridged} {
-    upvar 1 $hirVar hir
-    if {[dict size $bridged] == 0} {
-        return
-    }
-    dict for {e node} [dict get $hir exprs] {
-        if {[dict get $node kind] ne "ref" || ![dict exists $node binding]
-                || ![dict exists $bridged [dict get $node binding]]} {
-            continue
-        }
-        set b [dict get $bridged [dict get $node binding]]
-        dict set hir exprs $e bridge $b
-        set bindingScope [dict get $hir bindings $b scope]
-        set static [isModuleScope $hir $bindingScope]
-        for {set s [dict get $node scope]} {$s ne ""} {set s [dict get $hir scopes $s parent]} {
-            if {[dict get $hir scopes $s kind] ne "block"} {
-                continue
-            }
-            if {!$static && [scopeWithin $hir $bindingScope $s]} {
-                break
-            }
-            set block [dict get $hir scopes $s owner]
-            set field [expr {$static ? "staticRefs" : "captures"}]
-            set list [dict get $hir exprs $block $field]
-            if {$b ni $list} {
-                dict set hir exprs $block $field [concat $list [list $b]]
-            }
-        }
-    }
+    hir::traits::verify hir
 }
 
 proc hir::Options {command defaults given} {
@@ -880,7 +1062,9 @@ proc hir::children {hir e} {
         }
         struct  { return [dict get $node fields] }
         project { return [list [dict get $node receiver]] }
-        fail  { return {} }
+        fail  {
+            return [expr {[dict exists $node value] && [dict get $node value] ne "" ? [list [dict get $node value]] : {}}]
+        }
         handle {
             set result [list [dict get $node call]]
             foreach body [dict get $node handlerBodies] {
@@ -1031,7 +1215,7 @@ proc hir::exprsAt {hir origin} {
 }
 
 apply {{dir} {
-    foreach file {syntax imports resolve flags refcheck hygiene sourcetypes structs syscall errordecls types exactvalue signatures modulebinding refine lower format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings} {
+    foreach file {syntax static staticdeps imports resolve flags contexts coroutines affine mutvec refcheck hygiene sourcetypes structs enums traits syscall errordecls types exactvalue signatures modulebinding refine repeatable lower format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings} {
         uplevel #0 [list source [file join $dir $file.tcl]]
     }
 }} $hir::home

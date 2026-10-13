@@ -1,7 +1,7 @@
 # The composed workload for this milestone: CSV with a header row, parsed
-# into a List of mutable open-addressed HashTables (examples/stdlib/
-# hashtable.bot's algorithm, unmodified), one per data row, keyed by the
-# shared header Strings, all held in one outer immutable List.
+# into a List of open-addressed HashTables (examples/stdlib/hashtable.bot's
+# algorithm, unmodified), one per data row, keyed by the shared header
+# Strings, all held in one outer immutable List.
 #
 #   name,age,city
 #   Alice,31,Berlin
@@ -12,10 +12,10 @@
 #
 # ("{...}" above is notation for a HashTable's contents, not a Botlish
 # literal -- there is no dict/record literal syntax; the actual value is a
-# List of opaque HashTable handles, read back with ht_get/ht_contains.)
+# List of HashTable values, read back with ht_get/ht_contains.)
 #
 # This file exists to compose two already-working mechanisms -- CSV parsing
-# (csv_geometric.bot's algorithm, duplicated verbatim below) and the mutable
+# (csv_geometric.bot's algorithm, duplicated verbatim below) and the
 # HashTable (hashtable.bot's algorithm, duplicated verbatim below) -- and
 # discover what happens when ordinary application code uses them together.
 # Neither is changed here; see bench/csv_records.tcl for the allocation,
@@ -133,7 +133,7 @@ fn geo_grow(storage, length, value) errors UpperOverrun:
     if length < capacity:
         return storage
 
-    new_capacity = geo_new_capacity(capacity, length)
+    new_capacity = capacity.geo_new_capacity(length)
     fresh = mutable_array::create(new_capacity, value)
     mutable_array::copy(fresh, 0, storage, 0, length)
     fresh
@@ -142,14 +142,14 @@ fn geo_grow(storage, length, value) errors UpperOverrun:
 # storage is mutated (or replaced by a grown copy, which is returned); the
 # caller's new length is LENGTH + 1.
 fn geo_append(storage, length, value) errors IndexNotFound, UpperOverrun:
-    grown = geo_grow(storage, length, value)
-    mutable_array::set(grown, length, value)
+    grown = storage.geo_grow(length, value)
+    grown.set(length, value)
     grown
 
 # STORAGE's first LENGTH elements as an ordinary immutable List
 # (finalization: a single exact-size copy, see mutable_array::freeze).
 fn geo_finish(storage, length) errors LowerUnderrun, UpperOverrun:
-    mutable_array::freeze(storage, length)
+    storage.freeze(length)
 
 # ---------------------------------------------------------------------------
 # CSV parsing (see csv.bot for the algorithm's description; identical to
@@ -171,30 +171,34 @@ fn peek(text, index) errors LowerUnderrun:
     if index >= str::length(text):
         return ""
 
-    str::substring(text, index, index + 1)
+    text.substring(index, index + 1)
 
-fn scan_unquoted(text, start, index) errors LowerUnderrun, UpperOverrun:
-    character = peek(text, index)
-    if character == "" or character == "," or character == "\n":
-        return {field: str::substring(text, start, index), index: index}
+fn quote_at?(text, index) errors IndexNotFound:
+    index < str::length(text) and text.char_at(index) == '"'
 
-    scan_unquoted(text, start, index + 1)
+fn scan_unquoted(text, start, index) errors IndexNotFound, LowerUnderrun, UpperOverrun:
+    if index < str::length(text):
+        character = text.char_at(index)
+        if character != ',' and character != '\n':
+            return text.scan_unquoted(start, index + 1)
 
-fn scan_quoted(text, index, field) errors LowerUnderrun:
-    character = peek(text, index)
-    if character == "\"":
-        if peek(text, index + 1) == "\"":
-            return scan_quoted(text, index + 2, str::concat(field, "\""))
+    {field: text.substring(start, index), index: index}
+
+fn scan_quoted(text, index, field) errors IndexNotFound, LowerUnderrun:
+    character = text.peek(index)
+    if text.quote_at?(index):
+        if text.quote_at?(index + 1):
+            return text.scan_quoted(index + 2, field.concat(character))
 
         return {field: field, index: index + 1}
 
-    scan_quoted(text, index + 1, str::concat(field, character))
+    text.scan_quoted(index + 1, field.concat(character))
 
-fn scan_field(text, index) errors LowerUnderrun, UpperOverrun:
-    if peek(text, index) == "\"":
-        return scan_quoted(text, index + 1, "")
+fn scan_field(text, index) errors IndexNotFound, LowerUnderrun, UpperOverrun:
+    if text.quote_at?(index):
+        return text.scan_quoted(index + 1, "")
 
-    scan_unquoted(text, index, index)
+    text.scan_unquoted(index, index)
 
 # The rest of a record whose first COUNT fields are in FIELDS, the last field
 # ending at STOP. (Defined before scan_record, its only caller, like every
@@ -204,43 +208,51 @@ fn scan_field(text, index) errors LowerUnderrun, UpperOverrun:
 # whole call chain -- TYPED-MUTARRAY-BUILDER-REFACTOR.md, "Definition-order
 # sensitivity".)
 fn scan_record_rest(text, stop, fields: MutableArray[str], count) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    delimiter = peek(text, stop)
-    if delimiter == ",":
-        scanned = scan_field(text, stop + 1)
-        more = geo_append(fields, count, scanned.field)
-        return scan_record_rest(text, scanned.index, more, count + 1)
+    if stop < str::length(text):
+        delimiter = text.char_at(stop)
+        if delimiter == ',':
+            scanned = text.scan_field(stop + 1)
+            more = fields.geo_append(count, scanned.field)
+            return text.scan_record_rest(scanned.index, more, count + 1)
 
-    if delimiter == "\n":
-        return {fields: geo_finish(fields, count), stop: stop + 1}
+        if delimiter == '\n':
+            return {fields: fields.geo_finish(count), stop: stop + 1}
 
-    {fields: geo_finish(fields, count), stop: stop}
+    {fields: fields.geo_finish(count), stop: stop}
 
 # The record starting at INDEX and the index where it stops: the first field
 # (a record always has one, possibly empty) starts the FIELDS builder.
 fn scan_record(text, index) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    scanned = scan_field(text, index)
-    scan_record_rest(text, scanned.index, geo_new(scanned.field), 1)
+    scanned = text.scan_field(index)
+    text.scan_record_rest(scanned.index, geo_new(scanned.field), 1)
 
 # The records from INDEX on, the first COUNT records already in RECORDS.
 fn scan_records(text, index, records: MutableArray[List[str]], count) errors IndexNotFound, LowerUnderrun, UpperOverrun:
     if index >= str::length(text):
-        return geo_finish(records, count)
+        return records.geo_finish(count)
 
-    scanned = scan_record(text, index)
-    more = geo_append(records, count, scanned.fields)
-    scan_records(text, scanned.stop, more, count + 1)
+    scanned = text.scan_record(index)
+    more = records.geo_append(count, scanned.fields)
+    text.scan_records(scanned.stop, more, count + 1)
 
 fn csv_parse(text) errors IndexNotFound, LowerUnderrun, UpperOverrun:
     if str::length(text) == 0:
         return []
 
-    scanned = scan_record(text, 0)
-    scan_records(text, scanned.stop, geo_new(scanned.fields), 1)
+    scanned = text.scan_record(0)
+    text.scan_records(scanned.stop, geo_new(scanned.fields), 1)
 
 # ---------------------------------------------------------------------------
-# HashTable (see hashtable.bot for the algorithm's description; identical,
-# unchanged -- including ht_new_sized, this milestone's presizing API, which
-# already existed).
+# HashTable (see hashtable.bot for the algorithm's description; identical
+# -- including ht_new_sized, this milestone's presizing API, which already
+# existed -- up to ht_set: a table is a value, and ht_set returns the
+# updated table, MUTABLE-ARRAY.md).
+
+struct HashTable:
+    controls: MutableArray[int]
+    keys: mutarray
+    values: mutarray
+    counts: mutarray
 
 fn ht_min_capacity():
     8
@@ -254,175 +266,195 @@ fn ht_occupied_state():
 fn ht_tombstone_state():
     2
 
-fn ht_fill_empty(controls, i, capacity) errors IndexNotFound:
-    if i >= capacity:
-        return unit
-
-    mutable_array::set(controls, i, ht_empty_state())
-    ht_fill_empty(controls, i + 1, capacity)
+# ---------------------------------------------------------------------------
+# Construction
 
 fn ht_alloc(capacity) errors IndexNotFound:
-    controls = mutable_array::allocate(capacity)
-    ht_fill_empty(controls, 0, capacity)
-    keys = mutable_array::allocate(capacity)
-    values = mutable_array::allocate(capacity)
-    table = mutable_array::allocate(5)
-    mutable_array::set(table, 0, controls)
-    mutable_array::set(table, 1, keys)
-    mutable_array::set(table, 2, values)
-    mutable_array::set(table, 3, 0)
-    mutable_array::set(table, 4, 0)
-    table
+    counts = mutable_array::allocate(2)
+    counts.set(0, 0)
+    counts.set(1, 0)
+    HashTable {controls: mutable_array::create(capacity, ht_empty_state()), keys: mutable_array::allocate(capacity), values: mutable_array::allocate(capacity), counts: counts}
 
 fn ht_new() errors IndexNotFound:
     ht_alloc(ht_min_capacity())
 
+# The smallest capacity, doubling from ht_min_capacity(), that keeps EXPECTED
+# entries under the 2/3 load-factor policy with zero tombstones -- for a
+# caller (e.g. the future CSV-header workload) that knows its entry count in
+# advance and wants to avoid growing while filling the table.
 fn ht_capacity_for(expected, capacity):
     if expected * 3 <= capacity * 2:
         return capacity
 
-    ht_capacity_for(expected, capacity * 2)
+    expected.ht_capacity_for(capacity * 2)
 
 fn ht_new_sized(expected) errors IndexNotFound:
-    ht_alloc(ht_capacity_for(expected, ht_min_capacity()))
+    ht_alloc(expected.ht_capacity_for(ht_min_capacity()))
 
-fn ht_controls(table) errors IndexNotFound:
-    mutable_array::at(table, 0)
-
-fn ht_keys(table) errors IndexNotFound:
-    mutable_array::at(table, 1)
-
-fn ht_values(table) errors IndexNotFound:
-    mutable_array::at(table, 2)
+# ---------------------------------------------------------------------------
+# Fields
 
 fn ht_size(table) errors IndexNotFound:
-    mutable_array::at(table, 3)
+    mutable_array::at(table.counts, 0)
 
 fn ht_tombstones(table) errors IndexNotFound:
-    mutable_array::at(table, 4)
+    mutable_array::at(table.counts, 1)
 
-fn ht_capacity(table) errors IndexNotFound:
-    mutable_array::capacity(ht_controls(table))
+fn ht_capacity(table):
+    mutable_array::capacity(table.controls)
 
-fn ht_probe_start(table, key) errors IndexNotFound:
-    mod(hash(key), ht_capacity(table))
+# ---------------------------------------------------------------------------
+# Probing (ordinary linear probing: see the file header)
 
-fn ht_probe_next(table, index) errors IndexNotFound:
+fn ht_probe_start(table, key):
+    hash(key).mod(ht_capacity(table))
+
+fn ht_probe_next(table, index):
     mod(index + 1, ht_capacity(table))
 
+# The index of KEY from INDEX on, or -1 if probing reaches an EMPTY slot
+# first. Zero managed allocations: only mutable_array::at, ==, and mod/hash
+# on values already in hand (req #10, #19).
 fn ht_find_get(table, key, index) errors IndexNotFound:
-    controls = ht_controls(table)
-    state = mutable_array::at(controls, index)
+    state = mutable_array::at(table.controls, index)
     if state == ht_empty_state():
         return -1
 
-    if state == ht_occupied_state() and mutable_array::at(ht_keys(table), index) == key:
+    if state == ht_occupied_state() and mutable_array::at(table.keys, index) == key:
         return index
 
-    ht_find_get(table, key, ht_probe_next(table, index))
+    table.ht_find_get(key, table.ht_probe_next(index))
 
+# The slot to use for inserting/replacing KEY from INDEX on: an existing
+# equal key's own slot (replace), the first EMPTY slot (confirming the key
+# is not later in the chain first), or an earlier TOMBSTONE reused once
+# that confirmation is done (FIRST-TOMBSTONE is -1 until one is seen). The
+# two slots that end the search at INDEX -- an EMPTY one with no earlier
+# TOMBSTONE, and KEY's own -- fall through to the one answer, INDEX.
 fn ht_find_insert(table, key, index, first_tombstone) errors IndexNotFound:
-    controls = ht_controls(table)
-    state = mutable_array::at(controls, index)
+    state = mutable_array::at(table.controls, index)
     if state == ht_empty_state():
         if first_tombstone >= 0:
             return first_tombstone
+    elif state == ht_occupied_state() and mutable_array::at(table.keys, index) == key:
+        unit
+    elif state == ht_tombstone_state() and first_tombstone < 0:
+        return table.ht_find_insert(key, table.ht_probe_next(index), index)
+    else:
+        return table.ht_find_insert(key, table.ht_probe_next(index), first_tombstone)
 
-        return index
+    index
 
-    if state == ht_occupied_state() and mutable_array::at(ht_keys(table), index) == key:
-        return index
+# ---------------------------------------------------------------------------
+# Lookup
 
-    if state == ht_tombstone_state() and first_tombstone < 0:
-        return ht_find_insert(table, key, ht_probe_next(table, index), index)
-
-    ht_find_insert(table, key, ht_probe_next(table, index), first_tombstone)
-
+# KEY's value, or unit if absent (see the file header's absence convention).
 fn ht_get(table, key) errors IndexNotFound:
-    index = ht_find_get(table, key, ht_probe_start(table, key))
+    index = table.ht_find_get(key, table.ht_probe_start(key))
     if index < 0:
         return unit
 
-    mutable_array::at(ht_values(table), index)
+    mutable_array::at(table.values, index)
 
 fn ht_contains(table, key) errors IndexNotFound:
-    ht_find_get(table, key, ht_probe_start(table, key)) >= 0
+    table.ht_find_get(key, table.ht_probe_start(key)) >= 0
+
+# ---------------------------------------------------------------------------
+# Resize/rehash: a fresh EMPTY destination, so the insertion routine below
+# never has to consider tombstones or existing keys (req #16) -- distinct
+# from, and simpler than, ht_find_insert above.
 
 fn ht_rehash_probe(newControls, index, capacity) errors IndexNotFound:
     state = mutable_array::at(newControls, index)
     if state == ht_empty_state():
         return index
 
-    ht_rehash_probe(newControls, mod(index + 1, capacity), capacity)
+    newControls.ht_rehash_probe(mod(index + 1, capacity), capacity)
 
+# DEST, the new table, with KEY/VALUE inserted at its first EMPTY slot from
+# KEY's hash on.
 fn ht_rehash_insert(dest, capacity, key, value) errors IndexNotFound:
-    newControls = dest.controls
-    index = ht_rehash_probe(newControls, mod(hash(key), capacity), capacity)
-    mutable_array::set(newControls, index, ht_occupied_state())
-    mutable_array::set(dest.keys, index, key)
-    mutable_array::set(dest.values, index, value)
-    unit
+    index = dest.controls.ht_rehash_probe(hash(key).mod(capacity), capacity)
+    dest.controls.set(index, ht_occupied_state())
+    dest.keys.set(index, key)
+    dest.values.set(index, value)
+    dest
 
-fn ht_rehash_scan(src, i, oldCapacity, dest, newCapacity) errors IndexNotFound:
+# DEST with every OCCUPIED slot of the old table (its arrays CONTROLS, KEYS
+# and VALUES) from I on rehashed into it at NEWCAPACITY. Only individual
+# mutable_array::at/::set ever move an entry here -- no mutable_array::copy
+# (req #23). (The old table's arrays are passed apart, not as the struct,
+# so that an instance of this function never has to project a field of a
+# table its generic caller cannot type.)
+fn ht_rehash_scan(controls, keys, values, i, oldCapacity, dest, newCapacity) errors IndexNotFound:
     if i >= oldCapacity:
-        return unit
+        return dest
 
-    oldControls = src.controls
-    if mutable_array::at(oldControls, i) == ht_occupied_state():
-        key = mutable_array::at(src.keys, i)
-        value = mutable_array::at(src.values, i)
-        ht_rehash_insert(dest, newCapacity, key, value)
+    if mutable_array::at(controls, i) == ht_occupied_state():
+        filled = dest.ht_rehash_insert(newCapacity, mutable_array::at(keys, i), mutable_array::at(values, i))
+        return controls.ht_rehash_scan(keys, values, i + 1, oldCapacity, filled, newCapacity)
 
-    ht_rehash_scan(src, i + 1, oldCapacity, dest, newCapacity)
+    controls.ht_rehash_scan(keys, values, i + 1, oldCapacity, dest, newCapacity)
 
+# A fresh NEWCAPACITY table holding every currently OCCUPIED entry of TABLE
+# and no tombstones. Its 4 MutableArrays are this call's only allocations
+# (req #20, #41).
 fn ht_rehash(table, newCapacity) errors IndexNotFound:
-    src = {controls: ht_controls(table), keys: ht_keys(table), values: ht_values(table)}
-    oldCapacity = ht_capacity(table)
-    newControls = mutable_array::allocate(newCapacity)
-    ht_fill_empty(newControls, 0, newCapacity)
-    dest = {controls: newControls, keys: mutable_array::allocate(newCapacity), values: mutable_array::allocate(newCapacity)}
-    ht_rehash_scan(src, 0, oldCapacity, dest, newCapacity)
-    mutable_array::set(table, 0, dest.controls)
-    mutable_array::set(table, 1, dest.keys)
-    mutable_array::set(table, 2, dest.values)
-    mutable_array::set(table, 4, 0)
-    unit
+    dest = ht_alloc(newCapacity)
+    dest.counts.set(0, ht_size(table))
+    table.controls.ht_rehash_scan(table.keys, table.values, 0, ht_capacity(table), dest, newCapacity)
 
+# Whether the *next* insert (one more occupied slot) would push occupancy
+# past 2/3 of capacity -- checked before insert ever writes anything.
 fn ht_should_grow(table) errors IndexNotFound:
     occupied = ht_size(table) + ht_tombstones(table)
     (occupied + 1) * 3 > ht_capacity(table) * 2
 
 fn ht_grow_or_clean(table) errors IndexNotFound:
     if ht_tombstones(table) > ht_size(table):
-        ht_rehash(table, ht_capacity(table))
-    else:
-        ht_rehash(table, ht_capacity(table) * 2)
+        return table.ht_rehash(ht_capacity(table))
 
+    table.ht_rehash(ht_capacity(table) * 2)
+
+# ---------------------------------------------------------------------------
+# Insert / replace
+#
+# ht_find_insert runs once against TABLE as it stands; only if that proves
+# KEY is new does load factor get checked at all, so replacing an existing
+# key never resizes (req #44) and never re-probes. A plain insert with
+# spare capacity likewise probes exactly once. Only the (rarer, already
+# allocating) grow path pays a second probe, against the freshly resized
+# table -- req #19's zero-allocation targets (replace, insert with spare
+# capacity, delete) never pay it.
+
+# TABLE with the write for a confirmed-absent KEY at INDEX (an EMPTY or
+# TOMBSTONE slot ht_find_insert chose): bumps size, and tombstones only if
+# INDEX was reusing one. Split out of ht_set below because it is needed
+# from two branches (with and without a resize in between).
 fn ht_place(table, index, key, value) errors IndexNotFound:
-    controls = ht_controls(table)
-    prior = mutable_array::at(controls, index)
-    mutable_array::set(controls, index, ht_occupied_state())
-    mutable_array::set(ht_keys(table), index, key)
-    mutable_array::set(ht_values(table), index, value)
-    mutable_array::set(table, 3, ht_size(table) + 1)
+    prior = mutable_array::at(table.controls, index)
+    table.controls.set(index, ht_occupied_state())
+    table.keys.set(index, key)
+    table.values.set(index, value)
+    table.counts.set(0, ht_size(table) + 1)
     if prior == ht_tombstone_state():
-        mutable_array::set(table, 4, ht_tombstones(table) - 1)
+        table.counts.set(1, ht_tombstones(table) - 1)
 
-    unit
+    table
 
+# TABLE with KEY mapped to VALUE (replacing an existing mapping of KEY).
 fn ht_set(table, key, value) errors IndexNotFound:
-    index = ht_find_insert(table, key, ht_probe_start(table, key), -1)
-    controls = ht_controls(table)
-    prior = mutable_array::at(controls, index)
-    if prior == ht_occupied_state():
-        mutable_array::set(ht_values(table), index, value)
-        return unit
+    index = table.ht_find_insert(key, table.ht_probe_start(key), -1)
+    if mutable_array::at(table.controls, index) == ht_occupied_state():
+        table.values.set(index, value)
+        return table
 
     if ht_should_grow(table):
-        ht_grow_or_clean(table)
-        return ht_place(table, ht_find_insert(table, key, ht_probe_start(table, key), -1), key, value)
+        grown = ht_grow_or_clean(table)
+        slot = grown.ht_find_insert(key, grown.ht_probe_start(key), -1)
+        return grown.ht_place(slot, key, value)
 
-    ht_place(table, index, key, value)
+    table.ht_place(index, key, value)
 
 # ---------------------------------------------------------------------------
 # Row-table construction: the new work this milestone composes on top of the
@@ -446,34 +478,36 @@ fn row_fill(table, headers, fields, i, field_count) errors IndexNotFound:
     if i >= field_count:
         return table
 
-    ht_set(table, list::at(headers, i), list::at(fields, i))
-    row_fill(table, headers, fields, i + 1, field_count)
+    filled = table.ht_set(list::at(headers, i), list::at(fields, i))
+    filled.row_fill(headers, fields, i + 1, field_count)
 
 # One row's HashTable: ordinary HashTable APIs only (ht_new/ht_new_sized,
 # ht_set), no bulk-row-insert primitive and no CSV-specific table API.
 fn row_table(headers, header_count, fields, presize) errors IndexNotFound:
-    table = row_new(presize, header_count)
-    row_fill(table, headers, fields, 0, list::length(fields))
+    table = presize.row_new(header_count)
+    table.row_fill(headers, fields, 0, list::length(fields))
 
 # RECORDS[i..) (RECORDS[0] is the header row, already consumed by the
 # caller) as row HashTables, appended to the outer GeometricBuilder OUTER
 # (storage) holding COUNT row tables so far -- req #5's "one existing
 # efficient construction strategy" for the result, not repeated list::append.
 #
-# OUTER's declared MutableArray[mutarray] is this file's one concrete
+# OUTER's declared MutableArray[HashTable] is this file's one concrete
 # (non-generic) parameter contract on the builder path: build_rows appends a
-# value it computes itself (TABLE, statically a mutarray), so its own
-# definition must already know OUTER holds mutarrays -- an untyped OUTER is
+# value it computes itself (TABLE, statically a HashTable), so its own
+# definition must already know OUTER holds HashTables -- an untyped OUTER is
 # analyzed as a raw mutarray of unknown elements, and geo_grow would then
-# copy those unknown slots into a MutableArray[mutarray]. The geo_* functions
-# themselves stay untyped. (REFACTOR-FINDING: see
-# TYPED-MUTARRAY-BUILDER-REFACTOR.md, "Definition-level obstruction".)
-fn build_rows(records, i, headers, header_count, outer: MutableArray[mutarray], count, presize) errors IndexNotFound, LowerUnderrun, UpperOverrun:
+# copy those unknown slots into a MutableArray[HashTable]. The geo_*
+# functions themselves stay untyped. (REFACTOR-FINDING: see
+# TYPED-MUTARRAY-BUILDER-REFACTOR.md, "Definition-level obstruction"; a
+# table was one MutableArray, declared MutableArray[mutarray], until
+# MUTABLE-ARRAY.md made it a struct of arrays.)
+fn build_rows(records, i, headers, header_count, outer: MutableArray[HashTable], count, presize) errors IndexNotFound, LowerUnderrun, UpperOverrun:
     if i >= list::length(records):
-        return geo_finish(outer, count)
+        return outer.geo_finish(count)
 
-    table = row_table(headers, header_count, list::at(records, i), presize)
-    build_rows(records, i + 1, headers, header_count, geo_append(outer, count, table), count + 1, presize)
+    table = headers.row_table(header_count, list::at(records, i), presize)
+    records.build_rows(i + 1, headers, header_count, outer.geo_append(count, table), count + 1, presize)
 
 # CSV TEXT, with a header row, as an immutable List of mutable HashTables:
 # one per data row, keyed by the header row's own String objects (shared,
@@ -487,32 +521,32 @@ fn csv_records_generic(text, presize) errors IndexNotFound, LowerUnderrun, Upper
 
     headers = list::at(records, 0)
     header_count = list::length(headers)
-    first = row_table(headers, header_count, list::at(records, 1), presize)
-    build_rows(records, 2, headers, header_count, geo_new(first), 1, presize)
+    first = headers.row_table(header_count, list::at(records, 1), presize)
+    records.build_rows(2, headers, header_count, geo_new(first), 1, presize)
 
 # The general baseline: every row table starts at default capacity, not
 # knowing how many fields it will hold (req #46).
 fn csv_records(text) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    csv_records_generic(text, false)
+    text.csv_records_generic(false)
 
 # The presized variant: every row table is built for exactly this row's
 # header count via ht_new_sized (req #47) -- str::length(headers), nothing else.
 fn csv_records_presized(text) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    csv_records_generic(text, true)
+    text.csv_records_generic(true)
 
 # ---------------------------------------------------------------------------
 # Sample: the milestone's own worked example. Both variants must agree
 # (checked directly, alongside the differential/property tests in
 # tests/native-csv-records.test).
 
-fn sample_checks() errors IndexNotFound, LowerUnderrun, UpperOverrun:
+fn sample_checks() -> list errors IndexNotFound, LowerUnderrun, UpperOverrun:
     rows = csv_records("name,age,city\nAlice,31,Berlin\nBob,42,Hamburg\n")
     presized_rows = csv_records_presized("name,age,city\nAlice,31,Berlin\nBob,42,Hamburg\n")
     first = list::at(rows, 0)
     second = list::at(rows, 1)
     presized_first = list::at(presized_rows, 0)
-    agree = ht_get(first, "name") == ht_get(presized_first, "name") and ht_size(first) == ht_size(presized_first)
-    [list::length(rows), ht_get(first, "name"), ht_get(first, "age"), ht_get(first, "city"), ht_get(second, "name"), ht_get(second, "city"), agree]
+    agree = first.ht_get("name") == presized_first.ht_get("name") and ht_size(first) == ht_size(presized_first)
+    [list::length(rows), first.ht_get("name"), first.ht_get("age"), first.ht_get("city"), second.ht_get("name"), second.ht_get("city"), agree]
 
 # The sample's input is well formed, so IndexNotFound (a row with more fields
 # than headers, or a broken table invariant: hashtable.bot's sample) and

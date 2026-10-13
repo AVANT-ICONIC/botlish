@@ -56,7 +56,7 @@ set mutations {
         {SetField hir $e ns [CtxNamespace $ctx]}
         {# (mutated: no namespace stamp)}}
     {method-candidates hir/structs.tcl
-        {[projectionDenied $type [dict get $node method]]}
+        {[projectionDenied $type $context]}
         {0}}
     {method-record-ns hir/resolve.tcl
         {                    ns [CtxNamespace $ctx]]}
@@ -75,8 +75,8 @@ set mutations {
 }
         {}}
     {instance-kind hir/semantic.tcl
-        {[dict get $first kind] eq "OPAQUE-REPRESENTATION" ? "OPAQUE-REPRESENTATION" : "TYPE"}
-        {"TYPE"}}
+        {$kind in {OPAQUE-REPRESENTATION USE-AFTER-MOVE UNHANDLED-ERROR}}
+        {$kind in {USE-AFTER-MOVE UNHANDLED-ERROR}}}
     {print-nominal core/value.tcl
         {!$reveal && [isOpaqueStruct [lindex $v 1 0]]}
         {0}}
@@ -87,8 +87,8 @@ set mutations {
         {opaque [expr {[dict exists $node opaque] ? [dict get $node opaque] : 0}]}
         {opaque 0}}
     {registry-flag hir/structs.tcl
-        {opaque [expr {[dict exists $decl opaque] && [dict get $decl opaque]}] names $names}
-        {opaque 0 names $names}}
+        {opaque [expr {[dict exists $decl opaque] && [dict get $decl opaque]}]}
+        {opaque 0}}
     {projection-message-names-field hir/structs.tcl
         {[RepresentationMessage [lindex $type 1]]$hint"]}
         {[RepresentationMessage [lindex $type 1]] (field \"$name\")$hint"]}}

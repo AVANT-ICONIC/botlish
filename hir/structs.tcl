@@ -80,22 +80,53 @@
 #     types its callers pass, each analyzed under its actual type.
 
 namespace eval hir::structs {
-    # ID -> {id ID name NAME namespace NS opaque 0|1 names {FIELD...} types
+    # ID -> {id ID name NAME namespace NS opaque 0|1 context 0|1 names {FIELD...} types
     # {FIELD TYPE ...} spans {FIELD SPAN ...} span SPAN}: the registry of the
     # current compilation's declarations. `namespace` is the declaring module
     # and, for an opaque struct, the owner of its representation.
     variable registry [dict create]
     # Entries of the previous compilation's registration are dropped by the
     # next apply call that brings declarations.
+    # ID -> 1|0: whether struct ID is affine (IsAffine), for this registry.
+    variable affinity [dict create]
 }
 
 proc hir::structs::Reset {} {
     variable registry
+    variable affinity
     set registry [dict create]
+    set affinity [dict create]
 }
 
-proc hir::structs::Fail {span message} {
-    core::semanticError TYPE "[dict get $span file]:[dict get $span line]:[dict get $span column]: $message"
+# 1 if struct ID is affine (hir::types::Affinity, AFFINE-VALUES.md): a field
+# type is. Derived, never declared: there is no `affine struct`. SEEN guards
+# a struct whose fields mention itself (through a List): such a cycle adds no
+# affinity -- a struct is affine only if some field path reaches an affine
+# root. Cached per registration (Reset clears it).
+proc hir::structs::IsAffine {id {seen {}}} {
+    variable registry
+    variable affinity
+    if {[dict exists $affinity $id]} {
+        return [dict get $affinity $id]
+    }
+    if {$id in $seen || ![dict exists $registry $id]} {
+        return 0
+    }
+    set result 0
+    foreach {name t} [dict get $registry $id types] {
+        if {[hir::types::IsAffine $t [concat $seen [list $id]]]} {
+            set result 1
+            break
+        }
+    }
+    if {$seen eq {}} {
+        dict set affinity $id $result
+    }
+    return $result
+}
+
+proc hir::structs::Fail {span message {kind TYPE}} {
+    core::semanticError $kind "[dict get $span file]:[dict get $span line]:[dict get $span column]: $message"
 }
 
 # The declaration identity a struct NAME declared in module NAMESPACE (""
@@ -154,6 +185,14 @@ proc hir::structs::display {id} {
 proc hir::structs::isOpaque {id} {
     variable registry
     return [expr {[dict exists $registry $id opaque] && [dict get $registry $id opaque]}]
+}
+
+# 1 if struct ID was declared `context struct` (or `opaque context struct`):
+# a value of it may be installed into the execution environment and satisfy
+# a function's context dependency (CONTEXTS.md). Independent of opacity.
+proc hir::structs::isContext {id} {
+    variable registry
+    return [expr {[dict exists $registry $id context] && [dict get $registry $id context]}]
 }
 
 # The namespace ("" for an entry program) that owns the representation of
@@ -246,15 +285,20 @@ proc hir::structs::IsOtherType {name} {
 # in declaration order.
 proc hir::structs::apply {decls} {
     variable registry
+    variable affinity
     Reset
     set byId [dict create]
     foreach decl $decls {
         set name [dict get $decl name]
         set ns [dict get $decl namespace]
         set id [identity $name $ns]
-        if {$name in {Int any never Fn} || [core::type::isBuiltinName $name] || [core::type::valid $id]
+        if {$name in {Int any never Fn Coroutine enum} || [core::type::isBuiltinName $name] || [core::type::valid $id]
                 || [dict exists $::hir::types::constructors $name]} {
             Fail [dict get $decl nameSpan] "\"$name\" cannot be declared as a struct: the name is already a built-in or declared type"
+        }
+        if {[hir::enums::declared $id]} {
+            # One type namespace (ENUMS.md): an enum of that name exists.
+            Fail [dict get $decl nameSpan] "type \"$name\" is already declared (as an enum)"
         }
         if {[dict exists $byId $id]} {
             Fail [dict get $decl nameSpan] "type \"$name\" is already declared"
@@ -273,7 +317,8 @@ proc hir::structs::apply {decls} {
         # The skeleton first: a field type may name any struct of the batch,
         # declared earlier, later, or this one itself.
         dict set registry $id [dict create id $id name $name namespace $ns \
-            opaque [expr {[dict exists $decl opaque] && [dict get $decl opaque]}] names $names \
+            opaque [expr {[dict exists $decl opaque] && [dict get $decl opaque]}] \
+            context [expr {[dict exists $decl context] && [dict get $decl context]}] names $names \
             types {} spans $spans span [dict get $decl nameSpan]]
     }
     set entries {}
@@ -285,17 +330,39 @@ proc hir::structs::apply {decls} {
         foreach field [dict get $decl fields] {
             set fieldName [dict get $field name]
             set typeExpr [dict get $field type]
-            if {[catch {hir::resolve::ResolveTypeExpr $typeExpr $ns} resolved]} {
+            if {[catch {hir::resolve::ResolveTypeExpr $typeExpr $ns} resolved options]} {
                 Fail [dict get $field typeSpan] \
                     [format {unknown or invalid type %s for field "%s" of struct "%s": %s} \
-                        [hir::resolve::ShowTypeExpr $typeExpr] $fieldName $name $resolved]
+                        [hir::resolve::ShowTypeExpr $typeExpr] $fieldName $name $resolved] \
+                    [hir::resolve::TypeErrorKind $options TYPE]
+            }
+            if {[hir::types::MentionedContextTrait $resolved] ne ""} {
+                Fail [dict get $field typeSpan] \
+                    [hir::types::ContextTraitPositionMessage [hir::types::MentionedContextTrait $resolved] \
+                        "the type of field \"$fieldName\" of struct \"$name\""] CONTEXT-TRAIT-POSITION
+            }
+            if {[hir::types::MentionsTrait $resolved]} {
+                # A stored trait value would need its witness stored beside
+                # it: an existential representation this milestone does not
+                # have (TRAITS.md, "Storage").
+                Fail [dict get $field typeSpan] \
+                    [format {field "%s" of struct "%s" cannot have trait type %s: a struct field stores one concrete representation, and there is no erased or heterogeneous trait representation (store a concrete type)} \
+                        $fieldName $name [hir::types::show $resolved]] TRAIT-STORAGE-UNSUPPORTED
             }
             lappend types $fieldName $resolved
         }
         dict set registry $id types $types
-        lappend entries [dict create kind struct name $name id $id namespace $ns \
+        set entry [dict create kind struct name $name id $id namespace $ns \
             opaque [dict get $registry $id opaque] fields $types]
+        if {[dict get $registry $id context]} {
+            # Present only for a context struct (CONTEXTS.md), so an ordinary
+            # declaration's entry is unchanged.
+            dict set entry context 1
+        }
+        lappend entries $entry
     }
+    # (Affinity read while field types were still being resolved is stale.)
+    set affinity [dict create]
     return $entries
 }
 
@@ -303,21 +370,25 @@ proc hir::structs::apply {decls} {
 # a serialized HIR carries its declarations as resolved types).
 proc hir::structs::applyEntries {entries} {
     variable registry
+    variable affinity
     Reset
     foreach entry $entries {
         set names {}
         foreach {fieldName type} [dict get $entry fields] { lappend names $fieldName }
         dict set registry [dict get $entry id] [dict create id [dict get $entry id] \
             name [dict get $entry name] namespace [dict get $entry namespace] \
-            opaque [expr {[dict exists $entry opaque] && [dict get $entry opaque]}] names $names \
+            opaque [expr {[dict exists $entry opaque] && [dict get $entry opaque]}] \
+            context [expr {[dict exists $entry context] && [dict get $entry context]}] names $names \
             types [dict get $entry fields] spans {} span {}]
     }
+    set affinity [dict create]
 }
 
 # Adds the entries of DECLS (as apply takes them) to the registry without
 # resetting it (native::prepareHir loading more modules into a program).
 proc hir::structs::addDecls {decls} {
     variable registry
+    variable affinity
     set saved $registry
     set entries [apply $decls]
     foreach {id entry} $saved {
@@ -325,6 +396,7 @@ proc hir::structs::addDecls {decls} {
             dict set registry $id $entry
         }
     }
+    set affinity [dict create]
     return $entries
 }
 
@@ -366,6 +438,11 @@ proc hir::structs::addDecls {decls} {
 # "": the projection E is proven in HIR's current types; else {KIND MESSAGE}
 # (KIND UNPROVEN-FIELD is the one an instance may cure).
 proc hir::structs::ProjectionProblem {hir e} {
+    if {[dict exists $hir exprs $e traitCallee]} {
+        # The `receiver.op` of a trait operation (TRAITS.md) with no function
+        # `op` visible: not a field access (hir::traits::TypeCall).
+        return ""
+    }
     set node [dict get $hir exprs $e]
     set receiver [dict get $node receiver]
     set type [hir::typeOf $hir $receiver]
@@ -507,23 +584,32 @@ proc hir::structs::AmbiguousMethodCall {hir e} {
     if {$type eq "never" || ![hir::types::IsStructLike $type]} {
         return ""
     }
-    # An opaque struct's fields are not source-visible outside its owner
-    # (OPAQUE-STRUCTS.md): they are not method candidates and cannot make the
-    # call ambiguous, and nothing about them is consulted here. The call
-    # record carries the namespace of the code the call is written in.
-    if {[projectionDenied $type [dict get $node method]]} {
-        return ""
-    }
     set name [dict get $node method name]
-    if {$name ni [hir::types::StructLayout $type]} {
-        return ""
-    }
-    set fieldType [hir::types::StructField $type $name]
-    if {![hir::types::IsCallable $fieldType] && [hir::types::kindOf $fieldType] ni {"" any block native}} {
+    if {![FieldCompetes $type $name [dict get $node method]]} {
         return ""
     }
     return [format {method-style call "%s" is ambiguous: the receiver (type %s) has a field "%s" whose value may be callable, and a function "%s" is also visible here; write (receiver.%s)(...) to call the field, or %s(receiver, ...) to call the function} \
         $name [hir::types::show $type] $name $name $name $name]
+}
+
+# 1 if a receiver of the struct type TYPE (a struct-like type) has a field NAME
+# that could compete with a visible function NAME for `receiver.NAME(args)`:
+# the field exists, is visible to the code the call is in (CONTEXT carries its
+# `ns`; an opaque struct's fields are not source-visible outside its owner,
+# OPAQUE-STRUCTS.md, so they are not method candidates and cannot make the
+# call ambiguous) and its value may be callable (anything not statically some
+# other kind of value). The one rule of the field/function ambiguity above;
+# the METHOD-ELIGIBLE warning (hir/warnings.tcl) asks it of the sugared
+# spelling it would suggest.
+proc hir::structs::FieldCompetes {type name context} {
+    if {[projectionDenied $type $context]} {
+        return 0
+    }
+    if {$name ni [hir::types::StructLayout $type]} {
+        return 0
+    }
+    set fieldType [hir::types::StructField $type $name]
+    return [expr {[hir::types::IsCallable $fieldType] || [hir::types::kindOf $fieldType] in {"" any block native}}]
 }
 
 # The innermost block whose body CODE of expression E is in ("program" at

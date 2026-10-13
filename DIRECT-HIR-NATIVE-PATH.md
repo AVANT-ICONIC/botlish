@@ -84,10 +84,15 @@ source ─surface─▶ HIR ──hir::lower──▶ core IR ─┬─▶ core:
 
 ```
 source ─surface─▶ HIR (resolved; types, contracts, semantic instances, ranges of checks)
-                   ├──hir::lower──▶ core IR ─▶ Tcl interpreter / Tcl compiler   (reference branch)
+                   ├──hir::lower──▶ core IR ─▶ Tcl interpreter   (reference branch)
+                   ├──core::compiler::compileHir──▶ Tcl procs   (Tcl compiler; see below)
                    └──native::prepareHir──▶ HIR (natives attached; recovered)
                         └──native::lower::program──▶ NIR ─▶ botlish-native ─▶ JIT / object / executable
 ```
+
+The Tcl compiler's branch was a second relift until a follow-up removed it
+("The Tcl compiler compiles HIR" below): it compiled HIR rebuilt from the
+lowered core IR wherever its core IR backend was used.
 
 `native::lowered` is the one HIR->NIR entry point; `native::nir`, `evalHir`,
 `clif`, `vcode`, `roots`, `measure`, `object`, `codeSize`,
@@ -100,7 +105,7 @@ diverge.
 | | role | consumers |
 |---|---|---|
 | HIR | authoritative semantic program: binding identity, scopes, captures, exact call targets, types, declared/inferred contracts, semantic instances, refinements, error/completion facts, module identity; side tables | analyses (`hir::types`, `signatures`, `semantic`, `range`, `refine`, `callables`, `errorsets`, `modulebinding`), `hir::specialize`, `hir::aot`, native lowering, `hir::lower`, the Tcl compiler's facts |
-| Core IR | small, name-based executable/reference language | Tcl interpreter (`core/`), Tcl compiler input, Core IR tests; produced by `hir::lower`; read by `hir::build` as an input notation |
+| Core IR | small, name-based executable/reference language | Tcl interpreter (`core/`), Core IR tests; produced by `hir::lower`; read by `hir::build` as an input notation (which is how the Tcl compiler runs core IR *text*) |
 | NIR | register-based executable representation with no names, types or traits | `botlish-native` (Cranelift JIT/object/executable); the future bytecode interpreter |
 
 ## Production entry-point census (before)
@@ -205,7 +210,8 @@ boundary API of items 36/37).
 
 Carried by the HIR dict itself, so no copy exists: `semantic` (instances,
 keys, calls, envs, census counters), `intrinsicBlocks` (container rule per
-block), `modules`/`moduleScopeIds` (module identity), `moduleNativeTargets`,
+block; gone since MUTABLE-ARRAY.md made the array constructors registered
+natives), `modules`/`moduleScopeIds` (module identity), `moduleNativeTargets`,
 `errorDecls`, `sourceTypes`, per-expression `nativeResultOverride`, per-block
 `declaredParamTypes`/`inferredParamTypes`/`checkedParamTypes`, `violatedDeclared`,
 `demotedContracts`, per-node `origin` (source spans), `known`,
@@ -638,12 +644,14 @@ example since strict references).
 ## Remaining Core IR consumers
 
 * the Tcl reference interpreter (`core/`, `core::evalProgram`, `core::eval*`);
-* the Tcl compiler (`compiler/`): `core::compiler::runProgram` compiles core IR
-  (building its own HIR for facts), `core::compiler::evalHir` lowers HIR with
-  `hir::lower` for its own use -- a Tcl backend, not native;
-* `hir::lower` callers: `main.tcl` (interp, `-code`), `bench/bench.tcl`,
-  `bench/corpus.tcl`, `bench/uri-steady.tcl`, `examples/stdlib/corpus.tcl`
-  (Tcl backends), tests (reference branch of the differentials);
+* the Tcl compiler (`compiler/`) for core IR *text* only:
+  `core::compiler::runProgram`/`runSequence` (the registered `compile` backend)
+  and `generatedCode`/`programTypes`/`bindingTypes`/`unitHir` read the text
+  into HIR with `hir::build`; a front end's HIR is compiled as built
+  (`evalHir`, `compileHir`; "The Tcl compiler compiles HIR");
+* `hir::lower` callers: `main.tcl` (interp), the bench scripts' and
+  `examples/stdlib/corpus.tcl`'s interp runs, tests (reference branch of the
+  differentials);
 * Core IR text as an *input notation*: `hir::build` (examples/*.ir, bench/*.ir,
   tests, `native/explain-native.tcl`, the fixture generators);
 * Core IR tests (`acceptance`, `blocks`, `bindings`, `calls`, `control`,
@@ -651,7 +659,8 @@ example since strict references).
 * debugging/printing: `hir::format`/`hir::read` round trips, `core::compiler::generatedCode`;
 * **native-adjacent, justified**: `native::prepareHir` reads a native's
   registered `-native-body` (core IR *data* that defines that native) through
-  `hir::syntax::fromIR`; and the test harness's `cranelift` adapter (test-only).
+  `hir::syntax::fromIR`; and the test harness's `cranelift` and `compile`
+  adapters (test-only).
 
 ## Architecture guard tests
 
@@ -662,7 +671,12 @@ example since strict references).
 `core::evalProgram`, `core::compiler::`),
 `direct-hir-native-entry-points-never-call-core-ir` and
 `direct-hir-native-executable-never-calls-core-ir` (execution traces),
-`direct-hir-main-rejects-core-ir-for-native`.
+`direct-hir-main-rejects-core-ir-for-native`. For the Tcl compiler:
+`direct-hir-compile-namespace-static-scan`,
+`direct-hir-compile-entry-points-never-rebuild`,
+`direct-hir-compile-runs-repeat-in-one-process` and
+`direct-hir-compile-main-code-is-the-code-that-runs` ("The Tcl compiler
+compiles HIR").
 
 ## Known limitations
 
@@ -676,8 +690,13 @@ example since strict references).
 * `prepareHir`'s re-check re-runs the full front-end analysis for a program that
   calls such a native (2 of 30 audited programs). Loading the implementation
   modules in the front end would remove it.
-* The test harness backend remembers the HIR of every program `hir::lower`
-  produced (memory grows with a test file's size).
+* The test harness backends (`cranelift`, `cranelift-generic` and `compile`)
+  remember the HIR of every program `hir::lower` produced, keyed by the
+  lowered text (memory grows with a test file's size). Two HIRs that lower to
+  the same text share an entry: the later one wins. Only a HIR that states
+  facts its core IR does not carry (a hand-edited, deliberately wrong HIR)
+  can tell them apart; tests that start from HIR pass it directly
+  (`outcomeUnderHir`).
 * Frozen `audit/*/tools` scripts that compared the relifted pipeline
   (`typed-mutarray-builder-refactor/relift.tcl`, the opportunistic census's
   "native" HIR, `structural-function-types/typecensus.tcl`,
@@ -687,6 +706,87 @@ example since strict references).
   `hir::build` for `.ir` fixtures). `audit/mutarray-construction/tools/probe-typing.tcl`
   and `audit/post-module-static-exact-target-census/tools/parity.tcl` still
   call `core::useBackend $backend` and do not select `cranelift` any more.
+
+## The Tcl compiler compiles HIR
+
+A follow-up removed the last relift: the Tcl compiler's. Before it,
+`core::compiler::GenerateUnit` built its own HIR (`hir::build $exprs -strict 0`)
+whenever it was handed core IR rather than HIR, which was everywhere but
+`core::compiler::evalHir`: the registered `compile` backend
+(`core::useBackend compile` + `core::evalProgram`) and the inspection calls
+`generatedCode`, `programTypes`, `bindingTypes` and `unitHir`. Given the core
+IR `hir::lower` had just produced, that is the native relift again, and it was
+reached by:
+
+* the test suite's whole `CORE_BACKEND=compile` pass (CI's `compile` matrix
+  job): `outcomeUnderHir compile`, `sourceAgree` and every
+  `core::evalProgram [hir::lower ...]` -- 2,729 runs over the 109 non-native
+  test files that lower HIR;
+* `main.tcl -backend compile`: the program ran through `evalHir`, but `-code`
+  and the printed program types compiled it a second time from its lowered
+  core IR, so neither described the code that ran;
+* `tests/golden/run.tcl`'s `compile` (`compile-hir` was the opt-in direct
+  path), 11 bench scripts' `compile` columns and 11 audit tools' `compile`
+  branches.
+
+The rebuilt HIR had lost what the relift always loses -- declared parameter
+types (extra `core::value::expect`/`AssertCanonical` checks) and module
+identity (module statics read through captured frames instead of
+`ModuleBase`, making module functions closure-valued). Over the 47 compiling
+`.bot` programs of `bench/`, `examples/` and `tests/golden/`, 20 compiled to
+different Tcl from the rebuilt HIR, 1-5% longer; CI's compile job tested that
+code, not the code `main.tcl -backend compile` runs.
+
+Now:
+
+* `core::compiler::compileHir HIR` compiles a HIR as built and returns the unit
+  (`code`, `types`, `bindings`, `hir`, the proc `name`); `evalUnit UNIT` runs it
+  in a fresh program scope (any number of times), `runUnit UNIT ENV` in a given
+  one; `evalHir` is `evalUnit [compileHir HIR]`. `evalHir` no longer lowers or
+  `core::ir::check`s the HIR (as native's stopped doing).
+* `GenerateUnit` takes HIR only. The one `hir::build` left in `compiler/` is
+  `compileUnit`, for the core IR *text* the registered backend and the
+  inspection calls take (examples/*.ir, bench/*.ir, Core IR tests): reading
+  text is HIR construction from an input notation, as for native.
+* `main.tcl` compiles a `.bot`/`.hir` program's HIR once and prints `-code`
+  and the program types from that compilation.
+* The test harness replaces the `compile` backend with an adapter like the
+  `cranelift` one (`tests/helpers.tcl`): a program `hir::lower` produced is
+  compiled from the HIR it was lowered from, anything else is core IR text.
+  `outcomeUnderHir compile` calls `evalHir`. The golden runner's `compile` is
+  `evalHir` (`compile-hir` is gone), and the bench scripts and audit tools
+  compile the HIR once (`compileHir`, timing `evalUnit`).
+* `evalUnit` starts every run with an empty context set, as
+  `core::evalProgram` does: running a program that installs a context twice in
+  one process no longer fails with DUPLICATE-CONTEXT (GOLDEN-TEST-FRAMEWORK.md,
+  C7).
+
+Differential, before the switch: the 2,729 lowered-program runs above, each
+compiled both from the rebuilt HIR and from the HIR it was lowered from, gave
+identical outcomes (one difference was the harness's text key matching a
+deliberately wrong hand-edited HIR in `hir-samples-trusted`, which disappeared
+once `evalHir` stopped lowering). Unlike native's relift, this one was not
+found hiding a wrong result: the Tcl compiler uses HIR facts to drop checks
+and choose representations, so the rebuilt HIR made its code longer and
+slower, not different in meaning.
+
+Guards (`tests/direct-hir-native.test`): `direct-hir-compile-namespace-static-scan`
+(`compileUnit` is the only `::core::compiler` proc that builds HIR, and none
+lowers a HIR), `direct-hir-compile-entry-points-never-rebuild` (execution
+traces of every HIR builder, `hir::lower`, `core::ir::check` and
+`core::evalProgram` while `evalHir`, `compileHir`, `evalUnit`,
+`outcomeUnderHir compile` and the harness's `compile` backend run a
+module-heavy program), `direct-hir-compile-runs-repeat-in-one-process` (C7)
+and `direct-hir-compile-main-code-is-the-code-that-runs` (`main.tcl -code`
+prints `compileHir`'s code: one argument check where the rebuilt HIR needs
+two). Each fails when the rebuild or the context leak is put back.
+
+What still builds HIR more than once is the front end itself, from the same
+syntax and options and by design: method-call trial builds
+(`hir::DecideMethodCalls`), the trait/affine monomorphization's second build,
+`static compile:` decision builds, `hir::check`'s retyping after demoting a
+violated contract, and `native::prepareHir`'s re-check. None of them reads a
+lower representation back.
 
 ## Readiness for NIR -> bytecode
 
@@ -699,8 +799,8 @@ needed. Cell ops no longer have to be implemented.
 
 ## Required architecture questions
 
-1. HIR. 2. The Tcl reference interpreter's small executable representation (and the
-Tcl compiler's input). 3. Production executable lowering (native now, bytecode
+1. HIR. 2. The Tcl reference interpreter's small executable representation (and,
+as text, an input notation `hir::build` reads for the Tcl compiler). 3. Production executable lowering (native now, bytecode
 later). 4. No. 5. No.
 
 ## Required path questions

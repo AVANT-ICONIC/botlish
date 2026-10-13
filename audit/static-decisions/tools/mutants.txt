@@ -1,0 +1,209 @@
+# Mutants of the static decision schedulers (audit/static-decisions/tools/
+# mutate.tcl; STATIC-COMPILE.md, "Decision economics"): deliberate bugs in
+# the batched scheduler (hir/static.tcl), its dependency analysis
+# (hir/staticdeps.tcl) and the reuse of method-call decisions
+# (hir/static.tcl's MethodSeeds, hir/hir.tcl). The first group changes what
+# is decided (semantic); the second only how many builds it takes
+# (economic: the milestone's contract is economic, so these are bugs too).
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+
+# ---------------------------------------------------------------------------
+# Semantic
+
+@@ decide-dependents-together every failing site is committed in the build that found it, even one that depends on a site rejected since
+## hir/static.tcl
+<<<<
+            if {$deps eq "" || $first in [dict get $deps sites $key]} {
+====
+            if {$deps eq ""} {
+>>>>
+
+@@ unknown-does-not-block a site whose status became unknown does not hold back the later sites of its component
+## hir/static.tcl
+<<<<
+            if {$s eq "unknown"} {
+                dict set blocked $c 1
+                continue
+            }
+====
+            if {$s eq "unknown"} {
+                continue
+            }
+>>>>
+
+@@ erased-contributors-ignored the erased-callable contract depends on no contributor: its consumers are judged as if nothing changed what the program erases
+## hir/staticdeps.tcl
+<<<<
+            foreach point [lsort -unique [dict get $state erasurePoints]] {
+====
+            foreach point {} {
+>>>>
+
+@@ contribution-not-discarded an erasing call inside a block is not a dependency on that block: rejecting the block keeps its contribution in the decisions' model
+## hir/staticdeps.tcl
+<<<<
+                if {[dict exists $state siteOf $e]} {
+                    dict set succ Z:[dict get $state siteOf $e] erasure
+                }
+                lassign [dict get $hir exprs $e target] tk tb
+                set args [dict get $hir exprs $e args]
+                if {$tk ne "block" || ![dict exists $hir exprs $tb]} {
+                    foreach arg $args {
+                        AddSubtree $hir state $arg succ erasure
+                    }
+                    continue
+                }
+                dict set succ R:$tb erasure
+                foreach entry [hir::signatures::entryTypes $hir $tb] arg $args {
+                    if {$entry eq "" && $arg ne ""} {
+                        AddSubtree $hir state $arg succ erasure
+                    }
+                }
+====
+                lassign [dict get $hir exprs $e target] tk tb
+                if {$tk eq "block"} {
+                    dict set succ R:$tb erasure
+                }
+>>>>
+
+@@ nested-child-ignored a block does not depend on the blocks nested in it: the outer one is committed before its inner one's rejection is seen
+## hir/staticdeps.tcl
+<<<<
+            dict set state ownSites $region $site 1
+====
+            if {[dict get $spanParent $site] eq ""} {
+                dict set state ownSites $region $site 1
+            }
+>>>>
+
+@@ position-ignored a block does not depend on the code around it in its function: a later block in one statement sequence is committed with the diagnostics it had before the earlier one's rejection made it unreachable
+## hir/staticdeps.tcl
+<<<<
+                dict set succ R:[dict get $state siteHome $key] position
+====
+>>>>
+
+@@ precedence-changed a block committed without a build of its own is rejected with its last diagnostic instead of its first
+## hir/static.tcl
+<<<<
+        dict set decisions $first [list rejected [lindex [dict get $own $first] 0]]
+        lappend committed $first
+====
+        dict set decisions $first [list rejected [lindex [dict get $own $first] [expr {$committed eq {} ? 0 : "end"}]]]
+        lappend committed $first
+>>>>
+
+@@ internal-ids-ignored a rejection whose message names internal ids is committed in any build: its message carries that build's numbering
+## hir/static.tcl
+<<<<
+        if {$ids ne {}} {
+====
+        if {0} {
+>>>>
+
+@@ untyped-parameter-ignored an untyped parameter's facts do not depend on its uses in the functions nested in its function: one block's use cannot fail another
+## hir/staticdeps.tcl
+<<<<
+                dict set succ R:$r untyped-parameter
+====
+>>>>
+
+@@ stale-method-reuse a method-call decision is reused even when a site rejected since reaches the call (its receiver may have changed)
+## hir/static.tcl
+<<<<
+        foreach c $committed {
+            if {$c in [dict get $cone sites]} {
+====
+        foreach c {} {
+            if {$c in [dict get $cone sites]} {
+>>>>
+
+@@ method-key-alias a reused method-call decision is applied to every call of the same name, not to the one call it was made for
+## hir/hir.tcl
+<<<<
+    dict for {key choice} $seeds {
+        if {[dict exists $calls $key] && $choice in [dict get $calls $key candidates]} {
+            dict set decided $key $choice
+        }
+    }
+====
+    dict for {key choice} $seeds {
+        if {![dict exists $calls $key]} continue
+        dict for {other info} $calls {
+            if {[dict get $info name] eq [dict get $calls $key name]} {
+                dict set decided $other $choice
+            }
+        }
+    }
+>>>>
+
+@@ same-choices-unchecked a method-call decision build is taken to be the build it started from whatever the choices: the final program keeps the stand-in candidates
+## hir/hir.tcl
+<<<<
+        if {$want ne [dict get $info chosen]} {
+            return 0
+        }
+====
+        if {0} {
+            return 0
+        }
+>>>>
+
+# ---------------------------------------------------------------------------
+# Economic
+
+@@ one-commit-per-build the batched run commits one rejection per build, like the sequential reference
+## hir/static.tcl
+<<<<
+            if {$deps eq "" || $first in [dict get $deps sites $key]} {
+====
+            if {1} {
+>>>>
+
+@@ single-component every site is in one component: an unknown site holds back every later one, whatever it depends on
+## hir/static.tcl
+<<<<
+    if {$deps eq ""} {
+        set first [lindex [dict keys $status] 0]
+====
+    if {1} {
+        set first [lindex [dict keys $status] 0]
+>>>>
+
+@@ every-region-consumes every function is a consumer of the erased-callable contract (the legacy GlobalChannels)
+## hir/staticdeps.tcl
+<<<<
+    if {[dict exists $state erasedConsumers $q]} {
+====
+    if {1} {
+>>>>
+
+@@ never-reuse-methods no method-call decision is reused across rounds
+## hir/static.tcl
+<<<<
+    return $seeds
+}
+====
+    return {}
+}
+>>>>
+
+@@ nested-same-unit a site depends on everything of the top-level function it is nested in (the legacy units): the registration function's sites serialize
+## hir/staticdeps.tcl
+<<<<
+    # Where it is defined: the control operands around its literal, in every
+    # enclosing function up to the program.
+====
+    if {[dict exists $state litRegion $q] && [dict get $state litRegion $q] ne "program"} {
+        dict set succ R:[dict get $state litRegion $q] unit
+    }
+    # Where it is defined: the control operands around its literal, in every
+    # enclosing function up to the program.
+>>>>

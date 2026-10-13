@@ -36,15 +36,15 @@
 
 use super::show::tcl_list;
 use super::value::{
-    KIND_BIGINT, KIND_CLOSURE, KIND_LIST, KIND_LISTPLAN, KIND_MUTARRAY, KIND_NATIVE, KIND_RESULT, KIND_SET,
-    KIND_STR, KIND_STRPLAN, KIND_STRUCT,
+    KIND_BIGINT, KIND_BYTES, KIND_CLOSURE, KIND_COROUTINE, KIND_LIST, KIND_LISTPLAN, KIND_MUTARRAY, KIND_MUTBYTES, KIND_MUTVEC, KIND_NATIVE,
+    KIND_RESULT, KIND_SET, KIND_STR, KIND_STRPLAN, KIND_STRUCT,
 };
 use std::collections::HashMap;
 use std::time::Duration;
 
 /// One more than the largest `Header::kind` value: `by_kind`/`static_by_kind`
 /// are indexed directly by kind byte (index 0 unused).
-pub const KIND_COUNT: usize = 13;
+pub const KIND_COUNT: usize = 17;
 
 pub fn kind_name(kind: u8) -> &'static str {
     match kind {
@@ -57,8 +57,12 @@ pub fn kind_name(kind: u8) -> &'static str {
         KIND_MUTARRAY => "MutableArray",
         KIND_SET => "ImmutableSet",
         KIND_STRUCT => "Struct",
+        KIND_BYTES => "Bytes",
+        KIND_MUTBYTES => "MutableBytes",
         KIND_STRPLAN => "StringPlan",
         KIND_LISTPLAN => "ListPlan",
+        KIND_COROUTINE => "Coroutine",
+        KIND_MUTVEC => "MutableVector",
         _ => "?",
     }
 }
@@ -67,9 +71,9 @@ pub fn kind_name(kind: u8) -> &'static str {
 /// private virtual-construction plan kinds (M8.a) come last: they are
 /// implementation objects, never program values, reported separately so a
 /// String/List allocation count always means semantic flat objects only.
-pub const KINDS: [u8; 11] = [
+pub const KINDS: [u8; 13] = [
     KIND_STR, KIND_LIST, KIND_SET, KIND_STRUCT, KIND_MUTARRAY, KIND_BIGINT, KIND_RESULT, KIND_CLOSURE, KIND_NATIVE,
-    KIND_STRPLAN, KIND_LISTPLAN,
+    KIND_BYTES, KIND_MUTBYTES, KIND_STRPLAN, KIND_LISTPLAN,
 ];
 
 /// Virtual-construction counters (runtime/construct.rs, M8.a): what every
@@ -246,6 +250,44 @@ pub struct Metrics {
     /// String instead of allocating (strobj.rs, `Vm::empty_string`).
     pub str_empty_reuses: u64,
     pub construction: ConstructionStats,
+    /// Coroutine stacks (COROUTINES.md): how each start got its stack (a
+    /// fresh mapping, or one from the pool), and how each suspended
+    /// coroutine's stack came back -- released at its handle's last use
+    /// (`corelease`), or swept with an unreachable coroutine by a collection.
+    pub coroutines: CoroutineStats,
+    /// MutableVector copy-on-write (MUTABLE-VECTOR.md): logical copies (a
+    /// new header sharing a backing), detaches (a shared backing copied on
+    /// a write) and the element words they copied, and capacity growth of a
+    /// unique backing (and its bytes).
+    pub mutvec: MutVecStats,
+    /// MutableArray copy-on-write (MUTABLE-ARRAY.md): logical copies and
+    /// detaches (and the element words they copied), as for a vector.
+    pub mutarray: MutArrayStats,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MutArrayStats {
+    pub shares: u64,
+    pub detaches: u64,
+    pub detach_elements: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MutVecStats {
+    pub shares: u64,
+    pub detaches: u64,
+    pub detach_elements: u64,
+    pub growths: u64,
+    pub growth_bytes: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CoroutineStats {
+    pub stacks_mapped: u64,
+    pub stacks_reused: u64,
+    pub released: u64,
+    pub released_suspended: u64,
+    pub swept_suspended: u64,
 }
 
 impl Metrics {
@@ -270,7 +312,39 @@ impl Metrics {
             utf8_seek_bytes: 0,
             str_empty_reuses: 0,
             construction: ConstructionStats::default(),
+            coroutines: CoroutineStats::default(),
+            mutvec: MutVecStats::default(),
+            mutarray: MutArrayStats::default(),
         }
+    }
+
+    /// A logical copy of an array (ops.rs). Counted in every mode.
+    pub fn record_mutarray_share(&mut self) {
+        self.mutarray.shares += 1;
+    }
+
+    /// A write that detached an array's shared backing of N elements.
+    pub fn record_mutarray_detach(&mut self, n: usize) {
+        self.mutarray.detaches += 1;
+        self.mutarray.detach_elements += n as u64;
+    }
+
+    /// A logical copy of a vector (runtime/mutvec.rs). Counted in every
+    /// mode, like the coroutine counters: COW evidence is cheap.
+    pub fn record_mutvec_share(&mut self) {
+        self.mutvec.shares += 1;
+    }
+
+    /// A write that detached a shared backing of N elements.
+    pub fn record_mutvec_detach(&mut self, n: usize) {
+        self.mutvec.detaches += 1;
+        self.mutvec.detach_elements += n as u64;
+    }
+
+    /// A unique backing's capacity grew by BYTES.
+    pub fn record_mutvec_growth(&mut self, bytes: usize) {
+        self.mutvec.growths += 1;
+        self.mutvec.growth_bytes += bytes as u64;
     }
 
     pub fn enabled(&self) -> bool {
@@ -342,6 +416,34 @@ impl Metrics {
         }
     }
 
+    /// A coroutine start that took a stack: from the pool, or freshly mapped.
+    pub fn record_coroutine_stack(&mut self, reused: bool) {
+        if self.enabled() {
+            if reused {
+                self.coroutines.stacks_reused += 1;
+            } else {
+                self.coroutines.stacks_mapped += 1;
+            }
+        }
+    }
+
+    /// A `corelease` (of a coroutine that was suspended, holding its stack).
+    pub fn record_coroutine_release(&mut self, suspended: bool) {
+        if self.enabled() {
+            self.coroutines.released += 1;
+            if suspended {
+                self.coroutines.released_suspended += 1;
+            }
+        }
+    }
+
+    /// A collection swept an unreachable coroutine still holding its stack.
+    pub fn record_coroutine_swept(&mut self) {
+        if self.enabled() {
+            self.coroutines.swept_suspended += 1;
+        }
+    }
+
     pub fn record_mutarray_read(&mut self) {
         if self.enabled() {
             self.mutarray_reads += 1;
@@ -404,7 +506,16 @@ impl Metrics {
             ("peakLiveObjects", n(self.peak_live_objects)),
             ("peakLiveBytes", n(self.peak_live_bytes)),
         ]);
-        let by_kind = dict(&KINDS.iter().map(|&k| (kind_name(k), kind_dict(&self.by_kind[k as usize], &n))).collect::<Vec<_>>());
+        // Coroutine handles (COROUTINES.md) are reported only by a program
+        // that allocated one, so every other program's report is unchanged.
+        let mut kinds = KINDS.to_vec();
+        if self.by_kind[KIND_COROUTINE as usize].allocations > 0 {
+            kinds.push(KIND_COROUTINE);
+        }
+        if self.by_kind[KIND_MUTVEC as usize].allocations > 0 {
+            kinds.push(KIND_MUTVEC);
+        }
+        let by_kind = dict(&kinds.iter().map(|&k| (kind_name(k), kind_dict(&self.by_kind[k as usize], &n))).collect::<Vec<_>>());
         let static_by_kind =
             dict(&KINDS.iter().map(|&k| (kind_name(k), static_kind_dict(&self.static_by_kind[k as usize], &n))).collect::<Vec<_>>());
         let statics = dict(&[
@@ -441,7 +552,17 @@ impl Metrics {
             ("listElements", n(self.list_elements_copied)),
             ("mutableArrayElements", n(self.mutarray_elements_copied)),
         ]);
-        let mutations = dict(&[("reads", n(self.mutarray_reads)), ("writes", n(self.mutarray_writes))]);
+        // MutableArray slot reads and writes, and its copy-on-write
+        // (MUTABLE-ARRAY.md): logical copies, the detaches a write of a
+        // shared backing made, and the element words those copied.
+        let ma = &self.mutarray;
+        let mutations = dict(&[
+            ("reads", n(self.mutarray_reads)),
+            ("writes", n(self.mutarray_writes)),
+            ("shares", n(ma.shares)),
+            ("detaches", n(ma.detaches)),
+            ("detachElements", n(ma.detach_elements)),
+        ]);
         let traversal = dict(&[("utf8SeekBytes", n(self.utf8_seek_bytes))]);
         // String storage census (STRING-ALLOCATION.md). A String is one heap
         // block (header + UTF-8 text), so `heapAllocations`/`frees` are its
@@ -476,7 +597,7 @@ impl Metrics {
             ("materializedStringBytes", n(c.materialized_str_bytes)),
             ("materializedListElements", n(c.materialized_list_elements)),
         ]);
-        dict(&[
+        let mut sections = vec![
             ("total", total),
             ("byKind", by_kind),
             ("static", statics),
@@ -486,8 +607,37 @@ impl Metrics {
             ("traversal", traversal),
             ("strings", strings),
             ("construction", construction),
-            ("sites", sites_tcl.to_string()),
-        ])
+        ];
+        // Like the Coroutine kind above: only a program that started one.
+        let co = &self.coroutines;
+        if self.by_kind[KIND_COROUTINE as usize].allocations > 0 {
+            sections.push((
+                "coroutines",
+                dict(&[
+                    ("stacksMapped", n(co.stacks_mapped)),
+                    ("stacksReused", n(co.stacks_reused)),
+                    ("released", n(co.released)),
+                    ("releasedSuspended", n(co.released_suspended)),
+                    ("sweptSuspended", n(co.swept_suspended)),
+                ]),
+            ));
+        }
+        // Likewise: only a program that made a MutableVector.
+        let mv = &self.mutvec;
+        if self.by_kind[KIND_MUTVEC as usize].allocations > 0 {
+            sections.push((
+                "mutableVector",
+                dict(&[
+                    ("shares", n(mv.shares)),
+                    ("detaches", n(mv.detaches)),
+                    ("detachElements", n(mv.detach_elements)),
+                    ("growths", n(mv.growths)),
+                    ("growthBytes", n(mv.growth_bytes)),
+                ]),
+            ));
+        }
+        sections.push(("sites", sites_tcl.to_string()));
+        dict(&sections)
     }
 }
 

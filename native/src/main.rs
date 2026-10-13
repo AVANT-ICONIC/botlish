@@ -58,7 +58,7 @@ use codegen::{Backend, CompileOptions, CraneliftJit, Site};
 use runtime::metrics::{kind_name, AllocMode, SiteStats};
 use runtime::show::{tcl_list, tcl_value};
 use runtime::value::NO_VALUE;
-use runtime::vm::{FunctionInfo, NativeInfo, ProgramInfo, ShapeInfo, Vm};
+use runtime::vm::{EnumInfo, FunctionInfo, NativeInfo, ProgramInfo, ShapeInfo, Vm};
 use std::io::{Read, Write};
 use std::rc::Rc;
 use std::time::Instant;
@@ -310,6 +310,11 @@ fn program_info(program: &nir::Program) -> ProgramInfo {
             .iter()
             .map(|s| ShapeInfo { name: s.name.clone(), fields: s.fields.clone(), opaque: s.opaque })
             .collect(),
+        enums: program
+            .enums
+            .iter()
+            .map(|e| EnumInfo { name: e.name.clone(), cases: e.cases.clone() })
+            .collect(),
     }
 }
 
@@ -435,7 +440,7 @@ fn execute(command: &str, program: &nir::Program, runs: usize, alloc_mode: Alloc
         let error = vm.error.take().unwrap_or(runtime::error::RtError::Bug(
             "native code failed without recording an error".to_string(),
         ));
-        emit_error(&error.error_code(), &error.message());
+        emit_error(&error.error_code(), &vm.describe_error(&error));
         return 0;
     }
     match tcl_value(result) {

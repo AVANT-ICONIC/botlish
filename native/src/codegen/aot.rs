@@ -22,7 +22,7 @@ fn startup(program: &Program, object: &ObjectProgram) -> String {
         "#![allow(unused_imports)]\n\
          use botlish_native::{nir::OpCode, runtime::{aot, constants::{self, Const},\n\
          framemap::{FunctionMap, ProgramMap}, metrics::AllocMode, value::{Kind, Value},\n\
-         vm::{FunctionInfo, NativeInfo, ProgramInfo, ShapeInfo, Vm}}};\n\
+         vm::{EnumInfo, FunctionInfo, NativeInfo, ProgramInfo, ShapeInfo, Vm}}};\n\
          use std::rc::Rc;\n\
          unsafe extern \"C\" {\n",
     );
@@ -79,6 +79,15 @@ fn startup(program: &Program, object: &ObjectProgram) -> String {
         )
         .unwrap();
     }
+    s.push_str("], enums: vec![\n");
+    for e in &program.enums {
+        writeln!(
+            s,
+            "EnumInfo {{ name: {:?}.to_string(), cases: vec!{:?}.into_iter().map(String::from).collect() }},",
+            e.name, e.cases
+        )
+        .unwrap();
+    }
     s.push_str("] };\nlet mut vm = Vm::new(Rc::new(info), AllocMode::Off);\nlet entries = vec![\n");
     for f in &program.functions {
         writeln!(s, "botlish_entry_{} as *const () as usize,", f.id).unwrap();
@@ -87,6 +96,12 @@ fn startup(program: &Program, object: &ObjectProgram) -> String {
     for c in &object.pool.entries {
         match c {
             Const::Str(text) => writeln!(s, "Const::Str({text:?}.into()),"),
+            Const::Bytes(bytes) => {
+                // A byte-string literal of \xNN escapes: compact however large
+                // the static storage is, and exact for every byte (NUL, 0xff).
+                let literal: String = bytes.iter().map(|b| format!("\\x{b:02x}")).collect();
+                writeln!(s, "Const::Bytes(b\"{literal}\".to_vec()),")
+            }
             Const::BigInt(text) => writeln!(s, "Const::BigInt({text:?}.into()),"),
             Const::Native(id) => writeln!(s, "Const::Native({id}),"),
             Const::FnValue(id) => writeln!(s, "Const::FnValue({id}),"),

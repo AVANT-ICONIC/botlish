@@ -1,0 +1,357 @@
+# representation.bot -- representation-sensitive value tests (manifest:
+# category representation): the Int boundaries the backends' representations
+# change at (the tagged small Int at 2^62, the i64 edges at 2^63 and bigint
+# promotion past them, the raw Int ABI's small domain), Strings at the
+# Unicode edges (astral characters, the highest scalar value, ShortString1
+# and StringRegion values), hashing, scalar-replaced and late-materialized
+# structs, enum hashing and the ABI numeric domains. The golden runner runs
+# every test on interp, compile and cranelift and requires one report, so a
+# representation bug in one backend is a failing test or a disagreement.
+#
+# What these Tcl tests also pin and a Botlish program cannot observe -- the
+# NIR plan (rawparams, shortresult, structnew counts), allocation counts,
+# native options (-raw-int-abi-opt 0, -short-string-opt 0, -struct-opt 0)
+# and the cranelift-generic backend -- stays in the Tcl suite; each port says
+# which part it keeps.
+import abi
+import compiler
+import list
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only).
+
+# enums.test: enum-hash. The names are the Tcl test's own, unprefixed: the
+# pinned hash reads the enum's identity (`VehicleType`) and the case's name.
+enum VehicleType:
+    Boat,
+    Car,
+    Truck,
+    Tank,
+    Tractor,
+    Airplane,
+
+enum Other:
+    Car,
+
+# struct-scalar-replacement.test: sr-shape-named-vs-anonymous's Person and
+# Account (renamed: two nominal shapes with the same fields).
+struct SrPerson:
+    name: str
+    age: int
+
+struct SrAccount:
+    name: str
+    age: int
+
+# short-string.test: short-error-capable-result's Bad (renamed).
+error ShortBad
+
+# ---------------------------------------------------------------------------
+# Custom check: a rejection's code, location and message. lib/test.bot
+# compares codes and locations only; abi-numeric-conversion-failure-points-at-
+# the-call pins its message as a glob (PREFIX*SUFFIX) too.
+
+# TEXT begins with PREFIX.
+fn rep_starts_with?(text: str, prefix: str) -> bool:
+    k = str::length(prefix)
+    if k > str::length(text):
+        return false
+    head = str::substring(text, 0, k):
+        on LowerUnderrun:
+            return false
+        on UpperOverrun:
+            return false
+    head == prefix
+
+# TEXT ends with SUFFIX.
+fn rep_ends_with?(text: str, suffix: str) -> bool:
+    n = str::length(text)
+    k = str::length(suffix)
+    if k > n:
+        return false
+    tail = str::substring(text, n - k, n):
+        on LowerUnderrun:
+            return false
+        on UpperOverrun:
+            return false
+    tail == suffix
+
+# BODY's block must be rejected with EXPECTED at LINE:COLUMN with a message
+# that begins with PREFIX and ends with SUFFIX (the Tcl glob PREFIX*SUFFIX).
+# BODY goes through an untyped parameter, as in the library's own helpers.
+nomethod fn rep_rejects_message(name: str, expected: compiler::DiagnosticCode, line: int, column: int, prefix: str, suffix: str, body, context suite: test::Suite) -> unit:
+    fn check() -> test::Match:
+        place = compiler::SourceLocation {line: line, column: column}
+        shown = test::diagnostic_text(expected, place).concat(", message: ").concat(prefix).concat("*").concat(suffix)
+        actual = body():
+            on compiler::CompilerError {code, primary, message}:
+                worded = message.rep_starts_with?(prefix) and message.rep_ends_with?(suffix)
+                if code == expected and primary.line == line and primary.column == column and worded:
+                    return test::passed()
+                return test::mismatch(shown, test::diagnostic_text(code, primary), message)
+        test::mismatch(shown, "value ".concat(test::describe(actual)), "")
+    test::case(name, check)
+
+# ---------------------------------------------------------------------------
+# native.test
+
+fn register_native_tests(i64_max: int, i64_min: int, small_max: int, small_min: int, large: int):
+    # native-int-2: values beyond 64 bits stay exact: the i64 edges and the
+    # tagged small-Int edges (2^62) promote, never wrap. The literal program
+    # is the Tcl test's: the compiler folds most of its constant arithmetic
+    # (its exact values), as it does there.
+    fn b_int_2() errors compiler::CompilerError:
+        static compile:
+            fn big():
+                170141183460469231731687303715884105727
+            [[9223372036854775807 + 1, -9223372036854775808 - 1, 9223372036854775807 * 9223372036854775807, 100000000000000000000 - 100000000000000000000, 4611686018427387904 + 4611686018427387904], 4611686018427387903 + 1, -4611686018427387904 - 1, 123456789012345678901234567890 == 123456789012345678901234567890, big() > 170141183460469231731687303715884105726]
+    test::value("native-int-2", [[9223372036854775808, -9223372036854775809, 85070591730234615847396907784232501249, 0, 9223372036854775808], 4611686018427387904, -4611686018427387905, true, true], b_int_2)
+
+    # native-int-2/dynamic: the same arithmetic on operands the registration
+    # function receives (nothing folds: every backend computes it at run
+    # time).
+    fn b_int_2_dynamic() errors compiler::CompilerError:
+        static compile:
+            [[i64_max + 1, i64_min - 1, i64_max * i64_max, large - large, (small_max + 1) + (small_max + 1)], small_max + 1, small_min - 1, large * large == large * large, i64_max * i64_max > i64_max * i64_max - 1]
+    test::value("native-int-2/dynamic", [[9223372036854775808, -9223372036854775809, 85070591730234615847396907784232501249, 0, 9223372036854775808], 4611686018427387904, -4611686018427387905, true, true], b_int_2_dynamic)
+
+# ---------------------------------------------------------------------------
+# raw-int-abi.test
+
+fn register_raw_int_abi_tests():
+    # raw-small-domain-edges: the edges of the small-Int domain, smallMax
+    # and smallMin, round-trip through the raw Int ABI with their signs.
+    fn b_small_domain_edges() errors compiler::CompilerError:
+        static compile:
+            fn ident(n):
+                n
+            a = ident(4611686018427387903) + 0
+            b = ident(0 - 4611686018427387904) + 0
+            [a, b]
+    test::value("raw-small-domain-edges", [4611686018427387903, -4611686018427387904], b_small_domain_edges)
+
+# ---------------------------------------------------------------------------
+# loop-counted.test
+
+fn register_loop_counted_tests():
+    # loop-counted-large-int-sum: a counted loop whose bounds lie past
+    # i64::MAX steps and sums exactly (no native i64 wraparound, no
+    # wrapping Tcl incr).
+    fn b_large_int_sum() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                fn go(i, n, acc):
+                    loop j from i to n:
+                        return go(j + 1, n, acc + j)
+                    acc
+                go(9223372036854775806, 9223372036854775810, 0)
+            f()
+    test::value("loop-counted-large-int-sum", 36893488147419103230, b_large_int_sum)
+
+# ---------------------------------------------------------------------------
+# native-bitshift.test
+
+fn register_native_bitshift_tests():
+    # bitshift-shl-overflow-tagged-counts: small Ints of both signs shifted
+    # left by 61..64 and 100, value and count both parameters (the tagged
+    # rt_int_shl path): every result past 2^63 is promoted, never wrapped.
+    fn b_shl_overflow_counts() errors compiler::CompilerError:
+        static compile:
+            fn g(y, k):
+                shift_left(y, k)
+            fn row(y):
+                [g(y, 61), g(y, 62), g(y, 63), g(y, 64), g(y, 100)]
+            [row(1), row(2), row(3), row(-1), row(-2), row(-3), row(4611686018427387903), row(-4611686018427387904), row(0)]
+    test::value("bitshift-shl-overflow-tagged-counts", [
+        [2305843009213693952, 4611686018427387904, 9223372036854775808, 18446744073709551616, 1267650600228229401496703205376],
+        [4611686018427387904, 9223372036854775808, 18446744073709551616, 36893488147419103232, 2535301200456458802993406410752],
+        [6917529027641081856, 13835058055282163712, 27670116110564327424, 55340232221128654848, 3802951800684688204490109616128],
+        [-2305843009213693952, -4611686018427387904, -9223372036854775808, -18446744073709551616, -1267650600228229401496703205376],
+        [-4611686018427387904, -9223372036854775808, -18446744073709551616, -36893488147419103232, -2535301200456458802993406410752],
+        [-6917529027641081856, -13835058055282163712, -27670116110564327424, -55340232221128654848, -3802951800684688204490109616128],
+        [10633823966279326980924613473029062656, 21267647932558653961849226946058125312, 42535295865117307923698453892116250624, 85070591730234615847396907784232501248, 5846006549323611671547088730636902677127026966528],
+        [-10633823966279326983230456482242756608, -21267647932558653966460912964485513216, -42535295865117307932921825928971026432, -85070591730234615865843651857942052864, -5846006549323611672814739330865132078623730171904],
+        [0, 0, 0, 0, 0],
+    ], b_shl_overflow_counts)
+
+# ---------------------------------------------------------------------------
+# short-string.test
+
+fn register_short_string_tests():
+    # short-highest-scalar-round-trips: U+10FFFF, the highest scalar value,
+    # survives scalar -> String -> scalar as a one-character String (the
+    # literal below is that character).
+    fn b_highest_scalar() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag):
+                if flag:
+                    "􏿿"
+                else:
+                    ""
+            s = pick(true)
+            [str::length(s), s == "􏿿", s == ""]
+    test::value("short-highest-scalar-round-trips", [1, true, false], b_highest_scalar)
+
+    # short-error-capable-result: an error-capable function with a
+    # one-character (ShortString1) success result: the empty String is a
+    # successful value, never the failure; a handler receives the failure.
+    fn b_error_capable_result() errors compiler::CompilerError:
+        static compile:
+            fn guarded(n) -> str errors ShortBad:
+                if n < 0:
+                    fail ShortBad
+                else:
+                    if n == 0:
+                        ""
+                    else:
+                        "y"
+            fn run(n):
+                r = guarded(n):
+                    on ShortBad:
+                        "caught"
+                r
+            [run(-1), run(0), run(3), str::length(run(0)), run(0) == ""]
+    test::value("short-error-capable-result", ["caught", "", "y", 0, true], b_error_capable_result)
+
+# ---------------------------------------------------------------------------
+# native-hashing.test
+
+fn register_native_hashing_tests():
+    # hash-parity-astral-1: the hash of a String with a supplementary-plane
+    # character (U+1F642) is the reference value on every backend: one
+    # scalar, no surrogate pair.
+    fn b_hash_astral() errors compiler::CompilerError:
+        static compile:
+            hash("🙂 quick brown fox")
+    test::value("hash-parity-astral-1", 1807445379848190912, b_hash_astral)
+
+# ---------------------------------------------------------------------------
+# enums.test
+
+fn register_enums_tests():
+    # enum-hash: hashing is nominal and agrees with equality: the same case
+    # through a generic function hashes equal; another case, another enum's
+    # same-named case and the case's spelling as a String do not.
+    fn b_enum_hash() errors compiler::CompilerError:
+        static compile:
+            fn same(x):
+                x
+            h = hash(VehicleType::Car)
+            [h == hash(same(VehicleType::Car)), h == hash(VehicleType::Boat), h == hash(Other::Car), h == hash("VehicleType::Car"), h]
+    test::value("enum-hash", [true, false, false, false, 632455997673246507], b_enum_hash)
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test
+
+fn register_struct_scalar_replacement_tests():
+    # sr-shape-named-vs-anonymous: a virtual named struct materializes with
+    # its own nominal shape, an anonymous one with the canonical field-set
+    # shape: two named shapes with equal fields differ, two anonymous
+    # literals in different field orders are equal, and each element of the
+    # stored List equals a value of its own shape.
+    fn b_shape() errors compiler::CompilerError:
+        static compile:
+            a = SrPerson {age: 1, name: "a"}
+            b = SrAccount {name: "a", age: 1}
+            c = {age: 1, name: "a"}
+            d = {name: "a", age: 1}
+            xs = [a, b, c, d]
+            [a.age, b.age, c.age, d.age, a == b, c == d, xs]
+    test::value("sr-shape-named-vs-anonymous", [1, 1, 1, 1, false, true, [SrPerson {name: "a", age: 1}, SrAccount {name: "a", age: 1}, {age: 1, name: "a"}, {age: 1, name: "a"}]], b_shape)
+
+# ---------------------------------------------------------------------------
+# value-transport.test
+
+fn register_value_transport_tests():
+    # vt-late-materialized-is-equal-to-eager: a six-field value used locally,
+    # then carried down a five-call chain (materialized late, at the
+    # frontier) compares and hashes like one built at construction.
+    fn b_late_materialized() errors compiler::CompilerError:
+        static compile:
+            fn f0(r, k):
+                r.a + r.b + r.c + r.d + r.e + r.f + k
+            fn f1(r, k):
+                f0(r, k)
+            fn f2(r, k):
+                f1(r, k)
+            fn f3(r, k):
+                f2(r, k)
+            fn f4(r, k):
+                f3(r, k)
+            fn run(i):
+                r = {a: i, b: i + 1, c: i + 2, d: i + 3, e: i + 4, f: i + 5}
+                s = {f: i + 5, e: i + 4, d: i + 3, c: i + 2, b: i + 1, a: i}
+                local = r.a + r.b
+                t = f4(r, i)
+                [local, t, r == s, hash(r) == hash(s), r]
+            run(3)
+    test::value("vt-late-materialized-is-equal-to-eager", [7, 36, true, true, {a: 3, b: 4, c: 5, d: 6, e: 7, f: 8}], b_late_materialized)
+
+# ---------------------------------------------------------------------------
+# native-string-region.test
+
+fn register_native_string_region_tests():
+    # region-unicode-mixed-1: temporary substrings (StringRegions) of a
+    # String of ASCII, BMP and astral characters: contents, length and
+    # equality count scalars. (The Tcl test compiles non-strictly: f's
+    # slices may fail as far as the compiler can tell, so f declares their
+    # errors and its caller handles them; the slices themselves stay
+    # temporaries consumed only by == and str::length, as there.)
+    fn b_unicode_mixed() errors compiler::CompilerError:
+        static compile:
+            fn f(text) errors LowerUnderrun, UpperOverrun:
+                [str::substring(text, 0, 4) == "café", str::length(str::substring(text, 4, 6)), str::substring(text, 4, 6) == "🌍!"]
+            r = f("café🌍!"):
+                on LowerUnderrun:
+                    ["LowerUnderrun"]
+                on UpperOverrun:
+                    ["UpperOverrun"]
+            r
+    test::value("region-unicode-mixed-1", [true, 2, true], b_unicode_mixed)
+
+# ---------------------------------------------------------------------------
+# abi-numeric.test
+
+fn register_abi_numeric_tests():
+    # abi-numeric-conversion-failure-points-at-the-call: a conversion that
+    # may fail is an obligation at the creator call itself, reported there;
+    # a dynamic failure is the declared error of the violated bound, which a
+    # handler receives.
+    fn b_conversion_unhandled() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int):
+                abi::u8(n)
+            f(3)
+    rep_rejects_message("abi-numeric-conversion-failure-points-at-the-call/unhandled", compiler::DiagnosticCode::UnhandledError, 325, 17, "this call may produce the declared error \"abi::AbiInteger", "Range\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_conversion_unhandled)
+    fn b_conversion_dynamic() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
+                abi::u8(n).value
+            loop n in [1, 256, 0 - 1]:
+                f(n):
+                    on abi::AbiIntegerBelowRange:
+                        0 - 100
+                    on abi::AbiIntegerAboveRange:
+                        100
+    test::value("abi-numeric-conversion-failure-points-at-the-call/dynamic", [1, 100, -100], b_conversion_dynamic)
+
+# ---------------------------------------------------------------------------
+
+fn register_representation_tests():
+    register_native_tests(9223372036854775807, -9223372036854775808, 4611686018427387903, -4611686018427387904, 100000000000000000000)
+    register_raw_int_abi_tests()
+    register_loop_counted_tests()
+    register_native_bitshift_tests()
+    register_short_string_tests()
+    register_native_hashing_tests()
+    register_enums_tests()
+    register_struct_scalar_replacement_tests()
+    register_value_transport_tests()
+    register_native_string_region_tests()
+    register_abi_numeric_tests()
+
+with context test::suite()
+register_representation_tests()
+test::report()

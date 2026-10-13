@@ -35,6 +35,13 @@ pub enum OpCode {
     IEq,
     VEq,
     StrEq,
+    /// `==` of two operands statically UnicodeChar (native/lower.tcl's
+    /// NativeCallOp): word equality of the two immediates; never fails.
+    CharEq,
+    /// `==` of two operands statically enum cases (ENUMS.md, native/
+    /// lower.tcl's NativeCallOp): word equality of the two immediate case
+    /// words, which is nominal equality (same enum, same case); never fails.
+    EnumEq,
     ListNew,
     StrLen,
     Substr,
@@ -172,6 +179,16 @@ pub enum OpCode {
     /// builds on this plus List/Int operations instead of needing its own
     /// native.
     StrUtf8Bytes,
+    /// `str::char_at(S, I)` (core/strings.tcl): the Unicode scalar at
+    /// character index I as a UnicodeChar immediate, never allocating. The
+    /// checked form fails with the declared builtin error IndexNotFound for
+    /// any I outside 0..chars (a BigInt included); the proven sibling is
+    /// emitted only where hir/completions.tcl proved the index in range.
+    /// An ASCII String is a byte read; otherwise the scalar is located by
+    /// decoding forward from byte 0 (the seek `Substr` pays, counted in
+    /// `utf8SeekBytes`).
+    StrCharAt,
+    StrCharAtProven,
     /// `argv()` (core/process.tcl, ARGV.md): the process argument snapshot
     /// of this run as a List of Strings -- every argument validated as UTF-8
     /// *by this operation* (never earlier), all or nothing. Takes no
@@ -192,6 +209,150 @@ pub enum OpCode {
     /// `syscall` instruction itself (runtime/syscall.rs); never removed,
     /// merged or reordered (a helper call); Linux x86-64 targets only.
     SyscallLinuxX86_64,
+    /// `byte_store::from_list` (core/bytestore.tcl, ABI-BYTES.md): the owned
+    /// byte storage holding the bytes of a List of Ints in 0..255, eagerly
+    /// copied (one allocation, or the shared static empty storage; a
+    /// non-byte element is TYPE). One operand, the List.
+    BytesFromList,
+    /// `byte_store::byte_count`: the exact byte count of a storage, a small Int.
+    /// One operand; TYPE if it is not a byte storage.
+    BytesLen,
+    /// `abi::x86_64::from_bytes`, the raw address bridge: the machine
+    /// address of the first payload byte of a storage, as a small Int. One
+    /// operand; never allocates. The address is meaningful only while the
+    /// storage is live: native/lower.tcl pairs every use of it in a syscall
+    /// with a `keepalive` of the storage after that syscall.
+    BytesAddr,
+    /// `mutable_byte_store::zeroed` (core/bytestore.tcl, MUTABLE-BYTES.md): a
+    /// fresh writable storage of N zero bytes (one allocation; the shared
+    /// static empty storage for N = 0). One operand, the Int N (RANGE outside
+    /// 0..2^62-1).
+    MBytesNew,
+    /// `mutable_byte_store::from_storage`: a fresh writable copy of an immutable byte
+    /// storage. One operand.
+    MBytesFrom,
+    /// `mutable_byte_store::count`: the fixed byte count of a writable
+    /// storage, a small Int. One operand; TYPE unless it is a writable storage.
+    MBytesLen,
+    /// `mutable_byte_store::replace`: a fresh writable storage equal to the first
+    /// operand with byte I (second operand, RANGE if not a valid index)
+    /// replaced by the third (TYPE unless an Int in 0..255). The first
+    /// operand is cloned and the clone written; it is never written itself.
+    MBytesSet,
+    /// `mutable_byte_store::detach`: a fresh writable storage equal to the
+    /// operand (the "detach" before a writable foreign access).
+    MBytesClone,
+    /// `mutable_byte_store::freeze`: a fresh immutable byte storage holding the
+    /// operand's current bytes (the shared static empty storage for none).
+    MBytesFreeze,
+    /// `mutable_byte_store::freeze_prefix`: the first N bytes (second operand, RANGE
+    /// unless 0 <= N <= the length) of the first, as an immutable storage.
+    MBytesFreezePrefix,
+    /// `abi::x86_64::from_mutable_bytes`, the WRITABLE raw address bridge: the
+    /// machine address of the first payload byte of a writable storage, as a
+    /// small Int. One operand, which must be a KIND_MUTBYTES storage (TYPE
+    /// otherwise: the readable and writable kinds are never interchanged).
+    /// Never allocates. Like `bytesaddr`, every use of it in a syscall is
+    /// paired by native/lower.tcl with a `keepalive` of the storage after it.
+    MBytesAddr,
+    /// `%u = op keepalive %b`: a use of %b that is never removed and does
+    /// nothing, so %b stays a GC root until here. Result unit.
+    KeepAlive,
+    /// Coroutines (COROUTINES.md, runtime/coroutine.rs). `cocreate %t`: a
+    /// fresh coroutine handle around the zero-argument Block %t (allocates).
+    /// `costart %h`: the eager start, the body to its first outward boundary
+    /// -- its value, or a failure with the body's unhandled error.
+    /// `coresume %h %m` / `coresume0 %h`: the next segment, delivering %m (or
+    /// unit) to the suspended yield; a terminal handle returns its cached
+    /// result or raises its cached failure again. `coyield %v`: suspends the
+    /// running coroutine with outward value %v; the result is the resume
+    /// message. `codone %h`: Bool, the handle is completed or failed.
+    /// `corelease %h`: %h's handle is dead from here (native/lower.tcl emits
+    /// it after the last use the affine analysis found): frees what the
+    /// coroutine holds, its stack first; result unit, never fails or
+    /// allocates. Every one but `codone` and `corelease` is a GC safepoint
+    /// (op_may_allocate): a segment runs
+    /// arbitrary code, and while a coroutine is suspended others run and may
+    /// collect, so a call that may suspend must have its roots in a stack map.
+    CoCreate,
+    CoStart,
+    CoResume,
+    CoResume0,
+    CoYield,
+    CoDone,
+    CoRelease,
+    /// `affinedrop %v %d`: the owner of the affine aggregate %v is dead from
+    /// here (AFFINE-VALUES.md; native/lower.tcl emits it where the affine
+    /// analysis put a release): releases every affine value %v owns, by the
+    /// static drop descriptor %d (a String, runtime/affine.rs). Result unit;
+    /// never fails or allocates (no safepoint), like `corelease`.
+    AffineDrop,
+    /// MutableVector (MUTABLE-VECTOR.md, runtime/mutvec.rs). A vector is a
+    /// header over a copy-on-write backing; every mutation changes the
+    /// header in place (its register never changes).
+    ///   `mvfromlist %xs`       a fresh vector of a List's elements (allocates)
+    ///   `mvlen %v`, `mvempty %v`  observations (never detach)
+    ///   `mvat %v %i`           an element; IndexNotFound
+    ///   `mvpush %v %x`         append (detaching a shared backing first)
+    ///   `mvpop %v`, `mvtake %v %i`, `mvswap %v %i %x`  removal/exchange,
+    ///                          the element moved out; IndexNotFound
+    ///   `mvclear %v`           remove every (unrestricted) element
+    ///   `mvshare %v %d`        a logical copy by share descriptor %d (a new
+    ///                          header on the same backing; allocates)
+    ///   `mvtolist %v`          an immutable List snapshot (allocates)
+    ///   `mvtakefront %v`       a consuming loop's step (non-empty vector)
+    ///   `mvcleardrop %v %d`    clear of affine elements, each dropped by %d
+    ///   `mvswapdrop %v %i %x %d`  swap of affine elements; on IndexNotFound
+    ///                          the replacement %x is dropped by %d
+    /// Push/pop/take/swap/clear grow or detach the backing with Rust
+    /// allocations only: no Botlish allocation, so no safepoint.
+    MvFromList,
+    MvLen,
+    MvEmpty,
+    MvAt,
+    MvPush,
+    MvPop,
+    MvTake,
+    MvSwap,
+    MvClear,
+    MvShare,
+    MvToList,
+    MvTakeFront,
+    MvClearDrop,
+    MvSwapDrop,
+    /// MutableArray (MUTABLE-ARRAY.md, runtime/ops.rs): a header over a
+    /// copy-on-write backing, like a vector's (its logical copy is `mvshare`
+    /// with `h`), whose length never changes after construction.
+    ///   `mutarraycreate %n %x`     %n slots of the one value %x (allocates)
+    ///   `mutarrayfromlist %xs`     a fresh array of a List's elements
+    ///   `mutarraygenerate %n %f`   slot i holds %f(i); runs code (allocates;
+    ///                              a failing call is the result's failure)
+    ///   `mutarraygeneratedrop %n %f %d`  the same for affine elements: on a
+    ///                              failure the elements made are dropped by %d
+    ///   `mutarrayswap %a %i %x`    %x installed at %i, the old element out;
+    ///                              IndexNotFound
+    ///   `mutarrayswapdrop %a %i %x %d`  swap of affine elements; on
+    ///                              IndexNotFound %x is dropped by %d
+    ///   `mutarraysetdrop %a %i %x %d`  set of affine elements: the displaced
+    ///                              element (or, on IndexNotFound, %x) is
+    ///                              dropped by %d
+    ///   `mutarraytolist %a`        an immutable List snapshot (allocates)
+    ///   `mutarrayempty %a`         a consumed array has no element left
+    ///   `mutarraytakefront %a`     a consuming loop's step (non-empty)
+    MutArrayCreate,
+    MutArrayFromList,
+    MutArrayGenerate,
+    MutArrayGenerateDrop,
+    MutArraySwap,
+    MutArraySwapDrop,
+    MutArraySetDrop,
+    MutArrayToList,
+    MutArrayEmpty,
+    MutArrayTakeFront,
+    /// `ctxroot %h`: %h (a MutableVector or MutableArray header just
+    /// installed in the context area, MUTABLE-VECTOR.md) is a GC root for the rest of the
+    /// run. Never fails or allocates; result unit.
+    CtxRoot,
     /// Tcl 9-compatible Unicode alpha/alnum character classification
     /// (core/tclcompat.tcl's `is_tcl_alpha`/`is_tcl_alnum`): the operand is
     /// a one-Unicode-scalar String (RANGE if not). TEMPORARY compatibility
@@ -332,6 +493,8 @@ impl OpCode {
             "ieq" => IEq,
             "veq" => VEq,
             "streq" => StrEq,
+            "chareq" => CharEq,
+            "enumeq" => EnumEq,
             "listnew" => ListNew,
             "strlen" => StrLen,
             "substr" => Substr,
@@ -350,6 +513,16 @@ impl OpCode {
             "mutarrayset" => MutArraySet,
             "mutarraycopy" => MutArrayCopy,
             "mutarrayfreeze" => MutArrayFreeze,
+            "mutarraycreate" => MutArrayCreate,
+            "mutarrayfromlist" => MutArrayFromList,
+            "mutarraygenerate" => MutArrayGenerate,
+            "mutarraygeneratedrop" => MutArrayGenerateDrop,
+            "mutarrayswap" => MutArraySwap,
+            "mutarrayswapdrop" => MutArraySwapDrop,
+            "mutarraysetdrop" => MutArraySetDrop,
+            "mutarraytolist" => MutArrayToList,
+            "mutarrayempty" => MutArrayEmpty,
+            "mutarraytakefront" => MutArrayTakeFront,
             "listgetproven" => ListGetProven,
             "mutarraygetproven" => MutArrayGetProven,
             "mutarraysetproven" => MutArraySetProven,
@@ -373,8 +546,45 @@ impl OpCode {
             "decodecharat" => DecodeCharAt,
             "strbytelen" => StrByteLen,
             "strutf8bytes" => StrUtf8Bytes,
+            "strcharat" => StrCharAt,
+            "strcharatproven" => StrCharAtProven,
             "argv" => Argv,
             "syscall_linux_x86_64" => SyscallLinuxX86_64,
+            "bytesfromlist" => BytesFromList,
+            "byteslen" => BytesLen,
+            "bytesaddr" => BytesAddr,
+            "keepalive" => KeepAlive,
+            "cocreate" => CoCreate,
+            "costart" => CoStart,
+            "coresume" => CoResume,
+            "coresume0" => CoResume0,
+            "coyield" => CoYield,
+            "codone" => CoDone,
+            "corelease" => CoRelease,
+            "affinedrop" => AffineDrop,
+            "mvfromlist" => MvFromList,
+            "mvlen" => MvLen,
+            "mvempty" => MvEmpty,
+            "mvat" => MvAt,
+            "mvpush" => MvPush,
+            "mvpop" => MvPop,
+            "mvtake" => MvTake,
+            "mvswap" => MvSwap,
+            "mvclear" => MvClear,
+            "mvshare" => MvShare,
+            "mvtolist" => MvToList,
+            "mvtakefront" => MvTakeFront,
+            "mvcleardrop" => MvClearDrop,
+            "mvswapdrop" => MvSwapDrop,
+            "ctxroot" => CtxRoot,
+            "mbytesnew" => MBytesNew,
+            "mbytesfrom" => MBytesFrom,
+            "mbyteslen" => MBytesLen,
+            "mbytesset" => MBytesSet,
+            "mbytesclone" => MBytesClone,
+            "mbytesfreeze" => MBytesFreeze,
+            "mbytesfreezeprefix" => MBytesFreezePrefix,
+            "mbytesaddr" => MBytesAddr,
             "strtclalpha" => StrIsTclAlpha,
             "strtclalnum" => StrIsTclAlnum,
             "strregiontclalpha" => StrRegionIsTclAlpha,
@@ -417,9 +627,13 @@ impl OpCode {
             | IsOk | IsError | ResultValue | ResultError | MkOk | MkError | Hash | RBox | RUnbox
             | StrByteLen | StrUtf8Bytes | StrIsTclAlpha | StrIsTclAlnum | CharCodepoint | SetFromList
             | SetFromListTotal | StrToShort | ShortToStr | ShortLen | StrToAscii | AsciiToStr | AsciiLen
-            | AsciiToShort => Some(1),
-            Substr | SubstrProven | MutArraySet | MutArraySetProven | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum | StrSliceShort => Some(3),
-            RegionEq => Some(4),
+            | AsciiToShort | BytesFromList | BytesLen | BytesAddr | KeepAlive | MBytesNew | MBytesFrom | MBytesLen
+            | MBytesClone | MBytesFreeze | MBytesAddr | CoCreate | CoStart | CoResume0 | CoYield | CoDone
+            | CoRelease | MvFromList | MvLen | MvEmpty | MvPop | MvClear | MvToList | MvTakeFront | CtxRoot
+            | MutArrayFromList | MutArrayToList | MutArrayEmpty | MutArrayTakeFront => Some(1),
+            Substr | SubstrProven | MutArraySet | MutArraySetProven | MBytesSet | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum | StrSliceShort
+            | MvSwap | MutArraySwap | MutArrayGenerateDrop => Some(3),
+            RegionEq | MvSwapDrop | MutArraySwapDrop | MutArraySetDrop => Some(4),
             MutArrayCopy | MutArrayCopyProven => Some(5),
             _ => Some(2),
         }
@@ -485,11 +699,21 @@ pub enum Inst {
     /// `OpCode::StrToAscii`), printed as a signed i64.
     AsciiLit { dst: Reg, value: i64 },
     Str { dst: Reg, text: String },
+    /// A static byte-storage constant (`bytes "HEX"`): the bytes of lowercase
+    /// hexadecimal text HEX (two digits per byte), a program-lifetime object
+    /// installed at startup (never collected, never allocated at run time).
+    /// native/lower.tcl emits it for an `abi::bytes::from_list` call whose every byte is
+    /// known at compile time (ABI-BYTES.md).
+    Bytes { dst: Reg, bytes: Vec<u8> },
     /// A UnicodeChar constant: DIGITS is the canonical decimal codepoint
     /// (must be a valid Unicode scalar value, never a surrogate -- see
     /// UNICODE-CHAR-LITERALS.md); codegen packs it as the immediate
     /// `make_char` word directly, no allocation and no runtime call.
     Char { dst: Reg, digits: String },
+    /// `%d = enum E C`: the case number C of the program's enum number E (an
+    /// `enum` declaration, ENUMS.md); codegen packs it as the immediate
+    /// `make_enum` word directly, no allocation and no runtime call.
+    Enum { dst: Reg, index: u32, case: u32 },
     Bool { dst: Reg, value: bool },
     Unit { dst: Reg },
     Native { dst: Reg, native: u32 },
@@ -510,6 +734,16 @@ pub enum Inst {
     /// VALUES.md) -- never by any other instruction, and never read back by
     /// the same function through anything but a later StaticGet.
     StaticSet { index: u32, value: Reg },
+    /// Reads the 64-bit word at byte OFFSET of the program's fixed context
+    /// area (CONTEXTS.md): one scalar leaf of an installed context, a tagged
+    /// immediate (small Int, Bool, Unit or UnicodeChar -- never a heap
+    /// pointer, which is what makes the area need no GC root). The area is
+    /// one writable data symbol of the program (`Program::context_bytes`),
+    /// addressed directly: no Vm field, no lookup, no hidden argument.
+    ContextLoad { dst: Reg, offset: u32 },
+    /// Writes VALUE (such an immediate) to byte OFFSET of the context area:
+    /// a `with context` installation, emitted only by the program function.
+    ContextStore { offset: u32, value: Reg },
     Move { dst: Reg, src: Reg },
     Closure { dst: Reg, func: FuncId, captures: Vec<Reg> },
     Guard { kind: Kind, value: Reg, context: String },
@@ -546,7 +780,18 @@ pub enum Inst {
     /// every ordinary call site's own `may_error` check already propagates
     /// that with no change of its own. NAME is kept only for the fallback
     /// RtError message if this ever reaches the program boundary uncaught.
-    Fail { id: u32, name: String },
+    /// `faildeclared ID "NAME" SHAPE %f0 %f1 ...` raises an error with a
+    /// payload (ERROR-PAYLOADS.md): its field values, one register per field
+    /// of the anonymous payload struct SHAPE in slot order, copied into the
+    /// Vm's payload slots (`Vm::declared_payload`) -- the error edge carries
+    /// the fields themselves, no struct object is built. SHAPE only renders
+    /// an uncaught payload. PAYLOAD is empty (and SHAPE 0) for a
+    /// payload-free error, whose text and code are what they always were.
+    Fail { id: u32, name: String, shape: u32, payload: Vec<Reg> },
+    /// `%d = declaredpayload K`: field K (slot order) of the pending declared
+    /// error's payload, read by a handler that matched it before its
+    /// ClearDeclaredError (ERROR-PAYLOADS.md). Never allocates, never fails.
+    DeclaredPayload { dst: Reg, index: u32 },
     /// True iff the pending declared-error id (runtime/vm.rs's
     /// `Vm::declared_error`) equals ID: a `handle`'s own per-handler
     /// dispatch test, evaluated only inside a PushErrorExit/PopErrorExit
@@ -856,10 +1101,38 @@ pub struct ShapeDecl {
     pub opaque: bool,
 }
 
+/// One statically assigned context slot (`context N "ID" offset=O words=W
+/// fields="..."`, CONTEXTS.md): the installed value of context-struct ID
+/// lives, flattened to W scalar words in FIELDS' order (dotted paths through
+/// nested structs), at byte offset O of the context area. Program metadata
+/// for listings and validation; codegen reads only offsets.
+pub struct ContextDecl {
+    pub name: String,
+    pub offset: u32,
+    pub words: u32,
+    pub fields: Vec<String>,
+}
+
+/// An enum declaration (`enum N "ID" cases="A B ..."`, ENUMS.md): static
+/// program metadata the runtime keeps once per enum (runtime::vm::EnumInfo),
+/// for printing and hashing by name. Enum numbers are dense, in order; a
+/// case's number is its position in CASES. Both are representation only.
+pub struct EnumDecl {
+    pub name: String,
+    pub cases: Vec<String>,
+}
+
 pub struct Program {
     pub natives: Vec<NativeDecl>,
     pub shapes: Vec<ShapeDecl>,
+    pub enums: Vec<EnumDecl>,
     pub functions: Vec<Function>,
+    /// The size in bytes of the program's context area (the header's
+    /// `contexts=N`, CONTEXTS.md): one zero-initialized, 8-byte-aligned,
+    /// writable, linker-local data object holding every context slot. Zero
+    /// for a program without contexts (no data object is emitted).
+    pub context_bytes: u32,
+    pub contexts: Vec<ContextDecl>,
     /// The number of module-static slots this program uses (the header's
     /// own `statics=N`, MODULE-STATIC-RETAINED-VALUES.md): runtime::vm::Vm's
     /// own `statics` table is sized to this once, at program-install time,
@@ -1009,7 +1282,15 @@ fn word(t: &Token) -> Option<&str> {
 
 pub fn parse(text: &str) -> Result<Program, NirError> {
     let mut p = Parser { line: 0 };
-    let mut program = Program { natives: Vec::new(), shapes: Vec::new(), functions: Vec::new(), statics: 0 };
+    let mut program = Program {
+        natives: Vec::new(),
+        shapes: Vec::new(),
+        enums: Vec::new(),
+        functions: Vec::new(),
+        statics: 0,
+        context_bytes: 0,
+        contexts: Vec::new(),
+    };
     let mut current: Option<Function> = None;
     let mut seen_header = false;
     let mut call_effects = true;
@@ -1029,6 +1310,13 @@ pub fn parse(text: &str) -> Result<Program, NirError> {
                 Some(v) => v.parse().or_else(|_| p.err("bad statics count"))?,
                 None => 0,
             };
+            program.context_bytes = match kv.get("contexts") {
+                Some(v) => v.parse().or_else(|_| p.err("bad contexts size"))?,
+                None => 0,
+            };
+            if program.context_bytes % 8 != 0 {
+                return p.err("the context area size must be a multiple of 8 bytes");
+            }
             seen_header = true;
             continue;
         }
@@ -1042,6 +1330,25 @@ pub fn parse(text: &str) -> Result<Program, NirError> {
                         return p.err(format!("shape numbers must be dense and in order, got {}", shape.0));
                     }
                     program.shapes.push(shape.1);
+                }
+                "enum" => {
+                    let decl = parse_enum(&p, &tokens)?;
+                    if decl.0 as usize != program.enums.len() {
+                        return p.err(format!("enum numbers must be dense and in order, got {}", decl.0));
+                    }
+                    program.enums.push(decl.1);
+                }
+                "context" => {
+                    let decl = parse_context(&p, &tokens)?;
+                    if decl.0 as usize != program.contexts.len() {
+                        return p.err(format!("context slot numbers must be dense and in order, got {}", decl.0));
+                    }
+                    let end = decl.1.offset as u64 + 8 * decl.1.words as u64;
+                    if decl.1.offset % 8 != 0 || end > program.context_bytes as u64 {
+                        return p.err(format!("context slot {} lies outside the {}-byte context area", decl.0,
+                            program.context_bytes));
+                    }
+                    program.contexts.push(decl.1);
                 }
                 "func" => current = Some(parse_func_header(&p, &tokens)?),
                 _ => return p.err(format!("expected native or func, got {raw:?}")),
@@ -1156,6 +1463,60 @@ fn parse_native(p: &Parser, tokens: &[Token]) -> Result<NativeDecl, NirError> {
 }
 
 /// `shape N anon fields="a b ..."` or `shape N named "Name" fields="a b ..."`.
+
+/// `context N "ID" offset=O words=W fields="P1 P2 ..."` (CONTEXTS.md).
+fn parse_context(p: &Parser, tokens: &[Token]) -> Result<(u32, ContextDecl), NirError> {
+    let slot = match tokens.get(1).and_then(word).map(str::parse::<u32>) {
+        Some(Ok(n)) => n,
+        _ => return p.err("context needs a slot number"),
+    };
+    let name = match tokens.get(2) {
+        Some(Token::Quoted(q)) => q.clone(),
+        _ => return p.err("context needs a quoted type identity"),
+    };
+    let kv = pairs(tokens);
+    let number = |key: &str| -> Result<u32, NirError> {
+        match kv.get(key).map(|v| v.parse::<u32>()) {
+            Some(Ok(n)) => Ok(n),
+            _ => p.err(format!("context needs {key}=N")),
+        }
+    };
+    let offset = number("offset")?;
+    let words = number("words")?;
+    let fields: Vec<String> = kv.get("fields").map(|f| f.split_whitespace().map(String::from).collect()).unwrap_or_default();
+    if words == 0 || fields.len() != words as usize {
+        return p.err(format!("context {name} needs one field path per word ({words} words)"));
+    }
+    Ok((slot, ContextDecl { name, offset, words, fields }))
+}
+
+/// `enum N "ID" cases="A B ..."` (ENUMS.md).
+fn parse_enum(p: &Parser, tokens: &[Token]) -> Result<(u32, EnumDecl), NirError> {
+    let Some(index) = tokens.get(1).and_then(word).and_then(|w| w.parse::<u32>().ok()) else {
+        return p.err("enum needs a number");
+    };
+    let name = match tokens.get(2) {
+        Some(Token::Quoted(name)) if !name.is_empty() => name.clone(),
+        _ => return p.err("enum needs a quoted declaration identity"),
+    };
+    let kv = pairs(tokens);
+    let Some(cases) = kv.get("cases") else { return p.err("enum needs cases=") };
+    let cases: Vec<String> = cases.split_whitespace().map(str::to_string).collect();
+    if cases.is_empty() {
+        return p.err(format!("enum {name} declares no case"));
+    }
+    if cases.len() > crate::runtime::value::MAX_ENUM_CASE as usize + 1 {
+        return p.err(format!("enum {name} has too many cases"));
+    }
+    let mut seen = HashSet::new();
+    for c in &cases {
+        if !seen.insert(c) {
+            return p.err(format!("enum case {c} is declared twice"));
+        }
+    }
+    Ok((index, EnumDecl { name, cases }))
+}
+
 fn parse_shape(p: &Parser, tokens: &[Token]) -> Result<(u32, ShapeDecl), NirError> {
     let Some(index) = tokens.get(1).and_then(word).and_then(|w| w.parse::<u32>().ok()) else {
         return p.err("shape needs a number");
@@ -1391,6 +1752,16 @@ fn parse_inst(p: &Parser, tokens: &[Token], program: &Program) -> Result<Inst, N
                 Inst::AsciiLit { dst, value }
             }
             "str" => Inst::Str { dst, text: quoted(3)? },
+            "bytes" => {
+                let text = quoted(3)?;
+                if text.len() % 2 != 0 || !text.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+                    return p.err("bytes must be lowercase hexadecimal text of whole bytes");
+                }
+                let bytes = (0..text.len() / 2)
+                    .map(|i| u8::from_str_radix(&text[2 * i..2 * i + 2], 16).expect("validated hexadecimal"))
+                    .collect();
+                Inst::Bytes { dst, bytes }
+            }
             "char" => {
                 let digits = tokens.get(3).and_then(word).unwrap_or("").to_string();
                 let Ok(codepoint) = digits.parse::<u32>() else { return p.err("bad char literal") };
@@ -1398,6 +1769,17 @@ fn parse_inst(p: &Parser, tokens: &[Token], program: &Program) -> Result<Inst, N
                     return p.err("char literal is not a Unicode scalar value");
                 }
                 Inst::Char { dst, digits }
+            }
+            "enum" => {
+                let index = num(3)?;
+                let case = num(4)?;
+                let Some(decl) = program.enums.get(index as usize) else {
+                    return p.err(format!("enum constant of undeclared enum {index}"));
+                };
+                if case as usize >= decl.cases.len() {
+                    return p.err(format!("enum {} has no case number {case}", decl.name));
+                }
+                Inst::Enum { dst, index, case }
             }
             "bool" => match tokens.get(3).and_then(word) {
                 Some("true") => Inst::Bool { dst, value: true },
@@ -1438,6 +1820,13 @@ fn parse_inst(p: &Parser, tokens: &[Token], program: &Program) -> Result<Inst, N
                 }
                 Inst::StaticGet { dst, index }
             }
+            "contextload" => {
+                let offset = num(3)?;
+                if offset % 8 != 0 || offset as u64 + 8 > program.context_bytes as u64 {
+                    return p.err(format!("bad context offset {offset}"));
+                }
+                Inst::ContextLoad { dst, offset }
+            }
             "move" => Inst::Move { dst, src: reg(3)? },
             "closure" => Inst::Closure { dst, func: num(3)?, captures: regs_from(4)? },
             "op" => {
@@ -1453,6 +1842,7 @@ fn parse_inst(p: &Parser, tokens: &[Token], program: &Program) -> Result<Inst, N
                 Inst::CallEnvMulti { dsts, func: num(i)?, closure: reg(i + 1)?, args: regs_from(i + 2)?, may_error: true, may_gc: true }
             }
             "declarederroreq" => Inst::DeclaredErrorEq { dst, id: num(3)? },
+            "declaredpayload" => Inst::DeclaredPayload { dst, index: num(3)? },
             "construct" => {
                 let list = match tokens.get(3).and_then(word) {
                     Some("str") => false,
@@ -1501,6 +1891,13 @@ fn parse_inst(p: &Parser, tokens: &[Token], program: &Program) -> Result<Inst, N
             }
             Inst::StaticSet { index, value: reg(2)? }
         }
+        "contextstore" => {
+            let offset = num(1)?;
+            if offset % 8 != 0 || offset as u64 + 8 > program.context_bytes as u64 {
+                return p.err(format!("bad context offset {offset}"));
+            }
+            Inst::ContextStore { offset, value: reg(2)? }
+        }
         "guard" => {
             let kind = tokens.get(1).and_then(word).and_then(Kind::parse);
             let Some(kind) = kind else { return p.err("bad guard kind") };
@@ -1518,7 +1915,25 @@ fn parse_inst(p: &Parser, tokens: &[Token], program: &Program) -> Result<Inst, N
             message: quoted(2)?,
         },
         "unreachable" => Inst::Unreachable,
-        "faildeclared" => Inst::Fail { id: num(1)?, name: quoted(2)? },
+        "faildeclared" => {
+            if tokens.len() > 3 {
+                let shape = num(3)?;
+                let Some(decl) = program.shapes.get(shape as usize) else {
+                    return p.err(format!("faildeclared with a payload of undeclared shape {shape}"));
+                };
+                let payload = regs_from(4)?;
+                if payload.len() != decl.fields.len() {
+                    return p.err(format!(
+                        "faildeclared with a payload of shape {shape} needs {} field register(s), got {}",
+                        decl.fields.len(),
+                        payload.len()
+                    ));
+                }
+                Inst::Fail { id: num(1)?, name: quoted(2)?, shape, payload }
+            } else {
+                Inst::Fail { id: num(1)?, name: quoted(2)?, shape: 0, payload: Vec::new() }
+            }
+        }
         "cleardeclarederror" => Inst::ClearDeclaredError,
         "pusherrorexit" => Inst::PushErrorExit(label(1)?),
         "poperrorexit" => Inst::PopErrorExit,
@@ -1638,16 +2053,19 @@ fn validate(program: &Program) -> Result<(), NirError> {
             let mut targets: Vec<Label> = Vec::new();
             match inst {
                 Inst::Label(_) | Inst::Unreachable | Inst::Raise { .. }
-                | Inst::Fail { .. } | Inst::ClearDeclaredError | Inst::PopErrorExit
+                | Inst::ClearDeclaredError | Inst::PopErrorExit
                 | Inst::Reraise => {}
-                Inst::DeclaredErrorEq { dst, .. } => used.push(*dst),
+                Inst::Fail { payload, .. } => used.extend(payload),
+                Inst::DeclaredErrorEq { dst, .. } | Inst::DeclaredPayload { dst, .. } => used.push(*dst),
                 Inst::PushErrorExit(l) => targets.push(*l),
                 Inst::Int { dst, .. }
                 | Inst::RawInt { dst, .. }
                 | Inst::ShortLit { dst, .. }
                 | Inst::AsciiLit { dst, .. }
                 | Inst::Str { dst, .. }
+                | Inst::Bytes { dst, .. }
                 | Inst::Char { dst, .. }
+                | Inst::Enum { dst, .. }
                 | Inst::Bool { dst, .. }
                 | Inst::Unit { dst }
                 | Inst::Native { dst, .. } => used.push(*dst),
@@ -1668,6 +2086,8 @@ fn validate(program: &Program) -> Result<(), NirError> {
                 // per-function count to cross-check here, unlike Capture's
                 // own `f.captures`.
                 Inst::StaticGet { dst, .. } => used.push(*dst),
+                // Offsets were checked against the context area at parse time.
+                Inst::ContextLoad { dst, .. } => used.push(*dst),
                 Inst::FnValue { dst, func: g } => {
                     match func(*g) {
                         Some(g) if g.has_scalar_abi() => {
@@ -1681,6 +2101,7 @@ fn validate(program: &Program) -> Result<(), NirError> {
                 }
                 Inst::Move { dst, src } => used.extend([*dst, *src]),
                 Inst::StaticSet { value, .. } => used.push(*value),
+                Inst::ContextStore { value, .. } => used.push(*value),
                 Inst::Closure { dst, func: g, captures } => {
                     match func(*g) {
                         Some(g) if g.has_scalar_abi() => {
@@ -2033,18 +2454,20 @@ fn validate_plans(program: &Program) -> Result<(), NirError> {
                         consumed.push(*r);
                     }
                 }
-                Inst::Label(_) | Inst::Unreachable | Inst::Raise { .. } | Inst::Fail { .. }
+                Inst::Label(_) | Inst::Unreachable | Inst::Raise { .. }
                 | Inst::ClearDeclaredError | Inst::PushErrorExit(_) | Inst::PopErrorExit | Inst::Reraise
-                | Inst::Jump(_) | Inst::DeclaredErrorEq { .. } | Inst::Int { .. } | Inst::RawInt { .. } | Inst::ShortLit { .. }
+                | Inst::Jump(_) | Inst::DeclaredErrorEq { .. } | Inst::DeclaredPayload { .. } | Inst::Int { .. } | Inst::RawInt { .. } | Inst::ShortLit { .. }
                 | Inst::AsciiLit { .. }
-                | Inst::Str { .. } | Inst::Char { .. } | Inst::Bool { .. } | Inst::Unit { .. }
+                | Inst::Str { .. } | Inst::Bytes { .. } | Inst::Char { .. } | Inst::Enum { .. } | Inst::Bool { .. } | Inst::Unit { .. }
                 | Inst::Native { .. } | Inst::FnValue { .. } | Inst::SelfClosure { .. } | Inst::Capture { .. }
-                | Inst::StaticGet { .. } => {}
+                | Inst::StaticGet { .. } | Inst::ContextLoad { .. } => {}
                 Inst::StaticSet { value, .. } => used.push(*value),
+                Inst::ContextStore { value, .. } => used.push(*value),
                 Inst::Closure { captures, .. } => used.extend(captures),
                 Inst::Guard { value, .. } | Inst::GuardBool { value } => used.push(*value),
                 Inst::Op { args, .. } => used.extend(args),
                 Inst::StructNew { fields, .. } => used.extend(fields),
+                Inst::Fail { payload, .. } => used.extend(payload),
                 Inst::StructGet { value, .. } => used.push(*value),
                 Inst::CallValue { callee, args, .. } => {
                     used.push(*callee);
@@ -2209,12 +2632,12 @@ fn check_plan_linearity(f: &Function, consumes: &[Vec<Reg>]) -> Result<(), Strin
 /// caller).
 fn def_of(inst: &Inst) -> Option<Reg> {
     match inst {
-        Inst::Int { dst, .. } | Inst::RawInt { dst, .. } | Inst::ShortLit { dst, .. } | Inst::AsciiLit { dst, .. } | Inst::Str { dst, .. } | Inst::Char { dst, .. }
-        | Inst::Bool { dst, .. } | Inst::Unit { dst } | Inst::Native { dst, .. } | Inst::FnValue { dst, .. }
+        Inst::Int { dst, .. } | Inst::RawInt { dst, .. } | Inst::ShortLit { dst, .. } | Inst::AsciiLit { dst, .. } | Inst::Str { dst, .. } | Inst::Bytes { dst, .. } | Inst::Char { dst, .. }
+        | Inst::Enum { dst, .. } | Inst::Bool { dst, .. } | Inst::Unit { dst } | Inst::Native { dst, .. } | Inst::FnValue { dst, .. }
         | Inst::SelfClosure { dst } | Inst::Capture { dst, .. } | Inst::Move { dst, .. }
         | Inst::Closure { dst, .. }
         | Inst::Op { dst, .. } | Inst::Call { dst, .. } | Inst::CallEnv { dst, .. } | Inst::CallValue { dst, .. }
-        | Inst::DeclaredErrorEq { dst, .. } | Inst::Construct { dst, .. } => Some(*dst),
+        | Inst::DeclaredErrorEq { dst, .. } | Inst::DeclaredPayload { dst, .. } | Inst::Construct { dst, .. } => Some(*dst),
         _ => None,
     }
 }
@@ -2240,7 +2663,7 @@ mod effect_tests {
     fn call_effects_independence_matrix() {
         let cases = [
             ("    %0 = unit\n", (false, false)),
-            ("    %1 = int 1\n    %2 = int 0\n    %0 = op imod %1 %2\n", (true, false)),
+            ("    %1 = int 1\n    %2 = int 0\n    %0 = op veq %1 %2\n", (true, false)),
             ("    %1 = unit\n    %0 = op mkok %1\n", (false, true)),
             ("    %1 = str \"x\"\n    %2 = int 0\n    %0 = op substr %1 %2 %2\n", (true, true)),
         ];
@@ -2426,6 +2849,36 @@ mod struct_tests {
     fn structnew_checks_shape_and_arity() {
         assert!(message(text(SHAPES, "    %0 = int 1\n    %1 = structnew 7 %0 %0\n    ret %1")).contains("undeclared"));
         assert!(message(text(SHAPES, "    %0 = int 1\n    %1 = structnew 0 %0\n    ret %1")).contains("field register"));
+    }
+
+    // Enums (ENUMS.md): the enum table and the immediate case constants.
+
+    const ENUMS: &str = "enum 0 \"VehicleType\" cases=\"Boat Car Truck\"\nenum 1 \"geo::VehicleType\" cases=\"Boat Car\"\n";
+
+    #[test]
+    fn enums_and_enum_constants_parse() {
+        let p = parse(&text(ENUMS, "    %0 = enum 0 1
+    %1 = enum 1 1
+    %2 = op enumeq %0 %1
+    ret %2")).unwrap();
+        assert_eq!(p.enums.len(), 2);
+        assert_eq!(p.enums[1].name, "geo::VehicleType");
+        assert_eq!(p.enums[0].cases, vec!["Boat".to_string(), "Car".to_string(), "Truck".to_string()]);
+        assert!(matches!(&p.functions[0].body[0], Inst::Enum { index: 0, case: 1, .. }));
+        assert!(matches!(&p.functions[0].body[2], Inst::Op { op: OpCode::EnumEq, .. }));
+    }
+
+    #[test]
+    fn malformed_enums_are_rejected() {
+        let body = "    %0 = unit
+    ret %0";
+        assert!(message(text("enum 1 \"E\" cases=\"A\"\n", body)).contains("dense"));
+        assert!(message(text("enum 0 \"E\" cases=\"\"\n", body)).contains("no case"));
+        assert!(message(text("enum 0 \"E\" cases=\"A A\"\n", body)).contains("twice"));
+        assert!(message(text("enum 0 E cases=\"A\"\n", body)).contains("quoted"));
+        assert!(message(text("enum 0 \"E\"\n", body)).contains("cases="));
+        assert!(message(text(ENUMS, "    %0 = enum 2 0\n    ret %0")).contains("undeclared enum"));
+        assert!(message(text(ENUMS, "    %0 = enum 1 2\n    ret %0")).contains("no case number"));
     }
 
     #[test]

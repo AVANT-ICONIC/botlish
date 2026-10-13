@@ -470,7 +470,14 @@ proc hir::signatures::Value {hir AVar e sink ctx} {
     set handled [dict get $ctx handled]
     dict set ctx handled {}
     switch -- [dict get $node kind] {
-        const - continue - fail {
+        const - continue {
+        }
+        fail {
+            # A payload (ERROR-PAYLOADS.md) is a struct construction: its
+            # field values flow where this analysis does not follow.
+            if {[dict exists $node value] && [dict get $node value] ne ""} {
+                Value $hir A [dict get $node value] flow $ctx
+            }
         }
         ref {
             Use $hir A $e $sink $ctx
@@ -697,6 +704,15 @@ proc hir::signatures::ArgSinks {hir e node} {
     switch -- $kind {
         native {
             set name [dict get [hir::symbol $hir $target] name]
+            if {$name eq [core::coroutines::resumeNative] && $n > 0} {
+                # A coroutine resume (COROUTINES.md): its messages go through
+                # the handle's callable contract, like a Fn call's arguments
+                # (AFFINE-VALUES.md); the handle itself is the callee.
+                set handle [hir::typeOf $hir [lindex $args 0]]
+                if {[hir::types::IsCoroutine $handle]} {
+                    return [concat [list flow] [ContractSinks $handle [expr {$n - 1}]]]
+                }
+            }
             set meta [core::native::metadata $name]
             if {[dict get $meta arity] ne "*" && [dict get $meta arity] != $n} {
                 return $flows
@@ -724,7 +740,12 @@ proc hir::signatures::ArgSinks {hir e node} {
             set i 0
             foreach d [dict get $tnode declaredParamTypes] {
                 set label "argument [expr {$i + 1}] of $name"
-                if {$d ne {}} {
+                if {$d ne {} && [hir::types::IsTraitConstraint $d]} {
+                    # A trait-typed parameter is an explicit boundary
+                    # (TRAITS.md): it never makes an untyped parameter
+                    # implicitly trait-polymorphic.
+                    lappend sinks flow
+                } elseif {$d ne {}} {
                     lappend sinks [list type $d trusted "$label (declared [hir::types::show $d])"]
                 } else {
                     lappend sinks [list param $target $i $label]
@@ -735,20 +756,35 @@ proc hir::signatures::ArgSinks {hir e node} {
         }
     }
     set calleeType [hir::typeOf $hir [dict get $node callee]]
-    if {[hir::types::IsFn $calleeType] && [llength [hir::types::FnArgs $calleeType]] == $n} {
-        set sinks {}
-        set i 0
-        foreach t [hir::types::FnArgs $calleeType] {
-            incr i
-            if {$t eq "any"} {
-                lappend sinks flow
-            } else {
-                lappend sinks [list type $t trusted "argument $i of a call through [hir::types::show $calleeType]"]
-            }
+    if {[hir::types::IsFn $calleeType] || [hir::types::IsCoroutine $calleeType]} {
+        set sinks [ContractSinks $calleeType $n]
+        if {$sinks ne ""} {
+            return $sinks
         }
-        return $sinks
     }
     return $flows
+}
+
+# The sinks of the N arguments of a call through callable type CALLEETYPE
+# (a structural Fn, or a coroutine handle: one callable contract,
+# AFFINE-VALUES.md): each contract argument type, trusted, or "" when the
+# arity does not match.
+proc hir::signatures::ContractSinks {calleeType n} {
+    set types [dict get [hir::types::Contract $calleeType] args]
+    if {[llength $types] != $n} {
+        return ""
+    }
+    set sinks {}
+    set i 0
+    foreach t $types {
+        incr i
+        if {$t eq "any"} {
+            lappend sinks flow
+        } else {
+            lappend sinks [list type $t trusted "argument $i of a call through [hir::types::show $calleeType]"]
+        }
+    }
+    return $sinks
 }
 
 # ---------------------------------------------------------------------------
@@ -776,6 +812,14 @@ proc hir::signatures::Meet {a b} {
     if {[hir::types::IsMutArray $b] && $a eq "mutarray"} {
         return $b
     }
+    if {[hir::types::IsMutVec $a] && $b eq "mutvec"} {
+        # A MutableVector native's `mutvec` kind requirement: any
+        # MutableVector[T] satisfies it (MUTABLE-VECTOR.md).
+        return $a
+    }
+    if {[hir::types::IsMutVec $b] && $a eq "mutvec"} {
+        return $b
+    }
     return [hir::types::glb $a $b]
 }
 
@@ -784,7 +828,7 @@ proc hir::signatures::Meet {a b} {
 # placeholder -- no `any`, no bare aggregate kind (an element type `any`),
 # no callable (which also keeps inferred Fn types first-order: finite).
 proc hir::signatures::Concrete {type} {
-    if {$type in {any never list immutableSet mutarray block native}} {
+    if {$type in {any never list immutableSet mutarray mutvec block native}} {
         return 0
     }
     if {[hir::types::IsList $type] || [hir::types::IsSet $type]} {
@@ -1054,6 +1098,20 @@ proc hir::signatures::CallableContract {hir AVar contracts p} {
         : "its result is required by [join [lmap r $seenRet {Describe $hir $r}] {; }]"}]
     lappend parts "its call sites admit errors \[[join $admitted {, }]\]"
     return [list fn [hir::types::MakeFn $args $result $admitted] [join $parts {; }]]
+}
+
+# 1 if a value of type ARGTYPE satisfies DECLARED as the *inferred* contract
+# of an untyped parameter the body calls (CallableContract): an inferred
+# callable contract says what calling the parameter must allow -- arity,
+# arguments, result, errors -- not which callable kind supplies it
+# (AFFINE-VALUES.md, "Generic callables"). So a coroutine handle whose own
+# contract is compatible satisfies it as well as a function does; a
+# *declared* Fn parameter stays restricted to functions (hir::types::subtype).
+proc hir::signatures::CallableAdmits {argType declared} {
+    if {![hir::types::IsFn $declared] || ![hir::types::IsCoroutine $argType]} {
+        return 0
+    }
+    return [expr {[hir::types::FnMismatch [list fn [lindex $argType 1]] $declared] eq ""}]
 }
 
 # ---------------------------------------------------------------------------

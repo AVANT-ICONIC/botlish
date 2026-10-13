@@ -478,9 +478,13 @@ non-Int or 2^64 is TYPE); rax words are read signed (`-1`, `-38`, `-4095`,
 `i64::MIN`, ... -- kernel error returns stay negative Ints), pinned without
 making any other syscall.
 
-**Only getpid runs in the suite.** As instructed, getpid (harmless,
-argument-free) is the one live syscall any test executes, and nothing is
-fuzzed against the kernel. getpid cannot observe argument routing, so that is
+**Only getpid runs in this boundary's own suite.** As instructed, getpid
+(harmless, argument-free) is the one live syscall `tests/linux-syscall.test`
+executes, and nothing is fuzzed against the kernel. (ABI-BYTES.md later added
+the first memory-moving wrapper, `linux::write`; its tests and fuzzer do make
+real `write(2)` calls -- to temporary files, pipes and captured standard
+output the tests own, plus descriptors known to be closed for the error
+cases. The syscall number is never generated.) getpid cannot observe argument routing, so that is
 pinned statically (the machine-code simulation above). As a manual
 development check only -- not part of the suite -- two calls without side
 effects show the routing and the raw signed result end to end through
@@ -679,13 +683,13 @@ each finding was checked by a separate skeptic. Fixed as a result:
     * *No private construction.* Register64 is sound without privacy because
       every word is a valid register. A borrowed-memory value (an address
       and a length) is not: arbitrary `{address, length}` construction would
-      forge pointers. `abi::Bytes` needs a construction only trusted code
+      forge pointers. `abi::bytes::Bytes` needs a construction only trusted code
       can perform (an opaque/private type) -- the first real type-system
       requirement on this path.
     * *Byte storage.* Strings are immutable single allocations (a stable
       address for a read-only borrow under the non-moving collector); there
       is no mutable byte buffer (MutableArray slots are 8-byte Values), so
-      `abi::MutableBytes` for `read` needs a new runtime object.
+      `abi::bytes::MutableBytes` for `read` needs a new runtime object.
     * *GC across the transition.* The call is a safepoint and the collector
       is non-moving, so a borrowed object stays valid if it is kept live;
       operand registers are spilled as roots at the call today, which is
@@ -697,3 +701,19 @@ each finding was checked by a separate skeptic. Fixed as a result:
       passed by name materializes (an inline literal does not; Register64
       locals and parameters do not); a future wrapper library should write
       the register literal inline, or the frontier should be removed first.
+
+## Follow-up: owned memory and `write`
+
+The obstacles above that concern memory were resolved by ABI-BYTES.md:
+`abi::bytes::Bytes` is an `opaque struct` (a construction only module `abi` can perform)
+over an owned, contiguous byte storage; the raw address bridge
+`abi::x86_64::from_bytes` makes the address of its payload a `Register64`; the
+syscall lowering keeps the backing storage alive until the kernel returns
+(`keepalive`); and `linux::write(fd, data)` is the first syscall wrapper that moves
+memory. `linux::abi::syscall` itself is unchanged: still generic, still native-only.
+
+A second follow-up, MUTABLE-BYTES.md, adds the writable direction: `abi::bytes::MutableBytes`
+(a value, not a reference), the writable address bridge
+`abi::x86_64::from_mutable_bytes`, and `linux::read(fd, data)`, the first syscall
+wrapper whose kernel call writes into Botlish memory. Again `linux::abi::syscall` is
+unchanged: syscall number 0 is ordinary data in `lib/linux.bot`.

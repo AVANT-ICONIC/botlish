@@ -51,8 +51,9 @@
 #     constants or byte encoding: hash is a runtime-internal derived value,
 #     never a value to persist or compare across program versions
 #
-# Supported key domain: int, str, bool, unit, list (of hashable values),
-# result (of a hashable payload), UnicodeChar, immutableSet (of hashable
+# Supported key domain: int, str, bool, unit, enum (ENUMS.md), list (of hashable values),
+# result (of a hashable payload), UnicodeChar, bytestore and mutbytes (ABI-BYTES.md,
+# MUTABLE-BYTES.md: the byte count, then the bytes), immutableSet (of hashable
 # members, combined order-independently to match core::value::equal's own
 # order-independent set equality) -- exactly core::value::equal's domain.
 # Like ==, hash is undefined for block/native/mutarray (EQUALITY error):
@@ -75,7 +76,7 @@ namespace eval core::hashing {
     variable Mask61    0x1FFFFFFFFFFFFFFF
     # Kind tags mixed in before each value's payload, so e.g. int 1 and str
     # "1" never hash the same by coincidence of byte content.
-    variable KindTag [dict create int 0 str 1 bool 2 unit 3 list 4 result 5 UnicodeChar 6 immutableSet 7 struct 8]
+    variable KindTag [dict create int 0 str 1 bool 2 unit 3 list 4 result 5 UnicodeChar 6 immutableSet 7 struct 8 bytestore 9 mutbytes 10 enum 11]
 }
 
 # H folded over one more byte (0..255), wrapped to 64 bits.
@@ -116,7 +117,7 @@ proc core::hashing::Mix {h v} {
     variable KindTag
     variable Mask64
     set kind [core::value::kind $v]
-    if {$kind in {block native mutarray}} {
+    if {$kind in {block native mutarray coroutine mutvec}} {
         core::semanticError EQUALITY \
             "hash is not defined for callables: [core::value::show $v]"
     }
@@ -179,6 +180,32 @@ proc core::hashing::Mix {h v} {
             }
             return $h
         }
+        enum {
+            # Consistent with core::value::equal's nominal enum equality
+            # (ENUMS.md): the enum's declaration identity text, a 0xFF
+            # separator (never a byte of UTF-8 text, so the pair is encoded
+            # unambiguously), then the case's declared name. Never the
+            # case's position in its declaration: reordering cases changes
+            # no hash, and no hash is an ordinal.
+            set h [Bytes $h [Utf8Bytes [core::value::enumId $v]]]
+            set h [Step $h 255]
+            return [Bytes $h [Utf8Bytes [core::value::enumCaseName $v]]]
+        }
+        bytestore - mutbytes {
+            # The byte count (8 bytes, little-endian), then every byte in
+            # order: consistent with core::value::equal's exact byte-sequence
+            # equality, and with native/src/runtime/ops.rs's rt_hash. A
+            # MutableBytes hashes by its current contents under its own kind
+            # tag (the tag is the only difference from a byte storage).
+            set hex [lindex $v 1]
+            set count [expr {[string length $hex] / 2}]
+            set h [Bytes $h [LeBytes $count]]
+            if {$count == 0} {
+                return $h
+            }
+            binary scan [binary decode hex $hex] cu* codes
+            return [Bytes $h $codes]
+        }
         immutableSet {
             # Order-independent (XOR-combined member sub-hashes), matching
             # core::value::equal's own order-independent set equality: two
@@ -205,8 +232,8 @@ proc core::hashing::hash {v} {
     variable FnvOffset
     variable Mask61
     set h [Mix $FnvOffset $v]
-    return [core::value::int [expr {$h & $Mask61}]]
+    return [core::value::intFromNumber [expr {$h & $Mask61}]]
 }
 
 core::native::register hash -arity 1 -impl core::hashing::hash \
-    -param-types any -result-type int -result-range nonneg -runtime hash
+    -param-types any -result-type int -result-range nonneg -runtime hash -ownership {equality}

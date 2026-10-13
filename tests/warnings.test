@@ -49,6 +49,39 @@ proc codes {source} {
     return [lmap w [warningsOf $source] {dict get $w code}]
 }
 
+# The SAME-RETURN-VALUE warnings only, as `shown` / `codes` give them. A
+# program that imports lib/mutable_array.bot also compiles that module, whose
+# own source carries a METHOD-ELIGIBLE finding (WARNINGS-METHOD-ELIGIBLE.md:
+# library warnings are shown for any program that loads the module); the
+# tests that import it are about SAME-RETURN-VALUE, not about that finding.
+# Likewise a program whose functions return written list literals of one
+# arity carries FIXED-ARITY-LIST-RETURN findings
+# (WARNINGS-FIXED-ARITY-LIST-RETURN.md), which the tests that build their
+# values from such lists are not about, and a function that fails one declared
+# error from several exits carries a SAME-FAILURE finding
+# (WARNINGS-SAME-FAILURE.md), which the tests pinning that `fail` is never
+# grouped with a return are not about. And a written one-character String
+# literal (the String "1" among different kinds of returned values) carries a
+# ONE-CHAR-STRING-LITERAL finding (WARNINGS-ONE-CHAR-STRING-LITERAL.md), which
+# the tests pinning that different kinds never group are not about.
+proc sameReturnShown {source} {
+    set hir [compileWith $source]
+    return [lmap w [hir::warnings::of $hir] {
+        if {[dict get $w code] ne "SAME-RETURN-VALUE"} continue
+        set locations [lmap o [list [dict get $w primary] {*}[dict get $w secondary]] {
+            regsub {^t\.bot:} [hir::originLocation $hir $o] {}
+        }]
+        string cat [dict get $w message] " @ " [join $locations { }]
+    }]
+}
+
+proc sameReturnCodes {source} {
+    return [lmap w [warningsOf $source] {
+        if {[dict get $w code] ne "SAME-RETURN-VALUE"} continue
+        dict get $w code
+    }]
+}
+
 # The compile-time rejection of SOURCE under MODE: {errorcode message}, or
 # "compiled".
 proc rejection {source mode} {
@@ -98,7 +131,7 @@ test warn-char-literal {repeated UnicodeChar literals warn} -body {
 } -result {{value `'a'` is returned from 2 distinct exits @ 3:9 5:9}}
 
 test warn-different-kinds-not-same {the Int 1, the String "1" and true are different values} -body {
-    codes {fn f(x):
+    sameReturnCodes {fn f(x):
     if x < 0:
         return 1
     if x > 100:
@@ -118,14 +151,14 @@ test warn-different-values-not-same {two distinct literals never group} -body {
 } -result {}
 
 test warn-exact-list {an exactly known List returned twice warns (existing exact-value facts)} -body {
-    shown {fn f(x):
+    sameReturnShown {fn f(x):
     if x:
         return [1, 2]
     return [1, 2]}
 } -result {{value `[1, 2]` is returned from 2 distinct exits @ 3:9 4:5}}
 
 test warn-lists-with-unknown-elements-not-same {Lists built from unproven elements are not proven equal} -body {
-    codes {fn f(x, y):
+    sameReturnCodes {fn f(x, y):
     if x:
         return [y, 1]
     return [y, 1]}
@@ -192,7 +225,7 @@ fn f(a, b):
 # The same binding
 
 test warn-same-binding {the same immutable binding returned from two exits warns without any literal} -body {
-    shown {fn compute(a):
+    sameReturnShown {fn compute(a):
     [a, a + 1]
 fn f(x, y):
     result = compute(y)
@@ -213,7 +246,7 @@ test warn-same-parameter {a parameter is an immutable binding too} -body {
 } -result {{the value of `d` is returned from 2 distinct exits @ 3:9 5:9}}
 
 test warn-alias-of-binding {an alias of a non-exact binding is the same binding value} -body {
-    shown {fn compute(a):
+    sameReturnShown {fn compute(a):
     [a, a + 1]
 fn f(x, y):
     result = compute(y)
@@ -226,7 +259,7 @@ fn f(x, y):
 } -result {{the value of `result` is returned from 2 distinct exits @ 7:9 9:9}}
 
 test warn-different-bindings-not-same {two bindings of equal-looking but unproven values are not the same} -body {
-    codes {fn compute(a):
+    sameReturnCodes {fn compute(a):
     [a, a + 1]
 fn f(x, y):
     p = compute(y)
@@ -271,7 +304,7 @@ test warn-repeated-arithmetic-on-unknown {x + 1 returned twice is not an exact v
 } -result {}
 
 test warn-separate-mutable-construction {two separately allocated mutable values are two values} -body {
-    codes {import mutable_array
+    sameReturnCodes {import mutable_array
 fn f(x):
     if x:
         return mutable_array::allocate(1)
@@ -281,7 +314,7 @@ fn f(x):
 } -result {}
 
 test warn-same-mutable-binding {the exact same mutable binding returned twice IS one value identity} -body {
-    shown {import mutable_array
+    sameReturnShown {import mutable_array
 fn f(x):
     m = mutable_array::allocate(1)
     if x:
@@ -292,7 +325,7 @@ fn f(x):
 } -result {{the value of `m` is returned from 2 distinct exits @ 5:9 7:9}}
 
 test warn-alias-of-mutable-binding {an alias of a mutable binding is the same mutable value} -body {
-    shown {import mutable_array
+    sameReturnShown {import mutable_array
 fn f(x):
     m = mutable_array::allocate(1)
     n = m
@@ -411,7 +444,7 @@ fn f(n):
 } -result {{value `-1` is returned from 2 distinct exits @ 9:13 11:9}}
 
 test warn-failures-are-not-returns {fail and return are different completion kinds: never grouped} -body {
-    codes {error Bad
+    sameReturnCodes {error Bad
 fn f(x) -> int errors Bad:
     if x < 0:
         fail Bad
@@ -762,7 +795,7 @@ test warn-off-runs-no-warning-pass {warnings off does not execute the warning pa
     catch {compileWith $::policySource error}
     set afterError [hir::warnings::stats]
     list $afterOff $afterDefault $afterError
-} -result {{} {SAME-RETURN-VALUE 1} {SAME-RETURN-VALUE 2}}
+} -result {{} {SAME-RETURN-VALUE 1 METHOD-ELIGIBLE 1 FIXED-ARITY-LIST-RETURN 1 SAME-FAILURE 1 PROVES-NAMING 1 ONE-CHAR-STRING-LITERAL 1 MANY-BOOLEAN-ARGUMENTS 1} {SAME-RETURN-VALUE 2 METHOD-ELIGIBLE 2 FIXED-ARITY-LIST-RETURN 2 SAME-FAILURE 2 PROVES-NAMING 2 ONE-CHAR-STRING-LITERAL 2 MANY-BOOLEAN-ARGUMENTS 2}}
 
 test warn-off-runs-no-warning-pass-via-trace {an execution trace on the pass proves it is not invoked when off} -body {
     set ::passCalls 0

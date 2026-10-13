@@ -121,6 +121,20 @@ pub struct Symbols {
     /// own rel32-range check on a real address this backend cannot vouch
     /// for the distance of.
     pub direct_helpers: bool,
+    /// The program's context area (CONTEXTS.md, nir::Program::context_bytes):
+    /// one linker-local, zero-initialized, writable data object, declared by
+    /// `declare` when the program has context slots. Generated code reaches it
+    /// through its symbol only -- no Vm field, no lookup, no extra argument.
+    pub context_area: Option<cranelift_module::DataId>,
+    /// Whether code addresses the context area PC-relatively (the AOT object,
+    /// where the symbol is linker-local and so "colocated": Cranelift emits
+    /// a GOT-relative load, which `mod.rs`'s `relax_context_got` marks
+    /// relaxable so the static linker rewrites it to `lea
+    /// botlish_context_area(%rip)`), or by its absolute address (`movabs`:
+    /// the JIT, which places data and code independently, so a rel32 reach
+    /// cannot be vouched for). Either way a fixed program address, never a
+    /// lookup.
+    pub context_pc_relative: bool,
 }
 
 /// How many machine words F's direct function returns. Ordinarily
@@ -192,7 +206,25 @@ pub fn declare<M: Module>(module: &mut M, program: &nir::Program, export: bool) 
         helpers: HashMap::new(),
         names: HashMap::new(),
         direct_helpers,
+        context_area: None,
+        context_pc_relative: export,
     };
+    if program.context_bytes > 0 {
+        // The context area (CONTEXTS.md): every context slot, at the offsets
+        // native/lower.tcl assigned, zero until the program function's own
+        // `contextstore`s install the values. Linker-local (`Linkage::Local`
+        // is "final", so the object backend may address it PC-relatively),
+        // writable, not thread-local: process-wide storage of the main
+        // execution domain.
+        let id = module
+            .declare_data("botlish_context_area", Linkage::Local, true, false)
+            .map_err(module_error)?;
+        let mut data = cranelift_module::DataDescription::new();
+        data.define_zeroinit(program.context_bytes as usize);
+        data.set_align(8);
+        module.define_data(id, &data).map_err(module_error)?;
+        symbols.context_area = Some(id);
+    }
     for (name, params, _) in helpers() {
         let id = module.declare_function(name, Linkage::Import, &signature(module, params)).map_err(module_error)?;
         symbols.helpers.insert(name, id);
@@ -475,6 +507,9 @@ struct Translator<'a, 'b, M: Module> {
     /// `error_exit` itself in `new`, never popped below that.
     error_exit_stack: Vec<ir::Block>,
     refs: HashMap<ModuleFuncId, ir::FuncRef>,
+    /// This function's global value for the context area (`context_addr`),
+    /// declared on first use.
+    context_gv: Option<ir::GlobalValue>,
     terminated: bool,
     /// The hidden trailing pointer parameter of a `results > 2` function
     /// (signature_n): `RetMulti` writes fields 1.. through it instead of
@@ -555,6 +590,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             error_exit,
             error_exit_stack: vec![error_exit],
             refs: HashMap::new(),
+            context_gv: None,
             terminated: false,
             plan,
             result_buf: None,
@@ -834,6 +870,27 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
 
     fn get(&mut self, reg: Reg) -> ir::Value {
         self.b.use_var(self.vars[reg as usize])
+    }
+
+    /// The address of the program's context area (CONTEXTS.md):
+    /// `symbol_value` of its data symbol -- PC-relative in the AOT object,
+    /// absolute in the JIT (Symbols::context_pc_relative).
+    fn context_addr(&mut self) -> Result<ir::Value, BackendError> {
+        let Some(id) = self.symbols.context_area else {
+            return Err(BackendError::Bug("context access in a program without a context area".into()));
+        };
+        let gv = match self.context_gv {
+            Some(gv) => gv,
+            None => {
+                let gv = self.module.declare_data_in_func(id, self.b.func);
+                if let ir::GlobalValueData::Symbol { colocated, .. } = &mut self.b.func.global_values[gv] {
+                    *colocated = self.symbols.context_pc_relative;
+                }
+                self.context_gv = Some(gv);
+                gv
+            }
+        };
+        Ok(self.b.ins().symbol_value(I64, gv))
     }
 
     fn func_ref(&mut self, id: ModuleFuncId) -> ir::FuncRef {
@@ -1123,6 +1180,10 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let x = self.b.ins().band_imm_s(v, CHAR_TAG_MASK as i64);
                 return self.b.ins().icmp_imm_s(IntCC::Equal, x, CHAR_TAG as i64);
             }
+            Kind::Enum => {
+                let x = self.b.ins().band_imm_s(v, ENUM_TAG_MASK as i64);
+                return self.b.ins().icmp_imm_s(IntCC::Equal, x, ENUM_TAG as i64);
+            }
             _ => {}
         }
         let done = self.b.create_block();
@@ -1145,7 +1206,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             Kind::MutArray => KIND_MUTARRAY,
             Kind::ImmutableSet => KIND_SET,
             Kind::Struct => KIND_STRUCT,
-            Kind::Bool | Kind::Unit | Kind::UnicodeChar => unreachable!(),
+            Kind::ByteStore => KIND_BYTES,
+            Kind::MutByteStore => KIND_MUTBYTES,
+            Kind::Coroutine => KIND_COROUTINE,
+            Kind::MutVec => KIND_MUTVEC,
+            Kind::Bool | Kind::Unit | Kind::UnicodeChar | Kind::Enum => unreachable!(),
         };
         let low3 = self.b.ins().band_imm_s(v, 7);
         let pointer = self.b.ins().icmp_imm_s(IntCC::Equal, low3, 0);
@@ -1207,6 +1272,13 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let v = self.string(text);
                 self.def(*dst, v);
             }
+            Inst::Bytes { dst, bytes } => {
+                // A static byte storage (constants.rs installs it at
+                // startup): loaded from the constant table like a String
+                // constant, never allocated at run time.
+                let v = self.constant(Const::Bytes(bytes.clone()));
+                self.def(*dst, v);
+            }
             Inst::Char { dst, digits } => {
                 // Always fits: validated (a Unicode scalar value, <=
                 // 0x10FFFF) when this instruction was parsed (nir.rs). An
@@ -1214,6 +1286,13 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 // allocation, no GC root.
                 let codepoint: u32 = digits.parse().expect("validated char literal");
                 let v = self.iconst(make_char(codepoint));
+                self.def(*dst, v);
+            }
+            Inst::Enum { dst, index, case } => {
+                // An immediate constant (ENUMS.md), like a Char: validated
+                // against the program's enum table when parsed (nir.rs). No
+                // allocation, no GC root.
+                let v = self.iconst(make_enum(*index, *case));
                 self.def(*dst, v);
             }
             Inst::Bool { dst, value } => {
@@ -1262,6 +1341,20 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let table = self.b.ins().load(I64, MemFlagsData::trusted(), self.vm, VM_STATICS_OFFSET);
                 let v = self.get(*value);
                 self.b.ins().store(MemFlagsData::trusted(), v, table, (*index * 8) as i32);
+            }
+            Inst::ContextLoad { dst, offset } => {
+                // One scalar leaf of an installed context (CONTEXTS.md): the
+                // area's fixed address plus a constant offset; the word is a
+                // tagged immediate, never a pointer.
+                let area = self.context_addr()?;
+                let v = self.b.ins().load(I64, MemFlagsData::trusted(), area, *offset as i32);
+                self.def(*dst, v);
+            }
+            Inst::ContextStore { offset, value } => {
+                // A `with context` installation (program function only).
+                let area = self.context_addr()?;
+                let v = self.get(*value);
+                self.b.ins().store(MemFlagsData::trusted(), v, area, *offset as i32);
             }
             Inst::Move { dst, src } => {
                 let v = self.get(*src);
@@ -1364,6 +1457,16 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     // its register convention would mean something else.
                     return Err(BackendError::Codegen(
                         "linux::abi::syscall is the Linux x86-64 syscall transport: this target is not Linux x86-64"
+                            .to_string(),
+                    ));
+                }
+                if matches!(*op, OpCode::BytesAddr | OpCode::MBytesAddr) && !cfg!(all(target_arch = "x86_64", target_os = "linux")) {
+                    // The payload address is only ever consumed by the Linux
+                    // x86-64 syscall transport, and the small-Int
+                    // representation of an address is argued for its 47-bit
+                    // user space: never compiled for another target.
+                    return Err(BackendError::Codegen(
+                        "abi::x86_64::from_bytes is the Linux x86-64 address bridge: this target is not Linux x86-64"
                             .to_string(),
                     ));
                 }
@@ -1488,11 +1591,24 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 self.fail_with("rt_raise", &[self.vm, kind, message]);
                 self.terminated = true;
             }
-            Inst::Fail { id, name } => {
+            Inst::Fail { id, name, shape, payload } => {
                 let id_val = self.iconst(*id as u64);
                 let name_val = self.string(name);
-                self.fail_with("rt_fail_declared", &[self.vm, id_val, name_val]);
+                if payload.is_empty() {
+                    self.fail_with("rt_fail_declared", &[self.vm, id_val, name_val]);
+                } else {
+                    // ERROR-PAYLOADS.md: the payload's field values, from a
+                    // stack array, into the Vm's payload slots.
+                    let (n, ptr) = self.array(payload);
+                    let shape_val = self.iconst(*shape as u64);
+                    self.fail_with("rt_fail_declared_payload", &[self.vm, id_val, name_val, shape_val, n, ptr]);
+                }
                 self.terminated = true;
+            }
+            Inst::DeclaredPayload { dst, index } => {
+                let index_val = self.iconst(*index as u64);
+                let v = self.call_helper("rt_declared_payload", &[self.vm, index_val]);
+                self.def(*dst, v);
             }
             Inst::DeclaredErrorEq { dst, id } => {
                 let raw = self.call_helper("rt_declared_error", &[self.vm]);
@@ -1531,6 +1647,48 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             ILt | ILe | IGt | IGe | IEq => self.int_compare(op, a[0], a[1]),
             ListGet if self.listget_fast => self.list_get(a[0], a[1]),
             ListGetProven if self.listget_fast => self.list_get_proven(a[0], a[1]),
+            // Inline String/UnicodeChar reads (ENCODE-UTF8-ALLOCATION-
+            // RESEARCH.md): a character scan over str::length, str::char_at
+            // and char::scalar_value runs without a helper call on ASCII text.
+            // The String's character count, re-tagged as a small Int.
+            StrLen => {
+                let chars = self.b.ins().load(I64, MemFlagsData::trusted(), a[0], STR_CHARS_OFFSET);
+                let shifted = self.b.ins().ishl_imm_s(chars, 1);
+                self.b.ins().bor_imm_s(shifted, 1)
+            }
+            // char::scalar_value: the immediate's payload (cp << 3 | CHAR_TAG)
+            // re-tagged as a small Int (cp << 1 | 1); never fails.
+            CharCodepoint => {
+                let cp = self.b.ins().ushr_imm_s(a[0], 3);
+                let shifted = self.b.ins().ishl_imm_s(cp, 1);
+                self.b.ins().bor_imm_s(shifted, 1)
+            }
+            // str::char_at at a proven index: an ASCII String's character I is
+            // its text byte I; otherwise rt_str_char_at_proven decodes.
+            StrCharAtProven => {
+                let ascii_path = self.b.create_block();
+                let wide = self.b.create_block();
+                let done = self.b.create_block();
+                let result = self.b.append_block_param(done, I64);
+                let ascii = self.b.ins().uload8(I64, MemFlagsData::trusted(), a[0], STR_ASCII_OFFSET);
+                self.b.ins().brif(ascii, ascii_path, &[], wide, &[]);
+                self.b.switch_to_block(ascii_path);
+                let idx = self.b.ins().sshr_imm_s(a[1], 1);
+                let addr = self.b.ins().iadd(a[0], idx);
+                let byte = self.b.ins().uload8(I64, MemFlagsData::trusted(), addr, STR_TEXT_OFFSET as i32);
+                let shifted = self.b.ins().ishl_imm_s(byte, 3);
+                let ch = self.b.ins().bor_imm_s(shifted, CHAR_TAG as i64);
+                self.b.ins().jump(done, &[BlockArg::Value(ch)]);
+                self.b.switch_to_block(wide);
+                let v = self.call_helper("rt_str_char_at_proven", &[self.vm, a[0], a[1]]);
+                self.b.ins().jump(done, &[BlockArg::Value(v)]);
+                self.b.switch_to_block(done);
+                result
+            }
+            CharEq | EnumEq => {
+                let eq = self.b.ins().icmp(IntCC::Equal, a[0], a[1]);
+                self.bool_of(eq)
+            }
             VEq => {
                 // Two small Ints compare as words; everything else structurally.
                 let (fast, slow, done, result) = self.both_small_split(a[0], a[1]);
@@ -1707,8 +1865,72 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         RegionCheck => ("rt_str_region_check", None, true, None),
                         RegionEq => ("rt_str_region_eq", None, false, None),
                         StrEq => ("rt_str_eq", None, false, None),
-                        StrLen => ("rt_str_len", None, false, None),
                         StrByteLen => ("rt_str_byte_len", None, false, None),
+                        StrCharAt => ("rt_str_char_at", None, true, None),
+                        StrCharAtProven => ("rt_str_char_at_proven", None, false, None),
+                        // The owned byte storage (ABI-BYTES.md). from_list
+                        // allocates one object (or returns the static empty
+                        // one) and is fallible (a non-byte element is TYPE);
+                        // length/address read the header of a value that must
+                        // be a storage (TYPE otherwise) and never allocate;
+                        // keepalive is a real call so it is never removed
+                        // and its operand is live across everything before it.
+                        BytesFromList => ("rt_bytes_from_list", None, true, Some(("bytesfromlist", KIND_BYTES))),
+                        BytesLen => ("rt_bytes_len", None, true, None),
+                        BytesAddr => ("rt_bytes_addr", None, true, None),
+                        KeepAlive => ("rt_keepalive", None, false, None),
+                        // The writable byte storage (MUTABLE-BYTES.md): new /
+                        // from / set / clone allocate one object, freeze and
+                        // freeze_prefix one immutable one (all fallible, all
+                        // safepoints); length/address read a header.
+                        MBytesNew => ("rt_mbytes_new", None, true, Some(("mbytesnew", KIND_MUTBYTES))),
+                        MBytesFrom => ("rt_mbytes_from", None, true, Some(("mbytesfrom", KIND_MUTBYTES))),
+                        MBytesLen => ("rt_mbytes_len", None, true, None),
+                        MBytesSet => ("rt_mbytes_set", None, true, Some(("mbytesset", KIND_MUTBYTES))),
+                        MBytesClone => ("rt_mbytes_clone", None, true, Some(("mbytesclone", KIND_MUTBYTES))),
+                        MBytesFreeze => ("rt_mbytes_freeze", None, true, Some(("mbytesfreeze", KIND_BYTES))),
+                        MBytesFreezePrefix => ("rt_mbytes_freeze_prefix", None, true, Some(("mbytesfreezeprefix", KIND_BYTES))),
+                        MBytesAddr => ("rt_mbytes_addr", None, true, None),
+                        // Coroutines (COROUTINES.md, runtime/coroutine.rs):
+                        // plain helper calls. Every one but codone is a
+                        // safepoint (ops.rs's op_may_allocate), so the call's
+                        // stack map holds this frame's roots while the
+                        // coroutine is suspended inside it.
+                        CoCreate => ("rt_co_create", None, false, Some(("cocreate", KIND_COROUTINE))),
+                        CoStart => ("rt_co_start", None, true, None),
+                        CoResume => ("rt_co_resume", None, true, None),
+                        CoResume0 => ("rt_co_resume0", None, true, None),
+                        CoYield => ("rt_co_yield", None, true, None),
+                        CoDone => ("rt_co_done", None, false, None),
+                        CoRelease => ("rt_co_release", None, false, None),
+                        AffineDrop => ("rt_affine_drop", None, false, None),
+                        // MutableVector (MUTABLE-VECTOR.md, runtime/mutvec.rs).
+                        MvFromList => ("rt_mv_from_list", None, false, Some(("mvfromlist", KIND_MUTVEC))),
+                        MvLen => ("rt_mv_len", None, false, None),
+                        MvEmpty => ("rt_mv_empty", None, false, None),
+                        MvAt => ("rt_mv_at", None, true, None),
+                        MvPush => ("rt_mv_push", None, false, None),
+                        MvPop => ("rt_mv_pop", None, true, None),
+                        MvTake => ("rt_mv_take", None, true, None),
+                        MvSwap => ("rt_mv_swap", None, true, None),
+                        MvClear => ("rt_mv_clear", None, false, None),
+                        MvShare => ("rt_mv_share", None, false, Some(("mvshare", KIND_MUTVEC))),
+                        MvToList => ("rt_mv_to_list", None, false, Some(("mvtolist", KIND_LIST))),
+                        MvTakeFront => ("rt_mv_take_front", None, false, None),
+                        MvClearDrop => ("rt_mv_clear_drop", None, false, None),
+                        MvSwapDrop => ("rt_mv_swap_drop", None, true, None),
+                        CtxRoot => ("rt_context_root", None, false, None),
+                        // MutableArray (MUTABLE-ARRAY.md, runtime/ops.rs).
+                        MutArrayCreate => ("rt_mutarray_create", None, true, Some(("mutarraycreate", KIND_MUTARRAY))),
+                        MutArrayFromList => ("rt_mutarray_from_list", None, false, Some(("mutarrayfromlist", KIND_MUTARRAY))),
+                        MutArrayGenerate => ("rt_mutarray_generate", None, true, None),
+                        MutArrayGenerateDrop => ("rt_mutarray_generate_drop", None, true, None),
+                        MutArraySwap => ("rt_mutarray_swap", None, true, None),
+                        MutArraySwapDrop => ("rt_mutarray_swap_drop", None, true, None),
+                        MutArraySetDrop => ("rt_mutarray_set_drop", None, true, None),
+                        MutArrayToList => ("rt_mutarray_to_list", None, false, Some(("mutarraytolist", KIND_LIST))),
+                        MutArrayEmpty => ("rt_mutarray_empty", None, false, None),
+                        MutArrayTakeFront => ("rt_mutarray_take_front", None, false, None),
                         // Never fallible (see ops.rs's rt_str_decode_char_at):
                         // a one-character String can never exceed
                         // MAX_COLLECTION_LENGTH. Still routed through
@@ -1865,10 +2087,6 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         IsError => ("rt_is_result", Some(0), false, None),
                         ResultValue => ("rt_result_payload", Some(1), true, None),
                         ResultError => ("rt_result_payload", Some(0), true, None),
-                        // Total, never fails, never allocates (always an
-                        // immediate small Int result): see ops.rs's
-                        // rt_char_codepoint.
-                        CharCodepoint => ("rt_char_codepoint", None, false, None),
                         MkOk | MkError => {
                             let ok = self.iconst((op == MkOk) as u64);
                             let operation = if op == MkOk { "mkok" } else { "mkerror" };

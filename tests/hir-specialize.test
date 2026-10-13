@@ -158,13 +158,15 @@ test hir-specialize-14 {list literals} -body {
          [aggregateType "\[1, \"a\"\]"] [aggregateType "\[\]"]
 } -result {{List[int]} {List[str]} {List[List[int]]} {list[List[int], List[str]]} {list[int, str]} {List[never]}}
 
-test hir-specialize-15 {list::at: element kinds, positions of fixed shapes, and nothing for an empty list} -body {
+# A read of an empty List never completes normally (it raises IndexNotFound),
+# so `list::at([], 0)` is typed never, not the native's declared `any`.
+test hir-specialize-15 {list::at: element kinds, positions of fixed shapes, and never for an empty list} -body {
     list [aggregateType "import list\nxs = \[1, 2\]\nlist::at(xs, 1)"] \
          [aggregateType "import list\nm = \[\[1, 2\], \[3\]\]\nlist::at(list::at(m, 1), 0)"] \
          [aggregateType "import list\np = \[\"a\", 1\]\nlist::at(p, 1)"] \
          [aggregateType "import list\np = \[\"a\", 1\]\nfn i():\n    1\nlist::at(p, i())"] \
          [aggregateType "import list\nlist::at(\[\], 0)"]
-} -result {int int int any any}
+} -result {int int int any never}
 
 test hir-specialize-16 {list::append keeps a homogeneous element kind and joins others} -body {
     list [aggregateType "import list\nlist::append(\[1\], 2)"] [aggregateType "import list\nlist::append(\[1\], \"a\")"] \
@@ -209,6 +211,32 @@ test hir-specialize-17 {aggregate types are bounded} -body {
 # (LowerUnderrun/UpperOverrun) did the same for ai_text_clean,
 # string_replace and string_reverse: 0 -> 1 generic instances, a zero-
 # parameter `sample` that the top level calls once and handles.
+#
+# csv_chunked 1 -> 0 specialized blockers (and no guarded region): its one
+# was the kind guard on `chunk` in chunked_copy_chunks<List[never], ...>,
+# whose `list::at(chunks, index)` of an empty List is now typed never, so
+# the code after it is dead.
+#
+# MUTABLE-ARRAY.md (measured): the array constructors became registered
+# natives and lib/mutable_array.bot no longer imports list, so csv_geometric
+# lost the library bodies of create and from_list and all of lib/list.bot:
+# 37 -> 27 generic and 2 -> 0 specialized blockers, 18 -> 16 specialized
+# instances, no guarded region. hashtable.bot's table (and csv_records.bot's
+# copy of it) became a value -- a HashTable struct of four arrays that every
+# update returns: hashtable 79 -> 99 generic / 25 -> 8 specialized blockers
+# and 23 -> 19 specialized instances, csv_records 101 -> 112 generic / 23 ->
+# 6 specialized blockers and 52 -> 45 specialized instances. csv_chunked.bot's
+# builder became a ChunkedBuilder struct value (completed chunks, current
+# chunk, count), threaded through the scanners, its functions declaring the
+# builder parameter's type: 38 -> 30 generic / 0 -> 1 specialized blockers
+# (a guarded region: a completed chunk is read out of the untyped
+# `completed` List) and 17 -> 11 specialized instances. The warning-driven
+# refactor (REFACTOR-WARNINGS-CLEAN.md) made the four CSV programs read
+# characters with str::char_at and test quotes through a new quote_at?, and
+# ai_text_clean's clean_char read the character its text holds: csv 25 -> 27
+# generic blockers and 9 -> 10 specialized instances, csv_chunked 30 -> 32 /
+# 11 -> 12, csv_geometric 27 -> 28 / 16 -> 17, csv_records 112 -> 113 / 45 ->
+# 46 (each the new quote_at? instance), ai_text_clean 5 -> 6 generic blockers.
 test hir-specialize-corpus-1 {every used corpus instance is closed; the generic analysis is unchanged} -body {
     lmap name [corpus::names] {
         set hir [surface::readProgramFile [corpus::path $name]]
@@ -218,12 +246,12 @@ test hir-specialize-corpus-1 {every used corpus instance is closed; the generic 
         list $name [dict get $summary generic] [dict get $summary specialized] $statuses \
             [dict get $summary genericInstances] [dict get $summary specializedInstances]
     }
-} -result {{ai_text_clean 5 0 closed 1 5} {csv 25 0 closed 0 9} {csv_chunked 38 1 {closed guarded} 2 17} {csv_geometric 37 2 {closed guarded} 0 18} {csv_records 101 23 {closed guarded} 7 52} {hashtable 79 25 {closed guarded} 7 23} {matmul 27 0 closed 0 6} {string_replace 12 0 closed 1 3} {string_reverse 4 0 closed 1 2}}
+} -result {{ai_text_clean 6 0 closed 1 5} {csv 27 0 closed 0 10} {csv_chunked 32 1 {closed guarded} 2 12} {csv_geometric 28 0 closed 0 17} {csv_records 113 6 {closed guarded} 7 46} {hashtable 99 8 {closed guarded} 7 19} {matmul 27 0 closed 0 6} {string_replace 12 0 closed 1 3} {string_reverse 4 0 closed 1 2}}
 
 test hir-specialize-corpus-2 {specialized instances per corpus function} -body {
     set hir [surface::readProgramFile [corpus::path csv]]
     dict get [hir::specialize::summary $hir [hir::specialize::analyze $hir]] perFunction
-} -result {peek {generic 0 specializations 1} scan_unquoted {generic 0 specializations 1} scan_quoted {generic 0 specializations 1} scan_field {generic 0 specializations 1} scan_record {generic 0 specializations 2} scan_records {generic 0 specializations 2} csv_parse {generic 0 specializations 1}}
+} -result {peek {generic 0 specializations 1} quote_at? {generic 0 specializations 1} scan_unquoted {generic 0 specializations 1} scan_quoted {generic 0 specializations 1} scan_field {generic 0 specializations 1} scan_record {generic 0 specializations 2} scan_records {generic 0 specializations 2} csv_parse {generic 0 specializations 1}}
 
 test hir-specialize-all-programs {every example and benchmark program can be specialized and explained} -body {
     set failures {}
@@ -354,5 +382,63 @@ test hir-specialize-m1-exact-call-propagation {a generic caller's own restored d
              hir::specialize::label $analysis $t
          }]]
 } -result {{cls<int> cls<generic>} ascii::is_alphanumeric<int> ascii::is_digit<int> ascii::is_alphanumeric<int>}
+
+
+# ---------------------------------------------------------------------------
+# View memo (hir::specialize::memoizeViews)
+
+test hir-specialize-view-memo {under memoizeViews, view returns for every used instance the value it builds without the memo; a view of another HIR is that HIR's own} -body {
+    lassign [specOf "fn inc(x):\n    x + 1\n\nfn wrap(x):\n    \[x\]\n\n\[inc(1), wrap(\"a\"), wrap(2)\]"] hir analysis
+    lassign [specOf "fn dec(x):\n    x - 1\n\ndec(1)"] other otherAnalysis
+    set plain [lmap id [dict get $analysis used] {hir::specialize::view $hir $analysis $id}]
+    set otherPlain [hir::specialize::view $other $otherAnalysis i0]
+    hir::specialize::memoizeViews $hir $analysis
+    try {
+        set memo [lmap id [dict get $analysis used] {hir::specialize::view $hir $analysis $id}]
+        set again [lmap id [dict get $analysis used] {hir::specialize::view $hir $analysis $id}]
+        set otherMemo [hir::specialize::view $other $otherAnalysis i0]
+    } finally {
+        hir::specialize::forgetViews
+    }
+    list [llength $plain] [expr {$memo eq $plain}] [expr {$again eq $plain}] \
+        [expr {$otherMemo eq $otherPlain}] [expr {$otherMemo ne [lindex $memo 0]}] \
+        $hir::specialize::memoActive [dict size $hir::specialize::memoViews]
+} -result {4 1 1 1 1 0 0}
+
+test hir-specialize-view-memo-lowering {native lowering builds each used instance's view once, for all the analyses it composes and itself} -body {
+    set hir [surface::readProgramFile [file join $::projectRoot examples stdlib csv_records.bot]]
+    set ::viewBuilds [dict create]
+    set trace {apply {{command args} {
+        if {$hir::specialize::memoActive} { dict incr ::viewBuilds [lindex $command 3] }
+    }}}
+    trace add execution hir::specialize::View enter $trace
+    try {
+        set used [dict get [native::lowered $hir] specialization used]
+    } finally {
+        trace remove execution hir::specialize::View enter $trace
+    }
+    set builds $::viewBuilds
+    unset ::viewBuilds
+    list [expr {[llength $used] > 20}] [lsort -unique [dict values $builds]] \
+        [expr {[lsort [dict keys $builds]] eq [lsort $used]}] $hir::specialize::memoActive
+} -result {1 1 1 0}
+
+test hir-specialize-view-memo-released {native lowering releases its view memo however it ends} -body {
+    set hir [native::prepareHir [surface::compile "fn inc(x):\n    x + 1\n\ninc(1)" t.bot -strict 0]]
+    set trace {apply {{args} {
+        set ::memoWhenFailed [list $hir::specialize::memoActive [dict size $hir::specialize::memoViews]]
+        error "range analysis failed"
+    }}}
+    trace add execution hir::range::analyze enter $trace
+    try {
+        set failed [catch {native::lower::program $hir} message]
+    } finally {
+        trace remove execution hir::range::analyze enter $trace
+    }
+    set result [list $failed $message $::memoWhenFailed \
+        $hir::specialize::memoActive [dict size $hir::specialize::memoViews]]
+    unset ::memoWhenFailed
+    set result
+} -result {1 {range analysis failed} {1 0} 0 0}
 
 cleanupTests

@@ -110,6 +110,7 @@ namespace eval native::lower {
         str::lowercase    {op strlower} \
         str::concat       {op strcat} \
         str::encode_utf8  {op strutf8bytes} \
+        str::char_at      {op strcharat} \
         str::is_tcl_alpha {op strtclalpha} \
         str::is_tcl_alnum {op strtclalnum} \
         argv         {op argv} \
@@ -124,6 +125,15 @@ namespace eval native::lower {
         mutable_array::set      {op mutarrayset} \
         mutable_array::copy     {op mutarraycopy} \
         mutable_array::freeze   {op mutarrayfreeze} \
+        mutable_array::create   {op mutarraycreate} \
+        mutable_array::from_list {op mutarrayfromlist} \
+        mutable_array::generate {op mutarraygenerate} \
+        mutable_array::swap     {op mutarrayswap} \
+        mutable_array#to_list   {op mutarraytolist} \
+        mutable_array#take_front {op mutarraytakefront} \
+        mutable_array#swap_drop {op mutarrayswapdrop} \
+        mutable_array#set_drop  {op mutarraysetdrop} \
+        mutable_array#generate_drop {op mutarraygeneratedrop} \
         integer?     {op isint} \
         string?      {op isstr} \
         list?        {op islist} \
@@ -133,7 +143,37 @@ namespace eval native::lower {
         result-value {op resultvalue} \
         result-error {op resulterror} \
         hash         {op hash} \
-        char::scalar_value {op charcodepoint}]
+        char::scalar_value {op charcodepoint} \
+        byte_store::from_list {op bytesfromlist} \
+        byte_store::byte_count    {op byteslen} \
+        mutable_byte_store::zeroed   {op mbytesnew} \
+        mutable_byte_store::from_storage  {op mbytesfrom} \
+        mutable_byte_store::count {op mbyteslen} \
+        mutable_byte_store::replace   {op mbytesset} \
+        mutable_byte_store::detach  {op mbytesclone} \
+        mutable_byte_store::freeze        {op mbytesfreeze} \
+        mutable_byte_store::freeze_prefix {op mbytesfreezeprefix} \
+        coroutine#create {op cocreate} \
+        coroutine#start  {op costart} \
+        coroutine#resume {coroutine-resume} \
+        coroutine#yield  {op coyield} \
+        coroutine::done? {op codone} \
+        coroutine#release {op corelease} \
+        affine#drop {op affinedrop} \
+        mutable_vector::from_list {op mvfromlist} \
+        mutable_vector::length    {op mvlen} \
+        mutable_vector::empty?    {op mvempty} \
+        mutable_vector::at        {op mvat} \
+        mutable_vector::push      {op mvpush} \
+        mutable_vector::pop       {op mvpop} \
+        mutable_vector::take      {op mvtake} \
+        mutable_vector::swap      {op mvswap} \
+        mutable_vector::clear     {op mvclear} \
+        mutable_vector#share      {op mvshare} \
+        mutable_vector#to_list    {op mvtolist} \
+        mutable_vector#take_front {op mvtakefront} \
+        mutable_vector#clear_drop {op mvcleardrop} \
+        mutable_vector#swap_drop  {op mvswapdrop}]
     # State of the program being lowered. hir is the view of the instance
     # being lowered, baseHir the program's semantic HIR.
     variable hir {}
@@ -146,6 +186,7 @@ namespace eval native::lower {
     variable parents {}
     variable selfTail {}
     variable envless {}
+    variable affineTemps {}
     variable captureLists {}
     variable pending {}
     variable usedNatives {}
@@ -157,6 +198,14 @@ namespace eval native::lower {
     # declared slot order).
     variable shapeIds [dict create]
     variable shapeList {}
+    # Enums (ENUMS.md), per program: declaration identity -> dense enum
+    # number, assigned on first use in deterministic lowering order, and the
+    # ordered identities, emitted as the NIR `enum` declarations. A case
+    # value lowers to the immediate word of (enum number, the case's position
+    # in the declaration): representation only, chosen after every semantic
+    # check -- printing and hashing read the declared names from the table.
+    variable enumIds [dict create]
+    variable enumList {}
     # Module-static storage (MODULE-STATIC-RETAINED-VALUES.md): BindingId ->
     # its slot index in the Vm's own `statics` table (runtime::vm::Vm),
     # assigned once per program, in first-reference order (StaticSlot),
@@ -1148,7 +1197,18 @@ namespace eval native::lower {
 #   statistics  {functions N generic N specialized N blockers N guards N
 #               perFunction {NAME {generic 0|1 specializations N} ...}}
 #   specialization  the hir::specialize analysis
+#
+# Every analysis Program composes and lowering itself share one view per
+# instance (hir::specialize::memoizeViews), released here however it ends.
 proc native::lower::program {hirProgram args} {
+    try {
+        return [Program $hirProgram {*}$args]
+    } finally {
+        hir::specialize::forgetViews
+    }
+}
+
+proc native::lower::Program {hirProgram args} {
     variable hir
     variable baseHir
     variable spec
@@ -1192,6 +1252,10 @@ proc native::lower::program {hirProgram args} {
     variable shapeList
     set shapeIds [dict create]
     set shapeList {}
+    variable enumIds
+    variable enumList
+    set enumIds [dict create]
+    set enumList {}
 
     set default [expr {[info exists ::env(BOTLISH_NATIVE_SPECIALIZE)]
         && $::env(BOTLISH_NATIVE_SPECIALIZE) eq "0" ? 0 : 1}]
@@ -1291,6 +1355,22 @@ proc native::lower::program {hirProgram args} {
     set hir $hirProgram
     variable parents
     set parents [dict create]
+    variable affineTemps
+    # The construction operands a release names as pending temporaries
+    # (hir::affine::temporaries, AFFINE-VALUES.md): Expr records their
+    # registers (fn `temps`) for ReleaseHandles.
+    set affineTemps [hir::affine::temporaries $hirProgram]
+    # A discarded construction is not built (Struct's and the List
+    # literal's discarded paths): its release is its affine components'
+    # (hir::affine::Components), whose registers Expr records too.
+    if {[dict exists $hirProgram affine releases]} {
+        dict for {statement items} [dict get $hirProgram affine releases] {
+            if {$statement ni $items} continue
+            foreach {component type} [hir::affine::Components $hirProgram $statement] {
+                dict set affineTemps $component 1
+            }
+        }
+    }
     set reprOpt [dict get $options -repr-opt]
     set callFactsOpt [dict get $options -call-facts-opt]
     set callEffectsOpt [dict get $options -call-effects-opt]
@@ -1334,6 +1414,7 @@ proc native::lower::program {hirProgram args} {
         -closed-caller-facts-opt [dict get $options -closed-caller-facts-opt] \
         -exact-callable-opt [dict get $options -exact-callable-opt] \
         -exact-callable-limit [dict get $options -exact-callable-limit]]
+    hir::specialize::memoizeViews $hirProgram $spec
     set ranges [hir::range::analyze $hirProgram $spec [dict get $options -call-facts-opt] 1 1 \
         [dict get $options -recursive-result-range-opt] [dict get $options -recursive-range-limit]]
     # The raw Int ABI plan runs strictly after the closedness and Range
@@ -1388,6 +1469,9 @@ proc native::lower::program {hirProgram args} {
     # a tagged String, as a struct none of whose uses is free does.
     set shortDemandOpt [dict get $options -short-demand-opt]
     set shortPlan [native::shortstr::plan $hirProgram $spec $ranges $shortStringOpt $blockEscapeOpt $construction $asciiPackOpt $shortDemandOpt native::lower::DemandCallTagged]
+    # The program's context slots (CONTEXTS.md), fixed before any function
+    # is lowered.
+    ContextSlots
     set context [dict get $spec context]
     set selfTail [dict get $context selfTails]
     set envless [dict get $context envless]
@@ -1463,7 +1547,9 @@ proc native::lower::program {hirProgram args} {
         lappend infos [string map $map $info]
     }
 
-    set header [list "nir 1 call-effects=$callEffectsOpt statics=[StaticCount]"]
+    variable contextBytes
+    set header [list "nir 1 call-effects=$callEffectsOpt statics=[StaticCount][expr {$contextBytes > 0 ? " contexts=$contextBytes" : ""}]"]
+    lappend header {*}[ContextHeader]
     foreach name [lsort $usedNatives] {
         set meta [core::native::metadata $name]
         set kinds [lmap type [dict get $meta paramTypes] {
@@ -1483,6 +1569,10 @@ proc native::lower::program {hirProgram args} {
             set opaque [expr {[hir::structs::isOpaque $id] ? " opaque=1" : ""}]
             lappend header "shape [dict get $shapeIds $key] named [Quote $id]$opaque fields=[Quote [join $layout { }]]"
         }
+    }
+    variable enumList
+    foreach id $enumList {
+        lappend header "enum [EnumIndex $id] [Quote $id] cases=[Quote [join [hir::enums::cases $id] { }]]"
     }
     set text "[join $header \n]\n\n[join $texts \n\n]\n"
     return [dict create text $text functions $infos statistics [Statistics $infos] \
@@ -1547,8 +1637,8 @@ proc native::lower::CollectChecks {region} {
         switch -- [dict get $blocker class] {
             representation {
                 if {[dict get $blocker kind] eq "UnprovenRefinement"} {
-                    Unsupported [dict get $blocker expr] "refinement evidence" \
-                        "the operation needs [core::type::show [dict get $blocker requires]]; named types and evidence are not supported natively"
+                    Unsupported [dict get $blocker expr] "validator contract" \
+                        "the operation needs [core::type::show [dict get $blocker requires]]; a native's validator named-type contract is checked only by the reference runtime, not natively"
                 }
                 dict set guards [list [dict get $blocker operation] [dict get $blocker expr]] \
                     [dict get $blocker requires]
@@ -1580,7 +1670,7 @@ proc native::lower::CollectChecks {region} {
 #     and the checks of the operation it is an operand of. HIR's types
 #     leave that code reachable where they do not see the `never` (a
 #     decided `if` whose live arm returns, a `loop` whose only `break` is
-#     in a dead arm, an ARITY raise, a bridged native's known error), and an
+#     in a dead arm, an ARITY raise), and an
 #     operation with an operand typed `never` (`n + stop()`) never runs.
 # Their blockers are counted in the function's skippedGuards, as a virtual
 # binding's list::at read already is (Call). The NIR does not change.
@@ -2151,7 +2241,15 @@ proc native::lower::Function {id} {
     if {$region ne "program"} {
         dict set fn planResult [hir::construction::resultFamily $construction $id]
     }
-    if {[ResultRaw fn]} {
+    set contextProblem [expr {$region eq "program" ? [ContextDiagnostic] : ""}]
+    if {$contextProblem ne ""} {
+        # A -strict 0 program that failed context verification (CONTEXTS.md):
+        # its first context diagnostic is the run's failure; no code whose
+        # context loads were not proven runs.
+        lassign $contextProblem kind message
+        Emit fn "raise $kind [Quote $message]"
+        set result never
+    } elseif {[ResultRaw fn]} {
         set result [SequenceRaw fn $body]
     } elseif {[ResultShort fn] ne ""} {
         set result [SequenceShort fn $body [ResultShort fn]]
@@ -2903,7 +3001,51 @@ proc native::lower::Assign {fnVar rhs {e ""}} {
     upvar 1 $fnVar fn
     set r [NewReg fn]
     Emit fn "$r = $rhs" $e
+    if {[dict exists $fn keepAddr]} {
+        KeepAddrFlow fn $r $rhs
+    }
     return $r
+}
+
+# Raw-address provenance (BytesAddrCall, SyscallCall; ABI-BYTES.md): `fn
+# keepAddr` maps a register to the byte storages (registers) whose payload
+# address it may hold or contain. It is created by `bytesaddr` and flows, within
+# one function, through the instructions that build or take apart a value
+# holding an address -- a Register64 object (`structnew`), a register struct
+# bound to a local, a field read back out of it (`structget`), a List holding
+# one -- so a syscall that takes such a register as an operand keeps every
+# storage it may point into alive until the kernel returns. Registers are
+# single-assignment and a storage register is defined before any value derived
+# from it, so a recorded storage always dominates the registers that carry it.
+# (Not tracked, by design: an address returned from another function or merged
+# across a branch join -- the raw layer's one sharp edge, documented in
+# ABI-BYTES.md: take the address and make the syscall in the same function.)
+proc native::lower::KeepAddrFlow {fnVar reg rhs} {
+    upvar 1 $fnVar fn
+    set words [split $rhs " "]
+    set operands {}
+    switch -- [lindex $words 0] {
+        structnew { set operands [lrange $words 2 end] }
+        structget { set operands [lrange $words 2 end] }
+        op {
+            if {[lindex $words 1] in {listnew listget}} {
+                set operands [lrange $words 2 end]
+            }
+        }
+    }
+    set storages {}
+    foreach operand $operands {
+        if {[dict exists $fn keepAddr $operand]} {
+            foreach storage [dict get $fn keepAddr $operand] {
+                if {$storage ni $storages} {
+                    lappend storages $storage
+                }
+            }
+        }
+    }
+    if {$storages ne ""} {
+        dict set fn keepAddr $reg $storages
+    }
 }
 
 # Like Assign, for an instruction whose result is a raw (untagged) machine
@@ -3156,6 +3298,7 @@ proc native::lower::ScalarLit {fnVar kind text e} {
 
 proc native::lower::Sequence {fnVar exprs} {
     upvar 1 $fnVar fn
+    variable hir
     if {$exprs eq ""} {
         return [Assign fn unit]
     }
@@ -3164,8 +3307,156 @@ proc native::lower::Sequence {fnVar exprs} {
         if {$result eq "never"} {
             break
         }
+        # The affine values dead after this statement (AFFINE-VALUES.md;
+        # COROUTINES.md, "Release at the last use"), its own discarded value
+        # included; the statement's value register stays the sequence's
+        # value.
+        ReleaseHandles fn [hir::affine::releasesAfter $hir $e] $e $result
     }
     return $result
+}
+
+# Releases what the release items ITEMS hold (hir::affine::DropPlan), at
+# expression E: a binding's value (its register, or the field registers of
+# a virtualized aggregate), a pending temporary's (the register Expr
+# recorded for it, fn `temps`), or the statement E's own value (register
+# RESULT). A coroutine is `corelease`d, an aggregate `affinedrop`ped by its
+# static descriptor: AFFINE-VALUES.md; COROUTINES.md, "Release at the last
+# use" and "Release on every early exit".
+proc native::lower::ReleaseHandles {fnVar items e {result ""}} {
+    upvar 1 $fnVar fn
+    variable hir
+    foreach item $items {
+        set plan [hir::affine::DropPlan $hir $item]
+        if {$plan eq ""} continue
+        set descriptor [expr {[lindex $plan 0] eq "coroutine" ? "c" : [lindex $plan 1]}]
+        if {[string match b* $item]} {
+            set access [Access fn $item]
+        } elseif {$item eq $e && [hir::kind $hir $e] eq "struct"
+                || ($item eq $e && [hir::affine::NativeName $hir $e] eq "list")} {
+            # A discarded construction (not built): its components.
+            foreach {component type} [hir::affine::Components $hir $e] {
+                if {[dict exists $fn temps $component]} {
+                    DropAccess fn [dict get $fn temps $component] [hir::affine::Descriptor $hir $type] $e
+                }
+            }
+            continue
+        } elseif {$item eq $e && $result ne ""} {
+            set access [list reg $result]
+        } elseif {[dict exists $fn temps $item]} {
+            set access [dict get $fn temps $item]
+        } else {
+            # A pending temporary not evaluated on this path.
+            continue
+        }
+        DropAccess fn $access $descriptor $e
+    }
+}
+
+# Drops the affine value at ACCESS (a register, or a virtualized
+# aggregate's field registers in slot order) by DESCRIPTOR
+# (hir::affine::Descriptor), at expression E.
+proc native::lower::DropAccess {fnVar access descriptor e} {
+    upvar 1 $fnVar fn
+    switch -- [lindex $access 0] {
+        reg {
+            set where [lindex $access 1]
+            if {$descriptor eq "c"} {
+                Assign fn "op corelease $where" $e
+            } else {
+                set d [Assign fn "str [Quote $descriptor]" $e]
+                Assign fn "op affinedrop $where $d" $e
+            }
+        }
+        virtual {
+            # A virtualized construction (its fields in registers, never
+            # materialized): the descriptor applied to its fields directly.
+            set fields [lindex $access 1]
+            set pos 0
+            foreach {field inner} [DescriptorParts $descriptor] {
+                if {$field eq "*"} {
+                    foreach r $fields {
+                        DropAccess fn [list reg $r] $inner $e
+                    }
+                } else {
+                    DropAccess fn [list reg [lindex $fields $field]] $inner $e
+                }
+            }
+        }
+        default {
+            throw {NATIVE BUG} "native lowering: an affine value at $access cannot be released"
+        }
+    }
+}
+
+# The parts of an aggregate drop DESCRIPTOR as {SLOT INNER ...} pairs ("*"
+# for every element of a List).
+proc native::lower::DescriptorParts {descriptor} {
+    switch -- [string index $descriptor 0] {
+        l {
+            return [list * [string range $descriptor 1 end]]
+        }
+        s {
+            set pos 1
+            set n [DescriptorNumber $descriptor pos]
+            set parts {}
+            for {set i 0} {$i < $n} {incr i} {
+                set slot [DescriptorNumber $descriptor pos]
+                set start $pos
+                DescriptorSkip $descriptor pos
+                lappend parts $slot [string range $descriptor $start $pos-1]
+            }
+            return $parts
+        }
+    }
+    throw {NATIVE BUG} "native lowering: bad drop descriptor $descriptor"
+}
+
+proc native::lower::DescriptorNumber {descriptor posVar} {
+    upvar 1 $posVar pos
+    set end [string first . $descriptor $pos]
+    set n [string range $descriptor $pos $end-1]
+    set pos [expr {$end + 1}]
+    return $n
+}
+
+proc native::lower::DescriptorSkip {descriptor posVar} {
+    upvar 1 $posVar pos
+    set c [string index $descriptor $pos]
+    incr pos
+    switch -- $c {
+        l - v - a { DescriptorSkip $descriptor pos }
+        s {
+            set n [DescriptorNumber $descriptor pos]
+            for {set i 0} {$i < $n} {incr i} {
+                DescriptorNumber $descriptor pos
+                DescriptorSkip $descriptor pos
+            }
+        }
+    }
+}
+
+# Where a failure of call (or handle) E is pending: releases the affine
+# values a declared error it propagates takes out of scope or abandons
+# (hir::affine::releasesOnError), by the pending error's name, each
+# matching group then propagating it on unchanged (`reraise`). The code
+# after it runs only for other failures.
+proc native::lower::ReleaseOnError {fnVar e byName} {
+    upvar 1 $fnVar fn
+    set saved [dict get $fn locals]
+    set savedRaw [dict get $fn rawCache]
+    dict for {name bindings} $byName {
+        set eqReg [Assign fn "declarederroreq [ErrorId $name]" $e]
+        set matchLabel [NewLabel fn]
+        set nextLabel [NewLabel fn]
+        Emit fn "br $eqReg $matchLabel $nextLabel" $e
+        EmitLabel fn $matchLabel
+        ReleaseHandles fn $bindings $e
+        Emit fn "reraise" $e
+        EmitLabel fn $nextLabel
+    }
+    dict set fn locals $saved
+    dict set fn rawCache $savedRaw
 }
 
 proc native::lower::Expr {fnVar e {want tagged}} {
@@ -3213,6 +3504,11 @@ proc native::lower::Expr {fnVar e {want tagged}} {
         struct    { set result [Struct fn $e $node] }
         project   { set result [Project fn $e $node] }
         return {
+            # The coroutines this exit takes out of scope: released before
+            # its value, or (those the value refers to) right before
+            # leaving.
+            lassign [hir::affine::releasesOnExit $hir $e] before after
+            ReleaseHandles fn $before $e
             set companion [dict get $fn companion]
             if {$companion ne ""} {
                 # A scalar-replacement companion function (see the "Scalar
@@ -3224,6 +3520,7 @@ proc native::lower::Expr {fnVar e {want tagged}} {
                 set fields [VirtualValue fn [dict get $node value] $companion \
                     [hir::escape::resultCut $escape [dict get $fn instance]]]
                 if {$fields ne "never"} {
+                    ReleaseHandles fn $after $e
                     Emit fn "retmulti [join $fields { }]" $e
                 }
             } elseif {[dict get $fn regionCompanion]} {
@@ -3235,6 +3532,7 @@ proc native::lower::Expr {fnVar e {want tagged}} {
                 # produces.
                 set fields [Expr fn [dict get $node value] region]
                 if {$fields ne "never"} {
+                    ReleaseHandles fn $after $e
                     Emit fn "retmulti [join $fields { }]" $e
                 }
             } elseif {[PlanResultFamily fn] ne ""} {
@@ -3243,17 +3541,21 @@ proc native::lower::Expr {fnVar e {want tagged}} {
                 # the returned construction stays virtual.
                 set value [SequenceTo fn [list [dict get $node value]] [PlanResultFamily fn]]
                 if {$value ne "never"} {
+                    ReleaseHandles fn $after $e
                     Emit fn "ret $value" $e
                 }
             } else {
                 set value [Expr fn [dict get $node value] [expr {[ResultRaw fn] ? "rawjoin" : [ResultShort fn] ne "" ? [ResultShort fn] : "tagged"}]]
                 if {$value ne "never"} {
+                    ReleaseHandles fn $after $e
                     Emit fn "ret $value" $e
                 }
             }
             set result never
         }
         break {
+            lassign [hir::affine::releasesOnExit $hir $e] before after
+            ReleaseHandles fn $before $e
             lassign [dict get $fn loops [dict get $node target]] head exit resultReg accReg
             if {$accReg ne ""} {
                 # A returning iterable loop (listloop, RETURNING-ITERABLE-
@@ -3265,7 +3567,9 @@ proc native::lower::Expr {fnVar e {want tagged}} {
                 # check below) has no real accumulator to move; accReg is
                 # then the sentinel "discard", and the placeholder result
                 # nothing downstream reads is filled with unit instead.
-                set prefix [expr {$accReg eq "discard" ? [Assign fn unit] : $accReg}]
+                # A retained accumulator is materialized here
+                # (CollectFinish): it may be a construction plan.
+                set prefix [expr {$accReg eq "discard" ? [Assign fn unit] : [CollectFinish fn $e $accReg]}]
                 Emit fn "$resultReg = move $prefix" $e
                 Emit fn "jump $exit" $e
                 dict set fn broken [dict get $node target] 1
@@ -3276,6 +3580,7 @@ proc native::lower::Expr {fnVar e {want tagged}} {
                     set value [Expr fn [dict get $node value]]
                 }
                 if {$value ne "never"} {
+                    ReleaseHandles fn $after $e
                     if {$value eq ""} {
                         set value [Assign fn unit]
                     }
@@ -3287,6 +3592,7 @@ proc native::lower::Expr {fnVar e {want tagged}} {
             }
         }
         continue {
+            ReleaseHandles fn [lindex [hir::affine::releasesOnExit $hir $e] 0] $e
             lassign [dict get $fn loops [dict get $node target]] head
             Emit fn "jump $head" $e
             dict set fn continued [dict get $node target] 1
@@ -3301,7 +3607,30 @@ proc native::lower::Expr {fnVar e {want tagged}} {
             }
         }
         fail {
-            Emit fn "faildeclared [ErrorId [dict get $node name]] [Quote [dict get $node name]]" $e
+            lassign [hir::affine::releasesOnExit $hir $e] before after
+            ReleaseHandles fn $before $e
+            set name [dict get $node name]
+            if {[dict exists $node value] && [dict get $node value] ne "" && ![hir::errordecls::hasPayload $name]} {
+                # A payload on a payload-free error (UNEXPECTED-ERROR-PAYLOAD,
+                # a program run despite its diagnostics): evaluated for its
+                # effects, then the payload-free error.
+                if {[Expr fn [dict get $node value]] ne "never"} {
+                    ReleaseHandles fn $after $e
+                    Emit fn "faildeclared [ErrorId $name] [Quote $name]" $e
+                }
+            } elseif {[dict exists $node value] && [dict get $node value] ne ""} {
+                # ERROR-PAYLOADS.md: the payload's fields, evaluated in
+                # written order, travel the error edge field-wise (the Vm's
+                # payload slots): no struct object is built for them.
+                set fields [PayloadFields fn [dict get $node value] $name $e]
+                if {$fields ne "never"} {
+                    ReleaseHandles fn $after $e
+                    set layout [hir::types::StructLayout [hir::errordecls::payloadType $name]]
+                    Emit fn "faildeclared [ErrorId $name] [Quote $name] [ShapeIndex {} $layout] [join $fields { }]" $e
+                }
+            } else {
+                Emit fn "faildeclared [ErrorId $name] [Quote $name]" $e
+            }
             set result never
         }
         handle {
@@ -3318,6 +3647,11 @@ proc native::lower::Expr {fnVar e {want tagged}} {
     }
     if {$result eq "never"} {
         return [Never fn $e]
+    }
+    variable affineTemps
+    if {[dict exists $affineTemps $e]} {
+        # A pending temporary a release may name (ReleaseHandles).
+        dict set fn temps $e [list reg $result]
     }
     if {$result ne "never" && $want eq "raw" && $repr eq "tagged"} {
         # WANT could not be produced directly (Ref/Call are the only kinds
@@ -3361,6 +3695,32 @@ proc native::lower::Expr {fnVar e {want tagged}} {
 # `structget SLOT reg`, the slot a constant resolved from the receiver's
 # statically known struct type; a receiver whose shape is not statically
 # known is refused here -- native code never looks a field up by name.
+
+# The dense number of enum ID (see enumIds), assigned on first use.
+proc native::lower::EnumIndex {id} {
+    variable enumIds
+    variable enumList
+    if {![dict exists $enumIds $id]} {
+        if {![hir::enums::declared $id]} {
+            throw {NATIVE INVALID-HIR} "native lowering: enum \"$id\" is not declared in this program"
+        }
+        dict set enumIds $id [dict size $enumIds]
+        lappend enumList $id
+    }
+    return [dict get $enumIds $id]
+}
+
+# The NIR constant `enum E C` of the case value V ({enum ID CASE}): E the
+# enum's number, C the case's position in its declaration (ENUMS.md).
+proc native::lower::EnumConst {fnVar v e} {
+    upvar 1 $fnVar fn
+    set id [core::value::enumId $v]
+    set case [lsearch -exact [hir::enums::cases $id] [core::value::enumCaseName $v]]
+    if {$case < 0} {
+        throw {NATIVE INVALID-HIR} "native lowering: enum \"$id\" has no case \"[core::value::enumCaseName $v]\" ($e)"
+    }
+    return [Assign fn "enum [EnumIndex $id] $case" $e]
+}
 
 # The dense shape number of {ID LAYOUT} (see shapeIds), assigned on first use.
 proc native::lower::ShapeIndex {id layout} {
@@ -3509,6 +3869,11 @@ proc native::lower::MaterializeVirtual {fnVar b e} {
         throw {NATIVE BUG} "native lowering: virtual binding $b has no struct shape to materialize ($e)"
     }
     set rootLocal [dict get $fn locals $root]
+    if {[lindex $rootLocal 6] eq "partial"} {
+        # A handler payload whose unread fields were never read
+        # (PayloadNeeded): it has no object to build.
+        throw {NATIVE BUG} "native lowering: the payload binding $root is used whole, but only some fields were read ($e)"
+    }
     set mat [lindex $rootLocal 4]
     if {$mat ne ""} {
         return $mat
@@ -3523,6 +3888,12 @@ proc native::lower::Project {fnVar e node} {
     variable hir
     variable escape
     variable currentInstance
+    set path [ContextPath fn $e]
+    if {$path ne ""} {
+        # A projection chain of a context parameter (CONTEXTS.md): the slot
+        # word of a leaf, read directly (no receiver is evaluated).
+        return [ContextAt fn $e {*}$path]
+    }
     set receiver [dict get $node receiver]
     set type [hir::typeOf $hir $receiver]
     set name [dict get $node name]
@@ -3566,6 +3937,13 @@ proc native::lower::Project {fnVar e node} {
         }
         return [lindex $fields [FieldOffset $shape $cut $name]]
     }
+    if {$type eq "never"} {
+        # HIR proved the receiver never completes normally (an element of a
+        # `List[never]`, which is empty, in an instance for the argument
+        # `[]`), so the projection is unreachable: Expr ends the receiver's
+        # evaluation in `unreachable` and the projection needs no slot.
+        return [Expr fn $receiver]
+    }
     set slot [expr {[hir::types::IsStructLike $type] ? [lsearch -exact [hir::types::StructLayout $type] $name] : -1}]
     if {$slot < 0} {
         Unsupported $e struct-shape \
@@ -3576,6 +3954,381 @@ proc native::lower::Project {fnVar e node} {
         return never
     }
     return [Assign fn "structget $slot $r" $e]
+}
+
+# ---------------------------------------------------------------------------
+# Contexts (CONTEXTS.md)
+#
+# The first native lowering of execution-environment contexts is deliberately
+# the simplest one for the common case -- a process installs its contexts at
+# startup, once each -- and is static all the way down:
+#
+#   * one context area per program: a single zero-initialized, 8-byte
+#     aligned, writable, linker-local data object (`botlish_context_area`,
+#     codegen/clif.rs), holding every context slot;
+#   * one slot per context-struct type the program installs, assigned at
+#     compile time in installation (program) order (ContextSlots), at a fixed
+#     byte offset, and laid out flattened: one 64-bit word per scalar leaf of
+#     the struct, nested structs inlined, in declared field order
+#     (ContextLeaves);
+#   * `with context EXPR` (the program function) evaluates EXPR in ordinary
+#     execution order and stores its leaves: `contextstore OFFSET %leaf`;
+#   * a context parameter `io` is a local whose value is never loaded as a
+#     whole: a projection chain `io.stdout.raw.value` that ends at a leaf is
+#     one `contextload OFFSET` (ContextAt), and a sub-struct handed to a
+#     callee that receives it as fields (`linux::write`'s `fd`) is its leaves
+#     (ContextFields); only a use that needs the physical object (passing
+#     `io` itself to a function that keeps it whole, storing it, returning
+#     it) materializes one, from loads, with `structnew` -- exactly where an
+#     ordinary struct of the same shape would be materialized.
+#
+# Codegen turns OFFSET into the area's fixed address plus a constant
+# displacement: a PC-relative `lea` of the data symbol in the AOT object, an
+# absolute address in the JIT. No context pointer is passed, no register is
+# reserved, nothing is looked up, and there is no presence flag: hir/
+# contexts.tcl proved every load is preceded by its installation.
+#
+# Eligibility (StaticContextEligible, ContextLeaves): a leaf must be a value
+# whose tagged word is never a heap pointer -- an Int whose declared domain
+# fits the small-Int representation, a Bool, Unit or a UnicodeChar -- so the
+# area needs no GC root, no tracing and no dynamic layout -- or a MutableVector
+# or MutableArray header, which installation registers as a permanent root. Any other context
+# type is CONTEXT-NATIVE-LOWERING-UNSUPPORTED (native compilation fails,
+# naming the field and why); nothing is boxed, pointed to or looked up
+# instead.
+
+namespace eval native::lower {
+    # The program's context slots: ID -> {slot N offset BYTES leaves
+    # {{PATH TYPE} ...}}, PATH a list of field names (ContextSlots).
+    variable contextSlots [dict create]
+    variable contextBytes 0
+}
+
+# {ok LEAVES} or {no REASON}: the flattened native layout of context-struct
+# ID. LEAVES lists {PATH TYPE} in slot order, PATH the field names from ID
+# down to the leaf.
+proc native::lower::ContextLeaves {id {seen {}}} {
+    if {![hir::structs::declared $id]} {
+        return [list no "its declaration is not part of the program"]
+    }
+    if {$id in $seen} {
+        return [list no "it contains itself (a recursive layout has no fixed size)"]
+    }
+    set leaves {}
+    foreach {field type} [hir::structs::fieldTypes $id] {
+        if {[lindex $type 0] eq "nstruct"} {
+            lassign [ContextLeaves [lindex $type 1] [concat $seen [list $id]]] status inner
+            if {$status ne "ok"} {
+                return [list no "field \"$field\" ([hir::types::show $type]) cannot be flattened: $inner"]
+            }
+            foreach leaf $inner {
+                lassign $leaf path leafType
+                lappend leaves [list [concat [list $field] $path] $leafType]
+            }
+            continue
+        }
+        set kind [hir::types::kindOf $type]
+        switch -- $kind {
+            bool - unit - UnicodeChar - enum {
+                # (An enum case, ENUMS.md, is an immediate word: never a
+                # heap pointer.)
+                lappend leaves [list [list $field] $type]
+            }
+            mutvec - mutarray {
+                # A MutableVector or MutableArray member (MUTABLE-VECTOR.md,
+                # MUTABLE-ARRAY.md): its header,
+                # which the context owns for the whole run -- mutated in
+                # place, never replaced -- is registered as a permanent GC
+                # root when installed (`ctxroot`), so the area itself
+                # needs no scanning and a loaded header is kept alive by
+                # that root.
+                lappend leaves [list [list $field] $type]
+            }
+            int {
+                if {![hir::range::fitsSmall [hir::range::TypeFact $type]]} {
+                    return [list no "field \"$field\" is an Int ([hir::types::show $type]) whose declared domain does not fit the small-Int representation, so its value may be a heap-allocated big integer that fixed program data could not keep alive (no GC root)"]
+                }
+                lappend leaves [list [list $field] $type]
+            }
+            default {
+                return [list no "field \"$field\" has type [hir::types::show $type], a value that may be (or contain) a GC-managed heap object, and fixed program data holds no GC root"]
+            }
+        }
+    }
+    return [list ok $leaves]
+}
+
+# Assigns the program's context slots (contextSlots, contextBytes), in the
+# order the program installs them: its top-level installations that
+# verification gave an identity (hir::contexts::installId, which HIR text
+# carries as "installs ID", so a HIR read back from text gets the same
+# slots). Raises CONTEXT-NATIVE-LOWERING-UNSUPPORTED for an installed context
+# whose type is not StaticContextEligible.
+proc native::lower::ContextSlots {} {
+    variable baseHir
+    variable hir
+    variable contextSlots
+    variable contextBytes
+    set contextSlots [dict create]
+    set contextBytes 0
+    foreach c [dict get $baseHir roots] {
+        if {![hir::contexts::isInstall $baseHir $c]} continue
+        set id [hir::contexts::installId $baseHir $c]
+        if {$id eq "" || [dict exists $contextSlots $id]} continue
+        lassign [ContextLeaves $id] status leaves
+        if {$status ne "ok"} {
+            set where ""
+            set location [hir::aot::Location $baseHir [hir::get $baseHir $c origin]]
+            if {[dict exists $location line]} {
+                set where "[dict get $location file]:[dict get $location line]:[dict get $location column]: "
+            }
+            throw {NATIVE UNSUPPORTED CONTEXT-NATIVE-LOWERING-UNSUPPORTED} \
+                "${where}CONTEXT-NATIVE-LOWERING-UNSUPPORTED: context $id cannot currently be stored in a fixed native context slot because $leaves"
+        }
+        dict set contextSlots $id [dict create slot [dict size $contextSlots] offset $contextBytes leaves $leaves]
+        incr contextBytes [expr {8 * [llength $leaves]}]
+    }
+}
+
+# The NIR header lines of the context area: `contexts=BYTES` is appended to
+# the `nir` line by the caller; one `context` line per slot.
+proc native::lower::ContextHeader {} {
+    variable contextSlots
+    set lines {}
+    dict for {id slot} $contextSlots {
+        set paths [lmap leaf [dict get $slot leaves] {join [lindex $leaf 0] .}]
+        lappend lines "context [dict get $slot slot] [Quote $id] offset=[dict get $slot offset] words=[llength $paths] fields=[Quote [join $paths { }]]"
+    }
+    return $lines
+}
+
+# The slot record of installed context ID, or "" when the program does not
+# install it.
+proc native::lower::ContextOffsetSlot {id} {
+    variable contextSlots
+    if {![dict exists $contextSlots $id]} {
+        return ""
+    }
+    return [dict get $contextSlots $id]
+}
+
+# The byte offset in the context area of the word of leaf PATH (field
+# names) of installed context ID, or "" when PATH is not a leaf.
+proc native::lower::ContextOffset {id path} {
+    variable contextSlots
+    set slot [dict get $contextSlots $id]
+    set i 0
+    foreach leaf [dict get $slot leaves] {
+        if {[lindex $leaf 0] eq $path} {
+            return [expr {[dict get $slot offset] + 8 * $i}]
+        }
+        incr i
+    }
+    return ""
+}
+
+# The declared type of the value at PATH (field names) below context-struct
+# ID ({nstruct ID} for an empty PATH).
+proc native::lower::ContextTypeAt {id path} {
+    set type [list nstruct $id]
+    foreach name $path {
+        set type [hir::structs::fieldType [lindex $type 1] $name]
+    }
+    return $type
+}
+
+# The first context diagnostic of the program (hir/contexts.tcl), as
+# {KIND MESSAGE}, or "": a -strict 0 program that failed context verification
+# raises it when it starts (native code never runs code whose context loads
+# were not proven).
+proc native::lower::ContextDiagnostic {} {
+    variable baseHir
+    foreach d [dict get $baseHir diagnostics] {
+        if {[dict get $d kind] in {MISSING-CONTEXT DUPLICATE-CONTEXT NOT-A-CONTEXT CONTEXT-TYPE-NOT-EXACT
+                CONTEXT-INSTALLATION-UNSUPPORTED CONTEXT-FUNCTION-VALUE CONTEXT-BINDING-COLLISION
+                DUPLICATE-CONTEXT-PARAMETER}} {
+            return [list [dict get $d kind] [dict get $d message]]
+        }
+    }
+    return ""
+}
+
+# A load (at E) of context ID, which the program never installs: only
+# possible in a program that failed verification (whose program function
+# raises the diagnostic before anything runs, Function), and then unreachable
+# code; anything else is a lowering bug.
+proc native::lower::UninstalledContext {fnVar e id} {
+    upvar 1 $fnVar fn
+    if {[ContextDiagnostic] eq ""} {
+        throw {NATIVE BUG} "native lowering: context load $e of context \"$id\", which the program does not install"
+    }
+    Emit fn "raise MISSING-CONTEXT [Quote "$id: no context of this type is installed"]" $e
+    return never
+}
+
+# `with context VALUE` (call E, NODE): VALUE is evaluated in ordinary order,
+# then each scalar leaf of it is stored into the type's slot. Returns
+# {REG tagged} (unit) like a call.
+proc native::lower::ContextInstallCall {fnVar e node} {
+    upvar 1 $fnVar fn
+    variable hir
+    variable contextSlots
+    if {[dict get $fn region] ne "program"} {
+        throw {NATIVE BUG} "native lowering: context installation outside the program function ($e)"
+    }
+    set id [hir::contexts::installId $hir $e]
+    if {$id eq "" || ![dict exists $contextSlots $id]} {
+        throw {NATIVE BUG} "native lowering: context installation $e has no assigned slot"
+    }
+    set arg [lindex [dict get $node args] 0]
+    set slot [dict get $contextSlots $id]
+    set leaves {}
+    set b [expr {[hir::kind $hir $arg] eq "ref" ? [hir::get $hir $arg binding] : ""}]
+    set local [expr {$b ne "" && [dict exists $fn locals $b] ? [dict get $fn locals $b] : ""}]
+    if {[lindex $local 0] eq "virtual" && [lindex $local 2] ne ""} {
+        # The installed value held as fields (the hygienic temporary of
+        # `with context`, hir/escape.tcl's ctxUse): its leaves without the
+        # object, a closed inner struct read with `structget`.
+        lassign $local - fields shape - - cut
+        set leaves [ContextLeafRegs fn $e $shape $cut $fields]
+    } else {
+        set value [Expr fn $arg]
+        if {$value eq "never"} {
+            return {never tagged}
+        }
+        set leaves [ContextObjectLeaves fn $e $id $value]
+    }
+    set offset [dict get $slot offset]
+    if {[llength $leaves] != [llength [dict get $slot leaves]]} {
+        throw {NATIVE BUG} "native lowering: context installation $e yields [llength $leaves] words for a [llength [dict get $slot leaves]]-word slot"
+    }
+    foreach r $leaves leaf [dict get $slot leaves] {
+        Emit fn "contextstore $offset $r" $e
+        if {[hir::types::kindOf [lindex $leaf 1]] in {mutvec mutarray}} {
+            Assign fn "op ctxroot $r" $e
+        }
+        incr offset 8
+    }
+    dict lappend fn calls [list native [core::contexts::installNative]]
+    return [list [Assign fn unit $e] tagged]
+}
+
+# The leaf registers, in slot order, of the struct object in register VALUE
+# whose type is the named struct ID: `structget` down every path.
+proc native::lower::ContextObjectLeaves {fnVar e id value} {
+    upvar 1 $fnVar fn
+    set regs {}
+    foreach {name type} [hir::structs::fieldTypes $id] {
+        set index [lsearch -exact [hir::structs::names $id] $name]
+        set r [Assign fn "structget $index $value" $e]
+        if {[lindex $type 0] eq "nstruct"} {
+            lappend regs {*}[ContextObjectLeaves fn $e [lindex $type 1] $r]
+        } else {
+            lappend regs $r
+        }
+    }
+    return $regs
+}
+
+# The leaf registers, in slot order, of a struct of SHAPE opened as CUT whose
+# physical fields are the registers FIELDS (a virtual value): an opened field
+# contributes its own fields' leaves, a closed struct field its object's
+# (ContextObjectLeaves), a scalar field itself.
+proc native::lower::ContextLeafRegs {fnVar e shape cut fields} {
+    upvar 1 $fnVar fn
+    lassign $shape id layout
+    set cuts [CutDict $cut]
+    set regs {}
+    set pos 0
+    foreach name $layout {
+        if {[dict exists $cuts $name]} {
+            lassign [dict get $cuts $name] sub subcut
+            set w [hir::escape::CutFields $sub $subcut]
+            lappend regs {*}[ContextLeafRegs fn $e $sub $subcut [lrange $fields $pos [expr {$pos + $w - 1}]]]
+            incr pos $w
+            continue
+        }
+        set r [lindex $fields $pos]
+        incr pos
+        set type [hir::structs::fieldType $id $name]
+        if {[lindex $type 0] eq "nstruct"} {
+            lappend regs {*}[ContextObjectLeaves fn $e [lindex $type 1] $r]
+        } else {
+            lappend regs $r
+        }
+    }
+    return $regs
+}
+
+# {ID PATH} when expression E (of the current instance) denotes the value at
+# PATH (field names) of the installed context ID: a reference to a context
+# parameter local, or a projection chain rooted at one. "" otherwise.
+proc native::lower::ContextPath {fnVar e} {
+    upvar 1 $fnVar fn
+    variable hir
+    set names {}
+    while {[hir::kind $hir $e] eq "project"} {
+        set names [linsert $names 0 [hir::get $hir $e name]]
+        set e [hir::get $hir $e receiver]
+    }
+    if {[hir::kind $hir $e] ne "ref"} {
+        return ""
+    }
+    set b [hir::get $hir $e binding]
+    if {$b eq "" || ![dict exists $fn locals $b] || [lindex [dict get $fn locals $b] 0] ne "context"} {
+        return ""
+    }
+    return [list [lindex [dict get $fn locals $b] 1] $names]
+}
+
+# The tagged register of the value at PATH of installed context ID (source
+# expression E): one `contextload` for a scalar leaf; for a struct, the
+# physical object built from its leaves' loads (a use that needs the object).
+proc native::lower::ContextAt {fnVar e id path} {
+    upvar 1 $fnVar fn
+    set offset [ContextOffset $id $path]
+    if {$offset ne ""} {
+        return [Assign fn "contextload $offset" $e]
+    }
+    set type [ContextTypeAt $id $path]
+    if {[lindex $type 0] ne "nstruct"} {
+        throw {NATIVE BUG} "native lowering: context path $id.[join $path .] is neither a leaf nor a struct ($e)"
+    }
+    set sid [lindex $type 1]
+    set regs [lmap name [hir::structs::names $sid] {
+        ContextAt fn $e $id [concat $path [list $name]]
+    }]
+    return [Assign fn "structnew [ShapeIndex $sid [hir::structs::names $sid]] [join $regs { }]" $e]
+}
+
+# The physical fields of the struct value at PATH of installed context ID,
+# opened as CUT (hir/escape.tcl's cut of the receiving parameter): each opened
+# field contributes its own fields, each closed one a register (a leaf's load,
+# or a struct field's materialized object).
+proc native::lower::ContextFields {fnVar e id path cut} {
+    upvar 1 $fnVar fn
+    set sid [lindex [ContextTypeAt $id $path] 1]
+    set cuts [CutDict $cut]
+    set regs {}
+    foreach name [hir::structs::names $sid] {
+        if {[dict exists $cuts $name]} {
+            lassign [dict get $cuts $name] sub subcut
+            lappend regs {*}[ContextFields fn $e $id [concat $path [list $name]] $subcut]
+        } else {
+            lappend regs [ContextAt fn $e $id [concat $path [list $name]]]
+        }
+    }
+    return $regs
+}
+
+# The number of physical fields ContextFields gives for PATH of ID under CUT.
+proc native::lower::ContextFieldCount {id path cut} {
+    set type [ContextTypeAt $id $path]
+    if {[lindex $type 0] ne "nstruct"} {
+        return ""
+    }
+    set sid [lindex $type 1]
+    return [hir::escape::CutFields [list $sid [hir::structs::names $sid]] $cut]
 }
 
 # ---------------------------------------------------------------------------
@@ -3645,6 +4398,27 @@ proc native::lower::SyscallCall {fnVar e node wantVirtual} {
     }
     dict lappend fn calls [list native linux::abi::syscall]
     set rax [Assign fn "op syscall_linux_x86_64 [join $operands { }]" $e]
+    # The kernel may read memory the address operands point into. Every byte
+    # storage whose address (`bytesaddr`, BytesAddrCall) reached an operand
+    # register stays a GC root until the syscall has returned: a `keepalive`
+    # of it AFTER the transition makes the storage live from its definition
+    # through every safepoint up to and including this syscall, whatever
+    # else the function does with it (or does not). This is the one place
+    # that guarantees it, explicit in the NIR, never an accident of
+    # register allocation or lexical variable lifetime (ABI-BYTES.md).
+    set kept {}
+    foreach operand $operands {
+        if {[dict exists $fn keepAddr $operand]} {
+            foreach storage [dict get $fn keepAddr $operand] {
+                if {$storage ni $kept} {
+                    lappend kept $storage
+                }
+            }
+        }
+    }
+    foreach storage $kept {
+        Assign fn "op keepalive $storage" $e
+    }
     if {$wantVirtual ne ""} {
         if {$wantVirtual != 1} {
             throw {NATIVE BUG} "native lowering: expected a 1-field Register64 construction at $e"
@@ -3688,7 +4462,9 @@ proc native::lower::SyscallWords {fnVar e regs} {
     set layout [hir::types::StructLayout $type]
     foreach name $layout {
         set register [Assign fn "structget [lsearch -exact $layout $name] $object" $e]
-        dict set words $name [Assign fn "structget 0 $register" $e]
+        set word [Assign fn "structget 0 $register" $e]
+        KeepAddrThrough fn $register $word
+        dict set words $name $word
     }
     return $words
 }
@@ -3725,7 +4501,243 @@ proc native::lower::RegisterWordOf {fnVar field} {
     if {$object eq "never"} {
         return never
     }
-    return [Assign fn "structget 0 $object" $field]
+    set word [Assign fn "structget 0 $object" $field]
+    KeepAddrThrough fn $object $word
+    return $word
+}
+
+# Carries a raw address's byte-storage provenance (`keepAddr`, BytesAddrCall)
+# from register FROM to register TO when TO is read out of (or built from)
+# FROM -- a Register64 object holding an address, and the word read back out
+# of it -- so the syscall that consumes TO still keeps the storage alive.
+proc native::lower::KeepAddrThrough {fnVar from to} {
+    upvar 1 $fnVar fn
+    if {[dict exists $fn keepAddr $from]} {
+        dict set fn keepAddr $to [dict get $fn keepAddr $from]
+    }
+}
+
+# `abi::bytes::from_list(BYTES)` (lib/abi/bytes.bot) whose argument is a compile-time constant
+# byte sequence: the owned storage is a *static constant*,
+#
+#   %b = bytes "HEX"
+#
+# installed once at program start (never collected, never allocated at run
+# time), and the Bytes it belongs to is the one virtual field %b -- so
+# `abi::bytes::from_list(str::encode_utf8("hello\n"))` costs no heap buffer, no List and
+# no run-time conversion. Source semantics are unchanged: a Bytes is a value
+# (equal by its bytes, no identity), so a shared static storage cannot be told
+# from a fresh copy. What is recognized, deliberately narrow (no new analysis;
+# hir::exact's existing facts): `str::encode_utf8` of a statically known
+# String (any length), and a List of at most hir::exact's own element bound
+# whose every element is statically a byte. Anything else (a dynamic List) is
+# the ordinary call and conversion. Returns "" for a call that is not such a
+# construction, else the result Call returns: the Bytes as virtual fields when
+# WANTVIRTUAL, else built with `structnew` (a module binding, a List element,
+# an argument of an unspecialized call).
+proc native::lower::StaticBytesCall {fnVar e node wantVirtual} {
+    upvar 1 $fnVar fn
+    variable hir
+    variable context
+    variable structOpt
+    set calleeExpr [dict get $node callee]
+    if {[hir::kind $hir $calleeExpr] ne "ref" || [llength [dict get $node args]] != 1} {
+        return ""
+    }
+    set b [hir::get $hir $calleeExpr binding]
+    if {$b eq "" || [dict get [hir::binding $hir $b] name] ne "abi::bytes::from_list"} {
+        return ""
+    }
+    set known [ConstantBytesOf [lindex [dict get $node args] 0]]
+    if {$known eq ""} {
+        return ""
+    }
+    set hex [lindex $known 0]
+    set bytesType [core::bytestore::bytesType]
+    if {![hir::structs::declared $bytesType] || [llength [hir::structs::names $bytesType]] != 1} {
+        return ""
+    }
+    set layout [hir::structs::names $bytesType]
+    # The argument is a pure constant expression: nothing to evaluate.
+    set storage [Assign fn "bytes [Quote $hex]" $e]
+    if {$wantVirtual ne ""} {
+        if {$wantVirtual != 1} {
+            return ""
+        }
+        return [list [list $storage] virtual]
+    }
+    if {$structOpt && [dict exists $context discarded $e]} {
+        return [list [Assign fn unit] tagged]
+    }
+    return [list [Assign fn "structnew [ShapeIndex $bytesType $layout] $storage" $e] tagged]
+}
+
+# {HEX} -- the lowercase hexadecimal text of the bytes (core/bytestore.tcl's
+# {bytestore HEX} text, empty for no bytes) -- when the byte-List expression E
+# is statically known, "" when it is not: `str::encode_utf8` of an exactly known
+# String, or an exactly known List each of whose elements is a constant Int in
+# 0..255 or a `byte::from_int` call of one (a pure, total conversion of a
+# constant: its evaluation has no effect, so skipping it is unobservable).
+proc native::lower::ConstantBytesOf {e} {
+    variable hir
+    if {[hir::kind $hir $e] eq "call"} {
+        set node [hir::node $hir $e]
+        lassign [dict get $node target] targetKind target
+        if {$targetKind eq "native" && [PlainNativeCallee [dict get $node callee]]
+                && [dict get [hir::symbol $hir $target] name] eq "str::encode_utf8"
+                && [llength [dict get $node args]] == 1} {
+            set fact [hir::exact::Of $hir [lindex [dict get $node args] 0]]
+            if {[lindex $fact 0] eq "val" && [core::value::kind [lindex $fact 1]] eq "str"} {
+                return [list [binary encode hex [encoding convertto utf-8 [core::value::strOf [lindex $fact 1]]]]]
+            }
+            return ""
+        }
+    }
+    set fact [hir::exact::ListOf $hir $e]
+    if {$fact eq ""} {
+        return ""
+    }
+    set codes {}
+    foreach src [lrange $fact 2 end] {
+        set n ""
+        switch -- [lindex $src 0] {
+            e { set n [ConstantByteElement [lindex $src 1]] }
+            v {
+                set v [lindex $src 1]
+                set n [expr {[core::value::kind $v] eq "int" ? [core::value::intOf $v] : ""}]
+            }
+        }
+        if {$n eq "" || $n < 0 || $n > 255} {
+            return ""
+        }
+        lappend codes $n
+    }
+    if {$codes eq ""} {
+        return [list ""]
+    }
+    return [list [binary encode hex [binary format c* $codes]]]
+}
+
+# The byte value of List element expression E when it is a constant Int, or a
+# call of the library conversion `byte::from_int` of a constant Int (both pure
+# and total for a value in 0..255); "" otherwise.
+proc native::lower::ConstantByteElement {e} {
+    variable hir
+    set n [hir::exact::IntOf $hir $e]
+    if {$n ne ""} {
+        return $n
+    }
+    if {[hir::kind $hir $e] ne "call"} {
+        return ""
+    }
+    set node [hir::node $hir $e]
+    set callee [dict get $node callee]
+    if {[hir::kind $hir $callee] ne "ref" || [llength [dict get $node args]] != 1} {
+        return ""
+    }
+    set b [hir::get $hir $callee binding]
+    if {$b eq "" || [dict get [hir::binding $hir $b] name] ne "byte::from_int"} {
+        return ""
+    }
+    set n [hir::exact::IntOf $hir [lindex [dict get $node args] 0]]
+    return [expr {$n ne "" && $n >= 0 && $n <= 255 ? $n : ""}]
+}
+
+# abi::x86_64::from_bytes (core/bytestore.tcl, ABI-BYTES.md): the raw address
+# bridge. `from_bytes(DATA)`, DATA an abi::bytes::Bytes (hir/syscall.tcl's
+# BytesProblems proved that statically), lowers to
+#
+#   %b = <the byte storage of DATA>        a virtual field, or structget
+#   %a = op bytesaddr %b                   the machine address of its payload
+#
+# and %a is the one word of the abi::x86_64::Register64 result: handed back
+# as that field when the caller wants it virtual (hir/escape.tcl's Classify
+# recognizes the call like a syscall's result), built with `structnew` only
+# when an object is needed. The lowering records that %a points into %b
+# (`fn keepAddr`): SyscallCall then emits `op keepalive %b` after every
+# syscall that takes %a (or a register read from it) as an operand, so the
+# storage cannot be collected before the kernel has returned. The bridge
+# itself knows nothing about write(2) or any other syscall: it produces an
+# address, and the syscall lowering owns the lifetime.
+proc native::lower::BytesAddrCall {fnVar e node wantVirtual} {
+    upvar 1 $fnVar fn
+    variable hir
+    variable context
+    variable structOpt
+    set native [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name]
+    set bridgeType [core::bytestore::bridgeType $native]
+    set problems [hir::syscall::BytesProblems $hir $e $node]
+    if {$problems ne ""} {
+        # A -strict 0 program whose call hir/syscall.tcl rejected: replay the
+        # problem unconditionally, before anything is evaluated, exactly as
+        # SyscallCall does -- no address is taken from a value nothing proved
+        # to be an abi::bytes::Bytes.
+        lassign [lindex $problems 0] kind message
+        dict incr fn skippedGuards [SkippedBlockers [dict get $node args]]
+        Emit fn "raise $kind [Quote "$native: $message"]" $e
+        return {never tagged}
+    }
+    set registerType [core::linuxabi::registerType]
+    if {![hir::structs::declared $registerType]} {
+        throw {NATIVE BUG} "native lowering: $native without a declared $registerType ($e)"
+    }
+    set layout [hir::structs::names $registerType]
+    set storage [StorageOf fn [lindex [dict get $node args] 0] $bridgeType]
+    if {$storage eq "never"} {
+        return {never tagged}
+    }
+    dict lappend fn calls [list native $native]
+    # The readable bridge's operand is a Bytes storage, the writable one's a
+    # MutableBytes storage: two ops (two run-time kind checks), never
+    # interchanged. Provenance (keepAddr) is the same for both: the storage
+    # must stay live until the syscall has returned; for the writable one the
+    # kernel also changes its contents meanwhile, which needs nothing more
+    # here because every read of a storage is itself a runtime helper call
+    # that Cranelift can neither cache nor reorder across the syscall.
+    set bridgeOp [expr {[core::bytestore::bridgeWritable $native] ? "mbytesaddr" : "bytesaddr"}]
+    set address [Assign fn "op $bridgeOp $storage" $e]
+    dict set fn keepAddr $address [list $storage]
+    if {$wantVirtual ne ""} {
+        if {$wantVirtual != 1} {
+            throw {NATIVE BUG} "native lowering: expected a 1-field Register64 construction at $e"
+        }
+        return [list [list $address] virtual]
+    }
+    if {$structOpt && [dict exists $context discarded $e]} {
+        return [list [Assign fn unit] tagged]
+    }
+    set object [Assign fn "structnew [ShapeIndex $registerType $layout] $address" $e]
+    return [list $object tagged]
+}
+
+# The byte storage (a register) of abi::bytes::Bytes expression ARG, evaluated here,
+# or "never": the one field of a Bytes held as virtual fields (a virtual local,
+# or a virtual parameter of a `fields` variant), else read out of the object
+# with `structget`.
+proc native::lower::StorageOf {fnVar arg {structType ""}} {
+    upvar 1 $fnVar fn
+    variable hir
+    if {$structType eq ""} {
+        set structType [core::bytestore::bytesType]
+    }
+    set slot [lsearch -exact [hir::structs::names $structType] [core::bytestore::storageField]]
+    if {$slot < 0} {
+        throw {NATIVE BUG} "native lowering: $structType has no [core::bytestore::storageField] field"
+    }
+    if {[hir::kind $hir $arg] eq "ref"} {
+        set b [hir::get $hir $arg binding]
+        if {$b ne "" && [dict exists $fn locals $b]} {
+            set local [dict get $fn locals $b]
+            if {[lindex $local 0] eq "virtual" && [lindex $local 2] ne ""} {
+                return [lindex [lindex $local 1] $slot]
+            }
+        }
+    }
+    set object [Expr fn $arg]
+    if {$object eq "never"} {
+        return never
+    }
+    return [Assign fn "structget $slot $object" $arg]
 }
 
 # The register of the projection chain ending at project node E when its root
@@ -3790,6 +4802,11 @@ proc native::lower::ProjectChain {fnVar e node} {
         incr i
         foreach next [lrange $nodes $i end] {
             set recvType [hir::typeOf $hir [hir::get $hir $next receiver]]
+            if {$recvType eq "never"} {
+                # As in Project: a never-typed receiver is unreachable.
+                Emit fn unreachable [hir::get $hir $next receiver]
+                return never
+            }
             set slot [expr {[hir::types::IsStructLike $recvType] ? [lsearch -exact [hir::types::StructLayout $recvType] [hir::get $hir $next name]] : -1}]
             if {$slot < 0} {
                 Unsupported $next struct-shape "the field projection \".[hir::get $hir $next name]\" has a receiver whose slot is not statically known"
@@ -3812,6 +4829,7 @@ proc native::lower::Const {fnVar e node} {
             return $r
         }
         UnicodeChar { return [Assign fn "char [core::value::charOf $value]" $e] }
+        enum { return [EnumConst fn $value $e] }
         list {
             # (const list {...}): a list of literal elements.
             set items [lmap item [core::value::items $value] {
@@ -3957,6 +4975,11 @@ proc native::lower::Ref {fnVar e node want} {
             # could reference it (the same guarantee a root binding has).
             return [list [Assign fn "staticget $where" $e] tagged]
         }
+        context {
+            # A context parameter used as a whole value (CONTEXTS.md): the
+            # physical struct, built from its slot's words.
+            return [list [ContextAt fn $e $where {}] tagged]
+        }
     }
     throw {NATIVE BUG} "native lowering: bad access $access for $b ($e)"
 }
@@ -4049,6 +5072,18 @@ proc native::lower::Bind {fnVar e node} {
     variable shortStringOpt
     set valueExpr [dict get $node value]
     set b [dict get $node binding]
+    if {[hir::contexts::isLoad $hir $valueExpr] && ![dict get $node duplicate]
+            && [dict exists $context discarded $e] && [dict get [hir::binding $hir $b] kind] eq "local"} {
+        # A context parameter (CONTEXTS.md): nothing is loaded here. Every use
+        # reads exactly the slot words it needs (Project, TryFields) or, if it
+        # needs the object, materializes it (Ref).
+        set id [hir::contexts::loadId $hir $valueExpr]
+        if {$id eq "" || [ContextOffsetSlot $id] eq ""} {
+            return [UninstalledContext fn $e $id]
+        }
+        dict set fn locals $b [list context $id]
+        return ""
+    }
     if {[hir::kind $hir $valueExpr] eq "block" && $valueExpr in [dict get $context envless]
             && ![dict get $node duplicate] && [dict exists $context discarded $e]
             && [dict get [hir::binding $hir $b] kind] eq "local"} {
@@ -4227,6 +5262,7 @@ proc native::lower::CaptureRegsOf {fnVar bindings} {
             shortreg   { lappend values [TaggedOfShort fn $where] }
             fnvalue    { lappend values [Assign fn "fnvalue $where"] }
             self       { lappend values [Assign fn self] }
+            context    { lappend values [ContextAt fn "" $where {}] }
             default {
                 throw {NATIVE BUG} "native lowering: binding $b ($how) cannot be captured"
             }
@@ -4393,12 +5429,23 @@ proc native::lower::CanSupplyFields {fnVar argExprs fieldWidths {fieldCuts {}}} 
                         return 0
                     }
                 }
-                ref {
-                    set b [hir::get $hir $arg binding]
-                    if {$b eq "" || ![dict exists $fn locals $b]
-                            || [lindex [dict get $fn locals $b] 0] ne "virtual"
-                            || [llength [lindex [dict get $fn locals $b] 1]] != $width} {
+                ref - project {
+                    set path [ContextPath fn $arg]
+                    if {$path ne ""} {
+                        # A context value (CONTEXTS.md): its fields are its
+                        # slot's words, under any cut.
+                        if {[ContextFieldCount {*}$path $cut] != $width} {
+                            return 0
+                        }
+                    } elseif {[hir::kind $hir $arg] eq "project"} {
                         return 0
+                    } else {
+                        set b [hir::get $hir $arg binding]
+                        if {$b eq "" || ![dict exists $fn locals $b]
+                                || [lindex [dict get $fn locals $b] 0] ne "virtual"
+                                || [llength [lindex [dict get $fn locals $b] 1]] != $width} {
+                            return 0
+                        }
                     }
                 }
                 default {
@@ -4431,6 +5478,15 @@ proc native::lower::CanSupplyFields {fnVar argExprs fieldWidths {fieldCuts {}}} 
 proc native::lower::TryFields {fnVar e n {cut ""}} {
     upvar 1 $fnVar fn
     variable hir
+    set path [ContextPath fn $e]
+    if {$path ne ""} {
+        # A context value (CONTEXTS.md): its slot's words, as the callee's
+        # cut opens them; nothing is materialized but a closed inner struct.
+        if {[ContextFieldCount {*}$path $cut] != $n} {
+            return ""
+        }
+        return [ContextFields fn $e {*}$path $cut]
+    }
     switch -- [hir::kind $hir $e] {
         ref {
             set b [hir::get $hir $e binding]
@@ -4684,81 +5740,6 @@ proc native::lower::FlattenedVirtualRegionCall {fnVar e node target targetInstan
     return [list $dsts region]
 }
 
-# The native-to-module bridge changes a root native call's resolved target to
-# a module Block. When that Block has captures, the root native value is not
-# its closure; fetch the module function's own binding instead -- the one
-# hir::BridgeProvenance (hir/hir.tcl) recorded on this reference as its
-# `bridge`, and made every enclosing block capture, so it is reachable (by
-# Access) from any caller region exactly as a module-qualified reference to
-# it would be. This uses only HIR BindingIds, never a run-time
-# namespace/name lookup.
-proc native::lower::ModuleBridgeBinding {calleeExpr targetKind} {
-    variable hir
-    if {$targetKind ne "block" || [hir::kind $hir $calleeExpr] ne "ref"} {
-        return ""
-    }
-    set node [hir::node $hir $calleeExpr]
-    if {![dict exists $node bridge]} {
-        return ""
-    }
-    return [dict get $node bridge]
-}
-
-# The native a block call E denotes when it is a call of a module-bridged
-# native that hir::aot holds to the native's parameter kinds (VisitCall):
-# its name if some argument needed a check, "" otherwise. The bridge
-# replaces only the implementation; the native's parameter check is still
-# its own, under its own name, before the module function runs.
-proc native::lower::BridgedCheckedNative {e calleeExpr argExprs} {
-    variable hir
-    variable guards
-    variable knownErrors
-    set name [hir::types::BridgedNative $hir $calleeExpr]
-    if {$name eq ""} {
-        return ""
-    }
-    foreach arg $argExprs {
-        set key [list $e $arg]
-        if {[dict exists $guards $key] || [dict exists $knownErrors $key]} {
-            return $name
-        }
-    }
-    return ""
-}
-
-# 1 if some argument of the bridged native call E is statically of the
-# wrong kind (hir::aot's known error), so its parameter check always fails.
-proc native::lower::BridgedKnownError {e argExprs} {
-    variable knownErrors
-    foreach arg $argExprs {
-        if {[dict exists $knownErrors [list $e $arg]]} {
-            return 1
-        }
-    }
-    return 0
-}
-
-# The kind guards of the bridged native NAME's call E (see
-# BridgedCheckedNative), on its arguments ARGREGS as CallArgs evaluated
-# them. Only an argument of no static kind needs a guard, and its slot is
-# then always an ordinary tagged register (raw, short, field and plan slots
-# are each planned only for a proven kind), so the registers are the
-# arguments' own, one per argument.
-proc native::lower::BridgedArgGuards {fnVar e argExprs argRegs fieldWidths rawSlots planSlots name} {
-    upvar 1 $fnVar fn
-    variable guards
-    if {[join $fieldWidths ""] ne "" || [join $planSlots ""] ne ""
-            || [llength $argRegs] != [llength $argExprs]} {
-        throw {NATIVE BUG} "native lowering: bridged native $name call $e has non-register arguments"
-    }
-    foreach arg $argExprs slot $rawSlots {
-        if {[dict exists $guards [list $e $arg]] && $slot ni {"" 0}} {
-            throw {NATIVE BUG} "native lowering: guarded argument $arg of bridged native $name call $e is not tagged"
-        }
-    }
-    EmitArgGuards fn $e $argExprs $argRegs [dict get [core::native::metadata $name] paramTypes] $name
-}
-
 # Preserve the exact call and its completion handling, then substitute a
 # successful-result constant for later value uses when the per-instance range
 # analysis proves one. This is not an effect or totality optimization.
@@ -4797,7 +5778,152 @@ proc native::lower::ClosedResult {fnVar e result} {
     return [list $result tagged]
 }
 
+# Every call lowering goes through here, so the raw-address provenance of
+# ABI-BYTES.md is tracked across calls to ordinary Botlish functions in the
+# calling function (see KeepAddrFlow): CallInner lowers the call, then
+#   * a call that returns an abi::x86_64::Register64 and takes an abi::bytes::Bytes (or
+#     an address-carrying register) may be returning an address into it: its
+#     result registers carry the provenance of the call's operands -- the Bytes
+#     (or its storage) itself, whichever register passes it;
+#   * a call that takes an address-carrying operand may use it for a syscall
+#     inside the callee: the storages stay live until the call has returned (a
+#     keepalive after it).
+# Calls with neither (every call of a program that never takes an address) pay
+# one dict-exists test.
 proc native::lower::Call {fnVar e node want {wantVirtual ""} {wantRegion 0}} {
+    upvar 1 $fnVar fn
+    variable hir
+    # A declared error this call propagates out of the scope of affine
+    # owners, or past pending temporaries, releases them on its way
+    # (hir::affine::releasesOnError): the call's failures land on a pad that
+    # does, then go on (Handle's technique, with no handler).
+    set byName [hir::affine::releasesOnError $hir $e]
+    if {$byName ne ""} {
+        set pad [NewLabel fn]
+        Emit fn "pusherrorexit $pad" $e
+    }
+    set result [CallInner fn $e $node $want $wantVirtual $wantRegion]
+    if {[lindex [dict get $node target] 0] eq "block" && [BytesFlowCandidate fn $e $node]} {
+        AddressFlowAcrossCall fn $e $node $result
+    }
+    if {$byName ne ""} {
+        Emit fn "poperrorexit" $e
+        set normal [expr {[lindex $result 0] ne "never"}]
+        if {$normal} {
+            set join [NewLabel fn]
+            Emit fn "jump $join" $e
+        }
+        EmitLabel fn $pad
+        ReleaseOnError fn $e $byName
+        Emit fn "reraise" $e
+        if {$normal} {
+            EmitLabel fn $join
+        }
+    }
+    return $result
+}
+
+# The static types of the values an address can be taken from: abi::bytes::Bytes
+# (readable) and abi::bytes::MutableBytes (writable).
+proc native::lower::BytesStructTypes {} {
+    return [list [list nstruct [core::bytestore::bytesType]] [list nstruct [core::bytestore::mutableBytesType]]]
+}
+
+# 1 if call E (NODE) may carry an address: the program declares abi::bytes::Bytes and
+# either the call takes an abi::bytes::Bytes or abi::bytes::MutableBytes or its operands
+# carry a raw address.
+proc native::lower::BytesFlowCandidate {fnVar e node} {
+    upvar 1 $fnVar fn
+    variable hir
+    if {![hir::structs::declared [core::bytestore::bytesType]]} {
+        return 0
+    }
+    if {[dict exists $fn keepAddr]} {
+        return 1
+    }
+    foreach arg [dict get $node args] {
+        if {[hir::typeOf $hir $arg] in [BytesStructTypes]} {
+            return 1
+        }
+    }
+    return 0
+}
+
+proc native::lower::AddressFlowAcrossCall {fnVar e node result} {
+    upvar 1 $fnVar fn
+    variable hir
+    if {[lindex $result 0] eq "never"} {
+        return
+    }
+    set lines [dict get $fn lines]
+    set callLine ""
+    set count [llength $lines]
+    for {set i [expr {$count - 1}]} {$i >= 0 && $i >= $count - 16} {incr i -1} {
+        set line [lindex $lines $i]
+        if {[string match "* @$e" $line] && [regexp {= (?:call|callenv|callmulti|callenvmulti) \S+ } $line]} {
+            set callLine $line
+            break
+        }
+    }
+    if {$callLine eq ""} {
+        return
+    }
+    regexp {= (call|callenv|callmulti|callenvmulti) \S+ ?(.*) @[^ ]+$} $callLine -> kind rest
+    set operands [split [string trim $rest] " "]
+    if {$kind in {callenv callenvmulti}} {
+        set operands [lrange $operands 1 end]
+    }
+    set tagged {}
+    set carried {}
+    foreach operand $operands {
+        if {$operand eq "" || [dict exists $fn rawRegs $operand]} continue
+        if {[dict exists $fn keepAddr $operand]} {
+            foreach storage [dict get $fn keepAddr $operand] {
+                if {$storage ni $carried} {
+                    lappend carried $storage
+                }
+            }
+        }
+    }
+    # The values this call may return an address into: every non-raw operand
+    # of a Register64-returning call (a Bytes, its storage, or an address
+    # that already carries provenance), plus what the operands carry.
+    set source $carried
+    if {[hir::typeOf $hir $e] eq [list nstruct [core::linuxabi::registerType]]} {
+        # Which operands are the Bytes: by position when every argument is one
+        # operand (each Bytes argument, as its storage or its object), else (a
+        # parameter passed as several field registers) every non-raw operand.
+        set argExprs [dict get $node args]
+        set picked {}
+        if {[llength $argExprs] == [llength $operands]} {
+            foreach arg $argExprs operand $operands {
+                if {[hir::typeOf $hir $arg] in [BytesStructTypes]} {
+                    lappend picked $operand
+                }
+            }
+        } else {
+            set picked $operands
+        }
+        foreach operand $picked {
+            if {$operand ne "" && ![dict exists $fn rawRegs $operand] && $operand ni $source} {
+                lappend source $operand
+            }
+        }
+        set registers [expr {[lindex $result 1] eq "virtual" ? [lindex $result 0] : [list [lindex $result 0]]}]
+        foreach register $registers {
+            if {$register ne "" && $source ne ""} {
+                dict set fn keepAddr $register $source
+            }
+        }
+    }
+    # A callee may consume a carried address (a syscall inside it): keep what
+    # the operands carry alive until it has returned.
+    foreach storage $carried {
+        Assign fn "op keepalive $storage" $e
+    }
+}
+
+proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}} {
     upvar 1 $fnVar fn
     variable hir
     variable selfTail
@@ -4820,6 +5946,39 @@ proc native::lower::Call {fnVar e node want {wantVirtual ""} {wantRegion 0}} {
         # The raw Linux x86-64 kernel transition (core/linuxabi.tcl): its own
         # form, never NativeCall's one-operand-per-argument shape.
         return [SyscallCall fn $e $node $wantVirtual]
+    }
+    if {$targetKind eq "native" && [dict get [hir::symbol $hir $target] name] eq [core::contexts::installNative]} {
+        # `with context EXPR` (CONTEXTS.md): stores into the type's fixed slot.
+        return [ContextInstallCall fn $e $node]
+    }
+    if {$targetKind eq "native" && [dict get [hir::symbol $hir $target] name] eq [core::contexts::unreachableNative]} {
+        # Code no installed context reaches (CONTEXT-TRAITS.md): HIR
+        # verification proved it never runs, so there is nothing to call.
+        Emit fn unreachable $e
+        return {never tagged}
+    }
+    if {$targetKind eq "native" && [dict get [hir::symbol $hir $target] name] eq [core::contexts::loadNative]} {
+        # A context load outside a context parameter's own binding (Bind
+        # keeps those lazy): the whole installed value, from its slot.
+        set id [hir::contexts::loadId $hir $e]
+        if {$id eq "" || [ContextOffsetSlot $id] eq ""} {
+            return [list [UninstalledContext fn $e $id] tagged]
+        }
+        return [list [ContextAt fn $e $id {}] tagged]
+    }
+    if {$targetKind eq "block" && ($wantVirtual ne "" || !$wantRegion)} {
+        # `abi::bytes::from_list(BYTES)` whose every byte is known now (StaticBytesCall):
+        # a static byte storage instead of a call and a run-time conversion.
+        set static [StaticBytesCall fn $e $node $wantVirtual]
+        if {$static ne ""} {
+            return $static
+        }
+    }
+    if {$targetKind eq "native" && [core::bytestore::isBridge [dict get [hir::symbol $hir $target] name]]} {
+        # The raw address bridge (core/bytestore.tcl, ABI-BYTES.md): reads the
+        # storage out of an abi::bytes::Bytes and yields a Register64, so its own
+        # form too.
+        return [BytesAddrCall fn $e $node $wantVirtual]
     }
 
     if {$constructionOpt && $wantVirtual eq "" && !$wantRegion && $targetKind eq "native"
@@ -4984,7 +6143,7 @@ proc native::lower::Call {fnVar e node want {wantVirtual ""} {wantRegion 0}} {
     if {$wantVirtual eq "" && !$wantRegion && $targetKind eq "block" && $stringRegionOpt} {
         # A direct call to an instance hir::stringregion.tcl's ConsumingParams
         # proved region-consuming at some parameter (e.g. `is_local_char
-        # (char_at(i))`, lib/web.tcl's Emailish? native-body): if the
+        # (char_at(i))`, lib/web.bot's emailish?): if the
         # argument at that position is itself region-eligible, its body is
         # lowered directly here, inline, in the caller's own function --
         # never as a `call`/`callenv` to its own compiled function at all
@@ -5040,29 +6199,12 @@ proc native::lower::Call {fnVar e node want {wantVirtual ""} {wantRegion 0}} {
     }
 
     # The callee is evaluated first. A reference to a root native or to an
-    # environment-free function needs no code. A module-native bridge with a
-    # captured module value instead reads the module function binding itself.
+    # environment-free function needs no code.
     set callee ""
-    set bridgeBinding [ModuleBridgeBinding $calleeExpr $targetKind]
-    set bridgeEnvless [expr {$bridgeBinding ne "" && $target in $envless}]
     set skipCallee [expr {[hir::kind $hir $calleeExpr] eq "ref"
-        && ($bridgeEnvless || ($bridgeBinding eq "" &&
-            (($targetKind eq "native" && [dict get [hir::binding $hir [hir::get $hir $calleeExpr binding]] kind] eq "root")
-                || ($targetKind eq "block" && $target in $envless))))}]
-    if {$bridgeBinding ne "" && !$skipCallee} {
-        lassign [Access fn $bridgeBinding] how where
-        switch -- $how {
-            reg { set callee $where }
-            rawreg { set callee [TaggedOf fn $where] }
-            shortreg { set callee [TaggedOfShort fn $where] }
-            fnvalue { set callee [Assign fn "fnvalue $where" $e] }
-            self { set callee [Assign fn self $e] }
-            static { set callee [Assign fn "staticget $where" $e] }
-            default {
-                throw {NATIVE BUG} "native lowering: module bridge binding $bridgeBinding has inaccessible storage $how"
-            }
-        }
-    } elseif {!$skipCallee} {
+        && (($targetKind eq "native" && [dict get [hir::binding $hir [hir::get $hir $calleeExpr binding]] kind] eq "root")
+            || ($targetKind eq "block" && $target in $envless))}]
+    if {!$skipCallee} {
         set callee [Expr fn $calleeExpr]
         if {$callee eq "never"} {
             return {never tagged}
@@ -5093,26 +6235,6 @@ proc native::lower::Call {fnVar e node want {wantVirtual ""} {wantRegion 0}} {
     }
 
     if {$targetKind eq "block"} {
-        set bridged [BridgedCheckedNative $e $calleeExpr $argExprs]
-        if {$bridged ne "" && [BridgedKnownError $e $argExprs]} {
-            # A module-bridged native call whose argument is statically of
-            # the wrong kind: the native's own parameter check always fails
-            # (hir::aot's known error), so the call is never made. The
-            # arguments are evaluated tagged, never in the callee's ABI
-            # form, since that is planned for the wrong kind.
-            set argRegs {}
-            foreach arg $argExprs {
-                set r [Expr fn $arg]
-                if {$r eq "never"} {
-                    return {never tagged}
-                }
-                lappend argRegs $r
-            }
-            EmitArgGuards fn $e $argExprs $argRegs \
-                [dict get [core::native::metadata $bridged] paramTypes] $bridged
-            Emit fn unreachable $e
-            return {never tagged}
-        }
         set params [hir::get $hir $target params]
         set instance [expr {[dict exists $fn targets $e] ? [dict get $fn targets $e] : ""}]
         # The instance hir::specialize chose; a self tail call that stays in
@@ -5177,16 +6299,13 @@ proc native::lower::Call {fnVar e node want {wantVirtual ""} {wantRegion 0}} {
             return {never tagged}
         }
         if {[dict get $node known] ne ""} {
-            # A module-bridged type-test predicate HIR already decided
-            # statically (hir/types.tcl's BridgedNative extension to Call):
-            # the arguments were just evaluated above for effect, but the
-            # call itself needs no code at all -- not even a call to its
-            # bridged module function -- exactly like NativeCall's own
-            # identical fold for an unbridged type test (see there).
+            # A repeated proof-predicate invocation HIR already decided (an
+            # exact predicate-result fact of a repeatable function,
+            # REFINEMENT-VALUES.md; hir/types.tcl's Call): the arguments
+            # were just evaluated above for effect, but the call itself
+            # needs no code at all, exactly like NativeCall's own identical
+            # fold for a decided type test (see there).
             return [list [Assign fn "bool [expr {[dict get $node known] ? "true" : "false"}]" $e] tagged]
-        }
-        if {$bridged ne ""} {
-            BridgedArgGuards fn $e $argExprs $argRegs $fieldWidths $rawSlots $planSlots $bridged
         }
         if {![dict exists $fn targets $e]} {
             throw {NATIVE BUG} "native lowering: hir::specialize chose no instance for call $e"
@@ -6180,7 +7299,7 @@ proc native::lower::InlineLeafCall {fnVar e node calleeId callerArgRegs} {
 }
 
 # {NAME OP}: the native NODE's target's name, and the NIR op its call
-# resolves to (an "equality" implementation picks veq/ieq/streq from the two
+# resolves to (an "equality" implementation picks veq/ieq/streq/chareq from the two
 # argument expressions' static types, exactly as NativeCall always has;
 # an "equality-set" implementation -- immutable_set::contains -- picks
 # setcontainstotal over the generic setcontains the identical way, from the
@@ -6218,6 +7337,16 @@ proc native::lower::NativeCallOp {e node} {
                 set op ieq
             } elseif {$ka eq $kb && $ka eq "str"} {
                 set op streq
+            } elseif {$ka eq $kb && $ka eq "UnicodeChar"} {
+                # Two UnicodeChar immediates: scalar equality is word
+                # equality, and it cannot fail (str::char_at(s, i) == '%').
+                set op chareq
+            } elseif {$ka eq $kb && $ka eq "enum"} {
+                # Two enum case immediates (ENUMS.md): nominal equality is
+                # word equality (one word per case of one declaration, so a
+                # same-spelled case of another enum is another word), and it
+                # cannot fail.
+                set op enumeq
             }
             return [list $name $op]
         }
@@ -6251,6 +7380,12 @@ proc native::lower::NativeCallOp {e node} {
                 }
             }
             return [list $name $op]
+        }
+        coroutine-resume {
+            # A coroutine resume (COROUTINES.md): the handle alone for the
+            # zero-message protocol, the handle and the one message
+            # otherwise (static typing fixed which, COROUTINE-RESUME-ARITY).
+            return [list $name [expr {[llength $argExprs] == 1 ? "coresume0" : "coresume"}]]
         }
         equality-list {
             # SetFromList's generic form (rt_set_from_list) dedups its
@@ -6307,7 +7442,7 @@ proc native::lower::NativeCallOp {e node} {
 namespace eval native::lower {
     variable provenOps [dict create \
         listget listgetproven  mutarrayget mutarraygetproven  mutarrayset mutarraysetproven \
-        substr substrproven  mutarraycopy mutarraycopyproven  mutarrayfreeze mutarrayfreezeproven]
+        substr substrproven  strcharat strcharatproven  mutarraycopy mutarraycopyproven  mutarrayfreeze mutarrayfreezeproven]
 }
 
 # 1 if native call E has every bounds check proven (and the optimization is on).
@@ -6931,6 +8066,7 @@ proc native::lower::NativeImpl {name} {
         equality      { return veq }
         equality-set  { return setcontains }
         equality-list { return setfromlist }
+        coroutine-resume { return coresume }
         default       { return [lindex $impl 1] }
     }
 }
@@ -6939,12 +8075,20 @@ proc native::lower::NativeImpl {name} {
 # Control flow
 
 # 1 if evaluating CONDITION (an `if` condition whose outcome is decided) has
-# no effect, cannot fail and would produce only that Bool: a native
-# comparison (< <= > >= ==) of two PureIntOperands. Such a condition's
-# evaluation is dead code under a decided outcome (If, above).
+# no effect, cannot fail and would produce only that Bool: a reference to the
+# root `true` or `false` (the condition of an `if true:` block, which is also
+# what an accepted `static compile:` block whose body binds names becomes,
+# STATIC-COMPILE.md), or a native comparison (< <= > >= ==) of two
+# PureIntOperands. Such a condition's evaluation is dead code under a decided
+# outcome (If, above).
 proc native::lower::PureDecidedCondition {fnVar condition} {
     upvar 1 $fnVar fn
     variable hir
+    if {[hir::kind $hir $condition] eq "ref"} {
+        set b [hir::get $hir $condition binding]
+        return [expr {$b ne "" && [dict get $hir bindings $b kind] eq "root"
+            && [core::value::kind [dict get $hir bindings $b value]] eq "bool"}]
+    }
     if {[hir::kind $hir $condition] ne "call"} {
         return 0
     }
@@ -7119,9 +8263,11 @@ proc native::lower::If {fnVar e node {family ""} {virtualN ""} {virtualCut ""} {
             if {$virtualN ne ""} {
                 foreach r $result v $value {
                     Emit fn "$r = move $v"
+                    JoinKeepAddr fn $r $v
                 }
             } else {
                 Emit fn "$result = move $value"
+                JoinKeepAddr fn $result $value
             }
             Emit fn "jump $join"
             set joined 1
@@ -7132,6 +8278,85 @@ proc native::lower::If {fnVar e node {family ""} {virtualN ""} {virtualCut ""} {
     }
     EmitLabel fn $join
     return $result
+}
+
+# The raw-address provenance (KeepAddrFlow) of a branch's value V moved into
+# the join register R: R may hold an address into V's storages whichever branch
+# ran, so it carries the union over the branches. A storage register defined
+# in only one branch is read after the join as the zero a conditionally defined
+# register has on the other path (the same convention a root register that is
+# conditionally defined already relies on, codegen/roots.rs): the keepalive of
+# it is then a use of nothing, and of the storage on the path that has one.
+proc native::lower::JoinKeepAddr {fnVar r v} {
+    upvar 1 $fnVar fn
+    if {![dict exists $fn keepAddr $v]} {
+        return
+    }
+    set storages [expr {[dict exists $fn keepAddr $r] ? [dict get $fn keepAddr $r] : {}}]
+    foreach storage [dict get $fn keepAddr $v] {
+        if {$storage ni $storages} {
+            lappend storages $storage
+        }
+    }
+    dict set fn keepAddr $r $storages
+}
+
+# The result accumulator of a retained collecting loop (ListLoop, CountLoop,
+# LockLoop; COLLECTING-LOOPS.md). The accumulator is not a Botlish binding
+# -- the loop's List is never observable until the loop ends, normally or by
+# a bare `break` -- so hir/construction.tcl, which only reasons about
+# bindings and `str::concat`/`list::append` calls, never sees it; the loop lowering
+# owns it outright and keeps it virtual itself (M8A-VIRTUAL-IMMUTABLE-
+# CONSTRUCTION.md's plan objects): a maybe-plan register that starts as the
+# flat empty List, is extended in place by one `construct list plan ACC elem
+# V` per contributing iteration (amortized growth: O(1) allocations and
+# O(N) element copies for N iterations, where an eager `listappend` per
+# iteration copies the whole List so far), and is materialized exactly once,
+# by `construct list flat ACC`, where the loop yields its List: normal
+# exhaustion and a bare `break` (CollectFinish). `continue` contributes
+# nothing and leaves the plan untouched; `return`/an error leaving the body
+# just drops it (the collector frees it). The register is a loop-carried
+# plan register: consumed once per iteration by the extension and redefined
+# by the back-edge move, which is exactly the linear discipline nir.rs's
+# validate_plans checks across the back edge; it is an ordinary GC root
+# like any other heap register (a ListPlan's items are traced, heap.rs),
+# including on a suspended coroutine stack. -virtual-construction-opt 0
+# keeps the eager per-iteration `listappend`, for differential testing.
+proc native::lower::CollectStart {fnVar e} {
+    upvar 1 $fnVar fn
+    variable constructionOpt
+    set acc0 [Assign fn "op listnew" $e]
+    set accReg [NewReg fn]
+    if {$constructionOpt} {
+        MarkPlan fn $accReg
+    }
+    Emit fn "$accReg = move $acc0" $e
+    return $accReg
+}
+
+# Appends the body value VALUE to collecting-loop accumulator ACCREG
+# (CollectStart) and rebinds ACCREG to the result.
+proc native::lower::CollectAppend {fnVar e accReg value} {
+    upvar 1 $fnVar fn
+    if {[IsPlanReg fn $accReg]} {
+        set accNext [Assign fn "construct list plan $accReg elem $value" $e]
+        MarkPlan fn $accNext
+    } else {
+        set accNext [Assign fn "op listappend $accReg $value" $e]
+    }
+    Emit fn "$accReg = move $accNext" $e
+}
+
+# The List collected so far in accumulator ACCREG (CollectStart), as an
+# ordinary flat register: its one materialization (a loop that never
+# contributed still holds the flat empty List, which `construct` passes
+# through unchanged).
+proc native::lower::CollectFinish {fnVar e accReg} {
+    upvar 1 $fnVar fn
+    if {[IsPlanReg fn $accReg]} {
+        return [Assign fn "construct list flat $accReg" $e]
+    }
+    return $accReg
 }
 
 # (listloop LIST-EXPR (block (ELEM) BODY...)): the returning iterable loop
@@ -7180,17 +8405,24 @@ proc native::lower::ListLoop {fnVar e node} {
     if {$iterReg eq "never"} {
         return never
     }
-    EmitArgGuards fn $e [list $iterExpr] [list $iterReg] {list} "loop"
-    set lenReg [Assign fn "op listlen $iterReg" $e]
-    set idx0 [IntConst fn 0 $e]
-    set idxReg [NewReg fn]
+    # A loop consuming an affine MutableVector (MUTABLE-VECTOR.md): each
+    # iteration moves the vector's first element out (`mvtakefront`, O(1));
+    # what an early exit leaves in it is released by that exit's own release
+    # items (hir::affine's loop domain), the register %iter.
+    set consuming [hir::mutvec::IsConsumingLoop $hir $e]
+    # (An affine MutableArray is drained like a vector, MUTABLE-ARRAY.md.)
+    set drain [expr {$consuming && [hir::mutvec::ConsumedKind $hir $e] eq "array" ? "mutarray" : "mv"}]
+    if {!$consuming} {
+        EmitArgGuards fn $e [list $iterExpr] [list $iterReg] {list} "loop"
+        set lenReg [Assign fn "op listlen $iterReg" $e]
+        set idx0 [IntConst fn 0 $e]
+        set idxReg [NewReg fn]
+        Emit fn "$idxReg = move $idx0" $e
+    }
     set resultReg [NewReg fn]
-    Emit fn "$idxReg = move $idx0" $e
     set retained [expr {![dict exists $context discarded $e]}]
     if {$retained} {
-        set acc0 [Assign fn "op listnew" $e]
-        set accReg [NewReg fn]
-        Emit fn "$accReg = move $acc0" $e
+        set accReg [CollectStart fn $e]
     } else {
         set accReg ""
     }
@@ -7209,21 +8441,29 @@ proc native::lower::ListLoop {fnVar e node} {
     set exit [NewLabel fn]
     Emit fn "jump $head" $e
     EmitLabel fn $head
-    set cmp [Assign fn "op ilt $idxReg $lenReg" $e]
-    Emit fn "br $cmp $bodyLabel $normalExit" $e
+    if {$consuming} {
+        set empty [Assign fn "op ${drain}empty $iterReg" $e]
+        Emit fn "br $empty $normalExit $bodyLabel" $e
+    } else {
+        set cmp [Assign fn "op ilt $idxReg $lenReg" $e]
+        Emit fn "br $cmp $bodyLabel $normalExit" $e
+    }
     EmitLabel fn $bodyLabel
     set saved [dict get $fn locals]
     set savedRaw [dict get $fn rawCache]
     dict set fn loops $e [list $continueLabel $exit $resultReg \
         [expr {$retained ? $accReg : "discard"}]]
-    set elemReg [Assign fn "op listget $iterReg $idxReg" $e]
+    if {$consuming} {
+        set elemReg [Assign fn "op ${drain}takefront $iterReg" $e]
+    } else {
+        set elemReg [Assign fn "op listget $iterReg $idxReg" $e]
+    }
     dict set fn locals [dict get $node elementBinding] [list reg $elemReg]
     set bodyValue [Sequence fn [dict get $node body]]
     set usedContinue [dict exists $fn continued $e]
     if {$bodyValue ne "never"} {
         if {$retained} {
-            set accNext [Assign fn "op listappend $accReg $bodyValue" $e]
-            Emit fn "$accReg = move $accNext" $e
+            CollectAppend fn $e $accReg $bodyValue
         }
         Emit fn "jump $continueLabel" $e
     }
@@ -7233,13 +8473,15 @@ proc native::lower::ListLoop {fnVar e node} {
     dict unset fn loops $e
     if {$bodyValue ne "never" || $usedContinue} {
         EmitLabel fn $continueLabel
-        set idxNext [Assign fn "op iadd $idxReg [IntConst fn 1 $e]" $e]
-        Emit fn "$idxReg = move $idxNext" $e
+        if {!$consuming} {
+            set idxNext [Assign fn "op iadd $idxReg [IntConst fn 1 $e]" $e]
+            Emit fn "$idxReg = move $idxNext" $e
+        }
         Emit fn "jump $head" $e
     }
     EmitLabel fn $normalExit
     if {$retained} {
-        Emit fn "$resultReg = move $accReg" $e
+        Emit fn "$resultReg = move [CollectFinish fn $e $accReg]" $e
     } else {
         set unitConst [Assign fn unit $e]
         Emit fn "$resultReg = move $unitConst" $e
@@ -7378,9 +8620,7 @@ proc native::lower::CountLoop {fnVar e node} {
     Emit fn "$idxReg = move $startReg" $e
     set retained [expr {![dict exists $context discarded $e]}]
     if {$retained} {
-        set acc0 [Assign fn "op listnew" $e]
-        set accReg [NewReg fn]
-        Emit fn "$accReg = move $acc0" $e
+        set accReg [CollectStart fn $e]
     } else {
         set accReg ""
     }
@@ -7409,8 +8649,7 @@ proc native::lower::CountLoop {fnVar e node} {
     set usedContinue [dict exists $fn continued $e]
     if {$bodyValue ne "never"} {
         if {$retained} {
-            set accNext [Assign fn "op listappend $accReg $bodyValue" $e]
-            Emit fn "$accReg = move $accNext" $e
+            CollectAppend fn $e $accReg $bodyValue
         }
         Emit fn "jump $continueLabel" $e
     }
@@ -7431,7 +8670,7 @@ proc native::lower::CountLoop {fnVar e node} {
     }
     EmitLabel fn $normalExit
     if {$retained} {
-        Emit fn "$resultReg = move $accReg" $e
+        Emit fn "$resultReg = move [CollectFinish fn $e $accReg]" $e
     } else {
         set unitConst [Assign fn unit $e]
         Emit fn "$resultReg = move $unitConst" $e
@@ -7548,9 +8787,7 @@ proc native::lower::LockLoop {fnVar e node} {
     set resultReg [NewReg fn]
     set retained [expr {![dict exists $context discarded $e]}]
     if {$retained} {
-        set acc0 [Assign fn "op listnew" $e]
-        set accReg [NewReg fn]
-        Emit fn "$accReg = move $acc0" $e
+        set accReg [CollectStart fn $e]
     } else {
         set accReg ""
     }
@@ -7588,8 +8825,7 @@ proc native::lower::LockLoop {fnVar e node} {
     set usedContinue [dict exists $fn continued $e]
     if {$bodyValue ne "never"} {
         if {$retained} {
-            set accNext [Assign fn "op listappend $accReg $bodyValue" $e]
-            Emit fn "$accReg = move $accNext" $e
+            CollectAppend fn $e $accReg $bodyValue
         }
         Emit fn "jump $continueLabel" $e
     }
@@ -7619,7 +8855,7 @@ proc native::lower::LockLoop {fnVar e node} {
     }
     EmitLabel fn $normalExit
     if {$retained} {
-        Emit fn "$resultReg = move $accReg" $e
+        Emit fn "$resultReg = move [CollectFinish fn $e $accReg]" $e
     } else {
         set unitConst [Assign fn unit $e]
         Emit fn "$resultReg = move $unitConst" $e
@@ -7627,6 +8863,88 @@ proc native::lower::LockLoop {fnVar e node} {
     Emit fn "jump $exit" $e
     EmitLabel fn $exit
     return $resultReg
+}
+
+# The field registers of the payload VALUE of `fail NAME` (ERROR-PAYLOADS.md),
+# in the slot order of error NAME's payload struct (its fields sorted by
+# name), or "never": the fields of a payload construction (a struct literal)
+# evaluated in written order, never built into an object; a virtual struct's
+# own field registers; any other value's fields read out of the object.
+proc native::lower::PayloadFields {fnVar value name e} {
+    upvar 1 $fnVar fn
+    variable hir
+    set layout [hir::types::StructLayout [hir::errordecls::payloadType $name]]
+    if {[hir::kind $hir $value] eq "struct"} {
+        set node [hir::node $hir $value]
+        if {[dict get $node layout] ne $layout} {
+            throw {NATIVE BUG} "native lowering: the payload of fail $name has fields ([dict get $node layout]), not ($layout) ($e)"
+        }
+        return [StructFields fn $value $node]
+    }
+    if {[hir::kind $hir $value] eq "ref"} {
+        set b [hir::get $hir $value binding]
+        if {$b ne "" && [dict exists $fn locals $b]} {
+            set local [dict get $fn locals $b]
+            if {[lindex $local 0] eq "virtual" && [lindex $local 2] ne "" && [lindex $local 5] eq ""
+                    && [lindex $local 2 1] eq $layout} {
+                return [lindex $local 1]
+            }
+        }
+    }
+    set r [Expr fn $value]
+    if {$r eq "never"} {
+        return never
+    }
+    set fields {}
+    set slot 0
+    foreach field $layout {
+        lappend fields [Assign fn "structget $slot $r" $e]
+        incr slot
+    }
+    return $fields
+}
+
+# The payload fields handler BODY reads through its payload binding B of
+# error NAME (ERROR-PAYLOADS.md): the names projected out of B, plus every
+# field whose type is affine (a release of B drops those) -- or "all" when
+# some reference uses B whole (a materialization), so every field is read;
+# "captured" when a nested function refers to B (it captures the object).
+proc native::lower::PayloadNeeded {b body name} {
+    variable hir
+    set parent [dict create]
+    set refs {}
+    set work [lmap x $body {list $x 0}]
+    while {$work ne {}} {
+        lassign [lindex $work end] x nested
+        set work [lrange $work 0 end-1]
+        set node [hir::node $hir $x]
+        if {[dict get $node kind] eq "ref" && [dict get $node binding] eq $b} {
+            if {$nested} {
+                # Captured by a nested function: it needs the object.
+                return captured
+            }
+            lappend refs $x
+        }
+        set inner [expr {$nested || [dict get $node kind] eq "block"}]
+        foreach child [hir::children $hir $x] {
+            dict set parent $child $x
+            lappend work [list $child $inner]
+        }
+    }
+    set needed {}
+    foreach r $refs {
+        set p [expr {[dict exists $parent $r] ? [dict get $parent $r] : ""}]
+        if {$p eq "" || [hir::kind $hir $p] ne "project" || [hir::get $hir $p receiver] ne $r} {
+            return all
+        }
+        lappend needed [hir::get $hir $p name]
+    }
+    foreach {field type} [hir::errordecls::fields $name] {
+        if {[hir::types::IsAffine $type]} {
+            lappend needed $field
+        }
+    }
+    return [lsort -unique $needed]
 }
 
 # `handle CALL NAME1 HANDLER1 ...` (EXPLICIT-ERROR-COMPLETIONS.md): lowers
@@ -7645,6 +8963,7 @@ proc native::lower::LockLoop {fnVar e node} {
 # has already restored it by then).
 proc native::lower::Handle {fnVar e node} {
     upvar 1 $fnVar fn
+    variable hir
     set call [dict get $node call]
     set names [dict get $node handlerNames]
     set scopes [dict get $node handlerScopes]
@@ -7670,15 +8989,49 @@ proc native::lower::Handle {fnVar e node} {
     }
 
     EmitLabel fn $catchLabel
+    set payloads [expr {[dict exists $node handlerPayloads] ? [dict get $node handlerPayloads] : {}}]
+    set index 0
     foreach name $names scopeId $scopes body $bodies {
+        set payload [lindex $payloads $index]
+        incr index
         set eqReg [Assign fn "declarederroreq [ErrorId $name]" $e]
         set matchLabel [NewLabel fn]
         set nextLabel [NewLabel fn]
         Emit fn "br $eqReg $matchLabel $nextLabel" $e
         EmitLabel fn $matchLabel
-        Emit fn "cleardeclarederror" $e
         set saved [dict get $fn locals]
         set savedRaw [dict get $fn rawCache]
+        if {$payload ne "" && [hir::errordecls::hasPayload $name]} {
+            # The handler's payload binding (ERROR-PAYLOADS.md): the payload's
+            # fields, read out of the Vm's payload slots before they are
+            # cleared, held as a virtual struct of the payload's anonymous
+            # shape -- a projection or destructuring reads a field register,
+            # and only a use that needs the object itself builds it, once
+            # (MaterializeVirtual).
+            set layout [hir::types::StructLayout [hir::errordecls::payloadType $name]]
+            set needed [PayloadNeeded $payload $body $name]
+            set fieldRegs {}
+            set k 0
+            foreach field $layout {
+                if {$needed in {all captured} || $field in $needed} {
+                    lappend fieldRegs [Assign fn "declaredpayload $k" $e]
+                } else {
+                    # A field the handler never reads: no read at all (the
+                    # entry is marked partial, so it is never materialized).
+                    lappend fieldRegs ""
+                }
+                incr k
+            }
+            if {$needed eq "captured"} {
+                # A nested function captures the payload binding: a capture
+                # is an ordinary value, so the object is built here, once.
+                dict set fn locals $payload [list reg [BuildStruct fn [list "" $layout] "" $fieldRegs $e]]
+            } else {
+                dict set fn locals $payload [list virtual $fieldRegs [list "" $layout] $payload "" "" \
+                    [expr {$needed eq "all" ? "" : "partial"}]]
+            }
+        }
+        Emit fn "cleardeclarederror" $e
         set value [Sequence fn $body]
         dict set fn locals $saved
         dict set fn rawCache $savedRaw
@@ -7689,6 +9042,9 @@ proc native::lower::Handle {fnVar e node} {
         }
         EmitLabel fn $nextLabel
     }
+    # A declared error no handler handles, leaving the scope of affine
+    # owners (hir::affine::releasesOnError): released on its way out.
+    ReleaseOnError fn $e [hir::affine::releasesOnError $hir $e]
     Emit fn "reraise" $e
 
     if {!$joined} {
@@ -7808,10 +9164,7 @@ proc native::lower::PlainNativeCallee {calleeExpr} {
         return 0
     }
     set b [hir::get $hir $calleeExpr binding]
-    if {$b eq "" || [dict get [hir::binding $hir $b] kind] ne "root"} {
-        return 0
-    }
-    return [expr {[ModuleBridgeBinding $calleeExpr native] eq ""}]
+    return [expr {$b ne "" && [dict get [hir::binding $hir $b] kind] eq "root"}]
 }
 
 # The NIR operand text of construction PIECES.

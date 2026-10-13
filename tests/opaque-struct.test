@@ -348,7 +348,7 @@ test opaque-ast-contextual {`opaque` is not reserved: it stays an ordinary name,
 test opaque-ast-owner-not-in-ast {the cached AST is importer- and path-neutral: the declaration carries no namespace or owner} -body {
     set d [lindex [dict get [surface::parse "opaque struct A:\n    v: int\n"] body] 0]
     lsort [dict keys $d]
-} -result {fields id kind name nameSpan opaque opaqueSpan span}
+} -result {context contextSpan fields id kind name nameSpan opaque opaqueSpan span}
 
 foreach {name source message} {
     duplicate   "opaque opaque struct T:\n    a: int\n"          {duplicate modifier "opaque" in this struct declaration}
@@ -358,7 +358,6 @@ foreach {name source message} {
     nested      "fn f():\n    opaque struct T:\n        a: int\n    1\n" {a struct declaration is only allowed at the top level of a module, not nested in a function/if/loop}
     no-name     "opaque struct:\n    a: int\n"                   {expected a struct name after "struct", found ":"}
     no-fields   "opaque struct T:\n"                             {a struct declaration needs at least one "field: Type" line in an indented block (there is no empty-struct syntax), found end of file}
-    not-yet     "opaque context struct T:\n    a: int\n"          {expected end of line, found name "context"}
     not-yet-2   "opaque resource struct T:\n    a: int\n"         {expected end of line, found name "resource"}
     after-name  "struct opaque T:\n    a: int\n"                  {expected ":" after the struct name "opaque", found name "T"}
 } {
@@ -819,6 +818,15 @@ fn make() -> Leaky:
 
 set ::leakWords {zeta_secret hidden_tag lurk_inner slot_any hook_fn Lurker shade Secretive 777}
 
+# What the sweep scans of a diagnostic: MESSAGE without the locations it
+# reports ("FILE:LINE:COLUMN", which a strict compile's error starts with). A
+# location says where, not what -- and FILE lies in a scratch directory named
+# after the process id, which can itself contain a leak word (under pid 27770
+# every strict error would "leak" 777).
+proc withoutLocations {message} {
+    regsub -all {[^ ]*\.bot:[0-9]+:[0-9]+(?:: )?} $message {}
+}
+
 set ::leakPrograms {
     {import leaky
 leaky::Leaky {zeta_secret: 5, hidden_tag: "t", lurk_inner: leaky::Lurker {shade: 1}, slot_any: 0, hook_fn: leaky::twice}}
@@ -962,7 +970,7 @@ test opaque-leak-sweep {no diagnostic of any unauthorized program, in any phase,
                 # representation, whose messages are independent of it.
                 if {[string first $word $program] >= 0} continue
                 foreach m $messages {
-                    if {[string first $word $m] >= 0} {
+                    if {[string first $word [withoutLocations $m]] >= 0} {
                         lappend leaks [list $word $m $program]
                     }
                 }
@@ -972,21 +980,19 @@ test opaque-leak-sweep {no diagnostic of any unauthorized program, in any phase,
     }
 } -result {{} 1}
 
-test opaque-construct-bearing-erasure-is-not-reported {a forged construction whose value would lose a typed array's contract in a hidden `any` field is still only OPAQUE-CONSTRUCTION: the erasure diagnostic ("stored in field ...") would confirm that a guessed field exists} -body {
+test opaque-construct-bearing-erasure-is-not-reported {a forged construction whose value would lose a typed function's contract in a hidden `any` field is still only OPAQUE-CONSTRUCTION: the erasure diagnostic ("stored in field ...") would confirm that a guessed field exists} -body {
     withScratchLibrary {
         writeModule $dir leaky $::leakModule
-        useStandardModule $dir mutable_array
-        set forged "import leaky\nimport mutable_array\nm = mutable_array::create(2, \"x\")\n"
-        list [diagKinds "${forged}leaky::Leaky {slot_any: m}\n"] \
-            [diagKinds "${forged}leaky::Leaky {guess_any: m}\n"]
+        set forged "import leaky\nfn typed(k: int) -> int:\n    k\n"
+        list [diagKinds "${forged}leaky::Leaky {slot_any: typed}\n"] \
+            [diagKinds "${forged}leaky::Leaky {guess_any: typed}\n"]
     }
 } -result {OPAQUE-CONSTRUCTION OPAQUE-CONSTRUCTION}
 
 test opaque-construct-bearing-erasure-twin {the ordinary struct reports the erasure, naming the field: the control for the test above} -body {
     withScratchLibrary {
         writeModule $dir leaky [string map {{opaque struct Leaky} {struct Leaky}} $::leakModule]
-        useStandardModule $dir mutable_array
-        diagKinds "import leaky\nimport mutable_array\nm = mutable_array::create(2, \"x\")\nleaky::Leaky {zeta_secret: 5, hidden_tag: \"t\", lurk_inner: leaky::Lurker {shade: 1}, slot_any: m, hook_fn: leaky::twice}\n"
+        diagKinds "import leaky\nfn typed(k: int) -> int:\n    k\nleaky::Leaky {zeta_secret: 5, hidden_tag: \"t\", lurk_inner: leaky::Lurker {shade: 1}, slot_any: typed, hook_fn: leaky::twice}\n"
     }
 } -result TYPE
 
@@ -1001,7 +1007,7 @@ test opaque-leak-sweep-control {the sweep can see a leak: the same words do appe
         } {
             catch {hirOfSource $program 1} m
             foreach word $::leakWords {
-                if {[string first $word $program] < 0 && [string first $word $m] >= 0} { incr found; break }
+                if {[string first $word $program] < 0 && [string first $word [withoutLocations $m]] >= 0} { incr found; break }
             }
         }
         expr {$found >= 2}

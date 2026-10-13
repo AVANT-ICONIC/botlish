@@ -379,10 +379,10 @@ r}
 # by namespace.
 
 test errors-cross-module-signature {a library's own error decl + errors-bearing function is enforced identically from a separate calling file} -body {
-    set libPath [file join $::core::libraryDir errorscrossmodulelib.bot]
-    set ch [open $libPath w]
-    fconfigure $ch -encoding utf-8
-    puts -nonewline $ch {error OutOfRange
+    withPrivateLibrary {
+        set ch [open [file join $::core::libraryDir errorscrossmodulelib.bot] w]
+        fconfigure $ch -encoding utf-8
+        puts -nonewline $ch {error OutOfRange
 
 fn clamp(n) -> int errors OutOfRange:
     if n < 0:
@@ -393,25 +393,25 @@ fn clamp(n) -> int errors OutOfRange:
         else:
             n
 }
-    close $ch
-    set mainPath [makeFile {import errorscrossmodulelib
+        close $ch
+        set mainPath [makeFile {import errorscrossmodulelib
 r = errorscrossmodulelib::clamp(500):
-    on OutOfRange:
+    on errorscrossmodulelib::OutOfRange:
         -1
 r} errors-cross-module-main.bot]
-    try {
-        list [moduleParity $mainPath] [moduleValue $mainPath]
-    } finally {
-        removeFile errors-cross-module-main.bot
-        file delete $libPath
+        try {
+            list [moduleParity $mainPath] [moduleValue $mainPath]
+        } finally {
+            removeFile errors-cross-module-main.bot
+        }
     }
 } -result {same -1}
 
 test errors-cross-module-unhandled-rejected {an unhandled cross-module fallible call is a static UNHANDLED-ERROR at the calling file too} -body {
-    set libPath [file join $::core::libraryDir errorscrossmodulelib2.bot]
-    set ch [open $libPath w]
-    fconfigure $ch -encoding utf-8
-    puts -nonewline $ch {error OutOfRange
+    withPrivateLibrary {
+        set ch [open [file join $::core::libraryDir errorscrossmodulelib2.bot] w]
+        fconfigure $ch -encoding utf-8
+        puts -nonewline $ch {error OutOfRange
 
 fn clamp(n) -> int errors OutOfRange:
     if n < 0:
@@ -419,15 +419,15 @@ fn clamp(n) -> int errors OutOfRange:
     else:
         n
 }
-    close $ch
-    set mainPath [makeFile {import errorscrossmodulelib2
+        close $ch
+        set mainPath [makeFile {import errorscrossmodulelib2
 fn g(m):
     errorscrossmodulelib2::clamp(m)} errors-cross-module-main2.bot]
-    try {
-        diagKinds [surface::readProgramFile $mainPath -strict 0]
-    } finally {
-        removeFile errors-cross-module-main2.bot
-        file delete $libPath
+        try {
+            diagKinds [surface::readProgramFile $mainPath -strict 0]
+        } finally {
+            removeFile errors-cross-module-main2.bot
+        }
     }
 } -result {UNHANDLED-ERROR}
 
@@ -565,9 +565,9 @@ test errors-byte-from-int-in-range {byte::from_int succeeds for an in-range valu
     set path [makeFile {import byte
 byte::high_nibble(0)
 r = byte::from_int(200):
-    on BelowRange:
+    on byte::BelowRange:
         -1
-    on AboveRange:
+    on byte::AboveRange:
         -2
 r} errors-byte-from-int-ok.bot]
     try {
@@ -577,13 +577,13 @@ r} errors-byte-from-int-ok.bot]
     }
 } -result {same 200}
 
-test errors-byte-from-int-below-range {byte::from_int reaches its BelowRange handler for a negative value} -body {
+test errors-byte-from-int-below-range {byte::from_int reaches its byte::BelowRange handler for a negative value} -body {
     set path [makeFile {import byte
 byte::high_nibble(0)
 r = byte::from_int(0 - 1):
-    on BelowRange:
+    on byte::BelowRange:
         -1
-    on AboveRange:
+    on byte::AboveRange:
         -2
 r} errors-byte-from-int-below.bot]
     try {
@@ -593,13 +593,13 @@ r} errors-byte-from-int-below.bot]
     }
 } -result {same -1}
 
-test errors-byte-from-int-above-range {byte::from_int reaches its AboveRange handler for a value past 255} -body {
+test errors-byte-from-int-above-range {byte::from_int reaches its byte::AboveRange handler for a value past 255} -body {
     set path [makeFile {import byte
 byte::high_nibble(0)
 r = byte::from_int(256):
-    on BelowRange:
+    on byte::BelowRange:
         -1
-    on AboveRange:
+    on byte::AboveRange:
         -2
 r} errors-byte-from-int-above.bot]
     try {
@@ -647,7 +647,7 @@ test errors-byte-from-int-known-failure-with-handler-still-rejected {a handler d
     set path [makeFile {import byte
 byte::high_nibble(0)
 x = byte::from_int(999):
-    on AboveRange:
+    on byte::AboveRange:
         255
 x} errors-byte-from-int-known-failure-handled.bot]
     try {
@@ -657,7 +657,7 @@ x} errors-byte-from-int-known-failure-handled.bot]
     }
 } -result {KNOWN-ERROR}
 
-test errors-byte-from-int-partial-range-elimination {a value statically known nonnegative but not upper-bounded needs only an AboveRange handler/declaration -- STATIC-COMPLETION-PROOFS.md item 21} -body {
+test errors-byte-from-int-partial-range-elimination {a value statically known nonnegative but not upper-bounded needs only a byte::AboveRange handler/declaration -- STATIC-COMPLETION-PROOFS.md item 21} -body {
     set path [makeFile {import byte
 byte::high_nibble(0)
 fn nonneg(m) -> int:
@@ -665,7 +665,7 @@ fn nonneg(m) -> int:
         0 - m
     else:
         m
-fn g(m) -> int errors AboveRange:
+fn g(m) -> int errors byte::AboveRange:
     byte::from_int(nonneg(m))} errors-byte-from-int-partial.bot]
     try {
         diagKinds [surface::readProgramFile $path -strict 0]
@@ -751,9 +751,9 @@ a = byte::from_int(45)
 ns = [0 - 100000000000000000000000, 100000000000000000000000]
 bs = loop n in ns:
     b = byte::from_int(n):
-        on BelowRange:
+        on byte::BelowRange:
             1
-        on AboveRange:
+        on byte::AboveRange:
             2
     b
 [a, bs]} errors-handled-byte-from-int-bigint.bot]

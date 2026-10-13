@@ -36,7 +36,11 @@
 # callable flowing into a position whose type is a structural supertype of
 # it (an if/break/return join of compatible callables, a declared Fn
 # parameter or result, a List[Fn] element) keeps its obligations checkable:
-# only its identity is forgotten (Preserves). A structural type that still
+# only its identity is forgotten (Preserves). The same positions are where
+# the completion analysis checks what the type does not show -- what the
+# callable raises through a callable it captured or receives -- against the
+# contract (hir::completions::Subsume, the verified contract boundary), so
+# that the contract bounds every call through it. A structural type that still
 # carries an obligation -- a non-any argument type or a non-empty error
 # set, both of which can only have come from a typed Botlish block or a
 # source annotation, since a native's structural arguments are all any
@@ -88,12 +92,13 @@ namespace eval hir::callables {}
 # elements are.
 proc hir::callables::Bearing {hir type {mutable 1}} {
     if {[hir::types::IsMutArray $type]} {
-        # MUTABLE 0 asks only about *callable* obligations (for the
-        # native-argument policy in ArgContexts), so it looks through the
-        # array's own contract to what its elements bear.
-        if {$mutable && [lindex $type 1] ne "any"} {
-            return 1
-        }
+        # A MutableArray is a value (MUTABLE-ARRAY.md): a position that
+        # forgets its element contract holds a logical copy, which no write
+        # through it can make the original break, so the array bears only
+        # what its elements bear -- as a List or a MutableVector does. (Under
+        # the reference semantics MutableArray had before, an erased alias
+        # could write a value the original's contract excluded, and every
+        # typed array was bearing: PARAMETERIZED-MUTABLEARRAY.md.)
         return [Bearing $hir [lindex $type 1] $mutable]
     }
     if {[hir::types::IsExactBlock $type]} {
@@ -137,7 +142,8 @@ proc hir::callables::Bearing {hir type {mutable 1}} {
         }
         return 0
     }
-    if {[hir::types::IsSet $type]} {
+    if {[hir::types::IsSet $type] || [hir::types::IsMutVec $type]} {
+        # (A MutableVector is a value: it bears what its elements bear.)
         return [Bearing $hir [lindex $type 1] $mutable]
     }
     if {[hir::types::IsStruct $type]} {
@@ -156,6 +162,75 @@ proc hir::callables::Bearing {hir type {mutable 1}} {
         return [BearingNamed $hir [lindex $type 1] $mutable]
     }
     return 0
+}
+
+# The declared errors a value of TYPE carries: what calling it -- or any
+# callable reachable through it, by the structure Bearing walks (a
+# callable's result, a List/set/vector/array element, a struct field) -- may
+# raise according to its type: an exact block's declared errors, an exact
+# native's registered ones, a structural function type's or a coroutine
+# handle's contract errors. The error part of Bearing: what an erased value
+# of TYPE may raise once its type is forgotten (hir::completions::
+# ErasedErrors, the erased-callable contract).
+proc hir::callables::CarriedErrors {hir type} {
+    set errors {}
+    CarriedInto $hir $type errors
+    return [lsort -unique $errors]
+}
+
+proc hir::callables::CarriedInto {hir type errorsVar} {
+    upvar 1 $errorsVar errors
+    variable carriedVisiting
+    if {[hir::types::IsMutArray $type] || [hir::types::IsSet $type] || [hir::types::IsMutVec $type]} {
+        CarriedInto $hir [lindex $type 1] errors
+        return
+    }
+    if {[hir::types::IsExactBlock $type]} {
+        set block [lindex $type 1]
+        if {[dict exists $hir exprs $block]} {
+            lappend errors {*}[dict get $hir exprs $block declaredErrors]
+        }
+        CarriedInto $hir [lindex $type 3] errors
+        return
+    }
+    if {[hir::types::IsExactNative $type]} {
+        if {![catch {core::native::metadata [lindex $type 1]} meta]} {
+            lappend errors {*}[dict get $meta errors]
+        }
+        return
+    }
+    if {[hir::types::IsFn $type] || [hir::types::IsCoroutine $type]} {
+        set contract [hir::types::Contract $type]
+        lappend errors {*}[dict get $contract errors]
+        CarriedInto $hir [dict get $contract return] errors
+        return
+    }
+    if {[hir::types::IsList $type]} {
+        foreach t [concat [list [lindex $type 1]] [hir::types::shapeOf $type]] {
+            CarriedInto $hir $t errors
+        }
+        return
+    }
+    if {[hir::types::IsStruct $type]} {
+        foreach {name t} [lindex $type 1] {
+            CarriedInto $hir $t errors
+        }
+        return
+    }
+    if {[hir::types::IsNamedStruct $type]} {
+        set id [lindex $type 1]
+        if {[info exists carriedVisiting] && $id in $carriedVisiting} {
+            return
+        }
+        lappend carriedVisiting $id
+        try {
+            foreach {name t} [hir::structs::fieldTypes $id] {
+                CarriedInto $hir $t errors
+            }
+        } finally {
+            set carriedVisiting [lrange $carriedVisiting 0 end-1]
+        }
+    }
 }
 
 # Bearing of named struct ID: any declared field type bears. A struct may
@@ -203,10 +278,6 @@ proc hir::callables::Preserves {hir type final} {
         return [expr {$s ne "" && [hir::types::subtype $type $final]
             && [Preserves $hir [hir::types::FnReturn $s] [hir::types::FnReturn $final]]}]
     }
-    if {[hir::types::IsMutArray $type] && [hir::types::IsMutArray $final]} {
-        # Invariant: the same element contract, nothing narrower or wider.
-        return [hir::types::Equivalent [lindex $type 1] [lindex $final 1]]
-    }
     if {[hir::types::IsList $type] && [hir::types::IsList $final]} {
         set finalElem [lindex $final 1]
         foreach t [concat [list [lindex $type 1]] [hir::types::shapeOf $type]] {
@@ -217,6 +288,10 @@ proc hir::callables::Preserves {hir type final} {
         return 1
     }
     if {[hir::types::IsSet $type] && [hir::types::IsSet $final]} {
+        return [Preserves $hir [lindex $type 1] [lindex $final 1]]
+    }
+    if {([hir::types::IsMutVec $type] && [hir::types::IsMutVec $final])
+            || ([hir::types::IsMutArray $type] && [hir::types::IsMutArray $final])} {
         return [Preserves $hir [lindex $type 1] [lindex $final 1]]
     }
     if {[hir::types::IsStruct $type] && [hir::types::IsStruct $final]} {
@@ -278,13 +353,6 @@ proc hir::callables::CheckPreserved {hirVar arg finalType contextText} {
             incr i
         }
     }
-    if {[Bearing $hir $type 1] && ![Bearing $hir $type 0]} {
-        # The obligation lost is a MutableArray element contract.
-        hir::Diagnose hir TYPE [format \
-            {cannot erase element contract %s %s: its element type would be lost, permitting writes of values it does not admit through an alias that no longer knows the contract (a MutableArray[T] is invariant and may only flow into a position that keeps MutableArray[T])} \
-            [hir::types::show $type] $contextText] $arg
-        return
-    }
     set name [expr {[hir::types::IsExactBlock $type] ? [Name $hir [lindex $type 1]] : ""}]
     set label [expr {$name ne "" ? "\"$name\""
         : [hir::types::IsExactBlock $type] ? {this callable}
@@ -307,7 +375,7 @@ proc hir::callables::HasMutArray {type} {
         }
         return 0
     }
-    if {[hir::types::IsSet $type]} {
+    if {[hir::types::IsSet $type] || [hir::types::IsMutVec $type]} {
         return [HasMutArray [lindex $type 1]]
     }
     if {[hir::types::IsFn $type]} {
@@ -490,6 +558,9 @@ proc hir::callables::WalkExpr {hirVar e} {
             WalkExpr hir [dict get $node receiver]
         }
         fail {
+            if {[dict exists $node value] && [dict get $node value] ne ""} {
+                WalkExpr hir [dict get $node value]
+            }
         }
         handle {
             WalkExpr hir [dict get $node call]
@@ -525,14 +596,6 @@ proc hir::callables::ArgContexts {hir e} {
     set none [lrepeat [llength $args] ""]
     lassign [dict get $node target] targetKind target
     if {$targetKind eq "block"} {
-        set rule [hir::containers::RuleOf $hir $target]
-        if {$rule ne ""} {
-            # A library function with an intrinsic container rule
-            # (the mutarray library's from_list and create, hir/containers.tcl): its
-            # arguments land inside the typed result, which keeps their
-            # contracts.
-            return [hir::containers::BlockContexts $hir $e $rule]
-        }
         set declared [hir::signatures::entryTypes $hir $target]
         if {[llength $declared] != [llength $args]} {
             return $none

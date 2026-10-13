@@ -9,7 +9,7 @@
 use super::show::show;
 use super::value::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RtError {
     /// `core::value::expect`: CONTEXT: expected KIND, got VALUE.
     Type { context: String, expected: Kind, got: Value },
@@ -58,6 +58,14 @@ pub const SEMANTIC_KINDS: &[&str] = &[
     // A -strict 0 program's rejected linux::abi::syscall register struct,
     // replayed at run time (native::lower::SyscallCall; hir/syscall.tcl).
     "UNKNOWN-FIELD", "MISSING-FIELD",
+    // A -strict 0 program that failed context verification (CONTEXTS.md),
+    // replayed when it starts (native::lower's ContextDiagnostic).
+    "MISSING-CONTEXT", "DUPLICATE-CONTEXT", "NOT-A-CONTEXT", "CONTEXT-TYPE-NOT-EXACT",
+    "CONTEXT-INSTALLATION-UNSUPPORTED", "CONTEXT-FUNCTION-VALUE", "CONTEXT-BINDING-COLLISION",
+    "DUPLICATE-CONTEXT-PARAMETER",
+    // Coroutine lifecycle states a checked program cannot reach (the affine
+    // discipline, COROUTINES.md), kept as defensive runtime checks.
+    "COROUTINE-RUNNING", "COROUTINE-STATE", "YIELD-OUTSIDE-COROUTINE",
 ];
 
 pub fn semantic_kind(name: &str) -> Option<&'static str> {

@@ -16,6 +16,19 @@
 //!                 fixed constants' exact values above) so a UnicodeChar can
 //!                 never be mistaken for an Int by kind, even through a
 //!                 dynamic/untyped path (see UNICODE-CHAR-LITERALS.md).
+//!   eee...ccc10010  an enum case (ENUMS.md), stored as (enum << 32) |
+//!                 (case << 5) | 0b10010: an immediate (never heap-allocated,
+//!                 never a GC root) carrying the program's dense number of
+//!                 the enum declaration (bits 32..63, `ProgramInfo::enums`)
+//!                 and the case's number within it (bits 5..31). Low five bits
+//!                 `0b10010` are disjoint from a small Int's `0b...1`, a
+//!                 UnicodeChar's `0b100`, a pointer's `0b000` and the fixed
+//!                 constants 2/6/10 (`0b00010`, `0b00110`, `0b01010`), so a case
+//!                 is never mistaken for any other kind. The numbers are
+//!                 representation only: canonical within one program (equal
+//!                 cases have equal words, so equality is word equality), never
+//!                 a value a program can observe -- printing and hashing go
+//!                 through the declared names.
 //!   pppp...p000   pointer to a heap object (non-null, 8-byte aligned)
 //!   0             no value: an error is pending (never a program value)
 //! ```
@@ -44,6 +57,12 @@ pub const SMALL_MAX: i64 = (1 << 62) - 1;
 /// which have low 3 bits `0b100`).
 pub const CHAR_TAG: u64 = 0b100;
 pub const CHAR_TAG_MASK: u64 = 0b111;
+
+/// Low-bits tag of an immediate enum case word (see this module's header).
+pub const ENUM_TAG: u64 = 0b10010;
+pub const ENUM_TAG_MASK: u64 = 0b11111;
+/// The largest case number an enum word carries (27 bits).
+pub const MAX_ENUM_CASE: u32 = (1 << 27) - 1;
 
 pub const MAX_SCALAR: u32 = 0x10FFFF;
 pub const SURROGATE_LO: u32 = 0xD800;
@@ -90,6 +109,22 @@ pub const KIND_LISTPLAN: u8 = 11;
 /// A struct value (STRUCTS.md, StructObj): distinct from KIND_LIST, so a
 /// struct and a List are never the same runtime kind, whatever they hold.
 pub const KIND_STRUCT: u8 = 12;
+/// The owned byte storage behind `abi::bytes::Bytes` (ABI-BYTES.md, bytesobj.rs): an
+/// immutable, finite, contiguous sequence of bytes, header + length + payload
+/// in one allocation. Its payload holds no program value.
+pub const KIND_BYTES: u8 = 13;
+/// The writable byte storage behind `abi::bytes::MutableBytes` (MUTABLE-BYTES.md):
+/// the KIND_BYTES layout under its own kind, so the two are never confused
+/// (a MutableBytes is not accepted where a Bytes storage is required, nor the
+/// reverse). Never written once it is a value (see bytesobj.rs).
+pub const KIND_MUTBYTES: u8 = 14;
+/// A coroutine handle (COROUTINES.md, runtime/coroutine.rs's CoroutineObj):
+/// the lifecycle state of one started computation and, while it is
+/// suspended, the native stack its frames live on.
+pub const KIND_COROUTINE: u8 = 15;
+/// A MutableVector header (MUTABLE-VECTOR.md, runtime/mutvec.rs's MutVecObj):
+/// one logical vector value over a copy-on-write backing of elements.
+pub const KIND_MUTVEC: u8 = 16;
 
 #[repr(C)]
 pub struct Header {
@@ -115,6 +150,7 @@ pub struct BigIntObj {
 
 // The String object (one allocation: header, metadata and UTF-8 bytes) lives
 // in strobj.rs; re-exported so every `use value::*` still sees it.
+pub use super::bytesobj::{BYTES_LEN_OFFSET, BYTES_PAYLOAD_OFFSET, BytesObj};
 pub use super::strobj::{
     STR_ALIGN, STR_ASCII_OFFSET, STR_BYTE_LEN_OFFSET, STR_CHARS_OFFSET, STR_HEADER_SIZE,
     STR_MIN_ALLOC, STR_TEXT_OFFSET, StrObj, first_scalar,
@@ -241,16 +277,29 @@ impl SetObj {
     }
 }
 
-/// A MutableArray: fixed-capacity, explicitly mutable indexed storage. Every
-/// slot is a program value (initialized to UNIT at allocation: see
-/// Vm::new_mutarray), never uninitialized memory. Unlike ListObj, SLOTS is
-/// mutated in place by mutable_array::set/mutable_array::copy; its length
-/// (`slots.len()`) is its fixed capacity and never changes after allocation
-/// (see the module-level "no hidden resizing" invariant in ops.rs).
+/// A MutableArray header (MUTABLE-ARRAY.md): the identity of one logical
+/// fixed-length array VALUE over a copy-on-write BACKING shared between the
+/// headers of its logical copies (ops.rs's MutableArray section: the same
+/// header/backing model runtime/mutvec.rs gives a MutableVector). Every slot
+/// is a program value (UNIT at a raw allocation), never uninitialized
+/// memory; the length never changes after construction, so the backing is
+/// one allocation (its count and its slots: `Rc<[Value]>`), never grown.
+/// The array's elements are the backing's slots from START on: START is 0
+/// but in an array a consuming loop drains (`rt_mutarray_take_front` moves
+/// its first element out by advancing it) or an affine drop emptied. Slots
+/// before START are no element: nothing reads or traces them again.
 #[repr(C)]
 pub struct MutArrayObj {
     pub hdr: Header,
-    pub slots: Box<[Value]>,
+    pub start: usize,
+    pub backing: std::rc::Rc<[Value]>,
+}
+
+impl MutArrayObj {
+    /// The array's elements, first to last.
+    pub fn items(&self) -> &[Value] {
+        &self.backing[self.start..]
+    }
 }
 
 #[repr(C)]
@@ -338,6 +387,26 @@ pub fn make_char(codepoint: u32) -> Value {
     ((codepoint as u64) << 3) | CHAR_TAG
 }
 
+/// 1 if V is an enum case word (ENUMS.md).
+#[inline]
+pub fn is_enum(v: Value) -> bool {
+    v & ENUM_TAG_MASK == ENUM_TAG
+}
+
+/// The enum case word of case CASE of the program's enum number ENUM.
+#[inline]
+pub fn make_enum(enum_index: u32, case: u32) -> Value {
+    debug_assert!(case <= MAX_ENUM_CASE);
+    ((enum_index as u64) << 32) | ((case as u64) << 5) | ENUM_TAG
+}
+
+/// (enum number, case number) of the enum case word V.
+#[inline]
+pub fn enum_parts(v: Value) -> (u32, u32) {
+    debug_assert!(is_enum(v));
+    ((v >> 32) as u32, ((v >> 5) as u32) & MAX_ENUM_CASE)
+}
+
 #[inline]
 pub fn bool_value(b: bool) -> Value {
     if b { TRUE } else { FALSE }
@@ -375,6 +444,21 @@ pub enum Kind {
     ImmutableSet,
     /// A struct value (STRUCTS.md): distinct from List and every other kind.
     Struct,
+    /// The owned byte storage behind `abi::bytes::Bytes` (ABI-BYTES.md): distinct
+    /// from List and String. Named as core/value.tcl's `bytestore` kind.
+    ByteStore,
+    /// The writable byte storage behind `abi::bytes::MutableBytes` (MUTABLE-BYTES.md):
+    /// distinct from ByteStore. Named as core/value.tcl's `mutbytes` kind.
+    MutByteStore,
+    /// A coroutine handle (COROUTINES.md). Like Block/Native/MutArray it has
+    /// no equality and no hash; the compiler keeps it in local bindings only.
+    Coroutine,
+    /// A MutableVector header (MUTABLE-VECTOR.md): like MutArray, no equality
+    /// and no hash. Named as core/value.tcl's `mutvec` kind.
+    MutVec,
+    /// An enum case (ENUMS.md): an immediate word, distinct from every other
+    /// kind. Named as core/value.tcl's `enum` kind.
+    Enum,
 }
 
 impl Kind {
@@ -392,6 +476,11 @@ impl Kind {
             "UnicodeChar" => Kind::UnicodeChar,
             "immutableSet" => Kind::ImmutableSet,
             "struct" => Kind::Struct,
+            "bytestore" => Kind::ByteStore,
+            "mutbytes" => Kind::MutByteStore,
+            "coroutine" => Kind::Coroutine,
+            "mutvec" => Kind::MutVec,
+            "enum" => Kind::Enum,
             _ => return None,
         })
     }
@@ -410,6 +499,11 @@ impl Kind {
             Kind::UnicodeChar => "UnicodeChar",
             Kind::ImmutableSet => "immutableSet",
             Kind::Struct => "struct",
+            Kind::ByteStore => "bytestore",
+            Kind::MutByteStore => "mutbytes",
+            Kind::Coroutine => "coroutine",
+            Kind::MutVec => "mutvec",
+            Kind::Enum => "enum",
         }
     }
 
@@ -420,7 +514,8 @@ impl Kind {
     pub fn from_code(code: u8) -> Kind {
         [
             Kind::Int, Kind::Str, Kind::Bool, Kind::Unit, Kind::List, Kind::Result, Kind::Block, Kind::Native,
-            Kind::MutArray, Kind::UnicodeChar, Kind::ImmutableSet, Kind::Struct,
+            Kind::MutArray, Kind::UnicodeChar, Kind::ImmutableSet, Kind::Struct, Kind::ByteStore, Kind::MutByteStore,
+            Kind::Coroutine, Kind::MutVec, Kind::Enum,
         ][code as usize]
     }
 }
@@ -438,6 +533,9 @@ pub fn kind_of(v: Value) -> Kind {
     if is_char(v) {
         return Kind::UnicodeChar;
     }
+    if is_enum(v) {
+        return Kind::Enum;
+    }
     match heap_kind(v) {
         KIND_BIGINT => Kind::Int,
         KIND_STR => Kind::Str,
@@ -448,6 +546,10 @@ pub fn kind_of(v: Value) -> Kind {
         KIND_MUTARRAY => Kind::MutArray,
         KIND_SET => Kind::ImmutableSet,
         KIND_STRUCT => Kind::Struct,
+        KIND_BYTES => Kind::ByteStore,
+        KIND_MUTBYTES => Kind::MutByteStore,
+        KIND_COROUTINE => Kind::Coroutine,
+        KIND_MUTVEC => Kind::MutVec,
         _ => panic!("not a program value: {v:#x}"),
     }
 }
@@ -471,6 +573,23 @@ pub fn list_of<'a>(v: Value) -> &'a ListObj {
 pub fn struct_of<'a>(v: Value) -> &'a StructObj {
     debug_assert_eq!(heap_kind(v), KIND_STRUCT);
     unsafe { as_ref(v) }
+}
+
+/// The payload of the byte storage V (a slice of its inline bytes).
+pub fn bytes_of<'a>(v: Value) -> &'a [u8] {
+    debug_assert_eq!(heap_kind(v), KIND_BYTES);
+    // SAFETY: V is a live, fully constructed storage (a tagged heap pointer of
+    // kind KIND_BYTES); the payload is immutable for the object's life.
+    unsafe { BytesObj::payload(v) }
+}
+
+/// The payload of the MutableBytes storage V (read-only view of its inline
+/// bytes; writers use `BytesObj::payload_mut` on their own fresh clone).
+pub fn mutbytes_of<'a>(v: Value) -> &'a [u8] {
+    debug_assert_eq!(heap_kind(v), KIND_MUTBYTES);
+    // SAFETY: V is a live, fully constructed storage (a tagged heap pointer of
+    // kind KIND_MUTBYTES), written only while private to its creator.
+    unsafe { BytesObj::payload(v) }
 }
 
 pub fn set_of<'a>(v: Value) -> &'a SetObj {

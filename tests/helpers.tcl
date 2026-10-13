@@ -8,32 +8,46 @@ source [file join $::projectRoot compiler compiler.tcl]
 source [file join $::projectRoot native native.tcl]
 
 # ---------------------------------------------------------------------------
-# Test-only native backends (DIRECT-HIR-NATIVE-PATH.md).
+# Test-only backends that compile HIR (DIRECT-HIR-NATIVE-PATH.md).
 #
-# core::registerBackend backends run core IR: the Tcl interpreter and the Tcl
-# compiler. Native compilation starts from HIR (native::evalHir) and has no
-# core IR entry point, so native/ registers no backend. Most tests are written
-# as core IR text -- or lower a source/HIR program with hir::lower to get the
-# text -- and run on every backend through core::evalProgram; to keep native
-# coverage of them, the *test harness* registers "cranelift" and
-# "cranelift-generic" here. Native compiles HIR, so:
+# core::registerBackend backends run core IR: the Tcl interpreter, and the
+# Tcl compiler for core IR *text*. Both compilers compile HIR: native has no
+# core IR entry point at all (native::evalHir; native/ registers no backend),
+# and the Tcl compiler compiles a front end's HIR itself
+# (core::compiler::evalHir). Most tests are written as core IR text -- or
+# lower a source/HIR program with hir::lower to get the text -- and run on
+# every backend through core::evalProgram; to keep that coverage, the *test
+# harness* registers "cranelift" and "cranelift-generic" here and replaces
+# "compile" with an adapter. Both compilers compile HIR, so:
 #
 #   * a program that hir::lower produced is compiled from the very HIR it was
 #     lowered from (remembered below by the lowered text): the differential
-#     "HIR -> core IR -> interpreter" against "HIR -> NIR -> native" of one
-#     HIR. Native never sees, and never rebuilds HIR from, that core IR;
+#     "HIR -> core IR -> interpreter" against "HIR -> Tcl" and "HIR -> NIR ->
+#     native" of one HIR. Neither compiler sees, or rebuilds HIR from, that
+#     core IR;
 #   * any other program is hand-written core IR text (a test of core IR, or
-#     the frozen bench/*.ir): hir::build reads it into HIR -- the same
-#     builder that gives the compile backend its HIR: reading core IR text is
-#     HIR construction, not native compilation of core IR.
+#     the frozen bench/*.ir): hir::build reads it into HIR, which is HIR
+#     construction from an input notation, not a rebuild.
 #
-# Tests that start from source or HIR and are about native behavior should
-# call outcomeUnderHir (below) with the HIR itself.
+# Tests that start from source or HIR should call outcomeUnderHir (below)
+# with the HIR itself.
 set ::hirOfLowered [dict create]
 proc ::RecordLowered {command code result args} {
     dict set ::hirOfLowered $result [lindex $command 1]
 }
 trace add execution hir::lower leave ::RecordLowered
+
+proc ::testCompileProgram {exprs env} {
+    if {[dict exists $::hirOfLowered $exprs]} {
+        set hir [dict get $::hirOfLowered $exprs]
+        if {[hir::mode $hir] eq "program"} {
+            return [core::compiler::runUnit [core::compiler::compileHir $hir] $env]
+        }
+    }
+    return [core::compiler::runProgram $exprs $env]
+}
+
+core::registerBackend compile core::compiler::runSequence ::testCompileProgram
 
 proc ::testNativeHir {exprs} {
     if {[dict exists $::hirOfLowered $exprs]} {
@@ -122,10 +136,9 @@ proc errorCodeOf {args} {
 }
 
 # Outcome of EXPRS under BACKEND: {value V LOG} or {error ERRORCODE MESSAGE LOG},
-# where LOG is what test-log recorded. V includes runtime evidence, so the
-# backends must also agree on what values are proven to be, and the full
-# representation of a value of an opaque struct (core::value::show's REVEAL:
-# this is internal differential tooling, not user-facing text, OPAQUE-STRUCTS.md).
+# where LOG is what test-log recorded. V includes the full representation
+# of a value of an opaque struct (core::value::show's REVEAL: this is internal
+# differential tooling, not user-facing text, OPAQUE-STRUCTS.md).
 #
 # cranelift-generic (native -specialize 0) compiles every function once, so it
 # has no slot for a struct projection that only a semantic instance proves
@@ -160,16 +173,22 @@ proc outcomeUnder {backend exprs} {
 }
 
 # Outcome of the HIR program HIR under BACKEND, in outcomeUnder's shape. The
-# native backends compile the HIR itself; interp and compile run the core IR
-# it lowers to (the reference branch), so a program's HIR feeds each consumer
-# directly and native never sees core IR.
+# Tcl compiler and the native backends compile the HIR itself; the
+# interpreter runs the core IR it lowers to (the reference branch), so a
+# program's HIR feeds each consumer directly and neither compiler sees core IR.
 proc outcomeUnderHir {backend hir} {
-    if {$backend ni {cranelift cranelift-generic}} {
+    if {$backend eq "interp"} {
         return [outcomeUnder $backend [hir::lower $hir]]
     }
     set options [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
     resetEffects
-    if {[catch {native::evalHir $hir {*}$options} result options]} {
+    if {[catch {
+        if {$backend eq "compile"} {
+            core::compiler::evalHir $hir
+        } else {
+            native::evalHir $hir {*}$options
+        }
+    } result options]} {
         set outcome [list error [dict get $options -errorcode] $result $::testLog]
         if {[GenericBaselineUndefined $backend $outcome]} {
             incr ::genericBaselineStandIns
@@ -182,11 +201,32 @@ proc outcomeUnderHir {backend hir} {
 
 # The HIR native lowering compiles for a program written as core IR text
 # EXPRS: hir::build reads the text (HIR construction, as for the compile
-# backend) and native::prepareHir attaches the native implementations it calls.
-# For tests of native behavior on hand-written core IR (or the frozen bench/*.ir
-# files); a source or HIR program passes its own HIR to native instead.
+# backend) and native::prepareHir prepares it as every native entry point does.
+# For tests of native behavior on hand-written core IR; a source or HIR
+# program passes its own HIR to native instead.
 proc nativeHirOfIR {exprs} {
     return [native::prepareHir [hir::build $exprs -strict 0]]
+}
+
+# The outcome (outcomeUnderHir's shape, minus the test log) of the Botlish
+# source program SOURCE, compiled once, on every backend of BACKENDS -- or a
+# Tcl error naming every backend's outcome when they do not all agree. A
+# compile error is the outcome {error ERRORCODE MESSAGE} on every backend.
+proc sourceAgree {source {backends {interp compile cranelift-generic cranelift}}} {
+    if {[catch {surface::compile $source -warnings off} hir options]} {
+        return [list error [dict get $options -errorcode] $hir]
+    }
+    set outcomes [lmap b $backends {lrange [outcomeUnderHir $b $hir] 0 end-1}]
+    if {[llength [lsort -unique $outcomes]] != 1} {
+        error "mismatch across $backends: $outcomes"
+    }
+    return [lindex $outcomes 0]
+}
+
+# The HIR of bench/refined-checks.bot, the canonical repeated-refinement-
+# predicate workload (REFINEMENT-VALUES.md), as every backend compiles it.
+proc refinedChecksSourceHir {} {
+    return [surface::readProgramFile [file join $::projectRoot bench refined-checks.bot] -warnings off]
 }
 
 # "same" if both backends produce the same outcome; otherwise both outcomes.
@@ -277,34 +317,27 @@ proc resetEffects {} {
     set ::testTicks 0
 }
 
-# The refined-type tests use the optional web library.
-core::loadLibrary web
-
 if {"test-log" ni [core::native::names]} {
     core::registerNative test-log  -arity 1 -impl testLogImpl
     core::registerNative test-tick -arity 0 -impl testTickImpl
 
-    # A second validator type on str, to combine evidence with Emailish.
-    # Its predicate also carries a -native-body (str::length(v) > 0, exactly the
-    # Tcl validator above): an independent, generic proof that a
-    # validator-backed named-type predicate can run on the native (Cranelift)
-    # backend today, through the same mechanism NAME-agnostic native/lower.tcl
-    # already gives any native with a -native-body -- see NATIVE-EMAILISH.md.
+    # A validator type on str for the type-lattice and contract tests (a
+    # structural, runtime-checked named type: core/type.tcl), with its
+    # type-test predicate NonEmpty?.
     core::type::register NonEmpty -base str \
         -validator {apply {{v} {expr {[string length [core::value::strOf $v]] > 0}}}}
-    core::type::definePredicate NonEmpty "" \
-        {block {v} {call {ref >} {call {ref str::length} {ref v}} {const 0}}}
+    core::type::definePredicate NonEmpty
 
     # A native that breaks its declared contract: it claims to return a
-    # UriQueryValue but returns a plain string.
-    core::registerNative test-fake-escape -arity 1 \
+    # NonEmpty but returns its argument, which may be "".
+    core::registerNative test-fake-nonempty -arity 1 \
         -impl {apply {{v} {return $v}}} \
-        -param-types {str} -result-type UriQueryValue
+        -param-types {str} -result-type NonEmpty
 
     # A native whose implementation does not enforce its declared parameter.
     core::registerNative test-lax-param -arity 1 \
         -impl {apply {{v} {core::value::int 1}}} \
-        -param-types {Emailish} -result-type int
+        -param-types {NonEmpty} -result-type int
 }
 
 # SOURCE with an `import NS` header line for every standard namespace it
@@ -321,3 +354,28 @@ proc withImports {source} {
     }
     return $header$source
 }
+
+# Runs SCRIPT in the caller's scope with $::core::libraryDir pointed at a
+# private copy of the library (every module and subdirectory of the current
+# one), restoring it afterwards. A test that needs a throwaway module next to
+# the standard ones writes it there, never into the real lib/: runs in one
+# checkout share lib/, so a fixed module name there makes concurrent runs
+# delete each other's module, and a run cut short leaves it behind. The copy
+# is a tcltest temporary directory, named per process so runs that share a
+# -tmpdir do not collide either.
+proc withPrivateLibrary {script} {
+    set saved $::core::libraryDir
+    set name private-lib-[pid]-[incr ::privateLibraryCounter]
+    set dir [makeDirectory $name]
+    foreach entry [glob -nocomplain -directory $saved *] {
+        file copy -force $entry $dir
+    }
+    set ::core::libraryDir $dir
+    try {
+        uplevel 1 $script
+    } finally {
+        set ::core::libraryDir $saved
+        removeDirectory $name
+    }
+}
+set ::privateLibraryCounter 0

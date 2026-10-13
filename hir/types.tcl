@@ -48,10 +48,37 @@
 #                                   the identity is the declaration, never
 #                                   the fields, and the schema is the
 #                                   declaration's (hir::structs::fieldType).
+#   {enum ID}                       an *enum* (ENUMS.md): a value that is one
+#                                   case of the enum declared as ID
+#                                   (hir/enums.tcl). Nominal: the identity is
+#                                   the declaration, never the case list; a
+#                                   case expression has exactly this type
+#                                   (no per-case subtype). Closed: the
+#                                   declaration's case set is complete
+#                                   (hir::enums::cases). Never a subtype of
+#                                   Int or str, nor of another enum.
+#   enum                            the broad kind of every enum case value
+#                                   (the runtime kind's own name). Not
+#                                   source-spellable (an anonymous enum).
 #   struct                          the broad kind of every struct value (a
 #                                   depth-truncated struct type, and the
 #                                   runtime kind's own name); no field can
 #                                   be projected from it.
+#   {trait ID}                      a trait *constraint* (TRAITS.md): what a
+#                                   parameter or result annotation naming
+#                                   trait ID resolves to; never a value's type
+#   {trait ID WITNESS}              a *trait view*: a value accepted through
+#                                   trait ID's constraint. Source-visible as
+#                                   ID only (its requirements are its whole
+#                                   interface); WITNESS is the compiler's
+#                                   hidden static provenance -- the concrete
+#                                   witness type, {param E I} (the abstract
+#                                   witness of parameter I of block E) or
+#                                   {join W...} (a rejected join). A view is a
+#                                   subtype of its constraint and of any, of
+#                                   nothing else; no concrete type is a
+#                                   subtype of a constraint (acceptance is
+#                                   hir::traits::Accept, at the boundary)
 #   {mutarray ELEM}                 a MutableArray[ELEM] (PARAMETERIZED-
 #                                   MUTABLEARRAY.md): a mutable object whose
 #                                   static contract is that every slot value
@@ -63,6 +90,37 @@
 #                                   (hir/callables.tcl audits every position
 #                                   that would). The bare atom `mutarray` is
 #                                   the raw, element-untyped substrate type.
+#   {mutvec ELEM}                   a MutableVector[ELEM] (MUTABLE-VECTOR.md):
+#                                   a growable mutable VALUE whose every
+#                                   element has static type ELEM. Logical
+#                                   copies are independent (copy-on-write);
+#                                   its affinity is ELEM's (Affinity). Like
+#                                   List: covariant as a subtype, admissible
+#                                   at a declared boundary only with the
+#                                   same element type or as the proven-empty
+#                                   MutableVector[never] (range.tcl's
+#                                   AggregateAdmits). The bare atom `mutvec`
+#                                   is the runtime kind (MutableVector[any]).
+#   {coroutine {args {M} return R errors {E1 ...}}}
+#                                   a coroutine handle (COROUTINES.md,
+#                                   AFFINE-VALUES.md): the affine, resumable
+#                                   computation one `coroutine {...} = CALL`
+#                                   construction started, described by the
+#                                   same *callable contract* a structural Fn
+#                                   has -- `args` the messages one call
+#                                   (resume) takes: none (the zero-message
+#                                   protocol) or one named struct type;
+#                                   `return` the static type of every value
+#                                   a segment ends with (a yield's or the
+#                                   final return's); `errors` the sorted
+#                                   declared errors a segment may end with.
+#                                   Source-spellable as Coroutine{args: [M],
+#                                   return: R, errors: [E]}, and printed so.
+#                                   Its callable *kind* differs from Fn's
+#                                   (calling resumes one evolving execution),
+#                                   so neither is a subtype of the other.
+#                                   Affine (Affinity, below): ordinary
+#                                   operations never duplicate one.
 #
 # The list and immutableSet forms are *aggregate facts*. Semantic inference
 # (infer) never produces a *shaped* (positional) one: a program's HIR types
@@ -136,7 +194,7 @@ namespace eval hir::types {
     # resolution-mechanism change -- confirming the List[T] milestone's own
     # claim that a future unary container needs only another entry here
     # (plus a case in resolveApplication/MakeSet below), never new syntax.
-    variable constructors [dict create List 1 ImmutableSet 1 MutableArray 1]
+    variable constructors [dict create List 1 ImmutableSet 1 MutableArray 1 MutableVector 1]
 }
 
 # The canonical resolved type for a bare (unapplied) type name NAME -- an
@@ -161,6 +219,26 @@ proc hir::types::resolveNamed {name {ns ""}} {
     if {$id ne ""} {
         return [list nstruct $id]
     }
+    # An enum (ENUMS.md): the same type namespace and visibility rules,
+    # `import type` included.
+    set id [hir::enums::lookup $name $ns]
+    if {$id ne ""} {
+        return [list enum $id]
+    }
+    if {$name eq "enum"} {
+        # The broad kind of every enum value would be an anonymous enum
+        # type: an enum's identity is its declaration, so only a declared
+        # enum's name is an enum type.
+        error "\"enum\" is not a type: there are no anonymous enum types (an enum is a named declaration, `enum Name:`; write its name)"
+    }
+    # A trait (TRAITS.md): the same type namespace and visibility rules as a
+    # struct or a source-defined type, `import type` included. A bare
+    # annotation names the constraint; only a parameter or result position
+    # accepts one (every other position rejects it: MentionsTrait).
+    set trait [hir::traits::lookup $name $ns]
+    if {$trait ne ""} {
+        return [list trait $trait]
+    }
     # A source-defined `type`: spelled bare it is the code's own namespace's
     # (declared there) or the one a `import type` of its file binds to that
     # short name; spelled qualified it is exactly that member. Either way the
@@ -169,8 +247,11 @@ proc hir::types::resolveNamed {name {ns ""}} {
     if {[string first :: $canonical] >= 0 && ![core::type::isSource $canonical]} {
         error "unknown type \"$name\": no source-defined type or struct of that name is declared in that namespace"
     }
-    if {$ns ne "" && $canonical eq $name && [core::type::isSource $name]} {
-        # The entry program's own type: not visible from a module.
+    if {$ns ne "" && [string first :: $canonical] < 0 && [core::type::isSource $canonical]} {
+        # The entry program's own type (the only source types with a bare
+        # identity): not visible from a module. A qualified spelling is a
+        # module's member, authorized by its file's imports
+        # (surface/modules.tcl), never the program's.
         error "core::type: unknown type \"$name\" (a module sees its own types, the types it imports with `import type`, and the built-in types; not the program's)"
     }
     return [core::type::normalize $canonical]
@@ -214,16 +295,342 @@ proc hir::types::resolveApplication {ctor argTypes} {
     if {[llength $argTypes] != $arity} {
         error "\"$ctor\" takes $arity type argument(s), got [llength $argTypes]"
     }
+    foreach t $argTypes {
+        set contextTrait [MentionedContextTrait $t]
+        if {$contextTrait ne ""} {
+            return -code error -errorcode {BOTLISH CONTEXT-TRAIT-POSITION} \
+                [ContextTraitPositionMessage $contextTrait "the element type of $ctor\[[show $t]\]"]
+        }
+        if {$ctor eq "ImmutableSet" && [IsAffine $t]} {
+            # An ImmutableSet compares and hashes its members, which an
+            # affine value does not support (AFFINE-EQUALITY-UNSUPPORTED):
+            # it cannot own one. A List, a MutableVector and a MutableArray
+            # can (their affinity is their element's: MUTABLE-ARRAY.md).
+            return -code error -errorcode {BOTLISH AFFINE-CONTAINER-UNSUPPORTED} \
+                "$ctor\[[show $t]\] would hold affine values: an ImmutableSet compares and hashes its members, so it cannot own them (a List, MutableVector or MutableArray of them can)"
+        }
+        if {[MentionsTrait $t]} {
+            # A container of trait values would have to carry arbitrary
+            # witnesses: there is no erased/heterogeneous trait
+            # representation (TRAITS.md, "Storage").
+            return -code error -errorcode {BOTLISH TRAIT-STORAGE-UNSUPPORTED} \
+                "$ctor\[[show $t]\] would store trait values: a container element cannot be a trait (there is no erased or heterogeneous trait representation: elements need one concrete witness type)"
+        }
+    }
     switch -- $ctor {
         List { return [MakeList [lindex $argTypes 0] {} 0 0] }
         ImmutableSet { return [MakeSet [lindex $argTypes 0] 0] }
         MutableArray { return [MakeMutArray [lindex $argTypes 0] 0] }
+        MutableVector { return [MakeMutVec [lindex $argTypes 0] 0] }
     }
 }
 
 proc hir::types::IsSpecific {type} {
     return [expr {$type eq "never"
-                  || ([llength $type] > 1 && [lindex $type 0] in {native block list immutableSet mutarray fn struct nstruct})}]
+                  || ([llength $type] > 1 && [lindex $type 0] in {native block list immutableSet mutarray mutvec fn struct nstruct enum trait coroutine})}]
+}
+
+# ---------------------------------------------------------------------------
+# Coroutine handles (COROUTINES.md; the header's {coroutine ...} form)
+
+proc hir::types::IsCoroutine {type} {
+    return [expr {[lindex $type 0] eq "coroutine" && [llength $type] == 2}]
+}
+
+# The canonical coroutine handle type with the callable contract ARGTYPES
+# (the resume messages: {} or one named struct type), RESULT (what each
+# resume returns) and ERRORS (canonicalized here), nested DEPTH aggregate
+# forms deep. The parallel of MakeFn: the same three named fields in the same
+# canonical order, so that one contract text means the same thing for both
+# callable kinds. Unlike a Fn, a coroutine type is never cut by the aggregate
+# bound (an affine value must never be erased to an unrestricted one); only
+# its result is bounded, like a Fn's.
+proc hir::types::MakeCoroutineType {argTypes result errors {depth 0}} {
+    set argTypes [lmap a $argTypes {canonical $a}]
+    set result [Bound [canonical $result] [expr {$depth + 1}]]
+    return [list coroutine [dict create args $argTypes return $result errors [lsort -unique $errors]]]
+}
+
+# The handle type of a coroutine resumed with RESUME (unit: no message; a
+# named struct type: one message of it; any: a protocol conflict, already
+# diagnosed, whose resumes are not checked again), whose segments end with
+# values of OUTWARD or one of ERRORS.
+proc hir::types::MakeCoroutine {resume outward errors} {
+    return [MakeCoroutineType [expr {$resume eq "unit" ? {} : [list $resume]}] $outward $errors]
+}
+
+# The resume protocol of coroutine type TYPE: unit, a named struct type, or
+# any (MakeCoroutine).
+proc hir::types::CoroutineResume {type} {
+    set args [dict get [lindex $type 1] args]
+    return [expr {[llength $args] == 0 ? "unit" : [lindex $args 0]}]
+}
+proc hir::types::CoroutineOutward {type} { return [dict get [lindex $type 1] return] }
+proc hir::types::CoroutineErrors {type}  { return [dict get [lindex $type 1] errors] }
+
+# ---------------------------------------------------------------------------
+# Callable contracts and kinds (AFFINE-VALUES.md)
+#
+# A *callable contract* is what calling a value is allowed to do: {args {T1
+# ...} return R errors {E1 ...}}. Every callable type has one: a structural
+# Fn and a coroutine handle carry theirs as their second element (one
+# representation, compared field by field by the same FnMismatch rules), an
+# exact native or block has its structuralOf contract. The *callable kind*
+# is what a call means -- independent of the contract:
+#
+#   exact      an exact native or block: a direct call of known code
+#   fn         a structural function value: an ordinary indirect call
+#   coroutine  a coroutine handle: a resume of its one evolving execution
+#
+# Call checking (arity, argument admissibility, result typing, declared-
+# error charging) reads the contract only; lowering dispatches by the kind.
+
+# The callable kind of TYPE (exact, fn, coroutine), or "" if it is not
+# statically known to be callable.
+proc hir::types::CallableKind {type} {
+    if {[IsCoroutine $type]} {
+        return coroutine
+    }
+    if {[IsFn $type]} {
+        return fn
+    }
+    if {[IsExactBlock $type] || [IsExactNative $type]} {
+        return exact
+    }
+    return ""
+}
+
+# The callable contract dict of TYPE, or "" (not callable, or a native of
+# variable arity).
+proc hir::types::Contract {type} {
+    if {[IsCoroutine $type] || [IsFn $type]} {
+        return [lindex $type 1]
+    }
+    set s [structuralOf $type]
+    return [expr {$s eq "" ? "" : [lindex $s 1]}]
+}
+
+# ---------------------------------------------------------------------------
+# Affinity (AFFINE-VALUES.md)
+#
+# Affinity is a property of a value's type, orthogonal to callability:
+#
+#   unrestricted  ordinary operations may duplicate or alias the value
+#   affine        ordinary operations preserve at most one usable owner:
+#                 binding, passing, returning, storing in an aggregate or a
+#                 container *move* it, never copy it
+#
+# It is compositional: a value that owns an affine value is affine. The one
+# primitive affine root today is the coroutine handle; a struct (named or
+# anonymous) is affine iff a field type is, a List, a MutableVector and a
+# MutableArray (and, for completeness, an ImmutableSet, which rejects affine
+# members elsewhere) iff its element type is, a trait view iff its concrete
+# witness is.
+# Functions, scalars and `any` are unrestricted -- a closure cannot capture
+# an affine value (AFFINE-CAPTURE-UNSUPPORTED), and `any` never holds one
+# (AFFINE-ERASURE-UNSUPPORTED). A future affine root (a file, a socket, a
+# stateful closure) is one more case in AffineRoot; every ownership analysis
+# consumes only this query.
+
+# affine or unrestricted.
+proc hir::types::Affinity {type} {
+    return [expr {[IsAffine $type] ? "affine" : "unrestricted"}]
+}
+
+# 1 if TYPE is an intrinsically affine root type (no component makes it so).
+proc hir::types::AffineRoot {type} {
+    return [expr {[IsCoroutine $type] || $type eq "coroutine"}]
+}
+
+# 1 if any of TYPES is affine.
+proc hir::types::AnyAffine {types} {
+    foreach t $types {
+        if {[IsAffine $t]} {
+            return 1
+        }
+    }
+    return 0
+}
+
+# 1 if TYPE is affine (Affinity).
+proc hir::types::IsAffine {type {seen {}}} {
+    if {[llength $type] < 2} {
+        return [AffineRoot $type]
+    }
+    switch -- [lindex $type 0] {
+        coroutine {
+            return 1
+        }
+        list {
+            if {[IsAffine [lindex $type 1] $seen]} {
+                return 1
+            }
+            if {[llength $type] == 3} {
+                foreach p [lindex $type 2] {
+                    if {[IsAffine $p $seen]} {
+                        return 1
+                    }
+                }
+            }
+            return 0
+        }
+        immutableSet - mutarray - mutvec {
+            # A MutableVector or MutableArray of affine elements is itself
+            # affine: it uniquely owns every element (MUTABLE-VECTOR.md,
+            # MUTABLE-ARRAY.md). Mutation alone never makes a type affine.
+            return [IsAffine [lindex $type 1] $seen]
+        }
+        struct {
+            foreach {name t} [lindex $type 1] {
+                if {[IsAffine $t $seen]} {
+                    return 1
+                }
+            }
+            return 0
+        }
+        nstruct {
+            return [hir::structs::IsAffine [lindex $type 1] $seen]
+        }
+        enum {
+            # Derived from the enum's case payloads (hir::enums::IsAffine):
+            # no payload-free case owns anything, so every enum of today is
+            # unrestricted -- by that rule, not by being an enum.
+            return [hir::enums::IsAffine [lindex $type 1] $seen]
+        }
+        trait {
+            set w [lindex $type 2]
+            if {$w eq "" || [IsAbstractWitness $w] || [IsJoinWitness $w]} {
+                return 0
+            }
+            return [IsAffine $w $seen]
+        }
+    }
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Trait types (TRAITS.md; the header's {trait ID} and {trait ID WITNESS})
+
+# 1 if TYPE is a trait constraint or a trait view.
+proc hir::types::IsTrait {type} {
+    return [expr {[lindex $type 0] eq "trait" && [llength $type] in {2 3}}]
+}
+
+# 1 if TYPE is a trait constraint ({trait ID}: an annotation).
+proc hir::types::IsTraitConstraint {type} {
+    return [expr {[lindex $type 0] eq "trait" && [llength $type] == 2}]
+}
+
+# 1 if TYPE is a trait view ({trait ID WITNESS}: a value's type).
+proc hir::types::IsView {type} {
+    return [expr {[lindex $type 0] eq "trait" && [llength $type] == 3}]
+}
+
+proc hir::types::ViewTrait {type} { return [lindex $type 1] }
+proc hir::types::ViewWitness {type} { return [lindex $type 2] }
+
+# The view of trait ID whose hidden witness is WITNESS.
+proc hir::types::MakeView {id witness} {
+    return [list trait $id $witness]
+}
+
+# 1 if WITNESS (a view's hidden witness) is a rejected join of several.
+proc hir::types::IsJoinWitness {witness} {
+    return [expr {[lindex $witness 0] eq "join" && [llength $witness] > 2}]
+}
+
+# 1 if WITNESS is an abstract witness ({param E I}).
+proc hir::types::IsAbstractWitness {witness} {
+    return [expr {[lindex $witness 0] eq "param" && [llength $witness] == 3}]
+}
+
+# 1 if TYPE is or contains a trait type (an element, a field, a function
+# type's argument or result): the positions where a trait cannot appear.
+proc hir::types::MentionsTrait {type} {
+    if {[IsTrait $type]} {
+        return 1
+    }
+    if {[IsList $type] || [IsSet $type] || [IsMutArray $type] || [IsMutVec $type]} {
+        return [MentionsTrait [lindex $type 1]]
+    }
+    if {[IsFn $type]} {
+        foreach t [FnArgs $type] {
+            if {[MentionsTrait $t]} { return 1 }
+        }
+        return [MentionsTrait [FnReturn $type]]
+    }
+    if {[IsStruct $type]} {
+        foreach {name t} [lindex $type 1] {
+            if {[MentionsTrait $t]} { return 1 }
+        }
+    }
+    return 0
+}
+
+# The context trait (CONTEXT-TRAITS.md) TYPE is or contains -- an element, a
+# field, a function type's argument or result -- or "". A context trait is an
+# environment capability, never a value type: it is valid only as the type of
+# a context parameter, and every other position rejects it
+# (CONTEXT-TRAIT-POSITION, ContextTraitPositionMessage).
+proc hir::types::MentionedContextTrait {type} {
+    if {[IsTrait $type]} {
+        return [expr {[hir::traits::isContext [lindex $type 1]] ? [lindex $type 1] : ""}]
+    }
+    set inner {}
+    if {[IsList $type] || [IsSet $type] || [IsMutArray $type] || [IsMutVec $type]} {
+        set inner [list [lindex $type 1]]
+    } elseif {[IsFn $type]} {
+        set inner [concat [FnArgs $type] [list [FnReturn $type]]]
+    } elseif {[IsStruct $type]} {
+        set inner [lmap {name t} [lindex $type 1] {set t}]
+    }
+    foreach t $inner {
+        set id [MentionedContextTrait $t]
+        if {$id ne ""} {
+            return $id
+        }
+    }
+    return ""
+}
+
+# The CONTEXT-TRAIT-POSITION message for context trait ID used as WHAT ("the
+# type of parameter \"x\"", "a List element", ...).
+proc hir::types::ContextTraitPositionMessage {id what} {
+    return "$id is a context trait, which cannot be $what: a context trait is an execution-environment capability, not a value type -- it has no value, representation or storage, and is valid only as the type of a context parameter (\"context NAME: [namespace tail $id]\")"
+}
+
+# The hidden witness of a join of views with witnesses A and B: the one
+# witness when they are the same, else {join W...} (sorted, flattened).
+proc hir::types::JoinWitness {a b} {
+    if {$a eq $b} {
+        return $a
+    }
+    set all {}
+    foreach w [list $a $b] {
+        if {[IsJoinWitness $w]} {
+            lappend all {*}[lrange $w 1 end]
+        } else {
+            lappend all $w
+        }
+    }
+    set all [lsort -unique $all]
+    return [expr {[llength $all] == 1 ? [lindex $all 0] : [linsert $all 0 join]}]
+}
+
+# TYPE as an aggregate element/field: a view is erased to any (the concrete
+# runtime value is what is stored; no witness or tag is kept, TRAITS.md
+# "any"), so no List/ImmutableSet/MutableArray/struct type ever has a trait
+# element.
+proc hir::types::Unviewed {type} {
+    return [expr {[IsTrait $type] ? "any" : $type}]
+}
+
+# ---------------------------------------------------------------------------
+# Enum types (ENUMS.md; the header's {enum ID})
+
+# 1 if TYPE is an enum type ({enum ID}).
+proc hir::types::IsEnum {type} {
+    return [expr {[lindex $type 0] eq "enum" && [llength $type] == 2}]
 }
 
 # ---------------------------------------------------------------------------
@@ -257,7 +664,8 @@ proc hir::types::IsStructLike {type} {
 # hir::types::Struct) is recorded as `any`.
 proc hir::types::MakeStruct {fields depth} {
     variable aggregateDepth
-    if {$depth >= $aggregateDepth} {
+    if {$depth >= $aggregateDepth && ![AnyAffine [dict values $fields]]} {
+        # (Never cut when a field is affine: AFFINE-VALUES.md.)
         return struct
     }
     set inner [expr {$depth + 1}]
@@ -267,7 +675,7 @@ proc hir::types::MakeStruct {fields depth} {
         if {$t eq "never"} {
             set t any
         }
-        lappend canonical $name [Unshaped [Bound $t $inner]]
+        lappend canonical $name [Unviewed [Unshaped [Bound $t $inner]]]
     }
     return [list struct $canonical]
 }
@@ -450,6 +858,45 @@ proc hir::types::FnGlb {a b} {
 # TYPE is not a callable type, or is a native of variable arity (`list`: no
 # fixed-arity contract exists, and this milestone invents no variadic
 # function typing).
+# What a call of a value of callable TYPE returns: an exact block's result,
+# a structural Fn's or an exact native's contract result, a coroutine's
+# outward type; any when TYPE is not statically callable.
+proc hir::types::CallableResult {type} {
+    if {[IsExactBlock $type]} {
+        return [lindex $type 3]
+    }
+    if {[IsCoroutine $type]} {
+        return [CoroutineOutward $type]
+    }
+    set s [structuralOf $type]
+    if {$s ne ""} {
+        return [FnReturn $s]
+    }
+    return any
+}
+
+# The declared errors a call of a value of callable TYPE may complete with:
+# an exact block's declared errors, a structural Fn's or coroutine's
+# contract errors, an exact native's -errors; none otherwise (an untyped
+# value: hir/callables.tcl keeps an error-bearing callable from being
+# erased to one).
+proc hir::types::CallableErrors {hir type} {
+    if {[IsExactBlock $type]} {
+        set block [lindex $type 1]
+        if {[dict exists $hir exprs $block]} {
+            return [dict get $hir exprs $block declaredErrors]
+        }
+    }
+    if {[IsCoroutine $type]} {
+        return [CoroutineErrors $type]
+    }
+    set s [structuralOf $type]
+    if {$s ne ""} {
+        return [dict get [lindex $s 1] errors]
+    }
+    return {}
+}
+
 proc hir::types::structuralOf {type} {
     if {[IsFn $type]} {
         return $type
@@ -513,7 +960,11 @@ proc hir::types::FnMismatch {a b} {
     }
     set i 0
     foreach x $aa y $ba {
-        if {![Admits $x $y]} {
+        if {![Admits $x $y] || ([IsAffine $y] && ![IsAffine $x])} {
+            # (An argument the contract may pass affine must be received by
+            # a parameter that owns it: an `any` or untyped parameter of a
+            # function value has no specialization to carry ownership,
+            # AFFINE-VALUES.md.)
             return [list arg $i]
         }
         incr i
@@ -531,6 +982,15 @@ proc hir::types::FnMismatch {a b} {
         return [list errors {*}$extra]
     }
     return ""
+}
+
+# Why coroutine handle type A is not usable where coroutine handle type B is
+# expected, or "": FnMismatch's answer for their callable contracts -- the
+# same arity, argument (contravariant), return (covariant) and error-subset
+# rules a structural Fn obeys. Coroutine lifecycle adds no variance rule: a
+# resume is a call with the contract's arguments, result and errors.
+proc hir::types::CoroutineMismatch {a b} {
+    return [FnMismatch [list fn [lindex $a 1]] [list fn [lindex $b 1]]]
 }
 
 # The greatest lower bound of argument types A and B in the representable
@@ -602,6 +1062,37 @@ proc hir::types::explainMismatch {actual expected} {
         return ""
     }
     set s [structuralOf $actual]
+    if {[IsCoroutine $actual] && [IsFn $expected]} {
+        return "a coroutine handle is not a function value: Coroutine and Fn are distinct callable kinds, even with the same contract"
+    }
+    if {[IsCoroutine $expected]} {
+        if {![IsCoroutine $actual]} {
+            return "only a coroutine handle is a Coroutine: a function value is not one, even with the same contract (Fn and Coroutine are distinct callable kinds)"
+        }
+        # The same contract rules as a Fn's (CoroutineMismatch), worded for
+        # a resume.
+        set s [list fn [lindex $actual 1]]
+        set expected [list fn [lindex $expected 1]]
+        set why [FnMismatch $s $expected]
+        switch -- [lindex $why 0] {
+            arity {
+                return "resume protocol mismatch: the coroutine takes [lindex $why 1] message(s), the type [lindex $why 2]"
+            }
+            arg {
+                return [format {message type mismatch: the coroutine is resumed with %s, the type with %s} \
+                    [show [lindex [FnArgs $s] 0]] [show [lindex [FnArgs $expected] 0]]]
+            }
+            return {
+                return [format {return incompatible: each resume returns %s, not usable as %s} \
+                    [show [FnReturn $s]] [show [FnReturn $expected]]]
+            }
+            errors {
+                return [format {error set incompatible: a resume may raise %s, but the type allows only [%s]} \
+                    [join [lrange $why 1 end] {, }] [join [FnErrors $expected] {, }]]
+            }
+        }
+        return ""
+    }
     if {$s eq ""} {
         if {[IsExactNative $actual]} {
             return "native [lindex $actual 1] takes a variable number of arguments, so it has no function type"
@@ -669,24 +1160,60 @@ proc hir::types::IsMutArray {type} {
 # can ever be read or written: it is recorded as `any`.
 proc hir::types::MakeMutArray {elem depth} {
     variable aggregateDepth
-    if {$depth >= $aggregateDepth} {
+    if {$depth >= $aggregateDepth && ![IsAffine $elem]} {
+        # (An affine element type is never erased: AFFINE-VALUES.md.)
         return mutarray
     }
     if {$elem eq "never"} {
         set elem any
     }
-    return [list mutarray [Unshaped [Bound $elem [expr {$depth + 1}]]]]
+    return [list mutarray [Unviewed [Unshaped [Bound $elem [expr {$depth + 1}]]]]]
 }
 
-# 1 if element contracts A and B are the same contract: identical, or each
-# admissible for the other (two spellings of one value domain). MutableArray
-# is invariant, so this -- not subtype -- relates two MutableArray element
-# types.
-proc hir::types::Equivalent {a b} {
-    if {$a eq $b} {
+# 1 if TYPE is or holds a MutableVector or a MutableArray (an element, a
+# field): a type some place of which may be mutated.
+proc hir::types::MentionsMutable {type {seen {}}} {
+    if {[IsMutVec $type] || [IsMutArray $type] || $type in {mutvec mutarray}} {
         return 1
     }
-    return [expr {[Admits $a $b] && [Admits $b $a]}]
+    if {[IsList $type] || [IsSet $type]} {
+        return [MentionsMutable [lindex $type 1] $seen]
+    }
+    if {[IsStruct $type]} {
+        foreach {name t} [lindex $type 1] {
+            if {[MentionsMutable $t $seen]} { return 1 }
+        }
+    }
+    if {[IsNamedStruct $type]} {
+        set id [lindex $type 1]
+        if {$id in $seen} {
+            return 0
+        }
+        foreach {name t} [hir::structs::fieldTypes $id] {
+            if {[MentionsMutable $t [concat $seen [list $id]]]} { return 1 }
+        }
+    }
+    return 0
+}
+
+# 1 if TYPE is an applied MutableVector form ({mutvec ELEM}). The bare atom
+# `mutvec` (the runtime kind) is not one.
+proc hir::types::IsMutVec {type} {
+    return [expr {[lindex $type 0] eq "mutvec" && [llength $type] == 2}]
+}
+
+# The canonical MutableVector[ELEM], nested DEPTH aggregate forms deep. A
+# `never` element is kept: MutableVector[never] is the proven-empty vector
+# (`from_list([])`), admissible wherever a MutableVector[T] is declared
+# (hir::range::AggregateAdmits), into which nothing can ever be pushed.
+# Past the aggregate bound the bare kind, unless the element is affine (an
+# affine element type is never erased: AFFINE-VALUES.md).
+proc hir::types::MakeMutVec {elem depth} {
+    variable aggregateDepth
+    if {$depth >= $aggregateDepth && ![IsAffine $elem]} {
+        return mutvec
+    }
+    return [list mutvec [Unviewed [Unshaped [Bound $elem [expr {$depth + 1}]]]]]
 }
 
 # TYPE in canonical form (core types are normalized by core::type).
@@ -706,12 +1233,14 @@ proc hir::types::canonical {type} {
 proc hir::types::MakeList {elem {positions {}} {shaped 0} {depth 0}} {
     variable aggregateDepth
     variable shapeLength
-    if {$depth >= $aggregateDepth} {
+    if {$depth >= $aggregateDepth && ![IsAffine $elem] && ![AnyAffine $positions]} {
+        # (An affine element is never cut: the bare kind would erase the
+        # ownership it carries -- AFFINE-VALUES.md.)
         return list
     }
     set inner [expr {$depth + 1}]
     if {$shaped} {
-        set positions [lmap p $positions {Unshaped [Bound $p $inner]}]
+        set positions [lmap p $positions {Unviewed [Unshaped [Bound $p $inner]]}]
         set elem never
         foreach p $positions {
             set elem [lub $elem $p]
@@ -720,7 +1249,7 @@ proc hir::types::MakeList {elem {positions {}} {shaped 0} {depth 0}} {
             set shaped 0
         }
     }
-    set elem [Unshaped [Bound $elem $inner]]
+    set elem [Unviewed [Unshaped [Bound $elem $inner]]]
     if {$shaped} {
         return [list list $elem $positions]
     }
@@ -740,7 +1269,7 @@ proc hir::types::MakeSet {elem depth} {
     if {$depth >= $aggregateDepth} {
         return immutableSet
     }
-    set elem [Unshaped [Bound $elem [expr {$depth + 1}]]]
+    set elem [Unviewed [Unshaped [Bound $elem [expr {$depth + 1}]]]]
     if {$elem eq "any"} {
         return immutableSet
     }
@@ -762,6 +1291,9 @@ proc hir::types::Bound {type depth} {
     if {[IsMutArray $type]} {
         return [MakeMutArray [lindex $type 1] $depth]
     }
+    if {[IsMutVec $type]} {
+        return [MakeMutVec [lindex $type 1] $depth]
+    }
     if {[IsStruct $type]} {
         return [MakeStruct [lindex $type 1] $depth]
     }
@@ -774,6 +1306,12 @@ proc hir::types::Bound {type depth} {
         # over-approximation, unlike cutting one of its (contravariant)
         # argument types would be (MakeFn).
         return [MakeFn [FnArgs $type] [FnReturn $type] [FnErrors $type] $depth]
+    }
+    if {[IsCoroutine $type]} {
+        # Never cut (an affine value is never erased): only its result is
+        # bounded (MakeCoroutineType).
+        return [MakeCoroutineType [dict get [lindex $type 1] args] [CoroutineOutward $type] \
+            [CoroutineErrors $type] $depth]
     }
     return $type
 }
@@ -790,6 +1328,26 @@ proc hir::types::Unshaped {type} {
 # is a list form; otherwise "".
 proc hir::types::elementOf {type} {
     return [expr {[IsList $type] ? [lindex $type 1] : ""}]
+}
+
+# The static type of the loop variable of a loop over a value of static type
+# TYPE: a List's element type, or a MutableVector's (MUTABLE-VECTOR.md: a
+# loop over an unrestricted vector iterates its snapshot, over an affine one
+# consumes it); "" if not known.
+proc hir::types::IterationElementOf {type} {
+    if {[IsMutArray $type]} {
+        # A MutableArray's element type (MUTABLE-ARRAY.md: snapshot or
+        # consuming iteration, as a vector's).
+        return [lindex $type 1]
+    }
+    if {[IsMutVec $type]} {
+        # (MutableVector[never] promises no element type for its contents:
+        # it is empty only while held at that type, and a value read back
+        # from HIR text or Core IR may have lost the declared type it was
+        # filled under -- never a reason to call a loop body dead.)
+        return [expr {[lindex $type 1] eq "never" ? "" : [lindex $type 1]}]
+    }
+    return [elementOf $type]
 }
 
 # The positional shape {P0 ...} of static type TYPE, or "" if not known.
@@ -825,24 +1383,35 @@ proc hir::types::subtype {a b} {
         return 1
     }
     if {[IsMutArray $b]} {
-        # MutableArray[E] is invariant: only a MutableArray with an
-        # equivalent element contract (or the raw kind when E is the whole
-        # `any` domain, which promises nothing) may be viewed as it.
+        # MutableArray[E] is a value (MUTABLE-ARRAY.md), like MutableVector:
+        # an array of a subtype is one of the supertype, since a copy never
+        # writes through to another logical value. The raw kind is
+        # MutableArray[any]. (Under the reference semantics MutableArray had
+        # before, it was invariant: a wider view was an alias that could
+        # store values the original's element type excluded.)
         if {[IsMutArray $a]} {
-            return [Equivalent [lindex $a 1] [lindex $b 1]]
+            return [subtype [lindex $a 1] [lindex $b 1]]
         }
         return [expr {$a eq "mutarray" && [lindex $b 1] eq "any"}]
     }
+    if {[IsMutVec $b]} {
+        # MutableVector[E] is a value (MUTABLE-VECTOR.md): like List, a
+        # vector of a subtype is one of the supertype (a copy never writes
+        # through to another logical value). The bare kind is
+        # MutableVector[any].
+        if {[IsMutVec $a]} {
+            return [subtype [lindex $a 1] [lindex $b 1]]
+        }
+        return [expr {$a eq "mutvec" && [lindex $b 1] eq "any"}]
+    }
     if {$b eq "mutarray" && [IsMutArray $a]} {
-        # A typed array viewed as the raw kind could be written with
-        # anything: only the vacuous contract MutableArray[any] qualifies.
-        return [expr {[lindex $a 1] eq "any"}]
+        # The raw kind, MutableArray[any]: every MutableArray[T] is one.
+        return 1
     }
     if {[IsStruct $b]} {
         # An anonymous struct is compatible with another only when the field
         # sets are equal (no width subtyping, no optional fields) and every
-        # field type is compatible -- fields are immutable, so covariant;
-        # a MutableArray field stays invariant through its own rule above.
+        # field type is compatible -- fields are immutable, so covariant.
         if {![IsStruct $a]} {
             return 0
         }
@@ -863,6 +1432,21 @@ proc hir::types::subtype {a b} {
         # decided above ($a eq $b); a same-shaped anonymous struct or a
         # differently named struct with the same fields is never one.
         return 0
+    }
+    if {[IsTraitConstraint $b]} {
+        # A trait constraint (TRAITS.md) is satisfied, as a type, only by a
+        # view of the same trait with one witness. A concrete type that
+        # satisfies the trait structurally is *accepted* at a trait-typed
+        # boundary (hir::traits::Accept), never a subtype: lub must not join
+        # unrelated types to a trait they happen to satisfy.
+        return [expr {[IsView $a] && [ViewTrait $a] eq [lindex $b 1] && ![IsJoinWitness [ViewWitness $a]]}]
+    }
+    if {[IsCoroutine $b]} {
+        # A coroutine handle type (AFFINE-VALUES.md): only another coroutine
+        # handle, whose callable contract is compatible by the very rules a
+        # Fn's is (CoroutineMismatch). Never a Fn or an exact function: the
+        # callable *kind* is part of the type, the contract is shared.
+        return [expr {[IsCoroutine $a] && [CoroutineMismatch $a $b] eq ""}]
     }
     if {[IsFn $b]} {
         # A structural function type: any callable whose own call contract
@@ -890,6 +1474,16 @@ proc hir::types::lub {a b} {
         # exact identity, join what its calls return.
         return [canonical [lreplace $a 3 3 [lub [lindex $a 3] [lindex $b 3]]]]
     }
+    if {[IsTrait $a] && [IsTrait $b] && [lindex $a 1] eq [lindex $b 1]} {
+        # Two views of one trait keep the trait only with one witness: there
+        # is no trait object to hold a choice between two (TRAITS.md, "Witness
+        # joins"). Different witnesses join to a {join ...} witness, which
+        # hir::traits::verify reports (TRAIT-WITNESS-JOIN) -- never any.
+        if {[IsTraitConstraint $a] || [IsTraitConstraint $b]} {
+            return [list trait [lindex $a 1]]
+        }
+        return [MakeView [lindex $a 1] [JoinWitness [ViewWitness $a] [ViewWitness $b]]]
+    }
     if {[IsList $a] && [IsList $b]} {
         set elem [lub [lindex $a 1] [lindex $b 1]]
         set sa [shapeOf $a]
@@ -899,16 +1493,20 @@ proc hir::types::lub {a b} {
         }
         return [MakeList $elem]
     }
-    if {[IsMutArray $a] || [IsMutArray $b]} {
-        # Two MutableArrays join only when they are one contract. Otherwise
-        # there is no join that keeps the element contract (MutableArray[int]
-        # and MutableArray[str] have no common typed supertype; the raw kind
-        # would allow writes the original contract forbids): `any`, which
-        # hir/callables.tcl rejects as an erasure wherever a typed array
-        # would flow into it.
-        if {[subtype $a $b] && [subtype $b $a]} {
-            return [expr {$a eq "mutarray" || $b eq "mutarray" ? "mutarray" : [lindex [lsort [list $a $b]] 0]}]
-        }
+    if {[IsMutVec $a] && [IsMutVec $b]} {
+        # Two MutableVector values: their elements join, as a List's do.
+        return [MakeMutVec [lub [lindex $a 1] [lindex $b 1]] 0]
+    }
+    if {[IsMutArray $a] && [IsMutArray $b]} {
+        # Two MutableArray values: their elements join, as a MutableVector's
+        # do.
+        return [MakeMutArray [lub [lindex $a 1] [lindex $b 1]] 0]
+    }
+    if {[IsEnum $a] || [IsEnum $b]} {
+        # Nominal (ENUMS.md): the same enum was decided above ($a eq $b).
+        # Two different enums -- or an enum and anything else -- have no
+        # useful join: never a union of the two case sets (there are no
+        # anonymous enums) and never the bare `enum` kind. The broad any.
         return any
     }
     if {[IsStructLike $a] || [IsStructLike $b]} {
@@ -939,6 +1537,16 @@ proc hir::types::lub {a b} {
         # both branches agree, and this milestone deliberately does not
         # invent element-lub for sets merely because List has one.
         return immutableSet
+    }
+    if {[IsCoroutine $a] && [IsCoroutine $b]} {
+        # Two coroutine handle types: the narrowest common contract (the
+        # Fn rules, FnLub), still a coroutine; none representable is any --
+        # which no affine value may flow into (AFFINE-ERASURE-UNSUPPORTED).
+        set joined [FnLub [list fn [lindex $a 1]] [list fn [lindex $b 1]]]
+        if {$joined ne ""} {
+            return [canonical [list coroutine [lindex $joined 1]]]
+        }
+        return any
     }
     if {[IsCallable $a] && [IsCallable $b]} {
         # Two different callables (exact or structural): their narrowest
@@ -981,6 +1589,12 @@ proc hir::types::narrow {current fact} {
     if {$fact eq "any" || $current eq "never"} {
         return $current
     }
+    if {[IsTrait $current]} {
+        # A trait view is never strengthened by a fact about its value (a
+        # kind test, a native's parameter type): its source-visible type is
+        # its trait, whatever runs underneath (TRAITS.md, "One-way").
+        return $current
+    }
     if {[IsList $current] && [IsList $fact]} {
         set elem [narrow [lindex $current 1] [lindex $fact 1]]
         set positions [shapeOf $current]
@@ -992,17 +1606,33 @@ proc hir::types::narrow {current fact} {
     if {[IsSet $current] && [IsSet $fact]} {
         return [MakeSet [narrow [lindex $current 1] [lindex $fact 1]] 0]
     }
-    if {[IsMutArray $fact]} {
-        # A MutableArray[T] contract fact is a static property of the
-        # object, never derivable from a kind test: an already typed value
-        # keeps its contract; a raw/unknown one adopts the declared one
-        # (legal callers already proved it).
-        return [expr {[IsMutArray $current] ? $current : $fact}]
+    if {[IsMutVec $fact]} {
+        # A declared MutableVector[T] theorem: the element facts combine,
+        # as a List's do (an instance key's kind-only element, a coroutine,
+        # adopts the declared contract); a bare or unknown vector adopts the
+        # declared one.
+        if {[IsMutVec $current] && [lindex $current 1] ne "never"} {
+            return [MakeMutVec [narrow [lindex $current 1] [lindex $fact 1]] 0]
+        }
+        # (A proven-empty MutableVector[never] stays empty only while nothing
+        # is pushed into it: a place of the declared type may push, so the
+        # declared element type is the fact.)
+        return $fact
     }
-    if {[IsFn $fact] || [IsStructLike $fact]} {
-        # A structural contract fact (a function contract, a struct type): a
-        # value already known to satisfy it (a narrower contract, the same
-        # struct) says more.
+    if {[IsMutArray $fact]} {
+        # A declared MutableArray[T] theorem, like a MutableVector's: the
+        # element facts combine (an instance key's kind-only element, a
+        # coroutine, adopts the declared contract); a raw or unknown array
+        # adopts the declared one (legal callers already proved it).
+        if {[IsMutArray $current] && [lindex $current 1] ne "never"} {
+            return [MakeMutArray [narrow [lindex $current 1] [lindex $fact 1]] 0]
+        }
+        return $fact
+    }
+    if {[IsFn $fact] || [IsStructLike $fact] || [IsCoroutine $fact] || [IsEnum $fact]} {
+        # A structural contract fact (a function contract, a struct type, a
+        # coroutine handle's contract): a value already known to satisfy it
+        # (a narrower contract, the same struct) says more.
         return [expr {[subtype $current $fact] ? $current : $fact}]
     }
     if {[IsFn $current] && $fact in {block native}} {
@@ -1014,6 +1644,12 @@ proc hir::types::narrow {current fact} {
         # A precise callable type already implies a bare kind fact.
         if {$fact eq [kindOf $current]} {
             return $current
+        }
+        if {$fact in {list immutableSet mutarray mutvec} && [kindOf $current] in {list immutableSet mutarray mutvec}} {
+            # Two different collection kinds: no value is both (a native's
+            # parameter kind after a call that can only fail, a kind test
+            # that cannot hold), so nothing follows.
+            return never
         }
         return $fact
     }
@@ -1045,12 +1681,12 @@ proc hir::types::narrow {current fact} {
 # recursive list case would make it so -- sound but incomplete, never
 # unsound, and not needed by this milestone's own motivating call site.
 proc hir::types::IsEqualityTotal {type} {
-    return [expr {[kindOf $type] in {int str bool unit UnicodeChar}}]
+    return [expr {[kindOf $type] in {int str bool unit UnicodeChar enum}}]
 }
 
 # The runtime value kind every value of TYPE has, or "" if not fixed.
 proc hir::types::kindOf {type} {
-    if {$type eq "never" || [IsFn $type]} {
+    if {$type eq "never" || [IsFn $type] || [IsTrait $type]} {
         # A structural function type's value is a Block or a native: no
         # one runtime kind.
         return ""
@@ -1066,7 +1702,7 @@ proc hir::types::kindOf {type} {
 
 # The core type (core/type.tcl) a static type implies.
 proc hir::types::semantic {type} {
-    if {$type eq "never" || [IsFn $type]} {
+    if {$type eq "never" || [IsFn $type] || [IsTrait $type]} {
         return any
     }
     if {[IsStructLike $type]} {
@@ -1082,6 +1718,10 @@ proc hir::types::semantic {type} {
 proc hir::types::ofValue {v} {
     if {[core::value::kind $v] eq "native"} {
         return [list native [core::value::nativeName $v]]
+    }
+    if {[core::value::kind $v] eq "enum"} {
+        # A case value has exactly its declaring enum's type (ENUMS.md).
+        return [list enum [core::value::enumId $v]]
     }
     return [core::type::ofValue $v]
 }
@@ -1133,6 +1773,9 @@ proc hir::types::show {type} {
             mutarray {
                 return "MutableArray\[[show [lindex $type 1]]\]"
             }
+            mutvec {
+                return "MutableVector\[[show [lindex $type 1]]\]"
+            }
             struct {
                 # An anonymous struct type, fields in canonical order:
                 # struct{age: int, name: str}. (The leading word keeps a
@@ -1143,6 +1786,24 @@ proc hir::types::show {type} {
             nstruct {
                 # A named struct, by its declared name.
                 return [hir::structs::display [lindex $type 1]]
+            }
+            enum {
+                # An enum, by its declared name (ENUMS.md).
+                return [hir::enums::display [lindex $type 1]]
+            }
+            trait {
+                # A trait constraint or view, by the trait's name only: the
+                # source-visible type (a view's hidden witness is shown by
+                # hir::traits::showView, never in a source-level message).
+                return [lindex $type 1]
+            }
+            coroutine {
+                # The source notation of a coroutine handle type, field for
+                # field the one Fn{...} uses (AFFINE-VALUES.md).
+                set fields [lindex $type 1]
+                return [format {Coroutine{args: [%s], return: %s, errors: [%s]}} \
+                    [join [lmap t [dict get $fields args] {show $t}] {, }] \
+                    [show [dict get $fields return]] [join [dict get $fields errors] {, }]]
             }
             immutableSet {
                 # Same convention as List[T] above: the canonical applied-
@@ -1290,7 +1951,7 @@ proc hir::types::inferRegion {hirVar region types handler} {
 }
 
 proc hir::types::NewContext {} {
-    return [dict create types {} facts {} returnType never breakTypes {} reachable 1]
+    return [dict create types {} facts {} implies {} returnType never breakTypes {} reachable 1]
 }
 
 # The static type of constant V under aggregate facts.
@@ -1306,6 +1967,35 @@ proc hir::types::AggregateOfValue {v} {
 # RESULT.
 proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
     switch -- [lindex $shape 0] {
+        never {
+            # context#unreachable (core/contexts.tcl): never completes.
+            return never
+        }
+        coroutine-create - coroutine-outward - coroutine-yield {
+            # The coroutine operations (core/coroutines.tcl): typed from the
+            # program's coroutine analysis (hir/coroutines.tcl).
+            return [hir::coroutines::ShapeResult $hir [lindex $shape 0] $argExprs $argTypes]
+        }
+        context-struct {
+            # context#load("ID") (core/contexts.tcl, CONTEXTS.md): the
+            # installed context of the context-struct declaration ID, a
+            # struct of exactly that named declaration.
+            set arg [lindex $argExprs [lindex $shape 1]]
+            if {$arg ne "" && [hir::kind $hir $arg] eq "const"} {
+                set id [lindex [hir::get $hir $arg literal] end]
+                if {[hir::structs::declared $id]} {
+                    return [list nstruct $id]
+                }
+                if {[hir::traits::declared $id] && [hir::traits::isContext $id]} {
+                    # A context-trait binding (CONTEXT-TRAITS.md): source
+                    # code sees the context trait's operations only; the
+                    # installed context that provides them is selected
+                    # statically and never becomes this binding's type.
+                    return [list trait $id]
+                }
+            }
+            return $result
+        }
         named-struct {
             # A struct of one named declaration (core/native.tcl's
             # {named-struct ID}: linux::abi::syscall's abi::x86_64::
@@ -1335,9 +2025,21 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             }
             set list [lindex $argTypes $l]
             set elem [elementOf $list]
-            if {$elem eq "" || $elem eq "never"} {
-                # Nothing known, or an empty list: no element to describe.
+            if {$elem eq ""} {
+                # Nothing known: no element to describe.
                 return $result
+            }
+            if {$elem eq "never"} {
+                # A List[never] is empty (no value has type never), so no
+                # read of it completes normally. The native's declared
+                # result here would be wider than the element type of any
+                # List it is a subtype of: an instance entered with `[]`
+                # for a `List[S]` parameter would type an element read
+                # `any` where the declared contract's analysis has `S`,
+                # and reject a body valid for its contract
+                # (OPPORTUNISTIC-SEMANTIC-INSTANCES.md: a narrower
+                # argument may only add precision).
+                return never
             }
             set positions [shapeOf $list]
             if {$positions ne ""} {
@@ -1390,6 +2092,74 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
                 return [lindex $array 1]
             }
             return $result
+        }
+        mutarray-create {
+            # (n, x : T) -> MutableArray[T] (MUTABLE-ARRAY.md): T the static
+            # type of the repeated value, also for capacity 0 -- its
+            # ordinary type, never an exact-value fact
+            # (hir::containers::ElementContract).
+            lassign $shape _ v
+            return [MakeMutArray [hir::containers::ElementContract [lindex $argTypes $v]] 0]
+        }
+        mutarray-from-list {
+            # List[T] -> MutableArray[T]; a broad `list` (no element type),
+            # List[any] and the empty literal give MutableArray[any] -- a
+            # fully initialized array whose contract is the whole `any`
+            # domain, never the raw substrate type.
+            lassign $shape _ l
+            set list [Unshaped [lindex $argTypes $l]]
+            set elem any
+            if {[IsList $list]} {
+                set elem [hir::containers::ElementContract [lindex $list 1]]
+            }
+            return [MakeMutArray $elem 0]
+        }
+        mutarray-generate {
+            # (n, factory) -> MutableArray[T], T what the factory's callable
+            # contract returns (each slot holds one call's result); a
+            # factory of unknown contract gives MutableArray[any].
+            lassign $shape _ f
+            return [MakeMutArray [hir::containers::ElementContract [CallableResult [lindex $argTypes $f]]] 0]
+        }
+        mutvec-from-list {
+            # List[T] -> MutableVector[T] (MUTABLE-VECTOR.md); the empty
+            # literal's List[never] gives the proven-empty MutableVector[never].
+            lassign $shape _ l
+            set list [lindex $argTypes $l]
+            if {[IsList $list]} {
+                return [MakeMutVec [lindex $list 1] 0]
+            }
+            if {$list eq "never"} {
+                return never
+            }
+            return [MakeMutVec any 0]
+        }
+        mutvec-element {
+            # MutableVector[T] -> T: an element read (at) or removal (pop,
+            # take, swap's displaced element).
+            lassign $shape _ v
+            set vector [lindex $argTypes $v]
+            if {[IsMutVec $vector] && [lindex $vector 1] ne "never"} {
+                return [lindex $vector 1]
+            }
+            # (An element read of MutableVector[never]: see
+            # IterationElementOf.)
+            return $result
+        }
+        mutvec-to-list {
+            # MutableVector[T] -> List[T]: a snapshot of the elements.
+            lassign $shape _ v
+            set vector [lindex $argTypes $v]
+            if {[IsMutVec $vector] && [lindex $vector 1] ne "never"} {
+                return [MakeList [lindex $vector 1]]
+            }
+            return $result
+        }
+        same {
+            # The result is argument A's own value, logically copied
+            # (mutable_vector#share): its type.
+            lassign $shape _ a
+            return [lindex $argTypes $a]
         }
         mutarray-freeze {
             # MutableArray[T] -> List[T]: a frozen copy of slots that all
@@ -1486,24 +2256,6 @@ proc hir::types::BindingType {hir ctx b} {
     }
     if {[dict get $hir bindings $b kind] eq "root"} {
         set value [dict get $hir bindings $b value]
-        if {[core::value::kind $value] eq "native" && [dict exists $hir moduleNativeTargets]} {
-            set name [core::value::nativeName $value]
-            if {[dict exists $hir moduleNativeTargets $name]} {
-                # native::prepareHir (native/prepare.tcl, through
-                # hir::ResolveModuleNativeTargets) redirected native NAME to
-                # an ordinary top-level
-                # function elsewhere in this same HIR: a reference to the
-                # native is typed as a call of that function, not of the
-                # native, on every inference of it (including
-                # hir/specialize.tcl's own per-instance re-inference, which
-                # calls BindingType again -- so this stays correct there
-                # too, unlike a one-shot post-hoc edit of a single call's
-                # `target` field would). Every other backend leaves
-                # moduleNativeTargets unset, so this is a no-op for them.
-                lassign [dict get $hir moduleNativeTargets $name] block arity
-                return [blockType $hir $block $arity any]
-            }
-        }
         return [ofValue $value]
     }
     if {[hir::isModuleBinding $hir $b]} {
@@ -1610,7 +2362,7 @@ proc hir::types::Expr {hirVar ctxVar e} {
         }
         listloop {
             Expr hir ctx [dict get $node iterable]
-            set elemType [elementOf [hir::typeOf $hir [dict get $node iterable]]]
+            set elemType [IterationElementOf [hir::typeOf $hir [dict get $node iterable]]]
             if {$elemType eq ""} {
                 set elemType any
             }
@@ -1674,7 +2426,7 @@ proc hir::types::Expr {hirVar ctxVar e} {
             foreach domain [dict get $node domains] {
                 if {[dict get $domain kind] eq "list"} {
                     Expr hir ctx [dict get $domain iterable]
-                    set elemType [elementOf [hir::typeOf $hir [dict get $domain iterable]]]
+                    set elemType [IterationElementOf [hir::typeOf $hir [dict get $domain iterable]]]
                     lappend facts [dict get $domain binding] [expr {$elemType eq "" ? "any" : $elemType}]
                 } else {
                     Expr hir ctx [dict get $domain start]
@@ -1724,6 +2476,10 @@ proc hir::types::Expr {hirVar ctxVar e} {
             return [SetType hir $e [expr {$value eq "never" ? "never" : "result"}]]
         }
         fail {
+            if {[dict exists $node value] && [dict get $node value] ne ""} {
+                # The payload (ERROR-PAYLOADS.md): evaluated, then raised.
+                Expr hir ctx [dict get $node value]
+            }
             return [SetType hir $e never]
         }
         handle {
@@ -1763,6 +2519,13 @@ proc hir::types::Struct {hirVar ctxVar e} {
     if {[dict get $node named]} {
         set id [dict get $node structId]
         return [expr {$id eq "" ? "any" : [list nstruct $id]}]
+    }
+    if {[dict exists $node payloadOf] && [hir::errordecls::hasPayload [dict get $node payloadOf]]} {
+        # An error's payload (ERROR-PAYLOADS.md) has its declared type,
+        # whatever its values are -- the declaration is the contract, as a
+        # named construction's (hir::range::VerifyStruct proves each value
+        # admissible) -- the anonymous struct type of the declared fields.
+        return [hir::errordecls::payloadType [dict get $node payloadOf]]
     }
     return [MakeStruct $fieldTypes 0]
 }
@@ -1818,19 +2581,77 @@ proc hir::types::Project {hirVar ctxVar e} {
 # conservative (entry-reachable, like an `if` whose outcome isn't known):
 # nothing here claims to know which error, if any, a call actually
 # produces at run time (spec items 27/82 defer that proof).
+#
+# Facts. A handler runs instead of a normal completion of the handled call
+# expression -- the call itself failed, or one of its arguments did (the
+# handler catches any matching error the expression produces,
+# core::forms::op-handle). So a validator's completion fact
+# (REFINEMENT-VALUES.md, "Validators") established anywhere in that
+# expression -- the handled call's own, or an argument's -- does not hold
+# in a handler: Call logs the bindings such facts narrow (`completionLog`),
+# and each handler starts from the facts after the call with those bindings
+# as they were before it. After the construct, a fact holds when it holds at
+# the end of every way the construct completes normally: the call's normal
+# completion and each handler body that completes normally (a handler that
+# returns, fails, breaks or continues contributes nothing) -- the join of
+# an `if` (If), applied when a validator fact is involved; otherwise the
+# construct keeps the facts after the call, as it always has.
 proc hir::types::Handle {hirVar ctxVar e} {
     upvar 1 $hirVar hir $ctxVar ctx
     set node [dict get $hir exprs $e]
     set entry [dict get $ctx reachable]
+    set before [dict get $ctx facts]
+    set outerLog [expr {[dict exists $ctx completionLog] ? [dict get $ctx completionLog] : ""}]
+    set hadLog [dict exists $ctx completionLog]
+    dict set ctx completionLog {}
     set callType [Expr hir ctx [dict get $node call]]
+    set validated [dict keys [dict get $ctx completionLog]]
+    if {$hadLog} {
+        dict set ctx completionLog [dict merge $outerLog [dict get $ctx completionLog]]
+    } else {
+        dict unset ctx completionLog
+    }
     dict set ctx reachable $entry
+    set completed [dict get $ctx facts]
+    set handlerEntry $completed
+    foreach b $validated {
+        if {[dict exists $before $b]} {
+            dict set handlerEntry $b [dict get $before $b]
+        } else {
+            dict unset handlerEntry $b
+        }
+    }
 
     set handlerTypes {}
-    foreach body [dict get $node handlerBodies] {
+    set ends [expr {$callType ne "never" ? [list $completed] : {}}]
+    set payloads [expr {[dict exists $node handlerPayloads] ? [dict get $node handlerPayloads] : {}}]
+    set index 0
+    foreach body [dict get $node handlerBodies] name [dict get $node handlerNames] {
+        set payload [lindex $payloads $index]
+        incr index
+        if {$payload ne "" && [hir::errordecls::hasPayload $name]} {
+            # The handler's payload binding (ERROR-PAYLOADS.md) holds the
+            # selected error's payload: its declared type, known statically
+            # from the error's identity alone.
+            set payloadType [hir::errordecls::payloadType $name]
+            dict set ctx types $payload $payloadType
+            dict set hir bindings $payload type [intern hir $payloadType]
+        }
         dict set ctx reachable $entry
-        set saved [dict get $ctx facts]
-        lappend handlerTypes [Sequence hir ctx $body]
-        dict set ctx facts $saved
+        dict set ctx facts $handlerEntry
+        set handlerType [Sequence hir ctx $body]
+        lappend handlerTypes $handlerType
+        if {$handlerType ne "never"} {
+            lappend ends [dict get $ctx facts]
+        }
+    }
+    dict set ctx facts $completed
+    if {$validated ne {} && $ends ne {}} {
+        set joined [lindex $ends 0]
+        foreach end [lrange $ends 1 end] {
+            set joined [hir::refine::Meet $joined $end 1]
+        }
+        dict set ctx facts $joined
     }
     dict set ctx reachable $entry
     # Recorded for hir/errorsets.tcl, which (after this whole inference
@@ -1889,6 +2710,16 @@ proc hir::types::Bind {hirVar ctxVar e} {
     if {$typed} {
         dict set ctx types $b $value
         dict set hir bindings $b type [intern hir $value]
+        if {$value eq "bool"} {
+            # What the Boolean value implies is a property of the value, so
+            # it belongs to the immutable binding that holds it: `ok =
+            # p(s)` then `if ok:` proves what `if p(s):` would
+            # (REFINEMENT-VALUES.md, hir/refine.tcl's Implication).
+            set implication [hir::refine::Implication $hir $ctx $valueExpr]
+            if {$implication ne [hir::refine::Nothing]} {
+                dict set ctx implies $b $implication
+            }
+        }
     }
     return $value
 }
@@ -1930,7 +2761,9 @@ proc hir::types::Block {hirVar outerVar e self} {
     }
     hir::semantic::RecordEnv $hir $outer $e $self $selfType
     set declared [dict get $node declaredResult]
-    set assumed [expr {$declared eq {} ? {never} : $declared}]
+    # A declared trait result is a view whose witness the body decides
+    # (hir::traits::ViewResult), so it is inferred like an undeclared one.
+    set assumed [expr {$declared eq {} || [IsTraitConstraint $declared] ? {never} : $declared}]
     set attempts [expr {$self eq "" ? 1 : 3}]
     for {set attempt 1} {$attempt <= $attempts} {incr attempt} {
         if {$attempt == $attempts && $attempts > 1} {
@@ -1939,6 +2772,7 @@ proc hir::types::Block {hirVar outerVar e self} {
         set ctx [NewContext]
         dict set ctx types [dict get $outer types]
         dict set ctx facts [dict get $outer facts]
+        dict set ctx implies [dict get $outer implies]
         if {[dict exists $outer inst]} {
             dict set ctx inst [dict get $outer inst]
         }
@@ -1960,10 +2794,18 @@ proc hir::types::Block {hirVar outerVar e self} {
         # (hir::signatures::entryTypes, INTRINSIC-FUNCTION-CONTRACT-
         # INFERENCE.md): every call is held to it exactly like a
         # declaration, so the body may assume it the same way.
+        set index 0
         foreach b [dict get $node params] declaredType [hir::signatures::entryTypes $hir $e] {
             if {$declaredType ne {}} {
+                if {[IsTraitConstraint $declaredType]} {
+                    # A trait-typed parameter (TRAITS.md): the body sees a
+                    # view of the trait whose witness is this parameter's
+                    # own, unknown and independent of every other's.
+                    set declaredType [hir::traits::AbstractView $declaredType $e $index]
+                }
                 dict set ctx types $b $declaredType
             }
+            incr index
         }
         set body [Sequence hir ctx [dict get $node body]]
         set result [lub $body [dict get $ctx returnType]]
@@ -1973,35 +2815,9 @@ proc hir::types::Block {hirVar outerVar e self} {
         set assumed $result
     }
     dict set hir exprs $e inferredResultType [intern hir $result]
-    if {$declared ne {}} { set result $declared }
+    if {$declared ne {}} { set result [hir::traits::ViewResult $declared $result] }
     dict set hir exprs $e resultType [intern hir $result]
     return [blockType $hir $e $arity $result]
-}
-
-# The native NAME a reference to a *module-bridged* type-test predicate
-# denotes, when CALLEEEXPR's own reported type was redirected from
-# {native NAME} to {block ...} by the module-native bridge (BindingType's
-# moduleNativeTargets case, above) -- so a bridged predicate's known-folding
-# (this proc, below) and branch refinement (hir/refine.tcl) still key off its
-# real semantic identity, the same way an unbridged native predicate's always
-# have, even though its call *target* for lowering purposes is the ordinary
-# resolved module function BindingType redirected it to. "" if CALLEEEXPR is
-# not such a reference (an ordinary block call, or a native the bridge never
-# retyped). Never consulted for a plain {native NAME} callee: that case
-# already has its own name directly, with no redirection to see through.
-proc hir::types::BridgedNative {hir calleeExpr} {
-    if {[hir::kind $hir $calleeExpr] ne "ref"} {
-        return ""
-    }
-    set b [hir::get $hir $calleeExpr binding]
-    if {$b eq "" || [dict get [hir::binding $hir $b] kind] ne "root"} {
-        return ""
-    }
-    set value [dict get [hir::binding $hir $b] value]
-    if {[core::value::kind $value] ne "native"} {
-        return ""
-    }
-    return [core::value::nativeName $value]
 }
 
 proc hir::types::Call {hirVar ctxVar e} {
@@ -2027,6 +2843,19 @@ proc hir::types::Call {hirVar ctxVar e} {
     set known ""
     set result any
     set spec [dict exists $ctx spec]
+    if {!$spec} {
+        # A method-syntax call whose receiver is a trait view is an operation
+        # of the trait (TRAITS.md): typed from the requirement, never from
+        # whatever function of that name the code can see.
+        set traitCall [hir::traits::TypeCall hir $e $node]
+        if {$traitCall ne ""} {
+            lassign $traitCall result calleeErrors
+            dict set hir exprs $e target ""
+            dict set hir exprs $e known ""
+            dict set hir exprs $e calleeErrors $calleeErrors
+            return [expr {$dead ? "never" : $result}]
+        }
+    }
     if {[lindex $calleeType 0] eq "native" && [llength $calleeType] == 2} {
         set name [lindex $calleeType 1]
         set target [list native [hir::resolve::nativeSymbol hir $name]]
@@ -2092,42 +2921,38 @@ proc hir::types::Call {hirVar ctxVar e} {
     } elseif {[IsExactBlock $calleeType]} {
         lassign $calleeType _ block arity blockResult
         set target [list block $block]
-        if {[llength $argTypes] == 1} {
-            # A module-bridged type-test predicate (BridgedNative, above):
-            # its call target is the ordinary resolved module function, but
-            # its known-folding still uses its real native identity, exactly
-            # as an unbridged native predicate's always has -- both spellings
-            # of a compatibility-aliased predicate share this identity
-            # (core::native::alias), so this is spelling-independent.
-            set bridged [BridgedNative $hir [dict get $node callee]]
-            if {$bridged ne "" && [dict get [core::native::metadata $bridged] testsType] ne ""} {
-                set known [hir::refine::decideTypeTest $bridged [lindex $argTypes 0]]
+        if {$known eq "" && !$dead && [hir::refine::IsPredicate $hir $block]} {
+            # An exact predicate-result fact (REFINEMENT-VALUES.md): this
+            # very invocation -- the same proof-producing function on the
+            # same argument values -- already returned a known result on
+            # every path reaching here, and the function is repeatable
+            # (hir/repeatable.tcl), so the call is decided. A refinement
+            # fact about the argument alone never decides it: another
+            # function proving the same refinement need not return true.
+            # A validator (`-> unit proves`) has no exact result to record
+            # and is never decided: removing a repeated validator call
+            # would also remove the failure it may raise.
+            set key [hir::refine::CallKey $hir $block $argExprs]
+            if {$key ne "" && [dict exists $ctx facts $key] && [hir::repeatable::Block $hir $block]} {
+                set known [dict get $ctx facts $key]
             }
         }
         if {$arity == [llength $argExprs]} {
+            # A view the callee returns of one of its own trait parameters is
+            # the caller's argument's view (TRAITS.md, "Provenance").
+            set blockResult [hir::traits::SubstituteResult $blockResult $block $argTypes]
             set result $blockResult
             if {$spec && !$dead && [dict get $ctx reachable]} {
                 set result [{*}[dict get $ctx spec] call $e $block $argTypes]
             }
-            if {!$dead && [dict exists $node nativeResultOverride]} {
-                # A trusted native's declared result type survives the
-                # native-body attachment of native::prepareHir:
-                # still run the spec handler above unconditionally, so
-                # instance discovery/edges for the substituted body are
-                # unaffected, but the call's own *type* is the registered
-                # one, not whatever the body block infers.
-                set result [dict get $node nativeResultOverride]
-            }
             if {!$dead} {
-                # An intrinsic container rule of the resolved callee
-                # (hir/containers.tcl): the mutarray library's from_list and create
-                # relate their result to their argument types, which the
-                # non-generic function type cannot say.
-                set rule [hir::containers::RuleOf $hir $block]
-                if {$rule ne ""} {
-                    set result [hir::containers::CallResult $rule $argTypes $result]
-                } elseif {!$spec && [dict get $ctx reachable]
-                        && ![dict exists $node nativeResultOverride]} {
+                # (No call of a Botlish function is typed by a precomputed
+                # rule instead of its body: MutableArray's relational
+                # constructors are intrinsics, MUTABLE-ARRAY.md.)
+                if {!$spec && ([dict get $ctx reachable] || [hir::traits::IsPolymorphic $hir $block])} {
+                    # (A call of a trait-polymorphic function always gets its
+                    # instance, reachable or not: its witnesses decide which
+                    # specialization the call is, TRAITS.md.)
                     # An opportunistic semantic instance of the callee
                     # (hir/semantic.tcl): its ordinary body analyzed under
                     # this call's concrete argument types. The call is
@@ -2153,7 +2978,22 @@ proc hir::types::Call {hirVar ctxVar e} {
         } elseif {$spec} {
             set dead 1
         }
-    } elseif {$spec && [kindOf $calleeType] ni {"" block native}} {
+    } elseif {[IsCoroutine $calleeType]} {
+        # A call of a coroutine handle (AFFINE-VALUES.md): the coroutine
+        # callable kind -- a resume of its one execution -- typed from the
+        # same callable contract a structural Fn has: what each resume
+        # returns, and (calleeErrors below) which declared errors may cross
+        # it. Its messages are held to the contract's arguments by the same
+        # check (hir::range::VerifyStructuralCall), and it lowers to the
+        # coroutine resume (hir::coroutines::ElaborateResumes), never to a
+        # call of a function value.
+        set protocol [CoroutineResume $calleeType]
+        if {$protocol eq "any" || [llength [dict get [lindex $calleeType 1] args]] == [llength $argExprs]} {
+            set result [CoroutineOutward $calleeType]
+        } elseif {$spec} {
+            set dead 1
+        }
+    } elseif {$spec && [kindOf $calleeType] ni {"" block native coroutine}} {
         # Not callable: the call always raises NOT-CALLABLE.
         set dead 1
     }
@@ -2162,30 +3002,66 @@ proc hir::types::Call {hirVar ctxVar e} {
     # The declared errors this call may propagate (EXPLICIT-ERROR-
     # COMPLETIONS.md), for hir/errorsets.tcl. Only an exact, directly-known
     # callee (target {block ExprId}, or a root native whose registry entry
-    # declares -errors: `argv`) or a structural one (its contract's declared
-    # errors) can ever be charged with a nonempty set here, and any other
-    # callee (an unresolved
-    # dynamic dispatch through any/a bare kind) is sound to treat as
-    # producing none, because hir/callables.tcl's escape audit (widened to
-    # cover an error-bearing block exactly like a typed-parameter-bearing
-    # one) already rejects every position that would let an error-bearing
-    # callable reach such a call erased of both its exact identity and its
-    # structural contract -- so a callee that reaches here with neither can
-    # never actually be one.
+    # declares -errors: `argv`) or a structural one is charged with a
+    # nonempty set here. For a structural Fn or Coroutine callee it is the
+    # callable contract's declared error set: a valid semantic upper bound,
+    # because every value of that type was checked against the contract
+    # where it acquired it -- its declared errors by subtyping, what it
+    # raises through a callable it captured or receives by the verified
+    # contract boundary (hir/completions.tcl's Subsume) -- so no other error
+    # is ever added to it. Any other callee (an unresolved dynamic dispatch
+    # through any/a bare kind: uncontracted) is charged none at this type
+    # level. That is not a proof it raises nothing -- unknown never means
+    # empty: hir/callables.tcl's escape audit rejects every erasure of an
+    # error-bearing callable except into an untyped parameter of a semantic
+    # instance (hir/semantic.tcl) or of a callable given a structural type,
+    # so such a callee may be one after all. The completion analysis
+    # (hir/completions.tcl, "Precision and the erased-callable contract") and
+    # hir/affine.tcl's error edges charge what it may raise.
     set calleeErrors {}
     if {[lindex $target 0] eq "block"} {
         set calleeErrors [dict get $hir exprs [lindex $target 1] declaredErrors]
     } elseif {[lindex $target 0] eq "native"} {
         # A root native declares errors only through its registry entry
-        # (-errors: `argv`'s InvalidArgumentEncoding).
-        set calleeErrors [dict get [core::native::metadata [dict get [hir::symbol $hir [lindex $target 1]] name]] errors]
-    } elseif {[IsFn $calleeType]} {
-        # A structural callee's declared error contract: every error it
-        # permits may escape this call, since which implementation runs
-        # (and so any narrower proof about it) is unknown here.
-        set calleeErrors [FnErrors $calleeType]
+        # (-errors: `argv`'s InvalidArgumentEncoding) -- except a coroutine
+        # segment (start, resume: COROUTINES.md), which ends with whatever
+        # declared error its body lets escape, as the handle's type says.
+        set meta [core::native::metadata [dict get [hir::symbol $hir [lindex $target 1]] name]]
+        set calleeErrors [dict get $meta errors]
+        if {[dict get $meta completion] && [IsCoroutine [lindex $argTypes 0]]} {
+            set calleeErrors [CoroutineErrors [lindex $argTypes 0]]
+        }
+        if {[dict get $meta errorsFrom] ne ""} {
+            # A native that calls a callable argument (-errors-from:
+            # mutable_array::generate's factory) completes with whatever
+            # declared error that callable's contract permits.
+            set calleeErrors [lsort -unique [concat $calleeErrors \
+                [CallableErrors $hir [lindex $argTypes [dict get $meta errorsFrom]]]]]
+        }
+    } elseif {[IsFn $calleeType] || [IsCoroutine $calleeType]} {
+        # A structural callee's declared error contract (a Fn's, or a
+        # coroutine handle's: the errors a segment may end with): every
+        # error it permits may escape this call, since which implementation
+        # runs (and so any narrower proof about it) is unknown here -- and no
+        # error it does not permit can (above).
+        set calleeErrors [dict get [Contract $calleeType] errors]
     }
     dict set hir exprs $e calleeErrors $calleeErrors
+    if {!$dead && [lindex $target 0] eq "block"} {
+        # A validator's proof (REFINEMENT-VALUES.md, "Validators"): once
+        # this call completes normally, its argument satisfies the
+        # contract's refinement -- a flow fact about the rest of the path,
+        # like a native's parameter types above, scoped and joined like
+        # every other fact. Inside a handled call, the bindings it narrows
+        # are logged for Handle: a handler may run instead of this
+        # completion, and must not see its proof.
+        foreach {b fact} [hir::refine::CompletionFacts $hir $e] {
+            Narrow $hir ctx $b $fact
+            if {[dict exists $ctx completionLog]} {
+                dict set ctx completionLog $b 1
+            }
+        }
+    }
     return [expr {$dead ? "never" : $result}]
 }
 
@@ -2233,6 +3109,7 @@ proc hir::types::If {hirVar ctxVar e} {
 
     set known ""
     set refinements [dict create 1 {} 0 {}]
+    set implication [hir::refine::Nothing]
     if {[dict exists $ctx spec] && [kindOf $test] ni {"" bool}} {
         # Region inference: the condition is statically not a Boolean, so
         # the if always raises NOT-BOOLEAN.
@@ -2245,21 +3122,49 @@ proc hir::types::If {hirVar ctxVar e} {
             # The if raises unless the condition is a Boolean.
             Narrow $hir ctx [ValueBinding $hir $condition] bool
         }
-        set refinements [hir::refine::branchFacts $hir $condition]
+        set implication [hir::refine::Implication $hir $ctx $condition]
+        set refinements [hir::refine::branchFacts $hir $condition $ctx]
     }
     dict set hir exprs $e refinements $refinements
 
     set branchTypes [dict create]
+    set saved [dict get $ctx facts]
+    set ends {}
     foreach {outcome role} {1 then 0 else} {
-        set saved [dict get $ctx facts]
-        dict set ctx reachable [expr {$live && ($known eq "" || $known == $outcome)}]
+        set reachable [expr {$live && ($known eq "" || $known == $outcome)}]
+        dict set ctx reachable $reachable
         dict set hir scopes [dict get $node ${role}Scope] refinements [dict get $refinements $outcome]
         foreach {b fact} [dict get $refinements $outcome] {
             Narrow $hir ctx $b $fact
         }
+        if {$test ne "never" && [dict get $implication $outcome] ne "never"} {
+            # The exact predicate results this outcome establishes
+            # (hir/refine.tcl's call keys), for Call's decided repeats.
+            dict for {key value} [dict get $implication $outcome] {
+                if {[hir::refine::IsCallKey $key]} {
+                    dict set ctx facts $key $value
+                }
+            }
+        }
         dict set branchTypes $outcome [Sequence hir ctx [dict get $node ${role}Body]]
+        if {$reachable && [dict get $branchTypes $outcome] ne "never"} {
+            lappend ends [dict get $ctx facts]
+        }
         dict set ctx facts $saved
         dict set ctx reachable $entry
+    }
+    if {$ends ne {}} {
+        # The join (REFINEMENT-VALUES.md): a fact survives the if exactly
+        # when it holds at the end of every branch that completes normally
+        # -- a branch that returns, fails or breaks contributes nothing,
+        # like a never-completing branch contributes nothing to the if's
+        # value type. Facts about one binding join by lub; an exact
+        # predicate result survives when every such branch agrees.
+        set joined [lindex $ends 0]
+        foreach end [lrange $ends 1 end] {
+            set joined [hir::refine::Meet $joined $end 1]
+        }
+        dict set ctx facts $joined
     }
     if {$test eq "never"} {
         return never

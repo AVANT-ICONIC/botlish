@@ -15,7 +15,7 @@
 //! | helper                 | operands            | result / failure             | allocates |
 //! |------------------------|---------------------|------------------------------|-----------|
 //! | rt_int_add/sub/mul     | Int, Int            | Int                          | big Ints  |
-//! | rt_int_mod             | Int, Int            | Int (0<=r<|b|); ARITHMETIC   | no        |
+//! | rt_int_mod             | Int, Int            | Int (0<=r<|b|); ARITHMETIC   | big Ints  |
 //! | rt_int_and/or/xor      | Int, Int            | Int (two's-complement)       | big Ints  |
 //! | rt_int_shl/shr         | Int, Int(shift>=0)  | Int; RANGE if shift invalid  | big Ints  |
 //! | rt_int_cmp             | Int, Int            | -1/0/1 (raw i64)             | no        |
@@ -30,6 +30,10 @@
 //! | rt_str_lower           | Str                 | Str                          | yes       |
 //! | rt_str_cat             | Str, Str            | Str                          | yes       |
 //! | rt_str_utf8_bytes      | Str                 | List of Int (0..255); RANGE  | yes       |
+//! | rt_str_char_at         | Str, Int            | UnicodeChar; declared        | no        |
+//! |                        |                     | IndexNotFound (str::char_at) |           |
+//! | rt_str_char_at_proven  | Str, Int            | UnicodeChar (index proven    | no        |
+//! |                        |                     | valid by hir/completions.tcl)|           |
 //! | rt_argv                |                     | List of Str; declared        | yes       |
 //! |                        |                     | InvalidArgumentEncoding      |           |
 //! | rt_linux_x86_64_syscall| 7 Ints (i64 words)  | Int: raw rax, signed (see    | big Ints  |
@@ -70,6 +74,12 @@
 //! | rt_stack_overflow      |                     | records NATIVE LIMIT STACK   | no        |
 
 use super::construct::{rt_construct, rt_plan_materialize};
+use super::affine::rt_affine_drop;
+use super::mutvec::{
+    rt_mv_at, rt_mv_clear, rt_mv_clear_drop, rt_mv_empty, rt_mv_from_list, rt_mv_len, rt_mv_pop, rt_mv_push, rt_mv_share,
+    rt_mv_swap, rt_mv_swap_drop, rt_mv_take, rt_mv_take_front, rt_mv_to_list,
+};
+use super::coroutine::{rt_co_create, rt_co_done, rt_co_release, rt_co_resume, rt_co_resume0, rt_co_start, rt_co_yield};
 use super::error::{semantic_kind, RtError};
 use super::syscall::rt_linux_x86_64_syscall;
 use super::value::*;
@@ -78,6 +88,7 @@ use crate::nir::OpCode;
 use num_bigint::BigInt;
 use num_traits::Signed;
 use std::cmp::Ordering;
+use std::rc::Rc;
 use unicode_general_category::{get_general_category, GeneralCategory};
 
 /// Whether OP's runtime implementation may allocate (and so may trigger a
@@ -88,13 +99,21 @@ use unicode_general_category::{get_general_category, GeneralCategory};
 /// never allocates but their BigInt-overflow fallback (`rt_int_add` etc.)
 /// might; codegen has no cheaper way to tell the two paths apart from NIR
 /// alone, so the whole instruction is conservatively a safepoint (see
-/// codegen::roots's module doc).
+/// codegen::roots's module doc). `IMod` likewise: a BigInt operand can give
+/// a remainder outside the small-Int range, which `rt_int_mod` allocates.
 pub fn op_may_allocate(op: OpCode) -> bool {
     use OpCode::*;
     matches!(
         op,
-        IAdd | ISub | IMul | IAnd | IOr | IXor | IShl | IShr | Substr | DecodeCharAt | ShortToStr | AsciiToStr | StrLower | StrCat
+        IAdd | ISub | IMul | IMod | IAnd | IOr | IXor | IShl | IShr | Substr | DecodeCharAt | ShortToStr | AsciiToStr | StrLower | StrCat
             | StrUtf8Bytes | Argv | ListNew | ListAppend | MutArrayAllocate | MutArrayFreeze | MkOk
+            // The owned byte storage is one allocation (a collection may run
+            // first); the empty storage is a shared static (no allocation).
+            | BytesFromList
+            // The writable storage family (MUTABLE-BYTES.md): each of these
+            // but length/address makes a fresh object (a collection may run
+            // first, with the operands rooted).
+            | MBytesNew | MBytesFrom | MBytesSet | MBytesClone | MBytesFreeze | MBytesFreezePrefix
             // The proven siblings allocate exactly like their checked forms; only
             // their op_may_error classification differs.
             | SubstrProven | MutArrayFreezeProven | MkError
@@ -109,18 +128,49 @@ pub fn op_may_allocate(op: OpCode) -> bool {
             // may_error and may_gc are independent effect dimensions, and
             // this milestone changes only the former.
             | SetFromListTotal
+            // Coroutines (COROUTINES.md): create allocates the handle; start,
+            // resume and yield run arbitrary code (the body's segment, or
+            // other coroutines while this one is suspended), and suspension
+            // in particular must be a safepoint -- a suspended frame's roots
+            // are found only through its stack map.
+            | CoCreate | CoStart | CoResume | CoResume0 | CoYield
+            // MutableVector (MUTABLE-VECTOR.md): a new header (from_list, a
+            // share) or a List (the snapshot); the mutations allocate no
+            // Botlish object (runtime/mutvec.rs).
+            | MvFromList | MvShare | MvToList
+            // MutableArray (MUTABLE-ARRAY.md): a new header (and backing),
+            // or a List; generate runs the factory's code for every slot.
+            // The writes allocate no Botlish object.
+            | MutArrayCreate | MutArrayFromList | MutArrayGenerate | MutArrayGenerateDrop | MutArrayToList
     )
 }
 
 /// Whether OP can report a Botlish semantic error by returning NO_VALUE.
 pub fn op_may_error(op: OpCode) -> bool {
     use OpCode::*;
-    matches!(op, IMod | IShl | IShr | VEq | Hash | Substr | StrCat | StrUtf8Bytes | Argv | StrIsTclAlpha | StrIsTclAlnum
+    matches!(op, IMod | IShl | IShr | VEq | Hash | Substr | StrCat | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
+        // A non-byte element (TYPE, never a truncation), an operand that is
+        // not a byte storage (TYPE), an oversized storage (RANGE). A checked
+        // program cannot produce any of them: lib/abi/bytes.bot's creator takes
+        // a List[Byte] and its storage field only ever holds a storage.
+        | BytesFromList | BytesLen | BytesAddr
+        // The writable family: a length that is not 0..the ceiling (RANGE), an
+        // operand of the wrong kind (TYPE: the readable and writable storages
+        // are never interchanged), an index/count outside the payload (RANGE),
+        // a value that is not a byte (TYPE). Checked programs cannot produce
+        // any of them: lib/abi/bytes.bot's wrappers prove each before the call.
+        | MBytesNew | MBytesFrom | MBytesLen | MBytesSet | MBytesClone | MBytesFreeze | MBytesFreezePrefix | MBytesAddr
         // Only on an operand that is not a 64-bit register word (TYPE, never
         // a truncation: runtime/syscall.rs), which a checked program cannot
         // produce. The kernel's own result is never an error here.
         | SyscallLinuxX86_64
         | ListNew | ListGet | ListAppend | MutArrayAllocate | MutArrayGet | MutArraySet | MutArrayCopy | MutArrayFreeze
+        // MutableVector: the declared IndexNotFound (runtime/mutvec.rs).
+        | MvAt | MvPop | MvTake | MvSwap | MvSwapDrop
+        // MutableArray: a capacity outside the limit (RANGE), the declared
+        // IndexNotFound, and whatever a factory call fails with.
+        | MutArrayCreate | MutArrayGenerate | MutArrayGenerateDrop | MutArraySwap | MutArraySwapDrop
+        | MutArraySetDrop
         | ResultValue | ResultError | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum
         // Construction (dedup) and membership (a linear equal-scan) can
         // both raise EQUALITY through the same pre-existing
@@ -141,7 +191,11 @@ pub fn op_may_error(op: OpCode) -> bool {
         // (M3-EQUALITY-TOTAL-SETCONTAINS-EFFECT.md,
         // M4-EQUALITY-TOTAL-SETFROMLIST-EFFECT.md). Generic SetFromList/
         // SetContains keep their unconditional classification.
-        | SetFromList | SetContains)
+        | SetFromList | SetContains
+        // A segment ends with the body's unhandled error; a yield outside a
+        // running coroutine is a defensive runtime check a checked program
+        // never reaches.
+        | CoStart | CoResume | CoResume0 | CoYield)
 }
 
 pub type GenericEntry = extern "C" fn(*mut Vm, Value, *const Value) -> Value;
@@ -199,7 +253,38 @@ pub extern "C" fn rt_fail_declared(p: *mut Vm, id: u64, name: Value) -> Value {
     let name_text = str_of(name).as_str().to_string();
     let vm = vm(p);
     vm.declared_error = id as u32;
+    vm.declared_payload.clear();
     vm.fail(RtError::Semantic { kind: "UNCAUGHT-ERROR", message: format!("uncaught propagated error: <error {name_text}>") })
+}
+
+/// `fail NAME {field: value, ...}` (ERROR-PAYLOADS.md; Inst::Fail with
+/// payload registers): `rt_fail_declared`, plus the payload's N field values
+/// at FIELDS, in the slot order of its anonymous struct SHAPE, copied into
+/// the Vm's payload slots (`Vm::declared_payload`, a GC root) -- the field
+/// values are transported as they are, no struct object is built for them.
+/// The slots reuse their capacity: a payload-bearing failure allocates no
+/// heap object. Only an uncaught one is ever rendered (`Vm::describe_error`).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_fail_declared_payload(p: *mut Vm, id: u64, name: Value, shape: u64, n: u64, fields: *const Value) -> Value {
+    let fields = unsafe { std::slice::from_raw_parts(fields, n as usize) };
+    let name_text = str_of(name).as_str().to_string();
+    let vm = vm(p);
+    vm.declared_error = id as u32;
+    vm.declared_payload.clear();
+    vm.declared_payload.extend_from_slice(fields);
+    vm.declared_payload_shape = shape as u32;
+    vm.fail(RtError::Semantic { kind: "UNCAUGHT-ERROR", message: format!("uncaught propagated error: <error {name_text}>") })
+}
+
+/// Field INDEX (slot order) of the pending declared error's payload: what a
+/// handler that matched it receives (codegen::clif's DeclaredPayload),
+/// before `rt_clear_declared_error` releases the slots. No allocation.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_declared_payload(p: *mut Vm, index: u64) -> Value {
+    // (Out of range only in a program run despite its diagnostics -- a
+    // payload-bearing error raised without one, MISSING-ERROR-PAYLOAD,
+    // -strict 0: unit, never a read past the slots.)
+    vm(p).declared_payload.get(index as usize).copied().unwrap_or(UNIT)
 }
 
 /// The pending declared-error id (0 = none), for a `handle`'s own dispatch
@@ -224,6 +309,7 @@ pub extern "C" fn rt_declared_error(p: *mut Vm) -> u64 {
 pub extern "C" fn rt_clear_declared_error(p: *mut Vm) -> u64 {
     let vm = vm(p);
     vm.declared_error = 0;
+    vm.declared_payload.clear();
     vm.error = None;
     0
 }
@@ -382,7 +468,9 @@ fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
     let (ka, kb) = (kind_of(a), kind_of(b));
     // MutableArray, like Block/Native, has no structural equality (req #31:
     // its identity/equality semantics are a separate design question).
-    if matches!(ka, Kind::Block | Kind::Native | Kind::MutArray) || matches!(kb, Kind::Block | Kind::Native | Kind::MutArray) {
+    if matches!(ka, Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec)
+        || matches!(kb, Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec)
+    {
         vm(p).fail(RtError::Equality { a, b });
         return Err(());
     }
@@ -398,6 +486,19 @@ fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
         // Immediate, canonical (one codepoint, one word): word equality is
         // exactly value equality, like Bool.
         Kind::UnicodeChar => a == b,
+        // An enum case word is canonical (ENUMS.md): the same enum
+        // declaration and the same case of it have one word, so word
+        // equality is exactly nominal equality -- another enum's
+        // same-spelled case is another word.
+        Kind::Enum => a == b,
+        // Exact byte-sequence equality (core::value::equal's bytestore
+        // case): length and every byte, never the storage's identity or
+        // address -- a static constant, a heap buffer and a copy of either
+        // are equal iff their bytes are.
+        Kind::ByteStore => bytes_of(a) == bytes_of(b),
+        // The same, for the writable storage: its current contents, never
+        // its identity (a MutableBytes has none).
+        Kind::MutByteStore => mutbytes_of(a) == mutbytes_of(b),
         Kind::List => {
             let (xs, ys) = (list_of(a).items(), list_of(b).items());
             if xs.len() != ys.len() {
@@ -432,7 +533,7 @@ fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
             }
             true
         }
-        Kind::Block | Kind::Native | Kind::MutArray => unreachable!(),
+        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec => unreachable!(),
     })
 }
 
@@ -510,7 +611,7 @@ fn fnv1a(h: u64, bytes: &[u8]) -> u64 {
 /// a Result payload exactly as `equal` recurses (see ops.rs's `equal`).
 fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
     let kind = kind_of(v);
-    if matches!(kind, Kind::Block | Kind::Native | Kind::MutArray) {
+    if matches!(kind, Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec) {
         vm(p).fail(RtError::Unhashable { value: v });
         return Err(());
     }
@@ -528,7 +629,10 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         Kind::UnicodeChar => 6,
         Kind::ImmutableSet => 7,
         Kind::Struct => 8,
-        Kind::Block | Kind::Native | Kind::MutArray => unreachable!(),
+        Kind::ByteStore => 9,
+        Kind::MutByteStore => 10,
+        Kind::Enum => 11,
+        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec => unreachable!(),
     };
     let h = fnv1a(h, &[tag]);
     Ok(match kind {
@@ -545,9 +649,37 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         Kind::Str => fnv1a(h, str_of(v).as_bytes()),
         Kind::Bool => fnv1a(h, &[(v == TRUE) as u8]),
         Kind::Unit => h,
+        // The byte count (8 bytes, little-endian), then every byte in order:
+        // core/hashing.tcl's bytestore case, byte for byte, and consistent
+        // with the byte-sequence equality above.
+        Kind::ByteStore => {
+            let bytes = bytes_of(v);
+            let h = fnv1a(h, &(bytes.len() as u64).to_le_bytes());
+            fnv1a(h, bytes)
+        }
+        // A MutableBytes hashes by its current contents under its own kind
+        // tag (core/hashing.tcl's `bytestore - mutbytes` case).
+        Kind::MutByteStore => {
+            let bytes = mutbytes_of(v);
+            let h = fnv1a(h, &(bytes.len() as u64).to_le_bytes());
+            fnv1a(h, bytes)
+        }
         // Canonical decimal codepoint text, matching how Int's own text is
         // hashed above (core/hashing.tcl's identical choice).
         Kind::UnicodeChar => fnv1a(h, char_of(v).to_string().as_bytes()),
+        // core/hashing.tcl's enum case, byte for byte (ENUMS.md): the enum's
+        // declaration identity text, a 0xFF separator, the case's declared
+        // name -- never the numbers the word carries.
+        Kind::Enum => {
+            let (e, c) = enum_parts(v);
+            current_program(|prog| {
+                let info = &prog.enums[e as usize];
+                let (name, case) = (&info.name, &info.cases[c as usize]);
+                let h = fnv1a(h, name.as_bytes());
+                let h = fnv1a(h, &[0xFF]);
+                fnv1a(h, case.as_bytes())
+            })
+        }
         Kind::List => {
             let items = list_of(v).items();
             let mut h = fnv1a(h, &(items.len() as u64).to_le_bytes());
@@ -598,7 +730,7 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
             h = fnv1a(h, &combined.to_le_bytes());
             h
         }
-        Kind::Block | Kind::Native | Kind::MutArray => unreachable!(),
+        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec => unreachable!(),
     })
 }
 
@@ -608,6 +740,259 @@ pub extern "C" fn rt_hash(p: *mut Vm, v: Value) -> Value {
         Ok(h) => vm(p).new_int((h & HASH_MASK) as i64),
         Err(()) => NO_VALUE,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Owned byte storage (ABI-BYTES.md, bytesobj.rs)
+
+/// `byte_store::from_list` (core/bytestore.tcl): L's elements, each an Int
+/// in 0..255 stored exactly (no `mod 256`, no sign reinterpretation, no
+/// character coercion; a 0 is an ordinary byte), eagerly copied into a new
+/// storage that owns them -- the result is not a view of L and does not
+/// retain it. The empty List gives the shared static empty storage (no
+/// allocation). A non-byte element is a TYPE error with the same text the
+/// Tcl implementation raises, naming the element's position.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_bytes_from_list(p: *mut Vm, l: Value) -> Value {
+    let items = list_of(l).items();
+    // Validate and narrow first: the new storage's payload is then written
+    // from this buffer with no failure possible while it is half built.
+    let mut bytes: Vec<u8> = Vec::with_capacity(items.len());
+    for (position, &item) in items.iter().enumerate() {
+        let byte = match int_small(item) {
+            Some(n) if (0..=255).contains(&n) => n as u8,
+            _ => {
+                let got = if is_small(item) || heap_kind(item) == KIND_BIGINT {
+                    super::show::int_text(item)
+                } else {
+                    super::show::show(item)
+                };
+                let message = format!(
+                    "byte_store::from_list: element {position} must be a byte (an Int in 0..255), got {got}"
+                );
+                return vm(p).fail(RtError::Semantic { kind: "TYPE", message });
+            }
+        };
+        bytes.push(byte);
+    }
+    let r = vm(p).new_bytes(&bytes);
+    vm(p).metrics.record_list_copy(bytes.len());
+    r
+}
+
+/// The storage V, or a TYPE error naming CONTEXT (the same text as
+/// core::value::expect's, `CONTEXT: expected bytestore, got VALUE`).
+fn bytes_operand(p: *mut Vm, v: Value, context: &str) -> Result<(), Value> {
+    if heap_kind(v) == KIND_BYTES {
+        Ok(())
+    } else {
+        Err(vm(p).fail(RtError::Type { context: context.to_string(), expected: Kind::ByteStore, got: v }))
+    }
+}
+
+/// `byte_store::byte_count`: the exact byte count, as a small Int (the
+/// collection-length ceiling `Vm::alloc_bytes` enforces keeps it in range,
+/// which is what `-result-range collection-length` promises).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_bytes_len(p: *mut Vm, v: Value) -> Value {
+    if let Err(failed) = bytes_operand(p, v, "byte_store::byte_count") {
+        return failed;
+    }
+    make_small(bytes_of(v).len() as i64)
+}
+
+/// `abi::x86_64::from_bytes`, the raw address bridge (ABI-BYTES.md): the
+/// machine address of the first payload byte of storage V, as a small Int
+/// (the object's address plus the constant payload offset; no read of the
+/// payload, no allocation). Valid only while V is live and unmoved -- the
+/// collector never moves objects, and native lowering keeps V live through the
+/// syscall that consumes the address (`op keepalive`). The address of a
+/// 47-bit Linux x86-64 user-space object is far below the small-Int
+/// ceiling; anything else is refused rather than truncated.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_bytes_addr(p: *mut Vm, v: Value) -> Value {
+    if let Err(failed) = bytes_operand(p, v, "abi::x86_64::from_bytes") {
+        return failed;
+    }
+    let address = BytesObj::payload_address(v) as i64;
+    if !fits_small(address) {
+        let message = format!("abi::x86_64::from_bytes: the payload address {address:#x} is outside the small-Int range");
+        return vm(p).fail(RtError::Semantic { kind: "RANGE", message });
+    }
+    make_small(address)
+}
+
+/// `op keepalive %b`: a use of V that the optimizer cannot remove and that
+/// does nothing. native/lower.tcl emits it *after* every syscall whose
+/// address operands came from `bytesaddr %b`, so V is live (a GC root at
+/// every safepoint, including the syscall's own) from its definition until the
+/// kernel has returned. `black_box` keeps the value observed.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_keepalive(_p: *mut Vm, v: Value) -> Value {
+    std::hint::black_box(v);
+    UNIT
+}
+
+// ---------------------------------------------------------------------------
+// MutableBytes (MUTABLE-BYTES.md): the writable byte storage, KIND_MUTBYTES.
+//
+// One rule makes a MutableBytes a VALUE rather than a reference: a storage is
+// written only while it is private to the operation that created it. Every
+// operation that changes contents (`rt_mbytes_set`, and the clone
+// `rt_mbytes_clone` that linux::read's kernel write goes into) allocates a
+// FRESH object, fills it from its operand, and (for set) writes the one byte;
+// the operand is never written. So a published storage never changes, two
+// logical copies may share it freely, and no boundary (binding, argument,
+// field, List element, closure capture, generic or `any` transport) has to
+// copy anything for independence to hold.
+
+/// The writable storage V, or a TYPE error naming CONTEXT.
+fn mutbytes_operand(p: *mut Vm, v: Value, context: &str) -> Result<(), Value> {
+    if heap_kind(v) == KIND_MUTBYTES {
+        Ok(())
+    } else {
+        Err(vm(p).fail(RtError::Type { context: context.to_string(), expected: Kind::MutByteStore, got: v }))
+    }
+}
+
+/// A non-negative small Int operand as a usize, or the RANGE/TYPE error
+/// CONTEXT names (BigInt and negative are RANGE; a non-Int is TYPE).
+fn index_operand(p: *mut Vm, v: Value, context: &str, what: &str, limit: usize) -> Result<usize, Value> {
+    if !is_small(v) && heap_kind(v) != KIND_BIGINT {
+        return Err(vm(p).fail(RtError::Type { context: context.to_string(), expected: Kind::Int, got: v }));
+    }
+    match int_small(v) {
+        Some(n) if n >= 0 && (n as u64) <= limit as u64 => Ok(n as usize),
+        _ => {
+            let message = format!("{context}: {what} must be in 0..{limit}, got {}", super::show::int_text(v));
+            Err(vm(p).fail(RtError::Semantic { kind: "RANGE", message }))
+        }
+    }
+}
+
+/// `mutable_byte_store::zeroed`: N zero bytes in a fresh writable storage.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mbytes_new(p: *mut Vm, n: Value) -> Value {
+    let count = match index_operand(p, n, "mutable_byte_store::zeroed", "the length", MAX_COLLECTION_LENGTH) {
+        Ok(count) => count,
+        Err(failed) => return failed,
+    };
+    vm(p).new_mutbytes_with(count, |init| init.push_zeros(count))
+}
+
+/// `mutable_byte_store::from_storage`: a fresh writable copy of immutable storage V.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mbytes_from(p: *mut Vm, v: Value) -> Value {
+    if let Err(failed) = bytes_operand(p, v, "mutable_byte_store::from_storage") {
+        return failed;
+    }
+    vm(p).metrics.record_list_copy(bytes_of(v).len());
+    vm(p).new_mutbytes_with(bytes_of(v).len(), |init| init.push_slice(bytes_of(v)))
+}
+
+/// `mutable_byte_store::count`: the fixed byte count of writable storage V.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mbytes_len(p: *mut Vm, v: Value) -> Value {
+    if let Err(failed) = mutbytes_operand(p, v, "mutable_byte_store::count") {
+        return failed;
+    }
+    make_small(mutbytes_of(v).len() as i64)
+}
+
+/// `mutable_byte_store::replace`: a fresh storage equal to M with byte I replaced
+/// by B. M is read, never written: the new object is allocated, filled from
+/// M, and only then is its one byte written (it is still private here).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mbytes_set(p: *mut Vm, m: Value, i: Value, b: Value) -> Value {
+    const CONTEXT: &str = "mutable_byte_store::replace";
+    if let Err(failed) = mutbytes_operand(p, m, CONTEXT) {
+        return failed;
+    }
+    let len = mutbytes_of(m).len();
+    if len == 0 {
+        // An empty storage has no byte to replace; (the shared static empty
+        // storage must never be written either).
+        let message = format!("{CONTEXT}: index {} is outside an empty MutableBytes", super::show::int_text(i));
+        return vm(p).fail(RtError::Semantic { kind: "RANGE", message });
+    }
+    let index = match index_operand(p, i, CONTEXT, "the index", len - 1) {
+        Ok(index) => index,
+        Err(failed) => return failed,
+    };
+    let byte = match int_small(b) {
+        Some(n) if (0..=255).contains(&n) => n as u8,
+        _ => {
+            let got = if is_small(b) || heap_kind(b) == KIND_BIGINT { super::show::int_text(b) } else { super::show::show(b) };
+            let message = format!("{CONTEXT}: the value must be a byte (an Int in 0..255), got {got}");
+            return vm(p).fail(RtError::Semantic { kind: "TYPE", message });
+        }
+    };
+    vm(p).metrics.record_list_copy(len);
+    let r = vm(p).new_mutbytes_with(len, |init| init.push_slice(mutbytes_of(m)));
+    if r != NO_VALUE {
+        // SAFETY: R is the fresh, fully written object this call just
+        // created (len > 0, so it is not the shared empty storage); nothing
+        // else holds it yet.
+        unsafe { BytesObj::payload_mut(r)[index] = byte };
+    }
+    r
+}
+
+/// `mutable_byte_store::detach`: a fresh storage equal to M (the detach).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mbytes_clone(p: *mut Vm, m: Value) -> Value {
+    if let Err(failed) = mutbytes_operand(p, m, "mutable_byte_store::detach") {
+        return failed;
+    }
+    vm(p).metrics.record_list_copy(mutbytes_of(m).len());
+    vm(p).new_mutbytes_with(mutbytes_of(m).len(), |init| init.push_slice(mutbytes_of(m)))
+}
+
+/// `mutable_byte_store::freeze`: an immutable snapshot of all of M's bytes.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mbytes_freeze(p: *mut Vm, m: Value) -> Value {
+    if let Err(failed) = mutbytes_operand(p, m, "mutable_byte_store::freeze") {
+        return failed;
+    }
+    vm(p).metrics.record_list_copy(mutbytes_of(m).len());
+    vm(p).new_bytes_with(mutbytes_of(m).len(), |init| init.push_slice(mutbytes_of(m)))
+}
+
+/// `mutable_byte_store::freeze_prefix`: an immutable snapshot of M's first N bytes.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mbytes_freeze_prefix(p: *mut Vm, m: Value, n: Value) -> Value {
+    const CONTEXT: &str = "mutable_byte_store::freeze_prefix";
+    if let Err(failed) = mutbytes_operand(p, m, CONTEXT) {
+        return failed;
+    }
+    let count = match index_operand(p, n, CONTEXT, "the count", mutbytes_of(m).len()) {
+        Ok(count) => count,
+        Err(failed) => return failed,
+    };
+    vm(p).metrics.record_list_copy(count);
+    vm(p).new_bytes_with(count, |init| init.push_slice(&mutbytes_of(m)[..count]))
+}
+
+/// `abi::x86_64::from_mutable_bytes`, the WRITABLE raw address bridge
+/// (MUTABLE-BYTES.md): the machine address of the first payload byte of
+/// writable storage M, as a small Int. Exactly `rt_bytes_addr`'s contract,
+/// for the other kind: it refuses a readable storage, so the two bridges are
+/// never mixed up; it does not copy (the caller -- linux::read -- holds a
+/// storage it just detached), and the storage must stay live until the
+/// syscall that writes through the address has returned (`op keepalive`).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mbytes_addr(p: *mut Vm, m: Value) -> Value {
+    if let Err(failed) = mutbytes_operand(p, m, "abi::x86_64::from_mutable_bytes") {
+        return failed;
+    }
+    let address = BytesObj::payload_address(m) as i64;
+    if !fits_small(address) {
+        let message = format!(
+            "abi::x86_64::from_mutable_bytes: the payload address {address:#x} is outside the small-Int range"
+        );
+        return vm(p).fail(RtError::Semantic { kind: "RANGE", message });
+    }
+    make_small(address)
 }
 
 // ---------------------------------------------------------------------------
@@ -920,6 +1305,40 @@ pub extern "C" fn rt_str_utf8_bytes(p: *mut Vm, s: Value) -> Value {
     r
 }
 
+/// `str::char_at(S, I)` (core/strings.tcl's `charAt`) at a character index
+/// I already known valid: the scalar as a UnicodeChar immediate, never an
+/// allocation. An ASCII String's character I is its byte I; otherwise
+/// character I is located by decoding forward from byte 0 -- the same seek
+/// `rt_substr`'s non-ASCII path pays, counted the same way in
+/// `utf8SeekBytes`. codegen::clif inlines the ASCII path of the proven form.
+fn char_at_index(p: *mut Vm, s: Value, i: usize) -> Value {
+    let obj = str_of(s);
+    if obj.ascii {
+        return make_char(obj.as_bytes()[i] as u32);
+    }
+    let text = obj.as_str();
+    let (at, c) = text.char_indices().nth(i).expect("index validated");
+    vm(p).metrics.record_utf8_seek(at);
+    make_char(c as u32)
+}
+
+/// `str::char_at` checked: any index that is not a small Int in 0..chars (a
+/// negative one, one at or past the end, a BigInt) is the declared
+/// IndexNotFound, exactly like `rt_list_get`.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_str_char_at(p: *mut Vm, s: Value, index: Value) -> Value {
+    match int_small(index) {
+        Some(i) if i >= 0 && (i as usize) < str_of(s).chars => char_at_index(p, s, i as usize),
+        _ => index_not_found(p),
+    }
+}
+
+/// `rt_str_char_at` at an index proven to designate a character (`strcharatproven`).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_str_char_at_proven(p: *mut Vm, s: Value, index: Value) -> Value {
+    char_at_index(p, s, int_small(index).expect("proven index") as usize)
+}
+
 /// `argv()` (core/process.tcl, ARGV.md): the run's argument snapshot as a
 /// List of Strings, each argument validated as UTF-8 only now, all or
 /// nothing. An invalid argument records the declared builtin error
@@ -935,6 +1354,7 @@ pub extern "C" fn rt_argv(p: *mut Vm) -> Value {
     let vm = vm(p);
     if let Some(index) = vm.argv_status() {
         vm.declared_error = super::error::ERR_INVALID_ARGUMENT_ENCODING;
+        vm.declared_payload.clear();
         // Same text `rt_fail_declared` records, so an unhandled argv failure
         // reads identically to every other backend's (the offending
         // argument's index is deliberately not part of the error).
@@ -1133,12 +1553,27 @@ fn index_not_found(p: *mut Vm) -> Value {
     fail_builtin(p, super::error::ERR_INDEX_NOT_FOUND, "IndexNotFound")
 }
 
+/// `ctxroot %h`: the MutableVector or MutableArray header H, just installed
+/// in the context area (MUTABLE-VECTOR.md, MUTABLE-ARRAY.md), stays a GC root for the rest of the run (the
+/// context owns it; it is mutated in place, never replaced).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_context_root(p: *mut Vm, h: Value) -> Value {
+    vm(p).context_roots.push(h);
+    UNIT
+}
+
+/// `index_not_found` for the other runtime modules (runtime/mutvec.rs).
+pub fn fail_index_not_found(p: *mut Vm) -> Value {
+    index_not_found(p)
+}
+
 /// Records the builtin declared error ID (named NAME) as pending and fails:
 /// what a handler's `declarederroreq` reads, with an UNCAUGHT-ERROR fallback
 /// for the program boundary. Returns NO_VALUE.
 fn fail_builtin(p: *mut Vm, id: u32, name: &str) -> Value {
     let vm = vm(p);
     vm.declared_error = id;
+    vm.declared_payload.clear();
     let message = format!("uncaught propagated error: <error {name}>");
     vm.fail(RtError::Semantic { kind: "UNCAUGHT-ERROR", message })
 }
@@ -1310,51 +1745,208 @@ pub extern "C" fn rt_set_contains(p: *mut Vm, s: Value, v: Value) -> Value {
 }
 
 // ---------------------------------------------------------------------------
-// MutableArrays: fixed-capacity, explicitly mutable indexed storage
-// (value.rs's MutArrayObj). Every constructor/mutator here is the runtime
-// substrate only -- growth policy, chunking and finalization strategy are
-// ordinary Botlish (see examples/stdlib), never decided in this file.
+// MutableArrays (MUTABLE-ARRAY.md): fixed-length mutable VALUES. A
+// MutableArray is a header (value.rs's MutArrayObj: the identity of one
+// logical array) over a copy-on-write backing (runtime/mutvec.rs's
+// header/backing model for a MutableVector; a fixed length makes the backing
+// one allocation, `Rc<[Value]>`, where a vector's `Rc<VecDeque>` is two): a
+// logical copy (`mvshare` with `h`, inserted by the compiler, hir/mutvec.tcl)
+// is a new header on the same backing, and the first write through a header
+// whose backing is shared detaches it (`array_writable`: one shallow copy of
+// the element words, counted). Growth policy, chunking and finalization
+// strategy stay ordinary Botlish (see examples/stdlib): the array's length
+// never changes after construction -- only a consuming loop drains an affine
+// array it owns, which is dead to the program by then, by advancing its
+// header's start past the elements it took.
 //
-// rt_mutarray_set and rt_mutarray_copy are the two places a slot's value
-// ever changes after allocation: a future write barrier (e.g. for a
-// generational collector) has exactly these two call sites to instrument,
-// never arbitrary code that pokes at a MutableArray's memory directly.
+// The writes (set, swap, copy, and their affine `_drop` forms) are the only
+// places a slot's value ever changes after construction: a future write
+// barrier (e.g. for a generational collector) has exactly these call sites
+// to instrument.
 //
-// "No misleading copy accounting" (milestone req #43): record_mutarray_copy
-// is called only for movement of *existing* values -- bulk copy and
-// finalization -- never for an ordinary append's single fresh write of a
-// caller-supplied value into unused capacity (that is charged, optionally,
-// as a mutarray write via record_mutarray_write instead).
+// "No misleading copy accounting": record_mutarray_copy is called only for
+// movement of *existing* values -- bulk copy and finalization -- never for a
+// single fresh write of a caller-supplied value (that is charged, optionally,
+// as a mutarray write via record_mutarray_write instead); a detach is
+// counted apart (record_mutarray_detach).
 
-#[unsafe(no_mangle)]
-pub extern "C" fn rt_mutarray_allocate(p: *mut Vm, capacity: Value) -> Value {
+/// A new MutableArray header on BACKING, its elements from START on
+/// (allocates; may collect first), registering BYTES of element storage
+/// with the heap: a new backing's, or 0 for a share (counted when it was
+/// made; a detach counts its own copy).
+pub fn new_mutarray_header(p: *mut Vm, start: usize, backing: Rc<[Value]>, bytes: usize) -> Value {
+    vm(p).alloc(MutArrayObj { hdr: Header::new(KIND_MUTARRAY, false), start, backing }, bytes)
+}
+
+/// The elements of array ARR, unique to its header: a shared backing is
+/// detached first (one shallow copy of the elements, counted, into a new
+/// backing of exactly their length), a unique one returned as is.
+fn array_writable<'a>(p: *mut Vm, arr: Value) -> &'a mut [Value] {
+    let obj = mutarray_of_mut(arr);
+    if Rc::strong_count(&obj.backing) > 1 {
+        let n = obj.items().len();
+        let vm = vm(p);
+        vm.metrics.record_mutarray_detach(n);
+        vm.heap.note_growth(n * 8);
+        obj.backing = backing_of(obj.items());
+        obj.start = 0;
+    }
+    let start = obj.start;
+    &mut Rc::get_mut(&mut obj.backing).expect("a detached backing is unique")[start..]
+}
+
+/// The elements of affine array ARR: its backing is never shared (an affine
+/// array is moved, never copied), so this never copies an element.
+pub fn array_owned<'a>(arr: Value, what: &str) -> &'a mut [Value] {
+    let obj = mutarray_of_mut(arr);
+    let start = obj.start;
+    match Rc::get_mut(&mut obj.backing) {
+        Some(slots) => &mut slots[start..],
+        None => panic!("{what}: an affine MutableArray's backing is shared (an ownership invariant violation)"),
+    }
+}
+
+/// Moves every element out of affine array ARR, which is left with none
+/// (its start past them: the array is dying), and returns them, first to
+/// last. They stay in the backing's slots, which nothing reads again; no
+/// element is copied.
+fn take_elements<'a>(arr: Value, what: &str) -> &'a [Value] {
+    let n = array_owned(arr, what).len();
+    let obj = mutarray_of_mut(arr);
+    obj.start += n;
+    &obj.backing[obj.start - n..]
+}
+
+/// The checked capacity of a new array for operation NAME: an Int in
+/// 0..=MAX_COLLECTION_LENGTH, else RANGE (Err: the failure, recorded).
+fn array_capacity(p: *mut Vm, capacity: Value, name: &str) -> Result<usize, Value> {
     match int_small(capacity) {
-        Some(n) if n >= 0 => vm(p).new_mutarray(n as usize),
+        Some(n) if n >= 0 && (n as u64) <= MAX_COLLECTION_LENGTH as u64 => Ok(n as usize),
         _ => {
-            let message = format!(
-                "mutable_array::allocate: capacity must be 0..{MAX_COLLECTION_LENGTH}, got {}",
-                int_to_big(capacity)
-            );
-            vm(p).fail(RtError::Semantic { kind: "RANGE", message })
+            let message = format!("{name}: capacity must be 0..{MAX_COLLECTION_LENGTH}, got {}", int_to_big(capacity));
+            Err(vm(p).fail(RtError::Semantic { kind: "RANGE", message }))
         }
     }
 }
 
+/// A new backing holding ITEMS, in one allocation: the iterator's exact
+/// length lets the Rc be allocated at its final size and filled in place.
+/// Element by element, never one `memcpy` (`Rc::from`): on an x86-64 with
+/// ERMS but no FSRM, glibc copies a mid-sized block (80 KB, a detach of
+/// 10 000 elements) with `rep movsb`, measured 12 % slower than this loop --
+/// and than the `VecDeque` clone the detach used to be.
+fn backing_of(items: &[Value]) -> Rc<[Value]> {
+    items.iter().copied().collect()
+}
+
+/// A fresh array of ITEMS (a new, unique backing). Every caller builds the
+/// backing in one allocation, by collecting an iterator of exact length
+/// (`backing_of`, `repeat_n`).
+fn new_array_of(p: *mut Vm, items: Rc<[Value]>) -> Value {
+    let bytes = items.len() * 8;
+    new_mutarray_header(p, 0, items, bytes)
+}
+
+/// The index Int I of an array of N slots, if it designates one.
+fn array_index(i: Value, n: usize) -> Option<usize> {
+    match int_small(i) {
+        Some(i) if i >= 0 && (i as usize) < n => Some(i as usize),
+        _ => None,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mutarray_allocate(p: *mut Vm, capacity: Value) -> Value {
+    match array_capacity(p, capacity, "mutable_array::allocate") {
+        Ok(n) => new_array_of(p, std::iter::repeat_n(UNIT, n).collect()),
+        Err(failed) => failed,
+    }
+}
+
+/// `mutable_array::create(n, x)`: N slots, each holding X (one unrestricted
+/// value placed N times: the compiler rejects an affine X).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mutarray_create(p: *mut Vm, capacity: Value, x: Value) -> Value {
+    match array_capacity(p, capacity, "mutable_array::create") {
+        Ok(n) => new_array_of(p, std::iter::repeat_n(x, n).collect()),
+        Err(failed) => failed,
+    }
+}
+
+/// `mutable_array::from_list(xs)`: the List's elements, in order.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mutarray_from_list(p: *mut Vm, list: Value) -> Value {
+    new_array_of(p, backing_of(list_of(list).items()))
+}
+
+/// `mutable_array::generate(n, f)` (D = None) and `#generate_drop(n, f, D)`:
+/// slot I holds FACTORY(I), for I from 0 to N - 1, in order. The first call
+/// that fails ends the construction: its failure is the result (NO_VALUE,
+/// already recorded by the call), after the elements already made were
+/// dropped by D, first to last (affine elements; unrestricted ones are left
+/// to the collector). The array under construction, the factory and the
+/// descriptor are rooted across every call (each may collect).
+fn generate(p: *mut Vm, capacity: Value, factory: Value, d: Option<Value>, name: &str) -> Value {
+    let n = match array_capacity(p, capacity, name) {
+        Ok(n) => n,
+        Err(failed) => return failed,
+    };
+    let rooted = vm(p).temp_roots.len();
+    vm(p).temp_roots.push(factory);
+    if let Some(d) = d {
+        vm(p).temp_roots.push(d);
+    }
+    // Every slot is UNIT until its call returns: the collector may trace the
+    // array at any call, and finds only values.
+    let arr = new_array_of(p, std::iter::repeat_n(UNIT, n).collect());
+    vm(p).temp_roots.push(arr);
+    for i in 0..n {
+        let arg = make_small(i as i64);
+        let x = rt_call_value(p, factory, 1, &arg);
+        if x == NO_VALUE {
+            if let Some(d) = d {
+                let items = take_elements(arr, name)[..i].iter().copied();
+                let text = str_of(d).as_str().as_bytes().to_vec();
+                for item in items {
+                    super::affine::drop_descriptor(p, item, &text);
+                }
+            }
+            vm(p).temp_roots.truncate(rooted);
+            return NO_VALUE;
+        }
+        // No safepoint between the call's return and the store: X is in
+        // the (rooted) array before anything can collect again.
+        Rc::get_mut(&mut mutarray_of_mut(arr).backing).expect("a unique backing under construction")[i] = x;
+    }
+    vm(p).temp_roots.truncate(rooted);
+    arr
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mutarray_generate(p: *mut Vm, capacity: Value, factory: Value) -> Value {
+    generate(p, capacity, factory, None, "mutable_array::generate")
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mutarray_generate_drop(p: *mut Vm, capacity: Value, factory: Value, d: Value) -> Value {
+    generate(p, capacity, factory, Some(d), "mutable_array#generate_drop")
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_capacity(p: *mut Vm, arr: Value) -> Value {
-    vm(p).new_int(mutarray_of(arr).slots.len() as i64)
+    vm(p).new_int(mutarray_of(arr).items().len() as i64)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_get(p: *mut Vm, arr: Value, index: Value) -> Value {
-    let slots = &mutarray_of(arr).slots;
-    match int_small(index) {
-        Some(i) if i >= 0 && (i as usize) < slots.len() => {
-            let v = slots[i as usize];
+    let slots = mutarray_of(arr).items();
+    match array_index(index, slots.len()) {
+        Some(i) => {
+            let v = slots[i];
             vm(p).metrics.record_mutarray_read();
             v
         }
-        _ => index_not_found(p),
+        None => index_not_found(p),
     }
 }
 
@@ -1362,7 +1954,7 @@ pub extern "C" fn rt_mutarray_get(p: *mut Vm, arr: Value, index: Value) -> Value
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_get_proven(p: *mut Vm, arr: Value, index: Value) -> Value {
     let i = int_small(index).expect("proven index is a small Int") as usize;
-    let v = mutarray_of(arr).slots[i];
+    let v = mutarray_of(arr).items()[i];
     vm(p).metrics.record_mutarray_read();
     v
 }
@@ -1371,34 +1963,79 @@ pub extern "C" fn rt_mutarray_get_proven(p: *mut Vm, arr: Value, index: Value) -
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_set_proven(p: *mut Vm, arr: Value, index: Value, value: Value) -> Value {
     let i = int_small(index).expect("proven index is a small Int") as usize;
-    mutarray_of_mut(arr).slots[i] = value;
+    array_writable(p, arr)[i] = value;
     vm(p).metrics.record_mutarray_write();
     UNIT
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_set(p: *mut Vm, arr: Value, index: Value, value: Value) -> Value {
-    let obj = mutarray_of_mut(arr);
-    match int_small(index) {
-        Some(i) if i >= 0 && (i as usize) < obj.slots.len() => {
-            obj.slots[i as usize] = value;
+    match array_index(index, mutarray_of(arr).items().len()) {
+        Some(i) => {
+            array_writable(p, arr)[i] = value;
             vm(p).metrics.record_mutarray_write();
             UNIT
         }
-        _ => index_not_found(p),
+        None => index_not_found(p),
+    }
+}
+
+/// `mutable_array::swap(a, i, x)`: X installed at I, the old element moved
+/// out; IndexNotFound and nothing changes when I is no slot.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mutarray_swap(p: *mut Vm, arr: Value, index: Value, value: Value) -> Value {
+    match array_index(index, mutarray_of(arr).items().len()) {
+        Some(i) => {
+            vm(p).metrics.record_mutarray_write();
+            std::mem::replace(&mut array_writable(p, arr)[i], value)
+        }
+        None => index_not_found(p),
+    }
+}
+
+/// `mutable_array#swap_drop(a, i, x, d)`: swap of affine elements. When I is
+/// no slot the replacement X -- already owned by this operation -- is
+/// dropped by D before IndexNotFound; the array is unchanged.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mutarray_swap_drop(p: *mut Vm, arr: Value, index: Value, value: Value, d: Value) -> Value {
+    match array_index(index, mutarray_of(arr).items().len()) {
+        Some(i) => std::mem::replace(&mut array_owned(arr, "mutable_array#swap_drop")[i], value),
+        None => {
+            super::affine::drop_descriptor(p, value, str_of(d).as_str().as_bytes());
+            index_not_found(p)
+        }
+    }
+}
+
+/// `mutable_array#set_drop(a, i, x, d)`: set of affine elements. The
+/// displaced element leaves the array, then is dropped by D; when I is no
+/// slot, X is dropped by D instead before IndexNotFound.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mutarray_set_drop(p: *mut Vm, arr: Value, index: Value, value: Value, d: Value) -> Value {
+    let text = str_of(d).as_str().as_bytes();
+    match array_index(index, mutarray_of(arr).items().len()) {
+        Some(i) => {
+            let old = std::mem::replace(&mut array_owned(arr, "mutable_array#set_drop")[i], value);
+            super::affine::drop_descriptor(p, old, text);
+            UNIT
+        }
+        None => {
+            super::affine::drop_descriptor(p, value, text);
+            index_not_found(p)
+        }
     }
 }
 
 /// Bulk copy: COUNT elements of SRC starting at SRC_START into DST starting
-/// at DST_START. Uses `ptr::copy` (memmove semantics), so DST and SRC may be
-/// the same MutableArray with overlapping ranges: the result is always as if
-/// SRC's elements were read before any of DST's were written. Both ranges
+/// at DST_START, with memmove semantics: DST and SRC may be the same array
+/// (or share a backing) with overlapping ranges, and the result is always as
+/// if SRC's elements were read before any of DST's were written. Both ranges
 /// are slices (`check_slice`), the destination's checked first; an invalid
 /// one fails with LowerUnderrun/UpperOverrun and copies nothing.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_copy(p: *mut Vm, dst: Value, dst_start: Value, src: Value, src_start: Value, count: Value) -> Value {
-    let dst_len = mutarray_of(dst).slots.len();
-    let src_len = mutarray_of(src).slots.len();
+    let dst_len = mutarray_of(dst).items().len();
+    let src_len = mutarray_of(src).items().len();
     let (ds, end) = match check_slice(p, bound_of(dst_start), SliceEnd::Count(bound_of(count)), dst_len) {
         Ok(slice) => slice,
         Err(failed) => return failed,
@@ -1417,11 +2054,10 @@ pub extern "C" fn rt_mutarray_copy_proven(p: *mut Vm, dst: Value, dst_start: Val
     let n = int_small(count).expect("proven count is a small Int") as usize;
     let ds = int_small(dst_start).expect("proven start is a small Int") as usize;
     let ss = int_small(src_start).expect("proven start is a small Int") as usize;
-    // The one proven helper that would otherwise be a raw memmove: an internal
-    // invariant check (an abort, never a Botlish error), so a proof bug
-    // cannot become memory corruption. One comparison beside a bulk copy.
+    // An internal invariant check (an abort, never a Botlish error), so a
+    // proof bug cannot become a wrong copy. One comparison beside a bulk copy.
     assert!(
-        ds + n <= mutarray_of(dst).slots.len() && ss + n <= mutarray_of(src).slots.len(),
+        ds + n <= mutarray_of(dst).items().len() && ss + n <= mutarray_of(src).items().len(),
         "proven mutable_array::copy out of bounds"
     );
     mutarray_copy_range(p, dst, ds, src, ss, n)
@@ -1430,24 +2066,28 @@ pub extern "C" fn rt_mutarray_copy_proven(p: *mut Vm, dst: Value, dst_start: Val
 /// Copies N slots of SRC from SS into DST at DS (both ranges already valid).
 fn mutarray_copy_range(p: *mut Vm, dst: Value, ds: usize, src: Value, ss: usize, n: usize) -> Value {
     if n > 0 {
-        let dst_ptr = mutarray_of_mut(dst).slots.as_mut_ptr();
-        let src_ptr = mutarray_of(src).slots.as_ptr();
-        unsafe { std::ptr::copy(src_ptr.add(ss), dst_ptr.add(ds), n) };
+        if dst == src {
+            let items = array_writable(p, dst);
+            items.copy_within(ss..ss + n, ds);
+        } else {
+            // DST's elements first: once writable they are DST's alone, so a
+            // backing SRC shares with DST (a logical copy) has been detached
+            // from DST by now and stays SRC's, unchanged.
+            let items = array_writable(p, dst);
+            items[ds..ds + n].copy_from_slice(&mutarray_of(src).items()[ss..ss + n]);
+        }
         vm(p).metrics.record_mutarray_copy(n);
     }
     UNIT
 }
 
-/// Final immutable storage creation (milestone architecture item #2): a new
-/// List of ARR's first COUNT elements. This is substrate, not policy -- it
-/// is the one way a MutableArray's contents become an ordinary immutable
-/// List; growth/chunking policy is entirely the caller's (ordinary Botlish).
-/// Always copies (req #18): a future zero-copy freeze (req #19), proving ARR
-/// is uniquely owned and never mutated again, is left open, not implemented.
+/// Final immutable storage creation: a new List of ARR's first COUNT
+/// elements -- the one way an array's contents become an ordinary immutable
+/// List. Always copies.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_freeze(p: *mut Vm, arr: Value, count: Value) -> Value {
-    let slots = &mutarray_of(arr).slots;
-    match check_slice(p, Bound::At(0), SliceEnd::End(bound_of(count)), slots.len()) {
+    let n = mutarray_of(arr).items().len();
+    match check_slice(p, Bound::At(0), SliceEnd::End(bound_of(count)), n) {
         Ok((_, n)) => freeze_prefix(p, arr, n),
         Err(failed) => failed,
     }
@@ -1458,17 +2098,79 @@ pub extern "C" fn rt_mutarray_freeze(p: *mut Vm, arr: Value, count: Value) -> Va
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_freeze_proven(p: *mut Vm, arr: Value, count: Value) -> Value {
     let n = int_small(count).expect("proven count is a small Int") as usize;
-    debug_assert!(n <= mutarray_of(arr).slots.len());
+    debug_assert!(n <= mutarray_of(arr).items().len());
     freeze_prefix(p, arr, n)
 }
 
 /// A new List of ARR's first N slots (N already known valid).
 fn freeze_prefix(p: *mut Vm, arr: Value, n: usize) -> Value {
-    let items = mutarray_of(arr).slots[..n].to_vec();
+    let items: Vec<Value> = mutarray_of(arr).items()[..n].to_vec();
     let elements = items.len();
     let r = vm(p).new_list(items);
     vm(p).metrics.record_mutarray_copy(elements);
     r
+}
+
+/// `mutable_array#to_list(a)`: an immutable List snapshot of every element
+/// (the domain a loop over an unrestricted array iterates).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mutarray_to_list(p: *mut Vm, arr: Value) -> Value {
+    let items: Vec<Value> = mutarray_of(arr).items().to_vec();
+    vm(p).new_list(items)
+}
+
+/// Whether a consumed array has no element left (a consuming loop's test).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mutarray_empty(_p: *mut Vm, arr: Value) -> Value {
+    bool_value(mutarray_of(arr).items().is_empty())
+}
+
+/// `mutable_array#take_front(a)`: the first element of a consumed array,
+/// moved out (one step of a consuming loop, O(1)): the header's start
+/// advances past it. The backing is never written, so this never detaches.
+/// The drained slots are freed with the header.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_mutarray_take_front(_p: *mut Vm, arr: Value) -> Value {
+    let obj = mutarray_of_mut(arr);
+    let x = *obj.items().first().expect("mutable_array#take_front: no element left");
+    obj.start += 1;
+    x
+}
+
+/// The `a` drop of affine.rs: every element of array ARR by the element
+/// descriptor at POS of D, first to last. The elements leave the (dying)
+/// array before any is dropped. Returns with POS past the element descriptor.
+pub fn drop_array_elements(p: *mut Vm, arr: Value, d: &[u8], pos: &mut usize) {
+    let start = *pos;
+    let items = take_elements(arr, "affine#drop");
+    if items.is_empty() {
+        super::affine::skip(d, pos);
+    }
+    for &item in items {
+        *pos = start;
+        super::affine::drop_at(p, item, d, pos);
+    }
+}
+
+/// A logical copy of array ARR (`mvshare`'s `h` of an array header): a new
+/// header on the same backing (and the same elements of it), O(1).
+pub fn share_array(p: *mut Vm, arr: Value) -> Value {
+    let obj = mutarray_of(arr);
+    let (start, backing) = (obj.start, Rc::clone(&obj.backing));
+    vm(p).metrics.record_mutarray_share();
+    new_mutarray_header(p, start, backing, 0)
+}
+
+/// The live elements of array ARR, first to last (the collector's trace).
+pub fn array_elements(arr: Value) -> impl Iterator<Item = Value> {
+    mutarray_of(arr).items().iter().copied()
+}
+
+/// Approximate bytes array ARR owns (heap.rs's object_size): its header and
+/// its share of the backing.
+pub fn array_object_size(arr: Value) -> usize {
+    let obj = mutarray_of(arr);
+    std::mem::size_of::<MutArrayObj>() + obj.backing.len() * 8 / Rc::strong_count(&obj.backing)
 }
 
 // ---------------------------------------------------------------------------
@@ -1597,12 +2299,15 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         IEq => cmp(|o| o == Ordering::Equal),
         VEq => rt_value_eq(p, a[0], a[1]),
         StrEq => rt_str_eq(p, a[0], a[1]),
+        CharEq | EnumEq => bool_value(a[0] == a[1]),
         ListNew => rt_list_new(p, a.len() as u64, a.as_ptr()),
         StrLen => rt_str_len(p, a[0]),
         Substr => rt_substr(p, a[0], a[1], a[2]),
         StrLower => rt_str_lower(p, a[0]),
         StrCat => rt_str_cat(p, a[0], a[1]),
         StrUtf8Bytes => rt_str_utf8_bytes(p, a[0]),
+        StrCharAt => rt_str_char_at(p, a[0], a[1]),
+        StrCharAtProven => rt_str_char_at_proven(p, a[0], a[1]),
         Argv => rt_argv(p),
         StrIsTclAlpha => rt_is_tcl_alpha(p, a[0]),
         StrIsTclAlnum => rt_is_tcl_alnum(p, a[0]),
@@ -1637,6 +2342,31 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         MutArraySet => rt_mutarray_set(p, a[0], a[1], a[2]),
         MutArrayCopy => rt_mutarray_copy(p, a[0], a[1], a[2], a[3], a[4]),
         MutArrayFreeze => rt_mutarray_freeze(p, a[0], a[1]),
+        MutArrayCreate => rt_mutarray_create(p, a[0], a[1]),
+        MutArrayFromList => rt_mutarray_from_list(p, a[0]),
+        MutArrayGenerate => rt_mutarray_generate(p, a[0], a[1]),
+        MutArrayGenerateDrop => rt_mutarray_generate_drop(p, a[0], a[1], a[2]),
+        MutArraySwap => rt_mutarray_swap(p, a[0], a[1], a[2]),
+        MutArraySwapDrop => rt_mutarray_swap_drop(p, a[0], a[1], a[2], a[3]),
+        MutArraySetDrop => rt_mutarray_set_drop(p, a[0], a[1], a[2], a[3]),
+        MutArrayToList => rt_mutarray_to_list(p, a[0]),
+        MutArrayEmpty => rt_mutarray_empty(p, a[0]),
+        MutArrayTakeFront => rt_mutarray_take_front(p, a[0]),
+        MvFromList => rt_mv_from_list(p, a[0]),
+        MvLen => rt_mv_len(p, a[0]),
+        MvEmpty => rt_mv_empty(p, a[0]),
+        MvAt => rt_mv_at(p, a[0], a[1]),
+        MvPush => rt_mv_push(p, a[0], a[1]),
+        MvPop => rt_mv_pop(p, a[0]),
+        MvTake => rt_mv_take(p, a[0], a[1]),
+        MvSwap => rt_mv_swap(p, a[0], a[1], a[2]),
+        MvClear => rt_mv_clear(p, a[0]),
+        MvShare => rt_mv_share(p, a[0], a[1]),
+        MvToList => rt_mv_to_list(p, a[0]),
+        MvTakeFront => rt_mv_take_front(p, a[0]),
+        MvClearDrop => rt_mv_clear_drop(p, a[0], a[1]),
+        MvSwapDrop => rt_mv_swap_drop(p, a[0], a[1], a[2], a[3]),
+        CtxRoot => rt_context_root(p, a[0]),
         IsInt => rt_is_kind(p, a[0], Kind::Int.code() as u64),
         IsStr => rt_is_kind(p, a[0], Kind::Str.code() as u64),
         IsList => rt_is_kind(p, a[0], Kind::List.code() as u64),
@@ -1649,13 +2379,31 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         MkOk => rt_result_new(p, 1, a[0]),
         MkError => rt_result_new(p, 0, a[0]),
         Hash => rt_hash(p, a[0]),
+        BytesFromList => rt_bytes_from_list(p, a[0]),
+        BytesLen => rt_bytes_len(p, a[0]),
+        MBytesNew => rt_mbytes_new(p, a[0]),
+        MBytesFrom => rt_mbytes_from(p, a[0]),
+        MBytesLen => rt_mbytes_len(p, a[0]),
+        MBytesSet => rt_mbytes_set(p, a[0], a[1], a[2]),
+        MBytesClone => rt_mbytes_clone(p, a[0]),
+        MBytesFreeze => rt_mbytes_freeze(p, a[0]),
+        MBytesFreezePrefix => rt_mbytes_freeze_prefix(p, a[0], a[1]),
+        CoCreate => rt_co_create(p, a[0]),
+        CoStart => rt_co_start(p, a[0]),
+        CoResume => rt_co_resume(p, a[0], a[1]),
+        CoResume0 => rt_co_resume0(p, a[0]),
+        CoYield => rt_co_yield(p, a[0]),
+        CoDone => rt_co_done(p, a[0]),
+        CoRelease => rt_co_release(p, a[0]),
+        AffineDrop => rt_affine_drop(p, a[0], a[1]),
         RegionCheck | RegionEq | RBox | RUnbox | RIAdd | RISub | RIMul | RILt | RILe | RIGt | RIGe | RIEq
         | RIShr | RIShl | StrToShort | ShortToStr | ShortLen | ShortEq | StrSliceShort | StrToAscii | AsciiToStr
         | AsciiLen | AsciiEq | AsciiToShort | AsciiShortEq
         | DecodeCharAt | StrByteLen | StrRegionIsTclAlpha | StrRegionIsTclAlnum
-        // linux::abi::syscall is never a value (hir/syscall.tcl rejects any
-        // use but a direct call), so no Native value ever dispatches to it.
-        | SyscallLinuxX86_64 => {
+        // linux::abi::syscall and the raw address bridge are never values
+        // (hir/syscall.tcl rejects any use but a direct call), so no Native
+        // value ever dispatches to them; keepalive is a lowering-internal op.
+        | SyscallLinuxX86_64 | BytesAddr | MBytesAddr | KeepAlive => {
             // Raw (untagged) representation ops, StringRegion ops and String
             // traversal ops never implement a dynamic native: native/lower.tcl
             // emits them only directly, as `op` instructions inline in a
@@ -1679,6 +2427,8 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_raise, 3),
         h!(rt_stack_overflow, 1),
         h!(rt_fail_declared, 3),
+        h!(rt_fail_declared_payload, 6),
+        h!(rt_declared_payload, 2),
         h!(rt_declared_error, 1),
         h!(rt_clear_declared_error, 1),
         h!(rt_int_add, 3),
@@ -1709,8 +2459,22 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_str_lower, 2),
         h!(rt_str_cat, 3),
         h!(rt_str_utf8_bytes, 2),
+        h!(rt_str_char_at, 3),
+        h!(rt_str_char_at_proven, 3),
         h!(rt_argv, 1),
         h!(rt_linux_x86_64_syscall, 8),
+        h!(rt_bytes_from_list, 2),
+        h!(rt_bytes_len, 2),
+        h!(rt_bytes_addr, 2),
+        h!(rt_keepalive, 2),
+        h!(rt_mbytes_new, 2),
+        h!(rt_mbytes_from, 2),
+        h!(rt_mbytes_len, 2),
+        h!(rt_mbytes_set, 4),
+        h!(rt_mbytes_clone, 2),
+        h!(rt_mbytes_freeze, 2),
+        h!(rt_mbytes_freeze_prefix, 3),
+        h!(rt_mbytes_addr, 2),
         h!(rt_is_tcl_alpha, 2),
         h!(rt_is_tcl_alnum, 2),
         h!(rt_str_region_is_tcl_alpha, 4),
@@ -1735,6 +2499,16 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_mutarray_copy_proven, 6),
         h!(rt_mutarray_freeze, 3),
         h!(rt_mutarray_freeze_proven, 3),
+        h!(rt_mutarray_create, 3),
+        h!(rt_mutarray_from_list, 2),
+        h!(rt_mutarray_generate, 3),
+        h!(rt_mutarray_generate_drop, 4),
+        h!(rt_mutarray_swap, 4),
+        h!(rt_mutarray_swap_drop, 5),
+        h!(rt_mutarray_set_drop, 5),
+        h!(rt_mutarray_to_list, 2),
+        h!(rt_mutarray_empty, 2),
+        h!(rt_mutarray_take_front, 2),
         h!(rt_is_kind, 3),
         h!(rt_is_result, 3),
         h!(rt_result_payload, 3),
@@ -1742,6 +2516,29 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_char_codepoint, 2),
         h!(rt_closure_new, 5),
         h!(rt_call_value, 4),
+        h!(rt_co_create, 2),
+        h!(rt_co_start, 2),
+        h!(rt_co_resume, 3),
+        h!(rt_co_resume0, 2),
+        h!(rt_co_yield, 2),
+        h!(rt_co_done, 2),
+        h!(rt_co_release, 2),
+        h!(rt_affine_drop, 3),
+        h!(rt_mv_from_list, 2),
+        h!(rt_mv_len, 2),
+        h!(rt_mv_empty, 2),
+        h!(rt_mv_at, 3),
+        h!(rt_mv_push, 3),
+        h!(rt_mv_pop, 2),
+        h!(rt_mv_take, 3),
+        h!(rt_mv_swap, 4),
+        h!(rt_mv_clear, 2),
+        h!(rt_mv_share, 3),
+        h!(rt_mv_to_list, 2),
+        h!(rt_mv_take_front, 2),
+        h!(rt_mv_clear_drop, 3),
+        h!(rt_mv_swap_drop, 5),
+        h!(rt_context_root, 2),
     ]
 }
 
@@ -1751,9 +2548,21 @@ mod tests {
     use crate::runtime::metrics::AllocMode;
     use crate::runtime::vm::{ProgramInfo, Vm};
 
+    /// Evaluates V and pushes it onto `Vm::temp_roots` for the rest of the
+    /// test, as compiled code's stack maps root a live value: under
+    /// BOTLISH_NATIVE_GC_STRESS=1 every allocation collects first, so a value
+    /// held only in a Rust local is freed by the next allocation.
+    macro_rules! rooted {
+        ($vm:expr, $v:expr) => {{
+            let v = $v;
+            $vm.temp_roots.push(v);
+            v
+        }};
+    }
+
     fn vm() -> Box<Vm> {
         Vm::new(
-            std::rc::Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new() }),
+            std::rc::Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }),
             AllocMode::Summary,
         )
     }
@@ -1773,9 +2582,81 @@ mod tests {
                         opaque: false,
                     })
                     .collect(),
+                enums: Vec::new(),
             }),
             AllocMode::Summary,
         )
+    }
+
+    /// A VM whose program has these enums (runtime::vm::EnumInfo).
+    fn vm_with_enums(enums: &[(&str, &[&str])]) -> Box<Vm> {
+        use crate::runtime::vm::EnumInfo;
+        Vm::new(
+            std::rc::Rc::new(ProgramInfo {
+                functions: Vec::new(),
+                natives: Vec::new(),
+                shapes: Vec::new(),
+                enums: enums
+                    .iter()
+                    .map(|(name, cases)| EnumInfo {
+                        name: name.to_string(),
+                        cases: cases.iter().map(|c| c.to_string()).collect(),
+                    })
+                    .collect(),
+            }),
+            AllocMode::Summary,
+        )
+    }
+
+    // -----------------------------------------------------------------------
+    // Enums (ENUMS.md): immediate words, nominal equality, hashing and
+    // printing by name.
+
+    #[test]
+    fn enum_words_are_immediates_of_their_own_kind() {
+        let v = make_enum(3, 5);
+        assert!(is_enum(v));
+        assert_eq!(enum_parts(v), (3, 5));
+        assert_eq!(kind_of(v), Kind::Enum);
+        assert!(!is_pointer(v) && !is_small(v) && !is_char(v));
+        for other in [FALSE, TRUE, UNIT, make_small(0), make_small(-1), make_char(65)] {
+            assert!(!is_enum(other), "{other:#x} is not an enum word");
+        }
+        assert_eq!(enum_parts(make_enum(u32::MAX, MAX_ENUM_CASE)), (u32::MAX, MAX_ENUM_CASE));
+        assert_eq!(Kind::parse("enum"), Some(Kind::Enum));
+        assert_eq!(Kind::from_code(Kind::Enum.code()), Kind::Enum);
+    }
+
+    #[test]
+    fn enum_equality_is_nominal_word_equality() {
+        let mut vm = vm_with_enums(&[("A", &["X", "Y"]), ("B", &["X"])]);
+        let eq = |vm: &mut Vm, a, b| rt_value_eq(vm, a, b);
+        assert_eq!(eq(&mut vm, make_enum(0, 0), make_enum(0, 0)), TRUE);
+        assert_eq!(eq(&mut vm, make_enum(0, 0), make_enum(0, 1)), FALSE);
+        // The same spelling in another enum is another value.
+        assert_eq!(eq(&mut vm, make_enum(0, 0), make_enum(1, 0)), FALSE);
+        // Never an Int, whatever the word.
+        assert_eq!(eq(&mut vm, make_enum(0, 0), make_small(0)), FALSE);
+    }
+
+    #[test]
+    fn enum_hash_and_show_read_names_never_numbers() {
+        use crate::runtime::show::{show, tcl_value};
+        let mut vm = vm_with_enums(&[
+            ("VehicleType", &["Boat", "Car", "Truck", "Tank", "Tractor", "Airplane"]),
+            ("Other", &["Car"]),
+        ]);
+        let car = make_enum(0, 1);
+        // core/hashing.tcl's value for VehicleType::Car (tests/enums.test's
+        // enum-hash), byte for byte.
+        assert_eq!(rt_hash(&mut *vm, car), small(632455997673246507));
+        assert_ne!(rt_hash(&mut *vm, car), rt_hash(&mut *vm, make_enum(1, 0)));
+        assert_eq!(show(car), "VehicleType::Car");
+        assert_eq!(tcl_value(car).unwrap(), "enum VehicleType Car");
+        // Reordered cases: another number, the same name, the same hash.
+        let mut reordered = vm_with_enums(&[("VehicleType", &["Airplane", "Tank", "Car"])]);
+        assert_eq!(rt_hash(&mut *reordered, make_enum(0, 2)), small(632455997673246507));
+        assert_eq!(show(make_enum(0, 2)), "VehicleType::Car");
     }
 
     // -----------------------------------------------------------------------
@@ -1791,14 +2672,14 @@ mod tests {
             (Some("Account"), &["a", "b"]),
             (None, &["a"]),
         ]);
-        let s = str_val(&mut vm, "x");
-        let s2 = str_val(&mut vm, "x");
-        let anon1 = vm.new_struct(0, vec![small(1), s]);
-        let anon2 = vm.new_struct(0, vec![small(1), s2]);
-        let anon3 = vm.new_struct(0, vec![small(2), s]);
-        let person = vm.new_struct(1, vec![small(1), s]);
-        let account = vm.new_struct(2, vec![small(1), s]);
-        let short = vm.new_struct(3, vec![small(1)]);
+        let s = rooted!(vm, str_val(&mut vm, "x"));
+        let s2 = rooted!(vm, str_val(&mut vm, "x"));
+        let anon1 = rooted!(vm, vm.new_struct(0, vec![small(1), s]));
+        let anon2 = rooted!(vm, vm.new_struct(0, vec![small(1), s2]));
+        let anon3 = rooted!(vm, vm.new_struct(0, vec![small(2), s]));
+        let person = rooted!(vm, vm.new_struct(1, vec![small(1), s]));
+        let account = rooted!(vm, vm.new_struct(2, vec![small(1), s]));
+        let short = rooted!(vm, vm.new_struct(3, vec![small(1)]));
         let eq = |vm: &mut Vm, a, b| rt_value_eq(vm, a, b);
         assert_eq!(eq(&mut vm, anon1, anon2), TRUE);
         assert_eq!(eq(&mut vm, anon1, anon3), FALSE);
@@ -1815,9 +2696,9 @@ mod tests {
     #[test]
     fn struct_equality_keeps_the_no_equality_rule_for_arrays() {
         let mut vm = vm_with_shapes(&[(None, &["a"])]);
-        let array = vm.new_mutarray(1);
-        let x = vm.new_struct(0, vec![array]);
-        let y = vm.new_struct(0, vec![array]);
+        let array = rooted!(vm, vm.new_mutarray(1));
+        let x = rooted!(vm, vm.new_struct(0, vec![array]));
+        let y = rooted!(vm, vm.new_struct(0, vec![array]));
         assert_eq!(rt_value_eq(&mut *vm, x, y), NO_VALUE);
         assert!(vm.error.is_some());
     }
@@ -1825,12 +2706,12 @@ mod tests {
     #[test]
     fn struct_hash_agrees_with_equality() {
         let mut vm = vm_with_shapes(&[(None, &["a", "b"]), (None, &["a"]), (Some("P"), &["a"])]);
-        let s = str_val(&mut vm, "x");
-        let s2 = str_val(&mut vm, "x");
-        let one = vm.new_struct(0, vec![small(1), s]);
-        let two = vm.new_struct(0, vec![small(1), s2]);
-        let other = vm.new_struct(1, vec![small(1)]);
-        let named = vm.new_struct(2, vec![small(1)]);
+        let s = rooted!(vm, str_val(&mut vm, "x"));
+        let s2 = rooted!(vm, str_val(&mut vm, "x"));
+        let one = rooted!(vm, vm.new_struct(0, vec![small(1), s]));
+        let two = rooted!(vm, vm.new_struct(0, vec![small(1), s2]));
+        let other = rooted!(vm, vm.new_struct(1, vec![small(1)]));
+        let named = rooted!(vm, vm.new_struct(2, vec![small(1)]));
         let h = |vm: &mut Vm, v| rt_hash(vm, v);
         assert_eq!(h(&mut vm, one), h(&mut vm, two));
         assert_ne!(h(&mut vm, one), h(&mut vm, other));
@@ -1851,11 +2732,12 @@ mod tests {
                     ShapeInfo { name: Some("token::Token".into()), fields: vec!["secret".into()], opaque: true },
                     ShapeInfo { name: Some("Holder".into()), fields: vec!["token".into()], opaque: false },
                 ],
+                enums: Vec::new(),
             }),
             AllocMode::Summary,
         );
-        let token = vm.new_struct(0, vec![small(1234)]);
-        let holder = vm.new_struct(1, vec![token]);
+        let token = rooted!(vm, vm.new_struct(0, vec![small(1234)]));
+        let holder = rooted!(vm, vm.new_struct(1, vec![token]));
         assert_eq!(show(token), "<opaque token::Token>");
         assert_eq!(show(holder), "Holder {token: <opaque token::Token>}");
         assert_eq!(tcl_value(token).unwrap(), "struct {token::Token secret} {{int 1234}}");
@@ -1865,10 +2747,10 @@ mod tests {
     fn struct_show_names_fields_in_shape_order() {
         use crate::runtime::show::{show, tcl_value};
         let mut vm = vm_with_shapes(&[(None, &["age", "name"]), (Some("geo::Point"), &["y", "x"]), (None, &[])]);
-        let name = str_val(&mut vm, "Grace");
-        let anon = vm.new_struct(0, vec![small(45), name]);
-        let named = vm.new_struct(1, vec![small(2), small(1)]);
-        let empty = vm.new_struct(2, vec![]);
+        let name = rooted!(vm, str_val(&mut vm, "Grace"));
+        let anon = rooted!(vm, vm.new_struct(0, vec![small(45), name]));
+        let named = rooted!(vm, vm.new_struct(1, vec![small(2), small(1)]));
+        let empty = rooted!(vm, vm.new_struct(2, vec![]));
         assert_eq!(show(anon), "{age: 45, name: \"Grace\"}");
         assert_eq!(show(named), "geo::Point {y: 2, x: 1}");
         assert_eq!(show(empty), "{}");
@@ -1878,15 +2760,36 @@ mod tests {
     }
 
     #[test]
+    fn a_string_and_a_character_show_the_same_escapes() {
+        // core::value::show: the lexer's escape set, each kind in its own
+        // quotes; a carriage return is never written raw.
+        use crate::runtime::show::show;
+        let mut vm = vm();
+        for (c, shown) in [('\\', "\\\\"), ('\n', "\\n"), ('\r', "\\r"), ('\t', "\\t"), ('a', "a"), ('é', "é")] {
+            let s = str_val(&mut vm, &c.to_string());
+            assert_eq!(show(s), format!("\"{shown}\""));
+            assert_eq!(show(make_char(c as u32)), format!("'{shown}'"));
+        }
+        let quotes = str_val(&mut vm, "\"'");
+        assert_eq!(show(quotes), "\"\\\"'\"");
+        assert_eq!(show(make_char('\'' as u32)), "'\\''");
+        assert_eq!(show(make_char('"' as u32)), "'\"'");
+    }
+
+    #[test]
     fn struct_fields_are_traced_and_reclaimed() {
         use crate::runtime::metrics::GcReason;
         let mut vm = vm_with_shapes(&[(None, &["a", "b"])]);
-        let kept = str_val(&mut vm, "kept");
-        let inner = vm.new_struct(0, vec![kept, small(1)]);
+        let kept = rooted!(vm, str_val(&mut vm, "kept"));
+        let inner = rooted!(vm, vm.new_struct(0, vec![kept, small(1)]));
         let outer = vm.new_struct(0, vec![inner, small(2)]);
+        // Only OUTER stays rooted: INNER and KEPT survive by being traced
+        // through it. The garbage stays unrooted on purpose (under stress the
+        // struct's allocation already reclaims the garbage String).
+        vm.temp_roots.clear();
+        vm.temp_roots.push(outer);
         let _garbage = str_val(&mut vm, "garbage");
         let _garbage_struct = vm.new_struct(0, vec![small(3), small(4)]);
-        vm.temp_roots.push(outer);
         vm.collect_for_test(GcReason::Explicit);
         // The struct, its nested struct and the string reachable through both
         // survive; the unreachable string and struct are reclaimed.
@@ -1954,7 +2857,7 @@ mod tests {
         // loop would (byte_i += strbytelen(decoded)), never seeking.
         let mut vm = vm();
         let text = "A\u{e9}\u{6771}\u{1f642}A";
-        let s = str_val(&mut vm, text);
+        let s = rooted!(vm, str_val(&mut vm, text));
         let mut byte_offset = 0i64;
         let expected: Vec<char> = text.chars().collect();
         for want in expected {
@@ -2003,7 +2906,9 @@ mod tests {
         // fresh String. The empty String is the one canonical static object
         // (STRING-ALLOCATION.md: not an interning table, one shared immutable
         // empty), so every Empty materialization is that same object.
-        assert_ne!(rt_short_to_str(&mut *vm, 97), rt_short_to_str(&mut *vm, 97));
+        // (The first is rooted: freed, its address could be the second's.)
+        let first = rooted!(vm, rt_short_to_str(&mut *vm, 97));
+        assert_ne!(first, rt_short_to_str(&mut *vm, 97));
         assert_eq!(rt_short_to_str(&mut *vm, (-1i64) as u64), rt_short_to_str(&mut *vm, (-1i64) as u64));
         let empty = rt_short_to_str(&mut *vm, (-1i64) as u64);
         assert_eq!((str_of(empty).chars, str_of(empty).len_bytes()), (0, 0));
@@ -2051,12 +2956,12 @@ mod tests {
     fn slice_short_matches_substring_for_widths_zero_and_one() {
         let mut vm = vm();
         for text in ["hello", "\u{e9}t\u{e9}", "a\u{3bb}\u{1f600}\u{732b}z"] {
-            let s = str_val(&mut vm, text);
+            let s = rooted!(vm, str_val(&mut vm, text));
             let n = text.chars().count();
             for from in 0..=n {
                 for to in from..=(from + 1).min(n) {
                     let short = rt_str_slice_short(&mut *vm, s, small(from as i64), small(to as i64));
-                    let sub = rt_substr(&mut *vm, s, small(from as i64), small(to as i64));
+                    let sub = rooted!(vm, rt_substr(&mut *vm, s, small(from as i64), small(to as i64)));
                     let back = rt_short_to_str(&mut *vm, short);
                     assert_eq!(str_of(back).as_str(), str_of(sub).as_str(), "{text:?}[{from}..{to}]");
                 }
@@ -2084,7 +2989,7 @@ mod tests {
     #[test]
     fn substr_ascii_records_no_seek() {
         let mut vm = vm();
-        let s = str_val(&mut vm, "hello world");
+        let s = rooted!(vm, str_val(&mut vm, "hello world"));
         rt_substr(&mut *vm, s, small(2), small(5));
         assert_eq!(vm.metrics.utf8_seek_bytes, 0);
     }
@@ -2094,7 +2999,7 @@ mod tests {
         let mut vm = vm();
         // Every character is U+00E9 (2 bytes): character index 3 has byte offset
         // is exactly 6.
-        let s = str_val(&mut vm, &"\u{e9}".repeat(10));
+        let s = rooted!(vm, str_val(&mut vm, &"\u{e9}".repeat(10)));
         rt_substr(&mut *vm, s, small(3), small(4));
         assert_eq!(vm.metrics.utf8_seek_bytes, 6);
     }
@@ -2102,7 +3007,7 @@ mod tests {
     #[test]
     fn substr_non_ascii_seek_grows_with_start_index() {
         let mut vm = vm();
-        let s = str_val(&mut vm, &"\u{e9}".repeat(50));
+        let s = rooted!(vm, str_val(&mut vm, &"\u{e9}".repeat(50)));
         rt_substr(&mut *vm, s, small(1), small(2));
         let first = vm.metrics.utf8_seek_bytes;
         rt_substr(&mut *vm, s, small(40), small(41));
@@ -2121,7 +3026,7 @@ mod tests {
     #[test]
     fn region_eq_non_ascii_records_seek_bytes() {
         let mut vm = vm();
-        let base = str_val(&mut vm, &"\u{e9}".repeat(10));
+        let base = rooted!(vm, str_val(&mut vm, &"\u{e9}".repeat(10)));
         let other = str_val(&mut vm, "\u{e9}");
         rt_str_region_check(&mut *vm, base, small(3), small(4));
         rt_str_region_eq(&mut *vm, base, small(3), small(4), other);
@@ -2229,6 +3134,53 @@ mod tests {
         assert_eq!(utf8_bytes_of(&mut vm, s), vec![97, 0xC3, 0xA9, 0xF0, 0x9F, 0x98, 0x80]);
     }
 
+    // char_at (core/strings.tcl's charAt): the scalar at a character index
+    // as a UnicodeChar immediate, ASCII and non-ASCII alike; only the
+    // non-ASCII path seeks (utf8SeekBytes, the bytes before the character).
+    fn char_at_all(vm: &mut Vm, s: Value, n: i64) -> Vec<u32> {
+        (0..n)
+            .map(|i| {
+                let checked = rt_str_char_at(vm, s, small(i));
+                let proven = rt_str_char_at_proven(vm, s, small(i));
+                assert_eq!(checked, proven);
+                assert!(is_char(checked));
+                char_of(checked)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn char_at_ascii_reads_without_seeking() {
+        let mut vm = vm();
+        let s = str_val(&mut vm, "a%2F");
+        assert_eq!(char_at_all(&mut vm, s, 4), vec![97, 37, 50, 70]);
+        assert_eq!(vm.metrics.utf8_seek_bytes, 0);
+    }
+
+    #[test]
+    fn char_at_mixed_width_scalars() {
+        let mut vm = vm();
+        let s = str_val(&mut vm, "a\u{e9}\u{4e16}\u{1f600}z");
+        assert_eq!(char_at_all(&mut vm, s, 5), vec![97, 0xE9, 0x4E16, 0x1F600, 122]);
+        // Each read seeks from byte 0 to its character (0 + 1 + 3 + 6 + 10
+        // bytes), and char_at_all reads every character twice.
+        assert_eq!(vm.metrics.utf8_seek_bytes, 40);
+    }
+
+    #[test]
+    fn char_at_outside_the_string_is_index_not_found() {
+        let mut vm = vm();
+        let s = rooted!(vm, str_val(&mut vm, "\u{e9}"));
+        let empty = rooted!(vm, str_val(&mut vm, ""));
+        let big = rooted!(vm, vm.new_big(num_bigint::BigInt::from(1u8) << 80));
+        for (text, index) in [(s, small(1)), (s, small(-1)), (s, big), (empty, small(0))] {
+            assert_eq!(rt_str_char_at(&mut *vm, text, index), NO_VALUE);
+            assert_eq!(vm.declared_error, crate::runtime::error::ERR_INDEX_NOT_FOUND);
+            vm.error = None;
+            vm.declared_error = 0;
+        }
+    }
+
     // -----------------------------------------------------------------------
     // argv() (core/process.tcl, ARGV.md): rt_argv validates the raw snapshot
     // as UTF-8 only when called, all or nothing, with every String rooted
@@ -2303,13 +3255,13 @@ mod tests {
     #[test]
     fn indexed_reads_fail_with_index_not_found() {
         let mut vm = vm();
-        let list = vm.new_list(vec![small(10), small(20)]);
+        let list = rooted!(vm, vm.new_list(vec![small(10), small(20)]));
         assert_eq!(small_of(rt_list_get(&mut *vm, list, small(1))), 20);
         assert_eq!(vm.declared_error, 0);
-        let arr = rt_mutarray_allocate(&mut *vm, small(2));
+        let arr = rooted!(vm, rt_mutarray_allocate(&mut *vm, small(2)));
         rt_mutarray_set(&mut *vm, arr, small(0), small(7));
         assert_eq!(small_of(rt_mutarray_get(&mut *vm, arr, small(0))), 7);
-        let big = vm.new_big(num_bigint::BigInt::from(1u8) << 80);
+        let big = rooted!(vm, vm.new_big(num_bigint::BigInt::from(1u8) << 80));
         for index in [small(2), small(-1), big] {
             let reads: [(extern "C" fn(*mut Vm, Value, Value) -> Value, Value); 2] =
                 [(rt_list_get, list), (rt_mutarray_get, arr)];
@@ -2333,22 +3285,22 @@ mod tests {
     #[test]
     fn proven_helpers_agree_with_checked_ones_on_valid_bounds() {
         let mut vm = vm();
-        let list = vm.new_list(vec![small(10), small(20), small(30)]);
+        let list = rooted!(vm, vm.new_list(vec![small(10), small(20), small(30)]));
         for i in 0..3 {
             assert_eq!(rt_list_get_proven(&mut *vm, list, small(i)), rt_list_get(&mut *vm, list, small(i)));
         }
-        let arr = rt_mutarray_allocate(&mut *vm, small(4));
+        let arr = rooted!(vm, rt_mutarray_allocate(&mut *vm, small(4)));
         for i in 0..4 {
             assert_eq!(rt_mutarray_set_proven(&mut *vm, arr, small(i), small(i * 5)), UNIT);
             assert_eq!(small_of(rt_mutarray_get_proven(&mut *vm, arr, small(i))), i * 5);
             assert_eq!(rt_mutarray_get_proven(&mut *vm, arr, small(i)), rt_mutarray_get(&mut *vm, arr, small(i)));
         }
         for text in ["hello", "\u{e9}t\u{e9}", "a\u{3bb}\u{1f600}\u{732b}z", ""] {
-            let s = str_val(&mut vm, text);
+            let s = rooted!(vm, str_val(&mut vm, text));
             let n = text.chars().count() as i64;
             for from in 0..=n {
                 for to in from..=n {
-                    let checked = rt_substr(&mut *vm, s, small(from), small(to));
+                    let checked = rooted!(vm, rt_substr(&mut *vm, s, small(from), small(to)));
                     let proven = rt_substr_proven(&mut *vm, s, small(from), small(to));
                     assert_eq!(str_of(proven).as_str(), str_of(checked).as_str(), "{text:?}[{from}..{to}]");
                     assert_eq!(str_of(proven).chars, str_of(checked).chars);
@@ -2360,8 +3312,8 @@ mod tests {
         for dst_start in 0..=4 {
             for src_start in 0..=4 {
                 for count in 0..=(4 - dst_start.max(src_start)) {
-                    let a = rt_mutarray_allocate(&mut *vm, small(4));
-                    let b = rt_mutarray_allocate(&mut *vm, small(4));
+                    let a = rooted!(vm, rt_mutarray_allocate(&mut *vm, small(4)));
+                    let b = rooted!(vm, rt_mutarray_allocate(&mut *vm, small(4)));
                     for i in 0..4 {
                         rt_mutarray_set(&mut *vm, a, small(i), small(i));
                         rt_mutarray_set(&mut *vm, b, small(i), small(i));
@@ -2375,7 +3327,7 @@ mod tests {
             }
         }
         for count in 0..=4 {
-            let checked = rt_mutarray_freeze(&mut *vm, arr, small(count));
+            let checked = rooted!(vm, rt_mutarray_freeze(&mut *vm, arr, small(count)));
             let proven = rt_mutarray_freeze_proven(&mut *vm, arr, small(count));
             assert_eq!(list_of(proven).items(), list_of(checked).items());
         }
@@ -2385,6 +3337,42 @@ mod tests {
     // The slice rule (check_slice, core::native::checkSlice): START against
     // 0..N first, then END against START..N; below is LowerUnderrun, above
     // is UpperOverrun. Writes through an index are IndexNotFound.
+
+    #[test]
+    fn error_payload_travels_in_the_payload_slots_and_is_cleared_by_the_handler() {
+        // ERROR-PAYLOADS.md: `faildeclared` with payload registers copies the
+        // field values into the Vm's payload slots (a GC root: nothing else
+        // holds them while the error propagates), `declaredpayload K` reads
+        // field K, and the handler's clear empties the slots; a payload-free
+        // failure or a builtin error never leaves a stale payload behind.
+        let mut vm = vm();
+        vm.heap.set_stress_for_test(true);
+        let text = rooted!(vm, vm.new_str("detail"));
+        let big = rooted!(vm, vm.new_big(num_bigint::BigInt::from(7u8) << 70u32));
+        let name = rooted!(vm, vm.new_str("E"));
+        let fields = [text, big];
+        assert_eq!(rt_fail_declared_payload(&mut *vm, 4, name, 0, 2, fields.as_ptr()), NO_VALUE);
+        while vm.temp_roots.len() > 0 {
+            vm.temp_roots.pop();
+        }
+        for _ in 0..3 {
+            vm.collect_for_test(crate::runtime::metrics::GcReason::Explicit);
+        }
+        assert_eq!(vm.declared_error, 4);
+        assert_eq!(str_of(rt_declared_payload(&mut *vm, 0)).as_str(), "detail");
+        assert_eq!(super::super::show::show(rt_declared_payload(&mut *vm, 1)), (num_bigint::BigInt::from(7u8) << 70u32).to_string());
+        assert_eq!(rt_clear_declared_error(&mut *vm), 0);
+        assert!(vm.declared_payload.is_empty() && vm.declared_error == 0 && vm.error.is_none());
+        let name = rooted!(vm, vm.new_str("E"));
+        let fields = [small(1)];
+        rt_fail_declared_payload(&mut *vm, 4, name, 0, 1, fields.as_ptr());
+        rt_fail_declared(&mut *vm, 5, name);
+        assert!(vm.declared_payload.is_empty());
+        rt_fail_declared_payload(&mut *vm, 4, name, 0, 1, fields.as_ptr());
+        index_not_found(&mut *vm);
+        assert!(vm.declared_payload.is_empty());
+        assert_eq!(pending(&mut vm), crate::runtime::error::ERR_INDEX_NOT_FOUND);
+    }
 
     fn pending(vm: &mut Vm) -> u32 {
         let id = vm.declared_error;
@@ -2397,9 +3385,9 @@ mod tests {
     fn slices_fail_with_lower_underrun_or_upper_overrun() {
         use crate::runtime::error::{ERR_LOWER_UNDERRUN as LO, ERR_UPPER_OVERRUN as UP};
         let mut vm = vm();
-        let s = str_val(&mut vm, "abc");
-        let neg_big = vm.new_big(-(num_bigint::BigInt::from(1u8) << 80usize));
-        let pos_big = vm.new_big(num_bigint::BigInt::from(1u8) << 80usize);
+        let s = rooted!(vm, str_val(&mut vm, "abc"));
+        let neg_big = rooted!(vm, vm.new_big(-(num_bigint::BigInt::from(1u8) << 80usize)));
+        let pos_big = rooted!(vm, vm.new_big(num_bigint::BigInt::from(1u8) << 80usize));
         let cases = [
             (small(-1), small(2), LO),  // start below 0
             (small(4), small(4), UP),   // start above the length
@@ -2420,8 +3408,8 @@ mod tests {
         assert_eq!(str_of(rt_substr(&mut *vm, s, small(3), small(3))).as_str(), "");
         assert_eq!(rt_str_region_check(&mut *vm, s, small(0), small(3)), UNIT);
 
-        let arr = rt_mutarray_allocate(&mut *vm, small(2));
-        let big = rt_mutarray_allocate(&mut *vm, small(5));
+        let arr = rooted!(vm, rt_mutarray_allocate(&mut *vm, small(2)));
+        let big = rooted!(vm, rt_mutarray_allocate(&mut *vm, small(5)));
         assert_eq!(rt_mutarray_set(&mut *vm, arr, small(2), small(1)), NO_VALUE);
         assert_eq!(pending(&mut vm), crate::runtime::error::ERR_INDEX_NOT_FOUND);
         for (count, id) in [(small(-1), LO), (small(3), UP)] {
@@ -2514,15 +3502,16 @@ mod tests {
         .collect();
         for x in &values {
             for k in [0u32, 1, 2, 60, 61, 62, 63, 64, 65, 100, 200] {
-                let a = match i64::try_from(x) {
+                let a = rooted!(vm, match i64::try_from(x) {
                     Ok(n) => vm.new_int(n),
                     Err(_) => vm.new_big(x.clone()),
-                };
-                let b = vm.new_int(k as i64);
+                });
+                let b = rooted!(vm, vm.new_int(k as i64));
                 let shl = rt_int_shl(p, a, b);
                 assert_eq!(int_to_big(shl), x << (k as usize), "{x} << {k}");
                 let shr = rt_int_shr(p, a, b);
                 assert_eq!(int_to_big(shr), x >> (k as usize), "{x} >> {k}");
+                vm.temp_roots.clear();
             }
         }
     }
@@ -2540,5 +3529,562 @@ mod tests {
         assert_eq!(shl_i64_exact(0, 100), Some(0));
         assert_eq!(shl_i64_exact(1, 64), None);
         assert_eq!(shl_i64_exact(-1, 64), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // Owned byte storage (ABI-BYTES.md)
+
+    fn bytes_list(vm: &mut Vm, values: &[i64]) -> Value {
+        let items: Vec<Value> = values.iter().map(|n| vm.new_int(*n)).collect();
+        vm.new_list(items)
+    }
+
+    #[test]
+    fn bytes_from_list_copies_every_byte_exactly_including_nul_and_high_bytes() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let l = bytes_list(&mut vm, &[0x41, 0, 0x42, 0xff, 0x80, 0, 0]);
+        let b = rt_bytes_from_list(p, l);
+        assert_eq!(heap_kind(b), KIND_BYTES);
+        assert_eq!(bytes_of(b), &[0x41, 0, 0x42, 0xff, 0x80, 0, 0]);
+        assert_eq!(rt_bytes_len(p, b), make_small(7));
+        // Eager copy: the storage is its own allocation, not the List.
+        assert_ne!(b, l);
+    }
+
+    #[test]
+    fn the_empty_storage_is_the_shared_static_one_and_allocates_nothing() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let empty = bytes_list(&mut vm, &[]);
+        let before = vm.metrics.total_allocations();
+        let a = rt_bytes_from_list(p, empty);
+        let b = vm.new_bytes(&[]);
+        assert_eq!(vm.metrics.total_allocations(), before);
+        assert_eq!(a, b);
+        assert_eq!(unsafe { (*(a as *const Header)).is_static }, 1);
+        assert_eq!(rt_bytes_len(p, a), make_small(0));
+        assert!(bytes_of(a).is_empty());
+    }
+
+    #[test]
+    fn a_non_byte_element_is_a_type_error_never_a_truncation() {
+        for bad in [256i64, -1, 1 << 40] {
+            let mut vm = vm();
+            let p: *mut Vm = &mut *vm;
+            let l = bytes_list(&mut vm, &[1, bad, 3]);
+            assert_eq!(rt_bytes_from_list(p, l), NO_VALUE);
+            let message = vm.error.take().unwrap().message();
+            assert!(message.contains("element 1 must be a byte"), "{message}");
+            assert!(message.contains(&bad.to_string()), "{message}");
+        }
+        let mut strings = vm();
+        let p: *mut Vm = &mut *strings;
+        let text = rooted!(strings, strings.new_str("a"));
+        let l = rooted!(strings, strings.new_list(vec![text]));
+        assert_eq!(rt_bytes_from_list(p, l), NO_VALUE);
+        assert!(strings.error.take().unwrap().message().contains("got \"a\""));
+        // A BigInt (above the small range) is no byte either.
+        let mut bigs = vm();
+        let p: *mut Vm = &mut *bigs;
+        let big = rooted!(bigs, bigs.new_big(num_bigint::BigInt::from(1u64 << 63) * 4));
+        let l = rooted!(bigs, bigs.new_list(vec![big]));
+        assert_eq!(rt_bytes_from_list(p, l), NO_VALUE);
+    }
+
+    #[test]
+    fn length_and_address_refuse_a_value_that_is_not_a_storage() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let l = bytes_list(&mut vm, &[1, 2]);
+        for helper in [rt_bytes_len as extern "C" fn(*mut Vm, Value) -> Value, rt_bytes_addr] {
+            assert_eq!(helper(p, l), NO_VALUE);
+            assert!(vm.error.take().unwrap().message().contains("expected bytestore"));
+            assert_eq!(helper(p, make_small(5)), NO_VALUE);
+            assert!(vm.error.take().is_some());
+        }
+    }
+
+    #[test]
+    fn the_payload_address_is_the_object_address_plus_sixteen_and_reads_back() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let l = bytes_list(&mut vm, &[7, 0, 9]);
+        let b = rt_bytes_from_list(p, l);
+        let address = rt_bytes_addr(p, b);
+        assert!(is_small(address));
+        let address = small_of(address) as u64;
+        assert_eq!(address, b + 16);
+        assert_eq!(address % 16, 0);
+        let read = unsafe { std::slice::from_raw_parts(address as *const u8, 3) };
+        assert_eq!(read, &[7, 0, 9]);
+        // The empty storage's address is legal for a zero count (one past its header).
+        let e = vm.new_bytes(&[]);
+        assert_eq!(small_of(rt_bytes_addr(p, e)) as u64, e + 16);
+    }
+
+    #[test]
+    fn storage_equality_is_by_bytes_never_identity() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let a = rooted!(vm, vm.new_bytes(&[1, 2, 3]));
+        let b = rooted!(vm, vm.new_bytes(&[1, 2, 3]));
+        let c = rooted!(vm, vm.new_bytes(&[1, 2, 4]));
+        let d = rooted!(vm, vm.new_bytes(&[1, 2]));
+        let static_copy = BytesObj::new_static(&[1, 2, 3]) as Value;
+        assert_ne!(a, b);
+        assert_eq!(rt_value_eq(p, a, b), TRUE);
+        assert_eq!(rt_value_eq(p, a, static_copy), TRUE);
+        assert_eq!(rt_value_eq(p, a, c), FALSE);
+        assert_eq!(rt_value_eq(p, a, d), FALSE);
+        assert_eq!(rt_value_eq(p, vm.new_bytes(&[]), vm.new_bytes(&[0])), FALSE);
+        // Never equal to a List or String of the same numbers/characters.
+        let l = bytes_list(&mut vm, &[1, 2, 3]);
+        assert_eq!(rt_value_eq(p, a, l), FALSE);
+        unsafe { super::super::heap::free_object(static_copy as *mut Header) };
+    }
+
+    #[test]
+    fn storage_hash_agrees_with_equality_and_with_the_documented_encoding() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let a = rooted!(vm, vm.new_bytes(&[1, 2, 3]));
+        let b = rooted!(vm, vm.new_bytes(&[1, 2, 3]));
+        let c = rooted!(vm, vm.new_bytes(&[1, 2, 4]));
+        let zero = rooted!(vm, vm.new_bytes(&[0]));
+        let two_zeros = rooted!(vm, vm.new_bytes(&[0, 0]));
+        assert_eq!(rt_hash(p, a), rt_hash(p, b));
+        assert_ne!(rt_hash(p, a), rt_hash(p, c));
+        assert_ne!(rt_hash(p, zero), rt_hash(p, two_zeros));
+        // kind tag 9, the byte count as 8 little-endian bytes, then the bytes
+        // (core/hashing.tcl's bytestore case).
+        let mut h = fnv1a(FNV_OFFSET, &[9]);
+        h = fnv1a(h, &3u64.to_le_bytes());
+        h = fnv1a(h, &[1, 2, 3]);
+        assert_eq!(rt_hash(p, a), make_small((h & HASH_MASK) as i64));
+    }
+
+    #[test]
+    fn storage_renders_and_crosses_to_the_host_as_core_value_does() {
+        use crate::runtime::show::{show, tcl_value};
+        let mut vm = vm();
+        let b = vm.new_bytes(&[0x41, 0, 0xff]);
+        assert_eq!(show(b), "<bytes 3: 4100ff>");
+        assert_eq!(tcl_value(b).unwrap(), "bytestore 4100ff");
+        let e = vm.new_bytes(&[]);
+        assert_eq!(show(e), "<bytes 0: >");
+        assert_eq!(tcl_value(e).unwrap(), "bytestore {}");
+    }
+
+    #[test]
+    fn an_unreferenced_storage_is_collected_and_a_rooted_one_survives() {
+        use crate::runtime::metrics::GcReason;
+        let mut vm = vm();
+        // KEPT is rooted across the garbage's allocation (a collection
+        // under stress); the explicit collection below roots only KEPT.
+        let kept = rooted!(vm, vm.new_bytes(&[1; 100]));
+        let _garbage = vm.new_bytes(&[2; 100]);
+        vm.heap.collect(std::iter::once(kept), &mut vm.metrics, GcReason::Explicit, &crate::runtime::framemap::ProgramMap::new());
+        assert_eq!(vm.metrics.by_kind[KIND_BYTES as usize].live_objects, 1);
+        assert_eq!(vm.metrics.by_kind[KIND_BYTES as usize].reclaimed_objects, 1);
+        // The payload holds no program value: the survivor is intact.
+        assert_eq!(bytes_of(kept), &[1u8; 100][..]);
+    }
+
+    #[test]
+    fn an_oversized_storage_is_a_range_error_before_any_allocation() {
+        let mut vm = vm();
+        let before = vm.metrics.total_allocations();
+        let v = vm.new_bytes_with(MAX_COLLECTION_LENGTH + 1, |_| unreachable!("no payload is written"));
+        assert_eq!(v, NO_VALUE);
+        assert!(vm.error.take().unwrap().message().contains("cannot exceed"));
+        assert_eq!(vm.metrics.total_allocations(), before);
+    }
+
+    // -----------------------------------------------------------------------
+    // Writable byte storage, abi::bytes::MutableBytes (MUTABLE-BYTES.md)
+
+    #[test]
+    fn a_mutable_storage_is_zero_filled_fixed_length_and_one_block() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        for n in [0i64, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 4096] {
+            let m = rt_mbytes_new(p, small(n));
+            assert_eq!(heap_kind(m), KIND_MUTBYTES);
+            assert_eq!(rt_mbytes_len(p, m), make_small(n));
+            assert!(mutbytes_of(m).iter().all(|b| *b == 0), "length {n} must be zero-filled");
+            if n > 0 {
+                // header + length + payload, the payload at +16 and 16-aligned.
+                assert_eq!(small_of(rt_mbytes_addr(p, m)) as u64, m + 16);
+                assert_eq!((m + 16) % 16, 0);
+                assert_eq!(unsafe { super::super::heap::object_size(m as *mut Header) }, 16 + n as usize);
+            }
+        }
+        // The empty one is the shared static; a non-empty one is never shared.
+        let (e1, e2) = (rt_mbytes_new(p, small(0)), rt_mbytes_new(p, small(0)));
+        assert_eq!(e1, e2);
+        assert_eq!(unsafe { (*(e1 as *const Header)).is_static }, 1);
+        // (The first is rooted: freed, its address could be the second's.)
+        let first = rooted!(vm, rt_mbytes_new(p, small(4)));
+        assert_ne!(first, rt_mbytes_new(p, small(4)));
+    }
+
+    #[test]
+    fn a_mutable_length_outside_the_ceiling_is_a_range_error() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let big = vm.new_big(num_bigint::BigInt::from(1u8) << 70usize);
+        for bad in [small(-1), big, make_small(MAX_COLLECTION_LENGTH as i64 + 1)] {
+            let before = vm.metrics.total_allocations();
+            assert_eq!(rt_mbytes_new(p, bad), NO_VALUE);
+            assert!(vm.error.take().unwrap().message().contains("the length must be in 0.."));
+            assert_eq!(vm.metrics.total_allocations(), before);
+        }
+        // A length the allocator cannot supply is reported, never an abort.
+        assert_eq!(rt_mbytes_new(p, make_small(MAX_COLLECTION_LENGTH as i64)), NO_VALUE);
+        assert!(vm.error.take().unwrap().message().contains("out of memory"));
+    }
+
+    #[test]
+    fn set_updates_a_fresh_copy_and_never_writes_its_operand() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let a = rooted!(vm, vm.new_bytes(&[1, 2, 3, 4, 5]));
+        let m = rooted!(vm, rt_mbytes_from(p, a));
+        assert_eq!(mutbytes_of(m), &[1, 2, 3, 4, 5]);
+        let n = rt_mbytes_set(p, m, small(2), small(0xff));
+        assert_ne!(n, m, "an update is a new object");
+        assert_eq!(mutbytes_of(n), &[1, 2, 0xff, 4, 5]);
+        // The operand, and the immutable source it was copied from, are untouched.
+        assert_eq!(mutbytes_of(m), &[1, 2, 3, 4, 5]);
+        assert_eq!(bytes_of(a), &[1, 2, 3, 4, 5]);
+        // Every index, and the last byte, on objects of several sizes.
+        for len in [1usize, 2, 7, 8, 9, 16, 17, 33] {
+            let src: Vec<u8> = (0..len as u8).collect();
+            let base = rooted!(vm, vm.new_bytes(&src));
+            let m = rooted!(vm, rt_mbytes_from(p, base));
+            for i in 0..len {
+                let n = rt_mbytes_set(p, m, small(i as i64), small(200));
+                let mut want = src.clone();
+                want[i] = 200;
+                assert_eq!(mutbytes_of(n), &want[..]);
+                assert_eq!(mutbytes_of(m), &src[..]);
+            }
+        }
+    }
+
+    #[test]
+    fn set_refuses_a_bad_index_value_or_operand() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let m = rooted!(vm, rt_mbytes_new(p, small(3)));
+        let empty = rooted!(vm, rt_mbytes_new(p, small(0)));
+        let big = rooted!(vm, vm.new_big(num_bigint::BigInt::from(1u8) << 70usize));
+        let s = rooted!(vm, vm.new_str("x"));
+        for (target, index, value, kind) in [
+            (m, small(3), small(1), "RANGE"),
+            (m, small(-1), small(1), "RANGE"),
+            (m, big, small(1), "RANGE"),
+            (empty, small(0), small(1), "RANGE"),
+            (m, small(0), small(256), "TYPE"),
+            (m, small(0), small(-1), "TYPE"),
+            (m, small(0), s, "TYPE"),
+            (s, small(0), small(1), "TYPE"),
+        ] {
+            assert_eq!(rt_mbytes_set(p, target, index, value), NO_VALUE);
+            let e = vm.error.take().unwrap();
+            assert_eq!(e.error_code()[1..], ["SEMANTIC", kind], "{}", e.message());
+        }
+        assert_eq!(mutbytes_of(m), &[0, 0, 0]);
+    }
+
+    #[test]
+    fn clone_freeze_and_prefix_copy_and_the_kinds_never_mix() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let a = rooted!(vm, vm.new_bytes(&[9, 8, 7, 6]));
+        let m = rooted!(vm, rt_mbytes_from(p, a));
+        let c = rooted!(vm, rt_mbytes_clone(p, m));
+        assert_ne!(c, m);
+        assert_eq!(mutbytes_of(c), mutbytes_of(m));
+        let f = rooted!(vm, rt_mbytes_freeze(p, m));
+        assert_eq!(heap_kind(f), KIND_BYTES);
+        assert_eq!(bytes_of(f), &[9, 8, 7, 6]);
+        assert_ne!(f, a, "freeze is a snapshot copy, not the source storage");
+        for (count, want) in [(0usize, &[][..]), (1, &[9][..]), (3, &[9, 8, 7][..]), (4, &[9, 8, 7, 6][..])] {
+            let q = rt_mbytes_freeze_prefix(p, m, small(count as i64));
+            assert_eq!(heap_kind(q), KIND_BYTES);
+            assert_eq!(bytes_of(q), want);
+        }
+        assert_eq!(rt_mbytes_freeze_prefix(p, m, small(5)), NO_VALUE);
+        assert!(vm.error.take().unwrap().message().contains("the count must be in 0..4"));
+        assert_eq!(rt_mbytes_freeze_prefix(p, m, small(-1)), NO_VALUE);
+        vm.error = None;
+        // The two storage kinds are never accepted for one another.
+        assert_eq!(rt_bytes_len(p, m), NO_VALUE);
+        vm.error = None;
+        assert_eq!(rt_bytes_addr(p, m), NO_VALUE);
+        vm.error = None;
+        for helper in [rt_mbytes_len as extern "C" fn(*mut Vm, Value) -> Value, rt_mbytes_addr, rt_mbytes_clone, rt_mbytes_freeze] {
+            assert_eq!(helper(p, a), NO_VALUE, "a Bytes storage is not a MutableBytes");
+            assert!(vm.error.take().unwrap().message().contains("expected mutbytes"));
+            assert_eq!(helper(p, small(1)), NO_VALUE);
+            vm.error = None;
+        }
+        assert_eq!(rt_mbytes_from(p, m), NO_VALUE, "mutable_from takes an immutable storage");
+        vm.error = None;
+    }
+
+    #[test]
+    fn the_writable_address_is_the_payload_and_the_kernel_can_write_through_it() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let m = rt_mbytes_new(p, small(8));
+        let address = small_of(rt_mbytes_addr(p, m)) as u64;
+        assert_eq!(address, m + 16);
+        // A write through the raw address (what the read syscall does) is
+        // visible in the storage's own payload: no copy sits in between.
+        unsafe { std::ptr::copy_nonoverlapping([7u8, 6, 5].as_ptr(), address as *mut u8, 3) };
+        assert_eq!(mutbytes_of(m), &[7, 6, 5, 0, 0, 0, 0, 0]);
+        // The empty storage's address is a valid one-past address.
+        let e = rt_mbytes_new(p, small(0));
+        assert_eq!(small_of(rt_mbytes_addr(p, e)) as u64, e + 16);
+    }
+
+    #[test]
+    fn mutable_equality_hash_and_rendering_are_by_contents_under_their_own_kind() {
+        use crate::runtime::show::{show, tcl_value};
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let src = rooted!(vm, vm.new_bytes(&[1, 2, 3]));
+        let a = rooted!(vm, rt_mbytes_from(p, src));
+        let b = rooted!(vm, rt_mbytes_from(p, src));
+        let c = rooted!(vm, rt_mbytes_set(p, a, small(0), small(9)));
+        assert_ne!(a, b, "two storages, equal contents");
+        assert_eq!(rt_value_eq(p, a, b), TRUE);
+        assert_eq!(rt_value_eq(p, a, c), FALSE);
+        assert_eq!(rt_value_eq(p, a, src), FALSE, "a MutableBytes storage is not a Bytes storage");
+        assert_eq!(rt_hash(p, a), rt_hash(p, b));
+        assert_ne!(rt_hash(p, a), rt_hash(p, c));
+        assert_ne!(rt_hash(p, a), rt_hash(p, src), "its own kind tag (10), not the Bytes tag (9)");
+        // kind tag 10, the byte count as 8 little-endian bytes, then the bytes
+        // (core/hashing.tcl's `bytestore - mutbytes` case).
+        let mut h = fnv1a(FNV_OFFSET, &[10]);
+        h = fnv1a(h, &3u64.to_le_bytes());
+        h = fnv1a(h, &[1, 2, 3]);
+        assert_eq!(rt_hash(p, a), make_small((h & HASH_MASK) as i64));
+        assert_eq!(show(a), "<mutbytes 3: 010203>");
+        assert_eq!(tcl_value(a).unwrap(), "mutbytes 010203");
+        let e = rt_mbytes_new(p, small(0));
+        assert_eq!(show(e), "<mutbytes 0: >");
+        assert_eq!(tcl_value(e).unwrap(), "mutbytes {}");
+    }
+
+    #[test]
+    fn a_mutable_storage_is_collected_when_unreferenced_and_survives_when_rooted() {
+        use crate::runtime::metrics::GcReason;
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        // KEPT is rooted across the garbage's allocation (a collection
+        // under stress); the explicit collection below roots only KEPT.
+        let kept = rooted!(vm, rt_mbytes_new(p, small(100)));
+        unsafe { BytesObj::payload_mut(kept)[99] = 0x5a };
+        let _garbage = rt_mbytes_new(p, small(100));
+        vm.heap.collect(std::iter::once(kept), &mut vm.metrics, GcReason::Explicit, &crate::runtime::framemap::ProgramMap::new());
+        assert_eq!(vm.metrics.by_kind[KIND_MUTBYTES as usize].live_objects, 1);
+        assert_eq!(vm.metrics.by_kind[KIND_MUTBYTES as usize].reclaimed_objects, 1);
+        assert_eq!(mutbytes_of(kept)[99], 0x5a);
+    }
+
+    #[test]
+    fn mutable_operations_survive_a_collection_at_every_allocation() {
+        let mut vm = vm();
+        vm.heap.set_stress_for_test(true);
+        let p: *mut Vm = &mut *vm;
+        let src = vm.new_bytes(&[1, 2, 3, 4]);
+        vm.temp_roots.push(src);
+        let m = rt_mbytes_from(p, src);
+        vm.temp_roots.push(m);
+        let n = rt_mbytes_set(p, m, small(1), small(77));
+        vm.temp_roots.push(n);
+        let c = rt_mbytes_clone(p, n);
+        vm.temp_roots.push(c);
+        let f = rt_mbytes_freeze_prefix(p, c, small(3));
+        assert_eq!(mutbytes_of(m), &[1, 2, 3, 4]);
+        assert_eq!(mutbytes_of(n), &[1, 77, 3, 4]);
+        assert_eq!(mutbytes_of(c), &[1, 77, 3, 4]);
+        assert_eq!(bytes_of(f), &[1, 77, 3]);
+        vm.temp_roots.clear();
+    }
+
+    // -----------------------------------------------------------------------
+    // MutableArray as a value (MUTABLE-ARRAY.md): header over a copy-on-write
+    // backing.
+
+    /// A rooted array of the Ints XS.
+    fn mutarray_of_ints(vm: &mut Vm, xs: &[i64]) -> Value {
+        let list = rooted!(vm, vm.new_list(xs.iter().map(|&x| small(x)).collect()));
+        rooted!(vm, rt_mutarray_from_list(vm, list))
+    }
+
+    fn mutarray_contents(arr: Value) -> Vec<i64> {
+        array_elements(arr).map(small_of).collect()
+    }
+
+    #[test]
+    fn mutarray_copy_shares_and_only_the_first_write_detaches() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let a = mutarray_of_ints(&mut vm, &[1, 2, 3, 4]);
+        let b = rooted!(vm, share_array(p, a));
+        // A new header on the same backing: no element copied.
+        assert_ne!(a, b);
+        assert!(Rc::ptr_eq(&mutarray_of(a).backing, &mutarray_of(b).backing));
+        assert_eq!((vm.metrics.mutarray.shares, vm.metrics.mutarray.detaches), (1, 0));
+        // The first write through either detaches it, once.
+        rt_mutarray_set(p, b, small(0), small(9));
+        assert_eq!((vm.metrics.mutarray.detaches, vm.metrics.mutarray.detach_elements), (1, 4));
+        assert_eq!(mutarray_contents(a), vec![1, 2, 3, 4]);
+        assert_eq!(mutarray_contents(b), vec![9, 2, 3, 4]);
+        // Later writes to the now unique backings never detach again.
+        rt_mutarray_set(p, b, small(1), small(8));
+        rt_mutarray_set(p, a, small(3), small(7));
+        assert_eq!(vm.metrics.mutarray.detaches, 1);
+        assert_eq!(mutarray_contents(a), vec![1, 2, 3, 7]);
+        assert_eq!(mutarray_contents(b), vec![9, 8, 3, 4]);
+        vm.temp_roots.clear();
+    }
+
+    #[test]
+    fn mutarray_swap_and_take_front_move_elements_and_keep_copies_intact() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let a = mutarray_of_ints(&mut vm, &[1, 2, 3]);
+        let copy = rooted!(vm, share_array(p, a));
+        // swap installs the replacement and moves the old element out.
+        assert_eq!(small_of(rt_mutarray_swap(p, a, small(1), small(20))), 2);
+        // A consuming loop's drain takes elements first to last; the length
+        // shrinks, and a copy taken before is untouched.
+        assert_eq!(small_of(rt_mutarray_take_front(p, a)), 1);
+        assert_eq!(rt_mutarray_empty(p, a), FALSE);
+        assert_eq!(small_of(rt_mutarray_take_front(p, a)), 20);
+        assert_eq!(small_of(rt_mutarray_take_front(p, a)), 3);
+        assert_eq!(rt_mutarray_empty(p, a), TRUE);
+        assert_eq!(mutarray_contents(copy), vec![1, 2, 3]);
+        vm.temp_roots.clear();
+    }
+
+    #[test]
+    fn mutarray_out_of_range_changes_nothing() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let a = mutarray_of_ints(&mut vm, &[5, 6]);
+        let copy = rooted!(vm, share_array(p, a));
+        assert_eq!(rt_mutarray_set(p, a, small(2), small(9)), NO_VALUE);
+        assert_eq!(rt_mutarray_swap(p, a, small(-1), small(9)), NO_VALUE);
+        // A failed write neither changes the array nor detaches its backing.
+        assert_eq!(mutarray_contents(a), vec![5, 6]);
+        assert_eq!(vm.metrics.mutarray.detaches, 0);
+        assert!(Rc::ptr_eq(&mutarray_of(a).backing, &mutarray_of(copy).backing));
+        vm.temp_roots.clear();
+    }
+
+    #[test]
+    fn mutarray_operations_survive_a_collection_at_every_allocation() {
+        let mut vm = vm();
+        vm.heap.set_stress_for_test(true);
+        let p: *mut Vm = &mut *vm;
+        let inner = mutarray_of_ints(&mut vm, &[1, 2]);
+        let outer = rooted!(vm, rt_mutarray_create(p, small(3), inner));
+        let copy = rooted!(vm, share_array(p, outer));
+        let fresh = rooted!(vm, rt_mutarray_allocate(p, small(4)));
+        rt_mutarray_set(p, copy, small(0), fresh);
+        let frozen = rooted!(vm, rt_mutarray_to_list(p, outer));
+        assert_eq!(list_of(frozen).items().len(), 3);
+        assert_eq!(mutarray_contents(inner), vec![1, 2]);
+        assert_eq!(array_elements(copy).next(), Some(fresh));
+        assert_eq!(array_elements(outer).next(), Some(inner));
+        // A drained array keeps (and the collector traces) exactly the
+        // elements not taken yet.
+        let roots = vm.temp_roots.len();
+        let other = mutarray_of_ints(&mut vm, &[3]);
+        let list = rooted!(vm, vm.new_list(vec![inner, other]));
+        let drained = rt_mutarray_from_list(p, list);
+        // OTHER is reachable only through DRAINED from here on.
+        vm.temp_roots.truncate(roots);
+        vm.temp_roots.push(drained);
+        assert_eq!(rt_mutarray_take_front(p, drained), inner);
+        rooted!(vm, rt_mutarray_allocate(p, small(1)));
+        assert_eq!(array_elements(drained).collect::<Vec<_>>(), vec![other]);
+        assert_eq!(mutarray_contents(other), vec![3]);
+        vm.temp_roots.clear();
+    }
+
+    /// The allocator calls of each array operation (string_alloc_tests.rs's
+    /// counting allocator): a new array is its header and one backing
+    /// allocation -- the backing's counts and its slots -- whatever its
+    /// constructor and length; a copy is a header; the first write through a
+    /// copy allocates the detached backing, frees nothing (the shared one
+    /// stays the other header's), and later writes, a bulk copy and a
+    /// consuming loop's step allocate nothing.
+    #[test]
+    fn mutarray_is_a_header_and_one_backing_allocation() {
+        use crate::runtime::string_alloc_tests::{counting_vm, measure};
+        let mut vm = counting_vm();
+        let p: *mut Vm = &mut *vm;
+        let header = std::mem::size_of::<MutArrayObj>();
+        // An Rc's two counts, then the slots.
+        let backing = |n: usize| 16 + 8 * n;
+        let list = rooted!(vm, vm.new_list((0..8).map(small).collect()));
+        let (a, allocs, _, bytes) = measure(|| rt_mutarray_from_list(p, list));
+        vm.temp_roots.push(a);
+        assert_eq!((allocs, bytes), (2, header + backing(8)), "from_list");
+        let (b, allocs, _, bytes) = measure(|| rt_mutarray_create(p, small(8), small(7)));
+        vm.temp_roots.push(b);
+        assert_eq!((allocs, bytes), (2, header + backing(8)), "create");
+        let (c, allocs, _, bytes) = measure(|| rt_mutarray_allocate(p, small(0)));
+        vm.temp_roots.push(c);
+        assert_eq!((allocs, bytes), (2, header + backing(0)), "allocate(0)");
+        let (copy, allocs, _, bytes) = measure(|| share_array(p, a));
+        vm.temp_roots.push(copy);
+        assert_eq!((allocs, bytes), (1, header), "share");
+        let (_, allocs, frees, bytes) = measure(|| rt_mutarray_set(p, copy, small(0), small(9)));
+        assert_eq!((allocs, frees, bytes), (1, 0, backing(8)), "detach");
+        assert_eq!((vm.metrics.mutarray.detaches, vm.metrics.mutarray.detach_elements), (1, 8));
+        let (_, allocs, _, _) = measure(|| {
+            rt_mutarray_set(p, copy, small(1), small(9));
+            rt_mutarray_set(p, a, small(1), small(9))
+        });
+        assert_eq!(allocs, 0, "unique writes");
+        let (_, allocs, _, _) = measure(|| rt_mutarray_copy(p, b, small(0), a, small(2), small(4)));
+        assert_eq!(allocs, 0, "copy between arrays");
+        let (x, allocs, frees, _) = measure(|| rt_mutarray_take_front(p, b));
+        assert_eq!((small_of(x), allocs, frees), (2, 0, 0), "take_front");
+        assert_eq!(vm.metrics.mutarray.detaches, 1);
+        vm.temp_roots.clear();
+    }
+
+    /// A consuming loop's step only advances its own header's start: a copy
+    /// made before keeps every element, and a copy of a drained array (no
+    /// program makes one: a consumed array is affine) shares the elements
+    /// left, which its first write detaches -- exactly those.
+    #[test]
+    fn mutarray_drained_elements_are_header_local() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let a = mutarray_of_ints(&mut vm, &[1, 2, 3, 4]);
+        let before = rooted!(vm, share_array(p, a));
+        assert_eq!(small_of(rt_mutarray_take_front(p, a)), 1);
+        let after = rooted!(vm, share_array(p, a));
+        assert_eq!(small_of(rt_mutarray_capacity(p, after)), 3);
+        rt_mutarray_set(p, after, small(0), small(20));
+        assert_eq!((vm.metrics.mutarray.detaches, vm.metrics.mutarray.detach_elements), (1, 3));
+        assert_eq!(mutarray_contents(a), vec![2, 3, 4]);
+        assert_eq!(mutarray_contents(after), vec![20, 3, 4]);
+        assert_eq!(mutarray_contents(before), vec![1, 2, 3, 4]);
+        assert_eq!(small_of(rt_mutarray_take_front(p, after)), 20);
+        assert_eq!(mutarray_contents(after), vec![3, 4]);
+        assert_eq!(mutarray_contents(a), vec![2, 3, 4]);
+        vm.temp_roots.clear();
     }
 }

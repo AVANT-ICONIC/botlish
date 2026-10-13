@@ -115,16 +115,43 @@ Values are immutable. Every value has exactly one kind:
 |----------|------------------|----------------------------------------------------|
 | `int`    | `42`             | arbitrary precision; no fixed-width overflow       |
 | `str`    | `"hello"`        | a string                                           |
+| `UnicodeChar` | `'A'`       | exactly one Unicode scalar value (UNICODE-CHAR-LITERALS.md) |
 | `bool`   | `true` / `false` | the only valid condition values                    |
 | `unit`   | `unit`           | value of an empty sequence                         |
 | `list`   | `[1, "a"]`       | an ordered sequence of values                      |
 | `struct` | `{a: 1, b: 2}` / `Name {a: 1}` | fixed named fields (STRUCTS.md): anonymous (structural) or declared by `struct Name:` (nominal) |
+| `enum`   | `Name::Case`     | one case of an enum declared by `enum Name:` (ENUMS.md): nominal (its identity is the enum declaration and the case's name), no integer, String or ordinal meaning; payload-free, unrestricted, compared and hashed by identity |
 | `result` | `ok(v)` / `error(v)` | an application-level outcome                   |
 | `block`  | `<block (x y)>`  | a closure: parameters, body, captured environment  |
 | `native` | `<native +>`     | a primitive callable, possibly with refinement metadata |
+| `coroutine` | `<coroutine>` | the affine handle of one started coroutine (COROUTINES.md): resumed by calling it, observed with `coroutine::done?`, never compared, hashed, copied or stored |
 
 Kinds never blur: the integer `10`, the string `"10"`, and the string
 `"true"` are all different values, and none of the strings is a Boolean.
+
+**Strings and characters.** A String (`str`) is a sequence of characters; a
+character is a `UnicodeChar`, exactly one Unicode scalar value. **A single
+character is written as a character literal** (`','`, `'"'`, `'\n'`, `'\''`,
+`'😀'`); the empty String `""` and every String of two or more characters are
+Strings. Characters are counted as `str::length` counts them: Unicode scalar
+values, never bytes and never grapheme clusters (an `é` written as `e` plus a
+combining accent is two characters). The two kinds never convert implicitly: a
+String and a UnicodeChar are never equal (`==` of the two is `false`), a `str`
+parameter does not take a UnicodeChar, and `str::char_at` is the operation that
+reads a String's character as a value (ENCODE-UTF8-ALLOCATION-RESEARCH.md). A
+one-character String literal is therefore a String spelling of what the
+language writes as a character; the `ONE-CHAR-STRING-LITERAL` warning (§23)
+reports each one. Where an API takes a String for what is one character, that
+String spelling is what the API requires today, and the finding is about the
+API. The corpus's scanners are written this way: the CSV programs of
+`examples/stdlib` read each character with `str::char_at` under a
+`str::length` bound and compare it with `','`, `'\n'` and `'"'`;
+`ai_text_clean.bot`'s `clean_char` reads the character its one-character text
+holds; `lib/web.bot`'s `emailish?` tests `'.'` and `'@'` at a position
+(REFACTOR-WARNINGS-CLEAN.md). What still needs a one-character String --
+appending a character to text, a table of characters as text, a character
+handed to a String-taking classifier such as `str::is_tcl_alnum` -- is listed,
+with its reason, in the warning manifest (§23).
 
 **Equality (`==`)** compares structure. Values of different kinds are never
 equal. Integers compare numerically, strings compare exact characters, lists
@@ -194,7 +221,7 @@ Each evaluation step ends in a **completion**:
 | `return(v)`          | leave the current callable invocation with `v`   |
 | `break(v)`           | leave the nearest lexical loop with `v`          |
 | `continue`           | start the nearest lexical loop's next iteration  |
-| `propagate-error(e)` | reserved for future structured error propagation (no form produces it yet) |
+| `propagate-error(e)` | a declared error leaving: `e` is its identity and, for an error that declares one, the payload it carries (`fail`, EXPLICIT-ERROR-COMPLETIONS.md, ERROR-PAYLOADS.md) |
 
 When a sub-expression completes abruptly (anything other than `value`), the
 enclosing expression stops and completes the same way. Sequences stop at the
@@ -232,6 +259,9 @@ Evaluates to a literal value.
 * `(const int 42)` and `(const str 42)` force the type.
 * `(const list {1 2 abc})` builds a list. Each element follows the untyped
   rule.
+* `(const enum {ID CASE})` is the case CASE of the enum declared as ID
+  (ENUMS.md): `(const enum {geo::VehicleType Car})`. A value, like any
+  literal; HIR resolution has already checked that ID declares CASE.
 
 ### `(bind NAME EXPR)`
 
@@ -306,6 +336,16 @@ Completes with `break(v)`. `v` is `unit` when no expression is given.
 
 Completes with `continue`.
 
+### `(fail NAME)` / `(fail NAME PAYLOAD)` / `(handle CALL NAME BLOCK ...)`
+
+`(fail NAME)` completes with `propagate-error` of the declared error NAME;
+`(fail NAME PAYLOAD)` evaluates PAYLOAD first and completes with the
+identity and that payload value (ERROR-PAYLOADS.md). `(handle CALL NAME1
+BLOCK1 ...)` runs the block of the name the call's error has (selection is
+the name alone, never the payload), as part of the enclosing code; a block
+with one parameter, `(block {P} ...)`, binds P to the payload. Any other
+completion passes through. See EXPLICIT-ERROR-COMPLETIONS.md.
+
 ### `(ok EXPR)` / `(error-value EXPR)`
 
 Build Result values `ok(v)` and `error(v)`. These are ordinary values: an
@@ -332,8 +372,7 @@ runtime, so code run through `core::evalIn` gets the same errors.
 A callable can carry refinement metadata: facts that are proven when it
 returns `true` or `false`. A fact is a **type** (§14). For example, the
 metadata for `integer?` is `-refines-true {0 int}` ("when the result is
-true, argument 0 is an `int`"). The metadata for `Emailish?` is
-`{0 {refined str {Emailish}}}`.
+true, argument 0 is an `int`").
 
 When an `if` condition has the form `(call (ref P) ARG...)`, the evaluator:
 
@@ -353,6 +392,14 @@ under another name keeps its metadata, and a user block that shadows
 Refinement introspection: `core::refinementsOf ENV NAME` and
 `core::envRefinements ENV`. To inspect a scope, create a block in it and use
 `core::blockEnv` (see `examples/04-refinement-scope.ir`).
+
+Botlish source declares its own refinements: `refined type Emailish = str`
+is a nominal type over a carrier, `fn emailish?(v: str) -> bool proves
+v: Emailish:` is a function whose true result proves its argument one, and
+`fn validate_emailish(v: str) -> unit proves v: Emailish errors Invalid:`
+one whose normal completion does (§14, REFINEMENT-VALUES.md). Those facts
+are static only: the compiler (§13) derives them from the function's
+declared proof contract, and no runtime value or environment records them.
 
 ## 7. Invalid programs vs application errors
 
@@ -423,6 +470,7 @@ Standard intrinsics (qualified root natives):
 | `str::lowercase` | str → str (Unicode 16 simple one-to-one case mapping; see §"Strings") |
 | `str::concat` | str, str → str |
 | `str::encode_utf8` | str → `List[Byte]` (the UTF-8 bytes) |
+| `str::char_at` | str, int → UnicodeChar, errors `IndexNotFound`: the scalar at character index `0 <= i < length` (the index space of `length`/`substring`); any other Int index fails with `IndexNotFound`; never allocates. With char literals (`c == '%'`) and `char::scalar_value` it classifies a String's characters without a one-character String or an `encode_utf8` List (ENCODE-UTF8-ALLOCATION-RESEARCH.md) |
 | `str::is_tcl_alpha` `str::is_tcl_alnum` | one-scalar str → bool (temporary Tcl-compatibility classes, core/tclcompat.tcl) |
 | `char::scalar_value` | UnicodeChar → int (the Unicode scalar value: `0..0x10FFFF` without the surrogates, never a byte or a code unit of an encoding) |
 | `mutable_array::allocate` | int → mutarray (every slot `unit`) |
@@ -433,13 +481,19 @@ Standard intrinsics (qualified root natives):
 | `mutable_array::freeze` | mutarray, int → list, errors `LowerUnderrun` `UpperOverrun`: a copy of the first N slots (the slice `0..N`) |
 | `immutable_set::from_list` | `List[T]` → `ImmutableSet[T]` |
 | `immutable_set::contains` | `ImmutableSet`, any → bool |
+| `byte_store::from_list` | `List[Byte]` → byte storage: the eagerly copied, owned storage behind `abi::bytes::Bytes` (no source type spells it; ABI-BYTES.md) |
+| `byte_store::byte_count` | byte storage → int: its exact length |
+| `abi::x86_64::from_bytes` | `abi::bytes::Bytes` → `abi::x86_64::Register64`: the machine address of the payload, for the raw layer; native backend only (Tcl backends: `NATIVE-ONLY`); callable only directly (ABI-BYTES.md) |
+| `mutable_byte_store::zeroed` `from_storage` `count` `replace` `detach` `freeze` `freeze_prefix` | the writable byte storage behind `abi::bytes::MutableBytes`, a value kind of its own: zero-filled allocation, an independent copy of a byte storage, the fixed count, an update that returns a **fresh** storage (the operand is never written), the detach copy, and immutable snapshots; none is context-free (MUTABLE-BYTES.md) |
+| `abi::x86_64::from_mutable_bytes` | `abi::bytes::MutableBytes` → `abi::x86_64::Register64`: the machine address of a **writable** payload, for the raw layer; never mixed with `from_bytes`; native backend only; callable only directly (MUTABLE-BYTES.md) |
 | `linux::abi::syscall` | `{rax: R, rdi: R, …, r9: R}` → `abi::x86_64::Register64` (R a Register64): the raw Linux x86-64 kernel transition, raw rax back; omitted argument registers are zero; native backend only (Tcl backends: `NATIVE-ONLY`); callable only directly (LINUX-X86-64-SYSCALL.md) |
 
 Ordinary Botlish members of the same namespaces (library modules, not
 natives): `list::get`, `list::any?`, `list::all?`, `list::none?`,
 `list::find` (`lib/list.bot`); `mutable_array::from_list`,
 `mutable_array::create`, `mutable_array::get` (`lib/mutable_array.bot`).
-`char` has no library module: `char::scalar_value` is its one member (a
+`char` has no library module: `char::scalar_value` is its one member
+(`str::char_at` produces a UnicodeChar from a String position; a
 "code point" also names surrogates and, colloquially, Latin-1 or other
 encodings' numbers; a scalar value is exactly what a UnicodeChar holds).
 Like every native's parameter types, its `UnicodeChar` requirement is
@@ -489,13 +543,11 @@ proven impossible: the completion proof also reads String lengths (a
 literal, `str::concat`'s sum, a guard such as `if str::length(s) > 0:` or
 `if i < 0 or i >= str::length(s): return ...`) and array capacities.
 
-Optional library `web` (`# requires: web`, lib/web.tcl):
-
-| Name | Signature | Refinement |
-|------|-----------|------------|
-| `Emailish?` | str → bool, type test of `Emailish` | true: arg 0 : `Emailish` |
-| `UriQueryValue?` | str → bool, type test of `UriQueryValue` | true: arg 0 : `UriQueryValue` |
-| `uriEscape` | str → `UriQueryValue` | |
+The former optional native library `web` (lib/web.tcl: `Emailish?`,
+`UriQueryValue?`, `uriEscape`) is gone. The Botlish module `web`
+(lib/web.bot, `import web`) declares `web::Emailish` and
+`web::UriQueryValue` as source refinement types with their proof-producing
+functions `web::emailish?` and `web::uri_query_value?` (§14).
 
 New natives are registered through the registry, not by changing the
 evaluator:
@@ -509,7 +561,7 @@ core::registerNative even? -arity 1 -impl myEvenImpl -refines-true {0 Even}
 `-runtime {TAG…}` states what a native implementation of the operation
 needs from a runtime beyond bare machine operations: `bigint`,
 `string-alloc`, `list-alloc`, `result-alloc`, `char-index`, `range-check`,
-`structural-equality`, `evidence`, `process-argv`, `raw-syscall`
+`structural-equality`, `process-argv`, `raw-syscall`
 (`core/native.tcl` defines each). It is metadata for static analysis (§19) and never changes what a call
 does.
 
@@ -530,14 +582,13 @@ the registration rather than from the native's name.
 
 Natives may also declare a signature. `-param-types {int int}` lists the
 type each argument must have (`any` means no requirement), and
-`-result-type int` gives the type of every result. Types can be refined, for
-example `-result-type {refined str {UriQueryValue}}`.
+`-result-type int` gives the type of every result. Types can be refined
+(`{refined BASE {NAME…}}`, §14).
 
 **Declared types are a contract.** After every call, the reference runtime
 checks that each argument satisfied its parameter type and that the result
 satisfies the result type. A violation raises `CORE CONTRACT TYPE`. So a
-native can't claim to return a `UriQueryValue` while returning a plain
-string. The compiler relies on these declarations (§13). Compiled code
+native can't claim a result type its results don't have. The compiler relies on these declarations (§13). Compiled code
 never re-checks them: its inlined intrinsics and type tests are exact, and
 generic calls go through the runtime, which checks.
 
@@ -559,9 +610,9 @@ type test. `core::type::definePredicate` registers type tests, and so do the
 builtin kind and tag predicates.
 
 **Strings discard refinements.** A string transformation's result carries no
-refinement unless its contract explicitly establishes one. So
-`str::substring(UriQueryValue)` is a plain `str`, while `uriEscape(str)` is a
-`UriQueryValue`.
+refinement unless its contract explicitly establishes one. So `str::substring`
+of a `web::UriQueryValue` is a plain `str`, and so is `web::uri_escape_text`'s
+result until `web::uri_query_value?` proves it one.
 
 ## 9. Public API
 
@@ -627,7 +678,9 @@ refinement unless its contract explicitly establishes one. So
 | `core/primitives.tcl`, `core/predicates.tcl`, `core/strings.tcl`, `core/lists.tcl` | builtin natives |
 | `core/process.tcl` | the process boundary: `argv()`, its builtin error, argv injection (ARGV.md) |
 | `core/linuxabi.tcl` | `linux::abi::syscall`, the raw Linux x86-64 kernel transition (native only; LINUX-X86-64-SYSCALL.md) |
-| `lib/web.tcl` | optional demonstration library (`core::loadLibrary web`): `Emailish`, `UriQueryValue`, `uriEscape` |
+| `core/contexts.tcl` | the two internal context operations `context#install` / `context#load` and the Tcl backends' per-run context environment (CONTEXTS.md); `context#unreachable`, the placeholder of code no installed context reaches (CONTEXT-TRAITS.md) |
+| `core/coroutines.tcl` | the coroutine operations `coroutine#create` / `#start` / `#resume` / `#yield` and `coroutine::done?`, and the Tcl backends' coroutine store: one Tcl coroutine per Botlish coroutine (COROUTINES.md) |
+| `core/bytestore.tcl` | the byte-storage value kinds' natives (immutable `bytestore`, writable `mutbytes`) and the raw address bridges `abi::x86_64::from_bytes` / `from_mutable_bytes` (ABI-BYTES.md, MUTABLE-BYTES.md) |
 | `hir/hir.tcl` | HIR data model, ids, `hir::build`, queries |
 | `hir/syntax.tcl` | syntax nodes: HIR's input, and core IR → syntax |
 | `hir/hygiene.tcl` | renaming bindings that shadow root references |
@@ -640,16 +693,25 @@ refinement unless its contract explicitly establishes one. So
 | `hir/aot.tcl` | closed-AOT readiness analysis (§19) |
 | `hir/specialize.tcl` | call-site specialization: instances, result fixpoint, views for `hir::aot` (§21) |
 | `hir/exactvalue.tcl` | exact-value facts and value identity (`hir::exact::Of`, `Identity`, `SameValue`) |
-| `hir/warnings.tcl` | compiler warnings: record, static registry, global policy, rendering, error promotion, and `SAME-RETURN-VALUE` (§23) |
-| `hir/syscall.tcl` | the static contract of `linux::abi::syscall`'s register-struct argument (LINUX-X86-64-SYSCALL.md) |
+| `hir/warnings.tcl` | compiler warnings: record, static registry, global policy, rendering, error promotion, `SAME-RETURN-VALUE` and `METHOD-ELIGIBLE` (§23) |
+| `hir/traits.tcl` | eager structural traits: the trait registry, structural conformance (`hir::traits::satisfies`/`explain`), trait views and trait operations, their checks, and the monomorphization plan that turns every trait-polymorphic function into one ordinary function per witness (TRAITS.md) and every function requiring a context trait into one clone under the selected context (CONTEXT-TRAITS.md) |
+| `hir/coroutines.tcl` | coroutines: thunks and call graph, the resume-protocol fixed point, yield and handle typing, the transitive yield effect, `UNWRAPPED-YIELD` chains, the affine handle discipline and storage frontier (COROUTINES.md) |
+| `hir/contexts.tcl` | execution-environment contexts: context parameters, direct and transitive requirements, installation order, `MISSING-CONTEXT` chains, function-value frontier (CONTEXTS.md); context traits: structural satisfaction (`satisfiesTrait`/`explainTrait`), the one-way binding check, exactly-one provider selection (CONTEXT-TRAITS.md) |
+| `hir/syscall.tcl` | the static contract of `linux::abi::syscall`'s register-struct argument (LINUX-X86-64-SYSCALL.md) and of `abi::x86_64::from_bytes`'s `abi::bytes::Bytes` argument (ABI-BYTES.md) |
 | `compiler/compiler.tcl` | HIR → Tcl compiler backend |
 | `native/lower.tcl` | HIR → NIR native lowering (§20) |
 | `native/native.tcl` | the native entry points, all taking HIR: `native::lowered` (the one HIR → NIR entry), `evalHir` (JIT), NIR, CLIF, object, executable, code size and guard report; runs the native driver |
 | `native/prepare.tcl` | `native::prepareHir`: attaches the native implementations a program calls (module functions, validator bodies) to its HIR |
 | `native/src/nir.rs` | NIR parsing and validation |
-| `native/src/runtime/` | native `Value` representation, heap and collector, errors, runtime helper ABI; `syscall.rs` holds the one inline-asm `syscall` boundary (LINUX-X86-64-SYSCALL.md) |
+| `native/src/runtime/` | native `Value` representation, heap and collector, errors, runtime helper ABI; `syscall.rs` holds the one inline-asm `syscall` boundary (LINUX-X86-64-SYSCALL.md); `bytesobj.rs` the owned byte-storage object, immutable and writable kinds (ABI-BYTES.md, MUTABLE-BYTES.md) |
 | `lib/abi.bot` | the ABI numeric domains `abi::I8` ... `abi::Usize` (ordinary Int values with a proven foreign-interface domain `abi::I8Value` ... `abi::UsizeValue`, not fixed-width arithmetic), their checked creators `abi::i8` ... `abi::usize` and errors `AbiIntegerBelowRange`/`AbiIntegerAboveRange` (ABI-NUMERIC-DOMAINS.md) |
+| `lib/abi/bytes.bot` | the ABI memory values, both owned by this one module (the single-owner rule of OPAQUE-STRUCTS.md, so they convert into each other without a public accessor): `abi::bytes::Bytes`, immutable, opaque over contiguous byte storage (`from_list`, `length`; ABI-BYTES.md), and `abi::bytes::MutableBytes`, its writable counterpart, a *value* whose copies are independent (`zeroed`, `from_bytes`, `mutable_length`, `replace`, `detach`, `freeze`, `freeze_prefix`; MUTABLE-BYTES.md) |
 | `hir/imports.tcl` | the import environments of a compilation: which namespaces and short type names each file's header imported (IMPORTS.md) |
+| `lib/linux.bot` | `linux::write(fd, data)`: one `write(2)` syscall over an `abi::bytes::Bytes`, the kernel's raw signed result as an Int (ABI-BYTES.md); `linux::read(fd, data)`: one `read(2)` into the caller's `abi::bytes::MutableBytes` (copied: the caller's value is never changed), returning a `linux::ReadResult` of the raw `ssize_t` and the updated buffer (MUTABLE-BYTES.md) |
+| `lib/linux/io.bot` | `linux::io::LinuxIO`, the process's standard I/O as one opaque context over three opaque `FileDescriptor` tokens; `create()`, and the contextual `write`, `write_error`, `read` over `linux::write` / `linux::read` (CONTEXTS.md); `write_text`/`write_error_text`, LinuxIO's implementation of `io::IO`, completing short writes (CONTEXT-TRAITS.md) |
+| `lib/io.bot` | the portable text output: the context trait `io::IO`, `WriteFailed`, `io::print`, `print_line`, `write_error`, `write_error_line` (CONTEXT-TRAITS.md) |
+| `lib/io/path.bot` | the portable textual path trait `io::path::Path` (`concat`, `text`) and `NotAPath` (CONTEXT-TRAITS.md) |
+| `lib/linux/path.bot` | `linux::path::LinuxPath`, a refinement of str (non-empty, no U+0000): `valid?`, `validate`, `concat`, `text` (CONTEXT-TRAITS.md) |
 | `lib/abi/x86_64.bot` | `abi::x86_64::Register64`, the x86-64 register word as a transport value, and its two Int conversions (LINUX-X86-64-SYSCALL.md); `from_i8` ... `from_usize` encode ABI numeric values as register words, sign- or zero-extended (ABI-NUMERIC-DOMAINS.md) |
 | `native/src/codegen/` | the `Backend` interface; NIR → Cranelift IR for JIT and object files |
 | `surface/lexer.tcl` | source → tokens, indentation → `INDENT`/`DEDENT` |
@@ -679,7 +741,8 @@ Implementation notes (not part of the semantics):
 Surface syntax beyond the minimal language of §17, macros, objects (structs,
 STRUCTS.md, are immutable values: no mutable struct, update syntax, methods or
 inheritance), assignment, mutable
-variables, exceptions, `?` propagation, pattern matching, a type checker
+variables, exceptions, `?` propagation, pattern matching (enums, ENUMS.md, are
+payload-free closed sums with no `match`, exhaustiveness or payloads yet), a type checker
 beyond refinement tracking (struct destructuring, STRUCT-DESTRUCTURING.md, is
 irrefutable named projection, not pattern matching), async, coroutines, threads, or FFI. A small
 one-file/one-namespace module system *is* implemented (§17's
@@ -761,7 +824,11 @@ the same for programs built to expose unsound type facts (§13). The
 through compiled code as Tcl completion code 5, out of a direct call of a
 compiled block and -- since STRUCTURAL-FUNCTION-TYPES.md, where a callable
 with a declared error set may be called through a structural function type
--- out of a generic call (`core::runtime::callValue`) alike.
+-- out of a generic call (`core::runtime::callValue`) alike. The completion's
+value is the error identity, `{errorId NAME}`, or `{errorId NAME PAYLOAD}` for
+an error with a payload (ERROR-PAYLOADS.md), NAME the canonical identity
+(`ns::Name` for a module's error): a handler binds the payload
+straight from it, and a re-raise passes it on unchanged.
 
 ## 13. Type inference
 
@@ -805,8 +872,8 @@ the kind) and contract (to `any`).
 
 `hir::types::lub`, `narrow` and `kindOf` handle the extra forms themselves
 and delegate everything else to `core::type`. For example,
-`kindOf {refined str {Emailish}}` is `str`, and narrowing `str` by
-`Emailish` gives `{refined str {Emailish}}`. None of these forms mention a
+`kindOf {refined str {web::Emailish}}` is `str`, and narrowing `str` by
+`web::Emailish` gives `{refined str {web::Emailish}}`. None of these forms mention a
 representation: the compiler maps a block's `EXPR` to the proc it generates.
 
 **Where types come from.**
@@ -815,13 +882,29 @@ representation: the compiler maps a block's `EXPR` to the proc it generates.
 * **Root constants** in program mode: `+` has type `{native +}`, and `true`
   has type `bool` (and, as an `if` condition, decides the branch).
 * **Native signatures** (§8): a call of `-` has type `int`, and a call of
-  `uriEscape` has type `{refined str {UriQueryValue}}`.
+  `str::length` has type `int`.
 * **Immutability:** a binding has the type of the expression it was bound
   to, and keeps it.
 * **Refinements:** inside the `then` branch of `(if (call (ref integer?) (ref x)) …)`,
-  `x` is `int`. Inside the `then` branch of `Emailish?`, it's
-  `{refined str {Emailish}}`. Nested predicates accumulate evidence. As in
-  the interpreter, only arguments that are plain `(ref NAME)` are refined.
+  `x` is `int`. Inside the `then` branch of `if web::emailish?(x):`, it's
+  `{refined str {web::Emailish}}`: the function's proof contract (`proves v:
+  Emailish`, §14) says what its true result proves. Nested predicates
+  accumulate facts. As in the interpreter, only arguments that are plain
+  `(ref NAME)` are refined (an immutable alias's root value too), and a
+  Boolean binding carries what its value implies (`ok = p(s)` then `if ok:`).
+  A *validator*'s contract (`-> unit proves v: Emailish`) is a flow fact
+  instead: once its call completes, the argument is refined for the rest of
+  the path (not inside a handler of the call; after a handled call only if
+  every handler that completes proves it too).
+  A fact survives an `if` when every branch that completes normally proves it.
+* **Exact predicate results** (REFINEMENT-VALUES.md): a call of a
+  predicate (a `-> bool` proof-producing function; never a validator, whose
+  repeated call is always made) also records its own result for its exact
+  argument values on each edge. A second identical call on a path where that
+  result is known is decided (the call's `known`, and every backend elides
+  it) only when the function is *repeatable* (`hir/repeatable.tcl`: everything
+  it can reach is a deterministic value computation). Another function
+  proving the same refinement is never decided by it.
 * **Flow facts:** when a native that requires a type returns, its argument
   had that type. The runtime contract check guarantees this. Because
   bindings are immutable, the argument keeps the type for the rest of the
@@ -866,9 +949,8 @@ representation: the compiler maps a block's `EXPR` to the proc it generates.
 * **Type tests** (natives declared with `-tests-type T`, §8), with argument
   of static type `S` and parameter kind `P` (decided by the HIR, which marks
   the call `known`):
-  * **Folded to true** if `S ⊑ P` and `S ⊑ T`. For example, `Emailish?` on a
-    value already refined to `Emailish`, or `UriQueryValue?` on the result
-    of `uriEscape`.
+  * **Folded to true** if `S ⊑ P` and `S ⊑ T`. For example, `integer?` on
+    a value already known to be an `int`.
   * **Folded to false** if `S ⊑ P` and `S`'s base differs from `T`'s. For
     example, `integer?` on a string.
   * **Otherwise inline:** the parameter kind check, then either
@@ -921,12 +1003,14 @@ Native type contracts are checked on generic native calls, which costs
 compiled `sum-refined` roughly 10%; inlined intrinsics and type tests are
 unaffected.
 
-`refined-checks.ir` repeats `Emailish?` and `UriQueryValue?` checks, some of
-them made redundant by an enclosing refinement. Compiled, it went from
-20.9 ms to 8.5 ms once type tests were folded and inlined instead of called
-generically.
+`bench/refined-checks.bot` repeats `web::emailish?` and checks
+`web::uri_query_value?`; the repeated `web::emailish?` call, inside the true
+branch of the first one, is decided and disappears from the generated code
+(REFINEMENT-VALUES.md). (Its Core-IR predecessor `refined-checks.ir`, over
+the removed `Emailish?`/`UriQueryValue?` type-test natives, went from
+20.9 ms to 8.5 ms compiled once type tests were folded and inlined.)
 
-## 14. Types, named types and evidence
+## 14. Types, named types and refinements
 
 `core/type.tcl` owns the meaning of types. The interpreter is the
 specification; the compiler consumes the same definitions.
@@ -937,26 +1021,73 @@ specification; the compiler consumes the same definitions.
 |------|--------|
 | `int` `str` `bool` `unit` `list` `result` `block` `native` | every value of that kind |
 | `any` | every value |
-| `{refined BASE {NAME…}}` | values of kind `BASE` that satisfy every named type (an evidence set) |
+| `{refined BASE {NAME…}}` | values of kind `BASE` that satisfy every named type |
 
-A registered name on its own is shorthand: `Emailish` means
-`{refined str {Emailish}}`. `core::type::normalize` gives the canonical form,
-with names sorted and unique, and every registry stores canonical types.
+A registered name on its own is shorthand: `web::Emailish` means
+`{refined str {web::Emailish}}`. `core::type::normalize` gives the canonical
+form, with names sorted and unique, and every registry stores canonical types.
 
-**Named types** are registered from Tcl. There's no type declaration IR yet:
-
-```tcl
-core::type::register Emailish      -base str -validator [list core::regex::matches $re]
-core::type::register UriQueryValue -base str -opaque 1
-core::type::definePredicate Emailish          ;# registers the native Emailish?
-```
+**Named types** come in two kinds:
 
 * A **validator** type is structural. The validator (a command prefix called
-  with the value, returning 1/0) decides membership.
-* An **opaque** type has no validator. A value belongs to it only if it
-  carries runtime *evidence*, which only trusted natives attach. For opaque
-  types, evidence is the semantics. For validator types, evidence is only an
-  optimization.
+  with the value, returning 1/0) decides membership. The integer domains
+  source declares (`type Byte = Int in 0..255`, SOURCE-DEFINED-INTEGER-DOMAINS.md)
+  and the Result tags are validator types.
+* A **refinement** type is nominal (REFINEMENT-VALUES.md). Source declares
+  it over one carrier type, `refined type Emailish = str`, and a value of the
+  carrier is one only where a proof says so: a call of a proof-producing
+  function of the declaring module returned true for it (a predicate) or
+  completed normally for it (a validator). There is no runtime
+  test, tag or wrapper: a refined value is exactly a value of its carrier, so
+  equality, hashing, rendering, the ABI and layouts are the carrier's.
+
+```
+refined type Emailish = str
+
+fn emailish?(value: str) -> bool proves value: Emailish:
+    ...
+
+fn consume(e: Emailish) -> int:
+    str::length(e)
+
+fn ok(s: str) -> int:
+    if emailish?(s):
+        consume(s)              # s is proven an Emailish here
+    else:
+        0
+```
+
+`consume(s)` outside the true branch is rejected ("a refinement proof is
+required"): nothing converts a carrier value implicitly. A refined value is a
+value of its carrier everywhere a carrier is expected (forgetting is
+subtyping), and a refinement may refine another (`refined type Encoded =
+Query`), forgetting transitively. A refinement's identity is its declaring
+module's (`web::Emailish`), and only that exact module may declare a proof of
+it (`REFINEMENT-MINT-AUTHORITY`; no import, parent or child namespace grants
+it). A carrier must be a scalar value type whose values never change (str,
+int, bool, UnicodeChar, an integer domain or another refinement over them;
+`REFINEMENT-CARRIER`), and a chain of refinements may not return to itself
+(`CYCLIC-REFINEMENT`). `lib/web.bot` declares `web::Emailish` and
+`web::UriQueryValue` this way; the compiler knows neither name.
+
+A **trait** (TRAITS.md) is not a value type at all. `trait Named: fn
+name(value: Named) -> str` declares a nominal, signature-only view that a
+concrete type satisfies structurally (its owner namespace declares a
+compatible `name`). A trait-typed parameter accepts such a value as a *view*:
+source code may use only the trait's operations on it, while the compiler
+keeps the concrete type as hidden provenance and compiles one ordinary
+function per concrete type, each trait operation a direct call. Nothing of a
+trait exists at run time.
+
+A **context trait** (CONTEXT-TRAITS.md) is not a value type either. `context
+trait IO: fn write_text(text: str) -> unit errors WriteFailed` declares
+operations an installed context supplies; a function uses it through a
+context parameter (`fn print_line(text: str, context io: IO)`, then
+`io.write_text(...)`), the installed context that implements it
+(`linux::io::LinuxIO`, through `linux::io::write_text(text: str, context io:
+LinuxIO)`) is selected statically at each top-level call -- exactly one, or
+`MISSING-CONTEXT` / `AMBIGUOUS-CONTEXT-IMPLEMENTATION` -- and every operation
+compiles to a direct call of that context's implementation.
 
 **Operations.**
 
@@ -965,56 +1096,32 @@ core::type::definePredicate Emailish          ;# registers the native Emailish?
 | `valid T` | `T` is a well-formed type |
 | `base T` | its primitive kind (`""` for `any`) |
 | `subtype A B` | every value of `A` is a value of `B` |
-| `acceptsValue T V` | `V` is a value of `T` |
-| `validate NAME V` | `V` satisfies the named type (evidence, else validator; opaque: evidence only) |
-| `lub A B` | same base: the evidence both share; otherwise `any` |
-| `narrow A B` | same base: the union of the evidence; otherwise `B` (a contradiction only happens on unreachable paths) |
+| `acceptsValue T V` | `V` is a value of `T` (a refinement: of its carrier; its proposition is static) |
+| `validate NAME V` | `V` satisfies the named type (validator; refinement: its carrier) |
+| `lub A B` | same base: the named types both share; otherwise `any` |
+| `narrow A B` | same base: the union of the named types; otherwise `B` (a contradiction only happens on unreachable paths) |
 | `assertValue T V CONTEXT` | contract check; raises `CORE CONTRACT TYPE` |
 
-For example, `lub(Emailish, str)` is `str`, and
-`narrow(Emailish, NonEmpty)` is `{refined str {Emailish NonEmpty}}`. Proving a
-second property never erases the first.
+For example, `lub(Emailish, str)` is `str`, the lub of two refinements of
+one carrier is their nearest common carrier, and `narrow(Emailish,
+NonEmpty)` is `{refined str {Emailish NonEmpty}}`. Proving a second property
+never erases the first.
 
-**Runtime evidence.** Strings may carry evidence:
+**Values carry no proofs.** A value has only its kind and contents: the
+former runtime *evidence* on Strings (attached by trusted natives to make a
+String a member of an *opaque* named type) is gone with the opaque types
+themselves. A refinement is knowledge the compiler has about a binding on a
+path, never part of the value.
 
-```
-{str TEXT}                          plain
-{str TEXT {UriQueryValue}}          proven UriQueryValue
-{str TEXT {Emailish UriQueryValue}}
-```
-
-`core::value::evidence`, `withEvidence` and `hasEvidence` work with it.
-`strOf` still returns the text. **Evidence is knowledge about a value, not
-part of it:** `==` and ordinary display ignore it, so `"foo"` proven to
-be a `UriQueryValue` still equals `"foo"`. `core::value::show V 1` shows
-evidence as `"foo"#{UriQueryValue}`; the differential tests use this form, so
-both backends must agree on evidence too. Only string values carry evidence
-for now.
-
-**The predicate pattern.** A named type gets an ordinary predicate. `if`
-knows nothing about named types:
+**The predicate pattern.** `if` knows nothing about named types; a condition
+that calls a proof-producing function proves what its contract says, per
+outcome:
 
 ```
-(if (call (ref Emailish?) (ref x))
-    (block {} … x : {refined str {Emailish}} …)
+(if (call (ref emailish?) (ref x))
+    (block {} … x : {refined str {web::Emailish}} …)
     (block {} …))
 ```
-
-A future surface form such as `if string is Emailish x:` can lower to this
-call without new core semantics.
-
-**Trusted transforms produce evidence.** `uriEscape` percent-encodes its
-input and returns `withEvidence [str $escaped] UriQueryValue`. Its declared
-result type is `{refined str {UriQueryValue}}`. The compiler knows the
-static type, and the runtime value carries the proof through dynamically
-typed code. The contract check stops a native from claiming that type
-without delivering the evidence.
-
-`lib/web.tcl` defines `Emailish`, `UriQueryValue`, their predicates and
-`uriEscape` as an optional demonstration library. It isn't loaded by core:
-call `core::loadLibrary web`, or put `# requires: web` in a program file,
-which `main.tcl` and `bench/bench.tcl` honor. `examples/05-refined-strings.ir`
-shows all of it.
 
 ## 15. Regular expressions
 
@@ -1237,10 +1344,14 @@ representation: no Tcl variables, frames or boxing.
 
 Refinements (`hir/refine.tcl`) follow the run-time rule of §6. When a
 condition calls a callee whose static type is a known native, that native's
-metadata gives facts about the arguments that are plain references. Facts are
-BindingId/type pairs. They're recorded on the `if` (per outcome) and on the
-branch scope, and they narrow the binding only inside that branch. Nothing in
-the HIR refers to a predicate by name. A type test decided by static types
+metadata gives facts about the arguments that are plain references; when it
+calls a known function with a proof contract (`proves x: R`, resolved onto
+the block as its `proofs`), the contract does. Facts are BindingId/type
+pairs, plus the exact-result facts of proof-producing calls (§13). They're recorded on the `if` (per outcome) and on the
+branch scope, and they narrow the binding only inside that branch. A
+validator's contract (`-> unit proves x: R`, outcome `normal`) is no
+condition fact: a call of it that completes narrows its argument for the
+rest of the path (§13). Nothing in the HIR refers to a predicate by name. A type test decided by static types
 (§8) sets the call's `known` field. If an `if` condition is known (a decided
 test, or the root binding `true` or `false`), the other branch is marked
 unreachable.
@@ -1261,7 +1372,10 @@ under the interpreter and the compiler.
 The `hir::format` notation is also an input format. `hir::parse` (and
 `hir::readFile`, which honors `# requires:` and skips `#` comment lines)
 rebuilds a complete HIR program from it. The text states the binding ids,
-scopes, types, captures, refinements, call targets and flags. The reader
+scopes, types, captures, refinements, call targets and flags, and a
+source refinement's declaration (`refined type ID carrier T owner NS`) and a
+block's proof contract (` proves BINDING NAME: TYPE`, a predicate's or a
+validator's as its `declares bool`/`declares unit` says). The reader
 derives everything else: binding kinds and types, scope structure, closures,
 root symbols, diagnostics and origins. It rejects text that is malformed or
 inconsistent (an id declared twice, a reference to a binding that isn't
@@ -1274,8 +1388,7 @@ rebuilding it from IR, and runs it like `core::evalProgram`. The compiler
 trusts the HIR's facts.
 
 `examples/hir/NAME.hir` are samples covering scopes and shadowing, closures,
-recursion, refinements, control flow, refined strings and use before
-binding. Each sits next to the `NAME.ir` it lowers to and states its outcome
+recursion, refinements, control flow and use before binding. Each sits next to the `NAME.ir` it lowers to and states its outcome
 in a `# expect:` or `# expect-error:` comment. `tests/hir-samples.test`
 checks, for every sample, that:
 
@@ -1472,6 +1585,15 @@ add10(32)          # 42 (add captures x)
   static projection; a receiver the compiler cannot prove is a struct with
   that field is rejected, never looked up at run time. Struct values are
   immutable.
+* An **enum** is a named, closed, nominal sum (ENUMS.md). `enum VehicleType:`
+  followed by an indented, comma-separated list of payload-free cases
+  (`Boat,` `Car,` ... ; a trailing comma optional) declares one nominal type;
+  `VehicleType::Car` is a case value of exactly that type (`geo::VehicleType::Car`
+  for a module's, or `VehicleType::Car` after `import type geo::VehicleType`).
+  Two enums are unrelated even with identical cases, a case is never visible
+  by its bare name, and there is no anonymous enum, case value or alias, no
+  ordinal, integer or String conversion and no ordering: `==`, `!=` and `hash`
+  compare the enum and the case. `enum` is a contextual word.
 * **Opaque structs.** `opaque struct Token:` declares an ordinary struct whose
   representation belongs to the module that declares it: only that module may
   construct it (`token::Token {...}`) or inspect it (`x.value`, `{value} = x`);
@@ -1482,9 +1604,52 @@ add10(32)          # 42 (add captures x)
   (`OPAQUE-CONSTRUCTION`, `OPAQUE-REPRESENTATION`) with no runtime test. `opaque`
   is a contextual word, the compiler still sees the fields (a one-field wrapper
   scalar-replaces exactly as an ordinary one), and an opaque value prints as
-  `<opaque token::Token>`. It is representation ownership, not OO privacy, and
-  the prerequisite for later `opaque context struct` / `opaque resource struct`.
+  `<opaque token::Token>`. It is representation ownership, not OO privacy;
+  `context` (below) composes with it as an independent modifier
+  (`opaque context struct`), and a later `resource` will too.
   See OPAQUE-STRUCTS.md.
+* **Declared errors and their payloads.** `error NAME` declares an error, a
+  nominal identity (EXPLICIT-ERROR-COMPLETIONS.md); `fn f(x) -> T errors E1,
+  E2:` declares what a call may raise, `fail NAME` raises it, and `r = f(x):`
+  followed by `on E1:` handlers handles it. An error may carry a named-field
+  payload (ERROR-PAYLOADS.md): `error PageNotFound:` followed by `uri: str`,
+  `statusCode: int` lines (a struct declaration's field grammar), raised by
+  `fail PageNotFound {uri: u, statusCode: 404}` (a struct literal's checks:
+  every field once, none unknown, each value proven admissible), and received
+  by `on PageNotFound:` (ignored), `on PageNotFound details:` (bound whole, an
+  anonymous struct of the declared fields) or `on PageNotFound {uri,
+  statusCode: s}:` (the ordinary irrefutable struct destructuring, nested
+  patterns included). `on` selects by the error's identity only: there are no
+  value patterns, guards or payload-driven selection, and two errors with the
+  same fields are unrelated. `errors` clauses and `Fn{...}` contracts name
+  identities only. A payload owns what it holds: an affine field moves into
+  it and along the error edge, and is released where its owner dies; a
+  coroutine may not fail with an error whose payload is affine (its cached
+  failure is raised again on every later resume). An error's identity is
+  module-qualified (ERROR-PAYLOADS.md, "Module-qualified error identity"):
+  module `http`'s `error NotFound` is `http::NotFound`, named by its short
+  name inside the module and qualified outside it (through the ordinary
+  exact imports), so two modules' same-named errors -- even with identical
+  payloads -- are two identities; the entry program's and the runtime's
+  builtin errors keep bare names.
+* A result annotation `-> unit` declares the unit result (`fn log(x) ->
+  unit:`): `unit` is the unit value's keyword everywhere else, and the unit
+  type's name in a type position (results, parameters, `List[unit]`, `Fn{...}`
+  fields, struct fields).
+* **Refinement types and proofs.** `refined type Emailish = str` declares a
+  nominal refinement of one carrier type, and `fn emailish?(v: str) -> bool
+  proves v: Emailish:` declares a *predicate* whose true result proves it: in
+  `if emailish?(s):` (or `ok = emailish?(s)` then `if ok:`, or through `not`,
+  `and`, `or`), `s` is an `Emailish`. `fn validate_emailish(v: str) -> unit
+  proves v: Emailish errors Invalid:` declares a *validator* whose normal
+  completion proves it: after `validate_emailish(s)` returns, `s` is an
+  `Emailish` for the rest of the path (a handled call keeps the fact only if
+  every handler that completes proves it too). The proof clause names one
+  declared parameter, sits after `-> bool` or `-> unit` and before an
+  `errors` clause, and may appear only in the module that declares the
+  refinement. A refined value is its carrier everywhere a carrier is
+  expected; nothing else converts to it. `refined` and `proves` are
+  contextual words, not reserved. See §14 and REFINEMENT-VALUES.md.
 * **Method-call sugar.** `value.f(a, b)` is another spelling of the ordinary
   call `f(value, a, b)`, allowed exactly when `f` is a function visible by
   that name at the call (under ordinary lexical resolution: a function or
@@ -1501,6 +1666,33 @@ add10(32)          # 42 (add captures x)
   call whose name is both a visible function and a possibly-callable field of
   the receiver's struct type is rejected as ambiguous
   (`AMBIGUOUS-METHOD-CALL`). See METHOD-SUGAR.md.
+* **`nomethod fn`.** `nomethod fn atan2(y, x):` declares a function that is
+  *never the callee of method syntax*. It is a modifier on the one
+  declaration, accepted wherever `fn` is (top level, modules, nested
+  functions), and a declaration-level fact about the function's interface
+  decided by its author -- the author knows receiver syntax would read badly
+  (`y.atan2(x)`). A `nomethod` function is called functionally exactly like
+  any other: its type, completion, specialization and generated code are
+  identical, and nothing about it is visible outside call-form legality. A
+  method-style call that would resolve to it is the resolution error
+  `NOMETHOD-CALL` (`` `atan2` is declared nomethod and cannot be called with
+  method syntax; call it as atan2(receiver, ...) ``): method syntax skips a
+  `nomethod` function as a candidate, so another visible function of the same
+  name is still found, and only when every visible function of that name is
+  `nomethod` is the call rejected. It follows the class of an unbound name: raised by resolution
+  (before type inference) under `-strict 1`; kept in the HIR under `-strict 0`,
+  where the call stays the call of a field value and fails at run time too.
+  An alias (`g = atan2`) is the same function. The flag is carried by
+  imports (a `nomethod` function of a module behaves identically) and by the
+  builtin registry (`core::native::register -nomethod 1`). Five shipped
+  natives are marked, each for a stated reason (REFACTOR-WARNINGS-CLEAN.md):
+  `bit_and`, `bit_or` and `bit_xor` (symmetric operands: neither is a
+  receiver), `mutable_array::copy` (its first argument is the copy's
+  destination) and `mutable_array::create` (its first argument is the new
+  array's length). `nomethod` is a contextual word (an ordinary name everywhere but
+  before `fn`). It is not a suppression pragma: it changes what call forms are
+  *legal*, not what the compiler *reports* about a call. See
+  WARNINGS-METHOD-ELIGIBLE.md.
 * **Flag parameters.** `fn open(path, flags :append, :cloexec):` declares a
   *flag section* after the ordinary parameters; `open("f", :append)` supplies
   a flag by naming it. A flag is an immutable `Bool` parameter with a fixed
@@ -1513,7 +1705,36 @@ add10(32)          # 42 (add captures x)
   parameters, and work through method sugar (`path.open(:append)`) and
   aliases (`g = open`). A function with flags can only be called or aliased,
   not passed around as a value. `flags` is a contextual marker, not a reserved
-  word. See FLAGS.md.
+  word. Flags are the language's form for options: a call passing two or more
+  boolean literals to a function with a subject and boolean options is
+  `MANY-BOOLEAN-ARGUMENTS` (§23). See FLAGS.md ("Boolean arguments" states
+  the idiom).
+* **Contexts.** `context struct Clock:` (or `opaque context struct LinuxIO:`)
+  declares a struct whose values may be installed into the current execution
+  environment; `with context EXPR` installs EXPR's value -- its inferred type
+  must be exactly one context struct -- from that statement on (entry program
+  top level only, for now); and a function states a value of that
+  environment it directly uses in a last parameter section, after the
+  ordinary parameters and flags: `fn write(data, context io: LinuxIO):`.
+  `io` is an ordinary local; the call is `write(data)` -- context parameters
+  are not arguments and do not count in the arity. A context is identified by
+  its type alone (at most one installed value per type; the local name means
+  nothing outside the function). Only the function that uses a context
+  declares it: the compiler derives every caller's transitive requirement
+  from the call graph and proves, statement by statement, that each call at
+  the top level runs after the installation of everything it needs
+  (`MISSING-CONTEXT`, with the call chain that explains it), that no type is
+  installed twice (`DUPLICATE-CONTEXT`) and that a function needing a context
+  never becomes a value (`CONTEXT-FUNCTION-VALUE`). Natively a context lives in
+  a statically assigned slot of the program's writable data, read with fixed
+  PC-relative addressing where it is used: no hidden argument, no reserved
+  register, no lookup. `context` and `with` are contextual words. The first
+  context is `linux::io::LinuxIO` (lib/linux/io.bot): `with context
+  linux::io::create()` then `linux::io::write(bytes)`. See CONTEXTS.md. A
+  context parameter may also have a *context trait* type (`context io:
+  io::IO`): the one installed context implementing it is selected statically,
+  and portable code (`io::print_line`) compiles to direct calls of its
+  implementation. See CONTEXT-TRAITS.md.
 * **Struct destructuring.** `{user, expires: expiry} = result` binds fields
   of a struct value by name: it evaluates `result` once, then binds `user` to
   `result.user` and `expiry` to `result.expires`, exactly as the explicit
@@ -1536,6 +1757,43 @@ add10(32)          # 42 (add captures x)
   `LIST-DESTRUCTURING`): APIs returning heterogeneous values should prefer
   struct values with named fields, and a List remains the type of a sequence.
   See STRUCT-DESTRUCTURING.md.
+* **Coroutines.** `yield V` (an expression, lowest precedence: `1 + (yield
+  x)` needs the parentheses) sends `V` outward, suspends the whole coroutine
+  -- arbitrarily deep in its call stack -- and evaluates to the message the
+  next resume sends. `coroutine {step, first} = worker(a)` eagerly starts the
+  exact call `worker(a)` as a coroutine, running it to its first `yield`, its
+  return or an unhandled `fail`: `first` is that first result and `step` the
+  coroutine's affine handle (either field may be omitted or renamed,
+  `{step: next, first: initial}`). `step(m)` resumes it with one message of
+  the struct type the function declares as the last entry of its parameter
+  list (`fn worker(a: str, resume Input) -> Event:`, inferred where the
+  yields' uses determine it), or `step()` for the zero-message protocol. A
+  completed handle keeps returning its final result and a failed one raises
+  its error again; `coroutine::done?(step)` (`import coroutine`) is `true`
+  once it has done either.
+  A handle is moved by `other = step` and never copied or stored; a function
+  that may yield is called only inside a coroutine (`UNWRAPPED-YIELD`). A
+  coroutine is released as soon as its handle's last use is past, or when a
+  `return`, `fail`, `break`, `continue` or propagated error leaves the
+  handle's scope first (a suspended one's stack and frames are freed at
+  once).
+  `coroutine` and `resume` stay ordinary names elsewhere; `yield` is a
+  keyword. See COROUTINES.md.
+* **Static intrinsics.** `static compile:` followed by an indented block is
+  a recoverable semantic-compilation boundary (STATIC-COMPILE.md): if the
+  compiler accepts the block where it stands, the boundary disappears and the
+  block runs with its ordinary value and errors (the same HIR, code and
+  machine code as the block written there); if it rejects it, the block
+  completes with the one payload error `compiler::CompilerError {code,
+  primary, related, message}` -- `code` a `compiler::DiagnosticCode` case
+  (`Unbound`, `Type`, `UseAfterMove`, ...), `primary` the diagnostic's
+  `compiler::SourceLocation` -- none of the block runs, and the enclosing
+  program still compiles. A rejected block's error is handled or declared
+  like any other; a file using a static intrinsic imports `compiler`. It
+  captures parsed syntax (a parse error in the block is the program's),
+  is decided at compile time by the ordinary compiler, and is never an
+  assertion. `static` and `compile` are contextual words; `static NAME:` with
+  any other operation is `STATIC-UNKNOWN-OPERATION`.
 * Integers (decimal, arbitrary precision, no leading zeros), strings
   (`"..."`, escapes `\\ \" \n \r \t`), `true`, `false`, `unit`, lists
   `[a, b]`, calls `f(x)(y)`.
@@ -1546,8 +1804,10 @@ add10(32)          # 42 (add captures x)
 * Blocks are delimited by indentation (spaces only; tabs are an error).
   Blank and comment lines (`#`) don't count. Newlines inside `( )` and `[ ]`
   are ignored. Trailing commas are allowed in parameters, arguments and lists.
-* Names are `[A-Za-z_][A-Za-z0-9_]*`. `?` is reserved, so natives like
-  `integer?` or `test-log` can't be named from source yet.
+* Names are `[A-Za-z_][A-Za-z0-9_]*`, optionally ending in one `?` (the
+  predicate idiom: `emailish?`, `integer?`); a `?` anywhere else is a syntax
+  error, so natives like `result-value` or `test-log` can't be named from
+  source.
 
 The full grammar is at the top of `surface/parser.tcl`.
 
@@ -1680,9 +1940,9 @@ references and hygiene.
   written with `elif` (ELIF.md); a chain's length is bounded only by the
   nesting depth the passes can recurse to (a few hundred clauses at Tcl's
   default recursion limit, as for the same chain written as nested `if`s).
-* Natives whose names contain `?` or `-` (`integer?`, `ok?`, `result-value`,
-  `test-log`) can't be named from source. `?` is reserved, and `-` is an
-  operator.
+* Natives whose names contain `-` (`result-value`, `test-log`) can't be named
+  from source: `-` is an operator. A `?` may end a name, so `integer?` and
+  `ok?` can.
 
 **Hygiene**
 
@@ -2055,6 +2315,7 @@ A `Value` is one 64-bit word (`runtime/value.rs`):
 |---|---|
 | `…1` | small Int `n` as `(n << 1) \| 1`, for `-2^62 <= n < 2^62` |
 | `0010`, `0110`, `1010` | `false`, `true`, `unit` |
+| `…10010` | an enum case: `(enum << 32) \| (case << 5) \| 0b10010`, both numbers private to the program (ENUMS.md) |
 | `1110` | an unbound cell (never a program value) |
 | `…000` | pointer to a heap object, whose header byte is its kind: big Int, Str, List, Result, Block (closure), native, cell |
 | `0` | no value: an error is pending |
@@ -2099,6 +2360,13 @@ Rust upgrade changes any mapping.
 **Lists** are immutable vectors of values. `list::append` copies, as the
 reference runtime does, so CSV's quadratic behavior is kept deliberately
 (§18).
+
+**Enum cases** are immediate words (ENUMS.md): the program's dense number of
+the enum declaration and the case's number within it, packed beside a tag of
+their own, so a case is never allocated, rooted or traced. A word is
+canonical, so equality is word equality (`enumeq`, one compare); printing and
+hashing read the declared names from the program's enum table (`enum N "ID"
+cases="..."` in NIR), never the numbers, which are representation only.
 
 **Structs** are immutable heap objects of an interned shape (STRUCTS.md), but a
 struct is a semantic value and a `StructObj` only one representation of it:
@@ -2168,7 +2436,11 @@ The helper ABI is listed with its failure and allocation behavior at the top
 of `native/src/runtime/ops.rs`. Every helper takes the VM pointer and 64-bit
 words. Operands already have the kinds the operation requires. A helper that
 fails records a structured `RtError` (the offending values stay GC roots)
-and returns 0. The error is formatted only at the program boundary, as the
+and returns 0. A declared error (`fail`) also records its id in the VM, and
+its payload's field values, if it has one, in the VM's payload slots, a GC
+root: the payload travels field-wise, no struct object is built for it, and a
+handler reads the fields it uses (ERROR-PAYLOADS.md). The error is formatted
+only at the program boundary, as the
 reference runtime's error code (`CORE SEMANTIC TYPE`, `RANGE`, `ARITY`,
 `NOT-BOOLEAN`, `NOT-CALLABLE`, `EQUALITY`, `UNBOUND`, `DUPLICATE`) and its
 exact message. The native backend's own failures are `NATIVE UNSUPPORTED`,
@@ -2208,9 +2480,8 @@ the builtin natives of §8 (root primitives and standard intrinsics).
 
 **Not supported** (each reported as `NATIVE UNSUPPORTED`):
 
-* natives implemented only in Tcl: the `web` and regex libraries and the
-  test suite's instrumentation natives (`test-log`, `test-tick`, …)
-* named types and evidence (`Emailish?`, refined parameter types)
+* natives implemented only in Tcl: the regex library and the test suite's
+  instrumentation natives (`test-log`, `test-tick`, …)
 * sequence mode (`core::evalIn` in an existing Tcl environment)
 * handing a Block value back to the host, and so refinement probes through
   `core::blockEnv`
@@ -2218,22 +2489,24 @@ the builtin natives of §8 (root primitives and standard intrinsics).
 ### Coverage
 
 `tests/native-coverage.tcl` runs the whole suite with
-`CORE_BACKEND=cranelift` and puts every test in exactly one class. With
-`BOTLISH_NATIVE_SPECIALIZE=0` (no specialization, §21) the classification
-is identical:
+`CORE_BACKEND=cranelift` and puts every test in exactly one class. When the
+backend was introduced (757 tests predated it) the classes were 171 native,
+541 independent and 45 unsupported, with none failed. With refinement values
+(REFINEMENT-VALUES.md) the suite has 5,991 tests:
 
-| Class | Tests | Of the 757 tests that predate the backend | Meaning |
-|---|---:|---:|---|
-| native | 218 | 171 | passed, ran native code |
-| independent | 566 | 541 | passed without running a program on the backend (frontend, HIR, analysis) |
-| passed-partial | 3 | 0 | passed; checks an unsupported-construct diagnostic on purpose |
-| unsupported | 45 | 45 | needs a construct listed above |
-| failed | 0 | 0 | anything else |
+| Class | Tests | Meaning |
+|---|---:|---|
+| native | 2,424 | passed, ran native code |
+| independent | 3,440 | passed without running a program on the backend (frontend, HIR, analysis) |
+| passed-partial | 67 | passed; checks an unsupported-construct diagnostic, or compares another backend, on purpose |
+| unsupported | 60 | needs a construct listed above |
+| failed | 0 | anything else |
 
-The 45 unsupported tests need: a Block returned to the host (12), sequence
-mode (7), `test-log`/`test_log` (8), `test-tick`/`test_tick` (6), `web`
-library natives and evidence (9), and the test natives `test-fake-escape`,
-`test-lax-param` and `test-both-ints?` (3).
+The 60 unsupported tests need: a Block value returned to the host (13),
+`test-log`/`test_log` (19), `test-tick`/`test_tick` (12), sequence mode (7),
+the Tcl-registered test validator `NonEmpty?` and the test natives
+`test-fake-nonempty`, `test-both-ints?` (7), and a native's validator
+named-type contract (`test-lax-param`, 2).
 `tests/native.test` (55 tests) checks lowering and CLIF structure, and
 parity of interp, compile, cranelift-generic and cranelift on arithmetic at
 the small/big boundaries, guards, every error class, strings, lists,
@@ -2345,8 +2618,10 @@ A key is `{BLOCK ARG-TYPES}`: the block's ExprId and one *key type* per
 parameter. Key types are the static types of the arguments reduced to what
 choosing an operation depends on:
 
-* the kinds `int str bool unit result any`, with named-type evidence
-  dropped (the instance still sees the base kind)
+* the kinds `int str bool unit result any`, with named types (integer
+  domains, refinements) dropped: the instance still sees the base kind, and a
+  refined value has its carrier's representation (semantic instance keys,
+  §13, keep the refinement)
 * `block` and `native` for callables, without which one
 * `list`, `{list ELEM}` and `{list ELEM SHAPE}`, with key-typed elements
 
@@ -2427,7 +2702,9 @@ again. Mutual recursion (`even<int>` ↔ `odd<int>`) and cycles (`a → b → c
 The analysis never changes the HIR. Its output is an *overlay* per
 instance: the type, known outcome and reachability of each of the region's
 expressions that differ from the semantic HIR. `hir::specialize::view`
-applies an overlay to a copy of the HIR.
+applies an overlay to a copy of the HIR. Native lowering memoizes them
+(`hir::specialize::memoizeViews`): the analyses it composes and lowering
+itself share one view per instance.
 
 ### Aggregate facts
 
@@ -2787,11 +3064,44 @@ Tcl backends) and `tests/native-coverage.tcl` are unaffected.
 
 ## 23. Compiler warnings
 
-Botlish compiler warnings are **enabled by default**. They preferentially
-report *semantic facts the compiler can prove* rather than enforce source-style
-fashions: a warning says what is true of a legal program and stops. It never
-says what to do about it, and a program that keeps the fact on purpose is
-correct.
+Botlish compiler warnings are **enabled by default**. They report *semantic
+facts the compiler can prove*: a warning says what is true of a legal program
+and stops. It never says what to do about it, and a program that keeps the
+fact on purpose is correct. A warning that cannot cite a compiler proof does
+not belong in a default-on, non-suppressible system.
+
+That bar admits five *preference-shaped* warnings, `METHOD-ELIGIBLE`,
+`FIXED-ARITY-LIST-RETURN`, `PROVES-NAMING`, `ONE-CHAR-STRING-LITERAL` and
+`MANY-BOOLEAN-ARGUMENTS` (below), and only because each passes the bar rather
+than because "style warnings are fine now": (1) its **fact** is
+compiler-proven -- the sugared spelling parses and resolves to the identical
+callee; every reachable value exit is a written list literal of one arity; the
+declaration carries a resolved proof contract of one of the refinement
+feature's two shapes and its written name is outside that shape's convention; a
+written String literal's exact value is one character long; a written call
+passes two or more boolean literals to a declared callee whose signature has a
+subject and at least two parameters the checker proves bool -- with the
+compiler's own parser, resolver, provenance, exact values, parameter types and
+reachability as the prover; (2) the **preference** it serves is the language's
+own declared design (receiver syntax is Botlish's preferred call form; struct
+values have named parts and destructure, Lists deliberately do not:
+MULTI-VALUE-RESULTS.md; proof-producing functions are named by their shape, the
+refinement feature's declared interface: REFINEMENT-VALUES.md, "Naming"; a
+single character is written as a character literal: §1, "Strings and
+characters"; options are flags: FLAGS.md, "Boolean arguments"), not a
+per-warning fashion; (3) the **author** has first-class control at the
+declaration, as part of the interface: `nomethod fn` withdraws method
+eligibility, a result type `-> list` / `-> List[T]` declares a list result, a
+proof-producing function's name is its author's own choice, which a rename
+changes and nothing else does, a literal's spelling is its writer's -- where
+the literal's consumer takes a String, the declaration that decides is that
+API's, and changing it is the response (`ONE-CHAR-STRING-LITERAL` deliberately
+has no context gate and no opt-out: making those APIs visible is its purpose)
+-- and a function's options are its author's signature, which flags change
+(`MANY-BOOLEAN-ARGUMENTS` has no opt-out either: a bool the caller names or
+computes is not evidence in the first place). None is call-site suppression
+(there is still no lint-ignore, pragma or per-call opt-out); (4) **uncertainty
+means silence**: wherever the compiler cannot prove the fact, it says nothing.
 
 There is one global policy per compilation, and nothing finer:
 
@@ -2810,12 +3120,36 @@ set hir [surface::compile $source file.bot -warnings default -warning-channel ""
 hir::warnings::of $hir      ;# {code message primary secondary data} records
 ```
 
+**The shipped code is held to these warnings.** The stdlib, the libraries,
+the examples and the benchmarks compile clean under them, except exactly the
+findings `audit/refactor/manifest.txt` lists, each with the obstruction that
+keeps it open on today's surface (REFACTOR-WARNINGS-CLEAN.md). A gate
+(`audit/refactor/tools/gate.tcl`, the `warning-gate` CI job) compiles every
+corpus program and a one-line loader of every library module, asserts that the
+observed warnings are exactly the manifest -- a new warning anywhere, an entry
+that no longer fires, or a drifted location fails it -- and compiles every
+program and loader without a manifest entry under `-warnings error`. A
+library's findings print for every program that loads it (there is no "system
+header" notion); since the refactor only three modules carry any, all
+`ONE-CHAR-STRING-LITERAL`: `lib/web.bot` (23: its hexadecimal digit table,
+`"%"`, and the local-part and label classes beside `str::is_tcl_alnum`),
+`lib/io.bot` (2: the newline `print_line` and `write_error_line` append) and `lib/linux/path.bot` (2:
+the joining `"/"`, and an index the completion proof does not cover). A program
+that loads none of them compiles under `-warnings error` whenever its own code
+is clean.
+
 **Botlish does not currently provide GCC/Clang-style `-Wfoo` controls** (no
 `-Wno-foo`, `-Werror=foo`, `-Wall`, warning groups or levels), and no source
 annotation or comment suppresses a warning. This is intentional, not forgotten
 CLI work: every warning is on for everyone, so a warning must be trustworthy
-enough to be, and uncertainty means no warning. Codes (`SAME-RETURN-VALUE`) are
-stable for tests, tooling and documentation, but they are not switches.
+enough to be, and uncertainty means no warning. Codes (`SAME-RETURN-VALUE`,
+`METHOD-ELIGIBLE`, `FIXED-ARITY-LIST-RETURN`, `SAME-FAILURE`, `PROVES-NAMING`,
+`ONE-CHAR-STRING-LITERAL`, `MANY-BOOLEAN-ARGUMENTS`) are stable for tests,
+tooling and documentation, but they are not switches. Adding
+`METHOD-ELIGIBLE`, `FIXED-ARITY-LIST-RETURN`, `SAME-FAILURE`, `PROVES-NAMING`,
+`ONE-CHAR-STRING-LITERAL` and `MANY-BOOLEAN-ARGUMENTS` gave `BOTLISH_WARNINGS`
+and the command line nothing: three modes, one option. The warning-driven
+refactor and its gate added nothing to either.
 
 `SAME-RETURN-VALUE`: several distinct, reachable exits of one function are
 proven to return the same value.
@@ -2839,3 +3173,264 @@ unproven expression or a separately constructed mutable value is never assumed
 equal, and `unit` is never reported. See WARNINGS-SAME-RETURN.md for the
 semantics, architecture, the corpus audit and known limitations; the tests are
 `tests/warnings.test` and `audit/same-return-value/tools/fuzz.tcl`.
+
+`METHOD-ELIGIBLE`: a reachable call *written* in functional form to a declared
+named function of at least two parameters whose method spelling is proven to
+parse and to resolve to the identical callee.
+
+```
+fn any_hit(xs):
+    return any(xs, hit?)
+```
+```
+f.bot:2:12: warning: call to `any` is eligible for method syntax (METHOD-ELIGIBLE)
+```
+
+The rules are exactly two. (1) Method sugar must be syntactically allowed and
+unambiguous: the receiver (the call's first argument) is, as written, a
+postfix or primary expression -- a name, qualified name, field chain, call or
+method-call result, literal, list or struct literal -- and not an operator
+expression, which would need added parentheses; the callee is a declared named
+function (`fn`, a builtin, a module function), never a function *value* (a
+parameter, an alias) and never `nomethod`; and the resolver's own candidate
+gathering for the sugared spelling finds exactly that function and nothing
+else visible under the name, with no struct field of that name that could
+compete with it. (2) The function declares at least two ordinary parameters
+(flags do not count): the sugar moves a trailing argument behind the dot, and
+`length(s)` has none to move, so it never suggests `s.length()`. That rule
+lives in the warning only; the language's sugar is not restricted by it.
+
+The warning is one-directional (a call already written with sugar is never told
+it could be functional), prints no rewrite and carries no fixit, and is one
+diagnostic per written call site (no grouping, one location, empty
+`secondary`). `x.f(y)` where `f` is `nomethod` is an error, not a warning, so
+`nomethod` is a language declaration and not a way to silence anything. See
+WARNINGS-METHOD-ELIGIBLE.md for the eligibility theorem, the receiver-form
+table, provenance, the corpus audit, the round-trip law and known limitations;
+the tests are `tests/method-eligible.test` and
+`audit/method-eligible/tools/fuzz.tcl`.
+
+`FIXED-ARITY-LIST-RETURN`: every reachable value exit of one function produces
+a written list literal of the same arity N >= 2 -- the positional multi-value
+result that struct values name the parts of.
+
+```
+fn scan_quoted(text, index, field) errors LowerUnderrun:
+    character = peek(text, index)
+    if character == "\"":
+        if peek(text, index + 1) == "\"":
+            return scan_quoted(text, index + 2, str::concat(field, "\""))
+
+        return [field, index + 1]
+
+    scan_quoted(text, index + 1, str::concat(field, character))
+```
+```
+f.bot:4:13: warning: a 2-element list is returned from all 3 value exits; a struct value names the parts (FIXED-ARITY-LIST-RETURN)
+f.bot:7:9: note: also returned here
+f.bot:9:5: note: also returned here
+```
+
+An exit counts as the shape when it is a written list literal (the frontend's
+provenance, never text), a read of a binding whose initializer is one (bindings
+are immutable, so the initializer is the value), or a direct self-call (whose
+value is the function's own: it inherits N); at least one literal is required.
+Any single other exit silences: a unit exit (a bare `return`, a final `unit`,
+or the fall-through of an else-less final `if` -- "a list or nothing" is an
+optional, not a fixed-arity result; this deliberately differs from
+`SAME-RETURN-VALUE`, which skips unit), a computed or mutable list, a struct, a
+call of any other function, mixed arities, and one- or zero-element lists.
+`fail` is not a value exit, so a guard that fails before a list result does not
+block the warning; unreachable exits (structurally, or by the completion
+proof's range facts) are not exits. Element types are never consulted. A
+function whose declaration carries a list-typed result annotation (`-> list`,
+`-> List[T]`) has declared its result a list and is never reported; that
+annotation is a real type the checker must prove, not a suppression. One
+diagnostic per function, anchored at its first exit, the others as notes; no
+rewrite, no suggested field names. See WARNINGS-FIXED-ARITY-LIST-RETURN.md for
+the shape theorem, the soundness arguments, the corpus audit and known
+limitations, and MULTI-VALUE-RESULTS.md for the idiom; the tests are
+`tests/fixed-arity-list-return.test` and
+`audit/fixed-arity-list-return/tools/fuzz.tcl`.
+
+`SAME-FAILURE`: several distinct, reachable exits of one function `fail` the
+same declared failure.
+
+```
+error Invalid
+fn parse_record(text, pos) errors Invalid:
+    if text == "":
+        fail Invalid
+    if pos == 3:
+        fail Invalid
+    pos + 1
+```
+```
+f.bot:4:9: warning: failure `Invalid` is raised from 2 distinct exits (SAME-FAILURE)
+f.bot:6:9: note: also raised here
+```
+
+It is `SAME-RETURN-VALUE`'s theorem on the other completion kind, and it makes
+milestone 1's rule bidirectional: a `fail` is never grouped with a return, and
+a return is never grouped with a `fail`. The exits are exactly the written
+`fail` statements of the function's own body, wherever they sit (branches,
+every loop form, on-handler bodies; a re-raise `on E: fail E` is a written
+`fail` and counts). Nothing else is a failure exit: the final expression and a
+fall-through are normal completions, and a call that fails (an unhandled call
+of a fallible function, a final bare call included) propagates its callee's
+failure and is an ordinary call. Identity is nominal: a declared error's name
+is its identity across the whole program (a second declaration of a name is
+rejected), so two sites fail the same failure exactly when they fail the same
+name the function's `errors` clause admits -- similarly named failures (`A`,
+`A2`) are different failures. A failure that carries a payload
+(ERROR-PAYLOADS.md) also needs its payload proven identical
+(`hir::exact::Identity`): payloads nothing proves identical never group. It is silent for a single exit, for different declared failures, for
+unreachable sites (statically decided branches, code after a completion, and
+branches the completion proof's range facts prove infeasible), for propagated
+failures, and for a nested function's or closure's fails, which belong to that
+function and are checked on their own; whatever the compiler cannot establish
+is silence. One diagnostic per failure group, anchored at its first exit, the
+others as notes; a function failing two names repeatedly gets two warnings. The
+warning states the fact and stops: it does not suggest merging the guards,
+splitting the failure into richer ones, or that the repetition is wrong -- each
+can be the right response, and so can keeping the uniform failure. See
+WARNINGS-SAME-FAILURE.md for the theorem, the mirror-image exits table, the
+reachability argument, the corpus audit and known limitations; the tests are
+`tests/same-failure.test` and `audit/same-failure/tools/fuzz.tcl`.
+
+`PROVES-NAMING`: a function fitted with a `proves` contract, of one of the two
+shapes the refinement feature defines, whose written name does not follow that
+shape's naming convention (REFINEMENT-VALUES.md, "Naming").
+
+```
+refined type Emailish = str
+fn emailish(v: str) -> bool proves v: Emailish:
+    ...
+```
+```
+f.bot:2:1: warning: `emailish` proves a contract and returns bool; predicate names end in `?` (PROVES-NAMING)
+```
+
+**The scope guard is the warning's boundary: no `proves`, no opinion.** Only a
+function whose declaration carries a `proves` clause is ever looked at. A
+function without one is never warned, whatever its name, parameters or result:
+`fn is_empty(v: str) -> bool` is silent, and so is a `?`-named function that
+returns an `int`. Of the proves-fitted functions, exactly two shapes are
+covered, each with its convention:
+
+* a **predicate** -- one ordinary parameter, result `bool` -- is named with a
+  trailing `?` (`emailish?`);
+* a **validator** -- one ordinary parameter, result `unit` -- is named exactly
+  `validate` (a module export: `path::validate`) or beginning with `validate_`
+  (`validate_emailish`). The prefix is literal and case-sensitive:
+  `Validate_x`, `validateX` and `validator_x` are reported, and the bare
+  `validate_` conforms, as the literal rule reads.
+
+Flags and context parameters are not ordinary parameters; an `errors` clause
+neither qualifies nor disqualifies. A proves function with two or more
+ordinary parameters is silent, whatever its name. There is no reverse rule:
+nothing checks that a `?` name returns `bool` or that a `validate_` name is a
+validator. The name checked is the one the author wrote -- a module function's
+member name (`check`, not `path::check`), never hygiene's `NAME#N` spelling --
+and a declaration is checked wherever it is (nested functions and closures
+included), once, whether or not anything calls it. One diagnostic per
+function, at its `fn`, with no notes. The message states the shape and the
+convention and never prints a name: the response is a rename, which is
+semantics-preserving and fully checked by the compiler, and for a validator
+both `validate_f` and the bare `validate` conform, so the author chooses. There
+is no opt-out, and nothing to opt out of: a function outside the two shapes is
+never reported. See WARNINGS-PROVES-NAMING.md for the two rules, the scope
+guard, the shape decisions, the rename law, the corpus census and known
+limitations; the tests are `tests/proves-naming.test` and
+`audit/proves-naming/tools/fuzz.tcl`.
+
+`ONE-CHAR-STRING-LITERAL`: a written String literal whose exact value is one
+character.
+
+```
+fn peek(text, index):
+    text
+fn scan_quoted(text, index, field):
+    character = peek(text, index)
+    if character == "\"":
+        return field
+    scan_quoted(text, index + 1, field)
+```
+```
+f.bot:5:21: warning: the String literal `"\""` is one character long; a single character is written as a character literal (ONE-CHAR-STRING-LITERAL)
+```
+
+The fact is the literal's own exact value (`hir::exact::Of`), measured as
+`str::length` measures: escapes are resolved (`"\n"` and `"\""` are one
+character), a supplementary-plane character is one, and `e` plus a combining
+accent is two. The empty String and Strings of two or more characters are
+silent, and so is a character literal. **Literals only**: a binding's written
+initializer is the site (`sep = ","` warns once, there), and nothing else is --
+not a read of `sep`, an alias, a parameter, a call result or a computed String,
+whatever its value; no value is followed and no call is evaluated. **Context-
+blind by design**: the warning never looks at what consumes the literal, so it
+also fires where the character spelling would not work today -- a `str`
+parameter (rejected statically), a native's `str` argument (rejected at run
+time), a comparison with a String (`==` of the two kinds type-checks and is
+false). Those findings are the point: they catalogue the APIs that take a
+String where a character is meant. There is no reachability notion (a literal
+in a dead branch or an uncalled function is written source and warns), no
+grouping (two equal literals are two warnings) and no opt-out. The message
+renders the literal's value and names the form; it never prints the character
+spelling. The warning is **deliberately not autofixable**: the rewrite changes
+the program wherever the consumer takes a String, silently so in a comparison.
+It graduates to an autofixable warning only when the APIs the corpus audit
+catalogues take characters (or the language gains the conversions that make the
+rewrite total). See WARNINGS-ONE-CHAR-STRING-LITERAL.md for the theorem, the
+representation argument (one synthesized String const exists: a context
+parameter's load key, for a context struct or a context trait, which is never
+reported), the spelling law, the corpus
+audit with its API-deficiency catalog, and known limitations; the tests are
+`tests/one-char-string-literal.test` and
+`audit/one-char-string-literal/tools/fuzz.tcl`.
+
+`MANY-BOOLEAN-ARGUMENTS`: a written call passes two or more boolean literals
+to a function whose signature takes a subject and boolean options.
+
+```
+fn open_file(path, append: bool, create: bool, sync: bool):
+    path
+
+open_file("file.txt", true, false, true)
+```
+```
+f.bot:4:1: warning: the call to `open_file` passes 3 boolean literals; flags name options (MANY-BOOLEAN-ARGUMENTS)
+```
+
+The harm is anonymity: `true` carries no name. Flags are the language's answer
+for options (`fn open_file(path, flags :append, :create, :sync)`, called
+`open_file("file.txt", :append, :sync)`; FLAGS.md, "Boolean arguments"). The
+scope is narrow on purpose. **Written calls only**: a call the frontend
+synthesizes (`true != false`, `[true, false]`) or one with no provenance
+marker (core IR, HIR text) is never a candidate. **Literals only**: the
+evidence is a written `true`/`false` token at an ordinary argument position (a
+method call's receiver included); a named binding -- even one provably holding
+`true` -- and a computed bool (`n > 0`, a call) already say what they mean and
+never count, so `f(true, compute(), false)` passes 2 and `f(true, compute())`
+passes 1 (silent). **The gate**: the callee is a declared function (an alias of
+one included) or a native, never a function value, and among its ordinary
+parameters at least two are proven `bool` -- declared, or a trusted inferred
+contract; an untyped parameter the body merely tests has only a run-time
+checked contract and does not count, so in practice the options must be
+annotated -- and at least one is not (a function whose parameters are all bool,
+`xor(a: bool, b: bool)`, takes data, not options). **Flags are never counted**,
+in the gate or the threshold: they are the idiom. Natives are included because
+the call site is the caller's code; no native takes a bool today.
+Structurally unreachable calls are skipped (a call that cannot execute makes
+no call; contrast `ONE-CHAR-STRING-LITERAL`, whose fact is about written
+source). One diagnostic per call site, no notes, no grouping by callee. The
+message states the count, names the callee and names the form; it never prints
+a flag spelling. The warning is **deliberately not autofixable**: a flag
+defaults to `false`, so a mis-mapped rewrite still has a valid argument count
+and is silently wrong, and which `true` means which option is the author's
+intent, not a proof. The graduation criteria (a declared, total literal-to-flag
+mapping, or flag-variables landing) are recorded in FLAGS.md. See
+WARNINGS-MANY-BOOLEAN-ARGUMENTS.md for the theorem, the gate, the conversion
+law, the corpus census and known limitations; the tests are
+`tests/many-boolean-arguments.test` and
+`audit/many-boolean-arguments/tools/fuzz.tcl`.

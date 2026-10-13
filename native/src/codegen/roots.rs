@@ -204,15 +204,20 @@ fn is_safepoint(inst: &Inst) -> bool {
 fn def_use(inst: &Inst, params: u32) -> (Vec<Reg>, Vec<Reg>) {
     match inst {
         Inst::Label(_) | Inst::Unreachable | Inst::Raise { .. }
-        | Inst::Fail { .. } | Inst::ClearDeclaredError
+        | Inst::ClearDeclaredError
         | Inst::PushErrorExit(_) | Inst::PopErrorExit | Inst::Reraise => (vec![], vec![]),
-        Inst::DeclaredErrorEq { dst, .. } => (vec![*dst], vec![]),
+        // A payload's field values are copied into the Vm's payload slots
+        // (a GC root of their own, ERROR-PAYLOADS.md) by the failing helper.
+        Inst::Fail { payload, .. } => (vec![], payload.clone()),
+        Inst::DeclaredErrorEq { dst, .. } | Inst::DeclaredPayload { dst, .. } => (vec![*dst], vec![]),
         Inst::Int { dst, .. }
         | Inst::RawInt { dst, .. }
         | Inst::ShortLit { dst, .. }
         | Inst::AsciiLit { dst, .. }
         | Inst::Str { dst, .. }
+        | Inst::Bytes { dst, .. }
         | Inst::Char { dst, .. }
+        | Inst::Enum { dst, .. }
         | Inst::Bool { dst, .. }
         | Inst::Unit { dst }
         | Inst::Native { dst, .. }
@@ -220,8 +225,10 @@ fn def_use(inst: &Inst, params: u32) -> (Vec<Reg>, Vec<Reg>) {
         | Inst::SelfClosure { dst }
         | Inst::Capture { dst, .. } => (vec![*dst], vec![]),
         Inst::StaticGet { dst, .. } => (vec![*dst], vec![]),
+        Inst::ContextLoad { dst, .. } => (vec![*dst], vec![]),
         Inst::Move { dst, src } => (vec![*dst], vec![*src]),
         Inst::StaticSet { value, .. } => (vec![], vec![*value]),
+        Inst::ContextStore { value, .. } => (vec![], vec![*value]),
         Inst::Closure { dst, captures, .. } => (vec![*dst], captures.clone()),
         Inst::Guard { value, .. } | Inst::GuardBool { value } => (vec![], vec![*value]),
         Inst::Op { dst, args, .. } => (vec![*dst], args.clone()),
@@ -455,6 +462,27 @@ fn analyze(f: &Function, cfg: &Cfg) -> Liveness {
         }
     }
 
+    // A register defined only by `contextload` (CONTEXTS.md) holds a context
+    // leaf: a tagged immediate (small Int, Bool, Unit, UnicodeChar) that is
+    // never a heap pointer, so -- like a raw register -- it is never a root.
+    let mut context_only = vec![false; regs];
+    let mut other_def = vec![false; regs];
+    for inst in &f.body {
+        let is_context = matches!(inst, Inst::ContextLoad { .. });
+        for d in def_use(inst, f.params).0 {
+            if is_context {
+                context_only[d as usize] = true;
+            } else {
+                other_def[d as usize] = true;
+            }
+        }
+    }
+    for r in 0..regs {
+        if other_def[r] || (r as u32) < f.params {
+            context_only[r] = false;
+        }
+    }
+
     // Second pass: walk every block backward once more from its now-final
     // LiveOut, recording each safepoint's root set as we pass it.
     let mut safepoint_roots = Vec::new();
@@ -474,7 +502,7 @@ fn analyze(f: &Function, cfg: &Cfg) -> Liveness {
             }
             if is_safepoint(inst) {
                 let roots: Vec<Reg> =
-                    (0..regs).filter(|&r| live_in_inst[r] && !f.scalar_regs[r]).map(|r| r as Reg).collect();
+                    (0..regs).filter(|&r| live_in_inst[r] && !f.scalar_regs[r] && !context_only[r]).map(|r| r as Reg).collect();
                 safepoint_roots.push(roots);
                 safepoint_index.push(idx);
             }
@@ -934,12 +962,13 @@ mod tests {
 
     // -----------------------------------------------------------------------
     // #28: tagged intermediates that die before any safepoint need no slot.
-    // `imod`'s helper never allocates (ops.rs's table), so this function has
-    // no safepoint at all despite every register being tagged.
+    // An Int comparison never allocates (ops.rs's table), so this function
+    // has no safepoint at all despite every register being tagged. (Not
+    // `imod`: a BigInt remainder is allocated, so it is a safepoint.)
 
     #[test]
     fn tagged_dead_before_safepoint_needs_no_slot() {
-        let f = program_of(3, "", "    %0 = int 7\n    %1 = int 2\n    %2 = op imod %0 %1\n    ret %2\n");
+        let f = program_of(3, "", "    %0 = int 7\n    %1 = int 2\n    %2 = op ilt %0 %1\n    ret %2\n");
         let plan = plan(&f, true);
         assert_eq!(plan.safepoints, 0);
         assert_eq!(plan.root_candidates, 0);

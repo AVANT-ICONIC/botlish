@@ -1,0 +1,929 @@
+# structural-contract-completions.test -- the verified callable contract
+# boundary (VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md; STATIC-COMPLETION-
+# PROOFS.md, "Verified callable contract boundary"; hir/completions.tcl).
+#
+# Once a callable value has been proven to satisfy an explicit structural
+# callable contract, that contract is a semantic upper bound on the errors a
+# call through the value produces -- whatever callable it holds, wherever it
+# came from (a struct field, a collection, a parameter, a function result),
+# and whatever unrelated callable the program erases through an untyped
+# parameter elsewhere. The program-wide erased-callable contract stays for
+# genuinely uncontracted calls only. Three precisions, three tests side by
+# side throughout:
+#
+#   exact / recovered callable       its effective errors (may narrow)
+#   unidentified, contracted         the contract's errors
+#   unidentified, uncontracted       the erased-callable contract
+#
+# The bound is sound only because every value that acquires a structural
+# type is checked against it: what an exact callable raises through a
+# callable it captured or receives as an argument -- invisible in its type --
+# is checked where it acquires the type (a TYPE error outside the contract).
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+
+testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux"
+    && $::tcl_platform(machine) in {x86_64 amd64}}]
+
+# Three errors (E3 payload-bearing), one raising function each, an untyped
+# helper, and `poison`: a function that erases raise2 through the helper and
+# handles it, which puts E2 into the program's erased-callable contract.
+# Callables stored behind structural contracts, in every transport.
+set sccPrelude {import mutable_vector
+import mutable_array
+
+error E1
+
+error E2
+
+error E3:
+    code: int
+
+fn raise1(x: int) -> int errors E1:
+    if x == 1:
+        fail E1
+    x
+
+fn raise2(x: int) -> int errors E2:
+    if x == 2:
+        fail E2
+    x
+
+fn raise3(x: int) -> int errors E3:
+    if x == 3:
+        fail E3 {code: 30}
+    x
+
+fn call(f, x):
+    f(x)
+
+fn poison(k: int) -> int:
+    call(raise2, k):
+        on E2:
+            -2
+
+fn quiet() -> int:
+    7
+
+fn eleven() -> int:
+    11
+
+fn one1() -> int errors E1:
+    raise1(1)
+
+fn fails1() -> int errors E1:
+    fail E1
+
+struct Job:
+    run: Fn{args: [], return: int}
+
+struct Job1:
+    run: Fn{args: [], return: int, errors: [E1]}
+
+struct Job12:
+    run: Fn{args: [], return: int, errors: [E1, E2]}
+
+struct Job3:
+    run: Fn{args: [], return: int, errors: [E3]}
+
+struct JobAny:
+    run: Fn{args: [], return: any}
+
+struct Inner:
+    run: Fn{args: [], return: int}
+
+struct Outer:
+    inner: Inner
+
+fn dispatch(j: Job) -> int:
+    (j.run)()
+
+fn dispatch1(j: Job1) -> int errors E1:
+    (j.run)()
+
+fn run_all(jobs: List[Job]) -> List[int]:
+    loop j in jobs:
+        (j.run)()
+
+fn no_jobs() -> MutableVector[Job]:
+    mutable_vector::from_list([])
+
+fn vector_first(v: MutableVector[Job]) -> int:
+    j = v.at(0):
+        on IndexNotFound:
+            return -1
+    (j.run)()
+
+fn invoke(f: Fn{args: [], return: int, errors: []}) -> int:
+    f()
+
+fn invoke1(f: Fn{args: [], return: int, errors: [E1]}) -> int errors E1:
+    f()
+
+fn factory() -> Fn{args: [], return: int}:
+    quiet
+
+fn nested(o: Outer) -> int:
+    (o.inner.run)()
+
+fn dispatch_any(j: JobAny):
+    (j.run)()
+
+fn invoke_any(f: Fn{args: [], return: any}):
+    f()
+
+fn invoke_any1(f: Fn{args: [], return: any, errors: [E1]}) errors E1:
+    f()
+
+fn make(f, x):
+    fn inner():
+        f(x)
+    inner
+
+}
+
+# The program PRELUDE (default sccPrelude) followed by TEXT.
+proc sccProgram {text {prelude ""}} {
+    if {$prelude eq ""} {
+        set prelude $::sccPrelude
+    }
+    return "$prelude$text"
+}
+
+# {KIND FUNCTION ERROR} for every diagnostic of TEXT (-strict 0), FUNCTION the
+# function whose body holds the diagnosed expression ("top" for the
+# program's), ERROR the declared error the message names ("" if none), sorted.
+proc sccDiagnostics {text} {
+    set hir [surface::compile $text -strict 0 -warnings off]
+    return [lsort -unique [lmap d [hir::diagnostics $hir] {
+        set e [dict get $d expr]
+        set block [expr {[hir::kind $hir $e] eq "block" ? $e
+            : [dict get $hir scopes [hir::get $hir $e scope] invocation]}]
+        set where [expr {$block eq "" ? "top" : [hir::signatures::Name $hir $block]}]
+        set name ""
+        regexp {declared error "([^"]+)"} [dict get $d message] -> name
+        list [dict get $d kind] $where $name
+    }]]
+}
+
+# The effective errors the completion analysis stamped on every call through
+# a structural callable value (a Fn, or a coroutine handle: after
+# elaboration a coroutine#resume) and every `handle` in the body of TEXT's
+# function NAME, in ExprId order, as {KIND ERRORS} pairs.
+proc sccEffective {text name} {
+    set hir [surface::compile $text -strict 0 -warnings off]
+    set block [sccBlock $hir $name]
+    set region [hir::semantic::Region $hir $block]
+    set handled [lmap e $region {
+        expr {[dict get $hir exprs $e kind] eq "handle" ? [dict get $hir exprs $e call] : [continue]}
+    }]
+    set result {}
+    foreach e [lsort -dictionary $region] {
+        set node [dict get $hir exprs $e]
+        set kind [dict get $node kind]
+        set resume [expr {$kind eq "call" && [lindex [dict get $node target] 0] eq "native"
+            && [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name] eq "coroutine#resume"}]
+        if {$kind eq "handle" || ($kind eq "call" && $e ni $handled && ($resume || ([dict get $node target] eq ""
+                && [hir::types::CallableKind [hir::typeOf $hir [dict get $node callee]]] in {fn coroutine})))} {
+            lappend result $kind [hir::completions::effectiveErrorsOf $hir $e]
+        }
+    }
+    return $result
+}
+
+# The ExprId of the block of the function bound to NAME in HIR.
+proc sccBlock {hir name} {
+    foreach e [hirFind $hir bind] {
+        set b [hir::get $hir $e binding]
+        if {[dict get $hir bindings $b name] in [list $name test::$name]} {
+            return [hir::get $hir $e value]
+        }
+    }
+    error "no function $name"
+}
+
+# Every call node of TEXT the completion analysis found raising beyond the
+# contract it was proven for (hir/completions.tcl's contractExcess: an
+# internal inconsistency).
+proc sccExcess {text} {
+    set hir [surface::compile $text -strict 0 -warnings off]
+    set result {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict exists $node contractExcess]} {
+            lappend result $e [dict get $node contractExcess]
+        }
+    }
+    return $result
+}
+
+# ---------------------------------------------------------------------------
+# The headline: the golden runner's registry, with an unrelated erasure.
+
+set sccRunner {import test
+import compiler
+
+error E
+
+fn raise_e(x: int) -> int errors E:
+    if x > 0:
+        fail E
+    x
+
+fn call(f, x):
+    f(x)
+
+fn register_poison(n: int):
+    fn body() errors compiler::CompilerError:
+        static compile:
+            r = call(raise_e, n):
+                on E:
+                    7
+            r
+    test::value("poison", 7, body)
+
+fn register_plain():
+    fn body() errors compiler::CompilerError:
+        static compile:
+            3 + 4
+    test::value("plain", 7, body)
+
+with context test::suite()
+register_poison(1)
+register_plain()
+test::report()
+}
+
+test scc-golden-runner {the runner's (c.run)() through Fn{args: [], return: Match} is not charged an error an unrelated test erases: the suite compiles and runs on every backend} -constraints {
+    linuxX86_64
+} -body {
+    list [hir::completions::erasedErrorsOf [surface::compile $sccRunner -warnings off]] [sourceAgree $sccRunner]
+} -result {E {value {["PASS poison", "PASS plain", "2 passed, 0 failed"]}}}
+
+test scc-golden-runner-call-effective {the runner's call is charged nothing: its contract declares no error} -body {
+    set hir [surface::compile $sccRunner -warnings off]
+    set run [sccBlock $hir run]
+    lmap e [lsort -dictionary [hir::semantic::Region $hir $run]] {
+        set node [dict get $hir exprs $e]
+        if {[dict get $node kind] ne "call" || [dict get $node target] ne ""} continue
+        list [hir::types::show [hir::typeOf $hir [dict get $node callee]]] [hir::completions::effectiveErrorsOf $hir $e]
+    }
+} -result {{{Fn{args: [], return: test::Match, errors: []}} {}}}
+
+# ---------------------------------------------------------------------------
+# Every transport of a structural callable, with E2 in the erased contract.
+
+test scc-transports {struct field, List element, MutableVector element, parameter, returned callable, nested field: none charged E2, all accepted and agreeing on every backend} -body {
+    set text [sccProgram {fn d1() -> int:
+    dispatch1(Job1 {run: quiet}):
+        on E1:
+            -1
+
+v = no_jobs()
+v.push(Job {run: eleven})
+g = factory()
+[poison(2), dispatch(Job {run: quiet}), run_all([Job {run: quiet}, Job {run: eleven}]), vector_first(v), invoke(quiet), g(), nested(Outer {inner: Inner {run: eleven}}), d1()]
+}]
+    list [hir::completions::erasedErrorsOf [surface::compile $text -warnings off]] [sourceAgree $text] [sccExcess $text]
+} -result {E2 {value {[-2, 7, [7, 11], 11, 7, 7, 11, 7]}} {}}
+
+test scc-transports-effective {each structural call is stamped exactly its contract's errors} -body {
+    set text [sccProgram "0\n"]
+    list [sccEffective $text dispatch] [sccEffective $text dispatch1] [sccEffective $text run_all] \
+        [sccEffective $text vector_first] [sccEffective $text invoke] [sccEffective $text invoke1] \
+        [sccEffective $text nested]
+} -result {{call {}} {call E1} {call {}} {handle IndexNotFound call {}} {call {}} {call E1} {call {}}}
+
+test scc-transports-other-erasure {the same transports in a program that erases E1 instead: still charged nothing (the erased contract never reaches them)} -body {
+    set text [string map {"call(raise2, k):\n        on E2:" "call(raise1, k):\n        on E1:"} [sccProgram "0\n"]]
+    list [hir::completions::erasedErrorsOf [surface::compile $text -warnings off]] [sccEffective $text dispatch] \
+        [sccEffective $text run_all] [sccEffective $text invoke]
+} -result {E1 {call {}} {call {}} {call {}}}
+
+test scc-returned-bound {a callable returned as a structural type and called after a binding is bounded by that type} -body {
+    sccDiagnostics [sccProgram "fn use() -> int:\n    g = factory()\n    g()\n\n\[poison(2), use()\]\n"]
+} -result {}
+
+# ---------------------------------------------------------------------------
+# Not an `errors: []` special case: one error, several errors.
+
+test scc-one-error-handled {a contract admitting E1: a handler for E1 is enough although E2 is erased elsewhere} -body {
+    sourceAgree [sccProgram "fn h(j: Job1) -> int:\n    (j.run)():\n        on E1:\n            -1\n\n\[poison(2), h(Job1 {run: one1}), h(Job1 {run: quiet})\]\n"]
+} -result {value {[-2, -1, 7]}}
+
+test scc-one-error-wrong-handler {a handler for E2 only is not: E1 remains, and E2 is never charged} -body {
+    sccDiagnostics [sccProgram "fn h(j: Job1) -> int:\n    (j.run)():\n        on E2:\n            -2\n\n\[poison(2)\]\n"]
+} -result {{UNHANDLED-ERROR h E1}}
+
+test scc-one-error-declared {an enclosing function declaring E1 compiles; one declaring E2 only does not (UNHANDLED-ERROR E1)} -body {
+    list [sccDiagnostics [sccProgram "fn d(j: Job1) -> int errors E1:\n    (j.run)()\n\n\[poison(2)\]\n"]] \
+        [sccDiagnostics [sccProgram "fn d(j: Job1) -> int errors E2:\n    (j.run)()\n\n\[poison(2)\]\n"]]
+} -result {{} {{UNHANDLED-ERROR d E1}}}
+
+test scc-one-error-summary {the completion summary of a function calling through the field: E1, not E2} -body {
+    set hir [surface::compile [sccProgram "\[poison(2)\]\n"] -warnings off]
+    hir::completions::resetCache
+    set sub [hir::completions::analyzeBlock $hir [sccBlock $hir dispatch1] [list [hir::range::unknown]] {} {} {} {}]
+    list [dict get $sub errors] [dict get $sub incomplete] [dict get $sub normal]
+} -result {E1 0 1}
+
+test scc-multi-error {a contract [E1, E2] with E3 erased elsewhere: exactly E1 and E2} -body {
+    set text [string map {"call(raise2, k):\n        on E2:\n            -2" "call(raise3, k):\n        on E3:\n            -3"} \
+        [sccProgram "fn h(j: Job12) -> int:\n    (j.run)():\n        on E1:\n            -1\n        on E2:\n            -2\n\nfn bad(j: Job12) -> int:\n    (j.run)():\n        on E1:\n            -1\n\n\[poison(3)\]\n"]]
+    list [hir::completions::erasedErrorsOf [surface::compile $text -strict 0 -warnings off]] [sccEffective $text h] [sccDiagnostics $text]
+} -result {E3 {handle {E1 E2}} {{UNHANDLED-ERROR bad E2}}}
+
+test scc-payload-error {a payload-bearing contract error: handled with destructuring, payload transported, nothing else charged} -body {
+    sourceAgree [sccProgram "fn h(j: Job3) -> int:\n    (j.run)():\n        on E3 {code}:\n            code\n\nfn three() -> int errors E3:\n    raise3(3)\n\n\[poison(2), h(Job3 {run: three}), h(Job3 {run: quiet})\]\n"]
+} -result {value {[-2, 30, 7]}}
+
+# ---------------------------------------------------------------------------
+# Same short name, two identities: the contract names one.
+
+test scc-namespaced {a contract of a::Failed with b::Failed erased elsewhere: a::Failed only, never by short name} -body {
+    set lib {
+a.bot {error Failed
+
+fn fails(x: int) -> int errors Failed:
+    if x == 1:
+        fail Failed
+    x
+}
+b.bot {error Failed
+
+fn fails(x: int) -> int errors Failed:
+    if x == 2:
+        fail Failed
+    x
+}
+}
+    set text {import a
+import b
+
+fn call(f, x):
+    f(x)
+
+fn poison(k: int) -> int:
+    call(b::fails, k):
+        on b::Failed:
+            -2
+
+struct Job:
+    run: Fn{args: [int], return: int, errors: [a::Failed]}
+
+fn h(j: Job, k: int) -> int:
+    (j.run)(k):
+        on a::Failed:
+            -1
+
+fn wrong(j: Job, k: int) -> int:
+    (j.run)(k):
+        on b::Failed:
+            -9
+
+[poison(2), h(Job {run: a::fails}, 1), h(Job {run: a::fails}, 2)]
+}
+    withPrivateLibrary {
+        foreach {path body} $lib {
+            set ch [open [file join $::core::libraryDir $path] w]
+            puts -nonewline $ch $body
+            close $ch
+        }
+        set ok [string map {"fn wrong(j: Job, k: int) -> int:\n    (j.run)(k):\n        on b::Failed:\n            -9\n" ""} $text]
+        list [hir::completions::erasedErrorsOf [surface::compile $ok -warnings off]] \
+            [sccEffective $ok h] [sccDiagnostics $text] [sourceAgree $ok]
+    }
+} -result {b::Failed {handle a::Failed} {{UNHANDLED-ERROR wrong a::Failed}} {value {[-2, -1, 2]}}}
+
+test scc-namespaced-boundary {a closure carrying b::Failed given a contract of a::Failed: TYPE naming b::Failed (identities, never short names); carrying a::Failed it fits} -body {
+    set lib {
+a.bot {error Failed
+
+fn fails(x) -> int errors Failed:
+    if x == 1:
+        fail Failed
+    0
+}
+b.bot {error Failed
+
+fn fails(x) -> int errors Failed:
+    if x == 2:
+        fail Failed
+    0
+}
+}
+    set text {import a
+import b
+
+struct Job:
+    run: Fn{args: [int], return: any, errors: [a::Failed]}
+
+fn wrap(f) -> Job:
+    fn inner(x):
+        f(x)
+    Job {run: inner}
+
+fn h(j: Job, k: int):
+    (j.run)(k):
+        on a::Failed:
+            -1
+
+[h(wrap(GIVEN), 1), h(wrap(GIVEN), 3)]
+}
+    withPrivateLibrary {
+        foreach {path body} $lib {
+            set ch [open [file join $::core::libraryDir $path] w]
+            puts -nonewline $ch $body
+            close $ch
+        }
+        list [sccDiagnostics [string map {GIVEN b::fails} $text]] [sourceAgree [string map {GIVEN a::fails} $text]]
+    }
+} -result {{{TYPE wrap b::Failed}} {value {[-1, 0]}}}
+
+# ---------------------------------------------------------------------------
+# Three precisions side by side, in one program.
+
+test scc-three-precisions {exact/recovered: the callee's effective errors; unidentified and contracted: the contract; unidentified and uncontracted: the erased-callable contract} -body {
+    set hir [surface::compile [sccProgram "\[poison(2)\]\n"] -warnings off]
+    hir::completions::resetCache
+    set call [sccBlock $hir call]
+    set any [list [hir::range::unknown] [hir::range::unknown]]
+    set exact [hir::completions::analyzeBlock $hir $call $any {} {} [list [list block [sccBlock $hir raise1]] clean] {}]
+    set unknown [hir::completions::analyzeBlock $hir $call $any {} {} {unknown clean} {}]
+    set contracted [hir::completions::analyzeBlock $hir $call $any {} {} {{contract E1 {int}} clean} {}]
+    lmap sub [list $exact $contracted $unknown] {list [dict get $sub errors] [dict get $sub incomplete]}
+} -result {{E1 0} {E1 0} {E2 1}}
+
+test scc-exact-narrows-contract {a recovered exact callable narrows a structural call below its contract: invoke12(raise1-like) raises E1 only, so E1 alone is handled} -body {
+    set text [sccProgram "fn invoke12(f: Fn{args: \[\], return: int, errors: \[E1, E2\]}) -> int errors E1, E2:\n    f()\n\nfn use() -> int:\n    invoke12(one1):\n        on E1:\n            -1\n\n\[poison(2), use()\]\n"]
+    list [sccEffective $text invoke12] [sccEffective $text use] [sourceAgree $text]
+} -result {{call {E1 E2}} {handle E1} {value {[-2, -1]}}}
+
+# ---------------------------------------------------------------------------
+# The boundary: a callable that raises beyond a contract never acquires it.
+
+test scc-boundary-captured {a closure that calls an erased error-bearing callable it captured, given Fn{errors: []}: TYPE at the argument; with the error admitted it is accepted and the call is charged it} -body {
+    set bad [sccProgram "fn use():\n    invoke_any(make(raise1, 1))\n\n0\n"]
+    set good [sccProgram "fn use():\n    invoke_any1(make(raise1, 1)):\n        on E1:\n            -1\n\nuse()\n"]
+    list [sccDiagnostics $bad] [sourceAgree $good]
+} -result {{{TYPE use E1}} {value -1}}
+
+test scc-boundary-struct-field {the same closure stored in a field typed errors: []: TYPE at the field} -body {
+    sccDiagnostics [sccProgram "j = JobAny {run: make(raise1, 1)}\n0\n"]
+} -result {{TYPE top E1}}
+
+test scc-boundary-unknown-captures-possible {a closure from another activation: its captures stand for every value their calls pass -- make is only ever given error-free callables here, so errors: [] fits} -body {
+    sourceAgree [sccProgram "fn plain(x) -> int:\n    x * 3\n\n\[poison(2), dispatch_any(JobAny {run: make(plain, 2)})\]\n"]
+} -result {value {[-2, 6]}}
+
+test scc-boundary-created-here {a closure created in the same body sees its captures' facts: one capturing an error-free callable fits errors: []} -body {
+    sourceAgree [sccProgram "fn wrap(f, x) -> JobAny:\n    fn inner():\n        f(x)\n    JobAny {run: inner}\n\nfn plain(x) -> int:\n    x * 3\n\n\[poison(2), dispatch_any(wrap(plain, 2))\]\n"]
+} -result {value {[-2, 6]}}
+
+test scc-boundary-created-here-bad {... and one whose captured parameter receives an error-bearing callable is rejected in that body (the parameter stands for every value its calls pass)} -body {
+    sccDiagnostics [sccProgram "fn wrap(f, x) -> JobAny:\n    fn inner():\n        f(x)\n    JobAny {run: inner}\n\n\[poison(2), dispatch_any(wrap(raise2, 2))\]\n"]
+} -result {{TYPE wrap E2}}
+
+# A function that calls an untyped parameter, given a structural type whose
+# argument type is a contract that admits E1 (the hole this milestone
+# closes: before it, the program was accepted and E1 escaped at run time).
+set sccContravariant {error E1
+
+fn raise1(x: int) -> int errors E1:
+    if x > 0:
+        fail E1
+    x
+
+fn call1(f, x):
+    f(x)
+
+struct Job:
+    run: Fn{args: [Fn{args: [int], return: int, errors: [E1]}, int], return: any, errors: ERRORS}
+
+fn go(j: Job, k: int) HANDLES:
+    (j.run)(raise1, k)
+
+go(Job {run: call1}, 1)
+}
+
+test scc-contravariant-rejected {call1 calls its untyped parameter; given Fn{args: [Fn{... errors: [E1]}, int], errors: []} it is rejected (TYPE at the field), where it used to escape at run time} -body {
+    sccDiagnostics [string map {ERRORS {[]} HANDLES ""} $sccContravariant]
+} -result {{TYPE top E1}}
+
+test scc-contravariant-admitted {with the contract admitting E1 it fits, the call through it is charged E1, and the error is caught} -body {
+    set text [string map {ERRORS {[E1]} HANDLES "errors E1" "go(Job {run: call1}, 1)" "fn top(k: int):\n    go(Job {run: call1}, k):\n        on E1:\n            -1\n\n\[top(1), top(0)\]"} $sccContravariant]
+    list [hir::completions::erasedErrorsOf [surface::compile $text -warnings off]] [sourceAgree $text]
+} -result {E1 {value {[-1, 0]}}}
+
+test scc-any-parameter-call {a function that calls an `any` parameter, given Fn{args: [any, any], errors: []} in a program that erases E2: TYPE (a call through that type may pass it anything); without erasure it fits} -body {
+    set given "s = Job {run: quiet}\nfn apply(f, x):\n    f(x)\n\nstruct Apply:\n    run: Fn{args: \[any, any\], return: any}\n\na = Apply {run: apply}\n0\n"
+    list [sccDiagnostics [sccProgram $given]] \
+        [sccDiagnostics [string map {"fn poison(k: int) -> int:\n    call(raise2, k):\n        on E2:\n            -2\n" ""} [sccProgram $given]]]
+} -result {{{TYPE top E2}} {}}
+
+# ---------------------------------------------------------------------------
+# Type-level compatibility is unchanged and still strict.
+
+test scc-compat-strict {Fn{errors: [E1]} into a Fn{errors: []} slot and Fn{errors: [E1, E2]} into Fn{errors: [E1]}: rejected; fewer errors into more: accepted} -body {
+    lmap d [sccDiagnostics {error E1
+
+error E2
+
+fn give1(f: Fn{args: [], return: int, errors: [E1]}) -> Fn{args: [], return: int}:
+    f
+
+fn give12(f: Fn{args: [], return: int, errors: [E1, E2]}) -> Fn{args: [], return: int, errors: [E1]}:
+    f
+
+fn widen(f: Fn{args: [], return: int}) -> Fn{args: [], return: int, errors: [E1]}:
+    f
+
+0
+}] {lrange $d 0 1}
+} -result {{TYPE give1} {TYPE give12}}
+
+test scc-compat-exact-declared {an exact function declaring E1 into a Fn{errors: []} field: rejected by the type checker, as before (and only by it)} -body {
+    lmap d [sccDiagnostics [sccProgram "j = Job {run: one1}\n0\n"]] {lrange $d 0 1}
+} -result {{TYPE top}}
+
+# ---------------------------------------------------------------------------
+# May versus must.
+
+test scc-no-known-error {a contract admitting E1 called with a callable that always fails: a may-fact, never KNOWN-ERROR; the handler runs} -body {
+    sourceAgree [sccProgram "fn h(j: Job1) -> int:\n    (j.run)():\n        on E1:\n            -1\n\n\[poison(2), h(Job1 {run: fails1})\]\n"]
+} -result {value {[-2, -1]}}
+
+test scc-known-error-exact-unchanged {an exact always-failing call is still KNOWN-ERROR} -body {
+    lmap d [sccDiagnostics [sccProgram "fn h() -> int:\n    fails1():\n        on E1:\n            -1\n\n\[poison(2)\]\n"]] {lrange $d 0 1}
+} -result {{KNOWN-ERROR h}}
+
+# ---------------------------------------------------------------------------
+# Ownership: affine error edges use the same boundary.
+
+set sccAffine {import coroutine
+
+struct Message:
+    value: int
+
+struct Event:
+    value: int
+
+error E1
+
+error E2
+
+fn raise2(x) -> int errors E2:
+    if x == 2:
+        fail E2
+    0
+
+fn call(f, x):
+    f(x)
+
+fn poison(k: int) -> int:
+    call(raise2, k):
+        on E2:
+            -2
+
+fn worker(base: int, resume Message) -> Event:
+    message = yield Event {value: base}
+    Event {value: message.value}
+
+struct Box:
+    run: Fn{args: [], return: int}
+
+struct Box1:
+    run: Fn{args: [], return: int, errors: [E1]}
+
+fn seven() -> int:
+    7
+
+fn fails1() -> int errors E1:
+    fail E1
+
+fn across(b: Box) -> int:
+    coroutine {step, first} = worker(10)
+    r = (b.run)()
+    e = step(Message {value: r + first.value})
+    e.value
+
+fn across1(b: Box1) -> int errors E1:
+    coroutine {step, first} = worker(10)
+    r = (b.run)()
+    e = step(Message {value: r + first.value})
+    e.value
+
+fn across_untyped(f) -> int errors E2:
+    coroutine {step, first} = worker(10)
+    r = call(f, 2)
+    e = step(Message {value: r + first.value})
+    e.value
+
+fn top1(b: Box1) -> int:
+    across1(b):
+        on E1:
+            -1
+
+fn top2() -> int:
+    across_untyped(raise2):
+        on E2:
+            -2
+
+[poison(2), across(Box {run: seven}), top1(Box1 {run: seven}), top1(Box1 {run: fails1}), top2()]
+}
+
+# The error names of every affine error edge of TEXT's function NAME.
+proc sccErrorEdges {text name} {
+    set hir [surface::compile $text -warnings off]
+    set region [hir::semantic::Region $hir [sccBlock $hir $name]]
+    set result {}
+    dict for {e byName} [dict get $hir affine errorExits] {
+        if {$e in $region} {
+            lappend result {*}[dict keys $byName]
+        }
+    }
+    return [lsort -unique $result]
+}
+
+test scc-affine-edges {a coroutine live across a structural call: an edge for each contract error only (E1), none for the erased E2; across an untyped call the erased E2 keeps its edge} -body {
+    list [sccErrorEdges $sccAffine across] [sccErrorEdges $sccAffine across1] [sccErrorEdges $sccAffine across_untyped]
+} -result {{} E1 E2}
+
+test scc-affine-runs {and every backend releases the coroutine on the contract's error edge and the untyped one} -body {
+    sourceAgree $sccAffine
+} -result {value {[-2, 17, 17, -1, -2]}}
+
+test scc-affine-native {natively: every coroutine released, none swept} -constraints {
+    linuxX86_64
+} -body {
+    dict get [native::allocationReport [surface::compile $sccAffine -warnings off] summary] coroutines
+} -result {stacksMapped 1 stacksReused 3 released 4 releasedSuspended 2 sweptSuspended 0}
+
+# An affine-payload error through a structural contract: the error edge and
+# the payload's ownership are the contract's -- a coroutine live across the
+# call is released on the Carry edge, the payload's stream is moved to the
+# handler or released with it -- and nothing for the unrelated erased E2.
+set sccAffinePayload {import coroutine
+
+error E2
+
+error Carry:
+    stream: Coroutine{args: [], return: int}
+
+fn r2(x) -> int errors E2:
+    if x == 2:
+        fail E2
+    0
+
+fn call(f, x):
+    f(x)
+
+fn poison(k: int) -> int:
+    call(r2, k):
+        on E2:
+            -2
+
+fn counter(start: int) -> int:
+    yield start
+    start + 1
+
+fn fails_with_stream() -> int errors Carry:
+    coroutine {step, first} = counter(10)
+    fail Carry {stream: step}
+
+fn quiet() -> int:
+    7
+
+struct Box:
+    run: Fn{args: [], return: int, errors: [Carry]}
+
+fn h(b: Box) -> int:
+    (b.run)():
+        on Carry {stream}:
+            stream()
+
+fn live(b: Box) -> int errors Carry:
+    coroutine {step, first} = counter(100)
+    r = (b.run)()
+    r + step()
+
+fn top(b: Box) -> int:
+    live(b):
+        on Carry:
+            -1
+
+[poison(2), h(Box {run: fails_with_stream}), h(Box {run: quiet}), top(Box {run: fails_with_stream}), top(Box {run: quiet})]
+}
+
+test scc-affine-payload {a contract admitting an affine-payload error: an edge for it (Carry) and none for the erased E2; payloads and coroutines released on every backend} -body {
+    list [sccErrorEdges $sccAffinePayload live] [sccEffective $sccAffinePayload h] [sourceAgree $sccAffinePayload]
+} -result {Carry {handle Carry call {}} {value {[-2, 11, 7, -1, 108]}}}
+
+test scc-affine-payload-native {natively: every coroutine released, none swept} -constraints {
+    linuxX86_64
+} -body {
+    set c [dict get [native::allocationReport [surface::compile $sccAffinePayload -warnings off] summary] coroutines]
+    list [expr {[dict get $c released] == [dict get $c stacksMapped] + [dict get $c stacksReused]}] [dict get $c sweptSuspended]
+} -result {1 0}
+
+# ---------------------------------------------------------------------------
+# Coroutines: an error-bearing coroutine given to an untyped function no longer
+# reaches an unrelated contracted call.
+
+set sccCoroutine {import coroutine
+
+error Boom
+
+struct Message:
+    value: int
+
+struct Event:
+    value: int
+
+fn worker(base: int, resume Message) -> Event errors Boom:
+    message = yield Event {value: base}
+    if message.value < 0:
+        fail Boom
+    Event {value: message.value}
+
+fn invoke(c, m) errors Boom:
+    c(m)
+
+fn use_worker(k: int) -> int errors Boom:
+    coroutine {step, first} = worker(1)
+    e = invoke(step, Message {value: k}):
+        on Boom:
+            return -1
+    e.value
+
+fn top(k: int) -> int:
+    use_worker(k):
+        on Boom:
+            -9
+
+struct Box:
+    run: Fn{args: [], return: int}
+
+fn seven() -> int:
+    7
+
+fn run_box(b: Box) -> int:
+    (b.run)()
+
+[top(3), top(-3), run_box(Box {run: seven})]
+}
+
+# (The coroutine reaches invoke's untyped parameter through a semantic
+# instance while the program is checked, which puts Boom into the erased
+# contract then; the accepted program's invoke is specialized for it, so the
+# final HIR erases nothing.)
+test scc-coroutine-poison {an error-bearing coroutine given to an untyped function does not reach the Fn{args: [], return: int} field call: accepted, specialized, and the call is charged nothing} -body {
+    set hir [surface::compile $sccCoroutine -warnings off]
+    set clones [lsort [lmap b [dict keys [dict get $hir bindings]] {
+        set n [dict get $hir bindings $b name]
+        expr {[string match invoke<* $n] ? $n : [continue]}
+    }]]
+    list $clones [sccEffective $sccCoroutine run_box] [sourceAgree $sccCoroutine]
+} -result {{{invoke<Coroutine{args:[Message],return:Event,errors:[Boom]}>}} {call {}} {value {[3, -1, 7]}}}
+
+# A coroutine handle is resumed through its Coroutine type alone once it
+# leaves the body that constructed it: the same boundary. Its root calls an
+# untyped callable passed to its construction (here an error-bearing one):
+# before this milestone the escaping handle let E escape at run time.
+set sccHandle {import coroutine
+
+error E
+
+struct M:
+    value: int
+
+struct Ev:
+    value: int
+
+fn raise_e(m) -> int errors E:
+    fail E
+
+fn worker(f, resume M) -> Ev WORKER:
+    m = yield Ev {value: 0}
+    x = f(m)
+    Ev {value: 1}
+
+fn drive(c: Coroutine{args: [M], return: Ev, errors: CONTRACT}) -> int DRIVE:
+    e = c(M {value: 1})
+    e.value
+
+fn make(f) -> int DRIVE:
+    coroutine {step, first} = worker(f)
+    drive(step)
+
+LOCAL
+TOP
+}
+
+set sccLocal {fn local(f) -> int:
+    coroutine {step, first} = worker(f)
+    e = step(M {value: 1}):
+        on E:
+            return -1
+    e.value
+}
+
+test scc-coroutine-boundary-escape {a handle whose root may raise E through a callable passed to its construction, leaving its body as Coroutine{errors: []}: TYPE where it leaves} -body {
+    sccDiagnostics [string map {WORKER "" CONTRACT {[]} DRIVE "" LOCAL "" TOP "make(raise_e)"} $sccHandle]
+} -result {{TYPE make E}}
+
+test scc-coroutine-param-resume {a handle that fits its contract, resumed through a Coroutine{errors: []} parameter in a program that erases E2 elsewhere: charged nothing} -body {
+    set text [string map {WORKER "" CONTRACT {[]} DRIVE "" LOCAL "" TOP "fn plain(m) -> int:\n    0\n\nfn r2(x) -> int errors E2:\n    if x == 2:\n        fail E2\n    0\n\nfn call(f, x):\n    f(x)\n\nfn poison(k: int) -> int:\n    call(r2, k):\n        on E2:\n            -2\n\n\[poison(2), make(plain)\]"} \
+        [string map {"error E\n" "error E\n\nerror E2\n"} $sccHandle]]
+    list [hir::completions::erasedErrorsOf [surface::compile $text -warnings off]] [sccEffective $text drive] [sourceAgree $text {interp compile}]
+} -result {E2 {call {}} {value {[-2, 1]}}}
+
+test scc-coroutine-boundary-declared {with the root declaring E and the contract admitting it: accepted, E handled where it is resumed} -body {
+    sourceAgree [string map {WORKER "errors E" CONTRACT {[E]} DRIVE "errors E" LOCAL "" TOP "fn top() -> int:\n    make(raise_e):\n        on E:\n            -1\n\ntop()"} $sccHandle] {interp compile}
+} -result {value -1}
+
+test scc-coroutine-boundary-local {a handle resumed only in the body that constructed it is analyzed there: accepted, the resume charged E} -body {
+    set text [string map [list WORKER "" CONTRACT {[]} DRIVE "" "fn make(f) -> int :\n    coroutine {step, first} = worker(f)\n    drive(step)\n" "" LOCAL $sccLocal TOP "local(raise_e)"] $sccHandle]
+    list [sccDiagnostics $text] [sourceAgree $text {interp compile}]
+} -result {{} {value -1}}
+
+# ---------------------------------------------------------------------------
+# Natives calling a callable argument, recursion, and the uncontracted path.
+
+test scc-native-factory {mutable_array::generate with a factory of type Fn{..., errors: [E1]}: charged E1, never the erased E2} -body {
+    set text [sccProgram "fn gen(f: Fn{args: \[int\], return: int, errors: \[E1\]}) -> int:\n    a = mutable_array::generate(3, f):\n        on E1:\n            return -1\n    a.capacity()\n\n\[poison(2), gen(raise1)\]\n"]
+    list [sccEffective $text gen] [sourceAgree $text]
+} -result {{handle E1} {value {[-2, -1]}}}
+
+test scc-recursive-contract {a recursive function forwarding its Fn{errors: []} parameter: never charged the erased contract} -body {
+    sourceAgree [sccProgram "fn rec_invoke(f: Fn{args: \[\], return: int}, n: int) -> int:\n    if n < 1:\n        f()\n    else:\n        rec_invoke(f, n - 1)\n\n\[poison(2), rec_invoke(quiet, 3)\]\n"]
+} -result {value {[-2, 7]}}
+
+test scc-recursive-fallback {a transparent recursive function (it calls the untyped `call`) forwarding a Fn{errors: []} parameter whose value only its contract bounds (a struct field): its recursion fallback charges what that value carries -- its contract, never the erased one} -body {
+    sourceAgree [sccProgram "fn plain(x) -> int:\n    0\n\nfn rec2(f: Fn{args: \[\], return: int}, n: int) -> int:\n    if n < 1:\n        x = call(plain, n)\n        f()\n    else:\n        rec2(f, n - 1)\n\nfn start(j: Job) -> int:\n    rec2(j.run, 2)\n\n\[poison(2), start(Job {run: quiet})\]\n"]
+} -result {value {[-2, 7]}}
+
+test scc-trait-operation {a trait operation whose implementation calls a contracted field, in a program that erases E2: the trait call is not charged E2} -body {
+    sourceAgree [sccProgram "trait Runner:\n    fn go(self: Runner) -> int\n\nfn go(j: Job) -> int:\n    (j.run)()\n\nfn launch(r: Runner) -> int:\n    r.go()\n\n\[poison(2), launch(Job {run: quiet})\]\n"]
+} -result {value {[-2, 7]}}
+
+test scc-untyped-still-conservative {the original soundness reproducer: E1 through an untyped helper, a handler for E2 alone, is UNHANDLED-ERROR} -body {
+    sccDiagnostics {error E1
+error E2
+
+fn raise(x) -> int errors E1, E2:
+    if x == 1:
+        fail E1
+    if x == 2:
+        fail E2
+    0
+
+fn call(f, x):
+    f(x)
+
+fn generic(x) -> int errors E1, E2:
+    call(raise, x)
+
+fn bad(x):
+    generic(x):
+        on E2:
+            -1
+
+0
+}
+} -result {{UNHANDLED-ERROR bad E1}}
+
+test scc-uncontracted-message {an uncontracted unidentified call names both losses in its message} -body {
+    set hir [surface::compile {error E1
+
+fn raise(x) -> int errors E1:
+    if x == 1:
+        fail E1
+    0
+
+fn make(f):
+    fn inner(y):
+        f(y)
+    inner
+
+fn call(f, x):
+    f(x)
+
+fn holder(f) -> List[any]:
+    [make(f)]
+
+fn bad(k: int):
+    loop h in holder(raise):
+        h(k)
+
+0
+} -strict 0 -warnings off]
+    lsort -unique [lmap d [hir::diagnostics $hir] {
+        expr {[string match "*cannot identify, and that no callable contract bounds*" [dict get $d message]] ? "both" : [dict get $d message]}
+    }]
+} -result both
+
+test scc-no-excess {no accepted program of this file records a structural call raising beyond its proven contract} -body {
+    list [sccExcess [sccProgram "\[poison(2)\]\n"]] [sccExcess $sccAffine] [sccExcess $sccCoroutine] [sccExcess $sccRunner]
+} -result {{} {} {} {}}
+
+cleanupTests

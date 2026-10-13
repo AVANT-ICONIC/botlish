@@ -1,0 +1,1140 @@
+# abi-mutable-bytes.test -- abi::bytes::MutableBytes, the writable counterpart of
+# abi::bytes::Bytes, and linux::read built on it (MUTABLE-BYTES.md):
+#
+#   abi::bytes::zeroed(n: abi::Usize)                 n zero bytes
+#   abi::bytes::from_bytes(data: abi::bytes::Bytes)   an independent writable copy
+#   abi::bytes::mutable_length(data)                   the fixed byte count
+#   abi::bytes::replace(data, index, value)        a NEW value, data unchanged
+#   abi::bytes::detach(data)                     a fresh storage (the "detach")
+#   abi::bytes::freeze(data), abi::bytes::freeze_prefix(data, n)    immutable snapshots
+#   abi::x86_64::from_mutable_bytes(data)             the WRITABLE address bridge
+#   linux::read(fd, data) -> linux::ReadResult        ONE read(2) syscall
+#
+# The theorem under test is "mutable storage does not imply reference
+# semantics": a MutableBytes is a VALUE, so logical copies are independent
+# through every route a value can take (binding, argument, result, struct
+# field, List element, generic and untyped parameters, closure capture,
+# ReadResult, ImmutableSet). Pure semantics run on every backend; the writable
+# bridge and linux::read are native only (Linux x86-64), like the syscall.
+# Native tests build standalone executables, feed descriptor 0 through a real
+# pipe or file and redirect descriptors 3 and 4 to files, so every byte the
+# kernel wrote or read is checked as binary.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+interp recursionlimit {} 100000
+
+set allBackends {interp compile cranelift-generic cranelift}
+set nativeBackends {cranelift-generic cranelift}
+
+testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64}}]
+testConstraint objdump [expr {[auto_execok objdump] ne ""}]
+testConstraint posixShell [expr {[auto_execok sh] ne ""}]
+# strace is optional evidence: it needs the binary and permission to ptrace.
+testConstraint strace [expr {[auto_execok strace] ne "" && ![catch {exec strace -f -qq -o /dev/null true 2>@1}]}]
+
+set scratch [makeDirectory abi-mutable-bytes-scratch]
+set programCounter 0
+
+proc bytesHir {text {strict 1}} {
+    set path [file join $::scratch p[incr ::programCounter].bot]
+    set channel [open $path w]
+    fconfigure $channel -encoding utf-8
+    puts -nonewline $channel $text
+    close $channel
+    return [surface::readProgramFile $path -strict $strict]
+}
+
+proc diagKinds {text} {
+    return [lsort -unique [lmap d [hir::diagnostics [bytesHir $text 0]] {dict get $d kind}]]
+}
+
+# {KIND LINE:COLUMN MESSAGE} of the first diagnostic strict compilation of
+# TEXT raises, or "no error".
+proc strictError {text} {
+    if {![catch {bytesHir $text} message options]} {
+        return "no error"
+    }
+    regexp {^[^ ]*:([0-9]+:[0-9]+): (.*)$} $message -> location text
+    return [list [lindex [dict get $options -errorcode] end] $location $text]
+}
+
+proc outcomesOf {text {backends ""}} {
+    if {$backends eq ""} {
+        set backends $::allBackends
+    }
+    set hir [bytesHir $text]
+    return [lmap backend $backends {outcomeUnderHir $backend $hir}]
+}
+
+# The one shown value every backend in BACKENDS agrees on for TEXT, or a
+# description of the disagreement or error.
+proc agree {text {backends ""}} {
+    if {$backends eq ""} {
+        set backends $::allBackends
+    }
+    set outcomes [outcomesOf $text $backends]
+    if {[llength [lsort -unique $outcomes]] != 1} {
+        return "DISAGREE: [join [lmap b $backends o $outcomes {list $b $o}] { / }]"
+    }
+    set outcome [lindex $outcomes 0]
+    if {[lindex $outcome 0] ne "value"} {
+        return "ERROR: $outcome"
+    }
+    return [lindex $outcome 1]
+}
+
+proc withEnv {name value body} {
+    set had [info exists ::env($name)]
+    if {$had} {
+        set saved $::env($name)
+    }
+    set ::env($name) $value
+    try {
+        uplevel 1 $body
+    } finally {
+        if {$had} {
+            set ::env($name) $saved
+        } else {
+            unset ::env($name)
+        }
+    }
+}
+
+proc nirFunction {nir name} {
+    set lines [split $nir \n]
+    set start [lsearch -regexp $lines "^func \[0-9\]+ \"[string map {: \\:} $name]\""]
+    if {$start < 0} {
+        return ""
+    }
+    set end [lsearch -start $start -exact $lines end]
+    return [join [lrange $lines $start $end] \n]
+}
+
+# The id of the NIR function NAME (its first instance), or -1.
+proc nirFunctionId {nir name} {
+    if {[regexp "\nfunc (\[0-9\]+) \"[string map {: \\:} $name]\"" $nir -> id]} {
+        return $id
+    }
+    return -1
+}
+
+# Botlish source of a List[Byte] literal of byte values N... (each
+# `byte::from_int(N)`, which needs no handler for a constant in 0..255).
+proc byteList {args} {
+    return "\[[join [lmap n $args {string cat "byte::from_int($n)"}] {, }]\]"
+}
+
+# The user-facing text (evidence shown, representation NOT revealed) of
+# source TEXT's value on every backend, or the single text if they agree.
+proc shownOn {text} {
+    set hir [bytesHir $text]
+    set texts {}
+    foreach backend $::allBackends {
+        set saved [core::useBackend]
+        try {
+            if {$backend in {cranelift cranelift-generic}} {
+                set value [native::evalHir $hir {*}[expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]]
+            } else {
+                core::useBackend $backend
+                set value [core::evalProgram [hir::lower $hir]]
+            }
+            lappend texts [core::value::show $value 1]
+        } finally {
+            core::useBackend $saved
+        }
+    }
+    if {[llength [lsort -unique $texts]] != 1} {
+        return "DISAGREE: $texts"
+    }
+    return [lindex $texts 0]
+}
+
+# The prelude every pure program starts with.
+set pure {import abi
+import abi::bytes
+import byte
+import immutable_set
+import list
+import str
+import type byte::Byte
+
+fn mb(s: str):
+    abi::bytes::from_bytes(abi::bytes::from_list(str::encode_utf8(s)))
+
+fn put(m: abi::bytes::MutableBytes, i: int, v: Byte) -> abi::bytes::MutableBytes:
+    abi::bytes::replace(m, i, v):
+        on IndexNotFound:
+            m
+
+fn is(m: abi::bytes::MutableBytes, s: str) -> bool:
+    abi::bytes::freeze(m) == abi::bytes::from_list(str::encode_utf8(s))
+
+fn get(xs: List[abi::bytes::MutableBytes], i: int) -> abi::bytes::MutableBytes:
+    list::at(xs, i):
+        on IndexNotFound:
+            mb("")
+
+fn zeros(n: int):
+    loop i from 0 to n:
+        byte::from_int(0)
+
+fn pattern(n: int):
+    loop i from 0 to n:
+        byte::from_int(mod(i, 256))
+
+}
+
+# A literal byte for `put`: ASCII "X" = 88, "Z" = 90.
+proc X {} { return "byte::from_int(88)" }
+proc Z {} { return "byte::from_int(90)" }
+
+# ---------------------------------------------------------------------------
+# Registration and declaration
+
+test abi-mutable-bytes-natives-registered {the writable storage family is eight natives -- seven in their own namespace mutable_byte_store (zeroed, from_storage, count, replace, detach, freeze, freeze_prefix) and the writable address bridge -- none context-free (a mutable value is never a compile-time constant), none knowing a syscall; the immutable family byte_store is untouched (from_list, byte_count); the bridge is a raw-address native like from_bytes} -body {
+    set bridge [core::native::metadata abi::x86_64::from_mutable_bytes]
+    list [lsort [lsearch -all -inline [core::native::names] mutable_byte_store::*]] \
+        [lsort [lsearch -all -inline [core::native::names] byte_store::*]] \
+        [lmap n {zeroed from_storage count replace detach freeze freeze_prefix} {dict get [core::native::metadata mutable_byte_store::$n] contextFree}] \
+        [dict get $bridge arity] [dict get $bridge paramTypes] [dict get $bridge resultShape] \
+        [dict get $bridge contextFree] [dict get $bridge runtime] [dict get $bridge errors] \
+        [lsearch -all -inline -regexp [core::native::names] {(?i)read|keepalive|pointer|ptr}]
+} -result {{mutable_byte_store::count mutable_byte_store::detach mutable_byte_store::freeze mutable_byte_store::freeze_prefix mutable_byte_store::from_storage mutable_byte_store::replace mutable_byte_store::zeroed} {byte_store::byte_count byte_store::from_list} {0 0 0 0 0 0 0} 1 struct {named-struct abi::x86_64::Register64} 0 raw-address {} {}}
+
+test abi-mutable-bytes-declaration {abi::bytes::MutableBytes is an opaque struct with one hidden field, owned by module abi::bytes (the one module that owns both byte types, so Bytes and MutableBytes convert without any public accessor): the existing opaque-struct mechanism, no new visibility rule} -body {
+    set text [read [open [file join $::projectRoot lib abi bytes.bot]]]
+    set hir [bytesHir "import abi\nimport abi::bytes\nabi::bytes::mutable_length(abi::bytes::zeroed(abi::usize(0))).value"]
+    list [regexp -line {^opaque struct MutableBytes:$} $text] \
+        [hir::structs::isOpaque abi::bytes::MutableBytes] [hir::structs::names abi::bytes::MutableBytes] [hir::structs::owner abi::bytes::MutableBytes]
+} -result {1 1 storage abi::bytes}
+
+test abi-mutable-bytes-api-surface {the module adds exactly the small MutableBytes API beside the Bytes pair: zeroed, from_bytes, mutable_length, replace, detach, freeze and freeze_prefix; no indexing, slicing, capacity, resizing, append or address accessor} -body {
+    set text [read [open [file join $::projectRoot lib abi bytes.bot]]]
+    set fns [lmap line [split $text \n] {
+        if {![regexp {^fn ([a-z0-9_]+)} $line -> name]} continue
+        set name
+    }]
+    lsearch -all -inline -not -regexp $fns {^(from_list|length)$}
+} -result {zeroed from_bytes mutable_length replace detach freeze freeze_prefix}
+
+# ---------------------------------------------------------------------------
+# Allocation, length, zero initialization
+
+test abi-mutable-bytes-zero-filled-and-fixed-length {abi::bytes::zeroed(n) is n zero bytes (nothing uninitialized is ever visible), the length is exact and an abi::Usize, the empty and a large one included, on every backend} -body {
+    agree "${::pure}z = abi::bytes::zeroed(abi::usize(5))\nbig = abi::bytes::zeroed(abi::usize(4096))\n\[abi::bytes::mutable_length(abi::bytes::zeroed(abi::usize(0))).value, abi::bytes::mutable_length(z).value, abi::bytes::mutable_length(big).value, abi::bytes::freeze(z) == abi::bytes::from_list(zeros(5)), abi::bytes::freeze(big) == abi::bytes::from_list(zeros(4096)), abi::bytes::freeze(abi::bytes::zeroed(abi::usize(0))) == abi::bytes::from_list(\[\])\]"
+} -result {[0, 5, 4096, true, true, true]}
+
+test abi-mutable-bytes-length-is-an-abi-usize {the length is an abi::Usize: accepted where one is required, not an abi::U64} -body {
+    list [agree "${::pure}fn takes(n: abi::Usize) -> int:\n    n.value\ntakes(abi::bytes::mutable_length(mb(\"ab\")))"] \
+        [lindex [strictError "${::pure}fn takes(n: abi::U64) -> int:\n    n.value\ntakes(abi::bytes::mutable_length(mb(\"ab\")))"] 0]
+} -result {2 TYPE}
+
+test abi-mutable-bytes-length-is-bytes-not-scalars {from_bytes of a UTF-8 encoding has the encoded byte count, and the contents round trip exactly} -body {
+    agree "${::pure}s = \"héllo ☃ \U0001f600\"\nm = mb(s)\n\[str::length(s), abi::bytes::mutable_length(m).value, is(m, s)\]"
+} -result {[9, 15, true]}
+
+test abi-mutable-bytes-oversize-allocation-is-range {a length beyond the runtime's collection ceiling is the RANGE error every oversized collection is (nothing is allocated, nothing aborts), on every backend} -body {
+    set hir [bytesHir "${::pure}abi::bytes::zeroed(abi::usize(18446744073709551615))" 0]
+    lsort -unique [lmap b $::allBackends {lrange [outcomeUnderHir $b $hir] 0 2}]
+} -match glob -result {{error {CORE SEMANTIC RANGE} *}}
+
+# ---------------------------------------------------------------------------
+# mutable_bytes_set: a new value, the old one unchanged
+
+test abi-mutable-bytes-set-returns-a-new-value {b = abi::bytes::replace(a, i, x): b has the modified contents and a remains unchanged -- the semantics, whichever way the implementation realizes the update} -body {
+    agree "${::pure}a = mb(\"hello\")\nb = put(a, 0, [X])\nc = put(b, 4, [Z])\n\[is(a, \"hello\"), is(b, \"Xello\"), is(c, \"XelloZ\") == false, is(c, \"XellZ\"), abi::bytes::mutable_length(c).value\]"
+} -result {[true, true, true, true, 5]}
+
+test abi-mutable-bytes-set-index-error {an index that does not designate a byte is the existing IndexNotFound (below 0, equal to the length, beyond, and any index of the empty value); the value is not changed, and a byte value is by its Byte type} -body {
+    agree "${::pure}fn tryset(m: abi::bytes::MutableBytes, i: int) -> int errors IndexNotFound:\n    r = abi::bytes::replace(m, i, [X])\n    abi::bytes::mutable_length(r).value\nfn at(m: abi::bytes::MutableBytes, i: int):\n    tryset(m, i):\n        on IndexNotFound:\n            0 - 1\nm = mb(\"abc\")\n\[at(m, 0 - 1), at(m, 0), at(m, 2), at(m, 3), at(m, 1000), at(abi::bytes::zeroed(abi::usize(0)), 0), is(m, \"abc\")\]"
+} -result {[-1, 3, 3, -1, -1, -1, true]}
+
+test abi-mutable-bytes-set-needs-a-byte-statically {the value is a byte::Byte: an Int, a String or an out-of-range constant is rejected by ordinary typing, never truncated} -body {
+    lmap arg {"\"a\"" "byte::from_int(256)" "300" "0 - 1"} {
+        lindex [strictError "${::pure}abi::bytes::replace(mb(\"a\"), 0, $arg):\n    on IndexNotFound:\n        mb(\"a\")"] 0
+    }
+} -result {TYPE KNOWN-ERROR TYPE TYPE}
+
+# ---------------------------------------------------------------------------
+# The theorem: a logical copy is independent, through every route
+
+set theoremBody [dict create \
+    binding {a = mb("hello")
+b = a
+a2 = put(a, 0, XX)
+[is(b, "hello"), is(a, "hello"), is(a2, "Xello")]} \
+    parameter {fn mutate(m: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:
+    put(m, 1, XX)
+a = mb("hello")
+b = a
+a2 = mutate(a)
+b2 = mutate(b)
+[is(a, "hello"), is(b, "hello"), is(a2, "hXllo"), is(b2, "hXllo")]} \
+    identity {fn id(m: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:
+    m
+a = mb("hello")
+b = id(a)
+b2 = put(b, 0, XX)
+a2 = put(a, 4, ZZ)
+[is(a, "hello"), is(b, "hello"), is(b2, "Xello"), is(a2, "hellZ")]} \
+    result-with-another-copy {fn edit(m: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:
+    put(m, 0, XX)
+a = mb("hello")
+keep = a
+r = edit(a)
+r2 = edit(r)
+[is(a, "hello"), is(keep, "hello"), is(r, "Xello"), is(r2, "Xello")]} \
+    list {a = mb("hello")
+xs = [a]
+a2 = put(a, 0, XX)
+b = get(xs, 0)
+[is(b, "hello"), is(a, "hello"), is(a2, "Xello"), is(get(xs, 0), "hello")]} \
+    struct {struct Holder:
+    data: abi::bytes::MutableBytes
+a = mb("hello")
+h = Holder {data: a}
+a2 = put(a, 0, XX)
+h2 = Holder {data: put(h.data, 4, ZZ)}
+[is(h.data, "hello"), is(a, "hello"), is(a2, "Xello"), is(h2.data, "hellZ")]} \
+    struct-copy {struct Holder:
+    data: abi::bytes::MutableBytes
+a = mb("hello")
+h1 = Holder {data: a}
+h2 = h1
+h3 = Holder {data: put(h2.data, 0, XX)}
+[is(h1.data, "hello"), is(h2.data, "hello"), is(h3.data, "Xello")]} \
+    generic {fn same(x):
+    x
+fn twice(x, y):
+    [x, y]
+a = mb("hello")
+b = same(a)
+b2 = put(b, 0, XX)
+pair = twice(a, b)
+a2 = put(a, 4, ZZ)
+[is(a, "hello"), is(b, "hello"), is(b2, "Xello"), is(a2, "hellZ"), pair == [a, b]]} \
+    any {fn through(x: any):
+    x
+fn back(x):
+    through(x)
+a = mb("hello")
+b = back(a)
+b2 = put(b, 0, XX)
+[is(a, "hello"), is(b, "hello"), is(b2, "Xello"), b == a]} \
+    closure {a = mb("hello")
+fn peek() -> bool:
+    is(a, "hello")
+fn bump() -> abi::bytes::MutableBytes:
+    put(a, 0, XX)
+a2 = bump()
+a3 = bump()
+[peek(), is(a, "hello"), is(a2, "Xello"), a2 == a3]} \
+    immutable-set {a = mb("hello")
+s = immutable_set::from_list([a, mb("other")])
+a2 = put(a, 0, XX)
+[immutable_set::contains(s, mb("hello")), immutable_set::contains(s, a2), immutable_set::contains(s, a), is(a, "hello")]} \
+    loop {a = mb("aaaa")
+acc = [a]
+steps = loop i from 0 to 4:
+    put(a, i, XX)
+[is(a, "aaaa"), is(get(steps, 0), "Xaaa"), is(get(steps, 3), "aaaX"), list::length(steps)]} \
+    branch-join {a = mb("hello")
+b = if abi::bytes::mutable_length(a).value > 3:
+    a
+else:
+    mb("zzzzz")
+b2 = put(b, 0, XX)
+[is(a, "hello"), is(b, "hello"), is(b2, "Xello")]}]
+
+set theoremExpected [dict create \
+    binding {[true, true, true]} \
+    parameter {[true, true, true, true]} \
+    identity {[true, true, true, true]} \
+    result-with-another-copy {[true, true, true, true]} \
+    list {[true, true, true, true]} \
+    struct {[true, true, true, true]} \
+    struct-copy {[true, true, true]} \
+    generic {[true, true, true, true, true]} \
+    any {[true, true, true, true]} \
+    closure {[true, true, true, true]} \
+    immutable-set {[true, false, true, true]} \
+    loop {[true, true, true, 4]} \
+    branch-join {[true, true, true]}]
+
+dict for {route body} $theoremBody {
+    set program [string map [list XX [X] ZZ [Z]] $body]
+    test abi-mutable-bytes-copies-are-independent-$route "logical copies of a MutableBytes never influence each other, through the \"$route\" route: mutating one copy (a new value) leaves every other copy and the original exactly as they were, on every backend" -body [list apply {{pure program} {
+        agree "${pure}$program"
+    }} $::pure $program] -result [dict get $theoremExpected $route]
+}
+
+# ---------------------------------------------------------------------------
+# freeze and freeze_prefix: immutable snapshots
+
+test abi-mutable-bytes-freeze-is-a-snapshot {abi::bytes::freeze copies the whole contents into an immutable Bytes that never changes afterwards, whatever is done to the source or to values derived from it; the source stays a valid independent value (freezing it twice gives equal Bytes)} -body {
+    agree "${::pure}m = mb(\"hello\")\nf = abi::bytes::freeze(m)\nm2 = put(m, 0, [X])\nf2 = abi::bytes::freeze(m2)\n\[f == abi::bytes::from_list(str::encode_utf8(\"hello\")), f2 == abi::bytes::from_list(str::encode_utf8(\"Xello\")), f == abi::bytes::freeze(m), abi::bytes::freeze(m) == abi::bytes::freeze(m), f == f2, abi::bytes::length(f).value\]"
+} -result {[true, true, true, true, false, 5]}
+
+set preludePrefix {fn B(s: str) -> abi::bytes::Bytes:
+    abi::bytes::from_list(str::encode_utf8(s))
+
+fn pre(m: abi::bytes::MutableBytes, n: int) -> abi::bytes::Bytes:
+    c = abi::usize(n):
+        on abi::AbiIntegerBelowRange:
+            abi::usize(0)
+        on abi::AbiIntegerAboveRange:
+            abi::usize(0)
+    abi::bytes::freeze_prefix(m, c):
+        on UpperOverrun:
+            B("OVER")
+
+}
+
+test abi-mutable-bytes-freeze-prefix {abi::bytes::freeze_prefix(data, n) is exactly the first n bytes: 0 (empty), a proper prefix, the whole length; the suffix is never included; a count beyond the length is the existing UpperOverrun and reads nothing outside the payload; the source is unchanged} -body {
+    agree "${::pure}$::preludePrefix\nm = mb(\"hello\")\n\[pre(m, 0) == B(\"\"), pre(m, 2) == B(\"he\"), pre(m, 5) == B(\"hello\"), pre(m, 6) == B(\"OVER\"), pre(m, 100000) == B(\"OVER\"), pre(abi::bytes::zeroed(abi::usize(0)), 0) == B(\"\"), pre(abi::bytes::zeroed(abi::usize(0)), 1) == B(\"OVER\"), is(m, \"hello\")\]"
+} -result {[true, true, true, true, true, true, true, true]}
+
+test abi-mutable-bytes-freeze-prefix-after-update {a prefix of an UPDATED value sees the update and only the prefix: the suffix bytes after the count never appear} -body {
+    agree "${::pure}$::preludePrefix\nm = put(mb(\"hello\"), 3, [Z])\n\[pre(m, 3) == B(\"hel\"), pre(m, 4) == B(\"helZ\"), pre(m, 5) == B(\"helZo\")\]"
+} -result {[true, true, true]}
+
+test abi-mutable-bytes-frozen-bytes-never-change {a Bytes frozen from a MutableBytes (and from a prefix) never changes after later updates of every other value derived from the same source: the snapshot theorem on every backend} -body {
+    agree "${::pure}$::preludePrefix\nm = mb(\"abcde\")\nf = abi::bytes::freeze(m)\np = pre(m, 3)\nm2 = put(m, 0, [X])\nm3 = put(m2, 1, [Z])\nf3 = abi::bytes::freeze(m3)\n\[f == B(\"abcde\"), p == B(\"abc\"), f3 == B(\"XZcde\"), abi::bytes::freeze(m2) == B(\"Xbcde\"), f == abi::bytes::freeze(m)\]"
+} -result {[true, true, true, true, true]}
+
+# ---------------------------------------------------------------------------
+# from_bytes: an independent mutable value
+
+test abi-mutable-bytes-from-bytes-is-independent {abi::bytes::from_bytes copies: changing the result never changes the Bytes it came from, and the same Bytes gives independent mutable values every time} -body {
+    agree "${::pure}$::preludePrefix\nd = B(\"data\")\na = abi::bytes::from_bytes(d)\nb = abi::bytes::from_bytes(d)\na2 = put(a, 0, [X])\n\[d == B(\"data\"), is(a, \"data\"), is(b, \"data\"), is(a2, \"Xata\"), a == b, a2 == b, abi::bytes::freeze(b) == d\]"
+} -result {[true, true, true, true, true, false, true]}
+
+# ---------------------------------------------------------------------------
+# Equality, hash, rendering
+
+test abi-mutable-bytes-equality-is-by-contents {== is by current byte contents, never storage identity: independent values with equal contents are equal, a different byte, a prefix, a longer value and a NUL-padded one are not; after an update the equality changes accordingly} -body {
+    agree "${::pure}a = mb(\"AB\")\n\[a == mb(\"AB\"), a == mb(\"AC\"), a == mb(\"A\"), a == mb(\"ABC\"), abi::bytes::zeroed(abi::usize(2)) == abi::bytes::zeroed(abi::usize(2)), abi::bytes::zeroed(abi::usize(0)) == abi::bytes::zeroed(abi::usize(1)), put(a, 1, byte::from_int(67)) == mb(\"AC\"), put(a, 1, byte::from_int(66)) == a, a == a\]"
+} -result {[true, false, false, false, true, false, true, true, true]}
+
+test abi-mutable-bytes-is-not-a-bytes {a MutableBytes and a Bytes with the same contents are different types and different kinds: neither compares equal to the other nor to a List or String, and the types do not mix} -body {
+    list [agree "${::pure}\[mb(\"A\") == abi::bytes::from_list([byteList 65]), mb(\"A\") == \[65\], mb(\"A\") == \"A\"\]"] \
+        [lindex [strictError "${::pure}fn f(d: abi::bytes::Bytes) -> int:\n    1\nf(mb(\"A\"))"] 0] \
+        [lindex [strictError "${::pure}fn f(d: abi::bytes::MutableBytes) -> int:\n    1\nf(abi::bytes::from_list(\[\]))"] 0]
+} -result {{[false, false, false]} TYPE TYPE}
+
+test abi-mutable-bytes-hash-agrees-with-equality {hash is by the current contents, consistent with ==: equal values hash equal however built, a changed value hashes differently, the hash differs from the same bytes' Bytes hash (its own kind tag), and the hash VALUES are identical on every backend} -body {
+    set shown [agree "${::pure}a = mb(\"AB\")\n\[hash(a) == hash(mb(\"AB\")), hash(a) == hash(put(a, 1, byte::from_int(67))), hash(abi::bytes::zeroed(abi::usize(0))) == hash(abi::bytes::zeroed(abi::usize(1))), hash(a) == hash(abi::bytes::from_list([byteList 65 66])), hash(abi::bytes::zeroed(abi::usize(0))), hash(abi::bytes::zeroed(abi::usize(3))), hash(mb(\"héllo ☃\")), hash(put(a, 0, byte::from_int(0)))\]"]
+    list [string match DISAGREE* $shown] [string match ERROR* $shown] [regexp {^\[true, false, false, false, [0-9]+, [0-9]+, [0-9]+, [0-9]+\]$} $shown]
+} -result {0 0 1}
+
+test abi-mutable-bytes-in-immutable-collections-stay-correct {a MutableBytes stored in a List or an ImmutableSet is its value at that moment: a later update of another copy cannot corrupt the collection's equality or hash invariants (the update is a new value)} -body {
+    agree "${::pure}a = mb(\"k1\")\nb = a\ns = immutable_set::from_list(\[a, mb(\"k2\"), b\])\nc = put(a, 0, byte::from_int(75))\ns2 = immutable_set::from_list(\[c, a\])\n\[list::length(\[a, b\]), immutable_set::contains(s, mb(\"k1\")), immutable_set::contains(s, c), immutable_set::contains(s2, mb(\"K1\")), immutable_set::contains(s2, mb(\"k1\")), s == immutable_set::from_list(\[mb(\"k2\"), mb(\"k1\")\]), hash(b) == hash(mb(\"k1\"))\]"
+} -result {[2, true, false, true, true, true, true]}
+
+test abi-mutable-bytes-rendering-is-opaque {normal rendering is the nominal opaque form on every backend, alone or inside a List or struct: no address, allocator metadata, sharing count, hidden storage or payload} -body {
+    set text "${::pure}struct Holder:\n    data: abi::bytes::MutableBytes\n\[mb(\"secret\"), abi::bytes::zeroed(abi::usize(0)), Holder {data: mb(\"x\")}\]"
+    shownOn $text
+} -result {[<opaque abi::bytes::MutableBytes>, <opaque abi::bytes::MutableBytes>, Holder {data: <opaque abi::bytes::MutableBytes>}]}
+
+test abi-mutable-bytes-internal-reveal-shows-the-storage {the explicit internal reveal (the differential printer) shows the contents identically on every backend, in a kind of its own: how the backends are compared byte for byte} -body {
+    agree "${::pure}\[abi::bytes::from_bytes(abi::bytes::from_list([byteList 65 0 255])), abi::bytes::zeroed(abi::usize(2))\]"
+} -result {[abi::bytes::MutableBytes {storage: <mutbytes 3: 4100ff>}, abi::bytes::MutableBytes {storage: <mutbytes 2: 0000>}]}
+
+# ---------------------------------------------------------------------------
+# The opacity boundary and the two bridges' static contracts
+
+test abi-mutable-bytes-no-projection-or-construction-outside-the-owner {the representation is the owner's: a projection or destructuring is OPAQUE-REPRESENTATION, a construction OPAQUE-CONSTRUCTION, even with a byte_store native's own result} -body {
+    list [lmap field {storage pointer address length capacity} {
+            lindex [strictError "${::pure}d = mb(\"a\")\nd.$field"] 0
+        }] \
+        [lindex [strictError "${::pure}d = mb(\"a\")\n{storage} = d\nstorage"] 0] \
+        [lindex [strictError "import abi\nimport abi::bytes\nabi::bytes::MutableBytes {storage: 1}"] 0] \
+        [lindex [strictError "import abi\nimport abi::bytes\nimport mutable_byte_store\nabi::bytes::MutableBytes {storage: mutable_byte_store::zeroed(1)}"] 0]
+} -result {{OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION} OPAQUE-REPRESENTATION OPAQUE-CONSTRUCTION OPAQUE-CONSTRUCTION}
+
+test abi-mutable-bytes-bridges-never-mix {a Bytes gives readable foreign memory and a MutableBytes writable foreign memory, and nothing silently casts one to the other: from_bytes(MutableBytes), from_mutable_bytes(Bytes), of an Int, a String, a raw storage, an abi::U8 and no argument are all compile-time errors} -body {
+    set pre "import abi\nimport abi::bytes\nimport abi::x86_64\nimport byte_store\nimport mutable_byte_store\n"
+    list [lindex [strictError "${pre}abi::x86_64::from_bytes(abi::bytes::zeroed(abi::usize(1)))"] 0] \
+        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes(abi::bytes::from_list(\[\]))"] 0] \
+        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes(1)"] 0] \
+        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes(\"text\")"] 0] \
+        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes(mutable_byte_store::zeroed(1))"] 0] \
+        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes(byte_store::from_list(\[\]))"] 0] \
+        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes(abi::u8(1))"] 0] \
+        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes()"] 0] \
+        [strictError "${pre}abi::x86_64::to_int(abi::x86_64::from_mutable_bytes(abi::bytes::zeroed(abi::usize(1)))) + 0"]
+} -match glob -result {TYPE TYPE TYPE TYPE TYPE TYPE TYPE ARITY {no error}}
+
+test abi-mutable-bytes-bridge-is-only-called {the writable bridge, like the readable one, is a call and never a function value: an address is taken from one MutableBytes at one call and consumed by the syscall that call feeds} -body {
+    set pre "import abi\nimport abi::bytes\nimport abi::x86_64\n"
+    list [lindex [strictError "${pre}f = abi::x86_64::from_mutable_bytes\n1"] 0] \
+        [lindex [strictError "${pre}xs = \[abi::x86_64::from_mutable_bytes\]\nxs"] 0]
+} -result {TYPE TYPE}
+
+test abi-mutable-bytes-bridge-result-is-a-register {the writable bridge returns the raw machine transport, a Register64: not an Int and not a pointer type} -body {
+    set hir [bytesHir "import abi\nimport abi::bytes\nimport abi::x86_64\nm = abi::bytes::zeroed(abi::usize(1))\nabi::x86_64::from_mutable_bytes(m)"]
+    set types {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "call" && [lindex [dict get $node target] 0] eq "native"
+                && [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name] eq "abi::x86_64::from_mutable_bytes"} {
+            lappend types [hir::types::show [hir::typeOf $hir $e]]
+        }
+    }
+    set types
+} -result abi::x86_64::Register64
+
+test abi-mutable-bytes-unchecked-bridge-replays-the-contract {a -strict 0 program that breaks the writable bridge's contract (a Bytes where a MutableBytes is required) never takes an address natively: the problem is replayed as a run-time TYPE error before anything is evaluated} -constraints linuxX86_64 -body {
+    set hir [bytesHir "import abi\nimport abi::bytes\nimport abi::x86_64\nabi::x86_64::from_mutable_bytes(abi::bytes::from_list(\[\]))" 0]
+    lrange [outcomeUnderHir cranelift $hir] 0 1
+} -result {error {CORE SEMANTIC TYPE}}
+
+test abi-mutable-bytes-tcl-backends-refuse-the-address {interp and compile refuse the writable bridge and linux::read with NATIVE-ONLY (no imitation of an address or of a read with a Tcl channel); a program that defines but never calls them runs everywhere, and the pure operations run on both} -body {
+    set pre "import abi\nimport abi::bytes\nimport linux\nimport abi::x86_64\n"
+    list [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "${pre}linux::read(abi::i32(0), abi::bytes::zeroed(abi::usize(1)))"]] 0 1}] \
+        [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "${pre}abi::x86_64::to_int(abi::x86_64::from_mutable_bytes(abi::bytes::zeroed(abi::usize(1))))"]] 0 1}] \
+        [agree "${pre}fn emit():\n    linux::read(abi::i32(0), abi::bytes::zeroed(abi::usize(1)))\n7" {interp compile}]
+} -result {{{error {CORE SEMANTIC NATIVE-ONLY}} {error {CORE SEMANTIC NATIVE-ONLY}}} {{error {CORE SEMANTIC NATIVE-ONLY}} {error {CORE SEMANTIC NATIVE-ONLY}}} 7}
+
+test abi-mutable-bytes-no-fake-read-on-tcl-backends {nothing in core or lib (other than core/programfile.tcl, which reads the program's own source file) routes reads through gets, read, a Tcl channel or stdin helpers} -body {
+    set hits {}
+    foreach file [concat [glob -directory [file join $::projectRoot core] *.tcl] [glob -directory [file join $::projectRoot lib] *.bot]] {
+        if {[file tail $file] eq "programfile.tcl"} continue
+        set channel [open $file r]
+        set lineNumber 0
+        foreach line [split [read $channel] \n] {
+            incr lineNumber
+            if {[regexp {^\s*#} $line]} continue
+            if {[regexp {\mstdin\M|\mgets\M|\mfileevent\M|\mchan read\M|\[read } $line]} {
+                lappend hits [file tail $file]:$lineNumber
+            }
+        }
+        close $channel
+    }
+    set hits
+} -result {}
+
+# ---------------------------------------------------------------------------
+# Native: standalone executables. Descriptor 0 is a file or a real pipe the
+# test feeds; descriptors 3 and 4 are redirected to files, so every byte the
+# kernel wrote into a buffer and every byte Botlish then wrote out is read
+# back as binary.
+
+set executableDir [makeDirectory abi-mutable-bytes-executables]
+set outputDir [makeDirectory abi-mutable-bytes-outputs]
+foreach stale [glob -nocomplain -directory $executableDir *] {
+    file delete -force $stale
+}
+
+proc buildExecutable {name text} {
+    set path [file join $::executableDir $name]
+    if {![file exists $path]} {
+        native::executable [bytesHir $text] $path
+    }
+    return $path
+}
+
+proc readBinary {path} {
+    set channel [open $path rb]
+    set data [read $channel]
+    close $channel
+    return $data
+}
+
+proc writeBinary {path data} {
+    set channel [open $path wb]
+    puts -nonewline $channel $data
+    close $channel
+}
+
+set linuxPrelude {import abi
+import abi::bytes
+import abi::x86_64
+import byte
+import linux
+import linux::abi
+import list
+import str
+import type byte::Byte
+
+fn mk(s: str):
+    abi::bytes::from_list(str::encode_utf8(s))
+
+fn mb(s: str):
+    abi::bytes::from_bytes(mk(s))
+
+fn put(m: abi::bytes::MutableBytes, i: int, v: Byte) -> abi::bytes::MutableBytes:
+    abi::bytes::replace(m, i, v):
+        on IndexNotFound:
+            m
+
+fn doubled(s: str, k: int) -> str:
+    if k == 0:
+        s
+    else:
+        doubled(str::concat(s, s), k - 1)
+
+fn out(fd: int, data: abi::bytes::Bytes) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
+    linux::write(abi::i32(fd), data)
+
+fn rd(fd: int, data: abi::bytes::MutableBytes) -> linux::ReadResult errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
+    linux::read(abi::i32(fd), data)
+
+}
+set runCounter 0
+
+# {STDOUT FILE3 FILE4} of one run of EXECUTABLE: descriptor 0 a FILE holding
+# INPUT (a read of it returns what is there, up to the buffer), descriptors 3
+# and 4 files. STDOUT is the program's result line (trimmed).
+proc runIn {executable input {gcStress 0}} {
+    set n [incr ::runCounter]
+    set f0 [file join $::outputDir fd0.$n]
+    set f3 [file join $::outputDir fd3.$n]
+    set f4 [file join $::outputDir fd4.$n]
+    writeBinary $f0 $input
+    set command [list sh -c {exec "$0" 3>"$1" 4>"$2" <"$3"} $executable $f3 $f4 $f0]
+    if {$gcStress} {
+        set stdout [withEnv BOTLISH_NATIVE_GC_STRESS 1 {exec {*}$command}]
+    } else {
+        set stdout [exec {*}$command]
+    }
+    return [list [string trim $stdout] [readBinary $f3] [readBinary $f4]]
+}
+
+# The same, with descriptor 0 a REAL PIPE the test writes INPUT into and
+# closes: STDOUT is then the executable's own standard output, exactly (not
+# trimmed).
+proc runPiped {executable input {gcStress 0}} {
+    set n [incr ::runCounter]
+    set f3 [file join $::outputDir fd3.$n]
+    set f4 [file join $::outputDir fd4.$n]
+    set command [list sh -c {exec "$0" 3>"$1" 4>"$2"} $executable $f3 $f4]
+    if {$gcStress} {
+        set channel [withEnv BOTLISH_NATIVE_GC_STRESS 1 {open |$command r+b}]
+    } else {
+        set channel [open |$command r+b]
+    }
+    puts -nonewline $channel $input
+    chan close $channel write
+    set stdout [read $channel]
+    close $channel
+    return [list $stdout [readBinary $f3] [readBinary $f4]]
+}
+
+proc utf8 {text} {
+    return [encoding convertto utf-8 $text]
+}
+
+# A buffer of CAP bytes holding "A" (so an untouched byte is visible) read
+# once from descriptor 0: the full buffer afterwards goes to descriptor 3, the
+# caller's own buffer (still) to descriptor 4, the result is [n, bytes
+# written, bytes written].
+proc readProgram {cap {fd 0}} {
+    return "${::linuxPrelude}
+buf = abi::bytes::from_bytes(mk(\"[string repeat A $cap]\"))
+r = rd($fd, buf)
+a = out(3, abi::bytes::freeze(r.data))
+b = out(4, abi::bytes::freeze(buf))
+\[r.result, a, b\]"
+}
+
+test abi-mutable-bytes-example-echoes-stdin {examples/linux/read-stdin.bot as a standalone executable fed a real pipe: it makes one read(2) of descriptor 0 into a 4096-byte MutableBytes, freezes exactly the 17 bytes received and writes them to descriptor 1 through linux::write; the runner's own result line (the 17 bytes written) follows} -constraints {linuxX86_64 posixShell} -body {
+    set path [file join $::executableDir read-stdin]
+    native::executable [surface::readProgramFile [file join $::projectRoot examples linux read-stdin.bot]] $path
+    lindex [runPiped $path "hello from stdin\n"] 0
+} -result "hello from stdin\n17\n"
+
+test abi-mutable-bytes-example-eof-and-binary {the example at end of file (no input) writes nothing and its value is the raw 0; with binary input -- NUL, 0x80, 0xff and multi-byte UTF-8 -- the bytes arrive byte for byte (it is a byte abstraction, not a text API)} -constraints {linuxX86_64 posixShell} -body {
+    set path [file join $::executableDir read-stdin]
+    if {![file exists $path]} {
+        native::executable [surface::readProgramFile [file join $::projectRoot examples linux read-stdin.bot]] $path
+    }
+    set binary "[binary format c* {0 128 255 1 0 0 254}][utf8 "héllo ☃ \U0001f600"]"
+    set eof [lindex [runPiped $path ""] 0]
+    set data [lindex [runPiped $path $binary] 0]
+    list [string trim $eof] [expr {$data eq "$binary[string length $binary]\n"}] [string length $binary]
+} -result "0 1 [expr {7 + 15}]"
+
+test abi-mutable-bytes-read-short-read-and-untouched-suffix {a real short read: 5 bytes are available for a 16-byte buffer of A's. The result is exactly 5, the returned buffer is the 5 bytes then the 11 untouched A's (no truncation, no resizing, nothing past the kernel's count overwritten), and the caller's own buffer is still 16 A's} -constraints {linuxX86_64 posixShell} -body {
+    set exe [buildExecutable short [readProgram 16]]
+    foreach mode {runIn runPiped} {
+        lassign [$mode $exe hello] stdout f3 f4
+        lappend results [string trim $stdout] $f3 $f4
+    }
+    set results
+} -result "{\[5, 16, 16\]} helloAAAAAAAAAAA AAAAAAAAAAAAAAAA {\[5, 16, 16\]} helloAAAAAAAAAAA AAAAAAAAAAAAAAAA"
+
+test abi-mutable-bytes-read-binary-prefix-and-suffix {the issue's example, binary: before AA AA AA AA AA AA, the kernel reads 01 02 03, after 01 02 03 AA AA AA -- proving the exact pointer start, the exact count, that the kernel's write reaches the returned value, and that nothing resizes} -constraints {linuxX86_64 posixShell} -body {
+    set exe [buildExecutable binprefix "${::linuxPrelude}
+buf = abi::bytes::from_bytes(abi::bytes::from_list(\[byte::from_int(170), byte::from_int(170), byte::from_int(170), byte::from_int(170), byte::from_int(170), byte::from_int(170)\]))
+r = rd(0, buf)
+\[r.result, out(3, abi::bytes::freeze(r.data)), out(4, abi::bytes::freeze(buf))\]"]
+    lassign [runIn $exe [binary format c* {1 2 3}]] stdout f3 f4
+    list $stdout [binary encode hex $f3] [binary encode hex $f4]
+} -result {{[3, 6, 6]} 010203aaaaaa aaaaaaaaaaaa}
+
+test abi-mutable-bytes-read-eof {end of file is the raw result 0, not an error and not a special object: the returned buffer is unchanged (still all A's), the length is unchanged, nothing is read in a loop} -constraints {linuxX86_64 posixShell} -body {
+    set exe [buildExecutable eof [readProgram 8]]
+    lassign [runIn $exe ""] stdout f3 f4
+    lassign [runPiped $exe ""] stdout2 f3b f4b
+    list $stdout $f3 $f4 [string trim $stdout2] $f3b
+} -result {{[0, 8, 8]} AAAAAAAA AAAAAAAA {[0, 8, 8]} AAAAAAAA}
+
+test abi-mutable-bytes-read-error-is-the-raw-negative-result {a read the kernel refuses returns its raw negative -errno as an ordinary Int, preserved exactly: an invalid descriptor is EBADF (-9), a descriptor that is not readable (the write end, descriptor 1 here is a file opened for writing) is EBADF too; the returned buffer is unchanged and nothing is mapped to an error} -constraints {linuxX86_64 posixShell} -body {
+    set bad [buildExecutable badfd [readProgram 8 1000]]
+    lassign [runIn $bad "ignored"] stdout f3 f4
+    list $stdout $f3 $f4
+} -result {{[-9, 8, 8]} AAAAAAAA AAAAAAAA}
+
+test abi-mutable-bytes-read-larger-input-reads-one-chunk {more input than the buffer: 10000 bytes for a 4096-byte buffer. The one linux::read returns exactly 4096 and mutates only that capacity, allocates nothing more, does not continue reading -- and the remaining 5904 bytes are still there for the next reader of the same open file (a shell `cat` after the program, sharing its file offset)} -constraints {linuxX86_64 posixShell} -body {
+    set exe [buildExecutable larger [readProgram 4096]]
+    set input {}
+    for {set i 0} {$i < 10000} {incr i} { append input [format %c [expr {($i * 7 + 3) % 256}]] }
+    set input [encoding convertto iso8859-1 $input]
+    set f0 [file join $::outputDir larger.in]
+    set f3 [file join $::outputDir larger.f3]
+    set f4 [file join $::outputDir larger.f4]
+    set rest [file join $::outputDir larger.rest]
+    writeBinary $f0 $input
+    set stdout [exec sh -c {{ "$0" 3>"$2" 4>"$3"; cat >"$4"; } <"$1"} $exe $f0 $f3 $f4 $rest]
+    list [string trim $stdout] [expr {[readBinary $f3] eq [string range $input 0 4095]}] [expr {[readBinary $f4] eq [string repeat A 4096]}] \
+        [expr {[readBinary $rest] eq [string range $input 4096 end]}] [string length [readBinary $rest]]
+} -result {{[4096, 4096, 4096]} 1 1 1 5904}
+
+test abi-mutable-bytes-read-does-not-change-the-callers-buffer {the caller's value is a value: after read(fd, original) the logical value `original` is unchanged and the kernel's bytes are in result.data only -- and reading the SAME original twice gives two independent results (the second read, at end of file, leaves the first result's data as it was)} -constraints {linuxX86_64 posixShell} -body {
+    set exe [buildExecutable original "${::linuxPrelude}
+original = mb(\"______\")
+r1 = rd(0, original)
+r2 = rd(0, original)
+\[r1.result, r2.result, out(3, abi::bytes::freeze(r1.data)), out(3, abi::bytes::freeze(r2.data)), out(3, abi::bytes::freeze(original)), original == mb(\"______\"), r1.data == original, r2.data == original\]"]
+    lassign [runIn $exe "abcdef"] stdout f3 f4
+    list $stdout $f3
+} -result {{[6, 0, 6, 6, 6, true, false, true]} abcdef____________}
+
+test abi-mutable-bytes-read-result-copies-are-independent {a linux::ReadResult contains a MutableBytes, so copying the result copies the value: r2 = r1, then updating the buffer derived from one leaves the other result's logical contents unchanged (value-copy semantics recurse through ordinary structs), through a List and a function parameter as well} -constraints {linuxX86_64 posixShell} -body {
+    set exe [buildExecutable resultcopy "${::linuxPrelude}
+fn bump(r: linux::ReadResult) -> linux::ReadResult:
+    linux::ReadResult {result: r.result, data: put(r.data, 0, byte::from_int(90))}
+r1 = rd(0, mb(\"......\"))
+r2 = r1
+r3 = bump(r1)
+xs = \[r1, r3\]
+r4 = bump(r2)
+\[r1.result, out(3, abi::bytes::freeze(r1.data)), out(3, abi::bytes::freeze(r2.data)), out(3, abi::bytes::freeze(r3.data)), out(3, abi::bytes::freeze(r4.data)), r1.data == r2.data, r3.data == r4.data, r1.data == r3.data, list::length(xs)\]"]
+    lassign [runIn $exe "abcdef"] stdout f3 f4
+    list $stdout $f3
+} -result {{[6, 6, 6, 6, 6, true, true, false, 2]} abcdefabcdefZbcdefZbcdef}
+
+test abi-mutable-bytes-read-is-exactly-one-syscall {the wrapper makes ONE read(2) (the program as a whole has two syscall ops: this one and linux::write's) and returns exactly the kernel's result: linux::read's NIR has exactly one syscall op and no branch, jump, label or tail call, so there is no loop or retry to fill the buffer or repeat a short read; and its register mapping is rax = 0 (SYS_read), r10 = r8 = r9 = 0} -constraints linuxX86_64 -body {
+    set nir [native::nir [bytesHir [readProgram 8]]]
+    set body [nirFunction $nir linux::read]
+    list [regexp -all {op syscall_linux_x86_64} $body] [regexp -all {\mjump\M|\mbr\M|\mtail\M|\mlabel\M} $body] \
+        [regexp -all {op syscall_linux_x86_64} $nir]
+} -result {1 0 2}
+
+# ---------------------------------------------------------------------------
+# NIR, CLIF and machine-code evidence
+
+test abi-mutable-bytes-nir-read-path {NIR of linux::read, in order: the detached local storage (abi::bytes::detach), register64(0), from_i32(fd), the writable address op over THAT storage, mutable_bytes_length of THAT storage and its from_usize encoding, ONE syscall, a keepalive of the same storage after it, the signed conversion, and the ReadResult constructed from the SAME storage -- no loop, no retry, and not the readable bridge's op} -constraints linuxX86_64 -body {
+    set nir [native::nir [bytesHir [readProgram 8]]]
+    set names [dict create]
+    foreach {- id name} [regexp -all -inline -line {^func ([0-9]+) "([^"]+)"} $nir] { dict set names $id $name }
+    set read [nirFunction $nir linux::read]
+    set seq {}
+    foreach line [split $read \n] {
+        if {[regexp {^\s+(%[0-9]+) = op (mbytesaddr|bytesaddr|syscall_linux_x86_64|keepalive) } $line -> reg op]} {
+            lappend seq $op
+        } elseif {[regexp {= call(?:multi)? ([0-9]+) } $line -> id]} {
+            lappend seq [dict get $names $id]
+        } elseif {[regexp {= structnew } $line]} {
+            lappend seq structnew
+        }
+    }
+    set copyBody [nirFunction $nir abi::bytes::detach]
+    set lengthBody [nirFunction $nir abi::bytes::mutable_length]
+    list $seq [regexp -all {op mbytesclone} $copyBody] [regexp -all {op mbyteslen} $lengthBody] [regexp -all {op syscall_linux_x86_64} $read] \
+        [regexp -all {op bytesaddr} $read]
+} -result {{abi::bytes::detach abi::x86_64::register64 abi::x86_64::from_i32 mbytesaddr abi::bytes::mutable_length abi::x86_64::from_usize syscall_linux_x86_64 keepalive abi::x86_64::to_int structnew} 1 1 1 0}
+
+test abi-mutable-bytes-nir-operands {the syscall's operands are, in register order, rax = the register64(0) word, rdi = the fd word, rsi = THE ADDRESS (the mbytesaddr result), rdx = the length word, then ONE zero constant for r10 r8 r9 -- and the address op's operand, the length call's operand, the keepalive's operand, the ReadResult's data and the detach call's result are ONE register: the buffer the kernel writes is the buffer returned} -constraints linuxX86_64 -body {
+    set nir [native::nir [bytesHir [readProgram 8]]]
+    set read [nirFunction $nir linux::read]
+    regexp {(%[0-9]+) = op mbytesaddr (%[0-9]+)} $read -> address storage
+    regexp {op syscall_linux_x86_64 (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+)} $read -> rax rdi rsi rdx r10 r8 r9
+    regexp {op keepalive (%[0-9]+)} $read -> kept
+    regexp {= structnew [0-9]+ (%[0-9]+)} $read -> dataField
+    set producer [dict create]
+    foreach line [split $read \n] {
+        if {[regexp {^\s+(%[0-9]+) = callmulti ([0-9]+) ?(%[0-9]+)?} $line -> reg id arg]} {
+            regexp "\nfunc $id \"(\[^\"\]+)\"" $nir -> name
+            dict set producer $reg [list $name $arg]
+        }
+    }
+    regexp "($r10) = (int 0) " $read -> - zeroDef
+    set copied ""
+    dict for {reg v} $producer { if {[lindex $v 0] eq "abi::bytes::detach"} { set copied $reg } }
+    set lengthArg ""
+    dict for {reg v} $producer { if {[lindex $v 0] eq "abi::bytes::mutable_length"} { set lengthArg [lindex $v 1] } }
+    list [lindex [dict get $producer $rax] 0] [lindex [dict get $producer $rdi] 0] [expr {$rsi eq $address}] \
+        [lindex [dict get $producer $rdx] 0] [expr {$r10 eq $r8 && $r8 eq $r9}] $zeroDef \
+        [expr {$kept eq $storage}] [expr {$dataField eq $storage}] [expr {$lengthArg eq $storage}] [expr {$copied eq $storage}] \
+        [expr {$rsi ne $rdx && $rsi ne $rdi && $rsi ne $rax}]
+} -result {abi::x86_64::register64 abi::x86_64::from_i32 1 abi::x86_64::from_usize 1 {int 0} 1 1 1 1 1}
+
+test abi-mutable-bytes-nir-update-and-freeze {NIR of the pure operations: set is one allocating op over its operand (a fresh object, the operand never written), copy is one op, freeze and freeze_prefix are one op each producing the immutable kind, length one read; the constructor is one op} -constraints linuxX86_64 -body {
+    set nir [native::nir [bytesHir "${::linuxPrelude}\nm = mb(\"hello\")\nn = put(m, 0, byte::from_int(88))\nf = abi::bytes::freeze(n)\np = abi::bytes::freeze_prefix(n, abi::usize(2)):\n    on UpperOverrun:\n        f\n\[abi::bytes::mutable_length(abi::bytes::zeroed(abi::usize(3))).value, out(1000, p)\]"]]
+    lmap {fn op} {abi::bytes::zeroed mbytesnew abi::bytes::from_bytes mbytesfrom abi::bytes::replace mbytesset abi::bytes::detach mbytesclone abi::bytes::freeze mbytesfreeze abi::bytes::mutable_length mbyteslen} {
+        if {[nirFunctionId $nir $fn] < 0} { list $fn missing } else { list $fn [regexp -all "op $op " [nirFunction $nir $fn]] }
+    }
+} -match glob -result {{abi::bytes::zeroed 1} {abi::bytes::from_bytes 1} {abi::bytes::replace 1} {abi::bytes::detach missing} {abi::bytes::freeze 1} {abi::bytes::mutable_length 1}}
+
+test abi-mutable-bytes-clif-keepalive-and-stack-map {CLIF of linux::read: the writable address helper, then the syscall helper, then the keepalive helper, in that order, the keepalive's operand being the very value the address helper took (the detached storage), and the syscall call's stack map naming the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint} -constraints linuxX86_64 -body {
+    set clif [native::clif [bytesHir [readProgram 8]]]
+    set helperOf [dict create]
+    foreach {- ref name} [regexp -all -inline -line {^; (u0:[0-9]+) = (rt_[a-z0-9_]+)} $clif] { dict set helperOf $ref $name }
+    regexp {; function [0-9]+ "linux::read": botlish_fn_[0-9]+} $clif header
+    set start [string first $header $clif]
+    set block [string range $clif $start [string first "\n\}" $clif $start]]
+    set fnName [dict create]
+    foreach {whole fn ref} [regexp -all -inline -line {^\s+(fn[0-9]+) = (?:colocated )?(u0:[0-9]+) } $block] {
+        if {[dict exists $helperOf $ref]} { dict set fnName $fn [dict get $helperOf $ref] }
+    }
+    set alias [dict create]
+    foreach {- a b} [regexp -all -inline -line {^\s+(v[0-9]+) -> (v[0-9]+)$} $block] { dict set alias $a $b }
+    proc root {alias v} { while {[dict exists $alias $v]} { set v [dict get $alias $v] }; return $v }
+    set calls {}
+    foreach line [split $block \n] {
+        if {[regexp {= call (fn[0-9]+)\((v[0-9]+), (v[0-9]+)} $line -> fn vm arg]} {
+            if {[dict exists $fnName $fn]} { lappend calls [list [dict get $fnName $fn] [root $alias $arg] $line] }
+        }
+    }
+    set names [lmap c $calls {lindex $c 0}]
+    set addr [lsearch -inline -index 0 $calls rt_mbytes_addr]
+    set keep [lsearch -inline -index 0 $calls rt_keepalive]
+    set syscall [lsearch -inline -index 0 $calls rt_linux_x86_64_syscall]
+    set root [lindex $addr 1]
+    set offset 0
+    regexp "store \[a-z.0-9 \]*$root, v3(?:\\+(\[0-9\]+))?\n" "$block\n" -> offset
+    if {$offset eq ""} { set offset 0 }
+    list [lsearch -all -inline -regexp $names {^rt_(mbytes_addr|keepalive|linux_x86_64_syscall)$}] \
+        [expr {[lindex $addr 1] eq [lindex $keep 1]}] [regexp "ss0\\+$offset\[,\\]\]" [lindex $syscall 2]]
+} -result {{rt_mbytes_addr rt_linux_x86_64_syscall rt_keepalive} 1 1}
+
+proc machineCalls {exe function} {
+    set disassembly [exec objdump -d --no-show-raw-insn -M intel --disassemble=$function $exe]
+    set calls {}
+    set rsi ""
+    foreach line [split $disassembly \n] {
+        if {![regexp {^\s+[0-9a-f]+:\s+(\S+)\s*(.*)$} $line -> mnemonic operands]} continue
+        if {$mnemonic eq "mov" && [regexp {^rsi,(\w+)} $operands -> source]} {
+            set rsi $source
+        } elseif {$mnemonic eq "call" && [regexp {<([^>+]+)>} $operands -> target]} {
+            lappend calls [list $target $rsi]
+        }
+    }
+    return $calls
+}
+
+test abi-mutable-bytes-machine-code-read-function {the machine code of linux::read in a standalone executable: a call to the detach function, the runtime helper taking the WRITABLE payload address, the one syscall helper, then the keepalive helper, then to_int; the address and keepalive helpers are given the SAME register (the storage) so it is live across the syscall; and there is no call to libc's read, recv, pread or syscall(3) anywhere in it -- libc exists elsewhere in the executable (the runner's own machinery), the Botlish read path never reaches it} -constraints {linuxX86_64 objdump} -body {
+    set text [readProgram 8]
+    set exe [buildExecutable machine $text]
+    set id [nirFunctionId [native::nir [bytesHir $text]] linux::read]
+    set calls [machineCalls $exe botlish_fn_$id]
+    set targets [lmap c $calls {lindex $c 0}]
+    set helpers [lsearch -all -inline -regexp $targets {^rt_}]
+    set addressSource [lindex [lsearch -inline -index 0 $calls rt_mbytes_addr] 1]
+    set keepSource [lindex [lsearch -inline -index 0 $calls rt_keepalive] 1]
+    list $helpers [expr {$addressSource ne "" && $addressSource eq $keepSource}] \
+        [llength [lsearch -all -regexp $targets {^(read|recv|recvfrom|pread|pread64|readv|syscall)(@plt)?$}]] \
+        [expr {[lsearch -regexp $targets {^botlish_fn_[0-9]+$}] >= 0}]
+} -result {{rt_mbytes_addr rt_linux_x86_64_syscall rt_keepalive rt_struct_new} 1 0 1}
+
+test abi-mutable-bytes-detach-function-machine-code {the detach (abi::bytes::detach) is the runtime's clone helper and nothing else: one call, to rt_mbytes_clone} -constraints {linuxX86_64 objdump} -body {
+    set text [readProgram 8]
+    set exe [buildExecutable machine $text]
+    set id [nirFunctionId [native::nir [bytesHir $text]] abi::bytes::detach]
+    lmap c [machineCalls $exe botlish_fn_$id] {lindex $c 0}
+} -result rt_mbytes_clone
+
+# strace is optional corroboration: the kernel itself reports the arguments of
+# the read it received (rdi = fd, rdx = the capacity) and what it wrote.
+proc straceRecords {exe input {extra {}}} {
+    set n [incr ::straceCounter]
+    set f0 [file join $::outputDir strace.in.$n]
+    writeBinary $f0 $input
+    set log [file join $::outputDir strace.log.$n]
+    exec strace -f -qq -k {*}$extra -e trace=read,write -o $log sh -c {exec "$0" 3>"$1" <"$2"} $exe [file join $::outputDir strace.fd3.$n] $f0 >/dev/null 2>@1
+    set records {}
+    set current {}
+    foreach line [split [readBinary $log] \n] {
+        if {[regexp {^(?:\[pid +[0-9]+\]|[0-9]+) +((?:read|write)\(.*)$} $line -> call]} {
+            if {$current ne ""} { lappend records $current }
+            regsub {\) +=} $call ") =" call
+            set current [list $call]
+        } elseif {[string match " > *" $line] && $current ne ""} {
+            lappend current $line
+        }
+    }
+    if {$current ne ""} { lappend records $current }
+    return $records
+}
+set straceCounter 0
+
+# The records whose call text starts with PREFIX.
+proc recordsOf {records prefix} {
+    lsearch -all -inline -glob -index 0 $records "$prefix*"
+}
+
+test abi-mutable-bytes-kernel-sees-the-stdin-read {strace of the standalone stdin example: the kernel receives read(0, "hello from stdin\n", 4096) = 17 -- fd 0 in rdi, a 4096-byte capacity in rdx, and the 17 bytes it wrote visible at rsi -- issued from the raw boundary function botlish_linux_x86_64_syscall, called by the runtime helper, called by the Botlish function (linux::read), with NO libc frame (no __read) in that call's stack; the write that follows is the already implemented raw write, also from the raw boundary} -constraints {linuxX86_64 strace posixShell} -body {
+    set exe [file join $::executableDir read-stdin]
+    if {![file exists $exe]} {
+        native::executable [surface::readProgramFile [file join $::projectRoot examples linux read-stdin.bot]] $exe
+    }
+    set records [straceRecords $exe "hello from stdin\n"]
+    set read [lindex [recordsOf $records {read(0, }] 0]
+    set write [lindex [recordsOf $records {write(1, "hello from stdin}] 0]
+    set readStack [join [lrange $read 1 end] \n]
+    set writeStack [join [lrange $write 1 end] \n]
+    list [lindex $read 0] [lindex $write 0] \
+        [regexp {botlish_linux_x86_64_syscall} $readStack] [regexp {rt_linux_x86_64_syscall} $readStack] [regexp {botlish_fn_[0-9]+} $readStack] \
+        [regexp {__read|libc\.so\.6\(read} $readStack] \
+        [regexp {botlish_linux_x86_64_syscall} $writeStack] [regexp {__write|libc\.so\.6\(write} $writeStack] \
+        [llength [recordsOf $records {read(0, }]]
+} -result {{read(0, "hello from stdin\n", 4096) = 17} {write(1, "hello from stdin\n", 17) = 17} 1 1 1 0 1 0 1}
+
+test abi-mutable-bytes-kernel-sees-binary-short-eof-and-bad-fd {strace of the read program: a binary read shows read(0, "\0\200\377...", 16) = 7 (a SHORT read: 7 < 16, exactly the bytes sent, NUL and high bytes intact); end of file shows read(0, "", 16) = 0; an invalid descriptor shows read(1000, 0x..., 8) = -1 EBADF -- in every case exactly one read from the raw boundary, no retry} -constraints {linuxX86_64 strace posixShell} -body {
+    set exe [buildExecutable straceread [readProgram 16]]
+    set binary [binary format c* {0 128 255 1 0 0 254}]
+    set bytes [lindex [recordsOf [straceRecords $exe $binary -x] {read(0, }] 0]
+    set eof [recordsOf [straceRecords $exe ""] {read(0, }]
+    set bad [buildExecutable stracebad [readProgram 8 1000]]
+    set badRecords [recordsOf [straceRecords $bad "x"] {read(1000, }]
+    set eofRecord [lindex $eof 0]
+    list [lindex $bytes 0] [llength $eof] [lindex $eofRecord 0] [llength $badRecords] [regexp {read\(1000, 0x[0-9a-f]+, 8\) = -1 EBADF} [lindex $badRecords 0 0]] \
+        [regexp {botlish_linux_x86_64_syscall} [join [lrange [lindex $badRecords 0] 1 end] \n]]
+} -result {{read(0, "\x00\x80\xff\x01\x00\x00\xfe", 16) = 7} 1 {read(0, "", 16) = 0} 1 1 1}
+
+# ---------------------------------------------------------------------------
+# GC stress: a collection attempted at every allocation site
+
+test abi-mutable-bytes-gc-stress-reads-are-exact {with BOTLISH_NATIVE_GC_STRESS=1 forty reads of 16 bytes each from one open file reassemble the file exactly: each read detaches a fresh storage, the kernel writes into it, the storage is returned and frozen, with garbage allocated between -- run so an accidental liveness assumption would show} -constraints {linuxX86_64 posixShell} -body {
+    set program "${::linuxPrelude}
+rs = loop round from 0 to 40:
+    junk = mk(doubled(\"x\", 5))
+    r = rd(0, abi::bytes::zeroed(abi::usize(16)))
+    junk2 = mb(doubled(\"y\", 4))
+    out(3, abi::bytes::freeze(r.data)) + r.result - 16 + abi::bytes::length(junk).value - 32
+rs"
+    set exe [buildExecutable gcread $program]
+    set input {}
+    for {set i 0} {$i < 640} {incr i} { append input [format %c [expr {($i * 13 + 5) % 256}]] }
+    set input [encoding convertto iso8859-1 $input]
+    set normal [runIn $exe $input]
+    set stressed [runIn $exe $input 1]
+    list [expr {$normal eq $stressed}] [expr {[lindex $stressed 1] eq $input}] [string match {\[16, 16, *} [lindex $stressed 0]]
+} -result {1 1 1}
+
+test abi-mutable-bytes-gc-stress-pure-values {the in-process native runs (specialized and unspecialized) under GC stress give the same results as without: updates, freezes, prefixes, equality and hashes of MutableBytes held in Lists and structs} -constraints linuxX86_64 -body {
+    set text "${::pure}struct Holder:\n    data: abi::bytes::MutableBytes\na = mb(\"alias\")\nxs = \[a, put(a, 0, [X]), a, abi::bytes::from_bytes(abi::bytes::from_list(pattern(100)))\]\nh = Holder {data: put(a, 4, [Z])}\n\[abi::bytes::freeze(a) == abi::bytes::from_list(str::encode_utf8(\"alias\")), xs == \[a, put(a, 0, [X]), a, abi::bytes::from_bytes(abi::bytes::from_list(pattern(100)))\], hash(a) == hash(mb(\"alias\")), is(h.data, \"aliaZ\"), is(a, \"alias\"), list::length(xs)\]"
+    set plain [outcomesOf $text $::nativeBackends]
+    withEnv BOTLISH_NATIVE_GC_STRESS 1 {set stressed [outcomesOf $text $::nativeBackends]}
+    list [expr {$plain eq $stressed}] [lindex $stressed 0 1] [lindex $stressed 1 1]
+} -result {1 {[true, true, true, true, true, 4]} {[true, true, true, true, true, 4]}}
+
+# The address of a MutableBytes nothing else references, taken one register
+# earlier than a register word that allocates a same-sized one: without the
+# keepalive the first storage would be collected (and its block reused) while
+# its address is held in a register. The raw layer is used directly, so the
+# lowering -- not the wrapper -- is what is tested, in every way the address
+# can reach the syscall within one function. The kernel READS the buffer here
+# (write(2) with a writable address), so the bytes it receives show whether the
+# storage survived.
+set livenessHeader {import abi
+import abi::bytes
+import abi::x86_64
+import byte
+import linux::abi
+import str
+
+fn doubled(s: str, k: int) -> str:
+    if k == 0:
+        s
+    else:
+        doubled(str::concat(s, s), k - 1)
+
+fn mbm(s: str) -> abi::bytes::MutableBytes:
+    abi::bytes::from_bytes(abi::bytes::from_list(str::encode_utf8(s)))
+
+fn addr_of(d: abi::bytes::MutableBytes) -> abi::x86_64::Register64:
+    abi::x86_64::from_mutable_bytes(d)
+
+fn raw_write(fd: abi::x86_64::Register64, addr: abi::x86_64::Register64, n: abi::x86_64::Register64) -> int:
+    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: fd, rsi: addr, rdx: n}))
+
+}
+set livenessFooter {
+sa = doubled("A", 11)
+sb = doubled("B", 11)
+rs = loop i from 0 to 30:
+    w(abi::i32(3), sa, sb)
+rs
+}
+set livenessShapes [dict create \
+    inline {fn w(fd: abi::I32, a: str, b: str) -> int:
+    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_mutable_bytes(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
+} \
+    locals {fn w(fd: abi::I32, a: str, b: str) -> int:
+    addr = abi::x86_64::from_mutable_bytes(mbm(a))
+    n = abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))
+    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: n}))
+} \
+    struct {fn w(fd: abi::I32, a: str, b: str) -> int:
+    regs = {rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_mutable_bytes(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}
+    abi::x86_64::to_int(linux::abi::syscall(regs))
+} \
+    helper {fn w(fd: abi::I32, a: str, b: str) -> int:
+    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr_of(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
+} \
+    join {fn w(fd: abi::I32, a: str, b: str) -> int:
+    addr = if str::length(a) > 0:
+        abi::x86_64::from_mutable_bytes(mbm(a))
+    else:
+        abi::x86_64::register64(0)
+    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
+} \
+    callee {fn w(fd: abi::I32, a: str, b: str) -> int:
+    raw_write(abi::x86_64::from_i32(fd), abi::x86_64::from_mutable_bytes(mbm(a)), abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b))))
+}]
+set livenessProgram "$livenessHeader[dict get $livenessShapes inline]$livenessFooter"
+
+dict for {shape body} $livenessShapes {
+    test abi-mutable-bytes-liveness-$shape "a MutableBytes only the raw WRITABLE address refers to survives until the syscall returns, the address reaching the syscall by the \"$shape\" route, even though a register word evaluated after the address allocates a same-sized one (a collection at every allocation): the kernel receives the first storage's 2048 A bytes, 30 times, and the NIR keeps the storage alive after the syscall" -constraints {linuxX86_64 posixShell} -body [string map [list @SHAPE@ $shape] {
+        set text "$::livenessHeader[dict get $::livenessShapes @SHAPE@]$::livenessFooter"
+        set exe [buildExecutable mliveness-@SHAPE@ $text]
+        lassign [runIn $exe "" 1] stdout f3 f4
+        set nir [native::nir [bytesHir $text]]
+        list [expr {$f3 eq [string repeat A 61440]}] [string length $f3] [expr {[regexp -all {op keepalive} [nirFunction $nir w]] >= 1}]
+    }] -result {1 61440 1}
+}
+
+test abi-mutable-bytes-liveness-mutant-without-keepalive-is-detected {the inline program with the keepalive deleted from its NIR reads a reclaimed (and reused) buffer under GC stress: this test fails the mutant, so the writable bridge's liveness theorem is actually exercised} -constraints {linuxX86_64 posixShell} -body {
+    set nir [native::nir [bytesHir $::livenessProgram]]
+    set mutant [join [lmap line [split $nir \n] {
+        if {[regexp {= op keepalive } $line]} continue
+        set line
+    }] \n]
+    set path [file join $::executableDir mliveness-mutant]
+    native::Driver executable $mutant $path
+    lassign [runIn $path "" 1] stdout f3 f4
+    list [expr {[regexp -all {op keepalive} $nir] > 0}] [expr {$f3 ne [string repeat A 61440]}] [string length $f3]
+} -result {1 1 61440}
+
+test abi-mutable-bytes-read-liveness-an-unreferenced-buffer-under-stress {the read variant: the kernel WRITES through an address whose only owner is the raw register, while a register word evaluated after it allocates a same-sized MutableBytes (GC stress). The second storage -- a fresh buffer of B's -- must be intact afterwards: the kernel's bytes went into the first storage, which stayed alive, never into a reclaimed block the second one reused} -constraints {linuxX86_64 posixShell} -body {
+    set program "${::livenessHeader}
+fn raw_read(fd: abi::I32, a: str, b: str) -> int:
+    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(0), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_mutable_bytes(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
+sa = doubled(\"A\", 11)
+sb = doubled(\"B\", 11)
+rs = loop i from 0 to 5:
+    raw_read(abi::i32(0), sa, sb)
+rs"
+    set exe [buildExecutable mreadlive $program]
+    lassign [runIn $exe [string repeat z 100000] 1] stdout f3 f4
+    set nir [native::nir [bytesHir $program]]
+    list $stdout [expr {[regexp -all {op keepalive} [nirFunction $nir raw_read]] >= 1}]
+} -result {{[2048, 2048, 2048, 2048, 2048]} 1}
+
+# ---------------------------------------------------------------------------
+# The raw layer is sharp, and the wrapper is what makes read safe
+
+test abi-mutable-bytes-raw-bridge-writes-through-the-storage-it-is-given {documented sharp edge: the raw writable bridge does NOT detach -- it exposes the machine address of the storage of the value it is given, so a raw program that hands a syscall the address of a value other values share writes through all of them. This is exactly why linux::read detaches first (abi::bytes::detach) and why the raw layer belongs to library wrappers; the safe-wrapper theorem is the next test} -constraints {linuxX86_64 posixShell} -body {
+    set program "${::linuxPrelude}
+a = mb(\"______\")
+b = a
+n = abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(0), rdi: abi::x86_64::from_i32(abi::i32(0)), rsi: abi::x86_64::from_mutable_bytes(a), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(a))}))
+\[n, out(3, abi::bytes::freeze(a)), out(3, abi::bytes::freeze(b))\]"
+    set exe [buildExecutable rawshare $program]
+    lassign [runIn $exe "abcdef"] stdout f3 f4
+    list $stdout $f3
+} -result {{[6, 6, 6]} abcdefabcdef}
+
+test abi-mutable-bytes-wrapper-read-never-writes-through-shared-values {the safe wrapper over the same situation: read(0, a) with b = a, c = [a] and a struct holding a all keep their contents -- the kernel's bytes are only in result.data} -constraints {linuxX86_64 posixShell} -body {
+    set program "${::linuxPrelude}
+struct Holder:
+    data: abi::bytes::MutableBytes
+a = mb(\"______\")
+b = a
+xs = \[a\]
+h = Holder {data: a}
+r = rd(0, a)
+\[r.result, out(3, abi::bytes::freeze(r.data)), out(3, abi::bytes::freeze(a)), out(3, abi::bytes::freeze(b)), out(3, abi::bytes::freeze(h.data)), list::length(xs), xs == \[b\]\]"
+    set exe [buildExecutable wrappershare $program]
+    lassign [runIn $exe "abcdef"] stdout f3 f4
+    list $stdout $f3
+} -result {{[6, 6, 6, 6, 6, 1, true]} abcdef__________________}
+
+# ---------------------------------------------------------------------------
+# Allocation evidence (the in-process native run; descriptor 0/3 are not those
+# of the test, so a read here is of whatever stdin the test runner has --
+# every program below reads descriptor 1000 (EBADF) or only builds values)
+
+proc allocationsOf {text} {
+    set report [native::allocationReport [bytesHir "${::linuxPrelude}\n$text"] summary]
+    list [dict get $report total allocations] \
+        [dict get $report byKind MutableBytes allocations] \
+        [dict get $report byKind Bytes allocations] \
+        [dict get $report byKind Struct allocations] \
+        [dict get $report byKind List allocations]
+}
+
+test abi-mutable-bytes-allocations {allocation evidence {total MutableBytes Bytes Struct List}: the empty MutableBytes is one shared static (0), a small and a large one are exactly one heap object each, a binding is plain sharing (no second storage; the one List is the test's own tuple), passing and returning through a function shares the storage too (it only materializes the one-field wrapper Struct where the value crosses a call), set costs one copy of the storage (and its wrapper), freeze one immutable Bytes, a read costs the detach clone beside the original (2 storages, one wrapper for the returned buffer) -- the eager copies this milestone accepts, none hidden} -constraints linuxX86_64 -body {
+    list \
+        [allocationsOf "m = abi::bytes::zeroed(abi::usize(0))\nabi::bytes::mutable_length(m).value"] \
+        [allocationsOf "m = abi::bytes::zeroed(abi::usize(16))\nabi::bytes::mutable_length(m).value"] \
+        [allocationsOf "m = abi::bytes::zeroed(abi::usize(4096))\nabi::bytes::mutable_length(m).value"] \
+        [allocationsOf "m = abi::bytes::zeroed(abi::usize(16))\nb = m\nc = b\n\[abi::bytes::mutable_length(c).value, abi::bytes::mutable_length(m).value\]"] \
+        [allocationsOf "fn id(x: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:\n    x\nm = abi::bytes::zeroed(abi::usize(16))\nabi::bytes::mutable_length(id(id(m))).value"] \
+        [allocationsOf "m = abi::bytes::zeroed(abi::usize(16))\nn = put(m, 0, byte::from_int(1))\nabi::bytes::mutable_length(n).value"] \
+        [allocationsOf "m = abi::bytes::zeroed(abi::usize(16))\nabi::bytes::length(abi::bytes::freeze(m)).value"] \
+        [allocationsOf "m = abi::bytes::zeroed(abi::usize(16))\nr = rd(1000, m)\nr.result"]
+} -result {{0 0 0 0 0} {1 1 0 0 0} {1 1 0 0 0} {2 1 0 0 1} {2 1 0 1 0} {4 2 0 2 0} {2 1 1 0 0} {3 2 0 1 0}}
+
+test abi-mutable-bytes-allocations-aggregates {a MutableBytes stored in a List is the one storage shared: a List of two copies of one value holds ONE storage object (MutableBytes column 1); a mutated copy beside it is a second (2) -- storing in an aggregate copies nothing} -constraints linuxX86_64 -body {
+    lmap text [list \
+        "m = abi::bytes::zeroed(abi::usize(16))\nxs = \[m, m\]\nloop x in xs:\n    abi::bytes::mutable_length(x).value" \
+        "m = abi::bytes::zeroed(abi::usize(16))\nxs = \[m, put(m, 0, byte::from_int(1))\]\nloop x in xs:\n    abi::bytes::mutable_length(x).value"] {
+        lindex [allocationsOf $text] 1
+    }
+} -result {1 2}
+
+test abi-mutable-bytes-heap-object-layout {the heap storage is ONE allocation of 16 header bytes (kind, marked, static flag, then the 8-byte length) plus the payload, in-line, with no pointer to a second block: a 4096-byte MutableBytes is a 4112-byte object, reported as its own kind} -constraints linuxX86_64 -body {
+    set report [native::allocationReport [bytesHir "${::linuxPrelude}\nm = abi::bytes::zeroed(abi::usize(4096))\nabi::bytes::mutable_length(m).value"] summary]
+    list [dict get $report byKind MutableBytes allocations] [dict get $report byKind MutableBytes headerBytes] \
+        [dict get $report byKind MutableBytes payloadBytes] [dict get $report byKind MutableBytes allocatedBytes]
+} -result {1 16 4096 4112}
+
+test abi-mutable-bytes-no-static-mutable-constants {a compile-time-known mutable value is never a shared writable static: two identical mutable_bytes_from_bytes of the same constant Bytes, and two mutable_bytes(3), are FOUR separate heap storages (an immutable constant Bytes, by contrast, is one static object): no unrelated logical values can share writable static storage} -constraints linuxX86_64 -body {
+    list \
+        [lindex [allocationsOf "a = mb(\"abc\")\nb = mb(\"abc\")\n\[abi::bytes::mutable_length(a).value, abi::bytes::mutable_length(b).value\]"] 1] \
+        [lindex [allocationsOf "a = abi::bytes::zeroed(abi::usize(3))\nb = abi::bytes::zeroed(abi::usize(3))\n\[abi::bytes::mutable_length(a).value, abi::bytes::mutable_length(b).value\]"] 1] \
+        [lindex [allocationsOf "a = abi::bytes::from_list(str::encode_utf8(\"abc\"))\nb = abi::bytes::from_list(str::encode_utf8(\"abc\"))\n\[abi::bytes::length(a).value, abi::bytes::length(b).value\]"] 2]
+} -result {2 2 0}
+
+test abi-mutable-bytes-raw-write-is-a-memory-barrier {the raw syscall is a strong memory/effect barrier and read is not special-cased: a freeze taken BEFORE a raw read into a buffer shows the old bytes, a freeze taken AFTER shows the kernel's bytes -- neither is cached across the syscall nor moved over it, specialized or not} -constraints {linuxX86_64 posixShell} -body {
+    set program "${::linuxPrelude}
+m = mb(\"______\")
+before = abi::bytes::freeze(m)
+n = abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(0), rdi: abi::x86_64::from_i32(abi::i32(0)), rsi: abi::x86_64::from_mutable_bytes(m), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(m))}))
+after = abi::bytes::freeze(m)
+\[n, out(3, before), out(3, after), before == after\]"
+    set exe [buildExecutable barrier $program]
+    lassign [runIn $exe "abcdef"] stdout f3 f4
+    list $stdout $f3
+} -result {{[6, 6, 6, false]} ______abcdef}
+
+removeDirectory abi-mutable-bytes-executables
+removeDirectory abi-mutable-bytes-outputs
+removeDirectory abi-mutable-bytes-scratch
+cleanupTests

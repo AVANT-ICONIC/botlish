@@ -880,7 +880,10 @@ construction (their runtime helpers always allocate), or an `op` whose
 helper `op_may_allocate` marks as possibly allocating (`iadd`/`isub`/`imul`
 for their BigInt fallback, `substr`, `decodecharat`, `strlower`, `strcat`,
 `listnew`, `listappend`, `mutarrayallocate`, `mutarrayfreeze`, `mkok`,
-`mkerror`). Every other op (comparisons, `imod`, `strlen`, `listget`,
+`mkerror`; `imod` too, for a BigInt remainder -- first listed here as `NoGc`,
+which left a value live across a BigInt `mod` unrooted until the golden test
+framework's `gf-describe` hit it under GC stress). Every other op
+(comparisons, `strlen`, `listget`,
 `mutarrayget`/`set`/`copy`/`capacity`, `regioncheck`/`regioneq`,
 `strbytelen`, the raw `r*` ops, `isint`/`isok`/etc.) is `NoGc`, per
 `runtime/ops.rs`'s own documented table — the metadata source item 56 asked

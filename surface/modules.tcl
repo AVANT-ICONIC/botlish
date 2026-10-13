@@ -169,8 +169,11 @@ proc surface::modules::Error {kind span message} {
 # {NAMESPACE NAME SPAN KIND} of every mod::name reference in AST (a program
 # node, or any node -- used both for a whole file and, recursively, isn't
 # needed below this), in source order. KIND is value (an expression
-# `ns::name`), struct (a construction `ns::Name {...}`) or type (a qualified
-# type annotation `ns::Name`: a struct or a source-defined `type`).
+# `ns::name`), struct (a construction `ns::Name {...}`), type (a qualified
+# type annotation `ns::Name`: a struct or a source-defined `type`) or error
+# (a qualified error `ns::Name` in a `fail`, an `on` handler, an `errors`
+# clause or a function type's `errors` list: ERROR-PAYLOADS.md, "Module-
+# qualified error identity").
 proc surface::modules::QualifiedRefs {ast} {
     set found {}
     QualifiedRefsWalk $ast found
@@ -184,6 +187,14 @@ proc surface::modules::QualifiedRefsWalk {node foundVar} {
             lappend found [list [dict get $node namespace] [dict get $node name] [dict get $node span] value]
             return
         }
+        fail {
+            ErrorRef [dict get $node name] [dict get $node nameSpan] found
+        }
+        handledcall {
+            foreach handler [dict get $node handlers] {
+                ErrorRef [dict get $handler name] [dict get $handler nameSpan] found
+            }
+        }
         namedstruct {
             # NAMESPACE::Struct { ... }: a reference to the struct type
             # (STRUCTS.md); its field values may hold more references.
@@ -193,15 +204,43 @@ proc surface::modules::QualifiedRefsWalk {node foundVar} {
             }
         }
         function {
-            # Qualified struct types in parameter and result annotations.
+            # Qualified struct types in parameter and result annotations,
+            # qualified errors in the `errors` clause.
+            foreach pair [dict get $node errors] {
+                ErrorRef {*}$pair found
+            }
             foreach param [dict get $node params] {
                 TypeRefs [lindex $param 2] [lindex $param 3] found
             }
             TypeRefs [dict get $node resultType] [dict get $node resultTypeSpan] found
+            if {[dict exists $node proves]} {
+                foreach clause [dict get $node proves] {
+                    TypeRefs [dict get $clause type] [dict get $clause typeSpan] found
+                }
+            }
+        }
+        typedecl {
+            # A refinement's carrier (REFINEMENT-VALUES.md) may be a
+            # qualified type of another module.
+            if {[dict exists $node form] && [dict get $node form] eq "refined"} {
+                TypeRefs [dict get $node carrier] [dict get $node carrierSpan] found
+            }
         }
         structdecl {
             foreach field [dict get $node fields] {
                 TypeRefs [dict get $field type] [dict get $field typeSpan] found
+            }
+        }
+        traitdecl {
+            # A requirement's parameter and result types (TRAITS.md).
+            foreach r [dict get $node requirements] {
+                foreach param [dict get $r params] {
+                    TypeRefs [lindex $param 2] [lindex $param 3] found
+                }
+                TypeRefs [dict get $r resultType] [dict get $r resultTypeSpan] found
+                foreach pair [dict get $r errors] {
+                    ErrorRef {*}$pair found
+                }
             }
         }
     }
@@ -237,8 +276,20 @@ proc surface::modules::ImportHeader {source} {
     return [join [lmap ns [lsort $needed] {string cat "import " $ns "\n"}] ""]
 }
 
+# Appends the reference {NAMESPACE NAME SPAN error} of the error spelling
+# SPELLING (located at SPAN) when it is qualified: `ns::Name`, `a::b::Name`.
+proc surface::modules::ErrorRef {spelling span foundVar} {
+    upvar 1 $foundVar found
+    set cut [string last :: $spelling]
+    if {$cut > 0} {
+        lappend found [list [string range $spelling 0 [expr {$cut - 1}]] \
+            [string range $spelling [expr {$cut + 2}] end] $span error]
+    }
+}
+
 # Appends the qualified type names ("ns::Name") TYPE (a surface::
-# parser::TypeExpr result) mentions, each located at SPAN.
+# parser::TypeExpr result) mentions, each located at SPAN -- and the
+# qualified errors of a function type's `errors` list.
 proc surface::modules::TypeRefs {type span foundVar} {
     upvar 1 $foundVar found
     if {$type eq ""} {
@@ -256,6 +307,7 @@ proc surface::modules::TypeRefs {type span foundVar} {
     if {$head eq "fn"} {
         foreach t [dict get $arg args] { TypeRefs $t $span found }
         TypeRefs [dict get $arg return] $span found
+        foreach error [dict get $arg errors] { ErrorRef $error $span found }
         return
     }
     TypeRefs $arg $span found
@@ -268,6 +320,9 @@ proc surface::modules::TypeRefs {type span foundVar} {
 # changes, so a module's diagnostics and source locations still point at
 # its own file, never at the file that happened to reference it.
 proc surface::modules::RemapOrigin {origin fileId} {
+    if {$origin eq ""} {
+        return ""
+    }
     dict set origin file $fileId
     return $origin
 }
@@ -297,6 +352,26 @@ proc surface::modules::RemapFile {node fileId} {
             dict set node params $params
             dict set node flags [RemapFlags [expr {[dict exists $node flags] ? [dict get $node flags] : {}}] $fileId]
             dict set node body [lmap child [dict get $node body] {RemapFile $child $fileId}]
+            # The clauses that carry origins: context parameters (their
+            # loads are nodes at the parameter's origin), proof clauses and
+            # the resume clause.
+            if {[dict exists $node contextParams]} {
+                dict set node contextParams [lmap c [dict get $node contextParams] {
+                    lassign $c name origin type typeOrigin
+                    list $name [RemapOrigin $origin $fileId] $type [RemapOrigin $typeOrigin $fileId]
+                }]
+            }
+            if {[dict exists $node proofs]} {
+                dict set node proofs [lmap clause [dict get $node proofs] {
+                    dict set clause paramOrigin [RemapOrigin [dict get $clause paramOrigin] $fileId]
+                    dict set clause typeOrigin [RemapOrigin [dict get $clause typeOrigin] $fileId]
+                    set clause
+                }]
+            }
+            if {[dict exists $node resume]} {
+                lassign [dict get $node resume] type origin
+                dict set node resume [list $type [RemapOrigin $origin $fileId]]
+            }
             # paramTypes carries no origin of its own (plain type-name
             # strings, resolved later by hir/resolve.tcl): nothing to remap.
         }
@@ -374,10 +449,21 @@ proc surface::modules::RemapFile {node fileId} {
         return - ok - error {
             dict set node value [RemapFile [dict get $node value] $fileId]
         }
-        break {
-            if {[dict get $node value] ne ""} {
+        break - fail {
+            if {[dict exists $node value] && [dict get $node value] ne ""} {
                 dict set node value [RemapFile [dict get $node value] $fileId]
             }
+        }
+        static {
+            # STATIC-COMPILE.md: the site's own origins locate its body, and
+            # so which diagnostics are its (hir/static.tcl).
+            dict set node operationOrigin [RemapOrigin [dict get $node operationOrigin] $fileId]
+            dict set node bodyOrigin [RemapOrigin [dict get $node bodyOrigin] $fileId]
+            dict set node body [lmap child [dict get $node body] {RemapFile $child $fileId}]
+            dict set node deferred [lmap d [dict get $node deferred] {
+                dict set d origin [RemapOrigin [dict get $d origin] $fileId]
+                set d
+            }]
         }
     }
     return $node
@@ -411,9 +497,16 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan} {
             Error INVALID-TOPLEVEL [dict get $statement span] \
                 "module \"$name\" ($path): a struct destructuring is not allowed at module top level (module bindings are context-free immutable values, and a struct value is not one: MODULE-BINDINGS.md); destructure inside a function"
         }
-        if {[dict get $statement kind] ni {function bind typedecl errordecl structdecl}} {
+        if {[dict get $statement kind] eq "with"} {
+            # `with context EXPR` (CONTEXTS.md): installation exists only in
+            # the entry program's top-level scope -- its own diagnostic, the
+            # one HIR gives an installation anywhere else.
+            Error CONTEXT-INSTALLATION-UNSUPPORTED [dict get $statement span] \
+                "context installation is currently supported only in the entry program's top-level scope, as a statement (this one is inside a module: \"$name\", $path)"
+        }
+        if {[dict get $statement kind] ni {function bind typedecl errordecl structdecl enumdecl traitdecl}} {
             Error INVALID-TOPLEVEL [dict get $statement span] \
-                "module \"$name\" ($path): only function definitions, immutable bindings, type declarations, struct declarations and error declarations are allowed at module top level, found a \"[dict get $statement kind]\" statement"
+                "module \"$name\" ($path): only function definitions, immutable bindings, type declarations, struct declarations, enum declarations, trait declarations and error declarations are allowed at module top level, found a \"[dict get $statement kind]\" statement"
         }
     }
     CheckNativeMembers $ast $name "module \"$name\" ($path)"
@@ -423,7 +516,7 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan} {
     dict incr state nextFile
     CollectAndLoad state $ast $name
     set functionNames [lmap statement [dict get $ast body] {
-        if {[dict get $statement kind] in {typedecl errordecl structdecl}} continue
+        if {[dict get $statement kind] in {typedecl errordecl structdecl enumdecl traitdecl}} continue
         dict get $statement name
     }]
     dict set state loaded $name $functionNames
@@ -435,20 +528,36 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan} {
     }]
     # The source-defined types (`type`) and errors it declares: a type is a
     # member of the namespace, `NAME::Type` (hir/sourcetypes.tcl), what
-    # `import type NAME::Type` names; errors stay program-global names.
+    # `import type NAME::Type` names; so is an error, `NAME::Error`
+    # (hir/errordecls.tcl), named qualified from outside the module.
     dict set state loadedTypes $name [lmap statement [dict get $ast body] {
         if {[dict get $statement kind] ne "typedecl"} continue
+        dict get $statement name
+    }]
+    # The enums it declares (ENUMS.md): nominal types of the namespace like
+    # its structs, named `NAME::Enum`, importable with `import type` like its
+    # types; a case is `NAME::Enum::Case` (EnumQualifier).
+    dict set state loadedEnums $name [lmap statement [dict get $ast body] {
+        if {[dict get $statement kind] ne "enumdecl"} continue
         dict get $statement name
     }]
     dict set state loadedErrors $name [lmap statement [dict get $ast body] {
         if {[dict get $statement kind] ne "errordecl"} continue
         dict get $statement name
     }]
-    lassign [surface::lower::SplitTypeDecls [dict get $ast body] $name] executable decls errorDecls structDecls
+    # The traits it declares (TRAITS.md): type-level members of the
+    # namespace like its types, named `NAME::Trait` and importable with
+    # `import type`.
+    dict set state loadedTraits $name [lmap statement [dict get $ast body] {
+        if {[dict get $statement kind] ne "traitdecl"} continue
+        dict get $statement name
+    }]
+    lassign [surface::lower::SplitTypeDecls [dict get $ast body] $name] executable decls errorDecls structDecls traitDecls
     dict set state typeDecls [concat [dict get $state typeDecls] $decls]
     dict set state errorDecls [concat [dict get $state errorDecls] $errorDecls]
     dict set state structDecls [concat [dict get $state structDecls] $structDecls]
-    set statements [lmap node [surface::lower::Sequence $executable] {RemapFile $node $fileId}]
+    dict set state traitDecls [concat [dict get $state traitDecls] $traitDecls]
+    set statements [lmap node [LowerStatements $state $name $executable] {RemapFile $node $fileId}]
     set origin [RemapOrigin [surface::lower::Origin [dict get $ast span] "namespace"] $fileId]
     set section [dict create namespace $name nodes $statements origin $origin \
         imports [dict get $state imports $name]]
@@ -549,7 +658,7 @@ proc surface::modules::CheckImports {stateVar ast own} {
     set typeSpans [dict create]
     set local [dict create]
     foreach statement [dict get $ast body] {
-        if {[dict get $statement kind] in {typedecl structdecl} && ![dict exists $local [dict get $statement name]]} {
+        if {[dict get $statement kind] in {typedecl structdecl enumdecl traitdecl} && ![dict exists $local [dict get $statement name]]} {
             dict set local [dict get $statement name] [dict get $statement nameSpan]
         }
     }
@@ -590,7 +699,7 @@ proc surface::modules::CheckImports {stateVar ast own} {
         if {$hasFile} {
             LoadNamespace state $ns $span
         }
-        set typeNames [expr {$hasFile ? [dict get $state loadedTypes $ns] : {}}]
+        set typeNames [expr {$hasFile ? [concat [dict get $state loadedTypes $ns] [dict get $state loadedTraits $ns] [dict get $state loadedEnums $ns]] : {}}]
         if {$name ni $typeNames} {
             set functions [expr {$hasFile ? [dict get $state loaded $ns] : {}}]
             set structs [expr {$hasFile ? [dict get $state loadedStructs $ns] : {}}]
@@ -641,64 +750,297 @@ proc surface::modules::CollectAndLoad {stateVar ast {key ""}} {
     set env [CheckImports state $ast $own]
     dict set state imports $key $env
     set imported [dict get $env namespaces]
+    # STATIC-COMPILE.md: a file using a static intrinsic names the error its
+    # rejected blocks complete with, compiler::CompilerError -- an ordinary
+    # namespaced declaration, so the file imports its namespace like any
+    # other (no implicit import).
+    set sites [StaticSites $ast]
+    if {$sites ne {} && "compiler" ni $imported && $own ne "compiler"} {
+        set site [lindex $sites 0]
+        Error MISSING-IMPORT [dict get $site staticSpan] \
+            "namespace \"compiler\" is not imported; add `import compiler` to use `static [dict get $site operation]:` (a block it rejects completes with the error compiler::CompilerError)"
+    }
     foreach ref [QualifiedRefs $ast] {
-        lassign $ref namespaceName symbolName span refKind
-        if {$namespaceName eq $own && $own ne ""
-                && $refKind in {value} && [core::native::isQualifiedNative "${namespaceName}::$symbolName"]} {
-            # A reference to an intrinsic of the file's own namespace
-            # (lib/list.bot's own list::at): no import, nothing to load.
+        set site [StaticSiteOf $sites [lindex $ref 2]]
+        if {$site eq ""} {
+            CheckRef state $ast $own $key $env $imported $ref
             continue
         }
-        if {$namespaceName eq $own && $own ne "" && $key ne ""} {
-            # Own namespace: members of the module being compiled need no
-            # import (the HIR resolver checks the member is established).
-            continue
-        }
-        if {$namespaceName ni $imported} {
-            if {![NamespaceExists $namespaceName]} {
-                Error UNKNOWN-NAMESPACE $span "unknown namespace \"$namespaceName\": no such module file [ModulePath $namespaceName] and no intrinsics of that namespace"
+        # A reference inside a static intrinsic's block: the rejection is
+        # that block's, not the file's (STATIC-COMPILE.md). Only this
+        # loader's own located diagnostics are deferred; anything else is
+        # a failure of the compiler and propagates.
+        try {
+            CheckRef state $ast $own $key $env $imported $ref
+        } trap {SURFACE MODULE} {message options} {
+            set span [lindex $ref 2]
+            set prefix "[surface::ast::location $span]: "
+            if {[string first $prefix $message] == 0} {
+                set message [string range $message [string length $prefix] end]
             }
-            set note ""
-            set related [RelatedImport $namespaceName $imported]
-            if {$related ne ""} {
-                set note " (imports are exact: `import $related` does not import \"$namespaceName\")"
-            }
-            Error MISSING-IMPORT $span "namespace \"$namespaceName\" is not imported; add `import $namespaceName` to use `${namespaceName}::$symbolName`$note"
-        }
-        set natives [IntrinsicMembers $namespaceName]
-        if {$refKind eq "value" && [core::native::isQualifiedNative "${namespaceName}::$symbolName"]} {
-            # A root native registered under a qualified name
-            # (linux::abi::syscall, str::concat): no module file defines it,
-            # so nothing more is loaded (surface/lower.tcl lowers it to a
-            # root reference).
-            continue
-        }
-        if {![file exists [ModulePath $namespaceName]]} {
-            # A namespace whose only members are intrinsics (str): there is
-            # no module file, so an unknown member is reported against the
-            # intrinsics, not as a missing file.
-            Error UNKNOWN-SYMBOL $span \
-                "namespace \"$namespaceName\" has no [expr {$refKind eq "value" ? "definition" : "type"}] \"$symbolName\" (its members are the intrinsics: [join $natives {, }])"
-        }
-        # The import loaded the module.
-        if {$refKind in {struct type}} {
-            set structNames [dict get $state loadedStructs $namespaceName]
-            set typeNames [expr {$refKind eq "type" ? [dict get $state loadedTypes $namespaceName] : {}}]
-            if {$symbolName ni $structNames && $symbolName ni $typeNames} {
-                set declared [lsort [concat $structNames $typeNames]]
-                Error UNKNOWN-SYMBOL $span \
-                    "namespace \"$namespaceName\" has no [expr {$refKind eq "type" ? "type" : "struct"}] \"$symbolName\" (it declares: [expr {$declared eq "" ? "no types" : [join $declared {, }]}])"
-            }
-            continue
-        }
-        set functionNames [dict get $state loaded $namespaceName]
-        if {$symbolName ni $functionNames
-                && !([string index $symbolName end] eq "?"
-                    && [string range $symbolName 0 end-1] in [dict get $state loadedTypes $namespaceName])} {
-            Error UNKNOWN-SYMBOL $span \
-                "namespace \"$namespaceName\" has no definition \"$symbolName\" (it defines: [join [lsort [concat $functionNames $natives]] {, }])"
+            set path [list staticDeferred $key [dict get $site id]]
+            set deferred [expr {[dict exists $state {*}$path] ? [dict get $state {*}$path] : {}}]
+            lappend deferred [dict create kind [lindex [dict get $options -errorcode] 2] \
+                message $message span $span]
+            dict set state {*}$path $deferred
         }
     }
+}
+
+# Checks the qualified reference REF ({NAMESPACE NAME SPAN KIND}, QualifiedRefs)
+# of the file AST of module OWN (KEY as CollectAndLoad's, ENV its import
+# environment, IMPORTED its imported namespaces): Error unless it is
+# authorized and names a real member.
+proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
+    upvar 1 $stateVar state
+    lassign $ref namespaceName symbolName span refKind
+    if {$refKind eq "value"} {
+        # `Enum::Case` (ENUMS.md): a qualifier that names an enum type
+        # visible in this file makes the reference a case of it, decided
+        # (and the case checked) by HIR resolution -- never a namespace
+        # member, and never a reason to load anything.
+        set enum [EnumQualifier state $ast $own $env $namespaceName]
+        if {$enum ne ""} {
+            if {$namespaceName in $imported || [NamespaceExists $namespaceName]} {
+                # (Imported or not: `list::length` must never mean an
+                # intrinsic in one file and a case in another because
+                # of an enum's name.)
+                Error AMBIGUOUS-QUALIFIER $span \
+                    "\"${namespaceName}::$symbolName\" is ambiguous: \"$namespaceName\" names both a namespace and the enum type $enum visible in this file (a qualifier is never resolved by precedence; rename the enum)"
+            }
+            return
+        }
+    }
+    if {$namespaceName eq $own && $own ne ""
+            && $refKind in {value} && [core::native::isQualifiedNative "${namespaceName}::$symbolName"]} {
+        # A reference to an intrinsic of the file's own namespace
+        # (lib/list.bot's own list::at): no import, nothing to load.
+        return
+    }
+    if {$namespaceName eq $own && $own ne "" && $key ne ""} {
+        # Own namespace: members of the module being compiled need no
+        # import (the HIR resolver checks the member is established).
+        return
+    }
+    if {$refKind eq "struct" && [EnumQualifier state $ast $own $env $namespaceName] ne ""} {
+        # `Enum::Case { ... }` (ENUMS.md): a payload-free case is a
+        # value, written without an initializer.
+        Error NOT-A-STRUCT $span \
+            "\"${namespaceName}::$symbolName\" names a case of the enum $namespaceName, not a struct: a payload-free case is written ${namespaceName}::$symbolName, without braces (payload-bearing cases are not supported)"
+    }
+    if {$namespaceName ni $imported} {
+        if {$refKind eq "value" && ![NamespaceExists $namespaceName]} {
+            # `Struct::Case`, `int::Case`: a case qualified by a type that
+            # is not an enum (ENUMS.md). Types are not namespaces.
+            set other [OtherTypeQualifier state $ast $own $env $namespaceName]
+            if {$other ne ""} {
+                Error NOT-AN-ENUM $span \
+                    "\"$namespaceName\" is $other, not an enum: only an enum type qualifies a case (\"Enum::Case\"), and a type is not a namespace, so \"${namespaceName}::$symbolName\" names nothing"
+            }
+        }
+        if {![NamespaceExists $namespaceName]} {
+            set cut [string last :: $namespaceName]
+            if {$refKind eq "value" && $cut > 0} {
+                # `ns::Enum::Case` (ENUMS.md) whose module is not
+                # imported: the import is what is missing, as for any
+                # member of that module.
+                set prefix [string range $namespaceName 0 [expr {$cut - 1}]]
+                if {$prefix ni $imported && $prefix ne $own && [NamespaceExists $prefix]} {
+                    Error MISSING-IMPORT $span "namespace \"$prefix\" is not imported; add `import $prefix` to use `${namespaceName}::$symbolName`"
+                }
+            }
+            Error UNKNOWN-NAMESPACE $span "unknown namespace \"$namespaceName\": no such module file [ModulePath $namespaceName] and no intrinsics of that namespace[expr {$refKind eq "value" ? " (nor is \"$namespaceName\" an enum type visible in this file: a case is written Enum::Case)" : ""}]"
+        }
+        set note ""
+        set related [RelatedImport $namespaceName $imported]
+        if {$related ne ""} {
+            set note " (imports are exact: `import $related` does not import \"$namespaceName\")"
+        }
+        Error MISSING-IMPORT $span "namespace \"$namespaceName\" is not imported; add `import $namespaceName` to use `${namespaceName}::$symbolName`$note"
+    }
+    set natives [IntrinsicMembers $namespaceName]
+    if {$refKind eq "value" && [core::native::isQualifiedNative "${namespaceName}::$symbolName"]} {
+        # A root native registered under a qualified name
+        # (linux::abi::syscall, str::concat): no module file defines it,
+        # so nothing more is loaded (surface/lower.tcl lowers it to a
+        # root reference).
+        return
+    }
+    if {![file exists [ModulePath $namespaceName]]} {
+        # A namespace whose only members are intrinsics (str): there is
+        # no module file, so an unknown member is reported against the
+        # intrinsics, not as a missing file.
+        Error UNKNOWN-SYMBOL $span \
+            "namespace \"$namespaceName\" has no [dict get {value definition type type struct type error error} $refKind] \"$symbolName\" (its members are the intrinsics: [join $natives {, }])"
+    }
+    # The import loaded the module.
+    if {$refKind eq "error"} {
+        # A module-qualified error (ERROR-PAYLOADS.md): one the module
+        # declares itself, canonically `NAMESPACE::Name`.
+        set errorNames [dict get $state loadedErrors $namespaceName]
+        if {$symbolName ni $errorNames} {
+            Error UNKNOWN-SYMBOL $span \
+                "namespace \"$namespaceName\" has no error \"$symbolName\" (it declares: [expr {$errorNames eq "" ? "no errors" : [join [lsort $errorNames] {, }]}])"
+        }
+        return
+    }
+    if {$refKind in {struct type}} {
+        set structNames [dict get $state loadedStructs $namespaceName]
+        set typeNames [expr {$refKind eq "type" ? [concat [dict get $state loadedTypes $namespaceName] [dict get $state loadedTraits $namespaceName] [dict get $state loadedEnums $namespaceName]] : {}}]
+        if {$symbolName ni $structNames && $symbolName ni $typeNames} {
+            set declared [lsort [concat $structNames $typeNames]]
+            Error UNKNOWN-SYMBOL $span \
+                "namespace \"$namespaceName\" has no [expr {$refKind eq "type" ? "type" : "struct"}] \"$symbolName\" (it declares: [expr {$declared eq "" ? "no types" : [join $declared {, }]}])"
+        }
+        return
+    }
+    set functionNames [dict get $state loaded $namespaceName]
+    if {$symbolName ni $functionNames
+            && !([string index $symbolName end] eq "?"
+                && [string range $symbolName 0 end-1] in [dict get $state loadedTypes $namespaceName])} {
+        Error UNKNOWN-SYMBOL $span \
+            "namespace \"$namespaceName\" has no definition \"$symbolName\" (it defines: [join [lsort [concat $functionNames $natives]] {, }])"
+    }
+}
+
+# The static intrinsics of AST (STATIC-COMPILE.md), outermost first in source
+# order: {id operation staticSpan bodySpan} dicts.
+proc surface::modules::StaticSites {ast} {
+    set sites {}
+    StaticSitesWalk $ast sites
+    return $sites
+}
+
+proc surface::modules::StaticSitesWalk {node sitesVar} {
+    upvar 1 $sitesVar sites
+    if {[dict get $node kind] eq "static"} {
+        lappend sites [dict create id [dict get $node id] operation [dict get $node operation] \
+            staticSpan [dict get $node staticSpan] bodySpan [dict get $node body span]]
+    }
+    foreach child [surface::ast::Children $node] {
+        StaticSitesWalk $child sites
+    }
+}
+
+# The innermost of SITES (StaticSites) whose block holds SPAN, or "".
+proc surface::modules::StaticSiteOf {sites span} {
+    set found ""
+    set best -1
+    set at [dict get $span start]
+    foreach site $sites {
+        set body [dict get $site bodySpan]
+        if {$at >= [dict get $body start] && $at <= [dict get $body end] && [dict get $body start] > $best} {
+            set found $site
+            set best [dict get $body start]
+        }
+    }
+    return $found
+}
+
+# The loader's deferred diagnostics of the static intrinsics of the file of
+# module KEY ("" for the entry program): AST node id -> {kind message span}
+# dicts, what surface::lower::staticDeferred holds while that file is
+# lowered.
+proc surface::modules::StaticDeferred {state key} {
+    if {[dict exists $state staticDeferred $key]} {
+        return [dict get $state staticDeferred $key]
+    }
+    return [dict create]
+}
+
+# The syntax nodes of the executable STATEMENTS of the file of module KEY:
+# surface::lower::Sequence, with that file's deferred static diagnostics.
+proc surface::modules::LowerStatements {state key statements} {
+    set saved $::surface::lower::staticDeferred
+    set ::surface::lower::staticDeferred [StaticDeferred $state $key]
+    try {
+        return [surface::lower::Sequence $statements]
+    } finally {
+        set ::surface::lower::staticDeferred $saved
+    }
+}
+
+# The canonical identity of the enum the type spelling QUALIFIER (the part of
+# a value reference `QUALIFIER::NAME` before its last `::`) denotes in the
+# file AST of module OWN ("" for the entry program), whose import
+# environment is ENV, or "" if it denotes none (ENUMS.md). The visibility of
+# any nominal type: a bare name the file declares itself or binds with
+# `import type`, or `NS::Enum` where NS is the file's own namespace or one it
+# imports exactly and NS declares Enum.
+proc surface::modules::EnumQualifier {stateVar ast own env qualifier} {
+    upvar 1 $stateVar state
+    if {[string first :: $qualifier] < 0} {
+        foreach statement [dict get $ast body] {
+            if {[dict get $statement kind] eq "enumdecl" && [dict get $statement name] eq $qualifier} {
+                return [expr {$own eq "" ? $qualifier : "${own}::$qualifier"}]
+            }
+        }
+        set types [dict get $env types]
+        if {[dict exists $types $qualifier]} {
+            set canonical [dict get $types $qualifier]
+            set i [string last :: $canonical]
+            set ns [string range $canonical 0 [expr {$i - 1}]]
+            set name [string range $canonical [expr {$i + 2}] end]
+            if {[dict exists $state loadedEnums $ns] && $name in [dict get $state loadedEnums $ns]} {
+                return $canonical
+            }
+        }
+        return ""
+    }
+    set i [string last :: $qualifier]
+    set ns [string range $qualifier 0 [expr {$i - 1}]]
+    set name [string range $qualifier [expr {$i + 2}] end]
+    if {$ns ne "" && $ns eq $own} {
+        foreach statement [dict get $ast body] {
+            if {[dict get $statement kind] eq "enumdecl" && [dict get $statement name] eq $name} {
+                return $qualifier
+            }
+        }
+        return ""
+    }
+    if {$ns in [dict get $env namespaces] && [dict exists $state loadedEnums $ns]
+            && $name in [dict get $state loadedEnums $ns]} {
+        return $qualifier
+    }
+    return ""
+}
+
+# "a struct", "a trait", "a type" or "a built-in type" when the type
+# spelling QUALIFIER names a visible type of that kind that is not an enum
+# (in the file AST of module OWN with import environment ENV), else "": the
+# qualifier of a `QUALIFIER::NAME` value reference that is a type but cannot
+# qualify a case (NOT-AN-ENUM).
+proc surface::modules::OtherTypeQualifier {stateVar ast own env qualifier} {
+    upvar 1 $stateVar state
+    if {[string first :: $qualifier] < 0} {
+        foreach statement [dict get $ast body] {
+            if {[dict exists $statement name] && [dict get $statement name] eq $qualifier} {
+                switch -- [dict get $statement kind] {
+                    structdecl { return "a struct" }
+                    traitdecl  { return "a trait" }
+                    typedecl   { return "a type" }
+                }
+            }
+        }
+        if {[dict exists $env types $qualifier]} {
+            return "an imported type"
+        }
+        if {$qualifier ne "enum" && ([IsBuiltinTypeName $qualifier] || $qualifier in {int str bool unit})} {
+            # (`enum` is the internal kind of every enum value, never a
+            # type a program can name: no namespace of it either.)
+            return "a built-in type"
+        }
+        return ""
+    }
+    set i [string last :: $qualifier]
+    set ns [string range $qualifier 0 [expr {$i - 1}]]
+    set name [string range $qualifier [expr {$i + 2}] end]
+    if {$ns in [dict get $env namespaces] && [dict exists $state loadedStructs $ns]} {
+        if {$name in [dict get $state loadedStructs $ns]} { return "a struct" }
+        if {$name in [dict get $state loadedTraits $ns]} { return "a trait" }
+        if {$name in [dict get $state loadedTypes $ns]} { return "a type" }
+    }
+    return ""
 }
 
 # The initial loader state of a program whose own root file is FILES (a dict
@@ -713,16 +1055,16 @@ proc surface::modules::CollectAndLoad {stateVar ast {key ""}} {
 proc surface::modules::NewState {files nextFile} {
     return [dict create files $files nextFile $nextFile \
         loaded [dict create] loadedStructs [dict create] loadedTypes [dict create] \
-        loadedErrors [dict create] imports [dict create] stack {} sections {} \
-        typeDecls {} errorDecls {} structDecls {}]
+        loadedErrors [dict create] loadedTraits [dict create] loadedEnums [dict create] \
+        imports [dict create] stack {} sections {} \
+        typeDecls {} errorDecls {} structDecls {} traitDecls {} staticDeferred [dict create]]
 }
 
 # {sections SECTIONS files FILES functions NAMESPACE->{FUNCTION-NAME ...}
 # imports NAMESPACE->ENV ...} for NAMESPACES and everything they
 # transitively import -- the general module loader's entry point for a
-# caller with no source AST of its own (native/native.tcl's module-native
-# bridge: it names the namespaces a native's registered -module-fn needs
-# directly, not via source syntax). SECTIONS is ready for hir::buildSyntax's
+# caller with no source AST of its own (it names the namespaces directly,
+# not via source syntax). SECTIONS is ready for hir::buildSyntax's
 # -modules; FILES is ready to merge into its -files; imports (the import
 # environments of every loaded module) into its -imports. FileIds start at
 # f(START), so a caller that reserves f1 for its own root file can pass
@@ -743,7 +1085,7 @@ proc surface::modules::LoadNamespaces {namespaces args} {
     return [dict create sections [dict get $state sections] files [dict get $state files] \
         functions [dict get $state loaded] typeDecls [dict get $state typeDecls] \
         errorDecls [dict get $state errorDecls] structDecls [dict get $state structDecls] \
-        imports [dict get $state imports]]
+        traitDecls [dict get $state traitDecls] imports [dict get $state imports]]
 }
 
 # The HIR of the entry program AST (a `program` node whose file is FILE ... in
@@ -755,16 +1097,17 @@ proc surface::modules::LoadNamespaces {namespaces args} {
 proc surface::modules::BuildProgram {ast strict} {
     set state [NewState [dict create f1 [dict get $ast span file]] 2]
     CollectAndLoad state $ast ""
-    lassign [surface::lower::SplitTypeDecls [dict get $ast body]] executable ownDecls ownErrorDecls ownStructDecls
+    lassign [surface::lower::SplitTypeDecls [dict get $ast body]] executable ownDecls ownErrorDecls ownStructDecls ownTraitDecls
     set decls [concat [dict get $state typeDecls] $ownDecls]
     set errorDecls [concat [dict get $state errorDecls] $ownErrorDecls]
     set structDecls [concat [dict get $state structDecls] $ownStructDecls]
-    return [hir::buildSyntax [surface::lower::Sequence $executable] -strict 0 \
+    set traitDecls [concat [dict get $state traitDecls] $ownTraitDecls]
+    return [hir::buildSyntax [LowerStatements $state "" $executable] -strict 0 \
         -halt-on-resolution-errors $strict \
         -origin [surface::lower::Origin [dict get $ast span] ""] \
         -files [dict get $state files] -modules [dict get $state sections] \
         -imports [dict get $state imports] \
-        -type-decls $decls -error-decls $errorDecls -struct-decls $structDecls]
+        -type-decls $decls -error-decls $errorDecls -struct-decls $structDecls -trait-decls $traitDecls]
 }
 
 # The HIR of the .bot program file PATH, after loading (and compiling once,

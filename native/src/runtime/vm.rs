@@ -21,6 +21,7 @@ use super::framemap::ProgramMap;
 use super::heap::Heap;
 use super::metrics::{AllocMode, GcReason, Metrics};
 use super::native_stack::NativeStack;
+use super::bytesobj::BytesInit;
 use super::strobj::StrInit;
 use super::value::*;
 use crate::nir::OpCode;
@@ -71,12 +72,26 @@ pub struct ShapeInfo {
     pub opaque: bool,
 }
 
+/// One enum declaration of the program (ENUMS.md): its declaration identity
+/// and its declared case names, indexed by the case number an enum word
+/// carries (runtime::value's `make_enum`). Static, non-GC data, read only by
+/// printing, hashing and handing values back to the host: equality is word
+/// equality and never consults it. The numbers are representation only --
+/// a name is what every observable use reads.
+pub struct EnumInfo {
+    pub name: String,
+    pub cases: Vec<String>,
+}
+
 pub struct ProgramInfo {
     pub functions: Vec<FunctionInfo>,
     pub natives: Vec<NativeInfo>,
     /// The program's struct shapes, indexed by the shape number NIR's
     /// `structnew` carries and `StructObj::shape` stores.
     pub shapes: Vec<ShapeInfo>,
+    /// The program's enums, indexed by the enum number an enum word carries
+    /// (NIR's `enum` declarations, in order).
+    pub enums: Vec<EnumInfo>,
 }
 
 thread_local! {
@@ -148,6 +163,20 @@ pub struct Vm {
     /// Never itself a GC root: an id is a small compile-time constant, not
     /// a heap value.
     pub declared_error: u32,
+    /// The payload of the pending declared error (ERROR-PAYLOADS.md): its
+    /// field values in the anonymous payload struct's slot order (fields
+    /// sorted by name), transported field-wise -- no struct object is built
+    /// to carry them along the error edge. Empty for a payload-free error
+    /// (and whenever no declared error is pending). Set by
+    /// `rt_fail_declared_payload`, read by a handler's `declaredpayload K`,
+    /// cleared with `declared_error` by `rt_clear_declared_error` (and by
+    /// every payload-free `fail`). A GC root while pending: the payload
+    /// lives only here between the `fail` and the handler that receives it.
+    pub declared_payload: Vec<Value>,
+    /// The shape number of the pending payload's anonymous struct (only
+    /// meaningful while `declared_payload` is non-empty): what renders an
+    /// uncaught payload at the program boundary (`Vm::describe_error`).
+    pub declared_payload_shape: u32,
     /// The process argument snapshot of this run, as raw bytes exactly as
     /// the launching process supplied them (ARGV.md): copied here once, at
     /// startup or by the harness, and never decoded until `argv()` runs.
@@ -159,6 +188,9 @@ pub struct Vm {
     /// never observable, and never a GC root (a plain index).
     argv_invalid: std::cell::OnceCell<Option<usize>>,
     pub temp_roots: Vec<Value>,
+    /// The MutableVector/MutableArray headers installed in the context area this run
+    /// (`ctxroot`, MUTABLE-VECTOR.md): roots for the rest of the run.
+    pub context_roots: Vec<Value>,
     pub info: Rc<ProgramInfo>,
     pub metrics: Metrics,
     const_table: Vec<Value>,
@@ -168,6 +200,15 @@ pub struct Vm {
     /// constructor returns it instead of allocating a zero-byte object;
     /// Strings are immutable, so sharing it is unobservable.
     empty_str: *mut Header,
+    /// The one canonical empty byte storage (static, like `empty_str`):
+    /// `abi::bytes::from_list([])` allocates nothing. Storages are immutable, so sharing
+    /// it is unobservable (a Bytes' identity is not part of its value).
+    empty_bytes: *mut Header,
+    /// The one canonical EMPTY writable storage (static): a zero-length
+    /// MutableBytes has no byte any value could write or observe, so sharing
+    /// one object is unobservable. A non-empty storage is never shared
+    /// (MUTABLE-BYTES.md: every non-empty one is its own heap object).
+    empty_mutbytes: *mut Header,
     /// This program's PC-indexed stack-map table (runtime::framemap), set
     /// once by `set_framemap` right after compiling (codegen::CompiledProgram
     /// owns the original; this is an `Rc` clone). `collect_with` walks the
@@ -181,6 +222,11 @@ pub struct Vm {
     /// roots -- harmless for the brief window before a program is compiled.
     framemap: Rc<ProgramMap>,
     native_stack: Option<NativeStack>,
+    /// The innermost running coroutine (COROUTINES.md, runtime/coroutine.rs),
+    /// null while the main stack runs. With each running coroutine's own
+    /// `resumer` link it is the chain of running coroutines: every one a GC
+    /// root, and every stack on it walked by `collect_with`.
+    pub co_current: *mut super::coroutine::CoroutineObj,
 }
 
 pub const VM_SS_TOP_OFFSET: i32 = offset_of!(Vm, ss_top) as i32;
@@ -215,14 +261,19 @@ impl Vm {
             heap: Heap::new(),
             error: None,
             declared_error: 0,
+            declared_payload: Vec::new(),
+            declared_payload_shape: 0,
             argv: DEFAULT_ARGV.iter().map(|a| a.as_bytes().to_vec()).collect(),
             argv_invalid: std::cell::OnceCell::new(),
             temp_roots: Vec::new(),
+            context_roots: Vec::new(),
             info,
             metrics: Metrics::new(alloc_mode),
             const_table: Vec::new(),
             statics: Vec::new(),
             empty_str: StrObj::new_static(""),
+            empty_bytes: BytesObj::new_static(&[]),
+            empty_mutbytes: BytesObj::new_static_mutable_empty(),
             framemap: Rc::new(ProgramMap::new()),
             native_stack: {
                 #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
@@ -230,7 +281,23 @@ impl Vm {
                 #[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
                 { None }
             },
+            co_current: std::ptr::null_mut(),
         })
+    }
+
+    /// Publishes STACK (None: the main stack) as the one native stack running
+    /// now, for the overflow handler: a fault in its guard is a stack
+    /// overflow (runtime/coroutine.rs switches stacks).
+    pub fn publish_active_stack(&mut self, stack: Option<NativeStack>) {
+        #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+        {
+            let stack = stack.or(self.native_stack);
+            if let Some(stack) = stack {
+                super::platform::x86_64_linux::set_active_stack(&stack);
+            }
+        }
+        #[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
+        let _ = stack;
     }
 
     /// Replaces the argument snapshot with ARGV (raw bytes, one Vec per
@@ -357,7 +424,26 @@ impl Vm {
         // `native`'s are three disjoint sets of memory locations, never the
         // same logical root scanned twice.
         let mut native_frame_roots = Vec::new();
-        super::framewalk::walk(&self.framemap, self.native_stack.as_ref(), |addr| native_frame_roots.push(unsafe { *addr }));
+        // The running stacks (COROUTINES.md): the current one from here, then
+        // every resumer of the running coroutine chain from the point it
+        // switched away, each bounded by its own stack. Every running
+        // coroutine object is a root itself.
+        use super::coroutine::{suspended_rbp, CoroutineObj};
+        let stack_of = |co: *mut CoroutineObj, main: Option<NativeStack>| -> Option<NativeStack> {
+            if co.is_null() { main } else { unsafe { (*co).stack.as_ref().map(|s| s.bounds()) } }
+        };
+        let current = stack_of(self.co_current, self.native_stack);
+        super::framewalk::walk(&self.framemap, current.as_ref(), |addr| native_frame_roots.push(unsafe { *addr }));
+        let mut running = self.co_current;
+        while !running.is_null() {
+            native_frame_roots.push(running as Value);
+            let (resumer, resumer_sp) = unsafe { ((*running).resumer, (*running).resumer_sp) };
+            let bounds = stack_of(resumer, self.native_stack);
+            super::framewalk::walk_from(&self.framemap, suspended_rbp(resumer_sp), bounds.as_ref(), |addr| {
+                native_frame_roots.push(unsafe { *addr })
+            });
+            running = resumer;
+        }
         let error_values = self.error.as_ref().map(|e| e.values()).unwrap_or_default();
         let roots = stack
             .iter()
@@ -365,9 +451,12 @@ impl Vm {
             .chain(native.iter().copied())
             .chain(native_frame_roots)
             .chain(error_values)
+            .chain(self.declared_payload.iter().copied())
             .chain(self.temp_roots.iter().copied())
+            .chain(self.context_roots.iter().copied())
             .chain(self.statics_table.iter().copied());
-        self.heap.collect(roots.collect::<Vec<_>>().into_iter(), &mut self.metrics, reason);
+        let framemap = self.framemap.clone();
+        self.heap.collect(roots.collect::<Vec<_>>().into_iter(), &mut self.metrics, reason, &framemap);
     }
 
     /// Prepares for the next run: empty shadow stack, no error, empty heap,
@@ -384,13 +473,36 @@ impl Vm {
     /// anything in that run reads it -- so a stale previous-run value is
     /// simply retained as an ordinary (harmless) GC root a little longer,
     /// exactly like this same collection call's other roots.
+    /// The message of ERROR as the program boundary reports it: its own
+    /// message, with the payload of an uncaught declared error rendered into
+    /// it (ERROR-PAYLOADS.md: `<error NAME {field: value, ...}>`, as the Tcl
+    /// backends' errorId renders) -- lazily, here, never on a failure path
+    /// a handler catches.
+    pub fn describe_error(&self, error: &RtError) -> String {
+        let message = error.message();
+        if self.declared_error == 0 || self.declared_payload.is_empty() {
+            return message;
+        }
+        if let RtError::Semantic { kind: "UNCAUGHT-ERROR", .. } = error {
+            if let Some(stripped) = message.strip_suffix('>') {
+                return format!(
+                    "{stripped} {}>",
+                    super::show::show_fields(self.declared_payload_shape, &self.declared_payload)
+                );
+            }
+        }
+        message
+    }
+
     pub fn reset(&mut self) {
         self.ss_top = self.ss_base;
         self.native_roots_ptr = std::ptr::null_mut();
         self.native_roots_len = 0;
         self.error = None;
         self.declared_error = 0;
+        self.declared_payload.clear();
         self.temp_roots.clear();
+        self.context_roots.clear();
         self.metrics.reset();
         self.collect_with(GcReason::Explicit);
     }
@@ -544,6 +656,85 @@ impl Vm {
         }
     }
 
+    /// Allocates the one block of a dynamic byte storage of LEN payload bytes
+    /// (bytesobj.rs: header + length + payload, one allocation): enforces
+    /// MAX_COLLECTION_LENGTH (RANGE, no allocation), collects first if one is
+    /// due (before the object exists), allocates, registers it with the heap
+    /// and returns the writer for the still-uninitialized payload. No
+    /// allocation happens between here and `BytesInit::finish`, so no
+    /// collection can observe the half-built object.
+    fn alloc_bytes(&mut self, len: usize) -> Result<BytesInit, Value> {
+        self.alloc_byte_storage(KIND_BYTES, len)
+    }
+
+    /// `alloc_bytes` for either storage kind (KIND_BYTES, or KIND_MUTBYTES for
+    /// an `abi::bytes::MutableBytes`): the same single block, the same ceiling, the
+    /// same collect-before-the-object-exists sequence.
+    fn alloc_byte_storage(&mut self, kind: u8, len: usize) -> Result<BytesInit, Value> {
+        if len > MAX_COLLECTION_LENGTH {
+            let what = if kind == KIND_MUTBYTES { "MutableBytes" } else { "Bytes" };
+            let message = format!("a {what} cannot exceed {MAX_COLLECTION_LENGTH} bytes, got {len}");
+            return Err(self.fail(RtError::Semantic { kind: "RANGE", message }));
+        }
+        if self.heap.wants_collection() {
+            self.collect();
+        }
+        let Some(init) = BytesInit::try_new_kind(kind, len, false) else {
+            let what = if kind == KIND_MUTBYTES { "MutableBytes" } else { "Bytes" };
+            let message = format!("cannot allocate a {len}-byte {what}: out of memory");
+            return Err(self.fail(RtError::Semantic { kind: "RANGE", message }));
+        };
+        self.heap.register(init.addr() as *mut Header, BYTES_PAYLOAD_OFFSET + len);
+        if self.metrics.enabled() {
+            let site = self.alloc_site;
+            self.alloc_site = 0;
+            self.metrics.record_alloc(kind, BYTES_PAYLOAD_OFFSET, len, site);
+        }
+        Ok(init)
+    }
+
+    /// A writable byte storage of LEN bytes that FILL writes in place (every
+    /// byte must be written). Always a fresh heap object -- never a static
+    /// constant -- except the zero-length one, which is the shared static
+    /// empty storage. The same rooting rule as `new_bytes_with`: FILL may read
+    /// operands of the allocating instruction, which are roots across the
+    /// collection that may run first.
+    pub fn new_mutbytes_with(&mut self, len: usize, fill: impl FnOnce(&mut BytesInit)) -> Value {
+        if len == 0 {
+            return self.empty_mutbytes as Value;
+        }
+        match self.alloc_byte_storage(KIND_MUTBYTES, len) {
+            Err(v) => v,
+            Ok(mut init) => {
+                fill(&mut init);
+                init.finish() as Value
+            }
+        }
+    }
+
+    /// A byte storage holding exactly BYTES: one allocation, copied straight
+    /// into place; the empty storage is the shared static one (no allocation).
+    pub fn new_bytes(&mut self, bytes: &[u8]) -> Value {
+        self.new_bytes_with(bytes.len(), |init| init.push_slice(bytes))
+    }
+
+    /// A byte storage of LEN bytes that FILL writes in place (every byte must
+    /// be written: bytesobj.rs's `finish` asserts it). Allocation may collect
+    /// first, so a caller's operands must be rooted (they are operands of an
+    /// allocating instruction).
+    pub fn new_bytes_with(&mut self, len: usize, fill: impl FnOnce(&mut BytesInit)) -> Value {
+        if len == 0 {
+            return self.empty_bytes as Value;
+        }
+        match self.alloc_bytes(len) {
+            Err(v) => v,
+            Ok(mut init) => {
+                fill(&mut init);
+                init.finish() as Value
+            }
+        }
+    }
+
     pub fn new_list(&mut self, items: Vec<Value>) -> Value {
         if let Some(v) = self.reject_oversized_collection(items.len()) {
             return v;
@@ -611,9 +802,10 @@ impl Vm {
         if let Some(v) = self.reject_oversized_collection(capacity) {
             return v;
         }
-        let bytes = capacity * 8;
-        let slots = vec![UNIT; capacity].into_boxed_slice();
-        self.alloc(MutArrayObj { hdr: Header::new(KIND_MUTARRAY, false), slots }, bytes)
+        // One allocation: the iterator's exact length lets the Rc be
+        // allocated at its final size and filled in place.
+        let slots: std::rc::Rc<[Value]> = std::iter::repeat_n(UNIT, capacity).collect();
+        self.alloc(MutArrayObj { hdr: Header::new(KIND_MUTARRAY, false), start: 0, backing: slots }, capacity * 8)
     }
 }
 
@@ -623,5 +815,7 @@ impl Drop for Vm {
             unsafe { super::heap::free_object(object) };
         }
         unsafe { super::heap::free_object(self.empty_str) };
+        unsafe { super::heap::free_object(self.empty_bytes) };
+        unsafe { super::heap::free_object(self.empty_mutbytes) };
     }
 }

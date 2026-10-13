@@ -13,16 +13,47 @@ pub fn show(v: Value) -> String {
     out
 }
 
+/// The rendering of a struct of shape SHAPE whose field values are FIELDS
+/// (slot order), as `show` renders such a struct object: what an uncaught
+/// error's payload (ERROR-PAYLOADS.md), transported field-wise and never
+/// built as an object, looks like at the program boundary.
+pub fn show_fields(shape: u32, fields: &[Value]) -> String {
+    let (name, names) = current_program(|prog| {
+        let shape = &prog.shapes[shape as usize];
+        (shape.name.clone(), shape.fields.clone())
+    });
+    let mut out = String::new();
+    if let Some(name) = name {
+        out.push_str(&name);
+        out.push(' ');
+    }
+    out.push('{');
+    for (i, (field, item)) in names.iter().zip(fields.iter()).enumerate() {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        out.push_str(field);
+        out.push_str(": ");
+        show_into(*item, &mut out);
+    }
+    out.push('}');
+    out
+}
+
 fn show_into(v: Value, out: &mut String) {
     match kind_of(v) {
         Kind::Int => out.push_str(&int_text(v)),
         Kind::Str => {
+            // Matches core::value::show's String rendering exactly
+            // (core/value.tcl): the escapes of a character, below, with `"`
+            // for `'`.
             out.push('"');
             for c in str_of(v).as_str().chars() {
                 match c {
                     '\\' => out.push_str("\\\\"),
                     '"' => out.push_str("\\\""),
                     '\n' => out.push_str("\\n"),
+                    '\r' => out.push_str("\\r"),
                     '\t' => out.push_str("\\t"),
                     c => out.push(c),
                 }
@@ -46,6 +77,14 @@ fn show_into(v: Value, out: &mut String) {
                 c => out.push(c),
             }
             out.push('\'');
+        }
+        Kind::Enum => {
+            // Matches core::value::show's enum rendering exactly: the case's
+            // qualified spelling, debug output only (ENUMS.md).
+            let (name, case) = enum_names(v);
+            out.push_str(&name);
+            out.push_str("::");
+            out.push_str(&case);
         }
         Kind::List => {
             out.push('[');
@@ -120,9 +159,68 @@ fn show_into(v: Value, out: &mut String) {
             out.push_str(&format!("<native {name}>"));
         }
         Kind::MutArray => {
-            out.push_str(&format!("<mutable-array capacity={}>", mutarray_of(v).slots.len()));
+            // Matches core::value::show's mutarray rendering: the current
+            // elements, never the header or its backing.
+            out.push_str("<mutable-array [");
+            for (i, item) in super::ops::array_elements(v).enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                show_into(item, out);
+            }
+            out.push_str("]>");
+        }
+        Kind::Coroutine => {
+            out.push_str("<coroutine>");
+        }
+        Kind::MutVec => {
+            // Matches core::value::show's mutvec rendering: the current
+            // elements, never the header or its backing.
+            out.push_str("<mutable-vector [");
+            for (i, item) in super::mutvec::elements(v).enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                show_into(item, out);
+            }
+            out.push_str("]>");
+        }
+        Kind::ByteStore => {
+            // Matches core::value::show's bytestore rendering exactly: the
+            // byte count and the bytes in lowercase hex. Reached only for a
+            // storage shown on its own (internal tooling): an opaque
+            // abi::bytes::Bytes renders as `<opaque abi::bytes::Bytes>` above and never
+            // prints its storage.
+            let bytes = bytes_of(v);
+            out.push_str(&format!("<bytes {}: {}>", bytes.len(), hex_of(bytes)));
+        }
+        Kind::MutByteStore => {
+            // Matches core::value::show's mutbytes rendering (internal tooling
+            // only; an opaque abi::bytes::MutableBytes renders as
+            // `<opaque abi::bytes::MutableBytes>` and never prints its storage).
+            let bytes = mutbytes_of(v);
+            out.push_str(&format!("<mutbytes {}: {}>", bytes.len(), hex_of(bytes)));
         }
     }
+}
+
+/// Lowercase hexadecimal text of BYTES, two digits per byte (core/value.tcl's
+/// `{bytestore HEX}` text).
+pub fn hex_of(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push_str(&format!("{b:02x}"));
+    }
+    out
+}
+
+/// The declaration identity and the case name of the enum case word V.
+pub fn enum_names(v: Value) -> (String, String) {
+    let (e, c) = enum_parts(v);
+    current_program(|prog| {
+        let info = &prog.enums[e as usize];
+        (info.name.clone(), info.cases[c as usize].clone())
+    })
 }
 
 pub fn int_text(v: Value) -> String {
@@ -144,6 +242,12 @@ pub fn tcl_value(v: Value) -> Result<String, RtError> {
         // back to the Tcl host round-trips through core::ir::literalValue
         // unchanged.
         Kind::UnicodeChar => tcl_list(&["UnicodeChar".to_string(), char_of(v).to_string()]),
+        // Matches core::value::enumValue's own representation exactly
+        // ({enum ID CASE}, core/value.tcl): the names, never the numbers.
+        Kind::Enum => {
+            let (name, case) = enum_names(v);
+            tcl_list(&["enum".to_string(), name, case])
+        }
         Kind::List => {
             let items = list_of(v).items().iter().map(|item| tcl_value(*item)).collect::<Result<Vec<_>, _>>()?;
             tcl_list(&["list".to_string(), tcl_list(&items)])
@@ -167,6 +271,11 @@ pub fn tcl_value(v: Value) -> Result<String, RtError> {
             let items = set_of(v).items().iter().map(|item| tcl_value(*item)).collect::<Result<Vec<_>, _>>()?;
             tcl_list(&["immutableSet".to_string(), tcl_list(&items)])
         }
+        // Matches core::value::bytestore's own representation exactly
+        // ({bytestore HEX}, core/value.tcl).
+        Kind::ByteStore => tcl_list(&["bytestore".to_string(), hex_of(bytes_of(v))]),
+        // ({mutbytes HEX}, core/value.tcl).
+        Kind::MutByteStore => tcl_list(&["mutbytes".to_string(), hex_of(mutbytes_of(v))]),
         Kind::Result => {
             let r = result_of(v);
             tcl_list(&[
@@ -186,11 +295,25 @@ pub fn tcl_value(v: Value) -> Result<String, RtError> {
                 show(v)
             )));
         }
+        // An array's current elements, under a tag of their own: the host
+        // (native::Outcome) makes them an array value of its own runtime
+        // (core/mutarray.tcl), exactly as a vector's (below).
         Kind::MutArray => {
+            let items = super::ops::array_elements(v).map(tcl_value).collect::<Result<Vec<_>, _>>()?;
+            tcl_list(&["mutarrayitems".to_string(), tcl_list(&items)])
+        }
+        Kind::Coroutine => {
             return Err(RtError::Unsupported(format!(
-                "the native backend cannot return a MutableArray to the host (finalize it to a List first): {}",
+                "the native backend cannot return a coroutine handle to the host: {}",
                 show(v)
             )));
+        }
+        // A vector's current elements, under a tag of their own: the host
+        // (native::Outcome) makes them a vector value of its own runtime
+        // (core/mutvec.tcl), exactly as it would hold one.
+        Kind::MutVec => {
+            let items = super::mutvec::elements(v).map(tcl_value).collect::<Result<Vec<_>, _>>()?;
+            tcl_list(&["mutvecitems".to_string(), tcl_list(&items)])
         }
     })
 }
@@ -205,7 +328,10 @@ pub fn tcl_element(s: &str) -> String {
     if s.is_empty() {
         return "{}".to_string();
     }
-    let special = |c: char| matches!(c, ' ' | '\t' | '\n' | '\r' | ';' | '$' | '[' | ']' | '{' | '}' | '"' | '\\');
+    // Tcl's list parser separates elements at every one of ' ' \t \n \v \f \r.
+    let special = |c: char| {
+        matches!(c, ' ' | '\t' | '\n' | '\x0b' | '\x0c' | '\r' | ';' | '$' | '[' | ']' | '{' | '}' | '"' | '\\')
+    };
     if !s.contains(special) && !s.starts_with('#') {
         return s.to_string();
     }
@@ -218,6 +344,8 @@ pub fn tcl_element(s: &str) -> String {
         match c {
             '\n' => out.push_str("\\n"),
             '\t' => out.push_str("\\t"),
+            '\x0b' => out.push_str("\\v"),
+            '\x0c' => out.push_str("\\f"),
             '\r' => out.push_str("\\r"),
             c if special(c) || c == '#' => {
                 out.push('\\');

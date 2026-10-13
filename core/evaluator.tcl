@@ -188,12 +188,23 @@ proc core::forms::op-loop {node env} {
 # a bare `break` and a `break VALUE` behave identically here, both ending
 # the loop with the prefix. Exhausting the list without a `break` completes
 # normally with the List of every contributed value, in order.
+#
+# A MutableVector or MutableArray iterable (MUTABLE-VECTOR.md, MUTABLE-
+# ARRAY.md) is *consumed*: the compiler hands a loop one only when its
+# elements are affine (an unrestricted one's loop iterates its #to_list
+# snapshot), and the loop then moves each element out of it, first to last,
+# into the loop variable (#take_front). Whatever is left when the loop is
+# left early is still the collection's: the compiler releases it on that
+# exit.
 proc core::forms::op-listloop {node env} {
     set listExpr [lindex $node 1]
     set elementBlock [lindex $node 2]
     set param [lindex [core::ir::blockParams $elementBlock] 0]
     set body [core::ir::blockBody $elementBlock]
     set listValue [core::interp::valueOf [core::interp::evalIn $listExpr $env]]
+    if {[core::value::kind $listValue] in {mutvec mutarray}} {
+        return [ConsumeVector $listValue $param $body $env]
+    }
     set items [core::value::items [core::value::expect list $listValue "loop iterable"]]
     set results {}
     foreach item $items {
@@ -211,6 +222,37 @@ proc core::forms::op-listloop {node env} {
             }
             continue {
                 # contributes nothing; next iteration
+            }
+            break {
+                return [core::completion::normal [core::value::listOf $results]]
+            }
+            return - propagate-error {
+                return $completion
+            }
+        }
+    }
+    return [core::completion::normal [core::value::listOf $results]]
+}
+
+# The consuming iteration of op-listloop over VECTOR (a MutableVector, or a
+# MutableArray: MUTABLE-ARRAY.md).
+proc core::forms::ConsumeVector {vector param body env} {
+    set results {}
+    while {[core::mutvec::remaining $vector] > 0} {
+        set item [core::mutvec::drainFront $vector]
+        set iterationEnv [core::env::child $env]
+        core::env::define $iterationEnv $param $item
+        core::env::declare $iterationEnv [core::ir::scopeBindNames $body]
+        try {
+            set completion [core::interp::evalSequence $body $iterationEnv]
+        } finally {
+            core::env::release $iterationEnv
+        }
+        switch -- [core::completion::kind $completion] {
+            value {
+                lappend results [core::completion::payload $completion]
+            }
+            continue {
             }
             break {
                 return [core::completion::normal [core::value::listOf $results]]
@@ -263,7 +305,7 @@ proc core::forms::op-countloop {node env} {
     set results {}
     while {[$holds $i $end]} {
         set iterationEnv [core::env::child $env]
-        core::env::define $iterationEnv $param [core::value::int $i]
+        core::env::define $iterationEnv $param [core::value::intFromNumber $i]
         core::env::declare $iterationEnv [core::ir::scopeBindNames $body]
         try {
             set completion [core::interp::evalSequence $body $iterationEnv]
@@ -368,7 +410,7 @@ proc core::forms::op-lockloop {node env} {
                 core::env::define $iterationEnv $param [lindex [lindex $domain 1] $k]
             } else {
                 core::env::define $iterationEnv $param \
-                    [core::value::int [expr {[lindex $domain 1] + $k * [lindex $domain 2]}]]
+                    [core::value::intFromNumber [expr {[lindex $domain 1] + $k * [lindex $domain 2]}]]
             }
         }
         core::env::declare $iterationEnv [core::ir::scopeBindNames $body]
@@ -451,6 +493,12 @@ proc core::forms::op-error-value {node env} {
 # NAME is admissible here (declared/handled) is a HIR-level static
 # obligation (hir/errorsets.tcl), not something the evaluator enforces.
 proc core::forms::op-fail {node env} {
+    if {[llength $node] == 3} {
+        # (fail NAME PAYLOAD-EXPR): the error carries the payload value
+        # (ERROR-PAYLOADS.md) -- the identity and the payload, two components.
+        set payload [core::interp::valueOf [core::interp::evalIn [lindex $node 2] $env]]
+        return [core::completion::propagatingError [core::value::errorId [lindex $node 1] $payload]]
+    }
     return [core::completion::propagatingError [core::value::errorId [lindex $node 1]]]
 }
 
@@ -466,11 +514,20 @@ proc core::forms::op-handle {node env} {
     if {[core::completion::kind $callCompletion] ne "propagate-error"} {
         return $callCompletion
     }
-    set errorName [core::value::errorIdName [core::completion::payload $callCompletion]]
+    set raised [core::completion::payload $callCompletion]
+    set errorName [core::value::errorIdName $raised]
     foreach {name handlerBlock} [lrange $node 2 end] {
         if {$name eq $errorName} {
+            # Selection is by the error's identity alone; the payload is then
+            # bound to the handler's parameter, if it has one
+            # (ERROR-PAYLOADS.md).
             set body [core::ir::blockBody $handlerBlock]
-            set branchEnv [core::interp::enterScope $env $body]
+            set params [core::ir::blockParams $handlerBlock]
+            set branchEnv [core::env::child $env]
+            if {$params ne {}} {
+                core::env::define $branchEnv [lindex $params 0] [core::value::errorIdPayload $raised]
+            }
+            core::env::declare $branchEnv [core::ir::scopeBindNames $body]
             try {
                 return [core::interp::evalSequence $body $branchEnv]
             } finally {
@@ -527,14 +584,6 @@ proc core::rootEnv {} {
     foreach name [core::native::names] {
         core::env::define $env $name [core::value::native $name]
     }
-    foreach {alias canonical} [core::native::aliasPairs] {
-        # Same semantic predicate identity as canonical, not a second
-        # native: the environment binding for the alias spelling holds
-        # exactly the value canonical's own binding holds (core::native::
-        # alias's own contract; see hir/resolve.tcl's RootBinding for the
-        # matching HIR-side binding-sharing).
-        core::env::define $env $alias [core::value::native $canonical]
-    }
     core::env::define $env true  [core::value::true]
     core::env::define $env false [core::value::false]
     core::env::define $env unit  [core::value::unit]
@@ -558,7 +607,15 @@ proc core::evalProgram {exprs} {
     core::env::declare $env [core::ir::scopeBindNames $exprs]
     set value ""
     try {
-        set value [core::completion::atProgramBoundary [core::RunWithBackend program $exprs $env]]
+        # Every run starts with an empty execution-environment context set
+        # (core/contexts.tcl, CONTEXTS.md).
+        # So does the coroutine store (core/coroutines.tcl): coroutines a run
+        # leaves suspended end with it.
+        set value [core::contexts::fresh {
+            core::coroutines::fresh {
+                core::completion::atProgramBoundary [core::RunWithBackend program $exprs $env]
+            }
+        }]
     } finally {
         core::releaseProgram $mark $value
     }

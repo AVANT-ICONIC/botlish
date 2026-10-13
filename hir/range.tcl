@@ -1071,6 +1071,10 @@ proc hir::range::Expr {hirVar ctxVar e} {
             return never
         }
         fail {
+            if {[dict exists $node value] && [dict get $node value] ne ""} {
+                # The payload (ERROR-PAYLOADS.md), evaluated before raising.
+                Expr hir ctx [dict get $node value]
+            }
             # A propagate-error completion, exactly like return/break: never
             # completes normally, so JoinBindings correctly treats this
             # branch as dead and keeps only the surviving branch's own
@@ -1325,6 +1329,10 @@ proc hir::range::ProvesType {range type} {
 # alone does not license covariance without a variance system this
 # milestone deliberately does not build.
 #
+# MutableVector[T] and MutableArray[T] DECLARED take the identical path too
+# (MUTABLE-VECTOR.md, MUTABLE-ARRAY.md): both are values, so their subtype
+# relation is covariant like List's, and their admission exact like List's.
+#
 # M7.a.a exception (EMPTY-COLLECTION-AND-APPLIED-TYPE-SEMANTICS.md): a
 # statically *provably empty* List/ImmutableSet is admissible for any
 # element type, at any nesting depth. This is not covariance -- a non-empty
@@ -1340,11 +1348,27 @@ proc hir::range::ProvesType {range type} {
 # `[[]]`, statically `List[List[never]]`) is checked the same way one level
 # down, without making the enclosing non-empty List/Set itself covariant.
 proc hir::range::ProvesValueAcceptedBy {argType argRange declared} {
-    if {[hir::types::IsList $declared] || [hir::types::IsSet $declared]} {
+    if {[hir::types::IsTraitConstraint $declared]} {
+        # A trait-typed boundary (TRAITS.md): a view of the trait, or a
+        # concrete type that satisfies it structurally (hir::traits).
+        return [hir::traits::Accept $argType $declared]
+    }
+    if {[hir::types::IsView $declared]} {
+        # A trait view (a handled call whose normal result is a view, its
+        # handlers' value checked against it): only by hir::types::subtype,
+        # i.e. the same view or never. A concrete type becomes a view only at
+        # a trait-typed boundary (the case above), and no Range fact is one
+        # of a view (ProvesType would ask core::type for its integer facts).
+        return [hir::types::subtype $argType $declared]
+    }
+    if {[hir::types::IsList $declared] || [hir::types::IsSet $declared] || [hir::types::IsMutVec $declared]
+            || [hir::types::IsMutArray $declared]} {
         return [AggregateAdmits [hir::types::Unshaped $argType] $declared]
     }
-    if {[hir::types::IsFn $declared] || [hir::types::IsMutArray $declared]
-            || [hir::types::IsStructLike $declared]} {
+    if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
+            || [hir::types::IsEnum $declared]} {
+        # An enum type (ENUMS.md) likewise, by its declaration only.
+        #
         # A struct type (STRUCTS.md) is admitted by hir::types::subtype
         # alone: a named struct only ever by the same declaration, an
         # anonymous one by the same field set with admissible field types.
@@ -1352,12 +1376,10 @@ proc hir::range::ProvesValueAcceptedBy {argType argRange declared} {
         # A structural function type (STRUCTURAL-FUNCTION-TYPES.md): the
         # argument must be a callable whose own call contract is
         # compatible (hir::types::subtype's contravariant/covariant/subset
-        # rule) -- no Range fact bears on that.
-        #
-        # A MutableArray[T] (PARAMETERIZED-MUTABLEARRAY.md) is admitted the
-        # same way, by hir::types::subtype's invariant rule: only a
-        # MutableArray with an equivalent element contract (never a raw
-        # `mutarray`, never `any`, never a differently typed array).
+        # rule) -- no Range fact bears on that. An exact callable type (a
+        # handled call whose normal result is a function value, its
+        # handlers' value checked against it) likewise: no Range fact is
+        # one of a callable.
         return [hir::types::subtype $argType $declared]
     }
     return [expr {[hir::types::subtype $argType $declared] || [ProvesType $argRange $declared]}]
@@ -1380,6 +1402,26 @@ proc hir::range::AggregateAdmits {arg declared} {
     if {[hir::types::IsSet $declared] && [hir::types::IsSet $arg]} {
         set elem [lindex $arg 1]
         return [expr {$elem eq "never" || [AggregateAdmits $elem [lindex $declared 1]]}]
+    }
+    if {[hir::types::IsMutVec $declared] && [hir::types::IsMutVec $arg]} {
+        # A MutableVector (MUTABLE-VECTOR.md) the same way: the proven-empty
+        # MutableVector[never] (from_list([])) is admissible for any element
+        # type -- nothing can ever be pushed into it under its own type, and
+        # every place that mutates a vector owns its own header.
+        set elem [lindex $arg 1]
+        return [expr {$elem eq "never" || [AggregateAdmits $elem [lindex $declared 1]]}]
+    }
+    if {[hir::types::IsMutArray $declared] && [hir::types::IsMutArray $arg]} {
+        # A MutableArray, its fixed-length sibling (MUTABLE-ARRAY.md), the
+        # same way. (A MutableArray[never] has no slot: from_list([]).)
+        set elem [lindex $arg 1]
+        return [expr {$elem eq "never" || [AggregateAdmits $elem [lindex $declared 1]]}]
+    }
+    if {($arg eq "mutarray" && [hir::types::IsMutArray $declared])
+            || ($arg eq "mutvec" && [hir::types::IsMutVec $declared])} {
+        # The bare kind is the element type `any` (an untyped array or
+        # vector, allocate's result).
+        return [expr {[lindex $declared 1] eq "any"}]
     }
     return 0
 }
@@ -1428,11 +1470,11 @@ proc hir::range::FactsSatisfiable {observedType observedRange declared} {
     if {$observedType eq "never"} {
         return 0
     }
-    if {[hir::types::IsList $declared] || [hir::types::IsSet $declared]} {
+    if {[hir::types::IsList $declared] || [hir::types::IsSet $declared] || [hir::types::IsMutVec $declared]} {
         return [AggregateAdmits [hir::types::Unshaped $observedType] $declared]
     }
     if {[hir::types::IsFn $declared] || [hir::types::IsMutArray $declared]
-            || [hir::types::IsStructLike $declared]
+            || [hir::types::IsStructLike $declared] || [hir::types::IsEnum $declared]
             || [core::type::base $declared] ne "int"} {
         return 1
     }
@@ -1471,6 +1513,11 @@ proc hir::range::verifyDeclaredResults {hirVar} {
     upvar 1 $hirVar hir
     dict for {e node} [dict get $hir exprs] {
         if {[dict get $node kind] ne {block} || [dict get $node declaredResult] eq {}} { continue }
+        if {[hir::types::IsTraitConstraint [dict get $node declaredResult]]} {
+            # A declared trait result is proven per exit, with its witness
+            # (hir::traits::verify: TRAIT-NOT-SATISFIED, TRAIT-WITNESS-JOIN).
+            continue
+        }
         set params [dict get $node params]
         set outcome [AnalyzeInstance $hir verify {} $e $params \
             [lrepeat [llength $params] [unknown]] {} {}]
@@ -1572,8 +1619,18 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
     lassign [dict get $node target] targetKind targetBlock
     if {$targetKind eq {}} {
         set calleeType [hir::typeOf $hir [dict get $node callee]]
-        if {[hir::types::IsFn $calleeType]} {
-            VerifyStructuralCall hir $ranges $e $node $calleeType
+        if {[hir::types::IsFn $calleeType] || [hir::types::IsCoroutine $calleeType]} {
+            VerifyStructuralCall hir $ranges $e $node $calleeType [dict get $node callee] [dict get $node args]
+        }
+        return
+    }
+    if {$targetKind eq {native} && [dict get [hir::symbol $hir $targetBlock] name] eq [core::coroutines::resumeNative]} {
+        # A coroutine resume written out as the internal native (COROUTINES.md):
+        # the call of its handle, checked by the same contract rules.
+        set args [dict get $node args]
+        set handleType [hir::typeOf $hir [lindex $args 0]]
+        if {[hir::types::IsCoroutine $handleType]} {
+            VerifyStructuralCall hir $ranges $e $node $handleType [lindex $args 0] [lrange $args 1 end]
         }
         return
     }
@@ -1606,6 +1663,38 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
         set argType [hir::typeOf $hir $arg]
         set argRange [expr {[dict exists $ranges $arg] ? [dict get $ranges $arg] : [unknown]}]
         set inferred [hir::signatures::inferredTrusted $hir $targetBlock $i]
+        if {$inferred && [hir::signatures::CallableAdmits $argType $declaredType]} {
+            # An untyped parameter the body calls (its inferred contract is
+            # a callable contract, never a callable kind: AFFINE-VALUES.md):
+            # a coroutine handle with a compatible contract is admissible;
+            # the call's instance is analyzed with the handle itself.
+            continue
+        }
+        if {$declaredType ne {} && [hir::types::IsTraitConstraint $declaredType]
+                && ![ProvesValueAcceptedBy $argType $argRange $declaredType]} {
+            # A trait-typed parameter (TRAITS.md): the argument's static type
+            # does not satisfy the trait; say which requirement fails.
+            if {![dict exists $hir semanticContext]} {
+                dict set hir violatedDeclared $paramBinding $arg
+            }
+            hir::Diagnose hir TRAIT-NOT-SATISFIED [hir::traits::NotSatisfiedMessage $hir \
+                [dict get $hir bindings $paramBinding name] $argType $declaredType] $arg
+            continue
+        }
+        if {$declaredType ne {} && !$inferred && [hir::types::IsFn $declaredType] && [hir::types::IsCoroutine $argType]} {
+            # A coroutine handle where a function value is declared
+            # (AFFINE-VALUES.md): Fn and Coroutine share the callable contract
+            # but are distinct callable kinds -- never an implicit conversion.
+            if {![dict exists $hir semanticContext]} {
+                dict set hir violatedDeclared $paramBinding $arg
+            }
+            hir::Diagnose hir COROUTINE-NOT-FUNCTION [format \
+                {%s is a coroutine handle, not a function value: it carries the evolving state of one coroutine and cannot be passed where a function value of type %s is expected (Fn and Coroutine are distinct callable kinds, even with the same contract; declare the parameter %s, or leave it untyped)} \
+                [expr {[dict get $hir exprs $arg kind] eq "ref" ? "\"[dict get $hir exprs $arg name]\"" : "this value"}] \
+                [hir::types::show $declaredType] \
+                [hir::types::show [list coroutine [lindex $declaredType 1]]]] $arg
+            continue
+        }
         if {$declaredType ne {} && ![ProvesValueAcceptedBy $argType $argRange $declaredType]} {
             if {$inferred} {
                 dict set hir violatedContracts $paramBinding $arg
@@ -1658,9 +1747,16 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
 # Range within the declared integer domain). No runtime guard is ever
 # inserted because a field type is declared: an unproven value is a
 # compile-time TYPE error at that field, exactly as an unproven argument of a
-# declared parameter is. An anonymous struct declares nothing to check.
+# declared parameter is. An anonymous struct declares nothing to check --
+# except an error's payload (`fail NAME {...}`, ERROR-PAYLOADS.md), whose
+# fields are held to the error's declared payload field types by the same
+# proof.
 proc hir::range::VerifyStruct {hirVar ranges e node} {
     upvar 1 $hirVar hir
+    if {[dict exists $node payloadOf]} {
+        VerifyPayload hir $ranges $e $node
+        return
+    }
     if {![dict get $node named] || [dict get $node structId] eq ""} {
         return
     }
@@ -1692,6 +1788,32 @@ proc hir::range::VerifyStruct {hirVar ranges e node} {
     }
 }
 
+# The payload construction E of `fail NAME {...}` (ERROR-PAYLOADS.md): each
+# field value proven admissible for the declared type of that payload field
+# of error NAME, exactly as a named construction's (VerifyStruct).
+proc hir::range::VerifyPayload {hirVar ranges e node} {
+    upvar 1 $hirVar hir
+    set errorName [dict get $node payloadOf]
+    foreach name [dict get $node names] field [dict get $node fields] origin [dict get $node fieldOrigins] {
+        set declared [hir::errordecls::fieldType $errorName $name]
+        if {$declared eq ""} {
+            continue
+        }
+        set valueType [hir::typeOf $hir $field]
+        if {$valueType eq "never" || ![hir::get $hir $field reachable]} {
+            continue
+        }
+        set valueRange [expr {[dict exists $ranges $field] ? [dict get $ranges $field] : [unknown]}]
+        if {[ProvesValueAcceptedBy $valueType $valueRange $declared]} {
+            continue
+        }
+        hir::DiagnoseAt hir TYPE [format \
+            {payload field "%s" of error %s cannot be proven to satisfy its declared type %s (value type: %s%s)%s} \
+            $name $errorName [hir::types::show $declared] \
+            [hir::types::show $valueType] [FactsClause $valueType $declared $valueRange] [MismatchClause $valueType $declared]] $field $origin
+    }
+}
+
 # 1 if the Int facts proven for a value of static type TYPE can bear on its
 # admissibility for DECLARED: both may be Ints (Int-kinded, or of no fixed
 # kind). A value that is statically a struct, a List, a String, a function
@@ -1718,29 +1840,61 @@ proc hir::range::FactsClause {type declared r} {
 # is a nominal type, so equal field layouts (abi::I64 and abi::Isize, both
 # one Int field over the same domain) never make one the other.
 proc hir::range::MismatchClause {argType declared} {
+    if {[hir::types::IsTrait $argType] && ![hir::types::IsTrait $declared] && $declared ne "any"} {
+        return [format {; the value is a %s trait view: only the operations %s declares are available on it, and its concrete type is never recovered (there is no cast, type test or downcast from a trait)} \
+            [hir::types::show $argType] [hir::types::show $argType]]
+    }
+    set refinement [RefinementClause $argType $declared]
+    if {$refinement ne ""} {
+        return $refinement
+    }
     if {[hir::types::IsNamedStruct $argType] && [hir::types::IsNamedStruct $declared]
             && $argType ne $declared} {
         return [format {; %s and %s are distinct named struct types: a named struct type is nominal, and no value is ever converted from one to another implicitly} \
             [hir::types::show $argType] [hir::types::show $declared]]
     }
-    if {[hir::types::IsMutArray $argType]
-            && ([hir::types::IsMutArray $declared] || $declared eq {mutarray})} {
-        if {$declared eq {mutarray}} {
-            return [format {; %s would lose its element contract as the raw mutarray type, permitting writes of values that are not %s} \
-                [hir::types::show $argType] [hir::types::show [lindex $argType 1]]]
-        }
-        return [format {; MutableArray is invariant in its element type: %s cannot be viewed as %s, because writes through that view could store values the original element type does not admit} \
-            [hir::types::show $argType] [hir::types::show $declared]]
+    if {[hir::types::IsEnum $declared] && $argType ne $declared && $argType ni {any never}} {
+        # ENUMS.md: identity is the declaration, so a case of another enum
+        # -- even a same-spelled one -- is never a value of this one.
+        return [format {; %s is a nominal enum type: only its own cases (%s) are its values, never a case of another enum, an Int or a String} \
+            [hir::types::show $declared] \
+            [::join [lmap c [hir::enums::cases [lindex $declared 1]] {string cat [hir::types::show $declared] :: $c}] {, }]]
     }
     if {[hir::types::IsMutArray $declared] && !([hir::types::IsMutArray $argType])} {
         return [format {; only a value already known to be a %s satisfies this contract: a kind test proves the kind, never the element type, and no element check is inserted} \
             [hir::types::show $declared]]
     }
-    if {![hir::types::IsFn $declared]} {
+    if {![hir::types::IsFn $declared] && ![hir::types::IsCoroutine $declared]} {
         return ""
     }
     set why [hir::types::explainMismatch $argType $declared]
     return [expr {$why eq "" ? "" : "; $why"}]
+}
+
+# The explanation, when DECLARED requires a refinement (REFINEMENT-VALUES.md)
+# that a value of static type ARGTYPE -- a value of its carrier -- is not
+# proven to satisfy: a refinement is established only by a proof (the true
+# result of one of its owner's predicates, or the normal completion of one of
+# its validators), never by a conversion; or "" when that is not why ARGTYPE
+# is not admissible.
+proc hir::range::RefinementClause {argType declared} {
+    if {$argType in {any never} || [hir::types::IsSpecific $argType] || [hir::types::IsSpecific $declared]
+            || [catch {core::type::evidenceOf $declared} wanted]} {
+        return ""
+    }
+    set missing {}
+    set have [core::type::evidenceClosure $argType]
+    foreach name $wanted {
+        if {[core::type::isRefinement $name] && $name ni $have} {
+            lappend missing $name
+        }
+    }
+    if {$missing eq {} || [core::type::base $argType] ne [core::type::base $declared]} {
+        return ""
+    }
+    set names [::join $missing ", "]
+    return [format {; expected %s but found %s: a refinement proof is required (a %s value becomes %s only where one of its owner's proof-producing functions has proven it: a predicate returned true for it, or a validator completed normally for it; there is no implicit conversion)} \
+        $names [hir::types::show $argType] [hir::types::show $argType] $names]
 }
 
 # A call E through a structural function type CALLEETYPE
@@ -1751,23 +1905,49 @@ proc hir::range::MismatchClause {argType declared} {
 # contract also fixes the arity, so a call passing another number of
 # arguments is rejected statically (a direct call of an exact target with
 # the wrong arity remains the run-time ARITY error it always was).
-proc hir::range::VerifyStructuralCall {hirVar ranges e node calleeType} {
+proc hir::range::VerifyStructuralCall {hirVar ranges e node calleeType callee argExprs} {
     upvar 1 $hirVar hir
-    set declaredTypes [hir::types::FnArgs $calleeType]
-    set args [dict get $node args]
-    if {[llength $args] != [llength $declaredTypes]} {
+    # One contract check for every callable kind that carries its contract in
+    # its type (AFFINE-VALUES.md): a structural Fn value's call and a
+    # coroutine handle's resume. Arity and argument admissibility are the same
+    # proof; only the wording names the kind (a resume's arity is
+    # COROUTINE-RESUME-ARITY, phrased as its message protocol).
+    set declaredTypes [dict get [hir::types::Contract $calleeType] args]
+    set coroutine [hir::types::IsCoroutine $calleeType]
+    if {$coroutine && [hir::types::CoroutineResume $calleeType] eq "any"} {
+        # A protocol conflict, already diagnosed (COROUTINE-RESUME-CONFLICT).
+        return
+    }
+    if {[llength $argExprs] != [llength $declaredTypes]} {
+        if {$coroutine} {
+            set name [expr {[dict get $hir exprs $callee kind] eq "ref" ? [dict get $hir exprs $callee name] : "step"}]
+            if {$declaredTypes eq {}} {
+                hir::Diagnose hir COROUTINE-RESUME-ARITY \
+                    "this coroutine has the zero-message protocol: resume it with no argument, \"${name}()\", got [llength $argExprs] argument(s)" $e
+            } else {
+                set protocol [hir::types::show [lindex $declaredTypes 0]]
+                hir::Diagnose hir COROUTINE-RESUME-ARITY \
+                    "this coroutine is resumed with exactly one $protocol message: \"${name}($protocol {...})\", got [llength $argExprs] argument(s)" $e
+            }
+            return
+        }
         hir::Diagnose hir TYPE [format \
             {this call passes %d argument(s) to a callable of function type %s, whose contract takes %d} \
-            [llength $args] [hir::types::show $calleeType] [llength $declaredTypes]] $e
+            [llength $argExprs] [hir::types::show $calleeType] [llength $declaredTypes]] $e
         return
     }
     set index 0
-    foreach arg $args declaredType $declaredTypes {
+    foreach arg $argExprs declaredType $declaredTypes {
         incr index
         if {$declaredType eq "any"} { continue }
         set argType [hir::typeOf $hir $arg]
         set argRange [expr {[dict exists $ranges $arg] ? [dict get $ranges $arg] : [unknown]}]
         if {[ProvesValueAcceptedBy $argType $argRange $declaredType]} {
+            continue
+        }
+        if {$coroutine} {
+            hir::Diagnose hir TYPE \
+                "the resume message of this coroutine must be a [hir::types::show $declaredType], got [hir::types::show $argType]" $arg
             continue
         }
         hir::Diagnose hir TYPE [format \
@@ -2376,6 +2556,100 @@ proc hir::range::SettleInstance {hir id instanceCalls block params assumed locke
     return [list $outcome $assumed]
 }
 
+# The part of RESULTS (InstanceId -> successful-result summary) that a walk
+# of an instance whose exact-call targets are CALLEES (sorted, distinct) can
+# read: Call reads calleeResults only at a target of the walked instance's
+# own instanceCalls. A target without a summary is listed bare, so "no
+# summary" and every summary differ. Fixpoint and NarrowRounds key their
+# per-instance memos with it.
+proc hir::range::ResultsRead {results callees} {
+    set read {}
+    foreach t $callees {
+        lappend read [expr {[dict exists $results $t] ? [list $t [dict get $results $t]] : [list $t]}]
+    }
+    return $read
+}
+
+# The keys of SET (a dict keyed by InstanceId) in ids order (POSITION:
+# InstanceId -> index in ids).
+proc hir::range::InOrder {position set} {
+    return [lmap entry [lsort -integer -index 0 [lmap id [dict keys $set] {list [dict get $position $id] $id}]] {
+        lindex $entry 1
+    }]
+}
+
+# {REACHED CONTRIBUTION}: the per-argument join of the argument Ranges of
+# every exact call of target T in the current OUTCOMES of the instances
+# READERS (its possible callers, in ids order; Fixpoint's readersOf),
+# skipping DORMANT callers and, unless SELFCALLS, T itself -- the order a
+# round's full fold over every instance's calls joins them in. REACHED is 0
+# when no such call was reached (the fold then has no entry for T at all).
+proc hir::range::Contribution {outcomes readers dormant t selfCalls} {
+    set reached 0
+    set contribution {}
+    foreach caller $readers {
+        if {(!$selfCalls && $caller eq $t) || [dict exists $dormant $caller]} {
+            continue
+        }
+        foreach pair [dict get $outcomes $caller calls] {
+            lassign $pair target argRanges
+            if {$target ne $t} {
+                continue
+            }
+            if {!$reached} {
+                set reached 1
+                set contribution [lrepeat [llength $argRanges] never]
+            }
+            set next {}
+            foreach c $contribution r $argRanges {
+                lappend next [join $c $r]
+            }
+            set contribution $next
+        }
+    }
+    return [list $reached $contribution]
+}
+
+# BindingId -> Range: the join, per captured binding, of the capture Ranges
+# of every creation of CHILDBLOCK in the current OUTCOMES of CREATORS (a
+# dict keyed by InstanceId; POSITION orders them as ids does) -- the order a
+# round's full fold over every instance's creation sites joins them in.
+proc hir::range::CaptureFacts {outcomes creators position childBlock} {
+    set facts {}
+    foreach creator [InOrder $position $creators] {
+        foreach pair [dict get $outcomes $creator creates] {
+            lassign $pair created capRanges
+            if {$created ne $childBlock} {
+                continue
+            }
+            dict for {b r} $capRanges {
+                set prior [expr {[dict exists $facts $b] ? [dict get $facts $b] : "never"}]
+                dict set facts $b [join $prior $r]
+            }
+        }
+    }
+    return $facts
+}
+
+# Instance ID was re-walked: its outcome went from PREVIOUS ("" if none) to
+# OUTCOME. Updates CREATORSVAR (child block -> {InstanceId 1 ...}, the
+# instances whose current outcome creates it) and adds every child block
+# either outcome creates to RECAPTUREVAR, the blocks whose capture facts
+# must be refolded.
+proc hir::range::NoteCreates {creatorsVar recaptureVar id previous outcome} {
+    upvar 1 $creatorsVar creatorsOf $recaptureVar recapture
+    foreach pair [expr {$previous eq "" ? {} : [dict get $previous creates]}] {
+        set childBlock [lindex $pair 0]
+        dict set recapture $childBlock 1
+        dict unset creatorsOf $childBlock $id
+    }
+    foreach pair [dict get $outcome creates] {
+        set childBlock [lindex $pair 0]
+        dict set recapture $childBlock 1
+        dict set creatorsOf $childBlock $id 1
+    }
+}
+
 # One bounded descending pass over the used instances (M9's post-widen
 # narrowing, and Fixpoint's result narrowing): starting from the sound facts
 # NARROWED (InstanceId -> entry Ranges), CAPTURES (child block ExprId ->
@@ -2395,64 +2669,90 @@ proc hir::range::SettleInstance {hir id instanceCalls block params assumed locke
 #     instance with no summary at all.
 #
 # CTX holds Fixpoint's per-instance tables (ids blockOf paramsOf viewOf
-# instanceCallsOf monotoneOf lockedOf open dormant captureOpt pinned). Returns
-# {CONVERGED NARROWED CAPTURES RESULTS ROUNDS OUTCOMES}: CONVERGED is 1 iff
-# a round changed nothing within ROUNDBUDGET rounds, ROUNDS the rounds run,
-# OUTCOMES the last round's AnalyzeInstance outcomes (computed under the
-# returned facts exactly when CONVERGED). With NARROWRESULTS 0 this is
-# exactly M9's narrowing loop.
+# instanceCallsOf monotoneOf lockedOf open dormant captureOpt pinned
+# calleesOf readersOf instancesOf position). Returns {CONVERGED NARROWED
+# CAPTURES RESULTS ROUNDS OUTCOMES}: CONVERGED is 1 iff a round changed
+# nothing within ROUNDBUDGET rounds, ROUNDS the rounds run, OUTCOMES the
+# last round's AnalyzeInstance outcomes (computed under the returned facts
+# exactly when CONVERGED). With NARROWRESULTS 0 this is exactly M9's
+# narrowing loop.
 proc hir::range::NarrowRounds {ctx narrowed captures results narrowResults roundBudget} {
     set ids [dict get $ctx ids]
     set open [dict get $ctx open]
     set dormant [dict get $ctx dormant]
     set captureOpt [dict get $ctx captureOpt]
     set pinned [dict get $ctx pinned]
+    set calleesOf [dict get $ctx calleesOf]
+    set readersOf [dict get $ctx readersOf]
+    set instancesOf [dict get $ctx instancesOf]
+    set position [dict get $ctx position]
     set converged 0
     set rounds 0
-    set freshOutcomes [dict create]
+    # Incremental rounds, exactly as Fixpoint's ascending ones (see there):
+    # WALK holds the instances whose inputs changed last round (each still
+    # checked against MEMO, InstanceId -> {KEY OUTCOME}, its last walk);
+    # REFOLD, RENARROW and SUMMARIZE the targets, child blocks and instances
+    # whose entry fold, capture fold and summary narrowing must run again
+    # -- here every one of the three folds narrows its current value, so
+    # each runs again whenever its last run changed that value. OUTCOMES
+    # holds every instance's latest outcome: the last round's outcomes.
+    set memo [dict create]
+    set outcomes [dict create]
+    set walk $position
+    set refold [dict create]
+    set renarrow [dict create]
+    set summarize [dict create]
+    set contributionOf [dict create]
+    set creatorsOf [dict create]
     for {set round 1} {$round <= $roundBudget} {incr round} {
         set rounds $round
         set changed 0
-        set contributions [dict create]
-        set roundCaptures [dict create]
-        set freshOutcomes [dict create]
-        foreach id $ids {
+        set nextWalk [dict create]
+        set nextRefold [dict create]
+        set nextRenarrow [dict create]
+        set nextSummarize [dict create]
+        set recontribute [dict create]
+        foreach id [InOrder $position $walk] {
             set block [dict get $ctx blockOf $id]
             set captureSeed [expr {$captureOpt && [dict exists $captures $block] ? [dict get $captures $block] : {}}]
+            set key [list [dict get $narrowed $id] $captureSeed [ResultsRead $results [dict get $calleesOf $id]]]
+            if {[dict exists $memo $id] && [lindex [dict get $memo $id] 0] eq $key} {
+                continue
+            }
             set outcome [AnalyzeInstance [dict get $ctx viewOf $id] $id [dict get $ctx instanceCallsOf $id] \
                 $block [dict get $ctx paramsOf $id] [dict get $narrowed $id] \
                 [dict get $ctx monotoneOf $id] $results $captureSeed]
-            dict set freshOutcomes $id $outcome
-            set evidence [expr {![dict exists $dormant $id]}]
-            foreach pair [expr {$evidence ? [dict get $outcome calls] : {}}] {
-                lassign $pair target argRanges
-                if {[dict exists $open $target]} {
-                    continue
+            dict set memo $id [list $key $outcome]
+            set previous [expr {[dict exists $outcomes $id] ? [dict get $outcomes $id] : {}}]
+            dict set outcomes $id $outcome
+            dict set summarize $id 1
+            if {![dict exists $dormant $id]} {
+                foreach t [dict get $calleesOf $id] {
+                    if {![dict exists $open $t]} {
+                        dict set recontribute $t 1
+                    }
                 }
-                set current [expr {[dict exists $contributions $target]
-                    ? [dict get $contributions $target] : [lrepeat [llength $argRanges] never]}]
-                set next {}
-                foreach c $current r $argRanges {
-                    lappend next [join $c $r]
-                }
-                dict set contributions $target $next
-            }
-            foreach pair [expr {$evidence ? [dict get $outcome creates] : {}}] {
-                lassign $pair childBlock capRanges
-                set current [expr {[dict exists $roundCaptures $childBlock] ? [dict get $roundCaptures $childBlock] : {}}]
-                dict for {b r} $capRanges {
-                    set prior [expr {[dict exists $current $b] ? [dict get $current $b] : "never"}]
-                    dict set current $b [join $prior $r]
-                }
-                dict set roundCaptures $childBlock $current
+                NoteCreates creatorsOf renarrow $id $previous $outcome
             }
         }
-        dict for {target contribution} $contributions {
+        dict for {target _} $recontribute {
+            lassign [Contribution $outcomes [dict get $readersOf $target] $dormant $target 1] reached contribution
+            if {$reached} {
+                dict set contributionOf $target $contribution
+            } else {
+                dict unset contributionOf $target
+            }
+            dict set refold $target 1
+        }
+        dict for {target _} $refold {
+            if {![dict exists $contributionOf $target]} {
+                continue
+            }
             set locked [dict get $ctx lockedOf $target]
             set current [dict get $narrowed $target]
             set next {}
             set i 0
-            foreach o $current c $contribution {
+            foreach o $current c [dict get $contributionOf $target] {
                 if {[dict exists $locked $i]} {
                     lappend next $o
                 } else {
@@ -2462,31 +2762,44 @@ proc hir::range::NarrowRounds {ctx narrowed captures results narrowResults round
             }
             if {$next ne $current} {
                 set changed 1
+                dict set nextRefold $target 1
+                dict set nextWalk $target 1
             }
             dict set narrowed $target $next
         }
-        dict for {childBlock capRanges} $roundCaptures {
+        dict for {childBlock _} $renarrow {
+            if {![dict size [dict get $creatorsOf $childBlock]]} {
+                continue
+            }
             set current [expr {[dict exists $captures $childBlock] ? [dict get $captures $childBlock] : {}}]
             set next $current
-            dict for {b r} $capRanges {
+            dict for {b r} [CaptureFacts $outcomes [dict get $creatorsOf $childBlock] $position $childBlock] {
                 set old [expr {[dict exists $current $b] ? [dict get $current $b] : [unknown]}]
                 dict set next $b [RangeNarrow $old $r]
             }
             if {$next ne $current} {
                 set changed 1
+                dict set nextRenarrow $childBlock 1
+                foreach i [expr {[dict exists $instancesOf $childBlock] ? [dict get $instancesOf $childBlock] : {}}] {
+                    dict set nextWalk $i 1
+                }
             }
             dict set captures $childBlock $next
         }
         if {$narrowResults} {
-            foreach id $ids {
+            foreach id [InOrder $position $summarize] {
                 if {[dict exists $pinned $id] || ![dict exists $results $id]} {
                     continue
                 }
                 set current [dict get $results $id]
-                set next [RangeNarrow $current [dict get $freshOutcomes $id result]]
+                set next [RangeNarrow $current [dict get $outcomes $id result]]
                 if {$next ne $current} {
                     dict set results $id $next
                     set changed 1
+                    dict set nextSummarize $id 1
+                    foreach reader [dict get $readersOf $id] {
+                        dict set nextWalk $reader 1
+                    }
                 }
             }
         }
@@ -2494,8 +2807,12 @@ proc hir::range::NarrowRounds {ctx narrowed captures results narrowResults round
             set converged 1
             break
         }
+        set walk $nextWalk
+        set refold $nextRefold
+        set renarrow $nextRenarrow
+        set summarize $nextSummarize
     }
-    return [list $converged $narrowed $captures $results $rounds $freshOutcomes]
+    return [list $converged $narrowed $captures $results $rounds $outcomes]
 }
 
 # ---------------------------------------------------------------------------
@@ -2672,34 +2989,100 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
     foreach id $ids {
         dict set selfRecursiveOf $id [expr {$id in [dict values [dict get $instanceCallsOf $id]]}]
     }
+    # The instances whose result summaries ID's walk reads (ResultsRead);
+    # inverted, READERSOF: the instances that read T's summary, in ids
+    # order -- every instance that can call T, since a walk's exact calls
+    # are exactly its instanceCalls targets. INSTANCESOF: a block's
+    # instances. POSITION: an instance's index in ids.
+    set calleesOf [dict create]
+    set readersOf [dict create]
+    set instancesOf [dict create]
+    set position [dict create]
+    foreach id $ids {
+        dict set readersOf $id {}
+        dict set position $id [dict size $position]
+    }
+    foreach id $ids {
+        set callees [lsort -unique [dict values [dict get $instanceCallsOf $id]]]
+        dict set calleesOf $id $callees
+        foreach t $callees {
+            dict lappend readersOf $t $id
+        }
+        dict lappend instancesOf [dict get $blockOf $id] $id
+    }
 
     # A bound on rounds that scales with the instance count (a chain of N
     # instances can need up to N rounds for its first real value to
     # propagate end to end) plus a fixed cushion for the self-call/widen
     # settling every instance also does each round -- finite, deterministic,
     # never a per-interval or per-benchmark constant (spec #12, #24, #37).
+    #
+    # Each round is the Jacobi step described above: every instance settled
+    # from the facts the previous round left, then every fold. A chain of N
+    # instances needs N rounds, so redoing all of that every round would be
+    # quadratic in program size; instead a round redoes only the steps
+    # whose inputs changed, and skips the rest, each of which would
+    # recompute the value it already has:
+    #
+    #   * SETTLE holds the instances whose entry Ranges, capture seed or
+    #     callee summaries (the only inputs of SettleInstance that change
+    #     here; a walk reads only its own targets' summaries: ResultsRead)
+    #     changed last round. Each is still checked against SETTLEMEMO
+    #     (InstanceId -> {KEY {OUTCOME SETTLED}}, its last walk), so a
+    #     settle whose inputs came back to those of the last walk reuses it.
+    #   * A target's contribution (the join over its callers' reached calls)
+    #     and a child block's capture facts (the join over its creation
+    #     sites) are refolded only when a caller or creator was re-walked,
+    #     in the same order as a full fold (Contribution, CaptureFacts).
+    #   * REFOLD and SUMMARIZE hold the targets whose entry fold, and the
+    #     instances whose summary update, must run again: their inputs
+    #     changed, or their last run changed their value. A step that ran
+    #     on the same inputs and left its value unchanged would leave it
+    #     unchanged again.
+    #
+    # So the rounds -- how many there are, and every fact each one leaves
+    # -- are exactly those of redoing everything every round.
     set roundBudget [expr {4 * [llength $ids] + 16}]
+    set settleMemo [dict create]
+    set settle $position
+    set refold [dict create]
+    set summarize [dict create]
+    # CONTRIBUTIONOF: target -> the current contribution, absent while no
+    # reached call feeds it. CREATORSOF: child block -> the non-dormant
+    # instances whose current outcome creates it.
+    set contributionOf [dict create]
+    set creatorsOf [dict create]
     for {set round 1} {$round <= $roundBudget} {incr round} {
         set changed 0
-        set contributions [dict create]
-        set roundCaptures [dict create]
-        foreach id $ids {
+        set nextSettle [dict create]
+        set nextRefold [dict create]
+        set nextSummarize [dict create]
+        set recontribute [dict create]
+        set recapture [dict create]
+        foreach id [InOrder $position $settle] {
             set before [dict get $assumed $id]
             set block [dict get $blockOf $id]
             set captureSeed [expr {$captureOpt && [dict exists $captureSeeds $block] ? [dict get $captureSeeds $block] : {}}]
-            lassign [SettleInstance [dict get $viewOf $id] $id [dict get $instanceCallsOf $id] \
-                $block [dict get $paramsOf $id] $before \
-                [dict get $lockedOf $id] [dict get $monotoneOf $id] $calleeResults $captureSeed] outcome settled
-            dict set outcomes $id $outcome
-            set evidence [expr {![dict exists $dormant $id]}]
-            foreach pair [expr {$evidence ? [dict get $outcome creates] : {}}] {
-                lassign $pair childBlock capRanges
-                set current [expr {[dict exists $roundCaptures $childBlock] ? [dict get $roundCaptures $childBlock] : {}}]
-                dict for {b r} $capRanges {
-                    set prior [expr {[dict exists $current $b] ? [dict get $current $b] : "never"}]
-                    dict set current $b [join $prior $r]
+            set key [list $before $captureSeed [ResultsRead $calleeResults [dict get $calleesOf $id]]]
+            if {[dict exists $settleMemo $id] && [lindex [dict get $settleMemo $id] 0] eq $key} {
+                lassign [lindex [dict get $settleMemo $id] 1] outcome settled
+            } else {
+                set answer [SettleInstance [dict get $viewOf $id] $id [dict get $instanceCallsOf $id] \
+                    $block [dict get $paramsOf $id] $before \
+                    [dict get $lockedOf $id] [dict get $monotoneOf $id] $calleeResults $captureSeed]
+                dict set settleMemo $id [list $key $answer]
+                lassign $answer outcome settled
+                set previous [expr {[dict exists $outcomes $id] ? [dict get $outcomes $id] : {}}]
+                dict set outcomes $id $outcome
+                dict set summarize $id 1
+                if {![dict exists $dormant $id]} {
+                    foreach t [dict get $calleesOf $id] {
+                        if {$t ne $id && ![dict exists $open $t]} {
+                            dict set recontribute $t 1
+                        }
+                    }
+                    NoteCreates creatorsOf recapture $id $previous $outcome
                 }
-                dict set roundCaptures $childBlock $current
             }
             if {$settled ne $before} {
                 set locked [dict get $lockedOf $id]
@@ -2721,22 +3104,24 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
                 dict set poisonedOf $id $poisoned
                 dict set assumed $id $settled
                 set changed 1
-            }
-            foreach pair [expr {$evidence ? [dict get $outcome calls] : {}}] {
-                lassign $pair target argRanges
-                if {$target eq $id || [dict exists $open $target]} {
-                    continue
-                }
-                set current [expr {[dict exists $contributions $target]
-                    ? [dict get $contributions $target] : [lrepeat [llength $argRanges] never]}]
-                set next {}
-                foreach c $current r $argRanges {
-                    lappend next [join $c $r]
-                }
-                dict set contributions $target $next
+                dict set refold $id 1
+                dict set nextSettle $id 1
             }
         }
-        dict for {target contribution} $contributions {
+        dict for {target _} $recontribute {
+            lassign [Contribution $outcomes [dict get $readersOf $target] $dormant $target 0] reached contribution
+            if {$reached} {
+                dict set contributionOf $target $contribution
+            } else {
+                dict unset contributionOf $target
+            }
+            dict set refold $target 1
+        }
+        dict for {target _} $refold {
+            if {![dict exists $contributionOf $target]} {
+                continue
+            }
+            set contribution [dict get $contributionOf $target]
             set locked [dict get $lockedOf $target]
             set poisoned [dict get $poisonedOf $target]
             set selfRecursive [dict get $selfRecursiveOf $target]
@@ -2786,6 +3171,8 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
             }
             if {$next ne $current} {
                 set changed 1
+                dict set nextRefold $target 1
+                dict set nextSettle $target 1
             }
             dict set assumed $target $next
         }
@@ -2808,11 +3195,17 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
         # result (confirmed directly: a two-branch-guarded capture whose
         # true fact is exactly its external caller's point values was stuck
         # at the guard's own bare lower bound instead).
-        dict for {childBlock capRanges} $roundCaptures {
+        dict for {childBlock _} $recapture {
+            if {![dict size [dict get $creatorsOf $childBlock]]} {
+                continue
+            }
             set current [expr {[dict exists $captureSeeds $childBlock] ? [dict get $captureSeeds $childBlock] : {}}]
-            set next $capRanges
+            set next [CaptureFacts $outcomes [dict get $creatorsOf $childBlock] $position $childBlock]
             if {$next ne $current} {
                 set changed 1
+                foreach i [expr {[dict exists $instancesOf $childBlock] ? [dict get $instancesOf $childBlock] : {}}] {
+                    dict set nextSettle $i 1
+                }
             }
             dict set captureSeeds $childBlock $next
         }
@@ -2821,7 +3214,7 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
         # Once a concrete summary appears it can only widen. If later caller
         # evidence destroys it, unknown is permanent for this analysis.
         if {$callFactsOpt} {
-            foreach id $ids {
+            foreach id [InOrder $position $summarize] {
                 if {[dict exists $pinned $id]} continue
                 set inferred [dict get $outcomes $id result]
                 if {![dict exists $calleeResults $id]} {
@@ -2842,6 +3235,10 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
                 if {![dict exists $calleeResults $id] || [dict get $calleeResults $id] ne $next} {
                     dict set calleeResults $id $next
                     set changed 1
+                    dict set nextSummarize $id 1
+                    foreach reader [dict get $readersOf $id] {
+                        dict set nextSettle $reader 1
+                    }
                 }
             }
         }
@@ -2851,6 +3248,9 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
         if {$round == $roundBudget} {
             throw {HIR RANGE LIMIT} "hir::range: closed-call facts did not converge"
         }
+        set settle $nextSettle
+        set refold $nextRefold
+        set summarize $nextSummarize
     }
 
     # ---------------------------------------------------------------------
@@ -2894,7 +3294,8 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
     # round budget expired.
     set narrowCtx [dict create ids $ids blockOf $blockOf paramsOf $paramsOf viewOf $viewOf \
         instanceCallsOf $instanceCallsOf monotoneOf $monotoneOf lockedOf $lockedOf open $open \
-        dormant $dormant captureOpt $captureOpt pinned $pinned]
+        dormant $dormant captureOpt $captureOpt pinned $pinned calleesOf $calleesOf \
+        readersOf $readersOf instancesOf $instancesOf position $position]
     set narrowed $assumed
     set narrowedCaptures $captureSeeds
     if {$narrowOpt} {

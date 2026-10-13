@@ -21,9 +21,17 @@
 #             see this file's blockNode), flags (optional: {NAME ORIGIN}
 #             pairs, the function's declared flag section in declaration
 #             order -- FLAGS.md; absent or empty for a function without
-#             flags)
+#             flags), nomethod (optional, 1: `nomethod fn`, the function's author
+#             declares that it is never the callee of method syntax --
+#             WARNINGS-METHOD-ELIGIBLE.md; absent for every other block),
+#             contextParams (optional: {NAME ORIGIN TYPE TYPEORIGIN} tuples,
+#             the function's context parameter section -- CONTEXTS.md;
+#             absent for a function without one), resume (optional: {TYPE
+#             ORIGIN}, the function's `resume TYPE` clause -- COROUTINES.md;
+#             its declared coroutine resume protocol, never a parameter)
 #   call      callee, args, flags (optional: {NAME ORIGIN} pairs, the flags
-#             the call supplies, in written order -- FLAGS.md)
+#             the call supplies, in written order -- FLAGS.md), written
+#             (optional, see below)
 #   if        condition, thenOrigin, thenBody, elseOrigin, elseBody
 #   loop      bodyOrigin, body
 #   listloop  iterable, elementName, elementOrigin, bodyOrigin, body -- the
@@ -69,17 +77,48 @@
 # and ARGS exclude the receiver; hir::resolve::Expr turns it into the
 # ordinary call `name(receiver, args)` when `name` is visible from the call,
 # and otherwise leaves the call of the field value it has always been.
+#
+# Every `call` node a source frontend builds also carries `written FORM`: how
+# the call was spelled, which no later stage can recover once the sugar and
+# the operators are lowered to ordinary calls (WARNINGS-METHOD-ELIGIBLE.md):
+#
+#   function   `f(a, b)`: a call the programmer wrote in functional form
+#   method     `a.f(b)`: method-call sugar (also carries `method 1`)
+#   list       `[a, b]`: a list literal, lowered to a call of `list`
+#   operator   `a + b`, `a == b`, `-a`: an operator, lowered to a call of the
+#              root native of that name (`a != b`'s inner `==` too)
+#
+# A call that came from core IR carries no `written` field. The marker is
+# written in every compilation mode and read by diagnostics only: no analysis,
+# lowering or backend consults it.
 #   return    value
 #   break     value (node or "")
 #   continue
 #   ok        value
 #   error     value
-#   fail      name (a declared error's name)
+#   fail      name (a declared error's name), value (the payload the error
+#             carries, a node, or "" -- ERROR-PAYLOADS.md: a source payload
+#             is a `struct` node with `payloadOf NAME`, the field
+#             initializers of `fail NAME {...}`, checked like a named
+#             construction against the error's declared payload)
+#   static    operation (a static intrinsic's operation name: `compile`),
+#             operationOrigin, bodyOrigin, body (nodes), deferred (a list,
+#             possibly empty, of {kind message origin} dicts: diagnostics the
+#             module loader found in the body before any HIR exists -- a
+#             qualified reference the file may not make -- in source order)
+#             -- `static compile:` and its captured block (STATIC-COMPILE.md).
+#             Never resolved: hir/static.tcl replaces every static node by
+#             its decided form (the body as ordinary syntax, or the
+#             reification of the compiler diagnostic that rejected it)
+#             before hir::resolve sees the program, so no HIR expression,
+#             analysis or backend knows the kind
 #   handle    call (a `call` node), handlers (a list of {name nameSpan
-#             origin body} dicts, one per "on NAME:" clause, in written
-#             order -- name/nameSpan for diagnostics, origin for the
+#             origin body payload} dicts, one per "on NAME:" clause, in
+#             written order -- name/nameSpan for diagnostics, origin for the
 #             handler body's own branch scope, body a list of nodes,
-#             exactly like an `if` branch's body)
+#             exactly like an `if` branch's body, payload "" or {name NAME
+#             origin ORIGIN}: the binding the selected error's payload is
+#             bound to in the handler's scope, ERROR-PAYLOADS.md)
 #
 # `block`'s own node also takes an optional `declaredErrors` field: a list
 # of {name nameSpan} pairs, one per name of a function's own "errors E1,
@@ -185,7 +224,8 @@ proc hir::syntax::withFlags {call flags} {
 
 # `receiver.name(args...)` (METHOD-SUGAR.md): a call of the field projection
 # `receiver.name` marked as method-call sugar. NAMEORIGIN locates `name`.
-# The projection's own origin spans the receiver through the name.
+# The projection's own origin spans the receiver through the name. It is
+# written with method sugar (`written method`).
 proc hir::syntax::methodCallNode {origin receiver name nameOrigin args} {
     set projectOrigin $origin
     if {[dict exists $projectOrigin node]} {
@@ -195,9 +235,93 @@ proc hir::syntax::methodCallNode {origin receiver name nameOrigin args} {
     dict set projectOrigin endLine [dict get $nameOrigin endLine]
     dict set projectOrigin endColumn [dict get $nameOrigin endColumn]
     set callee [projectNode $projectOrigin $receiver $name $nameOrigin]
-    set call [callNode $origin $callee {*}$args]
+    set call [withWritten [callNode $origin $callee {*}$args] method]
     dict set call method 1
     return $call
+}
+
+# CALL (a `call` node) marked as written in spelling FORM (function | method
+# | list | operator, see this file's header).
+proc hir::syntax::withWritten {call form} {
+    if {$form ni {function method list operator}} {
+        core::malformed "a call's written form must be function, method, list or operator" [list call $form]
+    }
+    dict set call written $form
+    return $call
+}
+
+# BLOCK (a `block` node) declared `nomethod` by its author.
+proc hir::syntax::withNoMethod {block} {
+    dict set block nomethod 1
+    return $block
+}
+
+# BLOCK (a `block` node) with the proof clauses PROOFS (REFINEMENT-VALUES.md):
+# a list of {outcome true|normal param NAME paramOrigin ORIGIN type TYPEEXPR
+# typeOrigin ORIGIN} dicts, TYPEEXPR the as-written refinement type. A proof
+# clause is part of the function's contract, like its declared result: it
+# says that when a call returns true (a predicate) or completes normally (a
+# validator, `-> unit`), the argument of parameter NAME satisfies the
+# refinement. hir/resolve.tcl validates it and records the
+# resolved contract on the block expression (`proofs`).
+proc hir::syntax::withProofs {block proofs} {
+    foreach clause $proofs {
+        if {[catch {dict get $clause outcome; dict get $clause param; dict get $clause paramOrigin
+                dict get $clause type; dict get $clause typeOrigin}]} {
+            core::malformed "block proof clauses must be {outcome param paramOrigin type typeOrigin} dicts" [list block $proofs]
+        }
+    }
+    if {$proofs ne {}} {
+        dict set block proofs $proofs
+    }
+    return $block
+}
+
+# BLOCK (a `block` node) with the context parameter section CONTEXTPARAMS
+# (CONTEXTS.md): {NAME ORIGIN TYPE TYPEORIGIN} tuples in written order, TYPE
+# the as-written type expression of the required context. They are not
+# parameters: hir/resolve.tcl binds each NAME, at the start of the body, to
+# the installed context of TYPE's resolved identity (an explicit
+# context#load), and the block's `params` (its call arity) are unchanged.
+proc hir::syntax::withContextParams {block contextParams} {
+    foreach entry $contextParams {
+        if {[llength $entry] != 4 || [lindex $entry 0] eq ""} {
+            core::malformed "block context parameters must be {NAME ORIGIN TYPE TYPEORIGIN} tuples" [list block $contextParams]
+        }
+    }
+    if {$contextParams ne {}} {
+        dict set block contextParams $contextParams
+    }
+    return $block
+}
+
+# BLOCK (a `block` node) declaring the coroutine resume protocol TYPE (the
+# as-written type expression of its `resume TYPE` clause, at ORIGIN;
+# COROUTINES.md): hir/resolve.tcl resolves it into the block's
+# `declaredResume`, and hir/coroutines.tcl holds every yield of the
+# function's coroutine to it.
+proc hir::syntax::withResume {block type origin} {
+    dict set block resume [list $type $origin]
+    return $block
+}
+
+# `with context VALUE` (CONTEXTS.md): two statements --
+#
+#     bind TEMP VALUE                      evaluate the value, in order
+#     call ^context#install (ref TEMP)     install it as the context of its
+#                                          inferred context-struct type
+#
+# TEMP is a hygienic temporary (its name contains "#", which source cannot
+# spell), so the installation reads an ordinary local: the install is an
+# explicit call of the internal root native context#install (core/
+# contexts.tcl) that hir/contexts.tcl finds by native identity, infers the
+# type of and verifies, and a native backend can consume the value's fields
+# without building the object (hir/escape.tcl counts the install as a
+# structural use). Returns the two nodes.
+proc hir::syntax::contextInstallNodes {origin temp value} {
+    set bind [bindNode $origin $temp $value]
+    set call [callNode $origin [rootRef $origin [core::contexts::installNative]] [refNode $origin $temp]]
+    return [list $bind $call]
 }
 
 proc hir::syntax::ifNode {origin condition thenOrigin thenBody elseOrigin elseBody} {
@@ -256,13 +380,28 @@ proc hir::syntax::errorNode {origin value} {
     return [Node error $origin value $value]
 }
 
-proc hir::syntax::failNode {origin name} {
+# `fail NAME`, or with VALUE (a node, "" for none) the payload the error
+# carries (ERROR-PAYLOADS.md): a source payload is a `struct` node marked
+# `payloadOf NAME` (surface/lower.tcl), any node is accepted from core IR
+# (`(fail NAME (ref P))`, a re-raise that releases on its way out).
+proc hir::syntax::failNode {origin name {value ""}} {
     core::ir::checkShape [list fail $name]
-    return [Node fail $origin name $name]
+    return [Node fail $origin name $name value $value]
 }
 
-# HANDLERS: a list of {name nameSpan origin body} dicts, as this file's own
-# header describes. CALL must itself be a `call` node (checked by
+# `static OPERATION:` and its captured block BODY (STATIC-COMPILE.md): ORIGIN
+# spans the whole form, OPERATIONORIGIN the operation's name, BODYORIGIN the
+# block. DEFERRED as this file's header describes `static`.
+proc hir::syntax::staticNode {origin operation operationOrigin bodyOrigin body {deferred {}}} {
+    if {$operation ni [hir::static::operations]} {
+        core::malformed "\"$operation\" is not a static operation" [list static $operation]
+    }
+    return [Node static $origin operation $operation operationOrigin $operationOrigin \
+        bodyOrigin $bodyOrigin body $body deferred $deferred]
+}
+
+# HANDLERS: a list of {name nameSpan origin body payload} dicts, as this
+# file's own header describes (`payload` optional). CALL must itself be a `call` node (checked by
 # hir::resolve::Expr, which needs the resolved ExprId to check the kind of
 # -- this constructor only checks the unresolved syntax shape, mirroring
 # core::ir::checkShape's own (call ...) requirement for core IR's `handle`).
@@ -395,14 +534,26 @@ proc hir::syntax::fromIR {node path} {
             return [Node continue $origin]
         }
         fail {
-            return [Node fail $origin name [lindex $node 1]]
+            set value ""
+            if {[llength $node] == 3} {
+                set value [fromIR [lindex $node 2] [concat $path 2]]
+            }
+            return [Node fail $origin name [lindex $node 1] value $value]
         }
         handle {
             set handlers {}
             set index 2
             foreach {name handlerBlock} [lrange $node 2 end] {
+                set payload ""
+                set params [core::ir::blockParams $handlerBlock]
+                if {$params ne {}} {
+                    # (block {P} ...): the handler binds the error's payload
+                    # to P (ERROR-PAYLOADS.md).
+                    set payload [dict create name [lindex $params 0] \
+                        origin [list ir [concat $path [expr {$index + 1}] 1 0]]]
+                }
                 lappend handlers [dict create name $name nameSpan "" \
-                    origin [list ir [concat $path $index]] \
+                    origin [list ir [concat $path $index]] payload $payload \
                     body [Sequence [core::ir::blockBody $handlerBlock] [concat $path $index] 2]]
                 incr index 2
             }
@@ -477,8 +628,8 @@ proc hir::syntax::CollectBindNames {node namesVar} {
         return - ok - error {
             CollectBindNames [dict get $node value] names
         }
-        break {
-            if {[dict get $node value] ne ""} {
+        break - fail {
+            if {[dict exists $node value] && [dict get $node value] ne ""} {
                 CollectBindNames [dict get $node value] names
             }
         }

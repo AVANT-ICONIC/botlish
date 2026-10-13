@@ -24,13 +24,21 @@
 #   x                     ref x
 #   mod::x                ref "mod::x"          module-qualified; see
 #                         surface/modules.tcl for how "mod::x" is bound
+#   E::C                  the same `ref "E::C"` (qualified {E C}): when E
+#                         names an enum type visible here, hir::resolve makes
+#                         it the case C of that enum, the constant
+#                         `const enum {ID C}` (ENUMS.md); nothing here knows
+#                         which qualifier is a type
 #   [a, b]                call ^list a b
 #   {x: a, y: b}          struct {} (x a) (y b)      written order is evaluation
 #                         order; an anonymous struct value (STRUCTS.md)
 #   Name {x: a, y: b}     struct Name (x a) (y b)    the same payload applied
 #                         to the declared struct Name
 #   e.name                project e name             a static field projection
-#   f(a, b)               call f a b
+#   f(a, b)               call f a b            (every call here is marked
+#                         `written FORM`: function for this one, method,
+#                         list and operator for the rules below -- how a call
+#                         was spelled, for diagnostics only)
 #   e.name(a, b)          call (project e name) a b, marked `method`: the
 #                         method-call sugar (METHOD-SUGAR.md). Written as the
 #                         field-value call it has always been (callee
@@ -54,10 +62,27 @@
 #                         is its result (Sequence splices the statements in; a
 #                         nested pattern binds a further temporary)
 #   fn f(a, b): body      bind f (block (a b) body...)
+#   nomethod fn f(a, b):  the same block marked `nomethod 1`: its author
+#                         declares that it is never the callee of method
+#                         syntax (WARNINGS-METHOD-ELIGIBLE.md)
+#   fn p(x: T) -> bool proves x: R:   the same block carrying `proofs`
+#                         ({outcome true param x paramOrigin .. type R
+#                         typeOrigin ..}): a proof contract, resolved and
+#                         validated by hir::resolve (REFINEMENT-VALUES.md);
+#                         `-> unit proves x: R` (a validator) has outcome
+#                         `normal`
 #   fn f(a, flags :x, :y): body   the same block carrying `flags` ({x ORIGIN}
 #                         {y ORIGIN}) beside its ordinary params; flags are a
 #                         separate parameter category (FLAGS.md), made
 #                         Bool bindings by hir::resolve
+#   fn f(a, context io: T): body   the same block carrying `contextParams`
+#                         ({io ORIGIN T TYPEORIGIN}): not parameters; hir::resolve
+#                         binds io at the start of the body to the installed
+#                         context of T (CONTEXTS.md)
+#   with context e        bind tmp e; call ^context#install (ref tmp)
+#                         (CONTEXTS.md): the value, then the explicit
+#                         installation of it; tmp is a hygienic temporary
+#                         (context#START), Sequence splices both in
 #   f(a, :x)              call f a, carrying `flags` ({x ORIGIN}): names, not
 #                         expressions (FLAGS.md); a method call likewise
 #   if c: t else: e       if c {t...} {e...}    inline branches; a missing
@@ -76,6 +101,25 @@
 #                         down from; core/ir.tcl's `countloop`)
 #   loop x in e and i from a to b: body   lockloop {domains} {body...}
 #                         (lockstep; core/ir.tcl's `lockloop`)
+#   yield e               call ^coroutine#yield e      (COROUTINES.md: an
+#                         internal root native, typed by hir/coroutines.tcl)
+#   coroutine {step: s, first: f} = g(a, b)
+#                         bind coroutine#N#arg1 a; bind coroutine#N#arg2 b;
+#                         bind s (call ^coroutine#create (block {} (call g
+#                         (ref coroutine#N#arg1) (ref coroutine#N#arg2))));
+#                         bind f (call ^coroutine#start (ref s)); ^unit
+#                         -- the arguments are evaluated first, in order,
+#                         into hygienic temporaries (a constant stays in
+#                         place); create wraps the call in a zero-argument
+#                         thunk without running it; start runs it eagerly to
+#                         its first outward boundary. Handlers on the right
+#                         side handle the start call. An omitted step binds
+#                         the handle to the temporary coroutine#N, an
+#                         omitted first discards start's value. See
+#                         CoroutineBind
+#   fn f(a, resume T): body   the block carrying `resume {T ORIGIN}`: the
+#                         function's declared resume protocol (COROUTINES.md),
+#                         not a parameter; resolved by hir::resolve
 #   return / return e     return ^unit / return e
 #   break / break e       break / break e
 #   continue              continue
@@ -89,7 +133,14 @@
 # the node's structural id, ast.tcl); nodes a rule adds get the id with a
 # role (ID/op for an operator's callee, ID/then for a branch it adds, ...).
 
-namespace eval surface::lower {}
+namespace eval surface::lower {
+    # The loader's diagnostics of the static intrinsics of the file being
+    # lowered (STATIC-COMPILE.md): AST node id of a `static` node -> the
+    # {kind message span} dicts of the qualified references in its body the
+    # file may not make (surface/modules.tcl's CollectAndLoad), set by the
+    # loader around the file's lowering. Empty for a file without any.
+    variable staticDeferred [dict create]
+}
 
 proc surface::lowerToHir {ast args} {
     set options [dict create -strict 1 -warnings [hir::warnings::defaultMode] -warning-channel stderr]
@@ -116,14 +167,16 @@ proc surface::lowerToHir {ast args} {
         [dict get $options -warnings] [dict get $options -warning-channel]]
 }
 
-# STATEMENTS split into {EXECUTABLE DECLS ERRORDECLS STRUCTDECLS}: EXECUTABLE keeps
+# STATEMENTS split into {EXECUTABLE DECLS ERRORDECLS STRUCTDECLS TRAITDECLS}: EXECUTABLE keeps
 # every statement with runtime meaning, in order (ready for Sequence);
 # DECLS is the type declarations among them (surface/parser.tcl's
-# `typedecl` nodes), converted to the plain dicts hir::buildSyntax's
+# `typedecl` nodes, and `enumdecl` nodes as `kind enum` entries), converted to the plain dicts hir::buildSyntax's
 # -type-decls option takes (see hir/sourcetypes.tcl); ERRORDECLS likewise
 # for named-error declarations (`errordecl` nodes, hir/errordecls.tcl's
 # -error-decls); STRUCTDECLS likewise for struct declarations (`structdecl`
-# nodes, hir/structs.tcl's -struct-decls; STRUCTS.md); structs and types are
+# nodes, hir/structs.tcl's -struct-decls; STRUCTS.md), TRAITDECLS for trait
+# declarations (`traitdecl`, hir/traits.tcl's -trait-decls; TRAITS.md); structs,
+# traits and types are
 # tagged with NAMESPACE (the declaring module's, "" for the entry program):
 # it makes their identity `NAMESPACE::Name` (IMPORTS.md). No kind of declaration
 # is lowered to an hir/syntax.tcl node: compile-time-only metadata (spec
@@ -133,15 +186,40 @@ proc surface::lower::SplitTypeDecls {statements {namespace ""}} {
     set decls {}
     set errorDecls {}
     set structDecls {}
+    set traitDecls {}
     foreach statement $statements {
         switch -- [dict get $statement kind] {
             typedecl   { lappend decls [TypeDeclOf $statement $namespace] }
-            errordecl  { lappend errorDecls [ErrorDeclOf $statement] }
+            enumdecl   { lappend decls [EnumDeclOf $statement $namespace] }
+            errordecl  { lappend errorDecls [ErrorDeclOf $statement $namespace] }
             structdecl { lappend structDecls [StructDeclOf $statement $namespace] }
+            traitdecl  { lappend traitDecls [TraitDeclOf $statement $namespace] }
             default    { lappend executable $statement }
         }
     }
-    return [list $executable $decls $errorDecls $structDecls]
+    return [list $executable $decls $errorDecls $structDecls $traitDecls]
+}
+
+# The declaration dict of an `enumdecl` node declared in module NAMESPACE (""
+# for the entry program): a `kind enum` entry of hir::buildSyntax's
+# -type-decls (ENUMS.md; hir::sourcetypes::apply hands it to hir/enums.tcl).
+# `namespace` is the loader's canonical module identity, never read from the
+# (cached, importer-neutral) AST: it makes the enum's identity
+# `NAMESPACE::Name`.
+proc surface::lower::EnumDeclOf {node namespace} {
+    return [dict create kind enum name [dict get $node name] nameSpan [dict get $node nameSpan] \
+        namespace $namespace cases [dict get $node cases] span [dict get $node span]]
+}
+
+# The declaration dict of a `traitdecl` node declared in module NAMESPACE (""
+# for the entry program), for hir::buildSyntax's -trait-decls (TRAITS.md).
+# `namespace` -- the trait's owner, the one module that defines its
+# requirement set -- is the loader's canonical module identity, never read
+# from the (cached, importer-neutral) AST.
+proc surface::lower::TraitDeclOf {node namespace} {
+    return [dict create name [dict get $node name] nameSpan [dict get $node nameSpan] \
+        namespace $namespace requirements [dict get $node requirements] span [dict get $node span] \
+        context [expr {[dict exists $node context] ? [dict get $node context] : 0}]]
 }
 
 # The declaration dict of a `structdecl` node declared in module NAMESPACE (""
@@ -152,18 +230,38 @@ proc surface::lower::SplitTypeDecls {statements {namespace ""}} {
 proc surface::lower::StructDeclOf {node namespace} {
     return [dict create name [dict get $node name] nameSpan [dict get $node nameSpan] \
         namespace $namespace fields [dict get $node fields] span [dict get $node span] \
-        opaque [expr {[dict exists $node opaque] ? [dict get $node opaque] : 0}]]
+        opaque [expr {[dict exists $node opaque] ? [dict get $node opaque] : 0}] \
+        context [expr {[dict exists $node context] ? [dict get $node context] : 0}]]
 }
 
+# The declaration dict of a `typedecl` node declared in module NAMESPACE (""
+# for the entry program). `namespace` is the declaring module, supplied here
+# by the loader's canonical module identity (never read from the cached,
+# importer-neutral AST): for a refinement it is also the type's owner, the
+# one module that may mint it (REFINEMENT-VALUES.md).
 proc surface::lower::TypeDeclOf {node {namespace ""}} {
+    if {[dict exists $node form] && [dict get $node form] eq "refined"} {
+        return [dict create kind refined \
+            name [dict get $node name] nameSpan [dict get $node nameSpan] namespace $namespace \
+            carrier [dict get $node carrier] carrierSpan [dict get $node carrierSpan] \
+            span [dict get $node span]]
+    }
     return [dict create \
         name [dict get $node name] nameSpan [dict get $node nameSpan] namespace $namespace \
         parent [dict get $node parent] parentSpan [dict get $node parentSpan] \
         domain [dict get $node domain] domainSpan [dict get $node domain span]]
 }
 
-proc surface::lower::ErrorDeclOf {node} {
-    return [dict create name [dict get $node name] nameSpan [dict get $node nameSpan]]
+# The declaration dict of an `errordecl` node declared in module NAMESPACE
+# ("" for the entry program): its name, and its payload FIELDS
+# (ERROR-PAYLOADS.md; {name nameSpan type typeSpan} dicts, empty for a
+# payload-free error) with the namespace their type names resolve in. The
+# error's name stays program-global (hir/errordecls.tcl); NAMESPACE only
+# scopes the payload's field types, exactly as a struct's.
+proc surface::lower::ErrorDeclOf {node {namespace ""}} {
+    return [dict create name [dict get $node name] nameSpan [dict get $node nameSpan] \
+        namespace $namespace span [dict get $node span] \
+        fields [expr {[dict exists $node fields] ? [dict get $node fields] : {}}]]
 }
 
 # The tail both surface::lowerToHir and surface::modules::compileProgramFile
@@ -241,6 +339,14 @@ proc surface::lower::Sequence {nodes} {
     foreach node $nodes {
         if {[dict get $node kind] eq "destructure"} {
             lappend result {*}[Destructure $node]
+        } elseif {[dict get $node kind] eq "coroutinebind"} {
+            lappend result {*}[CoroutineBind $node]
+        } elseif {[dict get $node kind] eq "with"} {
+            # `with context EXPR` (CONTEXTS.md): the value bound to a hygienic
+            # temporary, then the explicit installation of it (placement,
+            # type, duplicates and order: hir/contexts.tcl).
+            lappend result {*}[hir::syntax::contextInstallNodes [OriginOf $node] \
+                "context#[dict get $node span start]" [Node [dict get $node value]]]
         } else {
             lappend result [Node $node]
         }
@@ -284,6 +390,33 @@ proc surface::lower::Destructure {node} {
     return [concat [list $source] [Projections $pattern $temp] [list $result]]
 }
 
+# The handler syntax dicts of handled call NODE (hir/syntax.tcl's handleNode):
+# what each "on NAME" receives of the error's payload is its `payload`
+# binding (ERROR-PAYLOADS.md) -- the name written in `on NAME details:`, or
+# for `on NAME {a, b: c}:` the pattern's hygienic temporary, whose ordinary
+# projection binds (Projections, exactly a destructuring statement's) open
+# the handler body. Nothing else of a handler is payload-specific: selection
+# stays the error name alone.
+proc surface::lower::Handlers {node} {
+    return [lmap handler [dict get $node handlers] {
+        set suite [dict get $handler body]
+        set body [Sequence [dict get $suite body]]
+        set payload ""
+        if {[dict exists $handler binding] && [dict get $handler binding] ne ""} {
+            set payload [dict create name [dict get $handler binding] \
+                origin [Origin [dict get $handler bindingSpan] [dict get $suite id]/payload]]
+        } elseif {[dict exists $handler pattern] && [dict get $handler pattern] ne ""} {
+            set pattern [dict get $handler pattern]
+            set temp [TempName $pattern]
+            set payload [dict create name $temp \
+                origin [Origin [dict get $pattern span] [dict get $suite id]/payload]]
+            set body [concat [Projections $pattern $temp] $body]
+        }
+        dict create name [dict get $handler name] nameSpan [dict get $handler nameSpan] \
+            origin [OriginOf $suite] body $body payload $payload
+    }]
+}
+
 # The hygienic temporary of the pattern PATTERN: unique per pattern in a file.
 proc surface::lower::TempName {pattern} {
     return "destructure#[dict get $pattern span start]"
@@ -308,6 +441,100 @@ proc surface::lower::Projections {pattern temp} {
         }
     }
     return $nodes
+}
+
+# A coroutine binding (COROUTINES.md): `coroutine {step: s, first: f} =
+# CALL` is
+#
+#     coroutine#N#arg1 = A1        each argument of CALL that is not a
+#     ...                          literal, in written order (a method call's
+#                                  receiver first): evaluated here, before
+#                                  the coroutine exists, exactly as an
+#                                  ordinary call evaluates them
+#     s = coroutine#create(THUNK)  THUNK: a zero-argument block whose body is
+#                                  CALL over those temporaries; nothing runs
+#     f = coroutine#start(s)       the eager start: runs CALL to its first
+#                                  outward boundary (yield, return or an
+#                                  unhandled fail); CALL's handlers, if any,
+#                                  handle this call
+#     unit                         the statement's own value
+#
+# N is the statement's start offset, and `#` makes every temporary hygienic
+# (source cannot spell it). An omitted `step` binds the handle to
+# coroutine#N, an omitted `first` leaves start's value unbound. No two-field
+# value is ever built. What the right side calls -- that it is a function
+# that may yield, and its protocol -- is HIR's to check
+# (hir/coroutines.tcl); a right side that is not a call becomes the thunk's
+# whole body, which HIR rejects (COROUTINE-RHS-NOT-YIELDING).
+proc surface::lower::CoroutineBind {node} {
+    set origin [OriginOf $node]
+    set value [dict get $node value]
+    set handlers {}
+    set call $value
+    if {[dict get $value kind] eq "handledcall"} {
+        set call [dict get $value call]
+        set handlers [Handlers $value]
+    }
+    set n [dict get $node span start]
+    set pre {}
+    set index 0
+    # The value of argument AST node ARG inside the thunk: the node itself for
+    # a literal, else a reference to the temporary it is evaluated into here.
+    set argument {{arg} {
+        upvar 1 pre pre index index n n
+        if {[dict get $arg kind] in {int string char bool unit}} {
+            return [surface::lower::Node $arg]
+        }
+        incr index
+        set temp "coroutine#$n#arg$index"
+        set argOrigin [surface::lower::OriginOf $arg]
+        lappend pre [hir::syntax::bindNode $argOrigin $temp [surface::lower::Node $arg]]
+        return [hir::syntax::refNode $argOrigin $temp]
+    }}
+    switch -- [dict get $call kind] {
+        call {
+            set callee [Node [dict get $call callee]]
+            set args [lmap arg [dict get $call args] {apply $argument $arg}]
+            set inner [hir::syntax::withFlags [hir::syntax::callNode [OriginOf $call] $callee {*}$args] \
+                [Flags $call]]
+        }
+        methodcall {
+            set receiver [apply $argument [dict get $call receiver]]
+            set args [lmap arg [dict get $call args] {apply $argument $arg}]
+            set inner [hir::syntax::withFlags [hir::syntax::methodCallNode [OriginOf $call] $receiver \
+                [dict get $call name] [Origin [dict get $call nameSpan] [dict get $call id]/method] \
+                {*}$args] [Flags $call]]
+        }
+        default {
+            set inner [Node $call]
+        }
+    }
+    set thunk [hir::syntax::blockNode [OriginOf $node thunk] {} [list $inner]]
+    set step ""
+    set first ""
+    foreach field [dict get $node pattern fields] {
+        set fieldOrigin [Origin [dict get $field localSpan] [dict get $field id]/binding]
+        dict set field origin $fieldOrigin
+        set [dict get $field name] $field
+    }
+    if {$step ne ""} {
+        set handle [dict get $step local]
+        set handleOrigin [dict get $step origin]
+    } else {
+        set handle "coroutine#$n"
+        set handleOrigin $origin
+    }
+    set create [hir::syntax::bindNode $handleOrigin $handle \
+        [hir::syntax::callNode $origin [hir::syntax::rootRef $origin [core::coroutines::createNative]] $thunk]]
+    set start [hir::syntax::callNode $origin [hir::syntax::rootRef $origin [core::coroutines::startNative]] \
+        [hir::syntax::refNode $origin $handle]]
+    if {$handlers ne {}} {
+        set start [hir::syntax::handleNode [OriginOf $value] $start $handlers]
+    }
+    if {$first ne ""} {
+        set start [hir::syntax::bindNode [dict get $first origin] [dict get $first local] $start]
+    }
+    return [concat $pre [list $create $start [hir::syntax::rootRef [OriginOf $node unit] unit]]]
 }
 
 # The {NAME ORIGIN} flag pairs of the function declaration or call AST node
@@ -379,13 +606,13 @@ proc surface::lower::Node {node} {
             return $ref
         }
         list {
-            return [hir::syntax::callNode $origin \
+            return [hir::syntax::withWritten [hir::syntax::callNode $origin \
                 [hir::syntax::rootRef [OriginOf $node list] list] \
-                {*}[Sequence [dict get $node items]]]
+                {*}[Sequence [dict get $node items]]] list]
         }
         call {
-            return [hir::syntax::withFlags [hir::syntax::callNode $origin [Node [dict get $node callee]] \
-                {*}[Sequence [dict get $node args]]] [Flags $node]]
+            return [hir::syntax::withFlags [hir::syntax::withWritten [hir::syntax::callNode $origin \
+                [Node [dict get $node callee]] {*}[Sequence [dict get $node args]]] function] [Flags $node]]
         }
         methodcall {
             return [hir::syntax::withFlags [hir::syntax::methodCallNode $origin [Node [dict get $node receiver]] \
@@ -408,18 +635,18 @@ proc surface::lower::Node {node} {
             set op [dict get $node op]
             set opOrigin [Origin [dict get $node opSpan] [dict get $node id]/op]
             if {$op eq "!="} {
-                set equal [hir::syntax::callNode $origin \
+                set equal [hir::syntax::withWritten [hir::syntax::callNode $origin \
                     [hir::syntax::rootRef $opOrigin ==] \
-                    [Node [dict get $node left]] [Node [dict get $node right]]]
+                    [Node [dict get $node left]] [Node [dict get $node right]]] operator]
                 return [Branch $origin $equal [list [Bool $opOrigin false]] [list [Bool $opOrigin true]]]
             }
-            return [hir::syntax::callNode $origin [hir::syntax::rootRef $opOrigin $op] \
-                [Node [dict get $node left]] [Node [dict get $node right]]]
+            return [hir::syntax::withWritten [hir::syntax::callNode $origin [hir::syntax::rootRef $opOrigin $op] \
+                [Node [dict get $node left]] [Node [dict get $node right]]] operator]
         }
         unary {
             set opOrigin [Origin [dict get $node opSpan] [dict get $node id]/op]
-            return [hir::syntax::callNode $origin [hir::syntax::rootRef $opOrigin -] \
-                [hir::syntax::constNode $opOrigin 0] [Node [dict get $node operand]]]
+            return [hir::syntax::withWritten [hir::syntax::callNode $origin [hir::syntax::rootRef $opOrigin -] \
+                [hir::syntax::constNode $opOrigin 0] [Node [dict get $node operand]]] operator]
         }
         not {
             set opOrigin [Origin [dict get $node opSpan] [dict get $node id]/op]
@@ -457,6 +684,29 @@ proc surface::lower::Node {node} {
                 [Origin [dict get $node paramsSpan] [dict get $node id]/block] \
                 $params [Sequence [dict get $node body body]] [dict get $node resultType] $paramTypes $errors \
                 [Flags $node]]
+            if {[dict exists $node nomethod] && [dict get $node nomethod]} {
+                set block [hir::syntax::withNoMethod $block]
+            }
+            if {[dict exists $node proves] && [dict get $node proves] ne {}} {
+                set block [hir::syntax::withProofs $block [lmap clause [dict get $node proves] {
+                    set param [dict get $clause param]
+                    dict create outcome [dict get $clause outcome] param $param \
+                        paramOrigin [Origin [dict get $clause paramSpan] "[dict get $node id]/proves($param)"] \
+                        type [dict get $clause type] \
+                        typeOrigin [Origin [dict get $clause typeSpan] "[dict get $node id]/proves($param)/type"]
+                }]]
+            }
+            if {[dict exists $node resume] && [dict get $node resume] ne ""} {
+                set block [hir::syntax::withResume $block [dict get $node resume type] \
+                    [Origin [dict get $node resume typeSpan] "[dict get $node id]/resume"]]
+            }
+            if {[dict exists $node contexts]} {
+                set block [hir::syntax::withContextParams $block [lmap c [dict get $node contexts] {
+                    set name [dict get $c name]
+                    list $name [Origin [dict get $c nameSpan] "[dict get $node id]/context($name)"] \
+                        [dict get $c type] [Origin [dict get $c typeSpan] "[dict get $node id]/context($name)/type"]
+                }]]
+            }
             return [hir::syntax::bindNode $origin [dict get $node name] $block]
         }
         if {
@@ -531,15 +781,43 @@ proc surface::lower::Node {node} {
             return [hir::syntax::continueNode $origin]
         }
         fail {
-            return [hir::syntax::failNode $origin [dict get $node name]]
+            # ERROR-PAYLOADS.md: a payload is the struct construction of its
+            # field initializers, checked (hir/resolve.tcl, hir/range.tcl)
+            # against the error's declared payload -- PAYLOADOF -- exactly as
+            # a named construction is against its declaration.
+            set payload ""
+            if {[dict exists $node payload] && [dict get $node payload] ne ""} {
+                set init [dict get $node payload]
+                set payload [hir::syntax::structNode [OriginOf $init] "" [FieldInits $init]]
+                dict set payload payloadOf [dict get $node name]
+            }
+            return [hir::syntax::failNode $origin [dict get $node name] $payload]
+        }
+        yield {
+            return [hir::syntax::callNode $origin \
+                [hir::syntax::rootRef $origin [core::coroutines::yieldNative]] [Node [dict get $node value]]]
         }
         handledcall {
-            set handlers [lmap handler [dict get $node handlers] {
-                dict create name [dict get $handler name] nameSpan [dict get $handler nameSpan] \
-                    origin [OriginOf [dict get $handler body]] \
-                    body [Sequence [dict get [dict get $handler body] body]]
-            }]
-            return [hir::syntax::handleNode $origin [Node [dict get $node call]] $handlers]
+            return [hir::syntax::handleNode $origin [Node [dict get $node call]] [Handlers $node]]
+        }
+        static {
+            # `static compile:` (STATIC-COMPILE.md): the captured block stays
+            # syntax -- the same nodes it would lower to anywhere, with their
+            # own origins -- under a `static` node that hir/static.tcl
+            # replaces by its decided form before resolution.
+            variable staticDeferred
+            set body [dict get $node body]
+            set deferred {}
+            if {[dict exists $staticDeferred [dict get $node id]]} {
+                set deferred [lmap d [dict get $staticDeferred [dict get $node id]] {
+                    dict create kind [dict get $d kind] message [dict get $d message] \
+                        origin [Origin [dict get $d span] [dict get $node id]/deferred]
+                }]
+            }
+            return [hir::syntax::staticNode $origin [dict get $node operation] \
+                [Origin [dict get $node operationSpan] [dict get $node id]/operation] \
+                [Origin [dict get $body span] [dict get $body id]/body] \
+                [Sequence [dict get $body body]] $deferred]
         }
     }
     error "surface::lowerToHir: cannot lower a \"[dict get $node kind]\" node"

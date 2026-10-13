@@ -1,0 +1,74 @@
+# Side-by-side agreement on this checkout
+
+221 ported rows, 56 old test files, 8 golden suites
+
+old pass, new pass: 221
+
+Old tests, wall seconds per file (one tclsh each, startup included):
+    tests/surface-samples.test                       0.2
+    tests/calls.test                                 0.1
+    tests/blocks.test                                0.1
+    tests/control.test                               0.1
+    tests/inference.test                             0.1
+    tests/elif.test                                  4.8
+    tests/loop-counted.test                          0.1
+    tests/loop-collecting.test                       0.4
+    tests/loop-in.test                               0.1
+    tests/lists.test                                 0.1
+    tests/list-stdlib.test                           0.1
+    tests/stdlib-namespaces.test                     0.3
+    tests/structs.test                               0.1
+    tests/struct-destructuring.test                  0.6
+    tests/method-sugar.test                          0.4
+    tests/enums.test                                 0.3
+    tests/immutable-set.test                         0.1
+    tests/mutable-vector.test                        1.2
+    tests/mutable-array.test                         1.1
+    tests/str-char-at.test                           0.2
+    tests/unicode-char.test                          0.1
+    tests/flags.test                                 0.1
+    tests/static-compile.test                        0.8
+    tests/strict-references.test                     0.1
+    tests/surface-lowering.test                      0.1
+    tests/imports.test                               0.2
+    tests/method-eligible.test                       0.1
+    tests/typed-parameters.test                      0.1
+    tests/opaque-struct.test                         0.3
+    tests/errors.test                                0.2
+    tests/error-payloads.test                        0.8
+    tests/namespaced-errors.test                     0.2
+    tests/higher-order-completions.test              0.3
+    tests/mutable-array-type.test                    0.5
+    tests/coroutines.test                            1.0
+    tests/affine.test                                1.5
+    tests/contexts.test                              1.9
+    tests/context-traits.test                        0.3
+    tests/portable-io.test                           0.4
+    tests/traits.test                                0.2
+    tests/refinement-values.test                     0.1
+    tests/refinement-validators.test                 0.3
+    tests/native.test                                0.2
+    tests/raw-int-abi.test                           0.2
+    tests/native-bitshift.test                       0.3
+    tests/short-string.test                          0.7
+    tests/native-hashing.test                        0.1
+    tests/struct-scalar-replacement.test             0.2
+    tests/value-transport.test                       0.4
+    tests/native-string-region.test                  0.2
+    tests/abi-numeric.test                           0.4
+    tests/argv.test                                  0.2
+    tests/warnings.test                              0.2
+    tests/native-alloc.test                          0.1
+    tests/hir-lowering.test                          0.1
+    tests/native-stack-overflow.test                 0.1
+    total                                           23.5
+Golden suites, wall seconds per suite (compile once, run on interp, compile, cranelift-generic, cranelift):
+    collections.bot                                 24.2   ok
+    diagnostics.bot                                 19.7   ok
+    errors.bot                                      13.1   ok
+    harness.bot                                      6.8   ok
+    modules.bot                                     23.4   ok
+    ownership.bot                                   43.3   ok
+    representation.bot                              11.4   ok
+    values.bot                                      19.1   ok
+    total                                          161.0

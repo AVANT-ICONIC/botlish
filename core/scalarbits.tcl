@@ -49,8 +49,8 @@
 # normalization itself (spec's own #3-4); byte::nibble(...) is the separate
 # conversion that does that. See lib/byte.bot's own header for exactly why
 # these are ordinary functions here rather than natives with a declared
-# HighNibble/LowNibble/Nibble result type: native lowering's -native-body/
-# -module-fn bridge (native/native.tcl) is a syntactic pre-pass over only
+# HighNibble/LowNibble/Nibble result type: native lowering's former
+# -native-body/-module-fn bridge (since removed) was a syntactic pre-pass over only
 # the entry program's own raw core IR, so a native whose sole executable
 # form is one of those is unsupported on Cranelift the moment it is called
 # from *inside* a cross-file module function -- exactly web.bot's own
@@ -103,17 +103,17 @@ namespace eval core::scalarbits {
 
 proc core::scalarbits::bitAnd {a b} {
     lassign [core::primitives::Ints bit_and $a $b] x y
-    return [core::value::int [expr {$x & $y}]]
+    return [core::value::intFromNumber [expr {$x & $y}]]
 }
 
 proc core::scalarbits::bitOr {a b} {
     lassign [core::primitives::Ints bit_or $a $b] x y
-    return [core::value::int [expr {$x | $y}]]
+    return [core::value::intFromNumber [expr {$x | $y}]]
 }
 
 proc core::scalarbits::bitXor {a b} {
     lassign [core::primitives::Ints bit_xor $a $b] x y
-    return [core::value::int [expr {$x ^ $y}]]
+    return [core::value::intFromNumber [expr {$x ^ $y}]]
 }
 
 # The nonnegative shift amount of raw Tcl int K, or a RANGE error: shared by
@@ -129,26 +129,31 @@ proc core::scalarbits::CheckShiftAmount {k} {
 proc core::scalarbits::shiftLeft {a b} {
     lassign [core::primitives::Ints shift_left $a $b] x k
     CheckShiftAmount $k
-    return [core::value::int [expr {$x << $k}]]
+    return [core::value::intFromNumber [expr {$x << $k}]]
 }
 
 proc core::scalarbits::shiftRight {a b} {
     lassign [core::primitives::Ints shift_right $a $b] x k
     CheckShiftAmount $k
-    return [core::value::int [expr {$x >> $k}]]
+    return [core::value::intFromNumber [expr {$x >> $k}]]
 }
 
-foreach {name impl} {
-    bit_and     core::scalarbits::bitAnd
-    bit_or      core::scalarbits::bitOr
-    bit_xor     core::scalarbits::bitXor
-    shift_left  core::scalarbits::shiftLeft
-    shift_right core::scalarbits::shiftRight
+# The three bitwise operations are `nomethod` (WARNINGS-METHOD-ELIGIBLE.md,
+# REFACTOR-WARNINGS-CLEAN.md): their operands are symmetric, so neither is a
+# receiver -- `a.bit_and(b)` would read as if A were the subject. A shift's
+# value is its subject (`v.shift_right(6)`), so the shifts take method syntax.
+foreach {name impl nomethod} {
+    bit_and     core::scalarbits::bitAnd     1
+    bit_or      core::scalarbits::bitOr      1
+    bit_xor     core::scalarbits::bitXor     1
+    shift_left  core::scalarbits::shiftLeft  0
+    shift_right core::scalarbits::shiftRight 0
 } {
     core::native::register $name -arity 2 -impl $impl \
-        -param-types {int int} -result-type int -runtime bigint -context-free 1
+        -param-types {int int} -result-type int -runtime bigint -context-free 1 \
+        -nomethod $nomethod
 }
-unset name impl
+unset name impl nomethod
 
 # The four scalar domains (Byte, Nibble, LowNibble, HighNibble) are no
 # longer registered here: they are ordinary Botlish source declarations in

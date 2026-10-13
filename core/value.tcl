@@ -6,11 +6,12 @@
 # distinct values.
 #
 #   {int DIGITS}              arbitrary-precision integer, canonical decimal
-#   {str TEXT ?EVIDENCE?}     string; EVIDENCE is a sorted, non-empty list of
-#                             named types the string is proven to satisfy
-#                             (see type.tcl). Evidence is knowledge *about*
-#                             the string, not part of it: equality, eq and
-#                             display ignore it.
+#   {str TEXT}                string. A String carries nothing but its
+#                             text: a refinement of str (REFINEMENT-VALUES.md)
+#                             is a static proof fact with exactly this
+#                             representation -- no tag, no evidence, no
+#                             wrapper (Strings used to carry runtime
+#                             "evidence" of opaque named types; that is gone).
 #   {bool true|false}         Boolean
 #   {unit}                    the unit value
 #   {UnicodeChar CODEPOINT}   exactly one Unicode scalar value (U+0000..U+D7FF
@@ -19,8 +20,7 @@
 #                             from Int: same tagged-list shape as {int N},
 #                             but a different tag, so a UnicodeChar can never
 #                             be mistaken for an Int by kind (see
-#                             UNICODE-CHAR-LITERALS.md). Immutable, no
-#                             evidence.
+#                             UNICODE-CHAR-LITERALS.md). Immutable.
 #   {list ITEMS}              ITEMS is a Tcl list of runtime values
 #   {immutableSet ITEMS}      an immutable set of unique Botlish values
 #                             (core::value::equal): ITEMS is a Tcl list of
@@ -37,7 +37,7 @@
 #                             operation. Immutable: there is no in-place
 #                             insertion/removal operation.
 #   {result ok|error VALUE}   Result
-#   {errorId NAME}            identity of a declared application error
+#   {errorId NAME ?PAYLOAD?}  identity of a declared application error
 #                             completion (EXPLICIT-ERROR-COMPLETIONS.md): the
 #                             payload of a `propagate-error` completion
 #                             (core/completion.tcl), never an ordinary
@@ -45,7 +45,13 @@
 #                             inspect -- it exists only to let `handle`
 #                             (core/ir.tcl) tell declared errors apart by
 #                             identity, never by message text. NAME is the
-#                             error's own declared (program-unique) name.
+#                             error's own declared (program-unique) name;
+#                             PAYLOAD, present exactly for an error that
+#                             declares one, the payload value it carries (an
+#                             anonymous struct value, ERROR-PAYLOADS.md):
+#                             the identity and the payload stay two
+#                             components, and a payload-free error is the
+#                             one-word form it always was.
 #   {block PARAMS BODY ENV CODE}
 #                             Block: parameters, body expressions (IR),
 #                             captured env, and the compiled code for the
@@ -62,18 +68,85 @@
 #                             struct's kind is never `list`. The field names
 #                             live in the shape, never in the individual
 #                             value's own payload.
-#   {mutarray ID}             MutableArray handle; ID indexes
-#                             core::mutarray's mutable store (mutarray.tcl).
-#                             The only value kind that is NOT treated as
-#                             immutable: two {mutarray ID} values with the
-#                             same ID are the same storage, and mutating one
-#                             is observable through the other.
+#   {enum ID CASE}            a case value of an enum (ENUMS.md): ID is the
+#                             declaration identity of the enum ("Name",
+#                             "namespace::Name"), CASE the declared name of
+#                             one of its cases. The pair is the value's
+#                             whole identity: two values are equal iff both
+#                             parts are, so a same-spelled case of another
+#                             enum is a different value. No ordinal, no
+#                             integer and no String meaning is carried or
+#                             implied (the case's position in its
+#                             declaration is not part of the value).
+#                             Immutable, unrestricted, no heap state. A
+#                             future payload-bearing case extends this
+#                             form; it does not replace it.
+#   {bytestore HEX}           the owned byte storage behind abi::bytes::Bytes (ABI-
+#                             BYTES.md): an immutable, finite sequence of
+#                             bytes, HEX its lowercase hexadecimal text (two
+#                             digits per byte, so the byte count is
+#                             [string length HEX] / 2 and the empty
+#                             sequence is {bytestore {}}). A distinct runtime
+#                             kind from List and String: a byte is a plain
+#                             0..255 value, never a character, and nothing
+#                             terminates the sequence (a NUL byte is
+#                             "00"). Equality is exact byte-sequence
+#                             equality. It exists only inside the owning
+#                             module's opaque struct (lib/abi/bytes.bot's Bytes);
+#                             no source type spells it.
+#   {mutbytes HEX}            the owned writable byte storage behind
+#                             abi::bytes::MutableBytes (MUTABLE-BYTES.md): a finite
+#                             sequence of bytes of one fixed length, HEX its
+#                             lowercase hexadecimal text exactly as for
+#                             `bytestore`. A distinct runtime kind from
+#                             `bytestore` (so a MutableBytes is never
+#                             accepted where an immutable byte storage is
+#                             required, nor the reverse). It is a VALUE, not
+#                             a reference: like every other kind it
+#                             is an immutable Tcl value (a mutarray or mutvec
+#                             header is a value too, by a different route:
+#                             see below), and an update
+#                             (core/bytestore.tcl's mutableSet) returns a
+#                             new one, so two logical copies can never
+#                             influence each other here. Equality is exact
+#                             byte-sequence equality, never identity.
+#   {coroutine ID}            a coroutine handle (COROUTINES.md); ID indexes
+#                             core::coroutines' store (coroutines.tcl), which
+#                             holds the coroutine's lifecycle state (fresh,
+#                             suspended, running, completed, failed) and its
+#                             continuation. Not a value in the immutable
+#                             sense: resuming it changes that state. The
+#                             compiler proves every handle has one owner
+#                             (an affine binding), so the store's mutation
+#                             is never observable as aliasing. No equality,
+#                             no hash, no storage in another value.
+#   {mutvec ID}               a MutableVector header (MUTABLE-VECTOR.md); ID
+#                             indexes core::mutvec's store (mutvec.tcl), the
+#                             vector's current elements. A VALUE with a
+#                             mutable header: a mutation changes the header
+#                             it is applied to, and the compiler proves only
+#                             the one place owning a header ever mutates it
+#                             (every logical copy is a new header,
+#                             mutable_vector#share), so no alias of a header
+#                             can observe it. No equality, no hash.
+#   {mutarray ID}             a MutableArray header (MUTABLE-ARRAY.md); ID
+#                             indexes core::mutarray's store (mutarray.tcl),
+#                             the array's current elements. Like a mutvec, a
+#                             VALUE with a mutable header: a mutation changes
+#                             the header it is applied to, and the compiler
+#                             proves only the one place owning a header ever
+#                             mutates it (every logical copy is a new header,
+#                             mutable_vector#share), so no alias of a header
+#                             can observe it. No equality, no hash.
 #
-# Values other than {mutarray ID} are treated as immutable. Code outside this
-# file should construct and inspect values only through these procedures.
+# Every value is treated as a value: a {mutbytes HEX} because the backends
+# realize each update as a new storage, a {mutarray ID}/{mutvec ID} header
+# because only its one owning place ever mutates it (above). Code outside
+# this file should construct and inspect values only through these
+# procedures.
 
 namespace eval core::value {
-    variable kinds {int str bool unit list result block native mutarray UnicodeChar immutableSet errorId struct}
+    variable kinds {int str bool unit list result block native mutarray UnicodeChar immutableSet errorId struct bytestore mutbytes coroutine mutvec enum}
 }
 
 proc core::value::isCanonicalInt {text} {
@@ -103,6 +176,20 @@ proc core::value::int {digits} {
     return [list int $digits]
 }
 
+# The Int whose value is N, an integer Tcl itself computed -- an integer
+# `expr` result on Ints' own payloads (or such a payload itself), or a count
+# such as `llength` or `string length` returns -- never text from a program
+# or other input (that goes through `int`). Tcl renders every integer it
+# computes in canonical decimal, so N is not validated. That is the point:
+# isCanonicalInt's regexp would make Tcl generate the decimal string of a
+# bignum (quadratic in its digits: about 50 s for 2^1048576 in Tcl 9.0.1)
+# and then replace its bignum internal representation by a string one,
+# which the next arithmetic on it has to parse back. Kept unvalidated, a
+# computed Int stays a number until something needs its text.
+proc core::value::intFromNumber {n} {
+    return [list int $n]
+}
+
 proc core::value::str {text} {
     return [list str $text]
 }
@@ -116,47 +203,6 @@ proc core::value::char {codepoint} {
         error "core::value::char: not a Unicode scalar value: \"$codepoint\""
     }
     return [list UnicodeChar $codepoint]
-}
-
-# ---------------------------------------------------------------------------
-# Evidence
-
-# The named types V carries evidence for (a sorted list, possibly empty).
-proc core::value::evidence {v} {
-    if {[kind $v] eq "str" && [llength $v] == 3} {
-        return [lindex $v 2]
-    }
-    return {}
-}
-
-proc core::value::hasEvidence {v name} {
-    return [expr {$name in [evidence $v]}]
-}
-
-# V with added evidence for every named type in TYPE (a named type or a
-# refined type). Only trusted Tcl code calls this. For validator types the
-# validator must accept V; opaque types are taken on the caller's word, which
-# is what makes such callers trusted.
-proc core::value::withEvidence {v type} {
-    set type [core::type::normalize $type]
-    if {[core::type::base $type] ne [kind $v]} {
-        error "core::value::withEvidence: [show $v] is not of base type [core::type::show $type]"
-    }
-    if {[kind $v] ni $::core::type::evidenceKinds} {
-        error "core::value::withEvidence: [kind $v] values cannot carry evidence"
-    }
-    set names [evidence $v]
-    foreach name [core::type::evidenceOf $type] {
-        if {![dict get [core::type::metadata $name] opaque]
-                && ![core::type::runValidator $name $v]} {
-            error "core::value::withEvidence: [show $v] does not satisfy $name"
-        }
-        lappend names $name
-    }
-    if {$names eq ""} {
-        return $v
-    }
-    return [list str [lindex $v 1] [lsort -unique $names]]
 }
 
 # The single point where a host (Tcl) truth value becomes a language Boolean.
@@ -184,6 +230,26 @@ proc core::value::immutableSet {items} {
     return [list immutableSet $items]
 }
 
+# The byte storage holding the bytes of HEX (lowercase hexadecimal text, two
+# digits per byte; "" is the empty storage). Trusted natives only: the one
+# constructor of a bytestore value (core/bytestore.tcl).
+proc core::value::bytestore {hex} {
+    if {![regexp {^(?:[0-9a-f][0-9a-f])*$} $hex]} {
+        error "core::value::bytestore: not lowercase hexadecimal byte text: \"$hex\""
+    }
+    return [list bytestore $hex]
+}
+
+# The writable byte storage holding the bytes of HEX (same text form as
+# `bytestore`). Trusted natives only: the one constructor of a mutbytes value
+# (core/bytestore.tcl).
+proc core::value::mutbytes {hex} {
+    if {![regexp {^(?:[0-9a-f][0-9a-f])*$} $hex]} {
+        error "core::value::mutbytes: not lowercase hexadecimal byte text: \"$hex\""
+    }
+    return [list mutbytes $hex]
+}
+
 # The struct value with SHAPE ({ID FIELD...}, see this file's header) and
 # VALUES (one per FIELD, in slot order).
 proc core::value::structOf {shape values} {
@@ -194,6 +260,15 @@ proc core::value::structOf {shape values} {
     return [list struct $shape $values]
 }
 
+# The case CASE of the enum declared as ID (ENUMS.md): its whole identity is
+# the pair. Neither may be empty: both come from a resolved declaration.
+proc core::value::enumValue {id case} {
+    if {$id eq "" || $case eq "" || [string first :: $case] >= 0} {
+        error "core::value::enumValue: not an enum case: \"$id\" \"$case\""
+    }
+    return [list enum $id $case]
+}
+
 proc core::value::ok {payload} {
     return [list result ok [check $payload]]
 }
@@ -202,14 +277,29 @@ proc core::value::ok {payload} {
 # hir/errordecls.tcl): the payload `core::completion::propagatingError`
 # carries. NAME must not be empty: it always comes from a validated `error`
 # declaration, never from unchecked input.
-proc core::value::errorId {name} {
+proc core::value::errorId {name args} {
     if {$name eq ""} {
         error "core::value::errorId: name must not be empty"
     }
-    return [list errorId $name]
+    if {[llength $args] > 1} {
+        error "core::value::errorId: at most one payload"
+    }
+    return [list errorId $name {*}$args]
 }
 
 proc core::value::errorIdName {v} { Require errorId $v; return [lindex $v 1] }
+
+# 1 if error identity V carries a payload (ERROR-PAYLOADS.md).
+proc core::value::errorIdHasPayload {v} { Require errorId $v; return [expr {[llength $v] == 3}] }
+
+# The payload error identity V carries (it must carry one).
+proc core::value::errorIdPayload {v} {
+    Require errorId $v
+    if {[llength $v] != 3} {
+        error "core::value::errorIdPayload: error [lindex $v 1] carries no payload"
+    }
+    return [lindex $v 2]
+}
 
 proc core::value::err {payload} {
     return [list result error [check $payload]]
@@ -261,6 +351,10 @@ proc core::value::strOf {v}  { Require str $v;  return [lindex $v 1] }
 proc core::value::items {v}  { Require list $v; return [lindex $v 1] }
 proc core::value::charOf {v} { Require UnicodeChar $v; return [lindex $v 1] }
 proc core::value::immutableSetItems {v} { Require immutableSet $v; return [lindex $v 1] }
+proc core::value::bytestoreHex {v} { Require bytestore $v; return [lindex $v 1] }
+proc core::value::bytestoreLength {v} { Require bytestore $v; return [expr {[string length [lindex $v 1]] / 2}] }
+proc core::value::mutbytesHex {v} { Require mutbytes $v; return [lindex $v 1] }
+proc core::value::mutbytesLength {v} { Require mutbytes $v; return [expr {[string length [lindex $v 1]] / 2}] }
 
 # Returns host 1/0 for a language Boolean.
 proc core::value::isTrue {v} {
@@ -293,8 +387,13 @@ proc core::value::structGet {v name} {
     return [lindex $v 2 $slot]
 }
 
+proc core::value::enumId {v}       { Require enum $v; return [lindex $v 1] }
+proc core::value::enumCaseName {v} { Require enum $v; return [lindex $v 2] }
+
 proc core::value::nativeName {v}  { Require native $v; return [lindex $v 1] }
 proc core::value::mutarrayId {v}  { Require mutarray $v; return [lindex $v 1] }
+proc core::value::coroutineId {v} { Require coroutine $v; return [lindex $v 1] }
+proc core::value::mutvecId {v}    { Require mutvec $v; return [lindex $v 1] }
 
 # 1 if V is a Block or contains one (in a list or Result).
 proc core::value::containsBlock {v} {
@@ -315,6 +414,20 @@ proc core::value::containsBlock {v} {
             }
         }
         result { return [containsBlock [lindex $v 2]] }
+        mutvec {
+            foreach item [core::mutvec::items $v] {
+                if {[containsBlock $item]} {
+                    return 1
+                }
+            }
+        }
+        mutarray {
+            foreach item [core::mutarray::items $v] {
+                if {[containsBlock $item]} {
+                    return 1
+                }
+            }
+        }
     }
     return 0
 }
@@ -331,10 +444,10 @@ proc core::value::containsBlock {v} {
 proc core::value::equal {a b} {
     set ka [kind $a]
     set kb [kind $b]
-    # MutableArray, like Block/Native, has no structural equality (its
-    # identity/equality semantics are a separate design question: see
-    # mutarray.tcl).
-    if {$ka in {block native mutarray} || $kb in {block native mutarray}} {
+    # MutableArray and MutableVector, like Block/Native, have no equality
+    # (MUTABLE-ARRAY.md, MUTABLE-VECTOR.md: none was added for either; a
+    # header's identity is never a value's).
+    if {$ka in {block native mutarray coroutine mutvec} || $kb in {block native mutarray coroutine mutvec}} {
         core::semanticError EQUALITY \
             "== is not defined for callables: [show $a] == [show $b]"
     }
@@ -342,6 +455,13 @@ proc core::value::equal {a b} {
         return 0
     }
     switch -- $ka {
+        bytestore - mutbytes {
+            # Exact byte-sequence equality: the hex text is canonical
+            # (lowercase, two digits per byte), so it is the bytes. A
+            # MutableBytes compares by its current contents, never by
+            # storage identity (it has none).
+            return [string equal [lindex $a 1] [lindex $b 1]]
+        }
         int - str - bool - UnicodeChar {
             # Integers and codepoints are canonical, so textual identity is
             # numeric equality. UnicodeChar never compares equal to Int or
@@ -351,6 +471,12 @@ proc core::value::equal {a b} {
         }
         unit {
             return 1
+        }
+        enum {
+            # Nominal (ENUMS.md): the same enum declaration and the same
+            # case of it. A same-spelled case of another enum is unequal,
+            # and no position or number of a case takes part.
+            return [expr {[lindex $a 1] eq [lindex $b 1] && [lindex $a 2] eq [lindex $b 2]}]
         }
         list {
             set xs [lindex $a 1]
@@ -416,8 +542,12 @@ proc core::value::equal {a b} {
 }
 
 # ---------------------------------------------------------------------------
-# Display: unambiguous human-readable rendering. With WITH-EVIDENCE, evidence
-# is appended as "TEXT"#{Name ...} (for debugging and differential tests).
+# Display: unambiguous human-readable rendering. DEBUG 1 asks for the
+# debugging/differential rendering tests and tools compare backends with; it
+# renders exactly like the plain form now (a String used to append its runtime
+# evidence, "TEXT"#{Name ...}, which REFINEMENT-VALUES.md removed: a refined
+# value renders as its carrier), and stays an argument of its own so REVEAL
+# keeps its position.
 #
 # A value of an *opaque struct* (OPAQUE-STRUCTS.md: a struct whose
 # representation belongs to the module declaring it) is rendered by its
@@ -449,14 +579,14 @@ proc core::value::isOpaqueStruct {id} {
     return [expr {$id ne "" && $opaqueStructTest ne "" && [{*}$opaqueStructTest $id]}]
 }
 
-proc core::value::show {v {withEvidence 0} {reveal 0}} {
+proc core::value::show {v {debug 0} {reveal 0}} {
     switch -- [kind $v] {
         int  { return [lindex $v 1] }
         str  {
-            set escaped [string map {\\ \\\\ \" \\\" \n \\n \t \\t} [lindex $v 1]]
-            if {$withEvidence && [evidence $v] ne ""} {
-                return "\"$escaped\"#{[evidence $v]}"
-            }
+            # The lexer's escape set, as for a UnicodeChar below (with \"
+            # for \'): the display is a literal denoting the String, and
+            # never carries a raw line break or carriage return.
+            set escaped [string map {\\ \\\\ \" \\\" \n \\n \r \\r \t \\t} [lindex $v 1]]
             return "\"$escaped\""
         }
         bool { return [lindex $v 1] }
@@ -469,11 +599,16 @@ proc core::value::show {v {withEvidence 0} {reveal 0}} {
         list {
             set parts {}
             foreach item [lindex $v 1] {
-                lappend parts [show $item $withEvidence $reveal]
+                lappend parts [show $item $debug $reveal]
             }
             return "\[[join $parts {, }]\]"
         }
-        result { return "[lindex $v 1]([show [lindex $v 2] $withEvidence $reveal])" }
+        result { return "[lindex $v 1]([show [lindex $v 2] $debug $reveal])" }
+        enum {
+            # Debug rendering only (ENUMS.md): the qualified spelling of the
+            # case, never a String conversion or a serialization contract.
+            return "[lindex $v 1]::[lindex $v 2]"
+        }
         struct {
             # {name: "Grace", age: 45} / Person {name: "Ada", age: 36}: field
             # names in slot order (anonymous: canonical sorted order). An
@@ -483,7 +618,7 @@ proc core::value::show {v {withEvidence 0} {reveal 0}} {
             }
             set parts {}
             foreach field [lrange [lindex $v 1] 1 end] item [lindex $v 2] {
-                lappend parts "$field: [show $item $withEvidence $reveal]"
+                lappend parts "$field: [show $item $debug $reveal]"
             }
             set text "{[join $parts {, }]}"
             if {[lindex $v 1 0] ne ""} {
@@ -495,13 +630,45 @@ proc core::value::show {v {withEvidence 0} {reveal 0}} {
             # Punctuation only; no semantic ordering is implied (item 87).
             set parts {}
             foreach item [lindex $v 1] {
-                lappend parts [show $item $withEvidence $reveal]
+                lappend parts [show $item $debug $reveal]
             }
             return "{[join $parts {, }]}"
         }
+        bytestore {
+            # Internal tooling only (reveal of an opaque abi::bytes::Bytes): the
+            # byte count and the bytes. Normal rendering never reaches it.
+            return "<bytes [expr {[string length [lindex $v 1]] / 2}]: [lindex $v 1]>"
+        }
+        mutbytes {
+            # Internal tooling only (reveal of an opaque abi::bytes::MutableBytes).
+            return "<mutbytes [expr {[string length [lindex $v 1]] / 2}]: [lindex $v 1]>"
+        }
         block  { return "<block ([join [lindex $v 1] { }])>" }
         native { return "<native [lindex $v 1]>" }
-        errorId { return "<error [lindex $v 1]>" }
-        mutarray { return "<mutable-array capacity=[core::value::intOf [core::mutarray::capacity $v]]>" }
+        errorId {
+            # Diagnostic rendering only (ERROR-PAYLOADS.md): the identity,
+            # then the payload's ordinary rendering -- not a serialization.
+            if {[llength $v] == 3} {
+                return "<error [lindex $v 1] [show [lindex $v 2] $debug $reveal]>"
+            }
+            return "<error [lindex $v 1]>"
+        }
+        mutarray {
+            # The current elements (a value's contents, never its header).
+            set parts {}
+            foreach item [core::mutarray::items $v] {
+                lappend parts [show $item $debug $reveal]
+            }
+            return "<mutable-array \[[join $parts {, }]\]>"
+        }
+        coroutine { return "<coroutine>" }
+        mutvec {
+            # The current elements (a value's contents, never its header).
+            set parts {}
+            foreach item [core::mutvec::items $v] {
+                lappend parts [show $item $debug $reveal]
+            }
+            return "<mutable-vector \[[join $parts {, }]\]>"
+        }
     }
 }

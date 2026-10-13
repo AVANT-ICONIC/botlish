@@ -1,0 +1,50 @@
+# tests/golden/run.tcl -backends interp,compile-hir -quiet, all suites in one process (C7: every suite after the first aborts on compile-hir)
+collections.bot              interp     44 passed, 0 failed (compile 13.14s, run 2.08s)
+collections.bot              compile-hir 44 passed, 0 failed (compile 13.14s, run 4.05s)
+diagnostics.bot              interp     27 passed, 0 failed (compile 13.11s, run 1.48s)
+diagnostics.bot              compile-hir ABORTED test::Suite is already installed in this scope (CORE SEMANTIC DUPLICATE-CONTEXT) (compile 13.11s, run 1.96s)
+diagnostics.bot: BACKENDS DISAGREE
+errors.bot                   interp     23 passed, 0 failed (compile 7.31s, run 1.03s)
+errors.bot                   compile-hir ABORTED test::Suite is already installed in this scope (CORE SEMANTIC DUPLICATE-CONTEXT) (compile 7.31s, run 2.49s)
+errors.bot: BACKENDS DISAGREE
+harness.bot                  interp     13 passed, 0 failed (compile 2.06s, run 1.19s)
+harness.bot                  compile-hir ABORTED test::Suite is already installed in this scope (CORE SEMANTIC DUPLICATE-CONTEXT) (compile 2.06s, run 1.65s)
+harness.bot: BACKENDS DISAGREE
+modules.bot                  interp     31 passed, 0 failed (compile 12.52s, run 2.48s)
+modules.bot                  compile-hir ABORTED test::Suite is already installed in this scope (CORE SEMANTIC DUPLICATE-CONTEXT) (compile 12.52s, run 5.30s)
+modules.bot: BACKENDS DISAGREE
+ownership.bot                interp     37 passed, 0 failed (compile 37.21s, run 2.71s)
+ownership.bot                compile-hir ABORTED test::Suite is already installed in this scope (CORE SEMANTIC DUPLICATE-CONTEXT) (compile 37.21s, run 3.64s)
+ownership.bot: BACKENDS DISAGREE
+representation.bot           interp     14 passed, 0 failed (compile 5.30s, run 1.16s)
+representation.bot           compile-hir ABORTED test::Suite is already installed in this scope (CORE SEMANTIC DUPLICATE-CONTEXT) (compile 5.30s, run 2.92s)
+representation.bot: BACKENDS DISAGREE
+values.bot                   interp     32 passed, 0 failed (compile 6.12s, run 2.44s)
+values.bot                   compile-hir ABORTED test::Suite is already installed in this scope (CORE SEMANTIC DUPLICATE-CONTEXT) (compile 6.12s, run 6.80s)
+values.bot: BACKENDS DISAGREE
+
+# the same, one process per suite
+collections.bot              interp     44 passed, 0 failed (compile 13.35s, run 2.06s)
+collections.bot              compile-hir 44 passed, 0 failed (compile 13.35s, run 3.64s)
+collections.bot exit 0
+diagnostics.bot              interp     27 passed, 0 failed (compile 11.46s, run 1.50s)
+diagnostics.bot              compile-hir 27 passed, 0 failed (compile 11.46s, run 1.96s)
+diagnostics.bot exit 0
+errors.bot                   interp     23 passed, 0 failed (compile 6.32s, run 0.84s)
+errors.bot                   compile-hir 23 passed, 0 failed (compile 6.32s, run 2.06s)
+errors.bot exit 0
+harness.bot                  interp     13 passed, 0 failed (compile 1.68s, run 0.84s)
+harness.bot                  compile-hir 13 passed, 0 failed (compile 1.68s, run 1.13s)
+harness.bot exit 0
+modules.bot                  interp     31 passed, 0 failed (compile 10.39s, run 2.11s)
+modules.bot                  compile-hir 31 passed, 0 failed (compile 10.39s, run 4.44s)
+modules.bot exit 0
+ownership.bot                interp     37 passed, 0 failed (compile 30.83s, run 2.46s)
+ownership.bot                compile-hir 37 passed, 0 failed (compile 30.83s, run 2.89s)
+ownership.bot exit 0
+representation.bot           interp     14 passed, 0 failed (compile 4.43s, run 0.83s)
+representation.bot           compile-hir 14 passed, 0 failed (compile 4.43s, run 2.04s)
+representation.bot exit 0
+values.bot                   interp     32 passed, 0 failed (compile 4.71s, run 1.87s)
+values.bot                   compile-hir 32 passed, 0 failed (compile 4.71s, run 4.71s)
+values.bot exit 0

@@ -115,7 +115,13 @@ impl Heap {
     /// place every object's fate -- live or reclaimed -- is known for
     /// certain, so live/peak/reclaimed accounting lives here rather than
     /// being approximated from allocation counts.
-    pub fn collect(&mut self, roots: impl Iterator<Item = Value>, metrics: &mut Metrics, reason: GcReason) {
+    pub fn collect(
+        &mut self,
+        roots: impl Iterator<Item = Value>,
+        metrics: &mut Metrics,
+        reason: GcReason,
+        framemap: &super::framemap::ProgramMap,
+    ) {
         let started = metrics.enabled().then(Instant::now);
         let mut stack: Vec<Value> = roots.collect();
         while let Some(v) = stack.pop() {
@@ -132,12 +138,17 @@ impl Heap {
                 // Every field of a struct is an ordinary program value.
                 KIND_STRUCT => stack.extend_from_slice(struct_of(v).fields()),
                 KIND_SET => stack.extend_from_slice(set_of(v).items()),
-                // Every slot is traced, initialized or not: allocation fills
-                // unused capacity with UNIT (Vm::new_mutarray), never
-                // uninitialized memory, so there is nothing here that could
-                // be mistaken for an arbitrary root.
-                KIND_MUTARRAY => stack.extend_from_slice(&mutarray_of(v).slots),
+                // A MutableArray (MUTABLE-ARRAY.md): every element of its
+                // backing, the slots from its header's start (a raw
+                // allocation's are UNIT, never uninitialized memory; a
+                // drained slot is no element and is not traced). A backing
+                // shared by several headers is traced once per header
+                // (marking is idempotent).
+                KIND_MUTARRAY => stack.extend(super::ops::array_elements(v)),
                 KIND_RESULT => stack.push(result_of(v).payload),
+                // A MutableVector (MUTABLE-VECTOR.md): exactly its live
+                // elements, never spare capacity or removed slots.
+                KIND_MUTVEC => stack.extend(super::mutvec::elements(v)),
                 KIND_CLOSURE => {
                     let c = closure_of(v);
                     stack.extend_from_slice(unsafe { std::slice::from_raw_parts(c.caps, c.ncaps) });
@@ -145,6 +156,23 @@ impl Heap {
                 // A List plan's elements are ordinary program values held
                 // until materialization; a String plan holds only bytes.
                 KIND_LISTPLAN => stack.extend_from_slice(&super::construct::listplan_of(v).items),
+                // A coroutine (COROUTINES.md): its thunk, transport slot and
+                // cached failure, and -- while it is suspended -- every root
+                // of every frame on its stack, from where it switched away
+                // (runtime/coroutine.rs). A running one's stack is walked
+                // with the running chain (Vm::collect_with).
+                KIND_COROUTINE => {
+                    let co = super::coroutine::coroutine_of(v);
+                    stack.extend(super::coroutine::fields(co));
+                    if co.state == super::coroutine::CO_SUSPENDED {
+                        if let Some(bounds) = co.stack.as_ref().map(|s| s.bounds()) {
+                            let start = super::coroutine::suspended_rbp(co.saved_sp);
+                            super::framewalk::walk_from(framemap, start, Some(&bounds), |addr| {
+                                stack.push(unsafe { *addr })
+                            });
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -176,6 +204,10 @@ impl Heap {
                     let k = &mut reclaimed_by_kind[header.kind as usize];
                     k.0 += 1;
                     k.1 += size as u64;
+                    if header.kind == KIND_COROUTINE && super::coroutine::coroutine_of(object as Value).stack.is_some() {
+                        // Abandoned suspended, not released at its last use.
+                        metrics.record_coroutine_swept();
+                    }
                 }
                 unsafe { free_object(object) };
                 false
@@ -232,15 +264,18 @@ pub unsafe fn object_size(object: *mut Header) -> usize {
         match (*object).kind {
             KIND_BIGINT => size_of::<BigIntObj>() + (as_ref::<BigIntObj>(v).n.bits() as usize / 8),
             KIND_STR => super::strobj::str_object_size(object),
+            KIND_BYTES | KIND_MUTBYTES => super::bytesobj::bytes_object_size(object),
             KIND_LIST => size_of::<ListObj>() + list_of(v).len * 8,
             KIND_STRUCT => size_of::<StructObj>() + struct_of(v).len * 8,
             KIND_SET => size_of::<SetObj>() + set_of(v).len * 8,
-            KIND_MUTARRAY => size_of::<MutArrayObj>() + mutarray_of(v).slots.len() * 8,
+            KIND_MUTARRAY => super::ops::array_object_size(v),
             KIND_RESULT => size_of::<ResultObj>(),
             KIND_CLOSURE => size_of::<ClosureObj>() + closure_of(v).ncaps * 8,
             KIND_NATIVE => size_of::<NativeObj>(),
             KIND_STRPLAN => size_of::<StrPlanObj>() + super::construct::strplan_of(v).buf.len(),
             KIND_LISTPLAN => size_of::<ListPlanObj>() + super::construct::listplan_of(v).items.capacity() * 8,
+            KIND_COROUTINE => size_of::<super::coroutine::CoroutineObj>(),
+            KIND_MUTVEC => super::mutvec::object_size(v),
             kind => panic!("bad heap object kind {kind}"),
         }
     }
@@ -255,6 +290,9 @@ pub unsafe fn free_object(object: *mut Header) {
             // One block (header + text): one release with its own layout; no
             // Rust destructor runs (strobj.rs).
             KIND_STR => super::strobj::free_str(object),
+            // One block (header + length + payload), no Rust destructor
+            // (bytesobj.rs).
+            KIND_BYTES | KIND_MUTBYTES => super::bytesobj::free_bytes(object),
             KIND_LIST => {
                 let l = Box::from_raw(object as *mut ListObj);
                 drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(l.ptr, l.len)));
@@ -276,6 +314,12 @@ pub unsafe fn free_object(object: *mut Header) {
             KIND_MUTARRAY => drop(Box::from_raw(object as *mut MutArrayObj)),
             KIND_STRPLAN => drop(Box::from_raw(object as *mut StrPlanObj)),
             KIND_LISTPLAN => drop(Box::from_raw(object as *mut ListPlanObj)),
+            // Its stack, if it still has one (an abandoned suspended
+            // coroutine), goes back to the pool: nothing on it runs.
+            KIND_COROUTINE => drop(Box::from_raw(object as *mut super::coroutine::CoroutineObj)),
+            // The header's share of its backing goes back (the backing is
+            // freed with its last header).
+            KIND_MUTVEC => drop(Box::from_raw(object as *mut super::mutvec::MutVecObj)),
             kind => panic!("bad heap object kind {kind}"),
         }
     }
@@ -345,7 +389,7 @@ mod tests {
         // Before any collection, an allocation is optimistically live.
         assert_eq!(metrics.current_live_objects, 2);
 
-        heap.collect(std::iter::once(kept), &mut metrics, GcReason::Explicit);
+        heap.collect(std::iter::once(kept), &mut metrics, GcReason::Explicit, &crate::runtime::framemap::ProgramMap::new());
 
         assert_eq!(metrics.current_live_objects, 1);
         assert_eq!(metrics.current_live_bytes, "kept".len() as u64 + STR_HEADER_SIZE as u64);
@@ -370,7 +414,7 @@ mod tests {
 
         // Only the list is rooted; its elements must be kept reachable
         // through it, not freed as if unrooted.
-        heap.collect(std::iter::once(list), &mut metrics, GcReason::Explicit);
+        heap.collect(std::iter::once(list), &mut metrics, GcReason::Explicit, &crate::runtime::framemap::ProgramMap::new());
 
         assert_eq!(metrics.current_live_objects, 3);
         assert_eq!(metrics.by_kind[KIND_STR as usize].reclaimed_objects, 0);
@@ -385,7 +429,7 @@ mod tests {
         }
         assert_eq!(metrics.peak_live_objects, 5);
 
-        heap.collect(std::iter::empty(), &mut metrics, GcReason::Explicit);
+        heap.collect(std::iter::empty(), &mut metrics, GcReason::Explicit, &crate::runtime::framemap::ProgramMap::new());
 
         assert_eq!(metrics.current_live_objects, 0);
         assert_eq!(metrics.peak_live_objects, 5);
@@ -398,7 +442,7 @@ mod tests {
         let mut metrics = Metrics::new(AllocMode::Off);
         str_val(&mut heap, &mut metrics, "x");
         assert_eq!(metrics.total_allocations(), 0);
-        heap.collect(std::iter::empty(), &mut metrics, GcReason::Explicit);
+        heap.collect(std::iter::empty(), &mut metrics, GcReason::Explicit, &crate::runtime::framemap::ProgramMap::new());
         assert_eq!(metrics.gc_cycles.len(), 0);
         assert_eq!(metrics.current_live_objects, 0);
     }

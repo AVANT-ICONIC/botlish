@@ -87,6 +87,55 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  warning-gate:
+    name: warning gate (manifest)
+    # The shipped stdlib, libraries, examples and benchmarks compile with
+    # exactly the warnings audit/refactor/manifest.txt lists, each with its
+    # named obstruction, and every program without a manifest entry compiles
+    # under -warnings error (REFACTOR-WARNINGS-CLEAN.md). A new warning, a
+    # closed finding still listed, or a location that drifted fails the job.
+    # Warnings are discovered before any backend runs, so no native build is
+    # needed.
+    runs-on: ubuntu-latest
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Warning gate
+        run: tclsh9.0 audit/refactor/tools/gate.tcl
+
+  golden:
+    name: golden suites (Botlish-native tests)
+    # The Botlish golden test suites (tests/golden/*.bot, lib/test.bot,
+    # GOLDEN-TEST-FRAMEWORK.md) on every backend, then the side-by-side
+    # check: every Tcl test tests/golden/manifest.tsv lists as ported, and
+    # the golden test it became, must both pass on this revision. The Tcl
+    # tests stay authoritative; tests/golden.test also runs the suites
+    # inside the ordinary test jobs.
+    runs-on: ubuntu-latest
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Golden suites
+        run: tclsh9.0 tests/golden/run.tcl
+
+      - name: Old and new tests side by side
+        run: tclsh9.0 audit/golden/tools/check.tcl
+
   gc-stress:
     name: tests (native GC-stress)
     # GC-stress forces a GC attempt at every allocation site, which is the
@@ -107,6 +156,12 @@ jobs:
 
       - name: Build native (Cranelift) backend
         uses: ./.github/actions/build-native
+
+      # The runtime's own Rust unit tests, under the same stress (each test
+      # roots what it holds in Rust locals, see Vm::temp_roots). Cheap: the
+      # dependencies are already built, the tests run in well under a second.
+      - name: Run native Rust unit tests under GC stress
+        run: cargo test --release --manifest-path native/Cargo.toml
 
       - name: Run test suite under GC stress
         run: tclsh9.0 tests/all.tcl

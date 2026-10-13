@@ -1,0 +1,511 @@
+# diagnostics.bot -- semantic compiler rejection tests (manifest: category
+# diagnostics): the compiler's diagnostic for a parser-valid program that it
+# rejects -- its exact compiler::DiagnosticCode (Unbound, Duplicate,
+# MissingField, UseAfterMove, UnhandledError, KnownError, MissingImport,
+# UnknownNamespace, AmbiguousMethodCall, NomethodCall, NotAStruct,
+# BreakOutsideLoop, UnknownFlag, LockstepUnproven, LockstepUnequal, Type,
+# OpaqueConstruction, OpaqueRepresentation), the location of the construct it
+# is reported at when the Tcl test pins one, and its message when the Tcl
+# test is about the wording.
+#
+# Every Tcl program here is one the ordinary compiler rejects, so each
+# becomes the body of a `static compile:` block that the compiler rejects
+# where it stands, and the test reads the reified diagnostic. Every body
+# here captures nothing; each is a top-level function written just before
+# the registration function that names it (a layout for reading: the
+# compiler decides independent blocks together however they are nested,
+# STATIC-COMPILE.md, "Decision economics").
+# Locations are lines and columns of this file.
+#
+# The header is part of several tests: the suite imports list and
+# mutable_array (both `at`s are visible: imports-method-untyped-receiver-is-
+# ambiguous) and abi::bytes (its opaque Bytes stands in for the Tcl tests'
+# fixture module `wrapped`), and must NOT import abi itself
+# (imports-qualified-needs-import: imports are exact, so abi::bytes does not
+# import abi).
+import abi::bytes
+import compiler
+import coroutine
+import list
+import mutable_array
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only), prefixed Dg (messages that
+# name them say DgPerson, DgVehicleType, ... where the Tcl tests say Person,
+# VehicleType, ...).
+
+# static-compile.test: the scErased prelude's E1 and E2 (its functions are
+# dg_raise, dg_call, dg_generic: see sc-negative-unhandled-erased).
+error DgE1
+error DgE2
+
+# static-compile.test: sc-negative-known-error's prelude (Boom, always) and
+# sc-primary-selection's needs_int.
+error DgBoom
+
+fn dg_always() -> int errors DgBoom:
+    fail DgBoom
+
+fn dg_needs_int(v: int) -> int:
+    v
+
+# static-compile.test: sc-affine-use-after-move's prelude (scAffineDecls,
+# without its unused `flag`).
+struct DgMessage:
+    value: int
+
+struct DgEvent:
+    value: int
+
+fn dg_worker(seed: int, resume DgMessage) -> DgEvent:
+    message = yield DgEvent {value: seed}
+    return DgEvent {value: message.value}
+
+fn dg_consume(s: Coroutine{args: [DgMessage], return: DgEvent}, n: int) -> int:
+    e = s(DgMessage {value: n})
+    e.value
+
+# structs.test: the ${person} prelude.
+struct DgPerson:
+    name: str
+    age: int
+
+# enums.test: the ${vehicle} prelude.
+enum DgVehicleType:
+    Boat,
+    Car,
+    Truck,
+    Tank,
+    Tractor,
+    Airplane,
+
+# typed-parameters.test: the samplePayload's Small (the only one of its
+# declarations typed-param-invalid-recursive uses).
+type DgSmall = Int in 0..10
+
+# ---------------------------------------------------------------------------
+# Custom checks: a rejection's code, location and message, for the Tcl tests
+# that pin a message (or a fragment of one). BODY goes through an untyped
+# parameter, as in lib/test.bot's own helpers.
+
+# What a body did: rejected (with its diagnostic) or completed.
+struct DgObserved:
+    rejected: bool
+    code: compiler::DiagnosticCode
+    line: int
+    column: int
+    message: str
+
+fn dg_observe(body) -> DgObserved:
+    v = body():
+        on compiler::CompilerError {code, primary, message}:
+            return DgObserved {rejected: true, code: code, line: primary.line, column: primary.column, message: message}
+    DgObserved {rejected: false, code: compiler::DiagnosticCode::Type, line: 0, column: 0, message: ""}
+
+# true when FRAGMENT occurs in TEXT.
+fn dg_contains?(text: str, fragment: str) -> bool:
+    n = str::length(text)
+    k = str::length(fragment)
+    loop i from 0 through n - k:
+        piece = str::substring(text, i, i + k):
+            on LowerUnderrun:
+                continue
+            on UpperOverrun:
+                continue
+        if piece == fragment:
+            return true
+    false
+
+# The verdict for BODY: rejected with EXPECTED, at LINE:COLUMN of this file
+# when LINE is positive, with a message that is exactly WANTED (WHOLE) or
+# contains it (not WHOLE).
+fn dg_message_verdict(expected: compiler::DiagnosticCode, line: int, column: int, wanted: str, whole: bool, body) -> test::Match:
+    place = compiler::SourceLocation {line: line, column: column}
+    head = if line > 0:
+        test::diagnostic_text(expected, place)
+    else:
+        "compiler diagnostic ".concat(test::code_name(expected))
+    shown = if whole:
+        head.concat(", message: ").concat(wanted)
+    else:
+        head.concat(", message containing: ").concat(wanted)
+    o = dg_observe(body)
+    if not o.rejected:
+        return test::mismatch(shown, "a value", "")
+    located = line <= 0 or (o.line == line and o.column == column)
+    worded = if whole:
+        o.message == wanted
+    else:
+        o.message.dg_contains?(wanted)
+    if o.code == expected and located and worded:
+        return test::passed()
+    test::mismatch(shown, test::diagnostic_text(o.code, compiler::SourceLocation {line: o.line, column: o.column}), o.message)
+
+# BODY's block must be rejected with EXPECTED and exactly the message WANTED
+# (at LINE:COLUMN when LINE is positive).
+nomethod fn dg_rejects_message(name: str, expected: compiler::DiagnosticCode, line: int, column: int, wanted: str, body, context suite: test::Suite) -> unit:
+    fn check() -> test::Match:
+        dg_message_verdict(expected, line, column, wanted, true, body)
+    test::case(name, check)
+
+# BODY's block must be rejected with EXPECTED and a message containing WANTED
+# (at LINE:COLUMN when LINE is positive).
+nomethod fn dg_rejects_containing(name: str, expected: compiler::DiagnosticCode, line: int, column: int, wanted: str, body, context suite: test::Suite) -> unit:
+    fn check() -> test::Match:
+        dg_message_verdict(expected, line, column, wanted, false, body)
+    test::case(name, check)
+
+# ---------------------------------------------------------------------------
+# static-compile.test
+
+# sc-negative-unhandled-erased: inside a block the completion analysis is the
+# whole program's: E1 escaping `generic` through an untyped call, with only
+# E2 handled, is UnhandledError at the call, naming E1. The Tcl program's
+# raise, call and generic are at the suite's top level, as there: the
+# program's erased-callable contract carries DgE1 and DgE2 in every build.
+# Since VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md that contract is no longer
+# charged to the runner (a call through its Fn contract), and since the
+# static-decision economics milestone (STATIC-COMPILE.md, "Decision
+# economics") it no longer serializes the suite's other blocks: only the
+# blocks that consume it depend on it. (Before, they took 14 decision
+# rounds and 34 builds here, and the port kept the three functions inside
+# its block.) The shorter names keep every line of this file where the
+# rejects_at checks below pin it.
+fn dg_raise(x) -> int errors DgE1, DgE2:
+    if x == 1:
+        fail DgE1
+    if x == 2:
+        fail DgE2
+    0
+fn dg_call(f, x):
+    f(x)
+fn dg_generic(x) -> int errors DgE1, DgE2:
+    dg_call(dg_raise, x)
+fn b_sc_negative_unhandled_erased() errors compiler::CompilerError:
+    static compile:
+        dg_generic(0):
+            on DgE2:
+                -1
+
+# sc-negative-unbound: a rejected body is compiler::CompilerError with code
+# Unbound at `missing` (scProbe "missing"); the program still compiles.
+fn b_sc_negative_unbound() errors compiler::CompilerError:
+    static compile:
+        missing
+
+# sc-primary-selection: of several diagnostics the reified one is the one the
+# ordinary compilation reports first -- a resolution diagnostic (Unbound at
+# `missing`) before the type error on the line above it, and of two unbound
+# names the first in source order (`a1`).
+fn b_sc_primary_selection_resolution_first() errors compiler::CompilerError:
+    static compile:
+        dg_needs_int("s")
+        missing
+
+fn b_sc_primary_selection_source_order() errors compiler::CompilerError:
+    static compile:
+        a1
+        a2
+
+# sc-affine-use-after-move: a use after move is UseAfterMove at the second
+# use, with the move as its one related location. (The body constructs and
+# moves its own coroutine: it captures nothing affine.)
+fn b_sc_affine_use_after_move() errors compiler::CompilerError:
+    static compile:
+        coroutine {step} = dg_worker(10)
+        dg_consume(step, 1)
+        dg_consume(step, 2)
+
+# sc-nested-outer-rejects: g cannot admit its inner block's CompilerError, so
+# the outer block is rejected with UnhandledError at the inner `static`. (The
+# Tcl program ends with the function value g; the body ends with 0 instead:
+# a body never yields a function value to the report.)
+fn b_sc_nested_outer_rejects() errors compiler::CompilerError:
+    static compile:
+        fn g() -> int:
+            static compile:
+                missing
+        0
+
+# sc-negative-known-error: a call proven always to fail is KnownError, even
+# in a function that declares the error.
+fn b_sc_negative_known_error() errors compiler::CompilerError:
+    static compile:
+        fn g() -> int errors DgBoom:
+            dg_always()
+        0
+
+fn register_static_compile_tests():
+    # The message names the error that escapes (E1, not the handled E2).
+    dg_rejects_message("sc-negative-unhandled-erased", compiler::DiagnosticCode::UnhandledError, 188, 9, "this call may produce the declared error \"DgE1\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_sc_negative_unhandled_erased)
+    test::rejects_at("sc-negative-unbound", compiler::DiagnosticCode::Unbound, 196, 9, b_sc_negative_unbound)
+    test::rejects_at("sc-primary-selection/resolution-first", compiler::DiagnosticCode::Unbound, 205, 9, b_sc_primary_selection_resolution_first)
+    test::rejects_at("sc-primary-selection/source-order", compiler::DiagnosticCode::Unbound, 209, 9, b_sc_primary_selection_source_order)
+    # The code, the primary location, the related locations and the message
+    # but for the file name it embeds. The body is called directly under a
+    # handler, as the Tcl probe calls `probe()`: a reified failure is never
+    # proof that a call cannot complete (KNOWN-ERROR does not count it).
+    fn use_after_move() -> test::Match:
+        r = b_sc_affine_use_after_move():
+            on compiler::CompilerError {code, primary, related, message}:
+                places = loop place in related:
+                    [place.line, place.column]
+                moved = message.dg_contains?("`step` was used after its coroutine value was moved\n\nmoved here:\n    step passed to dg_consume  (")
+                used = message.dg_contains?(")\n\nused here:\n    ")
+                [true, test::code_name(code), primary.line, primary.column, places, moved, used]
+        test::equal([true, "UseAfterMove", 219, 20, [[218, 20]], true, true], r)
+    test::case("sc-affine-use-after-move", use_after_move)
+    test::rejects_at("sc-nested-outer-rejects", compiler::DiagnosticCode::UnhandledError, 228, 13, b_sc_nested_outer_rejects)
+    test::rejects_at("sc-negative-known-error", compiler::DiagnosticCode::KnownError, 237, 13, b_sc_negative_known_error)
+
+# ---------------------------------------------------------------------------
+# strict-references.test
+
+# sr-later-sibling-function: a call of a function declared later in the same
+# scope is Unbound at the call, with the "declared later" hint (the Tcl
+# program's two top-level functions are two functions of the block's scope).
+fn b_sr_later_sibling_function() errors compiler::CompilerError:
+    static compile:
+        fn caller():
+            helper()
+        fn helper():
+            1
+        0
+
+# sr-duplicate-parameter-bind: binding a parameter's name in the body is a
+# Duplicate binding, at the rebinding.
+fn b_sr_duplicate_parameter_bind() errors compiler::CompilerError:
+    static compile:
+        fn f(a):
+            a = 2
+            a
+        0
+
+fn register_strict_references_tests():
+    dg_rejects_message("sr-later-sibling-function", compiler::DiagnosticCode::Unbound, 272, 13, "unbound name \"helper\": \"helper\" is declared later; forward references are not allowed (a binding is visible only after it is established)", b_sr_later_sibling_function)
+    test::rejects_at("sr-duplicate-parameter-bind", compiler::DiagnosticCode::Duplicate, 282, 13, b_sr_duplicate_parameter_bind)
+
+# ---------------------------------------------------------------------------
+# surface-lowering.test
+
+# lower-semantic-break-outside: a `break` in an `if` that is in no loop is
+# BreakOutsideLoop at the `break` (the body is a function: the block is in
+# no loop either).
+fn b_lower_semantic_break_outside() errors compiler::CompilerError:
+    static compile:
+        if true:
+            break
+
+fn register_surface_lowering_tests():
+    test::rejects_at("lower-semantic-break-outside", compiler::DiagnosticCode::BreakOutsideLoop, 299, 13, b_lower_semantic_break_outside)
+
+# ---------------------------------------------------------------------------
+# structs.test
+
+# struct-error-missing-field: a named construction that omits a declared
+# field is MissingField at the construction.
+fn b_struct_error_missing_field() errors compiler::CompilerError:
+    static compile:
+        p = DgPerson {name: "Ada"}
+        p
+
+fn register_structs_tests():
+    test::rejects_at("struct-error-missing-field", compiler::DiagnosticCode::MissingField, 311, 13, b_struct_error_missing_field)
+
+# ---------------------------------------------------------------------------
+# imports.test
+
+# imports-qualified-needs-import: a qualified reference without its
+# namespace's import is MissingImport, naming the exact import to add. (The
+# suite imports abi::bytes, so the message ends with the exact-imports hint
+# the Tcl program, which imports nothing, does not get.)
+fn b_imports_qualified_needs_import() errors compiler::CompilerError:
+    static compile:
+        x = abi::u8(1)
+        x
+
+# imports-unknown-namespace-reference: a reference into a namespace that
+# exists nowhere is UnknownNamespace.
+fn b_imports_unknown_namespace_reference() errors compiler::CompilerError:
+    static compile:
+        nosuch::f(1)
+
+# imports-method-untyped-receiver-is-ambiguous: an untyped receiver fits both
+# list::at and mutable_array::at: AmbiguousMethodCall, no precedence.
+fn b_imports_method_untyped_receiver_is_ambiguous() errors compiler::CompilerError:
+    static compile:
+        fn first(q):
+            q.at(0)
+        1
+
+fn register_imports_tests():
+    dg_rejects_message("imports-qualified-needs-import", compiler::DiagnosticCode::MissingImport, 0, 0, "namespace \"abi\" is not imported; add `import abi` to use `abi::u8` (imports are exact: `import abi::bytes` does not import \"abi\")", b_imports_qualified_needs_import)
+    test::rejects("imports-unknown-namespace-reference", compiler::DiagnosticCode::UnknownNamespace, b_imports_unknown_namespace_reference)
+    test::rejects("imports-method-untyped-receiver-is-ambiguous", compiler::DiagnosticCode::AmbiguousMethodCall, b_imports_method_untyped_receiver_is_ambiguous)
+
+# ---------------------------------------------------------------------------
+# method-eligible.test
+
+# me-nomethod-sugar-is-a-resolution-error: a receiver-form call of a
+# `nomethod` function is NomethodCall at the method name, with the pinned
+# message.
+fn b_me_nomethod_sugar_is_a_resolution_error() errors compiler::CompilerError:
+    static compile:
+        nomethod fn atan2(y, x):
+            y + x
+        5.atan2(1)
+
+fn register_method_eligible_tests():
+    dg_rejects_message("me-nomethod-sugar-is-a-resolution-error", compiler::DiagnosticCode::NomethodCall, 358, 11, "`atan2` is declared nomethod and cannot be called with method syntax; call it as atan2(receiver, ...)", b_me_nomethod_sugar_is_a_resolution_error)
+
+# ---------------------------------------------------------------------------
+# method-sugar.test
+
+# method-not-visible-names-the-fix: a method call with no visible function of
+# that name says the function must be visible by that name.
+fn b_method_not_visible_names_the_fix() errors compiler::CompilerError:
+    static compile:
+        x = 5
+        x.nothere(1)
+
+fn register_method_sugar_tests():
+    dg_rejects_message("method-not-visible-names-the-fix", compiler::DiagnosticCode::NotAStruct, 0, 0, "cannot project field \"nothere\" from a value of type int: only a struct has fields; as a method-style call, no function named \"nothere\" is visible here either: method syntax only applies a function that is already visible by that name (define it here, or import the namespace that defines it with `import NAMESPACE`)", b_method_not_visible_names_the_fix)
+
+# ---------------------------------------------------------------------------
+# enums.test
+
+# enum-cases-not-injected: a case is never visible by its bare name, and an
+# enum type is not a value (Unbound at the name, in all three spellings).
+fn b_enum_cases_not_injected_case() errors compiler::CompilerError:
+    static compile:
+        Car
+
+fn b_enum_cases_not_injected_type() errors compiler::CompilerError:
+    static compile:
+        DgVehicleType
+
+fn b_enum_cases_not_injected_projection() errors compiler::CompilerError:
+    static compile:
+        DgVehicleType.Car
+
+fn register_enums_tests():
+    test::rejects_at("enum-cases-not-injected/case", compiler::DiagnosticCode::Unbound, 383, 9, b_enum_cases_not_injected_case)
+    test::rejects_at("enum-cases-not-injected/type", compiler::DiagnosticCode::Unbound, 387, 9, b_enum_cases_not_injected_type)
+    test::rejects_at("enum-cases-not-injected/projection", compiler::DiagnosticCode::Unbound, 391, 9, b_enum_cases_not_injected_projection)
+
+# ---------------------------------------------------------------------------
+# flags.test
+
+# flags-diagnostic-unknown-second: an unknown flag between two accepted ones
+# is UnknownFlag at its own spelling (`:c`).
+fn b_flags_diagnostic_unknown_second() errors compiler::CompilerError:
+    static compile:
+        fn f(flags :a, :b):
+            a
+        f(:a, :c, :b)
+
+fn register_flags_tests():
+    test::rejects_at("flags-diagnostic-unknown-second", compiler::DiagnosticCode::UnknownFlag, 407, 15, b_flags_diagnostic_unknown_second)
+
+# ---------------------------------------------------------------------------
+# loop-collecting.test
+
+# loop-collecting-reject-unknown-lists: nothing proves the two lists equal:
+# LockstepUnproven, saying what could not be proven.
+fn b_loop_collecting_reject_unknown_lists() errors compiler::CompilerError:
+    static compile:
+        fn f(xs, ys):
+            loop x in xs and y in ys:
+                x
+        f([1], [2])
+
+# loop-collecting-reject-unequal-by-one: `in xs` and `from 0 through
+# length(xs)` differ by exactly one: LockstepUnequal, with both symbolic
+# counts.
+fn b_loop_collecting_reject_unequal_by_one() errors compiler::CompilerError:
+    static compile:
+        fn f(xs):
+            loop x in xs and i from 0 through list::length(xs):
+                i
+        f([1])
+
+fn register_loop_collecting_tests():
+    dg_rejects_message("loop-collecting-reject-unknown-lists", compiler::DiagnosticCode::LockstepUnproven, 0, 0, "lockstep loop requires equal iteration counts; could not prove length(xs) == length(ys) (clause 1 vs clause 2)", b_loop_collecting_reject_unknown_lists)
+    dg_rejects_message("loop-collecting-reject-unequal-by-one", compiler::DiagnosticCode::LockstepUnequal, 0, 0, "lockstep loop requires equal iteration counts; clause 1 iterates length(xs) times but clause 2 iterates length(xs) + 1 times", b_loop_collecting_reject_unequal_by_one)
+
+# ---------------------------------------------------------------------------
+# typed-parameters.test
+
+# typed-param-invalid-recursive: a recursive call whose own argument cannot
+# satisfy the declared integer-domain parameter is a compile-time Type error
+# ("cannot be proven to satisfy"), at that argument.
+fn b_typed_param_invalid_recursive() errors compiler::CompilerError:
+    static compile:
+        fn f(x: DgSmall) -> int:
+            f(x + 100)
+        0
+
+fn register_typed_parameters_tests():
+    dg_rejects_containing("typed-param-invalid-recursive", compiler::DiagnosticCode::Type, 447, 15, "cannot be proven to satisfy", b_typed_param_invalid_recursive)
+
+# ---------------------------------------------------------------------------
+# opaque-struct.test (abi::bytes::Bytes, whose one hidden field is `storage`,
+# stands in for the fixture module's wrapped::Wrapped)
+
+# opaque-construct-valid: outside its owner a construction of an opaque
+# struct, even one giving exactly its real fields, is the one
+# OpaqueConstruction diagnostic, whose message names no field.
+fn b_opaque_construct_valid() errors compiler::CompilerError:
+    static compile:
+        abi::bytes::Bytes {storage: 1}
+
+# opaque-instance-bypass-is-rejected: a generic function of the consumer's
+# that projects (a real field, a guessed one) or destructures its parameter
+# is analyzed under the opaque argument: OpaqueRepresentation at the call
+# that made the instance.
+fn b_opaque_instance_bypass_value() errors compiler::CompilerError:
+    static compile:
+        fn peek(x):
+            x.storage
+        peek(abi::bytes::from_list([]))
+
+fn b_opaque_instance_bypass_guess() errors compiler::CompilerError:
+    static compile:
+        fn peek(x):
+            x.guess
+        peek(abi::bytes::from_list([]))
+
+fn b_opaque_instance_bypass_destructure() errors compiler::CompilerError:
+    static compile:
+        fn peek(x):
+            {storage} = x
+            storage
+        peek(abi::bytes::from_list([]))
+
+fn register_opaque_struct_tests():
+    dg_rejects_message("opaque-construct-valid", compiler::DiagnosticCode::OpaqueConstruction, 0, 0, "abi::bytes::Bytes has an opaque representation owned by module \"abi::bytes\"; construct it through the public operations provided by that module", b_opaque_construct_valid)
+    test::rejects_at("opaque-instance-bypass-is-rejected/value", compiler::DiagnosticCode::OpaqueRepresentation, 472, 9, b_opaque_instance_bypass_value)
+    test::rejects_at("opaque-instance-bypass-is-rejected/guess", compiler::DiagnosticCode::OpaqueRepresentation, 478, 9, b_opaque_instance_bypass_guess)
+    test::rejects_at("opaque-instance-bypass-is-rejected/destructure", compiler::DiagnosticCode::OpaqueRepresentation, 485, 9, b_opaque_instance_bypass_destructure)
+
+# ---------------------------------------------------------------------------
+
+fn register_diagnostics_tests():
+    register_static_compile_tests()
+    register_strict_references_tests()
+    register_surface_lowering_tests()
+    register_structs_tests()
+    register_imports_tests()
+    register_method_eligible_tests()
+    register_method_sugar_tests()
+    register_enums_tests()
+    register_flags_tests()
+    register_loop_collecting_tests()
+    register_typed_parameters_tests()
+    register_opaque_struct_tests()
+
+with context test::suite()
+register_diagnostics_tests()
+test::report()

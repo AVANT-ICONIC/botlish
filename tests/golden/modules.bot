@@ -1,0 +1,572 @@
+# modules.bot -- module, context, context-trait, trait, refinement, opaque
+# struct, import and error-identity tests (manifest: category modules): the
+# static semantics of namespaces and environments, written against the
+# standard library's own modules (linux::io's opaque context LinuxIO, io's
+# context trait IO, web's refinement Emailish, linux::path's validator,
+# abi::bytes's opaque Bytes, list's error NotFound) and the suite's own
+# top-level declarations. A suite imports only modules of lib/: a Tcl test
+# that needs a private module is ported against a standard one or recorded as
+# not ported.
+#
+# Three application contexts are installed beside test::suite() (the driver
+# at the bottom): MdCounter (an exact context), MdLimited (the suite's own
+# implementation of the standard context trait io::IO) and the suite itself.
+# The tests that read them compute in their registration function and
+# compare in the body: a body cannot need a context.
+#
+# Layout: a body that captures nothing is a top-level function just above
+# its registration function, which only names it; the two bodies that
+# capture a value computed at registration are nested. Either costs the
+# same: independent blocks are decided together however they are nested
+# (STATIC-COMPILE.md, "Decision economics"; the README's "Layout is
+# free").
+import abi
+import abi::bytes
+import compiler
+import io
+import io::path
+import linux::io
+import linux::path
+import list
+import str
+import test
+import web
+import type linux::path::LinuxPath
+import type web::Emailish
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only), prefixed Md.
+
+# contexts.test: the synthetic context (contexts-param-is-ordinary-local's
+# Counter; renamed).
+type MdSmall = Int in 0..1000000
+
+context struct MdCounter:
+    value: MdSmall
+    enabled: bool
+
+# contexts.test: contexts-placement's context struct A and error E.
+context struct MdPlaced:
+    v: int
+
+error MdE
+
+# context-traits.test: the entry prelude (WriteFailed, Out, A, A's emit,
+# twice), renamed; A is not installed here.
+error MdWriteFailed
+
+context trait MdOut:
+    fn emit(n: int) -> int errors MdWriteFailed
+
+context struct MdA:
+    k: MdSmall
+
+fn emit(n: int, context c: MdA) -> int errors MdWriteFailed:
+    n + c.k
+
+fn twice(n: int, context out: MdOut) -> int errors MdWriteFailed:
+    out.emit(n) + out.emit(n)
+
+# portable-io.test: io-substitute-context's module `limited`, owned here by
+# the suite (the entry program implements io::IO for its own context).
+type MdLimit = Int in 0..1000
+
+context struct MdLimited:
+    max: MdLimit
+
+fn create_limited(max: MdLimit) -> MdLimited:
+    MdLimited {max: max}
+
+fn write_text(text: str, context c: MdLimited) -> unit errors io::WriteFailed:
+    if str::length(text) > c.max:
+        fail io::WriteFailed
+    unit
+
+fn write_error_text(text: str, context c: MdLimited) -> unit errors io::WriteFailed:
+    fail io::WriteFailed
+
+# traits.test: trait-witness-join-rejected's trait, with two witnesses of two
+# namespaces (the Tcl test's Person and other::O): the suite's MdRuler and
+# the built-in str (through its intrinsic str::length). The trait-
+# polymorphic md_same must be top-level.
+trait MdMeasured:
+    fn length(value: MdMeasured) -> int
+
+struct MdRuler:
+    n: int
+
+fn length(value: MdRuler) -> int:
+    value.n
+
+fn md_same(v: MdMeasured) -> MdMeasured:
+    v
+
+# opaque-struct.test: opaque-owner-entry-program's Secret, owned by the suite.
+opaque struct MdSecret:
+    value: int
+
+# ---------------------------------------------------------------------------
+# Custom checks. (String concatenation is spelled str::concat(a, b) here:
+# with io::path imported, a chained `a.concat(b).concat(c)` on Strings is
+# NO-APPLICABLE-METHOD -- the call is checked against the trait-polymorphic
+# io::path::concat -- although a single `a.concat(b)` resolves to str::concat.)
+
+# What a body did: rejected (with its diagnostic) or completed.
+struct MdObserved:
+    rejected: bool
+    code: compiler::DiagnosticCode
+    line: int
+    column: int
+    message: str
+
+# Runs BODY (through an untyped parameter, as lib/test.bot's helpers do; a
+# direct handled call of a body whose block is rejected compiles as well).
+fn md_observe(body) -> MdObserved:
+    v = body():
+        on compiler::CompilerError {code, primary, message}:
+            return MdObserved {rejected: true, code: code, line: primary.line, column: primary.column, message: message}
+    MdObserved {rejected: false, code: compiler::DiagnosticCode::Type, line: 0, column: 0, message: ""}
+
+# true when FRAGMENT occurs in TEXT.
+fn md_contains?(text: str, fragment: str) -> bool:
+    n = str::length(text)
+    k = str::length(fragment)
+    loop i from 0 through n - k:
+        piece = str::substring(text, i, i + k):
+            on LowerUnderrun:
+                continue
+            on UpperOverrun:
+                continue
+        if piece == fragment:
+            return true
+    false
+
+# BODY's block must be rejected with EXPECTED, with a message that is exactly
+# WANTED (WHOLE) or contains WANTED (not WHOLE).
+nomethod fn md_rejects_message(name: str, expected: compiler::DiagnosticCode, wanted: str, whole: bool, body, context suite: test::Suite) -> unit:
+    fn check() -> test::Match:
+        o = md_observe(body)
+        shown = str::concat(str::concat(str::concat("compiler diagnostic ", test::code_name(expected)), ", message: "), wanted)
+        if not o.rejected:
+            return test::mismatch(shown, "a value", "")
+        same = if whole:
+            o.message == wanted
+        else:
+            o.message.md_contains?(wanted)
+        if o.code == expected and same:
+            return test::passed()
+        test::mismatch(shown, test::diagnostic_text(o.code, compiler::SourceLocation {line: o.line, column: o.column}), o.message)
+    test::case(name, check)
+
+# ---------------------------------------------------------------------------
+# contexts.test
+
+# contexts-placement: an installation anywhere but the entry program's
+# top-level scope is CONTEXT-INSTALLATION-UNSUPPORTED, at the `with`: in
+# a function, a loop, a branch, a handler, a nested function. (Messages
+# are not compared: inside a body every one says "inside a function".)
+fn b_placement_function() errors compiler::CompilerError:
+    static compile:
+        fn f():
+            with context MdPlaced {v: 1}
+            1
+        f()
+
+fn b_placement_loop() errors compiler::CompilerError:
+    static compile:
+        loop i from 0 to 2:
+            with context MdPlaced {v: i}
+        1
+
+fn b_placement_if() errors compiler::CompilerError:
+    static compile:
+        if true:
+            with context MdPlaced {v: 1}
+        1
+
+fn b_placement_handler() errors compiler::CompilerError:
+    static compile:
+        fn g() errors MdE:
+            fail MdE
+        x = g():
+            on MdE:
+                with context MdPlaced {v: 1}
+                2
+        x
+
+fn b_placement_nested() errors compiler::CompilerError:
+    static compile:
+        fn outer():
+            fn inner():
+                with context MdPlaced {v: 1}
+            inner()
+        outer()
+
+# contexts-opacity-exact: outside linux::io a LinuxIO context parameter
+# cannot be projected or destructured, and a LinuxIO cannot be
+# constructed; it can be held, passed and compared. (Adapted: f is
+# declared, not called -- a body cannot need LinuxIO; the forged LinuxIO
+# is bound, not installed -- `with context` in a block is
+# CONTEXT-INSTALLATION-UNSUPPORTED; and the comparison takes LinuxIO as
+# an ordinary parameter -- installing LinuxIO beside MdLimited would make
+# every io::IO call AMBIGUOUS-CONTEXT-IMPLEMENTATION.)
+fn b_opacity_projection() errors compiler::CompilerError:
+    static compile:
+        fn f(context io: linux::io::LinuxIO):
+            io.stdout
+        1
+
+fn b_opacity_destructure() errors compiler::CompilerError:
+    static compile:
+        fn f(context io: linux::io::LinuxIO):
+            {stdout} = io
+            1
+        1
+
+fn b_opacity_construction() errors compiler::CompilerError:
+    static compile:
+        x = linux::io::LinuxIO {stdin: 1, stdout: 2, stderr: 3}
+        1
+
+fn b_opacity_compare() errors compiler::CompilerError:
+    static compile:
+        fn same(io: linux::io::LinuxIO):
+            io == linux::io::create()
+        same(linux::io::create())
+
+fn register_contexts_tests():
+    test::rejects_at("contexts-placement/function", compiler::DiagnosticCode::ContextInstallationUnsupported, 171, 13, b_placement_function)
+    test::rejects_at("contexts-placement/loop", compiler::DiagnosticCode::ContextInstallationUnsupported, 178, 13, b_placement_loop)
+    test::rejects_at("contexts-placement/if", compiler::DiagnosticCode::ContextInstallationUnsupported, 184, 13, b_placement_if)
+    test::rejects_at("contexts-placement/handler", compiler::DiagnosticCode::ContextInstallationUnsupported, 193, 17, b_placement_handler)
+    test::rejects_at("contexts-placement/nested-function", compiler::DiagnosticCode::ContextInstallationUnsupported, 201, 17, b_placement_nested)
+    test::rejects("contexts-opacity-exact/projection", compiler::DiagnosticCode::OpaqueRepresentation, b_opacity_projection)
+    test::rejects("contexts-opacity-exact/destructure", compiler::DiagnosticCode::OpaqueRepresentation, b_opacity_destructure)
+    test::rejects("contexts-opacity-exact/construction", compiler::DiagnosticCode::OpaqueConstruction, b_opacity_construction)
+    test::value("contexts-opacity-exact/compare", true, b_opacity_compare)
+
+    # contexts-param-is-ordinary-local: a context parameter is an ordinary
+    # immutable value inside the function: projected, passed, compared,
+    # stored, captured. Computed here, where MdCounter is installed.
+    fn keep(c: MdCounter):
+        c.value
+    fn use(context c: MdCounter):
+        fn later():
+            c.value + 1
+        [c.value, keep(c), c == MdCounter {value: 9, enabled: true}, later(), {held: c}.held.value]
+    observed = use()
+    fn b_ordinary_local() errors compiler::CompilerError:
+        static compile:
+            observed
+    test::value("contexts-param-is-ordinary-local", [9, 9, true, 10, 9], b_ordinary_local)
+
+# ---------------------------------------------------------------------------
+# context-traits.test
+
+# ct-one-way: inside `fn f(context out: MdOut)` the binding is only the
+# trait's operations: every other use is CONTEXT-TRAIT-MISUSE, an
+# undeclared operation TRAIT-UNKNOWN-OPERATION.
+fn b_one_way_return() errors compiler::CompilerError:
+    static compile:
+        fn take_a(a: MdA) -> int:
+            1
+        fn f(context out: MdOut):
+            out
+        1
+
+fn b_one_way_pass_context() errors compiler::CompilerError:
+    static compile:
+        fn take_a(a: MdA) -> int:
+            1
+        fn f(context out: MdOut):
+            take_a(out)
+        1
+
+fn b_one_way_pass_untyped() errors compiler::CompilerError:
+    static compile:
+        fn take_a(a: MdA) -> int:
+            1
+        fn f(context out: MdOut):
+            fn untyped(x):
+                1
+            untyped(out)
+        1
+
+fn b_one_way_project() errors compiler::CompilerError:
+    static compile:
+        fn take_a(a: MdA) -> int:
+            1
+        fn f(context out: MdOut):
+            out.k
+        1
+
+fn b_one_way_type_test() errors compiler::CompilerError:
+    static compile:
+        fn take_a(a: MdA) -> int:
+            1
+        fn f(context out: MdOut):
+            string?(out)
+        1
+
+fn b_one_way_compare() errors compiler::CompilerError:
+    static compile:
+        fn take_a(a: MdA) -> int:
+            1
+        fn f(context out: MdOut):
+            out == out
+        1
+
+fn b_one_way_store() errors compiler::CompilerError:
+    static compile:
+        fn take_a(a: MdA) -> int:
+            1
+        fn f(context out: MdOut):
+            [out]
+        1
+
+fn b_one_way_unknown_operation() errors compiler::CompilerError:
+    static compile:
+        fn take_a(a: MdA) -> int:
+            1
+        fn f(context out: MdOut):
+            out.nope(1)
+        1
+
+fn b_one_way_condition() errors compiler::CompilerError:
+    static compile:
+        fn take_a(a: MdA) -> int:
+            1
+        fn f(context out: MdOut):
+            if out:
+                1
+            else:
+                2
+        1
+
+fn register_context_traits_tests():
+    test::rejects("ct-one-way/return", compiler::DiagnosticCode::ContextTraitMisuse, b_one_way_return)
+    test::rejects("ct-one-way/pass-context-type", compiler::DiagnosticCode::ContextTraitMisuse, b_one_way_pass_context)
+    test::rejects("ct-one-way/pass-untyped", compiler::DiagnosticCode::ContextTraitMisuse, b_one_way_pass_untyped)
+    test::rejects("ct-one-way/project", compiler::DiagnosticCode::ContextTraitMisuse, b_one_way_project)
+    test::rejects("ct-one-way/type-test", compiler::DiagnosticCode::ContextTraitMisuse, b_one_way_type_test)
+    test::rejects("ct-one-way/compare", compiler::DiagnosticCode::ContextTraitMisuse, b_one_way_compare)
+    test::rejects("ct-one-way/store", compiler::DiagnosticCode::ContextTraitMisuse, b_one_way_store)
+    test::rejects("ct-one-way/unknown-operation", compiler::DiagnosticCode::TraitUnknownOperation, b_one_way_unknown_operation)
+    test::rejects("ct-one-way/condition", compiler::DiagnosticCode::ContextTraitMisuse, b_one_way_condition)
+
+# ---------------------------------------------------------------------------
+# portable-io.test
+
+fn register_portable_io_tests():
+    # io-substitute-context: a context implementing io::IO without Linux
+    # (MdLimited, max 3, installed below) is selected like LinuxIO:
+    # io::print_line("hi") fits, io::print("there") does not, so greet fails
+    # with io::WriteFailed. Computed here, where io::IO is selected, beside
+    # the installed suite. (Only the Tcl test's max-3 run: a program installs
+    # one MdLimited, and a second context implementing io::IO would make the
+    # selection ambiguous.)
+    fn greet() -> List[str] errors io::WriteFailed:
+        io::print_line("hi")
+        io::print("there")
+        ["ok"]
+    r = greet():
+        on io::WriteFailed:
+            ["failed"]
+    fn b_substitute() errors compiler::CompilerError:
+        static compile:
+            r
+    test::value("io-substitute-context/max-3", ["failed"], b_substitute)
+
+# ---------------------------------------------------------------------------
+# traits.test
+
+# trait-witness-join-rejected: different witnesses meeting at a join are
+# TRAIT-WITNESS-JOIN, never erased to any: at a trait-typed result, and
+# at a local join of two trait results. (Not its third program: a join of
+# two trait parameters' witnesses is rejected in a trait-polymorphic
+# function, which must be top-level, so it cannot be a block.)
+fn b_join_result() errors compiler::CompilerError:
+    static compile:
+        fn choose(flag: bool) -> MdMeasured:
+            if flag:
+                MdRuler {n: 1}
+            else:
+                "b"
+        choose(true).length()
+
+fn b_join_local() errors compiler::CompilerError:
+    static compile:
+        fn f(flag: bool) -> int:
+            x = if flag:
+                md_same(MdRuler {n: 1})
+            else:
+                md_same("b")
+            x.length()
+        f(true)
+
+fn register_traits_tests():
+    md_rejects_message("trait-witness-join-rejected/result", compiler::DiagnosticCode::TraitWitnessJoin, "the function's result has trait type MdMeasured but may contain either MdRuler or str; heterogeneous trait values are not supported (every exit of a trait-typed result needs the same witness)", true, b_join_result)
+    test::rejects("trait-witness-join-rejected/local", compiler::DiagnosticCode::TraitWitnessJoin, b_join_local)
+
+# ---------------------------------------------------------------------------
+# refinement-values.test
+
+# refinement-import-grants-no-authority: the importing (entry) program
+# cannot mint web's refinement, imported by `import type` or spelled
+# qualified.
+fn b_mint_import_type() errors compiler::CompilerError:
+    static compile:
+        fn fake?(s: str) -> bool proves s: Emailish:
+            true
+        1
+
+fn b_mint_qualified() errors compiler::CompilerError:
+    static compile:
+        fn fake?(s: str) -> bool proves s: web::Emailish:
+            true
+        1
+
+fn register_refinement_values_tests():
+    md_rejects_message("refinement-import-grants-no-authority/import-type", compiler::DiagnosticCode::RefinementMintAuthority, "the entry program cannot declare a proof of refinement web::Emailish: only its owning module \"web\" may mint it", false, b_mint_import_type)
+    test::rejects("refinement-import-grants-no-authority/qualified", compiler::DiagnosticCode::RefinementMintAuthority, b_mint_qualified)
+
+# ---------------------------------------------------------------------------
+# refinement-validators.test
+
+# validator-module-qualified: a module's validator called qualified
+# (linux::path::validate(p)) proves the module's refinement for the
+# caller; method sugar too. (The Tcl test's private module path, with two
+# errors, is the standard linux::path, with one: io::path::NotAPath.)
+fn b_validator_module() errors compiler::CompilerError:
+    static compile:
+        fn measure(p: LinuxPath) -> int:
+            str::length(p)
+        fn use(p: str) -> int:
+            linux::path::validate(p):
+                on io::path::NotAPath:
+                    return -1
+            measure(p) + str::length(linux::path::text(p))
+        fn sugar(p: str) -> int:
+            p.validate():
+                on io::path::NotAPath:
+                    return -1
+            measure(p)
+        [use("a/b"), use(""), sugar("xy")]
+
+fn register_refinement_validators_tests():
+    test::value("validator-module-qualified", [6, -1, 2], b_validator_module)
+
+# ---------------------------------------------------------------------------
+# opaque-struct.test
+
+# opaque-owner-entry-program: the entry program owns its opaque struct:
+# construction, projection, destructuring.
+fn b_owner_entry() errors compiler::CompilerError:
+    static compile:
+        x = MdSecret {value: 1}
+        fn copy(s: MdSecret):
+            {value} = s
+            MdSecret {value: value + 1}
+        [x.value, copy(x).value]
+
+# opaque-project-existing-and-guessed-fields-are-indistinguishable:
+# projecting abi::bytes::Bytes's real field (its only one) and two guessed
+# ones gives the same diagnostic: code, message and column (the field
+# name).
+fn b_project_real() errors compiler::CompilerError:
+    static compile:
+        x = abi::bytes::from_list([])
+        x.storage
+
+fn b_project_guess() errors compiler::CompilerError:
+    static compile:
+        x = abi::bytes::from_list([])
+        x.guess
+
+fn b_project_far() errors compiler::CompilerError:
+    static compile:
+        x = abi::bytes::from_list([])
+        x.a_long_and_unlikely_field_name
+
+fn register_opaque_struct_tests():
+    test::value("opaque-owner-entry-program", [1, 2], b_owner_entry)
+    fn indistinguishable() -> test::Match:
+        wanted = compiler::DiagnosticCode::OpaqueRepresentation
+        real = md_observe(b_project_real)
+        guess = md_observe(b_project_guess)
+        far = md_observe(b_project_far)
+        if not (real.rejected and guess.rejected and far.rejected):
+            return test::mismatch("three rejections", "a value", "")
+        if real.code != wanted:
+            return test::mismatch(str::concat("compiler diagnostic ", test::code_name(wanted)), test::code_name(real.code), real.message)
+        same = [real.code == guess.code, real.code == far.code, real.message == guess.message, real.message == far.message, real.column == guess.column, real.column == far.column]
+        if same != [true, true, true, true, true, true]:
+            return test::mismatch("[true, true, true, true, true, true]", test::describe(same), real.message)
+        test::passed()
+    test::case("opaque-project-existing-and-guessed-fields-are-indistinguishable", indistinguishable)
+
+# ---------------------------------------------------------------------------
+# imports.test
+
+# imports-exact-namespace: import abi authorizes abi::u8 and nothing of
+# abi::x86_64 (which the suite does not import).
+fn b_exact_u8() errors compiler::CompilerError:
+    static compile:
+        x = abi::u8(1)
+        x.value
+
+fn b_exact_x86_64() errors compiler::CompilerError:
+    static compile:
+        x = abi::x86_64::register64(1)
+        1
+
+fn register_imports_tests():
+    test::value("imports-exact-namespace/u8", 1, b_exact_u8)
+    md_rejects_message("imports-exact-namespace/x86_64", compiler::DiagnosticCode::MissingImport, "namespace \"abi::x86_64\" is not imported; add `import abi::x86_64` to use `abi::x86_64::register64` (imports are exact: `import abi` does not import \"abi::x86_64\")", true, b_exact_x86_64)
+
+# ---------------------------------------------------------------------------
+# namespaced-errors.test
+
+# nerr-stdlib-qualified-use: outside its module a stdlib error is spelled
+# qualified (list::find's NotFound is list::NotFound); the bare short name
+# is unknown there.
+fn b_qualified_use() errors compiler::CompilerError:
+    static compile:
+        fn big(x):
+            x > 5
+        r = list::find([1, 2], big):
+            on list::NotFound:
+                0
+        r
+
+fn b_bare_use() errors compiler::CompilerError:
+    static compile:
+        fn big(x):
+            x > 5
+        r = list::find([1, 2], big):
+            on NotFound:
+                0
+        r
+
+fn register_namespaced_errors_tests():
+    test::value("nerr-stdlib-qualified-use/qualified", 0, b_qualified_use)
+    test::rejects("nerr-stdlib-qualified-use/bare", compiler::DiagnosticCode::UndeclaredError, b_bare_use)
+
+# ---------------------------------------------------------------------------
+
+fn register_modules_tests():
+    register_contexts_tests()
+    register_context_traits_tests()
+    register_portable_io_tests()
+    register_traits_tests()
+    register_refinement_values_tests()
+    register_refinement_validators_tests()
+    register_opaque_struct_tests()
+    register_imports_tests()
+    register_namespaced_errors_tests()
+
+with context MdCounter {value: 9, enabled: true}
+with context create_limited(3)
+with context test::suite()
+register_modules_tests()
+test::report()

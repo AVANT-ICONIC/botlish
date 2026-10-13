@@ -20,13 +20,16 @@
 # ( ) , or whitespace inside names; ordinary IR names are.
 
 namespace eval hir::read {
-    variable flags {unbound deferred duplicate unreachable}
+    variable flags {unbound deferred duplicate unreachable move move-out consuming}
     # TypeDecls' own result from the current Program call, for Program to
     # store as the returned HIR's `sourceTypes` field.
     variable lastTypeDecls {}
     # ErrorDecls' own result from the current Program call, for Program to
     # store as the returned HIR's `errorDecls` field.
     variable lastErrorDecls {}
+    # NAME -> {fields {F T ...} namespace NS}: the payload descriptors of the
+    # last ErrorDecls call (ERROR-PAYLOADS.md), HIR's `errorPayloads`.
+    variable lastErrorPayloads {}
 }
 
 # The HIR program described by TEXT.
@@ -77,6 +80,18 @@ proc hir::read::Lines {text} {
 proc hir::read::TypeDecls {lines} {
     set decls {}
     set rest $lines
+    # Enum declarations (hir::format::TypeDecl's "enum ..." lines) come
+    # first: a refinement's carrier and a struct's field may name an enum.
+    # They join the type declarations as `kind enum` entries, registered by
+    # the same hir::sourcetypes::apply pass a source compile uses.
+    hir::enums::Reset
+    foreach entry $lines {
+        lassign $entry indent content number
+        if {$indent != 0 || [string range $content 0 4] ne "enum "} { break }
+        lappend decls [EnumDeclLine $content $number]
+        set rest [lrange $rest 1 end]
+    }
+    set lines $rest
     foreach entry $lines {
         lassign $entry indent content number
         if {$indent != 0} { break }
@@ -99,6 +114,13 @@ proc hir::read::TypeDecls {lines} {
         set rest [lrange $rest 1 end]
     }
     if {$structEntries ne ""} {
+        if {$decls eq ""} {
+            # Struct declarations alone still make this text a program of
+            # its own: no source type of an earlier compilation stays
+            # registered (hir::sourcetypes::apply's rule for a compilation
+            # that declares only structs).
+            hir::sourcetypes::Reset
+        }
         # Skeletons first, then the field types (which may name any struct
         # of the text, itself included).
         set skeleton [lmap entry $structEntries {
@@ -119,17 +141,123 @@ proc hir::read::TypeDecls {lines} {
         hir::structs::applyEntries $final
         lappend registered {*}$final
     }
+    # Trait declarations (hir::format::TraitDecl's "trait ..." lines) and the
+    # trait-polymorphic functions a monomorphized program replaced
+    # (TRAITS.md): their requirement types may name the structs above.
+    variable lastTraits
+    variable lastTraitFunctions
+    set lastTraits {}
+    set lastTraitFunctions {}
+    set traitLines {}
+    foreach entry $rest {
+        lassign $entry indent content number
+        if {$indent != 0 || [string range $content 0 5] ne "trait "} { break }
+        lappend traitLines $entry
+        set rest [lrange $rest 1 end]
+    }
+    if {$traitLines ne ""} {
+        # Names first (a requirement names its own trait), then the lines.
+        hir::traits::applyEntries [lmap entry $traitLines {
+            regexp {^trait (\S+) } [lindex $entry 1] -> id
+            dict create id $id name $id namespace "" requirements {}
+        }]
+        set lastTraits [lmap entry $traitLines {TraitLine [lindex $entry 1] [lindex $entry 2]}]
+        hir::traits::applyEntries $lastTraits
+    }
+    foreach entry $rest {
+        lassign $entry indent content number
+        if {$indent != 0 || [string range $content 0 7] ne "traitfn "} { break }
+        if {![regexp {^traitfn (\S+) \((.*)\) -> (.+) clones \((.*)\)$} $content -> fname paramsText resultText clonesText]} {
+            Fail $number "expected \"traitfn NAME (P: T, ...) -> R clones (C, ...)\""
+        }
+        set params {}
+        if {$paramsText ne ""} {
+            foreach item [SplitTop $paramsText ", "] {
+                if {![regexp {^(\S+): (.+)$} $item -> p t]} {
+                    Fail $number "expected \"PARAM: TYPE\", got \"$item\""
+                }
+                lappend params $p [ParseType $t $number]
+            }
+        }
+        set clones {}
+        foreach c [expr {$clonesText eq "" ? {} : [split [string map {", " \x01} $clonesText] \x01]}] {
+            lappend clones $c {}
+        }
+        dict set lastTraitFunctions $fname [dict create params $params \
+            result [expr {$resultText eq "-" ? "" : [ParseType $resultText $number]}] clones $clones]
+        set rest [lrange $rest 1 end]
+    }
     variable lastTypeDecls
     set lastTypeDecls $registered
     return $rest
+}
+
+# The `traits` entry hir::format::TraitDecl's line CONTENT states.
+proc hir::read::TraitLine {content number} {
+    if {![regexp {^trait (\S+)( context)? owner (\S+) requires (.+)$} $content -> id context owner reqsText]} {
+        Fail $number "expected \"trait ID ?context? owner NS requires REQ ; ...\""
+    }
+    set requirements {}
+    foreach text [split [string map {" ; " \x01} $reqsText] \x01] {
+        set errorsText ""
+        set i [TopIndex $text " errors "]
+        if {$i >= 0} {
+            set errorsText [string range $text [expr {$i + 8}] end]
+            set text [string range $text 0 [expr {$i - 1}]]
+        }
+        set resultText ""
+        set i [TopIndex $text " -> "]
+        if {$i >= 0} {
+            set resultText [string range $text [expr {$i + 4}] end]
+            set text [string range $text 0 [expr {$i - 1}]]
+        }
+        if {![regexp {^([^(\s]+)\((.*)\)$} $text -> name paramsText]} {
+            Fail $number "bad trait requirement \"$text\""
+        }
+        set params {}
+        foreach item [expr {$paramsText eq "" ? {} : [SplitTop $paramsText ", "]}] {
+            if {![regexp {^(\S+): (.+)$} $item -> p t]} {
+                Fail $number "expected \"PARAM: TYPE\" in a trait requirement, got \"$item\""
+            }
+            set type [ParseType $t $number]
+            lappend params [dict create name $p type $type self [expr {$type eq [list trait $id]}]]
+        }
+        set result ""
+        if {$resultText ne ""} {
+            set type [ParseType $resultText $number]
+            set result [dict create type $type self [expr {$type eq [list trait $id]}]]
+        }
+        set errors [expr {$errorsText eq "" ? {} : [lsort -unique [split [string map {", " \x01} $errorsText] \x01]]}]
+        lappend requirements [dict create name $name nameSpan "" span "" params $params result $result errors $errors]
+    }
+    return [dict create id $id name [lindex [split [string map {:: \x01} $id] \x01] end] \
+        namespace [expr {$owner eq "-" ? "" : $owner}] requirements $requirements \
+        context [expr {$context ne ""}]]
+}
+
+# The `kind enum` declaration (hir::enums::apply's input) of the enum line
+# "enum ID name NAME ns NS cases C1, C2, ..." (hir::format::TypeDecl).
+proc hir::read::EnumDeclLine {content number} {
+    if {![regexp {^enum (\S+) name (\S+) ns (\S+) cases (.+)$} $content -> id name ns casesText]} {
+        Fail $number "expected \"enum ID name NAME ns NS cases CASE, ...\""
+    }
+    set span [dict create file <hir-text> line $number column 1]
+    set cases [lmap c [split [string map {", " \x01} $casesText] \x01] {
+        if {![regexp {^[A-Za-z_][A-Za-z0-9_]*$} $c]} {
+            Fail $number "bad enum case \"$c\""
+        }
+        dict create name $c nameSpan $span
+    }]
+    return [dict create kind enum resolved 1 name $id namespace [expr {$ns eq "-" ? "" : $ns}] \
+        nameSpan $span cases $cases span $span]
 }
 
 # The struct sourceTypes entry "struct ID name NAME ns NS fields F: T, ..."
 # (hir::format::TypeDecl) states; field types are read with the structs
 # registered skeleton-first, so a field may name any struct of the text.
 proc hir::read::StructDeclLine {content number} {
-    if {![regexp {^struct (\S+) name (\S+) ns (\S+) (opaque )?fields (.*)$} $content -> id name ns opaqueWord fieldsText]} {
-        Fail $number "expected \"struct ID name NAME ns NS \[opaque\] fields FIELD: TYPE, ...\""
+    if {![regexp {^struct (\S+) name (\S+) ns (\S+) (opaque )?(context )?fields (.*)$} $content -> id name ns opaqueWord contextWord fieldsText]} {
+        Fail $number "expected \"struct ID name NAME ns NS \[opaque\] \[context\] fields FIELD: TYPE, ...\""
     }
     set ns [expr {$ns eq "-" ? "" : $ns}]
     # Skeleton: every struct line of the text must be known before any field
@@ -143,8 +271,12 @@ proc hir::read::StructDeclLine {content number} {
         lappend names $fname
         lappend rawFields $fname $ftype
     }
-    return [dict create kind struct name $name id $id namespace $ns opaque [expr {$opaqueWord ne ""}] \
+    set decl [dict create kind struct name $name id $id namespace $ns opaque [expr {$opaqueWord ne ""}] \
         fields $rawFields names $names line $number]
+    if {$contextWord ne ""} {
+        dict set decl context 1
+    }
+    return $decl
 }
 
 # The surface/lower.tcl-shaped decl dict for one "type ..." HIR text line
@@ -152,6 +284,13 @@ proc hir::read::StructDeclLine {content number} {
 # own), or "" if CONTENT is not a type-declaration line.
 proc hir::read::TypeDeclLine {content number} {
     set span [dict create file <hir-text> line $number column 1]
+    if {[regexp {^refined type (\S+) carrier (.+) owner (\S+)$} $content -> name carrier owner]} {
+        # A refinement type (hir::format::TypeDecl): registered from its
+        # canonical identity, resolved carrier text and owner, in printed
+        # (dependency) order, by hir::sourcetypes::RegisterRefinement.
+        return [dict create kind refined resolved 1 name $name namespace [expr {$owner eq "-" ? "" : $owner}] \
+            nameSpan $span carrier $carrier carrierSpan $span span $span line $number]
+    }
     if {[regexp {^type (\S+) parent (\S+) domain interval (-?[0-9]+) (-?[0-9]+)$} $content \
             -> name parent lo hi]} {
         set domain [dict create kind interval lo $lo loSpan $span hi $hi hiSpan $span span $span]
@@ -176,10 +315,24 @@ proc hir::read::TypeDeclLine {content number} {
 proc hir::read::ErrorDecls {lines} {
     set decls {}
     set rest $lines
+    set payloads [dict create]
     foreach entry $lines {
         lassign $entry indent content number
         if {$indent != 0} { break }
-        if {![regexp {^error (\S+)$} $content -> name]} { break }
+        if {[regexp {^error (\S+) ns (\S+) payload (.+)$} $content -> name ns fieldsText]} {
+            # A payload-bearing error (ERROR-PAYLOADS.md): its declared fields
+            # with their resolved types, in declaration order.
+            set fields {}
+            foreach item [SplitTop $fieldsText ", "] {
+                if {![regexp {^(\S+): (.+)$} $item -> fname ftype]} {
+                    Fail $number "expected \"FIELD: TYPE\" in an error payload, got \"$item\""
+                }
+                lappend fields $fname [ParseType $ftype $number]
+            }
+            dict set payloads $name [dict create fields $fields namespace [expr {$ns eq "-" ? "" : $ns}]]
+        } elseif {![regexp {^error (\S+)$} $content -> name]} {
+            break
+        }
         lappend decls [dict create name $name \
             nameSpan [dict create file <hir-text> line $number column 1]]
         set rest [lrange $rest 1 end]
@@ -187,9 +340,12 @@ proc hir::read::ErrorDecls {lines} {
     set registered {}
     if {$decls ne ""} {
         set registered [hir::errordecls::apply $decls]
+        hir::errordecls::applyEntries $registered $payloads
     }
     variable lastErrorDecls
     set lastErrorDecls $registered
+    variable lastErrorPayloads
+    set lastErrorPayloads $payloads
     return $rest
 }
 
@@ -234,6 +390,18 @@ proc hir::read::Program {text} {
     dict set hir sourceTypes $lastTypeDecls
     variable lastErrorDecls
     dict set hir errorDecls $lastErrorDecls
+    variable lastErrorPayloads
+    if {[dict size $lastErrorPayloads]} {
+        dict set hir errorPayloads $lastErrorPayloads
+    }
+    variable lastTraits
+    variable lastTraitFunctions
+    if {$lastTraits ne {}} {
+        dict set hir traits $lastTraits
+    }
+    if {$lastTraitFunctions ne {}} {
+        dict set hir traitFunctions $lastTraitFunctions
+    }
     Finish hir
     return $hir
 }
@@ -414,6 +582,20 @@ proc hir::read::ParseType {text number} {
         set errors [expr {$errorsText eq "" ? {} : [SplitTop $errorsText ", "]}]
         return [hir::types::MakeFn $argTypes [ParseType $returnText $number] $errors]
     }
+    if {[regexp {^Coroutine\{(.*)\}$} $text -> inner]} {
+        # hir::types::show's coroutine handle type notation (AFFINE-
+        # VALUES.md): the callable contract, the three fields of Fn{...}.
+        set fields [SplitTop $inner ", "]
+        if {[llength $fields] != 3
+                || ![regexp {^args: \[(.*)\]$} [lindex $fields 0] -> argsText]
+                || ![regexp {^return: (.+)$} [lindex $fields 1] -> returnText]
+                || ![regexp {^errors: \[(.*)\]$} [lindex $fields 2] -> errorsText]} {
+            Fail $number "bad coroutine type \"$text\": expected \"Coroutine{args: \[...\], return: ..., errors: \[...\]}\""
+        }
+        set argTypes [expr {$argsText eq "" ? {} : [lmap t [SplitTop $argsText ", "] {ParseType $t $number}]}]
+        set errors [expr {$errorsText eq "" ? {} : [SplitTop $errorsText ", "]}]
+        return [hir::types::MakeCoroutineType $argTypes [ParseType $returnText $number] $errors]
+    }
     if {[regexp {^List\[(.+)\]$} $text -> inner]} {
         # hir::types::show's own applied-type notation (MINIMAL-APPLIED-
         # LIST-TYPES.md): always exactly "List[" + show(ELEM) + "]", so the
@@ -428,6 +610,10 @@ proc hir::read::ParseType {text number} {
         # literal head word, which can never collide since "List" and
         # "ImmutableSet" are different constructor names.
         return [list immutableSet [ParseType $inner $number]]
+    }
+    if {[regexp {^MutableVector\[(.+)\]$} $text -> inner]} {
+        # MUTABLE-VECTOR.md: hir::types::show's own notation.
+        return [list mutvec [ParseType $inner $number]]
     }
     if {[regexp {^MutableArray\[(.+)\]$} $text -> inner]} {
         # PARAMETERIZED-MUTABLEARRAY.md: hir::types::show's own notation.
@@ -449,6 +635,15 @@ proc hir::read::ParseType {text number} {
     }
     if {[hir::structs::declared $text]} {
         return [list nstruct $text]
+    }
+    if {[hir::enums::declared $text]} {
+        # An enum type (ENUMS.md): hir::types::show prints its identity.
+        return [list enum $text]
+    }
+    if {[hir::traits::declared $text]} {
+        # A trait constraint (TRAITS.md): only a trait declaration or a
+        # trait function's source signature prints one.
+        return [list trait $text]
     }
     if {[regexp {^([a-z]+)\[([^\]]*)\]$} $text -> base names]} {
         set text [list refined $base [split $names ,]]
@@ -500,7 +695,14 @@ proc hir::read::TakeExprLine {hirVar level} {
         set tail [lrange $tail 0 $at-1]
     }
     set found {}
-    while {[llength $tail] > 1 && [lindex $tail end] in $flags} {
+    while {[llength $tail] > 1 && ([lindex $tail end] in $flags
+            || [string match release=* [lindex $tail end]]
+            || [string match exit-release=* [lindex $tail end]]
+            || [string match error-release=* [lindex $tail end]]
+            || [string match consumed=* [lindex $tail end]]
+            || [string match vector=* [lindex $tail end]]
+            || [string match array=* [lindex $tail end]]
+            || [string match place=* [lindex $tail end]])} {
         set found [linsert $found 0 [lindex $tail end]]
         set tail [lrange $tail 0 end-1]
     }
@@ -515,8 +717,22 @@ proc hir::read::TakeBranchLine {hirVar level role} {
     set line [Peek $hir]
     lassign $line indent content number
     if {$line eq "" || $indent != $level
-            || ![regexp "^$role (s\[0-9\]+)(?: binds (.*?))?(?: refines (.*))?\$" $content -> s binds refines]} {
+            || ![regexp "^$role (s\[0-9\]+)(.*)\$" $content -> s rest]} {
         Fail [expr {$line eq "" ? "end" : $number}] "expected \"$role SCOPE ...\" at indentation level $level"
+    }
+    # " refines " first: a branch may both bind locals and carry facts
+    # (Tcl's regexp matching prefers the first quantifier's greediness, so a
+    # single pattern for both optional parts would read the facts as binds).
+    set binds ""
+    set refines ""
+    set i [string first " refines " $rest]
+    if {$i >= 0} {
+        set refines [string range $rest [expr {$i + 9}] end]
+        set rest [string range $rest 0 [expr {$i - 1}]]
+    }
+    if {[regexp {^ binds (.*)$} $rest -> binds]} {
+    } elseif {$rest ne ""} {
+        Fail $number "expected \"$role SCOPE ?binds ...? ?refines ...?\""
     }
     dict incr hir pos
     set facts {}
@@ -539,14 +755,15 @@ proc hir::read::TakeHandlerLine {hirVar level} {
     set line [Peek $hir]
     lassign $line indent content number
     if {$line eq "" || $indent != $level
-            || ![regexp {^on (\S+) (s[0-9]+)(?: binds (.*))?$} $content -> name s binds]} {
-        Fail [expr {$line eq "" ? "end" : $number}] "expected \"on NAME SCOPE ...\" at indentation level $level"
+            || ![regexp {^on (\S+) (s[0-9]+)(?: payload \((b[0-9]+) (\S+)\))?(?: consumed=(\S+))?(?: binds (.*))?$} \
+                $content -> name s payloadId payloadName consumed binds]} {
+        Fail [expr {$line eq "" ? "end" : $number}] "expected \"on NAME SCOPE ?payload (BINDING NAME)? ...\" at indentation level $level"
     }
     dict incr hir pos
     if {![hir::errordecls::isDeclared $name]} {
         Fail $number "unknown error \"$name\": no \"error $name\" declaration is visible"
     }
-    return [list $name $s $binds $number]
+    return [list $name $s $binds $number $payloadId $payloadName $consumed]
 }
 
 # True if the next line is at indentation LEVEL.
@@ -579,6 +796,38 @@ proc hir::read::Expr {hirVar level s path block} {
     dict set hir exprs $e [dict create id $e kind $kind origin [list ir $path] scope $s \
         type [hir::types::intern hir [dict get $line type]] \
         reachable [expr {"unreachable" ni $flags}]]
+    if {"move" in $flags} {
+        # A move of an affine value (AFFINE-VALUES.md), as printed.
+        dict set hir exprs $e affineMove 1
+    }
+    set release [lsearch -inline -glob $flags release=*]
+    if {$release ne ""} {
+        # The affine values released after this statement (AFFINE-VALUES.md),
+        # as printed.
+        dict set hir exprs $e affineRelease [split [string range $release 8 end] ,]
+    }
+    set release [lsearch -inline -glob $flags exit-release=*]
+    if {$release ne ""} {
+        # The affine values this exit releases as it leaves.
+        dict set hir exprs $e affineExitRelease [split [string range $release 13 end] ,]
+    }
+    set release [lsearch -inline -glob $flags error-release=*]
+    if {$release ne ""} {
+        # The affine values released when this call propagates a declared
+        # error: NAME=ITEM,ITEM;...
+        set byName [dict create]
+        foreach group [split [string range $release 14 end] {;}] {
+            set at [string first = $group]
+            dict set byName [string range $group 0 $at-1] [split [string range $group $at+1 end] ,]
+        }
+        dict set hir exprs $e affineErrorRelease $byName
+    }
+    set consumed [lsearch -inline -glob $flags consumed=*]
+    if {$consumed ne ""} {
+        # A destructuring temporary's moved-out affine fields, recorded on
+        # its binding once the binding exists (TakeBind).
+        dict set hir exprs $e affineConsumed [split [string range $consumed 9 end] ,]
+    }
     set inner [expr {$level + 1}]
 
     switch -- $kind {
@@ -613,6 +862,9 @@ proc hir::read::Expr {hirVar level s path block} {
             Referenced hir $b $name $s $number
             SetField hir $e binding $b
             SetField hir $e value [Expr hir $inner $s [concat $path 2] $block]
+            if {[dict exists $hir exprs [dict get $hir exprs $e value] nomethod]} {
+                dict set hir bindings $b nomethod 1
+            }
             set duplicate [expr {"duplicate" in $flags}]
             SetField hir $e duplicate $duplicate
             if {$duplicate} {
@@ -620,8 +872,15 @@ proc hir::read::Expr {hirVar level s path block} {
             }
         }
         block {
-            if {![BlockHeader $head body params captures staticRefs declared errorsText binds]} {
-                Fail $number "expected \"block SCOPE (PARAMS) captures (BINDINGS) ?staticRefs (BINDINGS)? ?declares ...? ?errors ...? ?binds ...?\""
+            if {![BlockHeader $head body params captures staticRefs declared errorsText binds nomethod contexts provesText cloneText resumeText]} {
+                Fail $number "expected \"block SCOPE (PARAMS) captures (BINDINGS) ?staticRefs (BINDINGS)? ?nomethod? ?contexts (IDS) requires (IDS)? ?declares ...? ?proves BINDING NAME: TYPE? ?errors ...? ?binds ...?\""
+            }
+            if {$nomethod} {
+                SetField hir $e nomethod 1
+            }
+            if {$contexts ne ""} {
+                SetField hir $e directContexts [lindex $contexts 0]
+                SetField hir $e requiredContexts [lindex $contexts 1]
             }
             NewScope hir $body block $s $e $e [list ir $path] $number
             set paramIds {}
@@ -648,6 +907,45 @@ proc hir::read::Expr {hirVar level s path block} {
             set declaredType {}
             if {$declared ne {}} { set declaredType [ParseType $declared $number] }
             SetField hir $e declaredResult $declaredType
+            # The proof contract (REFINEMENT-VALUES.md), as printed: one
+            # "BINDING NAME: TYPE" clause naming one of the block's params.
+            # Its outcome is the declared result's, exactly as
+            # hir::resolve::ResolveProofs derived it: `declares unit` is a
+            # validator (a normal completion proves), anything else a
+            # predicate (a true result proves).
+            set proofs {}
+            if {$provesText ne ""} {
+                if {![regexp {^(b[0-9]+) (\S+): (.+)$} $provesText -> provenBinding provenName provenType]
+                        || [lsearch -exact $paramIds $provenBinding] < 0} {
+                    Fail $number "expected \"proves BINDING NAME: TYPE\" naming a parameter of the block"
+                }
+                lappend proofs [dict create outcome [expr {$declaredType eq "unit" ? "normal" : 1}] \
+                    param [lsearch -exact $paramIds $provenBinding] \
+                    binding $provenBinding fact [ParseType $provenType $number]]
+            }
+            SetField hir $e proofs $proofs
+            # A declared coroutine resume protocol (COROUTINES.md), and the
+            # derived effect as printed.
+            SetField hir $e declaredResume [expr {$resumeText eq "" ? "" : [ParseType $resumeText $number]}]
+            if {$effectText ne ""} {
+                SetField hir $e coroutineEffect $effectText
+            }
+            if {[dict exists $cloneText views]} {
+                SetField hir $e traitClone [dict get $hir bindings [lindex $paramIds 0] name]
+                foreach item [expr {[dict get $cloneText views] eq "" ? {} : [split [string map {", " \x01} [dict get $cloneText views]] \x01]}] {
+                    if {![regexp {^(b[0-9]+) \S+: (\S+)$} $item -> vb vtrait] || [lsearch -exact $paramIds $vb] < 0} {
+                        Fail $number "expected \"BINDING NAME: TRAIT\" in a clone's views"
+                    }
+                    dict set hir bindings $vb view [hir::types::MakeView $vtrait \
+                        [lindex $declaredParamTypes [lsearch -exact $paramIds $vb]]]
+                }
+            }
+            if {[dict exists $cloneText selection]} {
+                SetField hir $e contextClone [dict get $cloneText selection]
+            }
+            if {[dict exists $cloneText result]} {
+                SetField hir $e traitResult [list trait [dict get $cloneText result]]
+            }
             set declaredErrors {}
             if {$errorsText ne {}} {
                 foreach name [split [string map {", " \x01} $errorsText] \x01] {
@@ -670,8 +968,31 @@ proc hir::read::Expr {hirVar level s path block} {
             SetField hir $e body $ids
         }
         call {
-            if {![regexp {^(?:native\((.+)\)|block\((e[0-9]+)\)|(generic))(?: = (true|false))?$} $head -> native target generic known]} {
-                Fail $number "expected \"call native(NAME)|block(EXPR)|generic ?= true|false?\""
+            if {![regexp {^(?:native\((.+?)\)|block\((e[0-9]+)\)|(generic))(?: = (true|false))?(?: installs (\S+))?(?: (trait|contexttrait) (\S+)\.(\S+) witness (.+))?$} $head -> native target generic known installs traitWord traitId requirement witnessText]} {
+                Fail $number "expected \"call native(NAME)|block(EXPR)|generic ?= true|false? ?installs ID? ?trait|contexttrait TRAIT.OP witness TYPE?\""
+            }
+            if {$traitId ne ""} {
+                # A trait operation resolved to its implementation
+                # (TRAITS.md): the requirement's contract for the witness; a
+                # context-trait operation (CONTEXT-TRAITS.md) resolved to the
+                # selected context's implementation.
+                set witness [ParseType $witnessText $number]
+                set req [hir::traits::requirement $traitId $requirement]
+                if {$req eq ""} {
+                    Fail $number "trait $traitId has no requirement \"$requirement\""
+                }
+                if {$traitWord eq "contexttrait"} {
+                    SetField hir $e traitImpl [dict create trait $traitId requirement $requirement \
+                        witness $witness contract [hir::traits::RequiredFn $req ""] context 1]
+                } else {
+                    SetField hir $e traitImpl [dict create trait $traitId requirement $requirement \
+                        witness $witness contract [hir::traits::RequiredFn $req $witness]]
+                }
+            }
+            # The context a verified installation installs (CONTEXTS.md), as
+            # printed: native lowering assigns its fixed slot from it.
+            if {$installs ne ""} {
+                SetField hir $e context $installs
             }
             if {$native ne ""} {
                 SetField hir $e target [list native [Symbol hir native $native]]
@@ -858,6 +1179,11 @@ proc hir::read::Expr {hirVar level s path block} {
                 Fail $number "expected \"struct (anon|ID) (FIELD, ...)\""
             }
             set names [expr {$namesText eq "" ? {} : [split [string map {", " \x01} $namesText] \x01]}]
+            if {[regexp {^payload\((\S+)\)$} $who -> errorName]} {
+                # An error's payload construction (ERROR-PAYLOADS.md).
+                SetField hir $e payloadOf $errorName
+                set who anon
+            }
             set named [expr {$who ne "anon"}]
             set id ""
             if {$named} {
@@ -897,10 +1223,21 @@ proc hir::read::Expr {hirVar level s path block} {
             SetField hir $e receiver [Expr hir $inner $s [concat $path 1] $block]
         }
         fail {
+            if {[regexp {^(\S+) static=([a-z]+):([A-Z][A-Z0-9-]*)$} $head -> name operation reified]} {
+                # A rejected static block's reified failure (STATIC-COMPILE.md).
+                SetField hir $e static [dict create operation $operation kind $reified]
+                set head $name
+            }
             if {$head eq "" || ![hir::errordecls::isDeclared $head]} {
                 Fail $number "unknown error \"$head\": no \"error $head\" declaration is visible"
             }
             SetField hir $e name $head
+            # The payload (ERROR-PAYLOADS.md), if any: the one child line.
+            set value ""
+            if {[AtLevel $hir $inner]} {
+                set value [Expr hir $inner $s [concat $path 2] $block]
+            }
+            SetField hir $e value $value
         }
         handle {
             if {$head ne ""} {
@@ -910,11 +1247,21 @@ proc hir::read::Expr {hirVar level s path block} {
             set names {}
             set scopes {}
             set bodies {}
+            set payloads {}
             set index 2
             while {[AtLevel $hir $inner]} {
-                lassign [TakeHandlerLine hir $inner] name branch binds headerNumber
+                lassign [TakeHandlerLine hir $inner] name branch binds headerNumber payloadId payloadName consumed
                 NewScope hir $branch branch $s [dict get $hir scopes $s invocation] $e \
                     [list ir [concat $path $index]] $headerNumber
+                if {$payloadId ne ""} {
+                    # The handler's payload binding (ERROR-PAYLOADS.md): a
+                    # parameter of the handler's scope.
+                    NewBinding hir $payloadId $payloadName param $branch [list ir [concat $path $index 1 0]] $headerNumber
+                    if {$consumed ne ""} {
+                        dict set hir bindings $payloadId affineConsumed [split $consumed ,]
+                    }
+                }
+                lappend payloads $payloadId
                 Declare hir $branch $binds local $headerNumber
                 lappend names $name
                 lappend scopes $branch
@@ -930,6 +1277,7 @@ proc hir::read::Expr {hirVar level s path block} {
             SetField hir $e handlerNames $names
             SetField hir $e handlerScopes $scopes
             SetField hir $e handlerBodies $bodies
+            SetField hir $e handlerPayloads $payloads
             # Not re-derived either (see the `calleeErrors` comment above).
             SetField hir $e handlerTypes [lrepeat [llength $names] any]
         }
@@ -943,14 +1291,22 @@ proc hir::read::Expr {hirVar level s path block} {
 # Derives what the text implies: which bind declares each binding, binding
 # types, and id counters past every id in use.
 # Parses a block line's HEAD ("SCOPE (PARAMS) captures (BINDINGS)
-# ?staticRefs (BINDINGS)? ?declares TYPE? ?errors E1, E2? ?binds ...?")
+# ?staticRefs (BINDINGS)? ?nomethod? ?declares TYPE? ?errors E1, E2? ?binds ...?")
 # into the named variables; 0 if malformed. The optional parts are found
 # outside brackets, so a declared type may itself contain spaces, ", " or
 # the word "errors" (a structural function type's own "errors: [...]").
-proc hir::read::BlockHeader {head bodyVar paramsVar capturesVar staticRefsVar declaredVar errorsVar bindsVar} {
+proc hir::read::BlockHeader {head bodyVar paramsVar capturesVar staticRefsVar declaredVar errorsVar bindsVar {nomethodVar ""} {contextsVar ""} {provesVar ""} {cloneVar ""} {resumeVar ""}} {
     foreach var {bodyVar paramsVar capturesVar staticRefsVar declaredVar errorsVar bindsVar} {
         upvar 1 [set $var] [string range $var 0 end-3]
     }
+    if {$nomethodVar ne ""} {
+        upvar 1 $nomethodVar nomethod
+    }
+    if {$contextsVar ne ""} {
+        upvar 1 $contextsVar contexts
+    }
+    set nomethod 0
+    set contexts ""
     set staticRefs ""
     set declared ""
     set errors ""
@@ -959,15 +1315,82 @@ proc hir::read::BlockHeader {head bodyVar paramsVar capturesVar staticRefsVar de
         return 0
     }
     regexp {^ staticRefs \((.*?)\)(.*)$} $rest -> staticRefs rest
+    if {[regexp {^ nomethod(.*)$} $rest -> after]} {
+        set nomethod 1
+        set rest $after
+    }
+    # A trait clone's parameter views and a declared trait result
+    # (TRAITS.md), as hir::format prints them.
+    if {$cloneVar ne ""} {
+        upvar 1 $cloneVar clone
+        set clone ""
+        if {[regexp {^ clone \((.*?)\)(.*)$} $rest -> views after]} {
+            dict set clone views $views
+            set rest $after
+        }
+        if {[regexp {^ contextclone \((.*?)\)(.*)$} $rest -> selection after]} {
+            set pairs {}
+            foreach item [split [string map {", " \x01} $selection] \x01] {
+                if {![regexp {^([^=]+)=(.+)$} $item -> c w]} {
+                    error "expected \"TRAIT=CONTEXT\" in a clone's context selection, got \"$item\""
+                }
+                lappend pairs $c $w
+            }
+            dict set clone selection $pairs
+            set rest $after
+        }
+        if {[regexp {^ traitresult (\S+)(.*)$} $rest -> id after]} {
+            dict set clone result $id
+            set rest $after
+        }
+    }
+    # The context requirements (CONTEXTS.md): {DIRECT REQUIRED}, as printed
+    # (hir::check recomputes the same facts from the loads and calls).
+    if {[regexp {^ contexts \((.*?)\) requires \((.*?)\)(.*)$} $rest -> direct required after]} {
+        set contexts [list [lmap id [split $direct ,] {string trim $id}] [lmap id [split $required ,] {string trim $id}]]
+        set rest $after
+    }
     set i [TopIndex $rest " binds "]
     if {$i >= 0} {
         set binds [string range $rest [expr {$i + 7}] end]
         set rest [string range $rest 0 [expr {$i - 1}]]
     }
+    # The coroutine effect (COROUTINES.md): derived (hir::check recomputes
+    # it), kept as printed.
+    if {$resumeVar ne ""} {
+        upvar 1 $resumeVar resume
+        upvar 1 effectText effectText
+        set resume ""
+        set effectText ""
+    }
+    set i [TopIndex $rest " coroutine-effect "]
+    if {$i >= 0} {
+        if {$resumeVar ne "" && [regexp {^ coroutine-effect \((.*)\)$} [string range $rest $i end] -> effectText]} {}
+        set rest [string range $rest 0 [expr {$i - 1}]]
+    }
+    set i [TopIndex $rest " resume "]
+    if {$i >= 0 && $resumeVar ne ""} {
+        set resume [string range $rest [expr {$i + 8}] end]
+        set rest [string range $rest 0 [expr {$i - 1}]]
+        set j [TopIndex $resume " errors "]
+        if {$j >= 0} {
+            set rest "$rest[string range $resume $j end]"
+            set resume [string range $resume 0 [expr {$j - 1}]]
+        }
+    }
     set i [TopIndex $rest " errors "]
     if {$i >= 0} {
         set errors [string range $rest [expr {$i + 8}] end]
         set rest [string range $rest 0 [expr {$i - 1}]]
+    }
+    if {$provesVar ne ""} {
+        upvar 1 $provesVar proves
+        set proves ""
+        set i [TopIndex $rest " proves "]
+        if {$i >= 0} {
+            set proves [string range $rest [expr {$i + 8}] end]
+            set rest [string range $rest 0 [expr {$i - 1}]]
+        }
     }
     if {[string match " declares ?*" $rest]} {
         set declared [string range $rest 10 end]
@@ -1034,6 +1457,15 @@ proc hir::read::Finish {hirVar} {
     CanonicalBlockTypes hir
     foreach e [hir::walk $hir] {
         set node [dict get $hir exprs $e]
+        if {[dict get $node kind] eq "handle" && [dict exists $node handlerPayloads]} {
+            # A handler's payload binding has its error's declared payload
+            # type (ERROR-PAYLOADS.md).
+            foreach name [dict get $node handlerNames] b [dict get $node handlerPayloads] {
+                if {$b ne "" && [hir::errordecls::hasPayload $name]} {
+                    dict set hir bindings $b type [hir::types::intern hir [hir::errordecls::payloadType $name]]
+                }
+            }
+        }
         if {[dict get $node kind] ne "bind" || [dict get $node duplicate]} {
             continue
         }

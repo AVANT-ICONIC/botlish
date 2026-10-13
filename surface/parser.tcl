@@ -18,24 +18,92 @@
 #                     keyword: it starts an import only when immediately
 #                     followed by a name or by "type", which no other
 #                     construct allows, so `import` stays an ordinary name.
-#   topStatement = typeDecl | structDecl | errorDecl | statement
+#   topStatement = typeDecl | structDecl | enumDecl | errorDecl | traitDecl | statement
 #   statement    = simple NEWLINE | valued | function | if | loop
-#   simple       = binding | destructure | return | break | continue | fail
-#                | expression
-#   valued       = IDENT "=" (if|loop|handledExpr)
-#                | "return" (if|loop|handledExpr)
+#                | withDecl NEWLINE
+#   withDecl     = "with" "context" expression    -- CONTEXTS.md: installs
+#                  the expression's value as the context of its (inferred,
+#                  exact) context-struct type for the rest of the scope.
+#                  "with" and "context" are contextual (below); no binding
+#                  name, no type annotation, no list, no block, no colon
+#   simple       = binding | destructure | coroutineBind | return | break
+#                | continue | fail | staticIntrinsic | expression
+#   staticIntrinsic = "static" IDENT ":" suite
+#                  -- STATIC-COMPILE.md: a compiler-directed syntactic
+#                  operation on the captured block. The IDENT names the
+#                  operation and belongs to the compiler's static-intrinsic
+#                  vocabulary (staticOperations: only "compile"), never to
+#                  any scope: an unknown one is STATIC-UNKNOWN-OPERATION.
+#                  "static" and the operation name are contextual: the form
+#                  is recognized only where a statement or a statement's
+#                  value starts, as the word "static" directly followed by
+#                  a name (AtStatic) -- two adjacent names, which no other
+#                  construct allows -- so `static = 3`, `static(x)`,
+#                  `x.static`, `compile = f` and `compile(x)` are ordinary
+#                  names. The body is parsed as an ordinary suite (a parse
+#                  error in it is the program's parse error); what the
+#                  operation does with it is HIR's (hir/static.tcl)
+#   coroutineBind = "coroutine" "{" coField { "," coField } [ "," ] "}"
+#                  "=" valueOrHandled     -- COROUTINES.md: eagerly starts
+#                  the call on its right side as a coroutine. "coroutine" is
+#                  contextual: a binding form only when directly followed by
+#                  a braced group and "=" (CoroutineAhead), so `coroutine` is
+#                  an ordinary name everywhere else (`coroutine::done?(h)`,
+#                  `coroutine = 1`). The fields are exactly the two named
+#                  results of construction, each optional and renamable:
+#   coField      = ( "step" | "first" ) [ ":" IDENT ]
+#                  -- step the affine coroutine handle, first the first
+#                  outward result; any other name is COROUTINE-BINDING-FIELD
+#   valued       = IDENT "=" (if|loop|staticIntrinsic|handledExpr)
+#                | "return" (if|loop|staticIntrinsic|handledExpr)
 #   handledExpr  = expression [ handlers ]     -- handlers only after a bare
 #                                                  call expression (item 9)
-#   handlers     = ":" NEWLINE INDENT { "on" IDENT ":" suite } DEDENT
-#   function     = "fn" IDENT "(" [ paramList ] ")"
-#                  [ "->" IDENT ] [ "errors" IDENT { "," IDENT } ] ":" suite
-#   paramList    = [ param { "," param } ] [ "," flagSection ] [ "," ]
+#   handlers     = ":" NEWLINE INDENT { handler } DEDENT
+#   handler      = "on" errorName [ IDENT | pattern ] ":" suite
+#                  -- ERROR-PAYLOADS.md: the error name selects the handler;
+#                  the optional IDENT binds the error's whole payload, the
+#                  optional pattern destructures it (STRUCT-DESTRUCTURING.md's
+#                  pattern, irrefutable). No guard, no value pattern
+#   function     = { functionModifier } "fn" IDENT "(" [ paramList ] ")"
+#                  [ "->" typeExpr ] [ proofClause ]
+#                  [ "errors" errorName { "," errorName } ] ":" suite
+#                  -- typeExpr (TypeExpr) is a type name, a qualified or
+#                  applied one, a structural Fn type, or the keyword "unit"
+#                  as the unit type's name (`-> unit`)
+#   proofClause  = "proves" IDENT ":" typeExpr
+#                  -- REFINEMENT-VALUES.md: when the function returns true
+#                  (a predicate, "-> bool") or completes normally (a
+#                  validator, "-> unit"), the argument bound to the named
+#                  parameter is proven to satisfy the refinement type.
+#                  "proves" is contextual: it is
+#                  recognized only here, after the result type (or the
+#                  parameter list) and before "errors"/":", where no other
+#                  construct allows a name, so `proves` stays an ordinary
+#                  name everywhere else
+#   functionModifier = "nomethod"   -- WARNINGS-METHOD-ELIGIBLE.md; contextual
+#                  (below): the function's author declares that it is never
+#                  called with method syntax
+#   paramList    = [ param { "," param } ] [ "," flagSection ]
+#                  [ "," contextSection ] [ "," resumeClause ] [ "," ]
 #                  -- sections in canonical order: ordinary parameters, then
-#                  flags (ParamSections)
-#   param        = IDENT [ ":" IDENT ]
+#                  flags, then context, then the resume clause
+#                  (ParamSections); any may be absent
+#   resumeClause = "resume" typeExpr   -- COROUTINES.md: the one structured
+#                  message a yield of this function's coroutine evaluates
+#                  to. "resume" is contextual: the clause only when directly
+#                  followed by a type (ResumeMarker); `resume`, `resume: T`
+#                  are an ordinary parameter named resume. At most one, and
+#                  always last
+#   param        = IDENT [ ":" typeExpr ]
 #   flagSection  = "flags" flagDecl { "," flagDecl }   -- FLAGS.md; "flags" is
 #                  contextual: `flags :name` only (an ordinary name otherwise)
 #   flagDecl     = ":" IDENT                          -- the name glued to ":"
+#   contextSection = "context" contextDecl { "," contextDecl }   -- CONTEXTS.md;
+#                  "context" is contextual: it opens the section only when
+#                  followed by a name (`context io: T`); `context`,
+#                  `context: T` are an ordinary parameter named context
+#   contextDecl  = IDENT ":" typeExpr       -- a local name and the required
+#                  context type (always written)
 #   if           = "if" expression ":" suite
 #                  { "elif" expression ":" suite } [ "else" ":" suite ]
 #   loop         = "loop" [ clause { "and" clause } ] ":" suite
@@ -53,17 +121,62 @@
 #                                       level ("break EXPR" is a syntax
 #                                       error, not merely rejected later)
 #   continue     = "continue"
-#   fail         = "fail" IDENT
+#   fail         = "fail" errorName [ fieldInits ]
+#   errorName    = IDENT { "::" IDENT }    -- a module-qualified error
+#                  -- ERROR-PAYLOADS.md: the payload of an error that
+#                  declares one, as a struct's named field initializers
 #
 #   typeDecl     = "type" IDENT "=" IDENT "in" domain NEWLINE
+#                | "refined" "type" IDENT "=" typeExpr NEWLINE
+#                  -- a refinement type (REFINEMENT-VALUES.md): a new nominal
+#                  type whose values are exactly values of the carrier type
+#                  known to satisfy the type's proposition. "refined" is a
+#                  contextual word: a declaration modifier only directly
+#                  before "type", an ordinary name everywhere else
 #   domain       = signedInt ".." signedInt
 #                | "{" signedInt { "," signedInt } [ "," ] "}"
 #   signedInt    = [ "-" ] INT
 #
 #   errorDecl    = "error" IDENT NEWLINE
+#                | "error" IDENT ":" NEWLINE INDENT
+#                  { IDENT ":" typeExpr NEWLINE } DEDENT
+#                  -- ERROR-PAYLOADS.md: a named-field payload, a struct
+#                  declaration's field grammar exactly
 #
+#   traitDecl    = [ "context" ] "trait" IDENT ":" NEWLINE INDENT
+#                  traitRequirement { traitRequirement } DEDENT
+#                  -- TRAITS.md; with the `context` modifier a context
+#                  trait (CONTEXT-TRAITS.md: an environment abstraction
+#                  whose requirements have no receiver parameter).
+#                  `context` is contextual here exactly as before `struct`
+#   traitRequirement = "fn" IDENT "(" [ paramList ] ")" [ "->" typeExpr ]
+#                  [ "errors" errorName { "," errorName } ] NEWLINE
+#                  -- a signature only: no body and no trailing ":". "trait"
+#                  is contextual: a declaration only as the first word of a
+#                  top-level statement directly followed by a name (`trait
+#                  Named:`), an ordinary name everywhere else (`trait = 3`,
+#                  `fn f(trait):`, `x.trait`). What a requirement may say
+#                  (the trait as its first parameter, no flags, no context,
+#                  no proof clause) is checked here where it is grammar and
+#                  by hir/traits.tcl where it is meaning
+#
+#   enumDecl     = "enum" IDENT ":" NEWLINE INDENT enumCase { "," enumCase } [ "," ] DEDENT
+#   enumCase     = IDENT
+#                  -- ENUMS.md: a named, closed, nominal sum type and its
+#                  payload-free cases, one comma-separated list (a newline
+#                  may follow any comma; the trailing comma is optional).
+#                  "enum" is contextual, like "trait": a declaration only as
+#                  the first word of a top-level statement directly followed
+#                  by a name, an ordinary name everywhere else. A case has
+#                  no value, alias, payload or parameter list (each is a
+#                  located error), and there is no anonymous `enum {...}`
+#                  (ANONYMOUS-ENUM) and no empty enum (ENUM-EMPTY)
 #   structDecl   = { structModifier } "struct" IDENT ":" NEWLINE INDENT structField { structField } DEDENT
 #   structModifier = "opaque"       -- OPAQUE-STRUCTS.md; contextual (below)
+#                  | "context"      -- CONTEXTS.md; contextual (below). The
+#                  modifiers are independent boolean properties, in any
+#                  order, each at most once; canonical spelling
+#                  `opaque context struct`
 #   structField  = IDENT ":" typeExpr NEWLINE
 #
 # A structDecl (STRUCTS.md) declares a nominal struct type: like a typeDecl
@@ -74,15 +187,27 @@
 # a zero-field struct.
 #
 # A struct modifier (`opaque struct Token:` -- the declaring module alone may
-# construct and inspect the struct's representation, OPAQUE-STRUCTS.md) is a
-# *contextual* word, not a keyword: it is a modifier only when the words
+# construct and inspect the struct's representation, OPAQUE-STRUCTS.md;
+# `context struct Clock:` -- a value of the type may be installed into the
+# execution environment and satisfy a function's context dependency,
+# CONTEXTS.md) is a *contextual* word, not a keyword: it is a modifier only when the words
 # before the `struct` keyword are all modifier words (lookahead through the
 # modifier table, AtStructDecl), which no other construct allows, so `opaque`
 # stays an ordinary name everywhere else (`opaque = 1`, `opaque(x)`,
-# `x.opaque`, a field called `opaque`). A modifier is a property of the one
+# `x.opaque`, a field called `opaque`; likewise `context`). A modifier is a property of the one
 # struct declaration (the `structdecl` node's own fields), never a separate
 # declaration kind, so further modifiers extend the table, not the grammar's
 # shape.
+#
+# A function modifier (`nomethod fn atan2(y, x):`) is a contextual word in
+# the same way: it is a modifier only when the words before the `fn` keyword
+# are all function modifier words (AtFunctionDecl), which no other construct
+# allows, so `nomethod` stays an ordinary name everywhere else
+# (`nomethod = 1`, `nomethod(x)`, `x.nomethod`). Like `opaque`, it is a
+# property of the one declaration (the `function` node's own fields), never a
+# separate declaration kind. It states the *function's* interface (it cannot
+# be the callee of method syntax), decided by its author; it is not a
+# directive to the compiler about a particular call.
 #
 # A handled call (EXPLICIT-ERROR-COMPLETIONS.md) is a bare call expression
 # immediately followed by ":" and an indented block of "on NAME:" handlers,
@@ -117,7 +242,12 @@
 # SOURCE-DEFINED-INTEGER-DOMAINS.md) found no program using "type" or "in"
 # as an ordinary name.
 #
-#   expression   = disjunction
+#   expression   = "yield" expression | disjunction
+#                  -- COROUTINES.md: `yield V` sends V outward, suspends the
+#                  whole coroutine, and evaluates to the resume message.
+#                  Lowest precedence: `yield a + b` yields a + b, and an
+#                  operand needs parentheses (`1 + (yield x)`). "yield" is a
+#                  keyword (lexer.tcl)
 #   disjunction  = conjunction { "or" conjunction }
 #   conjunction  = inversion { "and" inversion }
 #   inversion    = "not" inversion | comparison
@@ -176,8 +306,23 @@ namespace eval surface::parser {
     variable comparisons {== != < <= > >=}
     # The contextual words that may precede `struct` in a struct declaration
     # (see the grammar above). Each names one boolean property of the
-    # `structdecl` node (`opaque` -> `opaque 0|1`, `opaqueSpan`).
-    variable structModifiers {opaque}
+    # `structdecl` node (`opaque` -> `opaque 0|1`, `opaqueSpan`; `context`
+    # -> `context 0|1`, `contextSpan`). A future `resource` is one more
+    # entry here and one more property, nothing else.
+    variable structModifiers {opaque context}
+    # The contextual words that may precede `fn` in a function declaration
+    # (see the grammar above). Each names one boolean property of the
+    # `function` node (`nomethod` -> `nomethod 0|1`, `nomethodSpan`).
+    variable functionModifiers {nomethod}
+    # The contextual words that may precede `type` in a type declaration
+    # (REFINEMENT-VALUES.md): `refined type NAME = CARRIER`.
+    variable typeModifiers {refined}
+    # The static intrinsics (STATIC-COMPILE.md): the operation names that
+    # may follow `static` (see the grammar above). The vocabulary is the
+    # compiler's, never a scope's: `static compile:` means the same whatever
+    # the program binds. A future `static parse:` is one more entry here
+    # (and its own meaning in hir/static.tcl), never a new node kind.
+    variable staticOperations {compile}
 }
 
 proc surface::parse {source args} {
@@ -273,6 +418,26 @@ proc surface::parser::Expect {pVar kind what} {
         Fail $token "expected $what, found [Describe $token]"
     }
     return [Advance p]
+}
+
+# An error reference: IDENT { "::" IDENT } (ERROR-PAYLOADS.md, "Module-
+# qualified error identity"). A bare name is an error of the file's own
+# module (or the entry program's, or a builtin one); `ns::Name`, `a::b::Name`
+# names the error Name of module ns, a::b -- the qualified-name rule of
+# every other module member. Returns a token-shaped dict {kind IDENT value
+# SPELLING span SPAN}; WHAT describes what is expected, for the diagnostic.
+proc surface::parser::ErrorName {pVar what} {
+    upvar 1 $pVar p
+    set first [Expect p IDENT $what]
+    set value [dict get $first value]
+    set span [dict get $first span]
+    while {[Kind p] eq "::"} {
+        Advance p
+        set member [Expect p IDENT "an error name after \"::\""]
+        append value "::[dict get $member value]"
+        set span [surface::ast::cover $span [dict get $member span]]
+    }
+    return [dict create kind IDENT value $value span $span text $value]
 }
 
 # The span from START (a span) to the last consumed token.
@@ -412,6 +577,319 @@ proc surface::parser::AtStructDecl {pVar} {
     return [expr {$i > 0 && [Kind p $i] eq "struct"}]
 }
 
+# 1 if the next tokens start an enum declaration (ENUMS.md): the contextual
+# word "enum" directly followed by a name, or by ":" (a declaration missing
+# its name, reported by EnumDecl). Neither is ever a valid expression, so an
+# ordinary variable called `enum` (`enum = 3`, `enum(x)`, `x.enum`) is
+# unaffected.
+proc surface::parser::AtEnumDecl {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "enum"
+        && [Kind p 1] in {IDENT :}}]
+}
+
+# 1 if the next tokens are the word "enum" directly followed by "{": the
+# spelling an anonymous enum would have, which Botlish does not have.
+proc surface::parser::AtAnonymousEnum {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "enum" && [Kind p 1] eq "\{"}]
+}
+
+# ANONYMOUS-ENUM at TOKEN (the word "enum" before "{").
+proc surface::parser::AnonymousEnumError {token} {
+    FailCode [dict get $token span] ANONYMOUS-ENUM \
+        "anonymous enum types do not exist: an enum's identity is its declaration, so an enum is always a named top-level declaration (\"enum Name:\" with its cases on indented lines), and a value of it is written Name::Case"
+}
+
+# "enum" IDENT ":" NEWLINE INDENT IDENT { "," IDENT } [ "," ] DEDENT -- a
+# top-level enum declaration (ENUMS.md): an `enumdecl` node {name nameSpan
+# cases}, CASES a list of {name nameSpan} dicts in declaration order. The
+# cases are one comma-separated list: a comma separates two cases (a newline
+# may follow it) and may end the list. A case is a bare name: no value
+# (`Foo = 17`), alias (`Foo = Bar`), payload (`Foo: T`, `Foo(T)`) or other
+# form exists, each a located error. Duplicate cases are left to HIR
+# (hir/enums.tcl), which owns case identity; an enum without a case is
+# ENUM-EMPTY here.
+proc surface::parser::EnumDecl {pVar} {
+    upvar 1 $pVar p
+    set start [dict get [Advance p] span]
+    set token [Peek p]
+    if {[dict get $token kind] ne "IDENT"} {
+        Fail $token "expected an enum name after \"enum\", found [Describe $token] (an enum is a named declaration: \"enum Name:\")"
+    }
+    set name [Advance p]
+    set token [Peek p]
+    if {[dict get $token kind] eq "\{"} {
+        Fail $token "an enum's cases are declared on indented lines after \"enum [dict get $name value]:\", not in braces"
+    }
+    if {[dict get $token kind] ne ":"} {
+        Fail $token "expected \":\" after the enum name \"[dict get $name value]\", found [Describe $token]"
+    }
+    Advance p
+    set token [Peek p]
+    if {[dict get $token kind] ne "NEWLINE"} {
+        Fail $token "expected a new line and an indented, comma-separated list of cases after \":\", found [Describe $token]"
+    }
+    Advance p
+    if {[Kind p] ne "INDENT"} {
+        FailCode [dict get $name span] ENUM-EMPTY \
+            "enum \"[dict get $name value]\" declares no case: an enum needs at least one case, written on the indented lines after \"enum [dict get $name value]:\" (\"Case,\")"
+    }
+    Advance p
+    set cases {}
+    set separated 1
+    while 1 {
+        while {[Kind p] eq "NEWLINE"} {
+            Advance p
+        }
+        if {[Kind p] in {DEDENT EOF}} {
+            break
+        }
+        set caseToken [Peek p]
+        if {[dict get $caseToken kind] ne "IDENT"} {
+            Fail $caseToken "expected an enum case name, found [Describe $caseToken]"
+        }
+        if {!$separated} {
+            Fail $caseToken "expected \",\" between the enum cases \"[dict get [lindex $cases end] name]\" and \"[dict get $caseToken value]\" (an enum's cases are one comma-separated list)"
+        }
+        Advance p
+        set caseName [dict get $caseToken value]
+        switch -- [Kind p] {
+            = {
+                Fail [Peek p] "enum case \"$caseName\" cannot be given a value or an alias: a case is a nominal value of its enum only, with no integer, String or other case behind it (write any mapping as ordinary code)"
+            }
+            : {
+                Fail [Peek p] "enum case \"$caseName\" cannot carry a payload: payload-bearing enum cases are not supported yet (every case is payload-free)"
+            }
+            ( {
+                Fail [Peek p] "enum case \"$caseName\" cannot take a parameter list: a case is written as a bare name (payload-bearing cases are not supported)"
+            }
+            \{ {
+                Fail [Peek p] "enum case \"$caseName\" cannot carry a payload: payload-bearing enum cases are not supported yet (every case is payload-free)"
+            }
+            . - :: {
+                Fail [Peek p] "an enum case is declared by its bare name, found [Describe [Peek p]] after \"$caseName\""
+            }
+        }
+        lappend cases [dict create name $caseName nameSpan [dict get $caseToken span]]
+        set separated 0
+        if {[Kind p] eq ","} {
+            Advance p
+            set separated 1
+        } elseif {[Kind p] ni {NEWLINE DEDENT EOF}} {
+            Fail [Peek p] "expected \",\" or the end of the line after the enum case \"$caseName\", found [Describe [Peek p]]"
+        }
+    }
+    if {[Kind p] eq "DEDENT"} {
+        Advance p
+    }
+    return [surface::ast::node enumdecl [SpanFrom p $start] \
+        name [dict get $name value] nameSpan [dict get $name span] cases $cases]
+}
+
+# 1 if the next tokens start a trait declaration (TRAITS.md): the contextual
+# word "trait" directly followed by a name, optionally after struct-style
+# modifier words (`context trait IO:`, CONTEXT-TRAITS.md; TraitDecl decides
+# which modifiers a trait admits). Two names in a row are never a valid
+# expression, so an ordinary variable called `trait` (`trait = 3`,
+# `trait(x)`, `x.trait`, a parameter `trait`) or `context` is unaffected.
+proc surface::parser::AtTraitDecl {pVar} {
+    variable structModifiers
+    upvar 1 $pVar p
+    set i 0
+    while {[Kind p $i] eq "IDENT" && [dict get [Peek p $i] text] in $structModifiers
+            && [Kind p [expr {$i + 1}]] eq "IDENT"} {
+        incr i
+    }
+    set token [Peek p $i]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "trait"
+        && [Kind p [expr {$i + 1}]] eq "IDENT"}]
+}
+
+# [ "context" ] "trait" IDENT ":" NEWLINE INDENT traitRequirement
+# { traitRequirement } DEDENT -- a top-level trait declaration (TRAITS.md). A
+# `traitdecl` node {name nameSpan requirements context contextSpan}, each
+# requirement a dict {name nameSpan params (the function node's own {NAME SPAN
+# TYPE TYPESPAN} tuples) paramsSpan resultType resultTypeSpan errors ({NAME
+# SPAN} pairs) span}. A requirement is a signature only: "fn NAME(params) [->
+# T] [errors E, ...]" ending the line, never a body. A trait needs at least
+# one requirement (TRAIT-EMPTY: a structural trait with none would be
+# satisfied by every type); a requirement may declare no flags
+# (TRAIT-REQUIREMENT-FLAGS), no context (TRAIT-CONTEXT-REQUIREMENT) and no
+# proof clause, and has no modifier.
+#
+# `context` is the one modifier a trait admits (CONTEXT-TRAITS.md): the same
+# orthogonal declaration modifier as on `context struct`, here making the
+# trait an *environment* abstraction (operations an installed context
+# supplies, invoked through a context parameter) instead of a value
+# abstraction. Its requirements have no receiver parameter -- the context is
+# the implicit receiver -- which hir/traits.tcl checks; the grammar is the
+# same. `opaque` (a representation property) modifies no trait.
+proc surface::parser::TraitDecl {pVar} {
+    variable structModifiers
+    upvar 1 $pVar p
+    set context 0
+    set contextSpan ""
+    set seen {}
+    set start ""
+    while {[Kind p] eq "IDENT" && [dict get [Peek p] text] in $structModifiers} {
+        set token [Advance p]
+        if {$start eq ""} {
+            set start [dict get $token span]
+        }
+        set word [dict get $token text]
+        if {$word in $seen} {
+            Fail $token "duplicate modifier \"$word\" in this trait declaration"
+        }
+        lappend seen $word
+        if {$word ne "context"} {
+            Fail $token "\"$word\" does not modify a trait declaration (the only trait modifier is \"context\": \"context trait NAME:\")"
+        }
+        set context 1
+        set contextSpan [dict get $token span]
+    }
+    set keyword [dict get [Advance p] span]
+    if {$start eq ""} {
+        set start $keyword
+    }
+    set name [Expect p IDENT "a trait name after \"trait\""]
+    set token [Peek p]
+    if {[dict get $token kind] ne ":"} {
+        Fail $token "expected \":\" after the trait name \"[dict get $name value]\", found [Describe $token]"
+    }
+    Advance p
+    set token [Peek p]
+    if {[dict get $token kind] ne "NEWLINE"} {
+        Fail $token "expected a new line and an indented block of requirements after \":\", found [Describe $token]"
+    }
+    Advance p
+    set token [Peek p]
+    if {[dict get $token kind] ne "INDENT"} {
+        if {$context} {
+            FailCode [dict get $name span] TRAIT-EMPTY \
+                "context trait \"[dict get $name value]\" declares no requirement: a context trait needs at least one \"fn NAME(...)\" requirement in an indented block (a requirement-free context trait would be satisfied by every installed context)"
+        }
+        FailCode [dict get $name span] TRAIT-EMPTY \
+            "trait \"[dict get $name value]\" declares no requirement: a trait needs at least one \"fn NAME(value: [dict get $name value], ...)\" requirement in an indented block (a requirement-free trait would be satisfied by every type)"
+    }
+    Advance p
+    set requirements {}
+    while {[Kind p] ne "DEDENT" && [Kind p] ne "EOF"} {
+        if {[Kind p] eq "NEWLINE"} {
+            Advance p
+            continue
+        }
+        lappend requirements [TraitRequirement p [dict get $name value] $context]
+    }
+    if {[Kind p] eq "DEDENT"} {
+        Advance p
+    }
+    return [surface::ast::node traitdecl [SpanFrom p $start] \
+        name [dict get $name value] nameSpan [dict get $name span] requirements $requirements \
+        context $context contextSpan $contextSpan]
+}
+
+# One requirement line of trait TRAIT (a context trait when CONTEXT): "fn"
+# IDENT "(" params ")" [ "->" typeExpr ] [ "errors" errorName { "," errorName } ]
+# NEWLINE.
+proc surface::parser::TraitRequirement {pVar trait {context 0}} {
+    variable functionModifiers
+    upvar 1 $pVar p
+    set what [expr {$context ? "context trait" : "trait"}]
+    set token [Peek p]
+    if {[dict get $token kind] eq "IDENT" && [dict get $token text] in $functionModifiers && [Kind p 1] eq "fn"} {
+        Fail $token "a trait requirement has no modifiers: \"[dict get $token text]\" applies to a function declaration, not to a requirement of $what \"$trait\""
+    }
+    if {[dict get $token kind] ne "fn"} {
+        if {$context} {
+            Fail $token "expected a requirement \"fn NAME(PARAMS) -> T\" in context trait \"$trait\", found [Describe $token] (a context trait declares function signatures only)"
+        }
+        Fail $token "expected a requirement \"fn NAME(value: $trait, ...) -> T\" in trait \"$trait\", found [Describe $token] (a trait declares function signatures only)"
+    }
+    set start [dict get [Advance p] span]
+    set name [Expect p IDENT "a requirement name after \"fn\""]
+    set open [Expect p ( "\"(\" after the requirement name"]
+    lassign [ParamSections p] params flags contexts resume
+    set paramsSpan [SpanFrom p [dict get $open span]]
+    if {$resume ne ""} {
+        Fail [dict create span [dict get $resume span]] "requirement \"[dict get $name value]\" of $what \"$trait\" declares a resume clause: a trait requirement cannot be a coroutine protocol"
+    }
+    if {$flags ne {}} {
+        FailCode [dict get [lindex $flags 0] span] TRAIT-REQUIREMENT-FLAGS \
+            "requirement \"[dict get $name value]\" of $what \"$trait\" declares flags: flags in trait requirements are not supported yet"
+    }
+    if {$contexts ne {} && $context} {
+        FailCode [dict get [lindex $contexts 0] nameSpan] TRAIT-CONTEXT-REQUIREMENT \
+            "requirement \"[dict get $name value]\" of context trait \"$trait\" declares a context parameter: the installed context is the requirement's implicit receiver, so a requirement declares only its ordinary parameters"
+    }
+    if {$contexts ne {}} {
+        FailCode [dict get [lindex $contexts 0] nameSpan] TRAIT-CONTEXT-REQUIREMENT \
+            "requirement \"[dict get $name value]\" of trait \"$trait\" declares a context parameter: context-supplied trait operations are not supported yet (a requirement is an ordinary signature over the trait's own values)"
+    }
+    set resultType {}
+    set resultTypeSpan {}
+    if {[Kind p] eq "->"} {
+        Advance p
+        set typeStart [dict get [Peek p] span]
+        set resultType [TypeExpr p "a result type after ->"]
+        set resultTypeSpan [SpanFrom p $typeStart]
+    }
+    if {[Kind p] eq "IDENT" && [dict get [Peek p] text] eq "proves"} {
+        Fail [Peek p] "a trait requirement cannot carry a proof clause: \"proves\" belongs to a refinement's own proof-producing function"
+    }
+    set errors {}
+    if {[Kind p] eq "errors"} {
+        Advance p
+        while 1 {
+            set nameToken [ErrorName p "an error name after \"errors\""]
+            lappend errors [list [dict get $nameToken value] [dict get $nameToken span]]
+            if {[Kind p] ne ","} {
+                break
+            }
+            Advance p
+        }
+    }
+    set next [Peek p]
+    if {[dict get $next kind] eq ":"} {
+        FailCode [dict get $next span] TRAIT-REQUIREMENT-BODY \
+            "requirement \"[dict get $name value]\" of trait \"$trait\" is a signature only: it has no body and no trailing \":\" (an implementation is an ordinary function in the namespace that owns the concrete type)"
+    }
+    if {[dict get $next kind] ne "NEWLINE" && [dict get $next kind] ne "DEDENT" && [dict get $next kind] ne "EOF"} {
+        Fail $next "expected end of line after the requirement signature, found [Describe $next]"
+    }
+    if {[dict get $next kind] eq "NEWLINE"} {
+        Advance p
+    }
+    return [dict create name [dict get $name value] nameSpan [dict get $name span] \
+        params $params paramsSpan $paramsSpan resultType $resultType resultTypeSpan $resultTypeSpan \
+        errors $errors span [SpanFrom p $start]]
+}
+
+# 1 if the next tokens are a type modifier word followed by the `type`
+# keyword (`refined type`, REFINEMENT-VALUES.md). Never a valid continuation
+# of an expression, so an ordinary variable called `refined` is unaffected
+# (`refined = 1`, `refined(x)`, `x.refined`).
+proc surface::parser::AtRefinedTypeDecl {pVar} {
+    variable typeModifiers
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] in $typeModifiers
+        && [Kind p 1] eq "type"}]
+}
+
+# 1 if the next tokens are a type modifier word directly followed by the
+# keyword of a declaration it does not modify (`refined struct`, `refined
+# fn`, `refined error`): a modifier of nothing.
+proc surface::parser::AtStrayTypeModifier {pVar} {
+    variable typeModifiers
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] in $typeModifiers
+        && [Kind p 1] in {fn struct error}}]
+}
+
 # 1 if the next tokens are a struct modifier word directly followed by the
 # keyword of another declaration (`opaque fn`, `opaque type`, `opaque error`):
 # a modifier of nothing. Also never a valid expression continuation.
@@ -421,6 +899,82 @@ proc surface::parser::AtStrayModifier {pVar} {
     set token [Peek p]
     return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] in $structModifiers
         && [Kind p 1] in {fn type error}}]
+}
+
+# 1 if the next tokens are function modifiers followed by the `fn` keyword:
+# one or more contextual modifier words (functionModifiers) and then `fn`.
+# Never a valid continuation of an expression, so an ordinary variable called
+# `nomethod` is unaffected.
+proc surface::parser::AtFunctionDecl {pVar} {
+    variable functionModifiers
+    upvar 1 $pVar p
+    set i 0
+    while {[Kind p $i] eq "IDENT" && [dict get [Peek p $i] text] in $functionModifiers} {
+        incr i
+    }
+    return [expr {$i > 0 && [Kind p $i] eq "fn"}]
+}
+
+# 1 if the next tokens are a function modifier word directly followed by the
+# keyword of a declaration it does not modify (`nomethod struct`, `nomethod
+# type`, `nomethod error`): a modifier of nothing.
+proc surface::parser::AtStrayFunctionModifier {pVar} {
+    variable functionModifiers
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] in $functionModifiers
+        && [Kind p 1] in {type struct error}}]
+}
+
+# 1 if the next tokens start a `with` declaration: the contextual word "with"
+# followed by a name (CONTEXTS.md). `with NAME` is never a valid expression
+# continuation, so an ordinary variable called `with` (`with = 1`, `with(x)`,
+# `with.x`) is unaffected.
+proc surface::parser::AtWith {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "with"
+        && [Kind p 1] eq "IDENT"}]
+}
+
+# "with" FORM ... -- a declaration that establishes something from this
+# point until the end of the enclosing scope, with no block of its own
+# (CONTEXTS.md). The one form that exists is
+#
+#   "with" "context" expression
+#
+# which installs the expression's value as the execution-environment context
+# of its inferred type: a `with` node {form context formSpan value}. FORM is
+# the word after "with"; the node is shaped for further forms (a future
+# `with NAME = EXPR` resource declaration would be form `resource` with a
+# name), none of which exists: they are located syntax errors. Where a `with`
+# may appear is decided by HIR (CONTEXT-INSTALLATION-UNSUPPORTED), not here.
+proc surface::parser::WithDecl {pVar} {
+    upvar 1 $pVar p
+    set start [dict get [Advance p] span]
+    set form [Peek p]
+    if {[dict get $form text] ne "context"} {
+        if {[Kind p 1] eq "="} {
+            Fail $form "a \"with NAME = EXPR\" declaration does not exist yet: the only \"with\" declaration is \"with context EXPR\""
+        }
+        Fail $form "expected \"context\" after \"with\" (the only \"with\" declaration is \"with context EXPR\"), found [Describe $form]"
+    }
+    Advance p
+    if {[Kind p] in {NEWLINE EOF DEDENT}} {
+        Fail [Peek p] "expected an expression after \"with context\" (the value to install), found [Describe [Peek p]]"
+    }
+    if {[Kind p] eq ":"} {
+        Fail [Peek p] "\"with context\" takes one expression and no block: write \"with context EXPR\" on its own line; the context is installed for the rest of the scope"
+    }
+    set value [Expression p]
+    if {[Kind p] eq ","} {
+        Fail [Peek p] "\"with context\" installs one value: write one \"with context EXPR\" line per context"
+    }
+    if {[Kind p] eq ":"} {
+        Fail [Peek p] "\"with context\" takes one expression and no block: write \"with context EXPR\" on its own line; the context is installed for the rest of the scope"
+    }
+    return [surface::ast::node with [SpanFrom p $start] form context \
+        formSpan [dict get $form span] value $value]
 }
 
 # Statements up to a token of a kind in STOP (not consumed).
@@ -525,6 +1079,35 @@ proc surface::parser::Statement {pVar} {
         else   { Fail $token "\"else\" without a matching \"if\"" }
         elif   { Fail $token "\"elif\" without a matching \"if\"" }
     }
+    if {[AtEnumDecl p]} {
+        # `enum NAME:` (ENUMS.md): a contextual top-level declaration.
+        if {![dict get $p topLevel]} {
+            Fail $token "an enum declaration is only allowed at the top level of a module, not nested in a function/if/loop"
+        }
+        return [EnumDecl p]
+    }
+    if {[AtAnonymousEnum p]} {
+        AnonymousEnumError $token
+    }
+    if {[AtTraitDecl p]} {
+        # `trait NAME:` (TRAITS.md): a contextual top-level declaration.
+        if {![dict get $p topLevel]} {
+            FailCode [dict get $token span] TRAIT-NESTED \
+                "a trait declaration is only allowed at the top level of a module, not nested in a function/if/loop"
+        }
+        return [TraitDecl p]
+    }
+    if {[AtRefinedTypeDecl p]} {
+        # `refined type NAME = CARRIER` (REFINEMENT-VALUES.md); the plain
+        # `type` form is the keyword case above.
+        if {![dict get $p topLevel]} {
+            Fail $token "a type declaration is only allowed at the top level of a module, not nested in a function/if/loop"
+        }
+        return [RefinedTypeDecl p]
+    }
+    if {[AtStrayTypeModifier p]} {
+        Fail $token "\"[dict get $token text]\" only modifies a type declaration (\"[dict get $token text] type NAME = CARRIER\"), not a \"[Kind p 1]\" declaration"
+    }
     if {[AtStructDecl p]} {
         # A modifier-led struct declaration (`opaque struct Name:`); the
         # plain `struct` form is the keyword case above.
@@ -536,20 +1119,36 @@ proc surface::parser::Statement {pVar} {
     if {[AtStrayModifier p]} {
         Fail $token "\"[dict get $token text]\" only modifies a struct declaration (\"[dict get $token text] struct NAME:\"), not a \"[Kind p 1]\" declaration"
     }
+    if {[AtFunctionDecl p]} {
+        # A modifier-led function declaration (`nomethod fn name(...):`);
+        # the plain `fn` form is the keyword case above.
+        return [Function p]
+    }
+    if {[AtStrayFunctionModifier p]} {
+        Fail $token "\"[dict get $token text]\" only modifies a function declaration (\"[dict get $token text] fn NAME(...):\"), not a \"[Kind p 1]\" declaration"
+    }
     if {[AtNamespaceDecl p]} {
         Fail $token "namespace declarations do not exist: a file's namespace is its path (lib/abi/x86_64.bot is abi::x86_64), so the file needs no \"namespace\" line"
     }
     if {[AtImport p]} {
         Fail $token "an import must be in the file header: after the \"namespace\" declaration, before any other declaration or statement, and never inside a function, loop or branch"
     }
-    set statement [Simple p]
+    if {[AtWith p]} {
+        set statement [WithDecl p]
+    } else {
+        set statement [Simple p]
+    }
     if {[dict get $statement kind] eq "handledcall"} {
         # The handler suite(s) already ended the line.
         return $statement
     }
-    if {[dict get $statement kind] in {bind return destructure}
+    if {[dict get $statement kind] eq "static"} {
+        # The static intrinsic's suite already ended the line.
+        return $statement
+    }
+    if {[dict get $statement kind] in {bind return destructure coroutinebind}
             && [dict get $statement value] ne ""
-            && [dict get $statement value kind] in {if loop handledcall}} {
+            && [dict get $statement value kind] in {if loop handledcall static}} {
         # The if's (or loop's, or the handler suite's) suite(s) already
         # ended the line. break is deliberately excluded here (unlike
         # bind/return): PAYLOAD-FREE-BREAK.md -- break never has a value, so
@@ -580,6 +1179,17 @@ proc surface::parser::Simple {pVar} {
                 set value [ValueOrHandled p]
                 return [surface::ast::node bind [SpanFrom p $start] \
                     name [dict get $token value] nameSpan $start value $value]
+            }
+            if {[CoroutineAhead p]} {
+                return [CoroutineBind p]
+            }
+            if {[dict get $token value] eq "coroutine" && [Kind p 1] eq "IDENT" && [Kind p 2] eq "="} {
+                FailCode [dict get [Peek p 1] span] COROUTINE-BINDING-FIELD \
+                    "a coroutine binding names its results in braces: write \"coroutine \{step: [dict get [Peek p 1] value]\} = CALL\" (there is no \"coroutine NAME = CALL\" form)"
+            }
+            if {[dict get $token value] eq "coroutine" && [Kind p 1] in {( \[} && [PatternEnd p 1] >= 0} {
+                FailCode [dict get [Peek p 1] span] COROUTINE-BINDING-FIELD \
+                    "a coroutine binding's results are named, never positional: write \"coroutine \{step, first\} = CALL\""
             }
         }
         \{ {
@@ -627,10 +1237,25 @@ proc surface::parser::Simple {pVar} {
             return [surface::ast::node continue $start]
         }
         fail {
+            # `fail NAME` or, for an error that declares a payload,
+            # `fail NAME {field: value, ...}` (ERROR-PAYLOADS.md): the one
+            # field-initializer payload of struct construction, checked
+            # against the error's declared payload fields by HIR.
             Advance p
-            set name [Expect p IDENT "an error name after \"fail\""]
+            set name [ErrorName p "an error name after \"fail\""]
+            set payload ""
+            switch -- [Kind p] {
+                \{ {
+                    set payloadStart [dict get [Peek p] span]
+                    set init [FieldInits p]
+                    set payload [surface::ast::node anonstruct [SpanFrom p $payloadStart] init $init]
+                }
+                ( {
+                    Fail [Peek p] "an error payload is constructed by named fields, never positionally: write \"fail [dict get $name value] \{field: value, ...\}\""
+                }
+            }
             return [surface::ast::node fail [SpanFrom p $start] \
-                name [dict get $name value] nameSpan [dict get $name span]]
+                name [dict get $name value] nameSpan [dict get $name span] payload $payload]
         }
     }
     return [ValueOrHandled p]
@@ -643,6 +1268,12 @@ proc surface::parser::ValueOrHandled {pVar} {
     upvar 1 $pVar p
     if {[Kind p] in {if loop}} {
         return [Value p]
+    }
+    if {[AtStatic p]} {
+        return [StaticIntrinsic p]
+    }
+    if {[AtStaticWithoutOperation p]} {
+        StaticWithoutOperationError p
     }
     set expr [Expression p]
     if {[Kind p] eq ":" && [dict get $expr kind] in {call methodcall}} {
@@ -680,15 +1311,137 @@ proc surface::parser::HandledCall {pVar call} {
             Fail $onToken "expected \"on\" (a handler for a declared error), found [Describe $onToken]"
         }
         Advance p
-        set name [Expect p IDENT "an error name after \"on\""]
-        set body [Suite p "the error name"]
-        lappend handlers [dict create name [dict get $name value] nameSpan [dict get $name span] body $body]
+        set name [ErrorName p "an error name after \"on\""]
+        # What the handler receives of the selected error's payload
+        # (ERROR-PAYLOADS.md): nothing (`on NAME:`), the whole payload as one
+        # binding (`on NAME details:`), or an irrefutable struct
+        # destructuring of it (`on NAME {a, b: c}:`, the destructuring
+        # pattern grammar exactly). The error name alone selects the handler.
+        set binding ""
+        set bindingSpan ""
+        set pattern ""
+        switch -- [Kind p] {
+            IDENT {
+                if {[dict get [Peek p] value] eq "where" && [Kind p 1] ne ":"} {
+                    HandlerGuardError p [dict get $name value]
+                }
+                set token [Advance p]
+                set binding [dict get $token value]
+                set bindingSpan [dict get $token span]
+            }
+            \{ {
+                set pattern [Pattern p]
+            }
+        }
+        if {[Kind p] ne ":"} {
+            HandlerGuardError p [dict get $name value]
+        }
+        set body [Suite p [expr {$binding ne "" || $pattern ne "" ? "the handler's payload binding" : "the error name"}]]
+        lappend handlers [dict create name [dict get $name value] nameSpan [dict get $name span] body $body \
+            binding $binding bindingSpan $bindingSpan pattern $pattern]
     }
     Advance p
     if {$handlers eq {}} {
         Fail [Peek p] "a handled call needs at least one \"on\" handler"
     }
     return [surface::ast::node handledcall [SpanFrom p $start] call $call handlers $handlers]
+}
+
+# Rejects what would make a handler more than nominal selection plus an
+# irrefutable binding (ERROR-PAYLOADS.md): a guard (`on E if ...`, `on E
+# where ...`), several errors in one handler (`on E, F:`, `on E | F:`), a
+# positional payload (`on E(a, b):`) or a second binding form.
+proc surface::parser::HandlerGuardError {pVar name} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    switch -- [dict get $token kind] {
+        : { return }
+        if {
+            Fail $token "a handler selects only by the error's identity (\"on $name:\"): there are no handler guards; test the payload with an ordinary \"if\" inside the handler"
+        }
+        , {
+            Fail $token "a handler names exactly one error: write one \"on NAME:\" handler per error"
+        }
+        ( {
+            Fail $token "an error payload is received by name, never positionally: bind it whole (\"on $name details:\") or destructure its fields (\"on $name \{field, other: name\}:\")"
+        }
+        IDENT {
+            if {[dict get $token value] eq "where"} {
+                Fail $token "a handler selects only by the error's identity (\"on $name:\"): there are no handler guards; test the payload with an ordinary \"if\" inside the handler"
+            }
+        }
+    }
+    if {[dict get $token text] eq "|"} {
+        Fail $token "a handler names exactly one error: write one \"on NAME:\" handler per error"
+    }
+    Fail $token "expected \":\" after the handler's error name and its optional payload binding (\"on $name:\", \"on $name details:\" or \"on $name \{field, ...\}:\"), found [Describe $token]"
+}
+
+# 1 if the next tokens start a static intrinsic (STATIC-COMPILE.md): the
+# contextual word "static" directly followed by a name, the operation's.
+# Two adjacent names are never a valid expression, so an ordinary variable
+# called `static` (`static = 1`, `static(x)`, `static.x`, `static + 1`) is
+# unaffected; whether the name is an operation is StaticIntrinsic's
+# question, never a lookup.
+proc surface::parser::AtStatic {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "static"
+        && [Kind p 1] eq "IDENT"}]
+}
+
+# 1 if the next tokens are "static" directly followed by ":" -- a static
+# intrinsic without its operation name (never a valid expression either: a
+# ":" after a plain name ends nothing).
+proc surface::parser::AtStaticWithoutOperation {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "static"
+        && [Kind p 1] eq ":"}]
+}
+
+proc surface::parser::StaticWithoutOperationError {pVar} {
+    variable staticOperations
+    upvar 1 $pVar p
+    FailCode [dict get [Peek p 1] span] STATIC-INTRINSIC-FORM \
+        "a static intrinsic names its operation after \"static\": write \"static [lindex $staticOperations 0]:\" followed by an indented block (the static operations: [join $staticOperations {, }])"
+}
+
+# "static" IDENT ":" suite (STATIC-COMPILE.md), at a token AtStatic accepted.
+# Node: static, operation, operationSpan, staticSpan, body (a suite). The
+# operation must be one of staticOperations -- a word of the compiler's
+# static-intrinsic vocabulary, never resolved through a scope or namespace
+# -- and the form is exactly the keyword pair, ":" and an indented block:
+# every other shape is a located STATIC-* syntax error.
+proc surface::parser::StaticIntrinsic {pVar} {
+    variable staticOperations
+    upvar 1 $pVar p
+    set staticToken [Advance p]
+    set start [dict get $staticToken span]
+    set operation [Advance p]
+    set name [dict get $operation value]
+    if {$name ni $staticOperations} {
+        FailCode [dict get $operation span] STATIC-UNKNOWN-OPERATION \
+            "unknown static operation \"$name\": the static operations are [join [lmap op $staticOperations {string cat "\"static $op:\""}] {, }]; an operation after \"static\" is compiler syntax, never a name looked up in scope"
+    }
+    switch -- [Kind p] {
+        ( {
+            FailCode [dict get [Peek p] span] STATIC-INTRINSIC-FORM \
+                "\"static $name\" takes no arguments: it captures the indented block written after \"static $name:\""
+        }
+        : {}
+        default {
+            FailCode [dict get [Peek p] span] STATIC-INTRINSIC-FORM \
+                "expected \":\" and an indented block after \"static $name\", found [Describe [Peek p]]"
+        }
+    }
+    if {[Kind p 1] ni {NEWLINE EOF}} {
+        FailCode [dict get [Peek p 1] span] STATIC-INTRINSIC-FORM \
+            "\"static $name:\" captures an indented block: start it on a new line after the \":\", found [Describe [Peek p 1]]"
+    }
+    set body [Suite p "\"static $name\""]
+    return [surface::ast::node static [SpanFrom p $start] operation $name \
+        operationSpan [dict get $operation span] staticSpan $start body $body]
 }
 
 # A statement's value: an if, a loop, or an expression.
@@ -725,12 +1478,32 @@ proc surface::parser::Value {pVar} {
 # errors here, each with its own message.
 proc surface::parser::TypeExpr {pVar what} {
     upvar 1 $pVar p
-    set token [Expect p IDENT $what]
-    set name [dict get $token value]
+    if {[Kind p] eq "unit"} {
+        # `unit` is a keyword (the unit value, lexer.tcl); in a type
+        # position it is the name of the unit type (`fn log(x) -> unit:`,
+        # a validator's `-> unit proves v: R`, REFINEMENT-VALUES.md). No
+        # expression can stand here, so the keyword keeps its value meaning
+        # everywhere else. It is a plain name: never qualified, never a
+        # constructor (`unit[int]` is resolution's "not a type constructor").
+        Advance p
+        set name unit
+    } else {
+        set token [Expect p IDENT $what]
+        set name [dict get $token value]
+    }
+    if {$name eq "enum" && [Kind p] eq "\{"} {
+        # `fn f(x: enum {A, B})` (ENUMS.md): there are no anonymous enums.
+        AnonymousEnumError $token
+    }
     if {$name eq "Fn"} {
         return [FnType p $token]
     }
-    while {[Kind p] eq "::"} {
+    if {$name eq "Coroutine"} {
+        # A coroutine handle type (AFFINE-VALUES.md): the same callable
+        # contract grammar, of the coroutine callable kind.
+        return [FnType p $token coroutine]
+    }
+    while {$name ne "unit" && [Kind p] eq "::"} {
         # A module-qualified type name (STRUCTS.md): "geo::Point" names the
         # struct Point declared by module geo, "abi::x86_64::Register64" the
         # struct Register64 of the nested namespace abi::x86_64. Kept as the
@@ -752,7 +1525,7 @@ proc surface::parser::TypeExpr {pVar what} {
 #
 #   fnField = "args" ":" "[" [ TypeExpr { "," TypeExpr } [ "," ] ] "]"
 #           | "return" ":" TypeExpr
-#           | "errors" ":" "[" [ IDENT { "," IDENT } [ "," ] ] "]"
+#           | "errors" ":" "[" [ errorName { "," errorName } [ "," ] ] "]"
 #
 # A structural function type's call contract (STRUCTURAL-FUNCTION-TYPES.md).
 # Fields are named, so they may come in any order; each at most once.
@@ -764,14 +1537,21 @@ proc surface::parser::TypeExpr {pVar what} {
 # errors {NAME...}} in canonical field order: "fn" is a keyword, so this
 # pair can never be mistaken for an applied type {NAME ARG}. Adding a field
 # later (the planned `context`) is one more case below.
-proc surface::parser::FnType {pVar fn} {
+proc surface::parser::FnType {pVar fn {kind fn}} {
     upvar 1 $pVar p
-    set usage "Fn{args: \[...\], return: ..., errors: \[...\]}"
+    if {$kind eq "coroutine"} {
+        set head Coroutine
+        set what "coroutine type"
+    } else {
+        set head Fn
+        set what "function type"
+    }
+    set usage "$head{args: \[...\], return: ..., errors: \[...\]}"
     if {[Kind p] eq "\["} {
-        Fail [Peek p] "a function type has named fields, not positional type arguments: write $usage"
+        Fail [Peek p] "a $what has named fields, not positional type arguments: write $usage"
     }
     if {[Kind p] ne "\{"} {
-        Fail [Peek p] "expected \"\{\" after \"Fn\" (a function type is written $usage), found [Describe [Peek p]]"
+        Fail [Peek p] "expected \"\{\" after \"$head\" (a $what is written $usage), found [Describe [Peek p]]"
     }
     set open [Advance p]
     set fields [dict create]
@@ -782,29 +1562,29 @@ proc surface::parser::FnType {pVar fn} {
                 set field [expr {[dict get $token kind] eq "IDENT" ? [dict get $token value] : [dict get $token kind]}]
             }
             default {
-                Fail $token "expected a field name (args, return or errors) in the function type, found [Describe $token]"
+                Fail $token "expected a field name (args, return or errors) in the $what, found [Describe $token]"
             }
         }
         if {$field ni {args return errors}} {
             if {$field in {target targets}} {
-                Fail $token "a function type cannot name its target: \"$field\" is not a field (a function type describes only the call contract: args, return, errors)"
+                Fail $token "a $what cannot name its target: \"$field\" is not a field (a $what describes only the call contract: args, return, errors)"
             }
             if {$field eq "context"} {
-                Fail $token "the function type field \"context\" is not supported yet (fields: args, return, errors)"
+                Fail $token "the $what field \"context\" is not supported yet (fields: args, return, errors)"
             }
-            Fail $token "unknown field \"$field\" in the function type (fields: args, return, errors)"
+            Fail $token "unknown field \"$field\" in the $what (fields: args, return, errors)"
         }
         if {[dict exists $fields $field]} {
-            Fail $token "duplicate field \"$field\" in the function type"
+            Fail $token "duplicate field \"$field\" in the $what"
         }
         Advance p
         if {[Kind p] ne ":"} {
-            Fail [Peek p] "expected \":\" after the function type field \"$field\", found [Describe [Peek p]]"
+            Fail [Peek p] "expected \":\" after the $what field \"$field\", found [Describe [Peek p]]"
         }
         Advance p
         switch -- $field {
             args {
-                dict set fields args [FnList p args {
+                dict set fields args [FnList p args $what {
                     TypeExpr p "a parameter type in the \"args\" list"
                 }]
             }
@@ -812,8 +1592,8 @@ proc surface::parser::FnType {pVar fn} {
                 dict set fields return [TypeExpr p "a type after \"return:\""]
             }
             errors {
-                set names [FnList p errors {
-                    set name [Expect p IDENT "an error name in the \"errors\" list"]
+                set names [FnList p errors $what {
+                    set name [ErrorName p "an error name in the \"errors\" list"]
                     if {[Kind p] eq "\["} {
                         Fail [Peek p] "the \"errors\" list names declared errors, not types: expected \",\" or \"\]\" after the error name \"[dict get $name value]\""
                     }
@@ -823,7 +1603,7 @@ proc surface::parser::FnType {pVar fn} {
                 foreach pair $names {
                     lassign $pair name nameToken
                     if {$name in $seen} {
-                        Fail $nameToken "duplicate error \"$name\" in the function type's \"errors\" list"
+                        Fail $nameToken "duplicate error \"$name\" in the $what's \"errors\" list"
                     }
                     lappend seen $name
                 }
@@ -833,31 +1613,38 @@ proc surface::parser::FnType {pVar fn} {
         if {[Kind p] eq ","} {
             Advance p
         } elseif {[Kind p] ne "\}"} {
-            Fail [Peek p] "expected \",\" or \"\}\" after the function type field \"$field\", found [Describe [Peek p]]"
+            Fail [Peek p] "expected \",\" or \"\}\" after the $what field \"$field\", found [Describe [Peek p]]"
         }
     }
     set close [Peek p]
     foreach required {args return} {
         if {![dict exists $fields $required]} {
-            Fail $close "the function type is missing its \"$required\" field ($usage)"
+            Fail $close "the $what is missing its \"$required\" field ($usage)"
         }
     }
     Advance p
     if {![dict exists $fields errors]} {
         dict set fields errors {}
     }
-    return [list fn [dict create args [dict get $fields args] return [dict get $fields return] \
-        errors [dict get $fields errors]]]
+    set result [dict create args [dict get $fields args] return [dict get $fields return] \
+        errors [dict get $fields errors]]
+    if {$kind eq "coroutine"} {
+        # One more named entry: the callable kind (surface type expressions
+        # keep the {fn FIELDS} form, so every walker of a type's argument
+        # and return types handles both kinds).
+        dict set result kind coroutine
+    }
+    return [list fn $result]
 }
 
 # "[" [ ITEM { "," ITEM } [ "," ] ] "]" for function type field FIELD, each
 # ITEM parsed by the script ITEM (in the caller's frame, with p visible).
 # Returns the items' values.
-proc surface::parser::FnList {pVar field item} {
+proc surface::parser::FnList {pVar field typeWhat item} {
     upvar 1 $pVar p
     if {[Kind p] ne "\["} {
         set what [expr {$field eq "args" ? "a list of parameter types" : "a list of declared error names"}]
-        Fail [Peek p] "the \"$field\" field of a function type must be $what in \"\[...\]\", found [Describe [Peek p]]"
+        Fail [Peek p] "the \"$field\" field of a $typeWhat must be $what in \"\[...\]\", found [Describe [Peek p]]"
     }
     Advance p
     set items {}
@@ -874,64 +1661,118 @@ proc surface::parser::FnList {pVar field item} {
 }
 
 proc surface::parser::Function {pVar} {
+    variable functionModifiers
     upvar 1 $pVar p
     dict set p allowFunctionResult 1
-    set start [dict get [Advance p] span]
+    set start [dict get [Peek p] span]
+    set modifiers [dict create]
+    while {[Kind p] eq "IDENT"} {
+        set word [Advance p]
+        set text [dict get $word text]
+        if {$text ni $functionModifiers} {
+            Fail $word "expected \"fn\" after the declaration modifiers, found [Describe $word]"
+        }
+        if {[dict exists $modifiers $text]} {
+            Fail $word "duplicate modifier \"$text\" in this function declaration"
+        }
+        dict set modifiers $text [dict get $word span]
+    }
+    Advance p
     set name [Expect p IDENT "a function name after \"fn\""]
     set open [Expect p ( "\"(\" after the function name"]
-    lassign [ParamSections p] params flags
+    lassign [ParamSections p] params flags contexts resume
     set body [Suite p "the parameter list"]
+    set nomethod [dict exists $modifiers nomethod]
     return [surface::ast::node function [SpanFrom p $start] \
         name [dict get $name value] nameSpan [dict get $name span] \
-        params $params flags $flags paramsSpan [SpanFrom p [dict get $open span]] \
+        params $params flags $flags contexts $contexts paramsSpan [SpanFrom p [dict get $open span]] \
         resultType [dict get $body resultType] resultTypeSpan [dict get $body resultTypeSpan] \
-        errors [dict get $body errors] body $body]
+        errors [dict get $body errors] proves [dict get $body proves] body $body \
+        nomethod $nomethod nomethodSpan [expr {$nomethod ? [dict get $modifiers nomethod] : ""}] \
+        resume $resume]
 }
 
 # The parameter list of a function declaration, after "(", through ")":
 #
-#   params       = [ ordinary ] [ flagSection ]       (see paramSectionOrder)
+#   params       = [ ordinary ] [ flagSection ] [ contextSection ]
+#                                                     (see paramSectionOrder)
 #   ordinary     = param { "," param }
 #   param        = IDENT [ ":" typeExpr ]
 #   flagSection  = "flags" flagDecl { "," flagDecl }
 #   flagDecl     = ":" IDENT                          -- no space after ":"
+#   contextSection = "context" contextDecl { "," contextDecl }
+#   contextDecl  = IDENT ":" typeExpr
 #
-# optionally followed by a trailing ",". Returns {PARAMS FLAGS}: PARAMS the
-# ordinary parameters {NAME SPAN TYPE TYPESPAN}, FLAGS the declared flags
-# {NAME SPAN} in written order (SPAN covers ":name").
+# optionally followed by a trailing ",". Returns {PARAMS FLAGS CONTEXTS}:
+# PARAMS the ordinary parameters {NAME SPAN TYPE TYPESPAN}, FLAGS the declared
+# flags {NAME SPAN} in written order (SPAN covers ":name"), CONTEXTS the
+# declared context parameters {name nameSpan type typeSpan} dicts in written
+# order (CONTEXTS.md).
 #
 # The parameter list is a sequence of *sections* in one canonical order,
-# paramSectionOrder: ordinary parameters, then flags. A new section is
-# introduced by its marker word and runs until the next section marker or the
-# closing ")"; it never swallows "the rest of the signature" -- the list is
-# parsed one entry at a time and each entry knows which section it belongs
-# to, so a later section (the planned `context`, `variadic`) is one more
-# marker and one more rank in the order, with the same ordering diagnostic.
+# paramSectionOrder: ordinary parameters, then flags, then context. A new
+# section is introduced by its marker word and runs until the next section
+# marker or the closing ")"; it never swallows "the rest of the signature" --
+# the list is parsed one entry at a time and each entry knows which section it
+# belongs to, so a later section (the planned `variadic`) is one more marker
+# and one more rank in the order, with the same ordering diagnostic.
 #
 # "flags" is a contextual marker, not a keyword: it opens the flag section
 # only where an entry is spelled `flags :NAME` -- the name, then a colon that
 # is separated from it by space and glued to the NAME after it (FlagsMarker).
 # `flags` anywhere else is an ordinary parameter name, typed or not
 # (`fn f(flags)`, `fn f(flags: Int)`, `fn f(flags : Int)`).
+#
+# "context" is contextual the same way: it opens the context section only
+# where it is directly followed by a name (`context io: LinuxIO`,
+# ContextMarker), which no ordinary parameter can be. `fn f(context)` and
+# `fn f(context: Int)` are an ordinary parameter named context. Inside the
+# section every entry is `NAME: Type`; the type is always written, since it
+# is the context's identity (the local name is not).
 proc surface::parser::ParamSections {pVar} {
     upvar 1 $pVar p
     variable paramSectionOrder
     set params {}
     set flags {}
+    set contexts {}
+    set resume ""
     set section ordinary
     while {[Kind p] ne ")"} {
         set token [Peek p]
-        if {[Kind p] eq ":" || [FlagsMarker p]} {
+        if {$section eq "resume"} {
+            if {[ResumeMarker p]} {
+                Fail $token "a function declares at most one resume clause (\"resume TYPE\", the last entry of its parameter list)"
+            }
+            Fail $token "the resume clause must be the last entry of the parameter list, found [Describe $token] after it"
+        }
+        if {[ResumeMarker p]} {
+            Advance p
+            EnterSection p section resume [dict get $token span]
+            set typeStart [dict get [Peek p] span]
+            set type [TypeExpr p "the resume message type after \"resume\""]
+            set resume [dict create type $type typeSpan [SpanFrom p $typeStart] \
+                span [SpanFrom p [dict get $token span]]]
+        } elseif {[ContextMarker p]} {
+            Advance p
+            EnterSection p section context [dict get $token span]
+            lappend contexts [ContextEntry p]
+        } elseif {[Kind p] eq ":" || [FlagsMarker p]} {
             if {[Kind p] ne ":"} {
                 Advance p
                 set markerSpan [dict get $token span]
                 EnterSection p section flags $markerSpan
+            } elseif {$section eq "context"} {
+                set flag [FlagEntry p]
+                FailCode [dict get $flag span] MALFORMED-CONTEXT-SECTION \
+                    "flag :[dict get $flag name] cannot follow the context section: a parameter list is ordinary parameters, then flags, then context"
             } elseif {$section ne "flags"} {
                 set flag [FlagEntry p]
                 FailCode [dict get $flag span] MALFORMED-FLAG-SECTION \
                     "flag :[dict get $flag name] is outside a flag section: declare flags after the ordinary parameters as \"flags :[dict get $flag name]\""
             }
             lappend flags [FlagEntry p]
+        } elseif {$section eq "context"} {
+            lappend contexts [ContextEntry p]
         } else {
             set param [Expect p IDENT "a parameter name"]
             if {$section ne "ordinary"} {
@@ -955,13 +1796,24 @@ proc surface::parser::ParamSections {pVar} {
         }
     }
     Advance p
-    return [list $params $flags]
+    return [list $params $flags $contexts $resume]
 }
 
-# The canonical order of a declaration's parameter sections. Only `ordinary`
-# and `flags` exist; `context` and `variadic` (terminal) are planned.
+# The canonical order of a declaration's parameter sections. `variadic`
+# (terminal) is planned.
 namespace eval surface::parser {
-    variable paramSectionOrder {ordinary flags}
+    variable paramSectionOrder {ordinary flags context resume}
+}
+
+# 1 if the next tokens are the resume clause marker: the name `resume`
+# directly followed by a type (a name, or the `unit` keyword) -- `resume
+# StepInput` (COROUTINES.md). Never an ordinary parameter (a parameter name is
+# followed by ":", "," or ")"), so `fn f(resume)` keeps its meaning.
+proc surface::parser::ResumeMarker {pVar} {
+    upvar 1 $pVar p
+    set name [Peek p]
+    return [expr {[dict get $name kind] eq "IDENT" && [dict get $name value] eq "resume"
+        && [Kind p 1] in {IDENT unit}}]
 }
 
 # Moves SECTIONVAR to section NEW (marker at SPAN), or fails when NEW is not
@@ -970,10 +1822,55 @@ proc surface::parser::EnterSection {pVar sectionVar new span} {
     upvar 1 $pVar p $sectionVar section
     variable paramSectionOrder
     if {[lsearch -exact $paramSectionOrder $new] <= [lsearch -exact $paramSectionOrder $section]} {
+        if {$new eq "resume"} {
+            Fail [dict create span $span] "a function declares at most one resume clause (\"resume TYPE\", the last entry of its parameter list)"
+        }
+        if {$new eq "context"} {
+            FailCode $span MALFORMED-CONTEXT-SECTION \
+                "a \"context\" section cannot follow the $section section: a parameter list has at most one context section, after the ordinary parameters and flags (list several contexts in one section: \"context a: A, b: B\")"
+        }
+        if {$section eq "context"} {
+            FailCode $span MALFORMED-CONTEXT-SECTION \
+                "a \"$new\" section cannot follow the context section: a parameter list is ordinary parameters, then flags, then context"
+        }
         FailCode $span MALFORMED-FLAG-SECTION \
             "a \"$new\" section cannot follow the $section section: a parameter list has at most one $new section, after the ordinary parameters"
     }
     set section $new
+}
+
+# 1 if the next tokens are the context-section marker: the name `context`
+# directly followed by another name -- `context io: T` (CONTEXTS.md). Never an
+# ordinary parameter (a parameter name is followed by ":", "," or ")"), so
+# `fn f(context)` and `fn f(context: T)` keep their meaning.
+proc surface::parser::ContextMarker {pVar} {
+    upvar 1 $pVar p
+    set name [Peek p]
+    return [expr {[dict get $name kind] eq "IDENT" && [dict get $name value] eq "context"
+        && [Kind p 1] eq "IDENT"}]
+}
+
+# One context parameter `NAME ":" typeExpr` of the context section. Returns
+# {name NAME nameSpan SPAN type TYPE typeSpan SPAN}. The type is required:
+# a context is identified by its type, never by the local name.
+proc surface::parser::ContextEntry {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    if {[dict get $token kind] ne "IDENT"} {
+        FailCode [dict get $token span] MALFORMED-CONTEXT-SECTION \
+            "expected a context parameter \"NAME: Type\" in the context section, found [Describe $token]"
+    }
+    Advance p
+    if {[Kind p] ne ":"} {
+        FailCode [dict get $token span] MALFORMED-CONTEXT-SECTION \
+            "context parameter \"[dict get $token value]\" needs its context type: write \"[dict get $token value]: Type\" (a context is identified by its type)"
+    }
+    Advance p
+    set typeStart [dict get [Peek p] span]
+    set type [TypeExpr p "a context type after \":\""]
+    set typeSpan [SpanFrom p $typeStart]
+    return [dict create name [dict get $token value] nameSpan [dict get $token span] \
+        type $type typeSpan $typeSpan]
 }
 
 # 1 if the next tokens are the flag-section marker: the name `flags` and a
@@ -1015,15 +1912,84 @@ proc surface::parser::FlagEntry {pVar} {
 }
 
 # "error" IDENT NEWLINE -- a top-level named-error declaration (see this
-# file's own header, and hir/errordecls.tcl for what it means). Only legal
-# directly at a program's or module's own top level, exactly like a
-# typeDecl (Statement rejects it elsewhere, using the same `topLevel` flag).
+# file's own header, and hir/errordecls.tcl for what it means) -- or
+# "error" IDENT ":" NEWLINE INDENT { IDENT ":" typeExpr NEWLINE } DEDENT, the
+# same declaration with a named-field payload (ERROR-PAYLOADS.md): every
+# payload field is `name: Type` with exactly a struct field's grammar (an
+# explicit type, no default), in written order. The payload-free spelling
+# stays the zero-field case: `error NAME:` with no field is not another
+# spelling of it. Only legal directly at a program's or module's own top
+# level, exactly like a typeDecl (Statement rejects it elsewhere, using the
+# same `topLevel` flag). The node carries `fields`, one {name nameSpan type
+# typeSpan} dict per declared payload field (empty for a payload-free error).
 proc surface::parser::ErrorDecl {pVar} {
     upvar 1 $pVar p
     set start [dict get [Advance p] span]
     set name [Expect p IDENT "an error name after \"error\""]
+    set errorName [dict get $name value]
+    set fields {}
+    switch -- [Kind p] {
+        ( {
+            Fail [Peek p] "an error payload has named fields, never positional ones: declare \"error $errorName:\" followed by an indented block of \"field: Type\" lines"
+        }
+        = {
+            Fail [Peek p] "an error declaration is not a binding: declare a payload as \"error $errorName:\" followed by an indented block of \"field: Type\" lines"
+        }
+        : {
+            Advance p
+            set token [Peek p]
+            if {[dict get $token kind] ne "NEWLINE"} {
+                if {[dict get $token kind] eq "\{"} {
+                    Fail $token "an error payload is declared by its fields, not by an anonymous struct type: write \"error $errorName:\" followed by an indented block of \"field: Type\" lines"
+                }
+                Fail $token "expected a new line and an indented block of payload fields after \":\", found [Describe $token]"
+            }
+            Advance p
+            set token [Peek p]
+            if {[dict get $token kind] ne "INDENT"} {
+                Fail $token "an error declared with \":\" needs at least one \"field: Type\" line in an indented block (a payload-free error is declared \"error $errorName\", without the colon), found [Describe $token]"
+            }
+            Advance p
+            while {[Kind p] ne "DEDENT" && [Kind p] ne "EOF"} {
+                if {[Kind p] eq "NEWLINE"} {
+                    Advance p
+                    continue
+                }
+                set fieldToken [Peek p]
+                if {[dict get $fieldToken kind] in {.. .}} {
+                    Fail $fieldToken "an error payload has no rest field: declare every payload field by name"
+                }
+                if {[dict get $fieldToken kind] ne "IDENT"} {
+                    Fail $fieldToken "expected a payload field declaration \"name: Type\", found [Describe $fieldToken]"
+                }
+                Advance p
+                if {[Kind p] ne ":"} {
+                    Fail [Peek p] "expected \":\" and a type after the payload field name \"[dict get $fieldToken value]\" (a payload field always has an explicit type), found [Describe [Peek p]]"
+                }
+                Advance p
+                set typeStart [dict get [Peek p] span]
+                set type [TypeExpr p "a payload field type after \":\""]
+                set typeSpan [SpanFrom p $typeStart]
+                if {[Kind p] eq "="} {
+                    Fail [Peek p] "an error payload field cannot have a default value (every payload field is given explicitly by each \"fail $errorName \{...\}\")"
+                }
+                set next [Peek p]
+                if {[dict get $next kind] ne "NEWLINE"} {
+                    Fail $next "expected end of line after the payload field declaration, found [Describe $next]"
+                }
+                Advance p
+                lappend fields [dict create name [dict get $fieldToken value] nameSpan [dict get $fieldToken span] \
+                    type $type typeSpan $typeSpan]
+            }
+            if {[Kind p] eq "DEDENT"} {
+                Advance p
+            }
+            return [surface::ast::node errordecl [SpanFrom p $start] \
+                name $errorName nameSpan [dict get $name span] fields $fields]
+        }
+    }
     set node [surface::ast::node errordecl [SpanFrom p $start] \
-        name [dict get $name value] nameSpan [dict get $name span]]
+        name $errorName nameSpan [dict get $name span] fields {}]
     set next [Peek p]
     if {[dict get $next kind] ne "NEWLINE"} {
         Fail $next "expected end of line, found [Describe $next]"
@@ -1046,17 +2012,51 @@ proc surface::parser::TypeDecl {pVar} {
     set parent [Expect p IDENT "a parent type name"]
     set inToken [Peek p]
     if {[dict get $inToken kind] ne "IDENT" || [dict get $inToken value] ne "in"} {
+        if {[dict get $inToken kind] in {NEWLINE EOF :: \[}} {
+            Fail $inToken "expected \"in\" after the parent type name, found [Describe $inToken] (a \"type\" declaration declares an integer domain, \"type NAME = Int in LO..HI\"; a refinement of another type is declared \"refined type [dict get $name value] = CARRIER\")"
+        }
         Fail $inToken "expected \"in\" after the parent type name, found [Describe $inToken]"
     }
     Advance p
     set domain [Domain p]
     set node [surface::ast::node typedecl [SpanFrom p $start] \
         name [dict get $name value] nameSpan [dict get $name span] \
-        parent [dict get $parent value] parentSpan [dict get $parent span] \
+        form domain parent [dict get $parent value] parentSpan [dict get $parent span] \
         domain $domain]
     set next [Peek p]
     if {[dict get $next kind] ne "NEWLINE"} {
         Fail $next "expected end of line, found [Describe $next]"
+    }
+    Advance p
+    return $node
+}
+
+# "refined" "type" IDENT "=" typeExpr NEWLINE -- a refinement type
+# declaration (REFINEMENT-VALUES.md; hir/sourcetypes.tcl for what it means):
+# a `typedecl` node of form `refined`, CARRIER the as-written type expression
+# (surface::parser::TypeExpr) its values are values of. The carrier is any
+# type expression the grammar has: whether it is an eligible carrier is a
+# semantic question (RefinementCarrierEligible, hir/sourcetypes.tcl), not a
+# syntactic one.
+proc surface::parser::RefinedTypeDecl {pVar} {
+    upvar 1 $pVar p
+    set modifier [Advance p]
+    Advance p
+    set name [Expect p IDENT "a type name after \"refined type\""]
+    Expect p = "\"=\" after the type name (\"refined type [dict get $name value] = CARRIER\")"
+    set carrierStart [dict get [Peek p] span]
+    set carrier [TypeExpr p "a carrier type after \"=\""]
+    set carrierSpan [SpanFrom p $carrierStart]
+    set next [Peek p]
+    if {[dict get $next kind] eq "IDENT" && [dict get $next value] eq "in"} {
+        Fail $next "a refinement type has no domain: \"refined type [dict get $name value] = CARRIER\" is the whole declaration (an integer domain is declared without \"refined\": \"type NAME = Int in LO..HI\")"
+    }
+    set node [surface::ast::node typedecl [SpanFrom p [dict get $modifier span]] \
+        name [dict get $name value] nameSpan [dict get $name span] \
+        form refined refinedSpan [dict get $modifier span] \
+        carrier $carrier carrierSpan $carrierSpan]
+    if {[dict get $next kind] ne "NEWLINE"} {
+        Fail $next "expected end of line after the carrier type, found [Describe $next] (a refinement has exactly one carrier: \"refined type [dict get $name value] = CARRIER\")"
     }
     Advance p
     return $node
@@ -1349,6 +2349,35 @@ proc surface::parser::Suite {pVar after} {
         set resultType [TypeExpr p {a result type after ->}]
         set resultTypeSpan [SpanFrom p $typeStart]
     }
+    # A proof clause (REFINEMENT-VALUES.md): "proves PARAM: TYPE", legal in
+    # exactly the same one position as the result type -- after it (or
+    # after the parameter list), before "errors" and the final ":". The
+    # word is contextual: no other construct allows a name here, so this is
+    # the only place it is recognized. A list of clause dicts, so further
+    # clause forms (several parameters, other outcomes) extend it, never
+    # the node shape; this grammar admits exactly one. Its outcome is what
+    # the written result says carries the proof: `-> unit` (a validator)
+    # proves by completing normally (`normal`), anything else by returning
+    # true (`true`, a predicate; hir/resolve.tcl's ResolveProofs holds the
+    # declared result to exactly `bool` or `unit`).
+    set proves {}
+    if {$allowResult && [Kind p] eq "IDENT" && [dict get [Peek p] text] eq "proves"} {
+        set provesToken [Advance p]
+        set paramToken [Expect p IDENT "the name of the proven parameter after \"proves\""]
+        Expect p : "\":\" after the proven parameter's name (\"proves [dict get $paramToken value]: TYPE\")"
+        set typeStart [dict get [Peek p] span]
+        set provenType [TypeExpr p "the proven refinement type after \"proves [dict get $paramToken value]:\""]
+        lappend proves [dict create outcome [expr {$resultType eq "unit" ? "normal" : "true"}] \
+            param [dict get $paramToken value] paramSpan [dict get $paramToken span] \
+            type $provenType typeSpan [SpanFrom p $typeStart] \
+            span [SpanFrom p [dict get $provesToken span]]]
+        if {[Kind p] eq ","} {
+            Fail [Peek p] "a function has at most one proof clause: \"proves PARAM: TYPE\" names one parameter and one refinement type"
+        }
+        if {[Kind p] eq "IDENT" && [dict get [Peek p] text] eq "proves"} {
+            Fail [Peek p] "a function has at most one proof clause: \"proves PARAM: TYPE\" names one parameter and one refinement type"
+        }
+    }
     # A function's own "errors E1, E2" declaration (EXPLICIT-ERROR-
     # COMPLETIONS.md items 3/109): the single-line canonical spelling,
     # gated by the identical ALLOWRESULT flag as "->" just above -- it is
@@ -1358,7 +2387,7 @@ proc surface::parser::Suite {pVar after} {
     if {$allowResult && [Kind p] eq {errors}} {
         Advance p
         while 1 {
-            set nameToken [Expect p IDENT "an error name after \"errors\""]
+            set nameToken [ErrorName p "an error name after \"errors\""]
             lappend errors [list [dict get $nameToken value] [dict get $nameToken span]]
             if {[Kind p] ne ","} {
                 break
@@ -1388,10 +2417,10 @@ proc surface::parser::Suite {pVar after} {
     if {$body eq ""} {
         # Every statement of the block was skipped by recovery.
         return [surface::ast::node suite $start body {} resultType $resultType resultTypeSpan $resultTypeSpan \
-            errors $errors]
+            errors $errors proves $proves]
     }
     return [surface::ast::node suite [SpanFrom p $start] body $body resultType $resultType \
-        resultTypeSpan $resultTypeSpan errors $errors]
+        resultTypeSpan $resultTypeSpan errors $errors proves $proves]
 }
 
 # ---------------------------------------------------------------------------
@@ -1399,6 +2428,15 @@ proc surface::parser::Suite {pVar after} {
 
 proc surface::parser::Expression {pVar} {
     upvar 1 $pVar p
+    if {[Kind p] eq "yield"} {
+        # `yield V` (COROUTINES.md): the lowest-precedence expression form.
+        set token [Advance p]
+        if {[Kind p] in {NEWLINE DEDENT EOF ) \] , :}} {
+            Fail [Peek p] "\"yield\" needs the value to send outward (write \"yield VALUE\"; \"yield unit\" sends unit), found [Describe [Peek p]]"
+        }
+        set value [Expression p]
+        return [surface::ast::node yield [SpanFrom p [dict get $token span]] value $value]
+    }
     return [Logical p or Conjunction]
 }
 
@@ -1635,6 +2673,10 @@ proc surface::parser::Primary {pVar} {
                     namespace $namespaceName namespaceSpan $namespaceSpan \
                     name [dict get $member value] nameSpan [dict get $member span]]
             }
+            if {[Kind p] eq "\{" && [dict get $token value] eq "enum"} {
+                # `enum {A, B}` (ENUMS.md): there are no anonymous enums.
+                AnonymousEnumError $token
+            }
             if {[Kind p] eq "\{"} {
                 # Struct { ... }: a named struct construction (STRUCTS.md).
                 set init [FieldInits p]
@@ -1661,6 +2703,9 @@ proc surface::parser::Primary {pVar} {
         }
         if {
             Fail $token "an \"if\" value must be the whole right side of \"=\" or \"return\""
+        }
+        yield {
+            Fail $token "a yield expression is an operand only in parentheses: write (yield VALUE)"
         }
         : {
             set name [Peek p 1]
@@ -1700,10 +2745,10 @@ proc surface::parser::PatternAhead {pVar} {
 # The offset (from the current token) of the token that closes the bracket the
 # current token opens, if "=" follows it; else -1. Brackets nest; a layout
 # token inside means the group is not closed on this logical line.
-proc surface::parser::PatternEnd {pVar} {
+proc surface::parser::PatternEnd {pVar {from 0}} {
     upvar 1 $pVar p
     set depth 0
-    for {set i 0} 1 {incr i} {
+    for {set i $from} 1 {incr i} {
         switch -- [Kind p $i] {
             \{ - [ - ( {
                 incr depth
@@ -1752,6 +2797,62 @@ proc surface::parser::Destructure {pVar} {
     Expect p = "\"=\""
     set value [ValueOrHandled p]
     return [surface::ast::node destructure [SpanFrom p $start] pattern $pattern value $value]
+}
+
+# ---------------------------------------------------------------------------
+# Coroutine construction (COROUTINES.md)
+#
+#   coroutineBind = "coroutine" "{" coField { "," coField } [ "," ] "}"
+#                   "=" valueOrHandled
+#   coField       = ( "step" | "first" ) [ ":" IDENT ]
+#
+# The named-destructuring model of STRUCT-DESTRUCTURING.md, over the two fixed
+# results of a construction rather than a struct value: `step` is the affine
+# coroutine handle, `first` the first outward result of the eager start.
+# Either may be omitted (`{step: next}` discards the first result, `{first}`
+# drops the handle after the start) or renamed. No two-field value ever
+# exists: the right side is lowered to the construction and the start
+# (surface/lower.tcl's CoroutineBind), each field binding one of their
+# results. Unknown fields are COROUTINE-BINDING-FIELD; there is no
+# positional form and no `coroutine NAME = CALL` sugar.
+
+# 1 if the tokens at the current position are the contextual word
+# "coroutine" followed by a braced group and "=": a coroutine binding.
+# `coroutine {x: 1} = ...` cannot be anything else (a named construction is
+# never followed by "="), and `coroutine` alone stays an ordinary name.
+proc surface::parser::CoroutineAhead {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token value] eq "coroutine"
+        && [Kind p 1] eq "\{" && [PatternEnd p 1] >= 0}]
+}
+
+# "coroutine" "{" coField ... "}" "=" valueOrHandled, at the "coroutine" word
+# CoroutineAhead accepted. Node: coroutinebind, pattern (destructure-shaped:
+# {span fields}, each field {name nameSpan local localSpan nested ""
+# shorthand span}), value (the call, a handled call, or -- rejected by HIR as
+# COROUTINE-RHS-NOT-YIELDING -- any other expression).
+proc surface::parser::CoroutineBind {pVar} {
+    upvar 1 $pVar p
+    set start [dict get [Advance p] span]
+    set open [Peek p]
+    set pattern [Pattern p]
+    foreach field [dict get $pattern fields] {
+        if {[dict get $field name] ni {step first}} {
+            FailCode [dict get $field nameSpan] COROUTINE-BINDING-FIELD \
+                "unknown field \"[dict get $field name]\" in a coroutine binding: a coroutine construction has exactly two results, \"step\" (the coroutine handle) and \"first\" (its first outward result), each optional and renamable (\{step: next, first: initial\})"
+        }
+        if {[dict get $field nested] ne ""} {
+            FailCode [dict get $field span] COROUTINE-BINDING-FIELD \
+                "the coroutine binding field \"[dict get $field name]\" binds one name: write \"[dict get $field name]: NAME\" (destructure the first result with a separate statement)"
+        }
+    }
+    Expect p = "\"=\""
+    if {[Kind p] in {if loop}} {
+        Fail [Peek p] "the right side of a coroutine binding is the call that starts the coroutine, found [Describe [Peek p]]"
+    }
+    set value [ValueOrHandled p]
+    return [surface::ast::node coroutinebind [SpanFrom p $start] pattern $pattern value $value]
 }
 
 # A pattern: {span SPAN fields {FIELD...}}, each FIELD a dict
@@ -1891,8 +2992,10 @@ proc surface::parser::FieldInits {pVar} {
 # `fields`, one {name nameSpan type typeSpan} dict per declared field in
 # written (slot) order, and one boolean per struct modifier (structModifiers):
 # `opaque` (1 for `opaque struct`, else 0) with `opaqueSpan` (the modifier
-# word's span, "" when absent). The node is the one struct declaration with a
-# property, never a different declaration kind (OPAQUE-STRUCTS.md).
+# word's span, "" when absent), and `context` / `contextSpan` likewise
+# (CONTEXTS.md). The node is the one struct declaration with properties,
+# never a different declaration kind (OPAQUE-STRUCTS.md); the modifiers are
+# order-independent and each may be written once.
 proc surface::parser::StructDecl {pVar} {
     variable structModifiers
     upvar 1 $pVar p
@@ -1959,7 +3062,9 @@ proc surface::parser::StructDecl {pVar} {
         Advance p
     }
     set opaque [dict exists $modifiers opaque]
+    set context [dict exists $modifiers context]
     return [surface::ast::node structdecl [SpanFrom p $start] \
         name [dict get $name value] nameSpan [dict get $name span] fields $fields \
-        opaque $opaque opaqueSpan [expr {$opaque ? [dict get $modifiers opaque] : ""}]]
+        opaque $opaque opaqueSpan [expr {$opaque ? [dict get $modifiers opaque] : ""}] \
+        context $context contextSpan [expr {$context ? [dict get $modifiers context] : ""}]]
 }

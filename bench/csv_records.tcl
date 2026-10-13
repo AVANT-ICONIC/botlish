@@ -47,7 +47,7 @@ set csvRecordsSource [regsub {\nsample\(\)\n$} \
 
 proc hirOf {text} {
     global csvRecordsSource
-    return [corpus::compile "$csvRecordsSource\n$text\n" bench.bot -strict 0]
+    return [corpus::compile "$csvRecordsSource\n$text\n" bench.bot -strict 0 -warnings off]
 }
 
 # TEXT as a Botlish string literal (examples/stdlib/corpus.tcl's own
@@ -294,14 +294,15 @@ proc reportSize {rows cols runs} {
     set presizedReport [allocationsOf [recordsProgram $text 1]]
     set defaultMutarrays [mutarrayAllocations $defaultReport]
     set presizedMutarrays [mutarrayAllocations $presizedReport]
-    # Each resize allocates exactly 3 replacement MutableArrays
-    # (hashtable.bot's ht_rehash); every table (default or presized) starts
-    # with 4 (ht_alloc) and the outer GeometricBuilder adds a few more of
-    # its own, identical between the two variants -- so the raw allocation
-    # *delta* between them is exactly 3 * (resizes saved by presizing).
+    # Each resize allocates exactly 4 replacement MutableArrays
+    # (hashtable.bot's ht_rehash: a HashTable value is four arrays, all
+    # allocated anew by ht_alloc); every table (default or presized) starts
+    # with 4 and the outer GeometricBuilder adds a few more of its own,
+    # identical between the two variants -- so the raw allocation *delta*
+    # between them is exactly 4 * (resizes saved by presizing).
     rowf "  presizing: %d fewer MutableArray allocations (%d default -> %d presized), i.e. %d fewer resizes across %d rows" \
         [expr {$defaultMutarrays - $presizedMutarrays}] $defaultMutarrays $presizedMutarrays \
-        [expr {($defaultMutarrays - $presizedMutarrays) / 3}] $rows
+        [expr {($defaultMutarrays - $presizedMutarrays) / 4}] $rows
     puts ""
 
     puts "  hashing/probing (Tcl-side model of the identical algorithm; see file header)"

@@ -168,7 +168,7 @@ proc hir::resolve::IsModuleScope {hirVar s} {
 }
 
 proc hir::resolve::RootNames {} {
-    return [concat [core::native::names] [core::native::aliasNames] {true false unit}]
+    return [concat [core::native::names] {true false unit}]
 }
 
 proc hir::resolve::NewScope {hirVar kind parent invocation owner origin} {
@@ -217,18 +217,6 @@ proc hir::resolve::RootBinding {hirVar root name} {
     upvar 1 $hirVar hir
     if {[dict exists $hir scopes $root names $name]} {
         return [dict get $hir scopes $root names $name]
-    }
-    # A native alias (core::native::alias, e.g. Emailish? -> emailish?)
-    # denotes the exact same predicate identity as its canonical spelling,
-    # never a second binding: this reference reuses the canonical name's own
-    # root Binding/Symbol (creating it first if this is the first reference
-    # to either spelling), and is memoized under its own alias spelling too,
-    # so a later reference to it finds the shared binding directly. No new
-    # Binding, Symbol, or runtime value is ever created for the alias name.
-    if {$name ni {true false unit} && [core::native::isAlias $name]} {
-        set b [RootBinding hir $root [core::native::canonicalName $name]]
-        dict set hir scopes $root names $name $b
-        return $b
     }
     set b [NewBinding hir $name root $root {builtin root}]
     set y [hir::NewId hir symbol]
@@ -348,6 +336,25 @@ proc hir::resolve::LexicalTarget {hirVar s name} {
     return ""
 }
 
+# 1 if the function candidate identity IDENTITY (CandidateIdentity's spelling)
+# stands for is declared `nomethod`: a native registered with -nomethod 1, or
+# a function binding whose declaration carries the modifier. Aliases are
+# already followed by the identity, so a name bound to a nomethod function is
+# that function.
+proc hir::resolve::NoMethodIdentity {hirVar identity} {
+    upvar 1 $hirVar hir
+    switch -glob -- $identity {
+        native:* {
+            set native [string range $identity 7 end]
+            return [expr {[core::native::exists $native] && [dict get [core::native::metadata $native] nomethod]}]
+        }
+        binding:* {
+            return [dict exists $hir bindings [string range $identity 8 end] nomethod]
+        }
+    }
+    return 0
+}
+
 # The functions the method-style call `receiver.NAME(args)` (ARGCOUNT: the
 # receiver plus the written arguments) may denote from scope S of CTX: the
 # distinct functions among
@@ -366,8 +373,19 @@ proc hir::resolve::LexicalTarget {hirVar s name} {
 # candidate that is statically a function of a different arity is dropped,
 # unless that would leave none (the ordinary call then keeps its arity
 # error). Empty: no function of that name is visible.
-proc hir::resolve::MethodCandidates {hirVar s name ctx argCount} {
+#
+# A function declared `nomethod` (WARNINGS-METHOD-ELIGIBLE.md: its author
+# declares that it is never the callee of method syntax) is not a candidate at
+# all, before the arity rule: sugar neither resolves to it nor competes with
+# it. HIDDENVAR, if given, names a caller variable that receives the displays
+# of the nomethod functions that were left out, so the caller can tell "no
+# function of that name is visible" from "only nomethod functions are".
+proc hir::resolve::MethodCandidates {hirVar s name ctx argCount {hiddenVar ""}} {
     upvar 1 $hirVar hir
+    if {$hiddenVar ne ""} {
+        upvar 1 $hiddenVar hidden
+    }
+    set hidden {}
     set found [dict create]
     set arities [dict create]
     foreach ns [hir::imports::namespaces [CtxNamespace $ctx]] {
@@ -407,7 +425,14 @@ proc hir::resolve::MethodCandidates {hirVar s name ctx argCount} {
             dict set arities $identity $arity
         }
     }
-    set all [lsort -command {apply {{a b} {string compare [dict get $a display] [dict get $b display]}}} [dict values $found]]
+    set all {}
+    foreach c [lsort -command {apply {{a b} {string compare [dict get $a display] [dict get $b display]}}} [dict values $found]] {
+        if {[NoMethodIdentity hir [dict get $c identity]]} {
+            lappend hidden [dict get $c display]
+        } else {
+            lappend all $c
+        }
+    }
     set fitting [lmap c $all {
         set arity [dict get $arities [dict get $c identity]]
         if {$arity ne "" && $arity ne "*" && $arity != $argCount} continue
@@ -511,14 +536,175 @@ proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""}} {
         # identity, exactly as in a function's own "errors" clause.
         set argTypes [lmap t [dict get $arg args] {ResolveTypeExpr $t $ns}]
         set result [ResolveTypeExpr [dict get $arg return] $ns]
-        foreach errName [dict get $arg errors] {
-            if {![hir::errordecls::isDeclared $errName]} {
-                error "unknown error \"$errName\" in the function type's \"errors\" list: no \"error $errName\" declaration is visible"
+        foreach t [concat $argTypes [list $result]] {
+            set contextTrait [hir::types::MentionedContextTrait $t]
+            if {$contextTrait ne ""} {
+                return -code error -errorcode {BOTLISH CONTEXT-TRAIT-POSITION} \
+                    [hir::types::ContextTraitPositionMessage $contextTrait "part of a function type"]
             }
+            if {[hir::types::MentionsTrait $t]} {
+                # A function (or coroutine) type over a trait would be a callable value whose
+                # calls need a witness only the caller knows: there is no
+                # runtime trait dispatch to give it one (TRAITS.md,
+                # "Function values").
+                return -code error -errorcode {BOTLISH TRAIT-POLYMORPHIC-FUNCTION-VALUE} \
+                    "a function type cannot mention a trait ([hir::types::show $t]): a trait-polymorphic function is not a general callable value (there is no runtime trait dispatch)"
+            }
+        }
+        set coroutine [expr {[dict exists $arg kind] && [dict get $arg kind] eq "coroutine"}]
+        set what [expr {$coroutine ? "coroutine type" : "function type"}]
+        # Each error spelling is the canonical identity it denotes here
+        # (hir::errordecls::resolve: ns's own errors bare, other modules'
+        # qualified); the contract holds identities only.
+        set errorIds {}
+        foreach errName [dict get $arg errors] {
+            set id [hir::errordecls::resolve $errName $ns]
+            if {$id eq ""} {
+                error "unknown error \"$errName\" in the $what's \"errors\" list: [hir::errordecls::unknownReason $errName $ns]"
+            }
+            if {$id in $errorIds} {
+                error "duplicate error \"$id\" in the $what's \"errors\" list"
+            }
+            lappend errorIds $id
+        }
+        dict set arg errors $errorIds
+        if {$coroutine} {
+            # A coroutine handle type (AFFINE-VALUES.md): the resume
+            # protocol is its args -- no message, or exactly one of a named
+            # struct type (COROUTINES.md's structured-message restriction).
+            # Construction arguments are never part of it.
+            if {[llength $argTypes] > 1} {
+                return -code error -errorcode {BOTLISH COROUTINE-CONTRACT} \
+                    "a coroutine is resumed with at most one message, but this coroutine type's \"args\" lists [llength $argTypes] types (put several values in the fields of one struct)"
+            }
+            foreach t $argTypes {
+                if {![hir::coroutines::IsStructProtocol $t]} {
+                    return -code error -errorcode {BOTLISH COROUTINE-CONTRACT} \
+                        "the message type in a coroutine type's \"args\" must be a declared struct type, not [hir::types::show $t] (a coroutine is resumed with one structured message)"
+                }
+            }
+            # (A coroutine's results are cached and its messages may go
+            # unreceived: neither may be affine, hir::coroutines::
+            # AffineProtocol. Checked where a construction has a type, as
+            # struct field types may not be complete while this resolves.)
+            return [hir::types::MakeCoroutineType $argTypes $result [dict get $arg errors]]
         }
         return [hir::types::MakeFn $argTypes $result [dict get $arg errors]]
     }
     return [hir::types::resolveApplication $name [list [ResolveTypeExpr $arg $ns]]]
+}
+
+# The diagnostic kind of a failed ResolveTypeExpr whose catch OPTIONS are
+# given: the code the type function raised it with ({BOTLISH KIND}), else
+# DEFAULT.
+proc hir::resolve::TypeErrorKind {options default} {
+    set code [dict get $options -errorcode]
+    if {[lindex $code 0] eq "BOTLISH" && [llength $code] == 2} {
+        return [lindex $code 1]
+    }
+    return $default
+}
+
+# The resolved proof contract of block E (REFINEMENT-VALUES.md): its syntax
+# NODE's proof clauses (hir::syntax::withProofs), each validated and turned
+# into the generic rule {outcome OUTCOME param INDEX binding B fact TYPE}.
+# The declared result decides the outcome that carries the proof:
+#
+#   -> bool   OUTCOME 1       a predicate: "when a call of E returns true,
+#                             its argument INDEX satisfies the refinement
+#                             TYPE"
+#   -> unit   OUTCOME normal  a validator: "when a call of E completes
+#                             normally (returns rather than failing), its
+#                             argument INDEX satisfies TYPE"
+#
+# PARAMS are E's parameter bindings (ordinary ones first, then flags),
+# DECLAREDTYPES their resolved declared types, DECLARED the resolved
+# declared result. A clause that fails validation is diagnosed at its own
+# origin and contributes no rule:
+#
+#   PROOF-CLAUSE               the clause names no ordinary parameter, its
+#                              type is not a refinement type, the parameter's
+#                              declared type does not forget to the
+#                              refinement's carrier, or the function declares
+#                              neither `-> bool` nor `-> unit`
+#   REFINEMENT-MINT-AUTHORITY  the function is not in the refinement's
+#                              owning module (its exact declaring namespace;
+#                              no import, parent or child grants it)
+#
+# The parameter must be *declared* of the carrier (or of a type that forgets
+# to it): the clause adds a fact to a value its callers have already proven
+# to be a carrier value, so a refinement of a refinement can only be minted
+# from an already-proven carrier refinement, never from the bare base kind.
+proc hir::resolve::ResolveProofs {hirVar e node params declaredTypes declared ctx} {
+    upvar 1 $hirVar hir
+    if {![dict exists $node proofs]} {
+        return {}
+    }
+    set ns [CtxNamespace $ctx]
+    set ordinary [lmap param [dict get $node params] {lindex $param 0}]
+    set rules {}
+    foreach clause [dict get $node proofs] {
+        set name [dict get $clause param]
+        set paramOrigin [dict get $clause paramOrigin]
+        set typeOrigin [dict get $clause typeOrigin]
+        set typeText [ShowTypeExpr [dict get $clause type]]
+        set index [lsearch -exact $ordinary $name]
+        if {$index < 0} {
+            set flags [expr {[dict exists $node flags] ? [lmap f [dict get $node flags] {lindex $f 0}] : {}}]
+            set contexts [expr {[dict exists $node contextParams] ? [lmap c [dict get $node contextParams] {lindex $c 0}] : {}}]
+            if {$name in $flags} {
+                set why "\"$name\" is a flag, not an ordinary parameter"
+            } elseif {$name in $contexts} {
+                set why "\"$name\" is a context parameter, not an ordinary parameter"
+            } else {
+                set why "the function has no parameter \"$name\" (its parameters: [expr {$ordinary eq {} ? "none" : [join $ordinary {, }]}])"
+            }
+            hir::DiagnoseAt hir PROOF-CLAUSE "proof clause \"proves $name: $typeText\" must name one of the function's ordinary parameters: $why" $e $paramOrigin
+            continue
+        }
+        if {[catch {ResolveTypeExpr [dict get $clause type] $ns} fact]} {
+            hir::DiagnoseAt hir PROOF-CLAUSE "unknown proven type $typeText in \"proves $name: $typeText\": $fact" $e $typeOrigin
+            continue
+        }
+        set refinement [core::type::refinementName $fact]
+        if {$refinement eq ""} {
+            hir::DiagnoseAt hir PROOF-CLAUSE [format {the proven type of "proves %s: %s" is %s, which is not a refinement type: a proof clause establishes a refinement declared with "refined type NAME = CARRIER"} \
+                $name $typeText [hir::types::show $fact]] $e $typeOrigin
+            continue
+        }
+        set meta [core::type::refinementOf $refinement]
+        set owner [dict get $meta owner]
+        if {$owner ne $ns} {
+            hir::DiagnoseAt hir REFINEMENT-MINT-AUTHORITY [format {%s cannot declare a proof of refinement %s: only its owning %s may mint it (no import, parent or child namespace grants that authority)} \
+                [expr {$ns eq "" ? "the entry program" : "module \"$ns\""}] $refinement \
+                [expr {$owner eq "" ? "entry program" : "module \"$owner\""}]] $e $typeOrigin
+            continue
+        }
+        set carrier [dict get $meta carrier]
+        set paramType [lindex $declaredTypes $index]
+        if {$paramType eq {}} {
+            hir::DiagnoseAt hir PROOF-CLAUSE [format {the proven parameter "%s" must declare its type: "proves %s: %s" refines a %s value, so write "%s: %s" (or a refinement that forgets to it)} \
+                $name $name $typeText [hir::types::show $carrier] $name [hir::types::show $carrier]] $e $paramOrigin
+            continue
+        }
+        if {![hir::types::subtype $paramType $carrier]} {
+            hir::DiagnoseAt hir PROOF-CLAUSE [format {proof carrier mismatch: parameter "%s" is declared %s, but %s refines %s, and a %s value does not forget to a %s (a proof can only strengthen what the parameter already is)} \
+                $name [hir::types::show $paramType] $refinement [hir::types::show $carrier] \
+                [hir::types::show $paramType] [hir::types::show $carrier]] $e $paramOrigin
+            continue
+        }
+        switch -- $declared {
+            bool { set outcome 1 }
+            unit { set outcome normal }
+            default {
+                hir::DiagnoseAt hir PROOF-CLAUSE [format {a proof-producing function must declare "-> bool" (a predicate: its true result is the proof) or "-> unit" (a validator: its normal completion is the proof), but "proves %s: %s" is on a function %s} \
+                    $name $typeText [expr {$declared eq {} ? "with no declared result type" : "declared -> [hir::types::show $declared]"}]] $e $typeOrigin
+                continue
+            }
+        }
+        lappend rules [dict create outcome $outcome param $index binding [lindex $params $index] fact $fact]
+    }
+    return $rules
 }
 
 # TYPEEXPR as canonical source text ("List[Small]"), for a diagnostic about
@@ -533,7 +719,8 @@ proc hir::resolve::ShowTypeExpr {typeExpr} {
     }
     lassign $typeExpr name arg
     if {$name eq "fn"} {
-        return [format {Fn{args: [%s], return: %s, errors: [%s]}} \
+        return [format {%s{args: [%s], return: %s, errors: [%s]}} \
+            [expr {[dict exists $arg kind] ? "Coroutine" : "Fn"}] \
             [join [lmap t [dict get $arg args] {ShowTypeExpr $t}] {, }] \
             [ShowTypeExpr [dict get $arg return]] [join [dict get $arg errors] {, }]]
     }
@@ -554,6 +741,11 @@ proc hir::resolve::Expr {hirVar node ctx} {
     set e [hir::NewId hir expr]
     dict set hir exprs $e [dict create id $e kind $kind origin $origin \
         scope $scope type "" reachable 1]
+    if {[dict exists $node sid]} {
+        # The syntax node's identity (hir::traits::Stamp): what a trait
+        # program's monomorphization plan names expressions by across builds.
+        SetField hir $e sid [dict get $node sid]
+    }
 
     switch -- $kind {
         const {
@@ -562,7 +754,18 @@ proc hir::resolve::Expr {hirVar node ctx} {
             SetField hir $e value [core::ir::literalValue [list const {*}$literal]]
         }
         ref {
-            if {[dict exists $node qualified]} {
+            set ident [hir::traits::ExternalIdent $ctx $node]
+            if {$ident ne ""} {
+                # A reference of a trait clone's body to a binding outside
+                # its function, resolved to the binding the source function's
+                # own resolution found (TRAITS.md, "Monomorphization").
+                ResolveIdent hir $e $ident $ctx
+            } elseif {[dict exists $node qualified]
+                    && [set enumId [hir::enums::lookup [lindex [dict get $node qualified] 0] [CtxNamespace $ctx]]] ne ""} {
+                # `Enum::Case` (ENUMS.md): the qualifier names an enum type,
+                # so this is a case of it, never a namespace member.
+                ResolveEnumCase hir $e $enumId [lindex [dict get $node qualified] 1] $ctx
+            } elseif {[dict exists $node qualified]} {
                 ResolveQualifiedRef hir $e [dict get $node qualified] $ctx
             } else {
                 ResolveRef hir $e [dict get $node name] [dict get $node root] $ctx
@@ -581,6 +784,11 @@ proc hir::resolve::Expr {hirVar node ctx} {
                     # The function's flag interface (FLAGS.md) is known
                     # before its body is resolved, so the body can call it.
                     hir::flags::DeclareFunction hir [dict get $hir exprs $e binding] [dict get $node value]
+                    if {[dict exists $node value nomethod]} {
+                        # The declaration's modifier, known before its body
+                        # (which may call itself) is resolved.
+                        dict set hir bindings [dict get $hir exprs $e binding] nomethod 1
+                    }
                 }
                 SetField hir $e value [Expr hir [dict get $node value] $ctx]
             } else {
@@ -593,6 +801,9 @@ proc hir::resolve::Expr {hirVar node ctx} {
         }
         block {
             set bodyScope [NewScope hir block $scope $e $e $origin]
+            if {[dict exists $node nomethod]} {
+                SetField hir $e nomethod 1
+            }
             set params {}
             set paramTypes [expr {[dict exists $node paramTypes] ? [dict get $node paramTypes]
                 : [lrepeat [llength [dict get $node params]] {}]}]
@@ -620,12 +831,44 @@ proc hir::resolve::Expr {hirVar node ctx} {
                     lappend declaredParamTypes {}
                     continue
                 }
-                if {[catch {ResolveTypeExpr $paramType [CtxNamespace $ctx]} normalized]} {
-                    hir::Diagnose hir TYPE \
+                if {[catch {ResolveTypeExpr $paramType [CtxNamespace $ctx]} normalized options]} {
+                    hir::Diagnose hir [TypeErrorKind $options TYPE] \
                         [format {unknown or invalid type %s for parameter "%s": %s} [ShowTypeExpr $paramType] $name $normalized] $e
+                    lappend declaredParamTypes {}
+                } elseif {[hir::types::MentionedContextTrait $normalized] ne ""} {
+                    # A context trait (CONTEXT-TRAITS.md) is not a value type:
+                    # only a context parameter may have one.
+                    hir::DiagnoseAt hir CONTEXT-TRAIT-POSITION \
+                        [hir::types::ContextTraitPositionMessage [hir::types::MentionedContextTrait $normalized] \
+                            "the type of the ordinary parameter \"$name\" (write \"context $name: [ShowTypeExpr $paramType]\" in the function's context section)"] \
+                        $e $paramOrigin
                     lappend declaredParamTypes {}
                 } else {
                     lappend declaredParamTypes $normalized
+                }
+            }
+            set head [hir::traits::CloneHead $ctx $node]
+            if {$head ne ""} {
+                # The block of a trait clone (TRAITS.md, "Monomorphization"):
+                # each trait parameter takes its witness type -- the
+                # representation it has -- and records the view it is.
+                dict for {i witness} [dict get $head params] {
+                    if {[lindex $declaredParamTypes $i] eq {}} {
+                        # An untyped parameter given an affine argument
+                        # (AFFINE-VALUES.md, "Generic callables"): the clone
+                        # declares it with the argument's type.
+                        lset declaredParamTypes $i $witness
+                        continue
+                    }
+                    set view [hir::types::MakeView [lindex [lindex $declaredParamTypes $i] 1] $witness]
+                    dict set hir bindings [lindex $params $i] view $view
+                    lset declaredParamTypes $i $witness
+                }
+                SetField hir $e traitClone [dict get $head key]
+                if {[dict get $head selection] ne {}} {
+                    # The installed contexts this clone's context-trait
+                    # operations call (CONTEXT-TRAITS.md): {TRAIT WITNESS ...}.
+                    SetField hir $e contextClone [dict get $head selection]
                 }
             }
             # The flag section (FLAGS.md): the last parameters, one bool
@@ -634,7 +877,11 @@ proc hir::resolve::Expr {hirVar node ctx} {
             lappend params {*}$flagBindings
             lappend declaredParamTypes {*}$flagTypes
             SetField hir $e flags [lmap flag [expr {[dict exists $node flags] ? [dict get $node flags] : {}}] {lindex $flag 0}]
-            set body [dict get $node body]
+            # The context section (CONTEXTS.md): not parameters. Each entry
+            # is an ordinary local of the body, bound first, to the installed
+            # context of its type (hir::contexts::DeclareParams).
+            set body [concat [hir::contexts::DeclareParams hir $e $node $bodyScope [CtxNamespace $ctx]] \
+                [dict get $node body]]
             NoteBody hir $bodyScope $body
             AddClosure hir $scope $e
             SetField hir $e bodyScope $bodyScope
@@ -644,31 +891,53 @@ proc hir::resolve::Expr {hirVar node ctx} {
             SetField hir $e staticRefs {}
             set declared [expr {[dict exists $node declaredResult] ? [dict get $node declaredResult] : {}}]
             if {$declared ne {}} {
-                if {[catch {ResolveTypeExpr $declared [CtxNamespace $ctx]} normalized]} {
-                    hir::Diagnose hir TYPE [format {unknown or invalid result type %s: %s} [ShowTypeExpr $declared] $normalized] $e
+                if {[catch {ResolveTypeExpr $declared [CtxNamespace $ctx]} normalized options]} {
+                    hir::Diagnose hir [TypeErrorKind $options TYPE] [format {unknown or invalid result type %s: %s} [ShowTypeExpr $declared] $normalized] $e
+                    set declared {}
+                } elseif {[hir::types::MentionedContextTrait $normalized] ne ""} {
+                    hir::Diagnose hir CONTEXT-TRAIT-POSITION \
+                        [hir::types::ContextTraitPositionMessage [hir::types::MentionedContextTrait $normalized] "a function's result type"] $e
                     set declared {}
                 } else {
                     set declared $normalized
                 }
             }
+            set resultWitness [hir::traits::ResultOverride $ctx $node $head]
+            if {$resultWitness ne ""} {
+                # A declared trait result: the witness the plan proved it has.
+                SetField hir $e traitResult $declared
+                set declared [expr {$resultWitness eq "-" ? {} : $resultWitness}]
+            }
             SetField hir $e declaredResult $declared
             SetField hir $e resultType ""
+            # A declared coroutine resume protocol (`resume T`,
+            # COROUTINES.md): a struct type, the one message every yield of
+            # the function's coroutine evaluates to (hir/coroutines.tcl).
+            SetField hir $e declaredResume [ResolveResume hir $e $node $ctx]
+            # A proof contract (REFINEMENT-VALUES.md), validated against the
+            # resolved parameters and result: the generic metadata every
+            # consumer reads (hir/refine.tcl), never a predicate's name.
+            SetField hir $e proofs [ResolveProofs hir $e $node $params $declaredParamTypes $declared $ctx]
             set declaredErrorPairs [expr {[dict exists $node declaredErrors] ? [dict get $node declaredErrors] : {}}]
             set errorNames {}
             set seenErrors [dict create]
             foreach pair $declaredErrorPairs {
-                lassign $pair errName errSpan
+                lassign $pair spelling errSpan
+                # The canonical identity the spelling denotes in this code's
+                # namespace (hir::errordecls::resolve): identities, never
+                # short names, are what a contract holds and compares.
+                set errName [hir::errordecls::resolve $spelling [CtxNamespace $ctx]]
+                if {$errName eq ""} {
+                    hir::Diagnose hir UNDECLARED-ERROR \
+                        [hir::errordecls::unknownMessage $spelling [CtxNamespace $ctx]] $e
+                    continue
+                }
                 if {[dict exists $seenErrors $errName]} {
                     hir::Diagnose hir DUPLICATE \
                         "duplicate error \"$errName\" in the same function's \"errors\" declaration" $e
                     continue
                 }
                 dict set seenErrors $errName 1
-                if {![hir::errordecls::isDeclared $errName]} {
-                    hir::Diagnose hir UNDECLARED-ERROR \
-                        "unknown error \"$errName\": no \"error $errName\" declaration is visible" $e
-                    continue
-                }
                 lappend errorNames $errName
             }
             set errorNames [lsort -unique $errorNames]
@@ -676,14 +945,42 @@ proc hir::resolve::Expr {hirVar node ctx} {
             set inner [dict create scope $bodyScope callable $e loop "" errors $errorNames \
                 blocks [concat [dict get $ctx blocks] [list [list $e $bodyScope]]] \
                 namespace [CtxNamespace $ctx]]
+            foreach field {traitContext clone} {
+                if {[dict exists $ctx $field]} {
+                    dict set inner $field [dict get $ctx $field]
+                }
+            }
             SetField hir $e body [Sequence hir $body $inner]
         }
         call {
             set written [dict get $node callee]
             set candidates {}
-            if {[dict exists $node method]} {
+            set hidden {}
+            set planned [hir::traits::CallAction $ctx $node]
+            if {$planned ne "" && $planned ne "field"} {
+                # A call the trait plan rewrites (TRAITS.md): a trait
+                # operation to its implementation, a call of a trait-
+                # polymorphic function to its clone for the call's witnesses.
+                ResolvePlannedCall hir $e $node $planned $ctx
+                if {[lindex $planned 0] ne "unreachable"} {
+                    # (The placeholder of never-executed code takes nothing,
+                    # flags included.)
+                    hir::flags::ResolveCall hir $e $node $ctx
+                }
+                SetField hir $e target ""
+                SetField hir $e known ""
+                return $e
+            }
+            if {[dict exists $node method] && $planned ne "field"} {
                 set candidates [MethodCandidates hir $scope [dict get $written name] $ctx \
-                    [expr {[llength [dict get $node args]] + 1}]]
+                    [expr {[llength [dict get $node args]] + 1}] hidden]
+            }
+            if {[dict exists $node written]} {
+                # How the call was spelled, and the namespace of the code it
+                # is written in (whose imports the method spelling would
+                # consult): diagnostics' provenance, recorded in every
+                # compilation mode and read by no analysis.
+                SetField hir $e written [dict create form [dict get $node written] ns [CtxNamespace $ctx]]
             }
             if {$candidates ne ""} {
                 # Method-call sugar (METHOD-SUGAR.md): `receiver.name(args)`
@@ -713,7 +1010,25 @@ proc hir::resolve::Expr {hirVar node ctx} {
             } else {
                 SetField hir $e callee [Expr hir $written $ctx]
                 SetField hir $e args [Sequence hir [dict get $node args] $ctx]
-                if {[dict exists $node method]} {
+                if {![dict exists $node method]} {
+                    # `step(m)` on a coroutine handle (COROUTINES.md) is the
+                    # explicit resume operation, not a call of a function
+                    # value: the handle becomes its first argument.
+                    CoroutineResume hir $e $ctx
+                }
+                if {[dict exists $node method] && $hidden ne ""} {
+                    # The only function(s) of that name visible are declared
+                    # nomethod (WARNINGS-METHOD-ELIGIBLE.md): method syntax
+                    # never denotes one. A resolution diagnostic, like an
+                    # unbound name; the call stays the call of a field value
+                    # (never a call of the function), so a -strict 0 program
+                    # that keeps the diagnostic fails at run time as well.
+                    set shown [join [lmap h $hidden {string cat ` $h `}] {, }]
+                    hir::DiagnoseAt hir NOMETHOD-CALL [::format {%s %s declared nomethod and cannot be called with method syntax; call %s as %s(receiver, ...)} \
+                        $shown [expr {[llength $hidden] == 1 ? "is" : "are"}] \
+                        [expr {[llength $hidden] == 1 ? "it" : "one of them"}] [lindex $hidden 0]] \
+                        $e [dict get $written nameOrigin]
+                } elseif {[dict exists $node method]} {
                     # No function `name` is visible: this is the call of a
                     # field value it has always been. Only diagnostics need
                     # to know it was written as a method call.
@@ -898,14 +1213,53 @@ proc hir::resolve::Expr {hirVar node ctx} {
             SetField hir $e value [Expr hir [dict get $node value] $ctx]
         }
         fail {
-            set name [dict get $node name]
+            # The error's canonical identity in this code's namespace
+            # (hir::errordecls::resolve); an unknown spelling stays as
+            # written, diagnosed below.
+            set spelling [dict get $node name]
+            set name [hir::errordecls::resolve $spelling [CtxNamespace $ctx]]
+            set known [expr {$name ne ""}]
+            if {!$known} {
+                set name $spelling
+            }
             SetField hir $e name $name
-            if {![hir::errordecls::isDeclared $name]} {
+            if {[dict exists $node static]} {
+                # The reified failure of a rejected static site
+                # (hir/static.tcl): provenance, never semantics.
+                SetField hir $e static [dict get $node static]
+            }
+            # The payload (ERROR-PAYLOADS.md) is evaluated before the error is
+            # raised: resolved first, in the enclosing scope.
+            set value ""
+            if {[dict exists $node value] && [dict get $node value] ne ""} {
+                set value [Expr hir [dict get $node value] $ctx]
+            }
+            SetField hir $e value $value
+            if {!$known} {
                 hir::Diagnose hir UNDECLARED-ERROR \
-                    "unknown error \"$name\": no \"error $name\" declaration is visible" $e
+                    [hir::errordecls::unknownMessage $spelling [CtxNamespace $ctx]] $e
+            } elseif {$name ni [dict get $ctx errors] && [dict exists $node static]} {
+                # Nobody wrote this `fail`: the site's body was rejected, and
+                # its completion is the error, where the enclosing code must
+                # handle or admit it like any other (STATIC-COMPILE.md).
+                set static [dict get $node static]
+                set remedy [expr {[dict get $ctx callable] eq ""
+                    ? "a program's top level admits no error: write the block in a function that declares \"errors $name\" and handle the error where it is called"
+                    : "handle it, or declare \"errors $name\" on the enclosing function"}]
+                hir::Diagnose hir UNHANDLED-ERROR \
+                    "this \"static [dict get $static operation]:\" block's body was rejected ([dict get $static kind]), so the block completes with the error \"$name\", which is not admitted here: $remedy" $e
             } elseif {$name ni [dict get $ctx errors]} {
                 hir::Diagnose hir UNHANDLED-ERROR \
-                    "\"fail $name\" is not admitted here: the enclosing function does not declare \"errors $name\"" $e
+                    "\"fail $spelling\" is not admitted here: the enclosing function does not declare \"errors $spelling\"" $e
+            }
+            if {$known} {
+                if {[hir::errordecls::hasPayload $name] && $value eq ""} {
+                    hir::Diagnose hir MISSING-ERROR-PAYLOAD \
+                        "error \"$name\" carries a payload, which \"fail $spelling\" must construct: write \"fail $spelling \{[join [lmap f [hir::errordecls::fieldNames $name] {string cat $f {: ...}}] {, }]\}\" (the error's name alone is not its payload)" $e
+                } elseif {![hir::errordecls::hasPayload $name] && $value ne ""} {
+                    hir::Diagnose hir UNEXPECTED-ERROR-PAYLOAD \
+                        "error \"$name\" declares no payload: write \"fail $spelling\" (to give it one, declare its fields: \"error [hir::errordecls::shortName $name]:\" followed by \"field: Type\" lines)" $e
+                }
             }
         }
         handle {
@@ -917,36 +1271,147 @@ proc hir::resolve::Expr {hirVar node ctx} {
             set names {}
             set scopes {}
             set bodies {}
+            set payloads {}
             set seen [dict create]
+            set index 0
             foreach handler [dict get $node handlers] {
-                set name [dict get $handler name]
+                incr index
+                # Selection is by canonical identity (hir::errordecls::
+                # resolve): `on NotFound` inside module http and `on
+                # http::NotFound` outside it are one handler of one error,
+                # `on cache::NotFound` another.
+                set spelling [dict get $handler name]
+                set name [hir::errordecls::resolve $spelling [CtxNamespace $ctx]]
+                set known [expr {$name ne ""}]
+                if {!$known} {
+                    set name $spelling
+                }
                 set body [dict get $handler body]
                 if {[dict exists $seen $name]} {
                     hir::Diagnose hir DUPLICATE \
-                        "duplicate \"on $name\" handler in the same handled call" $e
+                        "duplicate \"on $spelling\" handler in the same handled call (error \"$name\" is already handled)" $e
                     continue
                 }
                 dict set seen $name 1
-                if {![hir::errordecls::isDeclared $name]} {
+                if {!$known} {
                     hir::Diagnose hir UNDECLARED-ERROR \
-                        "unknown error \"$name\": no \"error $name\" declaration is visible" $e
+                        [hir::errordecls::unknownMessage $spelling [CtxNamespace $ctx]] $e
                 }
                 set branch [NewScope hir branch $scope \
                     [dict get $hir scopes $scope invocation] $e [dict get $handler origin]]
                 NoteBody hir $branch $body
+                # What the handler receives of the selected error's payload
+                # (ERROR-PAYLOADS.md): a binding of the handler's own scope,
+                # established before its body -- the name written, or a
+                # destructuring's hygienic temporary (whose projection binds
+                # open the body). Selection is the error name alone. An
+                # ignored payload that owns affine values gets a hidden
+                # binding, so it is released by the ordinary rules
+                # (hir/affine.tcl) -- never left to a collector.
+                set payload [expr {[dict exists $handler payload] ? [dict get $handler payload] : ""}]
+                set binding ""
+                if {$payload ne ""} {
+                    set binding [NewBinding hir [dict get $payload name] param $branch [dict get $payload origin]]
+                    if {$known && ![hir::errordecls::hasPayload $name]} {
+                        hir::DiagnoseAt hir UNEXPECTED-ERROR-PAYLOAD \
+                            "error \"$name\" declares no payload: there is nothing to bind (write \"on $spelling:\")" \
+                            $e [dict get $payload origin]
+                    }
+                } elseif {[hir::errordecls::hasPayload $name]
+                        && [hir::types::IsAffine [hir::errordecls::payloadType $name]]} {
+                    set binding [NewBinding hir "payload#$e#$index" param $branch [dict get $handler origin]]
+                }
                 lappend names $name
                 lappend scopes $branch
+                lappend payloads $binding
                 lappend bodies [Sequence hir $body [dict replace $ctx scope $branch]]
             }
             SetField hir $e handlerNames $names
             SetField hir $e handlerScopes $scopes
             SetField hir $e handlerBodies $bodies
+            SetField hir $e handlerPayloads $payloads
         }
         default {
             core::malformed "unknown syntax node kind \"$kind\"" $node
         }
     }
     return $e
+}
+
+# The resolved `resume TYPE` clause of block syntax NODE (resolved as ExprId
+# E), or "" (COROUTINES.md). The resume message of a first-milestone
+# coroutine is one struct value of a declared struct type: no scalar, List or
+# function protocol (COROUTINE-RESUME-TYPE), so a later tagged union of
+# struct cases extends it rather than replacing it.
+proc hir::resolve::ResolveResume {hirVar e node ctx} {
+    upvar 1 $hirVar hir
+    if {![dict exists $node resume]} {
+        return ""
+    }
+    lassign [dict get $node resume] typeExpr origin
+    if {[catch {ResolveTypeExpr $typeExpr [CtxNamespace $ctx]} type options]} {
+        hir::DiagnoseAt hir [TypeErrorKind $options TYPE] \
+            [format {unknown or invalid resume type %s: %s} [ShowTypeExpr $typeExpr] $type] $e $origin
+        return ""
+    }
+    if {[lindex $type 0] ne "nstruct"} {
+        hir::DiagnoseAt hir COROUTINE-RESUME-TYPE \
+            [format {the resume message type must be a declared struct type, not %s: a coroutine is resumed with one structured message (put several values in the fields of a struct, e.g. "struct Input:" with one field per value)} \
+                [ShowTypeExpr $typeExpr]] $e $origin
+        return ""
+    }
+    return $type
+}
+
+# 1 if binding B holds a coroutine handle by construction: it is bound to the
+# result of coroutine#create (surface/lower.tcl's CoroutineBind), or to a
+# reference of another such binding (a move, `next = step`).
+proc hir::resolve::IsCoroutineBinding {hirVar b {seen {}}} {
+    upvar 1 $hirVar hir
+    if {$b eq "" || $b in $seen || ![dict exists $hir bindings $b]} {
+        return 0
+    }
+    set by [dict get $hir bindings $b declaredBy]
+    if {$by eq "" || ![dict exists $hir exprs $by] || [dict get $hir exprs $by kind] ne "bind"} {
+        return 0
+    }
+    if {![dict exists $hir exprs $by value] || [dict get $hir exprs $by value] eq ""} {
+        return 0
+    }
+    set value [dict get $hir exprs [dict get $hir exprs $by value]]
+    switch -- [dict get $value kind] {
+        ref {
+            return [IsCoroutineBinding hir [dict get $value binding] [concat $seen [list $b]]]
+        }
+        call {
+            set callee [dict get $hir exprs [dict get $value callee]]
+            if {[dict get $callee kind] ne "ref" || [dict get $callee binding] eq ""} {
+                return 0
+            }
+            set binding [dict get $hir bindings [dict get $callee binding]]
+            return [expr {[dict get $binding kind] eq "root"
+                && [dict get $binding name] eq [core::coroutines::createNative]}]
+        }
+    }
+    return 0
+}
+
+# Call E, already resolved as the call of its written callee: when that is a
+# reference to a coroutine handle (IsCoroutineBinding), the call is the
+# resume operation `coroutine#resume(handle, ARGS...)` (COROUTINES.md) and is
+# rewritten to say so -- the handle becomes the first argument of the internal
+# root native, the written arguments follow.
+proc hir::resolve::CoroutineResume {hirVar e ctx} {
+    upvar 1 $hirVar hir
+    set callee [dict get $hir exprs $e callee]
+    set node [dict get $hir exprs $callee]
+    if {[dict get $node kind] ne "ref" || ![IsCoroutineBinding hir [dict get $node binding]]} {
+        return
+    }
+    set origin [dict get $node origin]
+    set native [Expr hir [hir::syntax::rootRef $origin [core::coroutines::resumeNative]] $ctx]
+    SetField hir $e callee $native
+    SetField hir $e args [concat [list $callee] [dict get $hir exprs $e args]]
 }
 
 # The module namespace ("" for the entry program) the code of CTX is in:
@@ -1049,6 +1514,38 @@ proc hir::resolve::ResolveStruct {hirVar e node ctx} {
             }
         }
     }
+    if {[dict exists $node payloadOf]} {
+        # The payload of `fail NAME {...}` (ERROR-PAYLOADS.md): an anonymous
+        # struct value checked exactly as a named construction is, against
+        # the error's declared payload fields -- every field once, none
+        # undeclared (hir::range::VerifyStruct proves each value admissible
+        # for its declared type). A payload-free or unknown error has no
+        # fields to check against (the fail itself is diagnosed).
+        # The canonical identity the `fail` spelling denotes here (the fail
+        # node resolves it the same way); an unknown one has no fields.
+        set errorName [hir::errordecls::resolve [dict get $node payloadOf] $ns]
+        if {$errorName eq ""} {
+            set errorName [dict get $node payloadOf]
+        }
+        SetField hir $e payloadOf $errorName
+        if {[hir::errordecls::hasPayload $errorName]} {
+            set declaredNames [hir::errordecls::fieldNames $errorName]
+            set reported {}
+            foreach name $names origin $fieldOrigins {
+                if {$name ni $declaredNames && $name ni $reported} {
+                    lappend reported $name
+                    hir::DiagnoseAt hir UNKNOWN-FIELD \
+                        "the payload of error $errorName has no field \"$name\" (declared fields: [join $declaredNames {, }])" $e $origin
+                }
+            }
+            foreach declared $declaredNames {
+                if {$declared ni $names} {
+                    hir::Diagnose hir MISSING-FIELD \
+                        "the payload of error $errorName is missing field \"$declared\" (every declared field must be given exactly once; there are no defaults)" $e
+                }
+            }
+        }
+    }
     SetField hir $e named $named
     if {$denied} {
         # Read by hir::range::VerifyStruct, which must not prove (or word a
@@ -1068,10 +1565,161 @@ proc hir::resolve::ResolveStruct {hirVar e node ctx} {
 proc hir::resolve::Sequence {hirVar nodes ctx} {
     upvar 1 $hirVar hir
     set ids {}
+    set planned [hir::traits::Planning]
     foreach node $nodes {
+        if {$planned && [dict exists $node sid]} {
+            # A trait program's monomorphization plan (TRAITS.md): a trait-
+            # polymorphic declaration (and an alias of one) is replaced by its
+            # clones, each placed before the first top-level statement that
+            # needs it.
+            if {[hir::traits::Dropped [dict get $node sid]]} {
+                continue
+            }
+            foreach key [hir::traits::PlacedBefore [dict get $node sid]] {
+                lappend ids [ResolveClone hir $key $ctx]
+            }
+        }
         lappend ids [Expr hir $node $ctx]
     }
     return $ids
+}
+
+# Resolves trait clone KEY (hir::traits::Plan) as a function bound in the
+# scope of CTX: the source function's own block syntax, resolved with its
+# own namespace, its trait parameters typed by the clone's witnesses, every
+# reference outside the function resolved to the binding the source
+# function's resolution found, and every call the plan rewrites rewritten for
+# this clone. Returns the bind's ExprId.
+proc hir::resolve::ResolveClone {hirVar key ctx} {
+    upvar 1 $hirVar hir
+    set clone [hir::traits::CloneRecord $key]
+    set node [dict get $clone node]
+    set scope [dict get $ctx scope]
+    set origin [dict get $node origin]
+    set e [hir::NewId hir expr]
+    dict set hir exprs $e [dict create id $e kind bind origin $origin scope $scope type "" reachable 1]
+    SetField hir $e name [dict get $clone name]
+    Establish hir $e $scope [dict get $clone name] $origin
+    set b [dict get $hir exprs $e binding]
+    dict set hir bindings $b traitClone $key
+    hir::traits::NoteCloneBinding $key $b
+    hir::flags::DeclareFunction hir $b [dict get $node value]
+    if {[dict exists $node value nomethod]} {
+        dict set hir bindings $b nomethod 1
+    }
+    set inner [dict replace $ctx namespace [dict get $clone namespace] traitContext $key \
+        clone [dict get $clone function] cloneHead [dict create key $key sid [dict get $node value sid] \
+            params [dict get $clone params] result [dict get $clone result] \
+            selection [dict get $clone selection]]]
+    SetField hir $e value [Expr hir [dict get $node value] $inner]
+    return $e
+}
+
+# Resolves the already-created reference expression E to the binding IDENT
+# names (hir::traits's location-independent identities: {root NAME},
+# {native QUALIFIED}, {module NS NAME}, {entry NAME}, {clone KEY},
+# {local NAME}).
+proc hir::resolve::ResolveIdent {hirVar e ident ctx} {
+    upvar 1 $hirVar hir
+    switch -- [lindex $ident 0] {
+        root - native {
+            ResolveRef hir $e [lindex $ident 1] 1 $ctx
+        }
+        local {
+            ResolveRef hir $e [lindex $ident 1] 0 $ctx
+        }
+        module {
+            ResolveQualifiedRef hir $e [lrange $ident 1 2] $ctx
+        }
+        entry - clone {
+            if {[lindex $ident 0] eq "entry"} {
+                set top [dict get $hir top]
+                set name [lindex $ident 1]
+                if {![dict exists $hir scopes $top names $name]} {
+                    core::malformed "trait plan: entry-program binding \"$name\" is not established here" [list ref $name]
+                }
+                set b [dict get $hir scopes $top names $name]
+            } else {
+                set b [hir::traits::CloneBinding [lindex $ident 1]]
+            }
+            SetField hir $e name [dict get $hir bindings $b name]
+            SetField hir $e binding $b
+            SetField hir $e init yes
+            hir::flags::NoteRef hir $e
+            Capture hir $ctx [dict get $hir bindings $b scope] $b
+        }
+        default {
+            error "hir::resolve::ResolveIdent: unknown identity $ident"
+        }
+    }
+}
+
+# Resolves call E (syntax NODE) as the trait plan's ACTION says: {redirect
+# KEY} calls clone KEY, {trait IDENT ...} the implementation IDENT names, the
+# receiver of a method-syntax call becoming the first argument; {context
+# OPERATION ?KEY?} the selected context's implementation of a context-trait
+# operation (or, with KEY, that implementation's own clone), with the written
+# arguments only -- the context-trait binding that was the receiver is no
+# value and is not evaluated (CONTEXT-TRAITS.md); {unreachable} code no
+# installed context reaches, never executed: the internal native
+# context#unreachable, with no arguments.
+proc hir::resolve::ResolvePlannedCall {hirVar e node action ctx} {
+    upvar 1 $hirVar hir
+    set written [dict get $node callee]
+    if {[lindex $action 0] in {context unreachable}} {
+        set origin [expr {[dict exists $node method] ? [dict get $written nameOrigin] : [dict get $written origin]}]
+        set c [hir::NewId hir expr]
+        dict set hir exprs $c [dict create id $c kind ref origin $origin scope [dict get $ctx scope] type "" reachable 1]
+        if {[lindex $action 0] eq "unreachable"} {
+            ResolveRef hir $c [hir::contexts::UnreachableNative] 1 $ctx
+            SetField hir $e callee $c
+            SetField hir $e args {}
+            return
+        }
+        set operation [lindex $action 1]
+        if {[llength $action] > 2} {
+            ResolveIdent hir $c [list clone [lindex $action 2]] $ctx
+        } else {
+            ResolveIdent hir $c [dict get $operation impl] $ctx
+        }
+        SetField hir $e traitImpl $operation
+        SetField hir $e callee $c
+        SetField hir $e args [Sequence hir [dict get $node args] $ctx]
+        return
+    }
+    if {[dict exists $node written]} {
+        SetField hir $e written [dict create form [dict get $node written] ns [CtxNamespace $ctx]]
+    }
+    if {[dict exists $node method]} {
+        set calleeOrigin [dict get $written nameOrigin]
+        set argNodes [concat [list [dict get $written receiver]] [dict get $node args]]
+    } else {
+        set calleeOrigin [dict get $written origin]
+        set argNodes [dict get $node args]
+    }
+    set c [hir::NewId hir expr]
+    dict set hir exprs $c [dict create id $c kind ref origin $calleeOrigin scope [dict get $ctx scope] type "" reachable 1]
+    switch -- [lindex $action 0] {
+        redirect {
+            ResolveIdent hir $c [list clone [lindex $action 1]] $ctx
+        }
+        trait {
+            ResolveIdent hir $c [dict get [lindex $action 1] impl] $ctx
+            SetField hir $e traitImpl [lindex $action 1]
+        }
+        method {
+            # A method-syntax call in a clone: the function the source
+            # function's own resolution chose, whatever is visible where the
+            # clone is placed.
+            ResolveIdent hir $c [lindex $action 1] $ctx
+        }
+    }
+    if {[dict exists $node method]} {
+        SetField hir $e method [dict create name [dict get $written name] \
+            nameOrigin [dict get $written nameOrigin] ns [CtxNamespace $ctx]]
+    }
+    SetField hir $e callee $c
+    SetField hir $e args [Sequence hir $argNodes $ctx]
 }
 
 # Resolves module-qualified reference E (a {NAMESPACE NAME} pair) directly
@@ -1086,8 +1734,8 @@ proc hir::resolve::Sequence {hirVar nodes ctx} {
 # NAMESPACE or NAME (no local scope is ever consulted at all) -- and,
 # unlike the raw pre-resolution -native-body substitution the native backend
 # once did on core IR text (NATIVE-URI-ESCAPE.md; removed by
-# DIRECT-HIR-NATIVE-PATH.md -- native::prepareHir now attaches native
-# implementations to already resolved HIR), this runs as part of
+# DIRECT-HIR-NATIVE-PATH.md, and the module-native bridge that replaced
+# it by REFINEMENT-VALUES.md), this runs as part of
 # hir::resolve's own ordinary walk, after full lexical resolution of
 # everything reachable so far.
 #
@@ -1145,6 +1793,56 @@ proc hir::resolve::ResolveQualifiedRef {hirVar e pair ctx} {
     Capture hir $ctx [dict get $hir bindings $b scope] $b
 }
 
+# Resolves E, written `QUALIFIER::CASE` where QUALIFIER denotes the enum ID
+# (hir::enums::lookup, from the code's own namespace: the visibility of any
+# nominal type), to the case CASE of ID (ENUMS.md). Type-qualified case
+# resolution is not a namespace lookup: QUALIFIER was resolved as a type,
+# and CASE is looked up among ID's declared cases only -- never in a module,
+# a lexical scope or another enum. A case value is a constant: E becomes the
+# `const` node of the value {enum ID CASE}, whose type is exactly {enum ID}
+# and which keeps both identities through every check and into each
+# backend. An unknown case is UNKNOWN-ENUM-CASE, with the closest declared
+# spellings suggested.
+proc hir::resolve::ResolveEnumCase {hirVar e id case ctx} {
+    upvar 1 $hirVar hir
+    if {![hir::enums::hasCase $id $case]} {
+        # Typed as never (an unbound name is too): nothing downstream
+        # reasons about a value that does not exist.
+        SetField hir $e name "${id}::$case"
+        SetField hir $e binding ""
+        SetField hir $e init yes
+        hir::Diagnose hir UNKNOWN-ENUM-CASE [hir::enums::UnknownCaseMessage $id $case] $e
+        return
+    }
+    dict set hir exprs $e kind const
+    set literal [list enum [list $id $case]]
+    SetField hir $e literal $literal
+    SetField hir $e value [core::ir::literalValue [list const {*}$literal]]
+}
+
+# The hint an UNBOUND diagnostic for the bare NAME adds when NAME is the
+# spelling of an enum type or of an enum's case (ENUMS.md): a case is never
+# injected into its surroundings, so it is written through its enum's type
+# name; and a type name is not a value.
+proc hir::resolve::EnumHint {name ns} {
+    set id [hir::enums::lookup $name $ns]
+    if {$id ne ""} {
+        return [format {: "%s" is an enum type, not a value; a case of it is written %s::CASE (its cases: %s)} \
+            $name $name [join [hir::enums::cases $id] {, }]]
+    }
+    set owners {}
+    foreach id [lsort [dict keys $::hir::enums::registry]] {
+        if {[hir::enums::hasCase $id $name]} {
+            lappend owners "${id}::$name"
+        }
+    }
+    if {$owners ne ""} {
+        return [format {: an enum case is never visible by its bare name; write it qualified by its enum's type, e.g. %s} \
+            [join $owners { or }]]
+    }
+    return ""
+}
+
 # 1 if NAME is a registered native (a root native of this compilation).
 proc hir::resolve::NativeNamed {name} {
     return [core::native::exists $name]
@@ -1180,6 +1878,8 @@ proc hir::resolve::ResolveRef {hirVar e name root ctx} {
         set message "unbound name \"$name\""
         if {!$root && [DeclaredLater hir $scope $name]} {
             append message ": \"$name\" is declared later; forward references are not allowed (a binding is visible only after it is established)"
+        } elseif {!$root} {
+            append message [EnumHint $name [CtxNamespace $ctx]]
         }
         hir::Diagnose hir UNBOUND $message $e
         return

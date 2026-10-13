@@ -20,9 +20,18 @@
 #   eN bind BINDING NAME
 #   eN block SCOPE (PARAMS) captures (BINDINGS) ?staticRefs (BINDINGS)?
 #                                        staticRefs (hir::isModuleBinding)
-#                                        omitted when empty
+#                                        omitted when empty; then ?nomethod?,
+#                                        ?declares TYPE?, ?proves BINDING
+#                                        NAME: TYPE? (a proof contract,
+#                                        REFINEMENT-VALUES.md), ?errors ...?
+#                                        and ?contexts (DIRECT) requires
+#                                        (REQUIRED)? -- the block's direct and
+#                                        transitive context requirements
+#                                        (CONTEXTS.md), omitted when empty
 #   eN call TARGET                       native(NAME), block(eN) or generic;
-#                                        "= true"/"= false" when decided
+#                                        "= true"/"= false" when decided;
+#                                        "installs ID" on a verified context
+#                                        installation (CONTEXTS.md)
 #   eN if                                followed by "then SCOPE ..." and
 #                                        "else SCOPE ..." lines with the
 #                                        refinements proven on entry
@@ -40,7 +49,18 @@
 #   eN ok / eN error
 #   eN struct (anon|ID) (FIELD, ...)     a struct value/construction; one
 #                                        child line per field value, in
-#                                        written order (STRUCTS.md)
+#                                        written order (STRUCTS.md);
+#                                        payload(NAME) for the payload of
+#                                        `fail NAME {...}` (ERROR-PAYLOADS.md)
+#   eN fail NAME ?static=OP:KIND?        the payload, if any, its child;
+#                                        static=OP:KIND marks the reified
+#                                        failure of a rejected `static OP:`
+#                                        block and the diagnostic kind it
+#                                        reifies (STATIC-COMPILE.md)
+#   eN handle                            children: the call, then one "on
+#                                        NAME SCOPE ?payload (B NAME)?
+#                                        ?consumed=F,...? ?binds ...?" line
+#                                        per handler, its body indented below
 #   eN project FIELD                     a field projection; the child is
 #                                        the receiver
 #
@@ -61,8 +81,18 @@ proc hir::format {hir args} {
     foreach entry [hir::sourceTypes $hir] {
         lappend lines [hir::format::TypeDecl $entry]
     }
+    if {[dict exists $hir traits]} {
+        foreach entry [dict get $hir traits] {
+            lappend lines [hir::format::TraitDecl $entry]
+        }
+    }
+    if {[dict exists $hir traitFunctions]} {
+        dict for {name fn} [dict get $hir traitFunctions] {
+            lappend lines [hir::format::TraitFunction $name $fn]
+        }
+    }
     foreach name [hir::errorDecls $hir] {
-        lappend lines "error $name"
+        lappend lines [hir::format::ErrorDecl $hir $name]
     }
     set top [dict get $hir top]
     lappend lines [string trimright "[dict get $hir scopes $top kind] $top [hir::format::Binds $hir $top]"]
@@ -80,6 +110,22 @@ proc hir::format {hir args} {
 # `declares TYPE`/`: TYPE` text (below) resolves exactly as it did when the
 # HIR was first built, without needing the original Botlish source again.
 proc hir::format::TypeDecl {entry} {
+    if {[dict exists $entry kind] && [dict get $entry kind] eq "refined"} {
+        # A refinement type (REFINEMENT-VALUES.md): "refined type ID carrier
+        # TYPE owner NS" (NS "-" for the entry program) -- its canonical
+        # identity, its resolved carrier, and the one module that may mint
+        # it. Read back by hir::read::TypeDeclLine.
+        set owner [dict get $entry owner]
+        return "refined type [dict get $entry name] carrier [hir::types::show [dict get $entry carrier]] owner [expr {$owner eq "" ? "-" : $owner}]"
+    }
+    if {[dict exists $entry kind] && [dict get $entry kind] eq "enum"} {
+        # An enum declaration (hir/enums.tcl, ENUMS.md): "enum ID name NAME ns
+        # NS cases C1, C2, ..." (NS "-" for the entry program), the complete
+        # closed case set in declaration order. Read back by hir::read::
+        # EnumDeclLine.
+        set ns [dict get $entry namespace]
+        return "enum [dict get $entry id] name [dict get $entry name] ns [expr {$ns eq "" ? "-" : $ns}] cases [join [dict get $entry cases] {, }]"
+    }
     if {[dict exists $entry kind] && [dict get $entry kind] eq "struct"} {
         # A struct declaration (hir/structs.tcl): "struct ID name NAME ns NS
         # [opaque] fields F1: T1, F2: T2" (NS "-" for the entry program), the
@@ -92,6 +138,9 @@ proc hir::format::TypeDecl {entry} {
         }]
         set ns [dict get $entry namespace]
         set opaque [expr {[dict exists $entry opaque] && [dict get $entry opaque] ? "opaque " : ""}]
+        if {[dict exists $entry context] && [dict get $entry context]} {
+            append opaque "context "
+        }
         return "struct [dict get $entry id] name [dict get $entry name] ns [expr {$ns eq "" ? "-" : $ns}] ${opaque}fields [join $fields {, }]"
     }
     set domain [dict get $entry domain]
@@ -101,6 +150,54 @@ proc hir::format::TypeDecl {entry} {
         set domainText "exact [lindex $domain 1]"
     }
     return "type [dict get $entry name] parent [dict get $entry parent] domain $domainText"
+}
+
+# One line for error declaration NAME: "error NAME", or for an error with a
+# payload (ERROR-PAYLOADS.md, HIR's `errorPayloads`) "error NAME ns NS
+# payload F1: T1, F2: T2" -- the declared fields in declaration order with
+# their resolved types (NS "-" for the entry program). Read back by
+# hir::read::ErrorDecls.
+proc hir::format::ErrorDecl {hir name} {
+    if {![dict exists $hir errorPayloads $name]} {
+        return "error $name"
+    }
+    set entry [dict get $hir errorPayloads $name]
+    set fields [lmap {field type} [dict get $entry fields] {
+        format {%s: %s} $field [hir::types::show $type]
+    }]
+    set ns [dict get $entry namespace]
+    return "error $name ns [expr {$ns eq "" ? "-" : $ns}] payload [join $fields {, }]"
+}
+
+# One line for a trait declaration (TRAITS.md, HIR's `traits`): "trait ID
+# owner NS requires REQ ; REQ ...", each REQ "NAME(P: T, ...) -> R errors E,
+# ..." with the trait's own type spelled as its identity (NS "-" for the
+# entry program). Read back by hir::read::TraitLine.
+proc hir::format::TraitDecl {entry} {
+    set reqs {}
+    foreach r [dict get $entry requirements] {
+        set text "[dict get $r name]([join [lmap p [dict get $r params] {format {%s: %s} [dict get $p name] [hir::types::show [dict get $p type]]}] {, }])"
+        if {[dict get $r result] ne ""} {
+            append text " -> [hir::types::show [dict get $r result type]]"
+        }
+        if {[dict get $r errors] ne {}} {
+            append text " errors [join [dict get $r errors] {, }]"
+        }
+        lappend reqs $text
+    }
+    set ns [dict get $entry namespace]
+    # A context trait (CONTEXT-TRAITS.md) carries its modifier.
+    set context [expr {[dict exists $entry context] && [dict get $entry context] ? " context" : ""}]
+    return "trait [dict get $entry id]$context owner [expr {$ns eq "" ? "-" : $ns}] requires [join $reqs { ; }]"
+}
+
+# One line for a trait-polymorphic source function the monomorphized program
+# replaced by its clones (HIR's `traitFunctions`): "traitfn NAME (P: T, ...)
+# -> R clones (C, ...)" (R "-" when undeclared).
+proc hir::format::TraitFunction {name fn} {
+    set params [join [lmap {p t} [dict get $fn params] {format {%s: %s} $p [hir::types::show $t]}] {, }]
+    set result [expr {[dict get $fn result] eq "" ? "-" : [hir::types::show [dict get $fn result]]}]
+    return "traitfn $name ($params) -> $result clones ([join [lmap {c w} [dict get $fn clones] {set c}] {, }])"
 }
 
 proc hir::format::BindingLabel {hir b} {
@@ -165,15 +262,53 @@ proc hir::format::Line {hir e text indent origins linesVar {typed 1}} {
                     lappend flags deferred
                 }
             }
+            if {[hir::affine::isMove $hir $e]} {
+                # A move of an affine value (AFFINE-VALUES.md): the
+                # referenced binding is dead from here, its value owned by
+                # whatever this reference flows into.
+                lappend flags move
+            }
         }
         bind {
             if {[dict get $node duplicate]} {
                 lappend flags duplicate
             }
+            if {[hir::affine::isMoveBind $hir $e]} {
+                # The move of an affine value to a new binding: the
+                # bound-from binding is dead from here.
+                lappend flags move
+            }
+            set consumed [hir::affine::ConsumedFields $hir [dict get $node binding]]
+            if {$consumed ne {} && [dict get $node binding] ne ""} {
+                # A destructuring's temporary: the affine fields moved out of
+                # it (its release drops only the others).
+                lappend flags "consumed=[join [lsort $consumed] ,]"
+            }
         }
     }
+    lappend flags {*}[hir::mutvec::Evidence $hir $e]
     if {![dict get $node reachable]} {
         lappend flags unreachable
+    }
+    set releases [hir::affine::releasesAfter $hir $e]
+    if {$releases ne ""} {
+        # The affine values released after this statement (AFFINE-VALUES.md,
+        # COROUTINES.md "Release at the last use"): bindings dead from here,
+        # or the statement's own discarded value (its ExprId).
+        lappend flags "release=[join $releases ,]"
+    }
+    set exiting [concat {*}[hir::affine::releasesOnExit $hir $e]]
+    if {$exiting ne ""} {
+        # The affine values this exit (return, break, continue, fail)
+        # releases as it leaves their owners' scope, or abandons as pending
+        # temporaries.
+        lappend flags "exit-release=[join [lsort -dictionary $exiting] ,]"
+    }
+    set failing [hir::affine::releasesOnError $hir $e]
+    if {$failing ne ""} {
+        # The affine values released when this call propagates a declared
+        # error, per error name.
+        lappend flags "error-release=[join [lmap {name bs} $failing {string cat $name = [join $bs ,]}] {;}]"
     }
     if {$flags ne ""} {
         append line " [join $flags { }]"
@@ -216,11 +351,63 @@ proc hir::format::Expr {hir e indent origins linesVar} {
             if {[dict get $node staticRefs] ne {}} {
                 append text " staticRefs ([BindingList $hir [dict get $node staticRefs]])"
             }
+            if {[dict exists $node nomethod]} {
+                append text " nomethod"
+            }
+            if {[dict exists $node traitClone]} {
+                # A trait clone (TRAITS.md): each trait parameter's source
+                # view -- its declared type is the witness.
+                set views {}
+                foreach b [dict get $node params] {
+                    if {[dict exists $hir bindings $b view]} {
+                        lappend views "[BindingLabel $hir $b]: [lindex [dict get $hir bindings $b view] 1]"
+                    }
+                }
+                append text " clone ([join $views {, }])"
+            }
+            if {[dict exists $node contextClone]} {
+                # The installed context each context trait the clone's
+                # operations call was statically selected as
+                # (CONTEXT-TRAITS.md).
+                append text " contextclone ([join [lmap {c w} [dict get $node contextClone] {string cat $c = $w}] {, }])"
+            }
+            if {[dict exists $node traitResult]} {
+                append text " traitresult [lindex [dict get $node traitResult] 1]"
+            }
+            if {[dict exists $node requiredContexts] && [dict get $node requiredContexts] ne {}} {
+                # CONTEXTS.md: the context types the block's own region loads
+                # (its context parameters) and the ones it transitively
+                # requires through its calls (hir/contexts.tcl).
+                append text " contexts ([join [dict get $node directContexts] {, }]) requires ([join [dict get $node requiredContexts] {, }])"
+            }
             if {[dict get $node declaredResult] ne {}} {
                 append text [format { declares %s} [hir::types::show [dict get $node declaredResult]]]
             }
+            if {[dict exists $node proofs]} {
+                # The proof contract (REFINEMENT-VALUES.md): "proves BINDING
+                # NAME: TYPE" -- when a call returns true (a predicate,
+                # `declares bool`) or completes normally (a validator,
+                # `declares unit`), its argument for that parameter
+                # satisfies TYPE. The outcome is the declared result's, so
+                # hir::read derives it back from the `declares` above.
+                foreach proof [dict get $node proofs] {
+                    append text [format { proves %s: %s} [BindingLabel $hir [dict get $proof binding]] \
+                        [hir::types::show [dict get $proof fact]]]
+                }
+            }
+            if {[dict exists $node declaredResume] && [dict get $node declaredResume] ne {}} {
+                # A declared coroutine resume protocol (COROUTINES.md).
+                append text " resume [hir::types::show [dict get $node declaredResume]]"
+            }
             if {[dict get $node declaredErrors] ne {}} {
                 append text " errors [join [dict get $node declaredErrors] {, }]"
+            }
+            set effect [hir::coroutines::EffectText $hir $e]
+            if {$effect ne ""} {
+                # The function's coroutine effect (COROUTINES.md), derived
+                # (hir::check recomputes it): what its yields send and what
+                # they evaluate to.
+                append text " coroutine-effect ($effect)"
             }
             set binds [Binds $hir [dict get $node bodyScope]]
             if {$binds ne ""} {
@@ -236,6 +423,17 @@ proc hir::format::Expr {hir e indent origins linesVar} {
             switch -- [dict get $node known] {
                 1 { append text " = true" }
                 0 { append text " = false" }
+            }
+            set installs [hir::contexts::installId $hir $e]
+            if {$installs ne ""} {
+                append text " installs $installs"
+            }
+            if {[dict exists $node traitImpl]} {
+                # A trait operation resolved to its witness's implementation
+                # (TRAITS.md): an ordinary direct call, annotated.
+                set impl [dict get $node traitImpl]
+                set word [expr {[dict exists $impl context] ? "contexttrait" : "trait"}]
+                append text " $word [dict get $impl trait].[dict get $impl requirement] witness [hir::types::show [dict get $impl witness]]"
             }
             Line $hir $e $text $indent $origins lines
             Expr $hir [dict get $node callee] $inner $origins lines
@@ -340,9 +538,15 @@ proc hir::format::Expr {hir e indent origins linesVar} {
             # struct's declaration identity or `anon`, then the field names
             # in WRITTEN order (their evaluation order); one child line per
             # field value, in that order.
+            # An error's payload construction (ERROR-PAYLOADS.md) is
+            # "struct payload(NAME) (...)": anonymous, checked against error
+            # NAME's declared payload.
             set id [dict get $node structId]
-            Line $hir $e "struct [expr {[dict get $node named] && $id ne "" ? $id : "anon"}]\
-                ([join [dict get $node names] {, }])" $indent $origins lines
+            set who [expr {[dict get $node named] && $id ne "" ? $id : "anon"}]
+            if {[dict exists $node payloadOf]} {
+                set who "payload([dict get $node payloadOf])"
+            }
+            Line $hir $e "struct $who ([join [dict get $node names] {, }])" $indent $origins lines
             foreach field [dict get $node fields] {
                 Expr $hir $field $inner $origins lines
             }
@@ -352,14 +556,39 @@ proc hir::format::Expr {hir e indent origins linesVar} {
             Expr $hir [dict get $node receiver] $inner $origins lines
         }
         fail {
-            Line $hir $e "fail [dict get $node name]" $indent $origins lines
+            # "fail NAME", and the payload (ERROR-PAYLOADS.md) as its one
+            # child line, like return's value.
+            # A rejected static block's reified failure (STATIC-COMPILE.md)
+            # says so: "static=OPERATION:KIND", the diagnostic it reifies.
+            set text "fail [dict get $node name]"
+            if {[dict exists $node static]} {
+                append text " static=[dict get $node static operation]:[dict get $node static kind]"
+            }
+            Line $hir $e $text $indent $origins lines
+            if {[dict exists $node value] && [dict get $node value] ne ""} {
+                Expr $hir [dict get $node value] $inner $origins lines
+            }
         }
         handle {
             Line $hir $e handle $indent $origins lines
             Expr $hir [dict get $node call] $inner $origins lines
+            set payloads [expr {[dict exists $node handlerPayloads] ? [dict get $node handlerPayloads] : {}}]
+            set index -1
             foreach name [dict get $node handlerNames] s [dict get $node handlerScopes] \
                     body [dict get $node handlerBodies] {
+                incr index
                 set header "[string repeat {    } $inner]on $name $s"
+                set payload [lindex $payloads $index]
+                if {$payload ne ""} {
+                    # The handler's payload binding (ERROR-PAYLOADS.md): nominal
+                    # selection (on NAME), then the binding the payload is
+                    # bound to, then the body's ordinary binds.
+                    append header " payload ([BindingLabel $hir $payload])"
+                    set consumed [hir::affine::ConsumedFields $hir $payload]
+                    if {$consumed ne {}} {
+                        append header " consumed=[join [lsort $consumed] ,]"
+                    }
+                }
                 set binds [Binds $hir $s]
                 if {$binds ne ""} {
                     append header " $binds"

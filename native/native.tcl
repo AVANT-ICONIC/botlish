@@ -6,7 +6,7 @@
 # Pipeline (DIRECT-HIR-NATIVE-PATH.md):
 #
 #   source --surface--> resolved + analyzed HIR
-#       --native::prepareHir--> HIR with native implementations attached
+#       --native::prepareHir--> HIR with -strict 0 contracts recovered
 #       --native::lowered (native::lower::program, lower.tcl)--> NIR
 #       --botlish-native--> Cranelift IR --> machine code (JIT / object /
 #                                            standalone executable) --> value
@@ -24,7 +24,7 @@
 # escape, traversal and construction analyses are run once by
 # native::lower::program on that HIR. See "Analysis ownership" in
 # DIRECT-HIR-NATIVE-PATH.md. The one exception is native::prepareHir, which
-# adds a native's module implementation to the HIR and re-checks it.
+# drops a -strict 0 HIR's violated declared parameter types and re-checks it.
 #
 # The Rust driver native/target/release/botlish-native does the rest (build
 # it with `cargo build --release` in native/). Each run is one process: the
@@ -32,7 +32,7 @@
 # error comes back on standard output. Only program mode is supported: a
 # native program cannot run in, or return, a Tcl environment.
 #
-#   native::prepareHir HIR              HIR with native implementations attached
+#   native::prepareHir HIR              HIR with -strict 0 contracts recovered
 #   native::lowered HIR ?OPTIONS?       HIR -> NIR, the one HIR->NIR entry point
 #                                       (a dict: text, functions, statistics)
 #   native::evalHir HIR ?OPTIONS?       runs a program-mode HIR program
@@ -193,7 +193,14 @@ proc native::Outcome {lines} {
         }
         switch -- $tag {
             value {
-                return [lindex $line 1]
+                set value [lindex $line 1]
+                if {[string first mutvecitems $value] >= 0 || [string first mutarrayitems $value] >= 0} {
+                    # A MutableVector or MutableArray in the result
+                    # (MUTABLE-VECTOR.md, MUTABLE-ARRAY.md): the host's own
+                    # collection value of those elements.
+                    set value [HostVectors $value]
+                }
+                return $value
             }
             error {
                 lassign $line _ code message
@@ -206,6 +213,31 @@ proc native::Outcome {lines} {
         }
     }
     throw {NATIVE BUG} "native backend produced no result:\n[join $lines \n]"
+}
+
+# VALUE (a host runtime value as the native runtime renders it) with every
+# `mutvecitems ITEMS` / `mutarrayitems ITEMS` (runtime/show.rs's rendering of
+# a MutableVector / MutableArray) made a vector / array of the host runtime
+# (core/mutvec.tcl, core/mutarray.tcl).
+proc native::HostVectors {value} {
+    switch -- [lindex $value 0] {
+        mutvecitems {
+            return [core::mutvec::New [lmap item [lindex $value 1] {HostVectors $item}]]
+        }
+        mutarrayitems {
+            return [core::mutarray::New [lmap item [lindex $value 1] {HostVectors $item}]]
+        }
+        list - immutableSet {
+            return [list [lindex $value 0] [lmap item [lindex $value 1] {HostVectors $item}]]
+        }
+        struct {
+            return [list struct [lindex $value 1] [lmap item [lindex $value 2] {HostVectors $item}]]
+        }
+        result {
+            return [list result [lindex $value 1] [HostVectors [lindex $value 2]]]
+        }
+    }
+    return $value
 }
 
 proc native::evalHir {hir args} {
@@ -648,7 +680,8 @@ proc native::FormatBytes {n} {
 # result). The dict is the canonical representation (tests and tooling read
 # it); this text is derived from it, never the other way around. Shows the
 # top TOPSITES allocation sites by bytes when REPORT has a "sites" list
-# (sites mode).
+# (sites mode). Every counter is a 64-bit count: it is printed with %ld (Tcl's
+# %d truncates to 32 bits) or as a plain value.
 proc native::allocationText {report {topSites 10}} {
     set total [dict get $report total]
     set lines [list "Botlish managed heap allocation report" ""]
@@ -663,7 +696,7 @@ proc native::allocationText {report {topSites 10}} {
     foreach kind {String List MutableArray BigInt Result Block Native} {
         set k [dict get $report byKind $kind]
         if {[dict get $k allocations] == 0} continue
-        lappend lines [format "    %-8s %8d   %s" $kind [dict get $k allocations] [FormatBytes [dict get $k allocatedBytes]]]
+        lappend lines [format "    %-8s %8ld   %s" $kind [dict get $k allocations] [FormatBytes [dict get $k allocatedBytes]]]
     }
     set copies [dict get $report copies]
     lappend lines "" "copies:" "    String       [FormatBytes [dict get $copies stringBytes]]" \
@@ -677,8 +710,13 @@ proc native::allocationText {report {topSites 10}} {
         "    [dict get $static allocations] objects, [FormatBytes [dict get $static bytes]]"
     set sites [dict get $report sites]
     if {$sites ne ""} {
+        # The comparator returns a sign, never the difference: lsort
+        # -command needs a 32-bit integer, and two sites' byte counts can
+        # differ by 2 GB or more.
         set bySite [lsort -command {apply {{a b} {
-            expr {[dict get $b allocatedBytes] - [dict get $a allocatedBytes]}
+            set x [dict get $a allocatedBytes]
+            set y [dict get $b allocatedBytes]
+            expr {$y > $x ? 1 : $y < $x ? -1 : 0}
         }}} $sites]
         lappend lines "" "top allocation sites by bytes:"
         set n 0
@@ -686,7 +724,7 @@ proc native::allocationText {report {topSites 10}} {
             if {[incr n] > $topSites} break
             set loc [dict get $s location]
             set where [expr {[dict exists $loc file] ? "[dict get $loc file]:[dict get $loc line]" : "func [dict get $s func]"}]
-            lappend lines [format "    %2d. %-32s %-12s %8d allocations  %s" \
+            lappend lines [format "    %2d. %-32s %-12s %8ld allocations  %s" \
                 $n $where [dict get $s operation] [dict get $s allocations] [FormatBytes [dict get $s allocatedBytes]]]
         }
     }

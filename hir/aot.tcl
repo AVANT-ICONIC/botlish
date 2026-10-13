@@ -90,8 +90,9 @@
 #                                       whose result type is unknown
 #               UnknownValueKind        any other operand without a kind
 #                                       (e.g. a merge of different kinds)
-#               UnprovenRefinement      the kind is right but a named type
-#                                       (evidence) is not proven
+#               UnprovenRefinement      the kind is right but a named
+#                                       (validator) type a native requires
+#                                       is not proven
 #   class     semantic | representation
 #   expr      ExprId of the operand or operation the blocker is about
 #   origin    its HIR origin; location: its location dict
@@ -626,7 +627,7 @@ proc hir::aot::VisitCall {hir stateVar region e node tails statics} {
         set argKinds [lmap arg $args {hir::types::kindOf [hir::typeOf $hir $arg]}]
         if {"structural-equality" in $runtime && [llength $argKinds] == 2
                 && [lindex $argKinds 0] eq [lindex $argKinds 1]
-                && [lindex $argKinds 0] in {int str bool unit}} {
+                && [lindex $argKinds 0] in {int str bool unit enum}} {
             # Both kinds known and scalar: no structural walk is needed.
             set runtime [lsearch -all -inline -not -exact $runtime structural-equality]
             if {[lindex $argKinds 0] eq "int"} {
@@ -657,20 +658,6 @@ proc hir::aot::VisitCall {hir stateVar region e node tails statics} {
         Fact state $region [dict merge [FactOf $hir direct-call $e] \
             [dict create block $target name $name tail [expr {$e in $tails}] \
                 self [expr {$target eq $region}]]]
-        # A module-bridged native (native::prepareHir): the module function
-        # replaces only the native's implementation. Its declared parameter
-        # kinds are still checked first, under the native's name, as
-        # core::native::invoke and the native's own impl check them on the
-        # reference backends -- the module function's body may check them
-        # later under another name (length), or not at all.
-        set bridged [hir::types::BridgedNative $hir $callee]
-        if {$bridged ne "" && [dict get $node known] eq ""} {
-            foreach arg $args param [dict get [core::native::metadata $bridged] paramTypes] {
-                if {$arg ne "" && $param ne ""} {
-                    Require $hir state $region $e $arg $param TYPE $bridged
-                }
-            }
-        }
         dict update state regions regions {
             if {$target ni [dict get $regions $region callees]} {
                 dict set regions $region callees [concat [dict get $regions $region callees] [list $target]]

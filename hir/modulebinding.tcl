@@ -129,6 +129,18 @@ proc hir::modulebinding::ContextExpr {hir e stateVar} {
             }
         }
         fail {
+            if {[dict exists $node value] && [dict get $node value] ne ""} {
+                # The payload (ERROR-PAYLOADS.md) is evaluated here: a payload
+                # construction is context-free exactly when its field values
+                # are (building the payload itself reads no context).
+                set value [dict get $node value]
+                set parts [expr {[hir::kind $hir $value] eq "struct" && [dict exists [hir::node $hir $value] payloadOf]
+                    ? [dict get [hir::node $hir $value] fields] : [list $value]}]
+                set result [ContextSequence $hir $parts state]
+                if {[lindex $result 0] ne "ok"} {
+                    return $result
+                }
+            }
             return {ok}
         }
         handle {
@@ -190,7 +202,8 @@ proc hir::modulebinding::ImmutableExpr {hir e factsVar activeVar} {
     switch -- [dict get $node kind] {
         const {
             set kind [core::value::kind [dict get $node value]]
-            if {$kind in {int str bool unit UnicodeChar}} {
+            if {$kind in {int str bool unit UnicodeChar enum}} {
+                # (An enum case, ENUMS.md, is an immutable scalar value.)
                 return [list ok [list scalar $kind]]
             }
             return [list bad unknown "literal value kind $kind"]
@@ -343,7 +356,7 @@ proc hir::modulebinding::ImmutableExpr {hir e factsVar activeVar} {
             # diverges (its own body ends in a `fail`, e.g. re-raising a
             # partially-handled error) contributes no value of its own and
             # is dropped from the fold (MergeDivergentProofs) -- e.g. what
-            # lets `byte::set([...]): on BelowRange: {} on AboveRange: {}`
+            # lets `byte::set([...]): on byte::BelowRange: {} on byte::AboveRange: {}`
             # retain as a module binding (BYTE-SET.md's own listloop case
             # above is the identical idea one level up: prove every
             # reachable possibility, never pick one arbitrarily).

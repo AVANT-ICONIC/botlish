@@ -13,43 +13,6 @@
 #                   argument (any = no requirement); a call that returns
 #                   proves its arguments had these types. "" = unknown.
 #   resultType      type of every result, or any
-#   moduleFn        "" or {NAMESPACE NAME}: the native (Cranelift) backend
-#                   may use the ordinary cross-file Botlish function
-#                   NAMESPACE::NAME (surface/modules.tcl) as this native's
-#                   *executable* implementation, instead of requiring an
-#                   entry in its own op whitelist (native/lower.tcl's
-#                   `natives`) or a -native-body -- see native/prepare.tcl's
-#                   native::prepareHir. impl (run by interp/compile, and
-#                   by the reference contract check) stays authoritative for
-#                   every other backend and for any semantics -- such as
-#                   attaching evidence for an opaque refined result type --
-#                   that ordinary Botlish cannot itself express (only a
-#                   trusted native impl may do that: see core/type.tcl); the
-#                   native keeps its own registered -result-type for the
-#                   call's static type on every backend, moduleFn or not
-#                   (a call's nativeResultOverride, native/prepare.tcl), and
-#                   its own paramTypes check, under its own name, before
-#                   the module function runs (hir::aot::VisitCall, native/
-#                   lower.tcl's BridgedCheckedNative). A native's
-#                   module function sees only its own module's other
-#                   definitions and ordinary root natives; it captures
-#                   nothing from the call site (an ordinary top-level
-#                   function, no different from any other module export).
-#   nativeBody      "" or a (block PARAMS BODY...) core IR node, with
-#                   PARAMS matching arity, expressing the same operation as
-#                   impl in ordinary Botlish over other natives: an
-#                   *authoritative-for-native-compilation* implementation
-#                   the native (Cranelift) backend may use instead of
-#                   requiring an entry in its own op whitelist
-#                   (native/lower.tcl's `natives`) -- see native/prepare.tcl's
-#                   native::prepareHir. impl (run by interp/compile, and by
-#                   the reference contract check) stays authoritative for
-#                   every other backend and for any semantics -- such as
-#                   attaching evidence for an opaque refined result type --
-#                   that ordinary Botlish cannot itself express (only a
-#                   trusted native impl may do that: see core/type.tcl).
-#                   A native's body sees only other root bindings (other
-#                   natives); it captures nothing from its call site.
 #   testsType       "" or a type T: the native is a *type test*, a pure
 #                   one-argument predicate returning exactly whether its
 #                   argument is a value of T (core::type::acceptsValue).
@@ -60,12 +23,59 @@
 #                   test refines its argument to T when it returns true.
 #                   Knowing this, a compiler may decide the call from static
 #                   types or replace it with an inline membership test.
+#   nomethod        0 | 1 (default 0): the native's author declares that its
+#                   receiver spelling reads badly, so `x.name(...)` never
+#                   denotes it (WARNINGS-METHOD-ELIGIBLE.md): method sugar skips it as a
+#                   candidate, and a method-style call whose only visible
+#                   function of that name is a nomethod one is the
+#                   NOMETHOD-CALL resolution error. Ordinary calls are
+#                   unaffected, and so are its type, completion and code.
+#                   Interface metadata of the callable, like arity: no
+#                   shipped native sets it.
 #   errors          the declared errors (core::native::declareError) a call
 #                   of this native may complete with -- {} for every native
 #                   but `argv` (core/process.tcl). The impl signals one with
 #                   core::native::failDeclared, and core::native::invoke turns
 #                   that into an ordinary propagate-error completion, exactly
 #                   like a Botlish `fail NAME` (EXPLICIT-ERROR-COMPLETIONS.md).
+#   completion      0 | 1 (default 0): the impl returns a *completion*, not a
+#                   value -- normal, or the propagate-error of a program's own
+#                   declared error that Botlish code it ran to a boundary of
+#                   its own completed with (core/coroutines.tcl: a coroutine
+#                   segment). Which errors are possible is not the native's
+#                   (they are the program's): static typing charges them to
+#                   the call (hir/coroutines.tcl), and compiled code always
+#                   calls such a native through the generic call boundary.
+#   errorsFrom      "" or the index K of a callable argument whose contract's
+#                   declared errors a call of the native may complete with:
+#                   the native calls it (mutable_array::generate's factory),
+#                   and the first failing call's propagate-error is the
+#                   native's own completion. Static typing charges the
+#                   callable's contract errors to the call (hir/types.tcl's
+#                   calleeErrors); such a native is a -completion native.
+#   ownership       what the operation does, statically, with each argument
+#                   it is given (OWNERSHIP ROLES below), one role per
+#                   parameter (for a native of arity *, the roles of its
+#                   leading arguments, the last one repeating for every
+#                   further argument), or "" (every argument is `erase`). The
+#                   ownership discipline (hir/affine.tcl) reads these roles,
+#                   never a native's name, to decide whether an affine
+#                   argument moves, stays owned, or is rejected; they are
+#                   compile-time semantics only (no runtime check exists).
+#   resultLength    "" or the length of the collection the native returns,
+#                   for static analyses that track lengths and capacities
+#                   (hir/cardinality.tcl), read by registration, never by
+#                   name:
+#                     int K           the Int argument K (allocate's capacity)
+#                     list K          the length of List argument K
+#   dropForm        "" or {NAME AT}: the operation's element-dropping variant
+#                   NAME, which takes the element drop descriptor as an extra
+#                   last argument, so that the elements the operation removes,
+#                   displaces or fails to place are released by the static
+#                   drop glue (hir/mutvec.tcl writes it for an operation whose
+#                   element type is affine). AT is the argument whose static
+#                   type holds the element type (a collection), or `result`
+#                   (the call's own type, a constructor's).
 #   bounds          "" or the bounds checks behind a native's argument-
 #                   dependent errors (STDLIB-NAMESPACES.md), stated once here
 #                   so static analyses (hir/completions.tcl) read them by
@@ -103,6 +113,22 @@
 #                                     the result is a T (PARAMETERIZED-
 #                                     MUTABLEARRAY.md); a raw `mutarray`
 #                                     argument keeps the declared result
+#                     mutvec-from-list L  argument L is a List[T]: the
+#                                     result is a MutableVector[T]
+#                                     (MUTABLE-VECTOR.md)
+#                     mutvec-element V    argument V is a MutableVector[T]:
+#                                     the result is a T
+#                     mutvec-to-list V    argument V is a MutableVector[T]:
+#                                     the result is a List[T]
+#                     same A          the result has argument A's own
+#                                     static type (mutable_vector#share)
+#                     mutarray-create V   argument V is a T: the result
+#                                     is a MutableArray[T] (MUTABLE-ARRAY.md)
+#                     mutarray-from-list L  argument L is a List[T]: the
+#                                     result is a MutableArray[T]
+#                     mutarray-generate F argument F is a callable whose
+#                                     contract returns T: the result is a
+#                                     MutableArray[T]
 #                     mutarray-freeze A   argument A is a MutableArray[T]:
 #                                     the result is a List[T]; a raw
 #                                     `mutarray` argument keeps the declared
@@ -113,6 +139,10 @@
 #                                     compiling program's struct registry
 #                                     (hir/structs.tcl); the declared
 #                                     result type when ID is not declared
+#                     context-struct I  the result is a struct of the named
+#                                     declaration whose identity is argument
+#                                     I's String literal (context#load,
+#                                     core/contexts.tcl; CONTEXTS.md)
 #                     typed NAME LO HI  every element is an Int in LO..HI (a
 #                                     fixed fact about the native itself, not
 #                                     derived from this call's own arguments);
@@ -138,26 +168,61 @@
 #                                     merely assumed (see MAX_COLLECTION_LENGTH
 #                                     there)
 #
+# OWNERSHIP ROLES (-ownership; AFFINE-VALUES.md, MUTABLE-ARRAY.md). Each role
+# says what the operation does with the argument's value, so the one question
+# the ownership discipline asks of an affine argument -- does it move, stay
+# owned, or would it be duplicated or lost? -- is answered from metadata:
+#
+#   observe    read only; nothing of it is retained. An affine argument stays
+#              owned by its source, which must be an owner (a binding or a
+#              place path): a temporary is AFFINE-TEMPORARY-UNSUPPORTED.
+#   place      the receiver place, mutated in place (push, set, swap, a
+#              copy's destination, a drain step); its owner keeps owning it.
+#   move       moved once into the operation: stored in its result or in its
+#              receiver (push's element, swap's replacement, from_list's
+#              List, a consuming loop's domain).
+#   element    a List literal's element (`list`): moved into the List when
+#              the List's type is affine, else an erasure.
+#   repeat     logically duplicated: the operation places one value in many
+#              slots (create's value). An affine argument is rejected
+#              (AFFINE-DUPLICATION-UNSUPPORTED): there would be several
+#              owners. An unrestricted one is copied logically, never deeply.
+#   factory    a callable invoked once per element the operation makes
+#              (generate's factory): each call's result moves into its own
+#              slot. The callable itself is only called, never stored; an
+#              affine callable (which could be called only once) is rejected.
+#   copy-out   a container whose elements the operation reads out while it
+#              keeps owning them (at, freeze, a copy's source, a snapshot):
+#              an affine container is rejected (AFFINE-ELEMENT-COPY-OUT, or
+#              AFFINE-LIST-OPERATION-UNSUPPORTED for a List).
+#   equality   compared or hashed: an affine argument is rejected
+#              (AFFINE-EQUALITY-UNSUPPORTED).
+#   resume     a coroutine handle resumed behind its owner (consume and
+#              replace: the owner keeps owning it).
+#   message    a resume message: moved into the coroutine.
+#   release    a release the compiler wrote (coroutine#release, affine#drop):
+#              never a use to check.
+#   erase      (the default) the argument becomes an untyped value the
+#              operation may keep or copy: an affine argument is rejected
+#              (AFFINE-ERASURE-UNSUPPORTED).
+#
 # Refinement rules are flat lists of ARG-INDEX TYPE pairs, e.g. {0 int}
-# ("argument 0 is an int") or {0 {refined str {Emailish}}}. The evaluator
-# never special-cases a native by name; it only consults this metadata (see
-# refine.tcl).
+# ("argument 0 is an int") or {0 {refined int {Byte}}}. The evaluator never
+# special-cases a native by name; it only consults this metadata (see
+# refine.tcl). (A Botlish function's own refinement rules are its proof
+# contract, `proves`, REFINEMENT-VALUES.md -- the same shape, from source.)
 #
 # Declared types are a *contract*. After every call the reference runtime
 # asserts that each argument satisfied its parameter type and that the
 # result satisfies the result type, so a native cannot claim to return, say,
-# a UriQueryValue while returning a plain string. Types are accepted in any
-# form type.tcl understands and stored in canonical form.
+# a Byte while returning 300. Types are accepted in any form type.tcl
+# understands and stored in canonical form.
 
 namespace eval core::native {
     variable registry [dict create]
     # NAME -> 1: the registered natives that are the predicates of
     # source-declared types, not compiler intrinsics (markSource).
     variable sourceNatives [dict create]
-    # ALIAS -> CANONICAL: a second source-level spelling for an already-
-    # registered native, denoting the exact same registry entry (semantic
-    # predicate identity), not a second registration. See `alias` below.
-    variable aliases [dict create]
     # Runtime requirement tags (-runtime):
     #   bigint               arbitrary-precision integer arithmetic or
     #                        comparison (a small-integer fast path still needs
@@ -168,7 +233,6 @@ namespace eval core::native {
     #   char-index           counts or indexes a string by character, not byte
     #   range-check          may raise RANGE for an index outside a value
     #   structural-equality  compares values of any kinds structurally
-    #   evidence             reads or attaches refinement evidence
     #   mutarray-alloc       allocates a new MutableArray, or a List by
     #                        finalizing one (mutable_array::freeze)
     #   mutarray-mutate      mutates a MutableArray's slots in place
@@ -181,12 +245,23 @@ namespace eval core::native {
     #   set-alloc            allocates a new ImmutableSet (core/immutableset.tcl)
     #   process-argv         reads the process argument snapshot of the run
     #                        (core/process.tcl; ARGV.md)
+    #   bytestore-alloc      allocates a new owned byte storage (core/bytestore.tcl;
+    #                        ABI-BYTES.md)
+    #   raw-address          produces the machine address of an owned byte
+    #                        storage's payload (abi::x86_64::from_bytes; native
+    #                        only, ABI-BYTES.md)
+    #   mutvec-alloc         allocates a new MutableVector header
+    #                        (core/mutvec.tcl; MUTABLE-VECTOR.md)
+    #   mutvec-mutate        mutates a MutableVector header in place (push,
+    #                        pop, take, swap, clear)
     #   raw-syscall          executes a raw Linux x86-64 kernel transition
     #                        (the `syscall` instruction) with unknown effects
     #                        (core/linuxabi.tcl; LINUX-X86-64-SYSCALL.md)
     variable runtimeTags {bigint string-alloc list-alloc result-alloc char-index
-        range-check structural-equality evidence mutarray-alloc mutarray-mutate hash set-alloc
-        process-argv raw-syscall}
+        range-check structural-equality mutarray-alloc mutarray-mutate hash set-alloc
+        process-argv raw-syscall bytestore-alloc raw-address mutvec-alloc mutvec-mutate}
+    # The -ownership roles (OWNERSHIP ROLES above).
+    variable ownershipRoles {observe place move element repeat factory copy-out equality resume message release erase}
     # NAME -> 1: the errors the runtime itself declares, visible in every
     # program like a root native and never part of a program's own `error`
     # declarations (hir/errordecls.tcl). Only a native's -errors may name one;
@@ -207,7 +282,8 @@ proc core::native::register {name args} {
     }
     set options [dict create -impl "" -arity "" -refines-true {} -refines-false {} \
         -param-types "" -result-type any -tests-type "" -runtime {} -result-shape {} -result-range {} \
-        -native-body {} -module-fn {} -context-free 0 -errors {} -bounds {}]
+        -context-free 0 -errors {} -bounds {} -nomethod 0 -completion 0 -ownership {} -errors-from {} \
+        -result-length {} -drop-form {}]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "core::native::register: unknown option \"$option\""
@@ -224,6 +300,12 @@ proc core::native::register {name args} {
     }
     if {[dict get $options -context-free] ni {0 1}} {
         error "core::native::register: -context-free of \"$name\" must be 0 or 1"
+    }
+    if {[dict get $options -nomethod] ni {0 1}} {
+        error "core::native::register: -nomethod of \"$name\" must be 0 or 1"
+    }
+    if {[dict get $options -completion] ni {0 1}} {
+        error "core::native::register: -completion of \"$name\" must be 0 or 1"
     }
     set testsType [dict get $options -tests-type]
     if {$testsType ne ""} {
@@ -287,13 +369,6 @@ proc core::native::register {name args} {
     if {$range ni {{} nonneg collection-length}} {
         error "core::native::register: bad -result-range \"$range\" for \"$name\""
     }
-    set nativeBody [dict get $options -native-body]
-    if {$nativeBody ne ""} {
-        if {[lindex $nativeBody 0] ne "block" || [llength [core::ir::blockParams $nativeBody]] != $arity} {
-            error "core::native::register: -native-body of \"$name\" must be a (block PARAMS BODY...)\
-                node with $arity parameter(s)"
-        }
-    }
     variable builtinErrors
     set errors [lsort -unique [dict get $options -errors]]
     foreach error $errors {
@@ -301,13 +376,34 @@ proc core::native::register {name args} {
             error "core::native::register: -errors of \"$name\" names \"$error\", which is not a declared builtin error"
         }
     }
+    variable ownershipRoles
+    set ownership [dict get $options -ownership]
+    foreach role $ownership {
+        if {$role ni $ownershipRoles} {
+            error "core::native::register: unknown -ownership role \"$role\" for \"$name\" (known: $ownershipRoles)"
+        }
+    }
+    if {$ownership ne "" && ($arity eq "*" ? [llength $ownership] == 0 : [llength $ownership] != $arity)} {
+        error "core::native::register: -ownership of \"$name\" must list [expr {$arity eq "*" ? "its leading" : $arity}] role(s)"
+    }
+    set errorsFrom [dict get $options -errors-from]
+    if {$errorsFrom ne "" && (![string is digit -strict $errorsFrom] || $arity eq "*" || $errorsFrom >= $arity
+            || ![dict get $options -completion])} {
+        error "core::native::register: -errors-from of \"$name\" must be the index of an argument of a -completion native"
+    }
+    set length [dict get $options -result-length]
+    if {$length ne "" && ([llength $length] != 2 || [lindex $length 0] ni {int list}
+            || ![string is digit -strict [lindex $length 1]] || $arity eq "*" || [lindex $length 1] >= $arity)} {
+        error "core::native::register: bad -result-length \"$length\" for \"$name\""
+    }
+    set dropForm [dict get $options -drop-form]
+    if {$dropForm ne "" && ([llength $dropForm] != 2 || !([lindex $dropForm 1] eq "result"
+            || ([string is digit -strict [lindex $dropForm 1]] && $arity ne "*" && [lindex $dropForm 1] < $arity)))} {
+        error "core::native::register: bad -drop-form \"$dropForm\" for \"$name\""
+    }
     set bounds [dict get $options -bounds]
     if {$bounds ne "" && ![ValidBounds $bounds $arity $errors]} {
         error "core::native::register: bad -bounds \"$bounds\" for \"$name\" (with -errors {$errors})"
-    }
-    set moduleFn [dict get $options -module-fn]
-    if {$moduleFn ne "" && [llength $moduleFn] != 2} {
-        error "core::native::register: -module-fn of \"$name\" must be a {NAMESPACE NAME} pair"
     }
     dict set registry $name [dict create \
         name $name \
@@ -319,8 +415,10 @@ proc core::native::register {name args} {
         resultType [CanonicalType $name -result-type [dict get $options -result-type]] \
         testsType $testsType \
         runtime [lsort -unique [dict get $options -runtime]] \
-        resultShape $shape resultRange $range nativeBody $nativeBody moduleFn $moduleFn \
-        contextFree [dict get $options -context-free] errors $errors bounds $bounds]
+        resultShape $shape resultRange $range \
+        contextFree [dict get $options -context-free] errors $errors bounds $bounds \
+        nomethod [dict get $options -nomethod] completion [dict get $options -completion] \
+        ownership $ownership errorsFrom $errorsFrom resultLength $length dropForm $dropForm]
     return [core::value::native $name]
 }
 
@@ -386,6 +484,26 @@ proc core::native::ValidShape {shape count} {
         # .bot module long after core bootstrap registers the native).
         return [expr {$length == 2 && [regexp {^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$} [lindex $shape 1]]}]
     }
+    if {$shape in {coroutine-create coroutine-outward coroutine-yield}} {
+        # The coroutine operations (core/coroutines.tcl, COROUTINES.md): the
+        # result is typed by hir::types::ShapeResult from the program's
+        # coroutine analysis (hir/coroutines.tcl) -- a handle's protocol, the
+        # outward value of its segment, the resume message of a yield.
+        return 1
+    }
+    if {$shape eq {never}} {
+        # {never}: the native never completes normally
+        # (context#unreachable, core/contexts.tcl).
+        return 1
+    }
+    if {[lindex $shape 0] eq {context-struct}} {
+        # {context-struct I}: the result is the installed context of the
+        # context-struct declaration whose canonical identity is the String
+        # literal of argument I (context#load, core/contexts.tcl): a struct of
+        # that named declaration, resolved by hir::types::ShapeResult.
+        return [expr {$length == 2 && [string is digit -strict [lindex $shape 1]]
+            && ($count eq "" || [lindex $shape 1] < $count)}]
+    }
     if {[lindex $shape 0] eq {typed}} {
         # {typed NAME LO HI}: every element of the result List is an Int
         # in LO..HI -- a semantic fact this native's own implementation
@@ -428,7 +546,16 @@ proc core::native::ValidShape {shape count} {
         elements { return [expr {$length == 1}] }
         element - append { return [expr {$length == 3 && $count ne ""}] }
         immutable-set { return [expr {$length == 2}] }
-        mutarray-element - mutarray-freeze { return [expr {$length == 2 && $count ne ""}] }
+        mutarray-element - mutarray-freeze - mutarray-create - mutarray-from-list - mutarray-generate {
+            return [expr {$length == 2 && $count ne ""}]
+        }
+        mutvec-from-list - mutvec-element - mutvec-to-list - same {
+            # MUTABLE-VECTOR.md (hir::types::ShapeResult): from_list's
+            # List[T] -> MutableVector[T]; an element read or removal's
+            # MutableVector[T] -> T; to_list's MutableVector[T] -> List[T];
+            # `same A`: the result has argument A's own type (a share).
+            return [expr {$length == 2 && $count ne ""}]
+        }
     }
     return 0
 }
@@ -503,7 +630,7 @@ proc core::native::checkSlice {native start end n} {
     }
 }
 
-# 1 if NAME is a registered native (an alias is not: see aliasNames).
+# 1 if NAME is a registered native.
 proc core::native::exists {name} {
     variable registry
     return [dict exists $registry $name]
@@ -546,57 +673,6 @@ proc core::native::qualifiedMembers {ns} {
     return [lsort $members]
 }
 
-# Declares ALIASNAME a second, purely compile-time spelling of the already-
-# registered native CANONICALNAME: every root reference to ALIASNAME (surface
-# source, raw core IR, or the Tcl interpreter's own root environment) resolves
-# to the identical BindingId/SymbolId/runtime value CANONICALNAME's own
-# references do (hir/resolve.tcl's RootBinding, core::rootEnv below) -- never
-# a second registry entry, a runtime Block/wrapper value, or a second
-# specialization instance. ALIASNAME is never itself a key of `registry`;
-# `metadata`/`invoke`/etc. only ever look up CANONICALNAME.
-proc core::native::alias {aliasName canonicalName} {
-    variable registry
-    variable aliases
-    if {![dict exists $registry $canonicalName]} {
-        error "core::native::alias: unknown native \"$canonicalName\""
-    }
-    if {[dict exists $registry $aliasName] || [dict exists $aliases $aliasName]} {
-        error "core::native::alias: \"$aliasName\" is already registered"
-    }
-    dict set aliases $aliasName $canonicalName
-}
-
-proc core::native::isAlias {name} {
-    variable aliases
-    return [dict exists $aliases $name]
-}
-
-# NAME's own registered identity: NAME itself if it is a registered native,
-# the native it aliases if NAME is an alias, or NAME unchanged otherwise (an
-# unknown name -- callers that care already check `names`/`isAlias`/`aliasNames`).
-proc core::native::canonicalName {name} {
-    variable aliases
-    if {[dict exists $aliases $name]} {
-        return [dict get $aliases $name]
-    }
-    return $name
-}
-
-proc core::native::aliasNames {} {
-    variable aliases
-    return [dict keys $aliases]
-}
-
-# Flat ALIAS CANONICAL ALIAS CANONICAL ... pairs, for core::rootEnv.
-proc core::native::aliasPairs {} {
-    variable aliases
-    set pairs {}
-    dict for {alias canonical} $aliases {
-        lappend pairs $alias $canonical
-    }
-    return $pairs
-}
-
 # Removes a previously registered native NAME. Only hir/sourcetypes.tcl uses
 # this, to undo the root constructor/predicate natives it registers for a
 # source-declared type at the start of the next compilation (see
@@ -622,14 +698,26 @@ proc core::native::markSource {name} {
 
 proc core::native::metadata {name} {
     variable registry
-    variable aliases
-    if {[dict exists $aliases $name]} {
-        set name [dict get $aliases $name]
-    }
     if {![dict exists $registry $name]} {
         error "core::native: no native named \"$name\""
     }
     return [dict get $registry $name]
+}
+
+# The ownership role (OWNERSHIP ROLES) native NAME's argument INDEX has:
+# its -ownership entry (for a native of arity *, the last entry repeats),
+# else erase.
+proc core::native::ownershipRole {name index} {
+    set meta [metadata $name]
+    set roles [dict get $meta ownership]
+    if {$roles eq ""} {
+        return erase
+    }
+    if {[dict get $meta arity] eq "*" && $index >= [llength $roles]} {
+        return [lindex $roles end]
+    }
+    set role [lindex $roles $index]
+    return [expr {$role eq "" ? "erase" : $role}]
 }
 
 # OUTCOME is host 1 (predicate returned true) or 0 (returned false).
@@ -652,6 +740,19 @@ proc core::native::invoke {nativeValue argValues} {
         if {$param ne "any"} {
             core::value::expect $param [lindex $argValues 0] $name
         }
+    }
+    if {[dict get $meta completion]} {
+        # A native whose implementation runs Botlish code to a boundary of
+        # its own and returns that code's completion (core/coroutines.tcl:
+        # a coroutine segment ends normally or with the body's own
+        # propagate-error, which this call then completes with). Only a
+        # normal or propagate-error completion may cross it.
+        set completion [{*}[dict get $meta impl] {*}$argValues]
+        if {[core::completion::kind $completion] ni {value propagate-error}} {
+            throw [list CORE CONTRACT TYPE] \
+                "$name: contract violation: it completed with [core::completion::show $completion]"
+        }
+        return $completion
     }
     set errors [dict get $meta errors]
     if {$errors ne ""} {

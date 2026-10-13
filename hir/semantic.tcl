@@ -61,7 +61,10 @@
 #     A declared parameter type stays the definition's contract: the body is
 #     always valid for it (and was already analyzed for it), and the narrower
 #     argument fact may only add precision -- it can never rescue a body that
-#     is invalid for the declared type.
+#     is invalid for the declared type. A contract that holds a
+#     MutableVector or a MutableArray is kept as it is: the parameter is a
+#     place the body may store into at its declared element type
+#     (MUTABLE-VECTOR.md, MUTABLE-ARRAY.md).
 #
 # Exact scalar values are not in the key (`0` and `1` are both `int`); only
 # types are. A request whose entry types equal the block's own generic entry
@@ -159,7 +162,7 @@ namespace eval hir::semantic {
     variable state {}
     # Per-expression facts a walk writes (hir/types.tcl); the ones that are
     # TypeIds are stored as type forms.
-    variable fields {type reachable target known calleeErrors handlerTypes refinements resultType inferredResultType}
+    variable fields {type reachable target known calleeErrors handlerTypes refinements resultType inferredResultType traitCall}
     variable typeFields {type resultType inferredResultType}
 }
 
@@ -267,7 +270,11 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
     variable maxInstances
     variable maxDepth
     variable levelLimit
-    if {!$enabled || $state eq "" || $blockResult eq "never"} {
+    if {!$enabled || $state eq "" || ($blockResult eq "never" && ![hir::traits::IsPolymorphic $hir $block]
+            && ![hir::types::AnyAffine $argTypes])} {
+        # (A call that gives an affine argument always gets its instance,
+        # like a trait-polymorphic one: it decides the call's specialization,
+        # AFFINE-VALUES.md.)
         return $blockResult
     }
     set node [dict get $hir exprs $block]
@@ -279,19 +286,40 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
     # Entry types (header, "The key").
     set declared [hir::signatures::entryTypes $hir $block]
     set entry {}
+    set generics {}
     set trivial 1
+    set index 0
     foreach t $argTypes d $declared {
-        if {$d ne {}} {
-            set x [expr {[hir::types::subtype $t $d] ? $t : $d}]
+        if {$d ne {} && [hir::types::IsTraitConstraint $d]} {
+            # A trait-typed parameter (TRAITS.md): the instance is entered
+            # with the argument's view -- its hidden witness is the instance's
+            # key component, so two witnesses are two instances.
+            set x [hir::traits::EntryView $t $d]
+            set generic [hir::traits::AbstractView $d $block $index]
+        } elseif {$d ne {}} {
+            set x [expr {[hir::types::subtype $t $d] && ![hir::types::MentionsMutable $d] ? $t : $d}]
+            if {[hir::signatures::inferredTrusted $hir $block $index]
+                    && [hir::signatures::CallableAdmits $t $d]} {
+                # A coroutine handle supplied for an untyped parameter the
+                # body calls (AFFINE-VALUES.md): its inferred contract is a
+                # callable contract, and the instance runs with the handle's
+                # own type, of its own callable kind.
+                set x $t
+            }
             set generic $d
         } else {
-            set x $t
+            # A view passed where nothing is declared is only its concrete
+            # value: no trait view crosses an untyped boundary (TRAITS.md,
+            # "any").
+            set x [expr {[hir::types::IsTrait $t] ? "any" : $t}]
             set generic any
         }
+        incr index
         if {$x ne $generic} {
             set trivial 0
         }
         lappend entry $x
+        lappend generics $generic
     }
     if {$trivial} {
         dict incr state trivial
@@ -324,25 +352,44 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
                 set reason nesting
             }
         }
-        if {$reason ne ""} {
+        if {$reason in {budget-total budget-block}
+                && ([hir::traits::IsPolymorphic $hir $block] || [hir::types::AnyAffine $entry])} {
+            # A trait-polymorphic function's call has no generic fallback:
+            # its witnesses decide which specialization it is (TRAITS.md).
+            # Past the budget it gets the instance keyed by its trait
+            # parameters' views alone, every other parameter at its generic
+            # type -- at most one per witness combination. So does a call
+            # that gives an affine argument (AFFINE-VALUES.md), keyed by its
+            # affine entry types.
+            set entry [lmap x $entry g $generics {
+                expr {[hir::types::IsView $x] || [hir::types::IsAffine $x] ? $x : $g}
+            }]
+            set key [list $block $entry]
+            set reason ""
+        }
+        if {$reason eq "" && [dict exists $state keys $key]} {
+            dict incr state hits
+            set id [dict get $state keys $key]
+        } elseif {$reason ne ""} {
             dict set state declined $callKey $reason
             Bump declinedCount $reason
             if {$reason eq "no-env"} {
                 dict set state pendingEnv $block 1
             }
             return $blockResult
-        }
-        set id [Create $block $entry $key]
-        if {[dict get $state stack] eq {}} {
-            dict set state base $hir
-            try {
-                Analyze $id
-                Drain
-            } finally {
-                dict set state base ""
-            }
         } else {
-            Analyze $id
+            set id [Create $block $entry $key]
+            if {[dict get $state stack] eq {}} {
+                dict set state base $hir
+                try {
+                    Analyze $id
+                    Drain
+                } finally {
+                    dict set state base ""
+                }
+            } else {
+                Analyze $id
+            }
         }
     }
     dict set state calls $callKey $id
@@ -535,7 +582,7 @@ proc hir::semantic::Walk {id} {
     dict set scratch exprs $block inferredResultType [hir::types::intern scratch $result]
     set declared [dict get $node declaredResult]
     if {$declared ne {}} {
-        set result $declared
+        set result [hir::traits::ViewResult $declared $result]
     }
     dict set scratch exprs $block resultType [hir::types::intern scratch $result]
     return [list $result $scratch]
@@ -683,6 +730,13 @@ proc hir::semantic::verify {hirVar} {
         hir::range::verifyBlocks view $blocks
         hir::callables::verifyBlocks view $blocks
         hir::structs::verifyExprs view [Region $view $block]
+        if {[hir::types::AnyAffine [dict get $semantic instances $id args]]} {
+            # An instance that owns an affine argument (AFFINE-VALUES.md):
+            # the ownership discipline, with the instance's own types -- a
+            # generic function that would duplicate or erase the value it
+            # was given is invalid for the call that gives it one.
+            hir::affine::verifyInstance view $block [Region $view $block]
+        }
         dict set own $id [lmap d [dict get $view diagnostics] {
             if {[dict exists $definitional [list [dict get $d expr] [dict get $d message]]]} continue
             dict set d curable [expr {[dict get $d kind] eq "UNPROVEN-FIELD"}]
@@ -752,7 +806,12 @@ proc hir::semantic::verify {hirVar} {
 # the instance is reported as the opacity violation it is.
 proc hir::semantic::DerivedKind {own id} {
     set first [lindex [dict get $own $id] 0]
-    return [expr {[dict get $first kind] eq "OPAQUE-REPRESENTATION" ? "OPAQUE-REPRESENTATION" : "TYPE"}]
+    set kind [dict get $first kind]
+    if {$kind in {OPAQUE-REPRESENTATION USE-AFTER-MOVE UNHANDLED-ERROR} || [string match AFFINE-* $kind]} {
+        # (An ownership violation keeps its own kind: AFFINE-VALUES.md.)
+        return $kind
+    }
+    return TYPE
 }
 
 # 1 if every problem instance ID has (in OWN) is an unproven struct field

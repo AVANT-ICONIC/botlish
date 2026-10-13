@@ -71,9 +71,23 @@
 #              flags ({name NAME span SPAN} dicts: the declared flags in
 #              written, canonical order -- `fn f(x, flags :a, :b)`; empty if
 #              none; they follow the ordinary params -- FLAGS.md),
+#              contexts ({name nameSpan type typeSpan} dicts: the declared
+#              context parameters in written order -- `fn f(x, context io:
+#              LinuxIO)`; empty if none; the last section -- CONTEXTS.md),
 #              paramsSpan (from "(" to the end of the body: the function
 #              literal), errors ({NAME SPAN} pairs, from the function's own
-#              "errors E1, E2" clause, empty if none), body (suite)
+#              "errors E1, E2" clause, empty if none), proves (the proof
+#              clauses, REFINEMENT-VALUES.md: a list of {outcome true|normal
+#              param NAME paramSpan SPAN type TYPE typeSpan SPAN span SPAN}
+#              dicts, at most one, empty if none; `normal` after `-> unit`, a
+#              validator), body (suite),
+#              nomethod (1 for `nomethod fn NAME(...)`, else 0), nomethodSpan
+#              (the modifier word's span, or "") -- a property of the one
+#              declaration: its author's declaration that it is never the
+#              callee of method syntax (WARNINGS-METHOD-ELIGIBLE.md),
+#              resume ("" or {type TYPE typeSpan SPAN span SPAN}: the
+#              function's `resume TYPE` clause, COROUTINES.md -- the last
+#              entry of its parameter list, never a parameter)
 #   if         condition, then (suite), else (suite or ""). An "elif" clause
 #              is not a node kind of its own (ELIF.md): the parser makes it an
 #              ordinary `if` node (extra field `elif 1`) standing alone in a
@@ -106,16 +120,21 @@
 #   return     value (an expression, an if, or "")
 #   break      value (an expression, an if, or "")
 #   continue
-#   typedecl   name, nameSpan, parent, parentSpan, domain -- a top-level
-#              bounded-integer-refinement declaration (surface/parser.tcl's
-#              TypeDecl; see hir/sourcetypes.tcl for what it means). `domain`
-#              is {kind interval lo LO loSpan .. hi HI hiSpan .. span ..} or
-#              {kind exact values {V...} spans {SPAN...} span ..}, LO/HI/V
-#              decimal text (a leading "-" allowed).
+#   typedecl   name, nameSpan, form, and then, for form `domain`: parent,
+#              parentSpan, domain -- a top-level bounded-integer-refinement
+#              declaration (surface/parser.tcl's TypeDecl; see
+#              hir/sourcetypes.tcl for what it means). `domain` is {kind
+#              interval lo LO loSpan .. hi HI hiSpan .. span ..} or {kind
+#              exact values {V...} spans {SPAN...} span ..}, LO/HI/V decimal
+#              text (a leading "-" allowed). For form `refined` ("refined
+#              type NAME = CARRIER", REFINEMENT-VALUES.md): refinedSpan (the
+#              modifier word), carrier (a surface::parser::TypeExpr result)
+#              and carrierSpan -- a nominal refinement of the carrier type.
 #   structdecl name, nameSpan, fields ({name nameSpan type typeSpan} dicts in
 #              declared order; TYPE as surface::parser::TypeExpr returns it),
 #              opaque (1 for `opaque struct NAME:`, else 0), opaqueSpan (the
-#              modifier word's span, or "")
+#              modifier word's span, or ""), context (1 for `context struct
+#              NAME:`, else 0) and contextSpan likewise (CONTEXTS.md)
 #              -- a top-level nominal struct declaration ("struct NAME:"
 #              followed by its indented "field: Type" lines; STRUCTS.md).
 #              A declaration like typedecl: no runtime meaning, no binding.
@@ -125,16 +144,62 @@
 #              owner is not in the AST (the cached AST is importer- and
 #              path-neutral): the loader supplies the module's namespace when
 #              it lowers the declaration (surface/lower.tcl's StructDeclOf).
-#   errordecl  name, nameSpan -- a top-level named-error declaration
+#   enumdecl   name, nameSpan, cases ({name nameSpan} dicts in declaration
+#              order) -- a top-level enum declaration ("enum NAME:" followed
+#              by its indented, comma-separated payload-free cases; ENUMS.md).
+#              A declaration like structdecl: no runtime meaning, no binding;
+#              the owner (the declaring module) is supplied by the loader.
+#   traitdecl  name, nameSpan, requirements ({name nameSpan params paramsSpan
+#              resultType resultTypeSpan errors span} dicts in written order;
+#              params are the function node's {NAME SPAN TYPE TYPESPAN}
+#              tuples, errors {NAME SPAN} pairs) -- a top-level trait
+#              declaration ("trait NAME:" followed by its indented
+#              signature-only "fn ..." requirement lines; TRAITS.md). A
+#              declaration like structdecl: no runtime meaning, no binding;
+#              the owner (the declaring module) is supplied by the loader.
+#              `context` (0|1) and `contextSpan`: the `context` modifier
+#              (`context trait IO:`, CONTEXT-TRAITS.md), a property of the
+#              one declaration kind, never a separate kind.
+#   errordecl  name, nameSpan, fields -- a top-level named-error declaration
 #              ("error NAME", surface/parser.tcl's ErrorDecl; see
-#              hir/errordecls.tcl for what it means). No runtime meaning,
-#              exactly like typedecl.
-#   fail       name, nameSpan -- "fail NAME": produces the named error's
-#              completion (EXPLICIT-ERROR-COMPLETIONS.md).
+#              hir/errordecls.tcl for what it means). FIELDS is its payload
+#              (ERROR-PAYLOADS.md): one {name nameSpan type typeSpan} dict per
+#              declared payload field, in written order, exactly a
+#              structdecl's; empty for a payload-free error. No runtime
+#              meaning, exactly like typedecl.
+#   with       form (context), formSpan, value -- "with context EXPR": a
+#              declaration-like statement installing EXPR's value as the
+#              execution-environment context of its type for the rest of
+#              the scope (CONTEXTS.md); `form` leaves room for later `with`
+#              declarations
+#   static     operation (the static operation's name: "compile"),
+#              operationSpan, staticSpan (the "static" word), body (a suite)
+#              -- "static compile:" followed by an indented block
+#              (STATIC-COMPILE.md): a static intrinsic, a compiler-directed
+#              syntactic operation on the captured block. The body is parsed
+#              syntax, never text; it is a statement or the value of a
+#              binding, return or destructuring (like an if)
+#   fail       name, nameSpan, payload -- "fail NAME": produces the named
+#              error's completion (EXPLICIT-ERROR-COMPLETIONS.md). PAYLOAD is
+#              "" or, for "fail NAME {field: value, ...}", the anonstruct
+#              node of its field initializers (ERROR-PAYLOADS.md).
+#   yield      value -- "yield VALUE" (COROUTINES.md): sends VALUE outward,
+#              suspends the coroutine, evaluates to the resume message
+#   coroutinebind  pattern, value -- "coroutine {step: s, first: f} = CALL"
+#              (COROUTINES.md): pattern is destructure-shaped ({span fields},
+#              each field {name nameSpan local localSpan nested shorthand span},
+#              name step or first), value the call that starts the coroutine
+#              (a call, methodcall or handledcall node; anything else is the
+#              HIR's COROUTINE-RHS-NOT-YIELDING). Only the parser and the
+#              printer know it by this name: lowering turns it into the
+#              construction and the eager start (surface/lower.tcl)
 #   handledcall  call (a `call` or `methodcall` node), handlers (a list of {name nameSpan
-#              body} dicts, one per "on NAME:" clause in written order;
-#              body a suite) -- "CALL: on NAME: ... on NAME: ...". Only a
-#              bare call expression may be handled this way (item 9).
+#              body binding bindingSpan pattern} dicts, one per "on NAME:"
+#              clause in written order; body a suite; binding the name the
+#              whole payload is bound to in "on NAME details:", else "";
+#              pattern the destructuring pattern of "on NAME {a, b: c}:", else
+#              "" -- ERROR-PAYLOADS.md) -- "CALL: on NAME: ... on NAME: ...".
+#              Only a bare call expression may be handled this way (item 9).
 #   error      a statement that could not be parsed (recovering parses only)
 #
 # Node ids
@@ -145,6 +210,7 @@
 #
 #   NAME()     function NAME          NAME=      binding of NAME
 #   if loop return break continue destructure     KIND       any other
+#   coroutine (a coroutine binding)
 #                                                 expression statement
 #
 # the Nth statement with the same key among its siblings adding "#N" (N > 1).
@@ -240,6 +306,7 @@ proc surface::ast::Statements {statements parent} {
         switch -- [dict get $statement kind] {
             function { set key "[dict get $statement name]()" }
             bind     { set key "[dict get $statement name]=" }
+            coroutinebind { set key coroutine }
             default  { set key [dict get $statement kind] }
         }
         dict incr counts $key
@@ -314,11 +381,14 @@ proc surface::ast::Ids {node id} {
             dict set node left [Ids [dict get $node left] $id/left]
             dict set node right [Ids [dict get $node right] $id/right]
         }
-        bind - return - break - destructure {
+        with - yield {
+            dict set node value [Ids [dict get $node value] $id/value]
+        }
+        bind - return - break - destructure - coroutinebind {
             if {[dict get $node value] ne ""} {
                 dict set node value [Ids [dict get $node value] $id/value]
             }
-            if {[dict get $node kind] eq "destructure"} {
+            if {[dict get $node kind] in {destructure coroutinebind}} {
                 dict set node pattern [PatternIds [dict get $node pattern] $id]
             }
         }
@@ -362,10 +432,21 @@ proc surface::ast::Ids {node id} {
             set index 1
             foreach handler [dict get $node handlers] {
                 dict set handler body [Suite [dict get $handler body] $id/on$index]
+                if {[dict exists $handler pattern] && [dict get $handler pattern] ne ""} {
+                    dict set handler pattern [PatternIds [dict get $handler pattern] $id/on$index/payload]
+                }
                 lappend handlers $handler
                 incr index
             }
             dict set node handlers $handlers
+        }
+        fail {
+            if {[dict exists $node payload] && [dict get $node payload] ne ""} {
+                dict set node payload [Ids [dict get $node payload] $id/payload]
+            }
+        }
+        static {
+            dict set node body [Suite [dict get $node body] $id]
         }
     }
     return $node
@@ -415,10 +496,11 @@ proc surface::ast::Children {node} {
         project            { return [list [dict get $node receiver]] }
         methodcall         { return [concat [list [dict get $node receiver]] [dict get $node args]] }
         binary - logical   { return [list [dict get $node left] [dict get $node right]] }
-        bind - return - break - destructure {
+        bind - return - break - destructure - coroutinebind {
             return [expr {[dict get $node value] eq "" ? {} : [list [dict get $node value]]}]
         }
-        function           { return [list [dict get $node body]] }
+        with - yield       { return [list [dict get $node value]] }
+        function - static  { return [list [dict get $node body]] }
         loop {
             if {[llength [dict get $node clauses]] > 1} {
                 set children {}
@@ -452,6 +534,11 @@ proc surface::ast::Children {node} {
                 lappend children [dict get $handler body]
             }
             return $children
+        }
+        fail {
+            if {[dict exists $node payload] && [dict get $node payload] ne ""} {
+                return [list [dict get $node payload]]
+            }
         }
     }
     return {}
@@ -590,6 +677,12 @@ proc surface::ast::Expr {node show} {
         destructure {
             return "(destructure [PatternText [dict get $node pattern] $show] [Expr [dict get $node value] $show])$at"
         }
+        coroutinebind {
+            return "(coroutine [PatternText [dict get $node pattern] $show] [Expr [dict get $node value] $show])$at"
+        }
+        yield {
+            return "(yield [Expr [dict get $node value] $show])$at"
+        }
         return - break {
             if {[dict get $node value] eq ""} {
                 return "([dict get $node kind])$at"
@@ -663,7 +756,8 @@ proc surface::ast::showType {type} {
     if {$name eq "fn"} {
         # A structural function type (surface::parser::FnType): its
         # canonical source spelling, fields in canonical order.
-        return [format {Fn{args: [%s], return: %s, errors: [%s]}} \
+        return [format {%s{args: [%s], return: %s, errors: [%s]}} \
+            [expr {[dict exists $arg kind] ? "Coroutine" : "Fn"}] \
             [join [lmap t [dict get $arg args] {showType $t}] {, }] \
             [showType [dict get $arg return]] [join [dict get $arg errors] {, }]]
     }
@@ -676,15 +770,55 @@ proc surface::ast::Statement {node indent show linesVar} {
     set at [At $node $show]
     switch -- [dict get $node kind] {
         typedecl {
+            if {[dict exists $node form] && [dict get $node form] eq "refined"} {
+                lappend lines "${pad}refined type [dict get $node name] = [showType [dict get $node carrier]]$at"
+                return
+            }
             lappend lines "${pad}type [dict get $node name] = [dict get $node parent] in [DomainText [dict get $node domain]]$at"
             return
         }
         errordecl {
+            if {[dict exists $node fields] && [dict get $node fields] ne {}} {
+                lappend lines "${pad}error [dict get $node name]:$at"
+                foreach field [dict get $node fields] {
+                    lappend lines "${pad}    [dict get $field name]: [showType [dict get $field type]]"
+                }
+                return
+            }
             lappend lines "${pad}error [dict get $node name]$at"
+            return
+        }
+        enumdecl {
+            lappend lines "${pad}enum [dict get $node name]$at"
+            foreach case [dict get $node cases] {
+                lappend lines "${pad}    [dict get $case name],"
+            }
+            return
+        }
+        traitdecl {
+            set modifier [expr {[dict exists $node context] && [dict get $node context] ? "context " : ""}]
+            lappend lines "${pad}${modifier}trait [dict get $node name]$at"
+            foreach r [dict get $node requirements] {
+                set params [lmap pair [dict get $r params] {
+                    lassign $pair name _ type
+                    expr {$type eq "" ? $name : "$name:[showType $type]"}
+                }]
+                set line "${pad}    fn [dict get $r name] ([join $params { }])"
+                if {[dict get $r resultType] ne ""} {
+                    append line " -> [showType [dict get $r resultType]]"
+                }
+                if {[dict get $r errors] ne {}} {
+                    append line " errors [join [lmap pair [dict get $r errors] {lindex $pair 0}] {, }]"
+                }
+                lappend lines $line
+            }
             return
         }
         structdecl {
             set modifier [expr {[dict exists $node opaque] && [dict get $node opaque] ? "opaque " : ""}]
+            if {[dict exists $node context] && [dict get $node context]} {
+                append modifier "context "
+            }
             lappend lines "${pad}${modifier}struct [dict get $node name]$at"
             foreach field [dict get $node fields] {
                 lappend lines "${pad}    [dict get $field name]: [showType [dict get $field type]]"
@@ -692,7 +826,11 @@ proc surface::ast::Statement {node indent show linesVar} {
             return
         }
         fail {
-            lappend lines "${pad}fail [dict get $node name]$at"
+            if {[dict exists $node payload] && [dict get $node payload] ne ""} {
+                lappend lines "${pad}fail [dict get $node name] [Expr [dict get $node payload] $show]$at"
+            } else {
+                lappend lines "${pad}fail [dict get $node name]$at"
+            }
             return
         }
         function {
@@ -709,7 +847,21 @@ proc surface::ast::Statement {node indent show linesVar} {
             if {[dict get $node flags] ne {}} {
                 lappend params flags {*}[lmap flag [dict get $node flags] {string cat : [dict get $flag name]}]
             }
-            set line "${pad}fn [dict get $node name] ([join $params { }])"
+            if {[dict exists $node contexts] && [dict get $node contexts] ne {}} {
+                lappend params context {*}[lmap c [dict get $node contexts] {
+                    string cat [dict get $c name] : [showType [dict get $c type]]
+                }]
+            }
+            if {[dict exists $node resume] && [dict get $node resume] ne ""} {
+                lappend params resume [showType [dict get $node resume type]]
+            }
+            set modifier [expr {[dict exists $node nomethod] && [dict get $node nomethod] ? "nomethod " : ""}]
+            set line "${pad}${modifier}fn [dict get $node name] ([join $params { }])"
+            if {[dict exists $node proves]} {
+                foreach clause [dict get $node proves] {
+                    append line " proves [dict get $clause param]: [showType [dict get $clause type]]"
+                }
+            }
             if {[dict get $node errors] ne {}} {
                 append line " errors [join [lmap pair [dict get $node errors] {lindex $pair 0}] {, }]"
             }
@@ -734,11 +886,20 @@ proc surface::ast::Statement {node indent show linesVar} {
             Body [dict get $node body] [expr {$indent + 1}] $show lines
             return
         }
-        bind - return - break - destructure {
+        with {
+            lappend lines "${pad}with [dict get $node form]$at [Expr [dict get $node value] $show]"
+            return
+        }
+        static {
+            StaticIntrinsic $node "" $indent $show lines
+            return
+        }
+        bind - return - break - destructure - coroutinebind {
             set value [dict get $node value]
             set prefix [switch -- [dict get $node kind] {
                 bind { expr {"bind [dict get $node name]$at = "} }
                 destructure { expr {"destructure [PatternText [dict get $node pattern] $show]$at = "} }
+                coroutinebind { expr {"coroutine [PatternText [dict get $node pattern] $show]$at = "} }
                 default { expr {"[dict get $node kind]$at "} }
             }]
             if {$value ne "" && [dict get $value kind] eq "if"} {
@@ -749,9 +910,22 @@ proc surface::ast::Statement {node indent show linesVar} {
                 HandledCall $value $indent $show lines $prefix
                 return
             }
+            if {$value ne "" && [dict get $value kind] eq "static"} {
+                StaticIntrinsic $value $prefix $indent $show lines
+                return
+            }
         }
     }
     lappend lines "$pad[Expr $node $show]"
+}
+
+# Lines of the static intrinsic NODE ("static OPERATION" and its captured
+# block, STATIC-COMPILE.md), its first line starting with PREFIX.
+proc surface::ast::StaticIntrinsic {node prefix indent show linesVar} {
+    upvar 1 $linesVar lines
+    set pad [string repeat {    } $indent]
+    lappend lines "$pad${prefix}static [dict get $node operation][At $node $show]"
+    Body [dict get $node body] [expr {$indent + 1}] $show lines
 }
 
 # Source text of the destructuring PATTERN, as written: "{a, b: c, d: {e}}"
@@ -789,7 +963,13 @@ proc surface::ast::HandledCall {node indent show linesVar {prefix ""}} {
     set pad [string repeat {    } $indent]
     lappend lines "$pad${prefix}[Expr [dict get $node call] $show]:[At $node $show]"
     foreach handler [dict get $node handlers] {
-        lappend lines "[string repeat {    } [expr {$indent + 1}]]on [dict get $handler name]:"
+        set receive ""
+        if {[dict exists $handler binding] && [dict get $handler binding] ne ""} {
+            set receive " [dict get $handler binding]"
+        } elseif {[dict exists $handler pattern] && [dict get $handler pattern] ne ""} {
+            set receive " [PatternText [dict get $handler pattern] $show]"
+        }
+        lappend lines "[string repeat {    } [expr {$indent + 1}]]on [dict get $handler name]$receive:"
         Body [dict get $handler body] [expr {$indent + 2}] $show lines
     }
 }

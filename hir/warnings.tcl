@@ -48,6 +48,12 @@ namespace eval hir::warnings {
     # one entry here plus its pass; there is no dynamic registration.
     variable passes {
         SAME-RETURN-VALUE hir::warnings::SameReturnValue
+        METHOD-ELIGIBLE   hir::warnings::MethodEligible
+        FIXED-ARITY-LIST-RETURN hir::warnings::FixedArityListReturn
+        SAME-FAILURE      hir::warnings::SameFailure
+        PROVES-NAMING     hir::warnings::ProvesNaming
+        ONE-CHAR-STRING-LITERAL hir::warnings::OneCharStringLiteral
+        MANY-BOOLEAN-ARGUMENTS  hir::warnings::ManyBooleanArguments
     }
     variable modes {default off error}
     # CODE -> number of times its pass has run in this process: test
@@ -126,7 +132,9 @@ proc hir::warnings::run {hir mode {channel stderr}} {
     if {[Mode $mode] eq "off" || [dict get $hir diagnostics] ne ""} {
         return $hir
     }
-    set warnings [collect $hir]
+    # A monomorphized trait program (TRAITS.md) is warned about as written:
+    # its checked source build, where each function exists once.
+    set warnings [collect [expr {[dict exists $hir traitSource] ? [dict get $hir traitSource] : $hir}]]
     if {$mode eq "error" && $warnings ne ""} {
         Raise $hir [lindex $warnings 0]
     }
@@ -478,4 +486,1065 @@ proc hir::warnings::SynthesizedBranch {hir node} {
     set then [dict get $hir scopes [dict get $node thenScope] origin]
     set else [dict get $hir scopes [dict get $node elseScope] origin]
     return [expr {$then eq $else}]
+}
+
+# ---------------------------------------------------------------------------
+# METHOD-ELIGIBLE (WARNINGS-METHOD-ELIGIBLE.md)
+#
+# A call written in functional form that is *proven* eligible for method
+# syntax: the sugared spelling `R.name(args...)` parses, is unambiguous and
+# resolves to the identical callee. The fact is local to one call, so each
+# eligible call is its own warning (no grouping, no secondary locations).
+#
+# The rules are exactly two, and the compiler's own parser and resolver are
+# the prover:
+#
+#   1. method sugar must be syntactically allowed and unambiguous:
+#        * the call was *written* `f(x, ...)` (the frontend's `written`
+#          provenance; method sugar, list literals and operators are not
+#          candidates, and a synthesized call is never eligible),
+#        * its first argument -- the receiver -- is, as written, a form the
+#          grammar accepts before a ".": a postfix or primary expression
+#          (ReceiverForm); an operator expression is not (it would need
+#          added parentheses, and HIR does not record parentheses),
+#        * the callee is a declared named function (`fn`, a root native, a
+#          module function) -- never a function *value* (a parameter, an
+#          alias) -- and is not `nomethod`,
+#        * the resolver's own candidate gathering for the sugared spelling
+#          (hir::resolve::MethodCandidates, the code real method calls use)
+#          finds exactly that function and nothing else visible under the
+#          name, and no struct field of that name could compete with it
+#          (SugarFieldSafe);
+#   2. the callee declares at least 2 ordinary parameters (the sugar moves a
+#      trailing argument behind the dot; `length(s)` has none to move).
+#
+# Anything the compiler cannot establish is silence. Calls HIR marks
+# structurally unreachable are skipped. The pass reads the generic source HIR
+# once, never a semantic instance, and adds no analysis of its own.
+
+proc hir::warnings::MethodEligible {hir} {
+    set haveFields 0
+    set fields {}
+    set view ""
+    set warnings {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] ne "call" || ![dict exists $node written]
+                || [dict get $node written form] ne "function" || ![dict get $node reachable]
+                || [lindex [dict get $node origin] 0] ne "file"} {
+            continue
+        }
+        set callee [NamedCallee $hir $node]
+        if {$callee eq "" || [dict get $callee params] < 2
+                || [llength [dict get $node args]] < 2} {
+            continue
+        }
+        set receiver [lindex [dict get $node args] 0]
+        set form [ReceiverForm $hir $receiver]
+        if {$form eq ""} {
+            continue
+        }
+        if {$view eq ""} {
+            set view [ResolutionView $hir]
+        }
+        if {![SugarResolvesTo $view $node $callee]} {
+            continue
+        }
+        if {!$haveFields} {
+            set fields [FieldNames $hir]
+            set haveFields 1
+        }
+        if {![SugarFieldSafe $hir $receiver [dict get $callee method] [dict get $node written ns] $fields]} {
+            continue
+        }
+        set shown [dict get $callee shown]
+        lappend warnings [New METHOD-ELIGIBLE \
+            "call to `$shown` is eligible for method syntax" \
+            [dict get $node origin] {} \
+            [dict create function [dict get $callee target] functionName $shown call $e \
+                receiver $receiver paramCount [dict get $callee params] receiverForm $form]]
+    }
+    return $warnings
+}
+
+# The callee of the call NODE when it is a declared named function, as a dict
+# {identity I target T params N method NAME shown TEXT}: IDENTITY in the resolver's own
+# spelling (hir::resolve::CandidateIdentity: `binding:B` / `native:NAME`),
+# TARGET like a call's `target` ({block ExprId} / {native NAME}), PARAMS its
+# ordinary parameter count (flags are a separate category and not counted;
+# a variadic native has no fixed count and is not a candidate), METHOD the
+# name its method spelling would carry, SHOWN the callee as the diagnostic
+# names it. "" for anything else: a call through
+# a function value (a parameter, an alias, a call result, a projection) never
+# qualifies, because the sugared form's resolution could not be proven
+# identical.
+proc hir::warnings::NamedCallee {hir node} {
+    set callee [dict get $hir exprs [dict get $node callee]]
+    if {[dict get $callee kind] ne "ref" || [dict get $callee binding] eq ""} {
+        return ""
+    }
+    set name [dict get $callee name]
+    set b [dict get $callee binding]
+    set binding [dict get $hir bindings $b]
+    switch -- [dict get $binding kind] {
+        root {
+            set native [dict get $binding name]
+            if {[dict get $binding symbol] eq "" || [dict get $hir symbols [dict get $binding symbol] kind] ne "native"
+                    || ![core::native::exists $native]} {
+                return ""
+            }
+            set arity [dict get [core::native::metadata $native] arity]
+            if {![string is digit -strict $arity]} {
+                return ""
+            }
+            return [dict create identity native:$native target [list native $native] params $arity \
+                method [MemberName $native] shown $name]
+        }
+        local {
+            set d [dict get $binding declaredBy]
+            if {$d eq "" || ![dict exists $hir exprs $d] || [dict get $hir exprs $d kind] ne "bind"
+                    || [dict get $hir exprs $d duplicate]} {
+                return ""
+            }
+            set block [dict get $hir exprs $d value]
+            if {[dict get $hir exprs $block kind] ne "block"} {
+                return ""
+            }
+            set params [expr {[llength [dict get $hir exprs $block params]] - [llength [dict get $hir exprs $block flags]]}]
+            # A binding hygiene renamed (NAME#N) is looked up under the
+            # spelling the programmer wrote, as the method call would.
+            set spelling [expr {[dict exists $binding spelling] ? [dict get $binding spelling] : $name}]
+            return [dict create identity binding:$b target [list block $block] params $params \
+                method [MemberName $spelling] shown [expr {[dict exists $binding spelling] ? $spelling : $name}]]
+        }
+    }
+    return ""
+}
+
+# The member of a possibly namespace-qualified NAME ("list::at" -> "at").
+proc hir::warnings::MemberName {name} {
+    set i [string last :: $name]
+    return [expr {$i < 0 ? $name : [string range $name [expr {$i + 2}] end]}]
+}
+
+# HIR as name resolution saw it: hygiene (hir/hygiene.tcl) renamed every
+# binding of a module's own section scope to its qualified spelling
+# ("list::find") after resolution, but the lookup a method call makes (a
+# scope's `names`, and an imported namespace's members) works on the names as
+# written ("find"). The view differs from HIR in exactly those scopes' name
+# tables; nothing else of it is touched or read differently. (The #N renames
+# of later, shadowing bindings stay: a later binding is invisible to the call
+# anyway, and its renamed key keeps it out of the lookup of the plain name.)
+proc hir::warnings::ResolutionView {hir} {
+    if {![dict exists $hir modules]} {
+        return $hir
+    }
+    dict for {ns scope} [dict get $hir modules] {
+        set prefix "${ns}::"
+        set names [dict create]
+        dict for {name b} [dict get $hir scopes $scope names] {
+            dict set names [expr {[string first $prefix $name] == 0 ? [string range $name [string length $prefix] end] : $name}] $b
+        }
+        dict set hir scopes $scope names $names
+    }
+    return $hir
+}
+
+# 1 if the sugared spelling of the call NODE to CALLEE resolves to exactly
+# CALLEE's function: the resolver's own candidate gathering for
+# `receiver.METHOD(args)` from the call's scope and namespace
+# (hir::resolve::MethodCandidates -- lexical lookup, the directly imported
+# namespaces' members, aliases and arity applied, nomethod functions left out)
+# yields one candidate, and it is that function. No second candidate (a
+# shadowing local, another namespace's member of the name) and no other
+# function: otherwise the real call would be decided by receiver types, be
+# ambiguous, or mean something else, and there is nothing to suggest.
+proc hir::warnings::SugarResolvesTo {hir node callee} {
+    set ctx [dict create namespace [dict get $node written ns]]
+    set candidates [hir::resolve::MethodCandidates hir [dict get $node scope] \
+        [dict get $callee method] $ctx [llength [dict get $node args]]]
+    return [expr {[llength $candidates] == 1
+        && [dict get [lindex $candidates 0] identity] eq [dict get $callee identity]}]
+}
+
+# The receiver-form class of expression E, the first argument of a call, when
+# the grammar accepts it as written before a ".": postfix and primary
+# expressions (surface/parser.tcl: postfix = primary { call | "." IDENT [call] },
+# primary = literal | name | qualified name | list | struct | "(" expr ")").
+# "" for a form that would need parentheses added -- an operator expression,
+# which `.` binds tighter than (`-1.f(y)` is `-(1.f(y))`, `a + b.f(y)` is
+# `a + (b.f(y))`) -- and for anything the frontend did not write as a call
+# argument. HIR records no parentheses, so a receiver written `(a + b)` is
+# the same node as `a + b` and is conservatively not eligible either.
+proc hir::warnings::ReceiverForm {hir e} {
+    set node [dict get $hir exprs $e]
+    switch -- [dict get $node kind] {
+        ref     { return [expr {[string first :: [dict get $node name]] >= 0 ? "qualified-name" : "name"}] }
+        const   { return literal }
+        project { return field }
+        struct  { return struct }
+        call {
+            if {![dict exists $node written]} {
+                return ""
+            }
+            switch -- [dict get $node written form] {
+                function { return call }
+                method   { return method-call }
+                list     { return list }
+            }
+        }
+    }
+    return ""
+}
+
+# The names of every struct field the program can have: its struct
+# declarations' fields (HIR's `sourceTypes`) and the fields of every struct
+# construction expression. A struct *type* can only arise from one of them,
+# so a name absent here is the name of no field of any value the program can
+# make.
+proc hir::warnings::FieldNames {hir} {
+    set names [dict create]
+    foreach entry [dict get $hir sourceTypes] {
+        if {[dict exists $entry kind] && [dict get $entry kind] eq "struct"} {
+            foreach {field type} [dict get $entry fields] {
+                dict set names $field 1
+            }
+        }
+    }
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "struct"} {
+            foreach field [dict get $node names] {
+                dict set names $field 1
+            }
+        }
+    }
+    return $names
+}
+
+# 1 if the sugared spelling `RECEIVER.NAME(args)` cannot be the field-value
+# call of a struct field NAME instead (hir/structs.tcl's field/function
+# ambiguity, which makes the sugared call an error). Provable when no struct
+# of the program has a field NAME (FIELDS, FieldNames); otherwise only when the
+# receiver's static type is a known one -- not a struct, or a struct whose
+# field NAME cannot compete (hir::structs::FieldCompetes). A receiver of
+# unknown type (`any`: a generic parameter) may be given such a struct by an
+# instance, so it is not provably safe.
+proc hir::warnings::SugarFieldSafe {hir receiver name ns fields} {
+    if {![dict exists $fields $name]} {
+        return 1
+    }
+    set type [hir::typeOf $hir $receiver]
+    if {$type eq "never"} {
+        return 0
+    }
+    if {[hir::types::IsStructLike $type]} {
+        return [expr {![hir::structs::FieldCompetes $type $name [dict create ns $ns]]}]
+    }
+    return [expr {[hir::types::kindOf $type] ni {"" any struct}}]
+}
+
+# ---------------------------------------------------------------------------
+# FIXED-ARITY-LIST-RETURN (WARNINGS-FIXED-ARITY-LIST-RETURN.md)
+#
+# Every reachable value exit of one function produces a written list literal
+# of the same arity N >= 2: the positional multi-value result that struct
+# values name the parts of (MULTI-VALUE-RESULTS.md: structs have named parts
+# and destructure; lists deliberately do not). One warning per function,
+# anchored at its first exit in source order, the other exits as secondary
+# locations.
+#
+# The shape theorem. A function is reported exactly when it has at least one
+# literal exit, and every reachable value exit is
+#   * a written list literal of arity N (a call carrying the frontend's
+#     `written {form list}` provenance; N is its argument count),
+#   * a read of a binding whose initializer is such a literal (followed
+#     through `y = x` aliases to the root binding, hir::exact::AliasRoot:
+#     bindings are immutable and a same-scope rebinding is a DUPLICATE error,
+#     so each binding has exactly one initializer), or
+#   * a direct self-call (the callee resolves to this function itself,
+#     hir::resolve::CandidateIdentity, aliases followed): its value is the
+#     function's own, so it inherits N and contributes none,
+# all with the same N >= 2. Self-calls alone state nothing.
+#
+# Exits are SAME-RETURN-VALUE's (Exits, Leaves above: returns targeting the
+# function, wherever they sit, and the final-expression leaves), with three
+# deliberate deviations:
+#   * unit is a MISMATCH, not a skip. A bare `return`, `return unit`, a final
+#     unit, a destructuring statement's unit, and the implicit fall-through of
+#     an else-less final `if` (FallThroughs: an empty branch whose outcome is
+#     not statically excluded) make the function "a list or nothing", an
+#     optional, not a fixed-arity result. SAME-RETURN-VALUE skips unit
+#     because repeated unit carries no information; here skipping it would
+#     manufacture the claim "every exit is a list".
+#   * `fail` does not block: it is not a value exit (inherited), so a guard
+#     `if bad: fail E` before a list result is the common shape and warns. An
+#     exit whose value can never complete (type never) is likewise not a
+#     value exit.
+#   * a self-call exit counts (above).
+# Anything else -- a computed list (list::append, str::concat, method sugar,
+# an operator), a struct, a mutable value, a parameter, an `if`/`loop`/handled
+# value, a call through a function value, indirect or mutual recursion -- is a
+# mismatch, and one mismatch silences. No element is looked at: no types, no
+# equality, no heterogeneity; arity and literal-ness are facts of the written
+# form. A call without the provenance marker (core IR, .hir input) is never a
+# literal.
+#
+# The author's voice: a function whose declaration carries a written result
+# annotation of a list type (`-> List[int]`, `-> list`: the block's
+# `declaredResult`, recorded by hir::resolve in every compilation mode) has
+# declared its result a list, and is never reported, whatever its exits.
+#
+# Reachability is milestone 1's: HIR's structural `reachable` flags, then, for
+# a candidate (at least one literal exit of arity >= 2), the completion
+# proof's recording walk prunes proven-unreachable exits. Unlike
+# SAME-RETURN-VALUE, removing an exit can create this warning (a pruned
+# mismatch no longer breaks uniformity); it is still sound, because a pruned
+# exit is proven unable to execute, so every exit that can carries shape N.
+#
+# Scope: the generic source HIR, once per source function; instances are
+# never walked.
+
+namespace eval hir::warnings {
+    # The smallest arity stated: a one-element list holds a single value,
+    # and there is nothing to name.
+    variable minListArity 2
+}
+
+proc hir::warnings::FixedArityListReturn {hir} {
+    set names [dict create]
+    set selves [dict create]
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "bind"
+                && [dict get $hir exprs [dict get $node value] kind] eq "block"} {
+            dict set names [dict get $node value] [dict get $node name]
+            if {![dict get $node duplicate]} {
+                dict set selves [dict get $node value] [dict get $node binding]
+            }
+        }
+    }
+    set warnings {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] ne "block" || ![dict get $node reachable]} {
+            continue
+        }
+        set warning [FixedArityIn $hir $e \
+            [expr {[dict exists $names $e] ? [dict get $names $e] : ""}] \
+            [expr {[dict exists $selves $e] ? [dict get $selves $e] : ""}]]
+        if {$warning ne ""} {
+            lappend warnings $warning
+        }
+    }
+    return $warnings
+}
+
+# The warning for BLOCK (bound to NAME through binding SELF), or "".
+proc hir::warnings::FixedArityIn {hir block name self} {
+    variable minListArity
+    if {[DeclaresListResult $hir $block]} {
+        return ""
+    }
+    set exits [lmap exit [ShapeExits $hir $block] {
+        lassign $exit site value
+        list $site [ExitShape $hir $value $self]
+    }]
+    # Cheap first: without a literal exit of arity >= 2 there is nothing to
+    # state, and pruning unreachable exits never adds one.
+    set candidate 0
+    foreach exit $exits {
+        set shape [lindex $exit 1]
+        if {[lindex $shape 0] in {list alias} && [lindex $shape 1] >= $minListArity} {
+            set candidate 1
+            break
+        }
+    }
+    if {!$candidate} {
+        return ""
+    }
+    # Only for a candidate: which exits can execute at all, by the completion
+    # proof's walk (range-infeasible branches never entered). Absent means
+    # proven unreachable.
+    set reached [hir::completions::reachedExprs $hir $block]
+    set arity ""
+    set sites {}
+    set selfCalls {}
+    foreach exit $exits {
+        lassign $exit site shape
+        if {![dict exists $reached $site]} {
+            continue
+        }
+        switch -- [lindex $shape 0] {
+            never {
+                # Not a value exit: it cannot complete.
+                continue
+            }
+            self {
+                lappend selfCalls $site
+            }
+            list - alias {
+                set n [lindex $shape 1]
+                if {$n < $minListArity || ($arity ne "" && $n != $arity)} {
+                    return ""
+                }
+                set arity $n
+            }
+            unit {
+                # A mismatch (see the header): "list or nothing" is not a
+                # fixed-arity result.
+                return ""
+            }
+            default {
+                return ""
+            }
+        }
+        lappend sites $site
+    }
+    if {$arity eq ""} {
+        return ""
+    }
+    set count [llength $sites]
+    set where [expr {$count == 1 ? "the only value exit" : "all $count value exits"}]
+    set origins [lmap site $sites {hir::get $hir $site origin}]
+    return [New FIXED-ARITY-LIST-RETURN \
+        "a $arity-element list is returned from $where; a struct value names the parts" \
+        [lindex $origins 0] [lrange $origins 1 end] \
+        [dict create function $block functionName $name arity $arity exits $count \
+            sites $sites selfCalls $selfCalls note "also returned here"]]
+}
+
+# 1 if BLOCK's declaration carries a written result annotation whose type is
+# a list type as the checker resolved it (List[T], the bare `list`, a
+# refinement of list).
+proc hir::warnings::DeclaresListResult {hir block} {
+    set node [dict get $hir exprs $block]
+    if {![dict exists $node declaredResult] || [dict get $node declaredResult] eq ""} {
+        return 0
+    }
+    return [expr {[hir::types::kindOf [dict get $node declaredResult]] eq "list"}]
+}
+
+# BLOCK's exits as {SITE VALUE} pairs in source order: SAME-RETURN-VALUE's
+# exits (Exits), plus each implicit unit fall-through of the final expression
+# (FallThroughs) as {IF ""}.
+proc hir::warnings::ShapeExits {hir block} {
+    set exits [dict create]
+    foreach exit [Exits $hir $block] {
+        dict set exits [lindex $exit 0] $exit
+    }
+    set body [dict get $hir exprs $block body]
+    if {$body ne ""} {
+        foreach site [FallThroughs $hir [lindex $body end]] {
+            dict set exits $site [list $site ""]
+        }
+    }
+    return [lmap e [BodyExprs $hir $block] {
+        if {![dict exists $exits $e]} {
+            continue
+        }
+        dict get $exits $e
+    }]
+}
+
+# The written `if`s on the final-expression path of E (the leaves' path,
+# Leaves) with a missing branch -- an else-less `if` -- that HIR does not
+# decide away: falling through such an `if` completes the function with
+# unit.
+proc hir::warnings::FallThroughs {hir e} {
+    set node [dict get $hir exprs $e]
+    if {![dict get $node reachable] || [dict get $node kind] ne "if"
+            || [SynthesizedBranch $hir $node] || [hir::typeOf $hir $e] eq "never"} {
+        return {}
+    }
+    set known [hir::types::KnownOutcome $hir [dict get $node condition]]
+    set sites {}
+    foreach {outcome role} {1 then 0 else} {
+        set body [dict get $node ${role}Body]
+        if {$body ne ""} {
+            lappend sites {*}[FallThroughs $hir [lindex $body end]]
+        } elseif {$known eq "" || $known == $outcome} {
+            lappend sites $e
+        }
+    }
+    return $sites
+}
+
+# The shape of an exit whose value is VALUE ("" for a fall-through) in the
+# function bound through binding SELF:
+#   {list N}    a written list literal of N elements
+#   {alias N}   a read of a binding whose initializer is one
+#   self        a direct self-call
+#   unit        the unit value
+#   never       a value that cannot complete (not a value exit)
+#   other       anything else
+proc hir::warnings::ExitShape {hir value self} {
+    if {$value eq ""} {
+        return unit
+    }
+    set type [hir::typeOf $hir $value]
+    if {$type eq "never"} {
+        return never
+    }
+    if {[hir::types::kindOf $type] eq "unit"} {
+        return unit
+    }
+    set node [dict get $hir exprs $value]
+    switch -- [dict get $node kind] {
+        call {
+            if {[dict exists $node written] && [dict get $node written form] eq "list"} {
+                return [list list [llength [dict get $node args]]]
+            }
+            if {$self ne "" && [SelfCall $hir $node $self]} {
+                return self
+            }
+        }
+        ref {
+            set n [InitializerArity $hir $value]
+            if {$n ne ""} {
+                return [list alias $n]
+            }
+        }
+    }
+    return other
+}
+
+# The arity of the written list literal that initializes the alias root of
+# the reference E (hir::exact::AliasRoot), or "".
+proc hir::warnings::InitializerArity {hir e} {
+    set root [hir::exact::AliasRoot $hir $e]
+    if {$root eq "" || [dict get $hir bindings $root kind] ne "local"} {
+        return ""
+    }
+    set d [dict get $hir bindings $root declaredBy]
+    if {$d eq "" || ![dict exists $hir exprs $d]} {
+        return ""
+    }
+    set bind [dict get $hir exprs $d]
+    if {[dict get $bind kind] ne "bind" || [dict get $bind duplicate]} {
+        return ""
+    }
+    set value [dict get $hir exprs [dict get $bind value]]
+    if {[dict get $value kind] ne "call" || ![dict exists $value written]
+            || [dict get $value written form] ne "list"} {
+        return ""
+    }
+    return [llength [dict get $value args]]
+}
+
+# 1 if the call NODE's callee resolves to the function bound through binding
+# SELF: a plain self-call or one through an alias (`g = f`), as the
+# resolver's candidate identity follows aliases.
+proc hir::warnings::SelfCall {hir node self} {
+    set callee [dict get $hir exprs [dict get $node callee]]
+    if {[dict get $callee kind] ne "ref" || [dict get $callee binding] eq ""} {
+        return 0
+    }
+    return [expr {[hir::resolve::CandidateIdentity hir [dict get $callee binding]] eq "binding:$self"}]
+}
+
+# ---------------------------------------------------------------------------
+# SAME-FAILURE (WARNINGS-SAME-FAILURE.md)
+#
+# Several distinct, reachable exits of one function `fail` the same declared
+# failure: SAME-RETURN-VALUE's theorem on the other completion kind. There,
+# `fail` is not a return and is never grouped with one; here, a return is not
+# a failure and is never grouped with one.
+#
+# Exits are exactly the written `fail` operations whose target is the
+# function: every reachable `fail` of the block's own body, wherever it sits
+# (branches, every loop form, on-handler bodies, a re-raise `on E: fail E`
+# included), never entering a nested function or closure, whose fails are its
+# own and checked on their own (the resolver admits a `fail` against the
+# `errors` clause of the innermost enclosing block, which is its target).
+# Nothing else is an exit here:
+#   * the final expression and the fall-through are not: a function never
+#     fails implicitly, and its normal completion is a return;
+#   * a call that fails is an ordinary call propagating its callee's failure,
+#     not an exit of this function (the fact would be about the callee).
+# An exit is a source operation, so no fall-through analysis is needed: a
+# function that both fails and falls through simply has fewer fail exits.
+#
+# Identity is nominal. `fail` names a declared error and carries no payload
+# (the surface grammar is `fail IDENT`). A declared error's name is its
+# identity, unique across one whole compiled program (hir/errordecls.tcl: a
+# second declaration of a name, in any module, and the name of a builtin
+# error are rejected), and the resolver admits a `fail` only when the
+# function declares its name in its own `errors` clause (the block's
+# resolved `declaredErrors`). Two sites fail the same failure exactly when
+# both fail one name of that set; a site whose name is not in it (never the
+# case in a program without diagnostics) is silent. Similar names are
+# different failures, and no value identity is involved.
+#
+# Reachability is SAME-RETURN-VALUE's, in two tiers: HIR's structural
+# `reachable` flags, then -- only for a function in which some failure has
+# at least two structurally reachable sites (pruning can only remove sites,
+# and a group needs two) -- the completion proof's recording walk
+# (hir::completions::reachedExprs), which prunes sites under branches its
+# range facts prove infeasible. A site absent from the walk is proven unable
+# to execute; imprecision keeps a site, which can only lose a warning.
+#
+# One warning per failure raised from N >= 2 exits, anchored at its first
+# exit (source order), the others as secondary locations; a function failing
+# two names repeatedly gets two warnings. Scope: the generic source HIR, once
+# per source function; instances are never walked.
+
+proc hir::warnings::SameFailure {hir} {
+    set names [BlockNames $hir]
+    set warnings {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] ne "block" || ![dict get $node reachable]} {
+            continue
+        }
+        lappend warnings {*}[SameFailureIn $hir $e [expr {[dict exists $names $e] ? [dict get $names $e] : ""}]]
+    }
+    return $warnings
+}
+
+proc hir::warnings::SameFailureIn {hir block name} {
+    set sites [FailSites $hir $block]
+    # Cheap first: candidate groups from the names alone.
+    if {![HasRepeat [FailureGroups $sites]]} {
+        return {}
+    }
+    # A failure repeats structurally, so it is worth asking the completion
+    # proof which sites can execute at all. Absent means proven unreachable.
+    set reached [hir::completions::reachedExprs $hir $block]
+    set sites [lmap site $sites {
+        if {![dict exists $reached [lindex $site 0]]} {
+            continue
+        }
+        set site
+    }]
+    set warnings {}
+    foreach group [FailureGroups $sites] {
+        lassign $group failure members
+        if {[llength $members] >= 2} {
+            lappend warnings [FailureWarning $hir $block $name $failure $members]
+        }
+    }
+    return $warnings
+}
+
+# BLOCK's fail exits as {SITE FAILURE} pairs in source order: each
+# structurally reachable `fail` of its own body (BodyExprs) that fails one
+# of the function's declared errors. FAILURE is what makes two exits the same
+# failure: the error's name -- and for a failure that carries a payload
+# (ERROR-PAYLOADS.md), {NAME IDENTITY}, the payload's proven identity
+# (hir::exact::Identity) beside it: a payload nothing proves identical to
+# another is its own failure ({NAME {unproven SITE}}), so it never groups
+# (the conservative payload rule WARNINGS-SAME-FAILURE.md reserved for this).
+# The error's name is always the first word.
+proc hir::warnings::FailSites {hir block} {
+    set node [dict get $hir exprs $block]
+    set declared [expr {[dict exists $node declaredErrors] ? [dict get $node declaredErrors] : {}}]
+    set sites {}
+    foreach e [BodyExprs $hir $block] {
+        set node [dict get $hir exprs $e]
+        # A rejected static block's reified failure is the compiler's report
+        # of a diagnostic, not an exit the programmer wrote
+        # (STATIC-COMPILE.md): never a fail site of this warning.
+        if {[dict exists $node static]} {
+            continue
+        }
+        if {[dict get $node kind] eq "fail" && [dict get $node reachable]
+                && [dict get $node name] in $declared} {
+            lappend sites [list $e [dict get $node name]]
+            if {[dict exists $node value] && [dict get $node value] ne ""} {
+                set identity [hir::exact::Identity $hir [dict get $node value]]
+                lset sites end 1 [list [dict get $node name] \
+                    [expr {$identity eq "" ? [list unproven $e] : $identity}]]
+            }
+        }
+    }
+    return $sites
+}
+
+# SITES ({SITE FAILURE} pairs, source order) grouped by failure: a list of
+# {FAILURE MEMBER-SITES}, in order of first appearance.
+proc hir::warnings::FailureGroups {sites} {
+    set groups [dict create]
+    foreach site $sites {
+        lassign $site e failure
+        dict lappend groups $failure $e
+    }
+    return [lmap {failure members} $groups {list $failure $members}]
+}
+
+# The one warning for SITES (source order) failing FAILURE.
+proc hir::warnings::FailureWarning {hir block name failure sites} {
+    set count [llength $sites]
+    # (FAILURE is the error's name, or {NAME IDENTITY} for a payload: the
+    # name is what the warning says.)
+    set failure [lindex $failure 0]
+    set origins [lmap site $sites {hir::get $hir $site origin}]
+    return [New SAME-FAILURE \
+        "failure `$failure` is raised from $count distinct exits" \
+        [lindex $origins 0] [lrange $origins 1 end] \
+        [dict create function $block functionName $name failure $failure failureName $failure \
+            exits $count sites $sites note "also raised here"]]
+}
+
+# ---------------------------------------------------------------------------
+# PROVES-NAMING (WARNINGS-PROVES-NAMING.md)
+#
+# A function fitted with a `proves` contract (REFINEMENT-VALUES.md) whose
+# shape is one the refinement feature defines, and whose written name does
+# not follow that shape's naming convention (REFINEMENT-VALUES.md, "Naming"):
+#
+#   predicate  one ordinary parameter, result bool: the name ends in `?`
+#   validator  one ordinary parameter, result unit: the name is exactly
+#              `validate` (a module export: `path::validate`) or begins
+#              with `validate_` (a literal, case-sensitive prefix; the bare
+#              `validate_` conforms too)
+#
+# The scope guard is the warning's boundary. Only a function whose block
+# carries a resolved proof contract (its `proofs`, hir/resolve.tcl's
+# ResolveProofs) is looked at: a function without `proves` is nobody's
+# business, whatever its name, parameters or result. Of those, only the two
+# shapes above: a proves function with zero or two or more ordinary
+# parameters, or with any other result, is silent. There is no reverse rule
+# (a `?` name returning something else, a `validate_` name that is not a
+# validator): nothing is ever read from a function without `proves`.
+#
+# The facts, all of them already on the block or its declaring `bind`:
+#   * the proof contract: the block's `proofs` is non-empty;
+#   * the ordinary parameter count: the block's `params` minus its `flags`,
+#     as METHOD-ELIGIBLE counts (flags are a separate category; context
+#     parameters are not in `params` at all);
+#   * the result: the block's `declaredResult`, the declared result the
+#     checker resolved and proves the body against (a proof contract
+#     requires one), compared with the canonical `bool` and `unit` types;
+#   * the written name: the declaring binding's name as the author wrote it
+#     (WrittenName), never hygiene's spelling of it.
+# Nothing else: no provenance, no annotation beyond the result, no value
+# identity, no exits, no reachability and no walk. A declaration is checked
+# once, in the generic source HIR, whether or not anything calls it, and
+# wherever it sits (a nested function or closure included); semantic
+# instances are never visited. One warning per function, anchored at its
+# declaration (the `bind`'s origin: the `fn` keyword); no secondary
+# locations. The message states the shape and the convention and never the
+# name to use: the validator convention has two conforming forms, and which
+# one fits is the author's call.
+
+proc hir::warnings::ProvesNaming {hir} {
+    set warnings {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] ne "bind"} {
+            continue
+        }
+        set block [dict get $node value]
+        set fn [dict get $hir exprs $block]
+        if {[dict get $fn kind] ne "block" || ![dict exists $fn proofs] || [dict get $fn proofs] eq ""} {
+            continue
+        }
+        set kind [ProvesShape $fn]
+        if {$kind eq ""} {
+            continue
+        }
+        set name [WrittenName $hir [dict get $node binding]]
+        if {[ConventionalName $kind $name]} {
+            continue
+        }
+        set convention [expr {$kind eq "predicate"
+            ? "predicate names end in `?`"
+            : "validator names are `validate` or begin with `validate_`"}]
+        lappend warnings [New PROVES-NAMING \
+            "`$name` proves a contract and returns [hir::types::show [dict get $fn declaredResult]]; $convention" \
+            [dict get $node origin] {} \
+            [dict create function $block functionName $name kind $kind]]
+    }
+    return $warnings
+}
+
+# The proof-producing shape of the function block FN: `predicate` (one
+# ordinary parameter, declared result bool), `validator` (one ordinary
+# parameter, declared result unit), or "" for any other shape. (A block read
+# from HIR text records no `flags`.)
+proc hir::warnings::ProvesShape {fn} {
+    set flags [expr {[dict exists $fn flags] ? [dict get $fn flags] : {}}]
+    if {[llength [dict get $fn params]] - [llength $flags] != 1
+            || ![dict exists $fn declaredResult]} {
+        return ""
+    }
+    switch -- [dict get $fn declaredResult] {
+        bool { return predicate }
+        unit { return validator }
+    }
+    return ""
+}
+
+# The name the function bound through binding B was written with: the
+# spelling hygiene recorded when it renamed the binding (NAME#N), else its
+# name; for a module's own definition, the member the module declared
+# ("emailish?" for web::emailish?). A name read back from HIR text keeps no
+# spelling, so a hygiene suffix there is dropped (source can never spell #).
+proc hir::warnings::WrittenName {hir b} {
+    set binding [dict get $hir bindings $b]
+    if {[dict exists $binding spelling]} {
+        set name [dict get $binding spelling]
+    } else {
+        regsub {#[0-9]+$} [dict get $binding name] {} name
+    }
+    return [MemberName $name]
+}
+
+# 1 if NAME follows the naming convention of the proof shape KIND.
+proc hir::warnings::ConventionalName {kind name} {
+    if {$kind eq "predicate"} {
+        return [expr {[string index $name end] eq "?"}]
+    }
+    return [expr {$name eq "validate" || [string first validate_ $name] == 0}]
+}
+
+# ---------------------------------------------------------------------------
+# ONE-CHAR-STRING-LITERAL (WARNINGS-ONE-CHAR-STRING-LITERAL.md)
+#
+# A written String literal whose exact value is one character. A single
+# character is written as a character literal ('x', a UnicodeChar), and a
+# String is a sequence of characters (README.md, "Strings and characters"):
+# the warning states that the literal's value is one character and names the
+# form, nothing else. It is deliberately not autofixable and prints no
+# rewritten spelling: where the literal's consumer takes a String (a `str`
+# parameter), the character spelling would not type-check, and that finding
+# belongs to the API, which the warning exists to make visible.
+#
+# The theorem. A literal site is reported exactly when
+#   * it is a written String literal: a `const` node -- the frontend lowers
+#     every written "..." to one (surface/lower.tcl: `"text"` -> const str
+#     text), and HIR text spells one as `const str ...` -- whose exact value
+#     (hir::exact::Of, the fact milestone 1's grouping uses) is a String, and
+#   * that String's length is 1, counted by the language's own str::length
+#     (core::strings::length, its reference implementation): characters, i.e.
+#     Unicode scalar values, never bytes. Escapes are already resolved in the
+#     exact value ("\n" is one character), a supplementary-plane character is
+#     one, and a base character plus a combining mark is two.
+# The empty String and every String of two or more characters are silent; a
+# character literal (const UnicodeChar) is never a String.
+#
+# The String consts the frontend synthesizes are not written literals and
+# are never reported: a context parameter is bound to `context#load("ID")`
+# (hir/contexts.tcl's DeclareParams), whose key is the identity of the context
+# struct or context trait -- one character for one named `C` -- and the
+# MutableVector elaboration (hir/mutvec.tcl) passes a static descriptor
+# String to the internal operations that need one (`mutable_vector#share(v,
+# "h")`, `#clear_drop`, `#swap_drop`; MUTABLE-VECTOR.md). They are recognized
+# by the compiler's own predicates for those constructs (hir::contexts::isLoad,
+# hir::mutvec::DescriptorArgs); no source can spell `context#load` or
+# `mutable_vector#...`, so no written literal is ever such a key.
+#
+# Literals only. Nothing else is looked at: not a binding read at a use site
+# (`sep = ","` is reported at its initializer, once, never where `sep` is
+# read), not an alias, a parameter, a call result or a computed String, even
+# when its value is one character; no value is followed and nothing is
+# evaluated. Context-blind: the pass never looks at what consumes a literal --
+# not the callee or its parameter types, not the other side of a comparison,
+# not an enclosing container. No reachability: the fact is about the written
+# source, so a literal in a dead branch or an uncalled function is reported
+# like any other. One diagnostic per literal site; two equal literals are two
+# sites. Scope: the generic source HIR, whose every written literal is one
+# const node; semantic instances are never visited.
+
+proc hir::warnings::OneCharStringLiteral {hir} {
+    set keys [ContextLoadKeys $hir]
+    set warnings {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] ne "const" || [dict exists $keys $e]} {
+            continue
+        }
+        set fact [hir::exact::Of $hir $e]
+        if {[lindex $fact 0] ne "val" || [core::value::kind [lindex $fact 1]] ne "str"} {
+            continue
+        }
+        set value [lindex $fact 1]
+        if {[core::value::intOf [core::strings::length $value]] != 1} {
+            continue
+        }
+        lappend warnings [New ONE-CHAR-STRING-LITERAL \
+            "the String literal `[core::value::show $value]` is one character long; a single character is written as a character literal" \
+            [dict get $node origin] {} [dict create site $e value $value]]
+    }
+    return $warnings
+}
+
+# The const ExprIds that are synthesized keys: the argument of every context
+# load (`context#load("ID")`, hir::contexts::isLoad) in HIR, and the
+# descriptor argument of every internal MutableVector operation
+# (hir::mutvec::DescriptorArgs).
+proc hir::warnings::ContextLoadKeys {hir} {
+    set keys [dict create]
+    dict for {e node} [dict get $hir exprs] {
+        if {[hir::contexts::isLoad $hir $e]} {
+            foreach arg [dict get $node args] {
+                dict set keys $arg 1
+            }
+        }
+        foreach arg [hir::mutvec::DescriptorArgs $hir $e] {
+            dict set keys $arg 1
+        }
+    }
+    return $keys
+}
+
+# ---------------------------------------------------------------------------
+# MANY-BOOLEAN-ARGUMENTS (WARNINGS-MANY-BOOLEAN-ARGUMENTS.md)
+#
+# A written call that passes two or more boolean literals to a declared
+# function whose signature takes a subject and boolean options. `true` carries
+# no name: at the call site a boolean literal is unreadable, and two of them
+# make the signature unusable there. Flags are the language's form for options
+# (FLAGS.md, "Boolean arguments"): the warning states the count, names the
+# callee and names the form, and nothing else. It is deliberately not
+# autofixable and prints no flag spelling: a flag defaults to false, so a
+# mis-mapped rewrite compiles and is silently wrong, and which `true` means
+# which option is the author's intent, not the compiler's proof.
+#
+# The theorem. A call site is reported exactly when
+#   * it is a written call: the frontend's `written` provenance (milestone 2)
+#     is {form function} or {form method}. The calls the frontend synthesizes
+#     -- an operator (`true == false`, the `==` of `a != b`), a list literal
+#     (`[true, false]`) -- carry another form, and a call with no marker
+#     (core IR, HIR text) is never a candidate. Written-ness is never derived
+#     any other way;
+#   * its callee is a declared function: a reference whose binding resolves,
+#     through plain aliases (`g = f`) by the resolver's own candidate identity
+#     (hir::resolve::CandidateIdentity), to a function declaration (`fn`, a
+#     nested or a module function: a non-duplicate `bind` of a block) or to a
+#     root native of fixed arity. A call through a function value -- a
+#     parameter, a projection, a call result, a binding of any other value --
+#     is silent: the signature that would have to change belongs to no
+#     declaration the warning can name. The call passes exactly the
+#     callee's parameters (a call that cannot match its declaration is
+#     silent);
+#   * the callee's signature takes options and a subject: among its ORDINARY
+#     parameters -- the block's `params` minus its `flags`, METHOD-ELIGIBLE's
+#     count (context parameters are not in `params` at all) -- at least two
+#     the checker proves `bool` and at least one it does not (the subject: a
+#     function whose ordinary parameters are all bool, `xor(a: bool, b:
+#     bool)`, takes data bools, not options). Flags are never counted, in the
+#     gate or the threshold: they are the idiom. A parameter is proven bool
+#     when its entry type is exactly the canonical `bool`: the declared
+#     annotation, else the TRUSTED inferred contract
+#     (hir::signatures::entryTypes, the one signature every call must prove
+#     and the body is typed with); for a native, its registry parameter type.
+#     An untyped parameter the body merely uses as a condition has only a
+#     CHECKED contract (validated at run time, never assumed by the body):
+#     not proven, not counted -- in practice the gate needs annotations;
+#   * it passes at least two written `true`/`false` literals at ordinary
+#     argument positions (a method call's receiver is position 1): an
+#     argument that is a reference to the root `true` or `false`, which is
+#     exactly how the frontend lowers those two keyword tokens. The flag
+#     arguments the resolver appends after the ordinary ones are never read.
+#     Nothing else is evidence, whatever its value: a binding that holds a
+#     constant, an alias, a comparison, a call (the anonymity principle: a
+#     name, or an expression, already says what the value means); no exact
+#     value, alias flow or constant is followed;
+#   * it is structurally reachable (HIR's `reachable` flag: statically
+#     decided branches, code after a completion): a call that cannot execute
+#     makes no call. Structural only: no completion walk.
+#
+# One warning per call site, anchored at the call, no secondary locations,
+# never grouped by callee. Scope: the generic source HIR, once per written
+# call; semantic instances are never visited.
+
+proc hir::warnings::ManyBooleanArguments {hir} {
+    set warnings {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] ne "call" || ![dict exists $node written]
+                || [dict get $node written form] ni {function method} || ![dict get $node reachable]} {
+            continue
+        }
+        # Cheap first: two literals among all the arguments.
+        if {[llength [BoolLiteralPositions $hir [dict get $node args]]] < 2} {
+            continue
+        }
+        set callee [OptionCallee $hir $node]
+        if {$callee eq "" || [dict get $callee bools] < 2 || [dict get $callee subjects] < 1} {
+            continue
+        }
+        set positions [BoolLiteralPositions $hir \
+            [lrange [dict get $node args] 0 [expr {[dict get $callee ordinary] - 1}]]]
+        set count [llength $positions]
+        if {$count < 2} {
+            continue
+        }
+        set shown [dict get $callee shown]
+        lappend warnings [New MANY-BOOLEAN-ARGUMENTS \
+            "the call to `$shown` passes $count boolean literals; flags name options" \
+            [dict get $node origin] {} \
+            [dict create call $e callee [dict get $callee target] calleeName $shown \
+                literals $count positions $positions]]
+    }
+    return $warnings
+}
+
+# The argument positions (1-based, as diagnostics count arguments) of ARGUMENTS
+# that are a written `true` or `false`: a reference to the root binding of
+# that name.
+proc hir::warnings::BoolLiteralPositions {hir arguments} {
+    set positions {}
+    set i 0
+    foreach a $arguments {
+        incr i
+        set node [dict get $hir exprs $a]
+        if {[dict get $node kind] ne "ref" || [dict get $node binding] eq ""} {
+            continue
+        }
+        set binding [dict get $hir bindings [dict get $node binding]]
+        if {[dict get $binding kind] eq "root" && [dict get $binding name] in {true false}} {
+            lappend positions $i
+        }
+    }
+    return $positions
+}
+
+# The declared callee of the call NODE, as a dict {target T shown TEXT
+# ordinary N bools B subjects S}: TARGET like a call's `target` ({block
+# ExprId} / {native NAME}), SHOWN the callee as the diagnostic names it, N its
+# ordinary parameter count, B how many of those the checker proves bool, S
+# how many it does not. "" for a call through a function value, and for a
+# call whose argument count is not the declaration's.
+proc hir::warnings::OptionCallee {hir node} {
+    set callee [dict get $hir exprs [dict get $node callee]]
+    if {[dict get $callee kind] ne "ref" || [dict get $callee binding] eq ""} {
+        return ""
+    }
+    set argc [llength [dict get $node args]]
+    set identity [hir::resolve::CandidateIdentity hir [dict get $callee binding]]
+    set b [string range $identity [expr {[string first : $identity] + 1}] end]
+    if {[string match native:* $identity]} {
+        if {![core::native::exists $b]} {
+            return ""
+        }
+        set meta [core::native::metadata $b]
+        set arity [dict get $meta arity]
+        if {![string is digit -strict $arity] || $argc != $arity} {
+            return ""
+        }
+        set types [lrange [concat [dict get $meta paramTypes] [lrepeat $arity any]] 0 [expr {$arity - 1}]]
+        return [OptionShape [list native $b] $b $types]
+    }
+    set binding [dict get $hir bindings $b]
+    set d [dict get $binding declaredBy]
+    if {[dict get $binding kind] ne "local" || $d eq "" || ![dict exists $hir exprs $d]
+            || [dict get $hir exprs $d kind] ne "bind" || [dict get $hir exprs $d duplicate]} {
+        return ""
+    }
+    set block [dict get $hir exprs $d value]
+    set fn [dict get $hir exprs $block]
+    if {[dict get $fn kind] ne "block" || $argc != [llength [dict get $fn params]]} {
+        return ""
+    }
+    set flags [expr {[dict exists $fn flags] ? [dict get $fn flags] : {}}]
+    set ordinary [expr {[llength [dict get $fn params]] - [llength $flags]}]
+    set types [lrange [hir::signatures::entryTypes $hir $block] 0 [expr {$ordinary - 1}]]
+    set shown [expr {[dict exists $binding spelling] ? [dict get $binding spelling] : [dict get $binding name]}]
+    return [OptionShape [list block $block] $shown $types]
+}
+
+proc hir::warnings::OptionShape {target shown types} {
+    set bools 0
+    foreach type $types {
+        if {$type eq "bool"} {
+            incr bools
+        }
+    }
+    return [dict create target $target shown $shown ordinary [llength $types] \
+        bools $bools subjects [expr {[llength $types] - $bools}]]
 }
