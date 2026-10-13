@@ -624,6 +624,25 @@ tables such as `hir::signatures::of`, the dependency trace). Warnings
 (`hir/warnings.tcl`) print some functions' binding `name` too, but a warning
 is no decision: it is reported once, for the decided program.
 
+Validated on the tree after: `tests/all.tcl` (interp 7299 tests passed;
+compile 7295 passed, 4 skipped), none failing;
+`audit/static-decisions/tools/fuzz.tcl -n 10 -legacy 0`, seeds 1, 2 and 3:
+30 programs, 816 sites, 480 rejected, no failure;
+`audit/static-decisions/tools/compare.tcl` on 87 of the 88 golden suites:
+batched = sequential on every one, and `mutable-array.bot` (whose sequential
+order outlasted a two-hour run) decided batched exactly as on the tree
+before (every site, message, diagnostic and the decided HIR; `depMs` aside);
+`audit/static-decisions/tools/mutate.tcl`: 54 mutants, 54 killed (each
+`hygiene-*` by its reproducer -- no fuzz program renames a binding, so the
+fuzzer kills none of them); `audit/affine/tools/mutate.tcl` 29 of 29 and the
+42 Tcl mutants of `audit/coroutines/tools/mutate.tcl` killed (its 10 mutants
+of `native/src/` were not rerun: no Rust changed), and every other audit's
+`mutants.txt` still applies (`projection-aliases` follows the line it
+mutates); the affine, coroutine, MutableVector, MutableArray, context-trait
+and trait fuzzers, two or three seeds each: no disagreement;
+`audit/golden/tools/check.tcl` (4 shards): 4702 ported rows, old pass and
+new pass, all 88 suites ok.
+
 #### The erased-callable contract's witnesses
 
 The erased-callable contract is a set of errors (`hir::completions::
