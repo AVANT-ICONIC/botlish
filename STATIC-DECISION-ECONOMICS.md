@@ -968,6 +968,94 @@ order's definition at work (STATIC-COMPILE.md, step 3), not a scheduler's
 error, and making the verdict independent of layout is a decision about
 that definition; it is recorded, not made.
 
+### The first diagnostic, and what method-call trials read
+
+A refinement of the contract-boundary channel developed beside the round
+above, from the tree of [every mention](#every-mention), and merged after
+it. Two of its rules are that round's, reached independently -- a region
+reads a held site's form, never the site's own checks ([a site's form is not
+what it reads](#a-sites-form-is-not-what-it-reads)); a coroutine handle's
+check reads the contract only through an uncontracted capture of a thunk
+constructed in the body ([above](#coroutine-constructions-and-a-verdict-that-depends-on-layout)).
+It adds two.
+
+**Who reads a contract-boundary report.** `hir::completions::ReportOutside`
+is called by `Subsume` and `SubsumeHandle` alone, in the completion walk
+(`hir::completions::checkBlock`, which `hir::errorsets::verify` alone
+calls), and only while the program erases something. No analysis reads a
+report: the semantic instances' check and the ownership analysis run before
+that walk. What does: the site's own diagnostics -- of which the scheduler
+reads whether the site fails and, if it does, its first diagnostic -- the
+trial builds of a method-style call (`hir::MethodCallProblems`: the
+diagnostics inside the call, minus those every candidate shares), and the
+plan's gate (`C:plan`), which a failing site keeps closed whatever its
+reports.
+
+**The gate: only while a report can be the first diagnostic.**
+`hir::CheckOnce` records the diagnostics reported before the completion walk
+(`beforeCompletions`, the range of their indices), and every report is
+appended after them. A site that fails in a build with its first diagnostic
+among them keeps that first diagnostic whatever the program erases -- what
+decides it is read through the site's other edges -- so `Z:site` takes no
+contract-boundary edge. A site that is ok, or fails first with the
+completion walk's diagnostic or a later pass's, keeps them: a report may
+become (or stop being) its first diagnostic, also when the program begins
+to erase something. So does a site failing first with a method-style call's
+rejection: `hir::DecideMethodCalls` prepends it and shifts the range past
+it, since its message names each candidate's first problem in its trial,
+which may be a report. (`hir::check`'s demotion rerun keeps the first
+check's range with its diagnostics.)
+
+**What a method-style call's trials judge (`method-trial`).** A candidate's
+parameter types are the structural types the call's own arguments acquire
+(`hir::callables::ArgContexts`), so an argument's check may report in one
+candidate's trial and not in another's, and decide the call.
+`R:region -> C:erased` and `-> P:input` for every call with several
+candidates of which an argument has a callable part some parameter type
+could make structural (`CallableParts`: what `hir::completions::Align`
+finds for every target at once); for a handle argument only while a
+candidate is a coroutine operation, whose positions the check skips -- a
+handle's check reads no parameter type. Every other check inside the call
+reports alike in every trial, a problem every candidate shares, which
+decides nothing: the arguments are analyzed before the call from the same
+facts, and resolution numbers them alike for any candidate (the candidate
+is one callee `ref`). Without it a method call's cone, which reaches site
+forms only, saw no contract-boundary check at all (and before the forms,
+only a site's own positions at the chosen candidate's parameter types):
+`se-equal-method-trial`'s `n.apply(mutable_array::generate)` -- a lexical
+`apply` typing its callable `Fn{args: [int, any], ...}` (generate calls its
+second argument, uncontracted there, so it may raise whatever the program
+erases) beside `pick::apply` leaving it untyped -- has only `pick::apply`
+fit while a contributor erases `raise_e`, and both, AMBIGUOUS-METHOD-CALL,
+once the contributor is rejected. Batched, the tree before this merge
+reused the decision and accepted the block; the sequential order rejects it.
+
+Every golden suite (88), compiled once with main before this merge and once
+after (`surface::readProgramFile`, batched): the same sites, diagnostics and
+decided HIR in every one, the same rounds and builds in all but
+`linux-io.bot`, 3/3 -> 2/2 (`structural_without_error`'s TYPE is the type
+checker's, before the completion walk, and no longer waits for the erasing
+sites before it). The method-trial edges cost no build in the corpus. (On
+the tree of every mention, before the round above, the same rules took
+ownership.bot 5/24 -> 4/11, mutable-array.bot 7/34 -> 6/21,
+framework-semantics.bot 5/9 -> 3/7, linux-io.bot 4/4 -> 3/3 and affinity.bot
+9/10, mispredicted -> 8/9; the round above reached as much or more by
+itself.)
+
+Tests: `se-equal-subsume-gate` (a report that vanishes with the
+contributor: mutable_array::generate given `Fn{args: [int, any], ...}`, and a
+handle leaving its construction in a function used as a value -- judged
+after the contributor), `se-equal-method-trial`, `se-builds-subsume-gate`
+(three USE-AFTER-MOVE handle sites rejected with the contributor: 2 rounds,
+3 without the gate), `se-property-subsume-positions`. Mutants:
+`subsume-gate-every-failing`, `method-trial-ignored` (semantic),
+`subsume-gate-ignored` (economic).
+
+Validation of the merged tree: `tests/static-economics.test` 68/68,
+`tests/static-compile.test` 83/83; the fuzzer, seeds 1, 2, 3 and 29 (10
+programs each): 40 programs, 1108 sites, 0 failures; the 88 golden suites
+before and after, above.
+
 ## Method-call decisions
 
 A round's method-style calls with several candidates are decided by trial
