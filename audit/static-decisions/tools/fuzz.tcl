@@ -39,12 +39,17 @@
 #      of discarded sites blanked (its own schedule numbers them);
 #   3. layout: the four layouts give every fragment the same verdict (its
 #      outcome and diagnostic code, and the diagnostic's line and column
-#      relative to the fragment) and take the same number of batched rounds
-#      -- except where a dependency runs one way (a consumer of the
-#      erased-callable contract on a contributor): the order a layout writes
-#      the two in decides whether the second waits for a build, so layouts may
-#      differ by at most one round fewer than the set has blocks the contract
-#      links (the summary counts the programs where they differ);
+#      relative to the fragment) -- for a consumer of the erased-callable
+#      contract too, because the sequential order judges it only once no
+#      failing contributor remains, wherever the two are written (the
+#      waiting rule, STATIC-COMPILE.md; the pool draws neither of its
+#      residual cases, a cycle of failing blocks that each erase and consume
+#      or an ok contributor a later rejection fails) -- and take the same number of
+#      batched rounds -- except where a dependency runs one way (a consumer
+#      on a contributor): the order a layout writes the two in decides
+#      whether the second waits for a build, so layouts may differ by at
+#      most one round fewer than the set has blocks the contract links (the
+#      summary counts the programs where they differ);
 #   4. economics: the batched rounds stay within the generator's own model of
 #      the set's dependency depth -- a resolution round, one checked round,
 #      one more per level of each genuine chain (a nested chain, the
@@ -361,7 +366,8 @@ for {set p 0} {$p < $n} {incr p} {
     }
     if {$problem eq ""} {
         set base [dict get $results nested]
-        # The sequential order is post-order: where a dependency runs one way
+        # The sequential order is post-order, a failing consumer after the
+        # failing contributors to its channel: where a dependency runs one way
         # (a consumer of the erased-callable contract on a contributor),
         # which of the two a layout writes first decides whether the second
         # waits for a build. Each round of the linked blocks rejects at least

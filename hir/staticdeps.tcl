@@ -7,6 +7,11 @@
 #                 DECISIONS) whose form the site's own diagnostics may
 #                 depend on, never the site itself
 #       channels  the program-wide channels of the build, for the trace
+#       consumes  key -> the waiting channels (C:erased, C:budget:B) the
+#                 site's diagnostics read (Waiting)
+#       contributors  channel -> the keys of the sites (present as bodies)
+#                 whose decision may change the channel's value (Waiting;
+#                 hir/static.tcl's waiting rule reads both)
 #   hir::staticdeps::Explain DEPS Y Z            why site Y depends on site
 #                                                Z: a path, as text
 #
@@ -132,12 +137,15 @@
 #                       *witness* contribution -- the one the sequential order
 #                       removes last; for a semantic instance, the chain of
 #                       requests keeping it that is removed last
-#                       (RequestPath) -- and on every declined request; every
-#                       site holding a contribution is linked to it
-#                       (Z:site -> C:erased, as C:verdict's contributors are:
-#                       when a consumer turns unknown, the other contributors
-#                       of its errors are held back with it;
-#                       ErasureWitnesses). Its
+#                       (RequestPath) -- and on every declined request
+#                       (ErasureWitnesses). The sites holding a contribution
+#                       are no edge of the graph: the waiting rule reads them
+#                       (Waiting). (They used to be linked to the contract,
+#                       Z:site -> C:erased, so that a consumer turned unknown
+#                       held the other contributors back and the next build
+#                       judged it with them present, as the sequential order
+#                       did; the order now judges a failing consumer only
+#                       once no failing contributor remains.) Its
 #                       *consumers*: R -> C:erased for a region with a call
 #                       through an uncontracted value (a callee of type any
 #                       or a bare kind, a native calling such an argument),
@@ -230,6 +238,22 @@
 #                       diagnostics -- so they are decided one per build, as
 #                       the sequential order decides them.
 #
+# The waiting rule (hir/static.tcl, Waits; STATIC-COMPILE.md) reads the
+# channels whose contributors' *presence* can cause a consumer's diagnostic --
+# C:erased and C:budget:B -- for the definition as well as for the
+# economics: a failing site that reads one (`consumes`: its node reaches the
+# channel over every edge but a contributor's link and a gate's, and not the
+# erased contract when its first diagnostic precedes the completion walk,
+# Waiting) waits while a failing site may change it (`contributors`: every
+# site holding a contribution, and every site form the channel's node
+# reaches). C:verdict and C:plan are gates, the
+# opposite shape -- a contributor's presence withholds a consumer's
+# diagnostic -- so no site waits on them. An extra edge into a waiting
+# channel's part of the graph can therefore change which site the order
+# judges first, not only cost a build: a conservative edge makes a consumer
+# wait for a contributor that could not have changed its diagnostic, and the
+# two are then judged contributor first, whatever their layout.
+#
 # And one channel that is the site's own, never a summary another region
 # reads: the contract-boundary checks at the site's positions
 # (hir::completions::Subsume) run only in the diagnosing walk of a body and
@@ -296,6 +320,13 @@ namespace eval hir::staticdeps {
         TRAIT-NOT-SATISFIED TRAIT-IMPL-ORDER TRAIT-INSTANCE-BUDGET
         TRAIT-POLYMORPHIC-RECURSION TRAIT-INTERNAL
         AFFINE-GENERIC-NESTED-UNSUPPORTED AFFINE-INSTANCE-BUDGET
+    }
+    # The edges the waiting rule does not read (Waiting): a contributor's
+    # link to what it contributes to (it orders, it reads nothing) and a
+    # site's edge to a gate (whose contributors' presence withholds the
+    # site's diagnostic rather than causing it).
+    variable waitingSkip {
+        verdict-contributor possible-contributor path-release plan-site
     }
 }
 
@@ -420,6 +451,7 @@ proc hir::staticdeps::Deps {hir sites decisions {methods 0}} {
         dict set result $key [lsearch -all -inline -not -glob \
             [lsearch -all -inline -not -exact [dict get $sccSites [dict get $sccOf Z:$key]] $key] M:*]
     }
+    lassign [Waiting $state $G $labels $sccOf $sccSites $result] consumes contributors
     # Per method-style call: the sites and the method-call regions its own
     # region reaches (hir/static.tcl's MethodSeeds).
     set methodCones [dict create]
@@ -448,7 +480,151 @@ proc hir::staticdeps::Deps {hir sites decisions {methods 0}} {
     }
     return [dict create sites $result channels [dict get $state channels] \
         labels $labels names [dict get $state names] nodes [dict size $G] methods $methodCones \
-        firstIds $firstIds]
+        firstIds $firstIds consumes $consumes contributors $contributors]
+}
+
+# The waiting rule's reading of the graph (header, "The waiting rule";
+# hir/static.tcl's Waits): a list {CONSUMES CONTRIBUTORS}, from STATE
+# (Prepare's walk), G and LABELS (Deps' graph: node -> successors, node ->
+# {successor label ...}), SCCOF and SCCSITES (its components and the site
+# forms each reaches) and SITES (Deps' result, whose keys are the sites
+# present as bodies).
+#
+#   CONSUMES      key -> the waiting channels (C:erased, C:budget:B) the
+#                 site's diagnostics read: those its node reaches over every
+#                 edge but a link (a contributor's edge to what it
+#                 contributes to, which orders but reads nothing) or a
+#                 gate's (C:verdict, C:plan: their contributors' presence
+#                 withholds a consumer's diagnostic rather than causing it);
+#                 not C:erased for a site whose first diagnostic was
+#                 reported before the completion walk (STATE's early),
+#                 which no erasure can cause or precede
+#   CONTRIBUTORS  channel -> the sites whose form its value may depend on:
+#                 every site holding a contribution (the erased contract's
+#                 every one, not only its witnesses) and every site form the
+#                 channel's node reaches. Not closed under what those sites
+#                 read: an ok contributor that a later rejection makes fail
+#                 holds no consumer back (STATIC-COMPILE.md, "The waiting
+#                 rule": a residual case, with cycles), since that closure
+#                 made ordinary failing sites a contributor's code reads wait
+#                 for each other, one build each (STATIC-DECISION-
+#                 ECONOMICS.md, "The waiting rule")
+proc hir::staticdeps::Waiting {state G labels sccOf sccSites sites} {
+    variable waitingSkip
+    # Tarjan over the edges the rule reads, from the sites' own nodes; the
+    # waiting channels each component reaches, summed as Deps sums sites.
+    set index [dict create]
+    set low [dict create]
+    set onStack [dict create]
+    set stack {}
+    set counter 0
+    set compOf [dict create]
+    set compChannels [dict create]
+    set ncomp 0
+    set fsucc [dict create]
+    set consumes [dict create]
+    foreach key [dict get $state presentKeys] {
+        set root Z:$key
+        if {![dict exists $G $root]} {
+            dict set consumes $key {}
+            continue
+        }
+        if {![dict exists $index $root]} {
+            set work [list [list $root 0]]
+            while {$work ne {}} {
+                lassign [lindex $work end] v i
+                if {$i == 0} {
+                    dict set index $v $counter
+                    dict set low $v $counter
+                    incr counter
+                    lappend stack $v
+                    dict set onStack $v 1
+                }
+                if {![dict exists $fsucc $v]} {
+                    dict set fsucc $v [lmap {w label} [dict get $labels $v] {
+                        if {$label in $waitingSkip} continue
+                        set w
+                    }]
+                }
+                set succs [dict get $fsucc $v]
+                set descended 0
+                while {$i < [llength $succs]} {
+                    set w [lindex $succs $i]
+                    incr i
+                    if {![dict exists $index $w]} {
+                        lset work end [list $v $i]
+                        lappend work [list $w 0]
+                        set descended 1
+                        break
+                    } elseif {[dict exists $onStack $w]} {
+                        if {[dict get $index $w] < [dict get $low $v]} {
+                            dict set low $v [dict get $index $w]
+                        }
+                    }
+                }
+                if {$descended} continue
+                lpop work
+                if {[dict get $low $v] == [dict get $index $v]} {
+                    set id $ncomp
+                    incr ncomp
+                    set members {}
+                    while 1 {
+                        set w [lpop stack]
+                        dict unset onStack $w
+                        dict set compOf $w $id
+                        lappend members $w
+                        if {$w eq $v} break
+                    }
+                    set found [dict create]
+                    foreach w $members {
+                        if {$w eq "C:erased" || [string match C:budget:* $w]} {
+                            dict set found $w 1
+                        }
+                        foreach x [dict get $fsucc $w] {
+                            set cx [dict get $compOf $x]
+                            if {$cx != $id} {
+                                foreach c [dict get $compChannels $cx] {
+                                    dict set found $c 1
+                                }
+                            }
+                        }
+                    }
+                    dict set compChannels $id [dict keys $found]
+                }
+                if {$work ne {}} {
+                    set parent [lindex [lindex $work end] 0]
+                    if {[dict get $low $v] < [dict get $low $parent]} {
+                        dict set low $parent [dict get $low $v]
+                    }
+                }
+            }
+        }
+        set channels [dict get $compChannels [dict get $compOf $root]]
+        if {[dict exists $state early $key]} {
+            # Its first diagnostic was reported before the completion walk,
+            # and nothing there reads the erased contract (hir/affine.tcl's
+            # exit releases read it and report nothing): it stays its first
+            # diagnostic whatever the program erases.
+            set channels [lsearch -all -inline -not -exact $channels C:erased]
+        }
+        dict set consumes $key [lsort $channels]
+    }
+    set contributors [dict create]
+    dict for {v _} $G {
+        if {$v ne "C:erased" && ![string match C:budget:* $v]} continue
+        set base [lsearch -all -inline -not -glob [dict get $sccSites [dict get $sccOf $v]] M:*]
+        if {$v eq "C:erased"} {
+            lappend base {*}[dict keys [dict get $state erasureSites]]
+        }
+        set seen [dict create]
+        foreach key $base {
+            if {[dict exists $sites $key]} {
+                dict set seen $key 1
+            }
+        }
+        dict set contributors $v [dict keys $seen]
+    }
+    return [list $consumes $contributors]
 }
 
 # A path of DEPS's graph from site Y's node to site Z's, as text: each step's
@@ -967,9 +1143,9 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
         }
     }
     dict set state erasurePoints $points
-    lassign [ErasureWitnesses $state $units] witnesses linked
+    lassign [ErasureWitnesses $state $units] witnesses holding
     dict set state erasureWitnesses $witnesses
-    dict set state erasureLinked $linked
+    dict set state erasureSites $holding
     dict set state erasedConsumers $consumers
     # The semantic-instance budget: the blocks under pressure.
     set pressured [dict create]
@@ -1098,7 +1274,8 @@ proc hir::staticdeps::RequestPath {requests regionOf siteOf position id pathsVar
 # requests -- the contribution exists while all of them do), a contravariant
 # erasure's (HOW all: ITEMS the value and its expression), each with the
 # errors it erases, or (ERRORS `*`) a declined request's, whose errors are not
-# known. A list {WITNESSES LINKED}.
+# known. A list {WITNESSES HOLDING}, HOLDING the sites (key -> 1) holding a
+# contribution of known errors.
 #
 # The contract is the union of the contributions' errors, and what reads it
 # reads that set and nothing else (hir::completions::ErasedErrors: an
@@ -1110,12 +1287,9 @@ proc hir::staticdeps::RequestPath {requests regionOf siteOf position id pathsVar
 # every contribution whose errors are not known. Rejecting any other
 # contributor's site leaves the set as it is: callable-contracts.bot's 41
 # sites, each erasing an error-declaring callable and calling an uncontracted
-# one, are no longer decided one per build. And every site holding a
-# contribution is linked to the contract (LINKED: Z:site -> C:erased), as the
-# ownership verdict's contributors are: when a consumer's status becomes
-# unknown -- a witness's inputs changed, and with them perhaps its errors --
-# its component holds the other contributors back, so that the next build
-# judges it with them still present, as the sequential order does.
+# one, are no longer decided one per build. The sites holding a contribution
+# (HOLDING) are the waiting rule's contributors (Waiting): a failing
+# consumer waits for every failing one, witness or not.
 proc hir::staticdeps::ErasureWitnesses {state units} {
     set position [dict create]
     set i 0
@@ -1126,7 +1300,7 @@ proc hir::staticdeps::ErasureWitnesses {state units} {
     set never [expr {$i + 1}]
     set witnesses {}
     set best [dict create]
-    set linked [dict create]
+    set holding [dict create]
     set index 0
     foreach unit $units {
         lassign $unit errors how items path pathRank
@@ -1139,7 +1313,7 @@ proc hir::staticdeps::ErasureWitnesses {state units} {
         foreach e $items {
             if {[dict exists $state siteOf $e]} {
                 set s [dict get $state siteOf $e]
-                dict set linked $s 1
+                dict set holding $s 1
                 if {[dict get $position $s] < $rank} {
                     set rank [dict get $position $s]
                 }
@@ -1160,7 +1334,7 @@ proc hir::staticdeps::ErasureWitnesses {state units} {
     dict for {error pick} $best {
         lappend witnesses [lindex $pick 0]
     }
-    return [list [lmap i [lsort -integer -unique $witnesses] {lindex $units $i}] $linked]
+    return [list [lmap i [lsort -integer -unique $witnesses] {lindex $units $i}] $holding]
 }
 
 # The plan's part of the graph (header, C:plan), from STATE (Prepare's walk):
@@ -1655,9 +1829,6 @@ proc hir::staticdeps::Successors {hir stateVar v} {
                 dict set succ C:verdict path-release
             } elseif {[dict exists $state verdictLinked $key]} {
                 dict set succ C:verdict verdict-contributor
-            }
-            if {[dict exists $state erasureLinked $key]} {
-                dict set succ C:erased erasure-contributor
             }
             if {[dict exists $state possibleLinks $key]} {
                 foreach node [dict keys [dict get $state possibleLinks $key]] {
