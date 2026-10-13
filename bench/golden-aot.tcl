@@ -11,7 +11,8 @@
 #   tclsh9.0 bench/golden-aot.tcl ?FILE.bot ...?    (default: every suite)
 #
 # A suite that is not AOT-ready (a region that needs a runtime-guarded
-# instance, from which AOT never falls back) reports its first blockers. A
+# instance, from which AOT never falls back) reports its first blockers; a
+# ready one whose executable fails to build reports the failure. A
 # suite's report is its program's value: the executable prints it, and its
 # summary ("N passed, M failed") must equal the JIT run's. Needs the release
 # native backend (cargo build --release --manifest-path native/Cargo.toml).
@@ -35,10 +36,16 @@ if {[lindex $argv 0] eq "-one"} {
         set t1 [clock microseconds]
         set result [dict create suite [file tail $path] frontend [seconds [expr {$t1 - $t0}]]]
         set exe [file join $dir [file rootname [file tail $path]]]
-        if {[catch {native::executable $hir $exe} message]} {
+        if {[catch {native::executable $hir $exe} message options]} {
             set t2 [clock microseconds]
-            dict set result aot [dict create status not-ready seconds [seconds [expr {$t2 - $t1}]] \
-                why [lrange [split $message \n] 1 3]]
+            set lines [split $message \n]
+            if {[dict get $options -errorcode] eq "NATIVE AOT NOT-READY"} {
+                dict set result aot [dict create status not-ready seconds [seconds [expr {$t2 - $t1}]] \
+                    why [lrange $lines 1 3]]
+            } else {
+                dict set result aot [dict create status failed seconds [seconds [expr {$t2 - $t1}]] \
+                    why [list "[dict get $options -errorcode]: [lindex $lines 0]" {*}[lrange $lines 1 3]]]
+            }
         } else {
             set t2 [clock microseconds]
             set output [exec $exe]
@@ -65,6 +72,7 @@ if {[lindex $argv 0] eq "-one"} {
 set suites [expr {$argv eq {} ? [lmap p [lsort [glob -directory [file join $root tests golden] *.bot]] {file tail $p}] : $argv}]
 set ready 0
 set notReady 0
+set failed 0
 foreach suite $suites {
     set path [file join $root tests golden $suite]
     if {[catch {exec tclsh9.0 [info script] -one $path 2>@1} output]} {
@@ -80,12 +88,17 @@ foreach suite $suites {
             $suite [dict get $r frontend] [dict get $aot seconds] [dict get $aot run] $jit \
             [expr {$jit > 0 ? [dict get $aot seconds] / $jit : 0}] [dict get $aot summary] \
             [expr {[dict get $r same] ? "" : " -- JIT: [dict get $r jit summary]"}]]
-    } else {
+    } elseif {[dict get $aot status] eq "not-ready"} {
         incr notReady
         puts [format "%-40s front end %7.2f s | NOT AOT-READY (found in %.2f s) | JIT lower+codegen+run %6.2f s" \
+            $suite [dict get $r frontend] [dict get $aot seconds] $jit]
+        foreach line [dict get $aot why] { puts "    $line" }
+    } else {
+        incr failed
+        puts [format "%-40s front end %7.2f s | AOT BUILD FAILED (after %.2f s) | JIT lower+codegen+run %6.2f s" \
             $suite [dict get $r frontend] [dict get $aot seconds] $jit]
         foreach line [dict get $aot why] { puts "    $line" }
     }
     flush stdout
 }
-puts "\n[llength $suites] suites: $ready AOT-ready, $notReady not AOT-ready"
+puts "\n[llength $suites] suites: $ready AOT-ready, $notReady not AOT-ready, $failed failed to build"
