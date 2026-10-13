@@ -312,7 +312,8 @@ proc hir::callables::Preserves {hir type final} {
 }
 
 # A best-effort source name for block B, for diagnostics only (the block
-# whose declaring "bind" this is, if any is still visible from here).
+# whose declaring "bind" this is, if any is still visible from here; its
+# hir::semantic::SourceName, never a hygiene rename).
 proc hir::callables::Name {hir block} {
     dict for {b binding} [dict get $hir bindings] {
         set declaredBy [dict get $binding declaredBy]
@@ -320,7 +321,7 @@ proc hir::callables::Name {hir block} {
             continue
         }
         if {[dict get $hir exprs $declaredBy value] eq $block} {
-            return [dict get $binding name]
+            return [hir::semantic::SourceName $hir $b]
         }
     }
     return ""

@@ -830,9 +830,12 @@ verdict such as the ownership analysis's, which withholds release scopes and
 `AFFINE-PATH-RELEASE-UNSUPPORTED` from a program it rejects, or the trait
 plan's gate, which reports its diagnostics only for a program with no other;
 or a diagnostic that prints an internal id in a new form -- `hir::static::
-InternalIds` knows `block(eN)` and `function eN` only -- or a binding's
-`name`, which hygiene may have renamed `NAME#N` with a number counted over
-the whole program: print `hir::semantic::SourceName`), run
+InternalIds` knows `block(eN)` and `function eN` only -- or a binding's, a
+reference's or a function's `name`, which hygiene may have renamed `NAME#N`
+with a number counted over the whole program: never print `name`, print
+`hir::semantic::SourceName` for a binding, `RefName` for a `ref` or `bind`
+node and `CallableName` (or `hir::signatures::Name`) for a function, and pin
+the message with an `se-equal-hygiene-*` reproducer), run
 `tests/static-economics.test`, `tests/static-compile.test`, `tests/golden.test`
 (`golden-static-economics`), `audit/static-decisions/tools/fuzz.tcl` (several
 seeds), `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` and

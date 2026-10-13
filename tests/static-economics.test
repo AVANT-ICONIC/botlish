@@ -454,6 +454,170 @@ test se-equal-hygiene-names {a diagnostic names a binding hygiene renamed (hir/h
     list [seSame $text] [seOutcomes $text] [lindex $messages 1]
 } -result {{} {TYPE TYPE} {argument for parameter "list" cannot be proven to satisfy int (argument type: str)}}
 
+# Sites a and b (the body lines A and B) after `import compiler` and PRELUDE,
+# each called under a handler, as in se-equal-hygiene-names.
+proc seTwoSites {prelude a b} {
+    set text "import compiler\n\n$prelude"
+    append text [seSite a $a] [seSite b $b]
+    append text "ra = a():\n    on compiler::CompilerError:\n        -1\nrb = b():\n    on compiler::CompilerError:\n        -1\nra + rb\n"
+    return $text
+}
+
+# {DIFFERENCE OUTCOMES MESSAGE} of SOURCE: seSame, its sites' outcomes
+# (seOutcomes) and the message of its last rejected site.
+proc seHygiene {source} {
+    set sites [hir::static::sites [seHir $source]]
+    set outcomes [lmap {key site} $sites {
+        expr {[dict get $site outcome] eq "rejected" ? [dict get $site diagnostic kind] : [dict get $site outcome]}
+    }]
+    set messages [lmap {key site} $sites {
+        expr {[dict get $site outcome] eq "rejected" ? [dict get $site diagnostic message] : [continue]}
+    }]
+    return [list [seSame $source] $outcomes [lindex $messages end]]
+}
+
+# The reproducers below are se-equal-hygiene-names for every other message
+# that names a binding, a reference or a function: each site renames a
+# binding `list` (a list literal beside it calls the root `list`), and b's
+# message names its own. Before they printed hir::semantic::SourceName
+# (RefName for a reference, CallableName for a function), the batched run
+# committed b's message with `list#2` beside a's rejection, where the
+# sequential order, judging b in the build after it, printed `list#1`.
+set ::seProducer "fn producer():\n    yield 1\n    2\n\n"
+
+test se-equal-hygiene-use-after-move {USE-AFTER-MOVE names the used reference and the move by their source spelling (hir/affine.tcl's Use and MoveText)} -body {
+    seHygiene [seTwoSites $::seProducer \
+        {"coroutine {step: list} = producer()" "x = [1]" "other = list" "list()" "0"} \
+        {"coroutine {step: list} = producer()" "y = [2]" "other = list" "list()" "0"}]
+} -result {{} {USE-AFTER-MOVE USE-AFTER-MOVE} {`list` was used after its coroutine value was moved
+
+moved here:
+    other = list  (<input>:18:9)
+
+used here:
+    <input>:19:9}}
+
+test se-equal-hygiene-affine-erasure {an ownership message names the affine value by its source spelling (hir/affine.tcl's Named)} -body {
+    seHygiene [seTwoSites "${::seProducer}fn keep(v: any) -> int:\n    1\n\n" \
+        {"coroutine {step: list} = producer()" "x = [1]" "keep(list)"} \
+        {"coroutine {step: list} = producer()" "y = [2]" "keep(list)"}]
+} -result {{} {AFFINE-ERASURE-UNSUPPORTED AFFINE-ERASURE-UNSUPPORTED} {`list` is an affine Coroutine{args: [], return: int, errors: []}, which cannot become the argument of parameter "v", declared any: that position does not carry ownership, so the value would be duplicated or lost (keep it in a binding, a parameter, a result, a struct field or a List of an affine type)}}
+
+test se-equal-hygiene-affine-parameter {an erasure into a declared parameter names the parameter by its source spelling (hir/affine.tcl's CallConsumer)} -body {
+    seHygiene [seTwoSites $::seProducer \
+        {"fn keep(list: any) -> int:" "    x = [1]" "    1" "coroutine {step: h} = producer()" "keep(h)"} \
+        {"fn keep(list: any) -> int:" "    y = [2]" "    1" "coroutine {step: h} = producer()" "keep(h)"}]
+} -result {{} {AFFINE-ERASURE-UNSUPPORTED AFFINE-ERASURE-UNSUPPORTED} {`h` is an affine Coroutine{args: [], return: int, errors: []}, which cannot become the argument of parameter "list", declared any: that position does not carry ownership, so the value would be duplicated or lost (keep it in a binding, a parameter, a result, a struct field or a List of an affine type)}}
+
+test se-equal-hygiene-affine-capture {AFFINE-CAPTURE-UNSUPPORTED names the captured reference by its source spelling} -body {
+    seHygiene [seTwoSites $::seProducer \
+        {"coroutine {step: list} = producer()" "x = [1]" "fn g() -> int:" "    list()" "    0" "g()"} \
+        {"coroutine {step: list} = producer()" "y = [2]" "fn g() -> int:" "    list()" "    0" "g()"}]
+} -result {{} {AFFINE-CAPTURE-UNSUPPORTED AFFINE-CAPTURE-UNSUPPORTED} {`list` is an affine Coroutine{args: [], return: int, errors: []}, which cannot be captured by a closure (a nested function): a closure may be called any number of times and copied freely, so capturing would alias the one owner (pass it as an argument, or construct it inside the nested function)}}
+
+test se-equal-hygiene-field-move {AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE names the struct and spells the destructuring it suggests by the source spelling} -body {
+    set prelude "[string range $::seOwnership [string length "import compiler\n"] end]struct Holder:\n    h: Coroutine{args: \[Command\], return: Event}\n\n"
+    seHygiene [seTwoSites $prelude \
+        {"list = Holder {h: make(1)}" "x = [1]" "s = list.h" "0"} \
+        {"list = Holder {h: make(2)}" "y = [2]" "s = list.h" "0"}]
+} -result {{} {AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE} {field "h" of `list` is affine (Coroutine{args: [Command], return: Event, errors: []}): reading it would make a second owner of what `list` owns, and a field cannot be moved out of a struct that stays usable (consume the struct with a destructuring instead: "{h} = list")}}
+
+test se-equal-hygiene-path-release {AFFINE-PATH-RELEASE-UNSUPPORTED names the binding by its source spelling (hir/affine.tcl's PathPoint)} -body {
+    set body {"fn f() -> int:" "    v = empty_queue()" "    list = make(1)" "    x = [1]" "    loop i from 0 to 3:"
+        "        if i == 1:" "            v.push(list)" "            break" "    1" "f()"}
+    seHygiene [seTwoSites [string range $::seOwnership [string length "import compiler\n"] end] $body $body]
+} -result {{} {AFFINE-PATH-RELEASE-UNSUPPORTED AFFINE-PATH-RELEASE-UNSUPPORTED} {`list` is moved on a path that breaks out of this loop but still owned when the loop runs to its end: no statement ends that path to release it there (move it on every path, or on none -- e.g. use an infinite `loop:` whose every exit is a `break`)}}
+
+test se-equal-hygiene-coroutine-not-function {COROUTINE-NOT-FUNCTION names the handle by its source spelling} -body {
+    seHygiene [seTwoSites "${::seProducer}fn call(f: Fn{args: \[\], return: any}) -> int:\n    f()\n    1\n\n" \
+        {"coroutine {step: list} = producer()" "x = [1]" "call(list)"} \
+        {"coroutine {step: list} = producer()" "y = [2]" "call(list)"}]
+} -result {{} {COROUTINE-NOT-FUNCTION COROUTINE-NOT-FUNCTION} {"list" is a coroutine handle, not a function value: it carries the evolving state of one coroutine and cannot be passed where a function value of type Fn{args: [], return: any, errors: []} is expected (Fn and Coroutine are distinct callable kinds, even with the same contract; declare the parameter Coroutine{args: [], return: any, errors: []}, or leave it untyped)}}
+
+test se-equal-hygiene-resume-arity {COROUTINE-RESUME-ARITY spells the resume it asks for with the handle's source spelling} -body {
+    seHygiene [seTwoSites $::seProducer \
+        {"coroutine {step: list} = producer()" "x = [1]" "list(1, 2)" "0"} \
+        {"coroutine {step: list} = producer()" "y = [2]" "list(1, 2)" "0"}]
+} -result {{} {COROUTINE-RESUME-ARITY COROUTINE-RESUME-ARITY} {this coroutine has the zero-message protocol: resume it with no argument, "list()", got 2 argument(s)}}
+
+test se-equal-hygiene-inferred-contract {why a parameter has its inferred contract names the callee by its source spelling (hir::signatures::Name)} -body {
+    seHygiene [seTwoSites "" \
+        {"fn list(v: int) -> int:" "    v" "fn g(x) -> int:" "    list(x)" "y = [1]" {g("s")}} \
+        {"fn list(v: int) -> int:" "    v" "fn g(x) -> int:" "    list(x)" "y = [2]" {g("t")}}]
+} -result {{} {TYPE TYPE} {argument for parameter "x" cannot be proven to satisfy int, the parameter type inferred from the function body (argument type: str); inferred from the function body: argument 1 of list (declared int) requires int (at 16:18)}}
+
+test se-equal-hygiene-parameter-conflict {a parameter no type satisfies is named by its source spelling (hir::signatures::Diagnose)} -body {
+    seHygiene [seTwoSites "fn want_i(v: int) -> int:\n    v\n\nfn want_s(v: str) -> int:\n    1\n\n" \
+        {"fn h(list) -> int:" "    y = [1]" "    want_i(list) + want_s(list)" "h(1)"} \
+        {"fn h(list) -> int:" "    y = [2]" "    want_i(list) + want_s(list)" "h(2)"}]
+} -result {{} {TYPE TYPE} {cannot infer a sound type for parameter "list" of h: argument 1 of want_i (declared int) requires int (at 19:20), but argument 1 of want_s (declared str) requires str (at 19:35), and no type satisfies both}}
+
+test se-equal-hygiene-erased-requirements {a typed callable whose requirements would be erased is named by its source spelling (hir::callables::Name)} -body {
+    seHygiene [seTwoSites "" \
+        {"fn list(k: int) -> int:" "    k + 1" "fn erase(x, c):" "    if c:" "        x" "    else:" "        0" "y = [1]" "erase(list, true)" "0"} \
+        {"fn list(k: int) -> int:" "    k + 1" "fn erase(x, c):" "    if c:" "        x" "    else:" "        0" "y = [2]" "erase(list, true)" "0"}]
+} -result {{} {TYPE TYPE} {call to erase with x : list/1 -> int, c : bool is invalid: "list" has typed parameter requirements that cannot be preserved in an "if" branch whose joined type differs from the other branch: its declared parameter contract would be erased and could no longer be checked at every future call (in the body of erase, at 21:17)}}
+
+test se-equal-hygiene-lockstep {a lockstep loop's iteration counts name their bindings by their source spelling (hir::cardinality::show)} -body {
+    seHygiene [seTwoSites "" \
+        {"fn f(list, ys):" "    y = [1]" "    loop x in list and z in ys:" "        x" "f([1], [2])" "0"} \
+        {"fn f(list, ys):" "    y = [2]" "    loop x in list and z in ys:" "        x" "f([1], [2])" "0"}]
+} -result {{} {LOCKSTEP-UNPROVEN LOCKSTEP-UNPROVEN} {lockstep loop requires equal iteration counts; could not prove length(list) == length(ys) (clause 1 vs clause 2)}}
+
+test se-equal-hygiene-mutable-receiver {MUTABLE-PLACE-RECEIVER names the receiver's binding by its source spelling} -body {
+    seHygiene [seTwoSites "import mutable_vector\n\n" \
+        {"list = mutable_vector::from_list([1])" "fn g() -> int:" "    mutable_vector::push(list, 2)" "    0" "g()"} \
+        {"list = mutable_vector::from_list([2])" "fn g() -> int:" "    mutable_vector::push(list, 3)" "    0" "g()"}]
+} -result {{} {MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-RECEIVER} {the receiver of mutable_vector::push is `list`, a binding of an enclosing function: a nested function cannot mutate a vector it captured (a vector is a value; pass it in and return the result)}}
+
+test se-equal-hygiene-mutable-capture {MUTABLE-PLACE-CAPTURE names the captured place by its source spelling} -body {
+    seHygiene [seTwoSites "import mutable_vector\n\n" \
+        {"list = mutable_vector::from_list([1])" "mutable_vector::push(list, 2)" "fn g() -> int:" "    mutable_vector::length(list)" "g()"} \
+        {"list = mutable_vector::from_list([2])" "mutable_vector::push(list, 3)" "fn g() -> int:" "    mutable_vector::length(list)" "g()"}]
+} -result {{} {MUTABLE-PLACE-CAPTURE MUTABLE-PLACE-CAPTURE} {`list` is a MutableVector place (its function mutates it in place), which a nested function cannot capture: the nested function would observe a binding that changes, and a vector is a value, not a shared reference (pass it as an argument: the callee gets its own logical copy)}}
+
+test se-equal-hygiene-context-trait-binding {CONTEXT-TRAIT-MISUSE names the context-trait binding by its source spelling} -body {
+    set prelude "error WriteFailed\ntype Small = Int in 0..1000\n\ncontext trait Out:\n    fn emit(n: int) -> int errors WriteFailed\n\ncontext struct A:\n    k: Small\n\nfn emit(n: int, context c: A) -> int errors WriteFailed:\n    n + c.k\n\n"
+    seHygiene [seTwoSites $prelude \
+        {"fn f(context list: Out) -> int:" "    y = [1]" "    z = list" "    1" "1"} \
+        {"fn f(context list: Out) -> int:" "    y = [2]" "    z = list" "    1" "1"}]
+} -result {{} {CONTEXT-TRAIT-MISUSE CONTEXT-TRAIT-MISUSE} {"list" is a context-trait binding (Out): it is not a value -- the only use of a context-trait binding is calling one of Out's operations on it (list.emit(...)); it cannot be passed, stored, returned, compared, projected or tested, and the installed context that provides it is never recovered}}
+
+test se-equal-hygiene-module-function {a module's own function hygiene renamed before qualifying it (hir/hygiene.tcl's qualifyModules: NS::NAME#N) is named NS::NAME (hir::semantic::SourceName): here hm's `fn list`, renamed by site a's list literal after a's local `list`} -body {
+    withPrivateLibrary {
+        set f [open [file join $::core::libraryDir hm.bot] w]
+        fconfigure $f -encoding utf-8
+        puts -nonewline $f "import compiler\n\nfn want(v: int) -> int:\n    v\n\n[seSite a {"list = 5" "x = [1]" {want("s")}}]\nfn list(v: int) -> int:\n    v\n\n[seSite b {"fn g(x) -> int:" "    list(x)" "y = [2]" {g("s")}}]"
+        close $f
+        seHygiene "import hm\n0\n"
+    }
+} -result {{} {TYPE TYPE} {argument for parameter "x" cannot be proven to satisfy int, the parameter type inferred from the function body (argument type: str); inferred from the function body: argument 1 of hm::list (declared int) requires int (at 18:18)}}
+
+# A trait-polymorphic function is declared at the top level only
+# (TRAIT-NESTED-POLYMORPHIC): its rename counts the renames of the sites
+# before it, here a's local `list`.
+set ::seNamed "trait Named:\n    fn name(value: Named) -> str\n\nstruct Person:\n    value: str\n\nfn name(value: Person) -> str:\n    value.value\n\nfn want(v: int) -> int:\n    v\n\n"
+
+test se-equal-hygiene-trait-function-value {TRAIT-POLYMORPHIC-FUNCTION-VALUE names the function by its source spelling (hir::signatures::Name)} -body {
+    seHygiene [seTwoSites "${::seNamed}fn list(value: Named) -> str:\n    value.name()\n\n" \
+        {"list = 5" "x = [1]" {want("s")}} \
+        {"fs = [list]" "0"}]
+} -result {{} {TYPE TRAIT-POLYMORPHIC-FUNCTION-VALUE} {list is a trait-polymorphic function (a parameter or its result is a trait): it can be called directly or through an immutable alias, but not used as a general function value, which has no place for the compile-time witnesses its calls need (there is no runtime trait dispatch)}}
+
+test se-equal-hygiene-trait-function-alias {the binding statement a body ends with, whose value denotes a trait-polymorphic function, is named by its source spelling} -body {
+    set text "import compiler\n\n$::seNamed[seSite a {"list = 5" "x = [1]" {want("s")}}]"
+    append text "fn describe(value: Named) -> str:\n    value.name()\n\n"
+    append text "fn b() errors compiler::CompilerError:\n    static compile:\n        y = \[2\]\n        list = describe\n\n"
+    append text "ra = a():\n    on compiler::CompilerError:\n        -1\nb():\n    on compiler::CompilerError:\n        unit\nra\n"
+    seHygiene $text
+} -result {{} {TYPE TRAIT-POLYMORPHIC-FUNCTION-VALUE} {"list" is the value of this body, but it denotes the trait-polymorphic function describe, which is not a general callable value (its calls need compile-time witnesses; there is no runtime trait dispatch): call it directly}}
+
+test se-equal-hygiene-trait-witness {a trait view's parameter witness is named by the parameter's source spelling (hir::traits::ShowWitness): a site inside a trait-polymorphic function, whose parameter `list` the site's list literal renames} -body {
+    set text "import compiler\n\n$::seNamed[seSite a {"list = 5" "x = [1]" {want("s")}}]"
+    append text "fn pick(list: Named, b: Named, flag: bool) -> Named errors compiler::CompilerError:\n    static compile:\n        y = \[2\]\n        if flag:\n            list\n        else:\n            b\n\n0\n"
+    seHygiene $text
+} -result {{} {TYPE TRAIT-WITNESS-JOIN} {expression has trait type Named but may contain either the witness of parameter "list" of pick or the witness of parameter "b" of pick; heterogeneous trait values are not supported (there is no erased trait representation to hold a run-time choice between witnesses)}}
+
 test se-equal-erased-witness {the erased-callable contract is a set of errors, which loses one only once every contribution erasing it is gone: it depends on one witness per error (the contribution the sequential order removes last) -- and every other contributor is linked to it: here the consumer turns unknown when the block in mk() is rejected (the witness, in w(), erases mk()'s result, which then never exists), and the other contributor of E2, l(), must not be rejected in the same run, or the next build judges the consumer without E2 -- the batched decisions are the sequential ones. store() escapes (`keep`), so what its parameter may hold is no input of the contract boundary (P:input), whose own witness link would hold l() back as well} -body {
     set text "import compiler\nimport list\n\nerror E1\nerror E2\n\nfn harmless() -> int:\n    1\n\nfn raise2() -> int errors E2:\n    fail E2\n\nfn raise2b() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn want(x: int) -> int:\n    x\n\nfn mk() errors compiler::CompilerError:\n    static compile:\n        want(\"z\")\n        raise2b\n\n"
     append text [seSite y {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]

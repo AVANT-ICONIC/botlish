@@ -476,17 +476,15 @@ proc hir::contexts::Callee {hir e} {
 }
 
 # The display name of block E: the name of the function it is bound to, as
-# written (a module function qualified), or "the function at LOCATION".
+# written (a module function qualified: hir::semantic::SourceName), or "the
+# function at LOCATION".
 proc hir::contexts::BlockName {hir e} {
     foreach {b binding} [dict get $hir bindings] {
         if {[dict get $binding kind] ne "local"} continue
         set by [dict get $binding declaredBy]
         if {$by ne "" && [dict exists $hir exprs $by] && [hir::kind $hir $by] eq "bind"
                 && [hir::get $hir $by value] eq $e} {
-            if {[dict exists $binding spelling] && ![hir::isModuleBinding $hir $b]} {
-                return [dict get $binding spelling]
-            }
-            return [dict get $binding name]
+            return [hir::semantic::SourceName $hir $b]
         }
     }
     return "the function at [hir::originLocation $hir [hir::get $hir $e origin]]"
@@ -889,9 +887,10 @@ proc hir::contexts::CheckTraitBindings {hirVar parent} {
         }
         set id [dict get $traitBindings [dict get $node binding]]
         set ops [hir::traits::requirementNames $id]
+        set name [hir::semantic::RefName $hir $e]
         hir::Diagnose hir CONTEXT-TRAIT-MISUSE \
             [::format {"%s" is a context-trait binding (%s): it is not a value -- the only use of a context-trait binding is calling one of %s's operations on it (%s.%s(...)); it cannot be passed, stored, returned, compared, projected or tested, and the installed context that provides it is never recovered} \
-                [dict get $node name] $id $id [dict get $node name] [lindex $ops 0]] $e
+                $name $id $id $name [lindex $ops 0]] $e
     }
 }
 
