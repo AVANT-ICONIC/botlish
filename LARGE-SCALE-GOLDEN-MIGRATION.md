@@ -403,7 +403,13 @@ outliers are method-call trials (mutable-array.bot 5 rounds / 20 builds, 14 of
 them trials of chained calls with several candidates; structs-and-enums.bot 4/17;
 imports.bot 4/16), which a block's dependency analysis does not make cheaper.
 Every suite's decisions are the sequential reference's
-(`audit/static-decisions/tools/compare.tcl`: COMPARE_RESULT).
+(`audit/static-decisions/tools/compare.tcl tests/golden/*.bot` on the final
+tree: all 88 suites agree -- every site's outcome and reified diagnostic, the
+program's diagnostics and the decided HIR -- with no misprediction). The
+reference order is what batching saves: sequentially the corpus takes 1082
+rounds and 3850 builds, 35,857 s of front end (mutable-array.bot alone 1089
+builds, 17,777 s), against 211 rounds, 329 builds and 1,347 s batched -- about
+27 times the time (both measured under the same, contended load).
 
 ## The framework at scale
 
