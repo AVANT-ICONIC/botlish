@@ -39,9 +39,11 @@ interp recursionlimit {} 20000
 set hir [surface::readProgramFile $program -warnings off]
 
 foreach backend {interp compile cranelift-generic cranelift} {
-    if {$backend in {interp compile}} {
+    if {$backend eq "interp"} {
         core::useBackend $backend
         set status [catch {core::evalProgram [hir::lower $hir]} r opts]
+    } elseif {$backend eq "compile"} {
+        set status [catch {core::compiler::evalHir $hir} r opts]
     } else {
         set options [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
         set status [catch {native::evalHir $hir {*}$options} r opts]

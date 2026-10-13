@@ -1,0 +1,340 @@
+abi-bytes.test:	Total	73	Passed	73	Skipped	0	Failed	0
+abi-mutable-bytes.test:	Total	76	Passed	76	Skipped	0	Failed	0
+abi-numeric.test:	Total	41	Passed	41	Skipped	0	Failed	0
+acceptance.test:	Total	4	Passed	4	Skipped	0	Failed	0
+affine.test:	Total	47	Passed	47	Skipped	0	Failed	0
+applied-types.test:	Total	51	Passed	51	Skipped	0	Failed	0
+argv.test:	Total	65	Passed	65	Skipped	0	Failed	0
+ascii.test:	Total	33	Passed	33	Skipped	0	Failed	0
+backends.test:	Total	14	Passed	14	Skipped	0	Failed	0
+bench-backends.test:	Total	4	Passed	4	Skipped	0	Failed	0
+bench-corpus.test:	Total	4	Passed	4	Skipped	0	Failed	0
+bindings.test:	Total	31	Passed	27	Skipped	4	Failed	0
+blockescape-called-generic.test:	Total	5	Passed	5	Skipped	0	Failed	0
+blockescape-nested-capturers.test:	Total	13	Passed	13	Skipped	0	Failed	0
+blocks.test:	Total	15	Passed	15	Skipped	0	Failed	0
+byte-set.test:	Total	21	Passed	21	Skipped	0	Failed	0
+calls.test:	Total	19	Passed	19	Skipped	0	Failed	0
+checked-domain-proof-provenance.test:	Total	18	Passed	18	Skipped	0	Failed	0
+close-callers-convergence.test:	Total	24	Passed	24	Skipped	0	Failed	0
+closed-closure-entry-facts.test:	Total	33	Passed	33	Skipped	0	Failed	0
+closure-int-keys.test:	Total	11	Passed	11	Skipped	0	Failed	0
+compiler-opt.test:	Total	25	Passed	25	Skipped	0	Failed	0
+conjunctive-entry-facts.test:	Total	28	Passed	28	Skipped	0	Failed	0
+context-traits.test:	Total	39	Passed	39	Skipped	0	Failed	0
+contexts.test:	Total	74	Passed	74	Skipped	0	Failed	0
+control.test:	Total	17	Passed	17	Skipped	0	Failed	0
+coroutines.test:	Total	79	Passed	79	Skipped	0	Failed	0
+direct-hir-native.test:	Total	33	Passed	33	Skipped	0	Failed	0
+dormant-instances.test:	Total	20	Passed	20	Skipped	0	Failed	0
+elif.test:	Total	45	Passed	45	Skipped	0	Failed	0
+emailish-predicate.test:	Total	20	Passed	20	Skipped	0	Failed	0
+empty-collection-admissibility.test:	Total	26	Passed	26	Skipped	0	Failed	0
+enums.test:	Total	66	Passed	66	Skipped	0	Failed	0
+error-payloads.test:	Total	61	Passed	61	Skipped	0	Failed	0
+errors.test:	Total	51	Passed	51	Skipped	0	Failed	0
+exact-callable-executable.test:	Total	6	Passed	6	Skipped	0	Failed	0
+exact-callable-key.test:	Total	60	Passed	60	Skipped	0	Failed	0
+exact-value-facts.test:	Total	71	Passed	71	Skipped	0	Failed	0
+fixed-arity-list-return.test:	Total	149	Passed	149	Skipped	0	Failed	0
+flags.test:	Total	155	Passed	155	Skipped	0	Failed	0
+golden-framework.test:	Total	42	Passed	42	Skipped	0	Failed	0
+golden.test:	Total	9	Passed	9	Skipped	0	Failed	0
+higher-order-completions.test:	Total	62	Passed	62	Skipped	0	Failed	0
+hir-aot.test:	Total	33	Passed	33	Skipped	0	Failed	0
+hir-call-facts.test:	Total	8	Passed	8	Skipped	0	Failed	0
+hir-callable-target.test:	Total	9	Passed	9	Skipped	0	Failed	0
+hir-cardinality.test:	Total	7	Passed	7	Skipped	0	Failed	0
+hir-closed-call-params.test:	Total	16	Passed	16	Skipped	0	Failed	0
+hir-lowering.test:	Total	45	Passed	45	Skipped	0	Failed	0
+hir-range-bitop.test:	Total	29	Passed	29	Skipped	0	Failed	0
+hir-range-exact.test:	Total	18	Passed	18	Skipped	0	Failed	0
+hir-range.test:	Total	60	Passed	60	Skipped	0	Failed	0
+hir-refinement.test:	Total	12	Passed	12	Skipped	0	Failed	0
+hir-resolution.test:	Total	29	Passed	29	Skipped	0	Failed	0
+hir-samples.test:	Total	42	Passed	42	Skipped	0	Failed	0
+hir-specialize.test:	Total	31	Passed	31	Skipped	0	Failed	0
+hir-syntax.test:	Total	12	Passed	12	Skipped	0	Failed	0
+hir-types.test:	Total	20	Passed	20	Skipped	0	Failed	0
+immutable-set.test:	Total	68	Passed	68	Skipped	0	Failed	0
+imports.test:	Total	104	Passed	104	Skipped	0	Failed	0
+inference.test:	Total	30	Passed	30	Skipped	0	Failed	0
+instance-entry-range-facts.test:	Total	29	Passed	29	Skipped	0	Failed	0
+intrinsic-contracts.test:	Total	62	Passed	62	Skipped	0	Failed	0
+linux-path.test:	Total	19	Passed	19	Skipped	0	Failed	0
+linux-syscall.test:	Total	37	Passed	37	Skipped	0	Failed	0
+list-stdlib.test:	Total	24	Passed	24	Skipped	0	Failed	0
+lists.test:	Total	12	Passed	12	Skipped	0	Failed	0
+loop-collecting.test:	Total	140	Passed	140	Skipped	0	Failed	0
+loop-counted.test:	Total	60	Passed	60	Skipped	0	Failed	0
+loop-in.test:	Total	34	Passed	34	Skipped	0	Failed	0
+loops.test:	Total	15	Passed	15	Skipped	0	Failed	0
+many-boolean-arguments.test:	Total	90	Passed	90	Skipped	0	Failed	0
+method-eligible.test:	Total	151	Passed	151	Skipped	0	Failed	0
+method-sugar.test:	Total	126	Passed	126	Skipped	0	Failed	0
+module-static-values.test:	Total	19	Passed	19	Skipped	0	Failed	0
+mutable-array-type.test:	Total	118	Passed	118	Skipped	0	Failed	0
+mutable-array.test:	Total	32	Passed	32	Skipped	0	Failed	0
+mutable-vector.test:	Total	56	Passed	56	Skipped	0	Failed	0
+mutarray-construction.test:	Total	76	Passed	76	Skipped	0	Failed	0
+namespaced-errors.test:	Total	31	Passed	31	Skipped	0	Failed	0
+native-alloc.test:	Total	18	Passed	18	Skipped	0	Failed	0
+native-bitshift.test:	Total	28	Passed	28	Skipped	0	Failed	0
+native-bitwise-fold.test:	Total	6	Passed	6	Skipped	0	Failed	0
+native-block-escape.test:	Total	54	Passed	54	Skipped	0	Failed	0
+native-byte.test:	Total	13	Passed	13	Skipped	0	Failed	0
+native-csv-records.test:	Total	21	Passed	21	Skipped	0	Failed	0
+native-escape.test:	Total	22	Passed	22	Skipped	0	Failed	0
+native-executable.test:	Total	13	Passed	13	Skipped	0	Failed	0
+native-hashing.test:	Total	37	Passed	37	Skipped	0	Failed	0
+native-hashtable.test:	Total	40	Passed	40	Skipped	0	Failed	0
+native-listloop.test:	Total	15	Passed	15	Skipped	0	Failed	0
+native-lockstep-rejected.test:	Total	4	Passed	4	Skipped	0	Failed	0
+native-mutarray.test:	Total	49	Passed	49	Skipped	0	Failed	0
+native-param-aggregate.test:	Total	37	Passed	37	Skipped	0	Failed	0
+native-refinement-propagation.test:	Total	7	Passed	7	Skipped	0	Failed	0
+native-report-inlined-leaf.test:	Total	5	Passed	5	Skipped	0	Failed	0
+native-report-skipped-code.test:	Total	10	Passed	10	Skipped	0	Failed	0
+native-root-liveness.test:	Total	23	Passed	23	Skipped	0	Failed	0
+native-root-storage.test:	Total	10	Passed	10	Skipped	0	Failed	0
+native-stack-map.test:	Total	11	Passed	11	Skipped	0	Failed	0
+native-stack-overflow.test:	Total	4	Passed	4	Skipped	0	Failed	0
+native-string-region.test:	Total	31	Passed	31	Skipped	0	Failed	0
+native-string-traversal.test:	Total	19	Passed	19	Skipped	0	Failed	0
+native-string-view.test:	Total	17	Passed	17	Skipped	0	Failed	0
+native-tcl-unicode.test:	Total	68	Passed	68	Skipped	0	Failed	0
+native-tiny-leaf-inline.test:	Total	34	Passed	34	Skipped	0	Failed	0
+native-tiny-leaf-pressure.test:	Total	10	Passed	10	Skipped	0	Failed	0
+native-uri-escape.test:	Total	38	Passed	38	Skipped	0	Failed	0
+native.test:	Total	90	Passed	90	Skipped	0	Failed	0
+one-char-string-literal.test:	Total	85	Passed	85	Skipped	0	Failed	0
+opaque-struct.test:	Total	141	Passed	141	Skipped	0	Failed	0
+packed-ascii.test:	Total	47	Passed	47	Skipped	0	Failed	0
+portable-io.test:	Total	12	Passed	12	Skipped	0	Failed	0
+proof-loop-intervals.test:	Total	13	Passed	13	Skipped	0	Failed	0
+proven-bounds.test:	Total	24	Passed	24	Skipped	0	Failed	0
+proves-naming.test:	Total	84	Passed	84	Skipped	0	Failed	0
+range-completions-crosscheck.test:	Total	17	Passed	17	Skipped	0	Failed	0
+range-fixpoint-scaling.test:	Total	4	Passed	4	Skipped	0	Failed	0
+raw-count-loops.test:	Total	13	Passed	13	Skipped	0	Failed	0
+raw-int-abi.test:	Total	69	Passed	69	Skipped	0	Failed	0
+raw-internal-abi.test:	Total	8	Passed	8	Skipped	0	Failed	0
+refined-signatures.test:	Total	16	Passed	16	Skipped	0	Failed	0
+refined.test:	Total	22	Passed	22	Skipped	0	Failed	0
+refinement-validators.test:	Total	48	Passed	48	Skipped	0	Failed	0
+refinement-values.test:	Total	88	Passed	88	Skipped	0	Failed	0
+refinements.test:	Total	11	Passed	11	Skipped	0	Failed	0
+regex.test:	Total	20	Passed	20	Skipped	0	Failed	0
+result-range-narrowing.test:	Total	12	Passed	12	Skipped	0	Failed	0
+results.test:	Total	9	Passed	9	Skipped	0	Failed	0
+same-failure.test:	Total	101	Passed	101	Skipped	0	Failed	0
+scalarbits.test:	Total	11	Passed	11	Skipped	0	Failed	0
+self-recursive-result-ranges.test:	Total	37	Passed	37	Skipped	0	Failed	0
+semantic-instances.test:	Total	79	Passed	79	Skipped	0	Failed	0
+setcontains-equality-total.test:	Total	17	Passed	17	Skipped	0	Failed	0
+setfromlist-equality-total.test:	Total	15	Passed	15	Skipped	0	Failed	0
+short-demand.test:	Total	17	Passed	17	Skipped	0	Failed	0
+short-string.test:	Total	59	Passed	59	Skipped	0	Failed	0
+source-types.test:	Total	48	Passed	48	Skipped	0	Failed	0
+static-compile.test:	Total	83	Passed	83	Skipped	0	Failed	0
+static-economics.test:	Total	44	Passed	44	Skipped	0	Failed	0
+stdlib-namespaces.test:	Total	74	Passed	74	Skipped	0	Failed	0
+stdlib.test:	Total	144	Passed	144	Skipped	0	Failed	0
+str-char-at.test:	Total	14	Passed	14	Skipped	0	Failed	0
+strict-references.test:	Total	63	Passed	63	Skipped	0	Failed	0
+string-allocation.test:	Total	24	Passed	24	Skipped	0	Failed	0
+struct-destructuring.test:	Total	263	Passed	263	Skipped	0	Failed	0
+struct-scalar-replacement.test:	Total	84	Passed	84	Skipped	0	Failed	0
+structs-syntax.test:	Total	30	Passed	30	Skipped	0	Failed	0
+structs.test:	Total	89	Passed	89	Skipped	0	Failed	0
+structural-contract-completions.test:	Total	45	Passed	45	Skipped	0	Failed	0
+structural-fn-types.test:	Total	85	Passed	85	Skipped	0	Failed	0
+surface-lexer.test:	Total	44	Passed	44	Skipped	0	Failed	0
+surface-lowering.test:	Total	98	Passed	98	Skipped	0	Failed	0
+surface-modules.test:	Total	37	Passed	37	Skipped	0	Failed	0
+surface-parser.test:	Total	135	Passed	135	Skipped	0	Failed	0
+surface-samples.test:	Total	65	Passed	65	Skipped	0	Failed	0
+symbolic-type-identity.test:	Total	15	Passed	15	Skipped	0	Failed	0
+traits.test:	Total	75	Passed	75	Skipped	0	Failed	0
+typed-callable-escape.test:	Total	37	Passed	37	Skipped	0	Failed	0
+typed-mutarray-builder.test:	Total	64	Passed	64	Skipped	0	Failed	0
+typed-parameters.test:	Total	50	Passed	50	Skipped	0	Failed	0
+types.test:	Total	16	Passed	16	Skipped	0	Failed	0
+unicode-char.test:	Total	75	Passed	75	Skipped	0	Failed	0
+value-display.test:	Total	8	Passed	8	Skipped	0	Failed	0
+value-transport.test:	Total	64	Passed	64	Skipped	0	Failed	0
+virtual-construction.test:	Total	51	Passed	51	Skipped	0	Failed	0
+warning-gate.test:	Total	6	Passed	6	Skipped	0	Failed	0
+warnings.test:	Total	81	Passed	81	Skipped	0	Failed	0
+web-unreserved.test:	Total	12	Passed	12	Skipped	0	Failed	0
+
+# file status seconds (2 files at a time)
+stdlib 0 280.067208758
+native-tiny-leaf-pressure 0 315.125467932
+typed-mutarray-builder 0 175.179828078
+native-csv-records 0 213.806256308
+golden-framework 0 189.387806318
+golden 0 196.475717963
+warning-gate 0 105.470717212
+static-economics 0 107.542071401
+direct-hir-native 0 31.955019131
+method-eligible 0 78.432319138
+raw-int-abi 0 70.411184258
+native-hashtable 0 69.054687332
+many-boolean-arguments 0 60.092178590
+one-char-string-literal 0 56.615610289
+abi-mutable-bytes 0 64.227146961
+proves-naming 0 56.443207254
+method-sugar 0 63.215611224
+same-failure 0 48.400351436
+abi-bytes 0 54.268715240
+struct-destructuring 0 41.237776209
+native-uri-escape 0 46.947171469
+elif 0 41.272260396
+fixed-arity-list-return 0 40.937854390
+self-recursive-result-ranges 0 38.030108490
+value-transport 0 40.570628856
+bench-corpus 0 2.217837068
+exact-callable-executable 0 25.622593796
+native-tcl-unicode 0 36.487135020
+emailish-predicate 0 24.154651602
+compiler-opt 0 22.719320482
+argv 0 21.019827849
+native 0 21.142970833
+struct-scalar-replacement 0 18.698828436
+contexts 0 19.295987566
+abi-numeric 0 17.475272531
+structural-contract-completions 0 17.438532222
+mutable-vector 0 17.234681421
+affine 0 17.317209344
+flags 0 15.484275306
+coroutines 0 16.970041101
+virtual-construction 0 14.703126865
+opaque-struct 0 15.192305880
+mutable-array 0 14.625255242
+packed-ascii 0 12.910285734
+hir-specialize 0 17.391343736
+structs-syntax 0 16.153469051
+stdlib-namespaces 0 13.444929700
+refinement-values 0 13.799972509
+short-string 0 13.646632920
+native-executable 0 12.900999375
+native-tiny-leaf-inline 0 13.197485927
+exact-callable-key 0 12.633467978
+refinement-validators 0 10.841669695
+error-payloads 0 10.380395966
+native-param-aggregate 0 10.671428094
+web-unreserved 0 10.510222107
+raw-internal-abi 0 8.465204719
+linux-syscall 0 10.680594535
+warnings 0 9.435528495
+native-block-escape 0 9.767624259
+native-mutarray 0 9.020314550
+raw-count-loops 0 9.203305320
+dormant-instances 0 8.658939615
+portable-io 0 8.925832868
+higher-order-completions 0 7.482143311
+hir-aot 0 8.618747719
+ascii 0 7.696427785
+static-compile 0 7.728606669
+range-completions-crosscheck 0 8.154542809
+native-refinement-propagation 0 8.090151475
+string-allocation 0 6.956696286
+imports 0 6.561495524
+native-byte 0 6.150012508
+loop-collecting 0 6.496689621
+mutable-array-type 0 6.358870924
+linux-path 0 6.937885636
+closure-int-keys 0 6.310089950
+native-bitshift 0 6.077451832
+mutarray-construction 0 5.766068579
+module-static-values 0 7.064193590
+strict-references 0 5.351645268
+native-report-inlined-leaf 0 5.107264263
+enums 0 4.507287389
+native-escape 0 4.934986343
+structs 0 4.254032678
+context-traits 0 5.267517252
+traits 0 4.685583203
+structural-fn-types 0 4.212259868
+namespaced-errors 0 4.190019746
+short-demand 0 4.174306251
+intrinsic-contracts 0 4.430483748
+surface-modules 0 4.156588487
+native-string-view 0 3.684296773
+errors 0 3.627372985
+native-string-region 0 3.604536237
+proven-bounds 0 3.493305486
+setcontains-equality-total 0 3.307734431
+exact-value-facts 0 3.304782797
+hir-closed-call-params 0 3.016271468
+range-fixpoint-scaling 0 2.916721931
+result-range-narrowing 0 2.675233093
+setfromlist-equality-total 0 2.287772397
+blockescape-nested-capturers 0 1.839181563
+proof-loop-intervals 0 2.078444138
+semantic-instances 0 2.042256303
+value-display 0 2.126733084
+byte-set 0 2.470120499
+native-string-traversal 0 1.787041007
+hir-range 0 1.945805610
+loop-counted 0 2.333757728
+closed-closure-entry-facts 0 1.097521270
+immutable-set 0 1.517022705
+surface-samples 0 1.139745374
+native-report-skipped-code 0 1.142127914
+list-stdlib 0 1.337525791
+native-hashing 0 1.154526012
+hir-callable-target 0 .996299495
+native-listloop 0 1.001439510
+unicode-char 0 .945835193
+symbolic-type-identity 0 1.281857554
+instance-entry-range-facts 0 .773486685
+surface-lowering 0 1.324036595
+str-char-at 0 .867164078
+empty-collection-admissibility 0 .778883217
+loop-in 0 .692170951
+close-callers-convergence 0 .786768066
+checked-domain-proof-provenance 0 .784205770
+native-root-liveness 0 .707782142
+refined-signatures 0 .640648277
+applied-types 0 1.015510225
+native-alloc 0 .601829841
+source-types 0 .708191583
+typed-parameters 0 .659254383
+native-stack-map 0 .686886909
+native-bitwise-fold 0 .616097489
+conjunctive-entry-facts 0 .668245834
+hir-call-facts 0 .610308289
+blockescape-called-generic 0 .631975981
+hir-lowering 0 .633133155
+typed-callable-escape 0 .519620358
+inference 0 .325566597
+native-lockstep-rejected 0 .453041923
+hir-samples 0 .382575285
+native-root-storage 0 .332137817
+scalarbits 0 .292839304
+surface-parser 0 .319766974
+hir-resolution 0 .204197541
+hir-types 0 .370024583
+refined 0 .274698682
+lists 0 .289417214
+backends 0 .242473756
+hir-range-exact 0 .181269081
+hir-syntax 0 .238423157
+native-stack-overflow 0 .194862385
+hir-cardinality 0 .176768093
+hir-refinement 0 .162039374
+surface-lexer 0 .126156661
+bindings 0 .191563623
+acceptance 0 .213995024
+control 0 .208731734
+loops 0 .204774058
+calls 0 .373496166
+blocks 0 .235531736
+regex 0 .120013840
+results 0 .250440135
+types 0 .075279679
+hir-range-bitop 0 .080199624
+refinements 0 .180219087
+bench-backends 0 .085081692

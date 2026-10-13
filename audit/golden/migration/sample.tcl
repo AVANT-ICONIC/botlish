@@ -1,5 +1,5 @@
 # sample.tcl -- runs the cross-suite mutant sample (mutant-sample.txt beside
-# this script; LARGE-SCALE-GOLDEN-MIGRATION.md, "Mutation sample"): for each
+# this script; LARGE-SCALE-GOLDEN-MIGRATION.md, "Mutation"): for each
 # mutant, audit/golden/tools/check.tcl -mutants against the Tcl files the
 # mutant's harness targets (the old side) and the golden suites holding those
 # files' ported rows (the new side), on the backends the mutant can affect:

@@ -513,9 +513,9 @@ test struct-bearing-attacks {a typed callable's contract cannot be erased throug
         "${m}s = \{handler: typed\}\nfn f(v: any):\n    v\nf(s)" \
         "struct Holder:\n    handler: Fn\{args: \[str\], return: int, errors: \[\]\}\n${m}h = Holder \{handler: typed\}\nh.handler"]
     set needles [list \
-        "this value of type struct\{handler: block(e2)/1 -> int\} has typed parameter requirements that cannot be preserved passed as an ordinary call argument" \
+        "this value of type struct\{handler: typed/1 -> int\} has typed parameter requirements that cannot be preserved passed as an ordinary call argument" \
         "\"typed\" has typed parameter requirements that cannot be preserved stored in field \"value\" of a struct" \
-        "this value of type struct\{handler: block(e2)/1 -> int\} has typed parameter requirements that cannot be preserved passed as an ordinary call argument" \
+        "this value of type struct\{handler: typed/1 -> int\} has typed parameter requirements that cannot be preserved passed as an ordinary call argument" \
         "field \"handler\" of struct Holder cannot be proven to satisfy its declared type Fn\{args: \[str\], return: int, errors: \[\]\}"]
     lmap attack $attacks needle $needles {
         set message [structErrorFile $attack]

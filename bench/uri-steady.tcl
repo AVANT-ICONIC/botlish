@@ -45,6 +45,9 @@ proc valueUnder {backend} {
         set args [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
         return [core::value::show [native::evalHir $hir {*}$args] 1]
     }
+    if {$backend eq "compile"} {
+        return [core::value::show [core::compiler::evalHir $hir] 1]
+    }
     set exprs [hir::lower $hir]
     set saved [core::useBackend]
     core::useBackend $backend

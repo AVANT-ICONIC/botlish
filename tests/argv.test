@@ -388,7 +388,7 @@ test argv-never-captured-at-compile-time {the compiled/lowered program never con
         set nir [native::nir $hir]
         set generic [native::nir $hir -specialize 0]
         set ir [hir::lower $hir]
-        set code [core::compiler::generatedCode $ir]
+        set code [dict get [core::compiler::compileHir $hir] code]
         set hirText [hir::format $hir]
     }
     list [string first $marker $nir] [string first $marker $generic] [string first $marker $ir] \

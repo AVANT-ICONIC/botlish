@@ -1829,6 +1829,60 @@ fn register_qualified_identity_tests():
             [f(300), f(-1), f(5)]
     test::value("nerr-duplicate-handlers/same-short-name", [0, 2, 5], b_same_short_name_pair)
 
+    # nerr-both-handlers: one call that may raise both the entry's AboveRange
+    # and byte::AboveRange has a handler for each identity, and each runs for
+    # its own identity only -- the entry's error passes the handler written
+    # first, byte::AboveRange's, to its own.
+    fn b_both_handlers() errors compiler::CompilerError:
+        static compile:
+            fn mine(x: int) -> int errors AboveRange:
+                if x < 0:
+                    fail AboveRange
+                x
+            fn mix(x: int, which: int) errors AboveRange, byte::AboveRange, byte::BelowRange:
+                if which == 0:
+                    return mine(x)
+                byte::from_int(x)
+            fn f(x: int, which: int):
+                r = mix(x, which):
+                    on byte::AboveRange:
+                        return ["byte", x]
+                    on AboveRange:
+                        return ["mine", x]
+                    on byte::BelowRange:
+                        return ["below", x]
+                r
+            [f(-9, 0), f(300, 1), f(3, 1)]
+    test::value("nerr-both-handlers", [["mine", -9], ["byte", 300], 3], b_both_handlers)
+
+    # nerr-completion-sets: a call that may raise byte::AboveRange or the
+    # entry's AboveRange keeps both, a handler for each catching its own (the
+    # entry's error passes byte::AboveRange's handler); and where exact
+    # narrowing excludes the entry's error, handling byte::AboveRange alone
+    # is enough.
+    fn b_completion_sets() errors compiler::CompilerError:
+        static compile:
+            fn pick(x: int) -> int errors byte::AboveRange, AboveRange:
+                if x < 0:
+                    fail byte::AboveRange
+                if x > 100:
+                    fail AboveRange
+                x
+            fn both(k: int):
+                pick(k):
+                    on byte::AboveRange:
+                        0
+                    on AboveRange:
+                        1
+            fn low(k: int):
+                if k > 50:
+                    return 0
+                pick(k):
+                    on byte::AboveRange:
+                        k
+            [both(-1), both(200), low(-7), low(60)]
+    test::value("nerr-completion-sets/value", [0, 1, -7, 0], b_completion_sets)
+
     # nerr-builtin-root: the runtime's builtin IndexNotFound is a root
     # identity named bare everywhere: in a module (list::get handles it) and
     # in the entry program.

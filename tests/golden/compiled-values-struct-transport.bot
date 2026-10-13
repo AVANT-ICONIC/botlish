@@ -96,6 +96,30 @@ fn register_transport_frontier_tests():
             drive(0, 10, 0)
     test::value("vt-late-frontier", 565, b_late_frontier)
 
+    # vt-late-materialized-is-equal-to-eager: a six-field value used locally,
+    # then carried down a five-call chain (materialized late, at the
+    # frontier) compares and hashes like one built at construction.
+    fn b_late_materialized() errors compiler::CompilerError:
+        static compile:
+            fn f0(r, k):
+                r.a + r.b + r.c + r.d + r.e + r.f + k
+            fn f1(r, k):
+                f0(r, k)
+            fn f2(r, k):
+                f1(r, k)
+            fn f3(r, k):
+                f2(r, k)
+            fn f4(r, k):
+                f3(r, k)
+            fn run(i):
+                r = {a: i, b: i + 1, c: i + 2, d: i + 3, e: i + 4, f: i + 5}
+                s = {f: i + 5, e: i + 4, d: i + 3, c: i + 2, b: i + 1, a: i}
+                local = r.a + r.b
+                t = f4(r, i)
+                [local, t, r == s, hash(r) == hash(s), r]
+            run(3)
+    test::value("vt-late-materialized-is-equal-to-eager", [7, 36, true, true, {a: 3, b: 4, c: 5, d: 6, e: 7, f: 8}], b_late_materialized)
+
     # vt-materialization-is-single: lateTwice W=6 E=5 -- the late-frontier
     # shape with two long forwards of one local.
     fn b_late_twice() errors compiler::CompilerError:

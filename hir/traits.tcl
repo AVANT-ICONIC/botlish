@@ -925,7 +925,7 @@ proc hir::traits::ShowWitness {witness {hir ""}} {
         lassign $witness _ block index
         if {$hir ne "" && [dict exists $hir exprs $block params]} {
             set b [lindex [dict get $hir exprs $block params] $index]
-            return "the witness of parameter \"[dict get $hir bindings $b name]\" of [hir::signatures::Name $hir $block]"
+            return "the witness of parameter \"[hir::semantic::SourceName $hir $b]\" of [hir::signatures::Name $hir $block]"
         }
         return "the witness of parameter [expr {$index + 1}] of $block"
     }
@@ -1271,7 +1271,7 @@ proc hir::traits::VerifyFunctionValues {hirVar parents} {
         if {$kind eq "bind" && [dict exists $lasts $e] && ![dict get $node duplicate]
                 && [dict get $node binding] ne "" && [FunctionOf $hir [dict get $node binding]] ne ""} {
             hir::Diagnose hir TRAIT-POLYMORPHIC-FUNCTION-VALUE [format {"%s" is the value of this body, but it denotes the trait-polymorphic function %s, which is not a general callable value (its calls need compile-time witnesses; there is no runtime trait dispatch): call it directly} \
-                [dict get $node name] [hir::signatures::Name $hir [FunctionOf $hir [dict get $node binding]]]] $e
+                [hir::semantic::RefName $hir $e] [hir::signatures::Name $hir [FunctionOf $hir [dict get $node binding]]]] $e
             continue
         }
         if {$kind ne "ref" || [dict get $node binding] eq "" || ![dict get $node reachable]} {

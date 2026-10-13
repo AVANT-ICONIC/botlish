@@ -1,0 +1,367 @@
+tcl-e2e        abi-bytes.test (26)                                  15.6 s  ok 26/73
+tcl-e2e        abi-mutable-bytes.test (34)                          23.7 s  ok 34/76
+tcl-e2e        abi-numeric.test (28)                                11.6 s  ok 28/41
+tcl-e2e        acceptance.test (2)                                   0.1 s  ok 2/4
+tcl-e2e        affine.test (38)                                     13.0 s  ok 38/47
+tcl-e2e        applied-types.test (25)                               0.4 s  ok 25/51
+tcl-e2e        argv.test (13)                                        0.7 s  ok 13/65
+tcl-e2e        ascii.test (31)                                       7.0 s  ok 31/33
+tcl-e2e        backends.test (3)                                     0.1 s  ok 3/14
+tcl-e2e        bindings.test (13)                                    0.2 s  ok 13/31
+tcl-e2e        blockescape-called-generic.test (2)                   0.5 s  ok 2/5
+tcl-e2e        blockescape-nested-capturers.test (3)                 0.7 s  ok 3/13
+tcl-e2e        blocks.test (10)                                      0.1 s  ok 10/15
+tcl-e2e        byte-set.test (19)                                    2.0 s  ok 19/21
+tcl-e2e        calls.test (14)                                       0.1 s  ok 14/19
+tcl-e2e        checked-domain-proof-provenance.test (6)              0.4 s  ok 6/18
+tcl-e2e        closed-closure-entry-facts.test (7)                   0.6 s  ok 7/33
+tcl-e2e        closure-int-keys.test (3)                             0.4 s  ok 3/11
+tcl-e2e        compiler-opt.test (10)                               21.5 s  ok 10/25
+tcl-e2e        conjunctive-entry-facts.test (3)                      0.2 s  ok 3/28
+tcl-e2e        context-traits.test (16)                              2.7 s  ok 16/39
+tcl-e2e        contexts.test (24)                                    5.8 s  ok 24/74
+tcl-e2e        control.test (10)                                     0.1 s  ok 10/17
+tcl-e2e        coroutines.test (53)                                  9.8 s  ok 53/79
+tcl-e2e        direct-hir-native.test (18)                          15.3 s  ok 18/33
+tcl-e2e        dormant-instances.test (6)                            1.3 s  ok 6/20
+tcl-e2e        elif.test (39)                                        8.9 s  ok 39/45
+tcl-e2e        emailish-predicate.test (13)                         17.9 s  ok 13/20
+tcl-e2e        empty-collection-admissibility.test (22)              0.7 s  ok 22/26
+tcl-e2e        enums.test (35)                                       3.1 s  ok 35/66
+tcl-e2e        error-payloads.test (42)                             10.1 s  ok 42/61
+tcl-e2e        errors.test (47)                                      3.6 s  ok 47/51
+tcl-e2e        exact-callable-executable.test (5)                    5.1 s  ok 5/6
+tcl-e2e        exact-callable-key.test (27)                          4.8 s  ok 27/60
+tcl-e2e        exact-value-facts.test (6)                            0.4 s  ok 6/71
+tcl-e2e        fixed-arity-list-return.test (10)                     0.4 s  ok 10/149
+tcl-e2e        flags.test (100)                                      9.1 s  ok 100/155
+tcl-e2e        golden-framework.test (17)                           63.6 s  ok 17/42
+tcl-e2e        higher-order-completions.test (57)                    6.7 s  ok 57/62
+tcl-e2e        hir-aot.test (1)                                      0.1 s  ok 1/33
+tcl-e2e        hir-lowering.test (5)                                 0.2 s  ok 5/45
+tcl-e2e        hir-range.test (4)                                    0.5 s  ok 4/60
+tcl-e2e        hir-resolution.test (8)                               0.2 s  ok 8/29
+tcl-e2e        hir-samples.test (4)                                  0.2 s  ok 4/42
+tcl-e2e        hir-specialize.test (1)                               0.1 s  ok 1/31
+tcl-e2e        hir-syntax.test (3)                                   0.1 s  ok 3/12
+tcl-e2e        immutable-set.test (36)                               0.8 s  ok 36/68
+tcl-e2e        imports.test (51)                                     4.7 s  ok 51/104
+tcl-e2e        inference.test (12)                                   0.2 s  ok 12/30
+tcl-e2e        instance-entry-range-facts.test (1)                   0.1 s  ok 1/29
+tcl-e2e        intrinsic-contracts.test (29)                         2.7 s  ok 29/62
+tcl-e2e        linux-path.test (13)                                  3.8 s  ok 13/19
+tcl-e2e        linux-syscall.test (19)                               5.4 s  ok 19/37
+tcl-e2e        list-stdlib.test (24)                                 1.1 s  ok 24/24
+tcl-e2e        lists.test (7)                                        0.2 s  ok 7/12
+tcl-e2e        loop-collecting.test (109)                            5.7 s  ok 109/140
+tcl-e2e        loop-counted.test (45)                                1.6 s  ok 45/60
+tcl-e2e        loop-in.test (23)                                     0.6 s  ok 23/34
+tcl-e2e        loops.test (12)                                       0.1 s  ok 12/15
+tcl-e2e        many-boolean-arguments.test (3)                       0.4 s  ok 3/90
+tcl-e2e        method-eligible.test (46)                             2.7 s  ok 46/151
+tcl-e2e        method-sugar.test (112)                              17.4 s  ok 112/126
+tcl-e2e        module-static-values.test (1)                         1.3 s  ok 1/19
+tcl-e2e        mutable-array-type.test (67)                          4.7 s  ok 67/118
+tcl-e2e        mutable-array.test (27)                              13.6 s  ok 27/32
+tcl-e2e        mutable-vector.test (49)                             17.4 s  ok 49/56
+tcl-e2e        mutarray-construction.test (24)                       4.5 s  ok 24/76
+tcl-e2e        namespaced-errors.test (11)                           1.3 s  ok 11/31
+tcl-e2e        native-alloc.test (2)                                 0.2 s  ok 2/18
+tcl-e2e        native-bitshift.test (12)                             0.9 s  ok 12/28
+tcl-e2e        native-bitwise-fold.test (6)                          0.6 s  ok 6/6
+tcl-e2e        native-block-escape.test (30)                         3.5 s  ok 30/54
+tcl-e2e        native-byte.test (7)                                  2.9 s  ok 7/13
+tcl-e2e        native-csv-records.test (1)                           4.3 s  ok 1/21
+tcl-e2e        native-escape.test (11)                               1.7 s  ok 11/22
+tcl-e2e        native-executable.test (7)                           10.4 s  ok 7/13
+tcl-e2e        native-hashing.test (26)                              1.0 s  ok 26/37
+tcl-e2e        native-listloop.test (2)                              0.7 s  ok 2/15
+tcl-e2e        native-mutarray.test (36)                             8.0 s  ok 36/49
+tcl-e2e        native-param-aggregate.test (22)                      2.5 s  ok 22/37
+tcl-e2e        native-refinement-propagation.test (1)                2.1 s  ok 1/7
+tcl-e2e        native-root-liveness.test (6)                         0.4 s  ok 6/23
+tcl-e2e        native-stack-map.test (8)                             0.6 s  ok 8/11
+tcl-e2e        native-stack-overflow.test (1)                        0.1 s  ok 1/4
+tcl-e2e        native-string-region.test (26)                        2.9 s  ok 26/31
+tcl-e2e        native-string-traversal.test (10)                     1.1 s  ok 10/19
+tcl-e2e        native-string-view.test (13)                          3.6 s  ok 13/17
+tcl-e2e        native-tcl-unicode.test (61)                         29.5 s  ok 61/68
+tcl-e2e        native-tiny-leaf-inline.test (10)                     1.0 s  ok 10/34
+tcl-e2e        native-uri-escape.test (33)                          39.8 s  ok 33/38
+tcl-e2e        native.test (57)                                      9.3 s  ok 57/90
+tcl-e2e        one-char-string-literal.test (13)                     0.6 s  ok 13/85
+tcl-e2e        opaque-struct.test (78)                               3.1 s  ok 78/141
+tcl-e2e        packed-ascii.test (26)                               12.9 s  ok 26/47
+tcl-e2e        portable-io.test (1)                                  0.4 s  ok 1/12
+tcl-e2e        proof-loop-intervals.test (11)                        2.5 s  ok 11/13
+tcl-e2e        proven-bounds.test (3)                                1.1 s  ok 3/24
+tcl-e2e        proves-naming.test (7)                                0.6 s  ok 7/84
+tcl-e2e        raw-count-loops.test (6)                              4.0 s  ok 6/13
+tcl-e2e        raw-int-abi.test (48)                                29.2 s  ok 48/69
+tcl-e2e        raw-internal-abi.test (3)                             2.6 s  ok 3/8
+tcl-e2e        refined-signatures.test (7)                           0.2 s  ok 7/16
+tcl-e2e        refined.test (2)                                      0.1 s  ok 2/22
+tcl-e2e        refinement-validators.test (41)                       5.8 s  ok 41/48
+tcl-e2e        refinement-values.test (44)                           4.6 s  ok 44/88
+tcl-e2e        result-range-narrowing.test (5)                       0.5 s  ok 5/12
+tcl-e2e        same-failure.test (4)                                 0.3 s  ok 4/101
+tcl-e2e        scalarbits.test (8)                                   0.1 s  ok 8/11
+tcl-e2e        self-recursive-result-ranges.test (7)                19.0 s  ok 7/37
+tcl-e2e        semantic-instances.test (33)                          1.1 s  ok 33/79
+tcl-e2e        setcontains-equality-total.test (2)                   0.3 s  ok 2/17
+tcl-e2e        setfromlist-equality-total.test (4)                   0.4 s  ok 4/15
+tcl-e2e        short-demand.test (9)                                 3.4 s  ok 9/17
+tcl-e2e        short-string.test (26)                               12.0 s  ok 26/59
+tcl-e2e        source-types.test (17)                                0.5 s  ok 17/48
+tcl-e2e        static-compile.test (57)                              6.6 s  ok 57/83
+tcl-e2e        static-economics.test (11)                            4.3 s  ok 11/44
+tcl-e2e        stdlib-namespaces.test (52)                          10.3 s  ok 52/74
+tcl-e2e        str-char-at.test (13)                                 1.0 s  ok 13/14
+tcl-e2e        strict-references.test (45)                           0.6 s  ok 45/63
+tcl-e2e        string-allocation.test (9)                            6.0 s  ok 9/24
+tcl-e2e        struct-destructuring.test (201)                      23.7 s  ok 201/263
+tcl-e2e        struct-scalar-replacement.test (68)                   8.2 s  ok 68/84
+tcl-e2e        structs.test (56)                                     3.1 s  ok 56/89
+tcl-e2e        structural-contract-completions.test (33)             8.8 s  ok 33/45
+tcl-e2e        structural-fn-types.test (40)                         3.8 s  ok 40/85
+tcl-e2e        surface-lowering.test (17)                            0.3 s  ok 17/98
+tcl-e2e        surface-modules.test (13)                             1.6 s  ok 13/37
+tcl-e2e        surface-samples.test (38)                             0.7 s  ok 38/65
+tcl-e2e        symbolic-type-identity.test (4)                       0.8 s  ok 4/15
+tcl-e2e        traits.test (45)                                      3.6 s  ok 45/75
+tcl-e2e        typed-callable-escape.test (31)                       0.4 s  ok 31/37
+tcl-e2e        typed-parameters.test (26)                            0.3 s  ok 26/50
+tcl-e2e        unicode-char.test (34)                                0.8 s  ok 34/75
+tcl-e2e        value-transport.test (31)                             9.0 s  ok 31/64
+tcl-e2e        virtual-construction.test (39)                       12.0 s  ok 39/51
+tcl-e2e        warnings.test (2)                                     0.2 s  ok 2/81
+tcl-e2e        web-unreserved.test (8)                               8.1 s  ok 8/12
+Tcl E2E subset, -match: 138 files, 3250 ported tests, wall 179.6 s with 4 job(s) (per-file seconds summed 706.5)
+tcl-e2e-files  abi-bytes.test (26)                                  50.5 s  ok 73/73
+tcl-e2e-files  abi-mutable-bytes.test (34)                          62.4 s  ok 76/76
+tcl-e2e-files  abi-numeric.test (28)                                18.4 s  ok 41/41
+tcl-e2e-files  acceptance.test (2)                                   0.1 s  ok 4/4
+tcl-e2e-files  affine.test (38)                                     17.3 s  ok 47/47
+tcl-e2e-files  applied-types.test (25)                               0.6 s  ok 51/51
+tcl-e2e-files  argv.test (13)                                       27.4 s  ok 65/65
+tcl-e2e-files  ascii.test (31)                                       8.5 s  ok 33/33
+tcl-e2e-files  backends.test (3)                                     0.3 s  ok 14/14
+tcl-e2e-files  bindings.test (13)                                    0.3 s  ok 31/31
+tcl-e2e-files  blockescape-called-generic.test (2)                   0.6 s  ok 5/5
+tcl-e2e-files  blockescape-nested-capturers.test (3)                 2.3 s  ok 13/13
+tcl-e2e-files  blocks.test (10)                                      0.1 s  ok 15/15
+tcl-e2e-files  byte-set.test (19)                                    2.7 s  ok 21/21
+tcl-e2e-files  calls.test (14)                                       0.1 s  ok 19/19
+tcl-e2e-files  checked-domain-proof-provenance.test (6)              0.8 s  ok 18/18
+tcl-e2e-files  closed-closure-entry-facts.test (7)                   1.3 s  ok 33/33
+tcl-e2e-files  closure-int-keys.test (3)                             6.7 s  ok 11/11
+tcl-e2e-files  compiler-opt.test (10)                               24.6 s  ok 25/25
+tcl-e2e-files  conjunctive-entry-facts.test (3)                      0.6 s  ok 28/28
+tcl-e2e-files  context-traits.test (16)                              5.5 s  ok 39/39
+tcl-e2e-files  contexts.test (24)                                   21.8 s  ok 74/74
+tcl-e2e-files  control.test (10)                                     0.1 s  ok 17/17
+tcl-e2e-files  coroutines.test (53)                                 19.0 s  ok 79/79
+tcl-e2e-files  direct-hir-native.test (18)                         101.8 s  ok 33/33
+tcl-e2e-files  dormant-instances.test (6)                            8.8 s  ok 20/20
+tcl-e2e-files  elif.test (39)                                       44.3 s  ok 45/45
+tcl-e2e-files  emailish-predicate.test (13)                         25.4 s  ok 20/20
+tcl-e2e-files  empty-collection-admissibility.test (22)              0.9 s  ok 26/26
+tcl-e2e-files  enums.test (35)                                       5.1 s  ok 66/66
+tcl-e2e-files  error-payloads.test (42)                             11.7 s  ok 61/61
+tcl-e2e-files  errors.test (47)                                      4.2 s  ok 51/51
+tcl-e2e-files  exact-callable-executable.test (5)                   27.3 s  ok 6/6
+tcl-e2e-files  exact-callable-key.test (27)                         14.6 s  ok 60/60
+tcl-e2e-files  exact-value-facts.test (6)                            3.2 s  ok 71/71
+tcl-e2e-files  fixed-arity-list-return.test (10)                    42.0 s  ok 149/149
+tcl-e2e-files  flags.test (100)                                     17.5 s  ok 155/155
+tcl-e2e-files  golden-framework.test (17)                          193.2 s  ok 42/42
+tcl-e2e-files  higher-order-completions.test (57)                    7.1 s  ok 62/62
+tcl-e2e-files  hir-aot.test (1)                                      8.3 s  ok 33/33
+tcl-e2e-files  hir-lowering.test (5)                                 0.6 s  ok 45/45
+tcl-e2e-files  hir-range.test (4)                                    1.6 s  ok 60/60
+tcl-e2e-files  hir-resolution.test (8)                               0.2 s  ok 29/29
+tcl-e2e-files  hir-samples.test (4)                                  0.3 s  ok 42/42
+tcl-e2e-files  hir-specialize.test (1)                              17.5 s  ok 31/31
+tcl-e2e-files  hir-syntax.test (3)                                   0.3 s  ok 12/12
+tcl-e2e-files  immutable-set.test (36)                               1.7 s  ok 68/68
+tcl-e2e-files  imports.test (51)                                     8.6 s  ok 104/104
+tcl-e2e-files  inference.test (12)                                   0.5 s  ok 30/30
+tcl-e2e-files  instance-entry-range-facts.test (1)                   1.1 s  ok 29/29
+tcl-e2e-files  intrinsic-contracts.test (29)                         4.5 s  ok 62/62
+tcl-e2e-files  linux-path.test (13)                                  6.8 s  ok 19/19
+tcl-e2e-files  linux-syscall.test (19)                              12.3 s  ok 37/37
+tcl-e2e-files  list-stdlib.test (24)                                 1.1 s  ok 24/24
+tcl-e2e-files  lists.test (7)                                        0.2 s  ok 12/12
+tcl-e2e-files  loop-collecting.test (109)                            7.8 s  ok 140/140
+tcl-e2e-files  loop-counted.test (45)                                2.0 s  ok 60/60
+tcl-e2e-files  loop-in.test (23)                                     0.8 s  ok 34/34
+tcl-e2e-files  loops.test (12)                                       0.1 s  ok 15/15
+tcl-e2e-files  many-boolean-arguments.test (3)                      64.0 s  ok 90/90
+tcl-e2e-files  method-eligible.test (46)                            78.0 s  ok 151/151
+tcl-e2e-files  method-sugar.test (112)                              58.8 s  ok 126/126
+tcl-e2e-files  module-static-values.test (1)                         6.5 s  ok 19/19
+tcl-e2e-files  mutable-array-type.test (67)                          6.6 s  ok 118/118
+tcl-e2e-files  mutable-array.test (27)                              15.6 s  ok 32/32
+tcl-e2e-files  mutable-vector.test (49)                             18.5 s  ok 56/56
+tcl-e2e-files  mutarray-construction.test (24)                       5.2 s  ok 76/76
+tcl-e2e-files  namespaced-errors.test (11)                           3.8 s  ok 31/31
+tcl-e2e-files  native-alloc.test (2)                                 0.7 s  ok 18/18
+tcl-e2e-files  native-bitshift.test (12)                             6.2 s  ok 28/28
+tcl-e2e-files  native-bitwise-fold.test (6)                          0.5 s  ok 6/6
+tcl-e2e-files  native-block-escape.test (30)                         8.7 s  ok 54/54
+tcl-e2e-files  native-byte.test (7)                                  5.8 s  ok 13/13
+tcl-e2e-files  native-csv-records.test (1)                         224.1 s  ok 21/21
+tcl-e2e-files  native-escape.test (11)                               4.5 s  ok 22/22
+tcl-e2e-files  native-executable.test (7)                           12.9 s  ok 13/13
+tcl-e2e-files  native-hashing.test (26)                              1.2 s  ok 37/37
+tcl-e2e-files  native-listloop.test (2)                              1.0 s  ok 15/15
+tcl-e2e-files  native-mutarray.test (36)                             8.3 s  ok 49/49
+tcl-e2e-files  native-param-aggregate.test (22)                     10.0 s  ok 37/37
+tcl-e2e-files  native-refinement-propagation.test (1)                6.2 s  ok 7/7
+tcl-e2e-files  native-root-liveness.test (6)                         0.7 s  ok 23/23
+tcl-e2e-files  native-stack-map.test (8)                             0.6 s  ok 11/11
+tcl-e2e-files  native-stack-overflow.test (1)                        0.2 s  ok 4/4
+tcl-e2e-files  native-string-region.test (26)                        3.9 s  ok 31/31
+tcl-e2e-files  native-string-traversal.test (10)                     1.6 s  ok 19/19
+tcl-e2e-files  native-string-view.test (13)                          3.4 s  ok 17/17
+tcl-e2e-files  native-tcl-unicode.test (61)                         30.5 s  ok 68/68
+tcl-e2e-files  native-tiny-leaf-inline.test (10)                    11.3 s  ok 34/34
+tcl-e2e-files  native-uri-escape.test (33)                          41.5 s  ok 38/38
+tcl-e2e-files  native.test (57)                                     22.9 s  ok 90/90
+tcl-e2e-files  one-char-string-literal.test (13)                    51.9 s  ok 85/85
+tcl-e2e-files  opaque-struct.test (78)                              15.0 s  ok 141/141
+tcl-e2e-files  packed-ascii.test (26)                               14.6 s  ok 47/47
+tcl-e2e-files  portable-io.test (1)                                  8.5 s  ok 12/12
+tcl-e2e-files  proof-loop-intervals.test (11)                        2.4 s  ok 13/13
+tcl-e2e-files  proven-bounds.test (3)                                3.6 s  ok 24/24
+tcl-e2e-files  proves-naming.test (7)                               51.4 s  ok 84/84
+tcl-e2e-files  raw-count-loops.test (6)                              8.1 s  ok 13/13
+tcl-e2e-files  raw-int-abi.test (48)                                72.0 s  ok 69/69
+tcl-e2e-files  raw-internal-abi.test (3)                             8.8 s  ok 8/8
+tcl-e2e-files  refined-signatures.test (7)                           0.7 s  ok 16/16
+tcl-e2e-files  refined.test (2)                                      0.2 s  ok 22/22
+tcl-e2e-files  refinement-validators.test (41)                      11.6 s  ok 48/48
+tcl-e2e-files  refinement-values.test (44)                          13.3 s  ok 88/88
+tcl-e2e-files  result-range-narrowing.test (5)                       3.2 s  ok 12/12
+tcl-e2e-files  same-failure.test (4)                                41.2 s  ok 101/101
+tcl-e2e-files  scalarbits.test (8)                                   0.3 s  ok 11/11
+tcl-e2e-files  self-recursive-result-ranges.test (7)                37.4 s  ok 37/37
+tcl-e2e-files  semantic-instances.test (33)                          1.9 s  ok 79/79
+tcl-e2e-files  setcontains-equality-total.test (2)                   3.4 s  ok 17/17
+tcl-e2e-files  setfromlist-equality-total.test (4)                   2.2 s  ok 15/15
+tcl-e2e-files  short-demand.test (9)                                 4.2 s  ok 17/17
+tcl-e2e-files  short-string.test (26)                               13.7 s  ok 59/59
+tcl-e2e-files  source-types.test (17)                                0.6 s  ok 48/48
+tcl-e2e-files  static-compile.test (57)                              7.2 s  ok 83/83
+tcl-e2e-files  static-economics.test (11)                           95.8 s  ok 44/44
+tcl-e2e-files  stdlib-namespaces.test (52)                          14.9 s  ok 74/74
+tcl-e2e-files  str-char-at.test (13)                                 0.8 s  ok 14/14
+tcl-e2e-files  strict-references.test (45)                           5.6 s  ok 63/63
+tcl-e2e-files  string-allocation.test (9)                            7.3 s  ok 24/24
+tcl-e2e-files  struct-destructuring.test (201)                      40.4 s  ok 263/263
+tcl-e2e-files  struct-scalar-replacement.test (68)                  19.7 s  ok 84/84
+tcl-e2e-files  structs.test (56)                                     4.6 s  ok 89/89
+tcl-e2e-files  structural-contract-completions.test (33)            17.9 s  ok 45/45
+tcl-e2e-files  structural-fn-types.test (40)                         4.4 s  ok 85/85
+tcl-e2e-files  surface-lowering.test (17)                            1.0 s  ok 98/98
+tcl-e2e-files  surface-modules.test (13)                             3.3 s  ok 37/37
+tcl-e2e-files  surface-samples.test (38)                             1.0 s  ok 65/65
+tcl-e2e-files  symbolic-type-identity.test (4)                       0.9 s  ok 15/15
+tcl-e2e-files  traits.test (45)                                      4.3 s  ok 75/75
+tcl-e2e-files  typed-callable-escape.test (31)                       0.5 s  ok 37/37
+tcl-e2e-files  typed-parameters.test (26)                            0.6 s  ok 50/50
+tcl-e2e-files  unicode-char.test (34)                                1.0 s  ok 75/75
+tcl-e2e-files  value-transport.test (31)                            35.0 s  ok 64/64
+tcl-e2e-files  virtual-construction.test (39)                       14.0 s  ok 51/51
+tcl-e2e-files  warnings.test (2)                                     8.3 s  ok 81/81
+tcl-e2e-files  web-unreserved.test (8)                              10.2 s  ok 12/12
+Tcl E2E files, whole: 138 files, 3250 ported tests, wall 558.1 s with 4 job(s) (per-file seconds summed 2188.0)
+golden-interp  abi-numeric-native.bot                                1.1 s  ok
+golden-interp  abi-bytes-native.bot                                  1.3 s  ok
+golden-interp  bits-bytes-hashing.bot                                6.8 s  ok
+golden-interp  callable-contracts-contravariant-rejected.bot         2.4 s  ok
+golden-interp  callable-contracts-contravariant.bot                  2.3 s  ok
+golden-interp  callable-contracts-fallback.bot                       2.0 s  ok
+golden-interp  callable-contracts-handle.bot                         1.7 s  ok
+golden-interp  callable-contracts-returned.bot                       2.5 s  ok
+golden-interp  abi-numeric.bot                                      20.3 s  ok
+golden-interp  callable-contracts-unerased.bot                       1.4 s  ok
+golden-interp  affinity.bot                                         22.2 s  ok
+golden-interp  closure-escape-instances.bot                          1.2 s  ok
+golden-interp  closure-escape.bot                                    6.0 s  ok
+golden-interp  abi-bytes.bot                                        34.0 s  ok
+golden-interp  compiled-values-struct-transport.bot                  5.5 s  ok
+golden-interp  collections.bot                                      18.1 s  ok
+golden-interp  completion-regressions.bot                            3.8 s  ok
+golden-interp  callables.bot                                        34.5 s  ok
+golden-interp  contexts.bot                                         24.9 s  ok
+golden-interp  core-semantics.bot                                   25.7 s  ok
+golden-interp  callable-contracts.bot                               62.9 s  ok
+golden-interp  declared-errors-imports.bot                           2.8 s  ok
+golden-interp  destructuring-instances.bot                           4.4 s  ok
+golden-interp  coroutines.bot                                       33.7 s  ok
+golden-interp  diagnostics.bot                                       9.7 s  ok
+golden-interp  errors.bot                                            5.1 s  ok
+golden-interp  compiled-values.bot                                  86.3 s  ok
+golden-interp  declared-errors.bot                                  44.9 s  ok
+golden-interp  gc-sensitive-values.bot                               5.4 s  ok
+golden-interp  harness.bot                                           2.9 s  ok
+golden-interp  hir-values.bot                                        2.3 s  ok
+golden-interp  imports-abi-child.bot                                 3.4 s  ok
+golden-interp  imports-abi-family.bot                                1.7 s  ok
+golden-interp  imports-library-modules.bot                           6.1 s  ok
+golden-interp  framework-semantics.bot                              24.4 s  ok
+golden-interp  flags.bot                                            25.0 s  ok
+golden-interp  linux-io-native.bot                                   1.3 s  ok
+golden-interp  imports-unimported.bot                                2.7 s  ok
+golden-interp  linux-io.bot                                         10.0 s  ok
+golden-interp  lists-and-sets.bot                                    9.9 s  ok
+golden-interp  loop-collecting-refined-checks.bot                   16.1 s  ok
+golden-interp  loops.bot                                             4.4 s  ok
+golden-interp  loop-collecting.bot                                  21.0 s  ok
+golden-interp  imports.bot                                          38.3 s  ok
+golden-interp  method-equivalence-imported.bot                       7.0 s  ok
+golden-interp  method-equivalence.bot                                6.4 s  ok
+golden-interp  methods-struct-instances.bot                          1.4 s  ok
+golden-interp  methods-byte-without-list.bot                         2.8 s  ok
+golden-interp  methods-list-without-str.bot                          2.4 s  ok
+golden-interp  methods-type-import-only.bot                          2.0 s  ok
+golden-interp  modules.bot                                          13.2 s  ok
+golden-interp  mutable-vector-str.bot                                1.2 s  ok
+golden-interp  destructuring.bot                                   159.1 s  ok
+golden-interp  mutable-vector.bot                                   41.6 s  ok
+golden-interp  names-and-scoping.bot                                 5.3 s  ok
+golden-interp  methods.bot                                          69.2 s  ok
+golden-interp  opaque-instances.bot                                  1.4 s  ok
+golden-interp  native-aggregates.bot                                15.8 s  ok
+golden-interp  native-values.bot                                    13.7 s  ok
+golden-interp  ownership.bot                                        20.5 s  ok
+golden-interp  raw-int-abi.bot                                      18.2 s  ok
+golden-interp  recursive-types.bot                                   2.8 s  ok
+golden-interp  range-and-contract-values.bot                        47.0 s  ok
+golden-interp  representation.bot                                    3.9 s  ok
+golden-interp  static-compile-erased-consumer.bot                    1.9 s  ok
+golden-interp  opaque.bot                                           58.2 s  ok
+golden-interp  stdlib-namespaces-entry-members.bot                   1.4 s  ok
+golden-interp  stdlib-namespaces-str-only.bot                        2.0 s  ok
+golden-interp  stdlib-namespaces-unimported.bot                      1.6 s  ok
+golden-interp  refinements.bot                                      41.6 s  ok
+golden-interp  string-natives.bot                                    8.2 s  ok
+golden-interp  string-representations.bot                            6.2 s  ok
+golden-interp  stdlib-namespaces.bot                                50.2 s  ok
+golden-interp  struct-representation-instances.bot                   2.0 s  ok
+golden-interp  strings.bot                                          18.8 s  ok
+golden-interp  structs-and-enums-instances.bot                       1.5 s  ok
+golden-interp  structs-and-enums-qualifiers.bot                      1.2 s  ok
+golden-interp  static-compile.bot                                   64.8 s  ok
+golden-interp  traits-path.bot                                       1.9 s  ok
+golden-interp  struct-representation.bot                            32.2 s  ok
+golden-interp  types.bot                                            22.5 s  ok
+golden-interp  traits.bot                                           47.7 s  ok
+golden-interp  unicode-strings.bot                                   3.3 s  ok
+golden-interp  values.bot                                            8.3 s  ok
+golden-interp  warning-programs.bot                                  6.0 s  ok
+golden-interp  structs-and-enums.bot                                67.4 s  ok
+golden-interp  validators-and-proofs.bot                            31.8 s  ok
+golden-interp  mutable-array.bot                                   323.9 s  ok
+Golden corpus on interp: 88 suites, wall 517.0 s with 4 job(s), one process per suite (per-suite seconds summed 1881.6)

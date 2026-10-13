@@ -411,7 +411,7 @@ proc hir::modulebinding::ImmutableRef {hir node facts} {
         }
         return [list bad unknown "root value [dict get $binding name] is not retained immutable data"]
     }
-    return [list bad order "\"[dict get $binding name]\" has not initialized"]
+    return [list bad order "\"[hir::semantic::SourceName $hir $b]\" has not initialized"]
 }
 
 proc hir::modulebinding::ImmutableBinding {hir b facts} {
@@ -422,7 +422,7 @@ proc hir::modulebinding::ImmutableBinding {hir b facts} {
     if {[dict get $binding kind] eq "root"} {
         return [ImmutableRef $hir [dict create binding $b] $facts]
     }
-    return [list bad order "\"[dict get $binding name]\" has not initialized"]
+    return [list bad order "\"[hir::semantic::SourceName $hir $b]\" has not initialized"]
 }
 
 proc hir::modulebinding::ImmutableNative {hir symbol proofs} {

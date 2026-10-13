@@ -1,5 +1,5 @@
 # ledger.tcl -- the migration ledger of the golden suites
-# (LARGE-SCALE-GOLDEN-MIGRATION.md, "The ledger"), generated from
+# (LARGE-SCALE-GOLDEN-MIGRATION.md, "The census"), generated from
 # tests/golden/manifest.tsv, the one map between the Tcl tests and the golden
 # tests.
 #
@@ -20,7 +20,8 @@
 #   multi        KEEP-MULTI-PROGRAM
 #   notexpr      KEEP-NOT-EXPRESSIBLE
 #   blocked      BLOCKED-GENERAL-COMPILER or BLOCKED-TEST-LIBRARY
-#   golden       golden tests (rows with a new_test)
+#   golden       golden rows (rows with a new_test: one per (Tcl test, golden
+#                test) pair)
 #   equal/stronger/weaker/splitobs  the golden rows' strength column
 #
 # then the Tcl suite's layer classification (tcl_layer: DUPLICATED-E2E,
@@ -72,6 +73,7 @@ set problems {}
 # Tcl test key -> {group status layer freeze}; and per key its golden rows.
 set tests [dict create]
 set goldenRows [dict create]
+set goldenTests [dict create]
 foreach row $rows {
     set key [list [dict get $row old_file] [dict get $row old_test]]
     set group [expr {[dict get $options -by] eq "file" ? [file tail [dict get $row old_file]] : [dict get $row subsystem]}]
@@ -97,6 +99,7 @@ foreach row $rows {
     }
     if {$ported} {
         dict lappend goldenRows $key $row
+        dict set goldenTests [list [dict get $row suite] [dict get $row new_test]] 1
     }
 }
 
@@ -136,16 +139,17 @@ dict for {key info} $tests {
 }
 
 set width [expr {max(14, [tcl::mathfunc::max {*}[lmap g [dict keys $ledger] {string length $g}]])}]
-puts [format "%-${width}s%s" [dict get $options -by] [join [lmap c $columns {format %10s $c}] ""]]
+puts [format "%-${width}s%s" [dict get $options -by] [join [lmap c $columns {format %11s $c}] ""]]
 foreach group [lsort [dict keys $ledger]] {
-    puts [format "%-${width}s%s" $group [join [lmap c $columns {format %10d [dict get $ledger $group $c]}] ""]]
+    puts [format "%-${width}s%s" $group [join [lmap c $columns {format %11d [dict get $ledger $group $c]}] ""]]
 }
-puts [format "%-${width}s%s" total [join [lmap c $columns {format %10d [dict get $totals $c]}] ""]]
+puts [format "%-${width}s%s" total [join [lmap c $columns {format %11d [dict get $totals $c]}] ""]]
 puts ""
 puts "Tcl tests by layer:"
 foreach l $layers { puts [format "    %-26s %6d" $l [expr {[dict exists $layerCounts $l] ? [dict get $layerCounts $l] : 0}]] }
 puts "Tcl tests by future freeze class:"
 foreach z $freezes { puts [format "    %-26s %6d" $z [expr {[dict exists $freezeCounts $z] ? [dict get $freezeCounts $z] : 0}]] }
-puts "\n[dict size $tests] Tcl tests, [llength $rows] manifest rows, [dict get $totals golden] golden tests"
+puts "\n[dict size $tests] Tcl tests, [llength $rows] manifest rows, [dict get $totals golden] golden rows,\
+    [dict size $goldenTests] distinct golden tests"
 foreach p $problems { puts "PROBLEM: $p" }
 exit [expr {$problems eq {} ? 0 : 1}]

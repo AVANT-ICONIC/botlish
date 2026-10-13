@@ -19,10 +19,9 @@
 # backends disagree; else 0.
 #
 # The backends: interp (the core IR on the reference interpreter), compile
-# (the core IR on the Tcl compiler, as the Tcl suite's harness runs it),
-# cranelift-generic and cranelift (native, from HIR); and, on request only,
-# compile-hir (the Tcl compiler compiling the HIR itself: main.tcl's
-# -backend compile).
+# (the Tcl compiler compiling the HIR itself, as main.tcl's -backend compile
+# and the Tcl suite's harness do), cranelift-generic and cranelift (native,
+# from HIR).
 #
 # A suite may exclude backends it cannot run, with the reason, in its leading
 # comment block ("# golden-exclude: cranelift-generic -- REASON"): the runner
@@ -88,7 +87,7 @@ proc golden::run {hir backend} {
     set failed [catch {
         if {$backend in {cranelift cranelift-generic}} {
             native::evalHir $hir {*}[expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
-        } elseif {$backend eq "compile-hir"} {
+        } elseif {$backend eq "compile"} {
             core::compiler::evalHir $hir
         } else {
             set saved [core::useBackend]
@@ -137,7 +136,7 @@ proc golden::summary {lines} {
 #
 #   # golden-exclude: BACKEND[,BACKEND...] -- REASON
 #
-# (LARGE-SCALE-GOLDEN-MIGRATION.md, "Backend exclusions"): a backend that
+# (LARGE-SCALE-GOLDEN-MIGRATION.md, "Backends and exclusions"): a backend that
 # cannot run some test of the suite for a recorded, legitimate reason (a
 # construct it reports unsupported), never a backend that runs it wrongly. The
 # lines are read from the suite's leading comment block only.
@@ -177,9 +176,11 @@ proc golden::suite {path backends} {
         return $result
     }
     set hir [lindex $compiled 1]
+    set before $::golden::genericStandIns
     foreach backend $backends {
         dict set result outcomes $backend [run $hir $backend]
     }
+    dict set result standIns [expr {$::golden::genericStandIns - $before}]
     set status ok
     set reports [lsort -unique [lmap {b o} [dict get $result outcomes] {lrange $o 0 1}]]
     foreach {backend outcome} [dict get $result outcomes] {
@@ -221,6 +222,12 @@ proc golden::main {argv} {
         set name [file tail $path]
         if {$mode eq "names"} {
             puts "$name STATUS $status"
+            if {[dict exists $result standIns] && [dict get $result standIns] > 0} {
+                # The whole suite's cranelift-generic run was replaced by
+                # cranelift's (golden::run): visible, so that a suite does not
+                # lose its generic coverage silently.
+                puts "$name STANDIN cranelift-generic"
+            }
             # The static decisions' economics (hir/static.tcl's staticStats),
             # for the economics guard of audit/golden/tools/check.tcl.
             set compiled [dict get $result compile]

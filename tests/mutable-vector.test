@@ -292,6 +292,142 @@ test mv-generic {item 72: an untyped function given a vector is specialized by t
 } -cleanup {unset -nocomplain text} -result {{value {[3, 1]}} {1 1} 1}
 
 # ---------------------------------------------------------------------------
+# Recursive struct types (STRUCTS.md: a struct may name itself)
+#
+# A struct that names itself through its fields has no finite value, but the
+# type exists and functions may be typed over it (structs.test's
+# struct-named-recursive-declaration). The share descriptor walk
+# (hir::mutvec::ShareDescriptor) once recursed through such a struct without
+# bound -- TCL LIMIT STACK in any program that also used a MutableVector or a
+# MutableArray anywhere, which every golden suite does (lib/test.bot).
+
+test mv-recursive-struct-declaration {a program that declares a struct naming itself, with a function typed over it, compiles and runs while it uses a MutableVector or a MutableArray -- also when the struct holds a vector beside its own type -- on every backend} -body {
+    list [mvAgree {import mutable_vector
+struct Node:
+    next: Node
+    label: str
+fn follow(n: Node) -> Node:
+    n.next
+v = mutable_vector::from_list([1])
+1
+}] [mvAgree {import mutable_array
+struct Node:
+    next: Node
+    label: str
+fn follow(n: Node) -> Node:
+    n.next
+a = mutable_array::create(2, 0)
+1
+}] [mvAgree {import mutable_vector
+struct Chain:
+    items: MutableVector[int]
+    next: Chain
+
+fn follow(c: Chain) -> Chain:
+    c.next
+
+fn items_of(c: Chain) -> MutableVector[int]:
+    c.items
+
+v = mutable_vector::from_list([1, 2])
+v.push(3)
+v.length()
+}]
+} -result {{value 1} {value 1} {value 3}}
+
+test mv-recursive-struct-copies {a struct holding a vector and its own type in a List or a MutableVector is copied logically like any vector-bearing struct -- a binding, an argument and a function's result mutate independently -- and a struct holding a vector beside a struct that names itself shares as before, on every backend} -body {
+    list [mvAgree {import list
+import mutable_vector
+struct Tree:
+    items: MutableVector[int]
+    kids: List[Tree]
+
+fn add(t: Tree, x: int) -> Tree:
+    t.items.push(x)
+    t
+
+leaf = Tree {items: mutable_vector::from_list([1]), kids: []}
+root = Tree {items: mutable_vector::from_list([0]), kids: [leaf]}
+copy = root
+grown = add(root, 7)
+root.items.push(9)
+[root.items.length(), copy.items.length(), grown.items.length(), leaf.items.length(), list::length(grown.kids)]
+}] [mvAgree {import mutable_vector
+struct Forest:
+    items: MutableVector[int]
+    kids: MutableVector[Forest]
+
+fn leaf(x: int) -> Forest:
+    Forest {items: mutable_vector::from_list([x]), kids: mutable_vector::from_list([])}
+
+fn graft(t: Forest, x: int) -> Forest:
+    t.kids.push(leaf(x))
+    t.items.push(x)
+    t
+
+root = leaf(0)
+copy = root
+grown = graft(root, 5)
+root.kids.push(leaf(1))
+[root.items.length(), root.kids.length(), copy.kids.length(), grown.items.length(), grown.kids.length()]
+}] [mvAgree {import mutable_vector
+struct Node:
+    next: Node
+    label: str
+
+struct Capture:
+    events: MutableVector[str]
+    n: int
+
+fn follow(n: Node) -> Node:
+    n.next
+
+fn record(c: Capture, e: str) -> Capture:
+    c.events.push(e)
+    c
+
+cap = Capture {events: mutable_vector::from_list(["x0"]), n: 1}
+cap2 = cap
+cap3 = record(cap, "y0")
+cap.events.push("z0")
+[cap.events.length(), cap2.events.length(), cap3.events.length()]
+}]
+} -result {{value {[2, 1, 2, 1, 1]}} {value {[1, 1, 0, 2, 1]}} {value {[2, 1, 2]}}}
+
+test mv-recursive-struct-descriptor {the share descriptor of a struct naming itself is finite: holding no collection it shares nothing (no copy, no dynamic copy either); holding a vector beside its own type it shares the vector, the inner occurrence nothing (no finite value has the type); holding itself in a List or a vector it shares its own vector fields only (an element is never a place); a struct holding a vector beside one naming itself, and one without, are unchanged} -body {
+    surface::compile {import mutable_vector
+struct Node:
+    next: Node
+    label: str
+
+struct Chain:
+    items: MutableVector[int]
+    next: Chain
+
+struct Tree:
+    items: MutableVector[int]
+    kids: List[Tree]
+
+struct Forest:
+    items: MutableVector[int]
+    kids: MutableVector[Forest]
+
+struct Holder:
+    events: MutableVector[str]
+    node: Node
+
+struct Capture:
+    events: MutableVector[str]
+    n: int
+
+1
+} -warnings off
+    lmap name {Node Chain Tree Forest Holder Capture} {
+        list [hir::mutvec::ShareDescriptor [list nstruct $name]] [hir::mutvec::HeldDescriptor [list nstruct $name]]
+    }
+} -cleanup {unset -nocomplain name} -result {{{} {}} {s1.0.h s1.0.h} {s1.0.h s1.0.h} {s2.0.h1.h s2.0.h1.h} {s1.0.h s1.0.h} {s1.0.h s1.0.h}}
+
+# ---------------------------------------------------------------------------
 # Affine vectors (items 7, 8, 12, 19-36, 40-42, 47, 60, 81)
 
 test mv-affine-push-moves {item 21: pushing an affine element moves it: the pushed binding is USE-AFTER-MOVE while the vector stays usable} -body {

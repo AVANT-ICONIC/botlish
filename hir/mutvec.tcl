@@ -85,6 +85,8 @@ namespace eval hir::mutvec {
     variable freshFunctions [dict create]
     # The parent map of the elaboration under way's current HIR.
     variable currentParent {}
+    # The named structs ShareDescriptor is inside of, outermost first.
+    variable shareVisiting {}
 }
 
 proc hir::mutvec::ShareNative {} { return mutable_vector#share }
@@ -237,7 +239,7 @@ proc hir::mutvec::verify {hirVar} {
             set kind [dict get $roots $b]
             set what [KindName $kind]
             hir::Diagnose hir MUTABLE-PLACE-CAPTURE \
-                "`[dict get $node name]` is a $what place (its function mutates it in place), which a nested function cannot capture: the nested function would observe a binding that changes, and a $kind is a value, not a shared reference (pass it as an argument: the callee gets its own logical copy)" $e
+                "`[hir::semantic::RefName $hir $e]` is a $what place (its function mutates it in place), which a nested function cannot capture: the nested function would observe a binding that changes, and a $kind is a value, not a shared reference (pass it as an argument: the callee gets its own logical copy)" $e
         }
     }
     dict set hir mutvec roots [lsort -dictionary [dict keys $roots]]
@@ -259,8 +261,9 @@ proc hir::mutvec::ReceiverProblem {hir e r} {
     }
     lassign $path b fields
     set binding [dict get $hir bindings $b]
+    set shown [hir::semantic::SourceName $hir $b]
     if {[dict get $binding kind] ni {local param} || [hir::isModuleBinding $hir $b]} {
-        return "$what is `[dict get $binding name]`, which is not a local binding, a parameter or a context parameter of this function: only those are places a $kind can be mutated in (a module binding is shared by every user of the module)"
+        return "$what is `$shown`, which is not a local binding, a parameter or a context parameter of this function: only those are places a $kind can be mutated in (a module binding is shared by every user of the module)"
     }
     set pathType [hir::affine::BindingType $hir $b]
     foreach field $fields {
@@ -275,7 +278,7 @@ proc hir::mutvec::ReceiverProblem {hir e r} {
         # another known type cannot be one. (A binding of a type too
         # imprecise to say -- a generic function's parameter -- is a place
         # whose entry copy is dynamic: HeldDescriptor.)
-        return "$what is `[join [concat [list [dict get $binding name]] $fields] .]`, whose binding is not statically a $name\[T\] place (its type is [hir::types::show [expr {$pathType eq "" ? "any" : $pathType}]]): only a binding of a collection type owns a header it may mutate (bind the narrowed value to a name first -- `copy = [dict get $binding name]` -- and mutate that)"
+        return "$what is `[join [concat [list $shown] $fields] .]`, whose binding is not statically a $name\[T\] place (its type is [hir::types::show [expr {$pathType eq "" ? "any" : $pathType}]]): only a binding of a collection type owns a header it may mutate (bind the narrowed value to a name first -- `copy = $shown` -- and mutate that)"
     }
     if {[hir::affine::IsDestructureTemp $hir $b]} {
         return "$what is not a place"
@@ -287,7 +290,7 @@ proc hir::mutvec::ReceiverProblem {hir e r} {
     set refScope [dict get $hir exprs $r scope]
     if {[dict get $hir scopes $refScope invocation] ne [dict get $hir scopes [dict get $binding scope] invocation]} {
         set a [expr {[string match {[aeiou]*} $kind] ? "an" : "a"}]
-        return "$what is `[dict get $binding name]`, a binding of an enclosing function: a nested function cannot mutate $a $kind it captured ($a $kind is a value; pass it in and return the result)"
+        return "$what is `$shown`, a binding of an enclosing function: a nested function cannot mutate $a $kind it captured ($a $kind is a value; pass it in and return the result)"
     }
     return ""
 }
@@ -299,6 +302,14 @@ proc hir::mutvec::ReceiverProblem {hir e r} {
 # of it shares no header: "h" an unrestricted collection (a vector or an
 # array header), "s"N"."(SLOT"."D)*N a struct whose listed layout slots hold
 # collection-bearing values. An affine type is never copied (it moves).
+#
+# A named struct may name itself, directly or through other structs
+# (STRUCTS.md, `struct-named-recursive-declaration`). The walk goes through
+# struct fields only, so a struct it meets again inside itself is one no
+# finite value has -- each would hold a smaller one of the same type, without
+# end -- and a descriptor is only ever applied to a value: that inner
+# occurrence shares nothing. (A struct that holds itself in a List, an array
+# or a vector is not walked into there: an element is never a place.)
 proc hir::mutvec::ShareDescriptor {type} {
     if {[hir::types::IsAffine $type]} {
         return ""
@@ -307,16 +318,30 @@ proc hir::mutvec::ShareDescriptor {type} {
         return h
     }
     if {[hir::types::IsStructLike $type]} {
-        set parts {}
-        set n 0
-        set slot 0
-        foreach name [hir::types::StructLayout $type] {
-            set d [ShareDescriptor [hir::types::StructField $type $name]]
-            if {$d ne ""} {
-                append parts "$slot.$d"
-                incr n
+        variable shareVisiting
+        set id [expr {[hir::types::IsNamedStruct $type] ? [lindex $type 1] : ""}]
+        if {$id ne ""} {
+            if {$id in $shareVisiting} {
+                return ""
             }
-            incr slot
+            lappend shareVisiting $id
+        }
+        try {
+            set parts {}
+            set n 0
+            set slot 0
+            foreach name [hir::types::StructLayout $type] {
+                set d [ShareDescriptor [hir::types::StructField $type $name]]
+                if {$d ne ""} {
+                    append parts "$slot.$d"
+                    incr n
+                }
+                incr slot
+            }
+        } finally {
+            if {$id ne ""} {
+                set shareVisiting [lrange $shareVisiting 0 end-1]
+            }
         }
         if {$n == 0} {
             return ""

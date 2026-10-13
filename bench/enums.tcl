@@ -157,12 +157,19 @@ proc timeOn {backend hir} {
         lassign [native::measure $hir $::runs] lower compile best collections value
         return $best
     }
-    set program [hir::lower $hir]
-    core::useBackend $backend
-    core::evalProgram $program
+    if {$backend eq "compile"} {
+        # The Tcl compiler compiles the HIR itself, once.
+        set unit [core::compiler::compileHir $hir]
+        set run {core::compiler::evalUnit $unit}
+    } else {
+        set program [hir::lower $hir]
+        core::useBackend $backend
+        set run {core::evalProgram $program}
+    }
+    eval $run
     set best ""
     for {set i 0} {$i < $::runs} {incr i} {
-        set micros [lindex [time {core::evalProgram $program}] 0]
+        set micros [lindex [time $run] 0]
         if {$best eq "" || $micros < $best} {
             set best $micros
         }

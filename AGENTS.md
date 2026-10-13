@@ -11,17 +11,28 @@ explicitly asked to.
 * **HIR** (`hir/`) is the authoritative semantic representation; every analysis
   fact lives in it or in its side tables.
 * **Core IR** (`core/`) is the small executable representation of the Tcl
-  reference interpreter (and the Tcl compiler's input). HIR lowers to it
-  (`hir::lower`); it is not on the native path.
+  reference interpreter. HIR lowers to it (`hir::lower`); neither compiler
+  compiles from it.
+* **The Tcl compiler** (`compiler/`) compiles HIR as a front end built it
+  (`core::compiler::evalHir`, or `compileHir` once and `evalUnit` per run). Its
+  core IR entry points (the registered `compile` backend through
+  `core::evalProgram`; `generatedCode`, `programTypes`, `bindingTypes`,
+  `unitHir`) are for core IR *text* someone wrote, which `hir::build` reads
+  into HIR. Never hand them the output of `hir::lower` for a HIR you have:
+  that rebuilds a weaker HIR (no declared types, module identity, `errors`
+  clauses). Compile the HIR (`tests/direct-hir-native.test`'s
+  `direct-hir-compile-*` tests guard this; DIRECT-HIR-NATIVE-PATH.md, "The
+  Tcl compiler compiles HIR").
 * **NIR** (`native/`) is the production executable representation. Native
   compilation starts from resolved, analyzed HIR (`native::lowered`,
   `native::evalHir`, `native::executable`, ...) and never goes through Core IR:
   do not add a native entry point that accepts Core IR, and do not lower HIR to
   Core IR and rebuild HIR from it (`tests/direct-hir-native.test` guards this).
   `DIRECT-HIR-NATIVE-PATH.md` has the details. Tests that run Core-IR-text
-  programs on `cranelift` do so through a harness backend in `tests/helpers.tcl`
-  that hands native the HIR the program was lowered from (or reads hand-written
-  IR text into HIR); it is not a production entry point.
+  programs on `cranelift` or `compile` do so through harness backends in
+  `tests/helpers.tcl` that hand the compiler the HIR the program was lowered
+  from (or read hand-written IR text into HIR); they are not production entry
+  points.
 
 ## Installing Tcl 9
 
@@ -390,6 +401,13 @@ instance key of a trait parameter (`hir/semantic.tcl`), the plan or build 2
 `audit/traits/tools/mutants.txt` to still apply: update a mutant's text when
 you change the code it mutates, and keep it a mutant of the same rule).
 `audit/traits/tools/evidence.tcl` regenerates `audit/traits/principal/`.
+`hir::BuildFull` runs the plan only on a program with no diagnostic, and its
+diagnostics are a static site's: a program-wide channel of the static
+decisions (`hir/staticdeps.tcl`'s `C:plan`, which lists the plan's
+diagnostic kinds and the calls they are reported at). A change to that gate,
+to those kinds or to where they are anchored also needs
+`tests/static-economics.test` (`se-property-plan-gate`, `se-equal-plan-gate`)
+and the static-decision harnesses (Static intrinsics, below).
 
 ## Context traits
 
@@ -809,10 +827,18 @@ schedulers, the dependency analysis, the method-call seeds or build reuse
 an inferred contract, the erased-callable contract, an instance budget, a
 yield type, a diagnostic suppressed by reachability or by a whole-program
 verdict such as the ownership analysis's, which withholds release scopes and
-`AFFINE-PATH-RELEASE-UNSUPPORTED` from a program it rejects), or move a check
-across the completion walk in `hir::CheckOnce` or make a diagnostic depend on
-another's presence (a site's contract-boundary edges read
-`beforeCompletions`: a first diagnostic reported before that walk is no
+`AFFINE-PATH-RELEASE-UNSUPPORTED` from a program it rejects, or the trait
+plan's gate, which reports its diagnostics only for a program with no other;
+or a diagnostic that prints an internal id in a new form -- `hir::static::
+InternalIds` knows `block(eN)` and `function eN` only -- or a binding's, a
+reference's or a function's `name`, which hygiene may have renamed `NAME#N`
+with a number counted over the whole program: never print `name`, print
+`hir::semantic::SourceName` for a binding, `RefName` for a `ref` or `bind`
+node and `CallableName` (or `hir::signatures::Name`) for a function, and pin
+the message with an `se-equal-hygiene-*` reproducer; or move a check across
+the completion walk in `hir::CheckOnce`, or make a diagnostic depend on
+another's presence: a site's contract-boundary edges read
+`beforeCompletions`, since a first diagnostic reported before that walk is no
 contract-boundary report and stays first whatever the program erases), run
 `tests/static-economics.test`, `tests/static-compile.test`, `tests/golden.test`
 (`golden-static-economics`), `audit/static-decisions/tools/fuzz.tcl` (several
@@ -842,6 +868,22 @@ fails when a suite's reported tests differ from the manifest's; a new or
 removed golden test is a manifest row added or removed. `rejects_at` pins
 line and column in the suite file: adding lines above one moves it (update
 the test). `tests/golden/README.md` is the porting guide.
+
+The manifest maps *every* Tcl test that runs (LARGE-SCALE-GOLDEN-MIGRATION.md)
+and is generated: never edit it by hand. A golden test's row lives in its
+suite's fragment (`audit/golden/migration/fragments/SUITE.tsv`), a Tcl test's
+classification in its file's census (`audit/golden/migration/census/FILE.tsv`);
+a new Tcl test gets a census row (KEEP-INTERNAL for a test of compiler
+internals). Regenerate with `tclsh9.0 audit/golden/migration/merge.tcl -names
+audit/golden/migration/tcl-names.txt` (refresh the names with
+`audit/golden/tools/check.tcl -full 1 -names-out FILE` when tests were added).
+A new golden test must be able to fail: run `audit/golden/tools/perturb.tcl` on
+its suite. By default `tests/golden.test` runs the eight validation-sample
+suites (`BOTLISH_GOLDEN_SUITES=all` or a list of files runs others); CI's
+`golden` shards run every suite on every backend beside its Tcl originals
+(`check.tcl -shard I/4`). A suite that cannot run on a backend declares
+`# golden-exclude: BACKEND -- REASON` in its leading comments; keep such tests
+in a companion suite so the main suite keeps all four backends.
 
 If you change `lib/test.bot`, run `tests/golden-framework.test`,
 `tests/golden.test`, `tclsh9.0 tests/golden/run.tcl`,

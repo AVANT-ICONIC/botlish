@@ -1,6 +1,7 @@
 # The cross-suite mutant sample of the large-scale golden migration
-# (LARGE-SCALE-GOLDEN-MIGRATION.md, "Mutation sample"): existing mutants of
-# every migrated subsystem with a mutation harness, each run by
+# (LARGE-SCALE-GOLDEN-MIGRATION.md, "Mutation"): existing mutants of ten
+# mutation harnesses (those with a mutants.txt, but for the golden-framework and
+# static-decision ones, which ran whole), each run by
 # audit/golden/migration/sample.tcl through audit/golden/tools/check.tcl against
 # the Tcl files its harness targets (old side) and the golden suites their
 # ported rows live in (new side).

@@ -55,6 +55,13 @@ test native-executable-values {constants, Unicode, native values, nested aggrega
     }
 } -match glob -result {\[85070591730234615865843651857942052864, *\]}
 
+test native-executable-empty-shape {a shape with no fields (the empty anonymous struct) gets a typed field list in the startup code (its untyped empty vec! did not compile)} -constraints executableAot -body {
+    aotParity {
+        e = {}
+        [e, {a: 1}, e == {}]
+    }
+} -result {[{}, {a: 1}, true]}
+
 test native-executable-roots {relocated stack maps keep allocating ancestor frames alive under GC stress} -constraints executableAot -body {
     aotParity {
         import str

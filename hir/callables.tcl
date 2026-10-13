@@ -312,7 +312,8 @@ proc hir::callables::Preserves {hir type final} {
 }
 
 # A best-effort source name for block B, for diagnostics only (the block
-# whose declaring "bind" this is, if any is still visible from here).
+# whose declaring "bind" this is, if any is still visible from here; its
+# hir::semantic::SourceName, never a hygiene rename).
 proc hir::callables::Name {hir block} {
     dict for {b binding} [dict get $hir bindings] {
         set declaredBy [dict get $binding declaredBy]
@@ -320,7 +321,7 @@ proc hir::callables::Name {hir block} {
             continue
         }
         if {[dict get $hir exprs $declaredBy value] eq $block} {
-            return [dict get $binding name]
+            return [hir::semantic::SourceName $hir $b]
         }
     }
     return ""
@@ -356,7 +357,7 @@ proc hir::callables::CheckPreserved {hirVar arg finalType contextText} {
     set name [expr {[hir::types::IsExactBlock $type] ? [Name $hir [lindex $type 1]] : ""}]
     set label [expr {$name ne "" ? "\"$name\""
         : [hir::types::IsExactBlock $type] ? {this callable}
-        : "this value of type [hir::types::show $type]"}]
+        : "this value of type [hir::semantic::ShowType $hir $type]"}]
     hir::Diagnose hir TYPE [format \
         {%s has typed parameter requirements that cannot be preserved %s: its declared parameter contract would be erased and could no longer be checked at every future call} \
         $label $contextText] $arg
@@ -735,7 +736,7 @@ proc hir::callables::verifyBlocks {hirVar blocks} {
             if {$declared ne {} && ![Preserves $hir $finalType $declared]} {
                 hir::Diagnose hir TYPE [format \
                     {the declared result type %s would erase the typed parameter requirements or declared errors of the callable this function returns (%s): its contract could no longer be checked at every future call} \
-                    [hir::types::show $declared] [hir::types::showContract $finalType]] $block
+                    [hir::types::show $declared] [hir::semantic::NameCallables $hir [hir::types::showContract $finalType]]] $block
             }
         }
     }

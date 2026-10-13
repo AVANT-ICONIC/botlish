@@ -914,13 +914,12 @@ proc hir::static::Simulate {sites decisions own deps} {
         set ids [InternalIds [dict get [lindex [dict get $own $first] 0] message]]
         if {$ids ne {}} {
             # Its message names internal identities (hir::types::show's
-            # `block(e12)`), numbered by the build in one walk: an expression
-            # number is the sequential order's own only if no site numbered
-            # before it has another form here than there -- a site rejected
-            # since this build, or a failing or unknown one before it (the
-            # sequential order rejects those first). Any other kind of id is
-            # assumed to depend on every site. Else its component waits for a
-            # build.
+            # `block(e12)`, InternalIds), numbered by the build in one walk:
+            # an expression number is the sequential order's own only if no
+            # site numbered before it has another form here than there -- a
+            # site rejected since this build, or a failing or unknown one
+            # before it (the sequential order rejects those first). Else its
+            # component waits for a build.
             set differing $committed
             dict for {key s} $status {
                 if {$key eq $first} break
@@ -1045,15 +1044,20 @@ proc hir::static::Find {leaderVar key} {
 # What a prediction of the batched run (Simulate) says about DIAGNOSTIC: the
 # diagnostic with the internal ids of its message blanked (InternalIds).
 proc hir::static::PredictionOf {diagnostic} {
-    dict set diagnostic message [regsub -all {\m[ebsyt][0-9]+\M} [dict get $diagnostic message] #]
+    dict set diagnostic message [regsub -all {\m(block\(|function )e[0-9]+\M} [dict get $diagnostic message] {\1#}]
     return $diagnostic
 }
 
 # The internal identities of the build it came from that diagnostic MESSAGE
-# names (expression, binding, scope, symbol or type ids: `block(e12)`), whose
-# numbering depends on the sites before them in the walk.
+# names, whose numbering depends on the sites before them in the walk: the
+# expression ids of exact callables, which a message prints the way
+# hir::types::show and hir::specialize::ShowKey do, `block(e12)`, or, for a
+# function without a name, hir::semantic::ShowType, `function e12` -- the
+# forms in which a diagnostic names an id. Nothing else counts: a word of the
+# message that merely looks like an id (a binding written `s1` or `t2`) is the
+# program's own text, the same in every build.
 proc hir::static::InternalIds {message} {
-    return [regexp -all -inline {\m[ebsyt][0-9]+\M} $message]
+    return [lmap {- - id} [regexp -all -inline {\m(block\(|function )(e[0-9]+)\M} $message] {set id}]
 }
 
 # 1 if site KEY is nested, at any depth, in the body of site OUTER (PARENTOF:

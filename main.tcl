@@ -46,9 +46,10 @@
 # a .bot file (Botlish source, e.g. examples/surface/*.bot) is parsed and
 # lowered to HIR with surface::readProgramFile. From that HIR, the interpreter
 # runs the core IR it lowers to (the Tcl reference branch), the compiler
-# compiles the HIR itself and the native backends lower it directly to NIR
-# (native::evalHir): native compilation never goes through core IR
-# (DIRECT-HIR-NATIVE-PATH.md). A .ir file is core IR text: it runs on
+# compiles the HIR itself (core::compiler::compileHir: -code and the printed
+# types are that compilation's, the code that runs) and the native backends
+# lower it directly to NIR (native::evalHir): neither compiler goes through
+# core IR (DIRECT-HIR-NATIVE-PATH.md). A .ir file is core IR text: it runs on
 # interp and compile only, and is rejected by the native backends and by
 # -emit-native-executable (use the .hir fixtures of examples/hir/ instead).
 #
@@ -104,15 +105,15 @@ proc runFile {path showCode showHir showAst showAot showNative} {
             puts "   error: $hir ([dict get $options -errorcode])"
             return 1
         }
-        # Core IR is only produced for the branches that consume it: the
-        # interpreter, the Tcl compiler (its program types and -code) --
-        # never the native backends.
+        # Core IR is only produced for the branch that consumes it, the
+        # interpreter. The Tcl compiler compiles the HIR once (below), for
+        # running, -code and the printed types alike.
         set program ""
-        if {$backend in {interp compile} || $showCode} {
+        if {$backend eq "interp"} {
             set program [hir::lower $hir]
         }
         set run [dict get {
-            compile   {core::compiler::evalHir $hir}
+            compile   {core::compiler::evalUnit $unit}
             cranelift {native::evalHir $hir}
             cranelift-generic {native::evalHir $hir -specialize 0}
             interp    {core::evalProgram $program}
@@ -162,8 +163,14 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         data { puts [hir::aot::analyze $shownHir] }
         spec { puts [hir::specialize::explain $shownHir] }
     }
+    # A .bot/.hir program: the Tcl compiler's one compilation of its HIR.
+    set compiled [expr {$extension in {.hir .bot} && ($backend eq "compile" || $showCode)}]
+    if {$compiled && [catch {core::compiler::compileHir $hir} unit options]} {
+        puts "   error: $unit ([dict get $options -errorcode])"
+        return 1
+    }
     if {$showCode} {
-        puts [core::compiler::generatedCode $program]
+        puts [expr {$compiled ? [dict get $unit code] : [core::compiler::generatedCode $program]}]
     }
     set nativeOptions [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
     if {$showNative ne "" && [catch {
@@ -181,7 +188,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
     }
     puts "   value: [core::value::show $value 1]"
     if {$backend eq "compile"} {
-        dict for {name type} [core::compiler::programTypes $program] {
+        dict for {name type} [expr {$compiled ? [dict get $unit types] : [core::compiler::programTypes $program]}] {
             puts "   type:  $name : [hir::types::show $type]"
         }
     }

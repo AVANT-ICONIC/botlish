@@ -74,7 +74,7 @@ fn startup(program: &Program, object: &ObjectProgram) -> String {
         };
         writeln!(
             s,
-            "ShapeInfo {{ name: {name}, fields: vec!{:?}.into_iter().map(String::from).collect(), opaque: {} }},",
+            "ShapeInfo {{ name: {name}, fields: <Vec<&str>>::into_iter(vec!{:?}).map(String::from).collect(), opaque: {} }},",
             shape.fields, shape.opaque
         )
         .unwrap();

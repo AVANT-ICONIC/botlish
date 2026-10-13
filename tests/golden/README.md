@@ -17,16 +17,13 @@ tclsh9.0 tests/golden/run.tcl                       # every suite, on the four d
 tclsh9.0 tests/golden/run.tcl tests/golden/errors.bot
 tclsh9.0 tests/golden/run.tcl -quiet                # one summary line per suite and backend
 tclsh9.0 tests/golden/run.tcl -names                # "SUITE PASS|FAIL NAME" per test
-tclsh9.0 tests/golden/run.tcl -backends interp,compile-hir tests/golden/values.bot
+tclsh9.0 tests/golden/run.tcl -backends interp,compile tests/golden/values.bot
 ```
 
 The default backends are the four the Tcl suite's differential tests use:
-interp and compile (the core IR on the reference interpreter and on the Tcl
-compiler), cranelift-generic and cranelift. `compile-hir` (the Tcl compiler
-compiling the HIR itself, `main.tcl -backend compile`) is opt-in and takes
-one suite per process: that path keeps a program's installed contexts after
-it ends (GOLDEN-TEST-FRAMEWORK.md, C7), so a second suite in the process
-fails with DUPLICATE-CONTEXT. Natively the suites run on x86-64 Linux only
+interp (the core IR on the reference interpreter), compile (the Tcl compiler
+compiling the HIR itself, as `main.tcl -backend compile` does),
+cranelift-generic and cranelift. Natively the suites run on x86-64 Linux only
 (the runner is a coroutine).
 
 The exit status is 1 when any test fails, a suite does not compile, a run
@@ -156,24 +153,66 @@ it), never its message, unless the Tcl test is about the wording: then use
 
 ## manifest.tsv
 
-One row per Tcl test considered, tab-separated, with a header row:
+The complete map between the Tcl tests and the golden tests
+(LARGE-SCALE-GOLDEN-MIGRATION.md, "The manifest"): every Tcl test that runs
+has at least one row, ported or classified. It is **generated** -- never edit
+it by hand -- by `audit/golden/migration/merge.tcl` from:
+
+* `audit/golden/migration/census/FILE.tsv`, one row per Tcl test of each Tcl
+  test file: its observational status (MIGRATED, SPLIT, KEEP-INTERNAL,
+  KEEP-WARNING, KEEP-PARSER, KEEP-RUNTIME-ONLY, KEEP-MULTI-PROGRAM,
+  KEEP-NOT-EXPRESSIBLE, BLOCKED-...), what it observes, what only Tcl keeps;
+* `audit/golden/migration/fragments/SUITE.tsv`, the rows of a golden suite in
+  the manifest's columns (they take precedence over the census for their Tcl
+  tests);
+* the names of the Tcl tests that ran (`audit/golden/migration/tcl-names.txt`:
+  `audit/golden/tools/check.tcl -full 1 -names-out FILE`, or the
+  `-verbose ps` output of a full run).
+
+So a new golden test is a row in its suite's fragment; a new Tcl test is a
+census row (and a fragment row if it is ported); then
+
+```sh
+tclsh9.0 audit/golden/migration/merge.tcl -names audit/golden/migration/tcl-names.txt
+```
+
+regenerates the manifest (`-check 1` only reports missing, stale or malformed
+rows). `audit/golden/tools/perturb.tcl SUITE.bot` must show every new test can
+fail (`-backends cranelift` for a suite that excludes the Tcl backends), and
+`audit/golden/tools/check.tcl -suites SUITE.bot` runs it side by side with its
+Tcl originals.
+
+A suite that cannot run on a backend says so in its leading comment block,
+`# golden-exclude: BACKEND,... -- REASON`; keep such tests in a companion suite
+of their own, so that the main suite keeps its full backend matrix (run.tcl
+used to stand cranelift in for a whole suite's cranelift-generic run when one
+program reported `NATIVE UNSUPPORTED struct-shape`; it now reports it).
+
+The columns, tab-separated, with a header row:
 
 | column | meaning |
 |---|---|
 | `old_file`, `old_test` | the Tcl test |
 | `suite`, `new_test` | the golden suite file and test name (`-` when not ported) |
-| `category` | values, collections, diagnostics, errors, ownership, modules, representation, harness |
+| `category` | the suite's concept (the validation sample's categories, or the migration batch's subsystem) |
 | `outcome` | value, diagnostic, diagnostic-at, runtime-error, predicate, custom, not-ported |
 | `old_backends`, `new_backends` | where each runs |
 | `class` | primary class (below) |
 | `also` | further classes, comma-separated, or `-` |
 | `static` | yes if the body needs its `static compile:` boundary to express the test (a rejection, or an escaping error), else `convention` |
 | `handler` | yes if the body handles a run-time error explicitly |
-| `api` | simple (a value/holds/rejects helper) or custom (`test::case`) |
+| `api` | simple (a library helper), helper (a suite-local registration helper) or custom (`test::case`) |
 | `verbosity` | clearer, similar or more-verbose than the Tcl test |
-| `strength` | equal, weaker (say why in notes) or stronger |
+| `strength` | equal, weaker (say why in notes), stronger, or split (the Tcl test also observes what only Tcl can) |
+| `old_lines`, `new_lines` | approximate sizes |
 | `mutants` | existing mutants (`audit/X/tools/mutants.txt NAME`) the Tcl test kills, or `-` |
 | `notes` | anything an auditor needs |
+| `subsystem` | the census's subsystem |
+| `status` | the Tcl test's observational status (above) |
+| `tcl_retained` | what only the Tcl test observes |
+| `tcl_layer` | DUPLICATED-E2E, ACTIVE-INTERNAL, ACTIVE-NOT-EXPRESSIBLE or ACTIVE-MULTI-PROGRAM |
+| `freeze` | FROZEN-DUPLICATE-ORACLE or ACTIVE-TCL-INTERNAL (a future policy's candidates; nothing is frozen) |
+| `tags` | STRICT0, CORE-IR, MESSAGE, LOCATION, MULTI-BACKEND, DYNAMIC-INPUT, RUNTIME-ONLY:CODE, OUTER-ANCHOR, CORPUS-SUBJECT, ... |
 
 Classes: DIRECT (the Tcl program, as a body, with a simple helper),
 STATIC-COMPILE-ADAPTATION (a separate rejected program became a rejected

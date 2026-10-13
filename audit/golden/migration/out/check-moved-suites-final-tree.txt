@@ -1,0 +1,27 @@
+# Side-by-side agreement on this checkout
+
+31 ported rows of 35 selected, 11 old test files, 2 golden suites, backends interp, compile, cranelift-generic, cranelift, 2 jobs
+
+old pass, new pass: 31
+
+Static decisions per suite (rounds, builds, method trials, mispredicted, compile s):
+    representation.bot                                 2    2    0   0      3.2 
+    compiled-values-struct-transport.bot               1    1    0   0      2.9 
+
+Old tests, wall seconds per file (one tclsh each, startup included):
+    tests/abi-numeric.test                               0.3
+    tests/enums.test                                     0.2
+    tests/loop-counted.test                              0.2
+    tests/native-bitshift.test                           0.3
+    tests/native-hashing.test                            0.2
+    tests/native-string-region.test                      0.2
+    tests/native.test                                    0.2
+    tests/raw-int-abi.test                               0.3
+    tests/short-string.test                              0.9
+    tests/struct-scalar-replacement.test                 0.2
+    tests/value-transport.test                           5.4
+    total                                                8.5 (elapsed 6.7 with 2 jobs)
+Golden suites, wall seconds per suite (compile once, run on interp, compile, cranelift-generic, cranelift):
+    representation.bot                                   9.7   ok
+    compiled-values-struct-transport.bot                16.5   ok
+    total                                               26.2 (elapsed 16.5 with 2 jobs)

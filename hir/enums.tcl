@@ -279,7 +279,7 @@ proc hir::enums::apply {decls} {
 }
 
 # Re-registers the enum entries of a HIR's own `sourceTypes` (hir/read.tcl:
-# a serialized HIR carries its declarations; core IR rebuilds keep them).
+# a serialized HIR carries its declarations; core IR text builds keep them).
 proc hir::enums::applyEntries {entries} {
     variable registry
     Reset

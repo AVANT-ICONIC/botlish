@@ -38,12 +38,12 @@
 # genuinely process-global core::type/core::native registration -- apply
 # needs no "undo the previous batch" step: `current` is simply overwritten
 # each time a program brings its own (non-empty) declarations, and a call
-# with no declarations of its own (every internal re-hir::build of an
-# already-resolved program: the Tcl compiler backend's own GenerateUnit,
-# hir/specialize.tcl, ...) leaves the previous batch in place, exactly
-# mirroring hir::sourcetypes::apply's own empty-DECLS rule and for the
-# identical reason (that internal rebuild's own `fail`/`handle` nodes still
-# need the original program's error names to resolve against).
+# with no declarations of its own (hir::build reading core IR text, e.g. the
+# core IR hir::lower made of an already-resolved program, read back by the
+# round-trip tests) leaves the previous batch in place, exactly mirroring
+# hir::sourcetypes::apply's own empty-DECLS rule and for the identical
+# reason (that build's own `fail`/`handle` nodes still need the original
+# program's error names to resolve against).
 #
 # Same single-process, non-concurrent-compilation caveat as
 # hir::sourcetypes.tcl's "Compilation isolation": `current` is one Tcl

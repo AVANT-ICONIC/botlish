@@ -130,7 +130,15 @@ they appear only as inferred types (`List[struct{a: int}]` and so on).
 introduces a **type, not a value binding** (`struct-named-type-not-value`): it
 creates no name in the value namespace. It follows the declaration-order
 semantics of the other type declarations (a struct may name a struct declared
-later, itself, or a cycle; `struct-named-recursive-declaration`). Duplicate
+later, itself, or a cycle; `struct-named-recursive-declaration`). A struct
+that names itself through its fields alone has no finite value, but the type
+is an ordinary one; every walk of a type through struct fields (affinity,
+bearing, the MutableVector share descriptor, the affine drop descriptor) is
+guarded against such a cycle (`mv-recursive-struct-*`, `af-recursive-*`). An
+affine struct that holds its own type in a List, MutableVector or
+MutableArray is AFFINE-CONTAINER-UNSUPPORTED at its declaration (its values
+nest to any depth; an affine value is released by a static, finite walk of
+its type: AFFINE-VALUES.md, item 34); an unrestricted one may. Duplicate
 fields, unknown field types, a repeated name, and a name that shadows a
 built-in or declared type are diagnosed at the declaration
 (`struct-error-declaration`). Declarations carry source spans for the

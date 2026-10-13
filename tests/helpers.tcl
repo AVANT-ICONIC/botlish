@@ -8,32 +8,46 @@ source [file join $::projectRoot compiler compiler.tcl]
 source [file join $::projectRoot native native.tcl]
 
 # ---------------------------------------------------------------------------
-# Test-only native backends (DIRECT-HIR-NATIVE-PATH.md).
+# Test-only backends that compile HIR (DIRECT-HIR-NATIVE-PATH.md).
 #
-# core::registerBackend backends run core IR: the Tcl interpreter and the Tcl
-# compiler. Native compilation starts from HIR (native::evalHir) and has no
-# core IR entry point, so native/ registers no backend. Most tests are written
-# as core IR text -- or lower a source/HIR program with hir::lower to get the
-# text -- and run on every backend through core::evalProgram; to keep native
-# coverage of them, the *test harness* registers "cranelift" and
-# "cranelift-generic" here. Native compiles HIR, so:
+# core::registerBackend backends run core IR: the Tcl interpreter, and the
+# Tcl compiler for core IR *text*. Both compilers compile HIR: native has no
+# core IR entry point at all (native::evalHir; native/ registers no backend),
+# and the Tcl compiler compiles a front end's HIR itself
+# (core::compiler::evalHir). Most tests are written as core IR text -- or
+# lower a source/HIR program with hir::lower to get the text -- and run on
+# every backend through core::evalProgram; to keep that coverage, the *test
+# harness* registers "cranelift" and "cranelift-generic" here and replaces
+# "compile" with an adapter. Both compilers compile HIR, so:
 #
 #   * a program that hir::lower produced is compiled from the very HIR it was
 #     lowered from (remembered below by the lowered text): the differential
-#     "HIR -> core IR -> interpreter" against "HIR -> NIR -> native" of one
-#     HIR. Native never sees, and never rebuilds HIR from, that core IR;
+#     "HIR -> core IR -> interpreter" against "HIR -> Tcl" and "HIR -> NIR ->
+#     native" of one HIR. Neither compiler sees, or rebuilds HIR from, that
+#     core IR;
 #   * any other program is hand-written core IR text (a test of core IR, or
-#     the frozen bench/*.ir): hir::build reads it into HIR -- the same
-#     builder that gives the compile backend its HIR: reading core IR text is
-#     HIR construction, not native compilation of core IR.
+#     the frozen bench/*.ir): hir::build reads it into HIR, which is HIR
+#     construction from an input notation, not a rebuild.
 #
-# Tests that start from source or HIR and are about native behavior should
-# call outcomeUnderHir (below) with the HIR itself.
+# Tests that start from source or HIR should call outcomeUnderHir (below)
+# with the HIR itself.
 set ::hirOfLowered [dict create]
 proc ::RecordLowered {command code result args} {
     dict set ::hirOfLowered $result [lindex $command 1]
 }
 trace add execution hir::lower leave ::RecordLowered
+
+proc ::testCompileProgram {exprs env} {
+    if {[dict exists $::hirOfLowered $exprs]} {
+        set hir [dict get $::hirOfLowered $exprs]
+        if {[hir::mode $hir] eq "program"} {
+            return [core::compiler::runUnit [core::compiler::compileHir $hir] $env]
+        }
+    }
+    return [core::compiler::runProgram $exprs $env]
+}
+
+core::registerBackend compile core::compiler::runSequence ::testCompileProgram
 
 proc ::testNativeHir {exprs} {
     if {[dict exists $::hirOfLowered $exprs]} {
@@ -159,16 +173,22 @@ proc outcomeUnder {backend exprs} {
 }
 
 # Outcome of the HIR program HIR under BACKEND, in outcomeUnder's shape. The
-# native backends compile the HIR itself; interp and compile run the core IR
-# it lowers to (the reference branch), so a program's HIR feeds each consumer
-# directly and native never sees core IR.
+# Tcl compiler and the native backends compile the HIR itself; the
+# interpreter runs the core IR it lowers to (the reference branch), so a
+# program's HIR feeds each consumer directly and neither compiler sees core IR.
 proc outcomeUnderHir {backend hir} {
-    if {$backend ni {cranelift cranelift-generic}} {
+    if {$backend eq "interp"} {
         return [outcomeUnder $backend [hir::lower $hir]]
     }
     set options [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
     resetEffects
-    if {[catch {native::evalHir $hir {*}$options} result options]} {
+    if {[catch {
+        if {$backend eq "compile"} {
+            core::compiler::evalHir $hir
+        } else {
+            native::evalHir $hir {*}$options
+        }
+    } result options]} {
         set outcome [list error [dict get $options -errorcode] $result $::testLog]
         if {[GenericBaselineUndefined $backend $outcome]} {
             incr ::genericBaselineStandIns
