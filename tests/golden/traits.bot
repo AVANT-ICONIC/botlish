@@ -863,6 +863,74 @@ fn register_error_contract_tests():
     test::rejects("trait-error-contracts/unhandled", compiler::DiagnosticCode::UnhandledError, unhandled)
 
 # ===========================================================================
+# Handled calls whose normal result is a view: a handler's value is admitted
+# against that view by subtyping alone -- the same view is, a concrete value
+# is not, even one of the witness (only a trait-typed boundary makes a view)
+# -- and a result joining two witnesses is rejected whether or not its call
+# is handled. (Before the fix every program here but the same-view one
+# crashed the compiler: a handler whose type was not already the call's view
+# had the view asked for integer facts.)
+
+error Boom
+
+# traits.test's pick (the name pick is trait-same-witness-join's): its
+# result joins the witnesses of its two parameters, so the wrapper's block is
+# rejected.
+fn pick_either(a: Named, b: Named, flag: bool) -> Named errors Boom, compiler::CompilerError:
+    static compile:
+        if flag:
+            a
+        else:
+            b
+
+fn one(v: Named, flag: bool) -> Named errors Boom:
+    if flag:
+        fail Boom
+    v
+
+fn safe(v: Named, flag: bool) -> Named:
+    one(v, flag):
+        on Boom:
+            v
+
+fn register_handled_view_tests():
+    # The Tcl program's handled call, its handler a concrete Person: the join
+    # is reported as for an unhandled call. (The handler's own Type, which
+    # the Tcl test also reads under -strict 0, is not reached here: once the
+    # wrapper's block is rejected, its call has no normal result to hold a
+    # handler to.)
+    fn witness_join_handled() errors compiler::CompilerError:
+        static compile:
+            p = Person {value: "p"}
+            ra = pick_either(p, p, true):
+                on Boom:
+                    p
+            ra.name()
+    test::rejects_message("trait-witness-join-handled", compiler::DiagnosticCode::TraitWitnessJoin, "expression has trait type Named but may contain either the witness of parameter \"a\" of pick_either or the witness of parameter \"b\" of pick_either; heterogeneous trait values are not supported (there is no erased trait representation to hold a run-time choice between witnesses)", witness_join_handled)
+
+    # trait-view-handler-admission: a handler of the call's own view is
+    # admitted ...
+    fn same_view_handler() errors compiler::CompilerError:
+        static compile:
+            safe(Person {value: "s"}, true).name()
+    test::value("trait-view-handler-admission/same-view", "s", same_view_handler)
+    # ... a concrete value of the witness is not ...
+    fn concrete_witness_handler() errors compiler::CompilerError:
+        static compile:
+            p = Person {value: "p"}
+            one(p, true):
+                on Boom:
+                    p
+    test::rejects_message("trait-view-handler-admission/concrete-witness", compiler::DiagnosticCode::Type, "handler \"on Boom\" completes with type Person, not admissible as Named (the call's own normal result type)", concrete_witness_handler)
+    # ... nor an int.
+    fn int_handler() errors compiler::CompilerError:
+        static compile:
+            one(Person {value: "p"}, true):
+                on Boom:
+                    3
+    test::rejects_message("trait-view-handler-admission/int", compiler::DiagnosticCode::Type, "handler \"on Boom\" completes with type int, not admissible as Named (the call's own normal result type)", int_handler)
+
+# ===========================================================================
 # Ordering and reachability: an implementation must be declared before the
 # code that first needs it; an unreachable call still has its
 # specialization. (The consumers hold the blocks: TraitImplOrder is reported
@@ -1014,6 +1082,7 @@ fn register_traits_tests():
     register_witness_kind_tests()
     register_method_sugar_tests()
     register_error_contract_tests()
+    register_handled_view_tests()
     register_ordering_tests()
     register_round_trip_tests()
     register_context_tests()

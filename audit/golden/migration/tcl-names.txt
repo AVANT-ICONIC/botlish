@@ -6816,7 +6816,9 @@ tests/traits.test trait-unchecked-trait-operation-raises pass
 tests/traits.test trait-unknown-operation-is-the-cause pass
 tests/traits.test trait-unknown-trait pass
 tests/traits.test trait-unreachable-call pass
+tests/traits.test trait-view-handler-admission pass
 tests/traits.test trait-view-never-narrowed pass
+tests/traits.test trait-witness-join-handled pass
 tests/traits.test trait-witness-join-rejected pass
 tests/traits.test trait-wrong-parameter pass
 tests/traits.test trait-wrong-signature pass
