@@ -555,6 +555,52 @@ test si-det-2 {compiling twice gives identical tables} -body {
 } -result 1
 
 # ---------------------------------------------------------------------------
+# in-place walks: an instance walk types the program's own HIR and leaves it
+# exactly as it found it (hir/semantic.tcl's Save/Restore; the audit compares
+# the whole program around every top-level request)
+
+test si-inplace-1 {the restore audit holds for nested walks (a closure, a chain), recursion, a payload handler, refinements and a trait call, and the results are the ones a scratch copy gave} -body {
+    set saved $hir::semantic::audit
+    set hir::semantic::audit 1
+    try {
+        lmap {name src} [list \
+            closure "fn mk(m, n):\n    fn get(i):\n        \[i, n\]\n    get(m)\nmk(\"x\", 1)" \
+            chain "fn c(z):\n    \[z\]\nfn b(y):\n    c(y)\nfn a(x):\n    b(x)\na(\"s\")" \
+            captured "import mutable_array\nfn mk(m) errors IndexNotFound:\n    fn get(i) errors IndexNotFound:\n        mutable_array::at(m, i)\n    get(0)\nv = mk(mutable_array::create(1, \"x\")):\n    on IndexNotFound:\n        \"z\"\nv" \
+            dyn5 "fn f(n) -> int:\n    if n == 0:\n        return 0\n    r = f(n - 1)\n    fn g(x):\n        x + n\n    g(1) + r\n\nf(3)" \
+            payload "error Bad:\n    code: int\nfn risky(x) errors Bad:\n    if x == 0:\n        fail Bad {code: 7}\n    x\nfn guard(x):\n    v = risky(x):\n        on Bad {code}:\n            code\n    v\nguard(1)" \
+            refine "import str\nrefined type Mail = str\nfn mail?(s: str) -> bool proves s: Mail:\n    str::length(s) > 3\nfn send(m: Mail) -> int:\n    str::length(m)\nfn go(x, y):\n    if mail?(x):\n        \[send(x), y\]\n    else:\n        \[0, y\]\ngo(\"abcd\", 1)" \
+            trait "trait Named:\n    fn name(value: Named) -> str\n\nstruct Person:\n    value: str\n\nfn name(value: Person) -> str:\n    value.value\n\nfn describe(value: Named) -> str:\n    value.name()\n\nfn twice(value: Named) -> str:\n    describe(value)\n\ntwice(Person {value: \"a\"})" \
+            rec1 "fn count(xs, n):\n    if n == 0:\n        xs\n    else:\n        count(xs, n - 1)\ncount(\[\"a\"\], 3)"] {
+            set hir [siCompile $src]
+            list $name [hir::types::show [hir::typeOf $hir [lindex [hir::roots $hir] end]]] \
+                [dict get $hir semantic walks] [dict get $hir semantic rounds]
+        }
+    } finally {
+        set hir::semantic::audit $saved
+    }
+} -result {{closure list 2 1} {chain {List[str]} 3 1} {captured str 2 1} {dyn5 int 3 2} {payload int 2 1} {refine {List[int]} 1 1} {trait str 0 1} {rec1 {List[str]} 4 1}}
+
+test si-inplace-2 {the audit catches a write a walk leaves behind} -body {
+    set saved $hir::semantic::audit
+    set hir::semantic::audit 1
+    rename hir::semantic::Restore hir::semantic::Restore.real
+    proc hir::semantic::Restore {hirVar save} {
+        upvar 1 $hirVar hir
+        hir::semantic::Restore.real hir $save
+        dict set hir counters type [expr {[dict get $hir counters type] + 1}]
+    }
+    try {
+        catch {siCompile "fn identity(x):\n    x\nidentity(1)"} message
+        set message
+    } finally {
+        rename hir::semantic::Restore {}
+        rename hir::semantic::Restore.real hir::semantic::Restore
+        set hir::semantic::audit $saved
+    }
+} -result {hir::semantic: an instance walk leaked a write into the program}
+
+# ---------------------------------------------------------------------------
 # runtime parity: the instances are analysis-only, so behavior is unchanged
 
 set parityBackends {interp compile cranelift-generic cranelift}

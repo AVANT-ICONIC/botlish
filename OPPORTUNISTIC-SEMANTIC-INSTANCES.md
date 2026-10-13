@@ -866,9 +866,19 @@ implemented here.
    its generic analysis (sound for every closure of the block); closures created in
    an instance's walk are typed in place with the instance's environment. Not in
    the key.
-7. **Is the original HIR cloned?** No. A walk uses a scratch value copy of the HIR
-   (dict copy-on-write) that is dropped; what is kept per instance is a snapshot of
-   the volatile per-expression facts of its region (side table).
+7. **Is the original HIR cloned?** No. A walk types the request-time HIR in place
+   and puts it back exactly as it found it: before the walk it saves its write set
+   (the nodes of the block's region, the binding records its bind and handle nodes
+   type, its ifs' branch-scope records, the counters and the diagnostics;
+   `hir::semantic::Save`), and afterwards it restores that set and removes the
+   types and symbols it interned (`Restore`); a request made inside a walk sets the
+   enclosing walk's writes aside meanwhile (`SwapOut`/`SwapIn`), so every walk starts
+   from the request-time HIR. (It used to walk a value copy of the whole HIR, whose
+   first write duplicated the program: O(program) per walk.) What is kept per
+   instance is a snapshot of the volatile per-expression facts of its region (side
+   table). `BOTLISH_SEMANTIC_RESTORE_AUDIT=1` checks that every top-level request
+   leaves the HIR unchanged; a new write of the hir::types walk outside those sets
+   must be added to `Save`.
 8. **Where are entry/result facts stored?** `hir semantic`: `instances` (args,
    result, snapshot, passes, ...), `keys`, `calls` ((context, call) -> instance),
    `envs`, census counters. No HIR field changes.

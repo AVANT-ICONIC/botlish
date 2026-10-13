@@ -128,12 +128,14 @@
 # Validity
 # --------
 # Analysis (Walk) and verification are separate. Walk types the body under the
-# entry environment and yields the result; each instance's final walk is
-# snapshotted (the volatile per-expression facts of its region, not a HIR
-# clone). verify then runs, on a view of the HIR carrying that snapshot, the
-# same checks every function body gets for its own definition: the typed-call
-# admissibility proofs and MutableArray store/copy rules
-# (hir::range::verifyBlocks) and the bearing/non-erasure audit
+# entry environment, in place on the request-time HIR, and yields the result;
+# each instance's final walk is snapshotted (the volatile per-expression facts
+# of its region, not a HIR clone) before the walk's writes are undone (Save,
+# Restore), so the program the generic walk goes on with is exactly the one
+# it made the request with. verify then runs, on a view of the HIR carrying
+# that snapshot, the same checks every function body gets for its own
+# definition: the typed-call admissibility proofs and MutableArray store/copy
+# rules (hir::range::verifyBlocks) and the bearing/non-erasure audit
 # (hir::callables::verifyBlocks). A diagnostic there means "this function is
 # invalid for this call": it is reported at the CALL that needed the instance
 # (status invalid); the source function is not rejected and other calls are
@@ -160,6 +162,15 @@ namespace eval hir::semantic {
     variable levelLimit 700
     # Run state (empty outside hir::types::infer).
     variable state {}
+    # {LEVEL VARNAME}: the variable holding the HIR a top-level request was
+    # made with (in its caller's frame), which every walk of that request
+    # types in place; "" outside a request.
+    variable live ""
+    # The write-set saves of the walks in progress (Save), innermost last.
+    variable saves {}
+    # 1 checks that every top-level request leaves the HIR exactly as it
+    # found it (tests and audits only: it compares the whole program).
+    variable audit [expr {[info exists ::env(BOTLISH_SEMANTIC_RESTORE_AUDIT)] && $::env(BOTLISH_SEMANTIC_RESTORE_AUDIT)}]
     # Per-expression facts a walk writes (hir/types.tcl); the ones that are
     # TypeIds are stored as type forms.
     variable fields {type reachable target known calleeErrors handlerTypes refinements resultType inferredResultType traitCall}
@@ -176,9 +187,13 @@ proc hir::semantic::Enabled {} {
 
 proc hir::semantic::Begin {envs} {
     variable state
+    variable live
+    variable saves
     set state [dict create envs $envs pendingEnv {} instances {} keys {} byBlock {} \
-        calls {} declined {} stack {} queue {} deps {} base "" next 0 regions {} instsOf {} \
+        calls {} declined {} stack {} queue {} deps {} next 0 regions {} instsOf {} \
         requests 0 trivial 0 hits 0 walks 0 declinedCount {}]
+    set live ""
+    set saves {}
 }
 
 # Ends the run: the state a HIR keeps as its `semantic` field (instances,
@@ -207,7 +222,7 @@ proc hir::semantic::End {} {
         }
     }
     dict set s used [lsort -dictionary $used]
-    foreach key {base stack queue regions} {
+    foreach key {stack queue regions} {
         dict unset s $key
     }
     return $s
@@ -259,17 +274,23 @@ proc hir::semantic::RecordEnv {hir outer e self selfType} {
 # Requests
 
 # The result type of the exact call E of BLOCK with ARGTYPES seen by
-# context CTX of HIR (the generic walk, or a semantic instance's walk):
-# BLOCKRESULT (the call's ordinary generic result) unless a semantic instance
-# proves a more precise one. Records the call -> instance edge that
-# hir::callables and hir::range::VerifyCall consult.
-proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
+# context CTX of the HIR in the caller's variable HIRVAR (the generic walk, or
+# a semantic instance's walk): BLOCKRESULT (the call's ordinary generic
+# result) unless a semantic instance proves a more precise one. Records the
+# call -> instance edge that hir::callables and hir::range::VerifyCall
+# consult. The instances it analyzes are walked in place on that HIR, which
+# they leave as they found it (Walk).
+proc hir::semantic::Call {hirVar ctx e block argTypes blockResult} {
+    upvar 1 $hirVar hir
     variable state
     variable enabled
     variable maxPerBlock
     variable maxInstances
     variable maxDepth
     variable levelLimit
+    variable live
+    variable saves
+    variable audit
     if {!$enabled || $state eq "" || ($blockResult eq "never" && ![hir::traits::IsPolymorphic $hir $block]
             && ![hir::types::AnyAffine $argTypes])} {
         # (A call that gives an affine argument always gets its instance,
@@ -330,11 +351,17 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
     if {$caller eq "generic" && [dict get $state queue] ne {} && [dict get $state stack] eq {}} {
         # Instances whose environment changed since the last request are
         # settled before this walk reads any answer.
-        dict set state base $hir
+        set live [list [expr {[info level] - 1}] $hirVar]
+        if {$audit} {
+            set before $hir
+        }
         try {
             Drain
         } finally {
-            dict set state base ""
+            set live ""
+        }
+        if {$audit && $before ne $hir} {
+            error "hir::semantic: an instance walk leaked a write into the program"
         }
     }
     set callKey [list $caller $e]
@@ -380,15 +407,29 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
         } else {
             set id [Create $block $entry $key]
             if {[dict get $state stack] eq {}} {
-                dict set state base $hir
+                set live [list [expr {[info level] - 1}] $hirVar]
+                if {$audit} {
+                    set before $hir
+                }
                 try {
                     Analyze $id
                     Drain
                 } finally {
-                    dict set state base ""
+                    set live ""
+                }
+                if {$audit && $before ne $hir} {
+                    error "hir::semantic: an instance walk leaked a write into the program"
                 }
             } else {
-                Analyze $id
+                # A request from inside a walk: the new instance's walks
+                # start from the request-time HIR too, so the enclosing
+                # walk's writes so far are set aside meanwhile.
+                set stash [SwapOut hir [lindex $saves end]]
+                try {
+                    Analyze $id
+                } finally {
+                    SwapIn hir $stash
+                }
             }
         }
     }
@@ -487,6 +528,9 @@ proc hir::semantic::Bump {field {key ""}} {
 proc hir::semantic::Analyze {id} {
     variable state
     variable passLimit
+    variable live
+    variable saves
+    upvar #[lindex $live 0] [lindex $live 1] scratch
     dict lappend state stack $id
     try {
         set passes 0
@@ -494,38 +538,48 @@ proc hir::semantic::Analyze {id} {
             incr passes
             dict set state instances $id dirty 0
             dict set state instances $id assumes 0
-            lassign [Walk $id] walked scratch
-            dict incr state walks
-            set old [dict get $state instances $id result]
-            set new [hir::types::lub $old $walked]
-            if {$new ne $old && $passes >= $passLimit} {
-                set new any
-            }
-            if {$new ne $old} {
-                dict set state instances $id result $new
-                if {[dict exists $state deps $id]} {
-                    foreach reader [dict keys [dict get $state deps $id]] {
-                        if {$reader eq $id} {
-                            continue
-                        }
-                        if {$reader in [dict get $state stack]} {
-                            dict set state instances $reader dirty 1
-                        } else {
-                            Requeue $reader
+            set depth [llength $saves]
+            set done 0
+            try {
+                set walked [Walk $id]
+                dict incr state walks
+                set old [dict get $state instances $id result]
+                set new [hir::types::lub $old $walked]
+                if {$new ne $old && $passes >= $passLimit} {
+                    set new any
+                }
+                if {$new ne $old} {
+                    dict set state instances $id result $new
+                    if {[dict exists $state deps $id]} {
+                        foreach reader [dict keys [dict get $state deps $id]] {
+                            if {$reader eq $id} {
+                                continue
+                            }
+                            if {$reader in [dict get $state stack]} {
+                                dict set state instances $reader dirty 1
+                            } else {
+                                Requeue $reader
+                            }
                         }
                     }
                 }
+                if {![dict get $state instances $id assumes]
+                        || ($new eq $old && ![dict get $state instances $id dirty])} {
+                    dict set state instances $id snapshot [Snapshot $scratch $id]
+                    set done 1
+                } elseif {$passes >= $passLimit + 3} {
+                    dict set state instances $id result any
+                    dict set state instances $id snapshot [Snapshot $scratch $id]
+                    set done 1
+                }
+            } finally {
+                # The walk's writes are undone (after its snapshot).
+                if {[llength $saves] > $depth} {
+                    Restore scratch [lindex $saves end]
+                    set saves [lrange $saves 0 end-1]
+                }
             }
-            if {![dict get $state instances $id assumes]
-                    || ($new eq $old && ![dict get $state instances $id dirty])} {
-                dict set state instances $id snapshot [Snapshot $scratch $id]
-                break
-            }
-            if {$passes >= $passLimit + 3} {
-                dict set state instances $id result any
-                dict set state instances $id snapshot [Snapshot $scratch $id]
-                break
-            }
+            if {$done} break
         }
         dict set state instances $id status analyzed
         dict set state instances $id passes [expr {[dict get $state instances $id passes] + $passes}]
@@ -560,15 +614,20 @@ proc hir::semantic::Drain {} {
 }
 
 # One walk of instance ID's block body under its entry environment: the
-# ordinary semantic inference (hir::types::Sequence) over a scratch copy of
-# the request-time HIR, with the block's parameters seeded by the entry types
-# and its captures by the recorded creation environment. Returns {RESULT
-# SCRATCH}.
+# ordinary semantic inference (hir::types::Sequence) in place on the
+# request-time HIR, with the block's parameters seeded by the entry types and
+# its captures by the recorded creation environment. Returns the result. Its
+# write set is saved first (Save) and restored by Analyze once the walk is
+# done with; a nested walk first swaps the enclosing walk's partial writes out
+# (SwapOut), so every walk starts from the request-time HIR.
 proc hir::semantic::Walk {id} {
     variable state
-    set scratch [dict get $state base]
+    variable live
+    variable saves
+    upvar #[lindex $live 0] [lindex $live 1] scratch
     set inst [dict get $state instances $id]
     set block [dict get $inst block]
+    lappend saves [Save scratch $block]
     set node [dict get $scratch exprs $block]
     set ctx [hir::types::NewContext]
     dict set ctx inst $id
@@ -585,7 +644,164 @@ proc hir::semantic::Walk {id} {
         set result [hir::traits::ViewResult $declared $result]
     }
     dict set scratch exprs $block resultType [hir::types::intern scratch $result]
-    return [list $result $scratch]
+    return $result
+}
+
+# ---------------------------------------------------------------------------
+# Write sets
+#
+# What a walk of BLOCK may change in the HIR, as it was before the walk: the
+# nodes of BLOCK's region, the records of the bindings its bind and handle
+# nodes type, the records of its ifs' branch scopes (their refinements), the
+# types and native symbols it interns (beyond the counters), and the
+# diagnostics. Any new write of the hir::types walk outside a region node, a
+# region binding or a region if-scope -- or a new interning kind -- must be
+# added here; BOTLISH_SEMANTIC_RESTORE_AUDIT=1 (`audit`) catches a miss.
+proc hir::semantic::Save {hirVar block} {
+    upvar 1 $hirVar hir
+    set nodes {}
+    set binds {}
+    set scopes {}
+    foreach e [Region $hir $block] {
+        set node [dict get $hir exprs $e]
+        lappend nodes $e $node
+        switch -- [dict get $node kind] {
+            bind {
+                set b [dict get $node binding]
+                if {$b ne "" && [dict exists $hir bindings $b]} {
+                    lappend binds $b [dict get $hir bindings $b]
+                }
+            }
+            handle {
+                if {[dict exists $node handlerPayloads]} {
+                    foreach b [dict get $node handlerPayloads] {
+                        if {$b ne "" && [dict exists $hir bindings $b]} {
+                            lappend binds $b [dict get $hir bindings $b]
+                        }
+                    }
+                }
+            }
+            if {
+                foreach role {thenScope elseScope} {
+                    if {[dict exists $node $role]} {
+                        set s [dict get $node $role]
+                        if {$s ne "" && [dict exists $hir scopes $s]} {
+                            lappend scopes $s [dict get $hir scopes $s]
+                        }
+                    }
+                }
+            }
+        }
+    }
+    set hasDiag [dict exists $hir diagnostics]
+    return [dict create nodes $nodes binds $binds scopes $scopes counters [dict get $hir counters] \
+        hasDiag $hasDiag diagnostics [if {$hasDiag} {dict get $hir diagnostics}]]
+}
+
+# The types and symbols HIR interned since SAVE (ids beyond its counters), as
+# {type|symbol ID VALUE} in id order.
+proc hir::semantic::Interned {hir save} {
+    set result {}
+    foreach {kind table} {type types symbol symbols} {
+        set prefix [dict get $::hir::prefixes $kind]
+        set from [Counter [dict get $save counters] $kind]
+        set to [Counter [dict get $hir counters] $kind]
+        for {set i [expr {$from + 1}]} {$i <= $to} {incr i} {
+            if {[dict exists $hir $table $prefix$i]} {
+                lappend result [list $kind $prefix$i [dict get $hir $table $prefix$i]]
+            }
+        }
+    }
+    return $result
+}
+
+proc hir::semantic::Counter {counters kind} {
+    return [expr {[dict exists $counters $kind] ? [dict get $counters $kind] : 0}]
+}
+
+# Removes from the HIR in HIRVAR the types and symbols interned since SAVE.
+proc hir::semantic::Added {hirVar save} {
+    upvar 1 $hirVar hir
+    foreach entry [Interned $hir $save] {
+        lassign $entry kind id value
+        if {$kind eq "symbol"} {
+            dict unset hir symbols $id
+            continue
+        }
+        dict unset hir types $id
+        if {[dict exists $hir typeIds $value] && [dict get $hir typeIds $value] eq $id} {
+            dict unset hir typeIds $value
+        }
+    }
+}
+
+# Puts the HIR in HIRVAR back as it was when SAVE was taken. (`dict set` of
+# an existing key keeps the key's place, so the HIR is the same value, key
+# order included.)
+proc hir::semantic::Restore {hirVar save} {
+    upvar 1 $hirVar hir
+    foreach {e node} [dict get $save nodes] {
+        dict set hir exprs $e $node
+    }
+    foreach {b record} [dict get $save binds] {
+        dict set hir bindings $b $record
+    }
+    foreach {s record} [dict get $save scopes] {
+        dict set hir scopes $s $record
+    }
+    Added hir $save
+    dict set hir counters [dict get $save counters]
+    if {[dict get $save hasDiag]} {
+        dict set hir diagnostics [dict get $save diagnostics]
+    } elseif {[dict exists $hir diagnostics]} {
+        dict unset hir diagnostics
+    }
+}
+
+# Sets the writes made since SAVE aside: restores the HIR in HIRVAR to SAVE
+# and returns a stash of what they were, for SwapIn.
+proc hir::semantic::SwapOut {hirVar save} {
+    upvar 1 $hirVar hir
+    set stash [dict create]
+    foreach {key table} {nodes exprs binds bindings scopes scopes} {
+        set current {}
+        foreach {k -} [dict get $save $key] {
+            lappend current $k [dict get $hir $table $k]
+        }
+        dict set stash $key $current
+    }
+    set hasDiag [dict exists $hir diagnostics]
+    dict set stash counters [dict get $hir counters]
+    dict set stash hasDiag $hasDiag
+    dict set stash diagnostics [if {$hasDiag} {dict get $hir diagnostics}]
+    dict set stash added [Interned $hir $save]
+    Restore hir $save
+    return $stash
+}
+
+# Puts the writes SwapOut set aside (STASH) back into the HIR in HIRVAR.
+proc hir::semantic::SwapIn {hirVar stash} {
+    upvar 1 $hirVar hir
+    foreach {key table} {nodes exprs binds bindings scopes scopes} {
+        foreach {k value} [dict get $stash $key] {
+            dict set hir $table $k $value
+        }
+    }
+    foreach entry [dict get $stash added] {
+        lassign $entry kind id value
+        if {$kind eq "symbol"} {
+            dict set hir symbols $id $value
+        } else {
+            dict set hir types $id $value
+            dict set hir typeIds $value $id
+        }
+    }
+    dict set hir counters [dict get $stash counters]
+    if {[dict get $stash hasDiag]} {
+        dict set hir diagnostics [dict get $stash diagnostics]
+    } elseif {[dict exists $hir diagnostics]} {
+        dict unset hir diagnostics
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -608,7 +824,8 @@ proc hir::semantic::Region {hir e} {
     return $result
 }
 
-# The volatile facts of instance ID's final walk over its region (a small
+# The volatile facts of instance ID's final walk over its region, read from
+# the HIR SCRATCH the walk wrote them into before Analyze restores it (a small
 # per-instance side table; the HIR is never cloned).
 proc hir::semantic::Snapshot {scratch id} {
     variable state
