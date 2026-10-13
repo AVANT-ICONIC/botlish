@@ -1,0 +1,128 @@
+# Side-by-side agreement on this checkout
+
+1350 ported rows of 1367 selected, 57 old test files, 29 golden suites, backends interp, compile, cranelift-generic, cranelift, 1 jobs
+
+old pass, new pass: 1350
+
+Static decisions per suite (rounds, builds, method trials, mispredicted, compile s):
+    abi-bytes.bot                                      3    3    0   0     15.1 
+    affinity.bot                                       4    5    0   0     13.2 
+    callable-contracts-contravariant.bot               2    2    0   0      1.7 
+    callable-contracts-returned.bot                    2    2    0   0      1.9 
+    callables.bot                                      3    3    0   0     20.4 
+    collections.bot                                    4    7    2   0     12.5 
+    completion-regressions.bot                         2    2    0   0      2.9 
+    coroutines.bot                                     4    5    0   0     17.6 
+    destructuring-instances.bot                        1    1    0   0      2.7 
+    errors.bot                                         3    3    0   0      4.3 
+    gc-sensitive-values.bot                            1    1    0   0      2.0 
+    imports-abi-child.bot                              3    3    0   0      2.3 
+    imports-unimported.bot                             2    2    0   0      1.9 
+    linux-io.bot                                       3    3    0   0      6.8 
+    loop-collecting.bot                                3    3    0   0      8.9 
+    method-equivalence.bot                             3    3    0   0      4.3 
+    methods-struct-instances.bot                       1    1    0   0      0.9 
+    modules.bot                                        3    4    0   0     10.0 
+    mutable-vector.bot                                 4   13    7   0     39.9 
+    native-values.bot                                  1    1    0   0      3.6 
+    ownership.bot                                      3   10    5   0     18.7 
+    recursive-types.bot                                1    3    1   0      2.4 
+    static-compile-erased-consumer.bot                 2    2    0   0      1.5 
+    stdlib-namespaces-str-only.bot                     2    2    0   0      1.3 
+    string-natives.bot                                 1    1    0   0      5.0 
+    struct-representation-instances.bot                1    1    0   0      1.2 
+    structs-and-enums-qualifiers.bot                   1    1    0   0      0.9 
+    traits.bot                                         8   13    3   0     41.9 
+    validators-and-proofs.bot                          3    4    0   0     15.1 
+
+Old tests, wall seconds per file (one tclsh each, startup included):
+    tests/abi-bytes.test                                13.2
+    tests/abi-mutable-bytes.test                        23.0
+    tests/affine.test                                   13.1
+    tests/argv.test                                      0.6
+    tests/backends.test                                  0.1
+    tests/closure-int-keys.test                          0.4
+    tests/context-traits.test                            0.3
+    tests/contexts.test                                  1.8
+    tests/coroutines.test                                8.4
+    tests/enums.test                                     0.3
+    tests/error-payloads.test                            0.8
+    tests/errors.test                                    1.9
+    tests/exact-callable-key.test                        4.6
+    tests/flags.test                                     0.1
+    tests/higher-order-completions.test                  1.3
+    tests/immutable-set.test                             0.2
+    tests/imports.test                                   1.6
+    tests/linux-syscall.test                             4.3
+    tests/list-stdlib.test                               0.2
+    tests/lists.test                                     0.1
+    tests/loop-collecting.test                           6.0
+    tests/method-eligible.test                           2.0
+    tests/method-sugar.test                              1.0
+    tests/mutable-array-type.test                        0.6
+    tests/mutable-array.test                             1.0
+    tests/mutable-vector.test                           17.2
+    tests/namespaced-errors.test                         0.2
+    tests/native-alloc.test                              0.2
+    tests/native-bitwise-fold.test                       0.6
+    tests/native-root-liveness.test                      0.3
+    tests/native-stack-map.test                          0.5
+    tests/native-string-region.test                      2.2
+    tests/native-string-traversal.test                   1.1
+    tests/native-string-view.test                        3.5
+    tests/native-uri-escape.test                        37.8
+    tests/native.test                                    8.5
+    tests/opaque-struct.test                             0.2
+    tests/portable-io.test                               0.5
+    tests/proof-loop-intervals.test                      2.1
+    tests/proven-bounds.test                             0.8
+    tests/raw-count-loops.test                           2.2
+    tests/refinement-validators.test                     5.5
+    tests/refinement-values.test                         0.1
+    tests/static-compile.test                            0.3
+    tests/static-economics.test                          0.6
+    tests/stdlib-namespaces.test                         0.4
+    tests/str-char-at.test                               0.2
+    tests/string-allocation.test                         5.1
+    tests/struct-destructuring.test                      4.2
+    tests/struct-scalar-replacement.test                 1.8
+    tests/structs.test                                   0.2
+    tests/structural-contract-completions.test           0.3
+    tests/structural-fn-types.test                       3.3
+    tests/surface-modules.test                           0.1
+    tests/traits.test                                    3.4
+    tests/typed-callable-escape.test                     0.5
+    tests/unicode-char.test                              0.1
+    total                                              191.0 (elapsed 191.0 with 1 jobs)
+Golden suites, wall seconds per suite (compile once, run on interp, compile, cranelift-generic, cranelift):
+    abi-bytes.bot                                       94.7   ok
+    affinity.bot                                        55.6   ok
+    callable-contracts-contravariant.bot                 4.3   ok
+    callable-contracts-returned.bot                      4.7   ok
+    callables.bot                                       83.1   ok
+    collections.bot                                     30.6   ok
+    completion-regressions.bot                           7.5   ok
+    coroutines.bot                                      89.1   ok
+    destructuring-instances.bot                         14.8   ok
+    errors.bot                                          13.1   ok
+    gc-sensitive-values.bot                             11.4   ok
+    imports-abi-child.bot                                6.4   ok
+    imports-unimported.bot                               5.4   ok
+    linux-io.bot                                        18.9   ok
+    loop-collecting.bot                                 62.0   ok
+    method-equivalence.bot                              17.3   ok
+    methods-struct-instances.bot                         3.1   ok
+    modules.bot                                         34.4   ok
+    mutable-vector.bot                                  93.7   ok
+    native-values.bot                                   39.4   ok
+    ownership.bot                                       33.9   ok
+    recursive-types.bot                                  6.1   ok
+    static-compile-erased-consumer.bot                   3.7   ok
+    stdlib-namespaces-str-only.bot                       3.1   ok
+    string-natives.bot                                  49.9   ok
+    struct-representation-instances.bot                  4.8   ok
+    structs-and-enums-qualifiers.bot                     3.0   ok
+    traits.bot                                          76.8   ok
+    validators-and-proofs.bot                           84.9   ok
+    total                                              955.6 (elapsed 955.6 with 1 jobs)
+RSS-WALL 1147.33 s, peak RSS 502 MB, user 1120.9 s, sys 11.9 s, status 0
