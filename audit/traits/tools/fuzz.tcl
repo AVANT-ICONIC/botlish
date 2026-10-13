@@ -1262,10 +1262,11 @@ proc satisfactionMismatches {} {
 proc outcome {backend hir} {
     if {[catch {
         switch -- $backend {
-            interp - compile {
+            interp {
                 core::useBackend $backend
                 set r [core::evalProgram [hir::lower $hir]]
             }
+            compile { set r [core::compiler::evalHir $hir] }
             cranelift { set r [native::evalHir $hir] }
             cranelift-generic { set r [native::evalHir $hir -specialize 0] }
         }

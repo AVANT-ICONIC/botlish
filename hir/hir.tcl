@@ -12,8 +12,8 @@
 #   core IR text --hir::build--> HIR              (an input notation: examples,
 #                                                  tests; same builder)
 #
-#   HIR --hir::lower--> core IR --> Tcl reference interpreter (core/) and the
-#                                   Tcl compiler (compiler/)
+#   HIR --hir::lower--> core IR --> Tcl reference interpreter (core/)
+#   HIR --core::compiler::compileHir--> Tcl procs (compiler/)
 #   HIR --native::lowered--> NIR --> native: JIT, object, standalone executable
 #                                    (native/), later a bytecode interpreter
 #
@@ -307,7 +307,8 @@ proc hir::DiagnoseAt {hirVar kind message expr origin} {
 #                   a program that fails to resolve is never typed, analyzed
 #                   or specialized.
 #   -strict 0       keep diagnostics in the HIR; the error stays a run-time
-#                   error of the lowered program (used by the compiler)
+#                   error of the program (the compiler's core IR text entry
+#                   points, the test harness)
 #
 # Malformed IR always raises {CORE MALFORMED}.
 #
@@ -352,8 +353,8 @@ proc hir::build {exprs args} {
 #                   CANONICAL ...}}, one per file, keyed by the namespace the
 #                   file is the module of ("" for the entry program). Given
 #                   (even empty), it replaces the compilation's table; omitted,
-#                   the table is left as it is (core IR builds, internal
-#                   rebuilds). Consulted by resolution only: no import is ever
+#                   the table is left as it is (core IR text builds, trial
+#                   builds). Consulted by resolution only: no import is ever
 #                   an expression.
 #
 #   -struct-decls D surface/lower.tcl's StructDeclOf dicts (one per "struct
@@ -364,8 +365,8 @@ proc hir::build {exprs args} {
 #                   STRUCTS.md), so `Name { ... }` and a `Name` annotation
 #                   resolve through it. A caller that passes this option, even
 #                   empty, starts a fresh struct registry (the surface
-#                   frontends always do); one that omits it (core IR builds,
-#                   internal rebuilds) leaves the registry as it is. Kept as
+#                   frontends always do); one that omits it (core IR text
+#                   builds, trial builds) leaves the registry as it is. Kept as
 #                   `struct` entries of HIR's `sourceTypes`.
 #
 #   -error-decls D  surface/lower.tcl's ErrorDeclOf dicts (one per "error
@@ -865,8 +866,9 @@ proc hir::TraitCallsDecided {hir calls decidedVar} {
 # like any other; the whole typing is then redone with those parameters'
 # trusted contracts demoted to checked-only, keeping the original
 # diagnostics. With -strict 1 the first diagnostic is raised either way;
-# with -strict 0 (the core-IR compile path, whose diagnostics stay in the
-# HIR and become AOT blockers) this is what keeps every backend from
+# with -strict 0 (a lenient front-end or core IR text build, whose
+# diagnostics stay in the HIR and become AOT blockers) this is what keeps
+# every backend from
 # compiling a body that assumes a contract its own program breaks --
 # exactly what such a program meant before its parameter had one.
 #

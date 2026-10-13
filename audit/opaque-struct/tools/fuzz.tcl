@@ -173,6 +173,8 @@ proc shownOnEach {source} {
         try {
             if {$b in {cranelift cranelift-generic}} {
                 set value [native::evalHir $hir {*}[expr {$b eq "cranelift-generic" ? {-specialize 0} : {}}]]
+            } elseif {$b eq "compile"} {
+                set value [core::compiler::evalHir $hir]
             } else {
                 core::useBackend $b
                 set value [core::evalProgram [hir::lower $hir]]

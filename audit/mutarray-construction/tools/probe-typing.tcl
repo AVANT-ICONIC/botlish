@@ -36,7 +36,17 @@ proc fnType {src name} {
 }
 proc run {backend src} {
     set hir [compile $src]
+    if {$backend eq "compile"} {
+        # The Tcl compiler compiles the HIR itself.
+        return [outcomeOf {core::compiler::evalHir $hir}]
+    }
     outcomeUnder $backend [hir::lower $hir]
+}
+proc outcomeOf {script} {
+    if {[catch {uplevel 1 $script} result options]} {
+        return [list error [dict get $options -errorcode] $result]
+    }
+    return [list value [core::value::show $result 1]]
 }
 proc outcomeUnder {backend exprs} {
     set saved [core::useBackend]

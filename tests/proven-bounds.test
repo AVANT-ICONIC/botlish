@@ -246,7 +246,7 @@ test bounds-clif-no-bounds-path {the proven read is the bare element load: its C
 
 test bounds-compiler-direct-call {a proven bounds-bearing native is a direct call in the Tcl compiler's code, not core::runtime::callValue; a handled or declared unknown one still goes through callValue} -body {
     proc codeOf {source} {
-        return [core::compiler::generatedCode [hir::lower [boundsHir $source]]]
+        return [dict get [core::compiler::compileHir [boundsHir $source]] code]
     }
     set proven [codeOf "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    list::at(xs, i)"]
     set handled [codeOf "fn f(xs, i):\n    list::at(xs, i):\n        on IndexNotFound:\n            -1\nf(\[1, 2\], 5)"]

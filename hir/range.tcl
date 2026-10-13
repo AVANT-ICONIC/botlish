@@ -1353,6 +1353,14 @@ proc hir::range::ProvesValueAcceptedBy {argType argRange declared} {
         # concrete type that satisfies it structurally (hir::traits).
         return [hir::traits::Accept $argType $declared]
     }
+    if {[hir::types::IsView $declared]} {
+        # A trait view (a handled call whose normal result is a view, its
+        # handlers' value checked against it): only by hir::types::subtype,
+        # i.e. the same view or never. A concrete type becomes a view only at
+        # a trait-typed boundary (the case above), and no Range fact is one
+        # of a view (ProvesType would ask core::type for its integer facts).
+        return [hir::types::subtype $argType $declared]
+    }
     if {[hir::types::IsList $declared] || [hir::types::IsSet $declared] || [hir::types::IsMutVec $declared]
             || [hir::types::IsMutArray $declared]} {
         return [AggregateAdmits [hir::types::Unshaped $argType] $declared]

@@ -29,8 +29,8 @@
 # Like hir/structs.tcl's registry and core::type's source types, the table is
 # the current compilation's, one Tcl variable, replaced by the next
 # compilation that brings its own (hir::buildSyntax's -imports); a build
-# without the option (core IR, an internal rebuild of an already resolved
-# program) leaves it as it is.
+# without the option (core IR text, a trial or monomorphizing build of the
+# same program) leaves it as it is.
 
 namespace eval hir::imports {
     variable table [dict create]

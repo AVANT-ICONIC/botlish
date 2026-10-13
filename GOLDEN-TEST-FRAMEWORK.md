@@ -1056,10 +1056,11 @@ does not compile gives its tests no verdict.
 
 **All backends.** Every golden suite runs on the Tcl interpreter, the Tcl
 compiler, generic Cranelift and specialized Cranelift
-(`tests/golden/run.tcl`'s default) -- and every golden test passes on a
-fifth path too, the Tcl compiler compiling HIR itself (`main.tcl -backend
-compile`, `run.tcl -backends compile-hir`), one suite per process because
-of C7 -- and `tests/golden-framework.test` compiles
+(`tests/golden/run.tcl`'s default; the Tcl compiler compiles each suite's
+HIR itself, as `main.tcl -backend compile` does -- it used to compile HIR
+rebuilt from the lowered core IR, with the direct path an opt-in
+`compile-hir` backend limited to one suite per process by C7, both since
+removed) -- and `tests/golden-framework.test` compiles
 each of its programs once and runs it on interp, compile and Cranelift,
 requiring identical reports. Exclusions, recorded: `representation.bot`
 aborts on generic Cranelift at one struct-shape case the generic baseline
@@ -1457,7 +1458,7 @@ candidates) and in an 87-branch `elif` chain (4.4 s per build, now 0.9 s).
 | C4 | Untyped parameter contract inference is path-insensitive: a result requirement is charged to the parameter although every path returning it is guarded | `type Small = Int in 0..10` / `fn check(n) -> Small errors TooBig: if n > 10: fail TooBig elif n < 0: fail TooBig else: n` called with an `int` is TYPE (with `n: int` it is proven) | one port types the parameter |
 | C5 | COROUTINE-RESUME-CONFLICT (and COROUTINE-RESUME-UNDERCONSTRAINED, the call form of UNWRAPPED-YIELD) name further locations only in their message text; their reified `related` is `[]` -- the convention AGENTS.md states for diagnostics with further locations | a block whose function reaches two yielding helpers declaring different `resume` types: `related` is `[]`, the two call locations are in `message` | a custom check parses the message |
 | C6 | `mutable_vector::length` accepts a List statically (with only `import mutable_vector`, `[1, 2].length()` compiles) and fails at run time | `import mutable_vector` / `[1, 2].length()`: run-time TYPE `mutable_vector::length: expected mutvec` | porters import `list` everywhere |
-| C7 | The Tcl compiler compiling HIR itself (`core::compiler::evalHir`, `main.tcl -backend compile`) keeps a program's installed contexts after the program ends: a second run in the same process of any program that installs a context fails at run time with DUPLICATE-CONTEXT. The core-IR paths (the interpreter, the Tcl compiler compiling core IR) reset them | `context struct Box: n: int` / `fn read(context b: Box) -> int: b.n` / `with context Box {n: 7}` / `read()`, run twice with `core::compiler::evalHir` in one process: `7`, then "Box is already installed in this scope" | `main.tcl` runs one program per process and never sees it; every golden suite after the first aborts on this path in one process, so `run.tcl`'s opt-in `compile-hir` backend needs one suite per process |
+| C7 | The Tcl compiler compiling HIR itself (`core::compiler::evalHir`, `main.tcl -backend compile`) keeps a program's installed contexts after the program ends: a second run in the same process of any program that installs a context fails at run time with DUPLICATE-CONTEXT. The core-IR paths (the interpreter, the Tcl compiler compiling core IR) reset them | `context struct Box: n: int` / `fn read(context b: Box) -> int: b.n` / `with context Box {n: 7}` / `read()`, run twice with `core::compiler::evalHir` in one process: `7`, then "Box is already installed in this scope" | `main.tcl` runs one program per process and never sees it; every golden suite after the first aborts on this path in one process, so `run.tcl`'s opt-in `compile-hir` backend needs one suite per process. **Fixed** (DIRECT-HIR-NATIVE-PATH.md, "The Tcl compiler compiles HIR"): `core::compiler::evalUnit` starts every run with an empty context set, as `core::evalProgram` does (`direct-hir-compile-runs-repeat-in-one-process`); the Tcl compiler now always compiles HIR, so `run.tcl`'s `compile` is this path and `compile-hir` is gone |
 
 Smaller inconsistencies: EQUALITY's run-time message says "callables" for
 MutableVector and MutableArray values; a non-Int loop bound's run-time

@@ -164,16 +164,18 @@ proc bench::measure {algorithm size backend runs} {
         return [list $best [string length $shown] [zlib crc32 [encoding convertto utf-8 $shown]] \
             [list $lower $jit] $code $alloc]
     }
-    set program [hir::lower $hir]
-    core::useBackend $backend
-    # The program runs as its lowered IR, whose HIR is the corpus program's
-    # HIR (tests/surface-samples.test checks this for source programs).
-    # core::evalProgram caches the compiled unit, so the untimed run keeps
-    # compilation out of the timings.
-    core::evalProgram $program
+    if {$backend eq "compile"} {
+        # The Tcl compiler compiles the HIR itself, once, outside the timings.
+        set run [list core::compiler::evalUnit [core::compiler::compileHir $hir]]
+    } else {
+        # The interpreter runs the lowered core IR.
+        core::useBackend $backend
+        set run [list core::evalProgram [hir::lower $hir]]
+    }
+    {*}$run
     set best ""
     for {set i 0} {$i < $runs} {incr i} {
-        set micros [lindex [time {set value [core::evalProgram $program]}] 0]
+        set micros [lindex [time {set value [{*}$run]}] 0]
         if {$best eq "" || $micros < $best} {
             set best $micros
         }
