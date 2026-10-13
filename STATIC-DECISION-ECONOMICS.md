@@ -1046,15 +1046,24 @@ Tests: `se-equal-subsume-gate` (a report that vanishes with the
 contributor: mutable_array::generate given `Fn{args: [int, any], ...}`, and a
 handle leaving its construction in a function used as a value -- judged
 after the contributor), `se-equal-method-trial`, `se-builds-subsume-gate`
-(three USE-AFTER-MOVE handle sites rejected with the contributor: 2 rounds,
-3 without the gate), `se-property-subsume-positions`. Mutants:
+(three blocks failing first with a checker TYPE, each also passing
+mutable_array::generate into such a `Fn`, rejected with the contributor: 2
+rounds, 3 without the gate), `se-property-subsume-positions`. Mutants:
 `subsume-gate-every-failing`, `method-trial-ignored` (semantic),
-`subsume-gate-ignored` (economic).
+`subsume-gate-ignored` (economic). The gate also covers the block of
+`se-builds-coroutine-construction` (it fails first with USE-AFTER-MOVE),
+which left `coroutine-subsume-unconditional` alive; `se-builds-coroutine-checks`
+(an accepted block passing on a parameter's handle and a capture-free one,
+before a failing block in the same function: 2 rounds, 3 with an edge for
+every handle) kills it again.
 
-Validation of the merged tree: `tests/static-economics.test` 68/68,
-`tests/static-compile.test` 83/83; the fuzzer, seeds 1, 2, 3 and 29 (10
-programs each): 40 programs, 1108 sites, 0 failures; the 88 golden suites
-before and after, above.
+Validation of the merged tree: `tests/static-economics.test` 69/69,
+`tests/static-compile.test` 83/83, `tests/golden.test` 9/9; the fuzzer,
+seeds 1, 2, 3 and 29 (10 programs each): 40 programs, 1108 sites, 0
+failures; `compare.tcl` on linux-io (batched 2/2, sequential 30/30) and the
+validation sample: batched = sequential exactly, no misprediction;
+`mutate.tcl`: 58 mutants, every one applies and is killed; the 88 golden
+suites before and after, above.
 
 ## Method-call decisions
 

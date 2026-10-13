@@ -876,11 +876,26 @@ test se-builds-coroutine-construction {a coroutine construction whose thunk capt
     list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
 } -result {{} {TYPE USE-AFTER-MOVE} 2}
 
-test se-builds-subsume-gate {a block whose first diagnostic was reported before the completion walk keeps it whatever the program erases (every contract-boundary report is appended after it): three blocks whose coroutine handle leaves its construction, each USE-AFTER-MOVE, are rejected in the build that rejects the contributor -- 2 rounds, where waiting for it took 3 (the sequential order 5)} -body {
-    set moved {"fn mk() -> int:" "    coroutine {step} = counter()" "    n = drive(step)" "    e = step(M {value: 2})" "    n" "mk()"}
-    set text [seBoundaryProgram contributor $::seBoundaryContributor m1 $moved m2 $moved m3 $moved]
+test se-builds-subsume-gate {a block whose first diagnostic was reported before the completion walk keeps it whatever the program erases (every contract-boundary report is appended after it): three blocks failing first with a checker TYPE, each also holding a check that reads what the program erases (mutable_array::generate given Fn{args: [int, any], ...}), are rejected in the build that rejects the contributor -- 2 rounds, where waiting for it took 3 (the sequential order 5)} -body {
+    set early {"fn adopt(f: Fn{args: [int, any], return: any, errors: []}) -> int:" "    1" "a = adopt(mutable_array::generate)" "want_int(\"s\")"}
+    set text [seBoundaryProgram contributor $::seBoundaryContributor g1 $early g2 $early g3 $early]
     list [seSame $text 0] [seOutcomes $text] [lindex [seEcon $text] 0]
-} -result {{} {TYPE USE-AFTER-MOVE USE-AFTER-MOVE USE-AFTER-MOVE} 2}
+} -result {{} {TYPE TYPE TYPE TYPE} 2}
+
+test se-builds-coroutine-checks {a coroutine handle's check reads what the program erases only through an uncontracted capture of a thunk constructed in the body: an accepted block passing on a handle it receives as a parameter (no construction: no check) and one whose thunk captures nothing does not wait for the contributor's rejection, nor does the failing block after it in the same function -- 2 rounds, where an edge for every handle took 3 (se-builds-coroutine-construction's block fails first before the completion walk, which the gate already covers)} -body {
+    set ok {"fn relay(c: Coroutine{args: [M], return: Ev, errors: []}) -> int:" "    drive(c)" "fn local() -> int:" "    coroutine {step: s} = counter()" "    drive(s)" "local()"}
+    set host "fn host() -> int errors compiler::CompilerError:\n    a = static compile:\n"
+    foreach line $ok {
+        append host "        $line\n"
+    }
+    append host "    b = static compile:\n        want_int(\"s\")\n    a + b\n\n"
+    set text "$::seBoundary[seSite contributor $::seBoundaryContributor]$host"
+    foreach name {contributor host} {
+        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    append text "0\n"
+    list [seSame $text 0] [seOutcomes $text] [lindex [seEcon $text] 0]
+} -result {{} {TYPE accepted TYPE} 2}
 
 test se-method-reuse {method-style call decisions are reused across rounds: fewer trial builds than deciding afresh, and the audit (every seeded round built again unseeded) finds the same program} -body {
     set text "import compiler\nimport list\nimport str\n\n"
