@@ -2,14 +2,17 @@ name	source	kind	input	expect	emit-result	emit-note
 ai_text_clean	examples/stdlib/ai_text_clean.bot	bot	none		ok	
 csv	examples/stdlib/csv.bot	bot	none		ok	
 csv_chunked	examples/stdlib/csv_chunked.bot	bot	none		fail	NATIVE AOT NOT-READY
-csv_geometric	examples/stdlib/csv_geometric.bot	bot	none		fail	NATIVE AOT NOT-READY
+csv_geometric	examples/stdlib/csv_geometric.bot	bot	none		ok	
 csv_records	examples/stdlib/csv_records.bot	bot	none		fail	NATIVE AOT NOT-READY
 hashtable	examples/stdlib/hashtable.bot	bot	none		fail	NATIVE AOT NOT-READY
 matmul	examples/stdlib/matmul.bot	bot	none		ok	
 string_replace	examples/stdlib/string_replace.bot	bot	none		ok	
 string_reverse	examples/stdlib/string_reverse.bot	bot	none		ok	
 numeric-domains	examples/abi/numeric-domains.bot	bot	none		ok	
+context-hello	examples/linux/context-hello.bot	bot	none		ok	
 getpid	examples/linux/getpid.bot	bot	none		ok	
+read-stdin	examples/linux/read-stdin.bot	bot	stdin		ok	
+write	examples/linux/write.bot	bot	none		ok	
 01-arithmetic	examples/surface/01-arithmetic.bot	bot	none		ok	
 02-recursion	examples/surface/02-recursion.bot	bot	none		ok	
 03-closure	examples/surface/03-closure.bot	bot	none		fail	NATIVE AOT NOT-READY
@@ -24,6 +27,7 @@ getpid	examples/linux/getpid.bot	bot	none		ok
 12-if-value	examples/surface/12-if-value.bot	bot	none		ok	
 13-hygiene	examples/surface/13-hygiene.bot	bot	none		ok	
 14-modules	examples/surface/14-modules.bot	bot	none		ok	
+15-enums	examples/surface/15-enums.bot	bot	none		ok	
 01-scopes	examples/hir/01-scopes.hir	hir	none		ok	
 02-closures	examples/hir/02-closures.hir	hir	none		fail	NATIVE AOT NOT-READY
 03-recursion	examples/hir/03-recursion.hir	hir	none		ok	

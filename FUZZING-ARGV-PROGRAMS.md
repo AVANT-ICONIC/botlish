@@ -183,19 +183,22 @@ Raw artifacts: 10 hangs (6 release + 4 ASan; 8 on `csv-argv`, 2 on
 **2** signatures. Confirmed by hand: **1 bug**, 1 performance
 observation.
 
-* **FZ-001, filed** (`fuzz/triage/FZ-001/`): `csv-argv` never terminates
-  on an argument whose first character is a quote with no closing quote;
-  minimized to a single byte (`"`). Mechanism: the example's
-  `scan_quoted` recurses past end-of-text (`peek` returns `""`, never a
-  quote, forever). Vertical split: `interp` completes with a clean
-  `TCL LIMIT STACK` error; `compile`, `cranelift`, `cranelift-generic`
-  and the AOT executable loop forever (self tail calls eliminated to
-  loops). Classification: **program logic** in the argv program's driver
-  (the repository example is within its documented valid-CSV contract;
-  no example driver passes malformed text). Not fixed, per campaign
-  policy; the vertical divergence itself is designed behavior
-  (interpreter recursion limit vs tail-call elimination) and is what
-  attributes the bug to program logic.
+* **FZ-001, filed and fixed on the branch** (`fuzz/triage/FZ-001/`):
+  `csv-argv` never terminates on an argument whose first character is a
+  quote with no closing quote; minimized to a single byte (`"`).
+  Mechanism: the example's `scan_quoted` recurses past end-of-text
+  (`peek` returns `""`, never a quote, forever). Vertical split:
+  `interp` completes with a clean `TCL LIMIT STACK` error; `compile`,
+  `cranelift`, `cranelift-generic` and the AOT executable loop forever
+  (self tail calls eliminated to loops). Classification: **program
+  logic** in the argv program's driver (the repository example is within
+  its documented valid-CSV contract; no example driver passes malformed
+  text). The fix (later, on branch `fuzz/argv-campaign`, after merging
+  main): `scan_quoted` returns the accumulated field at end-of-text in
+  `fuzz/programs/csv-argv.bot` -- verified not fixed on main first
+  (main's rewritten csv.bot still loops, rc=124 on the 1-byte input),
+  then fixed, all five verticals agreeing (`[[""]]`), valid inputs
+  byte-identical to before.
 * **FZ-002, not filed** (performance observation, §9): the two
   `string-reverse-argv` hang artifacts are ~100 KiB inputs finishing
   correctly in 3-4 s plain -- the example's documented O(n^2) reverse
@@ -270,11 +273,12 @@ Oracle and triage:
    mismatches beyond the four documented classes, nondeterminism.
 8. Expected failure exit codes excluded: **yes** (signals-only oracle;
    these drivers make exit 1 effectively unreachable).
-9. Every reported bug deduplicated and minimized: **yes** (vacuous if
-   zero findings; the pipeline is exercised either way).
+9. Every reported bug deduplicated and minimized: **yes** (FZ-001: 8 raw
+   artifacts -> 1 signature -> 1 byte).
 10. Every reported bug replayed across the four required verticals:
-    **yes** (vacuous if zero; the matrix itself ran for all targets).
-11. Every reported bug manually reproduced: **yes** (vacuous if zero).
+    **yes** (FZ-001's matrix is in its package and §7).
+11. Every reported bug manually reproduced: **yes** (FZ-001 by hand on
+    all five verticals, pre-fix and post-fix).
 
 Findings:
 
