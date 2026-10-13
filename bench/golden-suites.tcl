@@ -245,30 +245,52 @@ foreach path $files {
     dict set commands $path [list [info nameofexecutable] [info script] -one $path \
         -backends [join $backends ,] -profile [dict get $options -profile]]
 }
-set start [clock milliseconds]
-set outcomes [goldentools::runParallel [dict get $options -jobs] 7200 $commands]
-set wall [expr {([clock milliseconds] - $start) / 1000.0}]
-set results {}
-foreach path $files {
-    if {![dict exists $outcomes $path]} {
-        lappend results [goldentools::readFile [cached $path]]
-        continue
-    }
-    lassign [dict get $outcomes $path] status output seconds
+# The result dict of one suite's measurement OUTCOME ({STATUS OUTPUT
+# SECONDS}), or "" (reported) when it produced none.
+proc resultOf {path outcome} {
+    lassign $outcome status output seconds
     set line [lsearch -inline [split $output \n] {result *}]
     if {$line eq ""} {
         puts stderr "[file tail $path]: no result ([goldentools::lastLine $output])"
-        continue
+        return ""
     }
     set r [lindex $line 1]
     dict set r process $seconds
-    lappend results $r
-    if {$cache ne ""} {
-        file mkdir $cache
-        set f [open [cached $path] w]
-        fconfigure $f -encoding utf-8
-        puts -nonewline $f $r
-        close $f
+    return $r
+}
+
+# With -cache, the suites run in batches of -jobs and each batch's results
+# are written as soon as it ends, so an interrupted run loses at most one
+# batch.
+set start [clock milliseconds]
+set measured [dict create]
+set pending [dict keys $commands]
+set batch [expr {$cache ne "" ? [dict get $options -jobs] : [llength $pending]}]
+while {[llength $pending] > 0} {
+    set now [lrange $pending 0 [expr {max($batch, 1) - 1}]]
+    set pending [lrange $pending [llength $now] end]
+    set outcomes [goldentools::runParallel [dict get $options -jobs] 7200 \
+        [dict filter $commands script {key -} {expr {$key in $now}}]]
+    dict for {path outcome} $outcomes {
+        set r [resultOf $path $outcome]
+        if {$r eq ""} continue
+        dict set measured $path $r
+        if {$cache ne ""} {
+            file mkdir $cache
+            set f [open [cached $path] w]
+            fconfigure $f -encoding utf-8
+            puts -nonewline $f $r
+            close $f
+        }
+    }
+}
+set wall [expr {([clock milliseconds] - $start) / 1000.0}]
+set results {}
+foreach path $files {
+    if {[dict exists $measured $path]} {
+        lappend results [dict get $measured $path]
+    } elseif {![dict exists $commands $path]} {
+        lappend results [goldentools::readFile [cached $path]]
     }
 }
 
