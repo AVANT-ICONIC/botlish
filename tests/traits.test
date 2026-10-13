@@ -604,6 +604,20 @@ fn name(o: O) -> str:
          [lindex [rejection "${prelude}fn pick(a: Named, b: Named, flag: bool) -> Named:\n    if flag:\n        a\n    else:\n        b\npick(Person {value: \"a\"}, Person {value: \"b\"}, true)\n"] 1]
 } -result {{TRAIT-WITNESS-JOIN {the function's result has trait type Named but may contain either Person or other::O; heterogeneous trait values are not supported (every exit of a trait-typed result needs the same witness)}} TRAIT-WITNESS-JOIN {expression has trait type Named but may contain either the witness of parameter "a" of pick or the witness of parameter "b" of pick; heterogeneous trait values are not supported (there is no erased trait representation to hold a run-time choice between witnesses)}}
 
+test trait-witness-join-handled {a handled call of a function whose result joins witnesses is rejected like the unhandled one, its handler checked against the view, never asking a view for integer facts} -body {
+    set source "${prelude}error Boom\nfn pick(a: Named, b: Named, flag: bool) -> Named errors Boom:\n    if flag:\n        a\n    else:\n        b\np = Person {value: \"p\"}\nra = pick(p, p, true):\n    on Boom:\n        p\nra.name()\n"
+    set hir [surface::compile $source -warnings off -strict 0]
+    list [rejection $source] \
+         [lsearch -all -inline -glob [lmap d [dict get $hir diagnostics] {dict get $d message}] handler*]
+} -result {{TRAIT-WITNESS-JOIN {expression has trait type Named but may contain either the witness of parameter "a" of pick or the witness of parameter "b" of pick; heterogeneous trait values are not supported (there is no erased trait representation to hold a run-time choice between witnesses)}} {{handler "on Boom" completes with type Person, not admissible as Named (the call's own normal result type)}}}
+
+test trait-view-handler-admission {a handled call whose result is a view admits a handler of that same view; a concrete value, even of the witness, is not one (only a trait-typed boundary makes a view)} -body {
+    set one "${prelude}error Boom\nfn one(v: Named, flag: bool) -> Named errors Boom:\n    if flag:\n        fail Boom\n    v\n"
+    list [sourceAgree "${one}fn safe(v: Named, flag: bool) -> Named:\n    one(v, flag):\n        on Boom:\n            v\nsafe(Person {value: \"s\"}, true).name()\n"] \
+         [rejection "${one}p = Person {value: \"p\"}\none(p, true):\n    on Boom:\n        p\n"] \
+         [rejection "${one}one(Person {value: \"p\"}, true):\n    on Boom:\n        3\n"]
+} -result {{value {"s"}} {TYPE {handler "on Boom" completes with type Person, not admissible as Named (the call's own normal result type)}} {TYPE {handler "on Boom" completes with type int, not admissible as Named (the call's own normal result type)}}}
+
 test trait-no-implicit-trait-join {two unrelated types that both satisfy a trait never join to the trait} -body {
     set lib {other.bot {struct O:
     v: str
