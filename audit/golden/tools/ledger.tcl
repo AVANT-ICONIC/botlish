@@ -1,5 +1,5 @@
 # ledger.tcl -- the migration ledger of the golden suites
-# (LARGE-SCALE-GOLDEN-MIGRATION.md, "The ledger"), generated from
+# (LARGE-SCALE-GOLDEN-MIGRATION.md, "The census"), generated from
 # tests/golden/manifest.tsv, the one map between the Tcl tests and the golden
 # tests.
 #

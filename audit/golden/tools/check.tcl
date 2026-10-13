@@ -1,7 +1,7 @@
 # check.tcl -- the side-by-side check of the golden suites against the Tcl
 # tests they were ported from (GOLDEN-TEST-FRAMEWORK.md, "Side-by-side
-# agreement" and "Mutation spot-check"; LARGE-SCALE-GOLDEN-MIGRATION.md, "The
-# differential tool"): every Tcl test tests/golden/manifest.tsv lists as
+# agreement" and "Mutation spot-check"; LARGE-SCALE-GOLDEN-MIGRATION.md,
+# "Method"): every Tcl test tests/golden/manifest.tsv lists as
 # ported is run beside the golden test(s) it became, and their verdicts are
 # compared.
 #

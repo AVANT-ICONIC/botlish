@@ -137,7 +137,7 @@ proc golden::summary {lines} {
 #
 #   # golden-exclude: BACKEND[,BACKEND...] -- REASON
 #
-# (LARGE-SCALE-GOLDEN-MIGRATION.md, "Backend exclusions"): a backend that
+# (LARGE-SCALE-GOLDEN-MIGRATION.md, "Backends and exclusions"): a backend that
 # cannot run some test of the suite for a recorded, legitimate reason (a
 # construct it reports unsupported), never a backend that runs it wrongly. The
 # lines are read from the suite's leading comment block only.

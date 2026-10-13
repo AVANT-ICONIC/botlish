@@ -892,7 +892,7 @@ test gf-library-warning-clean {lib/test.bot, and a suite using every helper, com
 } -result ok
 
 # The message helpers, promoted from the suite-local matchers the migration's
-# suites wrote (LARGE-SCALE-GOLDEN-MIGRATION.md, "Library helpers"): the exact
+# suites wrote (LARGE-SCALE-GOLDEN-MIGRATION.md, "The framework at scale"): the exact
 # message, or a fragment of it, beside the code; each kind of mismatch.
 set gfMessages {import compiler
 import test

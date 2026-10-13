@@ -1,5 +1,6 @@
 # The cross-suite mutant sample's first run (audit/golden/migration/sample.tcl; LARGE-SCALE-GOLDEN-MIGRATION.md, Mutation).
-# Three of its six non-BOTH verdicts were migration gaps, closed in ce34e1d and re-checked there:
+# Three of its six non-BOTH verdicts were migration gaps, closed in ce34e1d and re-run on the final tree
+# (mutant-sample-closed-gaps.txt):
 # contravariant-erasure-dropped and handler-dispatch-short-name-tcl became BOTH, caller-imports-provide BOTH-SUITE-LEVEL.
 
 == first-yield-discarded (coroutines.test; compile,interp; 320s): BOTH
