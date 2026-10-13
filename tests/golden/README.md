@@ -17,16 +17,13 @@ tclsh9.0 tests/golden/run.tcl                       # every suite, on the four d
 tclsh9.0 tests/golden/run.tcl tests/golden/errors.bot
 tclsh9.0 tests/golden/run.tcl -quiet                # one summary line per suite and backend
 tclsh9.0 tests/golden/run.tcl -names                # "SUITE PASS|FAIL NAME" per test
-tclsh9.0 tests/golden/run.tcl -backends interp,compile-hir tests/golden/values.bot
+tclsh9.0 tests/golden/run.tcl -backends interp,compile tests/golden/values.bot
 ```
 
 The default backends are the four the Tcl suite's differential tests use:
-interp and compile (the core IR on the reference interpreter and on the Tcl
-compiler), cranelift-generic and cranelift. `compile-hir` (the Tcl compiler
-compiling the HIR itself, `main.tcl -backend compile`) is opt-in and takes
-one suite per process: that path keeps a program's installed contexts after
-it ends (GOLDEN-TEST-FRAMEWORK.md, C7), so a second suite in the process
-fails with DUPLICATE-CONTEXT. Natively the suites run on x86-64 Linux only
+interp (the core IR on the reference interpreter), compile (the Tcl compiler
+compiling the HIR itself, as `main.tcl -backend compile` does),
+cranelift-generic and cranelift. Natively the suites run on x86-64 Linux only
 (the runner is a coroutine).
 
 The exit status is 1 when any test fails, a suite does not compile, a run

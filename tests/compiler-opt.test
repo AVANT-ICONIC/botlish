@@ -12,8 +12,10 @@ proc sourceIR {text} {
     return [hir::lower [surface::compile $text t.bot]]
 }
 
+# The Tcl code the compiler generates for the source program TEXT, compiled
+# from its HIR (the code core::compiler::evalHir runs).
 proc codeOf {text} {
-    return [core::compiler::generatedCode [sourceIR $text]]
+    return [dict get [core::compiler::compileHir [surface::compile $text t.bot]] code]
 }
 
 if {"test_live_frames" ni [core::native::names]} {

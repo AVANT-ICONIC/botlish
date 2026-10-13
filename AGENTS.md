@@ -11,17 +11,28 @@ explicitly asked to.
 * **HIR** (`hir/`) is the authoritative semantic representation; every analysis
   fact lives in it or in its side tables.
 * **Core IR** (`core/`) is the small executable representation of the Tcl
-  reference interpreter (and the Tcl compiler's input). HIR lowers to it
-  (`hir::lower`); it is not on the native path.
+  reference interpreter. HIR lowers to it (`hir::lower`); neither compiler
+  compiles from it.
+* **The Tcl compiler** (`compiler/`) compiles HIR as a front end built it
+  (`core::compiler::evalHir`, or `compileHir` once and `evalUnit` per run). Its
+  core IR entry points (the registered `compile` backend through
+  `core::evalProgram`; `generatedCode`, `programTypes`, `bindingTypes`,
+  `unitHir`) are for core IR *text* someone wrote, which `hir::build` reads
+  into HIR. Never hand them the output of `hir::lower` for a HIR you have:
+  that rebuilds a weaker HIR (no declared types, module identity, `errors`
+  clauses). Compile the HIR (`tests/direct-hir-native.test`'s
+  `direct-hir-compile-*` tests guard this; DIRECT-HIR-NATIVE-PATH.md, "The
+  Tcl compiler compiles HIR").
 * **NIR** (`native/`) is the production executable representation. Native
   compilation starts from resolved, analyzed HIR (`native::lowered`,
   `native::evalHir`, `native::executable`, ...) and never goes through Core IR:
   do not add a native entry point that accepts Core IR, and do not lower HIR to
   Core IR and rebuild HIR from it (`tests/direct-hir-native.test` guards this).
   `DIRECT-HIR-NATIVE-PATH.md` has the details. Tests that run Core-IR-text
-  programs on `cranelift` do so through a harness backend in `tests/helpers.tcl`
-  that hands native the HIR the program was lowered from (or reads hand-written
-  IR text into HIR); it is not a production entry point.
+  programs on `cranelift` or `compile` do so through harness backends in
+  `tests/helpers.tcl` that hand the compiler the HIR the program was lowered
+  from (or read hand-written IR text into HIR); they are not production entry
+  points.
 
 ## Installing Tcl 9
 

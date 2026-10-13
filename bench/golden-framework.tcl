@@ -127,13 +127,18 @@ proc runUs {hir backend} {
     if {$backend eq "native"} {
         return [lindex [native::measure $hir $::runs] 2]
     }
-    set ir [hir::lower $hir]
     set saved [core::useBackend]
-    core::useBackend $backend
+    if {$backend eq "compile"} {
+        # The Tcl compiler compiles the HIR itself, once.
+        set run [list core::compiler::evalUnit [core::compiler::compileHir $hir]]
+    } else {
+        core::useBackend $backend
+        set run [list core::evalProgram [hir::lower $hir]]
+    }
     set best ""
     try {
         for {set i 0} {$i < $::runs} {incr i} {
-            set us [lindex [time {core::evalProgram $ir}] 0]
+            set us [lindex [time {{*}$run}] 0]
             if {$best eq "" || $us < $best} { set best $us }
         }
     } finally {

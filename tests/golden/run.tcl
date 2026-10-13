@@ -19,10 +19,9 @@
 # backends disagree; else 0.
 #
 # The backends: interp (the core IR on the reference interpreter), compile
-# (the core IR on the Tcl compiler, as the Tcl suite's harness runs it),
-# cranelift-generic and cranelift (native, from HIR); and, on request only,
-# compile-hir (the Tcl compiler compiling the HIR itself: main.tcl's
-# -backend compile).
+# (the Tcl compiler compiling the HIR itself, as main.tcl's -backend compile
+# and the Tcl suite's harness do), cranelift-generic and cranelift (native,
+# from HIR).
 #
 # -lib DIR compiles against the library directory DIR instead of lib/ (a
 # private, mutated copy: audit/golden/tools/). -names prints only the test
@@ -82,7 +81,7 @@ proc golden::run {hir backend} {
     set failed [catch {
         if {$backend in {cranelift cranelift-generic}} {
             native::evalHir $hir {*}[expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
-        } elseif {$backend eq "compile-hir"} {
+        } elseif {$backend eq "compile"} {
             core::compiler::evalHir $hir
         } else {
             set saved [core::useBackend]

@@ -572,8 +572,8 @@ proc hir::affine::verify {hirVar} {
     }
     # Releases: only for a program the discipline accepts (a rejected one
     # that still runs, -strict 0, keeps every value until collected), and
-    # never twice: HIR rebuilt from lowered Core IR (hir/lower.tcl) already
-    # has every release written out.
+    # never twice: HIR built from core IR text that spells them (what
+    # hir/lower.tcl lowered, read back) already has every release written out.
     set scopes [expr {!$accepted || [WrittenReleases $hir $parentMap] ? {} : [Scopes $hir $parentMap]}]
     variable consumed
     dict set hir affine consumed $consumed
@@ -1041,7 +1041,8 @@ proc hir::affine::Use {hirVar e b state} {
     set p [lindex [dict get $parent $e] 0]
     if {[NativeName $hir $p] ne "" && [core::native::ownershipRole [NativeName $hir $p] \
             [lsearch -exact [dict get $hir exprs $p args] $e]] eq "release"} {
-        # A release the compiler wrote out (HIR rebuilt from lowered Core IR):
+        # A release the compiler wrote out (HIR built from core IR text that
+        # spells it, e.g. what hir/lower.tcl lowered, read back):
         # placed where the value is dead, and of a binding possibly moved on
         # some path (Releases) -- never a use to check.
         return $state
@@ -1165,8 +1166,9 @@ proc hir::affine::DropNative {} {
     return affine#drop
 }
 
-# 1 if HIR already has releases written out: HIR rebuilt from Core IR that
-# hir/lower.tcl lowered (source cannot spell `#`).
+# 1 if HIR already has releases written out: HIR built from core IR text
+# that spells them, e.g. what hir/lower.tcl lowered, read back (source
+# cannot spell `#`).
 proc hir::affine::WrittenReleases {hir parent} {
     dict for {e node} [dict get $hir exprs] {
         if {[dict get $node kind] eq "ref" && [dict exists $parent $e]

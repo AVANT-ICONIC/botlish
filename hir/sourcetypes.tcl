@@ -119,12 +119,12 @@ proc hir::sourcetypes::apply {decls {structDecls {}}} {
         # neither resetting nor adding anything, and report no source types
         # of THIS call's own (a caller building an HIR from these decls
         # gets an accurate, empty `sourceTypes` field for it -- see hir::
-        # buildSyntax). This matters because hir::build (core IR, no
-        # surface syntax) and every internal re-hir::build of an
-        # already-lowered program (the Tcl compiler backend's own
-        # GenerateUnit, hir/specialize.tcl) all call through
-        # here too, with no type decls of their own (core IR has no type-
-        # declaration syntax) -- Resetting unconditionally on every call
+        # buildSyntax). This matters because hir::build (core IR text, no
+        # surface syntax -- including the core IR hir::lower made of an
+        # already-compiled program, read back by the round-trip tests)
+        # calls through here too, with no type decls of its own (core IR
+        # has no type-declaration syntax) -- Resetting unconditionally on
+        # every call
         # would unregister a program's own already-verified source types
         # out from under its *own* later compilation/native-lowering pass,
         # not just a genuinely different program's. Only a call that itself
