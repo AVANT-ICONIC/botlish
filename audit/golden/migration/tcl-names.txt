@@ -862,6 +862,10 @@ tests/coroutines.test co-terminal-success pass
 tests/coroutines.test co-trait-polymorphic pass
 tests/coroutines.test co-unwrapped-chain pass
 tests/coroutines.test co-yield-outside-function pass
+tests/direct-hir-native.test direct-hir-compile-entry-points-never-rebuild pass
+tests/direct-hir-native.test direct-hir-compile-main-code-is-the-code-that-runs pass
+tests/direct-hir-native.test direct-hir-compile-namespace-static-scan pass
+tests/direct-hir-native.test direct-hir-compile-runs-repeat-in-one-process pass
 tests/direct-hir-native.test direct-hir-container-call-result-is-semantic-type pass
 tests/direct-hir-native.test direct-hir-differential-argument-cycle pass
 tests/direct-hir-native.test direct-hir-differential-arithmetic pass
