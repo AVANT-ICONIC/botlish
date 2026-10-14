@@ -1,0 +1,8 @@
+# The full Tcl suite on the compile backend, on the tree after the merge of main (cc7f69b and the merge's follow-ups):
+# CORE_BACKEND=compile tclsh9.0 tests/all.tcl -tmpdir PRIVATE (exit 0, 2750 s; native: a release build of the merged native source).
+
+Tests ended at Tue Oct 13 17:58:06 UTC 2026
+all.tcl:	Total	7288	Passed	7284	Skipped	4	Failed	0
+Sourced 169 Test Files.
+Number of tests skipped for each constraint:
+	4	coreScoping

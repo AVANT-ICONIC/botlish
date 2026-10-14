@@ -12,8 +12,8 @@
 #   core IR text --hir::build--> HIR              (an input notation: examples,
 #                                                  tests; same builder)
 #
-#   HIR --hir::lower--> core IR --> Tcl reference interpreter (core/) and the
-#                                   Tcl compiler (compiler/)
+#   HIR --hir::lower--> core IR --> Tcl reference interpreter (core/)
+#   HIR --core::compiler::compileHir--> Tcl procs (compiler/)
 #   HIR --native::lowered--> NIR --> native: JIT, object, standalone executable
 #                                    (native/), later a bytecode interpreter
 #
@@ -307,7 +307,8 @@ proc hir::DiagnoseAt {hirVar kind message expr origin} {
 #                   a program that fails to resolve is never typed, analyzed
 #                   or specialized.
 #   -strict 0       keep diagnostics in the HIR; the error stays a run-time
-#                   error of the lowered program (used by the compiler)
+#                   error of the program (the compiler's core IR text entry
+#                   points, the test harness)
 #
 # Malformed IR always raises {CORE MALFORMED}.
 #
@@ -352,8 +353,8 @@ proc hir::build {exprs args} {
 #                   CANONICAL ...}}, one per file, keyed by the namespace the
 #                   file is the module of ("" for the entry program). Given
 #                   (even empty), it replaces the compilation's table; omitted,
-#                   the table is left as it is (core IR builds, internal
-#                   rebuilds). Consulted by resolution only: no import is ever
+#                   the table is left as it is (core IR text builds, trial
+#                   builds). Consulted by resolution only: no import is ever
 #                   an expression.
 #
 #   -struct-decls D surface/lower.tcl's StructDeclOf dicts (one per "struct
@@ -364,8 +365,8 @@ proc hir::build {exprs args} {
 #                   STRUCTS.md), so `Name { ... }` and a `Name` annotation
 #                   resolve through it. A caller that passes this option, even
 #                   empty, starts a fresh struct registry (the surface
-#                   frontends always do); one that omits it (core IR builds,
-#                   internal rebuilds) leaves the registry as it is. Kept as
+#                   frontends always do); one that omits it (core IR text
+#                   builds, trial builds) leaves the registry as it is. Kept as
 #                   `struct` entries of HIR's `sourceTypes`.
 #
 #   -error-decls D  surface/lower.tcl's ErrorDeclOf dicts (one per "error
@@ -795,6 +796,12 @@ proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
         hir::DiagnoseAt final $kind $message $e $origin
         set added [lindex [dict get $final diagnostics] end]
         dict set final diagnostics [concat [list $added] $diagnostics]
+        if {[dict exists $final beforeCompletions]} {
+            # Not one of them: what each candidate's trial build reported
+            # inside the call decided it.
+            lassign [dict get $final beforeCompletions] from to
+            dict set final beforeCompletions [list [expr {$from + 1}] [expr {$to + 1}]]
+        }
     }
     # The decided calls (not the rejected ones' stand-ins), for a later build
     # of a changed program that can reuse them (hir/static.tcl). Bookkeeping
@@ -865,8 +872,9 @@ proc hir::TraitCallsDecided {hir calls decidedVar} {
 # like any other; the whole typing is then redone with those parameters'
 # trusted contracts demoted to checked-only, keeping the original
 # diagnostics. With -strict 1 the first diagnostic is raised either way;
-# with -strict 0 (the core-IR compile path, whose diagnostics stay in the
-# HIR and become AOT blockers) this is what keeps every backend from
+# with -strict 0 (a lenient front-end or core IR text build, whose
+# diagnostics stay in the HIR and become AOT blockers) this is what keeps
+# every backend from
 # compiling a body that assumes a contract its own program breaks --
 # exactly what such a program meant before its parameter had one.
 #
@@ -883,11 +891,13 @@ proc hir::check {hirVar} {
         return
     }
     set diagnostics [dict get $hir diagnostics]
+    set before [dict get $hir beforeCompletions]
     set demote [lsort -unique [dict keys [dict get $hir violatedContracts]]]
     set hir $pre
     CheckOnce hir $demote
     dict unset hir violatedContracts
     dict set hir diagnostics $diagnostics
+    dict set hir beforeCompletions $before
     dict set hir demotedContracts $demote
 }
 
@@ -908,6 +918,13 @@ proc hir::CheckOnce {hirVar demote} {
     hir::mutvec::verify hir
     hir::syscall::verify hir
     hir::semantic::verify hir
+    # {FROM TO}: the diagnostics at indices FROM to TO - 1 were reported
+    # before the completion walk -- by resolution and the checks above --
+    # and so are no contract-boundary report (hir::completions::Subsume),
+    # which only that walk makes. Bookkeeping for hir/staticdeps.tcl (a
+    # site's first diagnostic among them does not read the contract
+    # boundary), never read by an analysis.
+    dict set hir beforeCompletions [list 0 [llength [dict get $hir diagnostics]]]
     hir::errorsets::verify hir
     hir::modulebinding::validate hir
     hir::structs::promoteOpacity hir

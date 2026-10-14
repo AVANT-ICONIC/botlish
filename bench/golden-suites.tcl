@@ -3,7 +3,7 @@
 # and running each suite costs, phase by phase, on every backend.
 #
 #   tclsh9.0 bench/golden-suites.tcl ?-backends LIST? ?-warm N? ?-profile 0|1?
-#                                    ?-jobs N? ?-format md|tsv? ?FILE.bot ...?
+#                                    ?-jobs N? ?-cache DIR? ?FILE.bot ...?
 #
 # Cold (the default): each suite in a fresh tclsh (one at a time, or -jobs N
 # at a time -- then the times include the contention), which reports:
@@ -17,9 +17,9 @@
 #                            lowering, every build, analysis and decision
 #   interp                   HIR -> Core IR lowering (hir::lower), then the
 #                            reference interpreter's run
-#   compile                  the Tcl compiler's code generation
-#                            (core::compiler::compileUnit) and the rest of its
-#                            run (execution)
+#   compile                  the Tcl compiler's code generation from the HIR
+#                            itself (core::compiler::compileHir) and the
+#                            unit's run (core::compiler::evalUnit)
 #   cranelift, -generic      NIR lowering (Tcl), Cranelift code generation and
 #                            one execution (native::measure, one run)
 #   peak RSS                 the process's VmHWM after everything
@@ -62,7 +62,6 @@ set phases {
     traits-monomorphize hir::traits::monomorphize
     finish surface::lower::Finish
     core-ir-lowering hir::lower
-    tcl-codegen core::compiler::compileUnit
 }
 
 namespace eval prof {
@@ -112,15 +111,12 @@ proc measureOne {path backends profile} {
     source [file join $::root compiler compiler.tcl]
     source [file join $::root surface surface.tcl]
     source [file join $::root native native.tcl]
+    source [file join $::root tests golden run.tcl]
     interp recursionlimit {} 100000
     if {$profile} {
         foreach {phase name} $::phases {
             prof::wrap $phase $name
         }
-    } else {
-        # The Tcl compiler's code generation is told apart from its run by
-        # this wrapper alone: always installed.
-        prof::wrap tcl-codegen core::compiler::compileUnit
     }
     set f [open $path]
     fconfigure $f -encoding utf-8
@@ -146,16 +142,40 @@ proc measureOne {path backends profile} {
         dict set result $counter [expr {[dict exists $hir staticStats $counter] ? [dict get $hir staticStats $counter] : 0}]
     }
     set tests ""
+    # The backends the suite excludes (its golden-exclude header lines,
+    # tests/golden/run.tcl) are not run: they would report the construct
+    # they refuse, not a cost.
+    set excluded [golden::exclusions $path]
     foreach backend $backends {
+        if {[dict exists $excluded $backend]} {
+            dict set result $backend [dict create excluded [dict get $excluded $backend]]
+            continue
+        }
         switch -- $backend {
-            interp - compile {
-                prof::reset
-                core::useBackend $backend
+            interp {
+                core::useBackend interp
                 set us [lindex [time {set ir [hir::lower $hir]}] 0]
-                set runUs [lindex [time {set value [core::evalProgram $ir]}] 0]
-                set codegen [expr {[dict exists $::prof::self tcl-codegen] ? [dict get $::prof::self tcl-codegen] : 0}]
-                dict set result $backend [dict create lowering [seconds $us] codegen [seconds $codegen] \
-                    execution [seconds [expr {$runUs - $codegen}]]]
+                if {[catch {
+                    set runUs [lindex [time {set value [core::evalProgram $ir]}] 0]
+                } message opts]} {
+                    dict set result $backend [dict create error [dict get $opts -errorcode]]
+                    continue
+                }
+                dict set result $backend [dict create lowering [seconds $us] codegen 0 \
+                    execution [seconds $runUs]]
+            }
+            compile {
+                # The Tcl compiler compiles the HIR itself, once, and runs
+                # the unit (as golden::run's evalHir does).
+                if {[catch {
+                    set codegen [lindex [time {set unit [core::compiler::compileHir $hir]}] 0]
+                    set runUs [lindex [time {set value [core::compiler::evalUnit $unit]}] 0]
+                } message opts]} {
+                    dict set result $backend [dict create error [dict get $opts -errorcode]]
+                    continue
+                }
+                dict set result $backend [dict create lowering 0 codegen [seconds $codegen] \
+                    execution [seconds $runUs]]
             }
             cranelift - cranelift-generic {
                 set options [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
@@ -184,7 +204,7 @@ proc measureOne {path backends profile} {
 # ---------------------------------------------------------------------------
 # The driver.
 
-set options [dict create -backends {interp compile cranelift-generic cranelift} -warm 0 -profile 1 -jobs 1 -format md -one ""]
+set options [dict create -backends {interp compile cranelift-generic cranelift} -warm 0 -profile 1 -jobs 1 -one "" -cache ""]
 set files {}
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
@@ -231,31 +251,72 @@ if {[dict get $options -warm] > 0} {
     exit 0
 }
 
-# Cold: one process per suite.
+# Cold: one process per suite. With -cache DIR, a suite whose result DIR
+# already holds (NAME.result, written by an earlier run with the same DIR) is
+# not measured again, so a long measurement can be run in pieces.
+source [file join $root audit golden tools tree.tcl]
+set cache [dict get $options -cache]
+proc cached {path} {
+    return [file join $::cache [file rootname [file tail $path]].result]
+}
 set commands [dict create]
 foreach path $files {
+    if {$cache ne "" && [file exists [cached $path]]} continue
     dict set commands $path [list [info nameofexecutable] [info script] -one $path \
         -backends [join $backends ,] -profile [dict get $options -profile]]
 }
-source [file join $root audit golden tools tree.tcl]
-set start [clock milliseconds]
-set outcomes [goldentools::runParallel [dict get $options -jobs] 7200 $commands]
-set wall [expr {([clock milliseconds] - $start) / 1000.0}]
-set results {}
-foreach path $files {
-    lassign [dict get $outcomes $path] status output seconds
+# The result dict of one suite's measurement OUTCOME ({STATUS OUTPUT
+# SECONDS}), or "" (reported) when it produced none.
+proc resultOf {path outcome} {
+    lassign $outcome status output seconds
     set line [lsearch -inline [split $output \n] {result *}]
     if {$line eq ""} {
         puts stderr "[file tail $path]: no result ([goldentools::lastLine $output])"
-        continue
+        return ""
     }
     set r [lindex $line 1]
     dict set r process $seconds
-    lappend results $r
+    return $r
+}
+
+# With -cache, the suites run in batches of -jobs and each batch's results
+# are written as soon as it ends, so an interrupted run loses at most one
+# batch.
+set start [clock milliseconds]
+set measured [dict create]
+set pending [dict keys $commands]
+set batch [expr {$cache ne "" ? [dict get $options -jobs] : [llength $pending]}]
+while {[llength $pending] > 0} {
+    set now [lrange $pending 0 [expr {max($batch, 1) - 1}]]
+    set pending [lrange $pending [llength $now] end]
+    set outcomes [goldentools::runParallel [dict get $options -jobs] 7200 \
+        [dict filter $commands script {key -} {expr {$key in $now}}]]
+    dict for {path outcome} $outcomes {
+        set r [resultOf $path $outcome]
+        if {$r eq ""} continue
+        dict set measured $path $r
+        if {$cache ne ""} {
+            file mkdir $cache
+            set f [open [cached $path] w]
+            fconfigure $f -encoding utf-8
+            puts -nonewline $f $r
+            close $f
+        }
+    }
+}
+set wall [expr {([clock milliseconds] - $start) / 1000.0}]
+set results {}
+foreach path $files {
+    if {[dict exists $measured $path]} {
+        lappend results [dict get $measured $path]
+    } elseif {![dict exists $commands $path]} {
+        lappend results [goldentools::readFile [cached $path]]
+    }
 }
 
 proc cell {r backend key} {
     if {![dict exists $r $backend]} { return - }
+    if {[dict exists $r $backend excluded]} { return excluded }
     if {[dict exists $r $backend error]} { return [dict get $r $backend error] }
     return [format %.2f [dict get $r $backend $key]]
 }
@@ -273,7 +334,7 @@ foreach r $results {
     }
 }
 puts "| total | [dict get $sum tests] | [dict get $sum lines] | [expr {[dict get $sum staticAccepted] + [dict get $sum staticRejected]}] ([dict get $sum staticRejected]) | [dict get $sum rounds] | [dict get $sum builds] | [dict get $sum hirExprs] | [format %.1f [dict get $sum frontend]] | [format %.1f [dict get $sum process]] | max [tcl::mathfunc::max {*}[lmap r $results {dict get $r rss}]] |"
-puts "\nElapsed: [format %.1f $wall] s with [dict get $options -jobs] job(s).\n"
+puts "\nElapsed: [format %.1f $wall] s with [dict get $options -jobs] job(s), [dict size $measured] suite(s) measured by this run[expr {$cache ne "" ? ", [expr {[llength $results] - [dict size $measured]}] read from $cache" : ""}].\n"
 
 puts "## Back ends (seconds): lowering / code generation / execution\n"
 puts "| suite | Core IR lowering | interp run | Tcl codegen | Tcl compiled run | NIR lowering | Cranelift codegen | native run | generic NIR lowering | generic codegen | generic run |"

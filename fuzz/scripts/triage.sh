@@ -28,7 +28,7 @@ mkdir -p "$TRIAGE/candidates"
 
 signal_of() {  # exit code -> signal name, or empty for normal exits
     case "$1" in
-        134) echo SIGABRT;; 137) echo SIGKILL;; 139) echo SIGSEGV;;
+        124) echo TIMEOUT;; 134) echo SIGABRT;; 137) echo SIGKILL;; 139) echo SIGSEGV;;
         132) echo SIGILL;; 133) echo SIGTRAP;; 135) echo SIGBUS;;
         136) echo SIGFPE;;  *) return 1;;
     esac
@@ -65,12 +65,14 @@ process_finding() {  # process_finding TARGET KIND RAWFILE   (kind: crash|hang)
     for i in 1 2 3 4 5; do
         [[ "${repeats[$i]}" != "$first" ]] && flaky=1
     done
-    # Hang classification (#25).
+    # Hang classification (#25). TIMEOUT means the plain `timeout 10`
+    # rerun did not terminate: a nonterminating hang. Slow-but-terminating
+    # (any other exit) is a performance observation, not a bug.
     if [[ "$kind" == "hang" ]]; then
-        if [[ "$first" == "exit|"* ]]; then
-            kind="hang-slow-terminating"
-        else
+        if [[ "$first" == "exit|TIMEOUT"* || "$first" == "signal|TIMEOUT"* ]]; then
             kind="hang-nonterminating"
+        else
+            kind="hang-slow-terminating"
         fi
     fi
     local signature="$target|$kind|$verdict"
@@ -85,11 +87,14 @@ process_finding() {  # process_finding TARGET KIND RAWFILE   (kind: crash|hang)
     signatures[$signature]="$dir"
     cp "$raw" "$dir/raw-input"
 
-    # Minimize (#34). tmin under QEMU; keep raw on any failure.
+    # Minimize (#34). tmin under QEMU for crashes; hangs keep the raw
+    # input (tmin and the replays below must never run an infinite-loop
+    # input unbounded -- every replay is capped, and hand-minimization
+    # happens at promotion time).
     local min="$dir/input"
     local t=2000
     [[ -f "$ROOT/fuzz/baselines/$target.tsv" ]] && t="$(awk -F'\t' 'NR>1 && $3+0>m {m=$3+0} END {v=m*10; if(v<200) v=200; if(v>2000) v=2000; print v}' "$ROOT/fuzz/baselines/$target.tsv")"
-    if [[ "$kind" == crash* ]] || [[ "$kind" == hang* ]]; then
+    if [[ "$kind" == "crash" ]]; then
         "$AFL/afl-tmin" -Q -m none -t "$((t * 3))" -i "$raw" -o "$min" -- \
             "$ROOT/fuzz/harness/argv-file" "$ROOT/fuzz/build/aot/$target" "@@" \
             >"$dir/tmin.log" 2>&1 || cp "$raw" "$min"
@@ -98,22 +103,27 @@ process_finding() {  # process_finding TARGET KIND RAWFILE   (kind: crash|hang)
     fi
 
     # The vertical replay matrix (#35-#37): cheapest first, all of them.
+    # Every replay is bounded: a non-terminating input must not wedge the
+    # pipeline (the bound itself is the datum -- "no verdict within 120 s").
     local verticals="aot interp compile cranelift cranelift-generic"
     local matrix=""
     for v in $verticals; do
         local line
-        line="$(tclsh9.0 "$ROOT/fuzz/scripts/replay.tcl" "$v" "$target" "$min" 2>/dev/null | paste -sd' ' -)"
-        [[ -z "$line" ]] && line="(vertical unavailable)"
+        line="$(timeout 120 tclsh9.0 "$ROOT/fuzz/scripts/replay.tcl" "$v" "$target" "$min" 2>/dev/null | paste -sd' ' -)"
+        [[ -z "$line" ]] && line="(no verdict within 120s -- non-terminating)"
         matrix+="$(printf '%-20s %s\n' "$v" "$line")"
     done
     # Optional verticals (#36): gc-stress on the native verticals, valgrind.
-    local gc=""; gc="$(tclsh9.0 "$ROOT/fuzz/scripts/replay.tcl" aot "$target" "$min" --gc-stress 2>/dev/null | paste -sd' ' -)"
-    [[ -n "$gc" ]] && matrix+="$(printf '%-20s %s\n' 'aot+gc-stress' "$gc")"
-    local vg=""; vg="$(tclsh9.0 "$ROOT/fuzz/scripts/replay.tcl" aot "$target" "$min" --valgrind 2>/dev/null | paste -sd' ' -)"
-    [[ -n "$vg" ]] && matrix+="$(printf '%-20s %s\n' 'aot+valgrind' "$vg")"
+    local gc=""; gc="$(timeout 120 tclsh9.0 "$ROOT/fuzz/scripts/replay.tcl" aot "$target" "$min" --gc-stress 2>/dev/null | paste -sd' ' -)"
+    [[ -z "$gc" ]] && gc="(no verdict within 120s)"
+    matrix+="$(printf '%-20s %s\n' 'aot+gc-stress' "$gc")"
+    local vg=""; vg="$(timeout 240 tclsh9.0 "$ROOT/fuzz/scripts/replay.tcl" aot "$target" "$min" --valgrind 2>/dev/null | paste -sd' ' -)"
+    [[ -z "$vg" ]] && vg="(no verdict within 240s)"
+    matrix+="$(printf '%-20s %s\n' 'aot+valgrind' "$vg")"
     if [[ -x "$ROOT/fuzz/build/aot-asan/$target" ]]; then
-        local as; as="$(tclsh9.0 "$ROOT/fuzz/scripts/replay.tcl" aot-asan "$target" "$min" 2>/dev/null | paste -sd' ' -)"
-        [[ -n "$as" ]] && matrix+="$(printf '%-20s %s\n' 'aot-asan' "$as")"
+        local as; as="$(timeout 120 tclsh9.0 "$ROOT/fuzz/scripts/replay.tcl" aot-asan "$target" "$min" 2>/dev/null | paste -sd' ' -)"
+        [[ -z "$as" ]] && as="(no verdict within 120s)"
+        matrix+="$(printf '%-20s %s\n' 'aot-asan' "$as")"
     fi
 
     # Mechanical classification guess (#38). The human confirms or corrects.

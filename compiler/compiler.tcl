@@ -1,15 +1,16 @@
 # compiler.tcl -- compiles HIR to Tcl procedures.
 #
 #   source compiler/compiler.tcl       ;# also loads core and hir
-#   core::useBackend compile
+#   core::compiler::evalHir $hir       ;# a front end's HIR
+#   core::useBackend compile           ;# core IR text, through core::evalProgram
 #
 # The compiler is a second implementation of the same semantics as the
 # interpreter in core/evaluator.tcl. It shares the runtime (values, natives,
 # environments, call boundary) but none of the interpreter's evaluation
 # machinery.
 #
-# It does no semantic analysis of its own. Each unit is first built into HIR
-# (hir/), which owns
+# It does no semantic analysis of its own. Each unit is HIR (hir/): the
+# front end's, or core IR text read into HIR (see "Entry points"), which owns
 #
 #   lexical resolution and binding identity   (which binding a name denotes,
 #                                             whether it is bound yet,
@@ -131,14 +132,31 @@ namespace eval core::compiler {
 namespace eval core::compiler::code {}
 
 # ---------------------------------------------------------------------------
-# Backend entry points
+# Entry points
+#
+# The compiler compiles HIR. A program a front end built (surface::
+# readProgramFile, surface::compile, hir::readFile) is compiled from that very
+# HIR: evalHir, or compileHir once and evalUnit/runUnit as often as needed.
+# Nothing on that path lowers the HIR to core IR and builds HIR again from it
+# (DIRECT-HIR-NATIVE-PATH.md, "The Tcl compiler compiles HIR";
+# tests/direct-hir-native.test's direct-hir-compile-* guards).
+#
+# The core IR entry points -- the registered backend (core::useBackend
+# compile, then core::evalProgram / core::evalIn: runProgram, runSequence)
+# and generatedCode, unitHir, programTypes, bindingTypes -- take core IR
+# *text* a person wrote (examples/*.ir, bench/*.ir, the Core IR tests):
+# hir::build reads it into HIR, which is HIR construction from an input
+# notation. Do not hand them the core IR hir::lower produced from a HIR you
+# have: that rebuilds a weaker HIR (no declared types, module identity,
+# `errors` clauses or source locations). Compile the HIR instead.
 
-# Runs EXPRS in the existing environment ENV. Returns a completion.
+# Runs core IR text EXPRS in the existing environment ENV. Returns a
+# completion.
 proc core::compiler::runSequence {exprs env} {
     return [Run [compileUnit sequence $exprs] $env]
 }
 
-# Runs checked EXPRS as a program in the fresh program scope ENV.
+# Runs checked core IR text EXPRS as a program in the fresh program scope ENV.
 proc core::compiler::runProgram {exprs env} {
     return [Run [compileUnit program $exprs] $env]
 }
@@ -148,16 +166,13 @@ proc core::compiler::Run {unit env} {
     return [core::completion::fromTclCode $status $result $options]
 }
 
-# Compiles EXPRS (once per mode) and returns the name of the unit proc.
+# Compiles core IR text EXPRS (once per mode) and returns the name of the
+# unit proc.
 proc core::compiler::compileUnit {mode exprs} {
     variable cache
     set key [list $mode $exprs]
     if {![dict exists $cache $key]} {
-        set unit [GenerateUnit $mode $exprs]
-        # The procs are defined only after the whole unit compiled cleanly.
-        namespace eval ::core::compiler::code [dict get $unit code]
-        dict set unit name ::core::compiler::code::[dict get $unit name]
-        dict set cache $key $unit
+        dict set cache $key [Define [GenerateUnit $mode [hir::build $exprs -mode $mode -strict 0]]]
     }
     return [dict get $cache $key name]
 }
@@ -168,19 +183,47 @@ proc core::compiler::Cached {mode exprs field} {
     return [dict get $cache [list $mode $exprs] $field]
 }
 
+# Defines the procs of the generated UNIT (only after the whole unit compiled
+# cleanly) and returns UNIT with its fully qualified name.
+proc core::compiler::Define {unit} {
+    namespace eval ::core::compiler::code [dict get $unit code]
+    dict set unit name ::core::compiler::code::[dict get $unit name]
+    return $unit
+}
+
+# Compiles the HIR program HIR (as built, in its own mode) and returns the
+# unit dict {name UNIT-PROC code CODE types PROGRAM-TYPES bindings BINDINGS
+# hir HIR}: what generatedCode, programTypes, bindingTypes and unitHir report
+# for core IR text, here for the HIR itself. Its procs are defined. The HIR is
+# trusted: it may come from hir::parse rather than a front end.
+proc core::compiler::compileHir {hir} {
+    return [Define [GenerateUnit [hir::mode $hir] $hir]]
+}
+
+# Runs the program-mode UNIT (compileHir's) in the existing environment ENV,
+# as runProgram runs core IR text. Returns a completion.
+proc core::compiler::runUnit {unit env} {
+    return [Run [dict get $unit name] $env]
+}
+
 # Compiles and runs the program-mode HIR program HIR as a checked program,
-# as core::evalProgram does for its lowered IR. Returns the value. The HIR is
-# trusted: it may come from hir::parse rather than hir::build.
+# as core::evalProgram does for core IR. Returns the value.
 proc core::compiler::evalHir {hir} {
     if {[hir::mode $hir] ne "program"} {
         error "core::compiler::evalHir: expected a program-mode HIR"
     }
-    set exprs [hir::lower $hir]
-    foreach expr $exprs {
-        core::ir::check $expr
+    return [evalUnit [compileHir $hir]]
+}
+
+# Runs the program-mode UNIT (compileHir's) as a checked program in a fresh
+# program scope, as core::evalProgram does for core IR: every run starts with
+# an empty context set and coroutine store and ends with both restored, so
+# UNIT may run any number of times in one process. Returns the value.
+proc core::compiler::evalUnit {unit} {
+    set hir [dict get $unit hir]
+    if {[hir::mode $hir] ne "program"} {
+        error "core::compiler::evalUnit: expected a program-mode unit"
     }
-    set unit [GenerateUnit program $exprs $hir]
-    namespace eval ::core::compiler::code [dict get $unit code]
     set names {}
     set programScopes [list [hir::top $hir]]
     if {[dict exists $hir modules]} {
@@ -200,8 +243,10 @@ proc core::compiler::evalHir {hir} {
     core::env::declare $env $names
     set value ""
     try {
-        set value [core::coroutines::fresh {
-            core::completion::atProgramBoundary [Run ::core::compiler::code::[dict get $unit name] $env]
+        set value [core::contexts::fresh {
+            core::coroutines::fresh {
+                core::completion::atProgramBoundary [runUnit $unit $env]
+            }
         }]
     } finally {
         core::releaseProgram $mark $value
@@ -209,24 +254,27 @@ proc core::compiler::evalHir {hir} {
     return $value
 }
 
-# The generated Tcl code for EXPRS, for inspection.
+# The generated Tcl code for core IR text EXPRS, for inspection (for a HIR:
+# compileHir's `code`).
 proc core::compiler::generatedCode {exprs {mode program}} {
     return [Cached $mode $exprs code]
 }
 
-# The HIR the unit for EXPRS was compiled from.
+# The HIR the unit for core IR text EXPRS was compiled from.
 proc core::compiler::unitHir {exprs {mode program}} {
     return [Cached $mode $exprs hir]
 }
 
-# Inferred static types of the program-level bindings of EXPRS: NAME -> TYPE.
+# Inferred static types of the program-level bindings of core IR text EXPRS:
+# NAME -> TYPE (for a HIR: compileHir's `types`).
 proc core::compiler::programTypes {exprs} {
     return [Cached program $exprs types]
 }
 
-# Every binding compiled for the program EXPRS, at any depth, with its
-# inferred static type: a list of {NAME TYPE} in compilation order. Types
-# include branch refinements and flow facts known where the bind occurs.
+# Every binding compiled for the core IR text program EXPRS, at any depth,
+# with its inferred static type: a list of {NAME TYPE} in compilation order.
+# Types include branch refinements and flow facts known where the bind occurs
+# (for a HIR: compileHir's `bindings`).
 proc core::compiler::bindingTypes {exprs} {
     return [Cached program $exprs bindings]
 }
@@ -577,16 +625,15 @@ proc core::compiler::Coerce {op repr} {
 # ---------------------------------------------------------------------------
 # Units and blocks
 
-# Returns the unit dict {name code types bindings hir}. UNIT-HIR is the HIR
-# of EXPRS, built here if not given.
-proc core::compiler::GenerateUnit {mode exprs {unitHir ""}} {
+# Returns the unit dict {name code types bindings hir} of the HIR UNIT-HIR,
+# compiled in MODE (its procs not yet defined: Define). The compiler never
+# builds HIR itself: its callers hand it the HIR (compileHir) or read core IR
+# text into HIR first (compileUnit).
+proc core::compiler::GenerateUnit {mode unitHir} {
     variable hir
     variable pending
     variable bindLog
     variable blockProcs
-    if {$unitHir eq ""} {
-        set unitHir [hir::build $exprs -mode $mode -strict 0]
-    }
     set hir $unitHir
     variable envless
     variable selfTailCalls

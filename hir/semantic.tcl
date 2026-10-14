@@ -837,9 +837,8 @@ proc hir::semantic::Derived {hir id e own} {
 
 # The source name of the function of instance ID.
 proc hir::semantic::Label {hir id} {
-    set block [dict get $hir semantic instances $id block]
-    set name [hir::signatures::Name $hir $block]
-    return [expr {$name eq "a function" ? "this function" : $name}]
+    set name [CallableName $hir [dict get $hir semantic instances $id block]]
+    return [expr {$name eq "" ? "this function" : $name}]
 }
 
 # "x : MutableArray[str], y : int": the concrete environment of instance ID.
@@ -847,17 +846,69 @@ proc hir::semantic::Environment {hir id} {
     set inst [dict get $hir semantic instances $id]
     set block [dict get $inst block]
     return [join [lmap b [dict get $hir exprs $block params] t [dict get $inst args] {
-        format {%s : %s} [dict get $hir bindings $b name] [ShowType $hir $t]
+        format {%s : %s} [SourceName $hir $b] [ShowType $hir $t]
     }] {, }]
+}
+
+# The name binding B is written with, for a diagnostic: its source spelling
+# when hygiene renamed it (hir/hygiene.tcl's NAME#N, whose number counts the
+# renames of that name across the whole program -- the bindings of every
+# static site's body among them, so it is not the same in every build:
+# STATIC-COMPILE.md, "Internal ids"), else its name (a module's own
+# definition: the qualified name, which hir/hygiene.tcl's qualifyModules
+# made of a hygiene rename too -- NS::NAME#N is written NS::NAME).
+proc hir::semantic::SourceName {hir b} {
+    if {[dict exists $hir bindings $b spelling] && ![hir::isModuleBinding $hir $b]} {
+        return [dict get $hir bindings $b spelling]
+    }
+    set name [dict get $hir bindings $b name]
+    set i [string last :: $name]
+    if {[dict exists $hir bindings $b spelling] && $i >= 0} {
+        set name [string range $name 0 [expr {$i + 1}]][namespace tail [dict get $hir bindings $b spelling]]
+    }
+    return $name
+}
+
+# The name reference or binding statement E (a `ref` or `bind` node) is
+# written with, for a diagnostic: hygiene renames a binding's references and
+# binding statements with it (hir/hygiene.tcl's RenameTo), so a node that
+# carries its binding's name is named by SourceName; any other (an unresolved
+# reference) keeps its own.
+proc hir::semantic::RefName {hir e} {
+    set node [dict get $hir exprs $e]
+    set b [dict get $node binding]
+    if {$b ne "" && [dict get $hir bindings $b name] eq [dict get $node name]} {
+        return [SourceName $hir $b]
+    }
+    return [dict get $node name]
+}
+
+# The source name of the function block E is bound to (SourceName), or ""
+# for a function without one.
+proc hir::semantic::CallableName {hir e} {
+    foreach b [dict get $hir scopes [dict get $hir exprs $e scope] bindings] {
+        set declaredBy [dict get $hir bindings $b declaredBy]
+        if {$declaredBy ne "" && [dict exists $hir exprs $declaredBy]
+                && [dict get $hir exprs $declaredBy value] eq $e} {
+            return [SourceName $hir $b]
+        }
+    }
+    return ""
 }
 
 # hir::types::show with an exact callable named by its source function
 # (`block(e49)/1 -> bool` reads `is_b/1 -> bool`).
 proc hir::semantic::ShowType {hir type} {
-    set text [hir::types::show $type]
+    return [NameCallables $hir [hir::types::show $type]]
+}
+
+# TEXT (a type's text, hir::types::show or showContract) with every exact
+# callable `block(e49)` named by its source function (CallableName) --
+# `function e49` for one without a name.
+proc hir::semantic::NameCallables {hir text} {
     while {[regexp {block\((e[0-9]+)\)} $text -> block]} {
-        set name [hir::signatures::Name $hir $block]
-        if {$name eq "a function"} {
+        set name [CallableName $hir $block]
+        if {$name eq ""} {
             set name "function $block"
         }
         regsub {block\(e[0-9]+\)} $text $name text

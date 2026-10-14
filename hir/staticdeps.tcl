@@ -7,6 +7,11 @@
 #                 DECISIONS) whose form the site's own diagnostics may
 #                 depend on, never the site itself
 #       channels  the program-wide channels of the build, for the trace
+#       consumes  key -> the waiting channels (C:erased, C:budget:B) the
+#                 site's diagnostics read (Waiting)
+#       contributors  channel -> the keys of the sites (present as bodies)
+#                 whose decision may change the channel's value (Waiting;
+#                 hir/static.tcl's waiting rule reads both)
 #   hir::staticdeps::Explain DEPS Y Z            why site Y depends on site
 #                                                Z: a path, as text
 #
@@ -27,23 +32,39 @@
 # ---------
 # Nodes are *regions* (R: a function literal, or the program's top-level
 # code), *bindings* (B: the facts of one binding as its readers see them),
-# *sites* (Z: a static site present as a body) and *channels* (C: a
-# program-wide fact). An edge u -> v says u's facts may depend on v's. A
-# site Y depends on Z when Z's node is reachable from Y's.
+# *sites* -- twice: Z, what a site's own diagnostics read, and F, the site's
+# *form* (whether it is still a body) -- and *channels* (C: a program-wide
+# fact). An edge u -> v says u's facts may depend on v's. A site Y depends on
+# Z when Z's form, F:Z, is reachable from Z:Y.
+#
+# The two site nodes are apart because reading a site's form is not reading
+# what that site reads: within one run of the batched scheduler a site's form
+# changes only when the site itself is rejected, never when something its
+# diagnostics read changes (that only makes its status unknown). An edge to
+# a site's code -- a region holding it, an expression of it in a subtree --
+# goes to its form, which has no successor but the form of the site around
+# it (whose rejection takes it away). Once it went to the site's own node:
+# whatever read a site's form read everything that site read, and a site
+# nested in a function in another site's body reached that site's form (the
+# `if true:` that scopes the body) and through it every sibling nested site
+# -- one rejection per build (tests/static-economics.test,
+# se-builds-nested-siblings).
 #
 #   Z:site    -> R of the region the site's body stands in (its position: the
 #                code before and after it in the same function, which its
 #                rejection can make unreachable -- completion and ownership
-#                diagnostics are not reported in unreachable code), the site
-#                whose body holds it (nested static compile), and its own
-#                contract-boundary checks (below).
+#                diagnostics are not reported in unreachable code), the forms
+#                of the sites nested in its body, and its own contract-
+#                boundary checks (below).
+#   F:site    -> the form of the site whose body holds it.
 #   R:region  -> everything its own code mentions (its own code: the region's
 #                expressions, not those of the functions defined in it):
 #                every binding referenced (B), every function literal in it
 #                (R: its summary -- result, errors, contexts, completion
 #                facts), every exact call target (R), every candidate of a
-#                method-style call (B: the trial builds try each one), every
-#                site whose body is in it (Z); its parameters and captures
+#                method-style call (B: the trial builds try each one) and
+#                what those builds judge of the contract boundary (below), the
+#                form of every site whose body is in it (F); its parameters and captures
 #                (B); the control operands enclosing its literal in the
 #                enclosing functions (conditions, loop operands, handled
 #                calls); and, for each captured binding, the narrowing
@@ -99,7 +120,32 @@
 #                       an instance; each position where a callable with an
 #                       uncontracted parameter acquires a structural type
 #                       whose argument could carry errors (Contravariant);
-#                       and each request the budget declined. Its
+#                       and each request the budget declined. A request
+#                       that erases nothing now (CarriedErrors of its
+#                       arguments there empty: none declares an error) never
+#                       will -- what a value carries is a function of its
+#                       static type, which a rejection only turns into
+#                       `never` -- so it is no contributor: rejecting the site
+#                       it is written in removes nothing. An argument that is
+#                       a function literal, a reference to a binding bound to
+#                       one or a native, whose result type carries nothing,
+#                       carries exactly its declared errors whatever its body
+#                       becomes (FixedCarrier): the edge goes to the sites it
+#                       is written in, not into its body. And the contract is
+#                       a set: it loses an error only once every contribution
+#                       erasing it is gone, so it depends, per error, on one
+#                       *witness* contribution -- the one the sequential order
+#                       removes last; for a semantic instance, the chain of
+#                       requests keeping it that is removed last
+#                       (RequestPath) -- and on every declined request
+#                       (ErasureWitnesses). The sites holding a contribution
+#                       are no edge of the graph: the waiting rule reads them
+#                       (Waiting). (They used to be linked to the contract,
+#                       Z:site -> C:erased, so that a consumer turned unknown
+#                       held the other contributors back and the next build
+#                       judged it with them present, as the sequential order
+#                       did; the order now judges a failing consumer only
+#                       once no failing contributor remains.) Its
 #                       *consumers*: R -> C:erased for a region with a call
 #                       through an uncontracted value (a callee of type any
 #                       or a bare kind, a native calling such an argument),
@@ -115,7 +161,13 @@
 #                       instances depends on every other call requesting one.
 #                       Open only under pressure -- a request declined, or B
 #                       holding half its per-block budget -- and then every
-#                       call of B is both.
+#                       call of B is both. What the allocation reads is the
+#                       number of distinct instances requested: B's own body,
+#                       each call's place, and the facts of its arguments --
+#                       of an argument naming a function only its place, since
+#                       an instance's key keeps a function's identity and
+#                       erases its result (hir::specialize::KeyType): its body
+#                       is no part of it (FunctionRef).
 #   C:verdict           the ownership analysis's verdict on the whole
 #                       program (hir::affine::verify's `accepted`: no
 #                       diagnostic of its whole-program analysis anywhere).
@@ -155,47 +207,52 @@
 #                       callable value (its type's contract); C:verdict ->
 #                       R of each region making one.
 #   C:plan              the gate of the trait monomorphization's plan
-#                       (hir::traits::Plan): hir::BuildFull runs it only on
-#                       a build with no diagnostic at all, and its
-#                       diagnostics (TRAIT-IMPL-ORDER, TRAIT-NOT-SATISFIED
-#                       in a clone, AFFINE-GENERIC-NESTED-UNSUPPORTED, the
-#                       budget kinds) are a site's: a site holding one fails
-#                       only once no other diagnostic is left anywhere. Its
-#                       *consumers* (PlanGate): Z:site -> C:plan for each
-#                       site holding an expression the plan may diagnose --
-#                       a trait operation (in the generic program or in an
-#                       instance's view, where a clone's body is planned), a
-#                       call giving an affine argument to an untyped
-#                       parameter of a function specialized only once (one
-#                       not bound at the top level, or requiring a context
-#                       trait) -- or any call of such a function in the body
-#                       of one the plan may clone (CloneMay: a trait-typed
-#                       parameter, a context-trait requirement, or an untyped
-#                       parameter some call passes an affine value or one
-#                       whose type mentions `any`), whose argument may be
-#                       affine in a clone a rejection elsewhere creates --
-#                       and a call whose instance request was declined.
-#                       While the gate is closed (a diagnostic is not of a
-#                       kind the plan reports, planKinds), a site failing
-#                       now is none: its first diagnostic stays while its
-#                       own facts do, and a plan diagnostic is never beside
-#                       another one; C:plan depends on one *witness*, the
-#                       last failing site in post-order (Z:), because the
-#                       gate stays closed while any one diagnostic stays
-#                       and the sequential order removes that one last.
-#                       (Every failing site instead would make a consumer
-#                       unknown at the first of several rejections that
-#                       cannot open the gate, one build per rejection.)
-#                       While it may be open (every diagnostic of a plan
-#                       kind), C:plan depends on every diagnostic's site
-#                       (or, in none, the region it is read from): a
-#                       rejection can close the gate again -- a diagnostic it
-#                       causes anywhere, say the UNHANDLED-ERROR of a
-#                       top-level call of the rejected site's function, in
-#                       no site -- or change another plan diagnostic (a
-#                       clone's instances and placement are its callers'),
-#                       so the plan's own diagnostics are decided one per
-#                       build, as in the sequential order.
+#                       (hir::traits::Plan), which hir::BuildFull runs only on
+#                       a checked program with no diagnostic at all -- and
+#                       whose diagnostics are a site's (planKinds: TRAIT-IMPL-
+#                       ORDER, AFFINE-GENERIC-NESTED-UNSUPPORTED, TRAIT-
+#                       INSTANCE-BUDGET, ...). Its *consumers* (PlanGate):
+#                       Z:site -> C:plan for each site holding a call the plan
+#                       can report at -- a trait operation, a call of a trait-
+#                       polymorphic function or of one requiring a context
+#                       trait, a call giving an untyped parameter an argument
+#                       that is or may become affine -- in a program that can
+#                       plan at all (trait declarations, or a coroutine
+#                       construction). Its successors, while the build has a
+#                       diagnostic the plan does not report (the gate is
+#                       closed): one *witness*, the site of the diagnostic last
+#                       in post-order (Z and F: the gate cannot open while it
+#                       stays), else the region of every one (in no site's
+#                       body; at a function literal, the function's own).
+#                       No linking is needed, unlike C:verdict: a plan
+#                       diagnostic never stands beside another diagnostic, so
+#                       a consumer judged once later diagnostics are gone is
+#                       rejected with the diagnostic the sequential order
+#                       gives it when they are (it accepts it first, and
+#                       rejects it in the build where the gate opens -- the
+#                       same build of the same forms). While every diagnostic
+#                       of the build may be the plan's own (the gate is open):
+#                       every site holding one is a consumer, and the plan
+#                       depends on each one's form -- one computation over the
+#                       whole program, whose stages hide each other's
+#                       diagnostics -- so they are decided one per build, as
+#                       the sequential order decides them.
+#
+# The waiting rule (hir/static.tcl, Waits; STATIC-COMPILE.md) reads the
+# channels whose contributors' *presence* can cause a consumer's diagnostic --
+# C:erased and C:budget:B -- for the definition as well as for the
+# economics: a failing site that reads one (`consumes`: its node reaches the
+# channel over every edge but a contributor's link and a gate's, and not the
+# erased contract when its first diagnostic precedes the completion walk,
+# Waiting) waits while a failing site may change it (`contributors`: every
+# site holding a contribution, and every site form the channel's node
+# reaches). C:verdict and C:plan are gates, the
+# opposite shape -- a contributor's presence withholds a consumer's
+# diagnostic -- so no site waits on them. An extra edge into a waiting
+# channel's part of the graph can therefore change which site the order
+# judges first, not only cost a build: a conservative edge makes a consumer
+# wait for a contributor that could not have changed its diagnostic, and the
+# two are then judged contributor first, whatever their layout.
 #
 # And one channel that is the site's own, never a summary another region
 # reads: the contract-boundary checks at the site's positions
@@ -205,15 +262,42 @@
 # Z:site -> C:erased and -> P:input for the inputs of the callables at its
 # positions (and the outward finals of a yield in it: every construction
 # reaching it); P:input -> what its calls pass in its position (a parameter
-# of a function only ever called), its value (a local), or C:erased.
+# of a function only ever called), its value (a local), or C:erased. What an
+# input may hold is a set too (errors, and whether every value is quiet), so
+# P:input depends per part on one witness value whose part is fixed
+# (PossibleUnit), and on every other value; every site passing a value of a
+# fixed part is linked to it (Z:site -> P:input, possibleLinks).
+#
+# None of those edges while the site's first diagnostic in this build was
+# reported before the completion walk (HIR's beforeCompletions): every report
+# is appended after it, so whatever the program erases the site keeps that
+# first diagnostic -- all the scheduler reads of a failing site -- for as long
+# as its other edges' facts hold. A site that is ok, or whose first diagnostic
+# is the completion walk's or a later pass's (or a method-style call's
+# rejection, which hir::DecideMethodCalls prepends and which reads its
+# trials), keeps them: a report may become its first diagnostic, also once
+# the program begins to erase something.
+#
+# What reads the reports besides the site's own diagnostics is the trial
+# builds of a method-style call, for the checks inside the call
+# (hir::MethodCallProblems): a candidate's parameter types are the structural
+# types the call's own arguments acquire, so their checks may tell the
+# candidates apart. R:region -> C:erased and -> P:input (method-trial) for
+# every call with several candidates of which an argument has a callable part
+# some parameter type could make structural (CallableParts), or a handle whose
+# construction is in this body while a candidate is a coroutine operation
+# (whose positions the check skips; a handle's check reads no parameter
+# type). Every other check inside the call reports alike in every trial: a
+# problem every candidate shares, which decides nothing. A region reaches a
+# site's form only (F:site), never these edges of the site.
 #
 # What is not a channel, and why: a demoted trusted contract (hir::check
 # keeps the diagnostics of the check before the demotion, so a demotion
-# changes no diagnostic); the trait monomorphization's build (it runs only on
-# a program with no diagnostic, and its own diagnostics are internal, never a
-# site's -- its plan's are C:plan); resolution (lexical: a site's own
-# bindings are scoped to it, and hir/static.tcl decides every
-# resolution-stage rejection in one build).
+# changes no diagnostic); the trait monomorphization's build after its plan
+# (it runs only on a program with no diagnostic, and its own diagnostics are
+# internal, never a site's); resolution (lexical: a site's own bindings are
+# scoped to it, and hir/static.tcl decides every resolution-stage rejection
+# in one build).
 
 namespace eval hir::staticdeps {
     # The kinds of the ownership analysis's whole-program diagnostics
@@ -228,14 +312,21 @@ namespace eval hir::staticdeps {
         AFFINE-TEMPORARY-UNSUPPORTED AFFINE-DUPLICATION-UNSUPPORTED
         AFFINE-ELEMENT-COPY-OUT
     }
-    # The kinds of the monomorphization plan's diagnostics (hir::traits::
-    # Plan), which a build reports only when it has no other diagnostic
-    # (C:plan). tests/static-economics.test checks the list against
-    # hir/traits.tcl.
+    # The kinds of the diagnostics the trait monomorphization's plan reports
+    # (hir::traits::Plan), which it computes only for a program with no other
+    # diagnostic (C:plan). TRAIT-NOT-SATISFIED is the checker's too.
+    # tests/static-economics.test checks the list against hir/traits.tcl.
     variable planKinds {
-        AFFINE-GENERIC-NESTED-UNSUPPORTED AFFINE-INSTANCE-BUDGET TRAIT-IMPL-ORDER
-        TRAIT-INSTANCE-BUDGET TRAIT-INTERNAL TRAIT-NOT-SATISFIED
-        TRAIT-POLYMORPHIC-RECURSION
+        TRAIT-NOT-SATISFIED TRAIT-IMPL-ORDER TRAIT-INSTANCE-BUDGET
+        TRAIT-POLYMORPHIC-RECURSION TRAIT-INTERNAL
+        AFFINE-GENERIC-NESTED-UNSUPPORTED AFFINE-INSTANCE-BUDGET
+    }
+    # The edges the waiting rule does not read (Waiting): a contributor's
+    # link to what it contributes to (it orders, it reads nothing) and a
+    # site's edge to a gate (whose contributors' presence withholds the
+    # site's diagnostic rather than causing it).
+    variable waitingSkip {
+        verdict-contributor possible-contributor path-release plan-site
     }
 }
 
@@ -327,7 +418,7 @@ proc hir::staticdeps::Deps {hir sites decisions {methods 0}} {
                 }
                 set found [dict create]
                 foreach w $members {
-                    if {[string match Z:* $w]} {
+                    if {[string match F:* $w]} {
                         dict set found [string range $w 2 end] 1
                     } elseif {[string match R:* $w] && [dict exists $mregions [string range $w 2 end]]} {
                         dict set found M:[string range $w 2 end] 1
@@ -360,6 +451,7 @@ proc hir::staticdeps::Deps {hir sites decisions {methods 0}} {
         dict set result $key [lsearch -all -inline -not -glob \
             [lsearch -all -inline -not -exact [dict get $sccSites [dict get $sccOf Z:$key]] $key] M:*]
     }
+    lassign [Waiting $state $G $labels $sccOf $sccSites $result] consumes contributors
     # Per method-style call: the sites and the method-call regions its own
     # region reaches (hir/static.tcl's MethodSeeds).
     set methodCones [dict create]
@@ -388,7 +480,151 @@ proc hir::staticdeps::Deps {hir sites decisions {methods 0}} {
     }
     return [dict create sites $result channels [dict get $state channels] \
         labels $labels names [dict get $state names] nodes [dict size $G] methods $methodCones \
-        firstIds $firstIds]
+        firstIds $firstIds consumes $consumes contributors $contributors]
+}
+
+# The waiting rule's reading of the graph (header, "The waiting rule";
+# hir/static.tcl's Waits): a list {CONSUMES CONTRIBUTORS}, from STATE
+# (Prepare's walk), G and LABELS (Deps' graph: node -> successors, node ->
+# {successor label ...}), SCCOF and SCCSITES (its components and the site
+# forms each reaches) and SITES (Deps' result, whose keys are the sites
+# present as bodies).
+#
+#   CONSUMES      key -> the waiting channels (C:erased, C:budget:B) the
+#                 site's diagnostics read: those its node reaches over every
+#                 edge but a link (a contributor's edge to what it
+#                 contributes to, which orders but reads nothing) or a
+#                 gate's (C:verdict, C:plan: their contributors' presence
+#                 withholds a consumer's diagnostic rather than causing it);
+#                 not C:erased for a site whose first diagnostic was
+#                 reported before the completion walk (STATE's early),
+#                 which no erasure can cause or precede
+#   CONTRIBUTORS  channel -> the sites whose form its value may depend on:
+#                 every site holding a contribution (the erased contract's
+#                 every one, not only its witnesses) and every site form the
+#                 channel's node reaches. Not closed under what those sites
+#                 read: an ok contributor that a later rejection makes fail
+#                 holds no consumer back (STATIC-COMPILE.md, "The waiting
+#                 rule": a residual case, with cycles), since that closure
+#                 made ordinary failing sites a contributor's code reads wait
+#                 for each other, one build each (STATIC-DECISION-
+#                 ECONOMICS.md, "The waiting rule")
+proc hir::staticdeps::Waiting {state G labels sccOf sccSites sites} {
+    variable waitingSkip
+    # Tarjan over the edges the rule reads, from the sites' own nodes; the
+    # waiting channels each component reaches, summed as Deps sums sites.
+    set index [dict create]
+    set low [dict create]
+    set onStack [dict create]
+    set stack {}
+    set counter 0
+    set compOf [dict create]
+    set compChannels [dict create]
+    set ncomp 0
+    set fsucc [dict create]
+    set consumes [dict create]
+    foreach key [dict get $state presentKeys] {
+        set root Z:$key
+        if {![dict exists $G $root]} {
+            dict set consumes $key {}
+            continue
+        }
+        if {![dict exists $index $root]} {
+            set work [list [list $root 0]]
+            while {$work ne {}} {
+                lassign [lindex $work end] v i
+                if {$i == 0} {
+                    dict set index $v $counter
+                    dict set low $v $counter
+                    incr counter
+                    lappend stack $v
+                    dict set onStack $v 1
+                }
+                if {![dict exists $fsucc $v]} {
+                    dict set fsucc $v [lmap {w label} [dict get $labels $v] {
+                        if {$label in $waitingSkip} continue
+                        set w
+                    }]
+                }
+                set succs [dict get $fsucc $v]
+                set descended 0
+                while {$i < [llength $succs]} {
+                    set w [lindex $succs $i]
+                    incr i
+                    if {![dict exists $index $w]} {
+                        lset work end [list $v $i]
+                        lappend work [list $w 0]
+                        set descended 1
+                        break
+                    } elseif {[dict exists $onStack $w]} {
+                        if {[dict get $index $w] < [dict get $low $v]} {
+                            dict set low $v [dict get $index $w]
+                        }
+                    }
+                }
+                if {$descended} continue
+                lpop work
+                if {[dict get $low $v] == [dict get $index $v]} {
+                    set id $ncomp
+                    incr ncomp
+                    set members {}
+                    while 1 {
+                        set w [lpop stack]
+                        dict unset onStack $w
+                        dict set compOf $w $id
+                        lappend members $w
+                        if {$w eq $v} break
+                    }
+                    set found [dict create]
+                    foreach w $members {
+                        if {$w eq "C:erased" || [string match C:budget:* $w]} {
+                            dict set found $w 1
+                        }
+                        foreach x [dict get $fsucc $w] {
+                            set cx [dict get $compOf $x]
+                            if {$cx != $id} {
+                                foreach c [dict get $compChannels $cx] {
+                                    dict set found $c 1
+                                }
+                            }
+                        }
+                    }
+                    dict set compChannels $id [dict keys $found]
+                }
+                if {$work ne {}} {
+                    set parent [lindex [lindex $work end] 0]
+                    if {[dict get $low $v] < [dict get $low $parent]} {
+                        dict set low $parent [dict get $low $v]
+                    }
+                }
+            }
+        }
+        set channels [dict get $compChannels [dict get $compOf $root]]
+        if {[dict exists $state early $key]} {
+            # Its first diagnostic was reported before the completion walk,
+            # and nothing there reads the erased contract (hir/affine.tcl's
+            # exit releases read it and report nothing): it stays its first
+            # diagnostic whatever the program erases.
+            set channels [lsearch -all -inline -not -exact $channels C:erased]
+        }
+        dict set consumes $key [lsort $channels]
+    }
+    set contributors [dict create]
+    dict for {v _} $G {
+        if {$v ne "C:erased" && ![string match C:budget:* $v]} continue
+        set base [lsearch -all -inline -not -glob [dict get $sccSites [dict get $sccOf $v]] M:*]
+        if {$v eq "C:erased"} {
+            lappend base {*}[dict keys [dict get $state erasureSites]]
+        }
+        set seen [dict create]
+        foreach key $base {
+            if {[dict exists $sites $key]} {
+                dict set seen $key 1
+            }
+        }
+        dict set contributors $v [dict keys $seen]
+    }
+    return [list $consumes $contributors]
 }
 
 # A path of DEPS's graph from site Y's node to site Z's, as text: each step's
@@ -397,7 +633,7 @@ proc hir::staticdeps::Explain {deps y z} {
     set labels [dict get $deps labels]
     set from [dict create Z:$y ""]
     set queue [list Z:$y]
-    set target Z:$z
+    set target F:$z
     while {$queue ne {}} {
         set v [lindex $queue 0]
         set queue [lrange $queue 1 end]
@@ -450,6 +686,7 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
             [list [dict get $origin start] [dict get $origin end] [dict get $site key]]
     }
     set spanParent [dict create]
+    set spanChildren [dict create]
     dict for {file spans} $byFile {
         set spans [lsort -command hir::staticdeps::SpanOrder $spans]
         dict set byFile $file $spans
@@ -459,11 +696,15 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
             while {$open ne {} && [lindex $open end 1] < $start} {
                 set open [lrange $open 0 end-1]
             }
-            dict set spanParent $key [expr {$open eq {} ? "" : [lindex $open end 2]}]
+            set outer [expr {$open eq {} ? "" : [lindex $open end 2]}]
+            dict set spanParent $key $outer
+            if {$outer ne ""} {
+                dict lappend spanChildren $outer $key
+            }
             lappend open $span
         }
     }
-    set state [dict create byFile $byFile spanParent $spanParent \
+    set state [dict create byFile $byFile spanParent $spanParent spanChildren $spanChildren \
         presentKeys [lmap site $present {dict get $site key}] presentSites $present \
         regionOf {} parentOf {} litRegion {} ownRefs {} ownLits {} ownTargets {} \
         ownSites {} siteHome {} siteDepth {} depth {program 0} \
@@ -604,6 +845,81 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
         }
     }
     dict set state candidates $candidates
+    # What the trial builds of each method-style call judge that reads the
+    # contract boundary (R:region's method-trial edges): the checks at the
+    # call's own arguments, whose structural type is the candidate's
+    # parameter's -- so may differ from one candidate's trial to another's.
+    # Every part of an argument that some candidate's parameter could give a
+    # structural Fn type (CallableParts) is analyzed there against what the
+    # program erases (hir::completions::SubsumedRaises), its captures and
+    # parameters standing for what they may hold (P:). A coroutine handle's
+    # check reads no parameter type (hir::completions::SubsumeHandle): the
+    # same report, at the same expression, in every trial, and a problem
+    # every candidate shares decides nothing (hir::DecideMethodCalls) --
+    # unless a candidate is a coroutine operation, whose positions the check
+    # skips (hir::completions::SubsumeCall). Checks deeper in the call are
+    # each trial's alike: the arguments are analyzed before the call, from
+    # the same facts.
+    set methodTrial [dict create]
+    if {[dict exists $hir methodCalls]} {
+        set operations [CoroutineOperations]
+        dict for {key info} [dict get $hir methodCalls] {
+            set e [dict get $info expr]
+            if {![dict exists $regionOf $e]} continue
+            set q [dict get $regionOf $e]
+            set operation 0
+            foreach display [dict get $info candidates] {
+                if {$display in $operations} {
+                    set operation 1
+                }
+            }
+            foreach arg [dict get $exprs $e args] {
+                set type [hir::typeOf $hir $arg]
+                if {[hir::types::IsCoroutine $type]} {
+                    set thunk [expr {$operation ? [hir::coroutines::thunkOfHandle $hir $arg] : ""}]
+                    if {$thunk ne ""} {
+                        dict set methodTrial $q C:erased 1
+                        foreach c [dict get $exprs $thunk captures] {
+                            dict set methodTrial $q P:$c 1
+                        }
+                    }
+                    continue
+                }
+                foreach part [CallableParts $type] {
+                    dict set methodTrial $q C:erased 1
+                    if {[hir::types::IsExactBlock $part] && [dict exists $exprs [lindex $part 1]]} {
+                        set block [dict get $exprs [lindex $part 1]]
+                        foreach b [concat [dict get $block params] [dict get $block captures]] {
+                            dict set methodTrial $q P:$b 1
+                        }
+                    }
+                }
+            }
+        }
+    }
+    dict set state methodTrial $methodTrial
+    # The sites whose first diagnostic in this build was reported before the
+    # completion walk (HIR's beforeCompletions): no contract-boundary report
+    # can come before it, whatever the program erases (Z:site).
+    set early [dict create]
+    if {[dict exists $hir beforeCompletions]} {
+        lassign [dict get $hir beforeCompletions] from to
+        set judged [dict create]
+        set i 0
+        foreach d [dict get $hir diagnostics] {
+            # Its owner as hir::static::Attribute names it.
+            set owner [expr {[hir::static::Internal $d] ? ""
+                : [hir::static::Owner $present [hir::static::PrimaryOrigin $hir $d]]}]
+            if {$owner ne "" && ![dict exists $judged $owner]} {
+                dict set judged $owner 1
+                if {$i >= $from && $i < $to} {
+                    dict set early $owner 1
+                }
+            }
+            incr i
+        }
+    }
+    dict set state early $early
     # Functions used as values (some reference is not a callee): their
     # uncontracted parameters are checked against the erased-callable
     # contract, never against their calls' arguments (hir::completions::
@@ -691,10 +1007,12 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
         }
     }
     dict set state yieldAll $yieldAll
+    dict set state creates $creates
     dict set state yieldStruct $yieldStruct
     # The erased-callable contract (hir::completions::erasedErrorsOf): what
     # the program's erasures carry, and the regions that consume it.
     set points {}
+    set units {}
     set consumers [dict create]
     dict for {e region} $regionOf {
         set node [dict get $exprs $e]
@@ -718,6 +1036,13 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
     # any other type never carries any, whatever the sites become) depends on
     # the calls that requested it, and on theirs when the requesting call is
     # itself inside an instance.
+    set position [dict create]
+    set index 0
+    foreach key [dict get $state presentKeys] {
+        dict set position $key $index
+        incr index
+    }
+    set paths [dict create]
     if {[dict exists $hir semantic instances]} {
         set requests [dict create]
         dict for {callKey id} [dict get $hir semantic calls] {
@@ -727,12 +1052,15 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
             set block [dict get $inst block]
             if {![dict exists $exprs $block]} continue
             set carries 0
+            set carried {}
             foreach entry [hir::signatures::entryTypes $hir $block] type [dict get $inst args] {
                 if {$entry eq "" && [CanCarry $hir $type]} {
                     set carries 1
+                    lappend carried {*}[hir::callables::CarriedErrors $hir $type]
                 }
             }
             if {!$carries} continue
+            set chain {}
             set work [list $id]
             set seen [dict create]
             while {$work ne {}} {
@@ -746,10 +1074,24 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
                         # with no declared or trusted contract; the call
                         # itself exists where it is written.
                         lappend points [list key $call]
+                        lappend chain $call
                     }
                     if {$caller ne "generic"} {
                         lappend work $caller
                     }
+                }
+            }
+            # What it erases (InstanceErasures). When nothing, it never will
+            # (C:erased): no contribution. Else the contribution exists while
+            # one chain of requests does -- a request of the instance, of the
+            # instance that request is made in, and so on up to the program's
+            # own code: its *path* is the chain the sequential order removes
+            # last (RequestPath).
+            set carried [lsort -unique $carried]
+            if {$carried ne {} && $chain ne {}} {
+                lassign [RequestPath $requests $regionOf $siteOf $position $id paths] path rank
+                if {$path ne {}} {
+                    lappend units [list $carried key [lsort -unique $chain] $path $rank]
                 }
             }
         }
@@ -761,6 +1103,7 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
             foreach arg [dict get $exprs $call args] {
                 if {[CanCarry $hir [hir::typeOf $hir $arg]]} {
                     lappend points [list key $call]
+                    lappend units [list * key [list $call]]
                     break
                 }
             }
@@ -787,6 +1130,10 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
                     foreach arg [hir::types::FnArgs $target] {
                         if {[hir::completions::ParamUncontracted $hir $source $i] && [CanCarry $hir $arg]} {
                             lappend points [list all $value] [list all $e]
+                            set carried [lsort -unique [hir::completions::Contravariant $hir $source $target]]
+                            if {$carried ne {}} {
+                                lappend units [list $carried all [list $value $e]]
+                            }
                             break
                         }
                         incr i
@@ -796,6 +1143,9 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
         }
     }
     dict set state erasurePoints $points
+    lassign [ErasureWitnesses $state $units] witnesses holding
+    dict set state erasureWitnesses $witnesses
+    dict set state erasureSites $holding
     dict set state erasedConsumers $consumers
     # The semantic-instance budget: the blocks under pressure.
     set pressured [dict create]
@@ -844,235 +1194,299 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
     dict set state pathRelease $pathRelease
     dict set state verdict $verdict
     dict set state verdictLinked $linked
-    # The monomorphization plan's gate (C:plan).
-    lassign [PlanGate $hir $state] planConsumers plan
+    # The sites passing a value with a fixed part to an uncontracted input
+    # (PossibleSuccessors): linked to what that input may hold.
+    set possibleLinks [dict create]
+    dict for {block calls} $callsOf {
+        if {![dict exists $exprs $block] || ![dict exists $definedBy $block]
+                || [dict exists $escaping [dict get $definedBy $block]]} continue
+        set i 0
+        foreach p [dict get $exprs $block params] {
+            if {[hir::completions::CleanInput $hir $p]} {
+                foreach call $calls {
+                    set arg [lindex [dict get $exprs $call args] $i]
+                    if {$arg eq "" || ![dict exists $siteOf $arg]} continue
+                    if {[lindex [PossibleUnit $hir state $arg] 0] eq "fixed"} {
+                        dict set possibleLinks [dict get $siteOf $arg] P:$p 1
+                    }
+                }
+            }
+            incr i
+        }
+    }
+    dict set state possibleLinks $possibleLinks
+    # The gate of the trait monomorphization's plan (C:plan).
+    lassign [PlanGate $hir $state] planConsumers plan planOpen
     dict set state planConsumers $planConsumers
     dict set state plan $plan
     dict set state channels [dict create erasurePoints [llength $points] \
         erasedConsumers [dict size $consumers] budgetPressure [dict size $pressured] \
         yieldingFunctions [dict size $yielding] constructions [llength $creates] \
         ownershipDiagnostics $diagnosed pathReleaseSites [dict size $pathRelease] \
-        planSites [dict size $planConsumers]]
+        planSites [dict size $planConsumers] planGate [expr {$planOpen ? "open" : "closed"}]]
     return $state
 }
 
-# The monomorphization plan's part of the graph (header, C:plan), from STATE
-# (Prepare's walk): a list {CONSUMERS PLAN} -- CONSUMERS the sites (key -> 1)
-# holding an expression hir::traits::Plan may diagnose, PLAN C:plan's
-# successors (node -> edge label).
-proc hir::staticdeps::PlanGate {hir state} {
-    variable planKinds
-    set exprs [dict get $hir exprs]
-    set regionOf [dict get $state regionOf]
-    set siteOf [dict get $state siteOf]
-    # The expressions the plan may diagnose, in the generic program or in an
-    # instance's view (a clone's body is planned in its instances' views):
-    # a trait operation (TRAIT-NOT-SATISFIED, TRAIT-IMPL-ORDER); a call
-    # giving an affine argument to an untyped parameter of a function
-    # specialized only once -- one not bound at the top level, or one
-    # requiring a context trait (AFFINE-GENERIC-NESTED-UNSUPPORTED) -- or a
-    # call of such a function in the body of one the plan may clone; a call
-    # whose instance request was declined, of a trait-polymorphic function or
-    # with an affine argument at an untyped parameter (TRAIT-INSTANCE-BUDGET,
-    # AFFINE-INSTANCE-BUDGET). A call that may become one only through a
-    # change of its own facts depends on that change already (a budget's
-    # through C:budget); the plan's placement errors
-    # (TRAIT-POLYMORPHIC-RECURSION) are at a top-level function's literal,
-    # in no site.
-    set top [dict create]
-    foreach r [dict get $hir roots] {
-        set node [dict get $exprs $r]
-        if {[dict get $node kind] eq "bind" && [dict get $node value] ne ""
-                && [dict get $exprs [dict get $node value] kind] eq "block"} {
-            dict set top [dict get $node value] 1
-        }
+# The chain of requests that keeps semantic instance ID requested (a list
+# {PATH RANK}): an instance exists while one of its requests does, a request
+# while its call does and, made inside an instance, while that instance
+# does. PATH is the calls of the chain the sequential order removes last --
+# the one whose earliest site (POSITION: site key -> post-order index;
+# SITEOF: expression -> its innermost site) is last, a call in no site's
+# body counting as last of all -- and RANK that site's position; {{} -1} for
+# none. REQUESTS: instance -> its requests {CALLER CALL}; PATHSVAR the
+# caller's memo.
+proc hir::staticdeps::RequestPath {requests regionOf siteOf position id pathsVar {visiting {}}} {
+    upvar 1 $pathsVar paths
+    if {[dict exists $paths $id]} {
+        return [dict get $paths $id]
     }
-    set at [dict create]
-    set cloned [dict create]
-    set contextTraits [dict create]
-    dict for {e region} $regionOf {
-        set node [dict get $exprs $e]
-        if {[dict get $node kind] ne "call"} continue
-        if {[dict exists $node traitCall] && ![dict exists [dict get $node traitCall] unknown]} {
-            dict set at $e 1
-            continue
-        }
-        # In the body of a function the plan may clone (CloneMay), a call of
-        # a function specialized only once with an untyped parameter: in a
-        # clone's view its argument may be affine, whatever it is here.
-        lassign [dict get $node target] tk tb
-        if {$tk ne "block" || ![dict exists $exprs $tb] || "" ni [dict get $exprs $tb declaredParamTypes]} continue
-        if {![dict exists $cloned $region]} {
-            set q $region
-            while {$q ne "program" && [dict get $state litRegion $q] ne "program"} {
-                set q [dict get $state litRegion $q]
+    set never [expr {[dict size $position] + 1}]
+    set best {}
+    set bestRank -1
+    if {[dict exists $requests $id]} {
+        foreach callKey [dict get $requests $id] {
+            lassign $callKey caller call
+            if {![dict exists $regionOf $call]} continue
+            set rank [expr {[dict exists $siteOf $call] ? [dict get $position [dict get $siteOf $call]] : $never}]
+            set path [list $call]
+            if {$caller ne "generic"} {
+                if {$caller in $visiting || $caller eq $id} continue
+                lassign [RequestPath $requests $regionOf $siteOf $position $caller paths \
+                    [concat $visiting [list $id]]] up upRank
+                if {$up eq {}} continue
+                set rank [expr {min($rank, $upRank)}]
+                lappend path {*}$up
             }
-            dict set cloned $region [expr {$q ne "program" && [dict exists $top $q]
-                && [CloneMay $hir $state contextTraits $q]}]
-        }
-        if {[dict get $cloned $region]
-                && (![dict exists $top $tb] || [ContextTraits contextTraits $hir $tb] ne {})} {
-            dict set at $e 1
-        }
-    }
-    if {[dict exists $hir semantic instances]} {
-        set instances [dict get $hir semantic instances]
-        dict for {id inst} $instances {
-            if {![dict exists $inst snapshot exprs]} continue
-            dict for {e rec} [dict get $inst snapshot exprs] {
-                if {[dict exists $rec traitCall] && [dict get $rec traitCall] ne ""
-                        && ![dict exists [dict get $rec traitCall] unknown]} {
-                    dict set at $e 1
-                }
-            }
-        }
-        dict for {callKey id} [dict get $hir semantic calls] {
-            set inst [dict get $instances $id]
-            set block [dict get $inst block]
-            if {[hir::traits::AffineWitnesses $hir $block [dict get $inst args]] ne {}
-                    && (![dict exists $top $block] || [ContextTraits contextTraits $hir $block] ne {})} {
-                dict set at [lindex $callKey 1] 1
-            }
-        }
-        dict for {callKey reason} [dict get $hir semantic declined] {
-            lassign $callKey caller e
-            if {![dict exists $exprs $e target]} continue
-            lassign [dict get $exprs $e target] tk tb
-            # (In an instance's view, conservatively: its arguments are not
-            # the generic program's.)
-            if {$caller ne "generic" || ($tk eq "block" && [dict exists $exprs $tb]
-                    && ([hir::traits::IsPolymorphic $hir $tb] || [hir::traits::AffineArgumentsUntyped $hir $e $tb]))} {
-                dict set at $e 1
+            if {$rank > $bestRank} {
+                set best $path
+                set bestRank $rank
             }
         }
     }
-    set consumers [dict create]
-    dict for {e _} $at {
-        if {[dict exists $siteOf $e]} {
-            dict set consumers [dict get $siteOf $e] 1
-        }
-    }
-    set plan [dict create]
-    if {[dict size $consumers] == 0 || [dict get $hir diagnostics] eq {}} {
-        # No site's diagnostics read the gate, or it is open and the plan
-        # found nothing: there is no decision left to make.
-        return [list $consumers $plan]
-    }
+    dict set paths $id [list $best $bestRank]
+    return [list $best $bestRank]
+}
+
+# The erased-callable contract's witnesses (header, C:erased), from STATE
+# (Prepare's walk) and UNITS, the program's contributions, each {ERRORS HOW
+# ITEMS}: a semantic instance's (HOW key: ITEMS its requests, up the chain of
+# requests -- the contribution exists while all of them do), a contravariant
+# erasure's (HOW all: ITEMS the value and its expression), each with the
+# errors it erases, or (ERRORS `*`) a declined request's, whose errors are not
+# known. A list {WITNESSES HOLDING}, HOLDING the sites (key -> 1) holding a
+# contribution of known errors.
+#
+# The contract is the union of the contributions' errors, and what reads it
+# reads that set and nothing else (hir::completions::ErasedErrors: an
+# uncontracted call is charged it, Subsume and Possible run while it is not
+# empty). An error leaves it only once every contribution erasing it has
+# lost it -- so the contract depends, per error, on one *witness*: the
+# contribution the sequential order removes last (the one whose earliest site
+# is last in post-order; one in no site's body before every other), and on
+# every contribution whose errors are not known. Rejecting any other
+# contributor's site leaves the set as it is: callable-contracts.bot's 41
+# sites, each erasing an error-declaring callable and calling an uncontracted
+# one, are no longer decided one per build. The sites holding a contribution
+# (HOLDING) are the waiting rule's contributors (Waiting): a failing
+# consumer waits for every failing one, witness or not.
+proc hir::staticdeps::ErasureWitnesses {state units} {
     set position [dict create]
     set i 0
     foreach key [dict get $state presentKeys] {
         dict set position $key $i
         incr i
     }
-    # Each diagnostic's site, as hir::static::Attribute attributes it (none
-    # for the compiler's own failures), else the node its facts are read
-    # from: a function literal's own region for a check of the function
-    # (its result), the region holding the expression for anything else.
-    set planned 1
-    set owned {}
-    set unowned {}
-    foreach d [dict get $hir diagnostics] {
-        if {[dict get $d kind] ni $planKinds} {
-            set planned 0
-        }
-        set owner [expr {[hir::static::Internal $d] ? ""
-            : [hir::static::Owner [dict get $state presentSites] [hir::static::PrimaryOrigin $hir $d]]}]
-        if {$owner ne ""} {
-            lappend owned $owner
+    set never [expr {$i + 1}]
+    set witnesses {}
+    set best [dict create]
+    set holding [dict create]
+    set index 0
+    foreach unit $units {
+        lassign $unit errors how items path pathRank
+        if {$errors eq "*"} {
+            lappend witnesses $index
+            incr index
             continue
         }
+        set rank $never
+        foreach e $items {
+            if {[dict exists $state siteOf $e]} {
+                set s [dict get $state siteOf $e]
+                dict set holding $s 1
+                if {[dict get $position $s] < $rank} {
+                    set rank [dict get $position $s]
+                }
+            }
+        }
+        if {$how eq "key"} {
+            # A semantic instance's: removed with the last chain of its
+            # requests (RequestPath).
+            set rank $pathRank
+        }
+        foreach error $errors {
+            if {![dict exists $best $error] || $rank > [lindex [dict get $best $error] 1]} {
+                dict set best $error [list $index $rank]
+            }
+        }
+        incr index
+    }
+    dict for {error pick} $best {
+        lappend witnesses [lindex $pick 0]
+    }
+    return [list [lmap i [lsort -integer -unique $witnesses] {lindex $units $i}] $holding]
+}
+
+# The plan's part of the graph (header, C:plan), from STATE (Prepare's walk):
+# a list {CONSUMERS PLAN OPEN} -- CONSUMERS the sites (key -> 1) that may hold
+# a diagnostic of the plan, PLAN C:plan's successors (node -> edge label), OPEN
+# whether the build's diagnostics may be the plan's own (every one of a kind
+# the plan reports: the plan ran and reported them, or -- for kinds the
+# checker reports too -- may have).
+proc hir::staticdeps::PlanGate {hir state} {
+    variable planKinds
+    set exprs [dict get $hir exprs]
+    set regionOf [dict get $state regionOf]
+    set present [dict get $state presentSites]
+    # The consumers: the sites holding a call the plan can report at (its
+    # diagnostics are anchored at the call, hir::traits::Plan) -- a trait
+    # operation (TRAIT-NOT-SATISFIED in a clone's view, TRAIT-IMPL-ORDER); a
+    # call of a trait-polymorphic function or of one requiring a context
+    # trait (TRAIT-INSTANCE-BUDGET, the context-trait AFFINE-GENERIC-NESTED-
+    # UNSUPPORTED); a call giving an untyped parameter an argument whose type
+    # is affine or may become affine (MayBecomeAffine: a clone's view, or a
+    # rejection narrowing an `any`, may make it so: AFFINE-GENERIC-NESTED-
+    # UNSUPPORTED, AFFINE-INSTANCE-BUDGET). (A call whose target or trait
+    # operation a rejection would first have to make exact is not one: such
+    # a site, if any, is predicted ok and the build that reports its plan
+    # diagnostic records a misprediction -- the audits fail on it.)
+    set consumers [dict create]
+    if {![dict exists $hir traits] && [dict get $state creates] eq {}} {
+        # Neither a trait nor a coroutine construction: the plan never runs
+        # (hir::BuildFull: trait declarations, or a generic function given an
+        # affine argument, which only a coroutine handle makes).
+        return [list $consumers {} 0]
+    }
+    set polymorphic [dict create]
+    dict for {site list} [dict get $state siteExprs] {
+        foreach e $list {
+            set node [dict get $exprs $e]
+            if {[dict get $node kind] ne "call"} continue
+            if {[dict exists $node traitCall]} {
+                dict set consumers $site 1
+                break
+            }
+            lassign [dict get $node target] tk tb
+            if {$tk ne "block" || ![dict exists $exprs $tb]} continue
+            if {![dict exists $polymorphic $tb]} {
+                dict set polymorphic $tb [expr {[hir::traits::IsPolymorphic $hir $tb]
+                    || [hir::traits::ContextTraitsOf $hir $tb] ne {}}]
+            }
+            if {[dict get $polymorphic $tb]} {
+                dict set consumers $site 1
+                break
+            }
+            set found 0
+            foreach arg [dict get $node args] declared [dict get $exprs $tb declaredParamTypes] {
+                if {$arg ne "" && $declared eq {}} {
+                    if {[MayBecomeAffine [hir::typeOf $hir $arg]]} {
+                        set found 1
+                        break
+                    }
+                }
+            }
+            if {$found} {
+                dict set consumers $site 1
+                break
+            }
+        }
+    }
+    # The build's diagnostics, each {SITE REGION}: a compiler failure is
+    # never a site's (hir::static::Internal). The region is the one whose
+    # facts the diagnostic is about: a diagnostic at a function literal (its
+    # declared result not proven, an error it does not declare) is about the
+    # function's own body -- not about the code the literal stands in, which
+    # for a top-level function is the whole program's top-level code.
+    set diagnosed {}
+    set open 1
+    foreach d [dict get $hir diagnostics] {
+        if {[dict get $d kind] ni $planKinds || ([dict get $d kind] eq "TRAIT-NOT-SATISFIED"
+                && [regexp {^(argument for parameter |the function's declared result )} [dict get $d message]])} {
+            # Not the plan's: a kind it does not report, or the checker's
+            # TRAIT-NOT-SATISFIED (at a call's argument, at a function's
+            # exit; the plan's is hir::traits::explain's text alone).
+            set open 0
+        }
         set e [dict get $d expr]
-        if {[dict exists $exprs $e] && [dict get $exprs $e kind] eq "block"} {
-            lappend unowned R:$e
+        if {[dict exists $exprs $e] && [dict get $exprs $e kind] eq "block" && [dict exists $regionOf $e]} {
+            set region $e
         } else {
-            lappend unowned R:[expr {[dict exists $regionOf $e] ? [dict get $regionOf $e] : "program"}]
+            set region [expr {[dict exists $regionOf $e] ? [dict get $regionOf $e] : "program"}]
         }
+        # Its site as hir/static.tcl attributes it (Attribute).
+        set site [expr {[hir::static::Internal $d] ? ""
+            : [hir::static::Owner $present [hir::static::PrimaryOrigin $hir $d]]}]
+        lappend diagnosed [list $site $region]
     }
-    if {$planned} {
-        # Every diagnostic may be the plan's: the gate is open, and a
-        # rejection may close it again (a diagnostic it causes anywhere) or
-        # change another plan diagnostic (a clone's instances and placement
-        # are its callers'): every one, so the plan's diagnostics are
-        # decided in the sequential order's own builds.
-        foreach key $owned {
-            dict set plan Z:$key plan-diagnostic
-        }
-        foreach node $unowned {
-            dict set plan $node plan-diagnostic
-        }
-        return [list $consumers $plan]
+    set plan [dict create]
+    if {$diagnosed eq {} || [dict size $consumers] == 0 && !$open} {
+        # No diagnostic: the plan ran and had none to report (the program is
+        # final); or no site can hold one of its diagnostics.
+        return [list $consumers $plan 0]
     }
-    # The gate is closed. A site failing now reads nothing of it: its first
-    # diagnostic stays while its own facts do, and a plan diagnostic is never
-    # beside another one. The others are judged by the gate, which stays
-    # closed while any one diagnostic stays: one witness, the site whose
-    # diagnostic the sequential order removes last (the last failing site in
-    # post-order), whose own diagnostics change only with what its node
-    # reaches.
-    foreach key $owned {
-        dict unset consumers $key
+    if {$open} {
+        # Every diagnostic may be the plan's: one computation over the whole
+        # program, which a rejection anywhere can change -- every site holding
+        # one is a consumer, and the plan depends on each.
+        foreach item $diagnosed {
+            lassign $item site region
+            if {$site eq ""} {
+                dict set plan R:$region plan-diagnostic
+            } else {
+                dict set consumers $site 1
+                dict set plan F:$site plan-diagnostic
+            }
+        }
+        return [list $consumers $plan 1]
+    }
+    # Closed: a consumer that has a diagnostic of its own keeps the gate
+    # closed itself -- its status changes only once that diagnostic is gone,
+    # which is what its own edges say -- so only a consumer without one reads
+    # the gate.
+    foreach item $diagnosed {
+        dict unset consumers [lindex $item 0]
+    }
+    # The plan does not run while one diagnostic stays. So it depends
+    # on one witness: the site of the diagnostic last in post-order (the
+    # sequential order rejects it last), what its diagnostics read and its
+    # form; else, with no diagnostic in a site's body, the region of each one
+    # (no decision removes one but through what that region reads). Any one
+    # witness is sound -- the gate cannot open while its diagnostic stays --
+    # and one in a site's body is the cheaper: a diagnostic of the program's
+    # own at a top-level function would make the top-level code, and so
+    # every function, the witness.
+    set position [dict create]
+    set i 0
+    foreach key [dict get $state presentKeys] {
+        dict set position $key $i
+        incr i
     }
     set last ""
-    foreach key $owned {
-        if {$last eq "" || [dict get $position $key] > [dict get $position $last]} {
-            set last $key
+    foreach item $diagnosed {
+        lassign $item site region
+        if {$site ne "" && ($last eq "" || [dict get $position $site] > [dict get $position $last])} {
+            set last $site
         }
     }
     if {$last ne ""} {
         dict set plan Z:$last plan-gate
+        dict set plan F:$last plan-gate
     } else {
-        foreach node $unowned {
-            dict set plan $node plan-gate
+        foreach item $diagnosed {
+            dict set plan R:[lindex $item 1] plan-gate
         }
     }
-    return [list $consumers $plan]
-}
-
-# 1 if the monomorphization plan may clone top-level function Q of HIR
-# (STATE: Prepare's walk; CACHEVAR: ContextTraits' cache): Q has a
-# trait-typed parameter or requires a context trait (cloned per witness or
-# per selection), or an untyped parameter that may get an affine argument --
-# an instance of Q already has one, or a call of Q passes a value there whose
-# type is affine or mentions `any`, which a rejection elsewhere can narrow to
-# an affine type (a value of any other type stays what it is).
-proc hir::staticdeps::CloneMay {hir state cacheVar q} {
-    upvar 1 $cacheVar cache
-    if {[hir::traits::IsPolymorphic $hir $q] || [ContextTraits cache $hir $q] ne {}} {
-        return 1
-    }
-    set declared [dict get $hir exprs $q declaredParamTypes]
-    if {"" ni $declared} {
-        return 0
-    }
-    if {[dict exists $hir semantic instances]} {
-        dict for {id inst} [dict get $hir semantic instances] {
-            if {[dict get $inst block] eq $q && [hir::traits::AffineWitnesses $hir $q [dict get $inst args]] ne {}} {
-                return 1
-            }
-        }
-    }
-    if {[dict exists $state callsOf $q]} {
-        foreach call [dict get $state callsOf $q] {
-            foreach arg [dict get $hir exprs $call args] d $declared {
-                if {$arg eq "" || $d ne {}} continue
-                set type [hir::typeOf $hir $arg]
-                if {[hir::types::IsAffine $type] || [MentionsAny $type]} {
-                    return 1
-                }
-            }
-        }
-    }
-    return 0
-}
-
-# hir::traits::ContextTraitsOf block E of HIR, cached in the caller's
-# CACHEVAR (block -> traits).
-proc hir::staticdeps::ContextTraits {cacheVar hir e} {
-    upvar 1 $cacheVar cache
-    if {![dict exists $cache $e]} {
-        dict set cache $e [hir::traits::ContextTraitsOf $hir $e]
-    }
-    return [dict get $cache $e]
+    return [list $consumers $plan 0]
 }
 
 # The ownership verdict's part of the graph (header, C:verdict), from STATE
@@ -1381,35 +1795,59 @@ proc hir::staticdeps::Successors {hir stateVar v} {
     upvar 1 $stateVar state
     set succ [dict create]
     switch -glob -- $v {
-        Z:* {
+        F:* {
+            # A site's form: whether it is still a body. Nothing decides it
+            # but the site's own decision -- and the decision of the site
+            # around it, whose rejection takes it away.
             set key [string range $v 2 end]
             dict set state names $v "site [SiteName $hir $key]"
+            set outer [dict get $state spanParent $key]
+            if {$outer ne ""} {
+                dict set succ F:$outer enclosed
+            }
+        }
+        Z:* {
+            set key [string range $v 2 end]
+            dict set state names $v "the diagnostics of site [SiteName $hir $key]"
             if {[dict exists $state siteHome $key]} {
                 dict set succ R:[dict get $state siteHome $key] position
             }
-            set outer [dict get $state spanParent $key]
-            if {$outer ne ""} {
-                dict set succ Z:$outer nested
+            # The sites nested in its body: their forms are part of it. (Not
+            # the site around it: a nested site's own diagnostics read the
+            # code around it through its own region, never through the outer
+            # site -- an edge to the outer site would make sibling nested
+            # sites depend on each other through it.)
+            if {[dict exists $state spanChildren $key]} {
+                foreach inner [dict get $state spanChildren $key] {
+                    dict set succ F:$inner nested
+                }
             }
-            SubsumeSuccessors $hir state $key succ
+            if {![dict exists $state early $key]} {
+                SubsumeSuccessors $hir state $key succ
+            }
             if {[dict exists $state pathRelease $key]} {
                 dict set succ C:verdict path-release
             } elseif {[dict exists $state verdictLinked $key]} {
                 dict set succ C:verdict verdict-contributor
             }
-            if {[dict exists $state planConsumers $key]} {
-                dict set succ C:plan plan
+            if {[dict exists $state possibleLinks $key]} {
+                foreach node [dict keys [dict get $state possibleLinks $key]] {
+                    dict set succ $node possible-contributor
+                }
+            }
+            if {[dict exists $state planConsumers $key] && [dict size [dict get $state plan]] > 0} {
+                dict set succ C:plan plan-site
+            }
+        }
+        C:plan {
+            dict set state names $v "the gate of the trait monomorphization's plan (no other diagnostic in the program)"
+            dict for {node label} [dict get $state plan] {
+                dict set succ $node $label
             }
         }
         C:verdict {
             dict set state names $v "the ownership analysis's verdict on the whole program"
             dict for {node label} [dict get $state verdict] {
-                dict set succ $node $label
-            }
-        }
-        C:plan {
-            dict set state names $v "the monomorphization plan's gate (no diagnostic anywhere)"
-            dict for {node label} [dict get $state plan] {
                 dict set succ $node $label
             }
         }
@@ -1424,28 +1862,54 @@ proc hir::staticdeps::Successors {hir stateVar v} {
         }
         C:erased {
             dict set state names $v "the erased-callable contract"
-            foreach point [lsort -unique [dict get $state erasurePoints]] {
-                lassign $point how e
+            # What can change it: the witnesses' contributions (Prepare,
+            # ErasureWitnesses) -- the sites they are written in (rejecting
+            # one removes them), the function a request instantiates (which
+            # of its parameters has no contract) and the arguments its key is
+            # made of (what their types may become, unless an argument is a
+            # function whose type nothing but its own removal changes,
+            # FixedCarrier).
+            foreach unit [dict get $state erasureWitnesses] {
+                lassign $unit errors how items path
                 if {$how eq "all"} {
-                    AddSubtree $hir state $e succ erasure
-                    continue
-                }
-                # A semantic instance's request: the arguments its key is
-                # made of, and the sites the call is written in.
-                if {[dict exists $state siteOf $e]} {
-                    dict set succ Z:[dict get $state siteOf $e] erasure
-                }
-                lassign [dict get $hir exprs $e target] tk tb
-                set args [dict get $hir exprs $e args]
-                if {$tk ne "block" || ![dict exists $hir exprs $tb]} {
-                    foreach arg $args {
-                        AddSubtree $hir state $arg succ erasure
+                    foreach e $items {
+                        AddSubtree $hir state $e succ erasure
                     }
                     continue
                 }
-                dict set succ R:$tb erasure
-                foreach entry [hir::signatures::entryTypes $hir $tb] arg $args {
-                    if {$entry eq "" && $arg ne ""} {
+                if {$errors ne "*"} {
+                    # A semantic instance's: what keeps it, its path.
+                    set items $path
+                }
+                foreach e $items {
+                    if {[dict exists $state siteOf $e]} {
+                        dict set succ F:[dict get $state siteOf $e] erasure
+                    }
+                    lassign [dict get $hir exprs $e target] tk tb
+                    set args [dict get $hir exprs $e args]
+                    if {$tk ne "block" || ![dict exists $hir exprs $tb]} {
+                        set erased $args
+                    } else {
+                        # (The function vanishes with a site its literal is
+                        # in.)
+                        dict set succ R:$tb erasure
+                        foreach s [SiteChain $state $tb] {
+                            dict set succ F:$s erasure
+                        }
+                        set erased {}
+                        foreach entry [hir::signatures::entryTypes $hir $tb] arg $args {
+                            if {$entry eq "" && $arg ne ""} {
+                                lappend erased $arg
+                            }
+                        }
+                    }
+                    foreach arg $erased {
+                        if {[FixedCarrier $hir $state $arg]} {
+                            foreach s [SiteChain $state $arg] {
+                                dict set succ F:$s erasure
+                            }
+                            continue
+                        }
                         AddSubtree $hir state $arg succ erasure
                     }
                 }
@@ -1454,13 +1918,47 @@ proc hir::staticdeps::Successors {hir stateVar v} {
         C:budget:* {
             set b [string range $v 9 end]
             dict set state names $v "the semantic-instance budget of [BlockName $hir $b]"
+            # Which call gets one of B's instances depends on how many
+            # distinct instances its calls request: B's own body (which
+            # requests more of them), each call (rejecting a site it is in
+            # removes it) and the arguments its key is made of -- of an
+            # argument naming a function, only its identity is in the key
+            # (hir::specialize::KeyType erases its result), which nothing but
+            # the argument's own removal changes (FunctionRef).
+            dict set succ R:$b budget
             foreach call [dict get $state callsOf $b] {
-                AddSubtree $hir state $call succ budget
+                foreach s [SiteChain $state $call] {
+                    dict set succ F:$s budget
+                }
+                foreach arg [dict get $hir exprs $call args] {
+                    if {$arg eq ""} continue
+                    if {[FunctionRef $hir $arg]} {
+                        foreach s [SiteChain $state $arg] {
+                            dict set succ F:$s budget
+                        }
+                    } else {
+                        AddSubtree $hir state $arg succ budget
+                    }
+                }
             }
         }
     }
     dict unset succ $v
     return $succ
+}
+
+# The sites (present ones) whose body holds expression E: the innermost one
+# and every site around it.
+proc hir::staticdeps::SiteChain {state e} {
+    set chain {}
+    if {[dict exists $state siteOf $e]} {
+        set s [dict get $state siteOf $e]
+        while {$s ne ""} {
+            lappend chain $s
+            set s [dict get $state spanParent $s]
+        }
+    }
+    return $chain
 }
 
 # The contract-boundary checks of site KEY's own code (hir::completions::
@@ -1503,11 +2001,18 @@ proc hir::staticdeps::SubsumeSuccessors {hir stateVar key succVar} {
             if {$value eq "" || ![dict exists $hir exprs $value]} continue
             set type [hir::typeOf $hir $value]
             if {[hir::types::IsCoroutine $type]} {
-                dict set succ C:erased subsume
+                # SubsumeHandle: the thunk's facts, a capture of an
+                # uncontracted type standing for what it can hold (Possible,
+                # which reads the contract); every other capture and callee
+                # reads it only through its own region (R -> C:erased). No
+                # thunk, no check.
                 set thunk [hir::coroutines::thunkOfHandle $hir $value]
                 if {$thunk ne ""} {
                     foreach c [dict get $hir exprs $thunk captures] {
                         dict set succ P:$c subsume
+                        if {[hir::completions::CleanInput $hir $c]} {
+                            dict set succ C:erased subsume
+                        }
                     }
                 }
                 continue
@@ -1525,6 +2030,51 @@ proc hir::staticdeps::SubsumeSuccessors {hir stateVar key succVar} {
             }
         }
     }
+}
+
+# The coroutine operations whose positions the contract-boundary check skips
+# (hir::completions::SubsumeCall).
+proc hir::staticdeps::CoroutineOperations {} {
+    return [list [core::coroutines::createNative] [core::coroutines::startNative] \
+        [core::coroutines::resumeNative] [core::coroutines::doneNative] [core::coroutines::releaseNative]]
+}
+
+# The callable types in a value of static TYPE that a position of some
+# static type could give a structural Fn type (hir::completions::Align, for
+# every FINAL at once): the value itself when it is an exact callable or a
+# Fn, and what such a callable returns; a List's elements, a set's, a
+# vector's or an array's element; an anonymous struct's fields.
+proc hir::staticdeps::CallableParts {type {depth 0}} {
+    if {$depth > 8 || $type in {never any ""}} {
+        return {}
+    }
+    set deeper [expr {$depth + 1}]
+    if {[hir::types::IsExactBlock $type] || [hir::types::IsExactNative $type] || [hir::types::IsFn $type]} {
+        set result [list $type]
+        set returned [hir::completions::ResultOf $type]
+        if {$returned ne ""} {
+            lappend result {*}[CallableParts $returned $deeper]
+        }
+        return $result
+    }
+    if {[hir::types::IsList $type]} {
+        set result {}
+        foreach t [concat [list [lindex $type 1]] [hir::types::shapeOf $type]] {
+            lappend result {*}[CallableParts $t $deeper]
+        }
+        return $result
+    }
+    if {[hir::types::IsSet $type] || [hir::types::IsMutVec $type] || [hir::types::IsMutArray $type]} {
+        return [CallableParts [lindex $type 1] $deeper]
+    }
+    if {[hir::types::IsStruct $type]} {
+        set result {}
+        dict for {name t} [lindex $type 1] {
+            lappend result {*}[CallableParts $t $deeper]
+        }
+        return $result
+    }
+    return {}
 }
 
 # The sites nested, at any depth, in site KEY's body (present ones).
@@ -1550,23 +2100,102 @@ proc hir::staticdeps::NestedSites {state key} {
 # binding), the erased-callable contract. Only a value that may carry errors
 # matters (CanCarry); one that is itself an uncontracted input holds that
 # input's Possible.
+#
+# What it holds is a set of errors and whether every value is quiet (calls no
+# argument it is given): the union of each value's (hir::completions::
+# ValueCarriesStatic), which a rejection only shrinks -- a value's type only
+# turns into `never`, a function's body only loses calls (PossibleUnit). So,
+# as the erased-callable contract does (ErasureWitnesses), it depends per
+# error, and for not being quiet, on one *witness* value -- the one whose
+# site is last in post-order, or one in no site's body -- and on every value
+# whose part is not fixed; and every site passing a value with a fixed part
+# is linked to it (Prepare's possibleLinks).
 proc hir::staticdeps::PossibleSuccessors {hir stateVar b succVar} {
     upvar 1 $stateVar state $succVar succ
     dict set state names P:$b "what [dict get $hir bindings $b name] may hold"
+    lassign [PossibleValues $hir state $b] status values
+    switch -- $status {
+        none { return }
+        top {
+            dict set succ C:erased possible
+            return
+        }
+    }
+    set position [SitePositions state]
+    set never [expr {[dict size $position] + 1}]
+    set best [dict create]
+    set units {}
+    foreach value $values {
+        set unit [PossibleUnit $hir state $value]
+        switch -- [lindex $unit 0] {
+            nothing { continue }
+            fixed {}
+            uncontracted {
+                # An uncontracted value: the input a reference reads, else the
+                # erased-callable contract.
+                set node [dict get $hir exprs $value]
+                if {[dict get $node kind] eq "ref" && [dict get $node binding] ne ""
+                        && [dict get $hir bindings [dict get $node binding] kind] ne "root"} {
+                    dict set succ P:[dict get $node binding] possible
+                } else {
+                    dict set succ C:erased possible
+                }
+                continue
+            }
+            default {
+                # Not fixed: everything its value reads.
+                AddSubtree $hir state $value succ possible
+                set type [hir::typeOf $hir $value]
+                if {[hir::types::IsExactBlock $type] && [dict exists $hir exprs [lindex $type 1]]} {
+                    foreach c [dict get $hir exprs [lindex $type 1] captures] {
+                        dict set succ P:$c possible
+                    }
+                }
+                continue
+            }
+        }
+        lassign $unit - atoms edges
+        set rank $never
+        foreach s [SiteChain $state $value] {
+            set rank [dict get $position $s]
+            break
+        }
+        set index [llength $units]
+        lappend units $edges
+        foreach atom $atoms {
+            if {![dict exists $best $atom] || $rank > [lindex [dict get $best $atom] 1]} {
+                dict set best $atom [list $index $rank]
+            }
+        }
+    }
+    foreach index [lsort -integer -unique [lmap {atom pick} $best {lindex $pick 0}]] {
+        dict for {node label} [lindex $units $index] {
+            if {![dict exists $succ $node]} {
+                dict set succ $node $label
+            }
+        }
+    }
+}
+
+# What an uncontracted input B may hold is made of (PossibleSuccessors): a
+# list {STATUS VALUES} -- STATUS none (B is no uncontracted input), top (it
+# holds whatever the program erases) or values (VALUES the expressions it
+# holds).
+proc hir::staticdeps::PossibleValues {hir stateVar b} {
+    upvar 1 $stateVar state
     if {![hir::completions::CleanInput $hir $b]} {
-        return
+        return {none {}}
     }
     set binding [dict get $hir bindings $b]
     set by [dict get $binding declaredBy]
     set owner [expr {[dict exists $state paramOwner $b] ? [dict get $state paramOwner $b] : ""}]
-    set values {}
     if {[lindex $owner 0] eq "block"} {
         lassign $owner _ block i
         set definer [expr {[dict exists $state definedBy $block] ? [dict get $state definedBy $block] : ""}]
         if {$definer eq "" || [dict exists $state escaping $definer]} {
-            dict set succ C:erased possible
-            return
+            return {top {}}
         }
+        set values {}
         if {[dict exists $state callsOf $block]} {
             foreach call [dict get $state callsOf $block] {
                 set arg [lindex [dict get $hir exprs $call args] $i]
@@ -1575,40 +2204,115 @@ proc hir::staticdeps::PossibleSuccessors {hir stateVar b succVar} {
                 }
             }
         }
-    } elseif {$by ne "" && [dict exists $hir exprs $by] && [dict get $hir exprs $by kind] eq "bind"
-            && [dict get $hir exprs $by value] ne ""} {
-        lappend values [dict get $hir exprs $by value]
-    } else {
-        dict set succ C:erased possible
-        return
+        return [list values $values]
     }
-    foreach value $values {
-        set type [hir::typeOf $hir $value]
-        if {[CanCarry $hir $type]} {
-            AddSubtree $hir state $value succ possible
-            if {[hir::types::IsExactBlock $type] && [dict exists $hir exprs [lindex $type 1]]} {
-                foreach c [dict get $hir exprs [lindex $type 1] captures] {
-                    dict set succ P:$c possible
-                }
-            }
-        } elseif {[hir::completions::Uncontracted $type]} {
-            # An uncontracted value: the input a reference reads, else the
-            # erased-callable contract.
-            set node [dict get $hir exprs $value]
-            if {[dict get $node kind] eq "ref" && [dict get $node binding] ne ""
-                    && [dict get $hir bindings [dict get $node binding] kind] ne "root"} {
-                dict set succ P:[dict get $node binding] possible
-            } else {
-                dict set succ C:erased possible
+    if {$by ne "" && [dict exists $hir exprs $by] && [dict get $hir exprs $by kind] eq "bind"
+            && [dict get $hir exprs $by value] ne ""} {
+        return [list values [list [dict get $hir exprs $by value]]]
+    }
+    return {top {}}
+}
+
+# What value VALUE adds to what an uncontracted input holds (hir::completions::
+# ValueCarriesStatic): {nothing} (it carries nothing, and a rejection never
+# makes it carry anything), {uncontracted} (it holds what another input or
+# the erased-callable contract holds), {open} (its part may grow, or is not
+# known without the facts it reads: a function capturing inputs, a container
+# that may hold callables), or {fixed ATOMS EDGES} -- ATOMS its errors and
+# `*calls*` if it may call an argument it is given, each of which a rejection
+# can only take away; EDGES what can: its removal (the sites it and its
+# function are written in), what its type may become (for a value other than
+# one naming a function, FunctionRef), and whether its function calls an
+# argument (the function's body, when a parameter of it is uncontracted).
+proc hir::staticdeps::PossibleUnit {hir stateVar value} {
+    upvar 1 $stateVar state
+    set type [hir::typeOf $hir $value]
+    if {$type eq "never"} {
+        return {nothing}
+    }
+    set edges [dict create]
+    if {[hir::types::IsFn $type] || [hir::types::IsCoroutine $type]} {
+        set fact [hir::completions::ContractFact $type]
+        set atoms [lindex $fact 1]
+        if {[hir::completions::ContractChannel [lindex $fact 2]]} {
+            lappend atoms *calls*
+        }
+        AddSubtree $hir state $value edges possible
+    } elseif {[hir::types::IsExactNative $type]} {
+        if {[catch {core::native::metadata [lindex $type 1]} meta]} {
+            return {nothing}
+        }
+        set atoms [dict get $meta errors]
+        if {[dict get $meta errorsFrom] ne ""} {
+            lappend atoms *calls*
+        }
+        AddSubtree $hir state $value edges possible
+    } elseif {[hir::types::IsExactBlock $type]} {
+        set block [lindex $type 1]
+        if {![dict exists $hir exprs $block]} {
+            return {nothing}
+        }
+        if {[dict get $hir exprs $block captures] ne {}} {
+            return {open}
+        }
+        set atoms [dict get $hir exprs $block declaredErrors]
+        set body 0
+        foreach p [dict get $hir exprs $block params] {
+            set t [hir::bindingType $hir $p]
+            if {[hir::types::IsFn $t] || [hir::types::IsCoroutine $t]} {
+                lappend atoms *calls*
+            } elseif {[hir::completions::CleanInput $hir $p]} {
+                # Whether it calls an argument it is given is whether its
+                # body is transparent (hir::completions::Transparent), which
+                # a rejection only takes away.
+                lappend atoms *calls*
+                set body 1
             }
         }
+        if {[FunctionRef $hir $value]} {
+            foreach s [concat [SiteChain $state $value] [SiteChain $state $block]] {
+                dict set edges F:$s possible
+            }
+            if {$body} {
+                dict set edges R:$block possible
+            }
+        } else {
+            AddSubtree $hir state $value edges possible
+        }
+    } elseif {[CanCarry $hir $type]} {
+        return {open}
+    } elseif {[hir::completions::Uncontracted $type]} {
+        return {uncontracted}
+    } else {
+        return {nothing}
     }
+    set atoms [lsort -unique $atoms]
+    if {$atoms eq {}} {
+        return {nothing}
+    }
+    return [list fixed $atoms $edges]
+}
+
+# Site key -> its position in post-order (the present sites), cached in the
+# caller's STATEVAR.
+proc hir::staticdeps::SitePositions {stateVar} {
+    upvar 1 $stateVar state
+    if {![dict exists $state positions]} {
+        set position [dict create]
+        set i 0
+        foreach key [dict get $state presentKeys] {
+            dict set position $key $i
+            incr i
+        }
+        dict set state positions $position
+    }
+    return [dict get $state positions]
 }
 
 proc hir::staticdeps::RegionSuccessors {hir stateVar q succVar} {
     upvar 1 $stateVar state $succVar succ
     dict set state names R:$q [expr {$q eq "program" ? "the top-level code" : "function [BlockName $hir $q]"}]
-    foreach {field label prefix} {ownRefs mentions B: ownLits defines R: ownTargets calls R: ownSites holds Z:} {
+    foreach {field label prefix} {ownRefs mentions B: ownLits defines R: ownTargets calls R: ownSites holds F:} {
         if {[dict exists $state $field $q]} {
             foreach x [dict keys [dict get $state $field $q]] {
                 if {![dict exists $succ $prefix$x]} {
@@ -1630,6 +2334,13 @@ proc hir::staticdeps::RegionSuccessors {hir stateVar q succVar} {
     }
     if {[dict exists $state erasedConsumers $q]} {
         dict set succ C:erased erased-consumer
+    }
+    if {[dict exists $state methodTrial $q]} {
+        foreach n [dict keys [dict get $state methodTrial $q]] {
+            if {![dict exists $succ $n]} {
+                dict set succ $n method-trial
+            }
+        }
     }
     if {[dict exists $state budgetOf $q]} {
         foreach b [dict keys [dict get $state budgetOf $q]] {
@@ -1850,7 +2561,7 @@ proc hir::staticdeps::AddNarrowing {hir stateVar r succVar label} {
     if {$parent eq "" || [dict get $hir exprs $parent kind] eq "bind"} {
         # A statement of its own, or an alias's value (the alias edge).
         if {[dict exists $state siteOf $r]} {
-            dict set succ Z:[dict get $state siteOf $r] $label
+            dict set succ F:[dict get $state siteOf $r] $label
         }
         return
     }
@@ -1872,7 +2583,7 @@ proc hir::staticdeps::AddSubtree {hir stateVar e succVar label} {
             if {![dict exists $hir exprs $x]} continue
             set node [dict get $hir exprs $x]
             if {[dict exists $state siteOf $x]} {
-                dict set nodes Z:[dict get $state siteOf $x] 1
+                dict set nodes F:[dict get $state siteOf $x] 1
             }
             switch -- [dict get $node kind] {
                 block {
@@ -2028,6 +2739,80 @@ proc hir::staticdeps::MentionsAny {type} {
     }
     foreach part [lrange $type 1 end] {
         if {[MentionsAny $part]} {
+            return 1
+        }
+    }
+    return 0
+}
+
+# 1 if argument expression ARG names a function whose static type -- and so
+# what it carries (hir::callables::CarriedErrors: the function's declared
+# errors, and what its result type carries) -- nothing but the removal of
+# the expression itself can change: a native, a function literal, or a
+# reference to a binding bound to one, whose result type carries nothing
+# (CanCarry: no rejection ever makes it carry anything). Its body's facts
+# are no part of what it carries.
+proc hir::staticdeps::FixedCarrier {hir state arg} {
+    if {![FunctionRef $hir $arg]} {
+        return 0
+    }
+    set type [hir::typeOf $hir $arg]
+    return [expr {[hir::types::IsExactNative $type] || ![CanCarry $hir [lindex $type 3]]}]
+}
+
+# 1 if expression ARG names one function whatever any site becomes: a
+# native, a function literal, or a reference to a binding bound to one -- its
+# static type is that exact function's (only its result type may change).
+proc hir::staticdeps::FunctionRef {hir arg} {
+    set node [dict get $hir exprs $arg]
+    set type [hir::typeOf $hir $arg]
+    switch -- [dict get $node kind] {
+        block {
+            set literal $arg
+        }
+        ref {
+            set b [dict get $node binding]
+            if {$b eq "" || ![dict exists $hir bindings $b]} {
+                return 0
+            }
+            if {[dict get $hir bindings $b kind] eq "root"} {
+                return [hir::types::IsExactNative $type]
+            }
+            set by [dict get $hir bindings $b declaredBy]
+            if {$by eq "" || ![dict exists $hir exprs $by] || [dict get $hir exprs $by kind] ne "bind"} {
+                return 0
+            }
+            set literal [dict get $hir exprs $by value]
+        }
+        default {
+            return 0
+        }
+    }
+    return [expr {$literal ne "" && [dict exists $hir exprs $literal]
+        && [dict get $hir exprs $literal kind] eq "block"
+        && [hir::types::IsExactBlock $type] && [lindex $type 1] eq $literal}]
+}
+
+# 1 if a value of static TYPE is affine, or may be once a clone's view or a
+# rejection makes its type more precise: it is or holds an `any` (an erased
+# join or element). A callable -- an exact function or native, a structural
+# Fn -- never is, whatever its result (a function value is unrestricted:
+# hir::types::IsAffine); a coroutine handle is affine on its own account.
+proc hir::staticdeps::MayBecomeAffine {type} {
+    if {[hir::types::IsAffine $type]} {
+        return 1
+    }
+    if {$type eq "any"} {
+        return 1
+    }
+    if {[hir::types::IsExactBlock $type] || [hir::types::IsExactNative $type] || [hir::types::IsFn $type]} {
+        return 0
+    }
+    if {[llength $type] < 2} {
+        return 0
+    }
+    foreach part [lrange $type 1 end] {
+        if {[MayBecomeAffine $part]} {
             return 1
         }
     }

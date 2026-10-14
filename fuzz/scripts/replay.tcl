@@ -132,7 +132,14 @@ switch -- $vertical {
         # 128 KiB per-argument limit (E2BIG), and stdin has no such limit.
         # main.tcl reads the global argv, which the script sets before
         # sourcing it.
+        #
+        # argv[0] is pinned to the aot executable's path, so the vector is
+        # byte-identical to what the harness passes the aot vertical
+        # (argv-file uses the binary path as argv[0]). Without this, every
+        # index shifts by one between the verticals and input-consuming
+        # programs diverge for a harness reason, not a semantic one.
         set words [list -backend $vertical]
+        lappend words -argv-hex [binary encode hex [file join $build $target]]
         foreach argument $arguments {
             lappend words -argv-hex [binary encode hex $argument]
         }

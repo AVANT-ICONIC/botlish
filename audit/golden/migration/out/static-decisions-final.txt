@@ -1,0 +1,183 @@
+# The static-decision validation after the coroutine-construction edge fix (hir/staticdeps.tcl, SubsumeSuccessors)
+# (LARGE-SCALE-GOLDEN-MIGRATION.md, Compiler findings; STATIC-DECISION-ECONOMICS.md, "Coroutine constructions, and a
+# verdict that depends on layout"). Paths normalized: ROOT the checkout.
+
+== tests: tests/static-economics.test, tests/static-compile.test, tests/golden.test
+static-economics.test:	Total	45	Passed	45	Skipped	0	Failed	0
+static-compile.test:	Total	83	Passed	83	Skipped	0	Failed	0
+golden.test:	Total	9	Passed	9	Skipped	0	Failed	0
+
+== the 24 golden suites that mention a coroutine, batched, the edge before (HEAD at the time) and after: decisions compared with sdDiff (sites, diagnostics, decided HIR, misprediction), rounds/builds
+affinity.bot                             old 4/5    new 4/5    same decisions
+callable-contracts-handle.bot            old 1/1    new 1/1    same decisions
+callable-contracts.bot                   old 4/8    new 4/8    same decisions
+collections.bot                          old 4/7    new 4/7    same decisions
+core-semantics.bot                       old 3/3    new 3/3    same decisions
+coroutines.bot                           old 4/5    new 4/5    same decisions
+declared-errors.bot                      old 3/7    new 3/7    same decisions
+destructuring.bot                        old 5/7    new 5/7    same decisions
+diagnostics.bot                          old 4/6    new 4/6    same decisions
+flags.bot                                old 2/2    new 2/2    same decisions
+framework-semantics.bot                  old 4/8    new 3/7    same decisions
+harness.bot                              old 2/2    new 2/2    same decisions
+loop-collecting.bot                      old 3/3    new 3/3    same decisions
+loops.bot                                old 2/2    new 2/2    same decisions
+methods.bot                              old 4/6    new 4/6    same decisions
+mutable-array.bot                        old 5/20   new 5/20   same decisions
+mutable-vector.bot                       old 4/13   new 4/13   same decisions
+ownership.bot                            old 3/10   new 3/10   same decisions
+recursive-types.bot                      old 1/3    new 1/3    same decisions
+static-compile.bot                       old 7/14   new 7/14   same decisions
+strings.bot                              old 2/2    new 2/2    same decisions
+struct-representation.bot                old 1/1    new 1/1    same decisions
+structs-and-enums.bot                    old 4/17   new 4/17   same decisions
+values.bot                               old 1/1    new 1/1    same decisions
+24 suites, 0 differing
+
+== tclsh9.0 audit/static-decisions/tools/fuzz.tcl -seed 1 (exit 0, 375 s)
+layout pairs taking different rounds: 2
+seed 1: 20 programs, 516 sites, 300 rejected, 0 failures
+fragments: anyconsumer 52 badcontributor 20 chain 24 consumer 16 contracted 28 contributor 36 earlycontributor 16 erasing 64 field 16 known 20 method 20 move 16 nestedok 20 possible 20 type 12 unbound 40 unhandled 20 valid 76
+
+== tclsh9.0 audit/static-decisions/tools/fuzz.tcl -seed 2 (exit 0, 207 s)
+layout pairs taking different rounds: 0
+seed 2: 20 programs, 512 sites, 272 rejected, 0 failures
+fragments: anyconsumer 72 badcontributor 24 chain 16 consumer 12 contracted 28 contributor 36 earlycontributor 20 erasing 60 field 40 known 16 method 28 move 12 nestedok 20 possible 20 type 8 unbound 16 unhandled 8 valid 76
+
+== tclsh9.0 audit/static-decisions/tools/fuzz.tcl -seed 3 (exit 0, 159 s)
+layout pairs taking different rounds: 1
+seed 3: 20 programs, 580 sites, 372 rejected, 0 failures
+fragments: anyconsumer 56 badcontributor 8 chain 40 consumer 32 contracted 24 contributor 24 earlycontributor 16 erasing 60 field 36 known 4 method 16 move 24 nestedok 36 possible 24 type 24 unbound 40 unhandled 44 valid 72
+
+== tclsh9.0 audit/static-decisions/tools/fuzz.tcl -seed 17 (exit 1, 324 s)
+program 6: 7 sites, rounds nested=3/3 top=3/3 split=3/3 deep=3/3
+    FAIL layout split gives other verdicts than nested: 0 {rejected TYPE 0 12} 1 {rejected UNKNOWN-FIELD 1 2} 2 {rejected TYPE 0 12} 3 accepted 4 accepted 5 accepted 6 {rejected TYPE 3 7} / 0 {rejected TYPE 0 12} 1 {rejected UNKNOWN-FIELD 1 2} 2 {rejected TYPE 0 12} 3 accepted 4 accepted 5 {rejected UNHANDLED-ERROR 3 4} 6 {rejected TYPE 3 7}
+layout pairs taking different rounds: 0
+seed 17: 20 programs, 484 sites, 263 rejected, 1 failures
+fragments: anyconsumer 36 badcontributor 36 chain 28 consumer 16 contracted 40 contributor 16 earlycontributor 20 erasing 36 field 24 known 4 method 20 move 24 nestedok 24 possible 12 type 28 unbound 4 unhandled 20 valid 96
+
+== tclsh9.0 audit/static-decisions/tools/fuzz.tcl -seed 29 (exit 0, 217 s)
+layout pairs taking different rounds: 0
+seed 29: 20 programs, 548 sites, 296 rejected, 0 failures
+fragments: anyconsumer 60 badcontributor 20 chain 36 consumer 16 contracted 44 contributor 16 earlycontributor 20 erasing 36 field 28 known 28 method 16 move 20 nestedok 24 possible 20 type 20 unbound 24 unhandled 24 valid 96
+
+== tclsh9.0 audit/static-decisions/tools/fuzz.tcl -seed 41 (exit 1, 174 s)
+program 0: 6 sites, rounds nested=2/4 top=2/4 split=2/4 deep=2/4
+    FAIL layout split gives other verdicts than nested: 0 {rejected UNHANDLED-ERROR 3 4} 1 {rejected TYPE 3 7} 2 accepted 3 {rejected UNHANDLED-ERROR 3 4} 4 {rejected TYPE 3 7} 5 {rejected KNOWN-ERROR 0 4} / 0 {rejected UNHANDLED-ERROR 3 4} 1 {rejected TYPE 3 7} 2 {rejected UNHANDLED-ERROR 3 4} 3 {rejected UNHANDLED-ERROR 3 4} 4 {rejected TYPE 3 7} 5 {rejected KNOWN-ERROR 0 4}
+layout pairs taking different rounds: 0
+seed 41: 20 programs, 564 sites, 351 rejected, 1 failures
+fragments: anyconsumer 68 badcontributor 20 chain 20 consumer 24 contracted 32 contributor 24 earlycontributor 16 erasing 48 field 32 known 20 method 32 move 20 nestedok 16 possible 36 type 20 unbound 44 unhandled 12 valid 80
+
+== tclsh9.0 audit/static-decisions/tools/mutate.tcl -only coroutine-subsume-unconditional (the new mutant)
+KILLED coroutine-subsume-unconditional -- every coroutine construction depends on the erased-callable contract, whatever its thunk captures: one capturing only the function it calls waits for a rejected contributor (a build more; the fuzzer's seed 29, program 13, nested)
+    tests: killed (1 failed: se-builds-coroutine-construction)
+    fuzz:  survived
+1 mutants, 1 killed, 0 survived
+
+== tclsh9.0 audit/static-decisions/tools/mutate.tcl (all mutants; exit 0, 4813 s)
+KILLED decide-dependents-together -- every failing site is committed in the build that found it, even one that depends on a site rejected since
+    tests: killed (12 failed: se-builds-ownership-verdict, se-builds-plan-gate, se-equal-erased-consumer, se-equal-every-mention, se-equal-nested-checked, se-equal-ownership-siblings, ...)
+    fuzz:  survived
+KILLED unknown-does-not-block -- a site whose status became unknown does not hold back the later sites of its component
+    tests: killed (1 failed: se-simulate-component-waits)
+    fuzz:  survived
+KILLED erased-contributors-ignored -- the erased-callable contract depends on no contributor: its consumers are judged as if nothing changed what the program erases
+    tests: killed (1 failed: se-equal-erased-consumer)
+    fuzz:  survived
+KILLED contribution-not-discarded -- an erasing call inside a block is not a dependency on that block: rejecting the block keeps its contribution in the decisions' model
+    tests: killed (1 failed: se-equal-erased-consumer)
+    fuzz:  survived
+KILLED nested-child-ignored -- a block does not depend on the blocks nested in it: the outer one is committed before its inner one's rejection is seen
+    tests: killed (1 failed: se-equal-nested-checked)
+    fuzz:  survived
+KILLED position-ignored -- a block does not depend on the code around it in its function: a later block in one statement sequence is committed with the diagnostics it had before the earlier one's rejection made it unreachable
+    tests: killed (5 failed: se-equal-erased-consumer, se-equal-every-mention, se-equal-ownership-siblings, se-equal-untyped-capture, se-trace)
+    fuzz:  survived
+KILLED precedence-changed -- a block committed without a build of its own is rejected with its last diagnostic instead of its first
+    tests: killed (2 failed: se-builds-erased-empty, se-simulate-independent)
+    fuzz:  killed (5 of 6 programs fail: FAIL nested: batched vs sequential: site f1:1885: rejected TYPE 96 24 {} {"raise_e1" has typed parameter requirements tha)
+KILLED internal-ids-ignored -- a rejection whose message names internal ids is committed in any build: its message carries that build's numbering
+    tests: killed (1 failed: se-equal-internal-ids)
+    fuzz:  survived
+KILLED untyped-parameter-ignored -- an untyped parameter's facts do not depend on its uses in the functions nested in its function: one block's use cannot fail another
+    tests: killed (2 failed: se-equal-untyped-capture, se-trace)
+    fuzz:  survived
+KILLED stale-method-reuse -- a method-call decision is reused even when a site rejected since reaches the call (its receiver may have changed)
+    tests: killed (1 failed: se-method-invalidated)
+    fuzz:  survived
+KILLED method-key-alias -- a reused method-call decision is applied to every call of the same name, not to the one call it was made for
+    tests: killed (2 failed: se-equal-corpus, se-method-reuse)
+    fuzz:  killed (2 of 6 programs fail: FAIL nested: batched vs sequential: decided HIR differs at line 115:     e94 block s34 () captures (b36 harmless) declare)
+KILLED same-choices-unchecked -- a method-call decision build is taken to be the build it started from whatever the choices: the final program keeps the stand-in candidates
+    tests: killed (2 failed: se-build-reuse-identical, se-method-reuse)
+    fuzz:  survived
+KILLED verdict-consumers-ignored -- a site whose path-release diagnostic the ownership verdict withholds does not depend on it: it is judged as if no rejection could reveal that diagnostic
+    tests: killed (2 failed: se-builds-ownership-verdict, se-equal-ownership-verdict)
+    fuzz:  survived
+KILLED verdict-unlinked -- the ownership verdict's later contributors are not linked to it: a consumer turned unknown does not hold them back, and the next build judges it without them
+    tests: killed (1 failed: se-equal-ownership-verdict)
+    fuzz:  survived
+KILLED mentions-last-only -- only the last mention of each binding is kept (the flat `dict lappend` the analysis once had): a binding's narrowing mentions before it, a mutation among them, are no edges
+    tests: killed (1 failed: se-equal-every-mention)
+    fuzz:  survived
+KILLED plan-consumers-ignored -- a site whose diagnostic only the trait monomorphization's plan reports does not depend on the plan's gate: it is predicted ok beside the diagnostics that keep the plan from running, and the next build contradicts it
+    tests: killed (2 failed: se-builds-plan-gate, se-equal-plan-gate)
+    fuzz:  survived
+KILLED plan-witness-ignored -- the plan's gate depends on no diagnostic while it is closed: its sites are predicted ok however many diagnostics are rejected, and the build that opens the gate contradicts them
+    tests: killed (2 failed: se-builds-plan-gate, se-equal-plan-gate)
+    fuzz:  survived
+KILLED erased-every-request-empty -- no request is taken to erase anything: a consumer of the erased-callable contract is judged as if rejecting a contributor removed nothing from it
+    tests: killed (1 failed: se-equal-erased-consumer)
+    fuzz:  survived
+KILLED erasure-unlinked -- the erased-callable contract's contributors are not linked to it: a consumer turned unknown (a witness's errors may be gone) does not hold back another contributor of the same errors, and the next build judges it without both
+    tests: killed (1 failed: se-equal-erased-witness)
+    fuzz:  survived
+KILLED hygiene-names-printed -- a diagnostic prints a binding hygiene renamed by its NAME#N, whose number counts that name's renames across the whole program: another site's rejection renumbers it, so a rejection committed beside an earlier one carries another message than the sequential order's
+    tests: killed (1 failed: se-equal-hygiene-names)
+    fuzz:  survived
+KILLED one-commit-per-build -- the batched run commits one rejection per build, like the sequential reference
+    tests: killed (15 failed: se-builds-contract, se-builds-contributor-checked, se-builds-coroutine-construction, se-builds-erased, se-builds-erased-empty, se-builds-legacy-pathology, ...)
+    fuzz:  killed (2 of 6 programs fail: FAIL nested: 5 rounds, more than the model's 3)
+KILLED single-component -- every site is in one component: an unknown site holds back every later one, whatever it depends on
+    tests: killed (2 failed: se-simulate-component-waits, se-simulate-independent)
+    fuzz:  survived
+KILLED every-region-consumes -- every function is a consumer of the erased-callable contract (the legacy GlobalChannels)
+    tests: killed (2 failed: se-builds-contributor-checked, se-builds-coroutine-construction)
+    fuzz:  killed (1 of 6 programs fail: FAIL layout split takes 3 rounds, nested 4 (1 blocks linked by the erased-callable contract))
+KILLED never-reuse-methods -- no method-call decision is reused across rounds
+    tests: killed (1 failed: se-method-reuse)
+    fuzz:  survived
+KILLED nested-same-unit -- a site depends on everything of the top-level function it is nested in (the legacy units): the registration function's sites serialize
+    tests: killed (4 failed: se-builds-legacy-pathology, se-builds-nested-siblings, se-builds-type-nested, se-equal-independent)
+    fuzz:  killed (2 of 6 programs fail: FAIL layout top takes 3 rounds, nested 5 (1 blocks linked by the erased-callable contract))
+KILLED verdict-every-diagnostic -- the ownership verdict depends on every diagnostic of the analysis, not on one witness: a consumer ahead of several turns unknown at the first and takes a build per rejection
+    tests: killed (1 failed: se-builds-ownership-verdict)
+    fuzz:  survived
+KILLED callable-shared -- a binding holding a callable whose contract mentions a vector is a shared mutable binding: every region calling `empty_queue() -> MutableVector[...]` depends on every other
+    tests: killed (1 failed: se-builds-ownership-verdict)
+    fuzz:  survived
+KILLED sibling-through-outer -- a nested site depends on the site around it, and so on everything that site's diagnostics read: sibling nested sites (each a dependency of the site around them) are decided one per build
+    tests: killed (1 failed: se-builds-nested-siblings)
+    fuzz:  survived
+KILLED form-reads-inputs -- a site's form is not told apart from what its diagnostics read: whatever depends on a site's form depends on that site's dependencies too, and a nested site reaches its siblings through the `if true:` around them
+    tests: killed (1 failed: se-builds-nested-siblings)
+    fuzz:  survived
+KILLED erased-empty-removed -- a request that erases nothing is taken to erase something not known: removing it changes the contract, and every caller of a consumer waits for each site passing such a function
+    tests: killed (1 failed: se-builds-erased-empty)
+    fuzz:  survived
+KILLED erased-every-contributor -- the erased-callable contract depends on every contribution, not on one witness per error: rejecting any contributor's site makes every consumer unknown, though another contribution still erases the same errors
+    tests: killed (1 failed: se-builds-erased-empty)
+    fuzz:  survived
+KILLED fixed-carrier-body -- what an erased function carries is taken to depend on its body: a site inside a function passed through an untyped parameter is an erasure site of the contract
+    tests: killed (1 failed: se-builds-erased-empty)
+    fuzz:  survived
+KILLED plan-every-diagnostic -- the plan's gate depends on every diagnostic while it is closed, not on one witness: a site ahead of several takes a build per rejection
+    tests: killed (1 failed: se-builds-plan-gate)
+    fuzz:  survived
+KILLED internal-ids-unknown -- a message naming an internal id is recognized by any word of the right shape -- and an id of no other kind than an expression's is taken to depend on every site -- so its rejection never comes from a build other than its own (it waits a build more; the semantic counterpart is internal-ids-ignored)
+    tests: killed (1 failed: se-equal-internal-ids-exact)
+    fuzz:  survived
+KILLED coroutine-subsume-unconditional -- every coroutine construction depends on the erased-callable contract, whatever its thunk captures: one capturing only the function it calls waits for a rejected contributor (a build more; the fuzzer's seed 29, program 13, nested)
+    tests: killed (1 failed: se-builds-coroutine-construction)
+    fuzz:  survived
+35 mutants, 35 killed, 0 survived

@@ -1,0 +1,5 @@
+     Running unittests src/lib.rs (native/target/release/deps/botlish_native-bd3049e0f4503646)
+test result: ok. 219 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+     Running unittests src/main.rs (native/target/release/deps/botlish_native-7feb40a4bfda7bc6)
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

@@ -134,9 +134,11 @@ for {set r 0} {$r < $rounds} {incr r} {
         exit 1
     }
     foreach backend $backends {
-        if {$backend in {interp compile}} {
+        if {$backend eq "interp"} {
             core::useBackend $backend
             set status [catch {core::evalProgram [hir::lower $hir]} v]
+        } elseif {$backend eq "compile"} {
+            set status [catch {core::compiler::evalHir $hir} v]
         } else {
             set options [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
             set status [catch {native::evalHir $hir {*}$options} v]

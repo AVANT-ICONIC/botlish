@@ -110,7 +110,7 @@ proc outcome {kind hir args} {
     if {[catch {
         switch $kind {
             interp  { core::useBackend interp;  set r [core::evalProgram [hir::lower $hir]] }
-            compile { core::useBackend compile; set r [core::evalProgram [hir::lower $hir]] }
+            compile { set r [core::compiler::evalHir $hir] }
             native  { set r [native::evalHir $hir {*}$args] }
         }
     } msg opts]} {

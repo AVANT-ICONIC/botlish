@@ -1,5 +1,5 @@
 # perturb.tcl -- non-vacuity check of golden suites (LARGE-SCALE-GOLDEN-MIGRATION.md,
-# "Every golden test can fail"): every registered test must report FAIL when
+# "Non-vacuity"): every registered test must report FAIL when
 # its verdict or its expectation is deliberately wrong.
 #
 #   tclsh9.0 audit/golden/tools/perturb.tcl ?-mode invert|alter|both?

@@ -457,7 +457,7 @@ Mismatches name the incompatible part of the contract
 diagnostic):
 
 ```
-argument for parameter "f" cannot be proven to satisfy Fn{args: [str], return: bool, errors: []} (argument type: block(e7)/2 -> bool, facts: ...); arity mismatch: the callable takes 2 argument(s), the function type 1
+argument for parameter "f" cannot be proven to satisfy Fn{args: [str], return: bool, errors: []} (argument type: two/2 -> bool, facts: ...); arity mismatch: the callable takes 2 argument(s), the function type 1
 ...; argument 1 is incompatible: the callable's parameter requires int[Byte], but callers of the function type may pass any int
 ...; return incompatible: the callable returns any, not usable as bool
 ...; error set incompatible: the callable may raise PermissionDenied, but the function type allows only [NotFound]

@@ -2,9 +2,12 @@
 # mutate.tcl; STATIC-COMPILE.md, "Decision economics"): deliberate bugs in
 # the batched scheduler (hir/static.tcl), its dependency analysis
 # (hir/staticdeps.tcl) and the reuse of method-call decisions
-# (hir/static.tcl's MethodSeeds, hir/hir.tcl). The first group changes what
-# is decided (semantic); the second only how many builds it takes
-# (economic: the milestone's contract is economic, so these are bugs too).
+# (hir/static.tcl's MethodSeeds, hir/hir.tcl), and in what a diagnostic
+# prints that differs between builds (hir/semantic.tcl's SourceName and
+# RefName, and every message naming a binding, a reference or a function by
+# them). The first group changes what is decided (semantic); the second only
+# how many builds it takes (economic: the milestone's contract is economic,
+# so these are bugs too).
 #
 #   @@ NAME DESCRIPTION
 #   ## FILE
@@ -41,36 +44,26 @@
 @@ erased-contributors-ignored the erased-callable contract depends on no contributor: its consumers are judged as if nothing changed what the program erases
 ## hir/staticdeps.tcl
 <<<<
-            foreach point [lsort -unique [dict get $state erasurePoints]] {
+            foreach unit [dict get $state erasureWitnesses] {
 ====
-            foreach point {} {
+            foreach unit {} {
 >>>>
 
 @@ contribution-not-discarded an erasing call inside a block is not a dependency on that block: rejecting the block keeps its contribution in the decisions' model
 ## hir/staticdeps.tcl
 <<<<
-                if {[dict exists $state siteOf $e]} {
-                    dict set succ Z:[dict get $state siteOf $e] erasure
-                }
-                lassign [dict get $hir exprs $e target] tk tb
-                set args [dict get $hir exprs $e args]
-                if {$tk ne "block" || ![dict exists $hir exprs $tb]} {
-                    foreach arg $args {
-                        AddSubtree $hir state $arg succ erasure
+                foreach e $items {
+                    if {[dict exists $state siteOf $e]} {
+                        dict set succ F:[dict get $state siteOf $e] erasure
+                    }
+                    lassign [dict get $hir exprs $e target] tk tb
+====
+                foreach e $items {
+                    lassign [dict get $hir exprs $e target] tk tb
+                    if {$tk eq "block"} {
+                        dict set succ R:$tb erasure
                     }
                     continue
-                }
-                dict set succ R:$tb erasure
-                foreach entry [hir::signatures::entryTypes $hir $tb] arg $args {
-                    if {$entry eq "" && $arg ne ""} {
-                        AddSubtree $hir state $arg succ erasure
-                    }
-                }
-====
-                lassign [dict get $hir exprs $e target] tk tb
-                if {$tk eq "block"} {
-                    dict set succ R:$tb erasure
-                }
 >>>>
 
 @@ nested-child-ignored a block does not depend on the blocks nested in it: the outer one is committed before its inner one's rejection is seen
@@ -81,6 +74,14 @@
             if {[dict get $spanParent $site] eq ""} {
                 dict set state ownSites $region $site 1
             }
+>>>>
+<<<<
+            if {[dict exists $state spanChildren $key]} {
+                foreach inner [dict get $state spanChildren $key] {
+                    dict set succ F:$inner nested
+                }
+            }
+====
 >>>>
 
 @@ position-ignored a block does not depend on the code around it in its function: a later block in one statement sequence is committed with the diagnostics it had before the earlier one's rejection made it unreachable
@@ -178,27 +179,304 @@
                     dict set mentions $b [list $e]
 >>>>
 
-@@ plan-consumers-ignored a site the monomorphization plan may diagnose does not depend on its gate: it is judged as if no rejection could reveal that diagnostic
+@@ plan-consumers-ignored a site whose diagnostic only the trait monomorphization's plan reports does not depend on the plan's gate: it is predicted ok beside the diagnostics that keep the plan from running, and the next build contradicts it
 ## hir/staticdeps.tcl
 <<<<
-                dict set succ C:plan plan
+                dict set succ C:plan plan-site
 ====
 >>>>
 
-@@ plan-clone-calls-ignored a call in the body of a function the plan may clone, of a function specialized only once, is no consumer unless it has an affine instance now: a clone a rejection elsewhere creates diagnoses it unpredicted
+@@ plan-witness-ignored the plan's gate depends on no diagnostic while it is closed: its sites are predicted ok however many diagnostics are rejected, and the build that opens the gate contradicts them
 ## hir/staticdeps.tcl
 <<<<
-        if {[dict get $cloned $region]
+        dict set plan Z:$last plan-gate
+        dict set plan F:$last plan-gate
 ====
-        if {0 && [dict get $cloned $region]
 >>>>
 
-@@ plan-open-witness while the gate is open (only the plan's diagnostics), the plan's sites wait for one witness like a closed gate's: one whose rejection closes it again is committed beside the others
+@@ erased-every-request-empty no request is taken to erase anything: a consumer of the erased-callable contract is judged as if rejecting a contributor removed nothing from it
 ## hir/staticdeps.tcl
 <<<<
-    if {$planned} {
+            if {$carried ne {} && $chain ne {}} {
+====
+            if {0} {
+>>>>
+
+@@ hygiene-names-printed a diagnostic prints a binding hygiene renamed by its NAME#N, whose number counts that name's renames across the whole program: another site's rejection renumbers it, so a rejection committed beside an earlier one carries another message than the sequential order's
+## hir/semantic.tcl
+<<<<
+        return [dict get $hir bindings $b spelling]
+====
+        return [dict get $hir bindings $b name]
+>>>>
+
+@@ hygiene-module-name a module's own definition hygiene renamed before qualifying it is named by its qualified NAME#N (hir::semantic::SourceName)
+## hir/semantic.tcl
+<<<<
+    if {[dict exists $hir bindings $b spelling] && $i >= 0} {
 ====
     if {0} {
+>>>>
+
+@@ hygiene-ref-name-printed a reference or binding statement is named by its own name, which hygiene renamed with its binding: every message printing hir::semantic::RefName prints NAME#N again
+## hir/semantic.tcl
+<<<<
+    if {$b ne "" && [dict get $hir bindings $b name] eq [dict get $node name]} {
+        return [SourceName $hir $b]
+    }
+====
+    if {0} {
+        return [SourceName $hir $b]
+    }
+>>>>
+
+@@ hygiene-use-after-move USE-AFTER-MOVE (and AFFINE-NOT-DEFINITELY-LIVE) names the used reference by its NAME#N (hir/affine.tcl's Use)
+## hir/affine.tcl
+<<<<
+    variable consumed
+    set name [hir::semantic::RefName $hir $e]
+====
+    variable consumed
+    set name [dict get $hir exprs $e name]
+>>>>
+
+@@ hygiene-move-text an ownership message's "moved here" names the moving reference by its NAME#N (hir/affine.tcl's MoveText)
+## hir/affine.tcl
+<<<<
+    set source [hir::semantic::RefName $hir $move]
+====
+    set source [dict get $node name]
+>>>>
+
+@@ hygiene-affine-named an ownership message names the affine value by its NAME#N (hir/affine.tcl's Named: erasure, duplication, equality, List and copy-out messages)
+## hir/affine.tcl
+<<<<
+        return "`[hir::semantic::RefName $hir $e]`"
+====
+        return "`[dict get $hir exprs $e name]`"
+>>>>
+
+@@ hygiene-affine-parameter an erasure into a declared parameter names the parameter by its NAME#N (hir/affine.tcl's CallConsumer)
+## hir/affine.tcl
+<<<<
+        set paramName [hir::semantic::SourceName $hir [lindex [dict get $hir exprs $target params] $index]]
+        return [Erasure
+====
+        set paramName [dict get $hir bindings [lindex [dict get $hir exprs $target params] $index] name]
+        return [Erasure
+>>>>
+
+@@ hygiene-affine-capture AFFINE-CAPTURE-UNSUPPORTED names the captured reference by its NAME#N
+## hir/affine.tcl
+<<<<
+                    "`[hir::semantic::RefName $hir $e]` is an affine [hir::types::show [BindingType $hir $b]], which cannot be captured
+====
+                    "`[dict get $node name]` is an affine [hir::types::show [BindingType $hir $b]], which cannot be captured
+>>>>
+
+@@ hygiene-field-move AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE spells the destructuring it suggests with the struct's NAME#N
+## hir/affine.tcl
+<<<<
+                set shown [expr {$kind eq "ref" ? [hir::semantic::RefName $hir $e] : "value"}]
+====
+                set shown [expr {$kind eq "ref" ? [dict get $hir exprs $e name] : "value"}]
+>>>>
+
+@@ hygiene-path-release AFFINE-PATH-RELEASE-UNSUPPORTED names the binding by its NAME#N (hir/affine.tcl's PathPoint)
+## hir/affine.tcl
+<<<<
+    set node [dict get $hir exprs $x]
+    set name [hir::semantic::SourceName $hir $b]
+====
+    set node [dict get $hir exprs $x]
+    set name [dict get $hir bindings $b name]
+>>>>
+
+@@ hygiene-coroutine-not-function COROUTINE-NOT-FUNCTION names the handle by its NAME#N
+## hir/range.tcl
+<<<<
+"\"[hir::semantic::RefName $hir $arg]\""
+====
+"\"[dict get $hir exprs $arg name]\""
+>>>>
+
+@@ hygiene-resume-arity COROUTINE-RESUME-ARITY spells the resume it asks for with the handle's NAME#N
+## hir/range.tcl
+<<<<
+[hir::semantic::RefName $hir $callee] : "step"
+====
+[dict get $hir exprs $callee name] : "step"
+>>>>
+
+@@ hygiene-function-name hir::signatures::Name names a function by its NAME#N: the inferred-contract reasons of TYPE messages and the trait messages naming a function
+## hir/signatures.tcl
+<<<<
+    set name [hir::semantic::CallableName $hir $e]
+    return [expr {$name eq "" ? "a function" : $name}]
+====
+    foreach b [dict get $hir scopes [dict get $hir exprs $e scope] bindings] {
+        set declaredBy [dict get $hir bindings $b declaredBy]
+        if {$declaredBy ne "" && [dict exists $hir exprs $declaredBy]
+                && [dict get $hir exprs $declaredBy value] eq $e} {
+            return [dict get $hir bindings $b name]
+        }
+    }
+    return "a function"
+>>>>
+
+@@ hygiene-parameter-conflict a parameter no type satisfies is named by its NAME#N (hir::signatures::Diagnose)
+## hir/signatures.tcl
+<<<<
+            [hir::semantic::SourceName $hir $p] [Name $hir $block] \
+====
+            [dict get $hir bindings $p name] [Name $hir $block] \
+>>>>
+
+@@ hygiene-erased-requirements a typed callable whose requirements would be erased is named by its NAME#N (hir::callables::Name)
+## hir/callables.tcl
+<<<<
+            return [hir::semantic::SourceName $hir $b]
+====
+            return [dict get $binding name]
+>>>>
+
+@@ hygiene-lockstep a lockstep loop's iteration counts name a List's binding by its NAME#N (hir::cardinality::ShowAtom)
+## hir/cardinality.tcl
+<<<<
+                return "length([hir::semantic::SourceName $hir $id])"
+====
+                return "length([dict get $hir bindings $id name])"
+>>>>
+
+@@ hygiene-mutable-receiver MUTABLE-PLACE-RECEIVER names the receiver's binding by its NAME#N (hir::mutvec::ReceiverProblem)
+## hir/mutvec.tcl
+<<<<
+    set shown [hir::semantic::SourceName $hir $b]
+====
+    set shown [dict get $binding name]
+>>>>
+
+@@ hygiene-mutable-capture MUTABLE-PLACE-CAPTURE names the captured place by its NAME#N
+## hir/mutvec.tcl
+<<<<
+                "`[hir::semantic::RefName $hir $e]` is a $what place
+====
+                "`[dict get $node name]` is a $what place
+>>>>
+
+@@ hygiene-context-trait-binding CONTEXT-TRAIT-MISUSE names the context-trait binding by its NAME#N
+## hir/contexts.tcl
+<<<<
+        set name [hir::semantic::RefName $hir $e]
+        hir::Diagnose hir CONTEXT-TRAIT-MISUSE \
+====
+        set name [dict get $node name]
+        hir::Diagnose hir CONTEXT-TRAIT-MISUSE \
+>>>>
+
+@@ hygiene-trait-function-bind a body's last binding statement whose value denotes a trait-polymorphic function is named by its NAME#N (hir::traits::VerifyFunctionValues)
+## hir/traits.tcl
+<<<<
+                [hir::semantic::RefName $hir $e] [hir::signatures::Name $hir [FunctionOf $hir [dict get $node binding]]]] $e
+====
+                [dict get $node name] [hir::signatures::Name $hir [FunctionOf $hir [dict get $node binding]]]] $e
+>>>>
+
+@@ hygiene-trait-witness a trait view's parameter witness is named by the parameter's NAME#N (hir::traits::ShowWitness)
+## hir/traits.tcl
+<<<<
+            return "the witness of parameter \"[hir::semantic::SourceName $hir $b]\" of [hir::signatures::Name $hir $block]"
+====
+            return "the witness of parameter \"[dict get $hir bindings $b name]\" of [hir::signatures::Name $hir $block]"
+>>>>
+
+@@ subsume-gate-every-failing every failing site's diagnostics drop their contract-boundary edges, whatever reported its first diagnostic: a site failing with a contract-boundary report is committed while a rejection can still make the report vanish
+## hir/staticdeps.tcl
+<<<<
+                if {$i >= $from && $i < $to} {
+                    dict set early $owner 1
+                }
+====
+                dict set early $owner 1
+>>>>
+
+@@ method-trial-ignored a method-style call's region does not depend on what the program erases through the contract-boundary checks of its trial builds: a decision that the rejection of an erasing site changes is reused
+## hir/staticdeps.tcl
+<<<<
+    if {[dict exists $state methodTrial $q]} {
+====
+    if {0} {
+>>>>
+
+@@ consumers-do-not-wait no site waits for the contributors to a channel it consumes (the definition before the waiting rule): a consumer written before a failing contributor is rejected for an erasure the final program does not have
+## hir/static.tcl
+<<<<
+proc hir::static::Waits {key status deps} {
+    if {$deps eq "" || ![dict exists $deps consumes $key]} {
+====
+proc hir::static::Waits {key status deps} {
+    if {1} {
+>>>>
+
+@@ batched-ignores-waiting the batched run commits a failing consumer while a failing contributor to its channel remains, which the sequential order makes wait
+## hir/static.tcl
+<<<<
+            if {$w ne ""} {
+                dict set waiting $key $w
+                if {![dict exists $cycle $c]} {
+                    dict set cycle $c $key
+                }
+                continue
+            }
+====
+>>>>
+
+@@ channels-not-consumed the dependency analysis records no site as a channel's consumer: nothing waits, in either scheduler
+## hir/staticdeps.tcl
+<<<<
+                        if {$w eq "C:erased" || [string match C:budget:* $w]} {
+====
+                        if {0} {
+>>>>
+
+@@ early-consumes-erased a failing site whose first diagnostic precedes the completion walk still waits for the erased contract's failing contributors, though no erasure can cause or precede that diagnostic: it is judged a build later
+## hir/staticdeps.tcl
+<<<<
+        if {[dict exists $state early $key]} {
+            # Its first diagnostic was reported before the completion walk,
+====
+        if {0} {
+            # Its first diagnostic was reported before the completion walk,
+>>>>
+
+@@ erasure-contributors-witnesses-only the erased-callable contract's contributors under the waiting rule are its witnesses' sites only, not every site holding a contribution: blocks that each erase and each call through an uncontracted value, failing for reasons of their own, wait one by one on the last of them -- one build each instead of one cycle in one build
+## hir/staticdeps.tcl
+<<<<
+            lappend base {*}[dict keys [dict get $state erasureSites]]
+====
+>>>>
+
+@@ plan-open-witness while every diagnostic may be the plan's (the gate is open), the plan's sites wait for one witness as when it is closed: a rejection that closes the gate again (an UNHANDLED-ERROR in no site) is committed beside an independent plan diagnostic the sequential order then accepts
+## hir/staticdeps.tcl
+<<<<
+    if {$open} {
+====
+    if {0} {
+>>>>
+
+@@ plan-any-settled an argument typed `any` cannot become affine: a call giving it to a nested generic function is no consumer of the plan's gate, though a clone its caller's narrowed argument creates diagnoses it
+## hir/staticdeps.tcl
+<<<<
+    if {[hir::types::IsAffine $type]} {
+        return 1
+    }
+    if {$type eq "any"} {
+        return 1
+    }
+====
+    if {[hir::types::IsAffine $type]} {
+        return 1
+    }
 >>>>
 
 # ---------------------------------------------------------------------------
@@ -275,36 +553,112 @@
 ====
 >>>>
 
-@@ plan-every-diagnostic the plan's closed gate depends on every failing site, not on one witness: a site it may diagnose ahead of several failures turns unknown at the first and takes a build per rejection
+@@ sibling-through-outer a nested site depends on the site around it, and so on everything that site's diagnostics read: sibling nested sites (each a dependency of the site around them) are decided one per build
 ## hir/staticdeps.tcl
 <<<<
-    if {$last ne ""} {
-        dict set plan Z:$last plan-gate
-    } else {
+            if {[dict exists $state spanChildren $key]} {
+                foreach inner [dict get $state spanChildren $key] {
+                    dict set succ F:$inner nested
+                }
+            }
 ====
-    if {$last ne ""} {
-        foreach key $owned {
-            dict set plan Z:$key plan-gate
+            if {[dict exists $state spanChildren $key]} {
+                foreach inner [dict get $state spanChildren $key] {
+                    dict set succ F:$inner nested
+                }
+            }
+            if {[dict get $state spanParent $key] ne ""} {
+                dict set succ Z:[dict get $state spanParent $key] nested
+            }
+>>>>
+
+@@ form-reads-inputs a site's form is not told apart from what its diagnostics read: whatever depends on a site's form depends on that site's dependencies too, and a nested site reaches its siblings through the `if true:` around them
+## hir/staticdeps.tcl
+<<<<
+            dict set state names $v "site [SiteName $hir $key]"
+====
+            dict set state names $v "site [SiteName $hir $key]"
+            dict set succ Z:$key form
+>>>>
+
+@@ erased-empty-removed a request that erases nothing is taken to erase something not known: removing it changes the contract, and every caller of a consumer waits for each site passing such a function
+## hir/staticdeps.tcl
+<<<<
+            if {$carried ne {} && $chain ne {}} {
+                lassign [RequestPath $requests $regionOf $siteOf $position $id paths] path rank
+                if {$path ne {}} {
+                    lappend units [list $carried key [lsort -unique $chain] $path $rank]
+====
+            if {$chain ne {}} {
+                lassign [RequestPath $requests $regionOf $siteOf $position $id paths] path rank
+                if {$path ne {}} {
+                    lappend units [list [expr {$carried eq {} ? "*" : $carried}] key [lsort -unique $chain] $path $rank]
+>>>>
+
+@@ erased-every-contributor the erased-callable contract depends on every contribution, not on one witness per error: rejecting any contributor's site makes every consumer unknown, though another contribution still erases the same errors
+## hir/staticdeps.tcl
+<<<<
+        set rank $never
+        foreach e $items {
+====
+        lappend witnesses $index
+        set rank $never
+        foreach e $items {
+>>>>
+
+@@ fixed-carrier-body what an erased function carries is taken to depend on its body: a site inside a function passed through an untyped parameter is an erasure site of the contract
+## hir/staticdeps.tcl
+<<<<
+                    if {[FixedCarrier $hir $state $arg]} {
+====
+                    if {0} {
+>>>>
+
+@@ plan-every-diagnostic the plan's gate depends on every diagnostic while it is closed, not on one witness: a site ahead of several takes a build per rejection
+## hir/staticdeps.tcl
+<<<<
+        if {$site ne "" && ($last eq "" || [dict get $position $site] > [dict get $position $last])} {
+            set last $site
         }
-    } else {
+====
+        if {$site ne ""} {
+            dict set plan F:$site plan-gate
+            dict set plan Z:$site plan-gate
+        }
+        if {$site ne "" && ($last eq "" || [dict get $position $site] > [dict get $position $last])} {
+            set last $site
+        }
 >>>>
 
-@@ plan-failing-consumers a site failing the checker is still a consumer of the plan's closed gate: it joins the witness's component, and its dependents turned unknown hold the witness back
-## hir/staticdeps.tcl
+@@ internal-ids-unknown a message naming an internal id is recognized by any word of the right shape -- and an id of no other kind than an expression's is taken to depend on every site -- so its rejection never comes from a build other than its own (it waits a build more; the semantic counterpart is internal-ids-ignored)
+## hir/static.tcl
 <<<<
-        dict unset consumers $key
+    return [lmap {- - id} [regexp -all -inline {\m(block\(|function )(e[0-9]+)\M} $message] {set id}]
 ====
+    return [regexp -all -inline {\m[ebsyt][0-9]+\M} $message]
 >>>>
 
-@@ plan-clone-any-untyped every top-level function with an untyped parameter may be cloned for an affine argument, whatever its calls pass: a site in one giving a value to a nested generic function is a consumer, and its reach joins the witness's component
+@@ coroutine-subsume-unconditional every coroutine construction depends on the erased-callable contract, whatever its thunk captures: one capturing only the function it calls waits for a rejected contributor (a build more; the fuzzer's seed 29, program 13, nested)
 ## hir/staticdeps.tcl
 <<<<
-    if {"" ni $declared} {
-        return 0
-    }
+                set thunk [hir::coroutines::thunkOfHandle $hir $value]
+                if {$thunk ne ""} {
+                    foreach c [dict get $hir exprs $thunk captures] {
+                        dict set succ P:$c subsume
 ====
-    if {"" ni $declared} {
-        return 0
-    }
-    return 1
+                set thunk [hir::coroutines::thunkOfHandle $hir $value]
+                dict set succ C:erased subsume
+                if {$thunk ne ""} {
+                    foreach c [dict get $hir exprs $thunk captures] {
+                        dict set succ P:$c subsume
+>>>>
+
+@@ subsume-gate-ignored a site whose first diagnostic was reported before the completion walk still depends on what the program erases: it waits for every erasing site's rejection
+## hir/staticdeps.tcl
+<<<<
+            if {![dict exists $state early $key]} {
+                SubsumeSuccessors $hir state $key succ
+====
+            if {1} {
+                SubsumeSuccessors $hir state $key succ
 >>>>

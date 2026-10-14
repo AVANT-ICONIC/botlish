@@ -1,0 +1,413 @@
+abi-bytes-native.bot         invert     0 tests,    0 failed as required
+abi-bytes-native.bot         alter      3 altered,    0 failed as required,    0 not alterable
+    NOT REPORTED under alteration: abi-bytes-empty-write-to-an-invalid-descriptor-is-still-the-syscall
+    NOT REPORTED under alteration: abi-bytes-write-error-is-the-raw-negative-result
+    NOT REPORTED under alteration: abi-bytes-gc-stress-in-process
+abi-bytes.bot                invert   103 tests,  103 failed as required
+abi-bytes.bot                alter    103 altered,  103 failed as required,    0 not alterable
+abi-numeric-native.bot       invert     0 tests,    0 failed as required
+abi-numeric-native.bot       alter      1 altered,    0 failed as required,    0 not alterable
+    NOT REPORTED under alteration: abi-numeric-syscall-operands-are-the-encoded-words
+abi-numeric.bot              invert    87 tests,   87 failed as required
+abi-numeric.bot              alter     72 altered,   72 failed as required,    5 not alterable
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+abi-numeric.bot              column     1 located,    1 failed as required
+affinity.bot                 invert    67 tests,   67 failed as required
+affinity.bot                 alter     67 altered,   67 failed as required,    0 not alterable
+affinity.bot                 column     2 located,    2 failed as required
+bits-bytes-hashing.bot       invert    47 tests,   47 failed as required
+bits-bytes-hashing.bot       alter     33 altered,   33 failed as required,    2 not alterable
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+callable-contracts-contravariant-rejected.bot invert     2 tests,    2 failed as required
+callable-contracts-contravariant-rejected.bot alter      2 altered,    2 failed as required,    0 not alterable
+callable-contracts-contravariant-rejected.bot column     1 located,    1 failed as required
+callable-contracts-contravariant.bot invert     4 tests,    4 failed as required
+callable-contracts-contravariant.bot alter      4 altered,    4 failed as required,    0 not alterable
+callable-contracts-contravariant.bot column     1 located,    1 failed as required
+callable-contracts-fallback.bot invert     4 tests,    4 failed as required
+callable-contracts-fallback.bot alter      4 altered,    4 failed as required,    0 not alterable
+callable-contracts-handle.bot invert     1 tests,    1 failed as required
+callable-contracts-handle.bot alter      1 altered,    1 failed as required,    0 not alterable
+callable-contracts-returned.bot invert     4 tests,    4 failed as required
+callable-contracts-returned.bot alter      4 altered,    4 failed as required,    0 not alterable
+callable-contracts-unerased.bot invert     1 tests,    1 failed as required
+callable-contracts-unerased.bot alter      1 altered,    1 failed as required,    0 not alterable
+callable-contracts.bot       invert    92 tests,   92 failed as required
+callable-contracts.bot       alter     92 altered,   92 failed as required,    0 not alterable
+callable-contracts.bot       column    18 located,   18 failed as required
+callables.bot                invert   113 tests,  113 failed as required
+callables.bot                alter    113 altered,  113 failed as required,    0 not alterable
+callables.bot                column     1 located,    1 failed as required
+closure-escape-instances.bot invert     1 tests,    1 failed as required
+closure-escape-instances.bot alter      1 altered,    1 failed as required,    0 not alterable
+closure-escape.bot           invert    49 tests,   49 failed as required
+closure-escape.bot           alter     49 altered,   49 failed as required,    0 not alterable
+collections.bot              invert    44 tests,   44 failed as required
+collections.bot              alter     38 altered,   38 failed as required,    2 not alterable
+    not altered: char-typed-callable-escape-rejected/accepted -- expected value has no Int, String, Bool or known enum case to alter
+collections.bot              column    13 located,   13 failed as required
+compiled-values-struct-transport.bot invert    18 tests,   18 failed as required
+compiled-values-struct-transport.bot alter     18 altered,   18 failed as required,    0 not alterable
+compiled-values.bot          invert   118 tests,  118 failed as required
+compiled-values.bot          alter    114 altered,  114 failed as required,    4 not alterable
+    not altered: si-bad-2/raw-array -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: si-bad-2/fitting-value -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: si-bad-4/two-fitting-instances -- expected value has no Int, String, Bool or known enum case to alter
+compiled-values.bot          column    11 located,   11 failed as required
+completion-regressions.bot   invert    23 tests,   23 failed as required
+completion-regressions.bot   alter     23 altered,   23 failed as required,    0 not alterable
+completion-regressions.bot   column    13 located,   13 failed as required
+contexts.bot                 invert    88 tests,   88 failed as required
+contexts.bot                 alter     88 altered,   88 failed as required,    0 not alterable
+contexts.bot                 column    14 located,   14 failed as required
+core-semantics.bot           invert   141 tests,  141 failed as required
+core-semantics.bot           alter    121 altered,  121 failed as required,    5 not alterable
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: if-missing-branch-is-unit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: elif-branch-values-unit/elif -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: elif-branch-values-unit/nested -- expected value has no Int, String, Bool or known enum case to alter
+core-semantics.bot           column    18 located,   18 failed as required
+coroutines.bot               invert    62 tests,   62 failed as required
+coroutines.bot               alter     62 altered,   62 failed as required,    0 not alterable
+coroutines.bot               column     1 located,    1 failed as required
+declared-errors-imports.bot  invert    10 tests,   10 failed as required
+declared-errors-imports.bot  alter     10 altered,   10 failed as required,    0 not alterable
+declared-errors.bot          invert   115 tests,  115 failed as required
+declared-errors.bot          alter    103 altered,  103 failed as required,    5 not alterable
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+destructuring-instances.bot  invert    55 tests,   55 failed as required
+destructuring-instances.bot  alter     33 altered,   33 failed as required,   22 not alterable
+    not altered: destructure-source-statement-value/destructured -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-source-statement-value/explicit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-field-order-irrelevant/ab -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-field-order-irrelevant/ba -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-field-order-irrelevant/both -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-nested/destructured -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-nested/explicit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-nested/reordered -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-nested/partial -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-not-source-narrowing-or-remainder/ab -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-not-source-narrowing-or-remainder/ba -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-not-source-narrowing-or-remainder/a -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-not-source-narrowing-or-remainder/abc -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-not-source-narrowing-or-remainder/renamed -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-branch/else-unit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-branch/both-branches -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-branch/elif -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-collecting-loop/in -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-collecting-loop/two-fields -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-collecting-loop/empty -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-loop-old-collection-gone/destructure -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-continue/destructure-last -- expected value has no Int, String, Bool or known enum case to alter
+destructuring.bot            invert   378 tests,  378 failed as required
+destructuring.bot            alter    316 altered,  316 failed as required,   41 not alterable
+    not altered: destructure-value-direct/destructured -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-direct/explicit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-is-not-the-last-field/destructure -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-shorthand-named/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-shorthand-anonymous/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-one-field-named/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-one-field-anonymous/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-last-field-named/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-last-field-anonymous/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-all-fields-named/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-all-fields-anonymous/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-renamed-named/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-renamed-anonymous/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-renamed-swap-named/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-renamed-swap-anonymous/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-reordered-named/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-reordered-anonymous/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-trailing-comma-named/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-trailing-comma-anonymous/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-rename/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-rename/later-destructure-last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-top-level/literal-source -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-top-level/binding-source -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-collecting-loop/counted -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-collecting-loop/lockstep -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-error-capable/success/destructured -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-error-capable/success/explicit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-handled/destructured -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-handled/explicit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-value-mutable-field-still-same-value/last -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-same-program-last-statement/destructured -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-same-program-last-statement/explicit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-same-program-last-statement-nested/destructured -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-same-program-last-statement-nested/explicit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-same-program-last-in-branch/destructured -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-same-program-last-in-branch/explicit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-same-program-last-in-loop/destructured -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-same-program-last-in-loop/explicit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-same-program-last-capturing-unit-result/destructured -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: destructure-same-program-last-capturing-unit-result/explicit -- expected value has no Int, String, Bool or known enum case to alter
+destructuring.bot            column    12 located,   12 failed as required
+diagnostics.bot              invert    27 tests,   27 failed as required
+diagnostics.bot              alter     17 altered,   17 failed as required,    3 not alterable
+diagnostics.bot              column    15 located,   15 failed as required
+errors.bot                   invert    24 tests,   24 failed as required
+errors.bot                   alter     22 altered,   22 failed as required,    1 not alterable
+errors.bot                   column     2 located,    2 failed as required
+flags.bot                    invert   100 tests,  100 failed as required
+flags.bot                    alter     98 altered,   98 failed as required,    1 not alterable
+flags.bot                    column    18 located,   18 failed as required
+framework-semantics.bot      invert    29 tests,   29 failed as required
+framework-semantics.bot      alter     29 altered,   29 failed as required,    2 not alterable
+    not altered: nested -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: raises -- expected value has no Int, String, Bool or known enum case to alter
+framework-semantics.bot      column     3 located,    3 failed as required
+gc-sensitive-values.bot      invert    22 tests,   22 failed as required
+gc-sensitive-values.bot      alter     22 altered,   22 failed as required,    0 not alterable
+harness.bot                  invert    13 tests,   13 failed as required
+harness.bot                  alter     13 altered,   13 failed as required,    0 not alterable
+harness.bot                  column     1 located,    1 failed as required
+hir-values.bot               invert    14 tests,   14 failed as required
+hir-values.bot               alter     14 altered,   14 failed as required,    0 not alterable
+hir-values.bot               column     2 located,    2 failed as required
+imports-abi-child.bot        invert    17 tests,   17 failed as required
+imports-abi-child.bot        alter     17 altered,   17 failed as required,    0 not alterable
+imports-abi-family.bot       invert     6 tests,    6 failed as required
+imports-abi-family.bot       alter      6 altered,    6 failed as required,    0 not alterable
+imports-library-modules.bot  invert    12 tests,   12 failed as required
+imports-library-modules.bot  alter     12 altered,   12 failed as required,    0 not alterable
+imports-unimported.bot       invert    16 tests,   16 failed as required
+imports-unimported.bot       alter     16 altered,   16 failed as required,    0 not alterable
+imports.bot                  invert    59 tests,   59 failed as required
+imports.bot                  alter     37 altered,   37 failed as required,    2 not alterable
+    not altered: (computed name str::concat(name, "/qualified")) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name str::concat(name, "/method")) -- expected value has no Int, String, Bool or known enum case to alter
+linux-io-native.bot          invert     0 tests,    0 failed as required
+linux-io-native.bot          alter      5 altered,    0 failed as required,    0 not alterable
+    NOT REPORTED under alteration: linux-syscall-getpid-positive-and-stable
+    NOT REPORTED under alteration: linux-syscall-argument-shapes
+    NOT REPORTED under alteration: linux-syscall-bound-register-struct-is-an-object/bound
+    NOT REPORTED under alteration: linux-syscall-bound-register-struct-is-an-object/inline
+    NOT REPORTED under alteration: linux-syscall-gc-stress
+linux-io.bot                 invert    55 tests,   55 failed as required
+linux-io.bot                 alter     53 altered,   53 failed as required,    1 not alterable
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+linux-io.bot                 column     5 located,    5 failed as required
+lists-and-sets.bot           invert    86 tests,   86 failed as required
+lists-and-sets.bot           alter     67 altered,   67 failed as required,    5 not alterable
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+lists-and-sets.bot           column     6 located,    6 failed as required
+loop-collecting-refined-checks.bot invert     1 tests,    1 failed as required
+loop-collecting-refined-checks.bot alter      1 altered,    1 failed as required,    0 not alterable
+loop-collecting.bot          invert   110 tests,  110 failed as required
+loop-collecting.bot          alter     84 altered,   84 failed as required,   20 not alterable
+    not altered: loop-collecting-up-to-empty -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-up-to-reversed -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-up-through-reversed -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-up-through-just-past -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-down-to-empty -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-down-to-reversed -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-down-to-neg-empty -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-down-through-reversed -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-down-through-just -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-huge-empty-through -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-break-first -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-lockstep-negative-n -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-lockstep-empty -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-collecting-lockstep-empty-constant -- expected value has no Int, String, Bool or known enum case to alter
+loop-collecting.bot          column     1 located,    1 failed as required
+loops.bot                    invert    55 tests,   55 failed as required
+loops.bot                    alter     49 altered,   49 failed as required,    6 not alterable
+    not altered: loop-counted-zero-iterations-equal -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-counted-zero-iterations-reversed -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-counted-break-bare -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-counted-end-exclusive-under-continue -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-in-empty-list -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-in-break-immediately -- expected value has no Int, String, Bool or known enum case to alter
+loops.bot                    column     5 located,    5 failed as required
+method-equivalence-imported.bot invert    13 tests,   13 failed as required
+method-equivalence-imported.bot alter     13 altered,   13 failed as required,    0 not alterable
+method-equivalence-imported.bot column     2 located,    2 failed as required
+method-equivalence.bot       invert    45 tests,   45 failed as required
+method-equivalence.bot       alter     43 altered,   43 failed as required,    2 not alterable
+    not altered: me-form-char-literal -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: me-form-bool-and-unit/unit -- expected value has no Int, String, Bool or known enum case to alter
+method-equivalence.bot       column     3 located,    3 failed as required
+methods-byte-without-list.bot invert     3 tests,    3 failed as required
+methods-byte-without-list.bot alter      3 altered,    3 failed as required,    0 not alterable
+methods-list-without-str.bot invert     3 tests,    3 failed as required
+methods-list-without-str.bot alter      3 altered,    3 failed as required,    0 not alterable
+methods-struct-instances.bot invert     8 tests,    8 failed as required
+methods-struct-instances.bot alter      8 altered,    8 failed as required,    0 not alterable
+methods-type-import-only.bot invert     1 tests,    1 failed as required
+methods-type-import-only.bot alter      1 altered,    1 failed as required,    0 not alterable
+methods.bot                  invert   195 tests,  195 failed as required
+methods.bot                  alter    184 altered,  184 failed as required,    3 not alterable
+    not altered: (computed name name.concat("/method")) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name.concat("/free")) -- expected value has no Int, String, Bool or known enum case to alter
+modules.bot                  invert    31 tests,   31 failed as required
+modules.bot                  alter     27 altered,   27 failed as required,    2 not alterable
+modules.bot                  column     5 located,    5 failed as required
+mutable-array.bot            invert   233 tests,  233 failed as required
+mutable-array.bot            alter    231 altered,  231 failed as required,    1 not alterable
+mutable-vector-str.bot       invert     1 tests,    1 failed as required
+mutable-vector-str.bot       alter      1 altered,    1 failed as required,    0 not alterable
+mutable-vector.bot           invert    74 tests,   74 failed as required
+mutable-vector.bot           alter     67 altered,   67 failed as required,    2 not alterable
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+names-and-scoping.bot        invert    58 tests,   58 failed as required
+names-and-scoping.bot        alter     51 altered,   51 failed as required,    2 not alterable
+names-and-scoping.bot        column    28 located,   28 failed as required
+native-aggregates.bot        invert    70 tests,   70 failed as required
+native-aggregates.bot        alter     47 altered,   47 failed as required,   10 not alterable
+    not altered: mutarray-2 -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: mutarray-4 -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: mutarray-5 -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: mutarray-freeze-4 -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+native-values.bot            invert    89 tests,   89 failed as required
+native-values.bot            alter     73 altered,   73 failed as required,    6 not alterable
+    not altered: constant-values/unit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: bare-break-loop-is-unit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-returning-unit -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+opaque-instances.bot         invert     1 tests,    1 failed as required
+opaque-instances.bot         alter      1 altered,    1 failed as required,    0 not alterable
+opaque.bot                   invert    91 tests,   91 failed as required
+opaque.bot                   alter     87 altered,   87 failed as required,    4 not alterable
+opaque.bot                   column     1 located,    1 failed as required
+ownership.bot                invert    38 tests,   38 failed as required
+ownership.bot                alter     34 altered,   34 failed as required,    3 not alterable
+range-and-contract-values.bot invert    78 tests,   78 failed as required
+range-and-contract-values.bot alter     78 altered,   78 failed as required,    0 not alterable
+range-and-contract-values.bot column     2 located,    2 failed as required
+raw-int-abi.bot              invert    52 tests,   52 failed as required
+raw-int-abi.bot              alter     52 altered,   52 failed as required,    0 not alterable
+recursive-types.bot          invert     9 tests,    9 failed as required
+recursive-types.bot          alter      9 altered,    9 failed as required,    0 not alterable
+refinements.bot              invert    66 tests,   66 failed as required
+refinements.bot              alter     66 altered,   66 failed as required,    0 not alterable
+refinements.bot              column    12 located,   12 failed as required
+representation.bot           invert    13 tests,   13 failed as required
+representation.bot           alter     12 altered,   12 failed as required,    1 not alterable
+static-compile-erased-consumer.bot invert     2 tests,    2 failed as required
+static-compile-erased-consumer.bot alter      2 altered,    2 failed as required,    0 not alterable
+static-compile-erased-consumer.bot column     1 located,    1 failed as required
+static-compile.bot           invert    81 tests,   81 failed as required
+static-compile.bot           alter     65 altered,   65 failed as required,    2 not alterable
+static-compile.bot           column    27 located,   27 failed as required
+stdlib-namespaces-entry-members.bot invert     4 tests,    4 failed as required
+stdlib-namespaces-entry-members.bot alter      4 altered,    4 failed as required,    0 not alterable
+stdlib-namespaces-str-only.bot invert     1 tests,    1 failed as required
+stdlib-namespaces-str-only.bot alter      1 altered,    1 failed as required,    0 not alterable
+stdlib-namespaces-unimported.bot invert     2 tests,    2 failed as required
+stdlib-namespaces-unimported.bot alter      2 altered,    2 failed as required,    0 not alterable
+stdlib-namespaces.bot        invert   114 tests,  114 failed as required
+stdlib-namespaces.bot        alter    105 altered,  105 failed as required,    5 not alterable
+    not altered: ns-slice-proofs/copy-within-capacities -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: ns-proof-capacity/allocation-size -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: ns-proof-capacity/capacity -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: ns-proof-capacity/literal-in-capacity -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+stdlib-namespaces.bot        column     1 located,    1 failed as required
+string-natives.bot           invert    82 tests,   82 failed as required
+string-natives.bot           alter     40 altered,   40 failed as required,    5 not alterable
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+string-representations.bot   invert    48 tests,   48 failed as required
+string-representations.bot   alter     48 altered,   48 failed as required,    0 not alterable
+strings.bot                  invert    94 tests,   94 failed as required
+strings.bot                  alter     43 altered,   43 failed as required,   15 not alterable
+    not altered: (computed name "str-char-at-index-not-found-".concat(label)) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: char-identity-accepts-char -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: char-take-int-accepts-codepoint -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: char-parity-literal-ascii -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: char-parity-literal-bmp -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: char-parity-literal-supplementary -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: char-parity-list-construction -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: char-parity-list-get -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: char-consume-list -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: char-alias-propagation -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: char-typed-callable-alias-still-works/accepted -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: char-container-erasure-ordinary/kept -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name "ascii-boundary-".concat(label)) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name "emailish-predicate-parity-".concat(label)) -- expected value has no Int, String, Bool or known enum case to alter
+strings.bot                  column     7 located,    7 failed as required
+struct-representation-instances.bot invert    15 tests,   15 failed as required
+struct-representation-instances.bot alter     15 altered,   15 failed as required,    0 not alterable
+struct-representation.bot    invert   110 tests,  110 failed as required
+struct-representation.bot    alter    104 altered,  104 failed as required,    3 not alterable
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name) -- expected value has no Int, String, Bool or known enum case to alter
+structs-and-enums-instances.bot invert     4 tests,    4 failed as required
+structs-and-enums-instances.bot alter      4 altered,    4 failed as required,    0 not alterable
+structs-and-enums-qualifiers.bot invert     2 tests,    2 failed as required
+structs-and-enums-qualifiers.bot alter      2 altered,    2 failed as required,    0 not alterable
+structs-and-enums.bot        invert   111 tests,  111 failed as required
+structs-and-enums.bot        alter    109 altered,  109 failed as required,    2 not alterable
+    not altered: struct-anon-empty/value -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: enum-syntax-comma-list/single-case -- expected value has no Int, String, Bool or known enum case to alter
+structs-and-enums.bot        column    27 located,   27 failed as required
+traits-path.bot              invert     2 tests,    2 failed as required
+traits-path.bot              alter      2 altered,    2 failed as required,    0 not alterable
+traits.bot                   invert    67 tests,   67 failed as required
+traits.bot                   alter     67 altered,   67 failed as required,    0 not alterable
+types.bot                    invert    96 tests,   96 failed as required
+types.bot                    alter     96 altered,   96 failed as required,    0 not alterable
+types.bot                    column     3 located,    3 failed as required
+unicode-strings.bot          invert    56 tests,   56 failed as required
+unicode-strings.bot          alter      1 altered,    1 failed as required,    4 not alterable
+    not altered: (computed name "native-tcl-unicode-alpha-".concat(label)) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name "native-tcl-unicode-alnum-".concat(label)) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name "native-tcl-unicode-emailish-".concat(label)) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name "native-tcl-unicode-lowercase-".concat(label)) -- expected value has no Int, String, Bool or known enum case to alter
+validators-and-proofs.bot    invert   153 tests,  153 failed as required
+validators-and-proofs.bot    alter    143 altered,  143 failed as required,   10 not alterable
+    not altered: validator-unit-result-annotation/unit-body -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: validator-unit-result-annotation/else-less-if -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: validator-unit-type-positions -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: validator-unit-stays-a-value/value -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-interval-mutable-array/set-from-1-to-4-minus-1 -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-interval-mutable-array/at-down-from-2-through-0 -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-interval-mutable-array/at-down-from-3-to-0-minus-1 -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-interval-empty-loops/from-5-to-5-constant-index -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-interval-empty-loops/from-10-to-0-u8-runs -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: loop-interval-empty-loops/down-from-0-to-10-runs -- expected value has no Int, String, Bool or known enum case to alter
+validators-and-proofs.bot    column     6 located,    6 failed as required
+values.bot                   invert    32 tests,   32 failed as required
+values.bot                   alter     23 altered,   23 failed as required,    3 not alterable
+    not altered: 07-loop-break -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name.concat("/elif")) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name name.concat("/nested")) -- expected value has no Int, String, Bool or known enum case to alter
+warning-programs.bot         invert    42 tests,   42 failed as required
+warning-programs.bot         alter     42 altered,   42 failed as required,    0 not alterable
+# the three suites that exclude the Tcl backends, on cranelift:
+abi-bytes-native.bot         invert     3 tests,    3 failed as required
+abi-bytes-native.bot         alter      3 altered,    3 failed as required,    0 not alterable
+abi-numeric-native.bot       invert     1 tests,    1 failed as required
+abi-numeric-native.bot       alter      1 altered,    1 failed as required,    0 not alterable
+linux-io-native.bot          invert     5 tests,    5 failed as required
+linux-io-native.bot          alter      5 altered,    5 failed as required,    0 not alterable

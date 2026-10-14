@@ -1,0 +1,748 @@
+[
+ {
+  "summary": "Yes, the biggest costs in the \"signatures\" phase can be removed by algorithmic refactoring alone, with no change to what the compiler concludes. Nothing in ROOT was edited or committed: I measured by patching procs in memory in a private process, and the scratch directory has been deleted. Timings are rough because the machine was under load (load average about 2.7 to 3.4).\n\n**Where the time goes.** hir::signatures::infer (signatures.tcl:243-279) runs whole-program typing (hir::types::infer) once per round, then collects requirements (Collect) and solves them (Solve); that typing includes every semantic-instance walk. Collect, Solve and Install together are only about 4% of the phase on callables.bot (0.30 + 0.19 + 0.18 s of 13.3 s). Almost all the time is in hir::types::infer.\n\n**Iteration strategy.**\n- **Outer rounds:** each round copies the HIR, installs the trusted contracts found so far (seeds), re-types the whole program from scratch, collects, solves, and narrows the seeds. It stops when the seeds stop changing.\n- **Observed:** every call took exactly 2 rounds, and round 2 reproduced round 1's seeds exactly (7 → 7 on loops.bot; 39, 36, 33 on callables.bot). Round 2 costs 51-62% of the typing time.\n- **Inner solver:** Gauss-Seidel sweeps over every untyped parameter (signatures.tcl:902-923), inside a loop that retracts callable candidates (872-900). This is cheap, about 0.02 s per solve.\n\n**Four patterns explain nearly all the cost:**\n1. **Redundant re-walks of non-recursive functions (exponential in nesting depth).** hir::types::Block gives every bound block up to 3 attempts (types.tcl:2767). An undeclared function with a non-`never` result always takes 2, and nested functions multiply this. A body that never references its own binding cannot see the assumed result, so its second attempt is pure repetition.\n   - On callables.bot, 6,501 such second attempts all reproduced the first result.\n   - Giving those blocks one attempt is an exact fix: the final HIR is identical on six suites (canonical dump of every node, binding, diagnostic, semantic instance and the hir::format text). The only differences are the `depMs` timer and, on traits-path.bot, the census counters requests/hits/trivial.\n   - Walked expressions drop 2.4-2.6x, and wall time drops about 7-10% (callables.bot 20.1 s → 18.1 s).\n2. **Each instance walk copies the whole program.** hir::semantic::Walk (semantic.tcl:569) starts from a copy of the entire HIR, so the first write duplicates all of `exprs` and the copy is freed afterwards.\n   - On callables.bot, 1,460 walks each copy 5,271 entries but touch on average 21 expressions.\n   - Copying `exprs` took 3.4 s and freeing it 2.1 s, out of 8.7 s of instance-analysis time. After fix 1, instance analysis is 84% of the typing time.\n   - On loops.bot, a diff of every walk against its base found that writes land only inside the instance's own region, plus a few binding types and interned types (0 writes outside).\n   - An in-place walk that saves and restores just the region would be exact. One constraint: hir::exact reads volatile facts of captured definitions (exactvalue.tcl:217-240), so a nested walk must see the base facts, not the enclosing instance's partial writes.\n   - I did not prototype this one.\n3. **Round 2 re-types everything to confirm unchanged seeds, with semantic state rebuilt from scratch** (semantic.tcl:177-182). Removing it exactly would need incremental re-typing with dependency tracking. Starting from the previous round's seeds is not provably exact, because seeds only narrow (signatures.tcl:262-269).\n4. **The demotion recovery repeats the whole check.** hir::check re-runs everything, including signatures, when a trusted inferred contract is violated (hir.tcl:878-892), and keeps only the first pass's diagnostics. On callables.bot one build paid for this. Skipping it for builds whose HIR is only read for diagnostics looks plausible, but staticdeps derives dependency edges from that HIR, so the static-decision harnesses would have to confirm it.\n\n**Not significant:**\n- The `Name` scope scans total 0.03 s.\n- The copy of the per-path types dict when a function body starts averages 54 entries.\n- hir::semantic::End's quadratic search over calls takes 0.07 s today.\n- Every helper on the typing path is small; the largest, intern, is 0.39 s over 94,566 calls.\n\n**Complexity.** Per compile: builds × (1 or 2 check passes) × rounds × [generic walk of about Σ body × 2^(depth of nested non-recursive named functions) + instance walks × O(program size + bindings + types)]. The instance term is effectively quadratic in program size, because the number of walks grows with the program and each walk copies the whole program.\n\n**Same copy pattern elsewhere:** hir::semantic::View, used by hir::semantic::verify (semantic.tcl:647-668, 723-731) and by the trait plan (traits.tcl:1774); and the specialization pass's per-instance scratch (specialize.tcl:813-814).",
+  "findings": [
+   {
+    "finding": "WHAT IT COMPUTES. For every untyped parameter of every block: (a) a TRUSTED contract (forwarding to declared-typed params, through structural Fn arguments, declared result positions, and an inferred Fn type for a parameter the body calls), stored as inferredParamTypes and seeded into the body like a declaration; (b) a CHECKED contract (all requirements incl. native -param-types, if-condition bool, loop list/int), stored as checkedParamTypes, never assumed by the body; (c) provenance (paramRequirements) and notes (paramNotes: relational/escapes/arity). Requirements meet by glb (Meet -> hir::types::glb / FnGlb); a missing meet is a TYPE conflict. Callable params get Fn{args: lub of call-site arg types (must be Concrete), return: meet of result consumers, errors: intersection of admitted errors}. entryTypes = declared else trusted is what hir::types::Block seeds, BlockContract embeds into exact block types, VerifyCall/callables/semantic/specialize read.",
+    "evidence": [
+     "hir/signatures.tcl:154-164 (entryTypes)",
+     "hir/signatures.tcl:283-312 (Install writes inferredParamTypes/checkedParamTypes/paramRequirements/paramNotes on every block)",
+     "hir/signatures.tcl:575-631 (Use: reqs/edges/rets/escapes/fnEdges)",
+     "hir/signatures.tcl:926-978 (Contract), 981-1013 (Add/meet), 1017-1101 (CallableContract)",
+     "hir/signatures.tcl:794-824 (Meet)",
+     "hir/types.tcl:776-790 (BlockContract reads entryTypes)",
+     "hir/types.tcl:2797-2809 (Block seeds entry types)"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "ITERATION STRATEGY. Outer loop (max 32 rounds): typed = copy of base; Install seeds; FULL hir::types::infer (whole program, with fresh semantic-instance state); Collect (one O(E) pass plus a walk from the roots); Solve; next = trusted contracts, met with previous seeds (monotone); stop when next == seeds, then Install with the solution and Diagnose. With no trusted contract it converges in 1 round; otherwise it needs at least 2, and the last round only confirms. Solve: optimistic callable candidates, retracted until stable (872-900); each attempt is a Gauss-Seidel fixpoint over all untyped params in sorted order, recomputing every param's Contract from scratch each sweep (902-923). Nothing is incremental: every round re-walks every body and re-creates every semantic instance.",
+    "evidence": [
+     "hir/signatures.tcl:243-279 (outer rounds; 249 set typed $base; 251 hir::types::infer; 252 Collect; 253 Solve; 262-269 monotone meet; 270 convergence)",
+     "hir/signatures.tcl:141-142 (maxRounds 32, maxSweeps 1000)",
+     "hir/signatures.tcl:872-900 (Solve candidate retraction), 902-923 (SolveWith sweeps), 913 (whole-contract-dict comparison)",
+     "hir/types.tcl:1874-1908 (types::infer: up to semantic maxRounds=3 full walks; Begin/End per walk)",
+     "hir/semantic.tcl:177-182 (Begin: empty instances/keys every typing run)"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Every signatures::infer call measured took exactly 2 rounds, and round 2 reproduced round 1's seeds unchanged. Round 2 costs 51-62% of the phase's typing time; it is a whole-program re-typing plus re-analysis of every semantic instance from scratch. Removing it exactly would need incremental re-typing driven by a dependency index: a seeded block's exact type changes too (its contract is the 5th element of {block E ARITY RESULT CONTRACT}), so every reference to it is affected. A warm start from earlier seeds is NOT an exact refactor, because seeds only narrow by meet from top (inference; not tested).",
+    "evidence": [
+     "hir/signatures.tcl:248-277",
+     "hir/types.tcl:796-802 (blockType embeds BlockContract -> entryTypes)",
+     "measured: loops.bot round1 types::infer 0.37 s, round2 0.50 s, seeds 7->7",
+     "measured: callables.bot 3 infer calls x 2 rounds; seeds 39->39, 36->36, 33->33; round2/round1 typing 1.73/1.07, 1.50/1.44, 1.80/1.19 s"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "The cost of the signatures phase is the typing it drives, not its own solver. On callables.bot (instrumented): signatures::infer 13.3 s, of which hir::types::infer 12.6 s; Collect 0.30 s, Solve 0.19 s, Install 0.18 s, CallableContract 0.07 s, Name 0.03 s. Solve ran 12 SolveWith calls of about 3 sweeps each.",
+    "evidence": [
+     "hir/signatures.tcl:251-253",
+     "measured with in-process wrappers (outermost inclusive time)"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "REDUNDANT RE-WALKS, EXPONENTIAL IN NESTING DEPTH. Bind passes the binding as SELF for every typed block value (every named fn and every lambda bound to a local), and Block then allows up to 3 attempts. An undeclared function with a non-never result always runs 2, each re-walking the whole body including nested functions. So a function nested d bound-functions deep is walked about 2^d (up to 3^d) times per typing; golden suites nest register_* -> test fn -> f -> go, about 4 deep. A body that never references its own binding (self not in captures and not in staticRefs; resolve.tcl Capture propagates a reference through every enclosing block) cannot read the assumed self type (written only at types.tcl:2780), so attempts 2-3 repeat attempt 1. Exact fix: attempts = 1 unless self is in captures or staticRefs. Verified identical final HIR on 6 suites. The only change is the semantic census counters requests/hits/trivial, which no test pins; tests/semantic-instances.test:332 pins `walks`, which is unchanged.",
+    "evidence": [
+     "hir/types.tcl:2694-2703 (Bind calls Block with self for every typed block value)",
+     "hir/types.tcl:2766-2767 (assumed; attempts = self eq \"\" ? 1 : 3)",
+     "hir/types.tcl:2768-2816 (attempt loop re-walks body: 2810; break: 2812)",
+     "hir/types.tcl:2779-2781 (only reader of `assumed`: ctx types $self)",
+     "hir/resolve.tcl:1953-1977 (Capture: captures through every enclosing block; module bindings -> staticRefs)",
+     "measured: callables.bot 8,091 non-recursive named-block typings -> 14,592 attempts, 6,501 second attempts, all reproducing the first result",
+     "measured skip variant: walked exprs loops 30,364->12,632, callables 160,030->61,481, errors 26,666->16,914, representation 23,474->14,482, harness 10,240->6,266; time loops 3.15->2.92 s, callables 20.07->18.09 s, errors 5.55->5.11 s",
+     "equivalence: canonical dump of all exprs/bindings (type ids mapped to forms), diagnostics, semantic instances and hir::format text byte-identical on loops, harness, representation; errors/callables differ only in staticStats depMs (a timer); traits-path differs only in traitSource.semantic requests/trivial/hits"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "WHOLE-PROGRAM COPY PER INSTANCE WALK (largest remaining cost, effectively quadratic). hir::semantic::Walk starts from the request-time HIR, which is shared with state.base, so the walk's first write (Expr's reachable write) duplicates the whole exprs dict (and bindings, types/typeIds on their first writes); the copy is freed when the walk ends. Cost is O(E) per walk even though a walk touches only its Region. After fix 1, semantic::Call (inclusive) is 7.7 s of types::infer's 9.2 s on callables.bot. Instance walks cost about 7x more per expression than generic walks.",
+    "evidence": [
+     "hir/semantic.tcl:567-589 (Walk: 569 set scratch [dict get $state base]; 580 Sequence on scratch)",
+     "hir/types.tcl:2328 (Expr writes reachable on every visit), 2243-2247 (SetType), 1821-1830 (intern writes types/typeIds), 2712 (binding type write)",
+     "hir/semantic.tcl:333, 383 (state base = the generic walk's current HIR)",
+     "measured callables.bot: 1,460 instance walks, average region 21 exprs vs 5,271 program exprs; Analyze self time 8.7 s = exprs copy 3.4 s + free of copy 2.1 s + bindings copy (forced) 0.69 s + types/typeIds copy (forced) 0.56 s + snapshot 0.17 s + walking about 2 s",
+     "measured loops.bot: 222 walks, average region 25 vs 3,353 exprs; exprs copy 0.25 s of about 0.33 s instance-walk time",
+     "micro: copy+free of exprs 3,353 entries 527 us, 5,271 entries 1,137 us"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "An instance walk's writes are confined, which makes an in-place save/restore design feasible. Diffing every walk's scratch against its base (loops.bot): 1,236 changed expr entries, all inside hir::semantic::Region(block), 0 outside; bindings 34 entries; types/typeIds/counters changed in 6 walks; scopes and symbols unchanged. Proposed exact refactor (not prototyped): pass the generic HIR by name into hir::semantic::Call, walk in place, save and restore the Region's nodes, its bindings and the added types (O(region) per walk instead of O(E)). Constraint: hir::exact reads `known`/`type` of other expressions (CallFact on arguments; Eval follows aliases into captured definitions outside the nested region), and today a nested walk sees the top-level base. So before a nested walk, the enclosing walks' partial writes must be swapped back to base values. Caching one private copy per base would not be enough: 1,460 walks ran under 1,025 distinct bases on callables.bot.",
+    "evidence": [
+     "hir/semantic.tcl:596-609 (Region), 613-643 (Snapshot reads only the region)",
+     "hir/exactvalue.tcl:207-240 (CallFact reads known/type of other exprs)",
+     "hir/types.tcl:2961 (hir::semantic::Call takes $hir by value: the only call site)",
+     "hir/semantic.tcl:381-392 (nested Analyze when the stack is non-empty)",
+     "measured: loops.bot 126 base assignments vs 222 walks (64 nested); callables.bot 1,025 vs 1,460 (333 nested)"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "The semantic-instance machinery is re-run from zero on every typing run: per signatures round (x2), per build, and per demotion re-check. Begin resets instances and keys, and each instance may need up to passLimit+3 walks. Interaction: every exact-block call reached in a walk (including every redundant Block attempt and every instance body) issues a semantic::Call request (cache hit, trivial, or new instance), so fix 1 also removes many requests (traits-path.bot 163->142 requests).",
+    "evidence": [
+     "hir/semantic.tcl:177-182, 266-412, 487-535 (passes loop; 501/524 limits)",
+     "hir/semantic.tcl:150-160 (budgets: maxPerBlock 16, maxInstances 2000, passLimit 6)",
+     "hir/types.tcl:2952-2962",
+     "measured callables.bot: 230-234 instances and 248-252 walks per typing run, 6 runs per compile"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "DEMOTION RE-CHECK DOUBLES A BUILD. When a call violates a trusted inferred contract, hir::check re-runs the whole CheckOnce (coroutines, signatures with all rounds, every verifier) with those parameters demoted, then restores the FIRST pass's diagnostics. On callables.bot one of 3 builds paid this (signatures::infer #2, demote=3, about 3 s of typing). For a strict build with diagnostics, the re-checked HIR is never used for code; but static decisions derive dependency edges (staticdeps) from that HIR and the legacy scheduler reads demotedContracts. So skipping it for diagnostics-only builds may change scheduling economics: plausible, not verified exact; it would need tests/static-economics.test and the static-decision harnesses.",
+    "evidence": [
+     "hir/hir.tcl:878-892 (check: CheckOnce, then whole CheckOnce again with demote; 890 keeps first diagnostics)",
+     "hir/hir.tcl:894-916 (CheckOnce: signatures::infer at 899)",
+     "hir/static.tcl:1203 (demotedContracts as legacy stop sign)",
+     "hir/staticdeps.tcl:246-249",
+     "hir/hir.tcl:405-409 (strict raises first diagnostic)"
+    ],
+    "verified": false
+   },
+   {
+    "finding": "Smaller patterns, all measured as negligible today: Name() scans the target scope's bindings for every block-target call and every ResultSink (62,256 binding visits, 0.03 s on callables); CallableContract rebuilds description text (Where/show) on every sweep; SolveWith compares whole contract dicts as strings; Install is O(E) and runs R+1 times; Collect is O(E) per round; the Block entry copy of ctx types/facts/implies averages 54 entries; refine::Meet joins at each if are 0.03 s. Latent quadratic: hir::semantic::End's search over `used` loops over all calls per instance, O(|used| x |calls|) (0.07 s now, but it could matter up to the 2000-instance budget, e.g. mutable-array.bot, not run); Requeue/Drain use list membership and lrange O(n).",
+    "evidence": [
+     "hir/signatures.tcl:439-452 (Name), 427-436 (ResultSink), 738 (ArgSinks)",
+     "hir/signatures.tcl:1084-1100 (parts text)",
+     "hir/signatures.tcl:913",
+     "hir/signatures.tcl:283-312 (Install)",
+     "hir/types.tcl:2772-2778",
+     "hir/semantic.tcl:187-214 (End BFS 199-208), 537-560",
+     "hir/refine.tcl:316-335"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "COMPLEXITY (derived from the code, consistent with the measurements). Per compile: Builds x K (1, or 2 with demotion) x R (1 if no trusted contract, else at least 2; observed 2) x [ generic walk sum over blocks of |body| x a^(depth of enclosing bound blocks), a in {2,3} (non-recursive ones too: pattern 1) + W x O(E + |bindings| + |types|) copy/free + O(sum of regions) + Collect O(E + C) + Solve O(retractions x sweeps x (P + reqs + edges + calls x arity)) + Install O(E) ]. W (instance walks per run) grows with program size up to min(2000, 16 x blocks) x passes, and each walk copies the whole program. So the instance term is effectively quadratic in program size and the generic term exponential in named-function nesting depth. Measured generic walk was 3.7-4x the program's expression count per typing (loops 12,365 per walk for 3,353 exprs; callables 21,465 for 5,271).",
+    "evidence": [
+     "hir/types.tcl:2767-2816",
+     "hir/semantic.tcl:567-589",
+     "hir/signatures.tcl:243-279, 872-923",
+     "measured Expr evaluation counts per typing run"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "The same whole-program-copy-per-instance pattern exists outside the signatures phase: hir::semantic::View writes an instance's facts into the full HIR (O(E) copy per used instance). It is used by hir::semantic::verify for every used instance (the separately profiled semantic-instances phase: 4.1 s on callables.bot) and by the trait plan. Codegen specialization does the same (scratch = state.hir, then inferRegion). Neither re-infers contracts; specialization re-types regions per codegen instance on the native/lowering path.",
+    "evidence": [
+     "hir/semantic.tcl:647-668 (View), 723-731 (verify per used instance)",
+     "hir/traits.tcl:1774",
+     "hir/specialize.tcl:813-814, 1519",
+     "measured: hir::semantic::verify 4.1 s total for 3 calls on callables.bot (instrumented)"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Answer to the user's question: type inference is the cost, and it is largely fixable by algorithmic refactoring without changing results. Fix 1 (one attempt for a non-self-referencing bound block) is a one-line exact change, verified identical, worth about 7-10% of front-end wall time on loops/callables. Fix 2 (no whole-program copy per instance walk) targets about 5.5 s (copy 3.4 s + free 2.1 s) of a 23.9 s loaded callables.bot run, roughly 25%, plus up to 1.25 s more from the forced bindings/types copies (an upper bound); it is an exact design with identified constraints but was not prototyped, so this saving is an estimate. Fixes 3 (incremental confirmation round) and 4 (lazy demotion re-check) are larger or need the static-decision harnesses. Rough projected share, not measured end-to-end.",
+    "evidence": [
+     "measurements above",
+     "hir/types.tcl:2767",
+     "hir/semantic.tcl:569"
+    ],
+    "verified": false
+   }
+  ],
+  "measurements": [
+   {
+    "what": "harness.bot (2,250 exprs): block typings / attempts / redundant second attempts on non-recursive named blocks",
+    "result": "428 / 600 / 164 (all 164 reproduced the first result); generic Expr evaluations 8,282 over 2 typing runs; total 1.74 s"
+   },
+   {
+    "what": "loops.bot (3,353 exprs): signatures rounds and seeds",
+    "result": "1 signatures::infer, 2 rounds; types::infer 0.37 s then 0.50 s; 64 untyped params, 45 reqs, 7 edges, 12 param calls; trusted 7, checked 51; seeds 0->7, then 7->7 (round 2 only confirms)"
+   },
+   {
+    "what": "loops.bot: attempt-loop skip (one attempt when self not in captures/staticRefs)",
+    "result": "Expr evaluations 30,364 -> 12,632; wall 3.15 s -> 2.92 s; canonical final-HIR dump byte-identical"
+   },
+   {
+    "what": "callables.bot (5,271 exprs, 3 builds): instrumented phase split",
+    "result": "total 27.2 s; signatures::infer 13.3 s (3 calls incl. one demotion re-check); hir::types::infer 12.6 s (6 runs); semantic::Call incl. 9.0 s; semantic::Walk 6.5 s (1,460 walks); Collect 0.30 s; Solve 0.19 s; Install 0.18 s; Name 0.03 s"
+   },
+   {
+    "what": "callables.bot: signatures rounds",
+    "result": "infer#1 seeds 0->39->39 (types::infer 1.07 s, 1.73 s); infer#2 (demote=3) 0->36->36 (1.44 s, 1.50 s); infer#3 0->33->33 (1.19 s, 1.80 s); ~230 instances per run"
+   },
+   {
+    "what": "callables.bot: attempt-loop skip",
+    "result": "Expr evaluations 160,030 -> 61,481; wall 20.07 s -> 18.09 s; final HIR identical except staticStats depMs (timer)"
+   },
+   {
+    "what": "errors.bot / representation.bot / traits-path.bot: attempt-loop skip",
+    "result": "errors 26,666->16,914 exprs, 5.55->5.11 s, identical except depMs; representation 23,474->14,482, 3.26->3.22 s, identical; traits-path 8,398->7,622, identical except semantic census requests/trivial/hits (163/129/17 -> 142/119/6) inside traitSource"
+   },
+   {
+    "what": "callables.bot with skip: hir::types::infer split and per-expression helper costs",
+    "result": "types::infer 9.16 s, of which semantic::Call 7.73 s; intern 0.39 s (94,566 calls), subtype 0.15, blockType 0.12, entryTypes 0.12 (36,528 calls), lub 0.10, nativeSymbol 0.10, narrow 0.10, implication 0.09, others below 0.07 s"
+   },
+   {
+    "what": "callables.bot: instance-walk self time breakdown (loaded run, total 23.9 s)",
+    "result": "Analyze self 8.7 s: exprs copy 3.41 s, free of the copy 2.13 s, bindings copy (forced) 0.69 s, types+typeIds copy (forced) 0.56 s, Snapshot 0.17 s"
+   },
+   {
+    "what": "Instance walks vs bases vs region size",
+    "result": "loops: 222 walks, 126 base assignments, 64 nested, average region 25 exprs (program 3,353); callables: 1,460 walks, 1,025 bases, 333 nested, average region 21 (program 5,271)"
+   },
+   {
+    "what": "Instance-walk write set (loops.bot, diff of every scratch vs base)",
+    "result": "1,236 changed expr entries, all inside Region; 0 outside; bindings 34 entries; types/typeIds/counters changed in 6 walks; scopes, symbols unchanged"
+   },
+   {
+    "what": "Micro-benchmark: copy-on-write duplication + free of program dicts",
+    "result": "exprs 3,353 entries 527 us; exprs 5,271 entries 1,137 us; bindings 939 entries 116 us"
+   },
+   {
+    "what": "Hypotheses ruled out (negligible)",
+    "result": "ctx types copy at Block entry averages 54 entries (callables); Name scope scans 62,256 visits = 0.03 s; refine::Meet 0.03 s; semantic::End 0.07 s; Solve 0.02 s per call"
+   }
+  ]
+ },
+ {
+  "summary": "Nothing an analysis computes carries over from one static-decision build to the next. Every BuildOnce rebuilds the registries and reruns resolution, hygiene and the whole hir::check from scratch. That covers static rounds, method-call trial builds, method final builds and the monomorphization build. The only things kept between builds are the parsed syntax, the site decisions, the method-call decisions (seeds) and a whole earlier build when its method choices are identical (SameChoices).\n\nhir::signatures::infer runs once per typed build, method trials included. It is never shared between builds, and inside a build it does several whole-program passes:\n- The outer loop over trusted contracts runs hir::types::infer at least twice whenever any trusted contract exists. Every typed build I measured did exactly two passes.\n- Each pass starts with an empty semantic-instance table and re-walks every requested instance: 50–86 instance walks per pass in the suites measured.\n- Up to 3 semantic rounds per pass, and up to 3 attempts for a recursive function's body.\n- hir::check reruns everything if a contract is demoted.\n- Monomorphization is one more complete build, inference included.\n\nMeasured with a concurrent benchmark on the machine, so times are ±20%:\n- **Later builds versus the first:** builds after the first typed build take 38–46% of front-end time on errors.bot and representation.bot, and about 90% on imports.bot, which makes 11 method trials. They take 45–54% of signatures time on the first two and 94% on imports.bot.\n- **Where inference time goes:** the type walk is about 84% of signatures time, and semantic-instance walks are about 44% of the walk.\n- **Little changes between builds:** 89–95% of expressions sit in functions whose content and inferred typing are identical to the previous build. 66–70% are identical between the two passes of a single build. Every function whose typing changed was in the suite file; no library function's typing changed in any build.\n\nSo the type-inference part can in principle be fixed by algorithmic refactoring alone (incremental reuse, no language change). But the outcome must still equal the sequential reference exactly. That needs an exact memo: content keys that do not depend on ID numbering, a complete record of every input a function's inference reads, and a replay that reproduces global side effects in the same order.\n\nInferred contracts are not computed from callers (intrinsic), but they are not modular either:\n- Typing reads callee summaries and instance results.\n- Coroutine yield types flow back from constructions elsewhere in the program.\n- The semantic-instance budget is shared program-wide.\n- A caller that violates a trusted contract demotes it, and hir::check then re-types the whole program.\n- The erased-callable contract is not read by inference.\n\nThe staticdeps graph cannot be used to decide what to reuse. It leaves out channels that change facts but not diagnostics. Its misses are tolerable today only because the next real build detects them as mispredictions; a cache miss would silently produce a different build.\n\nThe ceiling is moderate. Inference is 33–41% of a typed build, and other phases (hygiene, errorsets, affine, semantic verify, resolve, elaboration) are redone too. My estimate (not measured) is that inference reuse saves about 15% of front end on errors.bot and about 29% on imports.bot; method-trial suites gain the most only if every phase becomes incremental. A cache of the library-module prefix is the lowest-risk first step. Its measured ceiling is only 22–31% of each type walk, even though library modules are 56–69% of the expressions.",
+  "findings": [
+   {
+    "finding": "Each BuildOnce reruns everything from scratch: it rebuilds the per-compilation registries (imports, error decls, struct/enum reset, trait declare/resolve, source types, payloads), runs resolve::program, traits::index and hygiene::apply, then hir::check. hir::check runs CheckOnce: coroutines::analyze, signatures::infer, range verifyDeclaredResults/Params, callables, lockstep, structs, contexts, coroutines::verify, affine, mutvec::verify, syscall, semantic::verify, errorsets, modulebinding, promoteOpacity, traits::verify. BuildFull adds DecideMethodCalls (each trial and the final is a full BuildOnce), traits::monomorphize (another full BuildOnce), ElaborateResumes and mutvec::Elaborate. Each static round (static.tcl Round) is Expand plus BuildFull, followed by Attribute, Deps (only with more than one failing site or method seeds), Simulate and MethodSeeds. Parse and lowering run once, before the rounds.",
+    "evidence": [
+     "hir/hir.tcl:398-405 (buildSyntax -> static::decide or BuildFull)",
+     "hir/hir.tcl:424-464 (BuildFull: BuildOnce 439, DecideMethodCalls 440-442, monomorphize 443-447, ElaborateResumes 451, mutvec::Elaborate 459-461)",
+     "hir/hir.tcl:472-543 (BuildOnce: registries 477-507, resolve 508-509, traits::index 521-528, hygiene 529, halt after resolution 533-539, hir::check 540)",
+     "hir/hir.tcl:894-915 (CheckOnce pass list; signatures::infer at 899)",
+     "hir/static.tcl:674-676 and 1312-1338 (every round: Expand + BuildFull)",
+     "hir/static.tcl:770-787 (Deps only when >1 failing or methods; MethodSeeds)",
+     "hir/traits.tcl:2250-2286 (monomorphize = Plan + full BuildOnce at 2264)",
+     "measured: per-build phase profile shows every check phase in every typed build (instrumented wrappers, all 6 suites)"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Only decisions are reused between builds, never analysis results: (a) the site decisions dict; (b) method-call decisions carried into the next round as BuildFull SEEDS (MethodSeeds), which skip trial builds; (c) the whole initial build HIR when a trial's or the final build's choices equal it (SameChoices / lastIsInitial, counted as methodReused). The caches that exist are per pass or per compilation and reset every build: hir::completions::resetCache and the contexts traitCache.",
+    "evidence": [
+     "hir/hir.tcl:634-638 (seeds taken as decided)",
+     "hir/hir.tcl:670-678, 760-767 (SameChoices reuse vs BuildOnce)",
+     "hir/hir.tcl:806-825 (SameChoices; comment: 'hir::BuildOnce is a pure function of its inputs')",
+     "hir/static.tcl:1352-1386 (MethodSeeds)",
+     "hir/completions.tcl:177, 196-205 (cache cleared per pass)",
+     "hir/contexts.tcl:198-205 (traitCache per compilation)",
+     "hir/static.tcl:38-46 (header: the build is the transaction; registries rebuilt by every build)"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "hir::signatures::infer starts from scratch on every typed build, including every method-call trial, the method final build and the monomorphization build. Its state starts empty (base = the freshly resolved HIR, seeds = {}), and no contract, typing or instance survives a build. Measured: exactly one signatures::infer per typed BuildOnce in all 22 typed builds across 6 suites. In imports.bot the 11 trials and 1 final each ran it (0.63-1.21 s each).",
+    "evidence": [
+     "hir/signatures.tcl:243-279 (set base $hir; seeds empty; loop of Install + hir::types::infer + Collect + Solve)",
+     "hir/hir.tcl:540, 899 (check -> CheckOnce -> signatures::infer)",
+     "hir/hir.tcl:675, 765 (trial and final BuildOnce)",
+     "hir/traits.tcl:2264",
+     "measured imports.bot: builds 3-13 trial, 14 final, each with signatures::infer and 2 types::infer calls"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Within one build, whole-program inference runs several times:\n(1) The outer trusted-contract loop re-types the whole program from the untyped base each round. That is at least 2 hir::types::infer passes whenever any trusted contract is inferred (round 1 finds it, round 2 confirms); every typed build measured had exactly 2.\n(2) Each hir::types::infer starts fresh semantic-instance state (semantic::Begin) and re-walks every requested instance body via semantic::Walk over a scratch copy, possibly several passes per instance. Measured: 50-54 instance walks per pass (errors.bot), 81-86 (imports.bot).\n(3) A pass may repeat up to semantic::maxRounds=3 (observed 1).\n(4) A self-recursive function's body is walked up to 3 attempts.\n(5) hir::check reruns the whole CheckOnce, inference included, when a trusted contract is demoted (not observed in the measured suites).\n(6) Monomorphization is a full extra build with full inference: traits-path.bot 0.62 s mono vs 0.60 s initial.\nBackends add specialize's inferRegion and native::prepareHir's hir::check, outside the front end.",
+    "evidence": [
+     "hir/signatures.tcl:248-277",
+     "hir/types.tcl:1874-1908 (types::infer; Begin per round at 1896)",
+     "hir/semantic.tcl:177-181 (Begin resets state), 487-535 (Analyze passes), 567-591 (Walk re-walks body)",
+     "hir/types.tcl:2767-2810 (Block: attempts 1 or 3)",
+     "hir/hir.tcl:878-892 (demotion re-check)",
+     "hir/traits.tcl:2264",
+     "hir/specialize.tcl:814, 1519; native/prepare.tcl:53",
+     "measured: sig_calls = {us 2} in every typed build; semantic walks per types::infer from the semantic snapshot"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Inside the 'signatures' phase, the hir::types walk (generic walk plus semantic-instance walks) is about 84% of the time. Collect, Install, Solve and Diagnose are about 16%. Instance walks are about 44% of the walk time. Signatures (inclusive) is about 33-41% of a typed build. The rest of a later build is mostly hygiene, errorsets, affine, semantic::verify and resolve; mutvec::Elaborate (about 0.2 s per round) runs in every round, outside BuildOnce.",
+    "evidence": [
+     "measured errors.bot (2 typed builds): types-infer self 462 ms + semantic::Walk 333 ms + Snapshot 29 ms = 824 ms of 984 ms signatures inclusive; Collect 86, Install 39, Solve 12 ms",
+     "measured representation.bot build 2 self times: types-infer 331 ms, hygiene 199, errorsets 129, affine 107, semantic-instances 94, resolve 61 ms; mutvec-elaborate 440 ms over 2 rounds",
+     "hir/hir.tcl:448-462 (Elaborate in every BuildFull, i.e. every round)"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Between consecutive builds very little inference output changes. 89-95% of expressions lie in functions whose region content and inferred typing are identical to the previous build. 'Typing' here means each expression's type and reachability, the parameter contracts and the result type, with ExprIds inside types normalized to source origins. Every function whose typing changed was in the suite file (f1). No library-module function's typing differed in any build. The changes come forward from changed callees (a rejected site makes a callee's result never) and from different method choices.",
+    "evidence": [
+     "measured errors.bot build 3 vs 2: 127 functions, 120 content-same, 118 content+typing-same; 2423 of 2720 exprs (89%)",
+     "measured representation.bot build 2 vs 1: 98 of 101 content-same, all 98 typing-same; 2469 of 2645 exprs (93%)",
+     "measured imports.bot trials 3-14 vs initial build 2: 166-175 of 179 functions typing-same, 3096-3283 of 3455 exprs (90-95%); rounds 3 and 4: 172/178 and 173/176 content-same, all typing-same (90%); differing functions by file: only f1",
+     "example diff (errors.bot): ref {block @f1:6699:7054 0 int ...} became {... 0 never ...} after a site rejection"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Within one build, the second (confirmation) hir::types::infer pass recomputes about 2/3 of the program unchanged. Only 8 trusted inferred contracts exist in errors.bot (of 53 untyped parameters) and 8 in representation.bot (of 38). 66-70% of expressions are in functions whose typing is identical between pass 1 and pass 2. Incremental re-typing of only the functions affected by the new seeds is the same kind of algorithmic opportunity as cross-build reuse.",
+    "evidence": [
+     "measured errors.bot: walk 2 vs walk 1, 114 of 137 functions same, 1966 of 2802 exprs (70%)",
+     "measured representation.bot: 75 of 102 functions same, 1740 of 2646 exprs (66%)"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Library modules are a large part of every build but a smaller part of inference time. They hold 56-69% of the HIR expressions (lib/test.bot alone 1393), contain no static sites, and are resolved before the entry program (module sections first), so their ExprIds are a stable prefix. Yet the module-prefix part of each generic type walk is only 22-31% of walk time: instance walks of library functions that the entry program requests count to the program. That is the ceiling for a module-prefix typing cache.",
+    "evidence": [
+     "hir/resolve.tcl:96-130 (ProgramSection per module before Sequence of NODES)",
+     "grep: 'static compile' in lib/*.bot appears only in comments (lib/test.bot:17,21,557; lib/compiler.bot:4,14,137)",
+     "measured expression counts: errors.bot 1539/2731 library; representation.bot 1625/2656; imports.bot 2378/3463",
+     "measured walk time by root file: errors.bot modules 22-27% per walk; representation.bot 27-31%"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Inferred contracts do not use caller argument facts. A parameter's requirements come from reachable uses in its own function and in functions nested in it. A callable parameter's argument types come from call sites of the parameter inside the body. Contracts propagate forward through callee contracts (forwarding edges), and the greatest solution is independent of definition order. There is no reference to the erased-callable contract, errorsets or completions in hir/signatures.tcl or hir/types.tcl, so inferred contracts do not read C:erased.",
+    "evidence": [
+     "hir/signatures.tcl:9-11 ('never from who happens to call it')",
+     "hir/signatures.tcl:86-131 (callable args from the body's call sites; fixed point)",
+     "hir/signatures.tcl:334-382 (Collect walks the program's own bodies)",
+     "hir/staticdeps.tcl:84-87 (untyped parameter channel: B:p -> R of the function and nested functions)",
+     "grep of hir/signatures.tcl and hir/types.tcl for erased/completions:: : no hits"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Inference is nevertheless not modular. Its results depend on whole-program and caller-side facts:\n(a) Generic typing of a body reads the creation context (types, facts and implies of captured bindings), entry types (declared plus this round's trusted seeds), callee summaries (result type, BlockContract), semantic-instance results (the callee body under this call's argument types) and module-static types.\n(b) Yield types come back from the coroutine constructions that reach a function (computed before typing).\n(c) The per-block instance budget (16) and the global request order decide which calls get instances.\n(d) Demotion: if any caller or instance violates a trusted inferred contract, the contract is demoted and hir::check re-types the whole program. So the final entry types depend on callers. staticdeps does not model demotion because it changes no diagnostic, but it does change the HIR facts.",
+    "evidence": [
+     "hir/types.tcl:2762, 2767-2810 (RecordEnv; ctx copied from outer at 2773; entry types at 2798)",
+     "hir/types.tcl:1974-1977 (coroutine ShapeResult typed from hir/coroutines.tcl)",
+     "hir/staticdeps.tcl:99-103 (yield channel), C:budget block (semantic budget)",
+     "hir/semantic.tcl:150-160 (maxPerBlock 16, maxInstances 2000)",
+     "hir/range.tcl:1692, hir/callables.tcl:351, hir/semantic.tcl:745-747 (violatedContracts recorded)",
+     "hir/hir.tcl:878-892 (demote and re-check)",
+     "hir/staticdeps.tcl:246-248 ('What is not a channel': a demoted trusted contract)"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "To keep outcomes equal to the sequential reference, a build with reuse must be bit-identical to a from-scratch build. The batched scheduler's correctness argument assumes a build is a pure function of the site forms. That covers:\n- diagnostics: kind, message, expr id, origin, related, and order (Attribute takes a site's first diagnostic; Simulate's InternalIds logic depends on ExprId numbering);\n- the HIR that Deps and MethodSeeds read;\n- methodCalls and methodDecided;\n- the final hir::format text that compare.tcl checks.\nCache keys therefore cannot be ExprIds, BindingIds or TypeIds. A rejection renumbers everything after it: in errors.bot 64 of 126 functions' ExprIds shifted, though 120 kept the same relative layout. Hygiene's NAME#N is counted over the whole program, and TypeIds are interned in walk order. Keys must be content-based and alpha-normalized, cached facts must be remapped, including ExprIds embedded in types such as {block eN ...}. Replay must reissue semantic-instance requests in the original order so that instance numbering and budget outcomes match.",
+    "evidence": [
+     "hir/staticdeps.tcl:13-24 ('A build ... is a pure function of the forms of its static sites')",
+     "hir/static.tcl:885-1000 (Simulate; InternalIds handling 914-948)",
+     "audit/static-decisions/tools/lib.tcl:35 (hir::format compared)",
+     "hir/types.tcl:1821-1830 (TypeIds interned in first-use order)",
+     "hir/types.tcl:796-802 (exact block type embeds the ExprId)",
+     "measured errors.bot builds 2->3: 64 of 126 matched functions shifted ExprIds, 120 same relative layout; representation.bot: 3 of 100 shifted"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Starting the contract fixpoint from the previous build's contracts (a warm start) would not reliably give the reference result. The outer loop only ever narrows contracts (it meets each new solution with the previous seeds), so a stale narrow contract could never widen back to the cold-start result. Seeds can also create new contracts: narrower typing can make a callable parameter's argument types concrete. So the system may have several fixed points, and a cold start finds the greatest. Any reuse has to be exact memoization, not a warm start.",
+    "evidence": [
+     "hir/signatures.tcl:261-269 (meet with previous seeds: narrow only)",
+     "hir/signatures.tcl:90-104 (Fn contract inferred only when argument types are concrete)"
+    ],
+    "verified": false
+   },
+   {
+    "finding": "The staticdeps graph cannot serve as the oracle for which cached results to invalidate. It answers whether a site's diagnostics can change, and deliberately leaves out channels that change facts but not diagnostics: demotion, the monomorphized build, resolution. It is built from the finished HIR after a build, and only when more than one site fails or method seeds are in play. Missed channels have happened before (C:verdict, the Prepare dict-lappend bug) and were tolerable only because the next real build detects them as mispredictions. A cache relying on it would turn such a miss into a silently different build. Exact reuse needs its own complete record of inputs, plus an audit mode that builds fresh and compares, like the existing methodAudit.",
+    "evidence": [
+     "hir/staticdeps.tcl:246-252",
+     "hir/static.tcl:770-779",
+     "LARGE-SCALE-GOLDEN-MIGRATION.md:380-381 (missed channels found as mispredictions)",
+     "hir/static.tcl:1320-1335 (methodAudit precedent: fresh vs seeded build compared by hir::format, diagnostics, choices)"
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Algorithmic assessment: the redundancy in inference is algorithmic, not semantic, so reuse is possible in principle without changing outcomes. Estimated ceilings (not measured): about 90% of later-build signatures time plus about 65% of the second pass inside each build. That is roughly 15% of front end for errors.bot and roughly 29% for imports.bot. The cost is a function-level memo whose key covers every input listed above (content hash with resolved identities and method choices, entry types and seeds, captured-binding facts, callee summaries and instance answers, yield protocols, budget state, registries) and whose replay reproduces the writes: per-expression facts (hir::semantic::fields), binding types, type interning order, semantic state. semantic::Snapshot already records per-expression facts of a region as type forms, which is a starting point. Because inference is only 33-41% of a build, method-trial-heavy suites (imports.bot: trials 74% of front end) need every phase incrementalized for large gains. A cache of the library-module prefix within one compilation is the lowest-risk first step, with the yield, demotion and semantic-rerun channels in its key.",
+    "evidence": [
+     "hir/semantic.tcl:613-645 (Snapshot), hir/semantic.tcl fields/typeFields variables",
+     "measurements below"
+    ],
+    "verified": false
+   },
+   {
+    "finding": "Two side checks on cheap algorithmic fixes:\n(1) Dict copy at block entry is not a cost: copying the outer types dict for a block takes 4.8 ms of 735 ms of walk (1028 Block calls, about 53 visible bindings each).\n(2) mutvec::Elaborate (about 0.22 s per round) runs in non-final rounds too, even when the round computes no Deps. In representation.bot round 1 its output was read only by Attribute (diagnostics), about 7% of front end. Deferring it to the final round looks possible because Elaborate adds no diagnostics, but I did not check whether Deps relies on the elaborated nodes.",
+    "evidence": [
+     "measured cow probe on errors.bot",
+     "hir/hir.tcl:448-462",
+     "grep: no Diagnose inside hir::mutvec::Elaborate (hir/mutvec.tcl:369-)",
+     "measured representation.bot R1: static_deps 0, mutvec-elaborate about 220 ms"
+    ],
+    "verified": false
+   },
+   {
+    "finding": "In 4 of 6 suites measured (harness, loops, errors, imports), the first static round stops after resolution: a site has a resolution diagnostic and the strict build halts. That build is cheap (0.09-0.39 s) and does no inference, so the first typed build is the second build.",
+    "evidence": [
+     "hir/hir.tcl:533-539",
+     "hir/static.tcl:686-710",
+     "measured: build 1 had no hir::check pass in those suites"
+    ],
+    "verified": true
+   }
+  ],
+  "measurements": [
+   {
+    "what": "traits-path.bot front end, per build (instrumented, machine under load)",
+    "result": "total 1.77 s; 1 round, 2 builds: initial 0.60 s (signatures 0.162 s), monomorphized 0.62 s (signatures 0.175 s); 2 types::infer per build; the mono build is 35% of front end and 52% of signatures time"
+   },
+   {
+    "what": "harness.bot / loops.bot front end",
+    "result": "harness: total 1.64 s; R1 resolution-only build 0.094 s; R2 typed 0.874 s (signatures 0.340 s). loops: total 2.84 s; R1 resolution-only 0.185 s; R2 typed 1.67 s (signatures 0.866 s)"
+   },
+   {
+    "what": "representation.bot: first vs later build",
+    "result": "total 3.11 s: parse/lower 0.47 s, R1 (first typed) 1.30 s, R2 1.23 s = 40% of front end; signatures R1 0.385 s, R2 0.325 s, so later = 46%. Earlier run: 3.64 s, builds 1.36/1.17 s, signatures 0.371/0.393 s (51% later)"
+   },
+   {
+    "what": "errors.bot: first vs later build",
+    "result": "total 3.98 s: parse/lower 0.36 s; R1 resolution-only 0.19 s; R2 first typed 1.82 s (build 1.33 s, deps 0.14 s); R3 1.50 s = 38% of front end; signatures R2 0.488 s, R3 0.395 s (45% later). Second run 4.25 s: R3 1.94 s = 46%, signatures 54% later"
+   },
+   {
+    "what": "imports.bot: first vs later build (16 builds, 11 method trials)",
+    "result": "total 42.3 s: R1 resolution-only 0.39 s; first typed build 2.20 s (5%); 11 trials + 1 final about 31.4 s (74%); R3 3.15 s; R4 3.61 s; after the first typed build about 90% of front end; signatures first typed 0.915 s of 14.6 s total (94% later)"
+   },
+   {
+    "what": "Where signatures time goes (errors.bot, both typed builds)",
+    "result": "types walk self 462 ms + semantic::Walk 333 ms + Snapshot 29 ms = 824 ms of 984 ms (84%); instance walks 44% of walk time; Collect 86, Install 39, Solve 12 ms"
+   },
+   {
+    "what": "Semantic-instance walks per types::infer pass",
+    "result": "errors.bot 54 / 50 (build 2 / build 3); imports.bot 81-86; semantic rounds 1 everywhere; each build runs 2 passes, so instances are re-walked twice per build"
+   },
+   {
+    "what": "Typing stability between consecutive builds (expressions in functions with identical content and typing)",
+    "result": "errors.bot 2423/2720 (89%; 118 of 127 functions); representation.bot 2469/2645 (93%); imports.bot trials vs initial 3096-3283/3455 (90-95%), later rounds 90%; all differing functions in the suite file, none in library modules"
+   },
+   {
+    "what": "Typing stability between the two passes within one build",
+    "result": "errors.bot 1966/2802 exprs (70%), 114 of 137 functions; representation.bot 1740/2646 (66%), 75 of 102; trusted inferred contracts 8 of 53 and 8 of 38 untyped parameters"
+   },
+   {
+    "what": "ExprId stability across builds",
+    "result": "errors.bot builds 2->3: 64 of 126 matched functions had shifted ExprIds, 120 kept the same relative layout; representation.bot: 3 of 100 shifted, 98 same layout"
+   },
+   {
+    "what": "Library-module share of HIR expressions and of the generic type walk",
+    "result": "exprs: errors.bot 56% (test.bot 1393 of 2731), representation.bot 61%, imports.bot 69%; walk time of module roots: errors.bot 22-27%, representation.bot 27-31%"
+   },
+   {
+    "what": "Copy-on-write probe at block entry (errors.bot)",
+    "result": "1028 Block calls, average 53 visible bindings, copy time 4.8 ms of 735 ms of walk: negligible"
+   },
+   {
+    "what": "mutvec::Elaborate per round (runs in every BuildFull)",
+    "result": "about 0.22 s per round: representation.bot 0.44 s over 2 rounds (round 1's result not used by Deps), errors.bot 0.45 s over 2 typed rounds"
+   }
+  ]
+ },
+ {
+  "summary": "Short answer to your question: yes. Most of the signatures time is type inference, and its super-linear part can be fixed by changing the algorithm alone. I tried three fixes as patches applied at run time inside my own processes (no repo edits). Across 73 golden suites the result HIR came out identical, apart from a few measurement counters. Over 68 of those suites, signatures time fell 161.6 s → 74.1 s (−54%) and front-end time 502 → 421 s (−16%). On callables.bot signatures went 8.9 → 2.1 s and the front end 20.2 → 11.9 s.\n\nWhat the time is: about 85–92% of hir::signatures::infer is hir::types::infer, the ordinary whole-program typing walk. It runs twice in every invocation: round 1 without seeds, then round 2 with the trusted contracts seeded, which only confirms them (hir/signatures.tcl:247-276). The signatures-specific work is small: Collect 3–9%, Install 2–4%, Solve under 1%.\n\nTwo problems cause the super-linear cost:\n1. **Every instance walk copies the whole program.** A semantic-instance walk starts from a copy-on-write share of the whole HIR (hir/semantic.tcl:569, base set at :333/:383). Its first store (hir/types.tcl:2328) duplicates the entire exprs dict, and later the copy is freed. That is O(program size) per instance walk, so O(instances × size) overall. On callables this is 1463 copies at about 2 ms each, 2.9 s in copying alone.\n2. **Named functions are walked twice, and nesting multiplies it.** hir::types::Block re-walks every named function at least twice (types.tcl:2767, :2812), even when it never references itself. Nested named functions multiply this to 2^depth walks.\n\nSmaller quadratic terms: hir::signatures::Name scans the whole scope on every call (signatures.tcl:439-453), and each named function's context copies its outer types dict (types.tcl:2780).\n\nScaling on synthetic programs (N small functions, each calling its neighbour; N = 50…800): call and walk counts grow exactly linearly. Signatures time does not: it grows 1.7×, 2.6×, 2.8×, 5.8× per doubling of N (5.3 s at N = 800). With the fixes it grows about 2.0–2.3× per doubling (2.6× at N = 800 because of the remaining Name term), i.e. close to linear. On nesting depth the baseline is exponential: depth 14 takes 65,504 body walks and 3.95 s, against 105 walks and 0.026 s with the self-walk fix.\n\nPer build: signatures runs once for each build that reaches hir::check, and each run costs about the same. The first build is not special. callables is the exception: build 2 pays twice, because hir::check reruns everything with demoted contracts. Builds that stop at resolution skip it.\n\nNot done: no repo tests or audit/mutant harnesses were run against the patches. 15 golden suites were not checked (opaque, mutable-array, and those over 1300 lines). Machine load was 1–3 from other processes, so timings carry about ±15% noise; each baseline/patched pair ran back-to-back. All scratch files were in a temp directory, now deleted; `git status` in the repo is clean.",
+  "findings": [
+   {
+    "finding": "Signatures time is mostly the program's own type inference. hir::types::infer accounts for 83–92% of hir::signatures::infer self time, and every invocation runs it twice: round 1 unseeded, round 2 seeded with the trusted contracts, which only confirms them. The parts specific to signatures are small: Collect 3–9%, Install 2–4%, Solve plus Contract under 2%.",
+    "evidence": [
+     "hir/signatures.tcl:247-276: the outer round loop. Each round does `set typed $base`, Install, then `hir::types::infer typed` (:251). It returns once the next seeds equal the current seeds, so any trusted contract forces a second full typing.",
+     "Light profile (about 40 procs wrapped, overhead under 2%), share of signatures time in hir::types::infer: harness 84.7%, errors 82.9%, loops 89.3%, collections 86.8%, callables 91.6%.",
+     "Collect: harness 9.5%, collections 6.7%, callables 3.2%. Contract (the solver): 0.6–1.1%."
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Iterations per build. In every invocation observed (harness, errors, loops, collections, callables) the counts were the same: 2 outer rounds (hir::types::infer ×2), 1 semantic round per types::infer (Begin count equals types::infer count), and 2 SolveWith per Solve (one candidate retraction) with 2–3 sweeps each. The fixpoint loops are cheap. The cost is the full re-typing in round 2.",
+    "evidence": [
+     "Contract calls equal untyped params × 4 SolveWith × sweeps: harness 328 = 41×4×2, collections 448 = 56×4×2, callables 2988 = 249×4×3.",
+     "semantic::Begin calls per invocation = 2 = types::infer calls, so hir::semantic::maxRounds (3) is never reached.",
+     "Instance walks (hir::semantic::Walk) per invocation: harness 78, errors 104, loops 222, collections 151, callables 487."
+    ],
+    "verified": true
+   },
+   {
+    "finding": "First cause of super-linear cost: every semantic-instance walk copies, then frees, the entire program HIR. Walk takes `scratch` from `state base`, which is the live generic HIR shared by reference. The walk's first store therefore duplicates the whole exprs dict (and the bindings and type tables). This costs O(program size) per instance walk, and instance walks grow with program size.",
+    "evidence": [
+     "hir/semantic.tcl:569 `set scratch [dict get $state base]`; base is set to the generic walk's HIR at hir/semantic.tcl:333 and :383. hir/semantic.tcl:497: Analyze keeps the copy until it returns.",
+     "hir/types.tcl:2328 `dict set hir exprs $e reachable ...` is the first write that triggers the copy. Timing that one statement: callables 1463 slow stores in instance walks, 2.93 s total (2.0 ms each); collections 905 × 0.85 ms = 0.77 s; synthetic plain N=800, 401 × 4.9 ms = 1.97 s. Ordinary stores cost about 0.5 µs.",
+     "Synthetic plain: cost per instance walk is 0.32, 0.31, 0.57, 1.11, 5.05 ms for N = 50…800, while the walk count stays at N/2.",
+     "Full profile, callables: instance walks take 45% of signatures self time (6.18 of 13.6 s corrected) while making 20% of the Expr calls (31,240 of 160,030)."
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Inference, not verified: in the full profile, the copy shows up as hir::types::Expr self time and the matching free as hir::semantic::Call self time. My wrapper ends its timing window before the proc frame and its locals are released, so the free of Analyze's scratch copy is charged to its caller. This would explain why semantic::Call ranks second by self time (15.5% on callables, about 178 µs per call). It is consistent with the in-place prototype removing most of that time.",
+    "evidence": [
+     "Full profile, callables, corrected self: Expr 4.59 s (33.7%, 160,030 calls), semantic::Call 2.11 s (15.5%, 11,814 calls).",
+     "With the nocopy prototype, callables instance-walk time fell 5.17 → 1.03 s and types::infer 8.22 → 3.68 s."
+    ],
+    "verified": false
+   },
+   {
+    "finding": "Second cause: hir::types::Block walks every named function at least twice, and nesting makes this exponential in depth. Bind passes the function's own binding as `self` for every named function. Block then allows 3 attempts and stops only when the result equals the assumed result, which starts as `never`. So a non-recursive function is walked twice with identical results, and nested named functions get 2^depth walks. The doc comment (types.tcl:1859-1862) limits this to 'a block bound to a binding it calls itself through', but the code does not check for a self-reference.",
+    "evidence": [
+     "hir/types.tcl:2700-2702: Bind calls `Block hir ctx $valueExpr $b` for every typed block bind. :2767 `set attempts [expr {$self eq \"\" ? 1 : 3}]`. :2812 `if {$self eq \"\" || $result eq $assumed || $assumed eq \"any\"} break`.",
+     "Only a few named Block calls are actually self-referencing (self in captures/staticRefs): harness 14 of 360, collections 36 of 2718.",
+     "Body walks: harness 600 → 240 with the fix, collections 4050 → 2344.",
+     "Synthetic nesting depth D = 2…14, baseline body walks 8, 52, 240, 1004, 4072, 16356, 65504 (3.95 s at D=14). With the fix: 3, 10, 21, 36, 55, 78, 105 (0.026 s).",
+     "Fix used: `set attempts [expr {$self eq \"\" || ($self ni [dict get $node captures] && !([dict exists $node staticRefs] && $self in [dict get $node staticRefs])) ? 1 : 3}]`. This is sound because a reference at any depth adds the binding to the captures of every enclosing block (hir/resolve.tcl:1966-1976), so if self is not captured nothing reads `ctx types $self`."
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Both causes can be fixed by changing the algorithm alone, with identical compiler output. Three patches applied at run time (no repo edits) gave identical final HIR on 73 golden suites and on the synthetic programs: (a) selfwalk: one walk unless the body references its own binding; (b) nocopy: instance walks run in place on the request-time HIR, saving and restoring the region's expr nodes, the region's bind binding records, the If branch-scope refinements, the type-table entries the walk added, and diagnostics, with a 'pristine' map for nested walks; (c) namememo. The comparison covered the whole HIR, including staticSites outcomes, staticStats builds, diagnostics, every type and fact, and the embedded traitSource. The only differences were measurement counters: semantic requests/hits/walks/declinedCount (exactly halved, one per redundant re-request) and an instance's cumulative `passes` (closure-escape s109 16 → 2). Those are read only by hir::semantic::census (hir/semantic.tcl:929) and audit tools.",
+    "evidence": [
+     "A writes audit of baseline instance walks (harness, errors, collections) found writes only to region exprs, region bindings and types/typeIds/counters. hir/types.tcl:3136 also writes `scopes <branch> refinements`; the first prototype missed this and differed on hir-values and range-and-contract-values. Fixed and re-verified identical.",
+     "Sweep of 68 suites (≤1300 lines, excluding opaque) plus harness, errors, loops, collections, callables. The suites that differed were re-run with a recursive diff: 0 non-counter differences.",
+     "closure-escape: baseline re-analyzed instances after 30 creation-environment changes, against 2 with selfwalk. The environment oscillated never/int while repeated attempts re-walked a recursive inner function; the final environment is the same.",
+     "Timings: callables front end 20.2 → 14.5 s (nocopy) → 11.9 s (both), signatures 8.89 → 4.27 → 2.10 s; collections 14.5 → 12.4 → 11.5 s, signatures 4.86 → 2.93 → 2.42 s; loops signatures 0.81 → 0.67 → 0.42 s.",
+     "68-suite sweep: front end 502.1 → 420.8 s (−16.2%), signatures 161.6 → 74.1 s (−54.1%). Signatures share of the front end fell from 32.2% to 17.6%. Examples: stdlib-namespaces signatures 21.7 → 6.1 s, refinements 19.0 → 9.0 s, traits 14.8 → 6.9 s, mutable-vector 13.6 → 5.7 s.",
+     "Not run: tests/*.test, audit fuzzers and mutants. The audit census tools read the counters that change (audit/opportunistic-semantic-instances/tools/census.tcl, audit/direct-hir-native-path/tools/differential.tcl:144)."
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Third quadratic term: hir::signatures::Name scans every binding of the function's scope, and it is called eagerly just to build message labels. It runs once per call site whose target is a block (ArgSinks) and once per block with a declared result (ResultSink), so cost is O(calls × top-level bindings). It is negligible in golden suites but is 1.0 s at synthetic N=800. Memoizing per infer is identical and halves the calls, but each distinct block is still O(N). Building one index (block → binding name) per infer, or computing labels lazily, would make it linear.",
+    "evidence": [
+     "hir/signatures.tcl:444 `foreach b [dict get $hir scopes $scope bindings]`; call sites :738 (ArgSinks `set name [Name $hir $target]`) and :433 (ResultSink).",
+     "Synthetic plain: Name total 1.9, 6.3, 31, 152, 1045 ms for N = 50…800 (call count linear, 150 → 2400; 435 µs per call at N=800). With the memo: 284 ms at N=800.",
+     "Golden: callables 28 ms, collections 33 ms."
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Fourth, minor quadratic term: when hir::types::Block types a named function, it shares the outer context's `types` dict and then writes `self` into it. That copies a dict holding every visible binding, so each top-level function costs O(N).",
+    "evidence": [
+     "hir/types.tcl:2773 `dict set ctx types [dict get $outer types]` and :2780 `dict set ctx types $self ...`.",
+     "That statement alone: 6.8, 31.6, 136.5 ms for synthetic plain N = 200, 400, 800 (600, 1200, 2400 executions)."
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Top procedures inside signatures::infer by self time, from the full profile. All 2127 procs in ::hir*, ::core* and ::surface* were wrapped; overhead is 3.7–5.3 µs per call, calibrated and subtracted, so the corrected numbers are estimates. The hot path enters these namespaces: hir::types (dominant), hir::semantic, hir::signatures, hir::refine, core::value, core::type, hir::resolve (nativeSymbol), hir::traits, hir::exact, hir, core::native (metadata), hir::structs, hir::errordecls, hir::coroutines, hir::range, hir::enums, hir::containers, core::coroutines.",
+    "evidence": [
+     "callables (3 invocations, 1.06M wrapped calls each), corrected self: Expr 4.59 s / 160,030 calls (53,343 per invocation); semantic::Call 2.11 s / 11,814; types::Call 0.66 s / 32,488; If 0.61 s / 8,092; Block 0.46 s / 8,457; Bind 0.42 s / 12,054; semantic::Analyze 0.28 s / 1,352; intern 0.24 s / 200,569; resolve::nativeSymbol 0.22 s / 16,638; Snapshot 0.17 s / 1,352. By namespace: hir::types 8.65 s, hir::semantic 2.78 s, hir::signatures 0.90 s, core::type 0.26 s, hir::refine 0.23 s.",
+     "collections (6 invocations, 313k calls each): Expr 2.15 s / 99,332 (16,555 per invocation); semantic::Call 0.99 s / 7,908; types::Call 0.49 s / 18,900; Bind 0.28 s; Snapshot 0.21 s / 904; If 0.21 s; Block 0.19 s; Bound 0.17 s / 25,110; SetType 0.16 s / 102,050.",
+     "harness (1 invocation, 192k calls): Expr 0.128 s / 10,240; semantic::Call 0.042 s / 812; types::Call 0.042 s / 2,132; Bind 944; Block 428. errors (2 invocations): Expr 0.40 s / 26,666; semantic::Call 0.15 s / 2,204; types::Call 0.11 s / 4,984."
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Scaling across golden suites. Time grows faster than the number of expressions because Expr calls, instance walks and the per-walk copy all grow together. From collections to callables: 1.6× expressions, 2.7× blocks, 3.2× instance walks, 3.2× Expr calls, about 4.5× types::infer time per round.",
+    "evidence": [
+     "Per signatures invocation (light profile):\n\n| suite | lines | exprs | blocks | call sites | static sites (rejected) | builds | invocations | signatures per invocation | types::infer per invocation | front end | signatures share |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n| harness | 363 | 2236 | 105 | 412 | 14 (2) | 2 | 1 | 0.40 s | 0.33 s | 1.65 s | 24% |\n| errors | 607 | 2802 | 136 | 481 | 26 (11) | 3 | 2 | 0.44 s | 0.37 s | 4.43 s | 19% |\n| loops | 783 | 3342 | 177 | 616 | 55 (7) | 2 | 1 | 0.92 s | 0.82 s | 2.80 s | 33% |\n| collections | 718 | 3435 | 162 | 615 | 44 (22) | 7 | 6 | 0.56–0.90 s | 0.48–0.79 s | 14.15 s | 33% |\n| callables | 1780 | 5532 | 434 | 956 | 111 (38) | 3 | 3 | 3.1–3.8 s | 2.8–3.5 s | 21.98 s | 46% |",
+     "Expr calls per expression per invocation: harness 4.6, errors 4.8, collections 4.8, callables 9.6."
+    ],
+    "verified": true
+   },
+   {
+    "finding": "First build versus later builds. Signatures runs once per build that reaches hir::check, and every such run costs about the same, so the total is roughly proportional to the number of checked builds. Builds that stop at resolution (an unbound name in a rejected static block) skip it. The exception is the demotion re-check: when a trusted inferred contract is violated, hir::check reruns the whole of CheckOnce, signatures included, with those parameters demoted.",
+    "evidence": [
+     "hir/hir.tcl:878-892: hir::check calls CheckOnce a second time with the demoted parameters.",
+     "callables: build 2 ran signatures twice (3.06 s, then 3.83 s with 3 parameters demoted) and build 3 once (3.34 s), so 67% of its signatures time is in build 2. Build 1 never ran it.",
+     "collections: 6 invocations over 7 builds (2 of them method trials): 0.56, 0.77, 0.71, 0.89, 0.79, 0.90 s. The first is 12% of the total. With full instrumentation all six were flat (2.35–2.72 s), so the spread is noise, not growth.",
+     "errors: 0.44 and 0.42 s. harness and loops: one invocation each, on the last of their 2 builds."
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Synthetic scaling. Programs had N small functions alternating typed (`fn fi(x: int) -> int`) and untyped, each calling f_(i-1); three variants: plain, with every body in `static compile:`, and with one rejected static block per 10 functions. Call counts and body walks grow exactly linearly. Signatures time grows faster than quadratic at the top end. With nocopy, instance-walk time becomes linear; with all three fixes, signatures time is close to linear.",
+    "evidence": [
+     "plain, baseline signatures time (ms) for N = 50, 100, 200, 400, 800: 72, 122, 323, 913, 5294 (×1.7, ×2.6, ×2.8, ×5.8 per doubling). Instance-walk time: 8, 15, 57, 223, 2021 ms (walk count 25 → 400). Name: 2, 6, 31, 152, 1045 ms. Wrapped calls inside signatures at N = 100, 400, 800: 66,766, 266,716, 533,316, exactly linear.",
+     "static (one static block per function, decided in 1 build): baseline 66, 140, 419, 1078, 5851 ms. staticrej (2 builds, but build 1 stops at resolution, so still 1 invocation): 72, 143, 475, 1319, 7771 ms.",
+     "nocopy only, plain: instance-walk time 8.6, 9.8, 20, 56, 81 ms (linear); types::infer 59, 66, 137, 339, 664 ms (×1.96 from 400 to 800).",
+     "All three fixes: plain signatures 48, 98, 208, 442, 1164 ms (×2.0, ×2.1, ×2.1, ×2.6); static 57, 98, 222, 503, 1449; staticrej 99, 112, 247, 542, 1490. Front end at N=800: plain 8.3 → 4.0 s, static 10.0 → 5.3 s, staticrej 13.1 → 6.2 s.",
+     "Full profile, plain N = 100 → 400 → 800, corrected self of the super-linear procs: Expr 20 → 496 → 2185 ms (per call 5.8 → 35.7 → 78.6 µs); semantic::Call 5 → 178 → 1049 ms; signatures::Name 5 → 150 → 931 ms; Bind 6 → 82 → 338 ms; Block 3 → 74 → 316 ms."
+    ],
+    "verified": true
+   },
+   {
+    "finding": "Inference, not prototyped or measured as a fix: after these fixes, the largest remaining algorithmic cost is that round 2 re-types the whole program just to confirm the seeded contracts. That is about half of types::infer in every invocation. Re-typing only the blocks whose entry types changed, plus their dependents through result types and instances, is a larger incremental-inference refactor. Warm-starting the seeds from the previous build is not obviously safe, because the solver must find the greatest fixed point and must not depend on where it starts. The demotion re-check (hir/hir.tcl:878-892) and the per-build re-run of everything belong to the static-decision economics.",
+    "evidence": [
+     "hir/signatures.tcl:243-279 has no shortcut: round 2 calls `hir::types::infer typed` on the whole program again.",
+     "Every invocation observed had exactly 2 types::infer calls of similar cost (e.g. errors 0.369 s for 2 rounds)."
+    ],
+    "verified": false
+   }
+  ],
+  "measurements": [
+   {
+    "what": "Wrapper overhead calibration (body-injection wrapper, per wrapped call)",
+    "result": "3.7–5.3 µs in total per call: about 1.4–1.9 µs lands in the callee's self time and 2.3–3.4 µs in the caller's. Corrected self = raw − calls·a − child calls·b. The correction under-subtracts: harness signatures corrected 0.59 s, against 0.39 s with light instrumentation."
+   },
+   {
+    "what": "harness.bot (363 lines, 2 builds, 1 signatures invocation)",
+    "result": "Front end 1.65 s; signatures 0.39 s, of which types::infer 0.33 s (2 rounds), Collect 0.037 s, Install 0.014 s, Solve 0.007 s. Per invocation: 10,240 Expr calls and 78 instance walks."
+   },
+   {
+    "what": "errors.bot (607 lines, 3 builds, 2 invocations)",
+    "result": "Front end 4.43 s; signatures 0.86 s (0.44 + 0.42 s); types::infer 0.71 s; Expr calls 13,333 per invocation."
+   },
+   {
+    "what": "loops.bot (783 lines, 2 builds, 1 invocation)",
+    "result": "Front end 2.80 s; signatures 0.92 s; types::infer 0.82 s."
+   },
+   {
+    "what": "collections.bot (718 lines, 7 builds incl. 2 method trials, 6 invocations)",
+    "result": "Front end 14.15 s; signatures 4.61 s (0.56–0.90 s per invocation); types::infer 4.0 s; 16,555 Expr calls and 151 instance walks per invocation."
+   },
+   {
+    "what": "callables.bot (1780 lines, 3 builds, 3 invocations incl. 1 demotion re-check)",
+    "result": "Front end 21.98 s; signatures 10.22 s (3.06, 3.83 and 3.34 s); types::infer 9.34 s; 53,343 Expr calls and 487 instance walks per invocation."
+   },
+   {
+    "what": "Copy cost of each instance walk (first store in hir::types::Expr)",
+    "result": "callables 1463 × 2.0 ms = 2.93 s; collections 905 × 0.85 ms = 0.77 s; synthetic plain-800 401 × 4.9 ms = 1.97 s."
+   },
+   {
+    "what": "Prototype: identical output and timings on golden suites",
+    "result": "73 suites identical apart from counters. On 68 suites, front end 502.1 → 420.8 s and signatures 161.6 → 74.1 s. callables front end 20.2 → 11.9 s (signatures 8.89 → 2.10 s); collections 14.5 → 11.5 s; loops 3.0 → 2.5 s."
+   },
+   {
+    "what": "Self-walk fix alone, types::infer time",
+    "result": "callables 10.17 → 7.24 s; loops 1.11 → 0.50 s; errors 0.93 → 0.68 s; collections 3.86 → 3.72 s (body walks 4050 → 2344)."
+   },
+   {
+    "what": "Synthetic signatures time vs N (plain, ms, N = 50/100/200/400/800)",
+    "result": "Baseline 72 / 122 / 323 / 913 / 5294 (super-linear: ×5.8 for the last doubling). nocopy 86 / 104 / 234 / 629 / 1905. All three fixes 48 / 98 / 208 / 442 / 1164 (close to linear)."
+   },
+   {
+    "what": "Synthetic nesting depth (named nested functions, D = 2…14)",
+    "result": "Baseline body walks 8 → 65,504 (×2 per level), types::infer 3.95 s at D=14. With selfwalk: 105 walks, 0.026 s."
+   },
+   {
+    "what": "Cleanup",
+    "result": "All scratch files were in a temp directory under the session scratchpad, now deleted. No processes left running. `git status` in ROOT is clean."
+   }
+  ]
+ },
+ {
+  "verdict": "Yes. Most of the type-inference cost comes from two algorithmic defects, and changing the algorithm alone removes them without changing any result. I checked the earlier analyses against the code and then measured both fixes, applied as patches to procs in memory inside private processes. Nothing in ROOT was edited, the scratch directory has been deleted, `git status` is clean, and the load average was 0.1–1.9 during the runs.\n\n**Measured effect of both fixes together**\n- On a 14-suite sweep of the golden corpus, hir::signatures::infer fell 155.7 → 59.9 s (−61.5%) and the front end 426.4 → 333.2 s (−21.9%).\n- Per suite, signatures time / front-end time:\n  - callables.bot: 9.99 → 2.14 s / 21.9 → 13.1 s (−40% front end)\n  - opaque.bot: 15.3 → 5.5 s / 48.9 → 37.6 s\n  - structs-and-enums.bot: 28.5 → 10.4 s / 69.4 → 51.3 s\n  - stdlib-namespaces.bot: 22.6 → 6.2 s / 53.2 → 37.4 s\n- The final HIR was identical to the baseline on 23 suites. The comparison was string equality of the whole HIR dict, including staticSites, the semantic table and traitSource, plus the hir::format text. Before comparing I stripped the semantic counters requests/hits/trivial/walks/declinedCount, each instance's `passes` count, and the staticStats `*Ms` timers. Static-decision outcomes are part of that HIR (staticSites), so they are unchanged as well.\n\n**The two defects (verified)**\n1. **Every semantic-instance walk copies and frees the whole program.**\n   - Walk starts from `state base` (hir/semantic.tcl:569), and Call shares that object with the live generic HIR (:333, :383). The walk's first write (hir/types.tcl:2328) therefore duplicates the entire `exprs` dict.\n   - The cost is O(program size) per walk, which makes the total quadratic. The algorithm map measured 3.4 s of copying plus 2.1 s of freeing on callables.bot.\n   - Fix: run the walk in place and restore its write set. Measured alone: callables signatures 9.99 → 4.14 s, front end 21.9 → 15.3 s.\n2. **Every bound function body is walked at least twice.**\n   - hir::types::Block gives a function bound to a name up to 3 attempts (types.tcl:2767, :2812), whether or not it calls itself. Nested functions multiply this, so the cost is exponential in nesting depth.\n   - Fix: walk once when the body never references its own binding. Measured alone: callables signatures 10.41 → 7.45 s; loops.bot 0.99 → 0.58 s.\n\n**Two corrections to the earlier analyses**\n- **The self-walk fix needs a guard to be exact.** The earlier argument was: the body cannot read the assumed result of `self`, so the second attempt repeats the first. That is necessary but not sufficient.\n  - The second attempt also re-reads semantic-instance state, and that state depends on history. RecordEnv requeues an instance when a creation environment changes (semantic.tcl:245-254). Instance results only grow, by lub over successive analyses (:500). A request declined for want of an environment (no-env) can be served later in the same walk.\n  - On closure-escape.bot, 14 of 640 self-free blocks changed that state during their first attempt.\n  - An unguarded skip was still identical on every suite I tried, but that cannot be proven. A guard that skips only when no environment change, requeue or no-env/nesting decline happened during attempt 1 makes it provably exact. Apart from closure-escape.bot's 14, it never fell back.\n- **Round 2 of signatures::infer is not \"only confirmation\".** Its seeded typing is the final HIR (signatures.tcl:249-273). Round 1's unseeded typing is the extra pass.\n  - Removing it exactly needs incremental re-typing: blockType embeds the trusted contracts (types.tcl:776-802), so every reference to a seeded block changes. A warm start is not exact, because seeds only narrow (signatures.tcl:261-269).\n  - After the two fixes this redundancy is worth at most about 4% of the front end on callables.bot, which is not worth weeks of risk.\n\n**What remains after the fixes** (measured, both fixes applied)\n- Signatures is now about 16% of the front end (callables.bot 2.45 of 14.6 s; stdlib-namespaces.bot 6.0 of 36.9 s).\n- **Demotion re-check:** when a build violates a trusted inferred contract, hir::check runs the whole CheckOnce a second time (hir.tcl:878-892). On callables.bot that is about 3.0 s, 21% of the front end. It happens only in suites with such a violation.\n- **hir::semantic::View** copies the whole program for every instance it verifies: 1.71 of 3.21 s of semantic::verify on callables.bot, 4.09 of 7.75 s on stdlib-namespaces.bot.\n- **Hygiene (not type inference):** hir::hygiene::Rename and RenameTo rescan every binding and expression on each rename (hygiene.tcl:116-133, 196-200). That costs 8.0 s, 22% of the front end, on stdlib-namespaces.bot and 9.6 s on opaque.bot.\n\n**Facts versus estimates.** Everything above is measured or read in the code, except two estimates: the gain of candidates 3 and 4, and the ceiling for incremental re-typing. Not run: the repository tests and the audit fuzz/mutant harnesses, and the suites mutable-array.bot, destructuring.bot and most of the 88-suite corpus.",
+  "candidates": [
+   {
+    "name": "In-place semantic-instance walks (no whole-program copy per walk)",
+    "change": "Change only how the instance walk stores its work; the analysis itself stays the same.\n- hir/types.tcl:2961: pass the HIR to hir::semantic::Call by name (`hir`, not `$hir`).\n- hir/semantic.tcl:266: Call takes `hirVar` and does `upvar 1`. Lines 333 and 383 record where the live HIR is instead of sharing it as `state base`; lines 337 and 388 clear that record.\n- hir/semantic.tcl:390-392 (a request made while another walk is in progress): swap the enclosing walk's partial writes out before Analyze and back in afterwards.\n- hir/semantic.tcl:567-589 (Walk): walk the live HIR in place, after pushing a save of the region's base values.\n- hir/semantic.tcl:487-535 (Analyze): take the snapshot, then restore the save, in a `finally` around each pass.\n- New procs Save, Restore, SwapOut and SwapIn, plus an audit switch.\n- Full instructions are in prototype_spec.",
+    "removes": "The O(program size) duplication and freeing of the HIR on every instance walk, which makes the total quadratic.\n- callables.bot: 1,460 walks with an average region of 21 expressions, against 5,271 expressions in the program. The algorithm map measured 3.4 s copying `exprs`, 2.1 s freeing it, and up to 1.25 s of forced copies of bindings and the type tables. The empirical profile measured 1,463 copies × 2.0 ms = 2.93 s.\n- Synthetic N=800: 4.9 ms per walk. Instance-walk time grew super-linearly (8 → 2021 ms for N = 50…800); with the fix it grows linearly (8.6 → 81 ms).",
+    "expected_gain": "Measured here with this design applied in memory, nocopy alone:\n- callables.bot: signatures 9.99 → 4.14 s, front end 21.9 → 15.3 s (−30%).\n- collections.bot: signatures 4.73 → 2.70 s, front end 15.4 → 12.3 s (−20%).\n- loops.bot: signatures 0.99 → 0.60 s.\n- closure-escape.bot: signatures 1.35 → 0.70 s.\n- errors.bot: signatures 0.93 → 0.65 s.\n\nTogether with candidate 2, on a 14-suite sweep: front end −21.9% (426 → 333 s), signatures −61.5%. Nocopy is most of that; on callables.bot it accounts for 5.85 of the 7.85 s signatures saving.\n\nThe empirical profile's own prototype (with all three fixes) measured −16% front end and −54% signatures over 68 suites.",
+    "soundness": "**Exact by construction, provided the restored write set is complete.** Every walk must start from the HIR as it was when the request was made, exactly like the old scratch copy. The write set:\n- Region expression nodes: types.tcl:2245, 2328, 2661, 2702, 2817, 2819, 2853-2855, 3000-3001, 3049, 3128; traits.tcl:867, 878, 904-907.\n- Binding records of the region's bind nodes (types.tcl:2712) and handler payload bindings (types.tcl:2638).\n- The `thenScope`/`elseScope` records of the region's if nodes (types.tcl:3136).\n- Types and typeIds added by intern (types.tcl:1826-1828), symbols added by nativeSymbol (resolve.tcl:245-247), and counters (hir.tcl:270).\n- Diagnostics, saved defensively.\n\n**A nested walk must see the request-time HIR, not the enclosing walk's partial writes.** hir::exact reads `known`/`type` of captured definitions (exactvalue.tcl:207-240). SwapOut and SwapIn ensure this. Symbol ids are visible in the snapshotted `target` field, so restoring the counters matters.\n\n**Invariants preserved.**\n- The HIR is byte-identical, so static-decision outcomes, the staticdeps inputs, the semantic census counters and `passes` are all unchanged.\n- signatures.tcl is untouched, so trusted and checked contracts and entryTypes (which the warnings read) are unchanged.\n- The mutant texts in audit/traits/tools/mutants.txt (semantic.tcl:328-329) and audit/affine/tools/mutants.txt (semantic.tcl:305-306) must stay byte-identical.\n\n**Risks.**\n- A future write site outside the saved set would leak silently. Mitigate with an audit mode and a test that pin restoration.\n- Another frame holding the whole HIR by value would quietly bring the copying back. That costs performance only.\n\n**Verified.** Identical HIR on 9 suites with nocopy alone and on 23 suites combined with candidate 2. The audit mode checked string equality of the live HIR before and after every top-level request: 0 failures in 17,824 requests across 6 suites with nocopy alone, and 0 in 6,354 with both fixes.",
+    "effort": "About 200 changed lines (my in-memory prototype is about 230, including the audit switch), plus one test. 1–2 days including validation.",
+    "validation": "1. Equivalence: compile every golden suite with HEAD (a separate worktree) and with the change. Compare `hir::format` and the whole HIR dict string with only the staticStats `*Ms` timers removed; for this candidate even the semantic counters must match.\n2. Run the golden corpus with BOTLISH_SEMANTIC_RESTORE_AUDIT=1: there must be no leak error.\n3. Tests: tests/semantic-instances.test (including the new audit test), tests/golden.test, tests/traits.test, tests/affine.test, tests/coroutines.test, and tests/all.tcl in both CORE_BACKEND passes, each with a private -tmpdir.\n4. Mutant harnesses audit/traits/tools/mutate.tcl, audit/affine/tools/mutate.tcl and audit/coroutines/tools/mutate.tcl: every mutant must still apply and be killed.\n5. Static decisions: `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` and tests/static-economics.test.\n6. Performance: bench/golden-suites.tcl -profile 1 before and after.",
+    "prototype": true
+   },
+   {
+    "name": "One body walk for a bound function that never references itself (guarded by a semantic epoch)",
+    "change": "- hir/types.tcl:2767: compute `selfFree` = `self` is set but appears in neither the node's `captures` nor its `staticRefs`, and read `[hir::semantic::Epoch]` before attempt 1.\n- After the existing break test at types.tcl:2812-2814, add: `if {$selfFree && $attempt == 1 && [hir::semantic::Epoch] == $epoch} break`.\n- hir/semantic.tcl: add `variable epoch 0` and an accessor `Epoch`. Increment it in RecordEnv when an existing environment differs (before line 245), in Requeue when it appends (line 540), and in Call when a request is declined for `no-env` or `nesting` (lines 373-379).\n- Update the docs at types.tcl:1859-1863 and 2732-2735.",
+    "removes": "The repeated second walk of every non-recursive named function, which nesting makes exponential.\n- callables.bot: 6,501 redundant second attempts; walked expressions 160,030 → 61,481.\n- Synthetic nesting depth 14: 65,504 → 105 body walks, 3.95 → 0.026 s.",
+    "expected_gain": "Measured here, guarded fix alone:\n- callables.bot: signatures 10.41 → 7.45 s, front end 21.5 → 19.1 s (−11%).\n- loops.bot: signatures 0.99 → 0.58 s.\n- closure-escape.bot: signatures 1.35 → 0.73 s.\n- errors.bot: signatures 0.93 → 0.85 s.\n\nOn top of candidate 1: callables signatures 4.14 → 2.14 s, front end 15.3 → 13.1 s.",
+    "soundness": "**Why skipping is exact when the guard holds.** `assumed` is visible only through `ctx types $self` (types.tcl:2780). Resolution adds `self` to the captures of every enclosing block (resolve.tcl:1966-1976), or to staticRefs for a module binding (:1957-1964), so a body without it cannot read the assumed type.\n\n**Correction to both earlier analyses:** that alone does not make attempt 2 a repetition of attempt 1. Attempt 2 also re-reads semantic-instance state that depends on history:\n- RecordEnv requeues instances when a creation environment changes (semantic.tcl:245-254).\n- Instance results accumulate by lub (:500).\n- A request declined for want of an environment (no-env) can be served later in the same walk.\n\nThe epoch counts exactly the events that can change an answer after it has been read: environment changes, requeues, and no-env or nesting declines. Budget declines are excluded because budgets only grow. If the epoch did not move, baseline attempt 2 reads the same inputs, writes the same values and returns R2 = R1.\n\n**Measured.**\n- The guard fell back only on closure-escape.bot: 14 of 640 self-free blocks, epoch advanced 60 times.\n- Identical HIR on 6 suites with this fix alone, and on 23 with candidate 1.\n- The unguarded variant was also identical on the 4 suites I ran it on, but it is not provably exact.\n\n**Visible differences:** only the census counters requests/hits/trivial. No test pins them; tests/semantic-instances.test:332 pins `walks`, which is unchanged. audit/opportunistic-semantic-instances/tools/census.tcl and audit/direct-hir-native-path/tools/differential.tcl report them.\n\nContracts, entryTypes and static decisions are unchanged because the HIR is identical.",
+    "effort": "About 25 lines; a few hours.",
+    "validation": "- The same equivalence comparison as candidate 1, with requests/hits/trivial also stripped.\n- tests/semantic-instances.test, tests/golden.test, tests/all.tcl in both passes.\n- `audit/static-decisions/tools/compare.tcl tests/golden/*.bot`.\n- A new test with a deeply nested non-recursive function (walk count linear in depth) and one with a recursive inner closure, where the guard must fall back (the closure-escape.bot pattern).",
+    "prototype": false
+   },
+   {
+    "name": "Apply instance views in place in hir::semantic::verify",
+    "change": "- hir/semantic.tcl:647-668 (View) and the loop at 723-750: instead of writing the snapshot into a full copy of the HIR, apply it in place to the caller's HIR.\n- Run hir::range::verifyBlocks, hir::callables::verifyBlocks, hir::structs::verifyExprs and hir::affine::verifyInstance, then read the diagnostics and violatedContracts.\n- Then restore: the region's nodes, its bind binding records, added types/typeIds/counters, `diagnostics`, `violatedContracts`, `violatedDeclared` and `semanticContext`.\n- Use the same Save/Restore machinery as candidate 1.",
+    "removes": "An O(program size) copy and free per used instance, per build (measured with both fixes applied):\n- callables.bot: View 1.71 s of 3.21 s semantic::verify, over 672 views (about 2.5 ms each).\n- stdlib-namespaces.bot: View 4.09 s of 7.75 s, over 1,335 views.",
+    "expected_gain": "Estimate, not measured: most of the View time, about 10–12% of the post-fix front end on those two suites (1.7 of 14.6 s and 4.1 of 36.9 s). This is in the semantic-instances phase, not inside signatures::infer.",
+    "soundness": "Exact only if the verifiers' write set is complete. Writes found so far:\n- range.tcl:1670-1697 (violatedDeclared, violatedContracts)\n- callables.tcl:351\n- structs.tcl:306 (it rewrites `diagnostics` wholesale)\n- Diagnose calls\n- hir::affine::verifyInstance, which has not been audited yet.\n\nThe diagnostics a view collects must be identical, in the same order. Use the same audit mode as candidate 1.\n\nRisk is medium: several modules write, and the four verifiers would carry an invariant they do not carry today.",
+    "effort": "About 120–150 lines plus a write audit of the four verifiers; 1–2 days.",
+    "validation": "- HIR and diagnostics identical on the golden corpus.\n- tests/semantic-instances.test, tests/affine.test, tests/structs*.test, tests/golden.test.\n- audit/affine/tools/mutate.tcl and audit/coroutines/tools/mutate.tcl.\n- The audit mode run on the corpus.",
+    "prototype": false
+   },
+   {
+    "name": "Avoid or defer the demotion re-check of hir::check",
+    "change": "hir/hir.tcl:878-892: for strict static-decision builds, whose HIR is used only for diagnostics, Attribute, Deps and MethodSeeds, either skip the second CheckOnce or make it lazy, running it only when a consumer reads non-diagnostic facts. Consumers: Deps or MethodSeeds at hir/static.tcl:756-760, the legacy scheduler's read of demotedContracts (static.tcl:1203), and the -strict 0 and native::prepareHir paths. Keep the re-check unchanged for -strict 0 and code generation.",
+    "removes": "A complete second CheckOnce, signatures included, whenever a build violates a trusted inferred contract.\n- callables.bot, with both fixes applied: about 3.0 s of 14.6 s front end (21%).\n- Baseline: 3.83 s of signatures alone.\n- Not observed on stdlib-namespaces.bot or opaque.bot.",
+    "expected_gain": "Up to about 20% of the front end, but only on suites that demote a contract. Corpus-wide frequency was not measured.",
+    "soundness": "Plausible, not verified. Deps derives dependency edges from the demoted HIR. staticdeps.tcl:246-248 says demotion is deliberately not a channel, but the facts do differ. A wrong edge would show up as a misprediction, or as an outcome that differs from BOTLISH_STATIC_SCHEDULER=sequential.\n\nThe outcome invariant (batched outcomes equal the sequential reference) must be re-proven. Diagnostics stay those of the first pass in both versions (hir.tcl:890).",
+    "effort": "2–4 days. Medium-high risk.",
+    "validation": "tests/static-economics.test, tests/static-compile.test, `tests/golden.test` (golden-static-economics), `audit/static-decisions/tools/fuzz.tcl` (several seeds), `compare.tcl tests/golden/*.bot` and `mutate.tcl` (economic mutants too); tests/structural-contract-completions.test.",
+    "prototype": false
+   },
+   {
+    "name": "Linear-time indexes for message labels and native symbols",
+    "change": "- hir/signatures.tcl:439-452 (Name, called at 433, 738, 1053 and 1165): build a block → binding-name index once per Collect, or compute the labels lazily.\n- The same for hir::semantic::CallableName (semantic.tcl:868-877).\n- hir::resolve::nativeSymbol (resolve.tcl:238-249): keep a name → symbol index. With candidate 1, that index must be restored together with `symbols`.",
+    "removes": "Linear scans of a whole scope per call: O(calls × bindings).\n- Golden corpus: negligible (Name 0.03 s and nativeSymbol 0.22 s over 16,638 calls, both on callables.bot).\n- Synthetic N=800: Name 1.0 s of 5.3 s of signatures.",
+    "expected_gain": "Under 2% on the golden corpus. It protects scaling: per the empirical profile, Name is what keeps signatures growing 2.6× per doubling instead of 2× at N=800.",
+    "soundness": "Name must keep first-match semantics in scope binding order. Low risk.",
+    "effort": "About 40–60 lines; hours.",
+    "validation": "The same HIR-equivalence check; tests/signatures*.test and tests/semantic-instances.test (message texts).",
+    "prototype": false
+   },
+   {
+    "name": "Incremental seeded re-typing (avoid re-typing everything in round 2)",
+    "change": "hir/signatures.tcl:248-277 with hir/types.tcl:1874-1908: re-type only the blocks whose entry types change with the new seeds, plus everything that depends on them. Dependents include every reference to a seeded block's exact type (types.tcl:776-802 embed BlockContract) and the semantic instances keyed by those types.",
+    "removes": "About half of the typing per signatures call. 66–70% of expressions have identical typing in the two passes (cross-build analysis). After candidates 1 and 2, types::infer on callables.bot is 1.56 s over 6 runs.",
+    "expected_gain": "Ceiling of about 0.5 s of 13.1 s front end on callables.bot (about 4%). Estimate.",
+    "soundness": "Round 2's seeded typing is the final HIR, so it must be bit-identical. That needs a complete dependency record, including semantic state, the order types are interned in, and environments. A warm start is not exact: seeds only narrow (signatures.tcl:261-269), and a different start can reach a different fixpoint.",
+    "effort": "Weeks. High risk. Not recommended after candidates 1 and 2.",
+    "validation": "Full HIR equivalence on the corpus, the static-decision harnesses, and every signature/contract test (tests/*contract*, refinement-values, traits).",
+    "prototype": false
+   },
+   {
+    "name": "Cross-build memo of per-function typing (start with the library-module prefix)",
+    "change": "Content-addressed memo of each function's typing, alpha-normalized and with ids remapped, reused across BuildOnce (hir/hir.tcl:472-543). Replay must reproduce every write, the order types are interned in, and the order of semantic-instance requests.",
+    "removes": "Typed builds after the first take 45–94% of signatures time (cross-build analysis; imports.bot 94%). The module-prefix share is only 22–31% of each type walk.",
+    "expected_gain": "Estimated 15–29% of the front end before candidates 1 and 2; considerably less after them. Phases other than inference are still rerun on every build.",
+    "soundness": "Every build must stay bit-identical to a build from scratch, because static decisions read diagnostics, Deps and the hir::format text. staticdeps cannot serve as the invalidation oracle (staticdeps.tcl:246-252). It would need its own audit mode, like methodAudit (static.tcl:1320-1335).",
+    "effort": "Weeks or more. High risk.",
+    "validation": "The static-decision harnesses (fuzz, compare, mutate), tests/static-economics.test, and full HIR equivalence of each build against a from-scratch build in an audit mode.",
+    "prototype": false
+   }
+  ],
+  "prototype_spec": "Goal: semantic-instance walks run in place on the live generic HIR instead of on a copy of the whole program. The result must be byte-identical to today's HIR, including the semantic census counters. Only hir/types.tcl, hir/semantic.tcl and tests/semantic-instances.test change.\n\n1. hir/types.tcl:2961. Change\n   `set result [hir::semantic::Call $hir $ctx $e $block $argTypes $result]`\n   to\n   `set result [hir::semantic::Call hir $ctx $e $block $argTypes $result]`.\n   This is the only call site of hir::semantic::Call in the repo.\n\n2. hir/semantic.tcl `namespace eval` (150-167). Add:\n   - `variable live \"\"`: {LEVEL VARNAME} of the top-level request's caller frame, or \"\".\n   - `variable saves {}`: a stack of write-set saves for walks in progress, innermost last.\n   - `variable audit [expr {[info exists ::env(BOTLISH_SEMANTIC_RESTORE_AUDIT)] && $::env(BOTLISH_SEMANTIC_RESTORE_AUDIT)}]`.\n\n3. hir::semantic::Call (266):\n   - Change the signature to `{hirVar ctx e block argTypes blockResult}`. Add `upvar 1 $hirVar hir` as the first line and `variable live; variable saves` with the other variable lines.\n   - Replace both `dict set state base $hir` (333, 383) with `set live [list [expr {[info level] - 1}] $hirVar]`.\n   - Replace both `dict set state base \"\"` (337, 388) with `set live \"\"`.\n   - Replace the nested branch at 390-392 (`} else { Analyze $id }`) with:\n     `set stash [SwapOut hir [lindex $saves end]]; try { Analyze $id } finally { SwapIn hir $stash }`\n   - Leave lines 286-329 textually unchanged. audit/affine/tools/mutants.txt matches 305-306 and audit/traits/tools/mutants.txt matches 328-329.\n   - Audit: when `$audit` is true and the stack is empty, take `set before $hir` before the instance work. That is: before the Drain block at 330 and before Create/Analyze at 381-389. After it, `if {$before ne $hir} {error \"hir::semantic: an instance walk leaked a write into the program\"}`. Simplest: wrap both top-level branches.\n\n4. hir::semantic::Walk (567). Replace `set scratch [dict get $state base]` with:\n   `variable live; variable saves; upvar #[lindex $live 0] [lindex $live 1] scratch`\n   Then, right after computing `block`, before any write: `lappend saves [Save scratch $block]`. The rest is unchanged except the last line, `return $result` instead of `return [list $result $scratch]`.\n\n5. hir::semantic::Analyze (487):\n   - Add `variable live; variable saves; upvar #[lindex $live 0] [lindex $live 1] scratch`.\n   - Inside `while 1`, after the dirty/assumes resets: `set depth [llength $saves]; set done 0; try { ... } finally { if {[llength $saves] > $depth} { Restore scratch [lindex $saves end]; set saves [lrange $saves 0 end-1] } }; if {$done} break`.\n   - The try body is the old code from `lassign [Walk $id] ...` to the passLimit+3 check, with three changes:\n     - `set walked [Walk $id]` replaces the lassign.\n     - The two `snapshot [Snapshot $scratch $id]` writes stay inside the try, so they run before the restore.\n     - The two `break`s become `set done 1`, and the second test becomes an `elseif` of the first.\n   - Everything else is unchanged: `dict incr state walks`, lub, passLimit, deps/dirty/Requeue, and status/passes after the loop.\n\n6. New procs in hir/semantic.tcl (all take hirVar and do `upvar 1`):\n\n   - **Save {hirVar block}**: iterate `[Region $hir $block]`.\n     - For every e, record the pair {e node} in `nodes`.\n     - For a `bind` node, record {b record} in `binds` if `binding` is non-empty and exists in `bindings`.\n     - For a `handle` node with `handlerPayloads`, do the same for each non-empty payload binding.\n     - For an `if` node, record {s record} in `scopes` for `thenScope` and `elseScope` when present and existing in `scopes`.\n     - Return `dict create nodes .. binds .. scopes .. counters [dict get $hir counters] hasDiag [dict exists $hir diagnostics] diagnostics <list or {}>`.\n\n   - **Added {hirVar save}**: removes the types and symbols added since the save.\n     - For i from (save counters `type` + 1) to the current counters `type`, with id `t$i` (prefix from hir::prefixes): if `types $id` exists, unset it, and unset `typeIds <form>` if that maps to `$id`.\n     - The same for i over the `symbol` counter, with id `y$i` in `symbols`.\n     - A missing counter counts as 0.\n\n   - **Restore {hirVar save}**: write back every node, binding record and scope record with `dict set`, which keeps key order. Call Added. Set `counters` to the saved dict. Set or unset `diagnostics` per `hasDiag`.\n\n   - **SwapOut {hirVar save}**: build a stash with the same keys holding the CURRENT values (nodes, binds and scopes for the keys in save, counters, diagnostics). Add `added`, a list of {type|symbol id value} in id order for the ids beyond the save's counters. Then call `Restore hir $save` and return the stash.\n\n   - **SwapIn {hirVar stash}**: write back the stash's nodes, binds and scopes. Re-add each `added` entry in order (a type sets both `types id form` and `typeIds form id`; a symbol sets `symbols id value`). Restore counters and diagnostics.\n\n   - Optionally reset `saves {}` and `live \"\"` in Begin (177), defensively.\n\n7. Comments:\n   - Walk header (562-566): \"in place on the request-time HIR; its write set is saved and restored (Save); a nested walk first swaps the enclosing walk's partial writes out, so every walk starts from the request-time HIR\".\n   - Snapshot (611-612) and the \"Validity\" header text accordingly.\n   - Next to Save: any new write by the hir::types walk outside a region node, region binding or region if-scope (or by a new interning kind) must be added to Save. The audit switch catches a miss.\n\n8. Test in tests/semantic-instances.test: set `hir::semantic::audit 1` and compile programs that exercise each of the following, then reset to 0. Expect no error and the same result type as before.\n   - an instance whose body creates a closure that is itself instantiated (nested walk);\n   - the si-dyn-5 program (recursion with a declared result);\n   - a handler with a payload binding (`on E {x}:`);\n   - an `if` with refinements in an instance body;\n   - a trait method call in an instance;\n   - a recursive instance (si-rec-1).\n\n9. Acceptance:\n   - (a) For every tests/golden/*.bot (mutable-array.bot optional, it takes about 300 s), compile in a fresh tclsh with HEAD and with the change. Use `surface::readProgramFile PATH -warnings off` with `interp recursionlimit {} 100000`, run from a private temp dir. The whole HIR dict string must be equal after removing only the staticStats keys matching `*Ms`, and `hir::format` must be equal. The semantic counters must also be equal.\n   - (b) The audit switch is set on at least 10 suites with no error.\n   - (c) bench/golden-suites.tcl -one PATH -profile 1 shows signatures time on callables.bot dropping by about 50% (in-memory prototype: 9.99 → 4.14 s) and on collections.bot by about 40% (4.73 → 2.70 s).\n   - (d) The validation list of this candidate: tests, mutant harnesses (mutants still apply and are killed), and static-decision compare."
+ },
+ {
+  "implemented": true,
+  "worktree": "WORKTREE (HEAD detached at 96a25f0, the commit the checkout at ROOT is on; the diff is relative to it; nothing committed, no branch created)",
+  "diff": "diff --git a/hir/semantic.tcl b/hir/semantic.tcl\nindex d67a0c2..1a08165 100644\n--- a/hir/semantic.tcl\n+++ b/hir/semantic.tcl\n@@ -128,12 +128,14 @@\n # Validity\n # --------\n # Analysis (Walk) and verification are separate. Walk types the body under the\n-# entry environment and yields the result; each instance's final walk is\n-# snapshotted (the volatile per-expression facts of its region, not a HIR\n-# clone). verify then runs, on a view of the HIR carrying that snapshot, the\n-# same checks every function body gets for its own definition: the typed-call\n-# admissibility proofs and MutableArray store/copy rules\n-# (hir::range::verifyBlocks) and the bearing/non-erasure audit\n+# entry environment, in place on the request-time HIR, and yields the result;\n+# each instance's final walk is snapshotted (the volatile per-expression facts\n+# of its region, not a HIR clone) before the walk's writes are undone (Save,\n+# Restore), so the program the generic walk goes on with is exactly the one\n+# it made the request with. verify then runs, on a view of the HIR carrying\n+# that snapshot, the same checks every function body gets for its own\n+# definition: the typed-call admissibility proofs and MutableArray store/copy\n+# rules (hir::range::verifyBlocks) and the bearing/non-erasure audit\n # (hir::callables::verifyBlocks). A diagnostic there means \"this function is\n # invalid for this call\": it is reported at the CALL that needed the instance\n # (status invalid); the source function is not rejected and other calls are\n@@ -160,6 +162,15 @@ namespace eval hir::semantic {\n     variable levelLimit 700\n     # Run state (empty outside hir::types::infer).\n     variable state {}\n+    # {LEVEL VARNAME}: the variable holding the HIR a top-level request was\n+    # made with (in its caller's frame), which every walk of that request\n+    # types in place; \"\" outside a request.\n+    variable live \"\"\n+    # The write-set saves of the walks in progress (Save), innermost last.\n+    variable saves {}\n+    # 1 checks that every top-level request leaves the HIR exactly as it\n+    # found it (tests and audits only: it compares the whole program).\n+    variable audit [expr {[info exists ::env(BOTLISH_SEMANTIC_RESTORE_AUDIT)] && $::env(BOTLISH_SEMANTIC_RESTORE_AUDIT)}]\n     # Per-expression facts a walk writes (hir/types.tcl); the ones that are\n     # TypeIds are stored as type forms.\n     variable fields {type reachable target known calleeErrors handlerTypes refinements resultType inferredResultType traitCall}\n@@ -176,9 +187,13 @@ proc hir::semantic::Enabled {} {\n \n proc hir::semantic::Begin {envs} {\n     variable state\n+    variable live\n+    variable saves\n     set state [dict create envs $envs pendingEnv {} instances {} keys {} byBlock {} \\\n-        calls {} declined {} stack {} queue {} deps {} base \"\" next 0 regions {} instsOf {} \\\n+        calls {} declined {} stack {} queue {} deps {} next 0 regions {} instsOf {} \\\n         requests 0 trivial 0 hits 0 walks 0 declinedCount {}]\n+    set live \"\"\n+    set saves {}\n }\n \n # Ends the run: the state a HIR keeps as its `semantic` field (instances,\n@@ -207,7 +222,7 @@ proc hir::semantic::End {} {\n         }\n     }\n     dict set s used [lsort -dictionary $used]\n-    foreach key {base stack queue regions} {\n+    foreach key {stack queue regions} {\n         dict unset s $key\n     }\n     return $s\n@@ -259,17 +274,23 @@ proc hir::semantic::RecordEnv {hir outer e self selfType} {\n # Requests\n \n # The result type of the exact call E of BLOCK with ARGTYPES seen by\n-# context CTX of HIR (the generic walk, or a semantic instance's walk):\n-# BLOCKRESULT (the call's ordinary generic result) unless a semantic instance\n-# proves a more precise one. Records the call -> instance edge that\n-# hir::callables and hir::range::VerifyCall consult.\n-proc hir::semantic::Call {hir ctx e block argTypes blockResult} {\n+# context CTX of the HIR in the caller's variable HIRVAR (the generic walk, or\n+# a semantic instance's walk): BLOCKRESULT (the call's ordinary generic\n+# result) unless a semantic instance proves a more precise one. Records the\n+# call -> instance edge that hir::callables and hir::range::VerifyCall\n+# consult. The instances it analyzes are walked in place on that HIR, which\n+# they leave as they found it (Walk).\n+proc hir::semantic::Call {hirVar ctx e block argTypes blockResult} {\n+    upvar 1 $hirVar hir\n     variable state\n     variable enabled\n     variable maxPerBlock\n     variable maxInstances\n     variable maxDepth\n     variable levelLimit\n+    variable live\n+    variable saves\n+    variable audit\n     if {!$enabled || $state eq \"\" || ($blockResult eq \"never\" && ![hir::traits::IsPolymorphic $hir $block]\n             && ![hir::types::AnyAffine $argTypes])} {\n         # (A call that gives an affine argument always gets its instance,\n@@ -330,11 +351,17 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {\n     if {$caller eq \"generic\" && [dict get $state queue] ne {} && [dict get $state stack] eq {}} {\n         # Instances whose environment changed since the last request are\n         # settled before this walk reads any answer.\n-        dict set state base $hir\n+        set live [list [expr {[info level] - 1}] $hirVar]\n+        if {$audit} {\n+            set before $hir\n+        }\n         try {\n             Drain\n         } finally {\n-            dict set state base \"\"\n+            set live \"\"\n+        }\n+        if {$audit && $before ne $hir} {\n+            error \"hir::semantic: an instance walk leaked a write into the program\"\n         }\n     }\n     set callKey [list $caller $e]\n@@ -380,15 +407,29 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {\n         } else {\n             set id [Create $block $entry $key]\n             if {[dict get $state stack] eq {}} {\n-                dict set state base $hir\n+                set live [list [expr {[info level] - 1}] $hirVar]\n+                if {$audit} {\n+                    set before $hir\n+                }\n                 try {\n                     Analyze $id\n                     Drain\n                 } finally {\n-                    dict set state base \"\"\n+                    set live \"\"\n+                }\n+                if {$audit && $before ne $hir} {\n+                    error \"hir::semantic: an instance walk leaked a write into the program\"\n                 }\n             } else {\n-                Analyze $id\n+                # A request from inside a walk: the new instance's walks\n+                # start from the request-time HIR too, so the enclosing\n+                # walk's writes so far are set aside meanwhile.\n+                set stash [SwapOut hir [lindex $saves end]]\n+                try {\n+                    Analyze $id\n+                } finally {\n+                    SwapIn hir $stash\n+                }\n             }\n         }\n     }\n@@ -487,6 +528,9 @@ proc hir::semantic::Bump {field {key \"\"}} {\n proc hir::semantic::Analyze {id} {\n     variable state\n     variable passLimit\n+    variable live\n+    variable saves\n+    upvar #[lindex $live 0] [lindex $live 1] scratch\n     dict lappend state stack $id\n     try {\n         set passes 0\n@@ -494,38 +538,48 @@ proc hir::semantic::Analyze {id} {\n             incr passes\n             dict set state instances $id dirty 0\n             dict set state instances $id assumes 0\n-            lassign [Walk $id] walked scratch\n-            dict incr state walks\n-            set old [dict get $state instances $id result]\n-            set new [hir::types::lub $old $walked]\n-            if {$new ne $old && $passes >= $passLimit} {\n-                set new any\n-            }\n-            if {$new ne $old} {\n-                dict set state instances $id result $new\n-                if {[dict exists $state deps $id]} {\n-                    foreach reader [dict keys [dict get $state deps $id]] {\n-                        if {$reader eq $id} {\n-                            continue\n-                        }\n-                        if {$reader in [dict get $state stack]} {\n-                            dict set state instances $reader dirty 1\n-                        } else {\n-                            Requeue $reader\n+            set depth [llength $saves]\n+            set done 0\n+            try {\n+                set walked [Walk $id]\n+                dict incr state walks\n+                set old [dict get $state instances $id result]\n+                set new [hir::types::lub $old $walked]\n+                if {$new ne $old && $passes >= $passLimit} {\n+                    set new any\n+                }\n+                if {$new ne $old} {\n+                    dict set state instances $id result $new\n+                    if {[dict exists $state deps $id]} {\n+                        foreach reader [dict keys [dict get $state deps $id]] {\n+                            if {$reader eq $id} {\n+                                continue\n+                            }\n+                            if {$reader in [dict get $state stack]} {\n+                                dict set state instances $reader dirty 1\n+                            } else {\n+                                Requeue $reader\n+                            }\n                         }\n                     }\n                 }\n+                if {![dict get $state instances $id assumes]\n+                        || ($new eq $old && ![dict get $state instances $id dirty])} {\n+                    dict set state instances $id snapshot [Snapshot $scratch $id]\n+                    set done 1\n+                } elseif {$passes >= $passLimit + 3} {\n+                    dict set state instances $id result any\n+                    dict set state instances $id snapshot [Snapshot $scratch $id]\n+                    set done 1\n+                }\n+            } finally {\n+                # The walk's writes are undone (after its snapshot).\n+                if {[llength $saves] > $depth} {\n+                    Restore scratch [lindex $saves end]\n+                    set saves [lrange $saves 0 end-1]\n+                }\n             }\n-            if {![dict get $state instances $id assumes]\n-                    || ($new eq $old && ![dict get $state instances $id dirty])} {\n-                dict set state instances $id snapshot [Snapshot $scratch $id]\n-                break\n-            }\n-            if {$passes >= $passLimit + 3} {\n-                dict set state instances $id result any\n-                dict set state instances $id snapshot [Snapshot $scratch $id]\n-                break\n-            }\n+            if {$done} break\n         }\n         dict set state instances $id status analyzed\n         dict set state instances $id passes [expr {[dict get $state instances $id passes] + $passes}]\n@@ -560,15 +614,20 @@ proc hir::semantic::Drain {} {\n }\n \n # One walk of instance ID's block body under its entry environment: the\n-# ordinary semantic inference (hir::types::Sequence) over a scratch copy of\n-# the request-time HIR, with the block's parameters seeded by the entry types\n-# and its captures by the recorded creation environment. Returns {RESULT\n-# SCRATCH}.\n+# ordinary semantic inference (hir::types::Sequence) in place on the\n+# request-time HIR, with the block's parameters seeded by the entry types and\n+# its captures by the recorded creation environment. Returns the result. Its\n+# write set is saved first (Save) and restored by Analyze once the walk is\n+# done with; a nested walk first swaps the enclosing walk's partial writes out\n+# (SwapOut), so every walk starts from the request-time HIR.\n proc hir::semantic::Walk {id} {\n     variable state\n-    set scratch [dict get $state base]\n+    variable live\n+    variable saves\n+    upvar #[lindex $live 0] [lindex $live 1] scratch\n     set inst [dict get $state instances $id]\n     set block [dict get $inst block]\n+    lappend saves [Save scratch $block]\n     set node [dict get $scratch exprs $block]\n     set ctx [hir::types::NewContext]\n     dict set ctx inst $id\n@@ -585,7 +644,164 @@ proc hir::semantic::Walk {id} {\n         set result [hir::traits::ViewResult $declared $result]\n     }\n     dict set scratch exprs $block resultType [hir::types::intern scratch $result]\n-    return [list $result $scratch]\n+    return $result\n+}\n+\n+# ---------------------------------------------------------------------------\n+# Write sets\n+#\n+# What a walk of BLOCK may change in the HIR, as it was before the walk: the\n+# nodes of BLOCK's region, the records of the bindings its bind and handle\n+# nodes type, the records of its ifs' branch scopes (their refinements), the\n+# types and native symbols it interns (beyond the counters), and the\n+# diagnostics. Any new write of the hir::types walk outside a region node, a\n+# region binding or a region if-scope -- or a new interning kind -- must be\n+# added here; BOTLISH_SEMANTIC_RESTORE_AUDIT=1 (`audit`) catches a miss.\n+proc hir::semantic::Save {hirVar block} {\n+    upvar 1 $hirVar hir\n+    set nodes {}\n+    set binds {}\n+    set scopes {}\n+    foreach e [Region $hir $block] {\n+        set node [dict get $hir exprs $e]\n+        lappend nodes $e $node\n+        switch -- [dict get $node kind] {\n+            bind {\n+                set b [dict get $node binding]\n+                if {$b ne \"\" && [dict exists $hir bindings $b]} {\n+                    lappend binds $b [dict get $hir bindings $b]\n+                }\n+            }\n+            handle {\n+                if {[dict exists $node handlerPayloads]} {\n+                    foreach b [dict get $node handlerPayloads] {\n+                        if {$b ne \"\" && [dict exists $hir bindings $b]} {\n+                            lappend binds $b [dict get $hir bindings $b]\n+                        }\n+                    }\n+                }\n+            }\n+            if {\n+                foreach role {thenScope elseScope} {\n+                    if {[dict exists $node $role]} {\n+                        set s [dict get $node $role]\n+                        if {$s ne \"\" && [dict exists $hir scopes $s]} {\n+                            lappend scopes $s [dict get $hir scopes $s]\n+                        }\n+                    }\n+                }\n+            }\n+        }\n+    }\n+    set hasDiag [dict exists $hir diagnostics]\n+    return [dict create nodes $nodes binds $binds scopes $scopes counters [dict get $hir counters] \\\n+        hasDiag $hasDiag diagnostics [if {$hasDiag} {dict get $hir diagnostics}]]\n+}\n+\n+# The types and symbols HIR interned since SAVE (ids beyond its counters), as\n+# {type|symbol ID VALUE} in id order.\n+proc hir::semantic::Interned {hir save} {\n+    set result {}\n+    foreach {kind table} {type types symbol symbols} {\n+        set prefix [dict get $::hir::prefixes $kind]\n+        set from [Counter [dict get $save counters] $kind]\n+        set to [Counter [dict get $hir counters] $kind]\n+        for {set i [expr {$from + 1}]} {$i <= $to} {incr i} {\n+            if {[dict exists $hir $table $prefix$i]} {\n+                lappend result [list $kind $prefix$i [dict get $hir $table $prefix$i]]\n+            }\n+        }\n+    }\n+    return $result\n+}\n+\n+proc hir::semantic::Counter {counters kind} {\n+    return [expr {[dict exists $counters $kind] ? [dict get $counters $kind] : 0}]\n+}\n+\n+# Removes from the HIR in HIRVAR the types and symbols interned since SAVE.\n+proc hir::semantic::Added {hirVar save} {\n+    upvar 1 $hirVar hir\n+    foreach entry [Interned $hir $save] {\n+        lassign $entry kind id value\n+        if {$kind eq \"symbol\"} {\n+            dict unset hir symbols $id\n+            continue\n+        }\n+        dict unset hir types $id\n+        if {[dict exists $hir typeIds $value] && [dict get $hir typeIds $value] eq $id} {\n+            dict unset hir typeIds $value\n+        }\n+    }\n+}\n+\n+# Puts the HIR in HIRVAR back as it was when SAVE was taken. (`dict set` of\n+# an existing key keeps the key's place, so the HIR is the same value, key\n+# order included.)\n+proc hir::semantic::Restore {hirVar save} {\n+    upvar 1 $hirVar hir\n+    foreach {e node} [dict get $save nodes] {\n+        dict set hir exprs $e $node\n+    }\n+    foreach {b record} [dict get $save binds] {\n+        dict set hir bindings $b $record\n+    }\n+    foreach {s record} [dict get $save scopes] {\n+        dict set hir scopes $s $record\n+    }\n+    Added hir $save\n+    dict set hir counters [dict get $save counters]\n+    if {[dict get $save hasDiag]} {\n+        dict set hir diagnostics [dict get $save diagnostics]\n+    } elseif {[dict exists $hir diagnostics]} {\n+        dict unset hir diagnostics\n+    }\n+}\n+\n+# Sets the writes made since SAVE aside: restores the HIR in HIRVAR to SAVE\n+# and returns a stash of what they were, for SwapIn.\n+proc hir::semantic::SwapOut {hirVar save} {\n+    upvar 1 $hirVar hir\n+    set stash [dict create]\n+    foreach {key table} {nodes exprs binds bindings scopes scopes} {\n+        set current {}\n+        foreach {k -} [dict get $save $key] {\n+            lappend current $k [dict get $hir $table $k]\n+        }\n+        dict set stash $key $current\n+    }\n+    set hasDiag [dict exists $hir diagnostics]\n+    dict set stash counters [dict get $hir counters]\n+    dict set stash hasDiag $hasDiag\n+    dict set stash diagnostics [if {$hasDiag} {dict get $hir diagnostics}]\n+    dict set stash added [Interned $hir $save]\n+    Restore hir $save\n+    return $stash\n+}\n+\n+# Puts the writes SwapOut set aside (STASH) back into the HIR in HIRVAR.\n+proc hir::semantic::SwapIn {hirVar stash} {\n+    upvar 1 $hirVar hir\n+    foreach {key table} {nodes exprs binds bindings scopes scopes} {\n+        foreach {k value} [dict get $stash $key] {\n+            dict set hir $table $k $value\n+        }\n+    }\n+    foreach entry [dict get $stash added] {\n+        lassign $entry kind id value\n+        if {$kind eq \"symbol\"} {\n+            dict set hir symbols $id $value\n+        } else {\n+            dict set hir types $id $value\n+            dict set hir typeIds $value $id\n+        }\n+    }\n+    dict set hir counters [dict get $stash counters]\n+    if {[dict get $stash hasDiag]} {\n+        dict set hir diagnostics [dict get $stash diagnostics]\n+    } elseif {[dict exists $hir diagnostics]} {\n+        dict unset hir diagnostics\n+    }\n }\n \n # ---------------------------------------------------------------------------\n@@ -608,7 +824,8 @@ proc hir::semantic::Region {hir e} {\n     return $result\n }\n \n-# The volatile facts of instance ID's final walk over its region (a small\n+# The volatile facts of instance ID's final walk over its region, read from\n+# the HIR SCRATCH the walk wrote them into before Analyze restores it (a small\n # per-instance side table; the HIR is never cloned).\n proc hir::semantic::Snapshot {scratch id} {\n     variable state\ndiff --git a/hir/types.tcl b/hir/types.tcl\nindex 553fc53..cf6d28e 100644\n--- a/hir/types.tcl\n+++ b/hir/types.tcl\n@@ -2958,7 +2958,7 @@ proc hir::types::Call {hirVar ctxVar e} {\n                     # this call's concrete argument types. The call is\n                     # typed with what that analysis proves; the callee's own\n                     # contract and generic result are untouched.\n-                    set result [hir::semantic::Call $hir $ctx $e $block $argTypes $result]\n+                    set result [hir::semantic::Call hir $ctx $e $block $argTypes $result]\n                 }\n             }\n         } elseif {$spec} {\ndiff --git a/tests/semantic-instances.test b/tests/semantic-instances.test\nindex ac570fd..6115f53 100644\n--- a/tests/semantic-instances.test\n+++ b/tests/semantic-instances.test\n@@ -554,6 +554,52 @@ test si-det-2 {compiling twice gives identical tables} -body {\n     expr {[dict get [siCompile $src] semantic instances] eq [dict get [siCompile $src] semantic instances]}\n } -result 1\n \n+# ---------------------------------------------------------------------------\n+# in-place walks: an instance walk types the program's own HIR and leaves it\n+# exactly as it found it (hir/semantic.tcl's Save/Restore; the audit compares\n+# the whole program around every top-level request)\n+\n+test si-inplace-1 {the restore audit holds for nested walks (a closure, a chain), recursion, a payload handler, refinements and a trait call, and the results are the ones a scratch copy gave} -body {\n+    set saved $hir::semantic::audit\n+    set hir::semantic::audit 1\n+    try {\n+        lmap {name src} [list \\\n+            closure \"fn mk(m, n):\\n    fn get(i):\\n        \\[i, n\\]\\n    get(m)\\nmk(\\\"x\\\", 1)\" \\\n+            chain \"fn c(z):\\n    \\[z\\]\\nfn b(y):\\n    c(y)\\nfn a(x):\\n    b(x)\\na(\\\"s\\\")\" \\\n+            captured \"import mutable_array\\nfn mk(m) errors IndexNotFound:\\n    fn get(i) errors IndexNotFound:\\n        mutable_array::at(m, i)\\n    get(0)\\nv = mk(mutable_array::create(1, \\\"x\\\")):\\n    on IndexNotFound:\\n        \\\"z\\\"\\nv\" \\\n+            dyn5 \"fn f(n) -> int:\\n    if n == 0:\\n        return 0\\n    r = f(n - 1)\\n    fn g(x):\\n        x + n\\n    g(1) + r\\n\\nf(3)\" \\\n+            payload \"error Bad:\\n    code: int\\nfn risky(x) errors Bad:\\n    if x == 0:\\n        fail Bad {code: 7}\\n    x\\nfn guard(x):\\n    v = risky(x):\\n        on Bad {code}:\\n            code\\n    v\\nguard(1)\" \\\n+            refine \"import str\\nrefined type Mail = str\\nfn mail?(s: str) -> bool proves s: Mail:\\n    str::length(s) > 3\\nfn send(m: Mail) -> int:\\n    str::length(m)\\nfn go(x, y):\\n    if mail?(x):\\n        \\[send(x), y\\]\\n    else:\\n        \\[0, y\\]\\ngo(\\\"abcd\\\", 1)\" \\\n+            trait \"trait Named:\\n    fn name(value: Named) -> str\\n\\nstruct Person:\\n    value: str\\n\\nfn name(value: Person) -> str:\\n    value.value\\n\\nfn describe(value: Named) -> str:\\n    value.name()\\n\\nfn twice(value: Named) -> str:\\n    describe(value)\\n\\ntwice(Person {value: \\\"a\\\"})\" \\\n+            rec1 \"fn count(xs, n):\\n    if n == 0:\\n        xs\\n    else:\\n        count(xs, n - 1)\\ncount(\\[\\\"a\\\"\\], 3)\"] {\n+            set hir [siCompile $src]\n+            list $name [hir::types::show [hir::typeOf $hir [lindex [hir::roots $hir] end]]] \\\n+                [dict get $hir semantic walks] [dict get $hir semantic rounds]\n+        }\n+    } finally {\n+        set hir::semantic::audit $saved\n+    }\n+} -result {{closure list 2 1} {chain {List[str]} 3 1} {captured str 2 1} {dyn5 int 3 2} {payload int 2 1} {refine {List[int]} 1 1} {trait str 0 1} {rec1 {List[str]} 4 1}}\n+\n+test si-inplace-2 {the audit catches a write a walk leaves behind} -body {\n+    set saved $hir::semantic::audit\n+    set hir::semantic::audit 1\n+    rename hir::semantic::Restore hir::semantic::Restore.real\n+    proc hir::semantic::Restore {hirVar save} {\n+        upvar 1 $hirVar hir\n+        hir::semantic::Restore.real hir $save\n+        dict set hir counters type [expr {[dict get $hir counters type] + 1}]\n+    }\n+    try {\n+        catch {siCompile \"fn identity(x):\\n    x\\nidentity(1)\"} message\n+        set message\n+    } finally {\n+        rename hir::semantic::Restore {}\n+        rename hir::semantic::Restore.real hir::semantic::Restore\n+        set hir::semantic::audit $saved\n+    }\n+} -result {hir::semantic: an instance walk leaked a write into the program}\n+\n # ---------------------------------------------------------------------------\n # runtime parity: the instances are analysis-only, so behavior is unchanged\n \n",
+  "measurements": [
+   {
+    "suite": "harness.bot (2 interleaved runs each, fresh tclsh9.0, load 0.4-1.0)",
+    "before_s": "front end 1.51 / 1.79 (mean 1.65)",
+    "after_s": "front end 1.43 / 1.51 (mean 1.47, -11%)",
+    "signatures_before_after": "0.34 / 0.33 -> 0.23 / 0.30 s (mean -20%); semantic counters identical: requests 393 trivial 280 hits 75 walks 39 instances 38"
+   },
+   {
+    "suite": "errors.bot (2 interleaved runs)",
+    "before_s": "4.03 / 4.98 (mean 4.50)",
+    "after_s": "3.80 / 4.04 (mean 3.92, -13%)",
+    "signatures_before_after": "0.87 / 1.08 -> 0.64 / 0.66 s (mean -33%); counters identical: requests 516 hits 84 walks 50 instances 50"
+   },
+   {
+    "suite": "loops.bot (2 interleaved runs)",
+    "before_s": "2.89 / 2.98 (mean 2.93)",
+    "after_s": "2.48 / 2.98 (mean 2.73, -7%)",
+    "signatures_before_after": "0.80 / 0.80 -> 0.59 / 0.64 s (mean -23%); counters identical: requests 1016 hits 421 walks 111 declined budget-block 64"
+   },
+   {
+    "suite": "collections.bot (2 interleaved runs)",
+    "before_s": "14.30 / 14.70 (mean 14.50)",
+    "after_s": "12.14 / 12.71 (mean 12.43, -14%)",
+    "signatures_before_after": "4.62 / 4.73 -> 2.99 / 2.80 s (mean 4.68 -> 2.90, -38%; spec expected about -40%); counters identical: requests 575 hits 143 walks 70 instances 70"
+   },
+   {
+    "suite": "callables.bot (2 interleaved runs)",
+    "before_s": "19.95 / 22.55 (mean 21.25)",
+    "after_s": "16.00 / 15.61 (mean 15.80, -26%)",
+    "signatures_before_after": "9.14 / 10.47 -> 4.05 / 4.15 s (mean 9.81 -> 4.10, -58%; spec expected about -50%); counters identical: requests 1711 hits 825 walks 228 instances 210"
+   },
+   {
+    "suite": "the 12 largest suites, one run each side back to back during the equivalence sweep (load 1.5-2, noisier): opaque, static-compile, coroutines, compiled-values, struct-representation, validators-and-proofs, callable-contracts, callables, core-semantics, methods, declared-errors, destructuring",
+    "before_s": "537.7 total (destructuring 107.7, static-compile 73.9, methods 69.5, callable-contracts 62.3, opaque 47.8)",
+    "after_s": "433.0 total, -19% (destructuring 88.0, static-compile 61.7, methods 48.9, callable-contracts 49.6, opaque 45.1)",
+    "signatures_before_after": "199.7 -> 85.7 s total, -57% (destructuring 39.06 -> 14.08, methods 32.57 -> 11.93, callable-contracts 26.50 -> 11.88, static-compile 24.11 -> 11.55, compiled-values 17.27 -> 6.39, opaque 14.35 -> 8.19)"
+   },
+   {
+    "suite": "callables.bot, inside the signatures phase (inclusive time, outermost calls, one run each)",
+    "before_s": "hir::types::infer 7.97 s (6 calls), instance analysis (Analyze) 5.20 s, Walk 4.03 s, Snapshot 0.16 s",
+    "after_s": "hir::types::infer 3.69 s, Analyze 0.90 s, Walk 0.73 s, Save 0.07, Restore 0.05, SwapOut 0.016, SwapIn 0.004, Snapshot 0.12 s",
+    "signatures_before_after": "hir::signatures::infer 8.59 -> 4.30 s; Collect + Solve + Install about 0.54 s on both sides"
+   }
+  ],
+  "equivalence": "Verified. BEFORE was a frozen `git archive 96a25f0` copy. Its hir/surface/core/compiler/lib/tests/bench/audit trees were byte-identical to ROOT's working tree when I started and when I finished. AFTER was the worktree. Every compile ran in a fresh tclsh9.0 with `surface::readProgramFile PATH -warnings off` and `interp recursionlimit {} 100000`, from a private temp dir.\n\n(a) I compared all 87 golden suites (mutable-array.bot skipped as optional). For each, I compared the whole HIR dict string with staticStats `*Ms` keys removed (only `depMs` exists) and each tree's own root path replaced by a placeholder; library file paths differ only by tree location. I also compared `hir::format`. Result: 87/87 IDENTICAL on both. The semantic counters (requests, trivial, hits, walks, declinedCount, rounds, instance count) are equal on every suite.\n\n(b) The restore audit was on for 75 of the 87 (every suite except the 12 largest) and raised no error. Audited and unaudited AFTER HIR are identical (collections.bot checked both ways).\n\n(c) Golden reports: `tests/golden/run.tcl -backends interp,compile -names` output is identical before and after, ignoring the 'compile SECONDS' timing field. harness 13 PASS, errors 24, loops 55, collections 44, callables 113; 0 FAIL, STATUS ok, same STATIC rounds/builds/mispredicted 0.\n\n(d) Static-decision compare (`audit/static-decisions/tools/compare.tcl`, batched vs sequential) on harness, errors, loops, representation, traits-path, collections and callables: all agree, exit 0.\n\nThe six audit-test programs give the same result types, walks and rounds as on the BEFORE tree.",
+  "tests": "All files ran from the worktree with `CORE_BACKEND=interp tclsh9.0 tests/all.tcl -tmpdir <private> -file X`, one at a time. For the native-parity tests, native/target was a symlink to ROOT/native/target during the runs; it has been removed.\n\nAll passed, 0 failed:\n- semantic-instances.test 81/81 (includes the new si-inplace-1 and si-inplace-2)\n- structural-fn-types.test 85/85\n- higher-order-completions.test 62/62\n- refined-signatures.test 16/16\n- many-boolean-arguments.test 90/90\n- traits.test 75/75\n- refinement-values.test 88/88\n- structural-contract-completions.test 45/45\n- mutable-array-type.test 118/118\n- hir-specialize.test 31/31\n- affine.test 47/47\n- static-economics.test 44/44\n- intrinsic-contracts.test 62/62\n- coroutines.test 79/79\n- error-payloads.test 61/61\n- fixed-arity-list-return.test 149/149\n- same-failure.test 101/101\n- proves-naming.test 84/84\n- one-char-string-literal.test 85/85\n- strict-references.test 63/63\n- structs.test 89/89\n- typed-mutarray-builder.test 64/64\n- exact-callable-key.test 60/60\n- hir-closed-call-params.test 16/16\n- mutable-vector.test 56/56\n\nMutants:\n- All 25 edits in any audit/*/tools/mutants.txt that target hir/semantic.tcl or hir/types.tcl still occur exactly once.\n- The three mutants that edit hir/semantic.tcl are all killed: traits omit-witness-from-key, affine generic-coerces-fn, static-decisions hygiene-names-printed.\n- Full audit/traits/tools/mutate.tcl: 18/18 killed.\n- The four affine mutants that edit hir/types.tcl: 4/4 killed.\n\nNot run: golden.test, the full suite, and fuzzers other than the ones inside the mutant harnesses.",
+  "notes": "On your question (\"if it's type inference, can an algorithmic refactoring alone fix it?\"): yes. Most of the signatures time was type inference, and most of that was a pure algorithmic cost.\n\n- **Where the time went (measured on callables.bot):** before the change, hir::types::infer took 7.97 s of the 8.59 s signatures phase. Instance analysis took 5.20 s of that, of which the walks themselves were 4.03 s.\n- **Why it was so expensive (inference from the old code, not measured separately):** each walk took a copy of the whole request-time HIR (old semantic.tcl `set scratch [dict get $state base]`). Its first write therefore copied the whole top-level dict and the exprs dict, plus bindings, types and typeIds when written, and the copy was freed afterwards. That is a whole-program copy per walk, and callables.bot does 1460 walks.\n- **After the change:** walks run in place and save and restore only their region. Instance analysis drops to 0.90 s, and the bookkeeping (Save, Restore, SwapOut, SwapIn) costs about 0.14 s. The output HIR is byte-identical on all 87 suites.\n- **What remains in signatures on callables.bot (about 4.3 s):** about 2.8 s is six whole-program generic walks. hir::signatures::infer re-runs hir::types::infer every round (hir/signatures.tcl:251), two rounds for each of three builds. Collect, Solve and Install take about 0.54 s. Making the second round incremental is the next algorithmic candidate; that is inference, not tested.\n\nHow the change works:\n- **Live HIR location:** hir::semantic::Call takes the variable name (hir/types.tcl:2961). It records {level, name} of its caller's HIR variable at hir/semantic.tcl:354 and :410. Analyze and Walk then reach that variable with `upvar #N` (hir/semantic.tcl:528, :623).\n- **Save and restore:** Walk saves its region's write set (Save, hir/semantic.tcl:660). Analyze restores it after the snapshot, in a `finally` (hir/semantic.tcl:528). A nested request sets the enclosing walk's partial writes aside and puts them back afterwards (SwapOut and SwapIn, hir/semantic.tcl:427, :763, :783).\n- **Why the result is unchanged:** `[info level]` at every nested request is the same as before, because `try` adds no proc level. So the 'nesting' budget decisions are unchanged.\n\nDeviations and environment:\n1. My worktree started at 41a59a6, which has only 8 golden suites. I detached its HEAD to 96a25f0, the commit ROOT is checked out on (branch ccr-7eabe55c-br9bs6), so the 88-suite corpus exists; the diff is against 96a25f0. No branch was created and nothing was committed.\n2. I removed the now-dead `base` key from Begin and End. End already unset it, so the final semantic dict is identical.\n3. I added si-inplace-2 beyond the spec, as a check that the audit is not vacuous (it plants a leak and expects the error).\n4. Docs: OPPORTUNISTIC-SEMANTIC-INSTANCES.md:869-871 still says a walk uses a scratch copy of the HIR. It is now stale; I left it because the scope was three files.\n5. Measurement conditions:\n   - The two-run interleaved bench ran at load 0.4-1.0.\n   - The sweep ran at load 1.5-2 because another process was running, so its single-run timings are noisier.\n   - The sequential compare of callables.bot took 389 s, over the 5-minute guideline.\n6. Mistakes in the shared session scratchpad:\n   - The Write tool reported that scratchpad/applies.tcl already existed when I wrote mine, so someone else's applies.tcl there was overwritten.\n   - I may also have overwritten scratchpad/suites.txt and tests.log, and an earlier out/ directory, if they existed; I did not check.\n   - I deleted only my own files at the end.\n   - A script bug briefly wrote tests.log into the worktree root; I moved it out and it is not in the diff."
+ },
+ {
+  "equivalence_holds": "yes",
+  "gain_holds": "yes",
+  "soundness_concerns": [
+   "The guarantee is now kept by a hand-maintained list rather than by construction. Before, an instance walk wrote into a throwaway copy (old hir/semantic.tcl:569, `set scratch [dict get $state base]`), so a stray write could not reach the program. Now the walk writes into the live program (worktree hir/semantic.tcl:630, :578, :427), and correctness depends on Save (worktree hir/semantic.tcl:660-698) listing every place the walk writes. Today the list is complete (see evidence). But a future change to hir/types.tcl that writes somewhere new would quietly copy one call's types into the general typing of the function. Examples: a binding record for a loop variable, a node outside the block's region, a new top-level HIR key, or a new kind of interned id. The only check against this is opt-in: BOTLISH_SEMANTIC_RESTORE_AUDIT, read once at load (worktree hir/semantic.tcl:173). In the test suite it is switched on only by si-inplace-1 and si-inplace-2 (tests/semantic-instances.test:562 and :584), which cover 8 small programs, and no CI workflow sets it. Suggested fix: run the audit in CI (for example the semantic-instances and golden runs), or add a test that lists the HIR writes in hir/types.tcl and fails when a new one appears.",
+   "Save only records a binding or scope if it already exists (worktree hir/semantic.tcl:671, :678, :688). Restore therefore cannot undo a walk that creates a new record. One write could create one: `dict set hir scopes [dict get $node ${role}Scope] ...` (hir/types.tcl:3136) would create a `scopes \"\"` entry for an if node without a scope id. This cannot happen today, because hir/resolve.tcl:1044-1051 gives every if both scopes. HIR produced by any other route would also have to keep that true.",
+   "OPPORTUNISTIC-SEMANTIC-INSTANCES.md:869-871 still says a walk uses a scratch value copy of the HIR that is then dropped. That is no longer true. The prototype already flagged this.",
+   "Measurement method: the 5-suite numbers are from 2 runs per side, alternating, each in a fresh tclsh9.0. That design is sound but the sample is small. The 12-suite sweep was one run per side, back to back and not alternated, at load 1.5-2. Its per-suite percentages are therefore uncertain, but the effect is much larger than the noise. My re-measurement confirms the direction and roughly the size of the gain. The front-end gain on collections.bot was -10% for me against the claimed -14%."
+  ],
+  "evidence": "VERIFIED FACTS\n\nSetup.\n- I made copies of ROOT (HEAD 96a25f0, clean) in a fresh temp directory, which I have since deleted:\n  - BEFORE: the checkout as it is.\n  - AFTER: the same, with hir/semantic.tcl, hir/types.tcl and tests/semantic-instances.test taken from the worktree.\n- I checked that hir/, surface/, core/, compiler/, lib/ and tests/golden differ between the checkout and the worktree only in those files. The only change to hir/types.tcl is line 2961.\n- Every compile ran in a fresh tclsh9.0 with LANG=C.utf8 and recursionlimit 100000.\n\n(1) Output equivalence. The outputs compared were:\n- the whole HIR dict (with staticStats *Ms keys removed and the tree root path normalized);\n- hir::format;\n- the interp and compile report lines of the program value.\n\nResults:\n- representation.bot: all four identical (1.10 MB HIR). Semantic counters equal (requests 443, walks 43, instances 41), builds 2, 13/13 PASS on both backends.\n- traits-path.bot: all identical (1.38 MB HIR), 2/2 PASS. AFTER with the audit on also gave an identical HIR.\n- coroutines.bot: this is one of the 12 suites the prototype did not audit. I ran AFTER with BOTLISH_SEMANTIC_RESTORE_AUDIT=1:\n  - no leak;\n  - HIR (4.75 MB), formatted HIR, interp and compile reports all identical, 62/62 PASS;\n  - builds 5, static rounds 4;\n  - the nested-request swap path (SwapOut) ran 166 times.\n- Extra corpus: all 189 .bot files under examples/, audit/, bench/, fuzz/ and lib/, compiled with -strict 0. AFTER ran with the audit on.\n  - 189/189 identical: 156 normalized HIRs and 33 identical pre-inference errors.\n  - SwapOut ran 498 times.\n- Test files run in AFTER with the audit on (CORE_BACKEND=interp, private -tmpdir each). All passed with no leak error. Several were not in the prototype's list (refinement-validators, context-traits, enums).\n  - semantic-instances 81/81\n  - traits 75/75\n  - coroutines 79/79\n  - affine 47/47\n  - error-payloads 61/61\n  - refinement-values 88/88\n  - refinement-validators 48/48\n  - structural-contract-completions 45/45\n  - higher-order-completions 62/62\n  - context-traits 39/39\n  - structural-fn-types 85/85\n  - enums 66/66\n  - mutable-vector 56/56\n- Fuzzers in AFTER with the audit on:\n  - audit/affine/tools/fuzz.tcl -n 60 -seed 11: 0 disagreements.\n  - audit/static-decisions/tools/fuzz.tcl -n 6 -seed 5: 152 sites, 108 rejected, 0 failures. Batched and sequential decisions agree.\n- The anchor texts of the three mutants that edit hir/semantic.tcl (affine, static-decisions and traits mutants.txt) each still occur in the worktree file, at lines 327-328, 349-350 and once for `spelling`.\n\n(2) Soundness: code reading.\n- Where the walk writes. The type-inference walk writes the HIR only at:\n  - hir/types.tcl:1827-1828 (intern), 2245, 2328, 2638 (handler payload binding), 2661, 2702, 2712 (binding of a bind node), 2817-2819, 2853-2855, 3000-3001, 3049, 3128, 3136 (if branch scopes);\n  - hir/traits.tcl:867, 878, 903, 905, 907 (on the call node and its callee child);\n  - hir/resolve.tcl:245-247 (nativeSymbol: symbols and the symbol counter).\n- Every one of these is covered by what Save, Restore and Added handle (worktree hir/semantic.tcl:660-760): nodes in the block's region, bind and handler-payload bindings, if scopes, and types/typeIds/symbols above the saved counters, plus the counters themselves and the diagnostics.\n- The walk has no `dict update`/`dict with` and creates no node, binding or scope ids. The only other NewId on a node, hir/coroutines.tcl:983, runs after inference.\n- Nested requests. Every walk starts from the HIR as it was when the top-level request was made: SwapOut puts back the state saved by the innermost enclosing walk. This is the same base the old code used (old hir/semantic.tcl:569). Call still reads the enclosing walk's partial state before the swap, exactly as it read the scratch copy before.\n- Nesting budget. `[info level]` is unchanged: `try` adds no proc level, and SwapOut/SwapIn are sibling calls, not wrappers. So the nesting budget decisions are the same.\n- No error-catching around builds or inference: no catch/try in hir/hir.tcl, hir/static.tcl, hir/signatures.tcl or hir/types.tcl.\n- No new cache. The Region cache is unchanged.\n- hir::semantic::Call has only one caller (hir/types.tcl:2961).\n- Static decisions: given an identical HIR per build, they are unchanged, and the fuzzer confirms this.\n\n(3) Gain. I re-measured with bench/golden-suites.tcl -one ... -backends interp -profile 1, fresh process per run, runs alternated in the order B A A B B A, load 1.2-1.9.\n- collections.bot, front end:\n  - before 16.31 / 15.87 / 16.63 s, mean 16.27;\n  - after 15.22 / 13.82 / 15.00 s, mean 14.68 (-9.8%).\n  - Every after run is faster than every before run.\n- collections.bot, signatures:\n  - before 4.85 / 4.91 / 5.52 s, mean 5.09;\n  - after 3.53 / 3.25 / 3.29 s, mean 3.36 (-34%; claimed -38%).\n- errors.bot, inclusive outermost times, B A A B:\n  - hir::types::infer: 1.03 / 0.80 s before, 0.70 / 0.61 s after.\n  - semantic::Analyze: 0.53 / 0.41 s before, 0.22 / 0.18 s after.\n  - Walk: 0.43 / 0.33 s before, 0.18 / 0.15 s after.\n  - Counters identical (walks 50, requests 516).\n  - So the saving is in the instance walks, as claimed.\n- traits-path.bot (14 walks), 4 runs per side alternated:\n  - front end: mean 1.73 s before, 1.78 s after;\n  - signatures: 0.32 s before, 0.30 s after;\n  - both within noise. No gain on small suites, and no measurable regression.\n\nINFERENCE (not measured)\n- The saving is consistent with the old code duplicating the shared exprs, bindings, types and typeIds dicts on each walk's first write (a full-program copy per walk), against a copy of only the walked block's region now.\n- Nothing I tested refutes the prototype. The equivalence I found comes from reasoning backed by tests, not from a proof. It holds only as long as Save's list of written places stays complete (concern 1).\n\nHOUSEKEEPING\n- At the start I ran read-only git log/status/diff in ROOT and in the worktree. Nothing in either was modified (checked with find).\n- My temp directory, including its native/target symlink, is deleted, and native/target is intact."
+ }
+]

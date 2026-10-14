@@ -45,8 +45,9 @@
 # allocation counts, the RANGE failure of a shift count past MAX_SHIFT and
 # the other run-time-only failures (mod by zero, hash of a function or a
 # MutableArray), the standalone executable itself (its emission, ELF
-# output, relocation, stdout display and GC-stress run) and the programs
-# that are corpus files (bench/refined-checks.bot).
+# output, relocation, stdout display and GC-stress run), native
+# preparation leaving a program's HIR unchanged, and the programs that are
+# corpus files (bench/refined-checks.bot).
 #
 # Literal operands. The Tcl programs are ported as written, literal
 # operands included: the reference interpreter and the Tcl compiler compute
@@ -69,7 +70,8 @@
 # (native-executable-values' set); web (native-executable-modules' and
 # -source-refinements' web::is_unreserved, uri_escape_text, emailish? and
 # uri_query_value?). No test here is about an import or about which methods
-# are visible: every body calls qualified names or root natives.
+# are visible: every call in a body names a function of its block, a
+# module function by its qualified name or a root native.
 import byte
 import compiler
 import immutable_set

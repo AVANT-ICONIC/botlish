@@ -1,8 +1,7 @@
 # bench.tcl -- compares backends on the canonical programs in bench/*.bot
 # (CANONICAL-SURFACE-BENCHMARKS.md): every canonical benchmark is ordinary
 # Botlish source, compiled through the normal surface frontend
-# (surface::readProgramFile + hir::lower) exactly like any other .bot
-# program, never checked-in raw core IR/HIR/NIR. The historical bench/*.ir
+# (surface::readProgramFile) exactly like any other .bot program, never checked-in raw core IR/HIR/NIR. The historical bench/*.ir
 # fixtures these programs were migrated from remain in bench/ only as
 # frozen inputs for a handful of historical audit-reproduction scripts (see
 # that report); they are not discovered or run here.
@@ -25,7 +24,8 @@
 # Native (Cranelift) column
 # --------------------------
 # The interp/compile backends run in this same Tcl process, so timing them
-# is just "call core::evalProgram N times". Native code does not: each
+# is just "run the program N times" (core::evalProgram of the lowered core
+# IR, core::compiler::evalUnit of the HIR's one compilation). Native code does not: each
 # call would otherwise be a separate botlish-native subprocess, and timing
 # that in a loop would mostly measure process-spawn and re-JIT-compile
 # overhead, not the compiled function itself (see NATIVE-AUDIT.md). Instead
@@ -73,18 +73,20 @@ if {$files eq ""} {
 # Recursion depth in the benchmarks exceeds Tcl's default nesting limit.
 interp recursionlimit {} 20000
 
-# The Tcl-hosted backends: both run core::evalProgram in this process, so
-# timing them by calling it in a loop is valid. native/native.tcl's
+# The Tcl-hosted backends: both run in this process, so timing them by
+# running the program in a loop is valid. native/native.tcl's
 # sourcing above registers "cranelift"/"cranelift-generic" too (each call
 # there is its own subprocess), but those are measured separately by
 # bestNative, not through this list or `best`.
 set backends {interp compile}
 
-proc best {program runs} {
-    core::evalProgram $program
+# Best-of-RUNS microseconds and value of the command prefix RUN, which runs
+# the program (after one untimed run).
+proc best {run runs} {
+    {*}$run
     set best ""
     for {set i 0} {$i < $runs} {incr i} {
-        set micros [lindex [time {set value [core::evalProgram $program]}] 0]
+        set micros [lindex [time {set value [{*}$run]}] 0]
         if {$best eq "" || $micros < $best} {
             set best $micros
         }
@@ -205,17 +207,22 @@ if {$markdown} {
 
 set disagreements 0
 foreach path $files {
-    # One HIR, two consumers: the Tcl backends run the core IR it lowers to;
-    # native compiles the HIR itself (DIRECT-HIR-NATIVE-PATH.md).
+    # One HIR, three consumers: the interpreter runs the core IR it lowers
+    # to; the Tcl compiler and native compile the HIR itself
+    # (DIRECT-HIR-NATIVE-PATH.md).
     set hir [surface::readProgramFile $path -warnings off]
-    set program [hir::lower $hir]
     set base [string map {- _} [file rootname [file tail $path]]]
 
     set backendTimes {}
     set backendValues {}
     foreach backend $backends {
-        core::useBackend $backend
-        lassign [best $program $runs] micros value
+        if {$backend eq "compile"} {
+            set run [list core::compiler::evalUnit [core::compiler::compileHir $hir]]
+        } else {
+            core::useBackend $backend
+            set run [list core::evalProgram [hir::lower $hir]]
+        }
+        lassign [best $run $runs] micros value
         lappend backendTimes $micros
         lappend backendValues $value
     }

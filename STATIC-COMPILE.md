@@ -126,8 +126,14 @@ would sit below it; the two stay distinct.
    every outcome: a block with a loader diagnostic is rejected at once; a
    round that stopped after resolution rejects every block with a
    resolution diagnostic of its own (resolution is lexical); otherwise the
-   first block in post-order with a diagnostic of its own is rejected and
-   the blocks before it are accepted. A round in which no block has a
+   first block in post-order with a diagnostic of its own that does not
+   *wait* is rejected, and the blocks before it without one are accepted. A
+   block waits while it may read a program-wide channel -- the
+   erased-callable contract, a semantic-instance budget under pressure --
+   that another block with a diagnostic of its own may change: the
+   contributors to a channel are judged before its consumers, so a
+   consumer's verdict does not depend on where its contributors are written
+   ([The waiting rule](#the-waiting-rule)). A round in which no block has a
    diagnostic of its own is the final program. The scheduler only chooses
    how many builds that order takes: it continues the order on one build for
    as long as the build answers it, committing every rejection whose
@@ -245,6 +251,88 @@ program:
 process (how the audits run the existing suites under the reference);
 `BOTLISH_STATIC_TRACE=1` prints each compilation's decision trace.
 
+### The waiting rule
+
+Part of the definition, not of the economics. A *program-wide channel* is a
+fact every site reading it shares and every site feeding it may change, from
+anywhere in the program: the erased-callable contract (what every callable
+passed into an untyped parameter can raise, charged to every call through an
+uncontracted value) and a semantic-instance budget under pressure. Without
+the rule, the sequential order judged a consumer of such a channel against
+whatever the program fed it at that point, so a consumer written before a
+contributor that was rejected later kept a rejection the final program no
+longer justified -- and written after it, it was accepted:
+
+```botlish
+fn consumer() -> int errors compiler::CompilerError:
+    static compile:
+        fn run(fs: List[any]) errors IndexNotFound:
+            f = list::at(fs, 0)
+            f()                     # charged what the program erases
+        r = run([harmless]):
+            on IndexNotFound:
+                -2
+        1
+
+fn eraser() -> int errors compiler::CompilerError:
+    static compile:
+        r = store(raise_e2)         # erases E2 (store's parameter is untyped)
+        fn want(x: int) -> int:
+            x
+        want("s")                   # TYPE: the block is rejected
+```
+
+Written in this order, `consumer` used to be rejected (UNHANDLED-ERROR: E2)
+and `eraser` then rejected too, leaving a program that erases nothing;
+written the other way round, `consumer` was accepted.
+
+The rule: a failing block *waits* while another failing block contributes
+to a channel it consumes. The order rejects the first failing block in
+post-order that does not wait, so the contributors are judged first and
+the consumer against the channel their decisions leave -- here `eraser` is
+rejected first and `consumer` accepted, in either order. The consumers and
+contributors come from the dependency analysis
+([below](#the-dependency-graph); `hir::staticdeps::Waiting`): a block
+consumes a channel its node reaches over the edges that read something --
+not a contributor's link to a channel, which only orders, nor an edge to a
+gate (below) -- except that a block whose first diagnostic was reported
+before the completion walk does not consume the erased-callable contract
+(nothing before the walk reads it but the ownership analysis's exit
+releases, which report nothing, so no erasure can cause or precede that
+diagnostic). The contributors are every block holding a contribution and
+every block whose form the channel's node reaches. Three further points
+complete it:
+
+* an *ok* contributor does not make a consumer wait: its body is in the
+  final program unless a later decision makes it fail;
+* a block that waits stays undecided, and the blocks before the rejected one
+  that have no diagnostic are accepted as before;
+* when every failing block waits -- each on another: a *cycle* through a
+  channel, every one consuming what another contributes -- the first one in
+  post-order is rejected, as before the rule. With one failing block
+  nothing waits.
+
+Two cases are left to layout, and pinned as such. A *cycle*: two blocks that
+both erase and both call through an uncontracted value
+(`se-equal-channel-cycle`), every call of an instance budget under pressure
+(first-come first-served), or two blocks the conservative analysis cannot
+tell apart from such. And an ok contributor that a later rejection makes
+fail -- an erasing block whose nested block is rejected with a
+`CompilerError` the function around it does not admit
+(`se-equal-consumer-waits-residual`): a consumer written before it is judged
+while its erasure stands. Closing the contributors under what their
+diagnostics read would cover the second, and made ordinary failures that a
+contributor's code reads wait for each other, one build each
+(STATIC-DECISION-ECONOMICS.md, "The waiting rule").
+
+Not every channel has this shape. A *gate* -- a diagnostic that exists only
+while no other block has one: the ownership analysis's whole-program
+verdict (`C:verdict`) and the trait plan's gate (`C:plan`) -- cannot fail a
+consumer while a contributor still fails, so it cannot cause this layout
+dependence, and no block waits on one. (Read as a waiting channel, the plan's
+gate would make every failing block holding a trait call wait for the last
+failing block of the program: one rejection per build.)
+
 ### The theorem
 
 A build is a pure function of the forms of the static sites. A site's own
@@ -259,17 +347,22 @@ since.
 The batched scheduler (`hir::static::Simulate`) groups the sites into
 *components* -- sites linked, directly or through others, by a dependency
 in either direction -- and takes each component's sequential step on its
-own: reject the component's first site in post-order that is not *ok*
-(accepting the undecided sites of the component before it) while that site
-is *failing*; mark every site depending on it *unknown*; stop the component
-at its first *unknown* site. No decision in one component can change a
-status in another, so the sequential order of the whole program is an
-interleaving of the components' own orders: the run commits exactly the
-rejections the sequential order commits, with the same diagnostics, and a
-component builds again only where one of its decisions changed a fact
-another of its sites reads. A *stable decision* is one of these: the
-component's first non-ok site, failing, in a build in which nothing it
-depends on differs from the sequential order's build of that step.
+own: reject the component's first *failing* site in post-order that does
+not wait (accepting the undecided *ok* sites of the component before it),
+or, when every failing site of the component waits, its first failing site;
+mark every site depending on it *unknown*; stop the component at its first
+*unknown* site, and at a failing site that may or may not wait (a
+contributor to its channel is unknown). A failing consumer is linked to
+every contributor it may wait on (`Components`: it need not read their
+forms -- the erased contract reads its witnesses' only), so the rule is the
+component's own. No decision in one component can change a status in another, so the
+sequential order of the whole program is an interleaving of the components'
+own orders: the run commits exactly the rejections the sequential order
+commits, with the same diagnostics, and a component builds again only
+where one of its decisions changed a fact another of its sites reads. A
+*stable decision* is one of these: the component's next decision by the
+rule, in a build in which nothing it depends on differs from the sequential
+order's build of that step.
 
 Each build checks the previous run's predictions (every site whose status
 it still knew must show the same status and, ids blanked, the same first
@@ -291,12 +384,24 @@ Two details keep the diagnostics exact:
   rejected -- by then its first diagnostic may be the inner site's
   unadmitted `CompilerError`. A rejected outer site takes the sites nested
   in it with it (they are accepted, inside a body no build keeps).
-* **Internal ids.** A message that names internal ids (`block(e12)`) carries
+* **Internal ids.** A message that names internal ids (`block(e12)`, or
+  `function e12` for a function without a name -- the only two forms in
+  which a diagnostic prints one; a word that merely looks like an id, a
+  binding written `s1`, is no id) carries
   the numbering of the build it came from, which the forms of the sites
   numbered before them decide. Such a rejection is committed from a build
   only when no site before its ids differs between that build and the
   sequential order's; otherwise its component waits for a build (the trace
-  says so). Predictions compare messages with the ids blanked.
+  says so). Predictions compare messages with the ids blanked. Where a
+  message can name a callable by its source it does (`two/2 -> bool`,
+  `hir::semantic::NameCallables`), and a binding hygiene renamed
+  (`NAME#N`, numbered across the whole program, so by sites after it as
+  well) is printed as written in every message: a binding by
+  `hir::semantic::SourceName` (a module's own definition `NS::NAME`), a
+  reference or a binding statement by `hir::semantic::RefName`, a function
+  by `hir::semantic::CallableName` (`se-equal-hygiene-*`;
+  STATIC-DECISION-ECONOMICS.md, "Callables and bindings named by their
+  source").
 
 ### The dependency graph
 
@@ -310,10 +415,18 @@ extra one only costs a build. Its header lists every edge; in short:
 * a site depends on the region its body stands in (its *position*: a
   rejection can make the code after it unreachable, where completion and
   ownership diagnostics are not reported), on the sites nested in it, and
-  on its own contract-boundary checks;
+  on its own contract-boundary checks -- and only on what its diagnostics
+  read: a site is two nodes, what its diagnostics read and its *form*
+  (whether it is still a body, which only its own rejection changes), and
+  whatever reads a site's code depends on its form alone. (One node once
+  stood for both: a site nested in a function in another site's body
+  reached that site's form through the `if true:` scoping it, and through
+  it every sibling nested site -- one rejection per build;
+  `se-builds-nested-siblings`);
 * a region depends on everything its own code mentions -- bindings, the
   functions it defines and calls (their summaries), every candidate of a
-  method-style call, its parameters and captures, the control operands
+  method-style call and what its trial builds judge of the contract
+  boundary, its parameters and captures, the control operands
   around its literal, and the narrowings of each captured binding between
   its definition and the region -- but *not* on the rest of the function
   around it: a function is analyzed from its own entry, and sees of the
@@ -333,14 +446,25 @@ extra one only costs a build. Its header lists every edge; in short:
   a new value owned by the binding receiving it), a yielding function's
   yield type (the struct-protocol coroutine constructions that reach it);
 * the program-wide channels, modelled as nodes with contributors and
-  consumers rather than as a stop sign:
-  * **the erased-callable contract** (`hir::completions::erasedErrorsOf`).
-    Its *contributors* are the semantic-instance requests whose arguments
-    at parameters with no declared or trusted contract can carry errors (a
-    callable, or a value holding one), by those arguments and the call's
-    place, up the chain of requests; the positions where a callable with an
+  consumers rather than as a stop sign (which the waiting rule reads too,
+  [above](#the-waiting-rule)):
+  * **the erased-callable contract** (`hir::completions::erasedErrorsOf`),
+    a set of errors. Its *contributors* are the semantic-instance requests
+    whose arguments at parameters with no declared or trusted contract
+    carry errors (a callable, or a value holding one), by the chain of
+    requests keeping the instance and those arguments -- of one naming a
+    function, its place only: what a function carries is its declared
+    errors, never its body; the positions where a callable with an
     uncontracted parameter acquires a structural type (contravariant
-    erasure); and the requests the budget declined. Its *consumers* are the
+    erasure); and the requests the budget declined. A request that erases
+    nothing never will (a rejection only turns a type into `never`) and is
+    none. The contract depends, per error, on one *witness* -- the
+    contribution last in post-order -- since another contributor's
+    rejection leaves the set as it is (`se-equal-erased-witness`,
+    `se-builds-erased-empty`); the sites holding a contribution are the
+    waiting rule's contributors ([above](#the-waiting-rule)), no edge of
+    the graph (they used to be linked to the contract, which the rule made
+    redundant). Its *consumers* are the
     regions that call through an uncontracted value -- a callee typed `any`
     or a bare kind, a native calling such an argument -- whose identity and
     contract are both lost. A call through a verified structural `Fn` or
@@ -373,47 +497,39 @@ extra one only costs a build. Its header lists every edge; in short:
     types, so no other diagnostic can appear. A later finding of the golden
     migration (`mutable-vector.bot` mispredicted; a variant decided another
     program: `se-equal-ownership-verdict`);
-  * **the monomorphization plan's gate** (`hir::traits::Plan`, which
-    `hir::BuildFull` runs only on a build with no diagnostic at all): its
-    diagnostics (TRAIT-IMPL-ORDER, TRAIT-NOT-SATISFIED in a clone,
-    AFFINE-GENERIC-NESTED-UNSUPPORTED, the budget kinds) are a site's, and
-    appear only once no other diagnostic is left anywhere. Its *consumers*
-    are the sites holding an expression the plan may diagnose: a trait
-    operation (in the generic program or in an instance's view); a call
-    giving an affine argument to an untyped parameter of a function
-    specialized only once (nested, or requiring a context trait), or any
-    call of such a function in the body of a function the plan may clone --
-    a trait-typed parameter, a context-trait requirement, or an untyped
-    parameter some call passes an affine value or one whose type mentions
-    `any` -- whose argument may be affine in a clone a rejection elsewhere
-    creates (`se-equal-plan-clone`); a call whose instance request was
-    declined.
-    While the gate is closed (some diagnostic is not the plan's), a consumer
-    that is not failing depends on one witness, the last failing site in
-    post-order -- the gate stays closed while any one diagnostic stays, and
-    that one is removed last; a site failing now reads nothing of the gate
-    (a plan diagnostic is never beside another one), so it is no consumer
-    then. One consumer ahead of six rejections takes 3 rounds, not 8
-    (`se-builds-plan-gate`). While the gate is open (only the plan's
-    diagnostics), every consumer depends on every one of them: a rejection
-    can close the gate again (here, the UNHANDLED-ERROR of a top-level call
-    of the rejected site's function, in no site) or change another one (a
-    clone's instances and placement are its callers'), so the plan's own
-    diagnostics are decided one per build, as in the sequential order
-    (`se-equal-plan-gate`: otherwise a second TRAIT-IMPL-ORDER site is
-    rejected where the sequential order accepts it). A later finding of the
-    golden migration (`traits.bot`, `affinity.bot` mispredicted;
-    STATIC-DECISION-ECONOMICS.md, "The plan's gate");
   * **the contract-boundary checks** (`hir::completions::Subsume` with
     `Possible`), which run only in a body's own diagnosing walk while the
     program erases something: a site-local channel, from the site to the
-    erased contract and to the inputs of the callables at its positions.
+    erased contract and to the inputs of the callables at its positions --
+    what an input may hold being, like the contract, a set (of errors, and
+    whether every value is quiet), with one witness value per part
+    (`se-builds-possible-witness`). None while the site fails with a first
+    diagnostic reported before the completion walk, which every report
+    follows (`se-builds-subsume-gate`). Besides the site's own diagnostics,
+    only a method-style call's trial builds read a report: the checks at the
+    call's own arguments, which the candidates' parameter types decide, so
+    the call's region depends on them (`se-equal-method-trial`);
+  * **the gate of the trait monomorphization's plan** (`hir::traits::Plan`),
+    which `hir::BuildFull` runs only on a checked program with no
+    diagnostic at all, and whose diagnostics (TRAIT-IMPL-ORDER,
+    AFFINE-GENERIC-NESTED-UNSUPPORTED, TRAIT-INSTANCE-BUDGET, ...) are a
+    site's. Its *consumers* are the sites holding a call the plan can
+    report at and no diagnostic of their own; while some diagnostic it
+    does not report stays, it depends on one witness (the site of the last
+    in post-order: the gate cannot open while it stays); while every
+    diagnostic may be its own, on every site holding one, decided one per
+    build as the sequential order decides them -- a rejection can close the
+    gate again, by a diagnostic it causes in no site, after which the
+    sequential order accepts the next plan site (`se-equal-plan-reclosed`).
+    It used to be missing: `traits.bot` and `affinity.bot` recorded
+    mispredictions (`se-equal-plan-gate`, `se-builds-plan-gate`,
+    `se-equal-plan-clone`).
 
 Not channels: a demoted trusted contract (`hir::check` keeps the
 diagnostics of the check before the demotion,
 `se-property-demotion-keeps-diagnostics`), the trait monomorphization's
-build (it runs only on a program with no diagnostic, and its own are
-internal: its plan's are the channel above), and resolution (lexical).
+build after its plan (it runs only on a program with no diagnostic, and its
+own are internal), and resolution (lexical).
 
 ### Method-style call decisions across rounds
 
@@ -458,9 +574,9 @@ diagnostics and warnings, exactly as before.
   it must: each level's diagnostic is only known once the one inside it is
   decided);
 * program-wide channels: a contributor and its consumers form one
-  component, decided in post-order, so the builds grow with the number of
-  *strata* -- consumers judged after a contributor's rejection -- not with
-  the number of sites beside them.
+  component, decided contributors first (the waiting rule), so the builds
+  grow with the number of *strata* -- consumers judged after a
+  contributor's rejection -- not with the number of sites beside them.
 
 The dependency analysis is one walk of the build plus a strongly-connected
 -components pass, a few percent of a build.
@@ -476,7 +592,9 @@ erased-callable contract in the program). So independent failures nested in
 one function -- the golden framework's registration function -- were
 decided one build each, and one accepted erasing body anywhere serialized
 every rejection of the program. It is kept (`Rejectable`, `Independent`,
-`Units`, `GlobalChannels`) only as the legacy scheduler.
+`Units`, `GlobalChannels`) only as the legacy scheduler, which takes its
+first rejection by the waiting rule like the others (and only that one while
+a block waits), so that it decides the same program.
 
 ## Report
 
@@ -1248,5 +1366,9 @@ the same rule), and `tests/golden.test` (`golden-static-economics` bounds
 the suites' builds). A new cross-function channel the analysis misses shows
 up as a `mispredicted` build or a difference from the sequential scheduler:
 add its edge to `hir/staticdeps.tcl` (and to its header), never a special
-case in the scheduler. `bench/static-decisions.tcl` regenerates the
+case in the scheduler. A new program-wide channel is a `C:` node, which the
+waiting rule reads as well (`Waits`): an edge to or from one can change which
+block the order judges first, so check the fuzzer's layout claim (its item
+3) on several seeds, and classify a gate-shaped channel as [The waiting
+rule](#the-waiting-rule) does. `bench/static-decisions.tcl` regenerates the
 economics report.

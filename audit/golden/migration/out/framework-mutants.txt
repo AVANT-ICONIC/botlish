@@ -1,0 +1,62 @@
+# The golden framework's mutants on the final tree: tclsh9.0 audit/golden/tools/mutate.tcl -suites 0 (exit 0, 4228 s)
+# (LARGE-SCALE-GOLDEN-MIGRATION.md, Mutation, "The harnesses"). Detectors: tests/golden-framework.test and the framework fuzzer
+# (-fuzz 6). -suites 0 leaves out the third detector, every golden suite on every backend per mutant: with 88
+# suites that is a full four-backend corpus run per mutant; every mutant was killed without it.
+
+KILLED registration-executes -- registering a case calls its check at once, before storing it
+    golden-framework.test: 12 failed (gf-coroutine-body-deferred, gf-coroutine-cleanup, gf-coroutine-cleanup-native, gf-gc-stress, gf-nir-migrated-bodies, gf-registration-does-not-run, ...)
+KILLED registration-drops-one -- registering the second case of a suite stores nothing
+    golden-framework.test: 14 failed (gf-affine-capture-in-a-case, gf-composition, gf-coroutine-cleanup, gf-coroutine-cleanup-native, gf-escaping-error-is-the-case-s, gf-failures-continue, ...)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 18 disagreements
+KILLED registration-reorders -- registering a case puts it first, moving the former first case to the end
+    golden-framework.test: 12 failed (gf-affine-capture-in-a-case, gf-composition, gf-coroutine-cleanup, gf-escaping-error-is-the-case-s, gf-failures-continue, gf-fuzz-bounded, ...)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 18 disagreements
+KILLED runner-skips-last -- the runner does not run the last registered case
+    golden-framework.test: 27 failed (gf-affine-capture-in-a-case, gf-application-context, gf-composition, gf-coroutine-body-deferred, gf-coroutine-cleanup, gf-coroutine-cleanup-native, ...)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 18 disagreements
+KILLED runner-runs-twice -- the runner calls every check twice, reporting the second result
+    golden-framework.test: 10 failed (gf-coroutine-body-deferred, gf-coroutine-cleanup, gf-coroutine-cleanup-native, gf-gc-stress, gf-nir-migrated-bodies, gf-registration-does-not-run-native, ...)
+KILLED runner-stops-at-mismatch -- the runner stops after the first failing case (fail-fast)
+    golden-framework.test: 6 failed (gf-escaping-error-is-the-case-s, gf-failures-continue, gf-fuzz-bounded, gf-gc-stress, gf-message-helpers, gf-verdicts)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 15 disagreements
+KILLED mismatch-marked-passed -- a result is recorded as passed whatever its check found
+    golden-framework.test: 10 failed (gf-escaping-error-is-the-case-s, gf-failures-continue, gf-fuzz-bounded, gf-gc-stress, gf-message-helpers, gf-precision-affine, ...)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 18 disagreements
+KILLED value-compares-wrong-operand -- the value matcher compares the expected value with itself
+    golden-framework.test: 4 failed (gf-failures-continue, gf-gc-stress, gf-runner-protocol, gf-verdicts)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 9 disagreements
+KILLED code-matcher-accepts-any -- the diagnostic-code matcher accepts any code
+    golden-framework.test: 3 failed (gf-failures-continue, gf-gc-stress, gf-verdicts)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 3 disagreements
+KILLED location-matcher-ignores-column -- rejects_at compares the code and the line, not the column
+    golden-framework.test: 2 failed (gf-fuzz-bounded, gf-verdicts)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 3 disagreements
+KILLED any-rejection-accepts-values -- rejects_any passes a body that completed normally
+    golden-framework.test: 2 failed (gf-fuzz-bounded, gf-verdicts)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 9 disagreements
+KILLED rejection-passes-value -- value passes a body whose block was rejected
+    golden-framework.test: 6 failed (gf-escaping-error-is-the-case-s, gf-fuzz-bounded, gf-precision-affine, gf-precision-known-error, gf-precision-method-resolution, gf-verdicts)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 6 disagreements
+KILLED suite-starts-with-stale-case -- a new suite already holds a case, as if one leaked from an earlier suite (the library cannot keep a mutable value outside the context: a module binding is immutable)
+    golden-framework.test: 27 failed (gf-affine-capture-in-a-case, gf-application-context, gf-composition, gf-context-trait-surface, gf-coroutine-body-deferred, gf-coroutine-cleanup, ...)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 18 disagreements
+KILLED summary-miscounts -- the summary counts every result as passed
+    golden-framework.test: 6 failed (gf-escaping-error-is-the-case-s, gf-failures-continue, gf-fuzz-bounded, gf-gc-stress, gf-message-helpers, gf-verdicts)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 18 disagreements
+KILLED int-text-drops-sign -- a negative Int is shown without its sign
+    golden-framework.test: 3 failed (gf-describe, gf-fuzz-bounded, gf-int-text)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 12 disagreements
+KILLED escape-drops-quote -- a quotation mark inside a described String is not escaped
+    golden-framework.test: 3 failed (gf-describe, gf-library-warning-clean, gf-message-helpers)
+KILLED code-name-shifted -- a diagnostic code is named by its neighbour's name (Type reads as Unbound)
+    golden-framework.test: 5 failed (gf-code-name-complete, gf-failures-continue, gf-fuzz-bounded, gf-message-helpers, gf-verdicts)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 9 disagreements
+KILLED describe-drops-bool -- a Bool is described as a value with no text form
+    golden-framework.test: 1 failed (gf-describe)
+KILLED count-declares-context -- count declares the Suite context itself, so an application context trait spelled like it is satisfied by the suite
+    golden-framework.test: 1 failed (gf-context-trait-surface)
+KILLED report-drops-detail -- a mismatch's detail line is left out of the report
+    golden-framework.test: 5 failed (gf-escaping-error-is-the-case-s, gf-failures-continue, gf-fuzz-bounded, gf-message-helpers, gf-verdicts)
+    fuzz: 6 programs, 37 cases (16 passing, 21 failing) on interp, compile, cranelift: 9 disagreements
+
+20 mutants: 20 killed, 0 survived, 0 not applied, 0 not built

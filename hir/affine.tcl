@@ -123,6 +123,8 @@ namespace eval hir::affine {
     # Release points on infinite loops' breaks (PathReleases): break ->
     # bindings, merged into the exit table.
     variable pathExits {}
+    # The named structs Descriptor is inside of, outermost first.
+    variable descriptorVisiting {}
 }
 
 # ---------------------------------------------------------------------------
@@ -221,7 +223,7 @@ proc hir::affine::Where {hir e} {
 # How expression E is named in a diagnostic.
 proc hir::affine::Named {hir e} {
     if {[dict get $hir exprs $e kind] eq "ref"} {
-        return "`[dict get $hir exprs $e name]`"
+        return "`[hir::semantic::RefName $hir $e]`"
     }
     return "this value"
 }
@@ -294,7 +296,7 @@ proc hir::affine::Consumer {hir parent e} {
                 return {use field}
             }
             if {$affineField} {
-                set shown [expr {$kind eq "ref" ? [dict get $hir exprs $e name] : "value"}]
+                set shown [expr {$kind eq "ref" ? [hir::semantic::RefName $hir $e] : "value"}]
                 return [list reject AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE \
                     "field \"$name\" of [Named $hir $e] is affine ([hir::types::show $fieldType]): reading it would make a second owner of what [Named $hir $e] owns, and a field cannot be moved out of a struct that stays usable (consume the struct with a destructuring instead: \"{$name} = $shown\")"]
             }
@@ -383,7 +385,7 @@ proc hir::affine::CallConsumer {hir p e role type} {
                     # argument: whatever the body does with it -- duplicate
                     # it, erase it -- would go unseen (MUTABLE-ARRAY.md,
                     # "Library ownership").
-                    set paramName [dict get $hir bindings [lindex [dict get $hir exprs $target params] $index] name]
+                    set paramName [hir::semantic::SourceName $hir [lindex [dict get $hir exprs $target params] $index]]
                     return [list reject AFFINE-ERASURE-UNSUPPORTED \
                         "[Named $hir $e] is an affine [TypeText $hir $e], passed to the untyped parameter \"$paramName\" of a function whose body was not analyzed for it (its semantic instance was declined): the body could duplicate or lose it unseen (declare the parameter's type)"]
                 }
@@ -394,7 +396,7 @@ proc hir::affine::CallConsumer {hir p e role type} {
         if {[hir::types::IsAffine $declared] || ![hir::types::subtype $type $declared]} {
             return [list move arg $p $index]
         }
-        set paramName [dict get $hir bindings [lindex [dict get $hir exprs $target params] $index] name]
+        set paramName [hir::semantic::SourceName $hir [lindex [dict get $hir exprs $target params] $index]]
         return [Erasure $hir $e "the argument of parameter \"$paramName\", declared [hir::types::show $declared]"]
     }
     if {[hir::types::IsFn $calleeType] || [hir::types::IsCoroutine $calleeType]} {
@@ -572,8 +574,8 @@ proc hir::affine::verify {hirVar} {
     }
     # Releases: only for a program the discipline accepts (a rejected one
     # that still runs, -strict 0, keeps every value until collected), and
-    # never twice: HIR rebuilt from lowered Core IR (hir/lower.tcl) already
-    # has every release written out.
+    # never twice: HIR built from core IR text that spells them (what
+    # hir/lower.tcl lowered, read back) already has every release written out.
     set scopes [expr {!$accepted || [WrittenReleases $hir $parentMap] ? {} : [Scopes $hir $parentMap]}]
     variable consumed
     dict set hir affine consumed $consumed
@@ -659,7 +661,7 @@ proc hir::affine::Analyze {hirVar parentMap regions exprs program} {
                 dict set moveRefs $e capture
             } else {
                 dict set diagnostics $e [list AFFINE-CAPTURE-UNSUPPORTED \
-                    "`[dict get $node name]` is an affine [hir::types::show [BindingType $hir $b]], which cannot be captured by a closure (a nested function): a closure may be called any number of times and copied freely, so capturing would alias the one owner (pass it as an argument, or construct it inside the nested function)" $e]
+                    "`[hir::semantic::RefName $hir $e]` is an affine [hir::types::show [BindingType $hir $b]], which cannot be captured by a closure (a nested function): a closure may be called any number of times and copied freely, so capturing would alias the one owner (pass it as an argument, or construct it inside the nested function)" $e]
             }
         }
     }
@@ -1037,11 +1039,12 @@ proc hir::affine::Use {hirVar e b state} {
     variable parent
     variable consumers
     variable consumed
-    set name [dict get $hir exprs $e name]
+    set name [hir::semantic::RefName $hir $e]
     set p [lindex [dict get $parent $e] 0]
     if {[NativeName $hir $p] ne "" && [core::native::ownershipRole [NativeName $hir $p] \
             [lsearch -exact [dict get $hir exprs $p args] $e]] eq "release"} {
-        # A release the compiler wrote out (HIR rebuilt from lowered Core IR):
+        # A release the compiler wrote out (HIR built from core IR text that
+        # spells it, e.g. what hir/lower.tcl lowered, read back):
         # placed where the value is dead, and of a binding possibly moved on
         # some path (Releases) -- never a use to check.
         return $state
@@ -1102,7 +1105,7 @@ proc hir::affine::MoveText {hir move} {
     set node [dict get $hir exprs $move]
     switch -- [dict get $node kind] {
         bind {
-            return "the value of `[dict get $node name] = ...`, received by its context  ([Where $hir $move])"
+            return "the value of `[hir::semantic::RefName $hir $move] = ...`, received by its context  ([Where $hir $move])"
         }
         block {
             return "captured by a coroutine construction  ([Where $hir $move])"
@@ -1110,14 +1113,14 @@ proc hir::affine::MoveText {hir move} {
     }
     set consumer [expr {[dict exists $consumers $move] ? [dict get $consumers $move] : {}}]
     lassign $consumer _ where at
-    set source [dict get $node name]
+    set source [hir::semantic::RefName $hir $move]
     switch -- $where {
         bind {
-            return "[dict get $hir exprs $at name] = $source  ([Where $hir $at])"
+            return "[hir::semantic::RefName $hir $at] = $source  ([Where $hir $at])"
         }
         arg {
-            set callee [dict get $hir exprs [dict get $hir exprs $at callee]]
-            set fn [expr {[dict get $callee kind] eq "ref" ? [dict get $callee name] : "a function"}]
+            set callee [dict get $hir exprs $at callee]
+            set fn [expr {[dict get $hir exprs $callee kind] eq "ref" ? [hir::semantic::RefName $hir $callee] : "a function"}]
             return "$source passed to $fn  ([Where $hir $move])"
         }
         message {
@@ -1165,8 +1168,9 @@ proc hir::affine::DropNative {} {
     return affine#drop
 }
 
-# 1 if HIR already has releases written out: HIR rebuilt from Core IR that
-# hir/lower.tcl lowered (source cannot spell `#`).
+# 1 if HIR already has releases written out: HIR built from core IR text
+# that spells them, e.g. what hir/lower.tcl lowered, read back (source
+# cannot spell `#`).
 proc hir::affine::WrittenReleases {hir parent} {
     dict for {e node} [dict get $hir exprs] {
         if {[dict get $node kind] eq "ref" && [dict exists $parent $e]
@@ -1345,7 +1349,7 @@ proc hir::affine::PathPoint {hirVar x i b} {
     upvar 1 $hirVar hir
     variable loopBreaks
     set node [dict get $hir exprs $x]
-    set name [dict get $hir bindings $b name]
+    set name [hir::semantic::SourceName $hir $b]
     switch -- [dict get $node kind] {
         if {
             set field [expr {$i == 0 ? "thenBody" : "elseBody"}]
@@ -1868,17 +1872,42 @@ proc hir::affine::Descriptor {hir type {exclude {}}} {
         return "a$inner"
     }
     if {[hir::types::IsStructLike $type]} {
+        # A named struct may name itself (STRUCTS.md). Met again inside
+        # itself, it is one no finite value has -- held through fields alone
+        # (each value would hold a smaller one, without end) -- or an
+        # unrestricted one, which owns nothing to drop: either way that inner
+        # occurrence drops nothing. An affine struct holding itself in a
+        # container element is rejected at its declaration
+        # (hir::structs::OwnedRecursion): its values nest to any depth, past
+        # every finite descriptor.
+        variable descriptorVisiting
+        set id [expr {[hir::types::IsNamedStruct $type] ? [lindex $type 1] : ""}]
+        if {$id ne ""} {
+            if {$id in $descriptorVisiting} {
+                if {[hir::types::IsAffine $type] && [hir::structs::OwnedRecursion $id] ne ""} {
+                    error "internal compiler error: the affine struct $id holds itself in a container: it has no finite drop descriptor (hir::structs::apply rejects its declaration)"
+                }
+                return ""
+            }
+            lappend descriptorVisiting $id
+        }
         set layout [hir::types::StructLayout $type]
         set parts {}
         set n 0
         set slot [llength $layout]
-        foreach name [lreverse $layout] {
-            incr slot -1
-            if {$name in $exclude} continue
-            set d [Descriptor $hir [hir::types::StructField $type $name]]
-            if {$d ne ""} {
-                append parts "$slot.$d"
-                incr n
+        try {
+            foreach name [lreverse $layout] {
+                incr slot -1
+                if {$name in $exclude} continue
+                set d [Descriptor $hir [hir::types::StructField $type $name]]
+                if {$d ne ""} {
+                    append parts "$slot.$d"
+                    incr n
+                }
+            }
+        } finally {
+            if {$id ne ""} {
+                set descriptorVisiting [lrange $descriptorVisiting 0 end-1]
             }
         }
         if {$n == 0} {

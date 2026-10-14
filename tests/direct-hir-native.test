@@ -1,12 +1,13 @@
 # direct-hir-native.test -- the native path starts from HIR and never goes
-# through core IR (DIRECT-HIR-NATIVE-PATH.md).
+# through core IR (DIRECT-HIR-NATIVE-PATH.md); neither does the Tcl compiler.
 #
 #   HIR -> core IR -> Tcl interpreter        (the reference branch)
+#   HIR -> Tcl procs                         (the Tcl compiler)
 #   HIR -> NIR -> native / executable        (the production branch)
 #
-# Two sibling consumers of one HIR. These tests pin the architecture (no
-# native entry point lowers HIR to core IR or rebuilds HIR from it, and the
-# removed relift machinery stays removed), that native lowering identifies
+# Sibling consumers of one HIR. These tests pin the architecture (no native
+# or Tcl compiler entry point lowers HIR to core IR or rebuilds HIR from it,
+# and the removed relift machinery stays removed), that native lowering identifies
 # bindings by resolved identity rather than by hygiene-renamed spelling, that
 # module and container identity reach native lowering, and that
 # source -> HIR -> core IR -> interpreter agrees with
@@ -198,6 +199,116 @@ test direct-hir-main-rejects-core-ir-for-native {main.tcl compiles .bot and .hir
     lappend results [expr {[string match {*NATIVE AOT INPUT*} $out] ? "rejected" : $out}]
     lappend results [catch {exec [info nameofexecutable] $main -backend interp $ir} out] [string match {*value:*} $out]
 } -result {value value rejected rejected 0 1}
+
+# ---------------------------------------------------------------------------
+# The Tcl compiler compiles HIR too: a front end's HIR is compiled as built,
+# never lowered to core IR and rebuilt (DIRECT-HIR-NATIVE-PATH.md, "The Tcl
+# compiler compiles HIR"). Its core IR entry points read core IR *text*.
+
+test direct-hir-compile-namespace-static-scan {the only proc of ::core::compiler that builds HIR is compileUnit (core IR text), and none lowers a whole HIR to core IR} -body {
+    set builders {}
+    set lowerers {}
+    foreach name [info procs ::core::compiler::*] {
+        set body [info body $name]
+        if {[regexp {hir::(build|buildSyntax|BuildFull|BuildOnce)(?![:A-Za-z])|hir::syntax::fromIR} $body]} {
+            lappend builders $name
+        }
+        if {[regexp {hir::lower(?![:A-Za-z])} $body]} {
+            lappend lowerers $name
+        }
+    }
+    list $builders $lowerers
+} -result {::core::compiler::compileUnit {}}
+
+# The procs whose call would betray a rebuild of HIR, or a round trip through
+# core IR, while a front end's HIR is compiled.
+set ::compileRebuildWatch {hir::lower hir::build hir::buildSyntax hir::BuildFull hir::BuildOnce
+    hir::syntax::fromIR core::ir::check core::evalProgram core::compiler::compileUnit}
+
+proc compileTrips {script} {
+    set ::trips {}
+    proc ::Trip {command args} { lappend ::trips [lindex $command 0] }
+    foreach c $::compileRebuildWatch { trace add execution $c enter ::Trip }
+    try {
+        uplevel 1 $script
+    } finally {
+        foreach c $::compileRebuildWatch { trace remove execution $c enter ::Trip }
+    }
+    set result $::trips
+    unset ::trips
+    rename ::Trip {}
+    return $result
+}
+
+test direct-hir-compile-entry-points-never-rebuild {evalHir, compileHir, evalUnit and runUnit, and the harness's compile backend for a program hir::lower produced, compile the HIR given: no HIR is built, no core IR made or read} -body {
+    set hir [srcHir {
+        import mutable_array
+        import web
+        fn check(s: str) -> bool:
+            web::emailish?(s)
+        q = web::uri_escape_text("a b")
+        a = mutable_array::create(2, 0)
+        [check("a@b.co"), web::uri_query_value?(q), mutable_array::capacity(a)]
+    }]
+    set values {}
+    set direct [compileTrips {
+        lappend values [core::value::show [core::compiler::evalHir $hir]]
+        set unit [core::compiler::compileHir $hir]
+        lappend values [core::value::show [core::compiler::evalUnit $unit]]
+        lappend values [lindex [outcomeUnderHir compile $hir] 1]
+    }]
+    # The harness's registered compile backend, given the core IR hir::lower
+    # made: it compiles the remembered HIR (the lowering itself is the test's).
+    set lowered [hir::lower $hir]
+    set saved [core::useBackend]
+    core::useBackend compile
+    try {
+        set harness [compileTrips {
+            lappend values [core::value::show [core::evalProgram $lowered]]
+        }]
+    } finally {
+        core::useBackend $saved
+    }
+    # (core::evalProgram checks its core IR, as it does on every backend.)
+    list $direct [lsearch -all -inline -glob $harness hir::*] [lsort -unique $values]
+} -result {{} {} {{[true, true, 2]}}}
+
+test direct-hir-compile-runs-repeat-in-one-process {a program that installs a context runs any number of times in one process through evalHir and through one compileHir unit: every run starts with an empty context set (GOLDEN-TEST-FRAMEWORK.md, C7)} -body {
+    set hir [srcHir {
+        context struct Box:
+            n: int
+        fn read(context b: Box) -> int:
+            b.n
+        with context Box {n: 7}
+        read()
+    }]
+    set unit [core::compiler::compileHir $hir]
+    lmap run {1 2 3 4} {
+        core::value::show [expr {$run <= 2 ? [core::compiler::evalHir $hir] : [core::compiler::evalUnit $unit]}]
+    }
+} -result {7 7 7 7}
+
+test direct-hir-compile-main-code-is-the-code-that-runs {main.tcl -backend compile compiles a .bot program's HIR once: -code prints compileHir's code (here one argument check, where a HIR rebuilt from the lowered core IR, which has lost the declared parameter type, needs two) and the printed types are that compilation's} -body {
+    set text "import str\nfn size(s: str) -> int:\n    str::length(s)\nlength = size(\"abc\")\nlength\n"
+    set path [makeFile $text direct-hir-compile-main.bot]
+    try {
+        set out [exec [info nameofexecutable] [file join $::projectRoot main.tcl] -backend compile -code -warnings off $path]
+    } finally {
+        removeFile direct-hir-compile-main.bot
+    }
+    set hir [surface::compile $text t.bot -warnings off]
+    set unit [core::compiler::compileHir $hir]
+    # Generated names carry a per-process counter.
+    set normalize {apply {{code} {regsub -all {([a-z_])[0-9]+} $code {\1N}}}}
+    set lines [split $out \n]
+    set valueAt [lsearch -glob $lines {   value: *}]
+    set printed [join [lrange $lines 1 $valueAt-1] \n]
+    list [expr {[{*}$normalize $printed] eq [{*}$normalize [dict get $unit code]]}] \
+        [regexp -all {AssertCanonical} $printed] \
+        [regexp -all {AssertCanonical} [core::compiler::generatedCode [hir::lower $hir]]] \
+        [lrange $lines $valueAt end] \
+        [dict map {name type} [dict get $unit types] {hir::types::show $type}]
+} -result {1 1 2 {{   value: 3} {   type:  size : block(e2)/1 -> int} {   type:  length : int}} {size {block(e2)/1 -> int} length int}}
 
 # ---------------------------------------------------------------------------
 # Binding identity: native lowering reads resolved bindings, not spellings.

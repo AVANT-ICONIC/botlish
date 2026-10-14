@@ -501,6 +501,70 @@ test af-drop-order {an affine struct's fields are released last-declared first; 
         [affReleaseOrder "${affDecls}fn f() -> int:\n    xs = \[Pair {first: make(1), second: make(2)}, Pair {first: make(3), second: make(4)}\]\n    1\nf()\n"]
 } -result {{2 1} {1 2 3} {2 1 4 3}}
 
+# A struct may name itself (STRUCTS.md). The drop descriptor walk
+# (hir::affine::Descriptor) once recursed through such a struct without bound
+# (TCL LIMIT STACK); an affine struct holding itself in a container has values
+# nested to any depth, which no static descriptor reaches.
+
+test af-recursive-struct {an affine struct naming itself through a field (no finite value has the type) is declared, typed over and destructured, also in a program using a MutableVector, and its drop descriptor is finite (the inner occurrence drops nothing); an affine struct owning an unrestricted struct that holds itself in a List is released whole, every coroutine exactly once, on every backend} -body {
+    set node "import mutable_vector\n$affDecls"
+    append node {struct Node:
+    step: Coroutine{args: [Message], return: Event}
+    next: Node
+
+fn follow(n: Node) -> Node:
+    {next} = n
+    next
+
+fn step_of(n: Node) -> Coroutine{args: [Message], return: Event}:
+    {step} = n
+    step
+
+fn discard(n: Node) -> int:
+    m = n
+    1
+
+v = mutable_vector::from_list([1])
+[consume(make(4), 5), v.length(), test_aff_live()]
+}
+    set job $affDecls
+    append job {struct Tree:
+    label: str
+    kids: List[Tree]
+
+struct Job:
+    step: Coroutine{args: [Message], return: Event}
+    tree: Tree
+
+fn run() -> int:
+    j = Job {step: make(1), tree: Tree {label: "a", kids: [Tree {label: "b", kids: []}]}}
+    {step, tree} = j
+    e = step(Message {value: 5})
+    e.value + list::length(tree.kids)
+
+fn keep() -> int:
+    j = Job {step: make(2), tree: Tree {label: "x", kids: []}}
+    2
+
+[run(), keep(), test_aff_live()]
+}
+    list [affReleased $node] [hir::affine::Descriptor {} {nstruct Node}] [hir::affine::Descriptor {} {nstruct Node} {step}] \
+        [affReleased $job] [hir::affine::Descriptor {} {nstruct Job}] [hir::affine::Descriptor {} {list {nstruct Tree}}]
+} -cleanup {unset -nocomplain node job} -result {{{value {[5, 1, 0]}} {value {[5, 1, 0]}}} s1.0.c {} {{value {[6, 2, 0]}} {value {[6, 2, 0]}}} s1.0.c {}}
+
+test af-recursive-container-rejected {an affine struct holding its own type in a List, MutableVector or MutableArray -- directly or through another struct -- is AFFINE-CONTAINER-UNSUPPORTED at its declaration, naming the path: its values nest to any depth, and a release is a static, finite walk of the type (the drop descriptor walk once recursed without bound on it); the same structs unrestricted are accepted} -body {
+    set step "    step: Coroutine{args: \[Message\], return: Event}\n"
+    list \
+        [affCode "${affDecls}struct Tree:\n${step}    kids: List\[Tree\]\n1\n"] \
+        [affCode "import mutable_vector\n${affDecls}struct Tree:\n${step}    kids: MutableVector\[Tree\]\n1\n"] \
+        [affCode "import mutable_array\n${affDecls}struct Tree:\n${step}    kids: MutableArray\[Tree\]\n1\n"] \
+        [affCode "${affDecls}struct Tree:\n${step}    kids: List\[Tree\]\nfn f() -> int:\n    t = Tree {step: make(1), kids: \[\]}\n    1\nf()\n"] \
+        [affMessage "${affDecls}struct Tree:\n${step}    kids: List\[Branch\]\nstruct Branch:\n    weight: int\n    tree: Tree\n1\n"] \
+        [affMessage "${affDecls}struct A:\n${step}    b: B\nstruct B:\n    kids: List\[A\]\n1\n"] \
+        [affCode "${affDecls}struct Tree:\n    label: str\n    kids: List\[Tree\]\n1\n"] \
+        [affCode "${affDecls}struct Tree:\n    label: str\n    kids: List\[Tree\]\nstruct Job:\n${step}    tree: Tree\n1\n"]
+} -cleanup {unset -nocomplain step} -result {AFFINE-CONTAINER-UNSUPPORTED AFFINE-CONTAINER-UNSUPPORTED AFFINE-CONTAINER-UNSUPPORTED AFFINE-CONTAINER-UNSUPPORTED {struct "Tree" is affine and holds values of its own type in a List, MutableVector or MutableArray (Tree.kids: List[Branch], Branch.tree: Tree): a recursive affine type is not supported -- its release would have to recurse as deep as the value nests, and an affine value is released by a static, finite walk of its type (an unrestricted struct may hold itself in a container)} {struct "A" is affine and holds values of its own type in a List, MutableVector or MutableArray (A.b: B, B.kids: List[A]): a recursive affine type is not supported -- its release would have to recurse as deep as the value nests, and an affine value is released by a static, finite walk of its type (an unrestricted struct may hold itself in a container)} ok ok}
+
 test af-drop-native {natively every abandoned coroutine an aggregate owned is released where its owner dies: 1000 rows of structs, Lists and destructurings (at most three coroutines alive at once) map three stacks, reuse them for the other 4997 constructions and sweep none; the same under GC stress} -constraints linuxX86_64 -body {
     set text "import str\n${affDecls}fn row(i: int) -> int:\n    p = Pair {first: make(i), second: make(i + 1)}\n    xs = \[make(i), make(i)\]\n    r = Running {name: \"r\", step: make(i)}\n    {name} = r\n    ys = xs\n    str::length(name)\nxs = loop i from 0 to 1000:\n    row(i)\nlist::length(xs)\n"
     set hir [surface::compile $text -warnings off]

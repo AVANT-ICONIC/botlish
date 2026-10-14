@@ -1,0 +1,48 @@
+# closure-escape-instances.bot -- a field projection from an untyped
+# parameter in a loop over the empty List: the source-level specification
+# that the call with [] (whose instance's loop element cannot exist) runs
+# and computes its value beside a call with a real element, the projection
+# chain x.t.g proven, call by call, by the instance each call selects.
+#
+# golden-exclude: cranelift-generic -- NATIVE UNSUPPORTED struct-shape: the unspecialized native baseline has no slot for a projection only a semantic instance proves (STRUCTS.md, "Known limitations"; tests/helpers.tcl's GenericBaselineUndefined); tests/native-listloop.test's sourceAgree stands the specialized outcome in for cranelift-generic on this program
+#
+# Ported from tests/native-listloop.test (native-listloop-never-element-
+# neighbours' fifth program; closure-escape.bot holds its other four and the
+# rest of the file's value tests). This program is a suite of its own so
+# that the cranelift-generic run of closure-escape.bot stays a real one:
+# run.tcl substitutes cranelift for a whole suite whose unspecialized
+# lowering reports struct-shape. The Tcl test stays authoritative and
+# unchanged.
+#
+# Declarations: Detail and Record, the Tcl program's T and S (renamed, as in
+# closure-escape.bot).
+#
+# Imports: compiler and test (the framework); list (list::length, called
+# qualified). No test here is about an import or about method calls.
+import compiler
+import list
+import test
+
+struct Detail:
+    g: int
+
+struct Record:
+    f: int
+    t: Detail
+
+fn register_never_element_instance_tests():
+    # native-listloop-never-element-neighbours, its fifth program: total's
+    # parameter is untyped; one call passes a one-Record List, the other []
+    # (the instance whose loop element is never-typed).
+    fn mixed_callers() errors compiler::CompilerError:
+        static compile:
+            fn total(xs) -> int:
+                ys = loop x in xs:
+                    x.t.g + x.f
+                list::length(ys)
+            [total([Record {f: 1, t: Detail {g: 2}}]), total([])]
+    test::value("never-element/mixed-callers", [1, 0], mixed_callers)
+
+with context test::suite()
+register_never_element_instance_tests()
+test::report()

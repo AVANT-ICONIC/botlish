@@ -125,13 +125,7 @@ proc gfReleases {source backend} {
     set before $::core::coroutines::nextId
     set ::core::coroutines::releaseCalls {}
     try {
-        if {$backend eq "compile-hir"} {
-            # main.tcl's -backend compile: the Tcl compiler compiling the HIR
-            # itself (outcomeUnderHir's compile runs the core IR it lowers to).
-            set outcome [list value [core::value::show [core::compiler::evalHir $hir] 1 1]]
-        } else {
-            set outcome [outcomeUnderHir $backend $hir]
-        }
+        set outcome [outcomeUnderHir $backend $hir]
         set created [expr {$::core::coroutines::nextId - $before}]
         # In release order: a release a mutant delays (to the program's end)
         # shows as a moved id.
@@ -648,9 +642,9 @@ register_coroutine_cases(1)
 test::report()
 }
 
-test gf-coroutine-cleanup {every coroutine a run creates -- the runner and each case's own, completed, failed, abandoned while suspended, and left suspended by an early return -- is released exactly once, deterministically and in order (each case's before the next case runs, the runner's last), on the Tcl backends: the interpreter, the Tcl compiler compiling the core IR, and the Tcl compiler compiling the HIR itself (main.tcl's -backend compile)} -body {
-    lmap backend {interp compile compile-hir} {gfReleases $gfCoroutineSuite $backend}
-} -result {{{["PASS completes", "PASS fails, handled", "PASS abandons", "PASS leaves early", "4 passed, 0 failed"]} {created 5 released 2 3 4 5 1}} {{["PASS completes", "PASS fails, handled", "PASS abandons", "PASS leaves early", "4 passed, 0 failed"]} {created 5 released 2 3 4 5 1}} {{["PASS completes", "PASS fails, handled", "PASS abandons", "PASS leaves early", "4 passed, 0 failed"]} {created 5 released 2 3 4 5 1}}}
+test gf-coroutine-cleanup {every coroutine a run creates -- the runner and each case's own, completed, failed, abandoned while suspended, and left suspended by an early return -- is released exactly once, deterministically and in order (each case's before the next case runs, the runner's last), on the Tcl backends: the interpreter and the Tcl compiler (compiling the HIR itself, as main.tcl's -backend compile does)} -body {
+    lmap backend {interp compile} {gfReleases $gfCoroutineSuite $backend}
+} -result {{{["PASS completes", "PASS fails, handled", "PASS abandons", "PASS leaves early", "4 passed, 0 failed"]} {created 5 released 2 3 4 5 1}} {{["PASS completes", "PASS fails, handled", "PASS abandons", "PASS leaves early", "4 passed, 0 failed"]} {created 5 released 2 3 4 5 1}}}
 
 test gf-coroutine-cleanup-native {natively: five coroutines, five releases (the abandoned and the early-returning case's while suspended), none swept by the collector; the same under GC stress} -constraints linuxX86_64 -body {
     set plain [gfNativeCoroutines $gfCoroutineSuite]
@@ -892,7 +886,7 @@ test gf-library-warning-clean {lib/test.bot, and a suite using every helper, com
 } -result ok
 
 # The message helpers, promoted from the suite-local matchers the migration's
-# suites wrote (LARGE-SCALE-GOLDEN-MIGRATION.md, "Library helpers"): the exact
+# suites wrote (LARGE-SCALE-GOLDEN-MIGRATION.md, "The framework at scale"): the exact
 # message, or a fragment of it, beside the code; each kind of mismatch.
 set gfMessages {import compiler
 import test

@@ -78,16 +78,36 @@
 #      resolution diagnostic of the enclosing program ends the decisions:
 #      the program is rejected whatever they would be;
 #   3. otherwise (a typed round) the first site in post-order with a
-#      diagnostic of its own is rejected, and every undecided site before it
-#      is accepted -- every site before it compiled in a program whose
-#      earlier sites have their final forms. A rejected body's effects (a
-#      move, a refinement, an instance, a function's summary) are gone only
-#      from the next build on, so a later site is judged again without them:
-#      one rejection per build. A site accepted earlier that now has a
-#      diagnostic of its own is rejected (a later decision removed something
-#      it relied on): decisions only ever go from body to rejection, so the
-#      rounds end. A round in which no site has a diagnostic of its own
-#      accepts every undecided site and is the final program.
+#      diagnostic of its own that does not *wait* is rejected, and every
+#      undecided site before it without one is accepted -- every site before
+#      it compiled in a program whose earlier sites have their final forms. A
+#      rejected body's effects (a move, a refinement, an instance, a
+#      function's summary) are gone only from the next build on, so a later
+#      site is judged again without them: one rejection per build. A site
+#      accepted earlier that now has a diagnostic of its own is rejected (a
+#      later decision removed something it relied on): decisions only ever go
+#      from body to rejection, so the rounds end. A round in which no site has
+#      a diagnostic of its own accepts every undecided site and is the final
+#      program.
+#
+# The waiting rule (Next, Waits). A program-wide channel -- the
+# erased-callable contract, a semantic-instance budget under pressure -- is
+# one fact every site reading it shares, and its contributors may be written
+# anywhere: a site's diagnostic may come from a contribution that a site
+# written after it, rejected later, removes. So a failing site that may read
+# a channel (its *consumer*, hir/staticdeps.tcl's `consumes`) waits while
+# another failing site may change it (a *contributor*, `contributors`): the
+# contributors are judged first, and the consumer against the channel their
+# decisions leave -- whichever is written first. (A site whose first
+# diagnostic precedes the completion walk consumes no erased contract: no
+# erasure can cause or precede that diagnostic.) An ok contributor does not
+# make it wait: its body stays in the final program unless a later decision
+# makes it fail. A failing site that waits stays undecided. When every
+# failing site waits -- on another: a cycle through a channel, each one
+# consuming what another contributes -- the first one in post-order is
+# rejected, as before the rule. With one failing site nothing waits. Layout
+# still decides a verdict in a cycle, and where an ok contributor fails only
+# after a later rejection (STATIC-COMPILE.md, "The waiting rule").
 #
 # That is the *sequential* order, the definition of every outcome. The
 # scheduler that runs it (decide's `scheduler`) only chooses how many builds
@@ -107,7 +127,9 @@
 #
 # The *batched* scheduler (the default) runs the sequential order on one
 # build for as long as that build already answers it (Simulate): it rejects
-# the first failing site, marks every site that depends on it *unknown* --
+# the first failing site that does not wait (a consumer and its contributors
+# are linked: they are decided in one component, in the order the waiting
+# rule gives), marks every site that depends on it *unknown* --
 # its diagnostics may differ once that site is rejected -- and keeps every
 # other site's status, which cannot change: nothing it depends on changed.
 # It then continues with the next site in post-order, exactly as the next
@@ -126,7 +148,9 @@
 # scheduler is the procedure before the economics milestone (Rejectable,
 # Independent, GlobalChannels: one rejection per round, more only for sites
 # in different top-level units that do not reach each other), kept for the
-# before/after measurements.
+# before/after measurements; it takes its first rejection by the waiting
+# rule too, and only that one while a site waits. With two or more failing
+# sites, both read the dependency analysis for the rule (WaitingDeps).
 #
 # Decisions follow source order. A site is judged with the sites after it
 # present as written: a later site's body can reach an earlier one only
@@ -134,7 +158,10 @@
 # program-wide contract -- and only there can a later block that is itself
 # rejected afterwards have caused an earlier block's diagnostic (a later
 # *accepted* block's effect on an earlier one is ordinary: the final program
-# has it).
+# has it). For the program-wide channels the waiting rule takes the order
+# out of the verdict, except in its two residual cases; the backward
+# channels of one function (a loop, a recursive call, an untyped parameter's
+# inferred contract) keep it.
 #
 # The enclosing program's own diagnostics are not consulted while deciding
 # (a trial body may cause them: a move the site's rejection undoes); those
@@ -738,9 +765,17 @@ proc hir::static::decide {nodes options given halt} {
                     if {[dict get $site key] ni $failing} continue
                     set site
                 }]
-                AcceptBefore $sites decisions [lindex $failing 0] accepted
+                # The waiting rule decides which site goes first, as in the
+                # sequential order; while a site waits, one per round.
+                set deps [WaitingDeps $hir $sites $decisions $failing stats]
+                lassign [Next $sites $decisions $own $deps] first waiting
+                AcceptBefore $sites decisions $first accepted $failing
                 set rejected {}
-                set keys [Rejectable $hir $siteRecords]
+                if {[dict size $waiting] > 0} {
+                    set keys [list $first]
+                } else {
+                    set keys [Rejectable $hir $siteRecords]
+                }
                 foreach key $keys {
                     dict set decisions $key [list rejected [lindex [dict get $own $key] 0]]
                     lappend rejected [TraceDecision $key [lindex [dict get $own $key] 0]]
@@ -749,17 +784,27 @@ proc hir::static::decide {nodes options given halt} {
                 dict set entry rejected $rejected
                 dict set entry deferred [lmap key $failing {
                     if {$key in $keys} continue
-                    list $key "legacy: not proven independent of an earlier failing site"
+                    if {[dict exists $waiting $key]} {
+                        list $key [WaitReason $deps [dict get $waiting $key]]
+                    } else {
+                        list $key "legacy: not proven independent of an earlier failing site"
+                    }
                 }]
             }
             sequential {
-                AcceptBefore $sites decisions [lindex $failing 0] accepted
-                set key [lindex $failing 0]
+                set deps [WaitingDeps $hir $sites $decisions $failing stats]
+                lassign [Next $sites $decisions $own $deps] key waiting
+                AcceptBefore $sites decisions $key accepted $failing
                 dict set decisions $key [list rejected [lindex [dict get $own $key] 0]]
                 dict set entry accepted $accepted
                 dict set entry rejected [list [TraceDecision $key [lindex [dict get $own $key] 0]]]
-                dict set entry deferred [lmap other [lrange $failing 1 end] {
-                    list $other "sequential: one rejection per build"
+                dict set entry deferred [lmap other $failing {
+                    if {$other eq $key} continue
+                    if {[dict exists $waiting $other]} {
+                        list $other [WaitReason $deps [dict get $waiting $other]]
+                    } else {
+                        list $other "sequential: one rejection per build"
+                    }
                 }]
             }
             batched {
@@ -845,20 +890,111 @@ proc hir::static::Present {sites decisions} {
 }
 
 # Accepts, in the caller's DECISIONSVAR, every undecided site of SITES (in
-# post-order) before the site with key STOP ("" for all of them): what the
-# sequential order does for the sites before the first failing one. Sets the
+# post-order) before the site with key STOP ("" for all of them), except
+# the keys of FAILING (the failing sites before it wait: Next): what the
+# sequential order does for the ok sites before the one it rejects. Sets the
 # caller's ACCEPTEDVAR to their keys.
-proc hir::static::AcceptBefore {sites decisionsVar stop acceptedVar} {
+proc hir::static::AcceptBefore {sites decisionsVar stop acceptedVar {failing {}}} {
     upvar 1 $decisionsVar decisions $acceptedVar accepted
     set accepted {}
     foreach site $sites {
         set key [dict get $site key]
         if {$key eq $stop} break
-        if {![dict exists $decisions $key]} {
+        if {![dict exists $decisions $key] && $key ni $failing} {
             dict set decisions $key accepted
             lappend accepted $key
         }
     }
+}
+
+# The waiting rule (header, "Deciding"): whether failing site KEY waits --
+# a program-wide channel its diagnostics may depend on (DEPS's consumes:
+# hir/staticdeps.tcl) has a contributor other than KEY that is failing in
+# STATUS (key -> ok, failing or unknown, for the sites present as bodies, in
+# post-order). Returns "" when it does not, {Z CHANNEL} -- the first such
+# contributor in post-order and its channel -- when it does, and ? when that
+# cannot be told yet (no contributor is failing, and one's status is
+# unknown). With DEPS "" (no analysis: one failing site) no site waits.
+proc hir::static::Waits {key status deps} {
+    if {$deps eq "" || ![dict exists $deps consumes $key]} {
+        return ""
+    }
+    set channelOf [dict create]
+    foreach channel [dict get $deps consumes $key] {
+        if {![dict exists $deps contributors $channel]} continue
+        foreach z [dict get $deps contributors $channel] {
+            if {$z ne $key && ![dict exists $channelOf $z]} {
+                dict set channelOf $z $channel
+            }
+        }
+    }
+    set unsure 0
+    dict for {z s} $status {
+        if {![dict exists $channelOf $z]} continue
+        if {$s eq "failing"} {
+            return [list $z [dict get $channelOf $z]]
+        }
+        if {$s eq "unknown"} {
+            set unsure 1
+        }
+    }
+    return [expr {$unsure ? "?" : ""}]
+}
+
+# The site the sequential order rejects in a checked build (header,
+# "Deciding"): of SITES (post-order) present under DECISIONS, OWN the
+# build's diagnostics by site and DEPS its dependency analysis ("" with one
+# failing site), the first failing site that does not wait (Waits); when
+# every failing site waits -- on another one: a cycle through a channel --
+# the first failing site. Returns {KEY WAITING}, WAITING the failing sites
+# that wait: key -> {Z CHANNEL}.
+proc hir::static::Next {sites decisions own deps} {
+    set status [dict create]
+    foreach site [Present $sites $decisions] {
+        set key [dict get $site key]
+        dict set status $key [expr {[dict exists $own $key] ? "failing" : "ok"}]
+    }
+    set first ""
+    set pick ""
+    set waiting [dict create]
+    dict for {key s} $status {
+        if {$s ne "failing"} continue
+        if {$first eq ""} {
+            set first $key
+        }
+        set w [Waits $key $status $deps]
+        if {$w ne ""} {
+            dict set waiting $key $w
+        } elseif {$pick eq ""} {
+            set pick $key
+        }
+    }
+    if {$pick eq ""} {
+        set pick $first
+    }
+    dict unset waiting $pick
+    return [list $pick $waiting]
+}
+
+# The dependency analysis the waiting rule reads in a checked build of HIR
+# (SITES under DECISIONS) whose failing sites are FAILING: "" with one (it
+# cannot wait), else hir::staticdeps::Deps, its time added to the caller's
+# STATSVAR's depMs.
+proc hir::static::WaitingDeps {hir sites decisions failing statsVar} {
+    upvar 1 $statsVar stats
+    if {[llength $failing] < 2} {
+        return ""
+    }
+    set t0 [clock microseconds]
+    set deps [hir::staticdeps::Deps $hir $sites $decisions]
+    dict incr stats depMs [expr {([clock microseconds] - $t0) / 1000}]
+    return $deps
+}
+
+# The trace's reason for a failing site that waits (Waits' {Z CHANNEL}).
+proc hir::static::WaitReason {deps wait} {
+    lassign $wait z channel
+    return "waits for $z, a failing contributor to [hir::staticdeps::Name $deps $channel] it consumes"
 }
 
 # The batched scheduler's run of the sequential order on one build (header,
@@ -869,19 +1005,23 @@ proc hir::static::AcceptBefore {sites decisionsVar stop acceptedVar} {
 # unknown (it depends on a site rejected since the build).
 #
 # The sites fall into *components*: sites linked, directly or through
-# others, by a dependency in either direction. No decision in one component
-# can change a status in another, so the sequential order of the whole
-# program is an interleaving of each component's own sequential order --
-# the global first failing site is always the first non-ok site of its
-# component -- and the run takes each component's sequential step on its
-# own: reject the component's first site in post-order that is not ok (and
-# accept the undecided sites of the component before it) while that site
-# is failing. A rejection makes every site depending on it unknown; a
-# component whose first non-ok site is unknown needs a build, the others go
-# on. Returns a dict: decisions, committed (the rejected keys, in order),
-# accepted (the keys accepted), predicted (key -> ok or the first
+# others, by a dependency in either direction or by the waiting rule (a
+# failing site and every contributor it may wait on, Components). No decision in
+# one component can change a status or a wait in another, so the
+# sequential order of the whole program is an interleaving of each
+# component's own sequential order, and the run takes each component's
+# sequential step on its own: reject the component's first failing site in
+# post-order that does not wait (and accept the undecided ok sites of the
+# component before it), or, when every failing site of it waits, its first
+# failing site (Next). A rejection makes every site depending on it
+# unknown; a component whose first site not ok is unknown, or one of whose
+# failing sites may or may not wait (a contributor's status is unknown),
+# needs a build, the others go on. Returns a dict: decisions, committed (the rejected keys, in
+# order), accepted (the keys accepted), predicted (key -> ok or the first
 # diagnostic: what the next build must show for each site whose status the
-# run still knows).
+# run still knows), held (the sites whose message names internal ids, left
+# for a build), waiting (the failing sites the last step saw waiting: key
+# -> {Z CHANNEL}).
 proc hir::static::Simulate {sites decisions own deps} {
     set parentOf [dict create]
     foreach site $sites {
@@ -897,8 +1037,16 @@ proc hir::static::Simulate {sites decisions own deps} {
     set held {}
     set acceptedAll {}
     while 1 {
+        # Each component's sequential step: its first failing site in
+        # post-order that does not wait (Waits); a component whose first
+        # site not ok is unknown, or whose failing site may or may not wait,
+        # needs a build. A component whose failing sites all wait (a cycle
+        # through a channel) rejects its first failing site (Next).
         set first ""
+        set tie 0
         set blocked [dict create]
+        set cycle [dict create]
+        set waiting [dict create]
         dict for {key s} $status {
             set c [dict get $component $key]
             if {$s eq "ok" || [dict exists $blocked $c]} continue
@@ -906,27 +1054,56 @@ proc hir::static::Simulate {sites decisions own deps} {
                 dict set blocked $c 1
                 continue
             }
+            set w [Waits $key $status $deps]
+            if {$w eq "?"} {
+                dict set blocked $c 1
+                continue
+            }
+            if {$w ne ""} {
+                dict set waiting $key $w
+                if {![dict exists $cycle $c]} {
+                    dict set cycle $c $key
+                }
+                continue
+            }
             set first $key
             break
+        }
+        if {$first eq ""} {
+            dict for {c key} $cycle {
+                if {![dict exists $blocked $c]} {
+                    set first $key
+                    set tie 1
+                    break
+                }
+            }
         }
         if {$first eq ""} break
         set c [dict get $component $first]
         set ids [InternalIds [dict get [lindex [dict get $own $first] 0] message]]
         if {$ids ne {}} {
             # Its message names internal identities (hir::types::show's
-            # `block(e12)`), numbered by the build in one walk: an expression
+            # `block(e12)`, InternalIds), numbered by the build in one walk: an expression
             # number is the sequential order's own only if no site numbered
             # before it has another form here than there -- a site rejected
-            # since this build, or a failing or unknown one before it (the
-            # sequential order rejects those first). Any other kind of id is
-            # assumed to depend on every site. Else its component waits for a
-            # build.
+            # since this build, or a site of a blocked component that is not
+            # ok: before it (the sequential order may reject it first), or,
+            # for a cycle's site, anywhere (the sequential order breaks a
+            # cycle only once no failing site anywhere is free). A failing
+            # site of a component not blocked that waits keeps its form until
+            # then (nothing it waits on can change first). Any other kind of
+            # id is assumed to depend on every site. Else its component waits
+            # for a build. (The run's first pick has no such site: a run
+            # always commits one.)
             set differing $committed
             dict for {key s} $status {
-                if {$key eq $first} break
-                if {$s ne "ok"} {
-                    lappend differing $key
+                if {$key eq $first} {
+                    if {!$tie} break
+                    continue
                 }
+                if {$s eq "ok"} continue
+                if {[dict exists $waiting $key] && ![dict exists $blocked [dict get $component $key]]} continue
+                lappend differing $key
             }
             set clean 1
             if {$differing ne {}} {
@@ -958,7 +1135,7 @@ proc hir::static::Simulate {sites decisions own deps} {
             set key [dict get $site key]
             if {$key eq $first} break
             if {![dict exists $decisions $key] && [dict exists $status $key]
-                    && [dict get $component $key] eq $c} {
+                    && [dict get $component $key] eq $c && [dict get $status $key] eq "ok"} {
                 dict set decisions $key accepted
                 lappend accepted $key
             }
@@ -994,11 +1171,13 @@ proc hir::static::Simulate {sites decisions own deps} {
         }
     }
     return [dict create decisions $decisions committed $committed accepted $acceptedAll \
-        predicted $predicted held $held]
+        predicted $predicted held $held waiting $waiting]
 }
 
 # The components (Simulate) of the sites of STATUS under DEPS: key -> a
-# component id; one component when DEPS is "" (no analysis).
+# component id; one component when DEPS is "" (no analysis). Sites are
+# linked by a dependency in either direction and by the waiting rule (a
+# failing site and every contributor to a channel it consumes).
 proc hir::static::Components {status deps} {
     set leader [dict create]
     dict for {key s} $status {
@@ -1012,7 +1191,20 @@ proc hir::static::Components {status deps} {
         return $leader
     }
     dict for {key s} $status {
-        foreach other [dict get $deps sites $key] {
+        set others [dict get $deps sites $key]
+        # And, for a failing site, every site it may wait on (Waits): a
+        # contributor to a channel it consumes need not be one whose form it
+        # reads (the erased contract reads its witnesses' only), and the rule
+        # must stay inside a component. (Only a failing site waits: within a
+        # run an ok site stays ok or becomes unknown.)
+        if {$s eq "failing" && [dict exists $deps consumes $key]} {
+            foreach channel [dict get $deps consumes $key] {
+                if {[dict exists $deps contributors $channel]} {
+                    lappend others {*}[dict get $deps contributors $channel]
+                }
+            }
+        }
+        foreach other $others {
             if {![dict exists $leader $other]} continue
             set a [Find leader $key]
             set b [Find leader $other]
@@ -1045,15 +1237,20 @@ proc hir::static::Find {leaderVar key} {
 # What a prediction of the batched run (Simulate) says about DIAGNOSTIC: the
 # diagnostic with the internal ids of its message blanked (InternalIds).
 proc hir::static::PredictionOf {diagnostic} {
-    dict set diagnostic message [regsub -all {\m[ebsyt][0-9]+\M} [dict get $diagnostic message] #]
+    dict set diagnostic message [regsub -all {\m(block\(|function )e[0-9]+\M} [dict get $diagnostic message] {\1#}]
     return $diagnostic
 }
 
 # The internal identities of the build it came from that diagnostic MESSAGE
-# names (expression, binding, scope, symbol or type ids: `block(e12)`), whose
-# numbering depends on the sites before them in the walk.
+# names, whose numbering depends on the sites before them in the walk: the
+# expression ids of exact callables, which a message prints the way
+# hir::types::show and hir::specialize::ShowKey do, `block(e12)`, or, for a
+# function without a name, hir::semantic::ShowType, `function e12` -- the
+# forms in which a diagnostic names an id. Nothing else counts: a word of the
+# message that merely looks like an id (a binding written `s1` or `t2`) is the
+# program's own text, the same in every build.
 proc hir::static::InternalIds {message} {
-    return [regexp -all -inline {\m[ebsyt][0-9]+\M} $message]
+    return [lmap {- - id} [regexp -all -inline {\m(block\(|function )(e[0-9]+)\M} $message] {set id}]
 }
 
 # 1 if site KEY is nested, at any depth, in the body of site OUTER (PARENTOF:
@@ -1072,7 +1269,8 @@ proc hir::static::Inside {parentOf key outer} {
 # Why the batched run (RESULT of Simulate on DEPS) left failing site KEY
 # undecided: it depends on a site the run rejected (with the dependency's
 # path when TRACING: hir::staticdeps::Explain), or it comes after a site of
-# its component whose status became unknown.
+# its component whose status became unknown, or it waits for a failing
+# contributor to a channel it consumes (Waits).
 proc hir::static::Deferral {hir sites decisions deps result key tracing} {
     if {$key in [dict get $result held]} {
         return "its message names internal ids, numbered by the forms of the sites before it: decided in the sequential order's own build"
@@ -1087,6 +1285,9 @@ proc hir::static::Deferral {hir sites decisions deps result key tracing} {
             }
             return "depends on $c"
         }
+    }
+    if {[dict exists $result waiting $key]} {
+        return [WaitReason $deps [dict get $result waiting $key]]
     }
     return "after a site of its component whose status is unknown"
 }
