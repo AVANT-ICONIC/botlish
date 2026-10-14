@@ -115,10 +115,10 @@
 ## hir/affine.tcl
 <<<<
             if {$affineField} {
-                set shown [expr {$kind eq "ref" ? [dict get $hir exprs $e name] : "value"}]
+                set shown [expr {$kind eq "ref" ? [hir::semantic::RefName $hir $e] : "value"}]
 ====
             if {0} {
-                set shown [expr {$kind eq "ref" ? [dict get $hir exprs $e name] : "value"}]
+                set shown [expr {$kind eq "ref" ? [hir::semantic::RefName $hir $e] : "value"}]
 >>>>
 
 @@ any-erasure-hides erasing an affine value into an unrestricted position (any, an unrestricted field or argument) is accepted

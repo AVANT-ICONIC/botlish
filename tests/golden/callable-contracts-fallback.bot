@@ -1,0 +1,112 @@
+# callable-contracts-fallback.bot -- the declared-contract fallback of
+# tests/higher-order-completions.test (hocWrapper): an incomplete summary
+# keeps the callee's whole declared contract.
+#
+# wrapper declares E1 and E3. Under k = 5 its own `fail E1` (for a negative
+# k) is unreachable, but it also calls h, a closure make returned: a call
+# with neither an identity nor a contract, charged the program's
+# erased-callable contract, which leaves wrapper's summary incomplete -- so
+# it falls back to everything wrapper declares, and a caller of wrapper(5)
+# must handle E1 as well as E3. The same holds through a handled call in the
+# callee (wrapper2). Without the lost call (wrapper3) exact narrowing applies
+# again: wrapper3(5) needs no handler for E1.
+#
+# Why a suite of its own: wrapper and wrapper2 admit only E1 and E3, and
+# their h(k) is charged whatever the whole program erases. In the Tcl
+# tests' program that is E3 alone (`h = make(raise3)` erases raise3); in
+# callable-contracts.bot the program erases E2, OriginE1, C2, Boom and
+# more, and wrapper would itself be UnhandledError. This suite's program is
+# the Tcl tests' prelude, at the top level as there, and the tests' blocks,
+# which erase nothing.
+#
+# Imports: compiler and test (every suite).
+import compiler
+import test
+
+error E1
+
+error E3:
+    code: int
+
+# hocWrapper, as the Tcl file writes it: raise3 fails E3 for 3 (else 5),
+# make returns a closure calling its argument, and h is that closure over
+# raise3 -- the program's one erasure.
+fn raise3(x) -> int errors E3:
+    if x == 3:
+        fail E3 {code: 30}
+    5
+
+fn make(f):
+    fn inner(y):
+        f(y)
+    inner
+
+h = make(raise3)
+
+fn wrapper(k: int) -> int errors E1, E3:
+    if k < 0:
+        fail E1
+    h(k)
+
+fn wrapper2(k: int) -> int errors E1, E3:
+    if k < 0:
+        fail E1
+    h(k):
+        on E3 d:
+            fail E3 {code: d.code}
+
+fn register_hoc_fallback_tests():
+    # hoc-fallback-declared-contract: under k = 5 E1 is no longer proven
+    # absent: a handler for E3 alone is UnhandledError; with E1 handled too
+    # the program is accepted and runs (the value is raise3's 5).
+    fn declared_contract_unhandled() errors compiler::CompilerError:
+        static compile:
+            fn use():
+                wrapper(5):
+                    on E3 d:
+                        d.code
+            use()
+    test::rejects("hoc-fallback-declared-contract/unhandled", compiler::DiagnosticCode::UnhandledError, declared_contract_unhandled)
+
+    fn declared_contract_handled() errors compiler::CompilerError:
+        static compile:
+            fn use():
+                wrapper(5):
+                    on E1:
+                        -1
+                    on E3 d:
+                        d.code
+            use()
+    test::value("hoc-fallback-declared-contract/handled", 5, declared_contract_handled)
+
+    # hoc-fallback-declared-contract-handled: the same through a handled
+    # call in the callee (wrapper2's h(k) is handled and E3 failed again):
+    # incompleteness propagates through it, and E3 alone is UnhandledError.
+    fn through_handled_call() errors compiler::CompilerError:
+        static compile:
+            fn use():
+                wrapper2(5):
+                    on E3 d:
+                        d.code
+            use()
+    test::rejects("hoc-fallback-declared-contract-handled", compiler::DiagnosticCode::UnhandledError, through_handled_call)
+
+    # hoc-fallback-not-without-loss: wrapper3 calls raise3 directly (no lost
+    # call): under k = 5 its fail E1 is unreachable, so E3 alone is handled,
+    # and the program runs.
+    fn not_without_loss() errors compiler::CompilerError:
+        static compile:
+            fn wrapper3(k: int) -> int errors E1, E3:
+                if k < 0:
+                    fail E1
+                raise3(k)
+            fn use():
+                wrapper3(5):
+                    on E3 d:
+                        d.code
+            use()
+    test::value("hoc-fallback-not-without-loss", 5, not_without_loss)
+
+with context test::suite()
+register_hoc_fallback_tests()
+test::report()

@@ -1,0 +1,54 @@
+# methods-byte-without-list.bot -- method-call sugar (METHOD-SUGAR.md) in a
+# file that imports byte but neither list nor str: what an import does NOT
+# make visible. A method call finds a function only if it is visible by
+# that name -- defined in scope, or a member of a namespace the file imports
+# directly -- never by searching the receiver's type, and binding one
+# namespace's function to a name makes nothing else visible.
+#
+# Ports the halves of tests/method-sugar.test (which stays authoritative and
+# unchanged) whose programs import byte and not list (the halves with list
+# imported are in methods.bot): method-not-visible-module-function and
+# method-alias-does-not-import (its rejection; its accepted half is in
+# methods.bot).
+#
+# Imports: compiler and test (the framework); byte (the Tcl programs' own
+# import). The absence of `import list` and `import str` is the property:
+# list::any? and the `length` of list and str must not be candidates. (The
+# framework's own imports add no member named any? or length.)
+import byte
+import compiler
+import test
+
+fn register_visibility_tests():
+    # method-not-visible-module-function: a module function of a namespace
+    # the file does not import is not found by the sugar, though its first
+    # parameter would accept the receiver (no search by receiver type), and
+    # its qualified name is not even authorized.
+    fn b_module_function_method() errors compiler::CompilerError:
+        static compile:
+            fn big(x):
+                x > 1
+            [1, 2, 3].any?(big)
+    fn b_module_function_qualified() errors compiler::CompilerError:
+        static compile:
+            fn big(x):
+                x > 1
+            list::any?([1, 2, 3], big)
+    test::rejects_message("method-not-visible-module-function/method", compiler::DiagnosticCode::NotAStruct, "cannot project field \"any?\" from a value of type List[int]: only a struct has fields; as a method-style call, no function named \"any?\" is visible here either: method syntax only applies a function that is already visible by that name (define it here, or import the namespace that defines it with `import NAMESPACE`)", b_module_function_method)
+    test::rejects_message("method-not-visible-module-function/qualified", compiler::DiagnosticCode::MissingImport, "namespace \"list\" is not imported; add `import list` to use `list::any?`", b_module_function_qualified)
+
+fn register_alias_tests():
+    # method-alias-does-not-import: binding one namespace's function makes
+    # nothing of another namespace visible: `[1].length()` finds no
+    # function. (That the import, not the binding, makes the namespace's
+    # other members visible is the half in methods.bot.)
+    fn b_other_namespace() errors compiler::CompilerError:
+        static compile:
+            transform = byte::complement
+            [1].length()
+    test::rejects_containing("method-alias-does-not-import/other-namespace", compiler::DiagnosticCode::NotAStruct, "cannot project field \"length\" from a value of type List[int]: only a struct has fields; as a method-style call, no function named \"length\" is visible here either", b_other_namespace)
+
+with context test::suite()
+register_visibility_tests()
+register_alias_tests()
+test::report()

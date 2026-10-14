@@ -1,0 +1,381 @@
+# completion-regressions.bot -- completion-analysis defects the golden
+# migration found (manifest: category errors, class COMPILER-BUG-FOUND), each
+# pinned by the source-level outcome its fix restores, beside the Tcl test
+# that pins the same fix.
+#
+# An empty literal List never runs a loop body (STATIC-COMPLETION-PROOFS.md,
+# "Small literal-list proof", item 92): a call whose loop runs over the empty
+# literal -- written as the loop's iterable, or reaching a callee's parameter
+# through an exact call -- needs no handler for what the loop body could
+# raise. A List the compiler does not know (a parameter typed List) is not
+# the empty literal: there the handler is still required. The same fact is
+# the empty literal's size: a read of it through an exact call always fails.
+#
+# A loop's iteration domain runs once, in the enclosing body, before the first
+# iteration (STATIC-COMPLETION-PROOFS.md, "Loop domains"): a fallible call
+# written as a loop's iterable, a counted loop's bound or a lockstep loop's
+# operand is charged where it is written, exactly as the same call bound to a
+# local first; one that always fails stops the loop there.
+import byte
+import compiler
+import immutable_set
+import list
+import mutable_array
+import mutable_vector
+import test
+
+# errors.test: the error every iteration of the loops below fails with.
+error Boom
+
+# ---------------------------------------------------------------------------
+# errors.test: the empty literal List and loop bodies.
+
+fn register_empty_literal_loop_tests():
+    # each([]) and a loop over the literal [] itself complete normally: no
+    # handler, value 0.
+    fn b_empty_literal() errors compiler::CompilerError:
+        static compile:
+            fn each(xs) errors Boom:
+                loop x in xs:
+                    fail Boom
+                0
+            fn direct() errors Boom:
+                loop x in []:
+                    fail Boom
+                0
+            each([]) + direct()
+    test::value("errors-empty-literal-loop-no-handler", 0, b_empty_literal)
+
+    # One element: the body runs once and always fails -- KNOWN-ERROR, and a
+    # handler does not make it legal.
+    fn b_one_element() errors compiler::CompilerError:
+        static compile:
+            fn each(xs) errors Boom:
+                loop x in xs:
+                    fail Boom
+                0
+            each([1])
+    test::rejects("errors-one-element-literal-loop-known-error", compiler::DiagnosticCode::KnownError, b_one_element)
+
+    fn b_one_element_handled() errors compiler::CompilerError:
+        static compile:
+            fn each(xs) errors Boom:
+                loop x in xs:
+                    fail Boom
+                0
+            r = each([1]):
+                on Boom:
+                    1
+            r
+    test::rejects("errors-one-element-literal-loop-known-error/handled", compiler::DiagnosticCode::KnownError, b_one_element_handled)
+
+    # A List parameter is not the empty literal: g's own each(ys) needs a
+    # handler although g's only caller passes [] -- rejected there, at
+    # each(ys), not at the caller.
+    fn b_dynamic() errors compiler::CompilerError:
+        static compile:
+            fn each(xs) errors Boom:
+                loop x in xs:
+                    fail Boom
+                0
+            fn g(ys: List[int]) -> int:
+                each(ys)
+            g([])
+    test::rejects_at("errors-dynamic-list-loop-needs-handler", compiler::DiagnosticCode::UnhandledError, 82, 17, b_dynamic)
+
+    # Handled, it is accepted and runs: g([]) is 0, g([2]) takes the handler.
+    fn b_dynamic_handled() errors compiler::CompilerError:
+        static compile:
+            fn each(xs) errors Boom:
+                loop x in xs:
+                    fail Boom
+                0
+            fn g(ys: List[int]) -> int:
+                each(ys):
+                    on Boom:
+                        1
+            g([]) + g([2])
+    test::value("errors-dynamic-list-loop-needs-handler/handled", 1, b_dynamic_handled)
+
+    # The same fact gives the empty literal's size, zero, through the call:
+    # first([]) always fails, so even handled it is KNOWN-ERROR, exactly as
+    # a handled list::at([], 0) itself.
+    fn b_read_through_call() errors compiler::CompilerError:
+        static compile:
+            fn first(xs) errors IndexNotFound:
+                list::at(xs, 0)
+            r = first([]):
+                on IndexNotFound:
+                    5
+            r
+    test::rejects("errors-empty-literal-read-through-call-known-error", compiler::DiagnosticCode::KnownError, b_read_through_call)
+
+    fn b_read_direct() errors compiler::CompilerError:
+        static compile:
+            r = list::at([], 0):
+                on IndexNotFound:
+                    5
+            r
+    test::rejects("errors-empty-literal-read-through-call-known-error/direct", compiler::DiagnosticCode::KnownError, b_read_direct)
+
+    # byte::set's loop over its parameter sees the empty literal: no
+    # byte::AboveRange handler. A set has no text form: compared with `==`.
+    fn b_byte_set_empty() errors compiler::CompilerError:
+        static compile:
+            byte::set([]) == immutable_set::from_list([])
+    test::value("errors-byte-set-empty-literal-no-handler", true, b_byte_set_empty)
+
+# ---------------------------------------------------------------------------
+# errors.test: a loop's iteration domain is charged where it is written.
+
+# errors.test: what bang(n) below fails with, which no function declares.
+error Bang
+
+fn register_loop_domain_tests():
+    # The reproducer: f's loop x in g(n) -- the iterable call may fail Boom,
+    # which f does not declare, and f(1) always fails. The block reports
+    # KnownError at f(1) (f's iterable call is UnhandledError too); it used
+    # to be accepted and abort the suite with an uncaught Boom.
+    fn b_iterable_charged() errors compiler::CompilerError:
+        static compile:
+            fn g(n) errors Boom:
+                if n > 0:
+                    fail Boom
+                [1]
+            fn f(n):
+                loop x in g(n):
+                    0
+                0
+            f(1)
+    test::rejects_at("errors-loop-iterable-call-charged", compiler::DiagnosticCode::KnownError, 149, 13, b_iterable_charged)
+
+    # With an argument nothing decides: UnhandledError at the iterable call.
+    fn b_iterable_dynamic() errors compiler::CompilerError:
+        static compile:
+            fn g(n: int) -> List[int] errors Boom:
+                if n > 0:
+                    fail Boom
+                [1, 2]
+            fn f(n: int) -> int:
+                loop x in g(n):
+                    0
+                0
+            f(0)
+    test::rejects_at("errors-loop-iterable-call-charged/dynamic", compiler::DiagnosticCode::UnhandledError, 160, 27, b_iterable_dynamic)
+
+    # Handled: f declares Boom, its caller k handles it; the handler runs
+    # exactly when the iterable call fails (k(0) + k(1) is 5 + 7).
+    fn b_iterable_handled() errors compiler::CompilerError:
+        static compile:
+            fn g(n: int) -> List[int] errors Boom:
+                if n > 0:
+                    fail Boom
+                [1, 2]
+            fn f(n: int) -> int errors Boom:
+                loop x in g(n):
+                    0
+                5
+            fn k(m: int) -> int:
+                r = f(m):
+                    on Boom:
+                        7
+                r
+            k(0) + k(1)
+    test::value("errors-loop-iterable-handled-runs", 12, b_iterable_handled)
+
+    # An iterable call that always fails: the loop cannot complete --
+    # KnownError at the iterable call.
+    fn b_iterable_always() errors compiler::CompilerError:
+        static compile:
+            fn g(n: int) -> List[int] errors Boom:
+                if n > 0:
+                    fail Boom
+                [1, 2]
+            loop x in g(1):
+                0
+            0
+    test::rejects_at("errors-loop-iterable-always-fails-known-error", compiler::DiagnosticCode::KnownError, 194, 23, b_iterable_always)
+
+    # ... and in f's body, f's call handled: a handler does not make it legal.
+    fn b_iterable_always_handled() errors compiler::CompilerError:
+        static compile:
+            fn g(n: int) -> List[int] errors Boom:
+                if n > 0:
+                    fail Boom
+                [1, 2]
+            fn f() -> int errors Boom:
+                loop x in g(1):
+                    0
+                0
+            r = f():
+                on Boom:
+                    1
+            r
+    test::rejects("errors-loop-iterable-always-fails-known-error/handled", compiler::DiagnosticCode::KnownError, b_iterable_always_handled)
+
+    # Every loop form charges its domain where it is written: a collecting
+    # loop's iterable, a lockstep loop's list operand, a counted loop's
+    # bound, a consuming loop's MutableVector and MutableArray.
+    fn b_domain_collecting() errors compiler::CompilerError:
+        static compile:
+            fn g(n: int) -> List[int] errors Boom:
+                if n > 0:
+                    fail Boom
+                [1, 2]
+            fn f(n: int) -> List[int]:
+                loop x in g(n):
+                    x + 1
+            f(0)
+    test::rejects_at("errors-loop-domain-forms-charged/collecting", compiler::DiagnosticCode::UnhandledError, 226, 27, b_domain_collecting)
+
+    fn b_domain_lockstep() errors compiler::CompilerError:
+        static compile:
+            fn h(n: int) -> int errors Boom:
+                if n > 0:
+                    fail Boom
+                n
+            fn f(n: int) -> List[int]:
+                loop x in [h(n), 5] and i from 0 to 2:
+                    x + i
+            f(0)
+    test::rejects_at("errors-loop-domain-forms-charged/lockstep", compiler::DiagnosticCode::UnhandledError, 238, 28, b_domain_lockstep)
+
+    fn b_domain_counted() errors compiler::CompilerError:
+        static compile:
+            fn h(n: int) -> int errors Boom:
+                if n > 0:
+                    fail Boom
+                n
+            fn f(n: int) -> List[int]:
+                loop i from 0 to h(n):
+                    i
+            f(0)
+    test::rejects_at("errors-loop-domain-forms-charged/counted", compiler::DiagnosticCode::UnhandledError, 250, 34, b_domain_counted)
+
+    fn b_domain_vector() errors compiler::CompilerError:
+        static compile:
+            fn h(n: int) -> int errors Boom:
+                if n > 0:
+                    fail Boom
+                n
+            fn make(n: int) -> MutableVector[int] errors Boom:
+                mutable_vector::from_list([h(n), 2])
+            fn f(n: int) -> List[int]:
+                loop x in make(n):
+                    x
+            f(0)
+    test::rejects_at("errors-loop-domain-forms-charged/vector", compiler::DiagnosticCode::UnhandledError, 264, 27, b_domain_vector)
+
+    fn b_domain_array() errors compiler::CompilerError:
+        static compile:
+            fn h(n: int) -> int errors Boom:
+                if n > 0:
+                    fail Boom
+                n
+            fn make(n: int) -> MutableArray[int] errors Boom:
+                mutable_array::create(2, h(n))
+            fn f(n: int) -> List[int]:
+                loop x in make(n):
+                    x
+            f(0)
+    test::rejects_at("errors-loop-domain-forms-charged/array", compiler::DiagnosticCode::UnhandledError, 278, 27, b_domain_array)
+
+    # The lockstep loop handled by its caller runs.
+    fn b_domain_handled() errors compiler::CompilerError:
+        static compile:
+            fn h(n: int) -> int errors Boom:
+                if n > 0:
+                    fail Boom
+                n
+            fn f(n: int) -> List[int] errors Boom:
+                loop x in [h(n), 5] and i from 0 to 2:
+                    x + i
+            fn k(m: int) -> List[int]:
+                r = f(m):
+                    on Boom:
+                        [7]
+                r
+            [k(0), k(1)]
+    test::value("errors-loop-domain-forms-charged/handled", [[0, 6], [7]], b_domain_handled)
+
+    # A domain operand that always fails stops the loop there: h(1) always
+    # fails, so bang(n)'s undeclared Bang after it is never charged and f
+    # never completes -- KnownError at f's handled call f(0), the diagnostic
+    # the block reports (h(1) is KnownError too), no UnhandledError at
+    # bang(n).
+    fn b_never_counted() errors compiler::CompilerError:
+        static compile:
+            fn h(n: int) -> int errors Boom:
+                if n > 0:
+                    fail Boom
+                n
+            fn bang(n: int) -> int errors Bang:
+                if n > 0:
+                    fail Bang
+                n
+            fn f(n: int) -> List[int] errors Boom:
+                loop i from h(1) to bang(n):
+                    i
+            r = f(0):
+                on Boom:
+                    []
+            r
+    test::rejects_at("errors-loop-domain-never-stops-there/counted", compiler::DiagnosticCode::KnownError, 319, 17, b_never_counted)
+
+    fn b_never_lockstep() errors compiler::CompilerError:
+        static compile:
+            fn h(n: int) -> int errors Boom:
+                if n > 0:
+                    fail Boom
+                n
+            fn bang(n: int) -> int errors Bang:
+                if n > 0:
+                    fail Bang
+                n
+            fn f(n: int) -> List[int] errors Boom:
+                loop x in [h(1), 5] and y in [bang(n), 6]:
+                    x + y
+            r = f(0):
+                on Boom:
+                    []
+            r
+    test::rejects_at("errors-loop-domain-never-stops-there/lockstep", compiler::DiagnosticCode::KnownError, 338, 17, b_never_lockstep)
+
+    # The bound-first spelling of the reproducer and of the dynamic case:
+    # the same outcome as the inline one above (KnownError at f(1);
+    # UnhandledError at g(n)).
+    fn b_bound_reproducer() errors compiler::CompilerError:
+        static compile:
+            fn g(n) errors Boom:
+                if n > 0:
+                    fail Boom
+                [1]
+            fn f(n):
+                xs = g(n)
+                loop x in xs:
+                    0
+                0
+            f(1)
+    test::rejects_at("errors-loop-iterable-bound-first-agrees", compiler::DiagnosticCode::KnownError, 358, 13, b_bound_reproducer)
+
+    fn b_bound_dynamic() errors compiler::CompilerError:
+        static compile:
+            fn g(n: int) -> List[int] errors Boom:
+                if n > 0:
+                    fail Boom
+                [1, 2]
+            fn f(n: int) -> int:
+                xs = g(n)
+                loop x in xs:
+                    0
+                0
+            f(0)
+    test::rejects_at("errors-loop-iterable-bound-first-agrees/dynamic", compiler::DiagnosticCode::UnhandledError, 368, 22, b_bound_dynamic)
+
+fn register_completion_regressions_tests():
+    register_empty_literal_loop_tests()
+    register_loop_domain_tests()
+
+with context test::suite()
+register_completion_regressions_tests()
+test::report()

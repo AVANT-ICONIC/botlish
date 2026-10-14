@@ -1,0 +1,1810 @@
+# core-semantics.bot -- ordinary values and evaluation, as a source-level
+# specification: bindings are single-assignment and lexically scoped (a name
+# is visible from its binding on, a nested scope may shadow it and never
+# changes the outer binding, a scope may not bind a name twice); functions
+# are values whose body runs only when called, with fresh immutable parameter
+# bindings per call, closing over the bindings of their definition site (never
+# their caller's); calls of natives compute arbitrary-precision Int
+# arithmetic, comparisons, structural `==` and kind tests; `if`, `elif`,
+# `return`, `break` and `continue` select and leave code as written; and the
+# compiler's inference never changes what a program computes.
+#
+# Ported from tests/acceptance.test, tests/bindings.test, tests/blocks.test,
+# tests/calls.test, tests/control.test, tests/surface-samples.test,
+# tests/inference.test and tests/elif.test (their tests already in values.bot
+# are not repeated here). The Tcl tests stay authoritative and unchanged.
+#
+# Conventions:
+#
+# * Most Tcl tests of bindings, blocks, calls, control and inference are
+#   hand-written core IR programs run unchecked on one backend. Each is
+#   written here in source syntax with the same binding structure (an
+#   immediately called core IR block is a nested function called once), and
+#   compiled strictly. A core IR scoping error (UNBOUND, DUPLICATE) that the
+#   Tcl interpreter raises when it reaches it is, in source, a static
+#   diagnostic of the block, read with test::rejects_at at the name it is
+#   about.
+# * Evaluation order and "this code does not run" are observed with a
+#   coroutine log, as in values.bot: a probe `yield`s its argument, and the
+#   body drives the coroutine, collecting [FIRST, REST] -- FIRST the first
+#   yielded value, REST every later yield followed by the final result. A
+#   coroutine needs a reachable yield, so a program whose only probe is dead
+#   code gets one more probe before it.
+# * Tests about the run-time behaviour of a native (arithmetic, comparison,
+#   `==`, integer?) take their operands as parameters of their registration
+#   function, so no exact-value fact or decided type test stands in for the
+#   native; operands of `==` and integer? are `any`, so not even their kinds
+#   are known statically. Tests about inference keep the Tcl program's
+#   literals, except where per-kind specialization would decide the very
+#   check under test (then the arguments are `any` parameters too) and where
+#   the values must be computed at run time to be in unboxed registers.
+# * Source cannot name an operator (`+`, `*`) as a value: a Tcl test that
+#   binds, aliases or shadows one uses the named native `mod` (same
+#   int x int -> int shape) or `integer?` instead.
+# * elif.test runs each program in its elif spelling and its nested if/else
+#   spelling, which must agree: each spelling is a golden test here, suffixed
+#   /elif and /nested, with the same expected value.
+#
+# Imports: compiler and test (the framework); coroutine (coroutine::done? in
+# the coroutine-log driver); list (elif-same-nir-construction's
+# list::length); mathish (examples/surface/14-modules.bot); mutable_array
+# (elif-continue-and-break's accumulator); str (surface-run-strings'
+# str::length).
+import compiler
+import coroutine
+import list
+import mathish
+import mutable_array
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations (top-level only)
+
+# elif.test: elif-branch-values-struct's Point.
+struct Point:
+    x: int
+    y: int
+
+# elif.test: the error of elif-fail-propagates, elif-fail-unhandled and
+# elif-same-nir-completions (every program there declares its own Boom).
+error Boom
+
+# ---------------------------------------------------------------------------
+# Bindings and lexical scope (bindings.test)
+
+fn register_binding_tests():
+    # bind-1: a binding's name denotes its value after it.
+    fn b_binding_and_lookup() errors compiler::CompilerError:
+        static compile:
+            x = 10
+            x
+    test::value("binding-and-lookup", 10, b_binding_and_lookup)
+
+    # bind-2: a binding is an expression whose value is the bound value: a
+    # block ending in one has that value.
+    fn b_binding_value() errors compiler::CompilerError:
+        static compile:
+            x = 7
+    test::value("binding-evaluates-to-bound-value", 7, b_binding_value)
+
+    # bind-3: binding is not assignment: a second binding of x in the same
+    # scope is rejected, at the second binding.
+    fn b_duplicate_binding() errors compiler::CompilerError:
+        static compile:
+            x = 10
+            x = 20
+            x
+    test::rejects_at("duplicate-binding-rejected", compiler::DiagnosticCode::Duplicate, 96, 13, b_duplicate_binding)
+
+    # bind-4: a name nothing binds is rejected.
+    fn b_unbound_name() errors compiler::CompilerError:
+        static compile:
+            nope
+    test::rejects_at("unbound-name-rejected", compiler::DiagnosticCode::Unbound, 103, 13, b_unbound_name)
+
+    # bind-5: a nested scope may shadow x; the outer x is unaffected.
+    fn b_nested_shadowing() errors compiler::CompilerError:
+        static compile:
+            x = 10
+            fn g():
+                x = 20
+                x
+            inner = g()
+            [inner, x]
+    test::value("nested-scope-shadows-outer-binding", [20, 10], b_nested_shadowing)
+
+    # bind-6: a function nested two levels deep reads the outermost x.
+    fn b_outer_lookup() errors compiler::CompilerError:
+        static compile:
+            x = 10
+            fn a():
+                fn b():
+                    x
+                b()
+            a()
+    test::value("outer-lexical-lookup", 10, b_outer_lookup)
+
+    # bind-9: a name is visible only from its binding on: f's `later` is
+    # bound after the call that would read it.
+    fn b_use_before_binding() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                later
+            early = f()
+            later = 1
+            early
+    test::rejects_at("use-before-binding-is-unbound", compiler::DiagnosticCode::Unbound, 133, 17, b_use_before_binding)
+
+    # scope-hir-1: h's x is the outer x (1): g's own x is bound only after
+    # h is defined and called, and references resolve sequentially.
+    fn b_outer_before_inner() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            fn g():
+                fn h():
+                    x
+                y = h()
+                x = 2
+                y
+            g()
+    test::value("closure-sees-outer-binding-before-inner-one", 1, b_outer_before_inner)
+
+    # scope-hir-2: a binding's own expression sees the outer binding of the
+    # name it binds.
+    fn b_binding_sees_outer_name() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            fn g():
+                x = x + 10
+                x
+            g()
+    test::value("binding-expression-sees-outer-name", 11, b_binding_sees_outer_name)
+
+    # scope-hir-3: mutual recursion is a forward reference: even? names
+    # odd?, which is bound after it.
+    fn b_mutual_recursion() errors compiler::CompilerError:
+        static compile:
+            fn even?(n):
+                if n == 0:
+                    true
+                else:
+                    odd?(n - 1)
+            fn odd?(n):
+                if n == 0:
+                    false
+                else:
+                    even?(n - 1)
+            even?(4)
+    test::rejects_at("mutual-recursion-is-a-forward-reference", compiler::DiagnosticCode::Unbound, 172, 21, b_mutual_recursion)
+
+# ---------------------------------------------------------------------------
+# Functions, parameters and closures (blocks.test, bindings.test,
+# acceptance.test, surface-samples.test)
+
+fn register_function_tests():
+    # acceptance-1 (examples/01-adder.ir): make_adder returns a closure over
+    # x; the selected branch calls it.
+    fn b_adder() errors compiler::CompilerError:
+        static compile:
+            fn make_adder(x):
+                fn add(y):
+                    x + y
+                add
+            add10 = make_adder(10)
+            result = if integer?(41):
+                add10(32)
+            else:
+                0
+            result
+    test::value("acceptance-01-adder", 42, b_adder)
+
+    # acceptance-3 (examples/03-lexical-closure.ir): f sees the x of its
+    # definition site (10), not the x of its caller g (20).
+    fn b_lexical_closure() errors compiler::CompilerError:
+        static compile:
+            x = 10
+            fn f():
+                x
+            fn g():
+                x = 20
+                f()
+            g()
+    test::value("acceptance-03-lexical-closure", 10, b_lexical_closure)
+
+    # surface-run-lexical-scope: the same property with get and caller.
+    fn b_surface_lexical_scope() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            fn get():
+                x
+            fn caller():
+                x = 2
+                get()
+            caller()
+    test::value("surface-run-lexical-scope", 1, b_surface_lexical_scope)
+
+    # block-1: declaring a function does not run its body: f's probe 1 would
+    # be yielded before the program's own probe 2.
+    fn b_declaration_does_not_run() errors compiler::CompilerError:
+        static compile:
+            fn log(n: int) -> int:
+                yield n
+                n
+            fn program() -> int:
+                fn f(x, y):
+                    log(1)
+                log(2)
+                7
+            coroutine {step, first} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value("function-declaration-does-not-run-body", [2, [7]], b_declaration_does_not_run)
+
+    # block-3: a call runs the body with the parameters bound to the
+    # arguments, in order.
+    fn b_call_binds_parameters() errors compiler::CompilerError:
+        static compile:
+            fn f(x, y):
+                x - y
+            f(10, 3)
+    test::value("call-binds-parameters", 7, b_call_binds_parameters)
+
+    # block-5: a function's value is its final expression.
+    fn b_final_expression() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                x = 10
+                y = x + 1
+                y
+            f()
+    test::value("function-value-is-final-expression", 11, b_final_expression)
+
+    # bind-8: a function sees its own binding: it may call itself.
+    fn b_self_recursion() errors compiler::CompilerError:
+        static compile:
+            fn fact(n):
+                if n <= 1:
+                    1
+                else:
+                    n * fact(n - 1)
+            fact(20)
+    test::value("function-sees-own-binding-for-recursion", 2432902008176640000, b_self_recursion)
+
+    # closure-1: each closure keeps its own captured x.
+    fn b_closures_capture() errors compiler::CompilerError:
+        static compile:
+            fn make_adder(x):
+                fn add(y):
+                    x + y
+                add
+            add10 = make_adder(10)
+            add5 = make_adder(5)
+            [add10(1), add5(1)]
+    test::value("closure-captures-lexical-value", [11, 6], b_closures_capture)
+
+    # closure-3: a name local to the caller is not visible to the callee.
+    fn b_caller_locals_invisible() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                secret
+            fn h():
+                secret = 1
+                f()
+            h()
+    test::rejects_at("caller-locals-invisible-to-callee", compiler::DiagnosticCode::Unbound, 293, 17, b_caller_locals_invisible)
+
+    # params-1: a parameter is an immutable binding of the body's scope.
+    fn b_parameter_rebinding() errors compiler::CompilerError:
+        static compile:
+            fn g(x):
+                x = 2
+            g(1)
+    test::rejects_at("parameters-are-immutable-bindings", compiler::DiagnosticCode::Duplicate, 304, 17, b_parameter_rebinding)
+
+    # scope-6: the same when a closure over the parameter comes first.
+    fn b_parameter_rebinding_after_closure() errors compiler::CompilerError:
+        static compile:
+            fn g(x):
+                fn f():
+                    x
+                x = 2
+            g(1)
+    test::rejects_at("parameter-rebinding-after-closure-is-duplicate", compiler::DiagnosticCode::Duplicate, 314, 17, b_parameter_rebinding_after_closure)
+
+    # params-2: a parameter shadows an outer binding of its name.
+    fn b_parameter_shadows() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            fn f(x):
+                x
+            f(2)
+    test::value("parameters-shadow-outer-bindings", 2, b_parameter_shadows)
+
+    # params-3: two parameters may not share a name. (The diagnostic stands
+    # at the parameter list, not at the second x: only its code is the
+    # property.)
+    fn b_duplicate_parameters() errors compiler::CompilerError:
+        static compile:
+            fn g(x, x):
+                x
+            g(1, 2)
+    test::rejects("duplicate-parameter-names-rejected", compiler::DiagnosticCode::Duplicate, b_duplicate_parameters)
+
+    # params-4: every call binds the parameters afresh.
+    fn b_fresh_parameters() errors compiler::CompilerError:
+        static compile:
+            fn id(x):
+                x
+            [id(1), id(2)]
+    test::value("fresh-parameter-bindings-per-call", [1, 2], b_fresh_parameters)
+
+# ---------------------------------------------------------------------------
+# Natives: arithmetic, comparison, equality, kind tests, lists (calls.test,
+# bindings.test, surface-samples.test)
+
+# arith-1: + - * of Ints (operands A, B, C).
+fn register_arithmetic_test(a: int, b: int, c: int):
+    fn b_arithmetic() errors compiler::CompilerError:
+        static compile:
+            [a + b, a - b, c * b]
+    test::value("int-add-subtract-multiply", [5, -1, -12], b_arithmetic)
+
+# compare-1: comparisons produce Booleans, also of Ints beyond 64 bits.
+fn register_comparison_test(one: int, two: int, big: int, smaller: int):
+    fn b_comparisons() errors compiler::CompilerError:
+        static compile:
+            [one < two, two <= two, one > two, big >= smaller]
+    test::value("comparisons-return-booleans", [true, true, false, true], b_comparisons)
+
+# One `==` of LEFT and RIGHT, whose kinds only the run-time native sees.
+fn register_equality(name: str, left: any, right: any, expected: bool):
+    fn b_equality() errors compiler::CompilerError:
+        static compile:
+            left == right
+    test::value(name, expected, b_equality)
+
+# One integer? of VALUE, whose kind only the run-time native sees.
+fn register_integer_predicate(name: str, value: any, expected: bool):
+    fn b_integer_predicate() errors compiler::CompilerError:
+        static compile:
+            integer?(value)
+    test::value(name, expected, b_integer_predicate)
+
+fn register_native_tests():
+    register_arithmetic_test(2, 3, -4)
+    register_comparison_test(1, 2, 100000000000000000000, 99999999999999999999)
+
+    # equal-1: == on Ints and Strings.
+    register_equality("equality-on-ints-and-strings/equal-ints", 42, 42, true)
+    register_equality("equality-on-ints-and-strings/unequal-ints", 42, 43, false)
+    register_equality("equality-on-ints-and-strings/equal-strings", "abc", "abc", true)
+    # equal-2: == distinguishes kinds: the Int 10 is not the String "10".
+    register_equality("equality-distinguishes-int-from-string", 10, "10", false)
+    # equal-3: == is structural on Lists.
+    register_equality("equality-structural-on-lists/equal", [1, 2], [1, 2], true)
+    register_equality("equality-structural-on-lists/longer", [1, 2], [1, 2, 3], false)
+    # equal-4: == on Booleans, and on unit (the value of an if without else
+    # whose condition is false).
+    register_equality("equality-on-booleans-and-unit/true-true", true, true, true)
+    register_equality("equality-on-booleans-and-unit/true-false", true, false, false)
+    fn b_unit_equality() errors compiler::CompilerError:
+        static compile:
+            fn nothing(flag):
+                if flag:
+                    1
+            unit == nothing(false)
+    test::value("equality-on-booleans-and-unit/unit", true, b_unit_equality)
+    # eq-removed-1: String equality is the ordinary ==, which never coerces
+    # across kinds.
+    register_equality("string-equality-is-ordinary-equality/equal", "abc", "abc", true)
+    register_equality("string-equality-is-ordinary-equality/unequal", "abc", "abd", false)
+    register_equality("string-equality-is-ordinary-equality/digit-strings", "10", "10", true)
+    register_equality("string-equality-is-ordinary-equality/int-and-digit-string", 10, "10", false)
+
+    # eq-removed-2: there is no `eq`: the name is an ordinary unbound one.
+    fn b_no_eq() errors compiler::CompilerError:
+        static compile:
+            eq("abc", "abc")
+    test::rejects_at("no-eq-native", compiler::DiagnosticCode::Unbound, 411, 13, b_no_eq)
+
+    # integerp-1: integer? is true of Ints only.
+    register_integer_predicate("integer-predicate/positive-int", 41, true)
+    register_integer_predicate("integer-predicate/negative-int", -7, true)
+    register_integer_predicate("integer-predicate/string", "hello", false)
+    register_integer_predicate("integer-predicate/digit-string", "41", false)
+    register_integer_predicate("integer-predicate/bool", true, false)
+
+    # list-1: a List literal holds its elements in order, an empty List
+    # among them.
+    fn b_list_literal() errors compiler::CompilerError:
+        static compile:
+            [1, "a", []]
+    test::value("list-literal-elements", [1, "a", []], b_list_literal)
+
+    # bind-7: a root binding is ordinary and may be shadowed: a block-local
+    # mod is called instead of the native.
+    fn b_shadowed_native() errors compiler::CompilerError:
+        static compile:
+            fn mod(a, b):
+                "shadowed"
+            mod(1, 2)
+    test::value("root-native-may-be-shadowed", "shadowed", b_shadowed_native)
+
+    # surface-run-strings: String escapes reach the run time as one
+    # character each (a tab, a quotation mark, a backslash).
+    fn b_string_escapes() errors compiler::CompilerError:
+        static compile:
+            [str::length("a\tb"), str::length("q\""), str::length("\\"), str::length("")]
+    test::value("surface-run-strings", [3, 2, 1, 0], b_string_escapes)
+
+# ---------------------------------------------------------------------------
+# if and return (control.test, surface-samples.test)
+
+# if-2: exactly one branch runs (CONDITION is decided at run time).
+fn register_branch_execution_test(condition: bool):
+    fn b_one_branch() errors compiler::CompilerError:
+        static compile:
+            fn log(s: str) -> str:
+                yield s
+                s
+            fn program() -> str:
+                if condition:
+                    log("then")
+                else:
+                    log("else")
+            coroutine {step, first} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value("if-runs-exactly-one-branch", ["then", ["then"]], b_one_branch)
+
+fn register_control_tests():
+    # if-1: an if's value is its selected branch's.
+    fn b_if_value() errors compiler::CompilerError:
+        static compile:
+            fn sign(n):
+                if n > 0:
+                    "positive"
+                else:
+                    "nonpositive"
+            [sign(5), sign(-5)]
+    test::value("if-value-is-selected-branch", ["positive", "nonpositive"], b_if_value)
+
+    register_branch_execution_test(true)
+
+    # if-3: an if whose condition is false and that has no else is unit.
+    fn b_missing_branch() errors compiler::CompilerError:
+        static compile:
+            if false:
+                1
+    test::value("if-missing-branch-is-unit", unit, b_missing_branch)
+
+    # if-6: a binding made in a branch does not escape it.
+    fn b_branch_binding() errors compiler::CompilerError:
+        static compile:
+            if true:
+                y = 1
+            y
+    test::rejects_at("branch-binding-does-not-escape", compiler::DiagnosticCode::Unbound, 493, 13, b_branch_binding)
+
+    # if-7: a branch's value escapes it as the if's value.
+    fn b_branch_value() errors compiler::CompilerError:
+        static compile:
+            v = if true:
+                y = 1
+                y + 1
+            v
+    test::value("branch-value-escapes", 2, b_branch_value)
+
+    # if-8: a branch may bind a name that exists outside it; the outer
+    # binding is untouched.
+    fn b_branch_shadows() errors compiler::CompilerError:
+        static compile:
+            y = "outer"
+            inner = if true:
+                y = "inner"
+                y
+            [inner, y]
+    test::value("branch-may-shadow-outer-name", ["inner", "outer"], b_branch_shadows)
+
+    # surface-run-duplicate-in-branch: a branch is one scope: binding y
+    # twice in it is rejected, at the second binding.
+    fn b_duplicate_in_branch() errors compiler::CompilerError:
+        static compile:
+            if true:
+                y = 1
+                y = 2
+    test::rejects_at("surface-run-duplicate-in-branch", compiler::DiagnosticCode::Duplicate, 522, 17, b_duplicate_in_branch)
+
+    # return-1: return leaves the function with its value; what follows is
+    # not its value.
+    fn b_return_value() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                return 10
+                20
+            f()
+    test::value("return-exits-with-value", 10, b_return_value)
+
+    # return-3: a return in a branch leaves the whole function: the probe
+    # after the if never runs (the trace is the result alone).
+    fn b_return_in_branch() errors compiler::CompilerError:
+        static compile:
+            fn log(s: str) -> str:
+                yield s
+                s
+            fn f(x: int) -> str:
+                if x < 0:
+                    return "negative"
+                log("continued")
+                "nonnegative"
+            coroutine {step, first} = f(-1)
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value("return-in-branch-exits-function", ["negative", []], b_return_in_branch)
+
+    # return-4: return leaves only the innermost call: the caller goes on.
+    fn b_return_innermost() errors compiler::CompilerError:
+        static compile:
+            fn inner():
+                return 1
+                2
+            fn outer():
+                r = inner()
+                r + 100
+            outer()
+    test::value("return-leaves-innermost-call-only", 101, b_return_innermost)
+
+    # surface-run-abs: branch values, and unary minus of a call's result.
+    fn b_abs() errors compiler::CompilerError:
+        static compile:
+            fn abs(x):
+                if x < 0:
+                    0 - x
+                else:
+                    x
+            [abs(-3), abs(4), -abs(-5)]
+    test::value("surface-run-abs", [3, 4, -5], b_abs)
+
+    # surface-run-missing-else: an if without else is unit when its
+    # condition is false.
+    fn b_missing_else() errors compiler::CompilerError:
+        static compile:
+            fn f(flag):
+                if flag:
+                    1
+            [f(true), f(false)]
+    test::value("surface-run-missing-else", [1, unit], b_missing_else)
+
+# ---------------------------------------------------------------------------
+# The sample programs (examples/surface/*.bot with an `# expect:` or
+# `# expect-error:` outcome, surface-samples.test; each golden test covers the
+# sample's -interp- and -compile- tests). A sample's top-level statements are
+# the block's.
+
+fn register_sample_program_tests():
+    # 01-arithmetic: * binds tighter than +.
+    fn b_01_arithmetic() errors compiler::CompilerError:
+        static compile:
+            x = 10
+            y = 20
+            x + y * 2
+    test::value("01-arithmetic", 50, b_01_arithmetic)
+
+    # 02-recursion: recursion through the function's own binding.
+    fn b_02_recursion() errors compiler::CompilerError:
+        static compile:
+            fn fib(n):
+                if n <= 1:
+                    return n
+
+                fib(n - 1) + fib(n - 2)
+
+            fib(10)
+    test::value("02-recursion", 55, b_02_recursion)
+
+    # 04-branch-value: the selected branch of a final if is the function's
+    # value.
+    fn b_04_branch_value() errors compiler::CompilerError:
+        static compile:
+            fn choose(flag):
+                if flag:
+                    10
+                else:
+                    20
+
+            choose(false)
+    test::value("04-branch-value", 20, b_04_branch_value)
+
+    # 05-shadowing: a branch's x shadows the outer x without changing it.
+    fn b_05_shadowing() errors compiler::CompilerError:
+        static compile:
+            x = 1
+
+            if true:
+                x = 2
+                x
+
+            x
+    test::value("05-shadowing", 1, b_05_shadowing)
+
+    # 06-list: List literals call the list constructor.
+    fn b_06_list() errors compiler::CompilerError:
+        static compile:
+            x = 2
+            [1, x, x + 1]
+    test::value("06-list", [1, 2, 3], b_06_list)
+
+    # 08-return: an early return from a branch or from inside a loop leaves
+    # the whole function.
+    fn b_08_return() errors compiler::CompilerError:
+        static compile:
+            fn abs(x):
+                if x < 0:
+                    return -x
+                x
+
+            fn first_positive(a, b):
+                loop:
+                    if a > 0:
+                        return a
+                    return b
+
+            [abs(-7), abs(0), first_positive(-1, 3)]
+    test::value("08-return", [7, 0, 3], b_08_return)
+
+    # 09-mutual-recursion: is_even names is_odd, which is bound after it.
+    fn b_09_mutual_recursion() errors compiler::CompilerError:
+        static compile:
+            fn is_even(n):
+                if n == 0:
+                    return true
+                is_odd(n - 1)
+
+            fn is_odd(n):
+                if n == 0:
+                    return false
+                is_even(n - 1)
+
+            [is_even(10), is_even(7)]
+    test::rejects_at("09-mutual-recursion", compiler::DiagnosticCode::Unbound, 671, 17, b_09_mutual_recursion)
+
+    # 10-duplicate-binding: binding is not assignment.
+    fn b_10_duplicate_binding() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            x = 2
+    test::rejects_at("10-duplicate-binding", compiler::DiagnosticCode::Duplicate, 685, 13, b_10_duplicate_binding)
+
+    # 11-boolean-operators: and, or and not short-circuit and produce
+    # Booleans; != is the negation of ==.
+    fn b_11_boolean_operators() errors compiler::CompilerError:
+        static compile:
+            fn between(x, low, high):
+                low <= x and x <= high
+
+            fn outside(x, low, high):
+                not x.between(low, high)
+
+            [5.between(1, 10), 5.outside(1, 10), 3 != 4, false or 1 == 1]
+    test::value("11-boolean-operators", [true, false, true, true], b_11_boolean_operators)
+
+    # 12-if-value: an if is the value of a binding.
+    fn b_12_if_value() errors compiler::CompilerError:
+        static compile:
+            fn describe(n):
+                word = if n < 0:
+                    "negative"
+                else:
+                    if n == 0:
+                        "zero"
+                    else:
+                        "positive"
+                word
+
+            [describe(-3), describe(0), describe(8)]
+    test::value("12-if-value", ["negative", "zero", "positive"], b_12_if_value)
+
+    # 14-modules: a module-qualified call of an ordinary cross-file function
+    # (lib/mathish.bot), from two call sites.
+    fn b_14_modules() errors compiler::CompilerError:
+        static compile:
+            [mathish::inc(41), mathish::inc(1)]
+    test::value("14-modules", [42, 2], b_14_modules)
+
+# ---------------------------------------------------------------------------
+# Inference never changes meaning (inference.test: an interp/compile
+# differential there; here every backend must produce the value they agree
+# on)
+
+# The tests whose function would otherwise be specialized per argument kind,
+# deciding statically the very type test under test: ONE (1), ONE_TEXT
+# ("one") and FIVE (5) are `any`.
+fn register_inference_fact_tests(one: any, one_text: any, five: any):
+    # inference-refinement-does-not-leak-out-of-branch: integer?(x) refines
+    # x only inside its branch.
+    fn b_refinement_does_not_leak() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                if integer?(x):
+                    "int"
+                [integer?(x), string?(x)]
+            [f(one), f(one_text)]
+    test::value("inference-refinement-does-not-leak-out-of-branch", [[true, false], [false, true]], b_refinement_does_not_leak)
+
+    # inference-fact-holds-after-a-check: after x + 0 succeeds, x is an Int.
+    fn b_fact_after_check() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                x + 0
+                integer?(x)
+            f(five)
+    test::value("inference-fact-holds-after-a-check", true, b_fact_after_check)
+
+# inference-unboxed-values-escape-boxed: a Bool and an Int computed from
+# the Ints ONE and TWO (natively in unboxed registers) are ordinary values
+# once they escape into a List.
+fn register_unboxed_escape_test(one: int, two: int):
+    fn b_unboxed_escape() errors compiler::CompilerError:
+        static compile:
+            b = one < two
+            n = one + two
+            [b, n, b == true]
+    test::value("inference-unboxed-values-escape-boxed", [true, 3, true], b_unboxed_escape)
+
+fn register_inference_tests():
+    register_inference_fact_tests(1, "one", 5)
+
+    # inference-recursive-result-type: f's result is the String of its base
+    # case, through the recursion.
+    fn b_recursive_result() errors compiler::CompilerError:
+        static compile:
+            fn f(n):
+                if n == 0:
+                    "done"
+                else:
+                    f(n - 1)
+            string?(f(3))
+    test::value("inference-recursive-result-type", true, b_recursive_result)
+
+    # inference-return-and-fallthrough-types: f returns an Int from inside
+    # the loop or falls through to a String.
+    fn b_return_and_fallthrough() errors compiler::CompilerError:
+        static compile:
+            fn f(flag):
+                loop:
+                    if flag:
+                        return 1
+                    break
+                "one"
+            [integer?(f(true)), integer?(f(false))]
+    test::value("inference-return-and-fallthrough-types", [true, false], b_return_and_fallthrough)
+
+    # inference-shadowed-native-at-program-level: a block-local integer? is
+    # called, not the native the compiler folds.
+    fn b_shadowed_predicate() errors compiler::CompilerError:
+        static compile:
+            fn integer?(v):
+                "shadowed"
+            integer?(1)
+    test::value("inference-shadowed-native-at-program-level", "shadowed", b_shadowed_predicate)
+
+    # inference-aliased-native: a native called through an alias binding.
+    fn b_aliased_native() errors compiler::CompilerError:
+        static compile:
+            plus = mod
+            plus(47, 5)
+    test::value("inference-aliased-native", 2, b_aliased_native)
+
+    register_unboxed_escape_test(1, 2)
+
+    # inference-branch-representations-join: one branch is a Bool, the other
+    # an Int.
+    fn b_branch_join() errors compiler::CompilerError:
+        static compile:
+            fn f(flag):
+                if flag:
+                    1 < 2
+                else:
+                    1 + 1
+            [f(true), f(false)]
+    test::value("inference-branch-representations-join", [true, 2], b_branch_join)
+
+    # inference-constant-condition: a decided kind test selects its branch;
+    # the other branch's probe "no" never runs ("start" is the probe that
+    # makes the program a coroutine).
+    fn b_constant_condition() errors compiler::CompilerError:
+        static compile:
+            fn log(s: str) -> str:
+                yield s
+                s
+            fn program() -> str:
+                log("start")
+                x = 5
+                if integer?(x):
+                    "yes"
+                else:
+                    log("no")
+            coroutine {step, first} = program()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value("inference-constant-condition", ["start", ["yes"]], b_constant_condition)
+
+    # inference-equality-across-kinds: == of values of different kinds is
+    # false, and of equal values true, whatever the compiler knows of them.
+    fn b_equality_across_kinds() errors compiler::CompilerError:
+        static compile:
+            [1 == "1", unit == unit, true == (2 < 1), "a" == "a"]
+    test::value("inference-equality-across-kinds", [false, true, false, true], b_equality_across_kinds)
+
+    # inference-deep-bignum: 7^90 through recursion.
+    fn b_deep_bignum() errors compiler::CompilerError:
+        static compile:
+            fn pow(b, e):
+                if e == 0:
+                    1
+                else:
+                    b * pow(b, e - 1)
+            pow(7, 90)
+    test::value("inference-deep-bignum", 11450477594321044359340126713545146077054004823284978858214566372120240027249, b_deep_bignum)
+
+# ---------------------------------------------------------------------------
+# elif (elif.test)
+
+# Which branch runs.
+fn register_elif_selection_tests():
+    # elif-first-condition: the first true condition selects the first
+    # branch.
+    fn b_first() errors compiler::CompilerError:
+        static compile:
+            if true:
+                1
+            elif true:
+                2
+            else:
+                3
+    test::value("elif-first-condition", 1, b_first)
+
+    # elif-second-condition: the first false and the second true select the
+    # elif branch.
+    fn b_second() errors compiler::CompilerError:
+        static compile:
+            if false:
+                1
+            elif true:
+                2
+            else:
+                3
+    test::value("elif-second-condition", 2, b_second)
+
+    # elif-else-branch: every condition false selects the else branch.
+    fn b_else() errors compiler::CompilerError:
+        static compile:
+            if false:
+                1
+            elif false:
+                2
+            else:
+                3
+    test::value("elif-else-branch", 3, b_else)
+
+    # elif-multiple-clauses: with four conditions every branch is reachable
+    # and the first true condition wins.
+    fn b_multiple_elif() errors compiler::CompilerError:
+        static compile:
+            fn pick(a, b, c, d):
+                if a:
+                    1
+                elif b:
+                    2
+                elif c:
+                    3
+                elif d:
+                    4
+                else:
+                    5
+            [pick(true, false, false, false), pick(false, true, false, false),
+             pick(false, false, true, false), pick(false, false, false, true), pick(false, false, false, false),
+             pick(true, true, true, true), pick(false, true, true, true), pick(false, false, true, true)]
+    test::value("elif-multiple-clauses/elif", [1, 2, 3, 4, 5, 1, 2, 3], b_multiple_elif)
+    fn b_multiple_nested() errors compiler::CompilerError:
+        static compile:
+            fn pick(a, b, c, d):
+                if a:
+                    1
+                else:
+                    if b:
+                        2
+                    else:
+                        if c:
+                            3
+                        else:
+                            if d:
+                                4
+                            else:
+                                5
+            [pick(true, false, false, false), pick(false, true, false, false),
+             pick(false, false, true, false), pick(false, false, false, true), pick(false, false, false, false),
+             pick(true, true, true, true), pick(false, true, true, true), pick(false, false, true, true)]
+    test::value("elif-multiple-clauses/nested", [1, 2, 3, 4, 5, 1, 2, 3], b_multiple_nested)
+
+    # elif-without-else: a chain without a final else is unit when every
+    # condition is false.
+    fn b_without_else_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                if a:
+                    1
+                elif b:
+                    2
+                elif c:
+                    3
+            [f(true, false, false), f(false, true, false), f(false, false, true), f(false, false, false)]
+    test::value("elif-without-else/elif", [1, 2, 3, unit], b_without_else_elif)
+    fn b_without_else_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                if a:
+                    1
+                else:
+                    if b:
+                        2
+                    else:
+                        if c:
+                            3
+            [f(true, false, false), f(false, true, false), f(false, false, true), f(false, false, false)]
+    test::value("elif-without-else/nested", [1, 2, 3, unit], b_without_else_nested)
+
+# An elif chain as an expression.
+fn register_elif_expression_tests():
+    # elif-bound-value: a chain is the value of a binding, usable afterwards.
+    fn b_bound_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                x = if a:
+                    10
+                elif b:
+                    20
+                else:
+                    30
+                x + 1
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-bound-value/elif", [11, 21, 31], b_bound_elif)
+    fn b_bound_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                x = if a:
+                    10
+                else:
+                    if b:
+                        20
+                    else:
+                        30
+                x + 1
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-bound-value/nested", [11, 21, 31], b_bound_nested)
+
+    # elif-returned-value: a chain is the value of a return.
+    fn b_returned_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                return if a:
+                    1
+                elif b:
+                    2
+                else:
+                    3
+                99
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-returned-value/elif", [1, 2, 3], b_returned_elif)
+    fn b_returned_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                return if a:
+                    1
+                else:
+                    if b:
+                        2
+                    else:
+                        3
+                99
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-returned-value/nested", [1, 2, 3], b_returned_nested)
+
+    # elif-top-level-value: a chain at the top level of the program is its
+    # value.
+    fn b_top_level_elif() errors compiler::CompilerError:
+        static compile:
+            x = 5
+            if x < 0:
+                -1
+            elif x == 0:
+                0
+            elif x < 10:
+                1
+            else:
+                2
+    test::value("elif-top-level-value/elif", 1, b_top_level_elif)
+    fn b_top_level_nested() errors compiler::CompilerError:
+        static compile:
+            x = 5
+            if x < 0:
+                -1
+            else:
+                if x == 0:
+                    0
+                else:
+                    if x < 10:
+                        1
+                    else:
+                        2
+    test::value("elif-top-level-value/nested", 1, b_top_level_nested)
+
+    # elif-order-without-else: with no else and every condition false, the
+    # conditions run once each, in written order, and no branch body runs
+    # (probes 4, 5, 6); the chain's value is unit. The Tcl value
+    # [unit, 123] is the trace [1, [2, 3, unit]] here.
+    fn b_order_without_else_elif() errors compiler::CompilerError:
+        static compile:
+            fn probe(id: int, result: bool):
+                yield id
+                result
+            fn run():
+                v = if probe(1, false):
+                    probe(4, true)
+                elif probe(2, false):
+                    probe(5, true)
+                elif probe(3, false):
+                    probe(6, true)
+                v
+            coroutine {step, first} = run()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value("elif-order-without-else/elif", [1, [2, 3, unit]], b_order_without_else_elif)
+    fn b_order_without_else_nested() errors compiler::CompilerError:
+        static compile:
+            fn probe(id: int, result: bool):
+                yield id
+                result
+            fn run():
+                v = if probe(1, false):
+                    probe(4, true)
+                else:
+                    if probe(2, false):
+                        probe(5, true)
+                    else:
+                        if probe(3, false):
+                            probe(6, true)
+                v
+            coroutine {step, first} = run()
+            rest = loop i from 0 to 10:
+                if coroutine::done?(step):
+                    break
+                step()
+            [first, rest]
+    test::value("elif-order-without-else/nested", [1, [2, 3, unit]], b_order_without_else_nested)
+
+# Ownership: an elif or else belongs to the open if at its own indentation.
+# Every program is called as [f(true, true, true), f(true, false, true),
+# f(true, false, false), f(false, true, true), f(false, false, false)].
+fn register_elif_ownership_tests():
+    # elif-ownership-inner-elif: an elif under the then-branch is the inner
+    # if's; the else after the dedent is the outer if's.
+    fn b_inner_elif_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                if a:
+                    if b:
+                        1
+                    elif c:
+                        2
+                else:
+                    3
+            [f(true, true, true), f(true, false, true), f(true, false, false), f(false, true, true), f(false, false, false)]
+    test::value("elif-ownership-inner-elif/elif", [1, 2, unit, 3, 3], b_inner_elif_elif)
+    fn b_inner_elif_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                if a:
+                    if b:
+                        1
+                    else:
+                        if c:
+                            2
+                else:
+                    3
+            [f(true, true, true), f(true, false, true), f(true, false, false), f(false, true, true), f(false, false, false)]
+    test::value("elif-ownership-inner-elif/nested", [1, 2, unit, 3, 3], b_inner_elif_nested)
+
+    # elif-ownership-outer-elif: an elif after a dedent past a complete inner
+    # if/else is the outer if's.
+    fn b_outer_elif_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                if a:
+                    if b:
+                        1
+                    else:
+                        2
+                elif c:
+                    3
+                else:
+                    4
+            [f(true, true, true), f(true, false, true), f(true, false, false), f(false, true, true), f(false, false, false)]
+    test::value("elif-ownership-outer-elif/elif", [1, 2, 2, 3, 4], b_outer_elif_elif)
+    fn b_outer_elif_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                if a:
+                    if b:
+                        1
+                    else:
+                        2
+                else:
+                    if c:
+                        3
+                    else:
+                        4
+            [f(true, true, true), f(true, false, true), f(true, false, false), f(false, true, true), f(false, false, false)]
+    test::value("elif-ownership-outer-elif/nested", [1, 2, 2, 3, 4], b_outer_elif_nested)
+
+    # elif-ownership-branch-contains-if: an elif branch holds an if with its
+    # own else.
+    fn b_branch_contains_if_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                if a:
+                    1
+                elif b:
+                    if c:
+                        2
+                    else:
+                        3
+                else:
+                    4
+            [f(true, true, true), f(true, false, true), f(true, false, false), f(false, true, true), f(false, false, false)]
+    test::value("elif-ownership-branch-contains-if/elif", [1, 1, 1, 2, 4], b_branch_contains_if_elif)
+    fn b_branch_contains_if_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                if a:
+                    1
+                else:
+                    if b:
+                        if c:
+                            2
+                        else:
+                            3
+                    else:
+                        4
+            [f(true, true, true), f(true, false, true), f(true, false, false), f(false, true, true), f(false, false, false)]
+    test::value("elif-ownership-branch-contains-if/nested", [1, 1, 1, 2, 4], b_branch_contains_if_nested)
+
+    # elif-ownership-chain-in-else: a chain may start inside the else of
+    # another chain.
+    fn b_chain_in_else_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                if a:
+                    1
+                elif b:
+                    2
+                else:
+                    if c:
+                        3
+                    elif a:
+                        4
+                    else:
+                        5
+            [f(true, true, true), f(true, false, true), f(true, false, false), f(false, true, true), f(false, false, false)]
+    test::value("elif-ownership-chain-in-else/elif", [1, 1, 1, 2, 5], b_chain_in_else_elif)
+    fn b_chain_in_else_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                if a:
+                    1
+                else:
+                    if b:
+                        2
+                    else:
+                        if c:
+                            3
+                        else:
+                            if a:
+                                4
+                            else:
+                                5
+            [f(true, true, true), f(true, false, true), f(true, false, false), f(false, true, true), f(false, false, false)]
+    test::value("elif-ownership-chain-in-else/nested", [1, 1, 1, 2, 5], b_chain_in_else_nested)
+
+    # elif-ownership-else-after-inner-chain: an else after a dedent is the
+    # outer chain's even when the inner chain has elifs and no else.
+    fn b_else_after_inner_chain_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                if a:
+                    if b:
+                        1
+                    elif c:
+                        2
+                    elif a:
+                        3
+                elif b:
+                    4
+                else:
+                    5
+            [f(true, true, true), f(true, false, true), f(true, false, false), f(false, true, true), f(false, false, false)]
+    test::value("elif-ownership-else-after-inner-chain/elif", [1, 2, 3, 4, 5], b_else_after_inner_chain_elif)
+    fn b_else_after_inner_chain_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                if a:
+                    if b:
+                        1
+                    else:
+                        if c:
+                            2
+                        else:
+                            if a:
+                                3
+                else:
+                    if b:
+                        4
+                    else:
+                        5
+            [f(true, true, true), f(true, false, true), f(true, false, false), f(false, true, true), f(false, false, false)]
+    test::value("elif-ownership-else-after-inner-chain/nested", [1, 2, 3, 4, 5], b_else_after_inner_chain_nested)
+
+# Scope: an elif branch is a nested scope, like the nested spelling's.
+fn register_elif_scope_tests():
+    # elif-branch-bindings-are-local: y, bound in every branch, is not
+    # visible after the chain.
+    fn b_bindings_local_elif() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            if x == 0:
+                y = 1
+            elif x == 1:
+                y = 2
+            else:
+                y = 3
+            y
+    test::rejects_at("elif-branch-bindings-are-local/elif", compiler::DiagnosticCode::Unbound, 1286, 13, b_bindings_local_elif)
+    fn b_bindings_local_nested() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            if x == 0:
+                y = 1
+            else:
+                if x == 1:
+                    y = 2
+                else:
+                    y = 3
+            y
+    test::rejects_at("elif-branch-bindings-are-local/nested", compiler::DiagnosticCode::Unbound, 1298, 13, b_bindings_local_nested)
+
+    # elif-branch-shadowing: a branch may shadow an outer name, which stays
+    # untouched, and a nested elif sees the names of its enclosing branch.
+    fn b_shadowing_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                x = 100
+                v = if a:
+                    x = 1
+                    x
+                elif b:
+                    x = 2
+                    y = x + 10
+                    if a:
+                        0
+                    elif b:
+                        x + y
+                    else:
+                        1
+                else:
+                    x
+                [v, x]
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-shadowing/elif", [[1, 100], [14, 100], [100, 100]], b_shadowing_elif)
+    fn b_shadowing_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                x = 100
+                v = if a:
+                    x = 1
+                    x
+                else:
+                    if b:
+                        x = 2
+                        y = x + 10
+                        if a:
+                            0
+                        else:
+                            if b:
+                                x + y
+                            else:
+                                1
+                    else:
+                        x
+                [v, x]
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-shadowing/nested", [[1, 100], [14, 100], [100, 100]], b_shadowing_nested)
+
+# Completions in elif branches: return, fail, continue, break.
+fn register_elif_completion_tests():
+    # elif-return: a return in an elif branch returns from the function.
+    fn b_return_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                x = if a:
+                    1
+                elif b:
+                    return 2
+                else:
+                    3
+                x + 100
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-return/elif", [101, 2, 103], b_return_elif)
+    fn b_return_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                x = if a:
+                    1
+                else:
+                    if b:
+                        return 2
+                    else:
+                        3
+                x + 100
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-return/nested", [101, 2, 103], b_return_nested)
+
+    # elif-fail-propagates: Boom, failed in an elif branch, propagates
+    # through g, which declares it, to the handlers.
+    fn b_fail_propagates_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b) errors Boom:
+                if a:
+                    1
+                elif b:
+                    fail Boom
+                else:
+                    3
+            fn g(a, b) errors Boom:
+                f(a, b)
+            v = g(false, true):
+                on Boom:
+                    99
+            w = g(false, false):
+                on Boom:
+                    99
+            [v, w]
+    test::value("elif-fail-propagates/elif", [99, 3], b_fail_propagates_elif)
+    fn b_fail_propagates_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b) errors Boom:
+                if a:
+                    1
+                else:
+                    if b:
+                        fail Boom
+                    else:
+                        3
+            fn g(a, b) errors Boom:
+                f(a, b)
+            v = g(false, true):
+                on Boom:
+                    99
+            w = g(false, false):
+                on Boom:
+                    99
+            [v, w]
+    test::value("elif-fail-propagates/nested", [99, 3], b_fail_propagates_nested)
+
+    # elif-fail-unhandled: an elif branch's declared error that nobody
+    # handles is rejected statically, at the call.
+    fn b_fail_unhandled_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b) errors Boom:
+                if a:
+                    1
+                elif b:
+                    fail Boom
+                else:
+                    3
+            f(false, true)
+    test::rejects_at("elif-fail-unhandled/elif", compiler::DiagnosticCode::UnhandledError, 1430, 13, b_fail_unhandled_elif)
+    fn b_fail_unhandled_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b) errors Boom:
+                if a:
+                    1
+                else:
+                    if b:
+                        fail Boom
+                    else:
+                        3
+            f(false, true)
+    test::rejects_at("elif-fail-unhandled/nested", compiler::DiagnosticCode::UnhandledError, 1442, 13, b_fail_unhandled_nested)
+
+    # elif-continue-and-break: continue (i == 3) and break (i == 6) in elif
+    # branches of a loop: 0 + 100 + 2 + 4 + 5.
+    fn b_continue_and_break_elif() errors compiler::CompilerError:
+        static compile:
+            fn run():
+                acc = mutable_array::allocate(1)
+                mutable_array::set(acc, 0, 0)
+                loop i from 0 to 9:
+                    if i == 1:
+                        mutable_array::set(acc, 0, mutable_array::at(acc, 0) + 100)
+                    elif i == 3:
+                        continue
+                    elif i == 6:
+                        break
+                    else:
+                        mutable_array::set(acc, 0, mutable_array::at(acc, 0) + i)
+                mutable_array::at(acc, 0)
+            run()
+    test::value("elif-continue-and-break/elif", 111, b_continue_and_break_elif)
+    fn b_continue_and_break_nested() errors compiler::CompilerError:
+        static compile:
+            fn run():
+                acc = mutable_array::allocate(1)
+                mutable_array::set(acc, 0, 0)
+                loop i from 0 to 9:
+                    if i == 1:
+                        mutable_array::set(acc, 0, mutable_array::at(acc, 0) + 100)
+                    else:
+                        if i == 3:
+                            continue
+                        else:
+                            if i == 6:
+                                break
+                            else:
+                                mutable_array::set(acc, 0, mutable_array::at(acc, 0) + i)
+                mutable_array::at(acc, 0)
+            run()
+    test::value("elif-continue-and-break/nested", 111, b_continue_and_break_nested)
+
+    # elif-return-in-loop: a return in an elif branch inside a loop leaves
+    # the function.
+    fn b_return_in_loop_elif() errors compiler::CompilerError:
+        static compile:
+            fn find(n):
+                loop i from 0 to 10:
+                    if i == 2:
+                        continue
+                    elif i * i > n:
+                        return i
+                    elif i == 8:
+                        break
+                -1
+            [find(10), find(0), find(1000)]
+    test::value("elif-return-in-loop/elif", [4, 1, -1], b_return_in_loop_elif)
+    fn b_return_in_loop_nested() errors compiler::CompilerError:
+        static compile:
+            fn find(n):
+                loop i from 0 to 10:
+                    if i == 2:
+                        continue
+                    else:
+                        if i * i > n:
+                            return i
+                        else:
+                            if i == 8:
+                                break
+                -1
+            [find(10), find(0), find(1000)]
+    test::value("elif-return-in-loop/nested", [4, 1, -1], b_return_in_loop_nested)
+
+# Branch values: the ordinary typing and join rules apply. Every program is
+# called as [f(true, false), f(false, true), f(false, false)].
+fn register_elif_branch_value_tests():
+    # elif-branch-values-int
+    fn b_int_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    1
+                elif b:
+                    2
+                else:
+                    3
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-values-int/elif", [1, 2, 3], b_int_elif)
+    fn b_int_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    1
+                else:
+                    if b:
+                        2
+                    else:
+                        3
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-values-int/nested", [1, 2, 3], b_int_nested)
+
+    # elif-branch-values-string
+    fn b_string_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    "a"
+                elif b:
+                    "b"
+                else:
+                    "c"
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-values-string/elif", ["a", "b", "c"], b_string_elif)
+    fn b_string_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    "a"
+                else:
+                    if b:
+                        "b"
+                    else:
+                        "c"
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-values-string/nested", ["a", "b", "c"], b_string_nested)
+
+    # elif-branch-values-list
+    fn b_list_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    [1]
+                elif b:
+                    [2, 3]
+                else:
+                    []
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-values-list/elif", [[1], [2, 3], []], b_list_elif)
+    fn b_list_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    [1]
+                else:
+                    if b:
+                        [2, 3]
+                    else:
+                        []
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-values-list/nested", [[1], [2, 3], []], b_list_nested)
+
+    # elif-branch-values-struct
+    fn b_struct_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    Point { x: 1, y: 2 }
+                elif b:
+                    Point { x: 3, y: 4 }
+                else:
+                    Point { x: 5, y: 6 }
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-values-struct/elif", [Point {x: 1, y: 2}, Point {x: 3, y: 4}, Point {x: 5, y: 6}], b_struct_elif)
+    fn b_struct_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    Point { x: 1, y: 2 }
+                else:
+                    if b:
+                        Point { x: 3, y: 4 }
+                    else:
+                        Point { x: 5, y: 6 }
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-values-struct/nested", [Point {x: 1, y: 2}, Point {x: 3, y: 4}, Point {x: 5, y: 6}], b_struct_nested)
+
+    # elif-branch-values-unit
+    fn b_unit_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    unit
+                elif b:
+                    unit
+                else:
+                    unit
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-values-unit/elif", [unit, unit, unit], b_unit_elif)
+    fn b_unit_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    unit
+                else:
+                    if b:
+                        unit
+                    else:
+                        unit
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-values-unit/nested", [unit, unit, unit], b_unit_nested)
+
+    # elif-branch-values-mixed: an Int, a String and a List.
+    fn b_mixed_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    1
+                elif b:
+                    "b"
+                else:
+                    [3]
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-values-mixed/elif", [1, "b", [3]], b_mixed_elif)
+    fn b_mixed_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    1
+                else:
+                    if b:
+                        "b"
+                    else:
+                        [3]
+            [f(true, false), f(false, true), f(false, false)]
+    test::value("elif-branch-values-mixed/nested", [1, "b", [3]], b_mixed_nested)
+
+# A static error in a clause is reported at that clause.
+fn register_elif_location_tests():
+    # elif-error-in-condition: an unbound name in an elif condition.
+    fn b_error_in_condition() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            if x == 0:
+                1
+            elif x == 1:
+                2
+            elif missing:
+                3
+            else:
+                4
+    test::rejects_at("elif-error-in-condition", compiler::DiagnosticCode::Unbound, 1678, 18, b_error_in_condition)
+
+    # elif-error-in-branch: an unbound name in an elif branch.
+    fn b_error_in_branch() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            if x == 0:
+                1
+            elif x == 1:
+                missing
+            else:
+                4
+    test::rejects_at("elif-error-in-branch", compiler::DiagnosticCode::Unbound, 1691, 17, b_error_in_branch)
+
+# The programs elif.test also compares by HIR and native IR text (that half
+# stays in Tcl): their values.
+fn register_elif_equivalence_tests():
+    # elif-same-nir-completions: return, fail and fall-through in one chain.
+    fn b_completions_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c) errors Boom:
+                if a:
+                    return 1
+                elif b:
+                    fail Boom
+                elif c:
+                    2
+                else:
+                    3
+            fn run(a, b, c):
+                v = f(a, b, c):
+                    on Boom:
+                        -1
+                v
+            [run(true, false, false), run(false, true, false), run(false, false, true), run(false, false, false)]
+    test::value("elif-same-nir-completions/elif", [1, -1, 2, 3], b_completions_elif)
+    fn b_completions_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c) errors Boom:
+                if a:
+                    return 1
+                else:
+                    if b:
+                        fail Boom
+                    else:
+                        if c:
+                            2
+                        else:
+                            3
+            fn run(a, b, c):
+                v = f(a, b, c):
+                    on Boom:
+                        -1
+                v
+            [run(true, false, false), run(false, true, false), run(false, false, true), run(false, false, false)]
+    test::value("elif-same-nir-completions/nested", [1, -1, 2, 3], b_completions_nested)
+
+    # elif-same-nir-decided-branch: a constant argument (the branch is
+    # decided statically).
+    fn b_decided_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                if x < 0:
+                    1
+                elif x > 10:
+                    2
+                else:
+                    3
+            f(5)
+    test::value("elif-same-nir-decided-branch/elif", 3, b_decided_elif)
+    fn b_decided_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                if x < 0:
+                    1
+                else:
+                    if x > 10:
+                        2
+                    else:
+                        3
+            f(5)
+    test::value("elif-same-nir-decided-branch/nested", 3, b_decided_nested)
+
+    # elif-same-nir-construction: every branch constructs a List.
+    fn b_construction_elif() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    [1, 2]
+                elif b:
+                    [3, 4]
+                else:
+                    [5, 6]
+            list::length(f(true, false)) + list::length(f(false, true)) + list::length(f(false, false))
+    test::value("elif-same-nir-construction/elif", 6, b_construction_elif)
+    fn b_construction_nested() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                if a:
+                    [1, 2]
+                else:
+                    if b:
+                        [3, 4]
+                    else:
+                        [5, 6]
+            list::length(f(true, false)) + list::length(f(false, true)) + list::length(f(false, false))
+    test::value("elif-same-nir-construction/nested", 6, b_construction_nested)
+
+fn register_elif_tests():
+    register_elif_selection_tests()
+    register_elif_expression_tests()
+    register_elif_ownership_tests()
+    register_elif_scope_tests()
+    register_elif_completion_tests()
+    register_elif_branch_value_tests()
+    register_elif_location_tests()
+    register_elif_equivalence_tests()
+
+# ---------------------------------------------------------------------------
+
+with context test::suite()
+register_binding_tests()
+register_function_tests()
+register_native_tests()
+register_control_tests()
+register_sample_program_tests()
+register_inference_tests()
+register_elif_tests()
+test::report()

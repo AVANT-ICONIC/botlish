@@ -1,0 +1,50 @@
+# loop-collecting-refined-checks.bot -- the refinement-check benchmark
+# whose web scanners are counted loops (raw-count-loops.test's
+# raw-count-loops-refined-checks-parity), as a source-level specification:
+# repeated web::emailish? / web::uri_query_value? checks over a Unicode
+# address and a non-address, 400 levels deep, count 400 and 0 hits on every
+# backend.
+#
+# lib/web.bot's per-character scanners (scan_while, tld?, domain?) are
+# counted loops over String positions; natively their bounds are proven
+# small, so they run on a raw induction register (GENERIC-PREDICATE-PROOF-
+# LOSS.md, loss point 4). That representation, and the Tcl test's native run
+# with block escape off, are not observable from source and stay in
+# tests/raw-count-loops.test; this suite pins the program's value.
+#
+# The program is bench/refined-checks.bot, literally (its `# expect: [400,
+# 0]`), with its top-level statements in the block. A suite of its own
+# because it needs `import web`: the import set of tests/golden/
+# loop-collecting.bot stays minimal (web's functions would be method
+# candidates of every body there, and its library code part of every
+# build). Imports: compiler and test (the framework), web (the checks).
+import compiler
+import test
+import web
+
+fn register_refined_checks_tests():
+    fn refined_checks_parity() errors compiler::CompilerError:
+        static compile:
+            q = web::uri_escape_text("a b")
+
+            fn check(n, acc, s, q):
+                if n <= 0:
+                    return acc
+                hit = if web::emailish?(s):
+                    if web::emailish?(s):
+                        if web::uri_query_value?(q):
+                            1
+                        else:
+                            0
+                    else:
+                        0
+                else:
+                    0
+                check(n - 1, acc + hit, s, q)
+
+            [400.check(0, "café@例え.テスト", q), 400.check(0, "not-an-email", q)]
+    test::value("raw-count-loops-refined-checks-parity", [400, 0], refined_checks_parity)
+
+with context test::suite()
+register_refined_checks_tests()
+test::report()

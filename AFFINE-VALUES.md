@@ -555,6 +555,17 @@ affine fields were all moved out) has no descriptor and no release. The drop
 order rule: struct fields are released last-declared first (the reverse of
 construction), List elements first to last (`af-drop-order`).
 
+A descriptor is a finite walk of the type, so it must not follow a struct
+that names itself (STRUCTS.md) round its cycle: met again inside itself, a
+struct drops nothing there -- it is one no finite value has (named through
+fields alone), or an unrestricted one, which owns nothing (`af-recursive-struct`:
+an affine `Node {step, next: Node}` is `s1.0.c`). An affine struct that
+holds its own type in a List, MutableVector or MutableArray element,
+directly or through other structs, has values nested to any depth, which no
+finite descriptor reaches: it is AFFINE-CONTAINER-UNSUPPORTED at its
+declaration (`hir::structs::OwnedRecursion`, `af-recursive-container-rejected`);
+releasing one would need a recursive descriptor in both runtimes.
+
 ### 35. Coroutine drop integration
 
 A descriptor's `c` is the coroutine release of COROUTINES.md ("Release at

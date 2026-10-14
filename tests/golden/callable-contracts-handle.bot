@@ -1,0 +1,61 @@
+# callable-contracts-handle.bot -- tests/structural-contract-completions.test's
+# scc-coroutine-boundary-declared: a coroutine handle that leaves the body
+# constructing it, resumed through its Coroutine type, whose root declares
+# the error it may raise through the callable passed to its construction.
+#
+# worker's root calls f, the callable its construction was given, after its
+# first yield; make constructs it with its own parameter f and hands the
+# handle to drive, which resumes it through Coroutine{..., errors: [E]}. With
+# the root declaring E and the contract admitting it, the handle fits its
+# type, the resume is charged E, and top handles it: accepted, value -1.
+#
+# Why a suite of its own: the construction worker(f) in make, f being make's
+# untyped parameter, is charged the program's whole erased-callable
+# contract, and make admits only E. In the Tcl test's program that is E
+# alone (make(raise_e) erases raise_e); in a program that also erases an
+# unrelated error-bearing callable the construction may produce that error
+# too, and the program is rejected (observed: the Tcl program plus a
+# function erasing and handling an unrelated error is UnhandledError for it
+# at the construction, at make(raise_e) and at top()). Its own erasure of E
+# would in turn reach the uncontracted calls of the other callable-contracts
+# suites. This suite's program is the Tcl test's.
+#
+# Imports: compiler and test (every suite); coroutine, as the Tcl program.
+import compiler
+import coroutine
+import test
+
+# sccHandle's error and messages.
+error E
+
+struct M:
+    value: int
+
+struct Ev:
+    value: int
+
+fn register_scc_declared_handle_tests():
+    fn coroutine_boundary_declared() errors compiler::CompilerError:
+        static compile:
+            fn raise_e(m) -> int errors E:
+                fail E
+            fn worker(f, resume M) -> Ev errors E:
+                m = yield Ev {value: 0}
+                x = f(m)
+                Ev {value: 1}
+            fn drive(c: Coroutine{args: [M], return: Ev, errors: [E]}) -> int errors E:
+                e = c(M {value: 1})
+                e.value
+            fn make(f) -> int errors E:
+                coroutine {step, first} = worker(f)
+                drive(step)
+            fn top() -> int:
+                make(raise_e):
+                    on E:
+                        -1
+            top()
+    test::value("scc-coroutine-boundary-declared", -1, coroutine_boundary_declared)
+
+with context test::suite()
+register_scc_declared_handle_tests()
+test::report()

@@ -1,0 +1,1732 @@
+# struct-representation.bot -- values whose representation the compiler
+# optimizes, as a source-level specification. Two native optimizations
+# change how a value is carried without changing what it is:
+#
+#   * virtual construction (M8A-VIRTUAL-IMMUTABLE-CONSTRUCTION.md): a String
+#     built by str::concat and a List built by list::append (or by a
+#     collecting loop) may stay a construction plan -- pieces, regions of
+#     other Strings, an accumulator extended in place -- that is materialized
+#     only where a flat value is needed;
+#   * struct scalar replacement (STRUCT-SCALAR-REPLACEMENT.md): an immutable
+#     struct built and consumed locally, or crossing one exact call or return,
+#     may be carried as its fields and materialized only at the first use that
+#     needs an object (storage, equality, hashing, a capture, an open call,
+#     the program's result).
+#
+# Whatever a backend chooses, a Botlish program observes only ordinary
+# values, and this suite pins them:
+#
+#   * a String or List built by any shape of construction -- one flat
+#     operation, a nested tree, a binding, a fork (two uses of one partial
+#     value), a branch join, a self-tail or non-tail recursion that appends
+#     or prepends, a helper chain, an exact or a run-time-chosen callee, more
+#     than eight pieces, empty pieces, megabyte sizes, ASCII, BMP and astral
+#     characters -- is exactly the value the eager operations compute;
+#   * a substring piece of a construction raises the eager str::substring's
+#     own declared error (LowerUnderrun, UpperOverrun) at the same point:
+#     pieces run left to right and strictly, the first failing piece's error
+#     is the one handled, and a handled failure replaces a partial
+#     construction with the handler's value;
+#   * every collecting loop form (in, from/to/through, down from, lockstep),
+#     with break, continue, nesting, an early return, a handled error and a
+#     yield inside a coroutine, collects exactly its elements;
+#   * a struct is a value whatever its carriage: its fields read back
+#     exactly, through aliases, branch joins of one shape, nested structs,
+#     returns (several exits, recursion, a callee also reached through a
+#     function value), arguments (stored by the callee, passed around a cycle
+#     of function values, handed to a run-time-chosen callee) and mixed uses;
+#     it is materialized with its own identity (an anonymous struct equal to
+#     the same fields in any order, a one-field struct never its field),
+#     equal, hashed, stored, captured and returned as the same value; field
+#     expressions run once each, in written order, even when the literal is
+#     discarded, and a failing field leaves no struct behind; structs of 0 to
+#     16 fields are correct locally and returned; pointer-bearing fields
+#     (Strings, Lists, a MutableArray, a nested struct) stay intact while the
+#     program allocates.
+#
+# struct-representation-instances.bot holds the rest of the subject: struct
+# arguments an untyped callee projects (anonymous, named, four fields,
+# forwarded, chained, rebuilt by recursion, joined by a branch, 1 to 16
+# fields, pointer-bearing). The unspecialized cranelift-generic baseline
+# reports those programs NATIVE UNSUPPORTED struct-shape, and one such
+# program would make it stand the specialized outcome in for this whole
+# suite; every test here runs on all four backends.
+#
+# Ported from the value halves of tests/virtual-construction.test (vc-*) and
+# tests/struct-scalar-replacement.test (sr-*); audit/golden/migration/
+# fragments/struct-representation.tsv maps every Tcl test of the batch. The
+# Tcl tests stay active and authoritative for what a program cannot
+# observe: the NIR (construct, strcat/listappend, structnew/structget,
+# callmulti/retmulti, planregs, pnames), allocation and copy counts (the
+# linearity of a recurrence), the construction analysis and struct census,
+# instance labels and types, the lowering knobs (-virtual-construction-opt 0,
+# -struct-opt 0, -struct-policy legacy) and the BOTLISH_NATIVE_GC_STRESS
+# runs (this suite is stressed only when its whole run is, as in CI's
+# gc-stress job). The vc-* Tcl programs were compiled -strict 0: every
+# program here is strict; where a strict build needs it, an untyped function
+# whose str::substring or list::at may fail declares the error and its
+# caller handles it (noted at each test). Where a declared error is raised
+# at run time, the input that decides it is a parameter of the registration
+# function, given as a literal at its call below, so no exact-value fact of
+# a literal decides the outcome. Template inputs of the Tcl tests (%N%) are
+# registration parameters too.
+#
+# Imports: compiler and test are the framework's; str and list for the
+# constructions under test (str::concat, ::substring, ::length;
+# list::append, ::at, ::length); mutable_array for the MutableArray-held
+# structs and Strings and the field counter; coroutine for coroutine::done?
+# of the collecting-loop coroutine; web for web::uri_escape_text
+# (vc-gc-uri-1).
+import compiler
+import coroutine
+import list
+import mutable_array
+import str
+import test
+import web
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only).
+
+# vc-str-error-handled-1: the error g fails with (the Tcl program's Bad).
+error Bad
+
+# vc-collect-control-1: the error check fails with past 4 (its TooBig).
+error TooBig
+
+# sr-local-field-error and sr-materialize-protected-call: mayfail's Boom
+# (one payload-free declaration serves both programs).
+error Boom
+
+# vc-collect-coroutine-1: what the collecting coroutine yields and returns
+# (the Tcl program's V).
+struct Progress:
+    n: int
+
+# sr-local-named: a named two-field struct (the Tcl program's Person).
+struct Person:
+    name: str
+    age: int
+
+# sr-return-named: a named result (the Tcl program's Hit).
+struct Hit:
+    at: int
+    len: int
+
+# sr-recursion-higher-order-cycle: the state passed around the cycle (the
+# Tcl program's S).
+struct CycleState:
+    a: int
+    b: int
+
+# sr-local-discarded and sr-local-evaluation-order: the Tcl programs'
+# Counter context, installed below beside the suite. A body cannot need a
+# context, so the functions that read it run in the registration function
+# and the bodies compare what they computed.
+context struct FieldCounter:
+    slots: MutableArray[int]
+
+# Starts the count again at 0 (the Tcl programs each installed a fresh
+# counter; here the two share one).
+fn reset_count(context c: FieldCounter):
+    mutable_array::set(c.slots, 0, 0):
+        on IndexNotFound:
+            unit
+
+# The count before this call, which it then counts (the Tcl programs' tick
+# and ticket).
+fn tick(context c: FieldCounter):
+    n = mutable_array::get(c.slots, 0, 0)
+    mutable_array::set(c.slots, 0, n + 1):
+        on IndexNotFound:
+            unit
+    n
+
+fn count(context c: FieldCounter):
+    mutable_array::get(c.slots, 0, 0)
+
+# sr-local-discarded's f: two struct literals in statement position.
+fn discarded_literals():
+    {a: tick(), b: tick()}
+    {}
+    count()
+
+# sr-local-evaluation-order's build: fields written z, a, m.
+fn fields_in_written_order():
+    x = {z: tick(), a: tick(), m: tick()}
+    [x.a, x.m, x.z]
+
+# ---------------------------------------------------------------------------
+# virtual-construction.test: String constructions
+
+fn register_string_construction_tests():
+    # vc-str-two-flat-1: two flat Strings, one concat.
+    fn two_flat() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                str::concat(a, b)
+
+            f("ab", "cd")
+    test::value("vc-str-two-flat-1", "abcd", two_flat)
+
+    # vc-str-tree-1: a nested concat tree (an empty piece and a non-ASCII
+    # one included) is the eager value.
+    fn tree() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c, d):
+                str::concat(str::concat(str::concat(a, b), c), d)
+
+            f("a", "bc", "", "déf")
+    test::value("vc-str-tree-1", "abcdéf", tree)
+
+    # vc-str-region-1: a substring as a concat operand is that substring
+    # (characters 1 and 2 of "héllo"). Strict: f declares the slice's
+    # errors and the call handles them.
+    fn region() errors compiler::CompilerError:
+        static compile:
+            fn f(t) errors LowerUnderrun, UpperOverrun:
+                str::concat(str::substring(t, 1, 3), "x")
+
+            r = f("héllo"):
+                on LowerUnderrun:
+                    "lower"
+                on UpperOverrun:
+                    "upper"
+            r
+    test::value("vc-str-region-1", "élx", region)
+
+    # vc-str-region-bind-1: a one-character substring bound to a local and
+    # prepended to the accumulator reverses the String, astral character
+    # included. Strict: build declares the slice's errors, the call handles
+    # them.
+    fn region_bind() errors compiler::CompilerError:
+        static compile:
+            fn build(t, i, acc) errors LowerUnderrun, UpperOverrun:
+                if i >= str::length(t):
+                    return acc
+                c = str::substring(t, i, i + 1)
+                build(t, i + 1, str::concat(c, acc))
+
+            r = build("héllo🙂", 0, ""):
+                on LowerUnderrun:
+                    "lower"
+                on UpperOverrun:
+                    "upper"
+            r
+    test::value("vc-str-region-bind-1", "🙂olléh", region_bind)
+
+    # vc-str-bind-1: a binding across concats.
+    fn bind() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b, c):
+                x = str::concat(a, b)
+                y = str::concat(x, c)
+                str::length(y)
+
+            f("a", "b", "c")
+    test::value("vc-str-bind-1", 3, bind)
+
+    # vc-str-fork-1: two uses of one partial String each see the same
+    # prefix.
+    fn fork() errors compiler::CompilerError:
+        static compile:
+            fn f(a, b):
+                x = str::concat(a, b)
+                [str::concat(x, "c"), str::concat(x, "d")]
+
+            f("a", "b")
+    test::value("vc-str-fork-1", ["abc", "abd"], fork)
+
+    # vc-str-branch-1: both arms of a branch extend the accumulator, one by
+    # one piece, the other by two.
+    fn branch() errors compiler::CompilerError:
+        static compile:
+            fn build(i, n, acc):
+                if i >= n:
+                    return acc
+                next = if mod(i, 2) == 0:
+                    str::concat(acc, "ab")
+                else:
+                    str::concat(str::concat(acc, "c"), "d")
+                build(i + 1, n, next)
+
+            build(0, 7, "")
+    test::value("vc-str-branch-1", "abcdabcdabcdab", branch)
+
+    # vc-str-prepend-1: a prepending recurrence of one-character
+    # substrings. Strict: build declares the slice's errors, the call
+    # handles them.
+    fn prepend() errors compiler::CompilerError:
+        static compile:
+            fn build(i, n, acc) errors LowerUnderrun, UpperOverrun:
+                if i >= n:
+                    return acc
+                build(i + 1, n, str::concat(str::substring("xyz", mod(i, 3), mod(i, 3) + 1), acc))
+
+            r = build(0, 7, "!"):
+                on LowerUnderrun:
+                    "lower"
+                on UpperOverrun:
+                    "upper"
+            r
+    test::value("vc-str-prepend-1", "xzyxzyx!", prepend)
+
+    # vc-str-helper-1: a helper's result extended by its recursive caller.
+    fn helper() errors compiler::CompilerError:
+        static compile:
+            digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+
+            fn piece(i):
+                str::concat("<", str::concat(list::at(digits, mod(i, 10)), ">"))
+
+            fn build(i, n, acc):
+                if i >= n:
+                    return acc
+                build(i + 1, n, str::concat(acc, piece(i)))
+
+            build(0, 12, "")
+    test::value("vc-str-helper-1", "<0><1><2><3><4><5><6><7><8><9><0><1>", helper)
+
+    # vc-str-chain-1: a three-level helper chain, each level appending.
+    fn chain() errors compiler::CompilerError:
+        static compile:
+            digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+
+            fn a(i):
+                str::concat("a", list::at(digits, mod(i, 10)))
+
+            fn b(i):
+                str::concat(a(i), "b")
+
+            fn c(i):
+                str::concat(b(i), "c")
+
+            c(7)
+    test::value("vc-str-chain-1", "a7bc", chain)
+
+    # vc-str-open-1: a helper reached both as a function value through a
+    # parameter and by a direct call.
+    fn open_exact() errors compiler::CompilerError:
+        static compile:
+            fn wrap(s):
+                str::concat(s, "!")
+
+            fn apply(g, x):
+                g(x)
+
+            [apply(wrap, str::concat("a", "b")), str::concat(wrap("c"), "?")]
+    test::value("vc-str-open-1", ["ab!", "c!?"], open_exact)
+
+    # vc-str-open-2: the callee chosen at run time between two functions:
+    # each argument reaches its callee whole.
+    fn open_dynamic() errors compiler::CompilerError:
+        static compile:
+            fn wrap(s):
+                str::concat(s, "!")
+
+            fn shout(s):
+                str::concat(s, "?")
+
+            fn pick(flag):
+                if flag:
+                    wrap
+                else:
+                    shout
+
+            fn apply(g, x):
+                g(x)
+
+            [apply(pick(true), str::concat("a", "b")), apply(pick(false), str::concat("c", "d"))]
+    test::value("vc-str-open-2", ["ab!", "cd?"], open_dynamic)
+
+    # vc-str-empty-1: empty pieces, an empty accumulator and an empty
+    # result.
+    fn empty() errors compiler::CompilerError:
+        static compile:
+            fn build(i, n, acc):
+                if i >= n:
+                    return acc
+                build(i + 1, n, str::concat(str::concat(acc, ""), ""))
+
+            [build(0, 5, ""), str::concat("", ""), str::length(build(0, 0, ""))]
+    test::value("vc-str-empty-1", ["", "", 0], empty)
+
+    # vc-str-large-1: a 1 MB String built from 64 KB pieces (themselves
+    # built by doubling). Strict: the final slice's errors are handled.
+    fn large() errors compiler::CompilerError:
+        static compile:
+            fn big(i, n, acc):
+                if i >= n:
+                    return acc
+                big(i + 1, n, str::concat(acc, acc))
+
+            fn build(i, n, acc, piece):
+                if i >= n:
+                    return acc
+                build(i + 1, n, str::concat(acc, piece), piece)
+
+            s = build(0, 16, "", big(0, 16, "a"))
+            tail = str::substring(s, 1048570, 1048576):
+                on LowerUnderrun:
+                    "lower"
+                on UpperOverrun:
+                    "upper"
+            [str::length(s), tail]
+    test::value("vc-str-large-1", [1048576, "aaaaaa"], large)
+
+    # vc-str-unicode-1: scalar counts and indexing across ASCII, BMP and
+    # astral pieces. Strict: the slice's errors are handled.
+    fn unicode() errors compiler::CompilerError:
+        static compile:
+            fn build(i, n, acc):
+                if i >= n:
+                    return acc
+                build(i + 1, n, str::concat(str::concat(acc, "é"), str::concat("🙂", "x")))
+
+            s = build(0, 3, "")
+            sub = str::substring(s, 4, 6):
+                on LowerUnderrun:
+                    "lower"
+                on UpperOverrun:
+                    "upper"
+            [s, str::length(s), sub]
+    test::value("vc-str-unicode-1", ["é🙂xé🙂xé🙂x", 9, "🙂x"], unicode)
+
+    # vc-str-many-pieces-1: a construction of eleven pieces (more than
+    # eight).
+    fn many_pieces() errors compiler::CompilerError:
+        static compile:
+            fn f(a):
+                str::concat(str::concat(str::concat(str::concat(str::concat(str::concat(str::concat(str::concat(str::concat(str::concat(a, "1"), "2"), "3"), "4"), "5"), "6"), "7"), "8"), "9"), a)
+
+            f("é")
+    test::value("vc-str-many-pieces-1", "é123456789é", many_pieces)
+
+# vc-str-toplevel-1: concats bound at the program's top level (the Tcl
+# program is exactly these three bindings and z). A body's block is a
+# function body, so the bindings stay here, at the suite program's top
+# level, and the body reads the result.
+toplevel_x = str::concat("a", "b")
+toplevel_y = str::concat(toplevel_x, "c")
+toplevel_z = str::concat(toplevel_y, toplevel_y)
+
+fn register_toplevel_construction_tests():
+    fn toplevel() errors compiler::CompilerError:
+        static compile:
+            toplevel_z
+    test::value("vc-str-toplevel-1", "abcabc", toplevel)
+
+# vc-str-loop-1 (one test per %N%): a run-time-variable appending
+# recurrence of TIMES steps has twice TIMES characters.
+fn register_string_recurrence_test(name: str, times: int, expected: int):
+    fn appended() errors compiler::CompilerError:
+        static compile:
+            fn build(i, n, acc):
+                if i >= n:
+                    return acc
+                build(i + 1, n, str::concat(acc, "ab"))
+
+            str::length(build(0, times, ""))
+    test::value(name, expected, appended)
+
+# ---------------------------------------------------------------------------
+# virtual-construction.test: errors of a String construction's pieces
+
+# vc-str-region-2: a substring piece past the end raises the eager
+# substring's UpperOverrun, handled by the caller; a long enough input
+# succeeds. SHORT and LONG decide which.
+fn register_region_error_test(short: str, long: str):
+    fn region_bounds() errors compiler::CompilerError:
+        static compile:
+            fn f(t) errors LowerUnderrun, UpperOverrun:
+                str::concat("a", str::substring(t, 2, 9))
+
+            fn run(t):
+                r = f(t):
+                    on LowerUnderrun:
+                        "lower"
+                    on UpperOverrun:
+                        "upper"
+                r
+
+            [run(short), run(long)]
+    test::value("vc-str-region-2", ["upper", "allohell"], region_bounds)
+
+# vc-str-error-order-1: three pieces, the second a slice failing for a short
+# T, the third a list::at failing for a short XS: the first failing piece's
+# error is the one handled (the third run shows the third piece's own
+# error when the slice succeeds). SHORT/LONG and FEW/SIX decide.
+fn register_error_order_test(short: str, long: str, few: List[str], six: List[str]):
+    fn first_failing_piece() errors compiler::CompilerError:
+        static compile:
+            fn f(t, xs) errors IndexNotFound, LowerUnderrun, UpperOverrun:
+                str::concat(str::concat(str::substring(t, 0, 1), str::substring(t, 4, 9)), list::at(xs, 5))
+
+            fn run(t, xs):
+                r = f(t, xs):
+                    on IndexNotFound:
+                        "index"
+                    on LowerUnderrun:
+                        "lower"
+                    on UpperOverrun:
+                        "upper"
+                r
+
+            [run(short, few), run(long, six), run(long, few)]
+    test::value("vc-str-error-order-1", ["upper", "hohellf", "index"], first_failing_piece)
+
+# vc-str-error-midway-1: a failure at step 5 of a nine-step recurrence: the
+# handler's value replaces the partial accumulator. END decides whether the
+# slice is past the end (UpperOverrun), inside, or reversed (LowerUnderrun).
+fn register_midway_error_test(past: int, inside: int, reversed: int):
+    fn midway() errors compiler::CompilerError:
+        static compile:
+            fn build(i, n, acc, end) errors LowerUnderrun, UpperOverrun:
+                if i >= n:
+                    return acc
+                piece = if i == 5:
+                    str::substring("ab", 1, end)
+                else:
+                    "ab"
+                build(i + 1, n, str::concat(acc, piece), end)
+
+            fn run(end):
+                r = build(0, 9, "", end):
+                    on LowerUnderrun:
+                        "lower"
+                    on UpperOverrun:
+                        "upper"
+                r
+
+            [run(past), run(inside), run(reversed)]
+    test::value("vc-str-error-midway-1", ["upper", "abababababbababab", "lower"], midway)
+
+# vc-str-error-handled-1: a call given a concat argument fails; its handler's
+# value, not the argument, continues. FAIL_FIRST and FAIL_SECOND decide.
+fn register_handled_failure_test(fail_first: bool, fail_second: bool):
+    fn handled_failure() errors compiler::CompilerError:
+        static compile:
+            fn g(s, fail_now) -> str errors Bad:
+                if fail_now:
+                    fail Bad
+                else:
+                    str::concat(s, "!")
+
+            fn f(x, now):
+                r = g(str::concat(x, "-"), now):
+                    on Bad:
+                        "handled"
+                str::concat(r, ".")
+
+            [f("a", fail_first), f("b", fail_second)]
+    test::value("vc-str-error-handled-1", ["handled.", "b-!."], handled_failure)
+
+fn register_string_error_tests():
+    register_region_error_test("hello", "hellohello")
+    register_error_order_test("hello", "hellohello", ["x"], ["a", "b", "c", "d", "e", "f"])
+    register_midway_error_test(7, 2, 0)
+    register_handled_failure_test(true, false)
+
+# ---------------------------------------------------------------------------
+# virtual-construction.test: List constructions
+
+fn register_list_construction_tests():
+    # vc-list-append-1: one append.
+    fn append_one() errors compiler::CompilerError:
+        static compile:
+            fn f(l, x):
+                list::append(l, x)
+
+            f([1, 2], 3)
+    test::value("vc-list-append-1", [1, 2, 3], append_one)
+
+    # vc-list-nested-1: nested appends.
+    fn nested_appends() errors compiler::CompilerError:
+        static compile:
+            fn f(l):
+                list::append(list::append(list::append(l, 1), 2), 3)
+
+            f([0])
+    test::value("vc-list-nested-1", [0, 1, 2, 3], nested_appends)
+
+    # vc-list-bind-1: a binding across appends.
+    fn bind_appends() errors compiler::CompilerError:
+        static compile:
+            fn f(l):
+                a = list::append(l, "x")
+                b = list::append(a, "y")
+                list::length(b)
+
+            f(["w"])
+    test::value("vc-list-bind-1", 3, bind_appends)
+
+    # vc-list-fork-1: two uses of one partial List see the same prefix.
+    fn fork_appends() errors compiler::CompilerError:
+        static compile:
+            fn f(l):
+                a = list::append(l, 1)
+                [list::append(a, 2), list::append(a, 3)]
+
+            f([])
+    test::value("vc-list-fork-1", [[1, 2], [1, 3]], fork_appends)
+
+    # vc-list-helper-1: a non-tail recursion appending to its own recursive
+    # result.
+    fn helper_appends() errors compiler::CompilerError:
+        static compile:
+            fn build(n):
+                if n == 0:
+                    return []
+                list::append(build(n - 1), n)
+
+            build(6)
+    test::value("vc-list-helper-1", [1, 2, 3, 4, 5, 6], helper_appends)
+
+    # vc-list-empty-1: an empty literal as the starting accumulator: zero
+    # steps leave it empty.
+    fn empty_start() errors compiler::CompilerError:
+        static compile:
+            fn build(i, n, acc):
+                if i >= n:
+                    return acc
+                build(i + 1, n, list::append(acc, i * 2))
+
+            [build(0, 0, []), build(0, 3, []), list::length(build(0, 0, []))]
+    test::value("vc-list-empty-1", [[], [0, 2, 4], 0], empty_start)
+
+    # vc-list-gc-elements-1: String elements (a concat of a one-character
+    # slice) appended 25 times. Strict: build declares the slice's errors,
+    # the call handles them, and the two list::at are handled.
+    fn string_elements() errors compiler::CompilerError:
+        static compile:
+            fn build(i, n, acc) errors LowerUnderrun, UpperOverrun:
+                if i >= n:
+                    return acc
+                build(i + 1, n, list::append(acc, str::concat("s", str::substring("0123456789", mod(i, 10), mod(i, 10) + 1))))
+
+            l = build(0, 25, []):
+                on LowerUnderrun:
+                    []
+                on UpperOverrun:
+                    []
+            first = list::at(l, 0):
+                on IndexNotFound:
+                    "missing"
+            last = list::at(l, 24):
+                on IndexNotFound:
+                    "missing"
+            [list::length(l), first, last]
+    test::value("vc-list-gc-elements-1", [25, "s0", "s4"], string_elements)
+
+# vc-list-loop-1 (one test per %N%): a run-time-variable appending
+# recurrence of TIMES steps has TIMES elements.
+fn register_list_recurrence_test(name: str, times: int, expected: int):
+    fn appended() errors compiler::CompilerError:
+        static compile:
+            fn build(i, n, acc):
+                if i >= n:
+                    return acc
+                build(i + 1, n, list::append(acc, i))
+
+            list::length(build(0, times, []))
+    test::value(name, expected, appended)
+
+# ---------------------------------------------------------------------------
+# virtual-construction.test: values of mixed constructions
+
+fn register_construction_types_tests():
+    # vc-types-1: [Int, Int] and [Int, String] Lists extended by one
+    # element.
+    fn pair_and_mixed() errors compiler::CompilerError:
+        static compile:
+            fn pair(x):
+                list::append([x, x + 1], x + 2)
+
+            fn mixed(x):
+                list::append([x, "foo"], x)
+
+            [pair(1), mixed(2)]
+    test::value("vc-types-1", [[1, 2, 3], [2, "foo", 2]], pair_and_mixed)
+
+    # vc-types-2: a String and a List accumulated by one recurrence.
+    fn string_and_list() errors compiler::CompilerError:
+        static compile:
+            digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+
+            fn piece(i):
+                str::concat("<", list::at(digits, mod(i, 10)))
+
+            fn build(i, n, acc, l):
+                if i >= n:
+                    return [acc, l]
+                build(i + 1, n, str::concat(acc, piece(i)), list::append(l, i))
+
+            build(0, 4, "", [])
+    test::value("vc-types-2", ["<0<1<2<3", [0, 1, 2, 3]], string_and_list)
+
+# ---------------------------------------------------------------------------
+# virtual-construction.test: collecting loops
+
+fn register_collecting_form_tests():
+    # vc-collect-forms-1: every collecting loop form, over three elements
+    # and over none.
+    fn forms() errors compiler::CompilerError:
+        static compile:
+            fn forms(xs, n):
+                a = loop x in xs:
+                    str::concat(x, "!")
+                b = loop i from 0 to n:
+                    i * 2
+                c = loop i from 0 through n:
+                    i
+                d = loop i down from n to 0:
+                    i
+                e = loop i down from n through 0:
+                    i
+                f = loop x in xs and i from 0 to list::length(xs):
+                    [i, x]
+                [a, b, c, d, e, f]
+
+            [forms(["p", "q", "r"], 3), forms([], 0)]
+    test::value("vc-collect-forms-1", [[["p!", "q!", "r!"], [0, 2, 4], [0, 1, 2, 3], [3, 2, 1], [3, 2, 1, 0], [[0, "p"], [1, "q"], [2, "r"]]], [[], [], [0], [], [0], []]], forms)
+
+    # vc-gc-collect-1 (its third program): a collecting loop of
+    # [String, Int] elements left by a break at 25. Strict: the slice is a
+    # nested function declaring its errors, handled at the call; the two
+    # list::at are handled.
+    fn break_with_strings() errors compiler::CompilerError:
+        static compile:
+            fn collect() errors LowerUnderrun, UpperOverrun:
+                loop i from 0 to 30:
+                    if i == 25:
+                        break
+                    [str::concat("s", str::substring("0123456789", mod(i, 10), mod(i, 10) + 1)), i]
+
+            xs = collect():
+                on LowerUnderrun:
+                    []
+                on UpperOverrun:
+                    []
+            first = list::at(xs, 0):
+                on IndexNotFound:
+                    []
+            last = list::at(xs, 24):
+                on IndexNotFound:
+                    []
+            [list::length(xs), first, last]
+    test::value("vc-gc-collect-1/break-strings", [25, ["s0", 0], ["s4", 24]], break_with_strings)
+
+# vc-collect-control-1: break (the prefix so far), a break before the first
+# element, continue, nested loops, lockstep, a return from inside a
+# collecting loop and a handled error leaving it mid-way. SMALL (3) and
+# LARGE (10) are the Tcl program's bounds; LARGE decides that check fails.
+fn register_collecting_control_test(small: int, large: int):
+    fn control() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors TooBig:
+                if n > 4:
+                    fail TooBig
+                n
+
+            fn ctl(n):
+                brk = loop i from 0 to n:
+                    if i == 3:
+                        break
+                    i
+                first = loop i from 0 to n:
+                    break
+                cont = loop i from 0 to n:
+                    if mod(i, 2) == 0:
+                        continue
+                    i
+                nested = loop i from 0 to 4:
+                    loop j from 0 to i:
+                        if j == 2:
+                            break
+                        [i, j]
+                lock = loop x in ["a", "b", "c", "d"] and i from 0 to 4:
+                    if i == 1:
+                        continue
+                    if i == 3:
+                        break
+                    x
+                [brk, first, cont, nested, lock]
+
+            fn early(n):
+                xs = loop i from 0 to n:
+                    if i == 4:
+                        return [-1, i]
+                    i
+                xs
+
+            fn failing(n) -> List[int] errors TooBig:
+                loop i from 0 to n:
+                    check(i)
+
+            fn caught(n):
+                failing(n):
+                    on TooBig:
+                        [99]
+
+            [ctl(large), early(small), early(large), caught(small), caught(large)]
+    test::value("vc-collect-control-1", [[[0, 1, 2], [], [1, 3, 5, 7, 9], [[], [[1, 0]], [[2, 0], [2, 1]], [[3, 0], [3, 1]]], ["a", "c"]], [0, 1, 2], [-1, 4], [0, 1, 2], [99]], control)
+
+# vc-collect-coroutine-1 (STEPS 3) and vc-gc-collect-1's second program
+# (STEPS 40): a coroutine whose collecting loop yields mid-body, resumed
+# STEPS times by another collecting loop: its first yield, how many results
+# the resuming loop collected, the last (the final result: STEPS plus the
+# last collected pair's first element, STEPS - 1) and that it is done.
+# Strict: each list::at is handled in its own binding.
+fn register_collecting_coroutine_test(name: str, steps: int, expected):
+    fn suspended_collection() errors compiler::CompilerError:
+        static compile:
+            fn w(m: int) -> Progress:
+                xs = loop i from 0 to m:
+                    yield Progress {n: i}
+                    [i, i]
+                row = list::at(xs, m - 1):
+                    on IndexNotFound:
+                        [-1]
+                last = list::at(row, 0):
+                    on IndexNotFound:
+                        -1
+                return Progress {n: list::length(xs) + last}
+
+            coroutine {step, first} = w(steps)
+            ys = loop i from 0 to steps:
+                step().n
+            final = list::at(ys, steps - 1):
+                on IndexNotFound:
+                    -1
+            [first.n, list::length(ys), final, coroutine::done?(step)]
+    test::value(name, expected, suspended_collection)
+
+fn register_collecting_loop_tests():
+    register_collecting_form_tests()
+    register_collecting_control_test(3, 10)
+    register_collecting_coroutine_test("vc-collect-coroutine-1", 3, [0, 3, 5, true])
+    register_collecting_coroutine_test("vc-gc-collect-1/coroutine", 40, [0, 40, 79, true])
+
+# ---------------------------------------------------------------------------
+# virtual-construction.test: constructions that allocate throughout
+
+fn register_allocating_construction_tests():
+    # vc-gc-str-1: appending, prepending, region pieces, helper results and
+    # a final merge, 30 steps. Strict: build declares the slice's errors,
+    # the call and the final slices handle them.
+    fn appends_and_prepends() errors compiler::CompilerError:
+        static compile:
+            digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+
+            fn piece(i):
+                str::concat("<", str::concat(list::at(digits, mod(i, 10)), ">"))
+
+            fn build(i, n, acc, back) errors LowerUnderrun, UpperOverrun:
+                if i >= n:
+                    return str::concat(acc, back)
+                build(i + 1, n, str::concat(acc, piece(i)), str::concat(str::substring("xyz", mod(i, 3), mod(i, 3) + 1), back))
+
+            s = build(0, 30, "", "!"):
+                on LowerUnderrun:
+                    "lower"
+                on UpperOverrun:
+                    "upper"
+            head = str::substring(s, 0, 9):
+                on LowerUnderrun:
+                    "lower"
+                on UpperOverrun:
+                    "upper"
+            tail = str::substring(s, 115, 121):
+                on LowerUnderrun:
+                    "lower"
+                on UpperOverrun:
+                    "upper"
+            [str::length(s), head, tail]
+    test::value("vc-gc-str-1", [121, "<0><1><2>", "yxzyx!"], appends_and_prepends)
+
+    # vc-gc-uri-1: the URI escapes of three Strings (ASCII, Latin-1 and CJK,
+    # unreserved characters) concatenated by a recurrence.
+    fn uri_escape_chain() errors compiler::CompilerError:
+        static compile:
+            corpus = ["a b", "café 世", "~ok-"]
+
+            fn go(i, acc):
+                if i < 0 or i >= 3:
+                    return acc
+                go(i + 1, str::concat(acc, web::uri_escape_text(list::at(corpus, i))))
+
+            go(0, "")
+    test::value("vc-gc-uri-1", "a%20bcaf%C3%A9%20%E4%B8%96~ok-", uri_escape_chain)
+
+fn register_virtual_construction_tests():
+    register_string_construction_tests()
+    register_toplevel_construction_tests()
+    register_string_recurrence_test("vc-str-loop-1/500", 500, 1000)
+    register_string_recurrence_test("vc-str-loop-1/2000", 2000, 4000)
+    register_string_error_tests()
+    register_list_construction_tests()
+    register_list_recurrence_test("vc-list-loop-1/500", 500, 500)
+    register_list_recurrence_test("vc-list-loop-1/2000", 2000, 2000)
+    register_construction_types_tests()
+    register_collecting_loop_tests()
+    register_allocating_construction_tests()
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test: structs built and consumed locally
+
+fn register_local_struct_tests():
+    # sr-local-anonymous: an anonymous struct's fields read back.
+    fn anonymous() errors compiler::CompilerError:
+        static compile:
+            x = {a: 1, b: 2}
+            x.a + x.b
+    test::value("sr-local-anonymous", 3, anonymous)
+
+    # sr-local-named: a named struct's fields read back.
+    fn named() errors compiler::CompilerError:
+        static compile:
+            p = Person {name: "Ada", age: 36}
+            [p.name, p.age]
+    test::value("sr-local-named", ["Ada", 36], named)
+
+    # sr-local-multiple-projections: repeated projections read the same
+    # field.
+    fn multiple_projections() errors compiler::CompilerError:
+        static compile:
+            x = {a: 1, b: 2, c: 3}
+            [x.a, x.b, x.c, x.a]
+    test::value("sr-local-multiple-projections", [1, 2, 3, 1], multiple_projections)
+
+    # sr-local-alias: an alias of a struct is the same value.
+    fn alias() errors compiler::CompilerError:
+        static compile:
+            x = {a: 1, b: 2}
+            y = x
+            z = y
+            [z.a, y.b, x.a]
+    test::value("sr-local-alias", [1, 2, 1], alias)
+
+    # sr-local-direct-projection: a projection of a literal.
+    fn direct_projection() errors compiler::CompilerError:
+        static compile:
+            {a: 1, b: 2}.b
+    test::value("sr-local-direct-projection", 2, direct_projection)
+
+    # sr-local-empty: an unused empty struct, and an empty struct as a value
+    # equal to another empty struct.
+    fn empty_unused() errors compiler::CompilerError:
+        static compile:
+            e = {}
+            1
+    test::value("sr-local-empty/unused", 1, empty_unused)
+
+    fn empty_value() errors compiler::CompilerError:
+        static compile:
+            e = {}
+            [e, e == {}]
+    test::value("sr-local-empty/value", [{}, true], empty_value)
+
+    # sr-local-one-field: a one-field struct's field, and the struct itself
+    # equal to the same struct and never to its field.
+    fn one_field() errors compiler::CompilerError:
+        static compile:
+            o = {x: 7}
+            o.x
+    test::value("sr-local-one-field/projection", 7, one_field)
+
+    fn one_field_is_a_struct() errors compiler::CompilerError:
+        static compile:
+            o = {x: 7}
+            [o.x, o == {x: 7}, o == 7]
+    test::value("sr-local-one-field/still-a-struct", [7, true, false], one_field_is_a_struct)
+
+    # sr-local-four-fields: fields of four types.
+    fn four_fields() errors compiler::CompilerError:
+        static compile:
+            q = {a: 1, b: "s", c: [1], d: 4}
+            [q.a, q.b, q.c, q.d]
+    test::value("sr-local-four-fields", [1, "s", [1], 4], four_fields)
+
+    # sr-local-branches: a projection in each branch of an if.
+    fn branches() errors compiler::CompilerError:
+        static compile:
+            fn f(c):
+                x = {a: 1, b: 2}
+                if c:
+                    x.a
+                else:
+                    x.b
+
+            [f(true), f(false)]
+    test::value("sr-local-branches", [1, 2], branches)
+
+    # sr-local-loop-body: a struct built and consumed in each iteration of a
+    # collecting loop.
+    fn loop_body() errors compiler::CompilerError:
+        static compile:
+            fn total(xs):
+                loop x in xs:
+                    p = {a: x, b: x + 1}
+                    p.a + p.b
+
+            total([1, 2, 3])
+    test::value("sr-local-loop-body", [3, 5, 7], loop_body)
+
+# sr-local-discarded and sr-local-evaluation-order: field expressions run
+# once each, in written order -- also those of a literal in statement
+# position, whose value is discarded. Computed here (the counter is a
+# context), compared by the bodies.
+fn register_field_evaluation_tests():
+    reset_count()
+    discarded = discarded_literals()
+    fn discarded_fields_run() errors compiler::CompilerError:
+        static compile:
+            discarded
+    test::value("sr-local-discarded", 2, discarded_fields_run)
+
+    reset_count()
+    order = fields_in_written_order()
+    fn written_order() errors compiler::CompilerError:
+        static compile:
+            order
+    test::value("sr-local-evaluation-order", [1, 2, 0], written_order)
+
+# sr-local-field-error and sr-materialize-protected-call: a failing call
+# inside a struct's construction, and a call failing after a struct was
+# handed to it. SUCCEEDS (1) and FAILS (2) are the Tcl programs' inputs;
+# mayfail fails past 1.
+fn register_struct_failure_tests(succeeds: int, fails: int):
+    # sr-local-field-error: a failing field leaves no struct; the handler's
+    # value replaces the whole construction.
+    fn field_error() errors compiler::CompilerError:
+        static compile:
+            fn mayfail(n) errors Boom:
+                if n > 1:
+                    fail Boom
+                n
+
+            fn build(n) errors Boom:
+                x = {first: 1, second: mayfail(n), third: 3}
+                x.second + x.third
+
+            fn run(n) errors IndexNotFound:
+                build(n):
+                    on Boom:
+                        0 - 1
+
+            [run(succeeds), run(fails)]
+    test::value("sr-local-field-error", [4, -1], field_error)
+
+    # sr-materialize-protected-call: a struct stored by a call that fails,
+    # stored again by the handler, still has its fields.
+    fn protected_call() errors compiler::CompilerError:
+        static compile:
+            fn mayfail(n, p) errors Boom:
+                if n > 1:
+                    fail Boom
+                list::length(list::append([], p))
+
+            fn run(n) errors IndexNotFound:
+                p = {a: 1, b: 2}
+                r = mayfail(n, p):
+                    on Boom:
+                        list::length(list::append([], p))
+                [r, p.b]
+
+            [run(succeeds), run(fails)]
+    test::value("sr-materialize-protected-call", [[1, 2], [1, 2]], protected_call)
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test: branch joins
+
+fn register_branch_join_tests():
+    # sr-branch-join-bound: an if whose branches build one shape (fields in
+    # different written orders).
+    fn bound() errors compiler::CompilerError:
+        static compile:
+            fn f(c, i):
+                v = if c:
+                    {value: "a", n: i}
+                else:
+                    {n: i + 1, value: "b"}
+                [v.value, v.n]
+
+            [f(true, 1), f(false, 1)]
+    test::value("sr-branch-join-bound", [["a", 1], ["b", 2]], bound)
+
+    # sr-branch-join-trailing-return: a function's trailing if of one shape
+    # is its result.
+    fn trailing_return() errors compiler::CompilerError:
+        static compile:
+            fn pick(c):
+                if c:
+                    {value: "a", n: 1}
+                else:
+                    {value: "b", n: 2}
+
+            r = pick(false)
+            [r.value, r.n]
+    test::value("sr-branch-join-trailing-return", ["b", 2], trailing_return)
+
+    # sr-branch-join-non-completing-branch: a branch that returns.
+    fn non_completing() errors compiler::CompilerError:
+        static compile:
+            fn f(c, i):
+                v = if c:
+                    {value: "a", n: i}
+                else:
+                    return [0, 0]
+                [v.value, v.n]
+
+            [f(true, 1), f(false, 1)]
+    test::value("sr-branch-join-non-completing-branch", [["a", 1], [0, 0]], non_completing)
+
+    # sr-branch-join-nested-ifs: nested ifs of one shape.
+    fn nested_ifs() errors compiler::CompilerError:
+        static compile:
+            fn f(c, d, i):
+                v = if c:
+                    if d:
+                        {a: i, b: 1}
+                    else:
+                        {a: i + 1, b: 2}
+                else:
+                    {a: 0, b: 3}
+                [v.a, v.b]
+
+            [f(true, true, 5), f(true, false, 5), f(false, true, 5)]
+    test::value("sr-branch-join-nested-ifs", [[5, 1], [6, 2], [0, 3]], nested_ifs)
+
+    # sr-branch-join-materialized-once: a joined struct also stored in a
+    # List.
+    fn materialized_once() errors compiler::CompilerError:
+        static compile:
+            fn f(c):
+                v = if c:
+                    {a: 1, b: 2}
+                else:
+                    {a: 3, b: 4}
+                xs = list::append([], v)
+                [v.a, list::length(xs)]
+
+            [f(true), f(false)]
+    test::value("sr-branch-join-materialized-once", [[1, 1], [3, 1]], materialized_once)
+
+    # sr-branch-join-mixed-shapes: branches of different field sets.
+    fn mixed_shapes() errors compiler::CompilerError:
+        static compile:
+            fn f(c):
+                v = if c:
+                    {value: "a", n: 1}
+                else:
+                    {other: 1, n: 2}
+                v == v
+
+            [f(true), f(false)]
+    test::value("sr-branch-join-mixed-shapes", [true, true], mixed_shapes)
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test: nesting
+
+fn register_nested_struct_tests():
+    # sr-nested-outer-virtual: a struct as a field of a struct.
+    fn outer_and_inner() errors compiler::CompilerError:
+        static compile:
+            inner = {x: 1, y: 2}
+            outer = {inner: inner, z: 3}
+            [outer.z, outer.inner.x, outer.inner.y]
+    test::value("sr-nested-outer-virtual", [3, 1, 2], outer_and_inner)
+
+    # sr-nested-literal-field: a literal nested in a returned literal.
+    fn nested_literal() errors compiler::CompilerError:
+        static compile:
+            fn mk(i):
+                {pos: {line: i, col: 2}, tok: "t"}
+
+            r = mk(3)
+            [r.pos.line, r.pos.col, r.tok]
+    test::value("sr-nested-literal-field", [3, 2, "t"], nested_literal)
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test: returned structs
+
+fn register_struct_return_tests():
+    # sr-return-anonymous: an anonymous two-field result.
+    fn anonymous_result() errors compiler::CompilerError:
+        static compile:
+            fn scan(i):
+                {field: str::concat("f", "x"), index: i + 1}
+
+            r = scan(3)
+            [r.field, r.index]
+    test::value("sr-return-anonymous", ["fx", 4], anonymous_result)
+
+    # sr-return-named: a named two-field result.
+    fn named_result() errors compiler::CompilerError:
+        static compile:
+            fn find(i: int):
+                Hit {at: i, len: i * 2}
+
+            h = find(4)
+            [h.at, h.len]
+    test::value("sr-return-named", [4, 8], named_result)
+
+    # sr-return-alias: aliases of a returned struct.
+    fn result_alias() errors compiler::CompilerError:
+        static compile:
+            fn scan(i):
+                {field: "f", index: i}
+
+            r = scan(3)
+            s = r
+            [s.field, r.index, s.index]
+    test::value("sr-return-alias", ["f", 3, 3], result_alias)
+
+    # sr-return-one-projected-field: only one field of the result is read.
+    fn one_projected() errors compiler::CompilerError:
+        static compile:
+            fn scan(i):
+                {field: str::concat("f", "x"), index: i + 1}
+
+            r = scan(3)
+            r.index
+    test::value("sr-return-one-projected-field", 4, one_projected)
+
+    # sr-return-direct-projection: a projection of a call.
+    fn call_projection() errors compiler::CompilerError:
+        static compile:
+            fn scan(i):
+                {field: str::concat("f", "x"), index: i + 1}
+
+            scan(3).index
+    test::value("sr-return-direct-projection", 4, call_projection)
+
+    # sr-return-multiple-exits: an explicit return and the trailing value of
+    # one shape (fields in different written orders).
+    fn multiple_exits() errors compiler::CompilerError:
+        static compile:
+            fn scan(i):
+                if i > 2:
+                    return {a: 1, b: 2}
+                {b: 3, a: 4}
+
+            r = scan(3)
+            [r.a, r.b, scan(0).a]
+    test::value("sr-return-multiple-exits", [1, 2, 4], multiple_exits)
+
+    # sr-return-different-shapes: exits of different field sets.
+    fn different_shapes() errors compiler::CompilerError:
+        static compile:
+            fn scan(i):
+                if i > 2:
+                    return {a: 1, b: 2}
+                {c: 3, d: 4}
+
+            x = scan(3)
+            x == x
+    test::value("sr-return-different-shapes", true, different_shapes)
+
+    # sr-return-recursive: a result forwarded through non-tail recursion.
+    fn recursive_result() errors compiler::CompilerError:
+        static compile:
+            fn count(n):
+                if n <= 0:
+                    return {done: 0, left: 0}
+                r = count(n - 1)
+                {done: r.done + 1, left: n}
+
+            r = count(5)
+            [r.done, r.left]
+    test::value("sr-return-recursive", [5, 5], recursive_result)
+
+    # sr-return-open-caller: a struct-returning function called directly and
+    # through a function value chosen from a List: the whole struct reaches
+    # the open caller, the fields the direct one.
+    fn open_caller() errors compiler::CompilerError:
+        static compile:
+            fn one(i):
+                {a: i, b: i + 1}
+
+            fn two(i):
+                {a: i * 2, b: i * 3}
+
+            fn pick(n) errors IndexNotFound:
+                list::at([one, two], n)
+
+            fn run(n) errors IndexNotFound:
+                f = pick(n)
+                r = f(5)
+                g = one(7)
+                [r, g.a, g.b]
+
+            [run(0), run(1)]
+    test::value("sr-return-open-caller", [[{a: 5, b: 6}, 7, 8], [{a: 10, b: 15}, 7, 8]], open_caller)
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test: struct arguments (the arguments an untyped
+# callee projects are in struct-representation-instances.bot)
+
+fn register_struct_argument_tests():
+    # sr-argument-callee-materializes: a callee that stores its argument.
+    fn callee_stores() errors compiler::CompilerError:
+        static compile:
+            fn store(x):
+                list::length(list::append([], x))
+
+            store({a: 1, b: 2})
+    test::value("sr-argument-callee-materializes", 1, callee_stores)
+
+    # sr-recursion-higher-order-cycle: two functions passing themselves and
+    # a struct to each other.
+    fn higher_order_cycle() errors compiler::CompilerError:
+        static compile:
+            fn left(f, g, x: CycleState, n: int):
+                if n <= 0:
+                    return x.a
+                g(f, g, CycleState {a: x.a + 1, b: x.b}, n - 1)
+
+            fn right(f, g, x: CycleState, n: int):
+                if n <= 0:
+                    return x.b
+                f(f, g, CycleState {a: x.a, b: x.b + 2}, n - 1)
+
+            left(left, right, CycleState {a: 0, b: 0}, 5) + right(left, right, CycleState {a: 0, b: 0}, 5)
+    test::value("sr-recursion-higher-order-cycle", 6, higher_order_cycle)
+
+    # sr-argument-open-call-materializes: a struct handed to a function value
+    # chosen from a List.
+    fn open_call() errors compiler::CompilerError:
+        static compile:
+            fn one(x):
+                1
+
+            fn two(x):
+                2
+
+            fn pick(n) errors IndexNotFound:
+                list::at([one, two], n)
+
+            fn run(n) errors IndexNotFound:
+                f = pick(n)
+                x = {k: 1, v: 2}
+                [x.k, f(x)]
+
+            [run(0), run(1)]
+    test::value("sr-argument-open-call-materializes", [[1, 1], [1, 2]], open_call)
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test: uses that need the struct itself
+
+fn register_materialization_tests():
+    # sr-materialize-list-storage: a struct stored in a List and projected.
+    fn list_storage() errors compiler::CompilerError:
+        static compile:
+            x = {a: str::concat("p", "q"), b: 2}
+            xs = list::append([], x)
+            [x.a, x.b, list::at(xs, 0).b]
+    test::value("sr-materialize-list-storage", ["pq", 2, 2], list_storage)
+
+    # sr-materialize-mutable-array: a struct stored in a MutableArray slot.
+    fn array_storage() errors compiler::CompilerError:
+        static compile:
+            a = mutable_array::create(2, {k: 0, v: 0})
+            x = {k: 1, v: 2}
+            mutable_array::set(a, 0, x)
+            [x.k, mutable_array::at(a, 0).v]
+    test::value("sr-materialize-mutable-array", [1, 2], array_storage)
+
+    # sr-materialize-print: a struct as the result (here the body's value,
+    # compared with ==).
+    fn as_result() errors compiler::CompilerError:
+        static compile:
+            x = {k: 1, v: 2}
+            x
+    test::value("sr-materialize-print", {k: 1, v: 2}, as_result)
+
+    # sr-materialize-hash: equal structs (fields in any written order) hash
+    # equal.
+    fn hashed() errors compiler::CompilerError:
+        static compile:
+            x = {k: 1, v: 2}
+            [x.k, hash(x) == hash({v: 2, k: 1})]
+    test::value("sr-materialize-hash", [1, true], hashed)
+
+    # sr-materialize-equality: struct equality, fields in any written order.
+    fn compared() errors compiler::CompilerError:
+        static compile:
+            x = {a: 1, b: 2}
+            y = {b: 2, a: 1}
+            z = {a: 1, b: 3}
+            [x == y, x == z, x.a]
+    test::value("sr-materialize-equality", [true, false, 1], compared)
+
+    # sr-materialize-escaping-closure: a struct captured by a returned
+    # closure.
+    fn captured() errors compiler::CompilerError:
+        static compile:
+            fn mk(v):
+                x = {value: v, other: 1}
+                fn get():
+                    x.value
+                get
+
+            g = mk("a")
+            g()
+    test::value("sr-materialize-escaping-closure", "a", captured)
+
+    # sr-materialize-wide-return: a nine-field result.
+    fn wide_result() errors compiler::CompilerError:
+        static compile:
+            fn wide(i):
+                {a: i, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7, h: 8, i: 9}
+
+            w = wide(1)
+            [w.a, w.i]
+    test::value("sr-materialize-wide-return", [1, 9], wide_result)
+
+    # sr-materialize-loop-use: a struct built once, stored in every
+    # iteration.
+    fn loop_use() errors compiler::CompilerError:
+        static compile:
+            fn go(xs):
+                p = {a: 1, b: 2}
+                loop x in xs:
+                    list::length(list::append([], p)) + p.a
+
+            go([1, 2, 3])
+    test::value("sr-materialize-loop-use", [2, 2, 2], loop_use)
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test: projections and storage mixed
+
+fn register_mixed_use_tests():
+    # sr-mixed-use: projections before and after storing the struct twice.
+    fn mixed() errors compiler::CompilerError:
+        static compile:
+            x = {a: str::concat("p", "q"), b: 2}
+            first = x.a
+            xs = list::append([], x)
+            second = x.b
+            ys = list::append(xs, x)
+            [first, second, list::length(ys), list::at(ys, 1).a]
+    test::value("sr-mixed-use", ["pq", 2, 2, "pq"], mixed)
+
+    # sr-mixed-use-branches: storage in one branch, projection in the other,
+    # storage after the join.
+    fn mixed_branches() errors compiler::CompilerError:
+        static compile:
+            fn f(c):
+                x = {a: 1, b: 2}
+                n = if c:
+                    list::length(list::append([], x))
+                else:
+                    x.a
+                n + x.b + list::length(list::append([], x))
+
+            [f(true), f(false)]
+    test::value("sr-mixed-use-branches", [4, 4], mixed_branches)
+
+    # sr-mixed-use-alias: a struct and its alias stored together.
+    fn mixed_alias() errors compiler::CompilerError:
+        static compile:
+            x = {a: 1, b: 2}
+            y = x
+            xs = list::append(list::append([], x), y)
+            [x.a, y.b, list::length(xs)]
+    test::value("sr-mixed-use-alias", [1, 2, 2], mixed_alias)
+
+    # sr-mixed-use-returned: a returned struct both projected and stored.
+    fn mixed_returned() errors compiler::CompilerError:
+        static compile:
+            fn scan(i):
+                {a: i, b: 2}
+
+            r = scan(3)
+            xs = list::append([], r)
+            [r.a, list::length(xs)]
+    test::value("sr-mixed-use-returned", [3, 1], mixed_returned)
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test: struct widths (the Tcl test's widthSource
+# programs, written out: field fK is i + K, every field summed, f(1); a
+# struct of N fields sums to N + N(N-1)/2), locally and returned, and the
+# empty struct as an argument (the argument form of the wider structs, which
+# an untyped callee projects, is in struct-representation-instances.bot).
+
+fn register_width_0_tests():
+    fn local_fields() errors compiler::CompilerError:
+        static compile:
+            fn f(i):
+                r = {}
+                0
+
+            f(1)
+    test::value("sr-width-0-values/local", 0, local_fields)
+
+    fn returned_fields() errors compiler::CompilerError:
+        static compile:
+            fn mk(i):
+                {}
+
+            fn f(i):
+                r = mk(i)
+                0
+
+            f(1)
+    test::value("sr-width-0-values/return", 0, returned_fields)
+
+    fn argument_fields() errors compiler::CompilerError:
+        static compile:
+            fn use(r):
+                0
+
+            fn f(i):
+                use({})
+
+            f(1)
+    test::value("sr-width-0-values/argument", 0, argument_fields)
+
+fn register_width_1_tests():
+    fn local_fields() errors compiler::CompilerError:
+        static compile:
+            fn f(i):
+                r = {f0: i + 0}
+                r.f0
+
+            f(1)
+    test::value("sr-width-1-values/local", 1, local_fields)
+
+    fn returned_fields() errors compiler::CompilerError:
+        static compile:
+            fn mk(i):
+                {f0: i + 0}
+
+            fn f(i):
+                r = mk(i)
+                r.f0
+
+            f(1)
+    test::value("sr-width-1-values/return", 1, returned_fields)
+
+fn register_width_2_tests():
+    fn local_fields() errors compiler::CompilerError:
+        static compile:
+            fn f(i):
+                r = {f0: i + 0, f1: i + 1}
+                r.f0 + r.f1
+
+            f(1)
+    test::value("sr-width-2-values/local", 3, local_fields)
+
+    fn returned_fields() errors compiler::CompilerError:
+        static compile:
+            fn mk(i):
+                {f0: i + 0, f1: i + 1}
+
+            fn f(i):
+                r = mk(i)
+                r.f0 + r.f1
+
+            f(1)
+    test::value("sr-width-2-values/return", 3, returned_fields)
+
+fn register_width_3_tests():
+    fn local_fields() errors compiler::CompilerError:
+        static compile:
+            fn f(i):
+                r = {f0: i + 0, f1: i + 1, f2: i + 2}
+                r.f0 + r.f1 + r.f2
+
+            f(1)
+    test::value("sr-width-3-values/local", 6, local_fields)
+
+    fn returned_fields() errors compiler::CompilerError:
+        static compile:
+            fn mk(i):
+                {f0: i + 0, f1: i + 1, f2: i + 2}
+
+            fn f(i):
+                r = mk(i)
+                r.f0 + r.f1 + r.f2
+
+            f(1)
+    test::value("sr-width-3-values/return", 6, returned_fields)
+
+fn register_width_4_tests():
+    fn local_fields() errors compiler::CompilerError:
+        static compile:
+            fn f(i):
+                r = {f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3}
+                r.f0 + r.f1 + r.f2 + r.f3
+
+            f(1)
+    test::value("sr-width-4-values/local", 10, local_fields)
+
+    fn returned_fields() errors compiler::CompilerError:
+        static compile:
+            fn mk(i):
+                {f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3}
+
+            fn f(i):
+                r = mk(i)
+                r.f0 + r.f1 + r.f2 + r.f3
+
+            f(1)
+    test::value("sr-width-4-values/return", 10, returned_fields)
+
+fn register_width_8_tests():
+    fn local_fields() errors compiler::CompilerError:
+        static compile:
+            fn f(i):
+                r = {f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3, f4: i + 4, f5: i + 5, f6: i + 6, f7: i + 7}
+                r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5 + r.f6 + r.f7
+
+            f(1)
+    test::value("sr-width-8-values/local", 36, local_fields)
+
+    fn returned_fields() errors compiler::CompilerError:
+        static compile:
+            fn mk(i):
+                {f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3, f4: i + 4, f5: i + 5, f6: i + 6, f7: i + 7}
+
+            fn f(i):
+                r = mk(i)
+                r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5 + r.f6 + r.f7
+
+            f(1)
+    test::value("sr-width-8-values/return", 36, returned_fields)
+
+fn register_width_16_tests():
+    fn local_fields() errors compiler::CompilerError:
+        static compile:
+            fn f(i):
+                r = {f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3, f4: i + 4, f5: i + 5, f6: i + 6, f7: i + 7, f8: i + 8, f9: i + 9, f10: i + 10, f11: i + 11, f12: i + 12, f13: i + 13, f14: i + 14, f15: i + 15}
+                r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5 + r.f6 + r.f7 + r.f8 + r.f9 + r.f10 + r.f11 + r.f12 + r.f13 + r.f14 + r.f15
+
+            f(1)
+    test::value("sr-width-16-values/local", 136, local_fields)
+
+    fn returned_fields() errors compiler::CompilerError:
+        static compile:
+            fn mk(i):
+                {f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3, f4: i + 4, f5: i + 5, f6: i + 6, f7: i + 7, f8: i + 8, f9: i + 9, f10: i + 10, f11: i + 11, f12: i + 12, f13: i + 13, f14: i + 14, f15: i + 15}
+
+            fn f(i):
+                r = mk(i)
+                r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5 + r.f6 + r.f7 + r.f8 + r.f9 + r.f10 + r.f11 + r.f12 + r.f13 + r.f14 + r.f15
+
+            f(1)
+    test::value("sr-width-16-values/return", 136, returned_fields)
+
+fn register_struct_width_tests():
+    register_width_0_tests()
+    register_width_1_tests()
+    register_width_2_tests()
+    register_width_3_tests()
+    register_width_4_tests()
+    register_width_8_tests()
+    register_width_16_tests()
+
+# ---------------------------------------------------------------------------
+# struct-scalar-replacement.test: pointer-bearing fields while the program
+# allocates (the Tcl test's gcSource programs; across-call, whose callee
+# projects an untyped argument, is in struct-representation-instances.bot)
+
+fn register_struct_allocation_tests():
+    # sr-gc-across-return: a returned struct of a String and a List sharing
+    # it, the caller allocating before it reads them.
+    fn across_return() errors compiler::CompilerError:
+        static compile:
+            fn mk(i):
+                a = str::concat("a", "b")
+                {s: a, l: [str::concat("c", "d"), a]}
+
+            fn run(i):
+                r = mk(i)
+                junk = [str::concat("j", "k"), str::concat("m", "n"), str::concat("o", "p")]
+                [r.s, r.l, junk]
+
+            run(1)
+    test::value("sr-gc-across-return", ["ab", ["cd", "ab"], ["jk", "mn", "op"]], across_return)
+
+    # sr-gc-list-string: a returned struct of a List of Strings and a String.
+    fn list_string() errors compiler::CompilerError:
+        static compile:
+            fn build(i):
+                {items: [str::concat("a", "b"), str::concat("c", "d")], label: str::concat("l", "x")}
+
+            r = build(1)
+            junk = [str::concat("j", "k"), str::concat("m", "n")]
+            [r.items, r.label, junk]
+    test::value("sr-gc-list-string", [["ab", "cd"], "lx", ["jk", "mn"]], list_string)
+
+    # sr-gc-materialize-after-safepoint: a struct stored in a List after
+    # two allocating statements.
+    fn materialize_after_allocation() errors compiler::CompilerError:
+        static compile:
+            fn run(i):
+                x = {s: str::concat("a", "b"), l: [str::concat("c", "d")], n: i}
+                junk = [str::concat("j", "k"), str::concat("m", "n"), str::concat("o", "p")]
+                junk2 = [str::concat("q", "r"), str::concat("s", "t")]
+                xs = list::append([], x)
+                [x.s, x.n, list::at(xs, 0).l, junk, junk2]
+
+            run(5)
+    test::value("sr-gc-materialize-after-safepoint", ["ab", 5, ["cd"], ["jk", "mn", "op"], ["qr", "st"]], materialize_after_allocation)
+
+    # sr-gc-mutarray-string: a returned struct of a MutableArray holding a
+    # String and a String.
+    fn mutarray_string() errors compiler::CompilerError:
+        static compile:
+            fn build(i):
+                m = mutable_array::create(2, "z")
+                mutable_array::set(m, 0, str::concat("q", "r"))
+                {arr: m, label: str::concat("l", "x")}
+
+            r = build(1)
+            junk = str::concat(str::concat("j", "k"), "m")
+            [mutable_array::get(r.arr, 0, ""), mutable_array::get(r.arr, 1, ""), r.label, junk]
+    test::value("sr-gc-mutarray-string", ["qr", "z", "lx", "jkm"], mutarray_string)
+
+    # sr-gc-nested: a returned struct holding a struct of a String and a
+    # List.
+    fn nested() errors compiler::CompilerError:
+        static compile:
+            fn mk(i):
+                inner = {p: str::concat("p", "q"), q: [1, 2]}
+                {inner: inner, tag: str::concat("t", "g")}
+
+            o = mk(1)
+            junk = [str::concat("a", "b"), str::concat("c", "d")]
+            [o.inner.p, o.inner.q, o.tag, junk]
+    test::value("sr-gc-nested", ["pq", [1, 2], "tg", ["ab", "cd"]], nested)
+
+    # sr-gc-strings: a returned struct of two Strings and an Int.
+    fn strings() errors compiler::CompilerError:
+        static compile:
+            fn build(i):
+                {s: str::concat("a", "b"), t: str::concat("c", "d"), n: i}
+
+            r = build(3)
+            x = str::concat("x", "y")
+            [r.s, r.t, r.n, x]
+    test::value("sr-gc-strings", ["ab", "cd", 3, "xy"], strings)
+
+fn register_struct_scalar_replacement_tests():
+    register_local_struct_tests()
+    register_field_evaluation_tests()
+    register_struct_failure_tests(1, 2)
+    register_branch_join_tests()
+    register_nested_struct_tests()
+    register_struct_return_tests()
+    register_struct_argument_tests()
+    register_materialization_tests()
+    register_mixed_use_tests()
+    register_struct_width_tests()
+    register_struct_allocation_tests()
+
+with context test::suite()
+with context FieldCounter {slots: mutable_array::create(1, 0)}
+register_virtual_construction_tests()
+register_struct_scalar_replacement_tests()
+test::report()

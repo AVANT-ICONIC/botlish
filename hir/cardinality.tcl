@@ -482,26 +482,26 @@ proc hir::cardinality::show {hir form} {
 proc hir::cardinality::ShowAtom {hir atom} {
     lassign $atom kind what
     switch -- $kind {
-        v { return [dict get $hir bindings $what name] }
+        v { return [hir::semantic::SourceName $hir $what] }
         max { return "max([show $hir $what], 0)" }
         len {
             lassign $what how id
             if {$how eq "b"} {
-                return "length([dict get $hir bindings $id name])"
+                return "length([hir::semantic::SourceName $hir $id])"
             }
             return "length([ShowExpr $hir $id])"
         }
         cap {
             lassign $what how id
             if {$how eq "b"} {
-                return "capacity([dict get $hir bindings $id name])"
+                return "capacity([hir::semantic::SourceName $hir $id])"
             }
             return "capacity([ShowExpr $hir $id])"
         }
         slen {
             lassign $what how id
             if {$how eq "b"} {
-                return "str::length([dict get $hir bindings $id name])"
+                return "str::length([hir::semantic::SourceName $hir $id])"
             }
             return "str::length([ShowExpr $hir $id])"
         }
@@ -515,11 +515,11 @@ proc hir::cardinality::ShowExpr {hir e} {
     switch -- [dict get $node kind] {
         ref {
             set b [dict get $node binding]
-            return [expr {$b eq "" ? [dict get $node name] : [dict get $hir bindings $b name]}]
+            return [expr {$b eq "" ? [dict get $node name] : [hir::semantic::SourceName $hir $b]}]
         }
         call {
-            set callee [dict get $hir exprs [dict get $node callee]]
-            set name [expr {[dict get $callee kind] eq "ref" ? [dict get $callee name] : "<call>"}]
+            set callee [dict get $node callee]
+            set name [expr {[dict get $hir exprs $callee kind] eq "ref" ? [hir::semantic::RefName $hir $callee] : "<call>"}]
             return "${name}(...)"
         }
         const { return [lindex [dict get $node literal] end] }

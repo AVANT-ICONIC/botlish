@@ -1,0 +1,73 @@
+# traits-path.bot -- traits as static views (TRAITS.md), in a program that
+# imports a module's trait by its short name: `import type io::path::Path`
+# makes the standard library's trait io::path::Path a type of this file, and
+# a function over it specializes, statically, to each concrete path type it
+# is given -- a refinement of str owned by another module
+# (linux::path::LinuxPath) and a struct owned here -- with no erased path
+# object.
+#
+# Ports two tests of tests/traits.test (the Tcl tests stay authoritative):
+# the accepting half of trait-import-type (its other half, the short name
+# without `import type`, is in traits.bot, which imports io::path alone) and
+# the source half of trait-future-path-shape. They are a suite of their own
+# for the `import type` and because the struct witness here needs this
+# namespace's own `concat` and `text`, which traits.bot's namespace declares
+# for other witnesses (one namespace declares one function per name).
+#
+# Imports: compiler and test (the framework); io::path and `import type
+# io::path::Path` (the trait, by its short name: the property); linux::path
+# (LinuxPath's validator); str (str::concat).
+import compiler
+import io::path
+import linux::path
+import str
+import test
+import type io::path::Path
+
+# A Windows-like path: a struct of this namespace, joined with a backslash
+# (traits.test's module windows::WindowsPath; its `parent` and `render`
+# become io::path::Path's `text`).
+struct WindowsPath:
+    text: str
+
+fn concat(path: WindowsPath, component: str) -> WindowsPath:
+    WindowsPath {text: str::concat(str::concat(path.text, "\\"), component)}
+
+fn text(path: WindowsPath) -> str:
+    path.text
+
+# trait-import-type: the short name Path denotes the module's trait.
+fn accepts_path(v: Path) -> int:
+    1
+
+# trait-future-path-shape: a non-receiver parameter and a self result.
+fn somewhere(path: Path) -> Path errors io::path::NotAPath:
+    path.concat("child")
+
+fn register_path_trait_tests():
+    fn imported_short_name() errors compiler::CompilerError:
+        static compile:
+            accepts_path(WindowsPath {text: "C:"})
+    test::value("trait-import-type/imported", 1, imported_short_name)
+
+    fn path_shape() errors compiler::CompilerError:
+        static compile:
+            fn linux_side(s: str) -> str:
+                if linux::path::valid?(s):
+                    p = somewhere(s):
+                        on io::path::NotAPath:
+                            return "NotAPath"
+                    p.text()
+                else:
+                    ""
+            fn windows_side(w: WindowsPath) -> str:
+                p = somewhere(w):
+                    on io::path::NotAPath:
+                        return "NotAPath"
+                p.text()
+            [linux_side("/home"), windows_side(WindowsPath {text: "C:"})]
+    test::value("trait-future-path-shape", ["/home/child", "C:\\child"], path_shape)
+
+with context test::suite()
+register_path_trait_tests()
+test::report()

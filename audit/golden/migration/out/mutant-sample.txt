@@ -1,0 +1,282 @@
+# The cross-suite mutant sample's first run (audit/golden/migration/sample.tcl; LARGE-SCALE-GOLDEN-MIGRATION.md, Mutation).
+# Three of its six non-BOTH verdicts were migration gaps, closed in ce34e1d and re-run on the final tree
+# (mutant-sample-closed-gaps.txt):
+# contravariant-erasure-dropped and handler-dispatch-short-name-tcl became BOTH, caller-imports-provide BOTH-SUITE-LEVEL.
+
+== first-yield-discarded (coroutines.test; compile,interp; 320s): BOTH
+BOTH audit/coroutines/tools/mutants.txt:first-yield-discarded (every selected row; suites coroutines.bot, harness.bot, ownership.bot) -- construction runs past the first yield: its value is lost
+    old failed: 46 (tests/coroutines.test co-affine-done-does-not-move, tests/coroutines.test co-affine-loop, tests/coroutines.test co-affine-move-never-forks, tests/coroutines.test co-affine-terminating-branch, tests/coroutines.test co-binding-eager-order, tests/coroutines.test co-binding-forms)
+    new failed (related): 1 (harness.bot co-release-values)
+    new failed (other rows): 0 (); suites not ok: coroutines.bot=aborted, ownership.bot=aborted
+    rows weaker for this mutant: coroutines.bot co-affine-done-does-not-move (tests/coroutines.test co-affine-done-does-not-move); coroutines.bot co-affine-loop/move-in-loop (tests/coroutines.test co-affine-loop); coroutines.bot co-affine-loop/resumes-in-loop (tests/coroutines.test co-affine-loop); coroutines.bot co-affine-move-never-forks (tests/coroutines.test co-affine-move-never-forks); coroutines.bot co-affine-terminating-branch (tests/coroutines.test co-affine-terminating-branch); coroutines.bot co-binding-eager-order (tests/coroutines.test co-binding-eager-order); coroutines.bot co-binding-forms (tests/coroutines.test co-binding-forms); coroutines.bot co-context-portable-io/limit-100 (tests/coroutines.test co-context-portable-io); coroutines.bot co-context-portable-io/limit-5 (tests/coroutines.test co-context-portable-io); coroutines.bot co-context-trait (tests/coroutines.test co-context-trait); ...
+== failed-loses-error (coroutines.test; compile,interp; 153s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/coroutines/tools/mutants.txt:failed-loses-error (2 rows; suites coroutines.bot) -- a call of a failed handle completes normally with unit instead of raising the original error
+    old failed: 2 (tests/coroutines.test co-errors-last-segment-always-fails, tests/coroutines.test co-errors-startup)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: coroutines.bot=aborted
+    rows weaker for this mutant: coroutines.bot co-errors-last-segment-always-fails (tests/coroutines.test co-errors-last-segment-always-fails); coroutines.bot co-errors-startup (tests/coroutines.test co-errors-startup)
+== completed-reruns-body (coroutines.test; compile,interp; 168s): BOTH
+BOTH audit/coroutines/tools/mutants.txt:completed-reruns-body (1 rows; suites coroutines.bot) -- a call of a completed handle runs the body again from its beginning
+    old failed: 1 (tests/coroutines.test co-terminal-success)
+    new failed (related): 1 (coroutines.bot co-terminal-success)
+    new failed (other rows): 7 (coroutines.bot co-affine-loop/resumes-in-loop, coroutines.bot co-affine-move-never-forks, coroutines.bot co-deep-three-levels, coroutines.bot co-effect-nested-coroutines); suites not ok: 
+== message-wrong-yield (coroutines.test; compile,interp; 149s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/coroutines/tools/mutants.txt:message-wrong-yield (1 rows; suites coroutines.bot) -- each resume delivers the previous resume's message (the first, unit)
+    old failed: 1 (tests/coroutines.test co-protocol-explicit)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: coroutines.bot=aborted
+    rows weaker for this mutant: coroutines.bot co-protocol-explicit (tests/coroutines.test co-protocol-explicit)
+== move-keeps-source (coroutines.test; interp; 81s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/coroutines/tools/mutants.txt:move-keeps-source (1 rows; suites coroutines.bot) -- a move does not invalidate the binding moved from
+    old failed: 1 (tests/coroutines.test co-affine-move-chain-use-after)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: coroutines.bot=aborted
+    rows weaker for this mutant: coroutines.bot co-affine-move-chain-use-after (tests/coroutines.test co-affine-move-chain-use-after)
+== done-consumes (coroutines.test; compile,interp; 53s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/coroutines/tools/mutants.txt:done-consumes (1 rows; suites coroutines.bot) -- coroutine::done? consumes the handle: its owner is moved by the query (its ownership role, core/native.tcl's -ownership, is `move` instead of `observe`)
+    old failed: 1 (tests/coroutines.test co-affine-done-does-not-move)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: coroutines.bot=compile-error
+    rows weaker for this mutant: coroutines.bot co-affine-done-does-not-move (tests/coroutines.test co-affine-done-does-not-move)
+== release-never (coroutines.test; interp; 195s): NEITHER
+NEITHER audit/coroutines/tools/mutants.txt:release-never (every selected row; suites coroutines.bot, harness.bot, ownership.bot) -- no coroutine is released at its handle's last use: every one waits for a collection (Tcl: the program's end)
+    old failed: 0 ()
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: 
+== struct-affine-unrestricted (affine.test; interp; 178s): BOTH
+BOTH audit/affine/tools/mutants.txt:struct-affine-unrestricted (8 rows; suites affinity.bot, ownership.bot) -- a named struct with an affine field is unrestricted
+    old failed: 8 (tests/affine.test af-aggregate-branch, tests/affine.test af-aggregate-field-read, tests/affine.test af-aggregate-move, tests/affine.test af-coroutine-affine-protocol, tests/affine.test af-principal-struct)
+    new failed (related): 5 (affinity.bot af-aggregate-branch/maybe-moved, affinity.bot af-aggregate-move/destructure, affinity.bot af-aggregate-move/field, affinity.bot af-coroutine-affine-protocol/message, affinity.bot af-principal-struct/moved-struct)
+    new failed (other rows): 0 (); suites not ok: ownership.bot=aborted
+    rows weaker for this mutant: ownership.bot af-aggregate-field-read/unrestricted (tests/affine.test af-aggregate-field-read); ownership.bot af-aggregate-field-read/projection (tests/affine.test af-aggregate-field-read); ownership.bot af-aggregate-field-read/done (tests/affine.test af-aggregate-field-read)
+== alias-becomes-move (affine.test; interp; 590s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/affine/tools/mutants.txt:alias-becomes-move (1 rows; suites affinity.bot) -- an exact function value is affine: binding it to another name moves it, so the original name is dead
+    old failed: 1 (tests/affine.test af-exact-alias)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: affinity.bot=compile-error
+    rows weaker for this mutant: affinity.bot af-exact-alias (tests/affine.test af-exact-alias)
+== list-no-consume (affine.test; interp; 74s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/affine/tools/mutants.txt:list-no-consume (1 rows; suites affinity.bot) -- a List construction does not consume its affine elements: their bindings stay usable
+    old failed: 1 (tests/affine.test af-principal-list)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: affinity.bot=aborted
+    rows weaker for this mutant: affinity.bot af-principal-list/element (tests/affine.test af-principal-list)
+== destructure-aliases (affine.test; interp; 81s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/affine/tools/mutants.txt:destructure-aliases (3 rows; suites affinity.bot) -- a destructuring's moved-out affine field stays owned by the destructured struct too: its release drops the moved value
+    old failed: 3 (tests/affine.test af-aggregate-move, tests/affine.test af-principal-preserve, tests/affine.test af-principal-struct)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: affinity.bot=aborted
+    rows weaker for this mutant: affinity.bot af-aggregate-move/value (tests/affine.test af-aggregate-move); affinity.bot af-principal-preserve/value (tests/affine.test af-principal-preserve); affinity.bot af-principal-struct/destructure (tests/affine.test af-principal-struct)
+== explicit-fn-accepts-coroutine (affine.test; interp; 86s): BOTH
+BOTH audit/affine/tools/mutants.txt:explicit-fn-accepts-coroutine (2 rows; suites affinity.bot) -- a coroutine handle is accepted where an explicit Fn{...} with the same contract is expected
+    old failed: 2 (tests/affine.test af-explicit-fn)
+    new failed (related): 2 (affinity.bot af-explicit-fn/result, affinity.bot af-explicit-fn/struct-field)
+    new failed (other rows): 0 (); suites not ok: 
+
+12 mutants: BOTH 4, BOTH-SUITE-LEVEL 7, NEITHER 1
+== equal-ignores-enum-tcl (enums.test; compile,interp; 267s): BOTH
+BOTH audit/enums/tools/mutants.txt:equal-ignores-enum-tcl (3 rows; suites collections.bot, structs-and-enums.bot) -- case equality ignores the enum's identity (Tcl runtimes, and the compiler's decided comparisons)
+    old failed: 3 (tests/enums.test enum-case-and-function-same-spelling, tests/enums.test enum-equality, tests/enums.test enum-immutable-set)
+    new failed (related): 3 (collections.bot enum-equality, collections.bot enum-immutable-set, structs-and-enums.bot enum-case-and-function-same-spelling)
+    new failed (other rows): 2 (structs-and-enums.bot enum-erasure, structs-and-enums.bot enum-generic-identity); suites not ok: 
+== equal-by-ordinal-tcl (enums.test; compile,interp; 63s): BOTH
+BOTH audit/enums/tools/mutants.txt:equal-by-ordinal-tcl (2 rows; suites collections.bot) -- case equality compares declaration positions, not identities (Tcl runtimes)
+    old failed: 2 (tests/enums.test enum-equality, tests/enums.test enum-immutable-set)
+    new failed (related): 2 (collections.bot enum-equality, collections.bot enum-immutable-set)
+    new failed (other rows): 0 (); suites not ok: 
+== bare-case-accepted (enums.test; interp; 39s): BOTH
+BOTH audit/enums/tools/mutants.txt:bare-case-accepted (3 rows; suites diagnostics.bot) -- a bare case name resolves to the one enum that declares it (cases injected into the scope)
+    old failed: 3 (tests/enums.test enum-cases-not-injected)
+    new failed (related): 1 (diagnostics.bot enum-cases-not-injected/case)
+    new failed (other rows): 0 (); suites not ok: 
+    rows weaker for this mutant: diagnostics.bot enum-cases-not-injected/type (tests/enums.test enum-cases-not-injected); diagnostics.bot enum-cases-not-injected/projection (tests/enums.test enum-cases-not-injected)
+== unknown-case-string (enums.test; interp; 186s): BOTH
+BOTH audit/enums/tools/mutants.txt:unknown-case-string (4 rows; suites collections.bot, structs-and-enums.bot) -- an unknown case falls back to a String of its spelling
+    old failed: 4 (tests/enums.test enum-principal-rejections, tests/enums.test enum-unknown-case)
+    new failed (related): 3 (collections.bot enum-unknown-case/Carr, collections.bot enum-unknown-case/Submarine, collections.bot enum-unknown-case/tank)
+    new failed (other rows): 0 (); suites not ok: structs-and-enums.bot=aborted
+    rows weaker for this mutant: structs-and-enums.bot enum-principal-rejections/unknown-case (tests/enums.test enum-principal-rejections)
+== hash-ignores-enum-tcl (enums.test; compile,interp; 26s): BOTH
+BOTH audit/enums/tools/mutants.txt:hash-ignores-enum-tcl (1 rows; suites representation.bot) -- the hash ignores the enum's identity (Tcl runtimes)
+    old failed: 1 (tests/enums.test enum-hash)
+    new failed (related): 1 (representation.bot enum-hash)
+    new failed (other rows): 0 (); suites not ok: 
+== equal-ignores-enum-native (enums.test; cranelift; 90s): BOTH
+BOTH audit/enums/tools/mutants.txt:equal-ignores-enum-native (1 rows; suites collections.bot) -- case equality ignores the enum's identity (native runtime equality)
+    old failed: 1 (tests/enums.test enum-immutable-set)
+    new failed (related): 1 (collections.bot enum-immutable-set)
+    new failed (other rows): 0 (); suites not ok: 
+== fail-ignores-payload-tcl (error-payloads.test,errors.test,namespaced-errors.test; compile,interp; 26s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/error-payloads/tools/mutants.txt:fail-ignores-payload-tcl (4 rows; suites errors.bot) -- payload fields ignored during fail construction (the interpreter raises the bare identity)
+    old failed: 4 (tests/error-payloads.test ep-principal, tests/error-payloads.test ep-principal-ints, tests/error-payloads.test ep-propagation-through-handled-call, tests/error-payloads.test ep-same-shape-distinct)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: errors.bot=disagree
+    rows weaker for this mutant: errors.bot ep-principal (tests/error-payloads.test ep-principal); errors.bot ep-principal-ints (tests/error-payloads.test ep-principal-ints); errors.bot ep-propagation-through-handled-call (tests/error-payloads.test ep-propagation-through-handled-call); errors.bot ep-same-shape-distinct (tests/error-payloads.test ep-same-shape-distinct)
+== missing-payload-accepted (error-payloads.test,errors.test,namespaced-errors.test; interp; 15s): BOTH
+BOTH audit/error-payloads/tools/mutants.txt:missing-payload-accepted (1 rows; suites errors.bot) -- `fail NAME` of a payload-bearing error is accepted
+    old failed: 1 (tests/error-payloads.test ep-fail-missing-payload)
+    new failed (related): 1 (errors.bot ep-fail-missing-payload)
+    new failed (other rows): 0 (); suites not ok: 
+== dispatch-by-shape-tcl (error-payloads.test,errors.test,namespaced-errors.test; compile,interp; 29s): BOTH
+BOTH audit/error-payloads/tools/mutants.txt:dispatch-by-shape-tcl (2 rows; suites errors.bot) -- handler dispatch accepts any payload-bearing error for a handler that receives a payload (shape, not identity)
+    old failed: 2 (tests/error-payloads.test ep-propagation-through-handled-call, tests/error-payloads.test ep-same-shape-distinct)
+    new failed (related): 2 (errors.bot ep-propagation-through-handled-call, errors.bot ep-same-shape-distinct)
+    new failed (other rows): 0 (); suites not ok: errors.bot=disagree
+== whole-binding-loses-field-tcl (error-payloads.test,errors.test,namespaced-errors.test; compile,interp; 24s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/error-payloads/tools/mutants.txt:whole-binding-loses-field-tcl (3 rows; suites errors.bot) -- the payload a handler receives loses its last field (Tcl runtimes)
+    old failed: 3 (tests/error-payloads.test ep-principal, tests/error-payloads.test ep-propagation-through-handled-call, tests/error-payloads.test ep-same-shape-distinct)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: errors.bot=aborted
+    rows weaker for this mutant: errors.bot ep-principal (tests/error-payloads.test ep-principal); errors.bot ep-propagation-through-handled-call (tests/error-payloads.test ep-propagation-through-handled-call); errors.bot ep-same-shape-distinct (tests/error-payloads.test ep-same-shape-distinct)
+== renaming-binds-original (error-payloads.test,errors.test,namespaced-errors.test; interp; 16s): BOTH
+BOTH audit/error-payloads/tools/mutants.txt:renaming-binds-original (2 rows; suites errors.bot) -- a handler's renaming binds the field's own name instead
+    old failed: 2 (tests/error-payloads.test ep-principal, tests/error-payloads.test ep-principal-ints)
+    new failed (related): 1 (errors.bot ep-principal)
+    new failed (other rows): 0 (); suites not ok: 
+    rows weaker for this mutant: errors.bot ep-principal-ints (tests/error-payloads.test ep-principal-ints)
+== handler-dispatch-short-name-tcl (error-payloads.test,errors.test,namespaced-errors.test; compile,interp; 328s): NEITHER
+NEITHER audit/error-payloads/tools/mutants.txt:handler-dispatch-short-name-tcl (every selected row; suites completion-regressions.bot, declared-errors-imports.bot, declared-errors.bot, errors.bot, modules.bot) -- the interpreter selects a handler by the error's short name
+    old failed: 0 ()
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: 
+
+12 mutants: BOTH 9, BOTH-SUITE-LEVEL 2, NEITHER 1
+== untyped-callable-reports-no-errors (error-payloads.test,higher-order-completions.test,structural-contract-completions.test; interp; 601s): BOTH
+BOTH audit/error-payloads/tools/mutants.txt:untyped-callable-reports-no-errors (every selected row; suites callable-contracts-fallback.bot, callable-contracts-handle.bot, callable-contracts-returned.bot, callable-contracts-unerased.bot, callable-contracts.bot, declared-errors.bot, errors.bot) -- an untyped call whose callee the walk cannot identify contributes no errors and stays precise (the original hole)
+    old failed: 12 (tests/higher-order-completions.test hoc-differential-returned, tests/higher-order-completions.test hoc-differential-structural, tests/higher-order-completions.test hoc-fallback-declared-contract, tests/higher-order-completions.test hoc-fallback-declared-contract-handled, tests/higher-order-completions.test hoc-wrong-handler-returned, tests/higher-order-completions.test hoc-wrong-handler-structural)
+    new failed (related): 2 (callable-contracts-fallback.bot hoc-fallback-declared-contract-handled, callable-contracts-fallback.bot hoc-fallback-declared-contract/unhandled)
+    new failed (other rows): 0 (); suites not ok: callable-contracts-returned.bot=aborted, callable-contracts.bot=aborted
+    rows weaker for this mutant: callable-contracts-returned.bot hoc-all-handled-returned (tests/higher-order-completions.test hoc-differential-returned); callable-contracts.bot hoc-all-handled-structural (tests/higher-order-completions.test hoc-differential-structural); callable-contracts-fallback.bot hoc-fallback-declared-contract/handled (tests/higher-order-completions.test hoc-fallback-declared-contract); callable-contracts-returned.bot hoc-wrong-handler-returned (tests/higher-order-completions.test hoc-wrong-handler-returned); callable-contracts.bot hoc-wrong-handler-structural (tests/higher-order-completions.test hoc-wrong-handler-structural); callable-contracts-returned.bot hoc-wrong-twin-returned (tests/higher-order-completions.test hoc-wrong-twin-returned); callable-contracts-returned.bot hoc-wrong-twin-reverse-returned (tests/higher-order-completions.test hoc-wrong-twin-reverse-returned); callable-contracts.bot hoc-wrong-twin-reverse-structural (tests/higher-order-completions.test hoc-wrong-twin-reverse-structural); callable-contracts.bot hoc-wrong-twin-structural (tests/higher-order-completions.test hoc-wrong-twin-structural); callable-contracts.bot scc-uncontracted-message (tests/structural-contract-completions.test scc-uncontracted-message)
+== copy-aliases-tcl (mutable-array.test,mutable-array-type.test,mutarray-construction.test; compile,interp; 906s): BOTH
+BOTH audit/mutable-array/tools/mutants.txt:copy-aliases-tcl (1 rows; suites mutable-array.bot) -- an unrestricted copy aliases writes (Tcl runtimes): a logical copy of an array is the same header
+    old failed: 1 (tests/mutable-array.test ma-context-member)
+    new failed (related): 1 (mutable-array.bot ma-context-member)
+    new failed (other rows): 24 (mutable-array.bot ma-cow-routes/binding, mutable-array.bot ma-cow-routes/generic-identity, mutable-array.bot ma-cow-routes/generic-wrapper, mutable-array.bot ma-cow-routes/indirect-callee); suites not ok: 
+== affine-at-accepted (mutable-array.test,mutable-array-type.test,mutarray-construction.test; compile,interp; 459s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/mutable-array/tools/mutants.txt:affine-at-accepted (5 rows; suites mutable-array.bot) -- `at` of an affine element is accepted: a second owner of an element the array still owns (its role is observe instead of copy-out)
+    old failed: 5 (tests/mutable-array.test ma-affine-at)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: mutable-array.bot=compile-error
+    rows weaker for this mutant: mutable-array.bot ma-affine-at/at (tests/mutable-array.test ma-affine-at); mutable-array.bot ma-affine-at/field-path (tests/mutable-array.test ma-affine-at); mutable-array.bot ma-affine-at/freeze (tests/mutable-array.test ma-affine-at); mutable-array.bot ma-affine-at/copy-source (tests/mutable-array.test ma-affine-at); mutable-array.bot ma-affine-at/get (tests/mutable-array.test ma-affine-at)
+== failed-swap-keeps-replacement (mutable-array.test,mutable-array-type.test,mutarray-construction.test; compile,interp; 1079s): OLD-ONLY
+OLD-ONLY audit/mutable-array/tools/mutants.txt:failed-swap-keeps-replacement (2 rows; suites mutable-array.bot) -- a failed affine swap does not release the replacement it was given (Tcl runtimes): it leaks
+    old failed: 2 (tests/mutable-array.test ma-affine-swap-failure)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: 
+    rows weaker for this mutant: mutable-array.bot ma-affine-swap-failure/value (tests/mutable-array.test ma-affine-swap-failure); mutable-array.bot ma-affine-swap-failure/use-after-move (tests/mutable-array.test ma-affine-swap-failure)
+== param-mutation-leaks (mutable-array.test,mutable-array-type.test,mutarray-construction.test; interp; 767s): BOTH
+BOTH audit/mutable-array/tools/mutants.txt:param-mutation-leaks (10 rows; suites mutable-array.bot) -- an array parameter is never copied for its callee (no entry copy, no caller-side copy of a consumed parameter's argument): the callee's mutations reach the caller's array
+    old failed: 10 (tests/mutable-array.test ma-cow-routes)
+    new failed (related): 4 (mutable-array.bot ma-cow-routes/generic-identity, mutable-array.bot ma-cow-routes/indirect-callee, mutable-array.bot ma-cow-routes/parameter, mutable-array.bot ma-cow-routes/result)
+    new failed (other rows): 4 (mutable-array.bot ma-cow-surviving-result, mutable-array.bot ma-generic-place, mutable-array.bot mat-atk-1, mutable-array.bot mat-atk-18/parameter-store); suites not ok: 
+    rows weaker for this mutant: mutable-array.bot ma-cow-routes/binding (tests/mutable-array.test ma-cow-routes); mutable-array.bot ma-cow-routes/generic-wrapper (tests/mutable-array.test ma-cow-routes); mutable-array.bot ma-cow-routes/struct-field (tests/mutable-array.test ma-cow-routes); mutable-array.bot ma-cow-routes/list-element (tests/mutable-array.test ma-cow-routes); mutable-array.bot ma-cow-routes/vector-element (tests/mutable-array.test ma-cow-routes); mutable-array.bot ma-cow-routes/nested-aggregate (tests/mutable-array.test ma-cow-routes)
+== share-aliases-tcl (mutable-vector.test; compile,interp; 71s): BOTH
+BOTH audit/mutable-vector/tools/mutants.txt:share-aliases-tcl (1 rows; suites collections.bot) -- an unrestricted copy aliases writes (Tcl): a logical copy is the same header
+    old failed: 1 (tests/mutable-vector.test mv-context-member)
+    new failed (related): 1 (collections.bot mv-context-member)
+    new failed (other rows): 1 (collections.bot mv-cow-copies); suites not ok: 
+== callee-mutation-leaks (mutable-vector.test; interp; 349s): BOTH
+BOTH audit/mutable-vector/tools/mutants.txt:callee-mutation-leaks (every selected row; suites collections.bot, mutable-vector-str.bot, mutable-vector.bot, ownership.bot) -- a function's mutation of its unrestricted vector parameter changes the caller's vector (no entry copy)
+    old failed: 3 (tests/mutable-vector.test mv-cow-indirect-callee)
+    new failed (related): 1 (mutable-vector.bot mv-cow-indirect-callee/mutating-parameter)
+    new failed (other rows): 0 (); suites not ok: 
+    rows weaker for this mutant: mutable-vector.bot mv-cow-indirect-callee/unmutated-result (tests/mutable-vector.test mv-cow-indirect-callee); mutable-vector.bot mv-cow-indirect-callee/affine (tests/mutable-vector.test mv-cow-indirect-callee)
+== push-copies (mutable-vector.test; compile,interp; 373s): BOTH
+BOTH audit/mutable-vector/tools/mutants.txt:push-copies (every selected row; suites collections.bot, mutable-vector-str.bot, mutable-vector.bot, ownership.bot) -- push copies the affine element: the binding stays its owner (and is released) while the vector owns it too
+    old failed: 29 (tests/mutable-vector.test mv-affine-at, tests/mutable-vector.test mv-affine-clear, tests/mutable-vector.test mv-affine-gc-stress, tests/mutable-vector.test mv-affine-growth, tests/mutable-vector.test mv-affine-push-moves, tests/mutable-vector.test mv-affine-struct-elements)
+    new failed (related): 1 (collections.bot mv-affine-at/field)
+    new failed (other rows): 0 (); suites not ok: mutable-vector.bot=disagree
+    rows weaker for this mutant: collections.bot mv-affine-at/local (tests/mutable-vector.test mv-affine-at); mutable-vector.bot mv-affine-clear (tests/mutable-vector.test mv-affine-clear); mutable-vector.bot mv-affine-gc-stress (tests/mutable-vector.test mv-affine-gc-stress); mutable-vector.bot mv-affine-growth (tests/mutable-vector.test mv-affine-growth); mutable-vector.bot mv-affine-push-moves/use-after-move (tests/mutable-vector.test mv-affine-push-moves); mutable-vector.bot mv-affine-push-moves/vector-usable (tests/mutable-vector.test mv-affine-push-moves); mutable-vector.bot mv-affine-struct-elements/use-after-move (tests/mutable-vector.test mv-affine-struct-elements); mutable-vector.bot mv-affine-struct-elements/pop-destructure (tests/mutable-vector.test mv-affine-struct-elements); mutable-vector.bot mv-affine-struct-field/value (tests/mutable-vector.test mv-affine-struct-field); mutable-vector.bot mv-affine-struct-field/field-move (tests/mutable-vector.test mv-affine-struct-field); ...
+== at-accepts-affine (mutable-vector.test; compile,interp; 76s): BOTH
+BOTH audit/mutable-vector/tools/mutants.txt:at-accepts-affine (2 rows; suites collections.bot) -- `at` of an affine element is accepted: a second owner of an element the vector still owns
+    old failed: 2 (tests/mutable-vector.test mv-affine-at)
+    new failed (related): 2 (collections.bot mv-affine-at/field, collections.bot mv-affine-at/local)
+    new failed (other rows): 0 (); suites not ok: 
+== share-aliases-native (mutable-vector.test; cranelift; 67s): BOTH
+BOTH audit/mutable-vector/tools/mutants.txt:share-aliases-native (1 rows; suites collections.bot) -- an unrestricted copy aliases writes (native): a logical copy is the same header
+    old failed: 1 (tests/mutable-vector.test mv-context-member)
+    new failed (related): 1 (collections.bot mv-context-member)
+    new failed (other rows): 1 (collections.bot mv-cow-copies); suites not ok: 
+== wrong-code (static-compile.test; interp; 24s): BOTH
+BOTH audit/static-compile/tools/mutants.txt:wrong-code (4 rows; suites diagnostics.bot) -- every rejection is reified with the code of TYPE, whatever the diagnostic's kind
+    old failed: 4 (tests/static-compile.test sc-affine-use-after-move, tests/static-compile.test sc-negative-known-error, tests/static-compile.test sc-negative-unbound, tests/static-compile.test sc-negative-unhandled-erased)
+    new failed (related): 4 (diagnostics.bot sc-affine-use-after-move, diagnostics.bot sc-negative-known-error, diagnostics.bot sc-negative-unbound, diagnostics.bot sc-negative-unhandled-erased)
+    new failed (other rows): 3 (diagnostics.bot sc-nested-outer-rejects, diagnostics.bot sc-primary-selection/resolution-first, diagnostics.bot sc-primary-selection/source-order); suites not ok: 
+== loses-primary (static-compile.test; interp; 21s): BOTH
+BOTH audit/static-compile/tools/mutants.txt:loses-primary (4 rows; suites diagnostics.bot) -- the primary location is the static block's own, not the diagnostic's
+    old failed: 4 (tests/static-compile.test sc-affine-use-after-move, tests/static-compile.test sc-negative-known-error, tests/static-compile.test sc-negative-unbound, tests/static-compile.test sc-negative-unhandled-erased)
+    new failed (related): 4 (diagnostics.bot sc-affine-use-after-move, diagnostics.bot sc-negative-known-error, diagnostics.bot sc-negative-unbound, diagnostics.bot sc-negative-unhandled-erased)
+    new failed (other rows): 3 (diagnostics.bot sc-nested-outer-rejects, diagnostics.bot sc-primary-selection/resolution-first, diagnostics.bot sc-primary-selection/source-order); suites not ok: 
+
+12 mutants: BOTH 10, BOTH-SUITE-LEVEL 1, OLD-ONLY 1
+== success-returns-unit (static-compile.test; interp; 10s): BOTH
+BOTH audit/static-compile/tools/mutants.txt:success-returns-unit (2 rows; suites errors.bot) -- an accepted block's value is unit, not its body's
+    old failed: 2 (tests/static-compile.test sc-success-declared-error, tests/static-compile.test sc-success-runtime-error)
+    new failed (related): 2 (errors.bot sc-success-declared-error, errors.bot sc-success-runtime-error)
+    new failed (other rows): 0 (); suites not ok: 
+== runtime-errors-wrapped (static-compile.test; interp; 15s): BOTH
+BOTH audit/static-compile/tools/mutants.txt:runtime-errors-wrapped (1 rows; suites errors.bot) -- a body that may fail at run time with an application error is treated as rejected (its declared error becomes CompilerError)
+    old failed: 1 (tests/static-compile.test sc-success-runtime-error)
+    new failed (related): 1 (errors.bot sc-success-runtime-error)
+    new failed (other rows): 1 (errors.bot sc-success-declared-error); suites not ok: 
+== structural-call-adds-erased (structural-contract-completions.test,higher-order-completions.test; interp; 472s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/structural-contracts/tools/mutants.txt:structural-call-adds-erased (every selected row; suites callable-contracts-fallback.bot, callable-contracts-handle.bot, callable-contracts-returned.bot, callable-contracts-unerased.bot, callable-contracts.bot, errors.bot) -- a call through a structural Fn is still charged the erased-callable contract beside its contract (C3 itself)
+    old failed: 38 (tests/higher-order-completions.test hoc-structural-boundary, tests/structural-contract-completions.test scc-affine-payload, tests/structural-contract-completions.test scc-affine-runs, tests/structural-contract-completions.test scc-any-parameter-call, tests/structural-contract-completions.test scc-boundary-captured, tests/structural-contract-completions.test scc-boundary-created-here)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: callable-contracts-fallback.bot=compile-error, callable-contracts-handle.bot=compile-error, callable-contracts-returned.bot=compile-error, callable-contracts.bot=compile-error, errors.bot=compile-error
+    rows weaker for this mutant: callable-contracts.bot hoc-structural-boundary (tests/higher-order-completions.test hoc-structural-boundary); callable-contracts.bot hoc-structural-boundary/identity (tests/higher-order-completions.test hoc-structural-boundary); callable-contracts.bot scc-affine-payload (tests/structural-contract-completions.test scc-affine-payload); callable-contracts.bot scc-affine-runs (tests/structural-contract-completions.test scc-affine-runs); callable-contracts-unerased.bot scc-any-parameter-call/clean (tests/structural-contract-completions.test scc-any-parameter-call); callable-contracts.bot scc-any-parameter-call/erasing (tests/structural-contract-completions.test scc-any-parameter-call); callable-contracts.bot scc-boundary-captured/rejected (tests/structural-contract-completions.test scc-boundary-captured); callable-contracts.bot scc-boundary-captured/rejected/identity (tests/structural-contract-completions.test scc-boundary-captured); callable-contracts.bot scc-boundary-captured/admitted (tests/structural-contract-completions.test scc-boundary-captured); callable-contracts.bot scc-boundary-created-here (tests/structural-contract-completions.test scc-boundary-created-here); ...
+== boundary-unchecked (structural-contract-completions.test,higher-order-completions.test; interp; 288s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/structural-contracts/tools/mutants.txt:boundary-unchecked (every selected row; suites callable-contracts-fallback.bot, callable-contracts-handle.bot, callable-contracts-returned.bot, callable-contracts-unerased.bot, callable-contracts.bot, errors.bot) -- a structural contract is trusted without the effect check: whatever an exact callable raises through what it captured or receives is never compared with the contract it is given
+    old failed: 15 (tests/higher-order-completions.test hoc-structural-boundary, tests/structural-contract-completions.test scc-any-parameter-call, tests/structural-contract-completions.test scc-boundary-captured, tests/structural-contract-completions.test scc-boundary-created-here-bad, tests/structural-contract-completions.test scc-boundary-struct-field, tests/structural-contract-completions.test scc-contravariant-rejected)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: callable-contracts.bot=aborted
+    rows weaker for this mutant: callable-contracts.bot hoc-structural-boundary (tests/higher-order-completions.test hoc-structural-boundary); callable-contracts.bot hoc-structural-boundary/identity (tests/higher-order-completions.test hoc-structural-boundary); callable-contracts-unerased.bot scc-any-parameter-call/clean (tests/structural-contract-completions.test scc-any-parameter-call); callable-contracts.bot scc-any-parameter-call/erasing (tests/structural-contract-completions.test scc-any-parameter-call); callable-contracts.bot scc-boundary-captured/rejected (tests/structural-contract-completions.test scc-boundary-captured); callable-contracts.bot scc-boundary-captured/rejected/identity (tests/structural-contract-completions.test scc-boundary-captured); callable-contracts.bot scc-boundary-captured/admitted (tests/structural-contract-completions.test scc-boundary-captured); callable-contracts.bot scc-boundary-created-here-bad (tests/structural-contract-completions.test scc-boundary-created-here-bad); callable-contracts.bot scc-boundary-created-here-bad/identity (tests/structural-contract-completions.test scc-boundary-created-here-bad); callable-contracts.bot scc-boundary-struct-field (tests/structural-contract-completions.test scc-boundary-struct-field); ...
+== contravariant-erasure-dropped (structural-contract-completions.test,higher-order-completions.test; interp; 367s): OLD-ONLY
+OLD-ONLY audit/structural-contracts/tools/mutants.txt:contravariant-erasure-dropped (every selected row; suites callable-contracts-fallback.bot, callable-contracts-handle.bot, callable-contracts-returned.bot, callable-contracts-unerased.bot, callable-contracts.bot, errors.bot) -- a callable reaching an untyped parameter through a structural call's typed argument is not part of the erased-callable contract
+    old failed: 3 (tests/structural-contract-completions.test scc-contravariant-admitted, tests/structural-contract-completions.test scc-contravariant-rejected)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: 
+    rows weaker for this mutant: callable-contracts.bot scc-contravariant-admitted (tests/structural-contract-completions.test scc-contravariant-admitted); callable-contracts.bot scc-contravariant-rejected (tests/structural-contract-completions.test scc-contravariant-rejected); callable-contracts.bot scc-contravariant-rejected/identity (tests/structural-contract-completions.test scc-contravariant-rejected)
+== every-type-satisfies (traits.test; interp; 37s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/traits/tools/mutants.txt:every-type-satisfies (20 rows; suites traits.bot) -- allow every type to satisfy every trait
+    old failed: 20 (tests/traits.test trait-any-erasure, tests/traits.test trait-applied-witness-unsupported, tests/traits.test trait-context-orthogonal, tests/traits.test trait-error-contracts, tests/traits.test trait-impl-declares-result, tests/traits.test trait-imports-do-not-affect-satisfaction)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: traits.bot=compile-error
+    rows weaker for this mutant: traits.bot trait-any-erasure/list (tests/traits.test trait-any-erasure); traits.bot trait-any-erasure/equality (tests/traits.test trait-any-erasure); traits.bot trait-any-erasure/not-recovered (tests/traits.test trait-any-erasure); traits.bot trait-applied-witness-unsupported (tests/traits.test trait-applied-witness-unsupported); traits.bot trait-context-orthogonal/context-struct-witness (tests/traits.test trait-context-orthogonal); traits.bot trait-context-orthogonal/context-implementation (tests/traits.test trait-context-orthogonal); traits.bot trait-error-contracts/satisfied (tests/traits.test trait-error-contracts); traits.bot trait-error-contracts/broader (tests/traits.test trait-error-contracts); traits.bot trait-error-contracts/not-admitted (tests/traits.test trait-error-contracts); traits.bot trait-error-contracts/unhandled (tests/traits.test trait-error-contracts); ...
+== caller-namespace-implements (traits.test; interp; 70s): BOTH
+BOTH audit/traits/tools/mutants.txt:caller-namespace-implements (4 rows; suites traits.bot) -- make conformance depend on the caller: the entry program's function implements a requirement the witness's owner lacks
+    old failed: 4 (tests/traits.test trait-imports-do-not-affect-satisfaction, tests/traits.test trait-missing-requirement)
+    new failed (related): 2 (traits.bot trait-imports-do-not-affect-satisfaction/rejected, traits.bot trait-missing-requirement/reason)
+    new failed (other rows): 0 (); suites not ok: 
+    rows weaker for this mutant: traits.bot trait-imports-do-not-affect-satisfaction/direct (tests/traits.test trait-imports-do-not-affect-satisfaction); traits.bot trait-missing-requirement/required (tests/traits.test trait-missing-requirement)
+== ignore-result-mismatch (traits.test; interp; 66s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/traits/tools/mutants.txt:ignore-result-mismatch (3 rows; suites traits.bot) -- ignore an implementation's result mismatch
+    old failed: 3 (tests/traits.test trait-wrong-signature)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: traits.bot=compile-error
+    rows weaker for this mutant: traits.bot trait-wrong-signature/result-found (tests/traits.test trait-wrong-signature); traits.bot trait-wrong-signature/result-reason (tests/traits.test trait-wrong-signature); traits.bot trait-wrong-signature/errors (tests/traits.test trait-wrong-signature)
+== break-opacity (traits.test; interp; 91s): BOTH
+BOTH audit/traits/tools/mutants.txt:break-opacity (2 rows; suites traits.bot) -- break opaque representation while checking traits (no opacity check in a program that declares a trait)
+    old failed: 2 (tests/traits.test trait-opaque-witness)
+    new failed (related): 1 (traits.bot trait-opaque-witness/projection)
+    new failed (other rows): 0 (); suites not ok: 
+    rows weaker for this mutant: traits.bot trait-opaque-witness/consumer (tests/traits.test trait-opaque-witness)
+== any-context-satisfies-any-trait (context-traits.test; interp; 55s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/context-traits/tools/mutants.txt:any-context-satisfies-any-trait (every selected row; suites contexts.bot, modules.bot) -- every context struct satisfies every context trait
+    old failed: 1 (tests/context-traits.test ct-implementation-obligations)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: contexts.bot=compile-error, modules.bot=compile-error
+    rows weaker for this mutant: contexts.bot ct-implementation-obligations (tests/context-traits.test ct-implementation-obligations)
+== missing-provider-silent (context-traits.test; interp; 94s): OLD-ONLY
+OLD-ONLY audit/context-traits/tools/mutants.txt:missing-provider-silent (every selected row; suites contexts.bot, modules.bot) -- no installed provider is not diagnosed (the requirement is silently dropped)
+    old failed: 1 (tests/context-traits.test ct-source-position)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: 
+    rows weaker for this mutant: contexts.bot ct-source-position (tests/context-traits.test ct-source-position)
+== caller-imports-provide (context-traits.test; interp; 95s): NEITHER
+NEITHER audit/context-traits/tools/mutants.txt:caller-imports-provide (every selected row; suites contexts.bot, modules.bot) -- a function in the calling program provides a context's implementation when its owner has none
+    old failed: 0 ()
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: 
+
+12 mutants: BOTH 4, BOTH-SUITE-LEVEL 5, OLD-ONLY 2, NEITHER 1

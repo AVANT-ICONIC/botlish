@@ -1,0 +1,150 @@
+# callable-contracts-returned.bot -- the returned path of
+# tests/higher-order-completions.test's path corpus (hocPaths `returned`):
+# `h = make(raise)` then the handled call `h(k)`.
+#
+# h is a closure make returned: a call of it has neither an identity nor a
+# contract, so it is charged the program's erased-callable contract -- every
+# error of every callable the program passes into an untyped parameter --
+# and its caller's summary falls back to may-errors (never KnownError). A
+# wrong handler is UnhandledError; with E1, E2 and E3 handled the program is
+# accepted and every backend raises and catches each of them.
+#
+# Why a suite of its own (callable-contracts.bot holds the file's other
+# paths): the erased-callable contract belongs to the whole program, and
+# the accepted test here is accepted only because its program erases E1, E2
+# and E3 and nothing else -- exactly what its handlers handle. In
+# callable-contracts.bot other tests erase other errors (OriginE1, C2,
+# Boom, ...), which h(k) would be charged too. This suite's program is the
+# Tcl tests' program: hocDecls' prelude (whose generic and partial erase
+# raise) and the four tests, which erase raise again through make.
+#
+# Imports: compiler and test (every suite).
+import compiler
+import test
+
+# hocDecls: a payload-free error and two payload-bearing twins.
+error E1
+
+error E2:
+    code: int
+
+error E3:
+    code: int
+
+# hocDecls' prelude, as in callable-contracts.bot (and in every program of
+# the Tcl file).
+fn raise(x) -> int errors E1, E2, E3:
+    if x == 1:
+        fail E1
+    if x == 2:
+        fail E2 {code: 20}
+    if x == 3:
+        fail E3 {code: 30}
+    0
+
+fn call(f, x):
+    f(x)
+
+fn generic(x: int) -> int errors E1, E2, E3:
+    call(raise, x)
+
+fn g1(x: int) -> int errors E1, E2, E3:
+    generic(x)
+
+fn g2(x: int) -> int errors E1, E2, E3:
+    g1(x)
+
+fn partial(x: int) -> int errors E1, E3:
+    call(raise, x):
+        on E2 {code}:
+            code + 1
+
+fn outer(f, x):
+    fn inner(y):
+        f(y)
+    inner(x)
+
+fn make(f):
+    fn inner(y):
+        f(y)
+    inner
+
+fn use(kf: Fn{args: [int], return: any, errors: [E1, E2, E3]}, x: int) errors E1, E2, E3:
+    kf(x)
+
+fn rec(f, n: int, x):
+    if n < 1:
+        f(x)
+    else:
+        rec(f, n - 1, x)
+
+# The four tests of the path, as callable-contracts.bot writes the others:
+# handlers for E2 and E3 only (E1 unhandled), for E1 and E2 only (the
+# payload-bearing E3 not handled by its twin's handler), for E1 and E3 only
+# (E2 unhandled) -- each UnhandledError, the kind being what the Tcl tests
+# compare -- and every error handled, in the order E3, E1, E2. The driver's
+# selectors are the registration's inputs (run time).
+fn register_hoc_returned_tests(k0: int, k1: int, k2: int, k3: int):
+    fn wrong_handler() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                h = make(raise)
+                r = h(k):
+                    on E2 {code}:
+                        return ["E2", code]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-handler-returned", compiler::DiagnosticCode::UnhandledError, wrong_handler)
+
+    fn wrong_twin() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                h = make(raise)
+                r = h(k):
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-returned", compiler::DiagnosticCode::UnhandledError, wrong_twin)
+
+    fn wrong_twin_reverse() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                h = make(raise)
+                r = h(k):
+                    on E1:
+                        return ["E1"]
+                    on E3 d:
+                        return ["E3", d.code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::rejects("hoc-wrong-twin-reverse-returned", compiler::DiagnosticCode::UnhandledError, wrong_twin_reverse)
+
+    # hoc-all-handled-returned: accepted, and the value shows each identity
+    # raised and caught on every backend. It is also the observable half of
+    # hoc-differential-returned (each observed identity is in the analysis'
+    # effective errors: Tcl only) and the whole of
+    # hoc-known-error-fallback-not-definite (the incomplete summary never
+    # becomes KnownError, and the success path runs).
+    fn all_handled() errors compiler::CompilerError:
+        static compile:
+            fn observe(k: int):
+                h = make(raise)
+                r = h(k):
+                    on E3 d:
+                        return ["E3", d.code]
+                    on E1:
+                        return ["E1"]
+                    on E2 {code}:
+                        return ["E2", code]
+                [r]
+            [observe(k0), observe(k1), observe(k2), observe(k3)]
+    test::value("hoc-all-handled-returned", [[0], ["E1"], ["E2", 20], ["E3", 30]], all_handled)
+
+with context test::suite()
+register_hoc_returned_tests(0, 1, 2, 3)
+test::report()

@@ -1,0 +1,501 @@
+# linux-io.bot -- the raw Linux x86-64 syscall path (LINUX-X86-64-SYSCALL.md)
+# and the process argument vector (ARGV.md), as far as one program observes
+# them, as a source-level specification:
+#
+#   abi::x86_64::register64(value: int) -> abi::x86_64::Register64
+#       errors Register64BelowRange, Register64AboveRange
+#   abi::x86_64::to_int(register: abi::x86_64::Register64) -> Int
+#   linux::abi::syscall({rax: R, rdi: R, rsi: R, rdx: R, r10: R, r8: R, r9: R})
+#       -> abi::x86_64::Register64
+#   argv() -> List[str] errors InvalidArgumentEncoding
+#
+# * Register64 is one x86-64 register word, ordinary Botlish (lib/abi/
+#   x86_64.bot). register64 accepts exactly -2^63..2^63-1 and fails with the
+#   declared error of the bound it violates however far out the Int is --
+#   never truncation; to_int reads the word back signed, as an ordinary
+#   arbitrary-precision Int. A provably in-range constant needs no handler,
+#   a provably out-of-range one is a compile-time KnownError naming the
+#   violated bound's error (a handler does not legalize it), an unprovable
+#   Int must be handled or declared, and to_int's result is statically a
+#   register word, so register64(to_int(r)) needs no handler. Constructing a
+#   Register64 directly must prove its word in the domain statically.
+#   Register64 is transport: a struct with structural equality and no
+#   arithmetic.
+# * linux::abi::syscall's one argument is an anonymous register struct --
+#   not a Register64, an Int or a named struct, and exactly one -- whose
+#   fields may name only rax, rdi, rsi, rdx, r10, r8 and r9 (UnknownField at
+#   the field, never ignored), must name rax (MissingField at the literal),
+#   and must each statically be a Register64 (Type at the field; no run-time
+#   check). A field that cannot complete hides no other field's problem.
+#   The native is no function value: it can only be called directly. A
+#   program that defines a syscall wrapper without calling it runs on every
+#   backend.
+# * argv() is an ordinary callable root native whose builtin declared error
+#   InvalidArgumentEncoding needs no declaration to be handled and must be
+#   handled or declared like any other: only a call introduces it, a
+#   function forwarding it declares it, a first-class argv keeps the
+#   contract through a Fn type that carries the error and is rejected
+#   through an untyped parameter or a Fn type without it. Its result is
+#   statically a List[str]; the name argv shadows like any name; two calls
+#   in one run see the same vector.
+#
+# The live syscalls (getpid) are linux-io-native.bot's: the Tcl backends
+# refuse linux::abi::syscall at run time with NATIVE-ONLY by design, which
+# would abort this suite. Every syscall call here is in a rejected block or
+# in a function nothing calls. Every argv() call sees the golden runner's
+# default vector, ["botlish-runner"]: a suite cannot inject one.
+#
+# Ported from tests/linux-syscall.test and tests/argv.test, which stay
+# authoritative and unchanged. They also observe what no program does: the
+# injected argument vectors (a valid one echoed, invalid UTF-8 running the
+# handlers), the Tcl backends' NATIVE-ONLY refusal, run-time TYPE errors of
+# Register64 arithmetic, every diagnostic after a block's first, HIR types,
+# NIR, CLIF, machine code, allocation counts and standalone executables.
+#
+# Imports: compiler and test (the framework); abi::x86_64 and linux::abi are
+# the syscall programs' own imports, list the List[str] consumer's
+# (list::length). Every call is written qualified, so the imports change no
+# call's meaning; no test is about a missing import, and no declaration of
+# the suite is named InvalidArgumentEncoding.
+import abi::x86_64
+import compiler
+import linux::abi
+import list
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only)
+
+# A named struct with a register field: not the anonymous register struct
+# linux::abi::syscall takes (linux-syscall-argument-must-be-register-struct's
+# Regs).
+struct NamedRegisters:
+    rax: abi::x86_64::Register64
+
+# The error a register field's diverging value may fail with
+# (linux-syscall-diverging-field-hides-nothing's Nope).
+error DivergingRegisterFailure
+
+# ---------------------------------------------------------------------------
+# Register64: the checked conversion and its inverse (pure; every backend)
+
+# Classifies each of INPUTS through register64: "below" or "above" for the
+# declared error of the violated bound, else the word read back by to_int.
+# The inputs are the registration's arguments, so every conversion is
+# decided at run time.
+fn register_register64_classification(name: str, inputs: List[int], expected):
+    fn classifies() errors compiler::CompilerError:
+        static compile:
+            fn classify(n: int):
+                r = abi::x86_64::register64(n):
+                    on abi::x86_64::Register64BelowRange:
+                        return "below"
+                    on abi::x86_64::Register64AboveRange:
+                        return "above"
+                abi::x86_64::to_int(r)
+            loop x in inputs:
+                classify(x)
+    test::value(name, expected, classifies)
+
+fn register_register64_tests():
+    # Exactly -2^63..2^63-1 round-trips: 0, 1, 39, -1, the i64 extremes and
+    # both small-Int boundaries.
+    register_register64_classification("linux-syscall-register64-boundaries", [0, 1, 39, 0 - 1, 9223372036854775807, 0 - 9223372036854775807 - 1, 4611686018427387903, 4611686018427387904, 0 - 4611686018427387904, 0 - 4611686018427387905], [0, 1, 39, -1, 9223372036854775807, -9223372036854775808, 4611686018427387903, 4611686018427387904, -4611686018427387904, -4611686018427387905])
+    # Outside the domain, the declared error of the violated bound, however
+    # far out.
+    register_register64_classification("linux-syscall-register64-rejects-out-of-range", [9223372036854775808, 0 - 9223372036854775809, 18446744073709551615, 18446744073709551616, 0 - 18446744073709551616, 340282366920938463463374607431768211456], ["above", "below", "above", "above", "below", "above"])
+
+    # Provably in-range constants, the extremes included, need no handler.
+    fn in_range_constants() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::register64(39)
+            abi::x86_64::register64(9223372036854775807)
+            abi::x86_64::register64(0 - 9223372036854775807 - 1)
+            abi::x86_64::register64(-1)
+    test::value("linux-syscall-register64-constant-proofs/in-range", abi::x86_64::Register64 {word: -1}, in_range_constants)
+
+    # A provably out-of-range constant is a compile-time KnownError ...
+    fn above_constant() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::register64(9223372036854775808)
+    test::rejects("linux-syscall-register64-constant-proofs/above", compiler::DiagnosticCode::KnownError, above_constant)
+    test::rejects_containing("linux-syscall-register64-known-error-names-the-bound/above", compiler::DiagnosticCode::KnownError, "always produces the declared error(s) abi::x86_64::Register64AboveRange", above_constant)
+
+    fn below_constant() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::register64(-9223372036854775809)
+    test::rejects("linux-syscall-register64-constant-proofs/below", compiler::DiagnosticCode::KnownError, below_constant)
+    test::rejects_containing("linux-syscall-register64-known-error-names-the-bound/below", compiler::DiagnosticCode::KnownError, "always produces the declared error(s) abi::x86_64::Register64BelowRange", below_constant)
+
+    # ... handler or not.
+    fn handled_above_constant() errors compiler::CompilerError:
+        static compile:
+            r = abi::x86_64::register64(9223372036854775808):
+                on abi::x86_64::Register64AboveRange:
+                    abi::x86_64::register64(0)
+            r
+    test::rejects("linux-syscall-register64-constant-proofs/handled", compiler::DiagnosticCode::KnownError, handled_above_constant)
+
+    # An unprovable Int must be handled ...
+    fn unhandled_dynamic() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int):
+                abi::x86_64::register64(n)
+            f(3)
+    test::rejects("linux-syscall-register64-constant-proofs/dynamic", compiler::DiagnosticCode::UnhandledError, unhandled_dynamic)
+
+    # ... or declared.
+    fn declared_dynamic() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) -> abi::x86_64::Register64 errors abi::x86_64::Register64BelowRange, abi::x86_64::Register64AboveRange:
+                abi::x86_64::register64(n)
+            1
+    test::value("linux-syscall-register64-constant-proofs/declared", 1, declared_dynamic)
+
+    # to_int's result is statically a Register64Word: converting it back
+    # needs no handler anywhere.
+    fn round_trip() errors compiler::CompilerError:
+        static compile:
+            fn again(r: abi::x86_64::Register64) -> abi::x86_64::Register64:
+                abi::x86_64::register64(abi::x86_64::to_int(r))
+            abi::x86_64::to_int(again(abi::x86_64::register64(-5)))
+    test::value("linux-syscall-round-trip-needs-no-handler", -5, round_trip)
+
+    # to_int's result is an ordinary Int: arithmetic past the register range
+    # does not wrap.
+    fn ordinary_int() errors compiler::CompilerError:
+        static compile:
+            m = abi::x86_64::to_int(abi::x86_64::register64(9223372036854775807))
+            n = abi::x86_64::to_int(abi::x86_64::register64(0 - 9223372036854775807 - 1))
+            [m + 1, n - 1, m * 2]
+    test::value("linux-syscall-to-int-is-ordinary-int", [9223372036854775808, -9223372036854775809, 18446744073709551614], ordinary_int)
+
+    # A Register64 has the language's structural equality (never equal to
+    # an Int) and is the nominal struct it is.
+    fn structural_equality() errors compiler::CompilerError:
+        static compile:
+            r = abi::x86_64::register64(20)
+            [r == abi::x86_64::register64(20), r == abi::x86_64::register64(21), r == 20, r]
+    test::value("linux-syscall-register64-is-transport-not-arithmetic/structural-equality", [true, false, false, abi::x86_64::Register64 {word: 20}], structural_equality)
+
+    # Direct construction must prove the word in the domain statically: an
+    # out-of-range constant and an unproven Int are Type; the minimum is a
+    # word.
+    fn construct_above() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::Register64 {word: 9223372036854775808}
+    test::rejects("linux-syscall-register64-construction-needs-proof/above", compiler::DiagnosticCode::Type, construct_above)
+
+    fn construct_unproven() errors compiler::CompilerError:
+        static compile:
+            fn wrap(x: int):
+                abi::x86_64::Register64 {word: x}
+            1
+    test::rejects("linux-syscall-register64-construction-needs-proof/unproven", compiler::DiagnosticCode::Type, construct_unproven)
+
+    fn construct_minimum() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::to_int(abi::x86_64::Register64 {word: 0 - 9223372036854775807 - 1})
+    test::value("linux-syscall-register64-construction-needs-proof/minimum", -9223372036854775808, construct_minimum)
+
+# ---------------------------------------------------------------------------
+# linux::abi::syscall: the static contract of the register struct
+#
+# Every block below is rejected (it never runs), or only defines a function
+# that calls the native without calling it.
+
+fn register_syscall_contract_tests():
+    # A field that is not a syscall-input register is UnknownField at that
+    # field, never ignored.
+    fn names_rbp() errors compiler::CompilerError:
+        static compile:
+            linux::abi::syscall({rax: abi::x86_64::register64(39), rbp: abi::x86_64::register64(1)})
+    test::rejects_at("linux-syscall-unknown-register-rejected/rbp", compiler::DiagnosticCode::UnknownField, 212, 68, names_rbp)
+    test::rejects_containing("linux-syscall-unknown-register-rejected/rbp-message", compiler::DiagnosticCode::UnknownField, "\"rbp\" is not a syscall register: linux::abi::syscall's argument may name only rax, rdi, rsi, rdx, r10, r8, r9", names_rbp)
+
+    fn names_rcx() errors compiler::CompilerError:
+        static compile:
+            linux::abi::syscall({rax: abi::x86_64::register64(39), rcx: abi::x86_64::register64(1)})
+    test::rejects("linux-syscall-unknown-register-rejected/rcx", compiler::DiagnosticCode::UnknownField, names_rcx)
+
+    fn names_r11() errors compiler::CompilerError:
+        static compile:
+            linux::abi::syscall({rax: abi::x86_64::register64(39), r11: abi::x86_64::register64(1)})
+    test::rejects("linux-syscall-unknown-register-rejected/r11", compiler::DiagnosticCode::UnknownField, names_r11)
+
+    fn names_rsp() errors compiler::CompilerError:
+        static compile:
+            linux::abi::syscall({rax: abi::x86_64::register64(39), rsp: abi::x86_64::register64(1)})
+    test::rejects("linux-syscall-unknown-register-rejected/rsp", compiler::DiagnosticCode::UnknownField, names_rsp)
+
+    # rax, the syscall number, is required: MissingField at the literal.
+    fn omits_rax() errors compiler::CompilerError:
+        static compile:
+            linux::abi::syscall({rdi: abi::x86_64::register64(39)})
+    test::rejects_at("linux-syscall-rax-required/at-the-literal", compiler::DiagnosticCode::MissingField, 234, 33, omits_rax)
+    test::rejects_containing("linux-syscall-rax-required/message", compiler::DiagnosticCode::MissingField, "linux::abi::syscall's argument has no field \"rax\"", omits_rax)
+
+    # Every register field must statically be a Register64: an Int ...
+    fn int_register() errors compiler::CompilerError:
+        static compile:
+            linux::abi::syscall({rax: 39})
+    test::rejects_at("linux-syscall-registers-must-be-register64/int", compiler::DiagnosticCode::Type, 241, 34, int_register)
+    test::rejects_containing("linux-syscall-registers-must-be-register64/int-message-register", compiler::DiagnosticCode::Type, "syscall register \"rax\" must be an abi::x86_64::Register64", int_register)
+    test::rejects_containing("linux-syscall-registers-must-be-register64/int-message-type", compiler::DiagnosticCode::Type, "its type here is int", int_register)
+
+    # ... a List ...
+    fn list_register() errors compiler::CompilerError:
+        static compile:
+            linux::abi::syscall({rax: abi::x86_64::register64(39), rdi: [1]})
+    test::rejects("linux-syscall-registers-must-be-register64/list", compiler::DiagnosticCode::Type, list_register)
+
+    # ... or an untyped value is Type (no run-time check is inserted) ...
+    fn untyped_register() errors compiler::CompilerError:
+        static compile:
+            fn sys(nr):
+                linux::abi::syscall({rax: nr})
+            1
+    test::rejects("linux-syscall-registers-must-be-register64/untyped", compiler::DiagnosticCode::Type, untyped_register)
+
+    # ... and a typed Register64 parameter is accepted.
+    fn typed_register() errors compiler::CompilerError:
+        static compile:
+            fn sys(nr: abi::x86_64::Register64):
+                linux::abi::syscall({rax: nr})
+            1
+    test::value("linux-syscall-registers-must-be-register64/typed", 1, typed_register)
+
+    # The argument is an anonymous register struct: a Register64 itself, an
+    # Int or a named struct is Type ...
+    fn register_argument() errors compiler::CompilerError:
+        static compile:
+            linux::abi::syscall(abi::x86_64::register64(39))
+    test::rejects("linux-syscall-argument-must-be-register-struct/register", compiler::DiagnosticCode::Type, register_argument)
+
+    fn int_argument() errors compiler::CompilerError:
+        static compile:
+            linux::abi::syscall(39)
+    test::rejects("linux-syscall-argument-must-be-register-struct/int", compiler::DiagnosticCode::Type, int_argument)
+
+    fn named_struct_argument() errors compiler::CompilerError:
+        static compile:
+            linux::abi::syscall(NamedRegisters {rax: abi::x86_64::register64(39)})
+    test::rejects("linux-syscall-argument-must-be-register-struct/named", compiler::DiagnosticCode::Type, named_struct_argument)
+
+    # ... and the arity is exactly one.
+    fn no_argument() errors compiler::CompilerError:
+        static compile:
+            linux::abi::syscall()
+    test::rejects("linux-syscall-argument-must-be-register-struct/none", compiler::DiagnosticCode::Arity, no_argument)
+
+    fn two_arguments() errors compiler::CompilerError:
+        static compile:
+            linux::abi::syscall({rax: abi::x86_64::register64(39)}, {rax: abi::x86_64::register64(39)})
+    test::rejects("linux-syscall-argument-must-be-register-struct/two", compiler::DiagnosticCode::Arity, two_arguments)
+
+    # A field whose value cannot complete (rdi: boom(c) is never, so the
+    # literal's whole type is never) hides no other field's problem: rcx is
+    # still an unknown register, reported at its name.
+    fn diverging_field() errors compiler::CompilerError:
+        static compile:
+            fn boom(c: bool) errors DivergingRegisterFailure:
+                if c:
+                    fail DivergingRegisterFailure
+                loop:
+                    unit
+            fn sc(c: bool) -> int errors DivergingRegisterFailure:
+                abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(39), rcx: 5, rbp: "x", rdi: boom(c)}))
+            v = sc(true):
+                on DivergingRegisterFailure:
+                    0 - 1
+            v
+    test::rejects_at("linux-syscall-diverging-field-hides-nothing", compiler::DiagnosticCode::UnknownField, 307, 92, diverging_field)
+
+    # linux::abi::syscall can only be called directly: it has no function
+    # value, bound ...
+    fn bound_native() errors compiler::CompilerError:
+        static compile:
+            f = linux::abi::syscall
+            f
+    test::rejects_at("linux-syscall-not-a-value/bound", compiler::DiagnosticCode::Type, 318, 17, bound_native)
+    test::rejects_containing("linux-syscall-not-a-value/bound-message", compiler::DiagnosticCode::Type, "linux::abi::syscall can only be called directly", bound_native)
+
+    # ... or passed.
+    fn passed_native() errors compiler::CompilerError:
+        static compile:
+            fn apply(g, x):
+                g(x)
+            apply(linux::abi::syscall, 1)
+    test::rejects("linux-syscall-not-a-value/argument", compiler::DiagnosticCode::Type, passed_native)
+
+    # Only the call is native-only: a program that defines raw_getpid and
+    # never calls it runs on every backend.
+    fn uncalled_definition() errors compiler::CompilerError:
+        static compile:
+            fn raw_getpid():
+                abi::x86_64::to_int(
+                    linux::abi::syscall({
+                        rax: abi::x86_64::register64(39),
+                    })
+                )
+            abi::x86_64::to_int(abi::x86_64::register64(7))
+    test::value("linux-syscall-tcl-backends-refuse-only-the-call/uncalled-definition-runs", 7, uncalled_definition)
+
+# ---------------------------------------------------------------------------
+# argv(): an ordinary callable root native with a builtin declared error
+#
+# Each accepted call sees the runner's default vector, ["botlish-runner"].
+
+fn register_argv_tests():
+    # `on InvalidArgumentEncoding` needs no `error` declaration.
+    fn handled_builtin_error() errors compiler::CompilerError:
+        static compile:
+            args = argv():
+                on InvalidArgumentEncoding:
+                    ["fallback"]
+            args
+    test::value("argv-builtin-error-visible-without-declaration", ["botlish-runner"], handled_builtin_error)
+
+    # An unhandled argv() is the ordinary UnhandledError diagnostic.
+    fn unhandled_call() errors compiler::CompilerError:
+        static compile:
+            args = argv()
+            args
+    test::rejects_containing("argv-unhandled-is-rejected-statically", compiler::DiagnosticCode::UnhandledError, "this call of \"argv\" may produce the declared error \"InvalidArgumentEncoding\"", unhandled_call)
+
+    # A function calling argv() unhandled must declare the error ...
+    fn undeclared_in_function() errors compiler::CompilerError:
+        static compile:
+            fn f() -> list:
+                argv()
+            f()
+    test::rejects("argv-fn-must-declare-the-error/undeclared", compiler::DiagnosticCode::UnhandledError, undeclared_in_function)
+
+    # ... which its caller must then handle ...
+    fn declared_unhandled_by_caller() errors compiler::CompilerError:
+        static compile:
+            fn f() -> list errors InvalidArgumentEncoding:
+                argv()
+            r = f()
+            r
+    test::rejects("argv-fn-must-declare-the-error/unhandled-caller", compiler::DiagnosticCode::UnhandledError, declared_unhandled_by_caller)
+
+    # ... as it may.
+    fn forwarded_to_caller() errors compiler::CompilerError:
+        static compile:
+            fn f() -> list errors InvalidArgumentEncoding:
+                argv()
+            r = f():
+                on InvalidArgumentEncoding:
+                    ["caller"]
+            r
+    test::value("argv-forwarding-fn-handled-by-caller", ["botlish-runner"], forwarded_to_caller)
+
+    # Only a call introduces the error: a reference needs no handler.
+    fn reference_only() errors compiler::CompilerError:
+        static compile:
+            f = argv
+            1
+    test::value("argv-only-a-call-introduces-the-error/reference", 1, reference_only)
+
+    fn call_introduces() errors compiler::CompilerError:
+        static compile:
+            f = argv()
+            1
+    test::rejects("argv-only-a-call-introduces-the-error/call", compiler::DiagnosticCode::UnhandledError, call_introduces)
+
+    # The name argv follows the ordinary lexical rules: a binding ...
+    fn shadowed_by_binding() errors compiler::CompilerError:
+        static compile:
+            argv = [1, 2]
+            argv
+    test::value("argv-shadowing-follows-lexical-rules/binding", [1, 2], shadowed_by_binding)
+
+    # ... or a function shadows it.
+    fn shadowed_by_function() errors compiler::CompilerError:
+        static compile:
+            fn argv() -> int:
+                7
+            argv()
+    test::value("argv-shadowing-follows-lexical-rules/function", 7, shadowed_by_function)
+
+    # A bound argv is called through the same declared-error contract.
+    fn first_class_value() errors compiler::CompilerError:
+        static compile:
+            f = argv
+            r = f():
+                on InvalidArgumentEncoding:
+                    ["h"]
+            r
+    test::value("argv-first-class-value-keeps-its-contract", ["botlish-runner"], first_class_value)
+
+    # argv cannot be erased into an untyped higher-order parameter: its error
+    # obligation would be lost.
+    fn erased_escape() errors compiler::CompilerError:
+        static compile:
+            fn apply0(g):
+                g()
+            r = apply0(argv)
+            r
+    test::rejects("argv-error-bearing-callable-escape-is-rejected", compiler::DiagnosticCode::Type, erased_escape)
+
+    # A Fn type carrying the error accepts argv ...
+    fn structural_with_error() errors compiler::CompilerError:
+        static compile:
+            fn apply0(g: Fn{args: [], return: list, errors: [InvalidArgumentEncoding]}) -> list errors InvalidArgumentEncoding:
+                g()
+            r = apply0(argv):
+                on InvalidArgumentEncoding:
+                    ["via-fn"]
+            r
+    test::value("argv-structural-function-type-carries-the-error/good", ["botlish-runner"], structural_with_error)
+
+    # ... one without it does not.
+    fn structural_without_error() errors compiler::CompilerError:
+        static compile:
+            fn apply0(g: Fn{args: [], return: list}) -> list:
+                g()
+            r = apply0(argv)
+            r
+    test::rejects("argv-structural-function-type-carries-the-error/bad", compiler::DiagnosticCode::Type, structural_without_error)
+
+    # The call is statically a List[str]: a List[str] consumer accepts it
+    # (one element, the runner's default vector) ...
+    fn string_list_consumer() errors compiler::CompilerError:
+        static compile:
+            fn count(args: List[str]) -> int:
+                list::length(args)
+            a = argv():
+                on InvalidArgumentEncoding:
+                    []
+            count(a)
+    test::value("argv-result-type-is-list-of-string/accepts", 1, string_list_consumer)
+
+    # ... a List[int] one rejects it.
+    fn int_list_consumer() errors compiler::CompilerError:
+        static compile:
+            fn count(args: List[int]) -> int:
+                list::length(args)
+            a = argv():
+                on InvalidArgumentEncoding:
+                    []
+            count(a)
+    test::rejects("argv-result-type-is-list-of-string/rejects", compiler::DiagnosticCode::Type, int_list_consumer)
+
+    # Repeated calls observe the same arguments.
+    fn stable_snapshot() errors compiler::CompilerError:
+        static compile:
+            a = argv():
+                on InvalidArgumentEncoding:
+                    ["x"]
+            b = argv():
+                on InvalidArgumentEncoding:
+                    ["y"]
+            [a == b, a, b]
+    test::value("argv-stable-snapshot-within-one-run", [true, ["botlish-runner"], ["botlish-runner"]], stable_snapshot)
+
+with context test::suite()
+register_register64_tests()
+register_syscall_contract_tests()
+register_argv_tests()
+test::report()

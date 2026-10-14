@@ -401,6 +401,13 @@ instance key of a trait parameter (`hir/semantic.tcl`), the plan or build 2
 `audit/traits/tools/mutants.txt` to still apply: update a mutant's text when
 you change the code it mutates, and keep it a mutant of the same rule).
 `audit/traits/tools/evidence.tcl` regenerates `audit/traits/principal/`.
+`hir::BuildFull` runs the plan only on a program with no diagnostic, and its
+diagnostics are a static site's: a program-wide channel of the static
+decisions (`hir/staticdeps.tcl`'s `C:plan`, which lists the plan's
+diagnostic kinds and the calls they are reported at). A change to that gate,
+to those kinds or to where they are anchored also needs
+`tests/static-economics.test` (`se-property-plan-gate`, `se-equal-plan-gate`)
+and the static-decision harnesses (Static intrinsics, below).
 
 ## Context traits
 
@@ -531,7 +538,13 @@ the trait and context-trait mutants. A change to native drop or release
 lowering also needs a `BOTLISH_NATIVE_GC_STRESS=1` run of
 `tests/affine.test` and `cargo test --release --manifest-path
 native/Cargo.toml --lib affine`. `bench/affine.tcl` regenerates the
-performance report.
+performance report. `hir::affine::verify` computes release scopes (and so
+`AFFINE-PATH-RELEASE-UNSUPPORTED`) only for a program its whole-program
+analysis accepts, a program-wide channel of the static decisions
+(`hir/staticdeps.tcl`'s `C:verdict`, which lists that analysis's diagnostic
+kinds): a change to that gate, to those kinds or to which joins can hold a
+path-release diagnostic also needs `tests/static-economics.test` and the
+static-decision harnesses (Static intrinsics, below).
 
 ## Enums
 
@@ -812,7 +825,21 @@ difference from `BOTLISH_STATIC_SCHEDULER=sequential`: add its edge to
 schedulers, the dependency analysis, the method-call seeds or build reuse
 (`hir/hir.tcl`), or add a fact an analysis reads across functions (a summary,
 an inferred contract, the erased-callable contract, an instance budget, a
-yield type, a diagnostic suppressed by reachability), run
+yield type, a diagnostic suppressed by reachability or by a whole-program
+verdict such as the ownership analysis's, which withholds release scopes and
+`AFFINE-PATH-RELEASE-UNSUPPORTED` from a program it rejects, or the trait
+plan's gate, which reports its diagnostics only for a program with no other;
+or a diagnostic that prints an internal id in a new form -- `hir::static::
+InternalIds` knows `block(eN)` and `function eN` only -- or a binding's, a
+reference's or a function's `name`, which hygiene may have renamed `NAME#N`
+with a number counted over the whole program: never print `name`, print
+`hir::semantic::SourceName` for a binding, `RefName` for a `ref` or `bind`
+node and `CallableName` (or `hir::signatures::Name`) for a function, and pin
+the message with an `se-equal-hygiene-*` reproducer; or move a check across
+the completion walk in `hir::CheckOnce`, or make a diagnostic depend on
+another's presence: a site's contract-boundary edges read
+`beforeCompletions`, since a first diagnostic reported before that walk is no
+contract-boundary report and stays first whatever the program erases), run
 `tests/static-economics.test`, `tests/static-compile.test`, `tests/golden.test`
 (`golden-static-economics`), `audit/static-decisions/tools/fuzz.tcl` (several
 seeds), `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` and
@@ -841,6 +868,22 @@ fails when a suite's reported tests differ from the manifest's; a new or
 removed golden test is a manifest row added or removed. `rejects_at` pins
 line and column in the suite file: adding lines above one moves it (update
 the test). `tests/golden/README.md` is the porting guide.
+
+The manifest maps *every* Tcl test that runs (LARGE-SCALE-GOLDEN-MIGRATION.md)
+and is generated: never edit it by hand. A golden test's row lives in its
+suite's fragment (`audit/golden/migration/fragments/SUITE.tsv`), a Tcl test's
+classification in its file's census (`audit/golden/migration/census/FILE.tsv`);
+a new Tcl test gets a census row (KEEP-INTERNAL for a test of compiler
+internals). Regenerate with `tclsh9.0 audit/golden/migration/merge.tcl -names
+audit/golden/migration/tcl-names.txt` (refresh the names with
+`audit/golden/tools/check.tcl -full 1 -names-out FILE` when tests were added).
+A new golden test must be able to fail: run `audit/golden/tools/perturb.tcl` on
+its suite. By default `tests/golden.test` runs the eight validation-sample
+suites (`BOTLISH_GOLDEN_SUITES=all` or a list of files runs others); CI's
+`golden` shards run every suite on every backend beside its Tcl originals
+(`check.tcl -shard I/4`). A suite that cannot run on a backend declares
+`# golden-exclude: BACKEND -- REASON` in its leading comments; keep such tests
+in a companion suite so the main suite keeps all four backends.
 
 If you change `lib/test.bot`, run `tests/golden-framework.test`,
 `tests/golden.test`, `tclsh9.0 tests/golden/run.tcl`,

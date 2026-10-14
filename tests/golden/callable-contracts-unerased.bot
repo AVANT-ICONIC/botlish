@@ -1,0 +1,44 @@
+# callable-contracts-unerased.bot -- tests/structural-contract-completions.test's
+# scc-any-parameter-call in a program that erases nothing.
+#
+# apply calls its untyped parameter. Given the structural type
+# Fn{args: [any, any], return: any} (no errors), apply fits only if nothing
+# a call through that type may pass it can raise: a call through the type
+# may pass it anything, so what apply raises through f is whatever the
+# whole program erases (the erased-callable contract). In a program that
+# erases an error-bearing callable that is a Type error
+# (callable-contracts.bot's scc-any-parameter-call/erasing); in a program
+# that erases nothing it fits.
+#
+# Why a suite of its own: the theorem is about a program with an empty
+# erased-callable contract, and every other callable-contracts suite erases
+# errors. The Tcl program is sccPrelude without its poison, plus the code
+# below; the prelude's other functions, unused and erasing nothing, are left
+# out (Job and quiet are the ones the program uses).
+#
+# Imports: compiler and test (every suite).
+import compiler
+import test
+
+struct Job:
+    run: Fn{args: [], return: int}
+
+struct Apply:
+    run: Fn{args: [any, any], return: any}
+
+fn register_scc_unerased_tests():
+    # scc-any-parameter-call/clean: accepted (value 0, the program's).
+    fn any_parameter_call() errors compiler::CompilerError:
+        static compile:
+            fn quiet() -> int:
+                7
+            s = Job {run: quiet}
+            fn apply(f, x):
+                f(x)
+            a = Apply {run: apply}
+            0
+    test::value("scc-any-parameter-call/clean", 0, any_parameter_call)
+
+with context test::suite()
+register_scc_unerased_tests()
+test::report()

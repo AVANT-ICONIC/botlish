@@ -1,0 +1,178 @@
+# tclsh9.0 bench/golden-aot.tcl (all 88 suites; exit 0, 2179 s), on the final tree with the AOT empty-shape fix (c50b9d1),
+# while other work shared the machine: the seconds are indicative, the build/JIT ratios are each suite's own
+# (LARGE-SCALE-GOLDEN-MIGRATION.md, Performance, "Ahead-of-time executables").
+
+abi-bytes-native.bot                     front end    1.72 s | AOT build   3.02 s, run  0.010 s | JIT lower+codegen+run   0.66 s | build/JIT  4.6 | 3 passed, 0 failed
+abi-bytes.bot                            front end   13.04 s | AOT build  17.47 s, run  0.004 s | JIT lower+codegen+run   3.78 s | build/JIT  4.6 | 103 passed, 0 failed
+abi-numeric-native.bot                   front end    1.09 s | AOT build   2.60 s, run  0.011 s | JIT lower+codegen+run   0.55 s | build/JIT  4.7 | 1 passed, 0 failed
+abi-numeric.bot                          front end    8.29 s | AOT build  12.77 s, run  0.005 s | JIT lower+codegen+run   3.26 s | build/JIT  3.9 | 87 passed, 0 failed
+affinity.bot                             front end   12.41 s | AOT build  13.30 s, run  0.004 s | JIT lower+codegen+run   3.93 s | build/JIT  3.4 | 67 passed, 0 failed
+bits-bytes-hashing.bot                   front end    2.83 s | AOT build   8.27 s, run  0.004 s | JIT lower+codegen+run   2.50 s | build/JIT  3.3 | 47 passed, 0 failed
+callable-contracts-contravariant-rejected.bot front end    1.48 s | AOT build   2.14 s, run  0.002 s | JIT lower+codegen+run   0.39 s | build/JIT  5.5 | 2 passed, 0 failed
+callable-contracts-contravariant.bot     front end    1.92 s | NOT AOT-READY (found in 0.23 s) | JIT lower+codegen+run   0.74 s
+    call1<generic>: open
+      line 66:17: the callee has no static kind: native, block or not callable is decided at run time
+    apply<generic>: open
+callable-contracts-fallback.bot          front end    2.01 s | AOT build   3.13 s, run  0.003 s | JIT lower+codegen+run   0.58 s | build/JIT  5.4 | 4 passed, 0 failed
+callable-contracts-handle.bot            front end    0.86 s | AOT build   2.36 s, run  0.008 s | JIT lower+codegen+run   0.68 s | build/JIT  3.5 | 1 passed, 0 failed
+callable-contracts-returned.bot          front end    1.92 s | AOT build   2.90 s, run  0.002 s | JIT lower+codegen+run   0.53 s | build/JIT  5.4 | 4 passed, 0 failed
+callable-contracts-unerased.bot          front end    0.81 s | NOT AOT-READY (found in 0.20 s) | JIT lower+codegen+run   0.38 s
+    apply<generic>: open
+      line 37:17: the callee has no static kind: native, block or not callable is decided at run time
+callable-contracts.bot                   front end   48.41 s | NOT AOT-READY (found in 5.09 s) | JIT lower+codegen+run   7.76 s
+    plain<generic>: guarded
+      line 1167:17: * needs int; parameter x (no annotation, no call-site inference) has no static kind
+    plain<generic>: guarded
+callables.bot                            front end   16.69 s | NOT AOT-READY (found in 4.69 s) | JIT lower+codegen+run   6.85 s
+    list::all?<List[str], any>: open
+      line 90:16: the condition needs bool; the result of the dynamic call at line 90:16 has no static kind
+      line 90:16: the callee has no static kind: native, block or not callable is decided at run time
+closure-escape-instances.bot             front end    0.86 s | AOT build   2.26 s, run  0.002 s | JIT lower+codegen+run   0.37 s | build/JIT  6.1 | 1 passed, 0 failed
+closure-escape.bot                       front end    2.76 s | NOT AOT-READY (found in 1.70 s) | JIT lower+codegen+run   3.48 s
+    inner<generic>: guarded
+      line 293:25: + needs int; parameter i (no annotation, no call-site inference) has no static kind
+    step<generic>: guarded
+collections.bot                          front end   12.24 s | NOT AOT-READY (found in 1.24 s) | JIT lower+codegen+run   2.09 s
+    is_even<generic>: guarded
+      line 161:17: mod needs int; parameter x (no annotation, no call-site inference) has no static kind
+compiled-values-struct-transport.bot     front end    2.45 s | AOT build   6.03 s, run  0.003 s | JIT lower+codegen+run   1.70 s | build/JIT  3.5 | 18 passed, 0 failed
+compiled-values.bot                      front end   31.77 s | NOT AOT-READY (found in 10.15 s) | JIT lower+codegen+run  11.52 s
+    ping<generic>: open
+      line 232:21: the callee has no static kind: native, block or not callable is decided at run time
+      line 232:30: - needs int; parameter n (no annotation, no call-site inference) has no static kind
+completion-regressions.bot               front end    2.62 s | AOT build   3.50 s, run  0.003 s | JIT lower+codegen+run   0.78 s | build/JIT  4.5 | 23 passed, 0 failed
+contexts.bot                             front end   13.55 s | AOT build  15.43 s, run  0.004 s | JIT lower+codegen+run   4.47 s | build/JIT  3.5 | 88 passed, 0 failed
+core-semantics.bot                       front end   12.04 s | NOT AOT-READY (found in 3.79 s) | JIT lower+codegen+run   6.61 s
+    add<generic>: guarded
+      line 192:25: + needs int; parameter y (no annotation, no call-site inference) has no static kind
+    add<generic>: guarded
+coroutines.bot                           front end   18.87 s | AOT build  17.62 s, run  0.006 s | JIT lower+codegen+run   5.39 s | build/JIT  3.3 | 62 passed, 0 failed
+declared-errors-imports.bot              front end    1.53 s | AOT build   2.50 s, run  0.002 s | JIT lower+codegen+run   0.42 s | build/JIT  5.9 | 10 passed, 0 failed
+declared-errors.bot                      front end   30.05 s | AOT build  25.38 s, run  0.005 s | JIT lower+codegen+run   5.95 s | build/JIT  4.3 | 115 passed, 0 failed
+destructuring-instances.bot              front end    2.51 s | NOT AOT-READY (found in 1.15 s) | JIT lower+codegen+run   1.84 s
+    next<generic>: guarded
+      line 151:21: + needs int; parameter x (no annotation, no call-site inference) has no static kind
+    next<generic>: guarded
+destructuring.bot                        front end   89.31 s | NOT AOT-READY (found in 43.20 s) | JIT lower+codegen+run  49.15 s
+    inc<generic>: guarded
+      line 2329:17: + needs int; parameter x (no annotation, no call-site inference) has no static kind
+    inc<generic>: guarded
+diagnostics.bot                          front end    6.27 s | AOT build   4.82 s, run  0.003 s | JIT lower+codegen+run   1.15 s | build/JIT  4.2 | 27 passed, 0 failed
+errors.bot                               front end    4.60 s | NOT AOT-READY (found in 0.71 s) | JIT lower+codegen+run   1.45 s
+    big<generic>: guarded
+      line 451:13: > needs int; parameter x (no annotation, no call-site inference) has no static kind
+flags.bot                                front end    7.04 s | NOT AOT-READY (found in 4.29 s) | JIT lower+codegen+run   6.51 s
+    nested_calls<generic>: guarded
+      line 256:22: + needs int; the result of list::get at line 256:22 has no static kind
+    inc<generic>: guarded
+framework-semantics.bot                  front end   17.10 s | AOT build   7.45 s, run  0.003 s | JIT lower+codegen+run   1.51 s | build/JIT  4.9 | 29 passed, 0 failed
+gc-sensitive-values.bot                  front end    1.92 s | NOT AOT-READY (found in 0.86 s) | JIT lower+codegen+run   1.61 s
+    build<generic>: guarded
+      line 348:20: < needs int; parameter n (no annotation, no call-site inference) has no static kind
+    apply<any, int>: open
+harness.bot                              front end    1.38 s | NOT AOT-READY (found in 0.57 s) | JIT lower+codegen+run   1.06 s
+    inc<generic>: guarded
+      line 309:17: + needs int; parameter x (no annotation, no call-site inference) has no static kind
+    dbl<generic>: guarded
+hir-values.bot                           front end    1.30 s | AOT build   3.54 s, run  0.003 s | JIT lower+codegen+run   0.99 s | build/JIT  3.6 | 14 passed, 0 failed
+imports-abi-child.bot                    front end    2.51 s | AOT build   3.35 s, run  0.004 s | JIT lower+codegen+run   0.93 s | build/JIT  3.6 | 17 passed, 0 failed
+imports-abi-family.bot                   front end    1.14 s | AOT build   2.45 s, run  0.003 s | JIT lower+codegen+run   0.52 s | build/JIT  4.7 | 6 passed, 0 failed
+imports-library-modules.bot              front end    4.05 s | AOT build   4.48 s, run  0.004 s | JIT lower+codegen+run   1.21 s | build/JIT  3.7 | 12 passed, 0 failed
+imports-unimported.bot                   front end    1.68 s | AOT build   2.88 s, run  0.003 s | JIT lower+codegen+run   0.53 s | build/JIT  5.5 | 16 passed, 0 failed
+imports.bot                              front end   35.70 s | NOT AOT-READY (found in 1.37 s) | JIT lower+codegen+run   2.16 s
+    dbl<generic>: guarded
+      line 372:17: + needs int; parameter n (no annotation, no call-site inference) has no static kind
+      line 372:21: + needs int; parameter n (no annotation, no call-site inference) has no static kind
+linux-io-native.bot                      front end    1.19 s | AOT build   2.63 s, run  0.002 s | JIT lower+codegen+run   0.60 s | build/JIT  4.4 | 5 passed, 0 failed
+linux-io.bot                             front end    6.29 s | AOT build   6.67 s, run  0.003 s | JIT lower+codegen+run   1.42 s | build/JIT  4.7 | 50 passed, 5 failed -- JIT: 55 passed, 0 failed
+lists-and-sets.bot                       front end    6.08 s | NOT AOT-READY (found in 1.53 s) | JIT lower+codegen+run   2.36 s
+    is_even<generic>: guarded
+      line 161:21: mod needs int; parameter x (no annotation, no call-site inference) has no static kind
+    is_even<generic>: guarded
+loop-collecting-refined-checks.bot       front end    1.42 s | AOT build   3.35 s, run  0.004 s | JIT lower+codegen+run   0.92 s | build/JIT  3.6 | 1 passed, 0 failed
+loop-collecting.bot                      front end    9.08 s | AOT build  21.20 s, run  0.003 s | JIT lower+codegen+run   6.69 s | build/JIT  3.2 | 110 passed, 0 failed
+loops.bot                                front end    3.35 s | AOT build   8.67 s, run  0.003 s | JIT lower+codegen+run   2.27 s | build/JIT  3.8 | 55 passed, 0 failed
+method-equivalence-imported.bot          front end    5.84 s | AOT build   3.85 s, run  0.003 s | JIT lower+codegen+run   0.94 s | build/JIT  4.1 | 13 passed, 0 failed
+method-equivalence.bot                   front end    4.44 s | NOT AOT-READY (found in 1.18 s) | JIT lower+codegen+run   2.08 s
+    atan2<generic>: guarded
+      line 451:17: + needs int; parameter y (no annotation, no call-site inference) has no static kind
+      line 451:21: + needs int; parameter x (no annotation, no call-site inference) has no static kind
+methods-byte-without-list.bot            front end    1.57 s | AOT build   2.30 s, run  0.003 s | JIT lower+codegen+run   0.46 s | build/JIT  5.0 | 3 passed, 0 failed
+methods-list-without-str.bot             front end    1.60 s | AOT build   2.41 s, run  0.003 s | JIT lower+codegen+run   0.48 s | build/JIT  5.0 | 3 passed, 0 failed
+methods-struct-instances.bot             front end    1.40 s | NOT AOT-READY (found in 0.36 s) | JIT lower+codegen+run   0.58 s
+    inc<generic>: guarded
+      line 50:17: + needs int; parameter a (no annotation, no call-site inference) has no static kind
+methods-type-import-only.bot             front end    1.51 s | AOT build   2.04 s, run  0.002 s | JIT lower+codegen+run   0.39 s | build/JIT  5.2 | 1 passed, 0 failed
+methods.bot                              front end   52.40 s | NOT AOT-READY (found in 10.13 s) | JIT lower+codegen+run  12.77 s
+    byte::complement<generic>: guarded
+      line 123:21: bit_xor needs int; parameter b (no annotation, no call-site inference) has no static kind
+    list::find<generic>: open
+modules.bot                              front end   10.98 s | NOT AOT-READY (found in 1.26 s) | JIT lower+codegen+run   1.90 s
+    big<generic>: guarded
+      line 536:13: > needs int; parameter x (no annotation, no call-site inference) has no static kind
+mutable-array.bot                        front end  306.25 s | NOT AOT-READY (found in 22.12 s) | JIT lower+codegen+run  21.75 s
+    f<generic>: guarded
+      line 2042:36: mutable_array::set needs mutarray; the result of mutable_vector#share at line 2041:24 has no static kind
+mutable-vector-str.bot                   front end    0.88 s | AOT build   2.06 s, run  0.002 s | JIT lower+codegen+run   0.48 s | build/JIT  4.3 | 1 passed, 0 failed
+mutable-vector.bot                       front end   37.78 s | AOT build  14.59 s, run  0.120 s | JIT lower+codegen+run   4.59 s | build/JIT  3.2 | 74 passed, 0 failed
+names-and-scoping.bot                    front end    2.95 s | NOT AOT-READY (found in 1.40 s) | JIT lower+codegen+run   2.09 s
+    f<generic>: guarded
+      line 477:17: + needs int; parameter x (no annotation, no call-site inference) has no static kind
+native-aggregates.bot                    front end    4.97 s | NOT AOT-READY (found in 4.29 s) | JIT lower+codegen+run   5.32 s
+    inc<generic>: guarded
+      line 1042:17: + needs int; parameter x (no annotation, no call-site inference) has no static kind
+    dec<generic>: guarded
+native-values.bot                        front end    3.83 s | NOT AOT-READY (found in 2.23 s) | JIT lower+codegen+run   3.67 s
+    bump<list[int, str], int>: guarded
+      line 670:17: + needs int; the element read by list::at at line 670:17 has no static kind
+    inc<generic>: guarded
+opaque-instances.bot                     front end    1.27 s | AOT build   2.46 s, run  0.006 s | JIT lower+codegen+run   0.41 s | build/JIT  6.1 | 1 passed, 0 failed
+opaque.bot                               front end   42.49 s | AOT build  14.80 s, run  0.010 s | JIT lower+codegen+run   4.02 s | build/JIT  3.7 | 91 passed, 0 failed
+ownership.bot                            front end   18.43 s | AOT build   6.99 s, run  0.007 s | JIT lower+codegen+run   1.80 s | build/JIT  3.9 | 38 passed, 0 failed
+range-and-contract-values.bot            front end   24.80 s | NOT AOT-READY (found in 3.45 s) | JIT lower+codegen+run   5.34 s
+    one?<generic>: guarded
+      line 126:29: str::length needs str; parameter c (no annotation, no call-site inference) has no static kind
+    one?<generic>: guarded
+raw-int-abi.bot                          front end    3.25 s | NOT AOT-READY (found in 1.52 s) | JIT lower+codegen+run   2.88 s
+    open_one<generic>: guarded
+      line 189:17: * needs int; parameter n (no annotation, no call-site inference) has no static kind
+    add1<generic>: guarded
+recursive-types.bot                      front end    2.62 s | AOT build   3.16 s, run  0.002 s | JIT lower+codegen+run   0.78 s | build/JIT  4.1 | 9 passed, 0 failed
+refinements.bot                          front end   39.45 s | AOT build  10.34 s, run  0.008 s | JIT lower+codegen+run   3.08 s | build/JIT  3.4 | 66 passed, 0 failed
+representation.bot                       front end    2.91 s | AOT build   4.79 s, run  0.003 s | JIT lower+codegen+run   0.97 s | build/JIT  4.9 | 13 passed, 0 failed
+static-compile-erased-consumer.bot       front end    1.41 s | AOT build   2.49 s, run  0.002 s | JIT lower+codegen+run   0.45 s | build/JIT  5.5 | 2 passed, 0 failed
+static-compile.bot                       front end   69.43 s | NOT AOT-READY (found in 6.67 s) | JIT lower+codegen+run   7.74 s
+    compile<generic>: guarded
+      line 223:17: * needs int; parameter x (no annotation, no call-site inference) has no static kind
+stdlib-namespaces-entry-members.bot      front end    1.03 s | AOT build   2.45 s, run  0.008 s | JIT lower+codegen+run   0.49 s | build/JIT  5.0 | 4 passed, 0 failed
+stdlib-namespaces-str-only.bot           front end    1.30 s | AOT build   2.26 s, run  0.007 s | JIT lower+codegen+run   0.41 s | build/JIT  5.5 | 1 passed, 0 failed
+stdlib-namespaces-unimported.bot         front end    1.51 s | AOT build   2.79 s, run  0.007 s | JIT lower+codegen+run   0.50 s | build/JIT  5.6 | 2 passed, 0 failed
+stdlib-namespaces.bot                    front end   48.90 s | NOT AOT-READY (found in 4.78 s) | JIT lower+codegen+run   6.38 s
+    list::get<generic>: guarded
+      line 77:22: list::at needs list; parameter xs (no annotation, no call-site inference) has no static kind
+      line 77:26: list::at needs int; parameter index (no annotation, no call-site inference) has no static kind
+string-natives.bot                       front end    4.91 s | AOT build  16.25 s, run  0.013 s | JIT lower+codegen+run   4.56 s | build/JIT  3.6 | 82 passed, 0 failed
+string-representations.bot               front end    3.10 s | NOT AOT-READY (found in 1.50 s) | JIT lower+codegen+run   2.53 s
+    pick<generic>: guarded
+      line 339:20: the condition needs bool; parameter flag (no annotation, no call-site inference) has no static kind
+    pick<generic>: guarded
+strings.bot                              front end    8.15 s | AOT build  11.92 s, run  0.009 s | JIT lower+codegen+run   3.57 s | build/JIT  3.3 | 94 passed, 0 failed
+struct-representation-instances.bot      front end    1.60 s | AOT build   3.80 s, run  0.008 s | JIT lower+codegen+run   0.85 s | build/JIT  4.5 | 15 passed, 0 failed
+struct-representation.bot                front end    8.98 s | NOT AOT-READY (found in 7.24 s) | JIT lower+codegen+run  10.18 s
+    tick<generic>: guarded
+      line 140:36: + needs int; the result of mutable_array::get at line 139:9 has no static kind
+    wrap<generic>: guarded
+structs-and-enums-instances.bot          front end    1.28 s | AOT build   2.64 s, run  0.002 s | JIT lower+codegen+run   0.53 s | build/JIT  5.0 | 4 passed, 0 failed
+structs-and-enums-qualifiers.bot         front end    0.96 s | AOT build   2.12 s, run  0.007 s | JIT lower+codegen+run   0.44 s | build/JIT  4.9 | 2 passed, 0 failed
+structs-and-enums.bot                    front end   60.07 s | AOT build  15.99 s, run  0.004 s | JIT lower+codegen+run   4.27 s | build/JIT  3.7 | 111 passed, 0 failed
+traits-path.bot                          front end    1.51 s | AOT build   2.47 s, run  0.003 s | JIT lower+codegen+run   0.53 s | build/JIT  4.7 | 2 passed, 0 failed
+traits.bot                               front end   41.25 s | AOT build  11.33 s, run  0.005 s | JIT lower+codegen+run   3.64 s | build/JIT  3.1 | 67 passed, 0 failed
+types.bot                                front end   11.79 s | AOT build  13.59 s, run  0.004 s | JIT lower+codegen+run   4.07 s | build/JIT  3.3 | 96 passed, 0 failed
+unicode-strings.bot                      front end    1.58 s | AOT build   4.30 s, run  0.004 s | JIT lower+codegen+run   0.97 s | build/JIT  4.4 | 56 passed, 0 failed
+validators-and-proofs.bot                front end   15.74 s | AOT build  26.76 s, run  0.011 s | JIT lower+codegen+run   5.44 s | build/JIT  4.9 | 153 passed, 0 failed
+values.bot                               front end    4.42 s | NOT AOT-READY (found in 1.44 s) | JIT lower+codegen+run   2.31 s
+    add<generic>: guarded
+      line 51:25: + needs int; parameter y (no annotation, no call-site inference) has no static kind
+warning-programs.bot                     front end    6.09 s | AOT build   6.00 s, run  0.004 s | JIT lower+codegen+run   1.56 s | build/JIT  3.9 | 42 passed, 0 failed
+
+88 suites: 57 AOT-ready, 31 not AOT-ready, 0 failed to build

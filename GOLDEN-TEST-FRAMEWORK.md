@@ -127,6 +127,7 @@ are reachable too, but are not part of it):
 | `test::rejects(name, code, body)` | registers: the body's block must be rejected with `code` (a `compiler::DiagnosticCode`) |
 | `test::rejects_at(name, code, line, column, body)` | registers: ... at that primary location |
 | `test::rejects_any(name, body)` | registers: the body's block must be rejected |
+| `test::rejects_message(name, code, message, body)`, `test::rejects_containing(name, code, fragment, body)` | registers: ... with that code and exactly that message, or a message containing the fragment (added by the large-scale migration, LARGE-SCALE-GOLDEN-MIGRATION.md) |
 | `test::Match` | `{matched, expected, actual, detail}`: one comparison's verdict, as data |
 | `test::equal(expected, actual)`, `test::satisfies(actual, description, predicate)`, `test::diagnostic(expected, code, primary, message)` | matchers: a Match |
 | `test::passed()`, `test::mismatch(expected, actual, detail)` | Match constructors for a custom check |
@@ -428,7 +429,7 @@ enclosing function's declared errors -- for `test::value`,
 registration is checked against it (`gf-body-error-contract`):
 
 ```
-suite.bot:14:30: argument for parameter "body" cannot be proven to satisfy Fn{args: [], return: any, errors: [compiler::CompilerError]}, the parameter type inferred from the function body (argument type: block(...)/0 -> int); error set incompatible: the callable may raise Boom, but the function type allows only [compiler::CompilerError]; ... (CORE SEMANTIC TYPE)
+suite.bot:14:30: argument for parameter "body" cannot be proven to satisfy Fn{args: [], return: any, errors: [compiler::CompilerError]}, the parameter type inferred from the function body (argument type: .../0 -> int); error set incompatible: the callable may raise Boom, but the function type allows only [compiler::CompilerError]; ... (CORE SEMANTIC TYPE)
 ```
 
 -- at the registration's argument, naming the error: a precise compile-time

@@ -1,0 +1,190 @@
+# unicode-strings.bot -- Strings at the Unicode edges, as a source-level
+# specification: the String operations whose answers depend on the Unicode
+# character database (character classes, lowercase) and the String
+# predicate built on them (web::emailish?), on non-ASCII, multi-byte and
+# astral characters, with the same answer on every backend.
+#
+# Character classes (str::is_tcl_alpha, str::is_tcl_alnum;
+# NATIVE-TCL-UNICODE.md), each of a String of exactly one Unicode scalar:
+#   * is_tcl_alpha is true exactly for a letter, General_Category Lu, Ll, Lt,
+#     Lm or Lo: an ASCII letter, a Latin letter beyond ASCII, a CJK
+#     ideograph, a titlecase digraph, a modifier letter;
+#   * is_tcl_alnum is true for a letter or a decimal digit (Nd), ASCII or not
+#     (ARABIC-INDIC DIGIT ZERO is alnum and not alpha);
+#   * a character that looks numeric but is not Nd -- a vulgar fraction or a
+#     circled digit (No), a Roman numeral (Nl) -- is neither, nor is a
+#     combining mark (Mn) or punctuation (Pc, Po): the classes are Tcl 9's
+#     [:alpha:] and [:alnum:], narrower than Rust's is_alphabetic /
+#     is_alphanumeric and Python's isalnum.
+# web::emailish? (lib/web.bot) uses them, so its grammar -- a local part of
+#   alnum characters and . _ % + -, "@", one or more labels of alnum
+#   characters and "-" each followed by ".", and a top-level domain of at
+#   least two alpha characters -- is Unicode-aware in every position: an
+#   accented local part, CJK labels and TLD, a CJK letter ending a TLD, a
+#   non-ASCII decimal digit in a label are accepted; a Roman numeral as the
+#   TLD is not; and the ASCII negatives (empty, too short or digit-bearing
+#   TLD, empty labels, a trailing dot, a missing part) are rejected. A
+#   re-check of an address inside its own true branch answers like the first
+#   check.
+# Lowercase (str::lowercase, README.md "Strings"): the Unicode 16 simple
+#   (one-to-one, UnicodeData.txt) lowercase mapping, scalar by scalar, so
+#   the length never changes: ASCII and Latin-1 letters; CAPITAL SHARP S to
+#   sharp s; SIGMA always to the medial sigma, even last in a word; DOTTED
+#   CAPITAL I to a plain i, alone and between letters; the two letters whose
+#   lowercase is outside their block (U+023A, U+023E); the KELVIN SIGN to an
+#   ASCII k; lowercase text unchanged; an astral Deseret capital to its
+#   astral small letter and an astral emoji unchanged; and characters that
+#   gained a lowercase mapping only in Unicode 17 (U+A7CE, U+A7D2, U+A7D4,
+#   the astral BERIA ERFE U+16EA0) unchanged.
+#
+# Ported from tests/native-tcl-unicode.test: the value halves of its
+# four-backend parity tests (audit/golden/migration/fragments/
+# unicode-strings.tsv maps every Tcl test to its golden test). The Tcl tests
+# stay authoritative for what a program cannot observe: the cross-check of
+# every emailish? verdict against the reference regular expression
+# (core::regex), the forced GC-stress run, the NIR shape of the redundant
+# re-check (one compiled validator, one call), the primitives' RANGE failure
+# on a String that is not one scalar (a run-time failure no handler
+# catches), their metadata and the every-scalar lowercase sweep. Five of the Tcl emailish programs are
+# exactly strings.bot's emailish-predicate-parity tests (the same address,
+# the same expected verdict) and map there instead of being repeated.
+#
+# Every input -- the classified character, the address, the text to
+# lowercase -- is a parameter of its registration function, captured by the
+# body and given as a literal at the call site: no exact-value fact of a
+# literal can decide an answer at compile time, so every backend computes it
+# at run time with its own Unicode tables (the Tcl programs, Core IR
+# constants handed to each backend, test the same). Botlish source has no
+# escape for a code point, so the characters are written literally; the
+# comment beside each row names its code points. Keep them byte for byte:
+# the kelvin-sign row's input is not stable under Unicode normalization (an
+# editor or tool that normalizes this file to NFC turns U+212A into an
+# ASCII K, and the row silently tests ASCII instead).
+#
+# Imports: compiler and test are the framework's (bodies declare
+# compiler::CompilerError); str for the primitives under test; web for
+# web::emailish?.
+import compiler
+import str
+import test
+import web
+
+# ---------------------------------------------------------------------------
+# Character classes: str::is_tcl_alpha and str::is_tcl_alnum
+
+# native-tcl-unicode-alpha-LABEL / native-tcl-unicode-alnum-LABEL: the one
+# character C is (ALPHA) a letter and (ALNUM) a letter or decimal digit.
+fn register_character_class(label: str, c: str, alpha: bool, alnum: bool):
+    fn b_alpha() errors compiler::CompilerError:
+        static compile:
+            str::is_tcl_alpha(c)
+    test::value("native-tcl-unicode-alpha-".concat(label), alpha, b_alpha)
+
+    fn b_alnum() errors compiler::CompilerError:
+        static compile:
+            str::is_tcl_alnum(c)
+    test::value("native-tcl-unicode-alnum-".concat(label), alnum, b_alnum)
+
+fn register_character_class_tests():
+    #                        label                          char       alpha  alnum
+    register_character_class("ascii-letter",               "A", true, true)      # U+0041 Lu
+    register_character_class("ascii-digit",                "9", false, true)     # U+0039 Nd
+    register_character_class("latin-e-acute-Ll",           "é", true, true)      # U+00E9 Ll
+    register_character_class("cjk-ri-Lo",                  "日", true, true)     # U+65E5 Lo
+    register_character_class("titlecase-Dz-Lt",            "ǅ", true, true)      # U+01C5 Lt
+    register_character_class("modifier-letter-Lm",         "ʰ", true, true)      # U+02B0 Lm
+    register_character_class("arabic-indic-digit-Nd",      "٠", false, true)     # U+0660 Nd
+    register_character_class("vulgar-fraction-3-4-No",     "¾", false, false)    # U+00BE No
+    register_character_class("circled-digit-one-No",       "①", false, false)    # U+2460 No
+    register_character_class("roman-numeral-one-Nl",       "Ⅰ", false, false)    # U+2160 Nl
+    register_character_class("combining-acute-accent-Mn",  "́", false, false)     # U+0301 Mn, alone
+    register_character_class("underscore-Pc",              "_", false, false)    # U+005F Pc
+    register_character_class("full-stop-Po",               ".", false, false)    # U+002E Po
+
+# ---------------------------------------------------------------------------
+# web::emailish? on the Unicode corpus
+
+# native-tcl-unicode-emailish-LABEL: web::emailish?(ADDRESS) is EXPECTED.
+fn register_emailish(label: str, address: str, expected: bool):
+    fn b_emailish() errors compiler::CompilerError:
+        static compile:
+            web::emailish?(address)
+    test::value("native-tcl-unicode-emailish-".concat(label), expected, b_emailish)
+
+fn register_emailish_tests():
+    # ascii-valid, ascii-invalid, missing-local-part and empty-string are
+    # strings.bot's emailish-predicate-parity-ascii-valid, -no-at,
+    # -empty-local-part and -empty-string.
+    register_emailish("short-tld-ok", "a@b.co", true)
+    register_emailish("tld-too-short", "a@b.c", false)
+    register_emailish("local-part-symbols", "a.b_c%d+e-f@sub.example.com", true)
+    register_emailish("missing-domain", "a@", false)
+    register_emailish("empty-first-label", "a@.com", false)
+    register_emailish("empty-middle-label", "a@b..com", false)
+    register_emailish("trailing-dot", "a@b.com.", false)
+    register_emailish("tld-with-digit", "a@b.c1", false)
+    # U+00E9 in the local part.
+    register_emailish("unicode-alpha-local-part", "café@example.com", true)
+    # Label U+4F8B U+3048, TLD U+30C6 U+30B9 U+30C8.
+    register_emailish("unicode-domain-label-and-tld", "user@例え.テスト", true)
+    # The TLD ends with U+65E5 (Lo).
+    register_emailish("unicode-alpha-in-tld", "user@example.co日", true)
+    register_emailish("mixed-case-ascii-tld", "a@b.cD", true)
+    # A label holding U+0660 ARABIC-INDIC DIGIT ZERO (Nd): alnum.
+    register_emailish("unicode-digit-in-label", "a@b٠.com", true)
+    # The TLD is U+2160 ROMAN NUMERAL ONE (Nl): numeric, not alpha.
+    register_emailish("numeric-non-Nd-rejected", "a@例え.Ⅰ", false)
+
+    # native-tcl-unicode-emailish-known-result-recheck: a redundant
+    # web::emailish? check inside its own true branch answers like the first.
+    fn b_known_result_recheck() errors compiler::CompilerError:
+        static compile:
+            fn f(s: str) -> str:
+                if web::emailish?(s):
+                    if web::emailish?(s):
+                        "yes"
+                    else:
+                        "no"
+                else:
+                    "no"
+            f("someone@example.com")
+    test::value("native-tcl-unicode-emailish-known-result-recheck", "yes", b_known_result_recheck)
+
+# ---------------------------------------------------------------------------
+# str::lowercase: the Unicode 16 simple lowercase mapping
+
+# native-tcl-unicode-lowercase-LABEL: str::lowercase(TEXT) is EXPECTED.
+fn register_lowercase(label: str, text: str, expected: str):
+    fn b_lowercase() errors compiler::CompilerError:
+        static compile:
+            str::lowercase(text)
+    test::value("native-tcl-unicode-lowercase-".concat(label), expected, b_lowercase)
+
+fn register_lowercase_tests():
+    #                  label                   text      lowercase
+    register_lowercase("ascii-and-latin",      "ABCÄ",   "abcä")   # U+00C4 -> U+00E4
+    register_lowercase("capital-sharp-s",      "ẞ",      "ß")      # U+1E9E -> U+00DF
+    register_lowercase("sigma-never-final",    "ΟΣ",     "οσ")     # U+039F U+03A3 -> U+03BF U+03C3, never U+03C2
+    register_lowercase("dotted-capital-I",     "İ",      "i")      # U+0130 -> U+0069, one scalar
+    register_lowercase("dotted-I-in-context",  "AİB",    "aib")    # U+0130 between letters
+    register_lowercase("a-with-stroke",        "Ⱥ",      "ⱥ")      # U+023A -> U+2C65
+    register_lowercase("t-with-diag-stroke",   "Ⱦ",      "ⱦ")      # U+023E -> U+2C66
+    register_lowercase("kelvin-sign",          "K",      "k")      # U+212A KELVIN SIGN -> U+006B
+    register_lowercase("already-lowercase",    "éⱥ",     "éⱥ")     # U+00E9 U+2C65 unchanged
+    register_lowercase("astral-deseret",       "𐐀",      "𐐨")      # U+10400 -> U+10428
+    register_lowercase("astral-no-mapping",    "😀",     "😀")     # U+1F600 unchanged
+    register_lowercase("unicode17-A7CE",       "꟎",      "꟎")      # U+A7CE unchanged (Unicode 17 only)
+    register_lowercase("unicode17-A7D2",       "꟒",      "꟒")      # U+A7D2 unchanged (Unicode 17 only)
+    register_lowercase("unicode17-A7D4",       "꟔",      "꟔")      # U+A7D4 unchanged (Unicode 17 only)
+    register_lowercase("unicode17-beria-erfe", "𖺠",      "𖺠")      # U+16EA0 unchanged (Unicode 17 only)
+
+# ---------------------------------------------------------------------------
+
+fn register_native_tcl_unicode_tests():
+    register_character_class_tests()
+    register_emailish_tests()
+    register_lowercase_tests()
+
+with context test::suite()
+register_native_tcl_unicode_tests()
+test::report()

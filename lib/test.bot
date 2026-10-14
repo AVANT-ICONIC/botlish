@@ -277,6 +277,20 @@ fn text_lines(text: str) -> List[str]:
                 ""
         piece
 
+# Whether FRAGMENT occurs in TEXT (the empty fragment occurs everywhere).
+fn contains_text?(text: str, fragment: str) -> bool:
+    n = str::length(text)
+    k = str::length(fragment)
+    loop i from 0 through n - k:
+        piece = text.substring(i, i + k):
+            on LowerUnderrun:
+                continue
+            on UpperOverrun:
+                continue
+        if piece == fragment:
+            return true
+    false
+
 # A value whose static type `describe` must not keep (see there).
 struct Erased:
     value: any
@@ -591,6 +605,35 @@ nomethod fn rejects_any(name: str, body) -> unit:
             on compiler::CompilerError:
                 return passed()
         mismatch("a compiler diagnostic", "value ".concat(actual.describe()), "")
+    case(name, check)
+
+# BODY's block must be rejected with diagnostic code EXPECTED and exactly the
+# message WANTED: for a test whose property is the diagnostic's wording (a
+# call chain, a name the message alone carries). Messages are otherwise
+# reported, never compared. (Promoted from the suite-local matchers four
+# suites wrote independently: LARGE-SCALE-GOLDEN-MIGRATION.md.)
+nomethod fn rejects_message(name: str, expected: compiler::DiagnosticCode, wanted: str, body) -> unit:
+    fn check() -> Match:
+        shown = "compiler diagnostic ".concat(expected.code_name()).concat(" with the message ").concat(wanted.quoted())
+        actual = body():
+            on compiler::CompilerError {code, primary, message}:
+                if code == expected and message == wanted:
+                    return passed()
+                return mismatch(shown, code.diagnostic_text(primary), message)
+        mismatch(shown, "value ".concat(actual.describe()), "")
+    case(name, check)
+
+# BODY's block must be rejected with diagnostic code EXPECTED and a message
+# containing FRAGMENT (see `rejects_message`).
+nomethod fn rejects_containing(name: str, expected: compiler::DiagnosticCode, fragment: str, body) -> unit:
+    fn check() -> Match:
+        shown = "compiler diagnostic ".concat(expected.code_name()).concat(" with a message containing ").concat(fragment.quoted())
+        actual = body():
+            on compiler::CompilerError {code, primary, message}:
+                if code == expected and message.contains_text?(fragment):
+                    return passed()
+                return mismatch(shown, code.diagnostic_text(primary), message)
+        mismatch(shown, "value ".concat(actual.describe()), "")
     case(name, check)
 
 # ---------------------------------------------------------------------------

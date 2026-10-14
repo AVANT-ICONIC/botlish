@@ -1345,8 +1345,10 @@ proc hir::completions::SeedParam {} {
 #                                        items 22/36-40; Int constants use
 #                                        `bindings`'s own Range/exact-set
 #                                        machinery instead, already general)
-#   exactList bindingId -> {value ...}  (a List-kind binding's own exact
-#                                        element values, when it was bound
+#   exactList bindingId -> {list V...}  (a List-kind binding's own literal-
+#                                        List fact (LiteralListOf: its exact
+#                                        element values; `{list}` is the
+#                                        empty List), when it was bound
 #                                        to a small literal list, either
 #                                        directly or via a further exact
 #                                        call boundary -- what lets
@@ -1880,9 +1882,37 @@ proc hir::completions::RestoreRelations {ctxVar relations} {
     dict set ctx minSizes $minSizes
 }
 
-# A countloop's start/end are evaluated once, in the enclosing scope,
-# exactly like EvalListloop's own iterable -- walked here to record whatever
-# errors/diagnostics/facts they themselves contribute, and for their Ranges.
+# Walks a collecting loop's iteration domain: OPERANDS, the ExprIds a
+# listloop's iterable, a countloop's start and end or a lockloop's domain
+# operands (hir::loopOperands) name, which run once, in this order, in the
+# enclosing scope, before the first iteration -- an ordinary sequence, like
+# the statements before the loop (Seq). Their Ranges in order, or `never`
+# when one cannot complete normally: the loop never starts, so the operands
+# after it and the body are never reached, charged or diagnosed, and the
+# loop is itself `never` there -- exactly the statement `xs = g(n)` bound
+# before `loop x in xs:` would be. What an operand raises (a call, a
+# handled call's unhandled remainder) is charged and diagnosed where it is
+# written, like any other expression of the enclosing body: a domain is
+# never skipped, or a fallible call in it would escape unchecked.
+proc hir::completions::LoopDomain {hirVar ctxVar diagnose enclosing guard operands} {
+    upvar 1 $hirVar hir $ctxVar ctx
+    set ranges {}
+    foreach operand $operands {
+        set r [Eval hir ctx $diagnose $enclosing $guard $operand]
+        if {$r eq {never}} {
+            return never
+        }
+        lappend ranges $r
+    }
+    return $ranges
+}
+
+# A countloop's start/end are evaluated once, in the enclosing scope, in
+# that order and before the first iteration, exactly like EvalListloop's own
+# iterable -- walked here to record whatever errors/diagnostics/facts they
+# themselves contribute, and for their Ranges. One that cannot complete
+# normally makes the whole loop `never` there (LoopDomain): the end after a
+# start that never completes, and the body, never run.
 # The body is then walked once, EvalLoop's own conservative treatment (item
 # 91's "no general loop theorem proving": no per-iteration concrete facts),
 # but under the induction binding's interval -- the very counted-loop theorem
@@ -1897,8 +1927,11 @@ proc hir::completions::RestoreRelations {ctxVar relations} {
 # case.
 proc hir::completions::EvalCountloop {hirVar ctxVar diagnose enclosing guard e node} {
     upvar 1 $hirVar hir $ctxVar ctx
-    set start [Eval hir ctx $diagnose $enclosing $guard [dict get $node start]]
-    set end [Eval hir ctx $diagnose $enclosing $guard [dict get $node end]]
+    set ranges [LoopDomain hir ctx $diagnose $enclosing $guard [list [dict get $node start] [dict get $node end]]]
+    if {$ranges eq {never}} {
+        return never
+    }
+    lassign $ranges start end
     set saved [dict get $ctx bindings]
     set savedBounds [dict get $ctx indexBounds]
     set relations [Relations $ctx]
@@ -1941,15 +1974,21 @@ proc hir::completions::NoteIndexBound {hirVar ctxVar binding startRange end dire
 
 # A lockloop's domain operands are evaluated once, in written order, in the
 # enclosing scope (walked here for whatever errors/diagnostics/facts they
-# contribute); the body is then walked once, EvalCountloop's own
+# contribute; one that cannot complete normally makes the loop `never`
+# there, LoopDomain); the body is then walked once, EvalCountloop's own
 # conservative treatment: each numeric domain's binding gets the same
 # interval hir/range.tcl gives it, each list domain's element binding stays
 # unseeded.
 proc hir::completions::EvalLockloop {hirVar ctxVar diagnose enclosing guard e node} {
     upvar 1 $hirVar hir $ctxVar ctx
+    set operands [hir::loopOperands $node]
+    set results [LoopDomain hir ctx $diagnose $enclosing $guard $operands]
+    if {$results eq {never}} {
+        return never
+    }
     set ranges [dict create]
-    foreach operand [hir::loopOperands $node] {
-        dict set ranges $operand [Eval hir ctx $diagnose $enclosing $guard $operand]
+    foreach operand $operands r $results {
+        dict set ranges $operand $r
     }
     set saved [dict get $ctx bindings]
     set savedBounds [dict get $ctx indexBounds]
@@ -1970,6 +2009,11 @@ proc hir::completions::EvalLockloop {hirVar ctxVar diagnose enclosing guard e no
     return [hir::range::unknown]
 }
 
+# A listloop's ITERABLE is evaluated first, once, in the enclosing scope
+# (LoopDomain): what it raises is charged and diagnosed there, and one that
+# cannot complete normally makes the whole loop `never` before any of what
+# follows is considered -- the body is never walked.
+#
 # listloop's small-exact-literal-list proof (items 36-40, 92): when ITERABLE
 # is itself a call to the variadic `list` native whose every argument is a
 # plain `const`, within hir::range's own exact-value budget, this walks the
@@ -1979,8 +2023,11 @@ proc hir::completions::EvalLockloop {hirVar ctxVar diagnose enclosing guard e no
 # unable to complete normally, the whole listloop stops there (matching
 # runtime left-to-right completion semantics) and is itself never, carrying
 # every error discovered up to and including that element (items 39/73).
-# An empty literal list never executes the body at all (item 92): trivially
-# always completes normally, no errors.
+# An empty literal list (the fact `{list}`, never confused with "no fact")
+# never executes the body at all (item 92): the body is not walked -- like
+# a branch proven infeasible, nothing in it is reached, so nothing in it is
+# charged or diagnosed -- and the loop completes normally with its empty
+# List, no errors, whatever the body could do (break or continue included).
 #
 # Any other iterable (dynamic, or a literal list too large for the budget)
 # falls back to EvalLoop's own general, conservative treatment -- this is a
@@ -1996,10 +2043,17 @@ proc hir::completions::EvalLockloop {hirVar ctxVar diagnose enclosing guard e no
 proc hir::completions::EvalListloop {hirVar ctxVar diagnose enclosing guard e node} {
     upvar 1 $hirVar hir $ctxVar ctx
     set iterable [dict get $node iterable]
-    set elements [LiteralListOf $hir $ctx $iterable]
-    if {$elements eq {} || [ExitsLoop $hir $e [dict get $node body]]} {
+    if {[LoopDomain hir ctx $diagnose $enclosing $guard [list $iterable]] eq {never}} {
+        return never
+    }
+    set fact [LiteralListOf $hir $ctx $iterable]
+    if {$fact eq {list}} {
+        return [hir::range::unknown]
+    }
+    if {$fact eq {} || [ExitsLoop $hir $e [dict get $node body]]} {
         return [EvalLoop hir ctx $diagnose $enclosing $guard $e $node]
     }
+    set elements [LiteralElements $fact]
     set elementBinding [dict get $node elementBinding]
     set saved [dict get $ctx bindings]
     set savedExact [dict get $ctx exact]
@@ -2045,9 +2099,10 @@ proc hir::completions::ExitsLoop {hir loop exprs} {
     return 0
 }
 
-# The literal core values of EXPR (a List-typed expression), if it is either
-# (a) a direct call to the variadic `list` native with every argument a
-# plain `const`, within hir::range's own exact-value budget (item 37:
+# The literal-List fact of EXPR (a List-typed expression): {list V...}, the
+# tag `list` followed by its exact element core values in order, if EXPR is
+# either (a) a direct call to the variadic `list` native with every argument
+# a plain `const`, within hir::range's own exact-value budget (item 37:
 # reused, not reintroduced), or (b) a `ref` to a binding this walk's own
 # ctx.exactList already established -- the general form of (a), threaded
 # across an exact call boundary the same way an Int/UnicodeChar exact value
@@ -2056,8 +2111,11 @@ proc hir::completions::ExitsLoop {hir loop exprs} {
 # `loop c in chars:` (whose iterable is a plain `ref` to the parameter
 # `chars`, not the literal list expression itself) as a genuine small
 # literal list, with no `set`/`byte`-specific code anywhere in this file.
-# {} otherwise (not a small literal list; EvalListloop falls back to the
-# general case).
+# "" otherwise: no fact (not a small literal list; EvalListloop falls back
+# to the general case). The tag is what keeps the empty literal `[]`,
+# `{list}` -- exactly zero elements, a loop over it never runs its body
+# (item 92) -- apart from "no fact": a parameter merely typed List, or any
+# other List this walk does not know, is "", never `{list}`.
 proc hir::completions::LiteralListOf {hir ctx expr} {
     if {[hir::kind $hir $expr] eq {ref}} {
         set b [hir::get $hir $expr binding]
@@ -2075,14 +2133,20 @@ proc hir::completions::LiteralListOf {hir ctx expr} {
     if {[llength $args] > $::hir::range::maxExactValues} {
         return {}
     }
-    set values {}
+    set fact {list}
     foreach arg $args {
         if {[hir::kind $hir $arg] ne {const}} {
             return {}
         }
-        lappend values [hir::get $hir $arg value]
+        lappend fact [hir::get $hir $arg value]
     }
-    return $values
+    return $fact
+}
+
+# The exact element core values of literal-List fact FACT (LiteralListOf),
+# in order: {} for the empty List `{list}`.
+proc hir::completions::LiteralElements {fact} {
+    return [lrange $fact 1 end]
 }
 
 # A native call's own result Range, for the small set of natives this
@@ -2142,7 +2206,7 @@ proc hir::completions::NativeResultRange {hir ctx name argExprs argRanges} {
         } else {
             set literal [LiteralListOf $hir $ctx $arg]
             if {$literal ne {}} {
-                return [hir::range::point [llength $literal]]
+                return [hir::range::point [llength [LiteralElements $literal]]]
             }
         }
     }
@@ -2319,7 +2383,9 @@ proc hir::completions::ArgExactValues {hir ctx argExprs} {
 }
 
 # ARGEXPRS's own LiteralListOf facts, one per argument -- the List-typed
-# counterpart of ArgExactValues above (items 36-40).
+# counterpart of ArgExactValues above (items 36-40): "" for no fact, so an
+# empty literal argument (`{list}`) reaches the callee's parameter as the
+# empty List, never as an unknown one.
 proc hir::completions::ArgExactLists {hir ctx argExprs} {
     set values {}
     foreach a $argExprs {
@@ -2883,7 +2949,7 @@ proc hir::completions::SizesOf {hir ctx family container} {
     if {$family eq "list"} {
         set literal [LiteralListOf $hir $ctx $container]
         if {$literal ne {}} {
-            lappend forms [hir::cardinality::FormConst [llength $literal]]
+            lappend forms [hir::cardinality::FormConst [llength [LiteralElements $literal]]]
         }
     } elseif {$family eq "str"} {
         set v [ExactValueOf $hir $ctx $container]
@@ -3138,7 +3204,7 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
     if {$family eq "list"} {
         set literal [LiteralListOf $hir $ctx $container]
         if {$literal ne {}} {
-            lappend sizes [hir::cardinality::FormConst [llength $literal]]
+            lappend sizes [hir::cardinality::FormConst [llength [LiteralElements $literal]]]
         }
     }
     set known {}

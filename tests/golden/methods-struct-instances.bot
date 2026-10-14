@@ -1,0 +1,109 @@
+# methods-struct-instances.bot -- method-call sugar (METHOD-SUGAR.md) with a
+# struct receiver that a function sees through an untyped parameter. The
+# sugar is the ordinary call: a struct receiver with no field of the
+# method's name is passed to the visible function as its first argument; a
+# field that cannot be called (an Int) is no candidate, so the function
+# applies; and with no function of the name visible, a callable field is
+# called -- in the generic analysis and in every semantic instance alike.
+#
+# Ports the programs of tests/method-sugar.test (which stays authoritative
+# and unchanged) whose functions project a field of an untyped parameter:
+# method-field-of-another-kind-does-not-compete,
+# method-field-call-ambiguity-in-an-instance (its accepted program; its
+# rejection is in methods.bot),
+# method-field-of-another-kind-does-not-compete-in-an-instance,
+# method-field-struct-receiver-method and
+# method-same-program-struct-receiver. Each spelling is a golden test
+# (suffixed /method and /free) with the Tcl expected value.
+#
+# golden-exclude: cranelift-generic -- NATIVE UNSUPPORTED struct-shape: the unspecialized native baseline has no slot for a projection only a semantic instance proves (STRUCTS.md, "Known limitations"; tests/helpers.tcl's GenericBaselineUndefined); tests/method-sugar.test's outcomeUnderHir stands the specialized outcome in for cranelift-generic on these programs
+#
+# Imports: compiler and test (the framework) only: the Tcl programs import
+# nothing, and none of their method names (cb, total, area) is a member of
+# either namespace.
+import compiler
+import test
+
+fn register_field_tests():
+    # method-field-of-another-kind-does-not-compete: an Int field cannot be
+    # called, so the function is the only candidate.
+    fn b_another_kind_method() errors compiler::CompilerError:
+        static compile:
+            fn cb(s):
+                s.v + 100
+            s = {cb: 7, v: 3}
+            s.cb()
+    fn b_another_kind_free() errors compiler::CompilerError:
+        static compile:
+            fn cb(s):
+                s.v + 100
+            s = {cb: 7, v: 3}
+            cb(s)
+    test::value("method-field-of-another-kind-does-not-compete/method", 103, b_another_kind_method)
+    test::value("method-field-of-another-kind-does-not-compete/free", 103, b_another_kind_free)
+
+    # method-field-call-ambiguity-in-an-instance: with no function `cb`
+    # visible, the instance's callable field is called.
+    fn b_instance_field_call() errors compiler::CompilerError:
+        static compile:
+            fn inc(a):
+                a + 1
+            fn call_it(s):
+                s.cb(41)
+            call_it({cb: inc, v: 2})
+    test::value("method-field-call-ambiguity-in-an-instance/field-call", 42, b_instance_field_call)
+
+    # method-field-of-another-kind-does-not-compete-in-an-instance: an
+    # instance whose receiver's field cannot be called leaves the function
+    # as the only candidate.
+    fn b_another_kind_instance() errors compiler::CompilerError:
+        static compile:
+            fn cb(p):
+                p.v + 100
+            fn call_it(s):
+                s.cb()
+            call_it({cb: 5, v: 2})
+    test::value("method-field-of-another-kind-does-not-compete-in-an-instance", 102, b_another_kind_instance)
+
+    # method-field-struct-receiver-method: a struct receiver with no field of
+    # that name: the function applies.
+    fn b_struct_receiver_method() errors compiler::CompilerError:
+        static compile:
+            fn total(p, extra):
+                p.x + p.y + extra
+            p = {x: 1, y: 2}
+            p.total(10)
+    fn b_struct_receiver_free() errors compiler::CompilerError:
+        static compile:
+            fn total(p, extra):
+                p.x + p.y + extra
+            p = {x: 1, y: 2}
+            total(p, 10)
+    test::value("method-field-struct-receiver-method/method", 13, b_struct_receiver_method)
+    test::value("method-field-struct-receiver-method/free", 13, b_struct_receiver_free)
+
+fn register_same_program_tests():
+    # method-same-program-struct-receiver: a struct literal receiver. (The
+    # Tcl test also compares the two spellings' HIR, core IR, NIR and
+    # analyses, which Botlish cannot observe; the value is pinned here.)
+    fn b_struct_receiver_method() errors compiler::CompilerError:
+        static compile:
+            fn area(r, scale):
+                r.w * r.h * scale
+            fn run(n):
+                {w: n, h: 3}.area(2)
+            [run(1), run(4)]
+    fn b_struct_receiver_free() errors compiler::CompilerError:
+        static compile:
+            fn area(r, scale):
+                r.w * r.h * scale
+            fn run(n):
+                area({w: n, h: 3}, 2)
+            [run(1), run(4)]
+    test::value("method-same-program-struct-receiver/method", [6, 24], b_struct_receiver_method)
+    test::value("method-same-program-struct-receiver/free", [6, 24], b_struct_receiver_free)
+
+with context test::suite()
+register_field_tests()
+register_same_program_tests()
+test::report()

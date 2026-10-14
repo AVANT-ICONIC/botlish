@@ -1,0 +1,37 @@
+# opaque-instances.bot -- opaque structs and generic instances, the half
+# cranelift-generic cannot run: the source-level specification that a
+# consumer's generic (untyped) function projecting its parameter, which is
+# rejected when instantiated for an opaque value (opaque.bot,
+# opaque-instance-bypass-message; diagnostics.bot,
+# opaque-instance-bypass-is-rejected), is accepted for a module's ordinary
+# struct: only the opaque receiver is refused.
+#
+# golden-exclude: cranelift-generic -- NATIVE UNSUPPORTED struct-shape: the unspecialized native baseline has no slot for a projection only a semantic instance proves (STRUCTS.md, "Known limitations"; tests/helpers.tcl's GenericBaselineUndefined); the Tcl test's agree runs this program on cranelift-generic through the same stand-in (the specialized outcome)
+#
+# Ported from tests/opaque-struct.test (opaque.bot holds the rest of the
+# batch; audit/golden/migration/fragments/opaque-instances.tsv maps this
+# test). It is a suite of its own so that the cranelift-generic run of
+# opaque.bot stays a real one: run.tcl substitutes cranelift for a whole
+# suite whose unspecialized lowering reports struct-shape.
+#
+# Imports: compiler and test (the framework); abi (abi::I32, an ordinary
+# struct of module abi, stands in for the Tcl fixture module mixed's
+# Public). No test here is about an import or about method calls.
+import abi
+import compiler
+import test
+
+fn register_generic_instance_tests():
+    # opaque-instance-ordinary-struct-still-works: the generic function
+    # that is rejected for an opaque argument, given a module's ordinary
+    # struct, is accepted and projects its field.
+    fn ordinary() errors compiler::CompilerError:
+        static compile:
+            fn peek(x):
+                x.value
+            peek(abi::I32 {value: 5})
+    test::value("opaque-instance-ordinary-struct-still-works", 5, ordinary)
+
+with context test::suite()
+register_generic_instance_tests()
+test::report()

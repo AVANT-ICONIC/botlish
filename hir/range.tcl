@@ -1678,7 +1678,7 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
                 dict set hir violatedDeclared $paramBinding $arg
             }
             hir::Diagnose hir TRAIT-NOT-SATISFIED [hir::traits::NotSatisfiedMessage $hir \
-                [dict get $hir bindings $paramBinding name] $argType $declaredType] $arg
+                [hir::semantic::SourceName $hir $paramBinding] $argType $declaredType] $arg
             continue
         }
         if {$declaredType ne {} && !$inferred && [hir::types::IsFn $declaredType] && [hir::types::IsCoroutine $argType]} {
@@ -1690,7 +1690,7 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
             }
             hir::Diagnose hir COROUTINE-NOT-FUNCTION [format \
                 {%s is a coroutine handle, not a function value: it carries the evolving state of one coroutine and cannot be passed where a function value of type %s is expected (Fn and Coroutine are distinct callable kinds, even with the same contract; declare the parameter %s, or leave it untyped)} \
-                [expr {[dict get $hir exprs $arg kind] eq "ref" ? "\"[dict get $hir exprs $arg name]\"" : "this value"}] \
+                [expr {[dict get $hir exprs $arg kind] eq "ref" ? "\"[hir::semantic::RefName $hir $arg]\"" : "this value"}] \
                 [hir::types::show $declaredType] \
                 [hir::types::show [list coroutine [lindex $declaredType 1]]]] $arg
             continue
@@ -1706,9 +1706,9 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
             }
             hir::Diagnose hir TYPE [format \
                 {argument for parameter "%s" cannot be proven to satisfy %s%s (argument type: %s%s)%s%s} \
-                [dict get $hir bindings $paramBinding name] [hir::types::show $declaredType] \
+                [hir::semantic::SourceName $hir $paramBinding] [hir::types::show $declaredType] \
                 [expr {$inferred ? ", the parameter type inferred from the function body" : ""}] \
-                [hir::types::show $argType] [FactsClause $argType $declaredType $argRange] [MismatchClause $argType $declaredType] \
+                [hir::semantic::ShowType $hir $argType] [FactsClause $argType $declaredType $argRange] [MismatchClause $argType $declaredType] \
                 [expr {$inferred ? [hir::signatures::because $hir $targetBlock $i] : ""}]] $arg
             continue
         }
@@ -1734,8 +1734,8 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
         }
         hir::Diagnose hir TYPE [format \
             {argument for parameter "%s" is statically incompatible with %s, the parameter type inferred from the function body (argument type: %s%s)%s} \
-            [dict get $hir bindings $paramBinding name] [hir::types::show $checkedType] \
-            [hir::types::show $argType] [FactsClause $argType $checkedType $argRange] \
+            [hir::semantic::SourceName $hir $paramBinding] [hir::types::show $checkedType] \
+            [hir::semantic::ShowType $hir $argType] [FactsClause $argType $checkedType $argRange] \
             [hir::signatures::because $hir $targetBlock $i]] $arg
     }
 }
@@ -1920,7 +1920,7 @@ proc hir::range::VerifyStructuralCall {hirVar ranges e node calleeType callee ar
     }
     if {[llength $argExprs] != [llength $declaredTypes]} {
         if {$coroutine} {
-            set name [expr {[dict get $hir exprs $callee kind] eq "ref" ? [dict get $hir exprs $callee name] : "step"}]
+            set name [expr {[dict get $hir exprs $callee kind] eq "ref" ? [hir::semantic::RefName $hir $callee] : "step"}]
             if {$declaredTypes eq {}} {
                 hir::Diagnose hir COROUTINE-RESUME-ARITY \
                     "this coroutine has the zero-message protocol: resume it with no argument, \"${name}()\", got [llength $argExprs] argument(s)" $e
@@ -1953,7 +1953,7 @@ proc hir::range::VerifyStructuralCall {hirVar ranges e node calleeType callee ar
         hir::Diagnose hir TYPE [format \
             {argument %d cannot be proven to satisfy %s, the parameter type the callee's function type %s requires (argument type: %s%s)%s} \
             $index [hir::types::show $declaredType] [hir::types::show $calleeType] \
-            [hir::types::show $argType] [FactsClause $argType $declaredType $argRange] [MismatchClause $argType $declaredType]] $arg
+            [hir::semantic::ShowType $hir $argType] [FactsClause $argType $declaredType $argRange] [MismatchClause $argType $declaredType]] $arg
     }
 }
 

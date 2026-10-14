@@ -1,0 +1,59 @@
+# static-compile-erased-consumer.bot -- a genuine consumer of the
+# erased-callable contract beside a rejected contributor
+# (tests/static-economics.test, se-equal-erased-consumer).
+#
+# A callable read from a List[any] has neither an identity nor a contract,
+# so its call is charged everything the WHOLE program erases (what reaches an
+# untyped parameter no use constrains). The contributor block erases raise2
+# (E2) by passing it to `store`, but the block is rejected by the checker: a
+# rejected block leaves nothing behind, so the program erases nothing and the
+# consumer, which handles only IndexNotFound, is accepted.
+#
+# The theorem needs a program whose only erasure is the contributor's: in
+# static-compile.bot the erased-callable programs (generic_e1_e2,
+# generic_e1) erase E1 and E2 from the top level, which would charge this
+# consumer (UnhandledError), so it is a suite of its own. Imports: compiler
+# and test (every suite), list (list::at).
+import compiler
+import list
+import test
+
+error E1
+error E2
+
+fn harmless() -> int:
+    1
+
+fn raise2() -> int errors E2:
+    fail E2
+
+fn store(f) -> int:
+    1
+
+fn register_erased_consumer_tests():
+    # The contributor: its erasure of raise2 goes with its rejection (Type,
+    # at want_0's String argument).
+    fn b_contributor() errors compiler::CompilerError:
+        static compile:
+            r = store(raise2)
+            fn want_0(x: int) -> int:
+                x
+            want_0("s")
+    test::rejects_at("se-equal-erased-consumer/contributor", compiler::DiagnosticCode::Type, 41, 20, b_contributor)
+
+    # The consumer: f() is charged nothing, so IndexNotFound is all `run`
+    # must declare.
+    fn b_consumer() errors compiler::CompilerError:
+        static compile:
+            fn run(fs: List[any]) errors IndexNotFound:
+                f = list::at(fs, 0)
+                f()
+            r = run([harmless]):
+                on IndexNotFound:
+                    -2
+            1
+    test::value("se-equal-erased-consumer/consumer", 1, b_consumer)
+
+with context test::suite()
+register_erased_consumer_tests()
+test::report()

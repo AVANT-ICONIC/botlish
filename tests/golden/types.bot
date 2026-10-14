@@ -1,0 +1,1269 @@
+# types.bot -- source-level types and typed boundaries: the source-level
+# specification of
+#
+#   * source-defined integer refinement types (`type Child = Parent in
+#     Domain`, SOURCE-DEFINED-INTEGER-DOMAINS.md): interval and finite
+#     (exact) domains under interval and exact parents, declared in a user
+#     program and usable as result types; a declared result is a proof
+#     obligation (an unprovable body is rejected at its definition, an
+#     interval hull never proves a sparse domain, an exact set of values is
+#     admitted by a broad `-> int`); a source domain's run-time membership is
+#     checked by an ordinary fallible function (`errors`/`fail`), dense,
+#     sparse and over the 32-value analysis budget alike;
+#   * strict typed parameters (`fn f(x: T)`, STRICT-TYPED-PARAMETERS.md): a
+#     call is legal only when every argument is proven admissible -- by
+#     nominal subtyping or by value-set inclusion -- and an unproven argument
+#     is rejected exactly like a wrong one, with a diagnostic that names the
+#     parameter, its type and the argument;
+#   * applied types (`List[T]`, MINIMAL-APPLIED-LIST-TYPES.md): resolution of
+#     the constructor, its arity and its argument; inference of a literal's
+#     element type (the nominal least upper bound); invariant admissibility
+#     at parameters and results; element reads; erasure through a declared
+#     broad result but not through an untyped passthrough; a callable whose
+#     parameter is an applied type, through a higher-order helper;
+#   * symbolic native result types (SYMBOLIC-TYPE-IDENTITY.md):
+#     str::encode_utf8's result is List[byte::Byte], by the qualified
+#     identity, under either spelling of the parameter type;
+#   * empty-collection admissibility (EMPTY-COLLECTION-AND-APPLIED-TYPE-
+#     SEMANTICS.md): a provably empty List or ImmutableSet satisfies every
+#     declared element type, as a parameter, a result and nested, while every
+#     non-empty one stays invariant; the empty caller's instance runs.
+#
+# Ported from tests/source-types.test, tests/typed-parameters.test,
+# tests/applied-types.test, tests/symbolic-type-identity.test and
+# tests/empty-collection-admissibility.test, which stay authoritative and
+# unchanged (audit/golden/migration/fragments/types.tsv maps every test).
+# Most Tcl tests there assert only that a program compiles (strict) or that
+# it is rejected with a TYPE diagnostic whose message contains a fragment;
+# here an accepted program also runs, on every backend, and its value is
+# compared, and a rejected one is a rejected block compared by its
+# compiler::DiagnosticCode and the message fragment its Tcl test globs (the
+# exact message, and the location, where the Tcl test pins them). What only
+# the compiler's internals show (the static type text hir::typeOf displays,
+# range facts, metadata, HIR and NIR text, specialization labels) stays in
+# Tcl; a call's exact static refinement type is observed here by passing
+# [call] to a List[T] parameter, which admits it only when its element type is
+# exactly T (List admissibility is invariant: applied-type-invariant-*).
+# Declaration errors (a non-subset domain, a cycle, a duplicate) are rejected
+# before any block is decided and stay in Tcl, as do the -strict 0 programs
+# whose declared error escapes to the program boundary (here every such error
+# is handled inside its block, its inputs parameters of the registration
+# function so that no constant decides the call).
+#
+# Imports: compiler and test (the framework); list (list::at, list::length,
+# list::get); immutable_set (from_list); str (str::encode_utf8); byte and web
+# (the symbolic-type-identity tests load lib/byte.bot and lib/web.bot as
+# their Tcl programs do); `import type byte::Byte` (the short spelling of
+# symbolic-type-identity-short-type-name-is-the-same-type): bare `Byte` is
+# byte::Byte throughout this file, so the Tcl programs' own `type Byte =
+# Int in 0..255` is LocalByte here. No test is about a missing import or
+# about method-call candidates, and no body uses method-call syntax.
+import byte
+import compiler
+import immutable_set
+import list
+import str
+import test
+import web
+import type byte::Byte
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only). The Tcl files declare most of
+# these identically in their preludes (::samplePayload, ::smallDecl,
+# ::byteDecl), and those are shared here under their Tcl names; a name two
+# Tcl programs give different domains is renamed (noted at each).
+
+# The bounded domain most tests use (source-types.test, typed-parameters.test,
+# applied-types.test and empty-collection-admissibility.test all declare
+# `type Small = Int in 0..10`), with its two values of applied-types.test's
+# and empty-collection-admissibility.test's preludes.
+type Small = Int in 0..10
+
+fn one() -> Small:
+    1
+
+fn two() -> Small:
+    2
+
+# A nominal subtype of Small (typed-parameters.test, applied-types.test) and
+# applied-types.test's t().
+type Tiny = Small in 0..3
+
+fn tiny_one() -> Tiny:
+    1
+
+# An independently declared domain inside Small's (typed-parameters.test).
+type OtherTiny = Int in 0..3
+
+# An independently declared domain wider than Small's (typed-parameters.test).
+type Wider = Int in 0..20
+
+# Two same-domain siblings (applied-types.test's A and B).
+type SiblingA = Int in 0..3
+type SiblingB = Int in 0..3
+
+# Sparse domains: typed-parameters.test's Marks and source-types.test's
+# Sparse (the same values, two declarations, as in Tcl).
+type Marks = Int in {0, 4, 8, 12}
+type Sparse = Int in {0, 4, 8, 12}
+
+# source-type-not-special-cased's Small (renamed: its domain is 10..20).
+type TenToTwenty = Int in 10..20
+
+# The programs' own byte domain (source-types.test and
+# empty-collection-admissibility.test's `type Byte = Int in 0..255`, renamed:
+# bare Byte is byte::Byte in this file) with empty-collection-admissibility's
+# byteA(), and its source-types.test children Nibble and HighNibble (the
+# shapes of lib/byte.bot's own, which stay byte::Nibble and byte::HighNibble).
+type LocalByte = Int in 0..255
+
+fn byteA() -> LocalByte:
+    97
+
+type Nibble = LocalByte in 0..15
+type HighNibble = LocalByte in {0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240}
+
+# source-type-exact-under-exact's A and B (renamed: applied-types.test's A
+# and B are the siblings above).
+type Spaced = Int in {1, 4, 7, 10}
+type SpacedPair = Spaced in {1, 7}
+
+# source-type-interval-under-sparse-exact's Sparse and Child (renamed: Sparse
+# is the {0, 4, 8, 12} above).
+type Gapped = Int in {1, 2, 4, 5}
+type GappedLow = Gapped in 1..2
+
+# The checked-conversion tests' domains and errors (source-types.test's
+# constructor section): a dense, a sparse and an over-budget (40 values,
+# past the range analysis's 32-value exact-set budget) domain.
+type Tags = Int in {1, 4, 7}
+type Big = Int in {0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78}
+
+error OutOfRange
+error NotATag
+error NotBig
+
+# empty-collection-admissibility.test's element struct S (renamed).
+struct Record:
+    f: int
+
+# ---------------------------------------------------------------------------
+# source-types.test: declarations
+
+fn register_source_type_declaration_tests():
+    # source-type-not-special-cased: the declaration syntax and a
+    # source-declared result type work in an ordinary user program, exactly
+    # as the specification's own example. The call's static type is exactly
+    # TenToTwenty: `exactly` admits [f()] only then.
+    fn b_not_special_cased() errors compiler::CompilerError:
+        static compile:
+            fn f() -> TenToTwenty:
+                12
+            fn exactly(xs: List[TenToTwenty]) -> List[TenToTwenty]:
+                xs
+            exactly([f()])
+    test::value("source-type-not-special-cased", [12], b_not_special_cased)
+
+    # source-type-interval-under-interval: an interval child inside its
+    # interval parent (Nibble = LocalByte in 0..15) is accepted and usable.
+    fn b_interval_under_interval() errors compiler::CompilerError:
+        static compile:
+            fn f() -> Nibble:
+                15
+            f()
+    test::value("source-type-interval-under-interval/subset-accepted", 15, b_interval_under_interval)
+
+    # source-type-exact-under-interval: every exact value inside its interval
+    # parent is valid (HighNibble's own shape).
+    fn b_exact_under_interval() errors compiler::CompilerError:
+        static compile:
+            fn f() -> HighNibble:
+                240
+            f()
+    test::value("source-type-exact-under-interval", 240, b_exact_under_interval)
+
+    # source-type-exact-under-exact: an exact child that is a subset of its
+    # exact parent (SpacedPair = Spaced in {1, 7}) is accepted.
+    fn b_exact_under_exact() errors compiler::CompilerError:
+        static compile:
+            fn f() -> SpacedPair:
+                7
+            f()
+    test::value("source-type-exact-under-exact/subset-accepted", 7, b_exact_under_exact)
+
+    # source-type-interval-under-sparse-exact: an interval child inside a
+    # sparse exact parent (GappedLow = Gapped in 1..2) is accepted.
+    fn b_interval_under_sparse_exact() errors compiler::CompilerError:
+        static compile:
+            fn f() -> GappedLow:
+                2
+            f()
+    test::value("source-type-interval-under-sparse-exact/subset-accepted", 2, b_interval_under_sparse_exact)
+
+    # source-type-same-module-forward-parent: a parent declared before its
+    # child in the same module, and the child is its nominal subtype: the
+    # literal [Nibble, LocalByte] has the element type lub(Nibble, LocalByte)
+    # = LocalByte (same-domain siblings would join to plain int instead), so
+    # a List[LocalByte] parameter admits it.
+    fn b_forward_parent() errors compiler::CompilerError:
+        static compile:
+            fn nibble() -> Nibble:
+                15
+            fn octet() -> LocalByte:
+                200
+            fn octets(xs: List[LocalByte]) -> List[LocalByte]:
+                xs
+            octets([nibble(), octet()])
+    test::value("source-type-same-module-forward-parent", [15, 200], b_forward_parent)
+
+# ---------------------------------------------------------------------------
+# source-types.test: result contracts
+
+fn register_result_contract_tests():
+    # source-type-result-contract-valid: a source-declared result type
+    # verifies exactly like a compiler-registered one; the call is exactly a
+    # Small.
+    fn b_result_valid() errors compiler::CompilerError:
+        static compile:
+            fn f() -> Small:
+                7
+            fn exactly(xs: List[Small]) -> List[Small]:
+                xs
+            exactly([f()])
+    test::value("source-type-result-contract-valid", [7], b_result_valid)
+
+    # source-type-result-contract-invalid: an unprovable result is rejected
+    # at the definition (f is never called), at its parameter list, with the
+    # message Tcl pins (the facts the analysis proved included).
+    fn b_result_invalid() errors compiler::CompilerError:
+        static compile:
+            fn f() -> Small:
+                20
+            1
+    test::rejects_at("source-type-result-contract-invalid/location", compiler::DiagnosticCode::Type, 240, 17, b_result_invalid)
+    test::rejects_message("source-type-result-contract-invalid/message", compiler::DiagnosticCode::Type, "function result does not prove declared type int[Small] (facts: [20, 20] {20})", b_result_invalid)
+
+    # source-type-sparse-result-contract: bit_and(x, 12)'s exact result set
+    # {0, 4, 8, 12} proves the sparse Sparse result; the call is exactly a
+    # Sparse.
+    fn b_sparse_result() errors compiler::CompilerError:
+        static compile:
+            fn f(x) -> Sparse:
+                y = bit_and(x, 12)
+                y
+            fn exactly(xs: List[Sparse]) -> List[Sparse]:
+                xs
+            exactly([f(255)])
+    test::value("source-type-sparse-result-contract", [12], b_sparse_result)
+
+    # source-type-interval-cannot-prove-sparse: an interval hull [0, 12] alone
+    # does not prove the sparse Sparse result (h is never called): rejected
+    # at h's parameter list, with the message Tcl pins.
+    fn b_hull_not_sparse() errors compiler::CompilerError:
+        static compile:
+            fn h(x) -> Sparse:
+                y = bit_and(x, 15)
+                z = if y > 12:
+                    12
+                else:
+                    y
+                z
+            1
+    test::rejects_at("source-type-interval-cannot-prove-sparse/location", compiler::DiagnosticCode::Type, 264, 17, b_hull_not_sparse)
+    test::rejects_message("source-type-interval-cannot-prove-sparse/message", compiler::DiagnosticCode::Type, "function result does not prove declared type int[Sparse] (facts: [0, 12])", b_hull_not_sparse)
+
+    # source-type-exact-set-accepted-by-broad-int: an exact set {0, 78, 999}
+    # reached by equality narrowing of an untyped parameter is admitted by a
+    # plain `-> int`.
+    fn b_exact_set_broad_int() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int:
+                if n == 0:
+                    n
+                else:
+                    if n == 78:
+                        n
+                    else:
+                        999
+            [check(0), check(78)]
+    test::value("source-type-exact-set-accepted-by-broad-int", [0, 78], b_exact_set_broad_int)
+
+    # source-type-exact-set-member-rejected-by-narrow-type: the same shape
+    # declared `-> LocalByte` is rejected, at check's definition: 999 is
+    # not in 0..255.
+    fn b_exact_set_narrow() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> LocalByte:
+                if n == 0:
+                    n
+                else:
+                    if n == 78:
+                        n
+                    else:
+                        999
+            [check(0), check(78)]
+    test::rejects_at("source-type-exact-set-member-rejected-by-narrow-type", compiler::DiagnosticCode::Type, 296, 21, b_exact_set_narrow)
+
+# ---------------------------------------------------------------------------
+# source-types.test: checked conversions into a source domain
+#
+# A source-declared type has no callable constructor; its run-time membership
+# check is an ordinary fallible function (`errors`/`fail`). The Tcl tests'
+# failing calls run -strict 0 and leave the declared error uncaught at the
+# program boundary; here the error is handled inside the block (attempt turns
+# it into the error's name), and the inputs are parameters of this function
+# (a constant non-member is a static Type error at the call). The checking
+# functions take `n: int`: an untyped n would take check's inferred contract,
+# the domain itself, and a non-member argument would be rejected statically.
+
+fn register_checked_conversion_tests(below: int, above: int, inside: int, outside: int, member: int, non_member: int, big_non_member: int):
+    # source-type-constructor-success: check(0) and check(10), each handled,
+    # succeed at both ends of the domain (the Tcl program, untyped n).
+    fn b_success() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> Small errors OutOfRange:
+                if n < 0:
+                    fail OutOfRange
+                else:
+                    if n > 10:
+                        fail OutOfRange
+                    else:
+                        n
+            a = check(0):
+                on OutOfRange:
+                    0
+            b = check(10):
+                on OutOfRange:
+                    0
+            [a, b]
+    test::value("source-type-constructor-success", [0, 10], b_success)
+
+    # source-type-constructor-failure: check(-1) and check(11) each raise the
+    # declared OutOfRange.
+    fn b_failure() errors compiler::CompilerError:
+        static compile:
+            fn check(n: int) -> Small errors OutOfRange:
+                if n < 0:
+                    fail OutOfRange
+                else:
+                    if n > 10:
+                        fail OutOfRange
+                    else:
+                        n
+            fn attempt(n: int):
+                r = check(n):
+                    on OutOfRange:
+                        return "OutOfRange"
+                r
+            [attempt(below), attempt(above)]
+    test::value("source-type-constructor-failure", ["OutOfRange", "OutOfRange"], b_failure)
+
+    # source-type-sparse-constructor: for the sparse Tags, check(4) succeeds
+    # and check(5) raises NotATag.
+    fn b_sparse() errors compiler::CompilerError:
+        static compile:
+            fn check(n: int) -> Tags errors NotATag:
+                if n == 1:
+                    n
+                else:
+                    if n == 4:
+                        n
+                    else:
+                        if n == 7:
+                            n
+                        else:
+                            fail NotATag
+            fn attempt(n: int):
+                r = check(n):
+                    on NotATag:
+                        return "NotATag"
+                r
+            [attempt(member), attempt(non_member)]
+    test::value("source-type-sparse-constructor", [4, "NotATag"], b_sparse)
+
+    # source-type-constructors-interp-compile-parity: the success check(7)
+    # and the failure check(20), with the same outcome on every backend.
+    fn b_parity() errors compiler::CompilerError:
+        static compile:
+            fn check(n: int) -> Small errors OutOfRange:
+                if n < 0:
+                    fail OutOfRange
+                else:
+                    if n > 10:
+                        fail OutOfRange
+                    else:
+                        n
+            fn attempt(n: int):
+                r = check(n):
+                    on OutOfRange:
+                        return "OutOfRange"
+                r
+            [attempt(inside), attempt(outside)]
+    test::value("source-type-constructors-interp-compile-parity", [7, "OutOfRange"], b_parity)
+
+    # source-type-over-budget-exact-set-stays-semantically-exact: a 40-value
+    # domain stays a sound, exact type past the analysis's 32-value budget:
+    # its members are admitted (the Tcl program, untyped n) ...
+    fn b_big_members() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> Big errors NotBig:
+                if n == 0:
+                    n
+                else:
+                    if n == 78:
+                        n
+                    else:
+                        fail NotBig
+            a = check(0):
+                on NotBig:
+                    0
+            b = check(78):
+                on NotBig:
+                    0
+            [a, b]
+    test::value("source-type-over-budget-exact-set-stays-semantically-exact/members", [0, 78], b_big_members)
+
+    # ... and check(1) raises NotBig.
+    fn b_big_non_member() errors compiler::CompilerError:
+        static compile:
+            fn check(n: int) -> Big errors NotBig:
+                if n == 0:
+                    n
+                else:
+                    if n == 78:
+                        n
+                    else:
+                        fail NotBig
+            fn attempt(n: int):
+                r = check(n):
+                    on NotBig:
+                        return "NotBig"
+                r
+            attempt(big_non_member)
+    test::value("source-type-over-budget-exact-set-stays-semantically-exact/non-member", "NotBig", b_big_non_member)
+
+# ---------------------------------------------------------------------------
+# typed-parameters.test: admissible arguments (the Tcl tests assert that the
+# program compiles; here it also runs). The functions of the Tcl file's
+# ::samplePayload (identity_small, widen_tiny, combine, make_other) are
+# written into the blocks that use them.
+
+fn register_typed_parameter_valid_tests():
+    # typed-param-valid-literal-interval: a literal inside the interval.
+    fn b_literal_interval() errors compiler::CompilerError:
+        static compile:
+            fn identity_small(x: Small) -> Small:
+                x
+            identity_small(7)
+    test::value("typed-param-valid-literal-interval", 7, b_literal_interval)
+
+    # typed-param-valid-literal-bounds: both interval endpoints.
+    fn b_literal_bounds() errors compiler::CompilerError:
+        static compile:
+            fn identity_small(x: Small) -> Small:
+                x
+            [identity_small(0), identity_small(10)]
+    test::value("typed-param-valid-literal-bounds", [0, 10], b_literal_bounds)
+
+    # typed-param-valid-nominal-subtype: a narrower nominal subtype (Tiny <:
+    # Small) is admissible.
+    fn b_nominal_subtype() errors compiler::CompilerError:
+        static compile:
+            fn widen_tiny(x: Tiny) -> Small:
+                x
+            widen_tiny(2)
+    test::value("typed-param-valid-nominal-subtype", 2, b_nominal_subtype)
+
+    # typed-param-valid-same-domain-sibling: OtherTiny is no subtype of Small,
+    # but its values are all Small's (value-set proof).
+    fn b_same_domain_sibling() errors compiler::CompilerError:
+        static compile:
+            fn identity_small(x: Small) -> Small:
+                x
+            fn make_other() -> OtherTiny:
+                2
+            identity_small(make_other())
+    test::value("typed-param-valid-same-domain-sibling", 2, b_same_domain_sibling)
+
+    # typed-param-valid-multi-args: every typed parameter is checked.
+    fn b_multi_args() errors compiler::CompilerError:
+        static compile:
+            fn combine(x: Small, y: Small) -> int:
+                x + y
+            combine(3, 8)
+    test::value("typed-param-valid-multi-args", 11, b_multi_args)
+
+    # typed-param-valid-independent-narrower-domain: an independently
+    # declared narrower domain satisfies a wider parameter.
+    fn b_independent_narrower() errors compiler::CompilerError:
+        static compile:
+            fn take_small(x: Small) -> int:
+                x
+            fn make_other() -> OtherTiny:
+                2
+            take_small(make_other())
+    test::value("typed-param-valid-independent-narrower-domain", 2, b_independent_narrower)
+
+    # typed-param-valid-exact-subset: an exact fact {0, 8}, known only as a
+    # subset of the sparse Marks, is admissible.
+    fn b_exact_subset() errors compiler::CompilerError:
+        static compile:
+            fn take_mark(x: Marks) -> int:
+                x
+            fn g(flag):
+                y = if flag:
+                    0
+                else:
+                    8
+                take_mark(y)
+            g(true)
+    test::value("typed-param-valid-exact-subset", 0, b_exact_subset)
+
+    # typed-param-valid-recursive: a recursive call's own argument (x - 1
+    # where x != 0) satisfies the declared parameter.
+    fn b_recursive() errors compiler::CompilerError:
+        static compile:
+            fn count(x: Small) -> int:
+                if x == 0:
+                    0
+                else:
+                    1 + count(x - 1)
+            count(5)
+    test::value("typed-param-valid-recursive", 5, b_recursive)
+
+    # typed-param-valid-builtin-int: a builtin primitive parameter type.
+    fn b_builtin_int() errors compiler::CompilerError:
+        static compile:
+            fn id_int(x: int) -> int:
+                x
+            id_int(5)
+    test::value("typed-param-valid-builtin-int", 5, b_builtin_int)
+
+    # typed-param-valid-builtin-str: the builtin string parameter type.
+    fn b_builtin_str() errors compiler::CompilerError:
+        static compile:
+            fn id_str(x: str) -> str:
+                x
+            id_str("hi")
+    test::value("typed-param-valid-builtin-str", "hi", b_builtin_str)
+
+    # typed-param-untyped-unaffected: an untyped parameter accepts any
+    # statically typed argument.
+    fn b_untyped() errors compiler::CompilerError:
+        static compile:
+            fn f(x):
+                x
+            [f(11), f("anything")]
+    test::value("typed-param-untyped-unaffected", [11, "anything"], b_untyped)
+
+    # typed-param-mixed-2: beside a typed parameter, the untyped one accepts
+    # anything.
+    fn b_mixed_untyped() errors compiler::CompilerError:
+        static compile:
+            fn f(x: Small, y):
+                y
+            f(1, "anything")
+    test::value("typed-param-mixed-2", "anything", b_mixed_untyped)
+
+    # typed-param-result-trivial: a declared parameter's own fact proves an
+    # identical declared result.
+    fn b_result_trivial() errors compiler::CompilerError:
+        static compile:
+            fn identity_small(x: Small) -> Small:
+                x
+            identity_small(4)
+    test::value("typed-param-result-trivial", 4, b_result_trivial)
+
+    # typed-param-result-widen-ok: a narrow declared parameter proves a wider
+    # declared result (Tiny <: Small).
+    fn b_result_widen() errors compiler::CompilerError:
+        static compile:
+            fn widen_tiny(x: Tiny) -> Small:
+                x
+            widen_tiny(3)
+    test::value("typed-param-result-widen-ok", 3, b_result_widen)
+
+# ---------------------------------------------------------------------------
+# typed-parameters.test: inadmissible arguments. The Tcl tests' typedParamRejects
+# requires a TYPE error whose message contains "cannot be proven to satisfy":
+# the argument diagnostic, not another TYPE one (an unknown type, an
+# unprovable result).
+
+fn register_typed_parameter_invalid_tests():
+    # typed-param-invalid-literal-outside-interval
+    fn b_outside() errors compiler::CompilerError:
+        static compile:
+            fn identity_small(x: Small) -> Small:
+                x
+            identity_small(11)
+    test::rejects_containing("typed-param-invalid-literal-outside-interval", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_outside)
+
+    # typed-param-invalid-literal-negative
+    fn b_negative() errors compiler::CompilerError:
+        static compile:
+            fn identity_small(x: Small) -> Small:
+                x
+            identity_small(-1)
+    test::rejects_containing("typed-param-invalid-literal-negative", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_negative)
+
+    # typed-param-invalid-sparse-literal: 5 is between Marks' members.
+    fn b_sparse_literal() errors compiler::CompilerError:
+        static compile:
+            fn take_mark(x: Marks) -> int:
+                x
+            take_mark(5)
+    test::rejects_containing("typed-param-invalid-sparse-literal", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_sparse_literal)
+
+    # typed-param-invalid-wider-interval-not-proven-subset: the argument's
+    # fact is make_wider's declared Wider, not its body's 7.
+    fn b_wider() errors compiler::CompilerError:
+        static compile:
+            fn take_small(x: Small) -> int:
+                x
+            fn make_wider() -> Wider:
+                7
+            take_small(make_wider())
+    test::rejects_containing("typed-param-invalid-wider-interval-not-proven-subset", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_wider)
+
+    # typed-param-invalid-interval-cannot-prove-sparse: an interval-only fact
+    # (n >= 0) does not prove membership in Marks.
+    fn b_interval_sparse() errors compiler::CompilerError:
+        static compile:
+            fn take_mark(x: Marks) -> int:
+                x
+            fn make_ranged(n) -> int:
+                if n < 0:
+                    0
+                else:
+                    n
+            fn wrap(v):
+                take_mark(v)
+            wrap(make_ranged(5))
+    test::rejects_containing("typed-param-invalid-interval-cannot-prove-sparse", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_interval_sparse)
+
+    # typed-param-invalid-unproven-argument: an argument with no useful fact
+    # is rejected like a proven-wrong one.
+    fn b_unproven() errors compiler::CompilerError:
+        static compile:
+            fn take_small(x: Small) -> int:
+                x
+            fn identity(v):
+                v
+            take_small(identity(999999))
+    test::rejects_containing("typed-param-invalid-unproven-argument", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_unproven)
+
+    # typed-param-invalid-wrong-primitive-type: a String for an int.
+    fn b_wrong_primitive() errors compiler::CompilerError:
+        static compile:
+            fn id_int(x: int) -> int:
+                x
+            id_int("hi")
+    test::rejects_containing("typed-param-invalid-wrong-primitive-type", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_wrong_primitive)
+
+    # typed-param-invalid-unknown-type: an unresolved parameter type is a
+    # semantic Type error naming the type and the parameter (the suite
+    # declares no MissingType).
+    fn b_unknown_type() errors compiler::CompilerError:
+        static compile:
+            fn f(x: MissingType):
+                x
+            1
+    test::rejects_containing("typed-param-invalid-unknown-type", compiler::DiagnosticCode::Type, "unknown or invalid type MissingType for parameter \"x\"", b_unknown_type)
+
+    # typed-param-invalid-diagnostic-names-parameter: the diagnostic names the
+    # parameter, its declared type and the argument's value.
+    fn b_names_parameter() errors compiler::CompilerError:
+        static compile:
+            fn identity_small(x: Small) -> Small:
+                x
+            identity_small(11)
+    test::rejects_message("typed-param-invalid-diagnostic-names-parameter", compiler::DiagnosticCode::Type, "argument for parameter \"x\" cannot be proven to satisfy int[Small] (argument type: int, facts: [11, 11] {11})", b_names_parameter)
+
+    # typed-param-mixed-1: beside an untyped parameter, the typed one is
+    # still checked.
+    fn b_mixed_typed() errors compiler::CompilerError:
+        static compile:
+            fn f(x: Small, y):
+                x + y
+            f(11, 1)
+    test::rejects_containing("typed-param-mixed-1", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_mixed_typed)
+
+    # typed-param-result-narrow-rejected: the parameter's wider declared fact
+    # does not prove a narrower declared result.
+    fn b_result_narrow() errors compiler::CompilerError:
+        static compile:
+            fn f(x: Small) -> Tiny:
+                x
+            1
+    test::rejects_containing("typed-param-result-narrow-rejected", compiler::DiagnosticCode::Type, "does not prove declared type", b_result_narrow)
+
+# ---------------------------------------------------------------------------
+# applied-types.test: resolution of an applied type. The Tcl tests'
+# appliedTypeRejects accepts a TYPE error whose message contains any of
+# "cannot be proven to satisfy", "unknown or invalid" or "does not prove
+# declared type"; each test here requires the specific failure its title
+# names.
+
+fn register_applied_type_resolution_tests():
+    # applied-type-unknown-constructor: Missing[Small] is a semantic error,
+    # not a parse error.
+    fn b_unknown_constructor() errors compiler::CompilerError:
+        static compile:
+            fn f(x: Missing[Small]):
+                x
+            1
+    test::rejects_containing("applied-type-unknown-constructor", compiler::DiagnosticCode::Type, "unknown type constructor \"Missing\"", b_unknown_constructor)
+
+    # applied-type-not-a-constructor: Small[int] -- the argument int is
+    # valid; Small is not a constructor.
+    fn b_not_a_constructor() errors compiler::CompilerError:
+        static compile:
+            fn f(x: Small[int]):
+                x
+            1
+    test::rejects_containing("applied-type-not-a-constructor", compiler::DiagnosticCode::Type, "\"Small\" is not a type constructor", b_not_a_constructor)
+
+    # applied-type-bare-list-arity: a bare List is an arity error, not an
+    # unknown type.
+    fn b_bare_list() errors compiler::CompilerError:
+        static compile:
+            fn f(x: List):
+                x
+            1
+    test::rejects_containing("applied-type-bare-list-arity", compiler::DiagnosticCode::Type, "requires 1 type argument", b_bare_list)
+
+    # applied-type-unknown-argument: List[Missing] (the suite declares no
+    # Missing).
+    fn b_unknown_argument() errors compiler::CompilerError:
+        static compile:
+            fn f(x: List[Missing]):
+                x
+            1
+    test::rejects_containing("applied-type-unknown-argument", compiler::DiagnosticCode::Type, "unknown type \"Missing\"", b_unknown_argument)
+
+    # applied-type-source-defined-argument: a source-defined type is a valid
+    # type argument, and a value known as List[Small] satisfies a List[Small]
+    # parameter (applied-type-param-accepted: the same Tcl program).
+    fn b_source_defined_argument() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[Small]) -> int:
+                1
+            consume([one(), two()])
+    test::value("applied-type-source-defined-argument", 1, b_source_defined_argument)
+
+    # applied-type-structural-not-nominal: two independent List[Small]
+    # applications denote the same type, so make_smalls()'s List[Small] is
+    # accepted by consume across the function boundary
+    # (applied-type-return-propagation: the same Tcl program).
+    fn b_structural() errors compiler::CompilerError:
+        static compile:
+            fn make_smalls() -> List[Small]:
+                [one(), two()]
+            fn consume(xs: List[Small]) -> int:
+                1
+            consume(make_smalls())
+    test::value("applied-type-structural-not-nominal", 1, b_structural)
+
+# ---------------------------------------------------------------------------
+# applied-types.test: construction, contracts and invariance
+
+fn register_applied_type_contract_tests():
+    # applied-type-construct-lub-sibling: [Tiny, Small] infers List[Small]
+    # (lub(Tiny, Small) = Small).
+    fn b_lub_sibling() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[Small]) -> int:
+                1
+            consume([tiny_one(), one()])
+    test::value("applied-type-construct-lub-sibling", 1, b_lub_sibling)
+
+    # applied-type-construct-heterogeneous: [1, "x"] is the broad list, not
+    # a false List[T].
+    fn b_heterogeneous() errors compiler::CompilerError:
+        static compile:
+            fn f(xs: List[int]) -> int:
+                1
+            f([1, "x"])
+    test::rejects_containing("applied-type-construct-heterogeneous", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_heterogeneous)
+
+    # applied-type-construct-empty ([] satisfies any declared List[T]) is
+    # empty-list-satisfies-source-defined-domain below: the same program.
+    # applied-type-param-accepted (a value known as List[Small] satisfies a
+    # List[Small] parameter) is applied-type-source-defined-argument above.
+
+    # applied-type-param-rejected-broad: an untyped [1, 2] is List[int], not
+    # List[Small].
+    fn b_param_broad() errors compiler::CompilerError:
+        static compile:
+            fn make_ints():
+                [1, 2]
+            fn consume(xs: List[Small]) -> int:
+                1
+            consume(make_ints())
+    test::rejects_containing("applied-type-param-rejected-broad", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_param_broad)
+
+    # applied-type-param-rejected-non-list
+    fn b_param_non_list() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[Small]) -> int:
+                1
+            consume(1)
+    test::rejects_containing("applied-type-param-rejected-non-list", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_param_non_list)
+
+    # applied-type-result-accepted: a body inferred as List[Small] satisfies a
+    # declared List[Small] result.
+    fn b_result_accepted() errors compiler::CompilerError:
+        static compile:
+            fn make_smalls() -> List[Small]:
+                [one(), two()]
+            make_smalls()
+    test::value("applied-type-result-accepted", [1, 2], b_result_accepted)
+
+    # applied-type-result-rejected: [1, 2] does not prove List[Small].
+    fn b_result_rejected() errors compiler::CompilerError:
+        static compile:
+            fn make_smalls() -> List[Small]:
+                [1, 2]
+            1
+    test::rejects_containing("applied-type-result-rejected", compiler::DiagnosticCode::Type, "does not prove declared type", b_result_rejected)
+
+    # applied-type-invariant-sibling-rejected: List[SiblingB] is not
+    # List[SiblingA], although a SiblingB is admissible as a SiblingA ...
+    fn b_sibling_rejected() errors compiler::CompilerError:
+        static compile:
+            fn make_b() -> SiblingB:
+                1
+            fn make_bs() -> List[SiblingB]:
+                [make_b()]
+            fn take_as(xs: List[SiblingA]) -> int:
+                0
+            take_as(make_bs())
+    test::rejects_containing("applied-type-invariant-sibling-rejected", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_sibling_rejected)
+
+    # applied-type-invariant-sibling-scalar-still-valid: ... as the scalar
+    # program shows.
+    fn b_sibling_scalar() errors compiler::CompilerError:
+        static compile:
+            fn make_b() -> SiblingB:
+                1
+            fn take_a(x: SiblingA) -> int:
+                0
+            take_a(make_b())
+    test::value("applied-type-invariant-sibling-scalar-still-valid", 0, b_sibling_scalar)
+
+    # applied-type-invariant-subtype-element-rejected: List[Tiny] is not
+    # List[Small], although Tiny <: Small.
+    fn b_subtype_rejected() errors compiler::CompilerError:
+        static compile:
+            fn make_tinys() -> List[Tiny]:
+                [tiny_one()]
+            fn take_smalls(xs: List[Small]) -> int:
+                0
+            take_smalls(make_tinys())
+    test::rejects_containing("applied-type-invariant-subtype-element-rejected", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_subtype_rejected)
+
+# ---------------------------------------------------------------------------
+# applied-types.test: element reads, aliases, propagation, erasure and
+# callables
+
+fn register_applied_type_flow_tests(first: int, past_end: int):
+    # applied-type-element-read-result-verifies: list::at of a List[Small]
+    # proves a declared Small result with no caller-derived rescue.
+    fn b_read_verifies() errors compiler::CompilerError:
+        static compile:
+            fn read_small(xs: List[Small]) -> Small errors IndexNotFound:
+                list::at(xs, 0)
+            r = read_small([one()]):
+                on IndexNotFound:
+                    0
+            r
+    test::value("applied-type-element-read-result-verifies", 1, b_read_verifies)
+
+    # applied-type-element-read-preserves-bounds-error: reading a List[Small]
+    # still raises the declared IndexNotFound past its end; only the read
+    # value's type improved. The indices are parameters (a constant missing
+    # index is a KnownError).
+    fn b_read_bounds() errors compiler::CompilerError:
+        static compile:
+            fn read_small(xs: List[Small], i: int) -> Small errors IndexNotFound:
+                list::at(xs, i)
+            fn read_or(xs: List[Small], i: int):
+                r = read_small(xs, i):
+                    on IndexNotFound:
+                        return "IndexNotFound"
+                r
+            [read_or([one()], first), read_or([one()], past_end)]
+    test::value("applied-type-element-read-preserves-bounds-error", [1, "IndexNotFound"], b_read_bounds)
+
+    # applied-type-alias-preserved: ys = xs keeps List[Small].
+    fn b_alias() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[Small]) -> Small errors IndexNotFound:
+                ys = xs
+                list::at(ys, 0)
+            r = consume([one()]):
+                on IndexNotFound:
+                    0
+            r
+    test::value("applied-type-alias-preserved", 1, b_alias)
+
+    # applied-type-return-propagation (make_smalls()'s List[Small] accepted by
+    # consume across the function boundary) is
+    # applied-type-structural-not-nominal above: the same program.
+
+    # applied-type-erasure-vs-consume: a declared broad result (`-> list`)
+    # loses List[Small], so consume rejects the erased value ...
+    fn b_erasure_declared() errors compiler::CompilerError:
+        static compile:
+            fn passthrough(x) -> list:
+                x
+            fn make_smalls() -> List[Small]:
+                [one(), two()]
+            fn consume(xs: List[Small]) -> int:
+                1
+            consume(passthrough(make_smalls()))
+    test::rejects_containing("applied-type-erasure-vs-consume/declared-broad-result", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_erasure_declared)
+
+    # ... while an untyped passthrough keeps it (its semantic instance
+    # carries List[Small]).
+    fn b_erasure_untyped() errors compiler::CompilerError:
+        static compile:
+            fn passthrough(x):
+                x
+            fn make_smalls() -> List[Small]:
+                [one(), two()]
+            fn consume(xs: List[Small]) -> int:
+                1
+            consume(passthrough(make_smalls()))
+    test::value("applied-type-erasure-vs-consume/untyped-passthrough", 1, b_erasure_untyped)
+
+    # applied-type-erasure-passthrough-alone-is-legal: an erased value never
+    # re-consumed by a List[T] parameter is legal.
+    fn b_passthrough_alone() errors compiler::CompilerError:
+        static compile:
+            fn passthrough(x):
+                x
+            fn make_smalls() -> List[Small]:
+                [one(), two()]
+            1 + list::length(passthrough(make_smalls()))
+    test::value("applied-type-erasure-passthrough-alone-is-legal", 3, b_passthrough_alone)
+
+    # applied-type-callable-escape-still-rejected: a function whose only typed
+    # parameter is List[Small], passed through an untyped higher-order
+    # helper, has its contract checked by the helper's semantic instance: a
+    # List[Small] argument is accepted ...
+    fn b_escape_accepted() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[Small]) -> int:
+                0
+            fn apply(f, v):
+                f(v)
+            apply(consume, [one()])
+    test::value("applied-type-callable-escape-still-rejected/accepted", 0, b_escape_accepted)
+
+    # ... and any other is rejected at the call of apply, the diagnostic
+    # attributing it to that call through consume's parameter.
+    fn b_escape_rejected() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[Small]) -> int:
+                0
+            fn apply(f, v):
+                f(v)
+            apply(consume, [3])
+    test::rejects_containing("applied-type-callable-escape-still-rejected/rejected", compiler::DiagnosticCode::Type, "call to apply with f : consume/1 -> int, v : List[int] is invalid: argument for parameter \"xs\" cannot be proven to satisfy List[int[Small]]", b_escape_rejected)
+
+    # applied-type-callable-escape-exact-alias-still-legal: f = consume is an
+    # exact alias, fully first-class.
+    fn b_exact_alias() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[Small]) -> int:
+                0
+            f = consume
+            f([one()])
+    test::value("applied-type-callable-escape-exact-alias-still-legal", 0, b_exact_alias)
+
+# ---------------------------------------------------------------------------
+# symbolic-type-identity.test
+
+fn register_symbolic_type_identity_tests():
+    # symbolic-type-identity-web-regression-clean-compile: lib/web.bot's
+    # list::at(str::encode_utf8(c), 0) still satisfies is_unreserved's Byte
+    # parameter: uri_escape_text compiles and escapes ASCII, two-byte and
+    # astral text as it always has.
+    fn b_web() errors compiler::CompilerError:
+        static compile:
+            web::uri_escape_text("aA1 é😀")
+    test::value("symbolic-type-identity-web-regression-clean-compile", "aA1%20%C3%A9%F0%9F%98%80", b_web)
+
+    # symbolic-type-identity-satisfies-declared-list-byte-parameter:
+    # str::encode_utf8's result is a List[byte::Byte].
+    fn b_list_byte() errors compiler::CompilerError:
+        static compile:
+            fn consume(bytes: List[byte::Byte]) -> int:
+                1
+            consume(str::encode_utf8("A"))
+    test::value("symbolic-type-identity-satisfies-declared-list-byte-parameter", 1, b_list_byte)
+
+    # symbolic-type-identity-short-type-name-is-the-same-type: Byte, imported
+    # with `import type byte::Byte`, is the one byte::Byte.
+    fn b_short_name() errors compiler::CompilerError:
+        static compile:
+            fn consume(bytes: List[Byte]) -> int:
+                1
+            consume(str::encode_utf8("A"))
+    test::value("symbolic-type-identity-short-type-name-is-the-same-type", 1, b_short_name)
+
+    # symbolic-type-identity-negative-control-list-int-still-rejected: the
+    # List[byte::Byte] result is not a List[int].
+    fn b_list_int() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[int]) -> int:
+                1
+            consume(str::encode_utf8("A"))
+    test::rejects_containing("symbolic-type-identity-negative-control-list-int-still-rejected", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_list_int)
+
+# ---------------------------------------------------------------------------
+# empty-collection-admissibility.test: every acceptance beside the non-empty
+# control that stays rejected. The Tcl file's `rejects` requires a TYPE error
+# whose message contains "cannot be proven to satisfy" or "does not prove
+# declared type"; each test here requires the one its boundary reports.
+
+fn register_empty_collection_tests():
+    # empty-list-satisfies-source-defined-domain: [] satisfies List[Small], a
+    # source-defined domain (also applied-type-construct-empty: [] satisfies
+    # any declared List[T]).
+    fn b_empty_small() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[Small]) -> int:
+                1
+            consume([])
+    test::value("empty-list-satisfies-source-defined-domain", 1, b_empty_small)
+
+    # empty-list-satisfies-string: the rule is about emptiness, not integer
+    # domains.
+    fn b_empty_str() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[str]) -> int:
+                1
+            consume([])
+    test::value("empty-list-satisfies-string", 1, b_empty_str)
+
+    # nonempty-list-still-invariant-small-domain: a non-empty List[Small] is
+    # no List[LocalByte] (no base-kind covariance).
+    fn b_small_to_byte() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[LocalByte]) -> int:
+                1
+            consume([one()])
+    test::rejects_containing("nonempty-list-still-invariant-small-domain", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_small_to_byte)
+
+    # nonempty-list-byte-to-int-still-rejected
+    fn b_byte_to_int() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[int]) -> int:
+                1
+            consume([byteA()])
+    test::rejects_containing("nonempty-list-byte-to-int-still-rejected", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_byte_to_int)
+
+    # nonempty-list-int-to-byte-still-rejected
+    fn b_int_to_byte() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[LocalByte]) -> int:
+                1
+            consume([1, 2, 3])
+    test::rejects_containing("nonempty-list-int-to-byte-still-rejected", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_int_to_byte)
+
+    # checked-domain-negative-control-still-checked: 256 in a non-empty
+    # literal is still checked against LocalByte.
+    fn b_checked_domain() errors compiler::CompilerError:
+        static compile:
+            fn takes_bytes(xs: List[LocalByte]) -> int:
+                1
+            takes_bytes([256])
+    test::rejects_containing("checked-domain-negative-control-still-checked", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_checked_domain)
+
+    # empty-set-satisfies-byte
+    fn b_empty_set_byte() errors compiler::CompilerError:
+        static compile:
+            fn consume(s: ImmutableSet[LocalByte]) -> int:
+                1
+            consume(immutable_set::from_list([]))
+    test::value("empty-set-satisfies-byte", 1, b_empty_set_byte)
+
+    # empty-set-satisfies-string
+    fn b_empty_set_str() errors compiler::CompilerError:
+        static compile:
+            fn consume(s: ImmutableSet[str]) -> int:
+                1
+            consume(immutable_set::from_list([]))
+    test::value("empty-set-satisfies-string", 1, b_empty_set_str)
+
+    # nonempty-set-still-invariant: an ImmutableSet[LocalByte] is no
+    # ImmutableSet[int].
+    fn b_nonempty_set() errors compiler::CompilerError:
+        static compile:
+            fn consume(s: ImmutableSet[int]) -> int:
+                1
+            consume(immutable_set::from_list([byteA()]))
+    test::rejects_containing("nonempty-set-still-invariant", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_nonempty_set)
+
+    # empty-list-satisfies-declared-result: results are symmetric with
+    # parameters.
+    fn b_empty_result() errors compiler::CompilerError:
+        static compile:
+            fn empty() -> List[int]:
+                []
+            1
+    test::value("empty-list-satisfies-declared-result", 1, b_empty_result)
+
+    # empty-set-satisfies-declared-result
+    fn b_empty_set_result() errors compiler::CompilerError:
+        static compile:
+            fn emptySet() -> ImmutableSet[Small]:
+                immutable_set::from_list([])
+            1
+    test::value("empty-set-satisfies-declared-result", 1, b_empty_set_result)
+
+    # nonempty-list-result-still-invariant: rejected at the result boundary.
+    fn b_nonempty_result() errors compiler::CompilerError:
+        static compile:
+            fn wrong() -> List[LocalByte]:
+                [1, 2, 3]
+            1
+    test::rejects_containing("nonempty-list-result-still-invariant", compiler::DiagnosticCode::Type, "does not prove declared type", b_nonempty_result)
+
+    # nested-empty-inner-list-satisfies-nested-declared-type: [[]]'s one
+    # element is checked against List[int] by the same rule, one level down.
+    fn b_nested_inner_empty() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[List[int]]) -> int:
+                1
+            consume([[]])
+    test::value("nested-empty-inner-list-satisfies-nested-declared-type", 1, b_nested_inner_empty)
+
+    # nested-outer-empty-satisfies-nested-declared-type
+    fn b_nested_outer_empty() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[List[int]]) -> int:
+                1
+            consume([])
+    test::value("nested-outer-empty-satisfies-nested-declared-type", 1, b_nested_outer_empty)
+
+    # nested-nonempty-inner-list-still-invariant: [[1]] is no
+    # List[List[LocalByte]].
+    fn b_nested_nonempty() errors compiler::CompilerError:
+        static compile:
+            fn consume(xs: List[List[LocalByte]]) -> int:
+                1
+            consume([[1]])
+    test::rejects_containing("nested-nonempty-inner-list-still-invariant", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_nested_nonempty)
+
+    # generic-body-usability-empty-caller: an empty caller never makes the
+    # callee's body (helper(xs) requiring List[int]) invalid.
+    fn b_empty_caller() errors compiler::CompilerError:
+        static compile:
+            fn helper(xs: List[int]) -> int:
+                1
+            fn consume(xs: List[int]) -> int:
+                helper(xs)
+            consume([])
+    test::value("generic-body-usability-empty-caller", 1, b_empty_caller)
+
+    # generic-body-usability-mixed-callers-both-compile
+    fn b_mixed_callers() errors compiler::CompilerError:
+        static compile:
+            fn helper(xs: List[int]) -> int:
+                1
+            fn consume(xs: List[int]) -> int:
+                helper(xs)
+            [consume([]), consume([1, 2, 3])]
+    test::value("generic-body-usability-mixed-callers-both-compile", [1, 1], b_mixed_callers)
+
+    # empty-listloop-runtime-zero-iterations: the empty caller's loop runs
+    # zero times.
+    fn b_zero_iterations() errors compiler::CompilerError:
+        static compile:
+            fn count(xs: List[int]) -> int:
+                mapped = loop x in xs:
+                    x
+                list::length(mapped)
+            count([])
+    test::value("empty-listloop-runtime-zero-iterations", 0, b_zero_iterations)
+
+    # empty-listloop-nonempty-caller-still-correct: mixed callers do not
+    # corrupt each other.
+    fn b_nonempty_caller() errors compiler::CompilerError:
+        static compile:
+            fn count(xs: List[int]) -> int:
+                mapped = loop x in xs:
+                    x
+                list::length(mapped)
+            [count([]), count([1, 2, 3])]
+    test::value("empty-listloop-nonempty-caller-still-correct", [0, 3], b_nonempty_caller)
+
+    # join-empty-and-nonempty-arms-satisfies-declared-result: the join of []
+    # and [1, 2] is List[int].
+    fn b_join_arms() errors compiler::CompilerError:
+        static compile:
+            fn pick(flag: bool) -> List[int]:
+                if flag:
+                    []
+                else:
+                    [1, 2]
+            1
+    test::value("join-empty-and-nonempty-arms-satisfies-declared-result", 1, b_join_arms)
+
+    # empty-caller-element-read-handled: a handled read of the empty caller's
+    # List[Record], then a field projection.
+    fn b_read_handled() errors compiler::CompilerError:
+        static compile:
+            fn first(xs: List[Record]) -> int:
+                s = list::at(xs, 0):
+                    on IndexNotFound:
+                        Record {f: 7}
+                s.f
+            first([])
+    test::value("empty-caller-element-read-handled", 7, b_read_handled)
+
+    # empty-caller-element-read-propagated: the empty caller's read failure
+    # propagated through a declared errors clause and handled by its caller
+    # run, whose parameter carries the empty [] (a handled first([]) itself
+    # is KnownError: the empty literal reaches xs as zero elements) ...
+    fn b_read_propagated() errors compiler::CompilerError:
+        static compile:
+            fn first(xs: List[Record]) -> int errors IndexNotFound:
+                list::at(xs, 0).f
+            fn run(ys: List[Record]) -> int:
+                r = first(ys):
+                    on IndexNotFound:
+                        5
+                r
+            run([])
+    test::value("empty-caller-element-read-propagated/declared-error", 5, b_read_propagated)
+
+    # ... and list::get with a default.
+    fn b_read_default() errors compiler::CompilerError:
+        static compile:
+            fn first(xs: List[Record]) -> int:
+                list::get(xs, 0, Record {f: 3}).f
+            first([])
+    test::value("empty-caller-element-read-propagated/get-default", 3, b_read_default)
+
+# ---------------------------------------------------------------------------
+# The suite
+
+fn register_types_tests():
+    register_source_type_declaration_tests()
+    register_result_contract_tests()
+    register_checked_conversion_tests(-1, 11, 7, 20, 4, 5, 1)
+    register_typed_parameter_valid_tests()
+    register_typed_parameter_invalid_tests()
+    register_applied_type_resolution_tests()
+    register_applied_type_contract_tests()
+    register_applied_type_flow_tests(0, 5)
+    register_symbolic_type_identity_tests()
+    register_empty_collection_tests()
+
+with context test::suite()
+register_types_tests()
+test::report()

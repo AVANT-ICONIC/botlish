@@ -291,12 +291,24 @@ Two details keep the diagnostics exact:
   rejected -- by then its first diagnostic may be the inner site's
   unadmitted `CompilerError`. A rejected outer site takes the sites nested
   in it with it (they are accepted, inside a body no build keeps).
-* **Internal ids.** A message that names internal ids (`block(e12)`) carries
+* **Internal ids.** A message that names internal ids (`block(e12)`, or
+  `function e12` for a function without a name -- the only two forms in
+  which a diagnostic prints one; a word that merely looks like an id, a
+  binding written `s1`, is no id) carries
   the numbering of the build it came from, which the forms of the sites
   numbered before them decide. Such a rejection is committed from a build
   only when no site before its ids differs between that build and the
   sequential order's; otherwise its component waits for a build (the trace
-  says so). Predictions compare messages with the ids blanked.
+  says so). Predictions compare messages with the ids blanked. Where a
+  message can name a callable by its source it does (`two/2 -> bool`,
+  `hir::semantic::NameCallables`), and a binding hygiene renamed
+  (`NAME#N`, numbered across the whole program, so by sites after it as
+  well) is printed as written in every message: a binding by
+  `hir::semantic::SourceName` (a module's own definition `NS::NAME`), a
+  reference or a binding statement by `hir::semantic::RefName`, a function
+  by `hir::semantic::CallableName` (`se-equal-hygiene-*`;
+  STATIC-DECISION-ECONOMICS.md, "Callables and bindings named by their
+  source").
 
 ### The dependency graph
 
@@ -310,29 +322,53 @@ extra one only costs a build. Its header lists every edge; in short:
 * a site depends on the region its body stands in (its *position*: a
   rejection can make the code after it unreachable, where completion and
   ownership diagnostics are not reported), on the sites nested in it, and
-  on its own contract-boundary checks;
+  on its own contract-boundary checks -- and only on what its diagnostics
+  read: a site is two nodes, what its diagnostics read and its *form*
+  (whether it is still a body, which only its own rejection changes), and
+  whatever reads a site's code depends on its form alone. (One node once
+  stood for both: a site nested in a function in another site's body
+  reached that site's form through the `if true:` scoping it, and through
+  it every sibling nested site -- one rejection per build;
+  `se-builds-nested-siblings`);
 * a region depends on everything its own code mentions -- bindings, the
   functions it defines and calls (their summaries), every candidate of a
-  method-style call, its parameters and captures, the control operands
+  method-style call and what its trial builds judge of the contract
+  boundary, its parameters and captures, the control operands
   around its literal, and the narrowings of each captured binding between
   its definition and the region -- but *not* on the rest of the function
   around it: a function is analyzed from its own entry, and sees of the
   enclosing code exactly its captures (`se-property-nested-entry`,
   `se-property-capture-narrowing`). That is why bodies nested in one
   registration function are as independent as top-level ones;
+* a binding depends on its definition and on every narrowing mention of it
+  in its own region (a condition, a native's parameter types, a mutation:
+  a nested function may not capture a vector its function mutates) -- every
+  mention, not only the last, which is all an earlier version kept
+  (`se-equal-every-mention`);
 * the backward channels: an untyped parameter's contract (inferred from its
   uses in the function and the functions nested in it), a shared affine or
-  mutable binding (every region mentioning it), a yielding function's yield
-  type (the struct-protocol coroutine constructions that reach it);
+  mutable binding (every region mentioning it; a binding holding a function
+  is none, whatever the function's contract mentions: a function value has
+  no place to mutate and is never moved, and the vector its call returns is
+  a new value owned by the binding receiving it), a yielding function's
+  yield type (the struct-protocol coroutine constructions that reach it);
 * the program-wide channels, modelled as nodes with contributors and
   consumers rather than as a stop sign:
-  * **the erased-callable contract** (`hir::completions::erasedErrorsOf`).
-    Its *contributors* are the semantic-instance requests whose arguments
-    at parameters with no declared or trusted contract can carry errors (a
-    callable, or a value holding one), by those arguments and the call's
-    place, up the chain of requests; the positions where a callable with an
+  * **the erased-callable contract** (`hir::completions::erasedErrorsOf`),
+    a set of errors. Its *contributors* are the semantic-instance requests
+    whose arguments at parameters with no declared or trusted contract
+    carry errors (a callable, or a value holding one), by the chain of
+    requests keeping the instance and those arguments -- of one naming a
+    function, its place only: what a function carries is its declared
+    errors, never its body; the positions where a callable with an
     uncontracted parameter acquires a structural type (contravariant
-    erasure); and the requests the budget declined. Its *consumers* are the
+    erasure); and the requests the budget declined. A request that erases
+    nothing never will (a rejection only turns a type into `never`) and is
+    none. The contract depends, per error, on one *witness* -- the
+    contribution the sequential order removes last -- since another
+    contributor's rejection leaves the set as it is, and every contributor
+    is linked to it, as the ownership verdict's are (`se-equal-erased-
+    witness`, `se-builds-erased-empty`). Its *consumers* are the
     regions that call through an uncontracted value -- a callee typed `any`
     or a bare kind, a native calling such an argument -- whose identity and
     contract are both lost. A call through a verified structural `Fn` or
@@ -346,16 +382,55 @@ extra one only costs a build. Its header lists every edge; in short:
   * **the semantic-instance budget** of a function: open only under
     pressure (a request declined, or half the per-block budget used), and
     then every call of the function is both contributor and consumer;
+  * **the ownership verdict** (`hir::affine::verify`'s `accepted`): release
+    scopes, and with them `AFFINE-PATH-RELEASE-UNSUPPORTED`, are computed
+    only while the ownership analysis finds nothing anywhere in the
+    program, so a site that moves a binding on a loop's break path or in a
+    handler has that diagnostic only once every site with an ownership
+    diagnostic is rejected. Its *consumers* are the sites holding such a
+    join; while the analysis reports something, the verdict depends on one
+    *witness* (the diagnostic whose site is last in post-order, or every
+    one outside a site: the verdict cannot change while one stays), and
+    every site holding one after the first consumer is linked to it, so a
+    consumer whose status becomes unknown holds back what the sequential
+    order still sees when it judges it. One consumer ahead of six
+    rejections takes 3 builds, not 8 (`se-builds-ownership-verdict`). While
+    the analysis accepts the program, the verdict depends on the regions
+    passing an affine argument whose contract can widen (an untyped
+    parameter, a callable value): a rejection only kills paths and narrows
+    types, so no other diagnostic can appear. A later finding of the golden
+    migration (`mutable-vector.bot` mispredicted; a variant decided another
+    program: `se-equal-ownership-verdict`);
   * **the contract-boundary checks** (`hir::completions::Subsume` with
     `Possible`), which run only in a body's own diagnosing walk while the
     program erases something: a site-local channel, from the site to the
-    erased contract and to the inputs of the callables at its positions.
+    erased contract and to the inputs of the callables at its positions --
+    what an input may hold being, like the contract, a set (of errors, and
+    whether every value is quiet), with one witness value per part
+    (`se-builds-possible-witness`). None while the site fails with a first
+    diagnostic reported before the completion walk, which every report
+    follows (`se-builds-subsume-gate`). Besides the site's own diagnostics,
+    only a method-style call's trial builds read a report: the checks at the
+    call's own arguments, which the candidates' parameter types decide, so
+    the call's region depends on them (`se-equal-method-trial`);
+  * **the gate of the trait monomorphization's plan** (`hir::traits::Plan`),
+    which `hir::BuildFull` runs only on a checked program with no
+    diagnostic at all, and whose diagnostics (TRAIT-IMPL-ORDER,
+    AFFINE-GENERIC-NESTED-UNSUPPORTED, TRAIT-INSTANCE-BUDGET, ...) are a
+    site's. Its *consumers* are the sites holding a call the plan can
+    report at and no diagnostic of their own; while some diagnostic it
+    does not report stays, it depends on one witness (the site of the last
+    in post-order: the gate cannot open while it stays); while every
+    diagnostic may be its own, on every site holding one, decided one per
+    build as the sequential order decides them. It used to be missing:
+    `traits.bot` and `affinity.bot` recorded mispredictions
+    (`se-equal-plan-gate`, `se-builds-plan-gate`).
 
 Not channels: a demoted trusted contract (`hir::check` keeps the
 diagnostics of the check before the demotion,
-`se-property-demotion-keeps-diagnostics`), the trait monomorphization (it
-runs only on a program with no diagnostic, and its own are internal), and
-resolution (lexical).
+`se-property-demotion-keeps-diagnostics`), the trait monomorphization's
+build after its plan (it runs only on a program with no diagnostic, and its
+own are internal), and resolution (lexical).
 
 ### Method-style call decisions across rounds
 
@@ -1176,8 +1251,10 @@ If you change the decision schedulers (`hir/static.tcl`'s `decide`,
 the method-call decisions' seeds or build reuse (`hir/hir.tcl`), or any fact
 an analysis reads across functions -- a new summary, a new backward or
 program-wide channel (an inferred contract, the erased-callable contract,
-an instance budget, a yield type), a new diagnostic suppressed by
-reachability -- run `tests/static-economics.test`,
+an instance budget, a yield type, the ownership verdict), a new diagnostic
+suppressed by reachability or by a whole-program verdict (as
+`hir::affine::verify` withholds release scopes from a program its analysis
+rejects) -- run `tests/static-economics.test`,
 `tests/static-compile.test`, `audit/static-decisions/tools/fuzz.tcl`
 (several seeds; `-legacy 1` also checks the legacy scheduler),
 `audit/static-decisions/tools/compare.tcl` (the golden suites and the

@@ -1,0 +1,87 @@
+# abi-bytes-native.bot -- linux::write of an abi::bytes::Bytes (ABI-BYTES.md),
+# in process, as a source-level specification: the wrapper is ONE write(2)
+# syscall whose raw result is an ordinary Int, so a write the kernel refuses
+# is its exact negative errno -- an invalid descriptor is EBADF (-9) on
+# Linux, for a heap, a static and an empty payload alike (a zero-length
+# write still reaches the kernel, which checks the descriptor) -- and Bytes
+# held in Lists keep their lengths, equality and hashes around the writes.
+#
+# golden-exclude: interp, compile -- CORE SEMANTIC NATIVE-ONLY: linux::write takes its payload's machine address (abi::x86_64::from_bytes) for the write(2) syscall, which the Tcl backends refuse at run time by design (tests/abi-bytes.test abi-bytes-tcl-backends-refuse-the-address pins the refusal); a refusal aborts a suite, so these tests run on cranelift-generic and cranelift only
+#
+# Every write goes to descriptor 1000, which is invalid in the runner's
+# process as in the Tcl tests' standalone executables: nothing is ever
+# written. Ported from tests/abi-bytes.test, which stays authoritative and
+# unchanged: it also writes to a descriptor it closed (63, which may be open
+# in the runner), runs standalone executables whose printed result it reads,
+# and reruns the in-process program under BOTLISH_NATIVE_GC_STRESS=1 (the CI
+# gc-stress job runs this suite under stress as a whole). The pure Bytes
+# semantics, and programs that only define a write, are abi-bytes.bot's.
+#
+# Imports: compiler and test (the framework); abi, abi::bytes, abi::x86_64,
+# byte, linux and str are the Tcl programs' linuxPrelude (less linux::abi and
+# `type byte::Byte`, which no ported program uses); list for the GC-stress
+# program's list::at. Every call is written qualified.
+import abi
+import abi::bytes
+import abi::x86_64
+import byte
+import compiler
+import linux
+import list
+import str
+import test
+
+# The Tcl linuxPrelude's helpers the ported programs call: mk (a String's
+# Bytes), pattern (a List of every byte value in turn) and out (one write of
+# DATA to descriptor FD; abi::i32 fails only for an FD outside I32).
+fn mk(s: str):
+    abi::bytes::from_list(str::encode_utf8(s))
+
+fn pattern(n: int):
+    loop i from 0 to n:
+        byte::from_int(mod(i, 256))
+
+fn out(fd: int, data: abi::bytes::Bytes) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
+    linux::write(abi::i32(fd), data)
+
+fn register_native_write_tests():
+    # A zero-length write to a bad descriptor is EBADF: the empty write is a
+    # real syscall.
+    fn empty_write_to_an_invalid_descriptor() errors compiler::CompilerError:
+        static compile:
+            out(1000, abi::bytes::from_list([]))
+    test::value("abi-bytes-empty-write-to-an-invalid-descriptor-is-still-the-syscall", 0 - 9, empty_write_to_an_invalid_descriptor)
+
+    # The raw negative result is preserved exactly (never reread as
+    # unsigned), for a heap, a static and an empty payload.
+    fn write_error() errors compiler::CompilerError:
+        static compile:
+            [
+                out(1000, mk("x")),
+                out(1000, abi::bytes::from_list(str::encode_utf8("static"))),
+                out(1000, abi::bytes::from_list([])),
+                abi::x86_64::to_int(abi::x86_64::register64(0 - 9)) < 0
+            ]
+    test::value("abi-bytes-write-error-is-the-raw-negative-result", [0 - 9, 0 - 9, 0 - 9, true], write_error)
+
+    # Lengths, equality and hashes of Bytes held in a List, and writes of
+    # them (the CI gc-stress job runs this suite with a collection at every
+    # allocation site).
+    fn in_process() errors compiler::CompilerError:
+        static compile:
+            a = mk("alias\n")
+            xs = [a, mk("other\n"), a, abi::bytes::from_list(pattern(100))]
+            sizes = loop x in xs:
+                abi::bytes::length(x).value
+            [
+                sizes,
+                xs == [a, mk("other\n"), a, abi::bytes::from_list(pattern(100))],
+                hash(a) == hash(mk("alias\n")),
+                out(1000, a),
+                out(1000, list::at(xs, 0))
+            ]
+    test::value("abi-bytes-gc-stress-in-process", [[6, 6, 6, 100], true, true, 0 - 9, 0 - 9], in_process)
+
+with context test::suite()
+register_native_write_tests()
+test::report()

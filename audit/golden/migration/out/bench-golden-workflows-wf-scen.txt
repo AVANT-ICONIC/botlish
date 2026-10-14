@@ -1,0 +1,41 @@
+scenario-affine-ownership golden affinity.bot (interp)                         22.7 s  ok
+scenario-affine-ownership golden ownership.bot (interp)                        25.0 s  ok
+scenario-affine-ownership golden coroutines.bot (interp)                       35.7 s  ok
+scenario-affine-ownership golden mutable-vector.bot (interp)                   54.1 s  ok
+scenario-affine-ownership tcl affine.test                                      16.7 s  ok 47/47
+scenario-affine-ownership tcl coroutines.test                                  15.6 s  ok 79/79
+scenario-affine-ownership tcl mutable-vector.test                              17.5 s  ok 56/56
+scenario affine-ownership   (hir/affine.tcl): golden 137.4 s (4 suites), Tcl 49.9 s (3 files)
+scenario-error-completions golden declared-errors.bot (interp)                  53.6 s  ok
+scenario-error-completions golden errors.bot (interp)                            5.6 s  ok
+scenario-error-completions golden callable-contracts.bot (interp)               71.2 s  ok
+scenario-error-completions golden completion-regressions.bot (interp)            3.7 s  ok
+scenario-error-completions tcl errors.test                                       3.2 s  ok 51/51
+scenario-error-completions tcl error-payloads.test                              10.3 s  ok 61/61
+scenario-error-completions tcl higher-order-completions.test                     6.6 s  ok 62/62
+scenario-error-completions tcl structural-contract-completions.test             17.9 s  ok 45/45
+scenario error-completions  (hir/completions.tcl): golden 134.0 s (4 suites), Tcl 38.0 s (4 files)
+scenario-core-evaluator golden core-semantics.bot (interp)                   28.2 s  ok
+scenario-core-evaluator golden values.bot (interp)                           10.7 s  ok
+scenario-core-evaluator golden loops.bot (interp)                             5.9 s  ok
+scenario-core-evaluator golden loop-collecting.bot (interp)                  23.2 s  ok
+scenario-core-evaluator tcl calls.test                                        0.1 s  ok 19/19
+scenario-core-evaluator tcl control.test                                      0.1 s  ok 17/17
+scenario-core-evaluator tcl loops.test                                        0.1 s  ok 15/15
+scenario-core-evaluator tcl loop-counted.test                                 1.6 s  ok 60/60
+scenario-core-evaluator tcl loop-in.test                                      0.6 s  ok 34/34
+scenario-core-evaluator tcl loop-collecting.test                              6.1 s  ok 140/140
+scenario-core-evaluator tcl elif.test                                        36.3 s  ok 45/45
+scenario-core-evaluator tcl bindings.test                                     0.1 s  ok 31/31
+scenario-core-evaluator tcl blocks.test                                       0.1 s  ok 15/15
+scenario core-evaluator     (core/evaluator.tcl): golden 67.9 s (4 suites), Tcl 45.2 s (9 files)
+scenario-native-lowering golden native-values.bot (cranelift)                  7.5 s  ok
+scenario-native-lowering golden string-natives.bot (cranelift)                10.2 s  ok
+scenario-native-lowering golden native-aggregates.bot (cranelift)             10.8 s  ok
+scenario-native-lowering golden representation.bot (cranelift)                 4.2 s  ok
+scenario-native-lowering tcl native.test                                      21.0 s  ok 90/90
+scenario-native-lowering tcl native-mutarray.test                              7.6 s  ok 49/49
+scenario-native-lowering tcl native-string-region.test                         3.3 s  ok 31/31
+scenario-native-lowering tcl native-uri-escape.test                           41.3 s  ok 38/38
+scenario-native-lowering tcl native-param-aggregate.test                      11.9 s  ok 37/37
+scenario native-lowering    (native/lower.tcl): golden 32.8 s (4 suites), Tcl 85.1 s (5 files)

@@ -1,0 +1,1093 @@
+# traits.bot -- traits as static views (TRAITS.md), as a source-level
+# specification: a trait is a nominal set of requirements that a concrete
+# type satisfies structurally, through the functions its owner namespace
+# declares; a function with a trait-typed parameter is trait-polymorphic and
+# is specialized, statically, once per witness; inside it the value is
+# visible only as the trait (a view), whatever concrete type is underneath;
+# and nothing of a trait exists at run time. Ported from tests/traits.test
+# (the Tcl tests stay authoritative; its HIR, NIR, Cranelift-IR and API
+# observations stay there). traits-path.bot holds the two tests that need
+# `import type io::path::Path`.
+#
+# Layout. Each section declares what its tests need, then registers them.
+# Declarations are top-level only, and so is every trait-polymorphic function
+# (a nested one is TraitNestedPolymorphic). A rejection inside a
+# trait-polymorphic function is therefore a top-level wrapper whose own body
+# is the `static compile:` block (static-compile.test's sc-trait-program): the
+# block is decided against the trait alone, and the test body calls the
+# wrapper with a witness, completing with the wrapper's
+# compiler::CompilerError. One namespace declares one function per name, so
+# every trait implemented here has its own requirement names, and a second
+# witness of one trait comes from a standard module (abi::bytes::Bytes,
+# linux::path::LinuxPath) or is the built-in str.
+#
+# Imports:
+#   abi, abi::bytes  Extent's result type abi::Usize, and abi::bytes::Bytes,
+#                    an opaque struct of another module, as Extent's witness
+#   compiler         compiler::CompilerError and DiagnosticCode (every body);
+#                    compiler::SourceLocation and DiagnosticCode as witnesses
+#                    whose owner lacks the requirement
+#   io::path         imported WITHOUT `import type io::path::Path`, so its
+#                    trait has no short name here (trait-import-type);
+#                    io::path::text is a trait consumer whose namespace
+#                    imports no witness (trait-operation-needs-no-import)
+#   linux::path      LinuxPath, a refinement of str owned by another module,
+#                    and its validator valid?
+#   list             list::at (trait-any-erasure); list::length is one more
+#                    visible `.length()` a trait operation must not consult
+#   str              str::length and str::concat (the built-in str as a
+#                    witness, through its namespace's intrinsics), and
+#                    str::encode_utf8 (the bytes of a Bytes)
+#   test             the framework; its test::code_name is an imported
+#                    function that would fit a requirement
+#                    (trait-imports-do-not-affect-satisfaction)
+import abi
+import abi::bytes
+import compiler
+import io::path
+import linux::path
+import list
+import str
+import test
+
+# ===========================================================================
+# The principal trait (traits.test's prelude): Named, its witness Person
+# (this namespace implements `name` for it), the concrete-only `secret` and
+# `person_only`, and the trait consumers `describe` and `identity` (the Tcl
+# tests' `same` and `identity`, one function here).
+
+trait Named:
+    fn name(value: Named) -> str
+
+struct Person:
+    value: str
+
+fn name(value: Person) -> str:
+    value.value
+
+fn secret(value: Person) -> str:
+    "hidden"
+
+fn person_only(p: Person) -> str:
+    p.value
+
+fn describe(value: Named) -> str:
+    value.name()
+
+fn identity(x: Named) -> Named:
+    x
+
+# ===========================================================================
+# Declarations and names
+
+# `trait` starts a declaration only as `trait NAME:` at the top level; this
+# top-level statement binds an ordinary name.
+trait = 3
+
+fn register_declaration_tests():
+    # trait-is-contextual: the binding above, and a parameter.
+    fn is_contextual() errors compiler::CompilerError:
+        static compile:
+            fn f(trait):
+                trait + 1
+            [f(trait), trait]
+    test::value("trait-is-contextual", [4, 3], is_contextual)
+
+    # An unknown trait name in an annotation is an unknown type.
+    fn unknown_trait() errors compiler::CompilerError:
+        static compile:
+            fn f(v: Nope) -> int:
+                1
+            f(1)
+    test::rejects("trait-unknown-trait", compiler::DiagnosticCode::Type, unknown_trait)
+
+    # A module's trait has no short name without `import type` (io::path is
+    # imported here, its trait Path is not).
+    fn unimported_short_name() errors compiler::CompilerError:
+        static compile:
+            fn f(v: Path) -> int:
+                1
+            1
+    test::rejects("trait-import-type/unimported", compiler::DiagnosticCode::Type, unimported_short_name)
+
+# ===========================================================================
+# Structural conformance: only the witness's owner namespace counts, and it
+# is decided from declarations.
+
+# A struct of this namespace with no implementation of its own: `name` here
+# takes a Person, which does not admit it.
+struct Thing:
+    v: int
+
+# An implementation with the wrong result type ...
+trait Titled:
+    fn title(value: Titled) -> str
+
+struct NumberedTitle:
+    v: int
+
+fn title(value: NumberedTitle) -> int:
+    3
+
+fn show_title(v: Titled) -> str:
+    v.title()
+
+# ... and one whose errors the requirement's contract does not admit.
+error CaptionFailed
+
+trait Captioned:
+    fn caption(value: Captioned) -> str
+
+struct FailingCaption:
+    v: int
+
+fn caption(value: FailingCaption) -> str errors CaptionFailed:
+    fail CaptionFailed
+
+fn show_caption(v: Captioned) -> str:
+    v.caption()
+
+# An implementation that declares no result.
+trait Badged:
+    fn badge(value: Badged) -> str
+
+struct BadgeHolder:
+    v: str
+
+fn badge(p: BadgeHolder):
+    p.v
+
+fn show_badge(v: Badged) -> str:
+    v.badge()
+
+# compiler::DiagnosticCode's owner (compiler) has no code_name; the imported
+# test::code_name takes exactly a compiler::DiagnosticCode.
+trait Coded:
+    fn code_name(value: Coded) -> str
+
+fn coded_name(v: Coded) -> str:
+    v.code_name()
+
+fn register_conformance_tests():
+    # trait-missing-requirement: a struct of module compiler, whose namespace
+    # has no `name`.
+    fn missing_requirement() errors compiler::CompilerError:
+        static compile:
+            describe(compiler::SourceLocation {line: 1, column: 2})
+    test::rejects_containing("trait-missing-requirement/required", compiler::DiagnosticCode::TraitNotSatisfied, "argument for parameter \"value\" does not satisfy trait Named:\ncompiler::SourceLocation does not satisfy Named\nrequired:\n    fn name(compiler::SourceLocation) -> str   (declared at ", missing_requirement)
+    # (Named's requirement is declared at line 60, column 8.)
+    test::rejects_containing("trait-missing-requirement/reason", compiler::DiagnosticCode::TraitNotSatisfied, "traits.bot:60:8)\nno function compiler::name exists: \"name\" is not defined by module \"compiler\"", missing_requirement)
+
+    # trait-wrong-signature: a same-named function with the wrong result ...
+    fn wrong_result() errors compiler::CompilerError:
+        static compile:
+            show_title(NumberedTitle {v: 1})
+    test::rejects_containing("trait-wrong-signature/result-found", compiler::DiagnosticCode::TraitNotSatisfied, "found:\n    fn title(NumberedTitle) -> int   (at ", wrong_result)
+    # (title for a NumberedTitle is declared at line 129, column 1.)
+    test::rejects_containing("trait-wrong-signature/result-reason", compiler::DiagnosticCode::TraitNotSatisfied, "traits.bot:129:1)\nreturn type int does not satisfy required str", wrong_result)
+    # ... or the wrong error contract.
+    fn wrong_errors() errors compiler::CompilerError:
+        static compile:
+            show_caption(FailingCaption {v: 1})
+    test::rejects_containing("trait-wrong-signature/errors", compiler::DiagnosticCode::TraitNotSatisfied, "it may fail with CaptionFailed, which the requirement's error contract [] does not admit", wrong_errors)
+
+    fn wrong_parameter() errors compiler::CompilerError:
+        static compile:
+            describe(Thing {v: 1})
+    test::rejects_containing("trait-wrong-parameter", compiler::DiagnosticCode::TraitNotSatisfied, "parameter 1 requires Person, which does not admit the required Thing", wrong_parameter)
+
+    fn undeclared_result() errors compiler::CompilerError:
+        static compile:
+            show_badge(BadgeHolder {v: "a"})
+    test::rejects_containing("trait-impl-declares-result", compiler::DiagnosticCode::TraitNotSatisfied, "badge declares no result type: conformance is decided from declarations", undeclared_result)
+
+    # trait-imports-do-not-affect-satisfaction: the imported test::code_name
+    # would fit, but only the witness's owner (compiler) counts ...
+    fn imported_helper() errors compiler::CompilerError:
+        static compile:
+            coded_name(compiler::DiagnosticCode::Type)
+    test::rejects_containing("trait-imports-do-not-affect-satisfaction/rejected", compiler::DiagnosticCode::TraitNotSatisfied, "no function compiler::code_name exists: \"code_name\" is not defined by module \"compiler\"", imported_helper)
+    # ... while a direct call of it is fine.
+    fn imported_helper_direct() errors compiler::CompilerError:
+        static compile:
+            test::code_name(compiler::DiagnosticCode::Type)
+    test::value("trait-imports-do-not-affect-satisfaction/direct", "Type", imported_helper_direct)
+
+# ===========================================================================
+# Two witnesses from two namespaces: Extent, implemented here for a Ruler
+# and by abi::bytes for its opaque Bytes. A view is its witness's value.
+
+type Small = Int in 0..1000
+
+trait Extent:
+    fn length(value: Extent) -> abi::Usize
+
+struct Ruler:
+    marks: Small
+
+fn length(value: Ruler) -> abi::Usize:
+    abi::Usize {value: value.marks}
+
+fn extent(v: Extent) -> int:
+    v.length().value
+
+fn register_principal_tests():
+    fn principal() errors compiler::CompilerError:
+        static compile:
+            [extent(Ruler {marks: 7}), extent(abi::bytes::from_list(str::encode_utf8("svc:db")))]
+    test::value("trait-principal-vertical", [7, 6], principal)
+
+    fn no_wrapper() errors compiler::CompilerError:
+        static compile:
+            identity(Person {value: "a"})
+    test::value("trait-no-runtime-wrapper", Person {value: "a"}, no_wrapper)
+
+# ===========================================================================
+# One-way abstraction: inside a consumer only the trait's operations exist,
+# whatever witness reaches it. Each wrapper below holds one rejected block.
+
+# Measured: the built-in str satisfies it through str::length.
+trait Measured:
+    fn length(value: Measured) -> int
+
+fn size(v: Measured) -> int:
+    v.length()
+
+fn call_hidden_method(value: Named) -> str errors compiler::CompilerError:
+    static compile:
+        value.secret()
+
+fn call_undeclared_operation(value: Named) -> str errors compiler::CompilerError:
+    static compile:
+        value.whatever_happens_to_compile()
+
+fn add_to_view(value: Named) -> int errors compiler::CompilerError:
+    static compile:
+        value + 1
+
+# `.length()` has visible candidates here (str::length, list::length,
+# abi::bytes::length, this namespace's length).
+fn chain_after_unknown_operation(value: Measured) -> int errors compiler::CompilerError:
+    static compile:
+        value.secret().length()
+
+fn project_view_field(value: Named) -> str errors compiler::CompilerError:
+    static compile:
+        value.value
+
+fn type_test_view(v: Named) -> int errors compiler::CompilerError:
+    static compile:
+        if string?(v):
+            1
+        else:
+            2
+
+fn kind_native_on_view(v: Named) -> int errors compiler::CompilerError:
+    static compile:
+        str::length(v)
+
+fn view_as_condition(v: Named) -> int errors compiler::CompilerError:
+    static compile:
+        if v:
+            1
+        else:
+            2
+
+fn integer_test_view(v: Named) -> int errors compiler::CompilerError:
+    static compile:
+        if integer?(v):
+            x = v
+            1
+        else:
+            0
+
+fn register_one_way_tests():
+    # A method of the hidden witness is unavailable, even in Person's
+    # specialization.
+    fn hidden_method() errors compiler::CompilerError:
+        static compile:
+            call_hidden_method(Person {value: "a"})
+    test::rejects_message("trait-hidden-method-unavailable", compiler::DiagnosticCode::TraitUnknownOperation, "trait Named has no operation \"secret\" (its operations: name): a trait view exposes exactly its trait's requirements, whatever concrete type is underneath", hidden_method)
+
+    # trait-no-delayed-duck-typing: the body is checked against the trait
+    # alone.
+    fn undeclared_operation() errors compiler::CompilerError:
+        static compile:
+            call_undeclared_operation(Person {value: "a"})
+    test::rejects("trait-no-delayed-duck-typing/unknown-operation", compiler::DiagnosticCode::TraitUnknownOperation, undeclared_operation)
+    fn view_arithmetic() errors compiler::CompilerError:
+        static compile:
+            add_to_view(Person {value: "a"})
+    test::rejects("trait-no-delayed-duck-typing/arithmetic", compiler::DiagnosticCode::TraitViewMisuse, view_arithmetic)
+
+    # The undeclared operation is reported, not "no applicable method" for
+    # the call chained on its result.
+    fn unknown_cause() errors compiler::CompilerError:
+        static compile:
+            chain_after_unknown_operation("abc")
+    test::rejects_message("trait-unknown-operation-is-the-cause", compiler::DiagnosticCode::TraitUnknownOperation, "trait Measured has no operation \"secret\" (its operations: length): a trait view exposes exactly its trait's requirements, whatever concrete type is underneath", unknown_cause)
+
+    fn field_access() errors compiler::CompilerError:
+        static compile:
+            project_view_field(Person {value: "a"})
+    test::rejects_containing("trait-no-field-access", compiler::DiagnosticCode::TraitViewMisuse, "a Named trait view has no fields", field_access)
+
+    # trait-no-type-test-or-kind-operation: no type test, kind-specific
+    # native or condition recovers the concrete type.
+    fn type_test() errors compiler::CompilerError:
+        static compile:
+            type_test_view(Person {value: "a"})
+    test::rejects_containing("trait-no-type-test-or-kind-operation/type-test", compiler::DiagnosticCode::TraitViewMisuse, "string? cannot test a Named trait view", type_test)
+    fn kind_native() errors compiler::CompilerError:
+        static compile:
+            kind_native_on_view(Person {value: "a"})
+    test::rejects("trait-no-type-test-or-kind-operation/kind-native", compiler::DiagnosticCode::TraitViewMisuse, kind_native)
+    fn condition() errors compiler::CompilerError:
+        static compile:
+            view_as_condition(Person {value: "a"})
+    test::rejects("trait-no-type-test-or-kind-operation/condition", compiler::DiagnosticCode::TraitViewMisuse, condition)
+
+    fn integer_test() errors compiler::CompilerError:
+        static compile:
+            integer_test_view(Person {value: "a"})
+    test::rejects("trait-view-never-narrowed", compiler::DiagnosticCode::TraitViewMisuse, integer_test)
+
+    # An untyped parameter never becomes trait-polymorphic: relay is
+    # rejected at its definition.
+    fn implicit_parameter() errors compiler::CompilerError:
+        static compile:
+            fn relay(x):
+                describe(x)
+            relay(Person {value: "a"})
+    test::rejects_containing("trait-no-implicit-trait-parameter", compiler::DiagnosticCode::TraitNotSatisfied, "any cannot be a trait witness", implicit_parameter)
+
+# ===========================================================================
+# Provenance: a view keeps its witness through results, joins and onward
+# calls, and stays source-visible as the trait.
+
+# A requirement returning the trait (traits.test's Norm; its struct C is
+# Level here).
+trait Norm:
+    fn normalize(value: Norm) -> Norm
+    fn label(value: Norm) -> str
+
+struct Level:
+    n: int
+
+fn normalize(value: Level) -> Level:
+    Level {n: value.n + 1}
+
+fn label(value: Level) -> str:
+    "c"
+
+fn level_only(c: Level) -> int:
+    c.n
+
+fn twice(value: Norm) -> Norm:
+    value.normalize().normalize()
+
+fn concrete_use_of_returned_view(value: Norm) -> int errors compiler::CompilerError:
+    static compile:
+        x = value.normalize()
+        level_only(x)
+
+fn pick(v: Named, flag: bool) -> Named:
+    if flag:
+        v
+    else:
+        v
+
+fn inner(v: Named) -> str:
+    v.name()
+
+fn outer(v: Named) -> str:
+    inner(v)
+
+fn register_provenance_tests():
+    fn provenance_value() errors compiler::CompilerError:
+        static compile:
+            y = identity(Person {value: "a"})
+            y.name()
+    test::value("trait-provenance-identity/operation", "a", provenance_value)
+    fn provenance_concrete() errors compiler::CompilerError:
+        static compile:
+            y = identity(Person {value: "a"})
+            person_only(y)
+    test::rejects_containing("trait-provenance-identity/concrete", compiler::DiagnosticCode::Type, "argument for parameter \"p\" cannot be proven to satisfy Person (argument type: Named)", provenance_concrete)
+
+    fn returned_views() errors compiler::CompilerError:
+        static compile:
+            x = twice(Level {n: 1})
+            [x.label(), twice(x).label()]
+    test::value("trait-returns-from-requirements/operations", ["c", "c"], returned_views)
+    fn returned_view_concrete() errors compiler::CompilerError:
+        static compile:
+            concrete_use_of_returned_view(Level {n: 1})
+    test::rejects("trait-returns-from-requirements/concrete", compiler::DiagnosticCode::Type, returned_view_concrete)
+    fn returned_value() errors compiler::CompilerError:
+        static compile:
+            twice(Level {n: 1})
+    test::value("trait-returns-from-requirements/value", Level {n: 3}, returned_value)
+
+    # Branches that yield the same witness keep the view (make is not
+    # trait-polymorphic: it has no trait parameter).
+    fn same_witness_join() errors compiler::CompilerError:
+        static compile:
+            fn make() -> Named:
+                Person {value: "m"}
+            x = if 1 < 2:
+                pick(Person {value: "a"}, true)
+            else:
+                make()
+            x.name()
+    test::value("trait-same-witness-join", "a", same_witness_join)
+
+    fn passing_onward() errors compiler::CompilerError:
+        static compile:
+            outer(Person {value: "o"})
+    test::value("trait-passing-onward", "o", passing_onward)
+
+# ===========================================================================
+# Specialization: per witness, per independent parameter, through
+# recursion, and past the semantic-instance budget.
+
+fn extent_pair(a: Extent, b: Extent) -> List[abi::Usize]:
+    [a.length(), b.length()]
+
+fn recurse(value: Extent, n: int) -> int:
+    if n > 0:
+        recurse(value, n - 1)
+    else:
+        value.length().value
+
+# More distinct argument types than the semantic-instance budget, through
+# tag's untyped `extra`.
+struct Extra0:
+    v: int
+
+struct Extra1:
+    v: int
+
+struct Extra2:
+    v: int
+
+struct Extra3:
+    v: int
+
+struct Extra4:
+    v: int
+
+struct Extra5:
+    v: int
+
+struct Extra6:
+    v: int
+
+struct Extra7:
+    v: int
+
+struct Extra8:
+    v: int
+
+struct Extra9:
+    v: int
+
+struct Extra10:
+    v: int
+
+struct Extra11:
+    v: int
+
+struct Extra12:
+    v: int
+
+struct Extra13:
+    v: int
+
+struct Extra14:
+    v: int
+
+struct Extra15:
+    v: int
+
+struct Extra16:
+    v: int
+
+struct Extra17:
+    v: int
+
+struct Extra18:
+    v: int
+
+struct Extra19:
+    v: int
+
+fn tag(value: Named, extra) -> str:
+    value.name()
+
+fn register_specialization_tests():
+    fn independent() errors compiler::CompilerError:
+        static compile:
+            extent_pair(Ruler {marks: 2}, abi::bytes::from_list(str::encode_utf8("svc:s")))
+    test::value("trait-independent-parameters", [abi::Usize {value: 2}, abi::Usize {value: 5}], independent)
+
+    fn recursion() errors compiler::CompilerError:
+        static compile:
+            [recurse(Ruler {marks: 4}, 3), recurse(abi::bytes::from_list(str::encode_utf8("s")), 4)]
+    test::value("trait-recursion-two-witnesses", [4, 1], recursion)
+
+    fn budget() errors compiler::CompilerError:
+        static compile:
+            [
+                tag(Person {value: "t"}, Extra0 {v: 0}),
+                tag(Person {value: "t"}, Extra1 {v: 1}),
+                tag(Person {value: "t"}, Extra2 {v: 2}),
+                tag(Person {value: "t"}, Extra3 {v: 3}),
+                tag(Person {value: "t"}, Extra4 {v: 4}),
+                tag(Person {value: "t"}, Extra5 {v: 5}),
+                tag(Person {value: "t"}, Extra6 {v: 6}),
+                tag(Person {value: "t"}, Extra7 {v: 7}),
+                tag(Person {value: "t"}, Extra8 {v: 8}),
+                tag(Person {value: "t"}, Extra9 {v: 9}),
+                tag(Person {value: "t"}, Extra10 {v: 10}),
+                tag(Person {value: "t"}, Extra11 {v: 11}),
+                tag(Person {value: "t"}, Extra12 {v: 12}),
+                tag(Person {value: "t"}, Extra13 {v: 13}),
+                tag(Person {value: "t"}, Extra14 {v: 14}),
+                tag(Person {value: "t"}, Extra15 {v: 15}),
+                tag(Person {value: "t"}, Extra16 {v: 16}),
+                tag(Person {value: "t"}, Extra17 {v: 17}),
+                tag(Person {value: "t"}, Extra18 {v: 18}),
+                tag(Person {value: "t"}, Extra19 {v: 19}),
+            ]
+    test::value("trait-instance-budget-fallback", ["t", "t", "t", "t", "t", "t", "t", "t", "t", "t", "t", "t", "t", "t", "t", "t", "t", "t", "t", "t"], budget)
+
+# ===========================================================================
+# Function values: a trait-polymorphic function is called directly or
+# through an immutable alias, never used as a general function value; a
+# closure capturing a view belongs to its specialization.
+
+fn greeter(v: Named) -> str:
+    fn hello() -> str:
+        v.name()
+    hello()
+
+fn later(v: Named):
+    fn get() -> str:
+        v.name()
+    get
+
+fn register_function_value_tests():
+    fn alias() errors compiler::CompilerError:
+        static compile:
+            f = describe
+            g = f
+            [f(Person {value: "a"}), g(Person {value: "b"})]
+    test::value("trait-alias-direct-call", ["a", "b"], alias)
+
+    fn escape_argument() errors compiler::CompilerError:
+        static compile:
+            fn apply(f, x):
+                f(x)
+            apply(describe, Person {value: "a"})
+    test::rejects_message("trait-function-value-escape/argument", compiler::DiagnosticCode::TraitPolymorphicFunctionValue, "describe is a trait-polymorphic function (a parameter or its result is a trait): it can be called directly or through an immutable alias, but not used as a general function value, which has no place for the compile-time witnesses its calls need (there is no runtime trait dispatch)", escape_argument)
+    fn escape_list() errors compiler::CompilerError:
+        static compile:
+            fs = [describe]
+            1
+    test::rejects("trait-function-value-escape/list-element", compiler::DiagnosticCode::TraitPolymorphicFunctionValue, escape_list)
+    fn escape_result() errors compiler::CompilerError:
+        static compile:
+            fn get():
+                describe
+            get()
+    test::rejects("trait-function-value-escape/result", compiler::DiagnosticCode::TraitPolymorphicFunctionValue, escape_result)
+    fn escape_function_type() errors compiler::CompilerError:
+        static compile:
+            fn f(g: Fn{args: [Named], return: str}) -> int:
+                1
+            1
+    test::rejects("trait-function-value-escape/function-type", compiler::DiagnosticCode::TraitPolymorphicFunctionValue, escape_function_type)
+
+    fn closure_capture() errors compiler::CompilerError:
+        static compile:
+            [greeter(Person {value: "g"}), later(Person {value: "l"})()]
+    test::value("trait-closure-capture", ["g", "l"], closure_capture)
+
+    fn nested_polymorphic() errors compiler::CompilerError:
+        static compile:
+            fn outer_untyped(x):
+                fn nested(v: Named) -> str:
+                    v.name()
+                nested(x)
+            outer_untyped(Person {value: "a"})
+    test::rejects("trait-nested-polymorphic-rejected", compiler::DiagnosticCode::TraitNestedPolymorphic, nested_polymorphic)
+
+# ===========================================================================
+# Storage: no trait as a container element or in a result's container; a
+# view stored where `any` is accepted is only its concrete value, and the
+# trait is not recovered from `any`.
+
+fn view_in_list(v: Named) -> List[any]:
+    xs = [v, 1]
+    xs
+
+fn view_equals(v: Named) -> bool:
+    v == Person {value: "a"}
+
+fn any_element_as_witness(v: Named) -> str errors compiler::CompilerError:
+    static compile:
+        xs = [v, 1]
+        describe(list::at(xs, 1))
+
+fn register_storage_tests():
+    fn list_parameter() errors compiler::CompilerError:
+        static compile:
+            fn f(xs: List[Named]) -> int:
+                1
+            1
+    test::rejects("trait-storage-unsupported/list-parameter", compiler::DiagnosticCode::TraitStorageUnsupported, list_parameter)
+    fn array_parameter() errors compiler::CompilerError:
+        static compile:
+            fn f(xs: MutableArray[Named]) -> int:
+                1
+            1
+    test::rejects("trait-storage-unsupported/mutable-array-parameter", compiler::DiagnosticCode::TraitStorageUnsupported, array_parameter)
+    fn set_parameter() errors compiler::CompilerError:
+        static compile:
+            fn f(xs: ImmutableSet[Named]) -> int:
+                1
+            1
+    test::rejects("trait-storage-unsupported/immutable-set-parameter", compiler::DiagnosticCode::TraitStorageUnsupported, set_parameter)
+    fn list_result() errors compiler::CompilerError:
+        static compile:
+            fn f() -> List[Named]:
+                []
+            1
+    test::rejects("trait-storage-unsupported/list-result", compiler::DiagnosticCode::TraitStorageUnsupported, list_result)
+
+    fn erased_list() errors compiler::CompilerError:
+        static compile:
+            view_in_list(Person {value: "a"})
+    test::value("trait-any-erasure/list", [Person {value: "a"}, 1], erased_list)
+    fn erased_equality() errors compiler::CompilerError:
+        static compile:
+            view_equals(Person {value: "a"})
+    test::value("trait-any-erasure/equality", true, erased_equality)
+    fn not_recovered() errors compiler::CompilerError:
+        static compile:
+            any_element_as_witness(Person {value: "a"})
+    test::rejects("trait-any-erasure/not-recovered", compiler::DiagnosticCode::TraitNotSatisfied, not_recovered)
+
+# ===========================================================================
+# Witness kinds: an opaque struct of another module, sibling refinements of
+# str, a built-in scalar and an integer domain are witnesses; an applied
+# type is not (yet).
+
+# A refinement of str owned here, beside linux::path::LinuxPath: each with
+# its own `text`.
+trait Textual:
+    fn text(value: Textual) -> str
+
+refined type Word = str
+
+fn word?(s: str) -> bool proves s: Word:
+    str::length(s) > 0
+
+fn text(value: Word) -> str:
+    str::concat("word:", value)
+
+fn show_text(v: Textual) -> str:
+    v.text()
+
+# An integer domain owned here (traits.test's units::Meters and its label).
+trait Unitful:
+    fn unit_name(value: Unitful) -> str
+
+type Meters = Int in 0..1000
+
+fn unit_name(m: Meters) -> str:
+    "meters"
+
+fn show_unit(v: Unitful) -> str:
+    v.unit_name()
+
+fn register_witness_kind_tests():
+    # trait-opaque-witness: abi::bytes::Bytes satisfies Extent through its
+    # owner's length; its representation stays the owner's.
+    fn opaque_witness() errors compiler::CompilerError:
+        static compile:
+            extent(abi::bytes::from_list(str::encode_utf8("x")))
+    test::value("trait-opaque-witness/consumer", 1, opaque_witness)
+    fn opaque_projection() errors compiler::CompilerError:
+        static compile:
+            abi::bytes::from_list(str::encode_utf8("x")).storage
+    test::rejects("trait-opaque-witness/projection", compiler::DiagnosticCode::OpaqueRepresentation, opaque_projection)
+
+    # One value proven both a Word and a LinuxPath has no single witness:
+    # prove them apart.
+    fn sibling_refinements() errors compiler::CompilerError:
+        static compile:
+            fn as_word(s: str) -> str:
+                if word?(s):
+                    show_text(s)
+                else:
+                    ""
+            fn as_path(s: str) -> str:
+                if linux::path::valid?(s):
+                    show_text(s)
+                else:
+                    ""
+            [as_word("x"), as_path("/y")]
+    test::value("trait-refinement-witness-identity", ["word:x", "/y"], sibling_refinements)
+
+    fn builtin_scalar() errors compiler::CompilerError:
+        static compile:
+            size("hello")
+    test::value("trait-builtin-scalar-witness", 5, builtin_scalar)
+
+    fn integer_domain() errors compiler::CompilerError:
+        static compile:
+            fn mk(n: Meters) -> Meters:
+                n
+            show_unit(mk(5))
+    test::value("trait-integer-domain-witness", "meters", integer_domain)
+
+    fn applied_witness() errors compiler::CompilerError:
+        static compile:
+            describe([1, 2])
+    test::rejects_containing("trait-applied-witness-unsupported", compiler::DiagnosticCode::TraitNotSatisfied, "applied, container or callable type: such types have no canonical owner namespace, so they are not supported as trait witnesses yet", applied_witness)
+
+# ===========================================================================
+# Method sugar and imports.
+
+fn register_method_sugar_tests():
+    fn concrete_sugar() errors compiler::CompilerError:
+        static compile:
+            p = Person {value: "c"}
+            [p.name(), p.secret()]
+    test::value("trait-concrete-method-sugar-unchanged", ["c", "hidden"], concrete_sugar)
+
+    # extent's `v.length()` beside the imported str::length, list::length
+    # and abi::bytes::length: neither ambiguous nor different.
+    fn import_stable() errors compiler::CompilerError:
+        static compile:
+            extent(Ruler {marks: 9})
+    test::value("trait-method-sugar-import-stable", 9, import_stable)
+
+    # io::path::text, a trait consumer whose namespace imports no witness,
+    # calls linux::path::text.
+    fn needs_no_import() errors compiler::CompilerError:
+        static compile:
+            fn g(s: str) -> str:
+                if linux::path::valid?(s):
+                    io::path::text(s)
+                else:
+                    "bad"
+            g("/home")
+    test::value("trait-operation-needs-no-import", "/home", needs_no_import)
+
+# ===========================================================================
+# Error contracts: Extendable's requirement admits ExtendFailed. This
+# namespace's Unextendable always fails with it, str::concat declares no
+# error, and linux::path::concat may fail with io::path::NotAPath. Shouting's
+# requirement admits ShoutFailed, and Loud's implementation may fail with it
+# and with Hoarse (traits.test's loud::Loud: a strict superset).
+
+error ExtendFailed
+
+trait Extendable:
+    fn concat(value: Extendable, part: str) -> Extendable errors ExtendFailed
+
+struct Unextendable:
+    v: int
+
+fn concat(value: Unextendable, part: str) -> Unextendable errors ExtendFailed:
+    fail ExtendFailed
+
+fn extend_or_keep(value: Extendable) -> int:
+    x = value.concat("x"):
+        on ExtendFailed:
+            value
+    1
+
+fn unhandled_requirement_error(value: Extendable) -> int errors compiler::CompilerError:
+    static compile:
+        value.concat("x")
+        1
+
+error ShoutFailed
+error Hoarse
+
+trait Shouting:
+    fn shout(value: Shouting) -> Shouting errors ShoutFailed
+
+struct Loud:
+    v: int
+
+fn shout(value: Loud) -> Loud errors ShoutFailed, Hoarse:
+    value
+
+fn shout_or_keep(value: Shouting) -> int:
+    x = value.shout():
+        on ShoutFailed:
+            value
+    1
+
+fn register_error_contract_tests():
+    # The same contract, always failing, and a smaller one both satisfy (and
+    # a specialization that always fails is no error of its own).
+    fn fewer_or_same() errors compiler::CompilerError:
+        static compile:
+            [extend_or_keep(Unextendable {v: 1}), extend_or_keep("text")]
+    test::value("trait-error-contracts/satisfied", [1, 1], fewer_or_same)
+    # A broader contract does not: one error more than the requirement's ...
+    fn broader() errors compiler::CompilerError:
+        static compile:
+            shout_or_keep(Loud {v: 2})
+    test::rejects_containing("trait-error-contracts/broader", compiler::DiagnosticCode::TraitNotSatisfied, "it may fail with Hoarse, which the requirement's error contract [ShoutFailed] does not admit", broader)
+    # ... or an error of another module the requirement does not name.
+    fn other_error() errors compiler::CompilerError:
+        static compile:
+            fn g(s: str) -> int:
+                if linux::path::valid?(s):
+                    extend_or_keep(s)
+                else:
+                    0
+            g("/home")
+    test::rejects_containing("trait-error-contracts/not-admitted", compiler::DiagnosticCode::TraitNotSatisfied, "it may fail with io::path::NotAPath, which the requirement's error contract [ExtendFailed] does not admit", other_error)
+    # A consumer is charged the requirement's errors.
+    fn unhandled() errors compiler::CompilerError:
+        static compile:
+            unhandled_requirement_error(Unextendable {v: 1})
+    test::rejects("trait-error-contracts/unhandled", compiler::DiagnosticCode::UnhandledError, unhandled)
+
+# ===========================================================================
+# Handled calls whose normal result is a view: a handler's value is admitted
+# against that view by subtyping alone -- the same view is, a concrete value
+# is not, even one of the witness (only a trait-typed boundary makes a view)
+# -- and a result joining two witnesses is rejected whether or not its call
+# is handled. (Before the fix every program here but the same-view one
+# crashed the compiler: a handler whose type was not already the call's view
+# had the view asked for integer facts.)
+
+error Boom
+
+# traits.test's pick (the name pick is trait-same-witness-join's): its
+# result joins the witnesses of its two parameters, so the wrapper's block is
+# rejected.
+fn pick_either(a: Named, b: Named, flag: bool) -> Named errors Boom, compiler::CompilerError:
+    static compile:
+        if flag:
+            a
+        else:
+            b
+
+fn one(v: Named, flag: bool) -> Named errors Boom:
+    if flag:
+        fail Boom
+    v
+
+fn safe(v: Named, flag: bool) -> Named:
+    one(v, flag):
+        on Boom:
+            v
+
+fn register_handled_view_tests():
+    # The Tcl program's handled call, its handler a concrete Person: the join
+    # is reported as for an unhandled call. (The handler's own Type, which
+    # the Tcl test also reads under -strict 0, is not reached here: once the
+    # wrapper's block is rejected, its call has no normal result to hold a
+    # handler to.)
+    fn witness_join_handled() errors compiler::CompilerError:
+        static compile:
+            p = Person {value: "p"}
+            ra = pick_either(p, p, true):
+                on Boom:
+                    p
+            ra.name()
+    test::rejects_message("trait-witness-join-handled", compiler::DiagnosticCode::TraitWitnessJoin, "expression has trait type Named but may contain either the witness of parameter \"a\" of pick_either or the witness of parameter \"b\" of pick_either; heterogeneous trait values are not supported (there is no erased trait representation to hold a run-time choice between witnesses)", witness_join_handled)
+
+    # trait-view-handler-admission: a handler of the call's own view is
+    # admitted ...
+    fn same_view_handler() errors compiler::CompilerError:
+        static compile:
+            safe(Person {value: "s"}, true).name()
+    test::value("trait-view-handler-admission/same-view", "s", same_view_handler)
+    # ... a concrete value of the witness is not ...
+    fn concrete_witness_handler() errors compiler::CompilerError:
+        static compile:
+            p = Person {value: "p"}
+            one(p, true):
+                on Boom:
+                    p
+    test::rejects_message("trait-view-handler-admission/concrete-witness", compiler::DiagnosticCode::Type, "handler \"on Boom\" completes with type Person, not admissible as Named (the call's own normal result type)", concrete_witness_handler)
+    # ... nor an int.
+    fn int_handler() errors compiler::CompilerError:
+        static compile:
+            one(Person {value: "p"}, true):
+                on Boom:
+                    3
+    test::rejects_message("trait-view-handler-admission/int", compiler::DiagnosticCode::Type, "handler \"on Boom\" completes with type int, not admissible as Named (the call's own normal result type)", int_handler)
+
+# ===========================================================================
+# Ordering and reachability: an implementation must be declared before the
+# code that first needs it; an unreachable call still has its
+# specialization. (The consumers hold the blocks: TraitImplOrder is reported
+# at their trait call.)
+
+# early() needs late_name before it is declared.
+trait LateNamed:
+    fn late_name(value: LateNamed) -> str
+
+struct LatePerson:
+    v: str
+
+fn late_named(v: LateNamed) -> str errors compiler::CompilerError:
+    static compile:
+        v.late_name()
+
+fn early() -> str errors compiler::CompilerError:
+    late_named(LatePerson {v: "a"})
+
+fn late_name(p: LatePerson) -> str:
+    p.v
+
+# The implementation calls its own consumer (and handles its
+# compiler::CompilerError, keeping the requirement's empty error contract).
+trait SelfNamed:
+    fn self_name(value: SelfNamed) -> str
+
+struct SelfPerson:
+    v: str
+
+fn self_named(v: SelfNamed) -> str errors compiler::CompilerError:
+    static compile:
+        v.self_name()
+
+fn self_name(p: SelfPerson) -> str:
+    r = self_named(p):
+        on compiler::CompilerError:
+            "rejected"
+    r
+
+fn register_ordering_tests():
+    fn declared_late() errors compiler::CompilerError:
+        static compile:
+            early()
+    test::rejects("trait-impl-order/declared-late", compiler::DiagnosticCode::TraitImplOrder, declared_late)
+    fn implementation_calls_consumer() errors compiler::CompilerError:
+        static compile:
+            self_named(SelfPerson {v: "a"})
+    test::rejects("trait-impl-order/implementation-calls-consumer", compiler::DiagnosticCode::TraitImplOrder, implementation_calls_consumer)
+
+    fn unreachable_call() errors compiler::CompilerError:
+        static compile:
+            fn f(flag: bool) -> str:
+                if false:
+                    describe(Person {value: "dead"})
+                else:
+                    "live"
+            f(true)
+    test::value("trait-unreachable-call", "live", unreachable_call)
+
+# ===========================================================================
+# trait-hir-round-trip's program (the HIR text round trip itself stays in
+# Tcl): two requirements, one failing, a consumer of a consumer, a handler.
+
+error Invalid
+
+trait Shape:
+    fn area(value: Shape) -> int
+    fn scaled(value: Shape, k: int) -> Shape errors Invalid
+
+struct Square:
+    side: int
+
+fn area(value: Square) -> int:
+    value.side * value.side
+
+fn scaled(value: Square, k: int) -> Square errors Invalid:
+    if k < 0:
+        fail Invalid
+    Square {side: value.side * k}
+
+fn grow(s: Shape) -> Shape errors Invalid:
+    s.scaled(2)
+
+fn total(s: Shape) -> int:
+    big = grow(s):
+        on Invalid:
+            s
+    big.area()
+
+fn register_round_trip_tests():
+    fn round_trip_program() errors compiler::CompilerError:
+        static compile:
+            total(Square {side: 3})
+    test::value("trait-hir-round-trip", 36, round_trip_program)
+
+# ===========================================================================
+# Contexts stay orthogonal: a context struct value is a witness like any
+# struct; an implementation that needs a context is none, even with that
+# context installed (Counter is installed below, as in the Tcl program; its
+# field is a Small, not an int: natively, a context with an unbounded Int
+# field cannot be installed, CONTEXT-NATIVE-LOWERING-UNSUPPORTED).
+
+trait Valued:
+    fn amount(value: Valued) -> int
+
+context struct Counter:
+    value: Small
+
+fn amount(value: Counter) -> int:
+    value.value
+
+fn valued_total(v: Valued) -> int:
+    v.amount()
+
+trait ContextValued:
+    fn context_amount(value: ContextValued) -> int
+
+struct NeedsCounter:
+    v: int
+
+fn context_amount(value: NeedsCounter, context c: Counter) -> int:
+    c.value
+
+fn context_valued_total(v: ContextValued) -> int:
+    v.context_amount()
+
+fn register_context_tests():
+    fn context_struct_witness() errors compiler::CompilerError:
+        static compile:
+            valued_total(Counter {value: 3})
+    test::value("trait-context-orthogonal/context-struct-witness", 3, context_struct_witness)
+    fn context_implementation() errors compiler::CompilerError:
+        static compile:
+            context_valued_total(NeedsCounter {v: 1})
+    test::rejects_containing("trait-context-orthogonal/context-implementation", compiler::DiagnosticCode::TraitNotSatisfied, "context_amount requires a context (Counter): context-dependent implementations are not supported yet", context_implementation)
+
+# ===========================================================================
+
+fn register_traits_tests():
+    register_declaration_tests()
+    register_conformance_tests()
+    register_principal_tests()
+    register_one_way_tests()
+    register_provenance_tests()
+    register_specialization_tests()
+    register_function_value_tests()
+    register_storage_tests()
+    register_witness_kind_tests()
+    register_method_sugar_tests()
+    register_error_contract_tests()
+    register_handled_view_tests()
+    register_ordering_tests()
+    register_round_trip_tests()
+    register_context_tests()
+
+with context test::suite()
+with context Counter {value: 3}
+register_traits_tests()
+test::report()

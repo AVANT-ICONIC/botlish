@@ -1,0 +1,1456 @@
+# coroutines.bot -- coroutines as a source-level specification
+# (COROUTINES.md), ported from tests/coroutines.test.
+#
+# A coroutine is an eagerly started, affine resumable computation:
+#
+# * Construction. `coroutine {step, first} = f(args)` evaluates the call's
+#   arguments (a method call's receiver first), then runs f at once to its
+#   first yield: `first` is the value that yield sends, and the binding
+#   completes after that first segment. A function that returns before any
+#   yield is completed at construction (`first` is its result). The binding
+#   names what it keeps: {step, first}, {step: s}, {first: f} or
+#   {step: s, first: f}. `coroutine` and `resume` stay ordinary names
+#   outside their forms.
+# * Yields. `yield V` suspends the coroutine's whole stack however deep the
+#   yield is. A function is yielding when it yields, or calls a yielding
+#   function on a reachable path; one that only constructs a coroutine is
+#   not. A yield may stand in a loop, a branch, a recursive function, an
+#   on-handler, or in a coroutine body that drives another coroutine. A
+#   yielding function never becomes a value (UnwrappedYield), and the right
+#   side of a construction is an exact call of a yielding function
+#   (CoroutineRhsNotYielding).
+# * Resume protocols. Each yield evaluates to the message of the resume that
+#   continues it: of the declared `resume T` (T a declared struct type:
+#   CoroutineResumeType otherwise); else inferred from a use of the yield's
+#   value; else inherited from a yielding callee; else the zero-message
+#   protocol (`step()`, every yield evaluates to unit). A helper whose yields
+#   discard their values adapts to any protocol. A yield value used as a
+#   struct with nothing to determine its type is
+#   CoroutineResumeUnderconstrained, a used zero-message helper under a
+#   struct-protocol caller CoroutineResumeConflict, a message of another
+#   type Type, a wrong number of messages CoroutineResumeArity.
+# * Results. The root's yields and its return share one outward type
+#   (CoroutineResultMismatch otherwise). A completed handle returns its
+#   cached final result -- the very value -- and runs no body code again;
+#   coroutine::done? is false while the coroutine is suspended and true
+#   after.
+# * Errors. A declared error crosses the construction or the resume that
+#   ran the failing segment: it is handled there or admitted by the
+#   enclosing function (UnhandledError otherwise), and a failed coroutine
+#   raises it again on every later resume. A root that always fails after
+#   yielding is no statically known failure; an error handled inside the
+#   coroutine never reaches the resume.
+# * Affinity. A handle has one owner: `other = step` moves it (UseAfterMove
+#   at a later use of the old owner, AffineNotDefinitelyLive after a join or
+#   a loop iteration that may have moved it), and the new owner continues
+#   the one coroutine -- a move never forks it. done? and resumes do not
+#   move it, a handle may be dropped unused, and it has no equality
+#   (AffineEqualityUnsupported). The release at a handle's last use or on an
+#   early exit changes no value.
+# * Contexts and traits are static: a deep context-trait operation runs the
+#   provider selected at construction, after every resume too (io::IO's
+#   print_line included); a trait-polymorphic yielding function is an
+#   ordinary yielding clone.
+# * Values held only by suspended frames survive the collections other
+#   coroutines and the main program run; thousands of short coroutines,
+#   finished and abandoned, leave the program correct.
+#
+# What a Botlish program cannot observe stays in tests/coroutines.test,
+# where these tests keep running unchanged: parse errors and the AST
+# print-back of the coroutine grammar, HIR effect text, the complete
+# diagnostic list of a non-strict build, NIR, allocation, release and
+# live-frame reports, private library modules and GC-stress runs. A port of
+# such a test keeps the values and diagnostics of its programs.
+#
+# A body cannot need a context (CONTEXT-FUNCTION-VALUE): the tests whose
+# programs install one (co-binding-eager-order, co-terminal-success,
+# co-context-trait, co-context-portable-io) run their programs in the
+# registration function, against the contexts installed below beside the
+# suite, and their bodies compare what those runs computed.
+#
+# Imports: compiler and test for the framework; coroutine
+# (coroutine::done?), list, mutable_array and str as the Tcl programs import
+# them; io for co-context-portable-io (io::print_line, io::IO,
+# io::WriteFailed). No test here is about a missing import or about which
+# methods are visible.
+import compiler
+import coroutine
+import io
+import list
+import mutable_array
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only). The Tcl programs are
+# separate programs; one suite is one program, so a struct two programs
+# declare differently is renamed here (noted at each).
+
+# principalDecls's resume message and event (also co-deep-three-levels's
+# Message, the same shape).
+struct Message:
+    value: int
+
+struct Event:
+    value: int
+
+# co-deep-three-levels's Event (renamed DeepEvent: it has a kind too).
+struct DeepEvent:
+    kind: str
+    value: int
+
+# co-empty-loop's Item and Event (renamed Stage).
+struct Item:
+    n: int
+
+struct Stage:
+    kind: str
+
+# protocolDecls: In and Out keep their names (co-protocol-wrong-type's
+# message names them), and consume, a function of an In.
+struct In:
+    v: int
+
+struct Out:
+    v: int
+
+fn consume(m: In) -> int:
+    m.v * 2
+
+# co-protocol-zero-message's Tick.
+struct Tick:
+    n: int
+
+# The one-field event of storageDecls, co-binding-forms, co-affine-*,
+# co-protocol-arity (T); of effectDecls, co-protocol-underconstrained,
+# co-protocol-struct-only, co-effect-handler, co-result-mismatch and the
+# context programs (Ev); and of the remaining programs (V).
+struct T:
+    n: int
+
+struct Ev:
+    n: int
+
+struct V:
+    n: int
+
+# co-result-mismatch's result.
+struct Res:
+    r: int
+
+# co-terminal-identity's V (renamed ListV: a List field).
+struct ListV:
+    n: List[int]
+
+# co-effect-handler's error.
+error X
+
+# errorDecls: Broken keeps its name (co-errors-declared-propagation's
+# messages name it); Msg and Ev are renamed ErrMsg and ErrEv (Ev here has
+# the field n). co-errors-last-segment-always-fails's Ev is the same ErrEv.
+error Broken
+
+struct ErrMsg:
+    v: int
+
+struct ErrEv:
+    v: int
+
+# co-errors-last-segment-always-fails's and exitDecls's Boom, exitDecls's
+# Late.
+error Boom
+
+error Late
+
+# ---------------------------------------------------------------------------
+# The context programs' declarations: they need a context, so they are
+# top-level functions their registration functions call.
+
+# co-binding-eager-order: a log of argument evaluation and body progress
+# (Log, note, get), and the flagged yielding function a method call
+# constructs (run).
+context struct Log:
+    a: MutableArray[int]
+
+fn note(i: int, v: int, context log: Log) -> int:
+    mutable_array::set(log.a, i, v):
+        on IndexNotFound:
+            unit
+    v
+
+fn get(i: int, context log: Log) -> int:
+    mutable_array::at(log.a, i):
+        on IndexNotFound:
+            -1
+
+fn run(base: int, flags :twice) -> V:
+    note(2, get(0) * 10 + get(1))
+    if twice:
+        yield V {n: base * 2}
+    yield V {n: base}
+    return V {n: 0}
+
+# co-terminal-success: a counter of body steps (Counter, bump, count) and
+# the yielding function that bumps it (w, renamed counting).
+context struct Counter:
+    a: MutableArray[int]
+
+fn bump(context c: Counter) -> int:
+    v = mutable_array::at(c.a, 0):
+        on IndexNotFound:
+            0
+    mutable_array::set(c.a, 0, v + 1):
+        on IndexNotFound:
+            unit
+    v + 1
+
+fn count(context c: Counter) -> int:
+    mutable_array::at(c.a, 0):
+        on IndexNotFound:
+            -1
+
+fn counting(k: int) -> V:
+    if k == 0:
+        return V {n: bump()}
+    yield V {n: bump()}
+    yield V {n: bump()}
+    return V {n: bump() * 100}
+
+# co-context-trait (contextProgram): a context trait (Out, renamed Emitter)
+# implemented by the installed context A (renamed Adder), its error
+# (WriteFailed, renamed EmitFailed: io::WriteFailed is another error here),
+# and a deep consumer yielding between two operations (deep and worker,
+# renamed emitting_deep and emitting_worker).
+error EmitFailed
+
+type Small = Int in 0..1000
+
+context trait Emitter:
+    fn emit(n: int) -> int errors EmitFailed
+
+context struct Adder:
+    k: Small
+
+fn emit(n: int, context c: Adder) -> int errors EmitFailed:
+    n + c.k
+
+fn emitting_deep(n: int, context out: Emitter) -> int errors EmitFailed:
+    x = out.emit(n)
+    yield Ev {n: x}
+    out.emit(x)
+
+fn emitting_worker(n: int) -> Ev errors EmitFailed:
+    y = emitting_deep(n)
+    return Ev {n: y}
+
+# co-context-portable-io: the substitute io::IO context of the Tcl test's
+# private module limited.bot, here in the suite's own namespace (an
+# implementation of a context trait is read from its context's owner
+# namespace). Writes succeed up to a limit and fail with io::WriteFailed
+# beyond it. The Tcl program installs limited::create(100) and
+# limited::create(5) in two programs; one program installs one Limited, so
+# its limit is a one-slot array set before each run (set_limit) instead of a
+# refined Int field.
+context struct Limited:
+    max: MutableArray[int]
+
+fn write_text(text: str, context c: Limited) -> unit errors io::WriteFailed:
+    limit = mutable_array::at(c.max, 0):
+        on IndexNotFound:
+            0
+    if str::length(text) > limit:
+        fail io::WriteFailed
+    unit
+
+fn write_error_text(text: str, context c: Limited) -> unit errors io::WriteFailed:
+    fail io::WriteFailed
+
+fn set_limit(limit: int, context c: Limited) -> unit:
+    mutable_array::set(c.max, 0, limit):
+        on IndexNotFound:
+            unit
+
+# The Tcl program's say and worker (renamed talker) and its driver.
+fn say(text: str) -> int errors io::WriteFailed:
+    io::print_line(text)
+    yield Ev {n: 10}
+    1
+
+fn talker() -> Ev errors io::WriteFailed:
+    a = say("hi")
+    b = say("a much longer line")
+    return Ev {n: a + b}
+
+fn drive_talker() -> List[int]:
+    coroutine {step, first} = talker():
+        on io::WriteFailed:
+            Ev {n: -1}
+    second = step():
+        on io::WriteFailed:
+            Ev {n: -2}
+    third = step():
+        on io::WriteFailed:
+            Ev {n: -3}
+    [first.n, second.n, third.n]
+
+# co-trait-polymorphic: a trait, its witness, and the trait-polymorphic
+# yielding function (a trait-polymorphic function is declared at the top
+# level: nested in a block it is TraitNestedPolymorphic). Its Ev is renamed
+# Line (a String field); the GC program's Ev is the same Line.
+trait Named:
+    fn name(value: Named) -> str
+
+struct Person:
+    first: str
+
+fn name(p: Person) -> str:
+    p.first
+
+struct Line:
+    text: str
+
+fn greet(x: Named) -> Line:
+    yield Line {text: str::concat("hello ", x.name())}
+    return Line {text: str::concat("bye ", x.name())}
+
+# ---------------------------------------------------------------------------
+# Grammar: what is source-observable of it (the parse errors and the AST
+# print-back stay in Tcl).
+
+fn register_syntax_tests():
+    # `coroutine` and `resume` are ordinary names outside their forms: a
+    # binding named coroutine (beside the imported coroutine namespace), a
+    # function named resume with a parameter named resume.
+    fn b_contextual() errors compiler::CompilerError:
+        static compile:
+            coroutine = 3
+            fn resume(resume):
+                resume + coroutine
+            resume(4)
+    test::value("co-syntax-contextual", 7, b_contextual)
+
+    # A lone `resume` in a parameter list is a parameter, not a resume
+    # clause.
+    fn b_resume_parameter() errors compiler::CompilerError:
+        static compile:
+            fn f(resume: int) -> int:
+                resume * 2
+            f(21)
+    test::value("co-syntax-resume-clause", 42, b_resume_parameter)
+
+# ---------------------------------------------------------------------------
+# Deep yields and the empty loop (COROUTINES.md items 50, 51)
+
+fn register_deep_yield_tests():
+    # A yield three frames deep suspends the whole stack; the message
+    # becomes the yield's value; deepest, middle and worker return in turn;
+    # the handle is then completed and keeps its final result.
+    fn b_three_levels() errors compiler::CompilerError:
+        static compile:
+            fn consume_message(m: Message) -> int:
+                m.value * 2
+            fn deepest(resume Message) -> int:
+                m = yield DeepEvent {kind: "progress", value: 1}
+                return consume_message(m)
+            fn middle() -> int:
+                deepest() + 1
+            fn worker() -> DeepEvent:
+                x = middle()
+                return DeepEvent {kind: "finished", value: x}
+            coroutine {step, first} = worker()
+            was = coroutine::done?(step)
+            final = step(Message {value: 20})
+            now = coroutine::done?(step)
+            again = step(Message {value: 5})
+            [first, was, final, now, again]
+    test::value("co-deep-three-levels", [DeepEvent {kind: "progress", value: 1}, false, DeepEvent {kind: "finished", value: 41}, true, DeepEvent {kind: "finished", value: 41}], b_three_levels)
+
+    # A loop that runs zero times: construction succeeds, first is the final
+    # result, the handle is done, and calling it again returns that result
+    # -- no exhaustion, no failure. (One item: the ordinary first yield.)
+    fn b_empty_loop() errors compiler::CompilerError:
+        static compile:
+            fn worker(items: List[Item]) -> Stage:
+                loop item in items:
+                    yield Stage {kind: "item"}
+                return Stage {kind: "finished"}
+            fn run_items(items: List[Item]) -> list:
+                coroutine {step, first} = worker(items)
+                done = coroutine::done?(step)
+                again = step()
+                [first.kind, done, again.kind, coroutine::done?(step)]
+            [run_items([]), run_items([Item {n: 1}])]
+    test::value("co-empty-loop", [["finished", true, "finished", true], ["item", false, "finished", true]], b_empty_loop)
+
+# ---------------------------------------------------------------------------
+# Resume protocols (items 5-10, 33, 34, 52)
+
+fn register_protocol_tests():
+    # An explicit struct resume type: each yield evaluates to the message.
+    fn b_explicit() errors compiler::CompilerError:
+        static compile:
+            fn w(resume In) -> Out:
+                m = yield Out {v: 1}
+                return Out {v: m.v}
+            coroutine {step, first} = w()
+            x = step(In {v: 9})
+            [first.v, x.v]
+    test::value("co-protocol-explicit", [1, 9], b_explicit)
+
+    # Inferred from a use of the yield's value as a struct-typed argument
+    # (consume takes an In); one yield ignores its message, another uses it.
+    fn b_inferred() errors compiler::CompilerError:
+        static compile:
+            fn w() -> Out:
+                yield Out {v: 1}
+                m = yield Out {v: 2}
+                return Out {v: consume(m)}
+            coroutine {step, first} = w()
+            a = step(In {v: 100})
+            b = step(In {v: 21})
+            [first.v, a.v, b.v]
+    test::value("co-protocol-inferred", [1, 2, 42], b_inferred)
+
+    # A function without its own constraint inherits its yielding callee's
+    # protocol.
+    fn b_transitive() errors compiler::CompilerError:
+        static compile:
+            fn ask(resume In) -> int:
+                m = yield Out {v: 0}
+                m.v
+            fn middle() -> int:
+                ask() + ask()
+            fn w() -> Out:
+                return Out {v: middle()}
+            coroutine {step, first} = w()
+            a = step(In {v: 3})
+            b = step(In {v: 4})
+            [first.v, a.v, b.v]
+    test::value("co-protocol-transitive", [0, 0, 7], b_transitive)
+
+    # No constraint: the zero-message protocol -- step() takes no
+    # argument ...
+    fn b_zero_message() errors compiler::CompilerError:
+        static compile:
+            fn ticker() -> Tick:
+                x = yield Tick {n: 1}
+                y = yield Tick {n: 2}
+                return Tick {n: 3}
+            coroutine {step, first} = ticker()
+            a = step()
+            b = step()
+            [first.n, a.n, b.n]
+    test::value("co-protocol-zero-message/resumes", [1, 2, 3], b_zero_message)
+
+    # ... and every yield evaluates to unit.
+    fn b_zero_message_unit() errors compiler::CompilerError:
+        static compile:
+            fn ticker() -> Tick:
+                x = yield Tick {n: 1}
+                if x == unit:
+                    return Tick {n: 2}
+                Tick {n: 3}
+            coroutine {step, first} = ticker()
+            step().n
+    test::value("co-protocol-zero-message/unit", 2, b_zero_message_unit)
+
+    # A message of another type is an ordinary static Type error, worded
+    # for the resume.
+    fn b_wrong_type() errors compiler::CompilerError:
+        static compile:
+            fn w(resume In) -> Out:
+                m = yield Out {v: 1}
+                return Out {v: m.v}
+            coroutine {step} = w()
+            step(Out {v: 1})
+    test::rejects_message("co-protocol-wrong-type", compiler::DiagnosticCode::Type, "the resume message of this coroutine must be a In, got Out", b_wrong_type)
+
+    # A struct-protocol coroutine takes exactly one message ...
+    fn b_arity_missing() errors compiler::CompilerError:
+        static compile:
+            fn w(resume In) -> Out:
+                m = yield Out {v: 1}
+                return Out {v: m.v}
+            coroutine {step} = w()
+            step()
+    test::rejects("co-protocol-arity/missing-message", compiler::DiagnosticCode::CoroutineResumeArity, b_arity_missing)
+
+    fn b_arity_extra() errors compiler::CompilerError:
+        static compile:
+            fn w(resume In) -> Out:
+                m = yield Out {v: 1}
+                return Out {v: m.v}
+            coroutine {step} = w()
+            step(In {v: 1}, In {v: 2})
+    test::rejects("co-protocol-arity/extra-message", compiler::DiagnosticCode::CoroutineResumeArity, b_arity_extra)
+
+    # ... and a zero-message one none.
+    fn b_arity_zero() errors compiler::CompilerError:
+        static compile:
+            fn t() -> T:
+                yield T {n: 1}
+                T {n: 2}
+            coroutine {step} = t()
+            step(T {n: 1})
+    test::rejects("co-protocol-arity/zero-message", compiler::DiagnosticCode::CoroutineResumeArity, b_arity_zero)
+
+    # A yield's value used as a struct with nothing to determine its type
+    # needs a declared protocol.
+    fn b_underconstrained() errors compiler::CompilerError:
+        static compile:
+            fn w() -> Ev:
+                m = yield Ev {n: 1}
+                return Ev {n: m.n}
+            coroutine {step} = w()
+    test::rejects("co-protocol-underconstrained", compiler::DiagnosticCode::CoroutineResumeUnderconstrained, b_underconstrained)
+
+    # An explicit resume type must be a declared struct type: no Int,
+    # String or List protocol (w is never constructed).
+    fn b_struct_only_int() errors compiler::CompilerError:
+        static compile:
+            fn w(resume int) -> Ev:
+                yield Ev {n: 1}
+                Ev {n: 2}
+            1
+    test::rejects("co-protocol-struct-only/int", compiler::DiagnosticCode::CoroutineResumeType, b_struct_only_int)
+
+    fn b_struct_only_str() errors compiler::CompilerError:
+        static compile:
+            fn w(resume str) -> Ev:
+                yield Ev {n: 1}
+                Ev {n: 2}
+            1
+    test::rejects("co-protocol-struct-only/str", compiler::DiagnosticCode::CoroutineResumeType, b_struct_only_str)
+
+    fn b_struct_only_list() errors compiler::CompilerError:
+        static compile:
+            fn w(resume List[int]) -> Ev:
+                yield Ev {n: 1}
+                Ev {n: 2}
+            1
+    test::rejects("co-protocol-struct-only/list", compiler::DiagnosticCode::CoroutineResumeType, b_struct_only_list)
+
+    # An unconstrained helper whose yield value is used defaults to the
+    # zero-message protocol, which conflicts with a struct-protocol caller.
+    fn b_default_meets_struct() errors compiler::CompilerError:
+        static compile:
+            fn helper() -> int:
+                x = yield Out {v: 0}
+                if x == unit:
+                    return 1
+                2
+            fn w(resume In) -> Out:
+                m = yield Out {v: helper()}
+                return Out {v: m.v}
+            coroutine {step} = w()
+    test::rejects("co-protocol-default-meets-struct", compiler::DiagnosticCode::CoroutineResumeConflict, b_default_meets_struct)
+
+    # A helper whose yields all discard their value adapts to any protocol:
+    # In under w, zero-message under t.
+    fn b_unconstrained_helper() errors compiler::CompilerError:
+        static compile:
+            fn progress(n: int) -> int:
+                yield Out {v: n}
+                n
+            fn w(resume In) -> Out:
+                a = progress(1)
+                m = yield Out {v: a + 1}
+                b = progress(m.v)
+                return Out {v: b * 10}
+            fn t() -> Out:
+                return Out {v: progress(7)}
+            coroutine {step, first} = w()
+            x = step(In {v: 0})
+            y = step(In {v: 5})
+            z = step(In {v: 0})
+            coroutine {step: s2, first: f2} = t()
+            last = s2()
+            [first.v, x.v, y.v, z.v, f2.v, last.v]
+    test::value("co-protocol-unconstrained-helper", [1, 2, 5, 50, 7, 7], b_unconstrained_helper)
+
+    # A yield that is the last statement of a collecting loop or of an if
+    # whose own value is discarded discards its value too: the helper still
+    # adapts.
+    fn b_discarded_collections() errors compiler::CompilerError:
+        static compile:
+            fn helper(n: int) -> int:
+                loop i from 0 to 2:
+                    yield Out {v: i}
+                if n > 3:
+                    yield Out {v: n}
+                else:
+                    yield Out {v: 0 - n}
+                n
+            fn w(resume In) -> Out:
+                m = yield Out {v: 100}
+                return Out {v: helper(m.v)}
+            coroutine {step, first} = w()
+            a = step(In {v: 4})
+            b = step(In {v: 0})
+            c = step(In {v: 0})
+            d = step(In {v: 0})
+            [first.v, a.v, b.v, c.v, d.v]
+    test::value("co-protocol-discarded-collections", [100, 0, 1, 4, 4], b_discarded_collections)
+
+# ---------------------------------------------------------------------------
+# Binding forms (items 2, 4, 53)
+
+fn register_binding_tests():
+    # {step, first}, {step: next}, {first: initial}, {step: s, first: f}:
+    # each binds what it names.
+    fn b_forms() errors compiler::CompilerError:
+        static compile:
+            fn t(k: int) -> T:
+                yield T {n: k}
+                return T {n: k + 1}
+            coroutine {step, first} = t(1)
+            coroutine {step: next} = t(10)
+            coroutine {first: initial} = t(20)
+            coroutine {step: s, first: f} = t(30)
+            a = next()
+            b = s()
+            [first.n, coroutine::done?(step), a.n, initial.n, f.n, b.n, coroutine::done?(next)]
+    test::value("co-binding-forms", [1, false, 11, 20, 30, 31, true], b_forms)
+
+    # The call's arguments are evaluated before the coroutine exists, in
+    # order (a method call's receiver first), and the body has run to its
+    # first yield when the binding completes: the program (needing the Log
+    # context) runs here.
+    coroutine {step: s, first: f} = note(0, 7).run(:twice)
+    seen = get(2)
+    coroutine {first: only} = run(note(1, 9))
+    x = s()
+    eager = [f.n, seen, x.n, only.n, get(2)]
+    fn b_eager_order() errors compiler::CompilerError:
+        static compile:
+            eager
+    test::value("co-binding-eager-order", [14, 70, 7, 9, 79], b_eager_order)
+
+# ---------------------------------------------------------------------------
+# The yield effect (items 13-17, 54, 55)
+
+fn register_effect_tests(high: int, low: int):
+    # effectDecls: deepest yields, middle calls it, worker calls middle. A
+    # helper calling a yielding function is itself yielding (legal inside a
+    # coroutine), and a construction captures its call's effect ...
+    fn b_transitive() errors compiler::CompilerError:
+        static compile:
+            fn deepest() -> int:
+                yield Ev {n: 1}
+                3
+            fn middle() -> int:
+                deepest() + 1
+            fn worker() -> Ev:
+                x = middle()
+                return Ev {n: x}
+            coroutine {step, first} = worker()
+            last = step()
+            [first.n, last.n]
+    test::value("co-effect-transitive-legal/construction", [1, 4], b_transitive)
+
+    # ... and an unused yielding function is legal.
+    fn b_unused() errors compiler::CompilerError:
+        static compile:
+            fn deepest() -> int:
+                yield Ev {n: 1}
+                3
+            fn middle() -> int:
+                deepest() + 1
+            fn worker() -> Ev:
+                x = middle()
+                return Ev {n: x}
+            fn unused() -> int:
+                middle()
+            5
+    test::value("co-effect-transitive-legal/unused", 5, b_unused)
+
+    # A function that constructs a coroutine is not yielding itself: it may
+    # be called anywhere (here, twice from the block).
+    fn b_nested_isolation() errors compiler::CompilerError:
+        static compile:
+            fn deepest() -> int:
+                yield Ev {n: 1}
+                3
+            fn middle() -> int:
+                deepest() + 1
+            fn worker() -> Ev:
+                x = middle()
+                return Ev {n: x}
+            fn plain() -> int:
+                coroutine {step, first} = worker()
+                last = step()
+                first.n + last.n
+            plain() + plain()
+    test::value("co-effect-nested-isolation", 10, b_nested_isolation)
+
+    # A coroutine body starts and resumes another coroutine between its own
+    # yields.
+    fn b_nested_coroutines() errors compiler::CompilerError:
+        static compile:
+            fn inner(k: int) -> V:
+                yield V {n: k}
+                yield V {n: k + 1}
+                return V {n: k + 2}
+            fn outer() -> V:
+                coroutine {step, first} = inner(10)
+                yield first
+                a = step()
+                yield a
+                b = step()
+                return V {n: b.n * 100}
+            coroutine {step, first} = outer()
+            a = step()
+            b = step()
+            c = step()
+            [first.n, a.n, b.n, c.n]
+    test::value("co-effect-nested-coroutines", [10, 11, 1200, 1200], b_nested_coroutines)
+
+    # A self-recursive yielding function: each level yields, the stack
+    # unwinds level by level.
+    fn b_recursive() errors compiler::CompilerError:
+        static compile:
+            fn countdown(n: int) -> V:
+                if n == 0:
+                    return V {n: 0}
+                yield V {n: n}
+                countdown(n - 1)
+            coroutine {step, first} = countdown(3)
+            a = step()
+            b = step()
+            c = step()
+            d = step()
+            [first.n, a.n, b.n, c.n, d.n]
+    test::value("co-effect-recursive", [3, 2, 1, 0, 0], b_recursive)
+
+    # Yields in a counted loop and in a branch.
+    fn b_loop_branch() errors compiler::CompilerError:
+        static compile:
+            fn w(n: int) -> V:
+                loop i from 0 to n:
+                    if i == 1:
+                        yield V {n: 100}
+                    else:
+                        yield V {n: i}
+                return V {n: -1}
+            coroutine {step, first} = w(3)
+            a = step()
+            b = step()
+            c = step()
+            [first.n, a.n, b.n, c.n]
+    test::value("co-effect-loop-branch", [0, 100, 2, -1], b_loop_branch)
+
+    # A yield inside an on-handler: resuming continues the handler, which
+    # then returns. HIGH (5) fails X in something, LOW (1) does not; helper
+    # handles X itself, so the constructions need no handler.
+    fn b_handler() errors compiler::CompilerError:
+        static compile:
+            fn something(n: int) -> int errors X:
+                if n > 2:
+                    fail X
+                n
+            fn helper(n: int) -> Ev errors X:
+                v = something(n):
+                    on X:
+                        yield Ev {n: 77}
+                        return Ev {n: 88}
+                yield Ev {n: v}
+                return Ev {n: 0 - v}
+            coroutine {step, first} = helper(high)
+            a = step()
+            coroutine {step: s2, first: f2} = helper(low)
+            b = s2()
+            [first.n, a.n, f2.n, b.n]
+    test::value("co-effect-handler", [77, 88, 1, -1], b_handler)
+
+    # A yielding call that reachability proves unreachable does not make its
+    # caller yielding.
+    fn b_unreachable() errors compiler::CompilerError:
+        static compile:
+            fn deepest() -> int:
+                yield Ev {n: 1}
+                3
+            fn middle() -> int:
+                deepest() + 1
+            fn worker() -> Ev:
+                x = middle()
+                return Ev {n: x}
+            fn plain() -> int:
+                if false:
+                    worker()
+                7
+            plain()
+    test::value("co-effect-unreachable", 7, b_unreachable)
+
+    # A yielding function cannot become a value (an unknown call could run
+    # it outside every coroutine): neither a value that escapes (the Tcl
+    # program makes it the program's result; a body must not return a
+    # function, so here it escapes into a List) ...
+    fn b_function_value() errors compiler::CompilerError:
+        static compile:
+            fn deepest() -> int:
+                yield Ev {n: 1}
+                3
+            fn middle() -> int:
+                deepest() + 1
+            fn worker() -> Ev:
+                x = middle()
+                return Ev {n: x}
+            f = worker
+            held = [f]
+            1
+    test::rejects("co-effect-function-value/binding", compiler::DiagnosticCode::UnwrappedYield, b_function_value)
+
+    # ... nor an argument for a structural Fn parameter.
+    fn b_function_argument() errors compiler::CompilerError:
+        static compile:
+            fn deepest() -> int:
+                yield Ev {n: 1}
+                3
+            fn middle() -> int:
+                deepest() + 1
+            fn worker() -> Ev:
+                x = middle()
+                return Ev {n: x}
+            fn apply(g: Fn{args: [], return: Ev}) -> Ev:
+                g()
+            x = apply(worker)
+    test::rejects("co-effect-function-value/argument", compiler::DiagnosticCode::UnwrappedYield, b_function_argument)
+
+    # The right side of a construction is an exact call of a function that
+    # may yield: not a call of a plain function ...
+    fn b_rhs_plain() errors compiler::CompilerError:
+        static compile:
+            fn plain() -> int:
+                3
+            coroutine {step} = plain()
+    test::rejects("co-rhs-not-yielding/plain-call", compiler::DiagnosticCode::CoroutineRhsNotYielding, b_rhs_plain)
+
+    # ... nor a value that is no call.
+    fn b_rhs_value() errors compiler::CompilerError:
+        static compile:
+            fn deepest() -> int:
+                yield Ev {n: 1}
+                3
+            fn middle() -> int:
+                deepest() + 1
+            fn worker() -> Ev:
+                x = middle()
+                return Ev {n: x}
+            f = 3
+            coroutine {step} = f
+    test::rejects("co-rhs-not-yielding/not-a-call", compiler::DiagnosticCode::CoroutineRhsNotYielding, b_rhs_value)
+
+    # The root's yields and return need one outward type: its declared
+    # result, else one all others fit -- not without a declared result ...
+    fn b_result_undeclared() errors compiler::CompilerError:
+        static compile:
+            fn w():
+                yield Ev {n: 1}
+                Res {r: 2}
+            coroutine {step} = w()
+    test::rejects("co-result-mismatch/undeclared", compiler::DiagnosticCode::CoroutineResultMismatch, b_result_undeclared)
+
+    # ... nor with a declared result the yields do not fit ...
+    fn b_result_declared() errors compiler::CompilerError:
+        static compile:
+            fn w() -> Res:
+                yield Ev {n: 1}
+                Res {r: 2}
+            coroutine {step} = w()
+    test::rejects("co-result-mismatch/declared", compiler::DiagnosticCode::CoroutineResultMismatch, b_result_declared)
+
+    # ... while a yielding helper's own result is its business: only the
+    # root's outward type counts.
+    fn b_result_helper() errors compiler::CompilerError:
+        static compile:
+            fn helper() -> Res:
+                yield Ev {n: 1}
+                Res {r: 5}
+            fn w() -> Ev:
+                x = helper()
+                return Ev {n: x.r}
+            coroutine {step, first} = w()
+            l = step()
+            [first.n, l.n]
+    test::value("co-result-mismatch/helper", [1, 5], b_result_helper)
+
+# ---------------------------------------------------------------------------
+# Errors (items 18-20, 22, 56). errorDecls (deep and worker, failing with
+# Broken before the first yield for a negative V, or after a resume with a
+# negative message) is nested in each block. The inputs that decide whether
+# an error is raised come through the registration function's parameters:
+# a run-time failure, never a folded one.
+
+fn register_error_tests(early_input: int, bad_message: int, handled_input: int):
+    # An unhandled fail before the first yield crosses the construction:
+    # its handler runs, and the handle is failed (done, raising again).
+    fn b_startup() errors compiler::CompilerError:
+        static compile:
+            fn deep(v: int, resume ErrMsg) -> int errors Broken:
+                if v < 0:
+                    fail Broken
+                m = yield ErrEv {v: v}
+                if m.v < 0:
+                    fail Broken
+                m.v
+            fn worker(v: int, resume ErrMsg) -> ErrEv errors Broken:
+                x = deep(v)
+                y = deep(x + 1)
+                return ErrEv {v: x + y}
+            fn early(n: int) -> list:
+                coroutine {step, first} = worker(n):
+                    on Broken:
+                        ErrEv {v: -1}
+                again = step(ErrMsg {v: 1}):
+                    on Broken:
+                        ErrEv {v: -2}
+                [first.v, coroutine::done?(step), again.v]
+            early(early_input)
+    test::value("co-errors-startup", [-1, true, -2], b_startup)
+
+    # A root that always fails after yielding is no statically known
+    # failure (the block is accepted): construction yields, the last resume
+    # fails, and the failed handle fails again.
+    fn b_last_segment() errors compiler::CompilerError:
+        static compile:
+            fn w() -> ErrEv errors Boom:
+                yield ErrEv {v: 1}
+                fail Boom
+            fn g() -> list:
+                coroutine {step, first} = w():
+                    on Boom:
+                        ErrEv {v: 0}
+                last = step():
+                    on Boom:
+                        ErrEv {v: -1}
+                again = step():
+                    on Boom:
+                        ErrEv {v: -2}
+                [first, last, again]
+            g()
+    test::value("co-errors-last-segment-always-fails", [ErrEv {v: 1}, ErrEv {v: -1}, ErrEv {v: -2}], b_last_segment)
+
+    # An unhandled segment error propagates through a function that
+    # declares it, to the handler of its caller ...
+    fn b_propagation() errors compiler::CompilerError:
+        static compile:
+            fn deep(v: int, resume ErrMsg) -> int errors Broken:
+                if v < 0:
+                    fail Broken
+                m = yield ErrEv {v: v}
+                if m.v < 0:
+                    fail Broken
+                m.v
+            fn worker(v: int, resume ErrMsg) -> ErrEv errors Broken:
+                x = deep(v)
+                y = deep(x + 1)
+                return ErrEv {v: x + y}
+            fn inner() -> int errors Broken:
+                coroutine {step, first} = worker(2)
+                a = step(ErrMsg {v: bad_message})
+                a.v
+            fn outer() -> int:
+                inner():
+                    on Broken:
+                        42
+            outer()
+    test::value("co-errors-declared-propagation/value", 42, b_propagation)
+
+    # ... and uncaught it is an ordinary UnhandledError: at a construction
+    # (the enclosing function here is the body, which admits only
+    # compiler::CompilerError) ...
+    fn b_unhandled_construction() errors compiler::CompilerError:
+        static compile:
+            fn deep(v: int, resume ErrMsg) -> int errors Broken:
+                if v < 0:
+                    fail Broken
+                m = yield ErrEv {v: v}
+                if m.v < 0:
+                    fail Broken
+                m.v
+            fn worker(v: int, resume ErrMsg) -> ErrEv errors Broken:
+                x = deep(v)
+                y = deep(x + 1)
+                return ErrEv {v: x + y}
+            coroutine {step} = worker(2)
+    test::rejects_message("co-errors-declared-propagation/construction", compiler::DiagnosticCode::UnhandledError, "this coroutine construction may produce the declared error \"Broken\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_unhandled_construction)
+
+    # ... and at a resume: the handled resume before it is no diagnostic,
+    # the reported one is the unhandled resume (its location).
+    fn b_unhandled_resume() errors compiler::CompilerError:
+        static compile:
+            fn deep(v: int, resume ErrMsg) -> int errors Broken:
+                if v < 0:
+                    fail Broken
+                m = yield ErrEv {v: v}
+                if m.v < 0:
+                    fail Broken
+                m.v
+            fn worker(v: int, resume ErrMsg) -> ErrEv errors Broken:
+                x = deep(v)
+                y = deep(x + 1)
+                return ErrEv {v: x + y}
+            coroutine {step} = worker(2):
+                on Broken:
+                    ErrEv {v: 0}
+            step(ErrMsg {v: 1}):
+                on Broken:
+                    ErrEv {v: 0}
+            step(ErrMsg {v: 1})
+    test::rejects_message("co-errors-declared-propagation/resume-message", compiler::DiagnosticCode::UnhandledError, "this coroutine resume may produce the declared error \"Broken\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_unhandled_resume)
+    test::rejects_at("co-errors-declared-propagation/resume-location", compiler::DiagnosticCode::UnhandledError, 999, 13, b_unhandled_resume)
+
+    # A failure handled inside the coroutine never reaches the resume.
+    fn b_internal() errors compiler::CompilerError:
+        static compile:
+            fn deep(v: int, resume ErrMsg) -> int errors Broken:
+                if v < 0:
+                    fail Broken
+                m = yield ErrEv {v: v}
+                if m.v < 0:
+                    fail Broken
+                m.v
+            fn handled(n: int, resume ErrMsg) -> ErrEv:
+                v = deep(n):
+                    on Broken:
+                        42
+                m = yield ErrEv {v: v}
+                return ErrEv {v: m.v + 1}
+            coroutine {step, first} = handled(handled_input)
+            second = step(ErrMsg {v: 10})
+            [first.v, second.v]
+    test::value("co-errors-internal", [42, 11], b_internal)
+
+# ---------------------------------------------------------------------------
+# Stable terminal states (items 21-24, 57)
+
+fn register_terminal_tests():
+    # The cached final result is the very value the body returned (a
+    # nested aggregate kept whole).
+    fn b_identity() errors compiler::CompilerError:
+        static compile:
+            fn w() -> ListV:
+                yield ListV {n: []}
+                return ListV {n: [1, 2, 3]}
+            coroutine {step} = w()
+            a = step()
+            b = step()
+            [a == b, a, b]
+    test::value("co-terminal-identity", [true, ListV {n: [1, 2, 3]}, ListV {n: [1, 2, 3]}], b_identity)
+
+    # Return before any yield completes at construction; done? is false
+    # while suspended and true after; repeated calls return the cached
+    # result and run no body code (count() is 4: two bumps after the first
+    # segment's, none after completion). The program needs the Counter
+    # context: it runs here.
+    coroutine {step: z, first: zf} = counting(0)
+    zd = coroutine::done?(z)
+    zagain = z()
+    coroutine {step, first} = counting(1)
+    d0 = coroutine::done?(step)
+    x = step()
+    d1 = coroutine::done?(step)
+    y = step()
+    d2 = coroutine::done?(step)
+    r1 = step()
+    r2 = step()
+    terminal = [zf.n, zd, zagain.n, first.n, d0, x.n, d1, y.n, d2, r1.n, r2.n, count()]
+    fn b_success() errors compiler::CompilerError:
+        static compile:
+            terminal
+    test::value("co-terminal-success", [1, true, 1, 2, false, 3, false, 400, true, 400, 400, 4], b_success)
+
+# ---------------------------------------------------------------------------
+# The affine discipline (items 25-30, 49, 58) and the handle's equality
+# (item 59). principalDecls (deep and worker, resumed with a Message) is
+# nested in each block that uses it.
+
+fn register_affine_tests():
+    # A move in one branch leaves the handle not definitely live after the
+    # join.
+    fn b_branch_join() errors compiler::CompilerError:
+        static compile:
+            fn deep(base: int, resume Message) -> int:
+                message = yield Event {value: base}
+                message.value
+            fn worker(base: int, resume Message) -> Event:
+                x = deep(base)
+                message = yield Event {value: x}
+                return Event {value: message.value}
+            fn f(c: bool) -> int:
+                coroutine {step, first} = worker(10)
+                if c:
+                    other = step
+                x = step(Message {value: 1})
+                x.value
+            f(true)
+    test::rejects_containing("co-affine-branch-join", compiler::DiagnosticCode::AffineNotDefinitelyLive, "`step` is not definitely live here: its coroutine value was moved on some path reaching this use", b_branch_join)
+
+    # A move in a branch that returns leaves the handle live on the
+    # remaining path.
+    fn b_terminating_branch() errors compiler::CompilerError:
+        static compile:
+            fn deep(base: int, resume Message) -> int:
+                message = yield Event {value: base}
+                message.value
+            fn worker(base: int, resume Message) -> Event:
+                x = deep(base)
+                message = yield Event {value: x}
+                return Event {value: message.value}
+            fn f(c: bool) -> int:
+                coroutine {step, first} = worker(10)
+                if c:
+                    other = step
+                    x = other(Message {value: 5})
+                    return x.value
+                y = step(Message {value: 6})
+                y.value
+            [f(true), f(false)]
+    test::value("co-affine-terminating-branch", [5, 6], b_terminating_branch)
+
+    # A move inside a loop body reaches its next iteration: rejected (f is
+    # never called) ...
+    fn b_loop_move() errors compiler::CompilerError:
+        static compile:
+            fn deep(base: int, resume Message) -> int:
+                message = yield Event {value: base}
+                message.value
+            fn worker(base: int, resume Message) -> Event:
+                x = deep(base)
+                message = yield Event {value: x}
+                return Event {value: message.value}
+            fn f(n: int) -> int:
+                coroutine {step, first} = worker(10)
+                loop i from 0 to n:
+                    other = step
+                    i
+                1
+            0
+    test::rejects("co-affine-loop/move-in-loop", compiler::DiagnosticCode::AffineNotDefinitelyLive, b_loop_move)
+
+    # ... while resumes in a loop keep ownership, past completion too.
+    fn b_loop_resumes() errors compiler::CompilerError:
+        static compile:
+            fn t() -> T:
+                loop i from 0 to 3:
+                    yield T {n: i}
+                return T {n: 99}
+            coroutine {step, first} = t()
+            seen = loop i from 0 to 5:
+                x = step()
+                x.n
+            [first.n, seen, coroutine::done?(step)]
+    test::value("co-affine-loop/resumes-in-loop", [0, [1, 2, 99, 99, 99], true], b_loop_resumes)
+
+    # coroutine::done? observes the handle; sequential resumes keep
+    # ownership; dropping a handle is allowed.
+    fn b_done_does_not_move() errors compiler::CompilerError:
+        static compile:
+            fn deep(base: int, resume Message) -> int:
+                message = yield Event {value: base}
+                message.value
+            fn worker(base: int, resume Message) -> Event:
+                x = deep(base)
+                message = yield Event {value: x}
+                return Event {value: message.value}
+            coroutine {step, first} = worker(1)
+            a = coroutine::done?(step)
+            b = coroutine::done?(step)
+            x = step(Message {value: 2})
+            y = step(Message {value: 3})
+            coroutine {step: dropped} = worker(5)
+            [a, b, x.value, y.value, coroutine::done?(step)]
+    test::value("co-affine-done-does-not-move", [false, false, 2, 3, true], b_done_does_not_move)
+
+    # A moved handle continues the one coroutine: resuming the new owner
+    # picks up where the old one stopped, and a second move still has one
+    # continuation.
+    fn b_never_forks() errors compiler::CompilerError:
+        static compile:
+            fn t() -> T:
+                yield T {n: 1}
+                yield T {n: 2}
+                yield T {n: 3}
+                return T {n: 4}
+            coroutine {step, first} = t()
+            a = step()
+            next = step
+            b = next()
+            third = next
+            c = third()
+            d = third()
+            [first.n, a.n, b.n, c.n, d.n]
+    test::value("co-affine-move-never-forks", [1, 2, 3, 4, 4], b_never_forks)
+
+    # Each owner in a move chain is dead after its own move.
+    fn b_chain_use_after() errors compiler::CompilerError:
+        static compile:
+            fn t() -> T:
+                yield T {n: 1}
+                return T {n: 4}
+            coroutine {step} = t()
+            next = step
+            third = next
+            next()
+    test::rejects("co-affine-move-chain-use-after", compiler::DiagnosticCode::UseAfterMove, b_chain_use_after)
+
+    # A handle has no equality (comparing would observe what it owns).
+    fn b_equality() errors compiler::CompilerError:
+        static compile:
+            fn t() -> T:
+                yield T {n: 1}
+                return T {n: 2}
+            coroutine {step: a} = t()
+            coroutine {step: b} = t()
+            x = a == b
+    test::rejects("co-storage-equality", compiler::DiagnosticCode::AffineEqualityUnsupported, b_equality)
+
+# ---------------------------------------------------------------------------
+# Contexts and traits (items 37, 38, 60). The context programs run here, in
+# the registration functions, against the contexts installed beside the
+# suite.
+
+fn register_context_tests():
+    # A deep context-trait operation inside a coroutine: the provider
+    # (Adder, k 5) is selected statically at construction and the same
+    # implementation runs after a resume (10 + 5, then 15 + 5).
+    coroutine {step, first} = emitting_worker(10):
+        on EmitFailed:
+            Ev {n: -1}
+    second = step():
+        on EmitFailed:
+            Ev {n: -2}
+    emitted = [first.n, second.n]
+    fn b_context_trait() errors compiler::CompilerError:
+        static compile:
+            emitted
+    test::value("co-context-trait", [15, 20], b_context_trait)
+
+    # io::print_line deep inside a coroutine, through the real io::IO
+    # context trait and a substitute context: each segment writes through
+    # the provider selected at construction. With room for both lines the
+    # coroutine completes ...
+    set_limit(100)
+    roomy = drive_talker()
+    fn b_portable_roomy() errors compiler::CompilerError:
+        static compile:
+            roomy
+    test::value("co-context-portable-io/limit-100", [10, 10, 2], b_portable_roomy)
+
+    # ... and a write failure after a resume crosses that resume and stays
+    # the coroutine's terminal error.
+    set_limit(5)
+    cramped = drive_talker()
+    fn b_portable_cramped() errors compiler::CompilerError:
+        static compile:
+            cramped
+    test::value("co-context-portable-io/limit-5", [10, -2, -3], b_portable_cramped)
+
+fn register_trait_tests():
+    # A trait-polymorphic yielding function is monomorphized into an
+    # ordinary yielding clone.
+    fn b_polymorphic() errors compiler::CompilerError:
+        static compile:
+            coroutine {step, first} = greet(Person {first: "Ada"})
+            last = step()
+            [first.text, last.text]
+    test::value("co-trait-polymorphic", ["hello Ada", "bye Ada"], b_polymorphic)
+
+# ---------------------------------------------------------------------------
+# GC (items 40-43): values held only by suspended frames, and many short
+# coroutines.
+
+fn register_gc_tests():
+    # Values held only by suspended frames at several depths survive the
+    # collections run by other coroutines (churn between resumes) and by
+    # the main program; a third coroutine is dropped suspended.
+    fn b_suspended_stacks() errors compiler::CompilerError:
+        static compile:
+            fn churn(n: int) -> int:
+                xs = loop i from 0 to n:
+                    str::concat("x", str::concat("y", "z"))
+                list::length(xs)
+            fn deep(k: int, label: str) -> int:
+                held = [label, str::concat(label, "!"), [k, k + 1]]
+                if k == 0:
+                    yield Line {text: str::concat("bottom:", label)}
+                    churn(50)
+                    yield Line {text: str::concat("after:", list::at(held, 1))}
+                    return 1
+                mine = str::concat(label, "-")
+                r = deep(k - 1, mine)
+                yield Line {text: str::concat(mine, list::at(held, 0))}
+                r + 1
+            fn worker(k: int, label: str) -> Line:
+                n = deep(k, label)
+                return Line {text: str::concat("done ", label)}
+            fn run_pair(k: int, label: str) -> list:
+                coroutine {step: a, first: fa} = worker(k, label)
+                coroutine {step: b, first: fb} = worker(k + 2, str::concat(label, "B"))
+                coroutine {step: dropped} = worker(3, "dropped")
+                churn(100)
+                out = loop i from 0 to k + 4:
+                    x = a()
+                    churn(20)
+                    y = b()
+                    [x.text, y.text]
+                [fa.text, fb.text, out]
+            run_pair(2, "L")
+    test::value("co-gc-suspended-stacks", ["bottom:L--", "bottom:LB----", [["after:L--!", "after:LB----!"], ["L--L-", "LB----LB---"], ["L-L", "LB---LB--"], ["done L", "LB--LB-"], ["done L", "LB-LB"], ["done L", "done LB"]]], b_suspended_stacks)
+
+    # Thousands of short coroutines, finished and abandoned: the program
+    # stays correct.
+    fn b_many_coroutines() errors compiler::CompilerError:
+        static compile:
+            fn w(k: int) -> V:
+                yield V {n: k}
+                return V {n: k * 2}
+            fn one(k: int) -> int:
+                coroutine {step, first} = w(k)
+                coroutine {step: abandoned} = w(k + 1)
+                last = step()
+                first.n + last.n
+            xs = loop i from 0 to 2000:
+                one(i)
+            last = list::at(xs, 1999):
+                on IndexNotFound:
+                    0
+            list::length(xs) + last
+    test::value("co-gc-many-coroutines", 7997, b_many_coroutines)
+
+# ---------------------------------------------------------------------------
+# Releases (COROUTINES.md, "Release at the last use" and "Release on every
+# early exit"): where a release goes is not observable from source; that it
+# changes no value is.
+
+fn register_release_tests():
+    # A handle moved on one path only: its new owner is released inside the
+    # branch, the old binding after it -- the same values on both paths.
+    fn b_branch_move() errors compiler::CompilerError:
+        static compile:
+            fn w(k: int) -> V:
+                yield V {n: k}
+                return V {n: k + 1}
+            fn pick(c: bool) -> int:
+                coroutine {step, first} = w(10)
+                if c:
+                    other = step
+                    x = other()
+                first.n
+            fn keep(c: bool) -> int:
+                coroutine {step, first} = w(20)
+                y = if c:
+                    other = step
+                    other().n
+                else:
+                    0
+                first.n + y
+            [pick(true), pick(false), keep(true), keep(false)]
+    test::value("co-release-branch-move", [10, 10, 41, 20], b_branch_move)
+
+    # A release on an exit changes no value: every exit kind (return, fail,
+    # a call's error, a handled error whose handler resumes the handle,
+    # break and continue leaving the function's own handle live, a self
+    # tail call, a moved handle), one row per k.
+    fn b_exit_values() errors compiler::CompilerError:
+        static compile:
+            fn w(k: int) -> V:
+                yield V {n: k}
+                return V {n: k + 1}
+            fn bad(k: int) -> int errors Boom:
+                if k > 2:
+                    fail Boom
+                k
+            fn worse(k: int) -> int errors Boom, Late:
+                if k > 4:
+                    fail Late
+                bad(k)
+            fn ret(k: int) -> int:
+                coroutine {step, first} = w(k)
+                if k > 1:
+                    return first.n
+                step().n
+            fn uses(k: int) -> int:
+                coroutine {step} = w(k)
+                return step().n
+            fn failing(k: int) -> int errors Boom:
+                coroutine {step} = w(k)
+                if k > 1:
+                    fail Boom
+                step().n
+            fn calling(k: int) -> int errors Boom:
+                coroutine {step} = w(k)
+                x = bad(k)
+                step().n + x
+            fn handled(k: int) -> int errors Late:
+                coroutine {step} = w(k)
+                x = worse(k):
+                    on Boom:
+                        step().n
+                x + 100
+            fn looping(k: int) -> int:
+                coroutine {step, first} = w(k)
+                xs = loop i from 0 to 4:
+                    coroutine {step: inner, first: one} = w(i)
+                    if i == k:
+                        break
+                    if i < k:
+                        continue
+                    inner().n + one.n
+                step().n * 10 + first.n
+            fn tail(k: int) -> int errors Boom:
+                coroutine {step} = w(k)
+                if k > 1:
+                    return tail(k - 1)
+                step().n + bad(k)
+            fn moved(k: int) -> int:
+                coroutine {step} = w(k)
+                if k > 1:
+                    other = step
+                    if k > 2:
+                        return 0
+                    other().n
+                else:
+                    step().n
+            fn row(k: int) -> list:
+                a = failing(k):
+                    on Boom:
+                        -1
+                b = calling(k):
+                    on Boom:
+                        -1
+                c = handled(k):
+                    on Late:
+                        -1
+                d = tail(k):
+                    on Boom:
+                        -1
+                [ret(k), uses(k), a, b, c, looping(k), d, moved(k)]
+            xs = loop k from 0 to 7:
+                row(k)
+            xs
+    test::value("co-exit-release-values", [[1, 1, 1, 1, 100, 10, 1, 1], [2, 2, 2, 3, 101, 21, 3, 2], [2, 3, -1, 5, 102, 32, 3, 3], [3, 4, -1, -1, 104, 43, 3, 0], [4, 5, -1, -1, 105, 54, 3, 0], [5, 6, -1, -1, -1, 65, 3, 0], [6, 7, -1, -1, -1, 76, 3, 0]], b_exit_values)
+
+# ---------------------------------------------------------------------------
+
+fn register_coroutines_tests():
+    register_syntax_tests()
+    register_deep_yield_tests()
+    register_protocol_tests()
+    register_binding_tests()
+    register_effect_tests(5, 1)
+    register_error_tests(-1, -5, -5)
+    register_terminal_tests()
+    register_affine_tests()
+    register_context_tests()
+    register_trait_tests()
+    register_gc_tests()
+    register_release_tests()
+
+with context test::suite()
+with context Log {a: mutable_array::create(4, 0)}
+with context Counter {a: mutable_array::create(1, 0)}
+with context Adder {k: 5}
+with context Limited {max: mutable_array::create(1, 0)}
+register_coroutines_tests()
+test::report()

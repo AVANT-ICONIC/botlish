@@ -1,0 +1,932 @@
+# strings.bot -- Strings as sequences of Unicode scalars, the UnicodeChar
+# scalar type, ASCII classification of bytes, URI-unreserved bytes and the
+# emailish predicate, as a source-level specification.
+#
+# Characters of a String (str::char_at):
+#   * str::char_at(s, i) is the Unicode scalar at character index i, a
+#     UnicodeChar: indices count scalars (an astral scalar is one index), the
+#     index space of str::substring, so char_at(s, i) is the one scalar of
+#     substring(s, i, i + 1);
+#   * every other index -- negative, at or past the end, any index of "", a
+#     BigInt -- fails with the builtin declared error IndexNotFound, handled
+#     like any declared error; a call whose index is not proven in range
+#     leaves IndexNotFound as an obligation of its caller (UnhandledError
+#     when nothing handles it), and a read under a guard that proves
+#     0 <= i < str::length(s) needs no handler;
+#   * str::char_at is a first-class value that reads and fails like a call.
+# UnicodeChar (UNICODE-CHAR-LITERALS.md):
+#   * a single-quoted literal is exactly one Unicode scalar value ('A', 'é',
+#     '😀'); char::scalar_value is its explicit, total code point;
+#   * UnicodeChar is neither Int nor String: no implicit conversion either
+#     way at a typed parameter (Type at the call), `==` against an Int or a
+#     String is simply false, never a coercion;
+#   * List[UnicodeChar] is ordinary List typing: a char list literal is one,
+#     a List of Strings or Ints is not, an alias keeps the type, a declared
+#     broad result erases it and an untyped passthrough does not;
+#   * a typed callable keeps its contract through an exact alias, and an Int
+#     reaching char::scalar_value through a typed or untyped parameter is
+#     rejected at compile time.
+# ASCII (lib/ascii.bot, ASCII-AND-URI-UNRESERVED.md): is_digit (48..57),
+#   is_upper (65..90), is_lower (97..122), is_alphabetic (upper or lower)
+#   and is_alphanumeric (alphabetic or digit) classify Bytes, total over
+#   0..255 (every predicate is false for 128..255) and pairwise disjoint;
+#   the parameter is a Byte proof obligation: a provably in-range literal or
+#   an established Byte (byte::from_int) is accepted, an out-of-range or
+#   merely Int-typed value, a UnicodeChar or a String is a Type error; every
+#   result is statically a bool.
+# URI unreserved (lib/web.bot): web::is_unreserved(b) is
+#   ascii::is_alphanumeric(b) or b in web::additional_unreserved_chars (the
+#   four bytes '-' '.' '_' '~'): exactly 66 of the 256 bytes, the
+#   alphanumeric test short-circuiting the set membership; the same Byte
+#   contract; callable from any user function.
+# Emailish (lib/web.bot, REFINEMENT-VALUES.md): web::emailish?'s verdicts on
+#   the valid/invalid corpus (ASCII and non-ASCII addresses; no "@", empty
+#   local part, invalid local character, invalid domain label, short TLD,
+#   "", "@"); its true result refines its argument to web::Emailish in the
+#   true branch only, and it is an ordinary bool function otherwise.
+#
+# Ported from tests/str-char-at.test, tests/unicode-char.test,
+# tests/ascii.test, tests/web-unreserved.test and
+# tests/emailish-predicate.test (audit/golden/migration/fragments/strings.tsv
+# maps every Tcl test to its golden test). collections.bot already holds
+# str-char-at-values and char-typed-callable-escape-rejected. Many of the
+# Tcl programs were compiled -strict 0 or checked only that a strict
+# compile succeeds; here every accepted block is strict and its value is
+# pinned on every backend. A Tcl "parity" twin of an interp-only test of the
+# same program is served by that program's one golden test (the runner
+# requires the same report on every backend). A rejection is pinned at the
+# argument (or call) it is reported at, and where a Tcl test pins a
+# fragment of the diagnostic's message (a Tcl glob), the port compares that
+# fragment too (`rejects_saying` below). Table inputs that a Tcl test
+# observes at run time (the declared errors, the per-byte verdicts) arrive
+# as parameters of the registration functions, so no exact-value fact of a
+# literal decides them.
+#
+# Imports: compiler and test are the framework's (bodies declare
+# compiler::CompilerError; DiagnosticCode cases); str and char for
+# str::char_at, str::substring, str::length and char::scalar_value; list for
+# list::at and list::length; ascii, byte and web for the libraries under
+# test (byte::from_int, the byte::BelowRange / byte::AboveRange errors);
+# immutable_set for membership in web::additional_unreserved_chars;
+# coroutine for coroutine::done?, which drives the short-circuit probe; and
+# `import type byte::Byte` for the short type name Byte the Tcl programs
+# write (and the registration parameters that carry a Byte).
+import ascii
+import byte
+import char
+import compiler
+import coroutine
+import immutable_set
+import list
+import str
+import test
+import web
+import type byte::Byte
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only)
+
+# char-coexists-with-source-defined-type: a source-defined Int refinement
+# next to the builtin UnicodeChar.
+type Small = Int in 0..10
+
+# ---------------------------------------------------------------------------
+# Custom check: a rejection at its location whose message holds the Tcl
+# glob's fragments in order (test::rejects_containing takes one, unlocated).
+
+# The position just past the first occurrence of FRAGMENT in TEXT at or
+# after START, or -1 when there is none.
+fn end_of_fragment(text: str, fragment: str, start: int) -> int:
+    k = str::length(fragment)
+    loop i from start through str::length(text) - k:
+        piece = str::substring(text, i, i + k):
+            on LowerUnderrun:
+                continue
+            on UpperOverrun:
+                continue
+        if piece == fragment:
+            return i + k
+    -1
+
+# true when FRAGMENTS, from the K-th on, occur in TEXT at or after START,
+# each after the one before (as the glob *A*B* matches).
+fn says_from?(text: str, fragments: List[str], k: int, start: int) -> bool:
+    if k >= list::length(fragments):
+        return true
+    fragment = list::at(fragments, k):
+        on IndexNotFound:
+            return false
+    next = end_of_fragment(text, fragment, start)
+    next >= 0 and says_from?(text, fragments, k + 1, next)
+
+# BODY's block must be rejected with EXPECTED at LINE:COLUMN of this file,
+# its message containing FRAGMENTS in order.
+nomethod fn rejects_saying(name: str, expected: compiler::DiagnosticCode, line: int, column: int, fragments: List[str], body, context suite: test::Suite) -> unit:
+    fn check() -> test::Match:
+        place = compiler::SourceLocation {line: line, column: column}
+        wanted = test::diagnostic_text(expected, place).concat(", message containing: ").concat(test::joined(fragments, " ... "))
+        actual = body():
+            on compiler::CompilerError {code, primary, message}:
+                located = primary.line == line and primary.column == column
+                if code == expected and located and says_from?(message, fragments, 0, 0):
+                    return test::passed()
+                return test::mismatch(wanted, test::diagnostic_text(code, primary), message)
+        test::mismatch(wanted, "value ".concat(test::describe(actual)), "")
+    test::case(name, check)
+
+# ---------------------------------------------------------------------------
+# str-char-at.test: the characters of a String
+
+fn register_char_at_tests(empty: str):
+    # str-char-at-equals-literal: a char_at result equals the char literal
+    # of the same scalar (astral included), and only that one.
+    fn b_equals_literal() errors compiler::CompilerError:
+        static compile:
+            s = "%é😀"
+            [str::char_at(s, 0) == '%', str::char_at(s, 1) == 'é', str::char_at(s, 2) == '😀', str::char_at(s, 2) == '%']
+    test::value("str-char-at-equals-literal", [true, true, true, false], b_equals_literal)
+
+    # str-char-at-agrees-with-substring: char_at(s, i) is the one scalar of
+    # substring(s, i, i + 1), at every index (the counted loop proves both
+    # reads and the slice in range: no handler).
+    fn b_agrees_with_substring() errors compiler::CompilerError:
+        static compile:
+            s = "x é😀 ~"
+            loop i from 0 to str::length(s):
+                char::scalar_value(str::char_at(s, i)) == char::scalar_value(str::char_at(str::substring(s, i, i + 1), 0))
+    test::value("str-char-at-agrees-with-substring", [true, true, true, true, true, true], b_agrees_with_substring)
+
+    # str-char-at-unhandled-error: inside `at` nothing proves the index in
+    # range, so the call leaves IndexNotFound to its caller, which does not
+    # handle it.
+    fn b_unhandled() errors compiler::CompilerError:
+        static compile:
+            fn at(s, i):
+                str::char_at(s, i)
+            at("a", 0)
+    rejects_saying("str-char-at-unhandled-error", compiler::DiagnosticCode::UnhandledError, 166, 13, ["may produce the declared error \"IndexNotFound\""], b_unhandled)
+
+    # str-char-at-as-a-value: str::char_at stored in a List and called
+    # through an untyped parameter reads, and fails with IndexNotFound,
+    # exactly like a direct call.
+    fn b_as_a_value() errors compiler::CompilerError:
+        static compile:
+            fs = [str::char_at]
+            fn read(f, s, i):
+                f(s, i):
+                    on IndexNotFound:
+                        'x'
+            loop i from 0 to 4:
+                read(list::at(fs, 0), "aé😀", i) == list::at(['a', 'é', '😀', 'x'], i)
+    test::value("str-char-at-as-a-value", [true, true, true, true], b_as_a_value)
+
+    # str-char-at-proven-in-guarded-scan: a read under an
+    # `i < 0 or i >= str::length(s)` guard is proven (no handler) and the
+    # scan counts the '%' scalars.
+    fn b_guarded_scan() errors compiler::CompilerError:
+        static compile:
+            fn count_pct(s, i, acc):
+                if i < 0 or i >= str::length(s):
+                    acc
+                else:
+                    hit = if str::char_at(s, i) == '%':
+                        1
+                    else:
+                        0
+                    count_pct(s, i + 1, acc + hit)
+            count_pct("a%b%%", 0, 0)
+    test::value("str-char-at-proven-in-guarded-scan", 3, b_guarded_scan)
+
+    # str-char-at-checked-when-unproven: an unproven read of "" fails at run
+    # time and its handler answers.
+    fn b_checked_when_unproven() errors compiler::CompilerError:
+        static compile:
+            fn first(s):
+                str::char_at(s, 0):
+                    on IndexNotFound:
+                        return 'x'
+            first(empty) == 'x'
+    test::value("str-char-at-checked-when-unproven", true, b_checked_when_unproven)
+
+    # str-char-at-allocates-nothing: the scan's value (the sum of the code
+    # points of "déjà vu 😀").
+    fn b_scan_sum() errors compiler::CompilerError:
+        static compile:
+            fn sum(s, i, acc):
+                if i < 0 or i >= str::length(s):
+                    acc
+                else:
+                    sum(s, i + 1, acc + char::scalar_value(str::char_at(s, i)))
+            sum("déjà vu 😀", 0, 0)
+    test::value("str-char-at-allocates-nothing", 129474, b_scan_sum)
+
+# str-char-at-index-not-found-LABEL: str::char_at(TEXT, INDEX) fails with
+# IndexNotFound, which the handler turns into -1 (EXPECTED).
+fn register_char_at_out_of_range(label: str, text: str, index: int, expected: int):
+    fn b_out_of_range() errors compiler::CompilerError:
+        static compile:
+            fn at(s, i):
+                c = str::char_at(s, i):
+                    on IndexNotFound:
+                        return -1
+                1
+            at(text, index)
+    test::value("str-char-at-index-not-found-".concat(label), expected, b_out_of_range)
+
+fn register_str_char_at_tests():
+    register_char_at_tests("")
+    register_char_at_out_of_range("negative", "é", -1, -1)
+    register_char_at_out_of_range("at-length", "é", 1, -1)
+    register_char_at_out_of_range("past-length", "ab", 5, -1)
+    register_char_at_out_of_range("empty", "", 0, -1)
+    register_char_at_out_of_range("bigint", "ab", 1208925819614629174706176, -1)
+
+# ---------------------------------------------------------------------------
+# unicode-char.test: UnicodeChar, character literals and List[UnicodeChar]
+
+fn register_char_type_tests():
+    # char-identity-accepts-char: a UnicodeChar parameter accepts a
+    # UnicodeChar.
+    fn b_identity_char() errors compiler::CompilerError:
+        static compile:
+            fn identity(c: UnicodeChar) -> UnicodeChar:
+                c
+            identity('A')
+    test::value("char-identity-accepts-char", 'A', b_identity_char)
+
+    # char-identity-rejects-int: an Int is not implicitly a UnicodeChar, even
+    # 65.
+    fn b_identity_int() errors compiler::CompilerError:
+        static compile:
+            fn identity(c: UnicodeChar) -> UnicodeChar:
+                c
+            identity(65)
+    rejects_saying("char-identity-rejects-int", compiler::DiagnosticCode::Type, 263, 22, ["cannot be proven to satisfy"], b_identity_int)
+
+    # char-identity-rejects-string: nor is a one-character String.
+    fn b_identity_string() errors compiler::CompilerError:
+        static compile:
+            fn identity(c: UnicodeChar) -> UnicodeChar:
+                c
+            identity("A")
+    rejects_saying("char-identity-rejects-string", compiler::DiagnosticCode::Type, 271, 22, ["cannot be proven to satisfy"], b_identity_string)
+
+    # char-take-int-rejects-char: an int parameter rejects a UnicodeChar (no
+    # implicit conversion to its code point).
+    fn b_take_int_char() errors compiler::CompilerError:
+        static compile:
+            fn take_int(x: int):
+                unit
+            take_int('A')
+    rejects_saying("char-take-int-rejects-char", compiler::DiagnosticCode::Type, 280, 22, ["cannot be proven to satisfy"], b_take_int_char)
+
+    # char-take-int-accepts-codepoint: char::scalar_value is the legal
+    # spelling.
+    fn b_take_int_codepoint() errors compiler::CompilerError:
+        static compile:
+            fn take_int(x: int):
+                unit
+            take_int(char::scalar_value('A'))
+    test::value("char-take-int-accepts-codepoint", unit, b_take_int_codepoint)
+
+    # char-equality-same / -different (and their char-parity- twins).
+    fn b_equality_same() errors compiler::CompilerError:
+        static compile:
+            'A' == 'A'
+    test::value("char-equality-same", true, b_equality_same)
+
+    fn b_equality_different() errors compiler::CompilerError:
+        static compile:
+            'A' == 'B'
+    test::value("char-equality-different", false, b_equality_different)
+
+    # char-equality-not-coercive-int / -string: `==` accepts any operands;
+    # a UnicodeChar is never equal to an Int or a String.
+    fn b_not_coercive_int() errors compiler::CompilerError:
+        static compile:
+            'A' == 65
+    test::value("char-equality-not-coercive-int", false, b_not_coercive_int)
+
+    fn b_not_coercive_string() errors compiler::CompilerError:
+        static compile:
+            'A' == "A"
+    test::value("char-equality-not-coercive-string", false, b_not_coercive_string)
+
+fn register_char_literal_tests():
+    # char-parity-literal-*: a literal of a 1-, 2- and 4-byte UTF-8 scalar is
+    # that scalar on every backend.
+    fn b_literal_ascii() errors compiler::CompilerError:
+        static compile:
+            'A'
+    test::value("char-parity-literal-ascii", 'A', b_literal_ascii)
+
+    fn b_literal_bmp() errors compiler::CompilerError:
+        static compile:
+            'é'
+    test::value("char-parity-literal-bmp", 'é', b_literal_bmp)
+
+    fn b_literal_supplementary() errors compiler::CompilerError:
+        static compile:
+            '😀'
+    test::value("char-parity-literal-supplementary", '😀', b_literal_supplementary)
+
+    # char-codepoint-* (and their char-parity- twins): the scalar value, not
+    # the UTF-8 bytes.
+    fn b_codepoint_ascii() errors compiler::CompilerError:
+        static compile:
+            char::scalar_value('A')
+    test::value("char-codepoint-ascii", 65, b_codepoint_ascii)
+
+    fn b_codepoint_bmp() errors compiler::CompilerError:
+        static compile:
+            char::scalar_value('é')
+    test::value("char-codepoint-bmp", 233, b_codepoint_bmp)
+
+    fn b_codepoint_supplementary() errors compiler::CompilerError:
+        static compile:
+            char::scalar_value('😀')
+    test::value("char-codepoint-supplementary", 128512, b_codepoint_supplementary)
+
+    # char-module-codepoint: char::scalar_value through a typed function of
+    # a program that imports char (a namespace with no module file).
+    fn b_module_codepoint() errors compiler::CompilerError:
+        static compile:
+            fn f(c: UnicodeChar) -> int:
+                char::scalar_value(c)
+            f('A')
+    test::value("char-module-codepoint", 65, b_module_codepoint)
+
+    # char-scalar-value-static-contract: an Int reaching char::scalar_value
+    # through a typed parameter (/typed) or an untyped one (/untyped) is
+    # rejected at compile time.
+    fn b_scalar_value_typed() errors compiler::CompilerError:
+        static compile:
+            fn f(c: UnicodeChar) -> int:
+                char::scalar_value(c)
+            f(65)
+    rejects_saying("char-scalar-value-static-contract/typed", compiler::DiagnosticCode::Type, 366, 15, ["cannot be proven to satisfy UnicodeChar"], b_scalar_value_typed)
+
+    fn b_scalar_value_untyped() errors compiler::CompilerError:
+        static compile:
+            fn f(c):
+                char::scalar_value(c)
+            f(65)
+    rejects_saying("char-scalar-value-static-contract/untyped", compiler::DiagnosticCode::Type, 373, 15, ["statically incompatible with UnicodeChar", "native char::scalar_value requires UnicodeChar"], b_scalar_value_untyped)
+
+fn register_char_list_tests():
+    # char-parity-list-construction / char-parity-list-get.
+    fn b_list_construction() errors compiler::CompilerError:
+        static compile:
+            ['-', '.', '_', '~']
+    test::value("char-parity-list-construction", ['-', '.', '_', '~'], b_list_construction)
+
+    fn b_list_get() errors compiler::CompilerError:
+        static compile:
+            list::at(['-', '.', '_', '~'], 0)
+    test::value("char-parity-list-get", '-', b_list_get)
+
+    # char-consume-list: a char list literal is a List[UnicodeChar].
+    fn b_consume_list() errors compiler::CompilerError:
+        static compile:
+            fn consume(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
+                list::at(chars, 0)
+            consume(['-', '.', '_', '~'])
+    test::value("char-consume-list", '-', b_consume_list)
+
+    # char-consume-rejects-string-list / -int-list: a List of Strings or of
+    # Ints is not.
+    fn b_consume_strings() errors compiler::CompilerError:
+        static compile:
+            fn consume(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
+                list::at(chars, 0)
+            consume(["-", ".", "_", "~"])
+    rejects_saying("char-consume-rejects-string-list", compiler::DiagnosticCode::Type, 402, 21, ["cannot be proven to satisfy"], b_consume_strings)
+
+    fn b_consume_ints() errors compiler::CompilerError:
+        static compile:
+            fn consume(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
+                list::at(chars, 0)
+            consume([45, 46, 95, 126])
+    rejects_saying("char-consume-rejects-int-list", compiler::DiagnosticCode::Type, 409, 21, ["cannot be proven to satisfy"], b_consume_ints)
+
+    # char-alias-propagation: an alias keeps List[UnicodeChar].
+    fn b_alias_propagation() errors compiler::CompilerError:
+        static compile:
+            fn chars() -> List[UnicodeChar]:
+                ['A', 'B']
+            fn first(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
+                copy = chars
+                list::at(copy, 0)
+            c = first(chars()):
+                on IndexNotFound:
+                    'Z'
+            c
+    test::value("char-alias-propagation", 'A', b_alias_propagation)
+
+    # char-required-basic-payload(-value): the milestone's payload compiles
+    # and sample() is the code point of '-'.
+    fn b_required_payload() errors compiler::CompilerError:
+        static compile:
+            fn identity(c: UnicodeChar) -> UnicodeChar:
+                c
+            fn code(c: UnicodeChar) -> int:
+                char::scalar_value(c)
+            fn first(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
+                list::at(chars, 0)
+            fn sample() -> int errors IndexNotFound:
+                chars = ['-', '.', '_', '~']
+                code(first(chars))
+            r = sample():
+                on IndexNotFound:
+                    -1
+            r
+    test::value("char-required-basic-payload", 45, b_required_payload)
+
+    # char-typed-callable-alias-still-works: an exact alias of a typed
+    # callable accepts a UnicodeChar (/accepted) and still rejects an Int
+    # (/rejected).
+    fn b_alias_accepted() errors compiler::CompilerError:
+        static compile:
+            fn consume(c: UnicodeChar) -> UnicodeChar:
+                c
+            f = consume
+            f('A')
+    test::value("char-typed-callable-alias-still-works/accepted", 'A', b_alias_accepted)
+
+    fn b_alias_rejected() errors compiler::CompilerError:
+        static compile:
+            fn consume(c: UnicodeChar) -> UnicodeChar:
+                c
+            f = consume
+            f(65)
+    rejects_saying("char-typed-callable-alias-still-works/rejected", compiler::DiagnosticCode::Type, 461, 15, ["cannot be proven to satisfy"], b_alias_rejected)
+
+    # char-container-erasure-ordinary: a declared broad `-> list` result
+    # erases List[UnicodeChar] like any container's (/erased); an untyped
+    # passthrough keeps it (/kept).
+    fn b_erasure_erased() errors compiler::CompilerError:
+        static compile:
+            fn passthrough(x) -> list:
+                x
+            fn consume(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
+                list::at(chars, 0)
+            chars = ['A']
+            lost = passthrough(chars)
+            c = consume(lost):
+                on IndexNotFound:
+                    'B'
+            c
+    rejects_saying("char-container-erasure-ordinary/erased", compiler::DiagnosticCode::Type, 475, 25, ["cannot be proven to satisfy"], b_erasure_erased)
+
+    fn b_erasure_kept() errors compiler::CompilerError:
+        static compile:
+            fn passthrough(x):
+                x
+            fn consume(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
+                list::at(chars, 0)
+            chars = ['A']
+            lost = passthrough(chars)
+            c = consume(lost):
+                on IndexNotFound:
+                    'B'
+            c
+    test::value("char-container-erasure-ordinary/kept", 'A', b_erasure_kept)
+
+    # char-coexists-with-source-defined-type: the source-defined Small and
+    # the builtin UnicodeChar resolve side by side.
+    fn b_coexists() errors compiler::CompilerError:
+        static compile:
+            fn one() -> Small:
+                1
+            fn f(c: UnicodeChar) -> int:
+                char::scalar_value(c)
+            f('A')
+    test::value("char-coexists-with-source-defined-type", 65, b_coexists)
+
+fn register_unicode_char_tests():
+    register_char_type_tests()
+    register_char_literal_tests()
+    register_char_list_tests()
+
+# ---------------------------------------------------------------------------
+# ascii.test: ASCII classification of Bytes
+
+fn register_ascii_contract_tests():
+    # ascii-rejects-out-of-range-int: 999 is no Byte: a static Type error,
+    # not a run-time range check.
+    fn b_out_of_range() errors compiler::CompilerError:
+        static compile:
+            ascii::is_digit(999)
+    test::rejects_at("ascii-rejects-out-of-range-int", compiler::DiagnosticCode::Type, 519, 29, b_out_of_range)
+
+    # ascii-accepts-provably-in-range-literal: the literal 48 is provably a
+    # Byte (no conversion).
+    fn b_in_range_literal() errors compiler::CompilerError:
+        static compile:
+            ascii::is_digit(48)
+    test::value("ascii-accepts-provably-in-range-literal", true, b_in_range_literal)
+
+    # ascii-rejects-codepoint-int: char::scalar_value('7') is 55, but its
+    # static facts do not bound it to 0..255 (no Byte proof).
+    fn b_codepoint_int() errors compiler::CompilerError:
+        static compile:
+            ascii::is_digit(char::scalar_value('7'))
+    test::rejects_at("ascii-rejects-codepoint-int", compiler::DiagnosticCode::Type, 533, 29, b_codepoint_int)
+
+    # ascii-rejects-unicode-char / ascii-rejects-string.
+    fn b_unicode_char() errors compiler::CompilerError:
+        static compile:
+            ascii::is_digit('7')
+    test::rejects_at("ascii-rejects-unicode-char", compiler::DiagnosticCode::Type, 539, 29, b_unicode_char)
+
+    fn b_string() errors compiler::CompilerError:
+        static compile:
+            ascii::is_digit("7")
+    test::rejects_at("ascii-rejects-string", compiler::DiagnosticCode::Type, 544, 29, b_string)
+
+    # ascii-accepts-byte: a Byte established by byte::from_int.
+    fn b_established_byte() errors compiler::CompilerError:
+        static compile:
+            b = byte::from_int(55):
+                on byte::BelowRange:
+                    0
+                on byte::AboveRange:
+                    0
+            ascii::is_digit(b)
+    test::value("ascii-accepts-byte", true, b_established_byte)
+
+    # ascii-result-type-NAME: each predicate's result is statically a bool,
+    # observed as a declared `-> bool` result the strict compile accepts.
+    fn b_result_digit() errors compiler::CompilerError:
+        static compile:
+            fn r() -> bool:
+                ascii::is_digit(65)
+            r()
+    test::value("ascii-result-type-is_digit", false, b_result_digit)
+
+    fn b_result_upper() errors compiler::CompilerError:
+        static compile:
+            fn r() -> bool:
+                ascii::is_upper(65)
+            r()
+    test::value("ascii-result-type-is_upper", true, b_result_upper)
+
+    fn b_result_lower() errors compiler::CompilerError:
+        static compile:
+            fn r() -> bool:
+                ascii::is_lower(65)
+            r()
+    test::value("ascii-result-type-is_lower", false, b_result_lower)
+
+    fn b_result_alphabetic() errors compiler::CompilerError:
+        static compile:
+            fn r() -> bool:
+                ascii::is_alphabetic(65)
+            r()
+    test::value("ascii-result-type-is_alphabetic", true, b_result_alphabetic)
+
+    fn b_result_alphanumeric() errors compiler::CompilerError:
+        static compile:
+            fn r() -> bool:
+                ascii::is_alphanumeric(65)
+            r()
+    test::value("ascii-result-type-is_alphanumeric", true, b_result_alphanumeric)
+
+# ascii-boundary-LABEL: the five predicates [is_digit, is_upper, is_lower,
+# is_alphabetic, is_alphanumeric] at the boundary byte B.
+fn register_ascii_boundary(label: str, b: Byte, expected: List[bool]):
+    fn b_boundary() errors compiler::CompilerError:
+        static compile:
+            [ascii::is_digit(b), ascii::is_upper(b), ascii::is_lower(b), ascii::is_alphabetic(b), ascii::is_alphanumeric(b)]
+    test::value("ascii-boundary-".concat(label), expected, b_boundary)
+
+fn register_ascii_table_tests():
+    # ascii-acceptance-table: the acceptance table, evaluated directly.
+    fn b_acceptance() errors compiler::CompilerError:
+        static compile:
+            [
+                ascii::is_digit(48), ascii::is_digit(57), ascii::is_digit(47), ascii::is_digit(58),
+                ascii::is_upper(65), ascii::is_upper(90), ascii::is_upper(64), ascii::is_upper(91),
+                ascii::is_lower(97), ascii::is_lower(122), ascii::is_lower(96), ascii::is_lower(123),
+                ascii::is_alphabetic(55), ascii::is_alphanumeric(55)
+            ]
+    test::value("ascii-acceptance-table", [true, true, false, false, true, true, false, false, true, true, false, false, false, true], b_acceptance)
+
+# The whole byte domain LOW..PAST-1 (HIGH the first high-bit byte), each
+# byte established with byte::from_int as the Tcl programs do.
+fn register_ascii_domain_tests(low: int, high: int, past: int):
+    # ascii-high-bit-bytes-all-false: how many of the bytes HIGH..PAST-1 no
+    # predicate holds for -- all 128 of them.
+    fn b_high_bit() errors compiler::CompilerError:
+        static compile:
+            unclassified = loop n from high to past:
+                b = byte::from_int(n):
+                    on byte::BelowRange:
+                        0
+                    on byte::AboveRange:
+                        0
+                if ascii::is_digit(b) or ascii::is_upper(b) or ascii::is_lower(b) or ascii::is_alphabetic(b) or ascii::is_alphanumeric(b):
+                    continue
+                n
+            list::length(unclassified)
+    test::value("ascii-high-bit-bytes-all-false", 128, b_high_bit)
+
+    # ascii-exhaustive-truth-table (and ascii-backend-parity-256, the same
+    # program): over every byte, every predicate agrees with a reference of
+    # plain Int comparisons and digit/upper/lower are pairwise disjoint; the
+    # value is [the bytes where anything disagrees, then how many bytes
+    # each predicate holds for]: [0, 10, 26, 26, 52, 62].
+    fn b_exhaustive() errors compiler::CompilerError:
+        static compile:
+            fn byte_of(n: int) -> Byte:
+                b = byte::from_int(n):
+                    on byte::BelowRange:
+                        0
+                    on byte::AboveRange:
+                        0
+                b
+            fn agrees?(n: int) -> bool:
+                b = byte_of(n)
+                digit = n >= 48 and n <= 57
+                upper = n >= 65 and n <= 90
+                lower = n >= 97 and n <= 122
+                ascii::is_digit(b) == digit and ascii::is_upper(b) == upper and ascii::is_lower(b) == lower and ascii::is_alphabetic(b) == (upper or lower) and ascii::is_alphanumeric(b) == (upper or lower or digit)
+            fn disjoint?(n: int) -> bool:
+                b = byte_of(n)
+                not (ascii::is_digit(b) and ascii::is_upper(b)) and not (ascii::is_digit(b) and ascii::is_lower(b)) and not (ascii::is_upper(b) and ascii::is_lower(b))
+            fn count(holds: Fn{args: [Byte], return: bool}) -> int:
+                members = loop n from low to past:
+                    if not holds(byte_of(n)):
+                        continue
+                    n
+                list::length(members)
+            wrong = loop n from low to past:
+                if agrees?(n) and disjoint?(n):
+                    continue
+                n
+            [list::length(wrong), count(ascii::is_digit), count(ascii::is_upper), count(ascii::is_lower), count(ascii::is_alphabetic), count(ascii::is_alphanumeric)]
+    test::value("ascii-exhaustive-truth-table", [0, 10, 26, 26, 52, 62], b_exhaustive)
+
+fn register_ascii_tests():
+    register_ascii_contract_tests()
+    register_ascii_boundary("zero", 0, [false, false, false, false, false])
+    register_ascii_boundary("slash", 47, [false, false, false, false, false])
+    register_ascii_boundary("zero-digit", 48, [true, false, false, false, true])
+    register_ascii_boundary("nine-digit", 57, [true, false, false, false, true])
+    register_ascii_boundary("colon", 58, [false, false, false, false, false])
+    register_ascii_boundary("at", 64, [false, false, false, false, false])
+    register_ascii_boundary("A", 65, [false, true, false, true, true])
+    register_ascii_boundary("Z", 90, [false, true, false, true, true])
+    register_ascii_boundary("open-bracket", 91, [false, false, false, false, false])
+    register_ascii_boundary("backtick", 96, [false, false, false, false, false])
+    register_ascii_boundary("a", 97, [false, false, true, true, true])
+    register_ascii_boundary("z", 122, [false, false, true, true, true])
+    register_ascii_boundary("open-brace", 123, [false, false, false, false, false])
+    register_ascii_boundary("del", 127, [false, false, false, false, false])
+    register_ascii_boundary("high-bit-lo", 128, [false, false, false, false, false])
+    register_ascii_boundary("high-bit-hi", 255, [false, false, false, false, false])
+    register_ascii_table_tests()
+    register_ascii_domain_tests(0, 128, 256)
+
+# ---------------------------------------------------------------------------
+# web-unreserved.test: URI-unreserved bytes
+
+fn register_unreserved_tests():
+    # web-unreserved-acceptance-table: the four punctuation members, the
+    # neighbouring non-members, high-bit bytes, and one letter or digit of
+    # each class.
+    fn b_acceptance() errors compiler::CompilerError:
+        static compile:
+            [
+                web::is_unreserved(45), web::is_unreserved(46),
+                web::is_unreserved(95), web::is_unreserved(126),
+                web::is_unreserved(44), web::is_unreserved(47),
+                web::is_unreserved(58), web::is_unreserved(64),
+                web::is_unreserved(91), web::is_unreserved(96),
+                web::is_unreserved(123), web::is_unreserved(127),
+                web::is_unreserved(128), web::is_unreserved(255),
+                web::is_unreserved(65), web::is_unreserved(97), web::is_unreserved(48)
+            ]
+    test::value("web-unreserved-acceptance-table", [true, true, true, true, false, false, false, false, false, false, false, false, false, false, true, true, true], b_acceptance)
+
+    # web-unreserved-rejects-unicode-char / -unproven-int: the Byte contract.
+    fn b_unicode_char() errors compiler::CompilerError:
+        static compile:
+            web::is_unreserved('-')
+    test::rejects_at("web-unreserved-rejects-unicode-char", compiler::DiagnosticCode::Type, 715, 32, b_unicode_char)
+
+    fn b_unproven_int() errors compiler::CompilerError:
+        static compile:
+            web::is_unreserved(char::scalar_value('-'))
+    test::rejects_at("web-unreserved-rejects-unproven-int", compiler::DiagnosticCode::Type, 720, 32, b_unproven_int)
+
+    # web-unreserved-user-fn-wraps-module-closure: a user function calling
+    # web::is_unreserved (a closure over the module's retained set).
+    fn b_user_fn() errors compiler::CompilerError:
+        static compile:
+            fn f(b: Byte) -> bool:
+                web::is_unreserved(b)
+            f(45)
+    test::value("web-unreserved-user-fn-wraps-module-closure", true, b_user_fn)
+
+    # web-unreserved-set-exact-members: the retained punctuation set holds
+    # 45, 46, 95 and 126 and none of their neighbours.
+    fn b_set_members() errors compiler::CompilerError:
+        static compile:
+            [
+                immutable_set::contains(web::additional_unreserved_chars, 45),
+                immutable_set::contains(web::additional_unreserved_chars, 46),
+                immutable_set::contains(web::additional_unreserved_chars, 95),
+                immutable_set::contains(web::additional_unreserved_chars, 126),
+                immutable_set::contains(web::additional_unreserved_chars, 44),
+                immutable_set::contains(web::additional_unreserved_chars, 47),
+                immutable_set::contains(web::additional_unreserved_chars, 94),
+                immutable_set::contains(web::additional_unreserved_chars, 96),
+                immutable_set::contains(web::additional_unreserved_chars, 65)
+            ]
+    test::value("web-unreserved-set-exact-members", [true, true, true, true, false, false, false, false, false], b_set_members)
+
+# The whole byte domain LOW..PAST-1, each byte established with
+# byte::from_int as the Tcl programs do.
+fn register_unreserved_domain_tests(low: int, past: int):
+    # web-unreserved-exhaustive: over every byte, is_unreserved agrees with
+    # a reference of plain Int comparisons (A-Z a-z 0-9 - . _ ~) and with
+    # its composition ascii::is_alphanumeric(b) or membership in the
+    # punctuation set; the value is [the bytes where the reference
+    # disagrees, the bytes where the composition disagrees, how many bytes
+    # are unreserved]: [0, 0, 66].
+    fn b_exhaustive() errors compiler::CompilerError:
+        static compile:
+            fn byte_of(n: int) -> Byte:
+                b = byte::from_int(n):
+                    on byte::BelowRange:
+                        0
+                    on byte::AboveRange:
+                        0
+                b
+            fn reference(n: int) -> bool:
+                (n >= 48 and n <= 57) or (n >= 65 and n <= 90) or (n >= 97 and n <= 122) or n == 45 or n == 46 or n == 95 or n == 126
+            off_reference = loop n from low to past:
+                if web::is_unreserved(byte_of(n)) == reference(n):
+                    continue
+                n
+            off_composition = loop n from low to past:
+                b = byte_of(n)
+                if web::is_unreserved(b) == (ascii::is_alphanumeric(b) or immutable_set::contains(web::additional_unreserved_chars, b)):
+                    continue
+                n
+            unreserved = loop n from low to past:
+                if not web::is_unreserved(byte_of(n)):
+                    continue
+                n
+            [list::length(off_reference), list::length(off_composition), list::length(unreserved)]
+    test::value("web-unreserved-exhaustive", [0, 0, 66], b_exhaustive)
+
+    # web-unreserved-backend-parity-256: the unreserved bytes, in order.
+    fn b_members() errors compiler::CompilerError:
+        static compile:
+            loop n from low to past:
+                b = byte::from_int(n):
+                    on byte::BelowRange:
+                        0
+                    on byte::AboveRange:
+                        0
+                if not web::is_unreserved(b):
+                    continue
+                n
+    test::value("web-unreserved-backend-parity-256", [
+        45, 46,
+        48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
+        65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
+        78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90,
+        95,
+        97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109,
+        110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122,
+        126
+    ], b_members)
+
+# web-unreserved-or-short-circuits: in an `or` of is_unreserved's shape the
+# right operand (a probe that yields 999) runs only when
+# ascii::is_alphanumeric(b) is false. Each trace is [FIRST, REST]: shape's
+# leading yield 0, then every later yield and shape's result.
+fn register_unreserved_short_circuit(alphanumeric: Byte, punctuation: Byte):
+    fn b_short_circuit() errors compiler::CompilerError:
+        static compile:
+            fn probe(id: int) -> bool:
+                yield id
+                false
+            fn shape(b: Byte) -> int:
+                yield 0
+                if ascii::is_alphanumeric(b) or probe(999):
+                    1
+                else:
+                    2
+            fn trace(b: Byte):
+                coroutine {step, first} = shape(b)
+                rest = loop i from 0 to 10:
+                    if coroutine::done?(step):
+                        break
+                    step()
+                [first, rest]
+            [trace(alphanumeric), trace(punctuation)]
+    test::value("web-unreserved-or-short-circuits", [[0, [1]], [0, [999, 2]]], b_short_circuit)
+
+fn register_web_unreserved_tests():
+    register_unreserved_tests()
+    register_unreserved_domain_tests(0, 256)
+    register_unreserved_short_circuit(65, 45)
+
+# ---------------------------------------------------------------------------
+# emailish-predicate.test: web::emailish?
+
+# emailish-predicate-parity-LABEL: web::emailish?(ADDRESS) is EXPECTED.
+fn register_emailish_verdict(label: str, address: str, expected: bool):
+    fn b_verdict() errors compiler::CompilerError:
+        static compile:
+            web::emailish?(address)
+    test::value("emailish-predicate-parity-".concat(label), expected, b_verdict)
+
+fn register_emailish_tests():
+    register_emailish_verdict("ascii-valid", "someone@example.com", true)
+    register_emailish_verdict("unicode-valid", "café@例え.テスト", true)
+    register_emailish_verdict("no-at", "not-an-email", false)
+    register_emailish_verdict("empty-local-part", "@example.com", false)
+    register_emailish_verdict("invalid-local-char", "\"a b\"@example.com", false)
+    register_emailish_verdict("invalid-domain-label", "foo@bad_domain.com", false)
+    register_emailish_verdict("tld-too-short", "foo@example.c", false)
+    register_emailish_verdict("empty-string", "", false)
+    register_emailish_verdict("at-only", "@", false)
+
+    # emailish-predicate-refines: a true web::emailish?(s) refines s to
+    # web::Emailish in the true branch (/true-branch: accepted where an
+    # Emailish is required) and only there (/else-branch: Type).
+    fn b_refines_true() errors compiler::CompilerError:
+        static compile:
+            fn need(e: web::Emailish) -> str:
+                e
+            fn f(s: str) -> str:
+                if web::emailish?(s):
+                    need(s)
+                else:
+                    "no"
+            [f("a@b.io"), f("x")]
+    test::value("emailish-predicate-refines/true-branch", ["a@b.io", "no"], b_refines_true)
+
+    fn b_refines_else() errors compiler::CompilerError:
+        static compile:
+            fn need(e: web::Emailish) -> str:
+                e
+            fn f(s: str) -> str:
+                if web::emailish?(s):
+                    "yes"
+                else:
+                    need(s)
+            f("a@b.io")
+    test::rejects_at("emailish-predicate-refines/else-branch", compiler::DiagnosticCode::Type, 883, 26, b_refines_else)
+
+    # emailish-predicate-ordinary-bool: the result is an ordinary bool.
+    fn b_ordinary_bool() errors compiler::CompilerError:
+        static compile:
+            x = web::emailish?("a@b.io")
+            [x, not x]
+    test::value("emailish-predicate-ordinary-bool", [true, false], b_ordinary_bool)
+
+    # emailish-predicate-redundant-check-nir-shape: a re-check inside its own
+    # true branch answers like the first check.
+    fn b_redundant_check() errors compiler::CompilerError:
+        static compile:
+            fn f(s: str) -> str:
+                if web::emailish?(s):
+                    if web::emailish?(s):
+                        "yes"
+                    else:
+                        "no"
+                else:
+                    "no"
+            [f("someone@example.com"), f("nope")]
+    test::value("emailish-predicate-redundant-check-nir-shape", ["yes", "no"], b_redundant_check)
+
+    # emailish-predicate-user-block: a user function refining and re-checking
+    # (method sugar s.emailish?(), web being imported).
+    fn b_user_block() errors compiler::CompilerError:
+        static compile:
+            fn check(s: str):
+                if web::emailish?(s):
+                    if s.emailish?():
+                        s
+                    else:
+                        "no"
+                else:
+                    "no"
+            [check("someone@example.com"), check("not-an-email"), check("café@例え.テスト")]
+    test::value("emailish-predicate-user-block", ["someone@example.com", "no", "café@例え.テスト"], b_user_block)
+
+# ---------------------------------------------------------------------------
+
+with context test::suite()
+register_str_char_at_tests()
+register_unicode_char_tests()
+register_ascii_tests()
+register_web_unreserved_tests()
+register_emailish_tests()
+test::report()

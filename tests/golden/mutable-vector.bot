@@ -1,0 +1,1206 @@
+# mutable-vector.bot -- MutableVector[T] as a source-level specification
+# (MUTABLE-VECTOR.md), ported from tests/mutable-vector.test.
+#
+# A MutableVector is a growable mutable VALUE:
+#
+# * Construction. `mutable_vector::from_list(xs)` is a MutableVector[T] of a
+#   List[T]; it leaves an unrestricted List unchanged. The empty literal is
+#   the proven-empty MutableVector[never], into which nothing can be pushed;
+#   declared as MutableVector[T] it is the typed empty vector. The type is
+#   spelled MutableVector[T]: a bare `MutableVector` or the lowercase
+#   namespace name is a type error. An element pushed or swapped in must be
+#   proven admissible to the element type: no widening, no run-time check.
+# * Operations. length, empty?, at, push, pop, take (the elements after the
+#   index keep their order: take(0) repeatedly is a queue), swap and clear;
+#   an empty pop and a bad index are the handleable IndexNotFound and
+#   change nothing.
+# * Logical copies. A copy of an unrestricted vector -- a binding, an
+#   argument, a result, a List element or struct field, a generic function's
+#   result, a context installation, a loop's domain -- never observes a later
+#   mutation of the original, and the original never observes the copy's.
+# * Places. A mutation updates its receiver *place* in place: a local, a
+#   parameter, a field path of one. A temporary (a call's result, a List
+#   element) or a non-vector is MutablePlaceReceiver; a nested function may
+#   neither mutate a vector of its enclosing function (MutablePlaceReceiver)
+#   nor capture one its enclosing function mutates (MutablePlaceCapture).
+# * Affine elements. A vector of affine elements (coroutines, structs owning
+#   one) is affine: it moves whole through bindings, arguments, results and
+#   struct fields (the old owner is UseAfterMove), owns its elements, and
+#   moves them across its boundary only through push and swap in and pop,
+#   take, swap and consuming iteration out. `==` of one is
+#   AffineEqualityUnsupported, erasing one to `any` AffineErasureUnsupported,
+#   moving one out of a struct field AffineFieldMoveRequiresDestructure,
+#   copying one out of a List AffineListOperationUnsupported, and a binding
+#   moved on a path no statement ends AffinePathReleaseUnsupported. An
+#   untyped function given one is specialized for it.
+# * Consuming iteration. `loop x in v` over an affine vector moves each
+#   element into the loop variable in order; continue, break, return, fail
+#   and a propagated declared error leave the loop with the values below.
+#
+# What a Botlish program cannot observe stays in the Tcl suite, where these
+# tests keep running unchanged: when and how often an element is released
+# (release counts and order), native copy-on-write and allocation counters,
+# NIR and HIR text, the display form of a vector, the run-time EQUALITY of
+# `==` on an unrestricted vector (no handler catches it), static types of
+# bindings, and in-process GC-stress runs. A port of such a test keeps the
+# values and diagnostics of its programs.
+#
+# A vector has no `==` (a run-time EQUALITY) and no text form, so a body
+# reads every vector it compares out as a List (`items`, `texts`).
+#
+# One test, mv-cow-gc-stress, lives in mutable-vector-str.bot: it needs
+# `import str`, which here would give every `q.length()` a third candidate
+# (str::length) and turn the UseAfterMove rejections below into
+# NoApplicableMethod.
+#
+# Imports: compiler and test for the framework; coroutine, list and
+# mutable_vector are the Tcl programs' own (mvDecls imports all three; the
+# unrestricted programs import mutable_vector, some list too). No test here
+# is about a missing import.
+import compiler
+import coroutine
+import list
+import mutable_vector
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only).
+
+# mvDecls: a one-yield worker resumed with a Command, its Event, an affine
+# struct owning one, a queue of them, and a failing helper.
+error Boom
+
+struct Command:
+    value: int
+
+struct Event:
+    value: int
+
+struct Running:
+    name: str
+    step: Coroutine{args: [Command], return: Event}
+
+fn worker(seed: int, resume Command) -> Event:
+    command = yield Event {value: seed}
+    return Event {value: command.value + seed}
+
+fn make(seed: int) -> Coroutine{args: [Command], return: Event}:
+    coroutine {step} = worker(seed)
+    step
+
+fn empty_queue() -> MutableVector[Coroutine{args: [Command], return: Event}]:
+    mutable_vector::from_list([])
+
+fn boom(x: int) -> int errors Boom:
+    if x > 0:
+        fail Boom
+    x
+
+# mvLoopDecls: four suspended workers, seeds 1 to 4.
+fn q4() -> MutableVector[Coroutine{args: [Command], return: Event}]:
+    mutable_vector::from_list([make(1), make(2), make(3), make(4)])
+
+# mv-cow-struct-field: an unrestricted struct with a vector field.
+struct Capture:
+    events: MutableVector[str]
+    n: int
+
+# mv-receiver-places: a field path two structs deep.
+struct Inner:
+    v: MutableVector[int]
+
+struct Outer:
+    inner: Inner
+
+# mv-affine-struct-field: an affine vector as a struct field (State), and the
+# second program's one-field State (renamed QueueState).
+struct State:
+    name: str
+    queue: MutableVector[Coroutine{args: [Command], return: Event}]
+
+struct QueueState:
+    queue: MutableVector[Coroutine{args: [Command], return: Event}]
+
+# mv-generic: one untyped function serves unrestricted and affine vectors.
+# It lives here because an untyped function nested in a body and given an
+# affine argument is AffineGenericNestedUnsupported.
+fn size(xs) -> int:
+    mutable_vector::length(xs)
+
+# mv-loop-exits: the Tcl program's run(mode) and go(mode). Each mode leaves
+# the consuming loop differently when the second element (seed 2) comes up:
+# 1 continue, 2 break, 3 return, 4 fail Boom, and 5 moves the third element
+# into `keep` and continues.
+fn drain_exiting(mode: int) -> int errors Boom:
+    queue = q4()
+    keep = empty_queue()
+    xs = loop step in queue:
+        e = step(Command {value: 0})
+        if e.value == 2 and mode == 1:
+            continue
+        if e.value == 2 and mode == 2:
+            break
+        if e.value == 2 and mode == 3:
+            return 0 - keep.length()
+        if e.value == 2 and mode == 4:
+            fail Boom
+        if e.value == 3 and mode == 5:
+            keep.push(step)
+            continue
+        e.value
+    list::length(xs) * 10 + keep.length()
+
+fn exit_outcome(mode: int) -> int:
+    r = drain_exiting(mode):
+        on Boom:
+            -1
+    r
+
+# mv-context-installed-copy: a context struct whose member is a vector, and
+# the binding the suite installs it from (below, beside test::suite()).
+context struct CaptureIO:
+    output: MutableVector[str]
+
+fn write_text(text: str, context io: CaptureIO) -> unit:
+    io.output.push(text)
+
+fn count(context io: CaptureIO) -> int:
+    io.output.length()
+
+installed_io = CaptureIO {output: mutable_vector::from_list(["s0"])}
+
+# Reading a vector out as a List, for comparison.
+fn items(v: MutableVector[int]) -> List[int]:
+    loop x in v:
+        x
+
+fn texts(v: MutableVector[str]) -> List[str]:
+    loop x in v:
+        x
+
+# ---------------------------------------------------------------------------
+# A custom check: a rejection whose message wording is the property.
+
+# BODY's block must be rejected with diagnostic code EXPECTED and exactly the
+# message WORDING (the message without a location prefix).
+nomethod fn rejects_with_message(name: str, expected: compiler::DiagnosticCode, wording: str, body) -> unit:
+    fn check() -> test::Match:
+        actual = body():
+            on compiler::CompilerError {code, primary, message}:
+                verdict = test::diagnostic(expected, code, primary, message)
+                if not verdict.matched:
+                    return verdict
+                return test::equal(wording, message)
+        test::mismatch(wording, "the block was accepted", "")
+    test::case(name, check)
+
+# ---------------------------------------------------------------------------
+# The principal theorem (item 102)
+
+fn register_principal_tests():
+    # A scheduler: first and second move into the List and the List into
+    # the vector; take moves one continuation out, resuming it advances the
+    # same execution (seed 1 + 10), push would move it back (it completed),
+    # pop moves the other out (seed 2 + 20).
+    fn b_scheduler() errors compiler::CompilerError:
+        static compile:
+            fn schedule() -> List[int] errors IndexNotFound:
+                coroutine {step: first} = worker(1)
+                coroutine {step: second} = worker(2)
+                queue = mutable_vector::from_list([first, second])
+                step = queue.take(0)
+                event = step(Command {value: 10})
+                if not coroutine::done?(step):
+                    queue.push(step)
+                next = queue.pop()
+                result = next(Command {value: 20})
+                [event.value, result.value, queue.length()]
+            r = schedule():
+                on IndexNotFound:
+                    []
+            r
+    test::value("mv-principal-scheduler", [11, 22, 0], b_scheduler)
+
+    # The List literal and from_list move the continuations: a later use of
+    # one is UseAfterMove. (f is never called, as in the Tcl programs.)
+    fn b_element_moved() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int errors IndexNotFound:
+                coroutine {step: first} = worker(1)
+                coroutine {step: second} = worker(2)
+                queue = mutable_vector::from_list([first, second])
+                e = first(Command {value: 1})
+                1
+            0
+    test::rejects("mv-principal-moves/element-after-from-list", compiler::DiagnosticCode::UseAfterMove, b_element_moved)
+
+    # take moves one out, push moves it back in: the taken binding is moved.
+    fn b_taken_moved() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int errors IndexNotFound:
+                coroutine {step: first} = worker(1)
+                coroutine {step: second} = worker(2)
+                queue = mutable_vector::from_list([first, second])
+                step = queue.take(0)
+                queue.push(step)
+                e = step(Command {value: 1})
+                1
+            0
+    test::rejects("mv-principal-moves/taken-after-push", compiler::DiagnosticCode::UseAfterMove, b_taken_moved)
+
+    # The vector is affine: binding it elsewhere moves it.
+    fn b_vector_moved() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int errors IndexNotFound:
+                coroutine {step: first} = worker(1)
+                coroutine {step: second} = worker(2)
+                queue = mutable_vector::from_list([first, second])
+                other = queue
+                queue.length()
+            0
+    test::rejects("mv-principal-moves/vector-after-copy", compiler::DiagnosticCode::UseAfterMove, b_vector_moved)
+
+    # An unrestricted vector's copy is independent.
+    fn b_unrestricted() errors compiler::CompilerError:
+        static compile:
+            a = mutable_vector::from_list([1, 2, 3])
+            b = a
+            a.push(4)
+            [items(a), items(b)]
+    test::value("mv-principal-unrestricted", [[1, 2, 3, 4], [1, 2, 3]], b_unrestricted)
+
+# ---------------------------------------------------------------------------
+# Type and construction (items 3, 10-12, 20, 74)
+
+fn register_type_tests():
+    # MutableVector takes exactly one type argument, spelled MutableVector.
+    fn b_no_argument() errors compiler::CompilerError:
+        static compile:
+            fn f(v: MutableVector) -> int:
+                1
+            f(1)
+    test::rejects("mv-type-syntax/no-argument", compiler::DiagnosticCode::Type, b_no_argument)
+
+    fn b_lowercase() errors compiler::CompilerError:
+        static compile:
+            fn f(v: mutable_vector[int]) -> int:
+                1
+            f(1)
+    test::rejects("mv-type-syntax/lowercase", compiler::DiagnosticCode::Type, b_lowercase)
+
+    # from_list leaves an unrestricted List usable and unchanged by later
+    # pushes.
+    fn b_list_unchanged() errors compiler::CompilerError:
+        static compile:
+            xs = [1, 2]
+            v = mutable_vector::from_list(xs)
+            v.push(3)
+            [xs, items(v), list::length(xs)]
+    test::value("mv-construction/list-unchanged", [[1, 2], [1, 2, 3], 2], b_list_unchanged)
+
+    # The empty literal declared as MutableVector[T] (empty_queue) is the
+    # typed empty vector: an element can be pushed into it.
+    fn b_typed_empty() errors compiler::CompilerError:
+        static compile:
+            q = empty_queue()
+            q.push(make(1))
+            q.length()
+    test::value("mv-construction/typed-empty-push", 1, b_typed_empty)
+
+    # Undeclared, it is the proven-empty MutableVector[never]: nothing can be
+    # pushed into it.
+    fn b_never() errors compiler::CompilerError:
+        static compile:
+            v = mutable_vector::from_list([])
+            v.push(1)
+            1
+    test::rejects("mv-construction/never-admits-nothing", compiler::DiagnosticCode::Type, b_never)
+
+    # A pushed element must be proven admissible to the element type; the
+    # message says why (no widening, no run-time check).
+    fn b_push_str() errors compiler::CompilerError:
+        static compile:
+            v = mutable_vector::from_list([1])
+            v.push("s")
+            1
+    rejects_with_message("mv-element-type/push-message", compiler::DiagnosticCode::Type, "value of type str is not admissible to element type int of MutableVector[int] (facts: [-∞, +∞]): a MutableVector's element type is fixed by its type, and an element pushed or swapped in is never widened or checked at run time", b_push_str)
+
+    # So must a swapped-in one.
+    fn b_swap_bool() errors compiler::CompilerError:
+        static compile:
+            v = mutable_vector::from_list([1])
+            x = v.swap(0, true):
+                on IndexNotFound:
+                    0
+            1
+    test::rejects("mv-element-type/swap", compiler::DiagnosticCode::Type, b_swap_bool)
+
+# ---------------------------------------------------------------------------
+# Operations (items 16-30)
+
+# The bad indexes of mv-ops arrive as parameters (AT_BAD 5, TAKE_BAD -1 and
+# SWAP_BAD 1, on a one-element vector), so that the IndexNotFound they raise
+# is run-time behavior, never a constant the compiler could decide.
+fn register_operation_tests(at_bad: int, take_bad: int, swap_bad: int):
+    # length, empty?, at, push, pop, take, swap and clear on unrestricted
+    # elements; an empty pop and a bad index are the handleable
+    # IndexNotFound and change nothing.
+    fn b_ops() errors compiler::CompilerError:
+        static compile:
+            fn f() -> List[int] errors IndexNotFound:
+                v = mutable_vector::from_list([1, 2, 3, 4])
+                a = v.at(1)
+                t = v.take(1)
+                s = v.swap(0, 7)
+                p = v.pop()
+                n = v.length()
+                v.clear()
+                e = if v.empty?():
+                    1
+                else:
+                    0
+                [a, t, s, p, n, v.length(), e]
+            fn bad() -> List[int]:
+                v = mutable_vector::from_list([1])
+                a = v.at(at_bad):
+                    on IndexNotFound:
+                        -1
+                b = v.take(take_bad):
+                    on IndexNotFound:
+                        -2
+                c = v.swap(swap_bad, 9):
+                    on IndexNotFound:
+                        -3
+                v.clear()
+                d = v.pop():
+                    on IndexNotFound:
+                        -4
+                [a, b, c, d, v.length()]
+            r = f():
+                on IndexNotFound:
+                    []
+            [r, bad()]
+    test::value("mv-ops", [[2, 2, 1, 4, 2, 0, 1], [-1, -2, -3, -4, 0]], b_ops)
+
+    # take(i) keeps the relative order of the elements after i; take(0)
+    # repeatedly is a queue.
+    fn b_take_order() errors compiler::CompilerError:
+        static compile:
+            fn f() -> List[int] errors IndexNotFound:
+                v = mutable_vector::from_list([1, 2, 3, 4, 5])
+                a = v.take(2)
+                b = v.take(0)
+                v.push(6)
+                c = v.take(0)
+                [a, b, c, v.at(0), v.at(1), v.at(2), v.length()]
+            r = f():
+                on IndexNotFound:
+                    []
+            r
+    test::value("mv-take-order", [3, 1, 2, 4, 5, 6, 3], b_take_order)
+
+    # `==` of an affine vector is rejected statically.
+    fn b_affine_equality() errors compiler::CompilerError:
+        static compile:
+            q = empty_queue()
+            q == q
+    test::rejects("mv-show/affine-equality", compiler::DiagnosticCode::AffineEqualityUnsupported, b_affine_equality)
+
+# ---------------------------------------------------------------------------
+# Logical copies of unrestricted vectors (items 39, 43-46, 49, 69)
+
+fn register_copy_tests():
+    # A function mutating its parameter changes its own copy only; returning
+    # a vector and storing it in a List copy it logically.
+    fn b_calls() errors compiler::CompilerError:
+        static compile:
+            fn modify(v: MutableVector[int]) -> int:
+                v.push(4)
+                v.length()
+            fn keep(v: MutableVector[int]) -> List[MutableVector[int]]:
+                [v]
+            fn grow(v: MutableVector[int]) -> MutableVector[int]:
+                v.push(9)
+                v
+            a = mutable_vector::from_list([1, 2, 3])
+            n = modify(a)
+            xs = keep(a)
+            b = grow(a)
+            a.push(5)
+            b.push(6)
+            kept = loop x in xs:
+                items(x)
+            [n, items(a), kept, items(b)]
+    test::value("mv-cow-calls", [4, [1, 2, 3, 5], [[1, 2, 3]], [1, 2, 3, 9, 6]], b_calls)
+
+    # A struct with a vector field stays unrestricted: copying the struct
+    # copies the vector logically, `s.events.push(x)` updates that field's
+    # place, and `snap = s.events` is a snapshot.
+    fn b_struct_field() errors compiler::CompilerError:
+        static compile:
+            cap = Capture {events: mutable_vector::from_list(["x0"]), n: 1}
+            cap2 = cap
+            cap.events.push("y0")
+            snap = cap.events
+            cap.events.push("z0")
+            cap2.events.clear()
+            [texts(cap.events), cap.n, texts(cap2.events), cap2.n, texts(snap)]
+    test::value("mv-cow-struct-field", [["x0", "y0", "z0"], 1, [], 1, ["x0", "y0"]], b_struct_field)
+
+    # An element read out of a List is a logical copy.
+    fn b_list_element() errors compiler::CompilerError:
+        static compile:
+            fn f() -> List[int] errors IndexNotFound:
+                xs = [mutable_vector::from_list([1]), mutable_vector::from_list([2])]
+                v = list::at(xs, 0)
+                v.push(5)
+                w = list::at(xs, 0)
+                [v.length(), w.length()]
+            r = f():
+                on IndexNotFound:
+                    []
+            r
+    test::value("mv-cow-list-element", [2, 1], b_list_element)
+
+    # An inner vector read (at) or taken out of an outer one is a logical
+    # copy: mutating it never changes the element still stored.
+    fn b_nested() errors compiler::CompilerError:
+        static compile:
+            fn f() -> List[int] errors IndexNotFound:
+                outer = mutable_vector::from_list([mutable_vector::from_list([1]), mutable_vector::from_list([2, 3])])
+                inner = outer.at(0)
+                inner.push(10)
+                taken = outer.take(1)
+                taken.push(20)
+                again = outer.at(0)
+                [inner.length(), taken.length(), again.length(), outer.length()]
+            r = f():
+                on IndexNotFound:
+                    []
+            r
+    test::value("mv-cow-nested", [2, 3, 1, 1], b_nested)
+
+    # A loop over an unrestricted vector iterates a snapshot.
+    fn b_loop() errors compiler::CompilerError:
+        static compile:
+            a = mutable_vector::from_list([1, 2, 3])
+            xs = loop x in a:
+                a.push(x * 10)
+                x
+            [xs, items(a)]
+    test::value("mv-cow-loop", [[1, 2, 3], [1, 2, 3, 10, 20, 30]], b_loop)
+
+    # A copy shares nothing observable: after b = a, three pushes to a
+    # leave b at its 1000 elements.
+    fn b_evidence() errors compiler::CompilerError:
+        static compile:
+            fn ints() -> MutableVector[int]:
+                mutable_vector::from_list([])
+            fn fill(n: int) -> MutableVector[int]:
+                v = ints()
+                loop i from 0 to n:
+                    v.push(i)
+                v
+            fn f() -> int:
+                a = fill(1000)
+                b = a
+                a.push(1)
+                a.push(2)
+                a.push(3)
+                a.length() + b.length()
+            f()
+    test::value("mv-cow-evidence", 2003, b_evidence)
+
+# Installing a context copies the value logically: the binding it came from
+# (installed_io, ["s0"]) does not observe the context's later writes. The
+# writes need the context, so they run here; the body compares.
+fn register_context_tests():
+    write_text("a0")
+    observed = [count(), installed_io.output.length()]
+    fn b_installed_copy() errors compiler::CompilerError:
+        static compile:
+            observed
+    test::value("mv-context-installed-copy", [2, 1], b_installed_copy)
+
+# mv-cow-fresh-results' prelude: a function's result built in its own place
+# (build), returned unmutated (id), mutated (keep), or either (pick).
+fn register_fresh_result_tests():
+    fn ints() -> MutableVector[int]:
+        mutable_vector::from_list([])
+    fn build(n: int) -> MutableVector[int]:
+        v = ints()
+        loop i from 0 to n:
+            v.push(i)
+        v
+    fn id(v: MutableVector[int]) -> MutableVector[int]:
+        v
+    fn keep(v: MutableVector[int]) -> MutableVector[int]:
+        v.push(1)
+        v
+    fn pick(c: bool, v: MutableVector[int]) -> MutableVector[int]:
+        w = build(2)
+        if c:
+            return w
+        v
+
+    fn b_fresh() errors compiler::CompilerError:
+        static compile:
+            w = build(5)
+            w.push(9)
+            w.length()
+    test::value("mv-cow-fresh-results/fresh-local", 6, b_fresh)
+
+    # A result that may be the caller's own vector never aliases it.
+    fn b_identity() errors compiler::CompilerError:
+        static compile:
+            a = build(3)
+            w = id(a)
+            w.push(9)
+            [a.length(), w.length()]
+    test::value("mv-cow-fresh-results/identity", [3, 4], b_identity)
+
+    fn b_mutated() errors compiler::CompilerError:
+        static compile:
+            a = build(3)
+            w = keep(a)
+            w.push(9)
+            [a.length(), w.length()]
+    test::value("mv-cow-fresh-results/mutated-parameter", [3, 5], b_mutated)
+
+    # The last `pick(true, a)` passes a's last use: whichever path returns,
+    # a never changes.
+    fn b_maybe() errors compiler::CompilerError:
+        static compile:
+            a = build(3)
+            w = pick(false, a)
+            w.push(9)
+            x = pick(true, a)
+            x.push(1)
+            [a.length(), w.length(), x.length()]
+    test::value("mv-cow-fresh-results/maybe-unmutated", [3, 4, 3], b_maybe)
+
+fn register_generic_result_tests():
+    # A generic function returning its argument -- bare, or in an anonymous
+    # struct -- is copied on entry to the caller's place; the argument never
+    # changes.
+    fn b_identity() errors compiler::CompilerError:
+        static compile:
+            fn v3() -> MutableVector[int]:
+                mutable_vector::from_list([1, 2, 3])
+            fn same(x):
+                x
+            fn wrap(x):
+                {data: x}
+            a = v3()
+            b = same(a)
+            b.push(9)
+            [a.length(), b.length()]
+    test::value("mv-cow-generic-results/identity", [3, 4], b_identity)
+
+    fn b_wrapped() errors compiler::CompilerError:
+        static compile:
+            fn v3() -> MutableVector[int]:
+                mutable_vector::from_list([1, 2, 3])
+            fn same(x):
+                x
+            fn wrap(x):
+                {data: x}
+            fn f() -> List[int]:
+                a = v3()
+                s = wrap(a)
+                s.data.push(9)
+                [a.length(), s.data.length()]
+            f()
+    test::value("mv-cow-generic-results/wrapped", [3, 4], b_wrapped)
+
+fn register_indirect_callee_tests():
+    # A function also passed as a value copies its mutated parameter on
+    # entry: the caller's vector never changes.
+    fn b_grow() errors compiler::CompilerError:
+        static compile:
+            fn v3() -> MutableVector[int]:
+                mutable_vector::from_list([1, 2, 3])
+            fn grow(xs: MutableVector[int]) -> int:
+                xs.push(9)
+                xs.length()
+            fn apply(g: Fn{args: [MutableVector[int]], return: int}, v: MutableVector[int]) -> int:
+                g(v)
+            fn f() -> List[int]:
+                a = v3()
+                n = apply(grow, a)
+                m = grow(a)
+                [a.length(), n, m]
+            f()
+    test::value("mv-cow-indirect-callee/mutating-parameter", [3, 4, 4], b_grow)
+
+    # A result it may return unmutated is copied by the caller.
+    fn b_pick() errors compiler::CompilerError:
+        static compile:
+            fn v3() -> MutableVector[int]:
+                mutable_vector::from_list([1, 2, 3])
+            fn pick(c: bool, x: MutableVector[int]) -> MutableVector[int]:
+                if c:
+                    return v3()
+                x
+            fn via(g: Fn{args: [bool, MutableVector[int]], return: MutableVector[int]}, v: MutableVector[int]) -> int:
+                g(true, v).length()
+            fn f() -> List[int]:
+                a = v3()
+                b = pick(false, a)
+                b.push(7)
+                n = via(pick, a)
+                [a.length(), b.length(), n]
+            f()
+    test::value("mv-cow-indirect-callee/unmutated-result", [3, 4, 3], b_pick)
+
+    # An affine vector entering it moves.
+    fn b_hire() errors compiler::CompilerError:
+        static compile:
+            fn hire(q: MutableVector[Coroutine{args: [Command], return: Event}]) -> MutableVector[Coroutine{args: [Command], return: Event}]:
+                q.push(make(5))
+                q
+            fn via(g: Fn{args: [MutableVector[Coroutine{args: [Command], return: Event}]], return: MutableVector[Coroutine{args: [Command], return: Event}]}, q: MutableVector[Coroutine{args: [Command], return: Event}]) -> MutableVector[Coroutine{args: [Command], return: Event}]:
+                g(q)
+            fn f() -> int:
+                q = mutable_vector::from_list([make(1), make(2)])
+                r = via(hire, q)
+                r.length()
+            f()
+    test::value("mv-cow-indirect-callee/affine", 3, b_hire)
+
+# ---------------------------------------------------------------------------
+# Places (items 13-15, 76)
+
+fn register_receiver_tests():
+    # Locals, parameters and struct field paths are places; the binding
+    # stays usable after each mutation.
+    fn b_places() errors compiler::CompilerError:
+        static compile:
+            fn param(v: MutableVector[int]) -> int:
+                v.push(1)
+                v.push(2)
+                v.length()
+            o = Outer {inner: Inner {v: mutable_vector::from_list([])}}
+            o.inner.v.push(5)
+            o.inner.v.push(6)
+            local = mutable_vector::from_list([9])
+            local.push(8)
+            [param(local), o.inner.v.length(), local.length()]
+    test::value("mv-receiver-places", [4, 2, 2], b_places)
+
+    # A mutation of a call's result is MutablePlaceReceiver: the updated
+    # vector would be lost (the message says so).
+    fn b_call_result() errors compiler::CompilerError:
+        static compile:
+            fn make() -> MutableVector[int]:
+                mutable_vector::from_list([1])
+            make().push(2)
+            1
+    rejects_with_message("mv-receiver-temporary/call-result", compiler::DiagnosticCode::MutablePlaceReceiver, "the receiver of mutable_vector::push is not a place: it is a temporary value, so the updated vector would be lost (a MutableVector is a value; bind it to a name, mutate the name, and use the name afterwards)", b_call_result)
+
+    # So is a mutation of a List element ...
+    fn b_list_element() errors compiler::CompilerError:
+        static compile:
+            xs = [mutable_vector::from_list([1])]
+            x = list::at(xs, 0).pop():
+                on IndexNotFound:
+                    0
+            1
+    test::rejects("mv-receiver-temporary/list-element", compiler::DiagnosticCode::MutablePlaceReceiver, b_list_element)
+
+    # ... and of a binding that is not a vector.
+    fn b_not_vector() errors compiler::CompilerError:
+        static compile:
+            fn f(x: str) -> int:
+                y = x
+                mutable_vector::push(y, 1)
+                1
+            f("s0")
+    test::rejects("mv-receiver-temporary/not-a-vector", compiler::DiagnosticCode::MutablePlaceReceiver, b_not_vector)
+
+    # A nested function may not mutate a vector of its enclosing function
+    # ...
+    fn b_mutates_enclosing() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                v = mutable_vector::from_list([1])
+                fn g() -> int:
+                    v.push(3)
+                    1
+                g()
+            f()
+    test::rejects("mv-receiver-captured/mutates-enclosing", compiler::DiagnosticCode::MutablePlaceReceiver, b_mutates_enclosing)
+
+    # ... nor capture one its enclosing function mutates ...
+    fn b_captures_mutated() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                v = mutable_vector::from_list([1])
+                fn g() -> int:
+                    v.length()
+                v.push(2)
+                g()
+            f()
+    test::rejects("mv-receiver-captured/captures-mutated", compiler::DiagnosticCode::MutablePlaceCapture, b_captures_mutated)
+
+    # ... but may read one nothing mutates.
+    fn b_reads_unmutated() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                v = mutable_vector::from_list([1])
+                fn g() -> int:
+                    v.length()
+                g()
+            f()
+    test::value("mv-receiver-captured/reads-unmutated", 1, b_reads_unmutated)
+
+# ---------------------------------------------------------------------------
+# Affine vectors (items 7, 8, 12, 21-36, 40-42, 46, 47, 71, 72)
+
+fn register_affine_tests():
+    # An untyped function given a vector is specialized by its static type:
+    # one size(xs) serves an unrestricted and an affine vector.
+    fn b_generic() errors compiler::CompilerError:
+        static compile:
+            [size(mutable_vector::from_list([1, 2, 3])), size(mutable_vector::from_list([make(1)]))]
+    test::value("mv-generic", [3, 1], b_generic)
+
+    # Pushing an affine element moves it: the pushed binding is
+    # UseAfterMove while the vector stays usable.
+    fn b_push_moved() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                queue = empty_queue()
+                coroutine {step} = worker(1)
+                queue.push(step)
+                e = step(Command {value: 1})
+                queue.length()
+            f()
+    test::rejects("mv-affine-push-moves/use-after-move", compiler::DiagnosticCode::UseAfterMove, b_push_moved)
+
+    fn b_push_usable() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                queue = empty_queue()
+                coroutine {step} = worker(1)
+                queue.push(step)
+                queue.length()
+            f()
+    test::value("mv-affine-push-moves/vector-usable", 1, b_push_usable)
+
+    # from_list of an affine List consumes the List; the vector owns every
+    # element.
+    fn b_from_list_moved() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                xs = [make(1), make(2)]
+                v = mutable_vector::from_list(xs)
+                list::length(xs)
+            f()
+    test::rejects("mv-affine-from-list/use-after-move", compiler::DiagnosticCode::UseAfterMove, b_from_list_moved)
+
+    fn b_from_list_owns() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                xs = [make(1), make(2)]
+                v = mutable_vector::from_list(xs)
+                v.length()
+            f()
+    test::value("mv-affine-from-list/value", 2, b_from_list_owns)
+
+    # pop and take move exactly one element out, swap moves the replacement
+    # in and the old element out; a resumed element is the same execution.
+    fn b_pop_take_swap() errors compiler::CompilerError:
+        static compile:
+            fn f() -> List[int] errors IndexNotFound:
+                q = mutable_vector::from_list([make(1), make(2), make(3)])
+                a = q.pop()
+                b = q.take(0)
+                e1 = b(Command {value: 10})
+                old = q.swap(0, b)
+                e2 = old(Command {value: 20})
+                [e1.value, e2.value, q.length()]
+            r = f():
+                on IndexNotFound:
+                    []
+            r
+    test::value("mv-affine-pop-take-swap", [11, 22, 1], b_pop_take_swap)
+
+    # A swap in statement position: the vector keeps its length.
+    fn b_swap_discarded() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                q = mutable_vector::from_list([make(1), make(2)])
+                q.swap(0, make(3)):
+                    on IndexNotFound:
+                        make(4)
+                q.length()
+            f()
+    test::value("mv-affine-swap-discarded", 2, b_swap_discarded)
+
+    # clear empties the vector, which stays usable.
+    fn b_clear() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                q = mutable_vector::from_list([make(1), make(2), make(3)])
+                q.clear()
+                q.push(make(5))
+                n = q.length()
+                n
+            f()
+    test::value("mv-affine-clear", 1, b_clear)
+
+    # A vector dies with live elements: of coroutines, and of affine
+    # structs.
+    fn b_drop_coroutines() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                q = mutable_vector::from_list([make(1), make(2), make(3)])
+                1
+            f()
+    test::value("mv-affine-drop-order/coroutines", 1, b_drop_coroutines)
+
+    fn b_drop_structs() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                q = mutable_vector::from_list([Running {name: "a0", step: make(1)}, Running {name: "b0", step: make(2)}])
+                1
+            f()
+    test::value("mv-affine-drop-order/structs", 1, b_drop_structs)
+
+    # A vector of affine structs: push moves the whole struct (even its
+    # unrestricted field is then UseAfterMove); pop moves one out, and
+    # destructuring it continues the same coroutine.
+    fn b_struct_pushed() errors compiler::CompilerError:
+        static compile:
+            fn f() -> str errors IndexNotFound:
+                running = Running {name: "w0", step: make(7)}
+                queue = mutable_vector::from_list([Running {name: "a0", step: make(8)}])
+                queue.push(running)
+                running.name
+            r = f():
+                on IndexNotFound:
+                    ""
+            r
+    test::rejects("mv-affine-struct-elements/use-after-move", compiler::DiagnosticCode::UseAfterMove, b_struct_pushed)
+
+    fn b_struct_popped() errors compiler::CompilerError:
+        static compile:
+            fn f() -> str errors IndexNotFound:
+                running = Running {name: "w0", step: make(7)}
+                queue = mutable_vector::from_list([Running {name: "a0", step: make(8)}])
+                queue.push(running)
+                item = queue.pop()
+                {step, name} = item
+                e = step(Command {value: 1})
+                name
+            r = f():
+                on IndexNotFound:
+                    ""
+            r
+    test::value("mv-affine-struct-elements/pop-destructure", "w0", b_struct_popped)
+
+    # An affine vector as a struct field: the field is a mutable place, the
+    # struct moves whole, and a consuming destructuring takes the vector out
+    # (2 elements, the first resumed with 5: 2 * 100 + 6) ...
+    fn b_struct_field() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int errors IndexNotFound:
+                s = State {name: "s0", queue: mutable_vector::from_list([make(1)])}
+                s.queue.push(make(2))
+                n = s.queue.length()
+                moved = s
+                {queue} = moved
+                first = queue.take(0)
+                e = first(Command {value: 5})
+                n * 100 + e.value
+            r = f():
+                on IndexNotFound:
+                    0
+            r
+    test::value("mv-affine-struct-field/value", 206, b_struct_field)
+
+    # ... and only a destructuring: reading the field out is rejected.
+    fn b_field_move() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                s = QueueState {queue: empty_queue()}
+                q = s.queue
+                1
+            f()
+    test::rejects("mv-affine-struct-field/field-move", compiler::DiagnosticCode::AffineFieldMoveRequiresDestructure, b_field_move)
+
+    # A List of affine vectors is affine: it moves whole; copying an element
+    # out is still rejected.
+    fn b_list_of_vectors() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                qs = [mutable_vector::from_list([make(1)]), mutable_vector::from_list([make(2), make(3)])]
+                other = qs
+                list::length(other)
+            f()
+    test::value("mv-affine-list-of-vectors/value", 2, b_list_of_vectors)
+
+    fn b_list_at() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                qs = [empty_queue()]
+                q = list::at(qs, 0):
+                    on IndexNotFound:
+                        empty_queue()
+                1
+            f()
+    test::rejects("mv-affine-list-of-vectors/at", compiler::DiagnosticCode::AffineListOperationUnsupported, b_list_at)
+
+    # An affine vector never becomes `any`: neither an argument for a
+    # parameter declared any nor a result declared any.
+    fn b_erased_parameter() errors compiler::CompilerError:
+        static compile:
+            fn g(x: any) -> int:
+                1
+            fn f() -> int:
+                g(empty_queue())
+            f()
+    test::rejects("mv-affine-erasure/parameter", compiler::DiagnosticCode::AffineErasureUnsupported, b_erased_parameter)
+
+    fn b_erased_result() errors compiler::CompilerError:
+        static compile:
+            fn f() -> any:
+                empty_queue()
+            f()
+            1
+    test::rejects("mv-affine-erasure/result", compiler::DiagnosticCode::AffineErasureUnsupported, b_erased_result)
+
+    # 1000 suspended coroutines pushed through many capacity changes, then
+    # drained: all of them (keep 2000), or up to the one whose seed reaches
+    # keep 500.
+    fn b_growth() errors compiler::CompilerError:
+        static compile:
+            fn grow(n: int, keep: int) -> int:
+                queue = empty_queue()
+                loop i from 0 to n:
+                    coroutine {step} = worker(i)
+                    queue.push(step)
+                total = loop step in queue:
+                    if step(Command {value: 0}).value >= keep:
+                        break
+                    1
+                list::length(total)
+            [grow(1000, 2000), grow(1000, 500)]
+    test::value("mv-affine-growth", [1000, 500], b_growth)
+
+    # Suspended coroutines held only as vector elements through growth,
+    # pop/take/swap and a consuming loop with an early exit.
+    fn b_churn() errors compiler::CompilerError:
+        static compile:
+            fn churn(n: int) -> int errors IndexNotFound:
+                q = empty_queue()
+                loop i from 0 to n:
+                    q.push(make(i))
+                a = q.take(0)
+                b = q.pop()
+                old = q.swap(1, a)
+                q.push(b)
+                e = old(Command {value: 1})
+                xs = loop step in q:
+                    if step(Command {value: 2}).value > 10:
+                        break
+                    1
+                e.value + list::length(xs)
+            r = churn(40):
+                on IndexNotFound:
+                    0
+            r
+    test::value("mv-affine-gc-stress", 11, b_churn)
+
+# mv-affine-whole-moves' typed pass-through and consumer.
+fn register_whole_move_tests():
+    fn pass(values: MutableVector[Coroutine{args: [Command], return: Event}]) -> MutableVector[Coroutine{args: [Command], return: Event}]:
+        values
+    fn consume(queue: MutableVector[Coroutine{args: [Command], return: Event}]) -> int:
+        queue.length()
+
+    # An affine vector moves whole through a binding, an argument and a
+    # result ...
+    fn b_moves() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                q = mutable_vector::from_list([make(1), make(2)])
+                r = pass(q)
+                s = r
+                consume(s)
+            f()
+    test::value("mv-affine-whole-moves/value", 2, b_moves)
+
+    # ... and the old owner is UseAfterMove after each.
+    fn b_after_pass() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                q = empty_queue()
+                r = pass(q)
+                q.length()
+            f()
+    test::rejects("mv-affine-whole-moves/after-pass", compiler::DiagnosticCode::UseAfterMove, b_after_pass)
+
+    fn b_after_consume() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                q = empty_queue()
+                n = consume(q)
+                q.push(make(1))
+                n
+            f()
+    test::rejects("mv-affine-whole-moves/after-consume", compiler::DiagnosticCode::UseAfterMove, b_after_consume)
+
+    fn b_after_binding() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                q = empty_queue()
+                w = q
+                q.length()
+            f()
+    test::rejects("mv-affine-whole-moves/after-binding", compiler::DiagnosticCode::UseAfterMove, b_after_binding)
+
+# An affine binding moved on some paths only.
+fn register_path_release_tests():
+    # Moved into the vector on one branch: the vector has it on that path
+    # only.
+    fn b_conditional_push() errors compiler::CompilerError:
+        static compile:
+            fn f(c: bool) -> int:
+                queue = empty_queue()
+                coroutine {step} = worker(1)
+                if c:
+                    queue.push(step)
+                queue.length()
+            [f(true), f(false)]
+    test::value("mv-path-release/conditional-push", [1, 0], b_conditional_push)
+
+    # Moved into a join's value on one branch: the join's value is the
+    # execution that branch chose (seed 1 or 2, resumed with 5).
+    fn b_join() errors compiler::CompilerError:
+        static compile:
+            fn f(c: bool) -> int:
+                coroutine {step} = worker(1)
+                x = if c:
+                    step
+                else:
+                    make(2)
+                e = x(Command {value: 5})
+                e.value
+            [f(true), f(false)]
+    test::value("mv-path-release/join", [6, 7], b_join)
+
+    # A path no statement ends -- a counted loop's iterations that do not
+    # push -- is AffinePathReleaseUnsupported ...
+    fn b_counted_loop() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                v = empty_queue()
+                s = make(1)
+                loop i from 0 to 3:
+                    if i == 1:
+                        v.push(s)
+                        break
+                1
+            f()
+    test::rejects("mv-path-release/counted-loop-break", compiler::DiagnosticCode::AffinePathReleaseUnsupported, b_counted_loop)
+
+    # ... while a bare loop that pushes and breaks on its first pass is
+    # accepted.
+    fn b_bare_loop() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                v = empty_queue()
+                s = make(1)
+                i = 0
+                loop:
+                    if i == 0:
+                        v.push(s)
+                        break
+                    break
+                v.length()
+            f()
+    test::value("mv-path-release/bare-loop-break", 1, b_bare_loop)
+
+# ---------------------------------------------------------------------------
+# Consuming iteration (items 50-56)
+
+# mv-loop-exits: the consuming loop of drain_exiting left in MODE; its
+# outcome EXPECTED (the collected values' count times ten plus what `keep`
+# owns, or -1 for Boom). MODE is a parameter: the exit is run-time
+# behavior.
+fn register_loop_exit(name: str, mode: int, expected: int):
+    fn b_exit() errors compiler::CompilerError:
+        static compile:
+            exit_outcome(mode)
+    test::value(name, expected, b_exit)
+
+fn register_consuming_loop_tests():
+    register_loop_exit("mv-loop-exits/continue", 1, 30)
+    register_loop_exit("mv-loop-exits/break", 2, 10)
+    register_loop_exit("mv-loop-exits/return", 3, 0)
+    register_loop_exit("mv-loop-exits/fail", 4, -1)
+    register_loop_exit("mv-loop-exits/moved-on", 5, 31)
+
+    # A declared error propagated out of a consuming loop's body (the
+    # second element's boom(2 - 2) is fine, the third's boom(1) fails).
+    fn b_error_propagation() errors compiler::CompilerError:
+        static compile:
+            fn run() -> int errors Boom:
+                xs = loop step in q4():
+                    e = step(Command {value: 0})
+                    n = boom(e.value - 2)
+                    n
+                list::length(xs)
+            fn go() -> int:
+                r = run():
+                    on Boom:
+                        -1
+                r
+            go()
+    test::value("mv-loop-error-propagation", -1, b_error_propagation)
+
+    # A consuming loop over a parameter that breaks at the third element.
+    fn b_drain() errors compiler::CompilerError:
+        static compile:
+            fn drain(q: MutableVector[Coroutine{args: [Command], return: Event}]) -> int:
+                loop step in q:
+                    if step(Command {value: 1}).value > 2:
+                        break
+                1
+            drain(q4())
+    test::value("mv-loop-native", 1, b_drain)
+
+    # A consuming loop whose body produces the affine elements themselves
+    # would collect them into a List: rejected.
+    fn b_collect_affine() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                xs = loop step in q4():
+                    step
+                1
+            f()
+    test::rejects("mv-loop-collect-affine", compiler::DiagnosticCode::AffineListOperationUnsupported, b_collect_affine)
+
+# ---------------------------------------------------------------------------
+
+fn register_mutable_vector_tests():
+    register_principal_tests()
+    register_type_tests()
+    register_operation_tests(5, -1, 1)
+    register_copy_tests()
+    register_context_tests()
+    register_fresh_result_tests()
+    register_generic_result_tests()
+    register_indirect_callee_tests()
+    register_receiver_tests()
+    register_affine_tests()
+    register_whole_move_tests()
+    register_path_release_tests()
+    register_consuming_loop_tests()
+
+with context test::suite()
+with context installed_io
+register_mutable_vector_tests()
+test::report()

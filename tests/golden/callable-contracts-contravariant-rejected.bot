@@ -1,0 +1,57 @@
+# callable-contracts-contravariant-rejected.bot -- tests/structural-contract-completions.test's
+# scc-contravariant-rejected in a program whose erased-callable contract is
+# what contravariant erasure puts there and nothing else.
+#
+# call1 calls its untyped parameter f. Given the structural type
+# Fn{args: [Fn{args: [int], return: int, errors: [E1]}, int], return: any,
+# errors: []}, call1 may be passed, through that type, a callable that fails
+# E1, and its untyped f forgets that: contravariant erasure, which puts E1
+# into the program's erased-callable contract -- what call1 is charged for
+# calling f, which its contract of no error does not admit: Type where call1
+# acquires the type (the field value), for E1. Before the boundary was
+# checked the program was accepted and E1 escaped at run time.
+#
+# Why a suite of its own: callable-contracts.bot passes C1-raising callables
+# into untyped parameters directly, so its erased-callable contract has C1
+# whatever contravariant erasure adds or fails to add, and the test there
+# could not tell whether contravariant erasure is counted at all
+# (audit/structural-contracts/tools/mutants.txt's
+# contravariant-erasure-dropped went unnoticed there). This program, like
+# the Tcl test's, passes no callable to an untyped parameter except through
+# that structural type. It is apart from callable-contracts-contravariant.bot
+# (the admitted program) as well: were this program accepted, its driver
+# go(Job {run: call1}, 1) would raise E1 at run time, which nothing
+# handles, and abort the suite holding it -- this one, never the admitted
+# program's.
+#
+# Imports: compiler and test (every suite).
+import compiler
+import test
+
+error E1
+
+# sccContravariant's Job with a contract of no error (ERRORS []).
+struct Job:
+    run: Fn{args: [Fn{args: [int], return: int, errors: [E1]}, int], return: any, errors: []}
+
+fn register_scc_contravariant_rejected_tests():
+    # scc-contravariant-rejected: call1 calls its untyped parameter; given
+    # Fn{args: [Fn{... errors: [E1]}, int], errors: []} it is rejected (Type
+    # at the field, for E1), where it used to escape at run time.
+    fn contravariant_rejected() errors compiler::CompilerError:
+        static compile:
+            fn raise1(x: int) -> int errors E1:
+                if x > 0:
+                    fail E1
+                x
+            fn call1(f, x):
+                f(x)
+            fn go(j: Job, k: int):
+                (j.run)(raise1, k)
+            go(Job {run: call1}, 1)
+    test::rejects_at("scc-contravariant-rejected", compiler::DiagnosticCode::Type, 51, 26, contravariant_rejected)
+    test::rejects_containing("scc-contravariant-rejected/identity", compiler::DiagnosticCode::Type, "declared error \"E1\"", contravariant_rejected)
+
+with context test::suite()
+register_scc_contravariant_rejected_tests()
+test::report()

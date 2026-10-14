@@ -1,0 +1,64 @@
+# stdlib-namespaces-entry-members.bot -- an entry program belongs to no
+# namespace (STDLIB-NAMESPACES.md), as a source-level specification: its own
+# top-level definitions may take a name an intrinsic has in some namespace
+# (a function `at`, like list::at; a binding `set`, like mutable_array::set),
+# and such a definition neither replaces nor overloads the intrinsic: a plain
+# call means the program's own definition, the qualified spelling still the
+# intrinsic. Only a module file of the intrinsic's own namespace is
+# protected (the Tcl suite's ns-protect-* tests: a library fixture is not a
+# suite).
+#
+# Ported from tests/stdlib-namespaces.test (ns-entry-program-is-in-no-namespace,
+# ns-local-names-are-unrelated), which stays authoritative:
+# audit/golden/migration/fragments/stdlib-namespaces-entry-members.tsv maps
+# both. A suite of its own: these definitions are the entry program's own,
+# at its top level, as in the Tcl programs, and a top-level `at` is a method
+# candidate in every block of its file, so a file holding it cannot also
+# hold stdlib-namespaces.bot's `.at` method calls (they would be ambiguous).
+#
+# Imports: compiler and test (the framework) and list (the intrinsics
+# list::at and list::length beside the program's own definitions; the Tcl
+# programs of the function and binding cases import nothing, those of the
+# other two import list).
+import compiler
+import list
+import test
+
+# The entry program's own definitions: a function named like the intrinsic
+# list::at, a binding named like the intrinsic mutable_array::set, and an
+# ordinary function over list::length.
+fn at(xs, i):
+    "mine"
+
+set = 3
+
+fn second(xs):
+    list::length(xs)
+
+fn register_entry_member_tests():
+    # ns-entry-program-is-in-no-namespace: the entry program may define a
+    # function and a binding whose names intrinsics use in some namespace,
+    # and its functions call the namespaces' members as any code does.
+    fn b_function() errors compiler::CompilerError:
+        static compile:
+            [at([4, 5], 0)]
+    test::value("ns-entry-program-is-in-no-namespace/function", ["mine"], b_function)
+    fn b_binding() errors compiler::CompilerError:
+        static compile:
+            [set]
+    test::value("ns-entry-program-is-in-no-namespace/binding", [3], b_binding)
+    fn b_module_member_call() errors compiler::CompilerError:
+        static compile:
+            [second([4, 5])]
+    test::value("ns-entry-program-is-in-no-namespace/module-member-call", [2], b_module_member_call)
+
+    # ns-local-names-are-unrelated: the program's own `at` neither replaces
+    # nor overloads list::at.
+    fn b_beside_the_intrinsic() errors compiler::CompilerError:
+        static compile:
+            [at([1], 0), list::at([7], 0)]
+    test::value("ns-local-names-are-unrelated", ["mine", 7], b_beside_the_intrinsic)
+
+with context test::suite()
+register_entry_member_tests()
+test::report()

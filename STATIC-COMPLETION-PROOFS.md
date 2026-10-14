@@ -249,8 +249,9 @@ facts" above for why). Two entry points:
   general mechanism for propagating an exact scalar constant of *any* kind
   (not just Int) through an immutable binding -- the motivating case is a
   literal `UnicodeChar` (item 22), but nothing here is UnicodeChar-specific.
-- **Exact List elements** (`ctx.exactList`, `bindingId -> {value ...}`):
-  the List-typed counterpart, for small-literal-list proof (items 36-40).
+- **Exact List elements** (`ctx.exactList`, `bindingId -> {list value ...}`):
+  the List-typed counterpart, for small-literal-list proof (items 36-40);
+  `{list}` is the empty literal, a fact of its own, never "no fact".
   Both of these cross an exact call boundary the same way an Int `Range`
   fact already does (`ArgExactValues`/`ArgExactLists`, seeded into the
   callee's own fresh `ctx` by `analyzeBlock`) -- this is what lets
@@ -469,12 +470,23 @@ item 73): later elements are never analyzed, exactly mirroring what would
 actually happen at runtime. An empty literal list never executes the body
 at all (item 92): trivially always completes normally, no errors, with no
 container-variance special-casing needed (this is a proof-time fact about
-an already-typed `List[UnicodeChar]` value, not a new type). This is
+an already-typed `List[UnicodeChar]` value, not a new type). The empty
+literal is a fact of its own (`LiteralListOf`'s `{list}`: exactly zero
+elements), never the absence of one: as the loop's iterable and threaded
+into a callee's parameter alike, so `each([])` needs no handler for what
+its loop body raises, while a parameter merely typed `List` still knows
+nothing and still does (`tests/errors.test`'s `errors-*-literal-loop-*`,
+`errors-dynamic-list-loop-needs-handler`). Its size, zero, is known the
+same way (`list::length`, a bounds check): a read of the empty literal
+through an exact call always fails, so a handled one is KNOWN-ERROR,
+exactly as a handled `list::at([], 0)` itself
+(`errors-empty-literal-read-through-call-known-error`). This is
 general, not `byte::set`-specific: the same `list`-native-call recognition
 and per-element walk apply to any `loop x in [literal, ...]:` shape,
 whatever fallible calls its body happens to make.
 
 ```
+byte::set([])                   -> effectiveErrors {} (no element)
 byte::set(['A'])                -> effectiveErrors {} (65, safe)
 byte::set(['é'])                -> effectiveErrors {} (233, safe)
 byte::set(['ÿ'])                -> effectiveErrors {} (255, safe)
@@ -483,6 +495,29 @@ byte::set(['😀'])               -> KNOWN-ERROR (128512, guaranteed AboveRange)
 byte::set(['A', 'Ā', 'B'])      -> KNOWN-ERROR at 'Ā'; 'B' never analyzed
 byte::set(['-', '.', '_', '~']) -> effectiveErrors {}, no handler needed
 ```
+
+## Loop domains
+
+A loop's iteration domain -- a `listloop`'s `iterable` (a consuming loop
+over a `MutableVector`/`MutableArray` is a listloop too), a `countloop`'s
+`start` and `end`, a `lockloop`'s operands in written order
+(`hir::loopOperands`) -- runs once, in the enclosing body, before the first
+iteration, exactly like the statements before the loop.
+`hir::completions::LoopDomain` walks it so, ahead of everything the loop's
+own proof considers (the literal-list fact, the per-element walk, the body):
+what an operand raises is charged and diagnosed where it is written, and an
+operand that cannot complete normally makes the loop itself `never` there --
+the operands after it and the body are never reached, charged or diagnosed.
+So `loop x in g(n):` has exactly the completions of `xs = g(n)` followed by
+`loop x in xs:`, in every loop form.
+
+The walk used to skip a listloop's iterable: a fallible call written there
+was never charged, the program compiled strictly and the error escaped at
+run time as an uncaught error (`CORE SEMANTIC UNCAUGHT-ERROR`), while the
+bound-first spelling was rejected; and a counted or lockstep operand that
+never completes did not stop its loop, charging what came after it
+(`tests/errors.test`'s `errors-loop-*`,
+`tests/golden/completion-regressions.bot`).
 
 ## UTF-8 result type
 

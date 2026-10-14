@@ -1,0 +1,1452 @@
+# static-compile.bot -- `static compile:` as source semantics
+# (STATIC-COMPILE.md): what a Botlish program can observe of the boundary.
+#
+#   static compile:
+#       BODY
+#
+# * An accepted block is the ordinary block where it stands: it evaluates to
+#   its body's value in every position (a statement, a binding's,
+#   destructuring's or return's value, a nested block), sees the lexical
+#   environment, lets `continue`, `break` and `return` reach the code around
+#   it, and contributes no compiler::CompilerError (its function needs no
+#   `errors` clause). `static` and `compile` stay ordinary names.
+# * A rejected block completes with compiler::CompilerError, whose payload is
+#   the compiler's diagnostic -- code, primary location (a line and column of
+#   this file), related locations, message -- exactly the one ordinary
+#   compilation reports first; none of its body runs, and it leaves nothing
+#   behind: bindings, functions, method candidates, moves, refinements. An
+#   installation inside a block is the nested installation the ordinary
+#   block would be: rejected.
+# * Its CompilerError is an ordinary declared error: handled, admitted by
+#   `errors`, or UnhandledError; a call that always fails with it is never
+#   KnownError, while ordinary always-failing calls still are.
+# * Blocks anywhere in one program -- independent, sibling, nested, in trait
+#   programs -- are each decided with their own outcome; the decisions are
+#   the sequential order's, whatever the scheduler (the source-visible half
+#   of static-economics.test: the batched decisions, pinned absolutely).
+#
+# Ports tests/static-compile.test (register_static_compile_tests) and
+# tests/static-economics.test (register_static_economics_tests). A Tcl
+# program's top-level statements are a body's block; its rejected whole
+# programs are a body's rejected block; its site records (kind, line,
+# column) are the payloads the body completes with, at this file's lines and
+# columns. Scheduler comparisons, build and round counts, HIR, Core IR and
+# NIR stay in Tcl. se-equal-erased-consumer needs a program that erases
+# nothing else: static-compile-erased-consumer.bot.
+#
+# Imports: compiler and test (every suite); list (list::at and list::length
+# in several programs); str (str::length in se-equal-untyped-capture,
+# str::encode_utf8 for sc-opaque/operations' bytes, str::concat in a helper);
+# coroutine (the affine transaction programs); abi::bytes (its opaque Bytes
+# stands in for sc-opaque's private module); linux::io (sc-tx-context's
+# installation). list::length and str::length are the two candidates that
+# make se-method-invalidated's call ambiguous.
+# Two tests depend on what is NOT imported: no imported namespace declares
+# `twice` (sc-tx-callable/method), and mutable_vector is not imported
+# (sc-diag-exact-missing-import, whose Tcl program names list::length).
+import abi::bytes
+import compiler
+import coroutine
+import linux::io
+import list
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Shared declarations (the Tcl tests' preludes)
+
+# Boom: the payload-free application error of sc-diag-exact-unhandled-fail,
+# sc-known-error-exempt, se-equal-ownership-siblings and
+# se-property-nested-entry; Bang: se-property-nested-entry's second one.
+error Boom
+error Bang
+
+# E1, E2: the errors of the erased-callable programs (static-compile.test's
+# scErased, static-economics.test's seErased).
+error E1
+error E2
+
+# The typed callee a String argument fails (sc-negative-type and the
+# programs that need a checker rejection).
+fn needs_int(v: int) -> int:
+    v
+
+# sc-location-original-span's prelude (`f` there).
+fn first_of(a, b):
+    a
+
+# static-compile.test's scErased: `call` cannot infer a contract for F, so
+# generic_e1_e2 erases raise_e1_e2 (E1 and E2) into the program's
+# erased-callable contract (`raise`, `generic` there).
+fn raise_e1_e2(x) -> int errors E1, E2:
+    if x == 1:
+        fail E1
+    if x == 2:
+        fail E2
+    0
+
+fn call(f, x):
+    f(x)
+
+fn generic_e1_e2(x) -> int errors E1, E2:
+    call(raise_e1_e2, x)
+
+# static-economics.test's seErased: generic_e1 erases raise_e1 (E1); a
+# contributor erases raise_e2 (E2) through the same `call` (`raise1`,
+# `raise2`, `generic` there).
+fn raise_e1(x) -> int errors E1:
+    if x == 1:
+        fail E1
+    0
+
+fn raise_e2(x) -> int errors E2:
+    if x == 2:
+        fail E2
+    0
+
+fn generic_e1(x) -> int errors E1:
+    call(raise_e1, x)
+
+# static-compile.test's scAffineDecls: a coroutine handle moved by consume.
+struct Message:
+    value: int
+
+struct Event:
+    value: int
+
+fn worker(seed: int, resume Message) -> Event:
+    message = yield Event {value: seed}
+    return Event {value: message.value}
+
+fn consume(s: Coroutine{args: [Message], return: Event}, n: int) -> int:
+    e = s(Message {value: n})
+    e.value
+
+fn flag(n: int) -> bool:
+    n > 100
+
+# sc-diag-exact-use-after-move's resume type (`M` there).
+struct Mark:
+    v: int
+
+# static-compile.test's scRefined: a refinement a validator establishes.
+refined type Small = int
+
+error NotSmall
+
+fn validate_small(v: int) -> unit proves v: Small errors NotSmall:
+    if v > 10:
+        fail NotSmall
+
+fn need(s: Small) -> int:
+    s
+
+# sc-trait-program: a trait program; its two functions with blocks are
+# trait-polymorphic, which only a top-level function may be (`describe` and
+# `bad` there; neither may be named `perimeter`, which would make
+# `s.perimeter()` a call of it).
+trait Shape:
+    fn area(self: Shape) -> int
+
+struct Square:
+    side: int
+
+fn area(s: Square) -> int:
+    s.side * s.side
+
+fn shape_area_plus_one(s: Shape) -> int errors compiler::CompilerError:
+    static compile:
+        s.area() + 1
+
+fn shape_perimeter(s: Shape) -> int errors compiler::CompilerError:
+    static compile:
+        s.perimeter()
+
+# ---------------------------------------------------------------------------
+# The reified payload, compared whole
+
+# What a body's CompilerError carries, as the Tcl probe's handler lists it:
+# the code (by its case name), the primary line and column, the related
+# locations as [line, column] pairs, and the message.
+struct Reified:
+    code: str
+    line: int
+    column: int
+    related: List[List[int]]
+    message: str
+
+# The payload BODY completes with (a code that names no case when it
+# completes normally).
+fn reified(body) -> Reified:
+    value = body():
+        on compiler::CompilerError {code, primary, related, message}:
+            places = loop place in related:
+                [place.line, place.column]
+            return Reified {code: test::code_name(code), line: primary.line, column: primary.column, related: places, message: message}
+    Reified {code: "no diagnostic: the block was accepted", line: 0, column: 0, related: [], message: ""}
+
+# BODY must be rejected with exactly this payload: CODE at LINE:COLUMN of
+# this file, the RELATED locations and the MESSAGE.
+nomethod fn rejects_with(name: str, code: compiler::DiagnosticCode, line: int, column: int, related: List[List[int]], message: str, body, context suite: test::Suite) -> unit:
+    fn check() -> test::Match:
+        r = reified(body)
+        test::equal([test::code_name(code), line, column, related, message], [r.code, r.line, r.column, r.related, r.message])
+    test::case(name, check)
+
+# BODY must be rejected with CODE at LINE:COLUMN and the RELATED locations,
+# with a message containing every one of PARTS: for a message that embeds
+# this file's name, which depends on how the suite is run.
+nomethod fn rejects_with_parts(name: str, code: compiler::DiagnosticCode, line: int, column: int, related: List[List[int]], parts: List[str], body, context suite: test::Suite) -> unit:
+    fn check() -> test::Match:
+        r = reified(body)
+        found = loop part in parts:
+            if test::contains_text?(r.message, part):
+                part
+            else:
+                str::concat("not in the message: ", part)
+        test::equal([test::code_name(code), line, column, related, parts], [r.code, r.line, r.column, r.related, found])
+    test::case(name, check)
+
+# ===========================================================================
+# static-compile.test
+
+# ---------------------------------------------------------------------------
+# Grammar and names
+
+fn register_grammar_tests():
+    # sc-grammar-contextual: `static` and `compile` stay ordinary names -- a
+    # function, a binding, parameters and fields so named -- and `static
+    # compile:` keeps its meaning beside them.
+    fn b_grammar_contextual() errors compiler::CompilerError:
+        static compile:
+            fn compile(x):
+                x * 10
+
+            static = 3
+            f = compile
+            fn g(static, compile):
+                static + compile
+
+            r = {static: 1, compile: 2}
+            v = static compile:
+                compile(static)
+            [f(static), g(1, 2), r.static, r.compile, v]
+    test::value("sc-grammar-contextual", [30, 3, 1, 2, 30], b_grammar_contextual)
+
+    # sc-import-required: in a file that imports compiler, a block is
+    # accepted and evaluates to its body's value.
+    fn b_import_required() errors compiler::CompilerError:
+        static compile:
+            1
+    test::value("sc-import-required/with-import", 1, b_import_required)
+
+    # sc-names-qualified: compiler::CompilerError, DiagnosticCode and
+    # SourceLocation are ordinary namespaced declarations: a bare error name
+    # is UndeclaredError, a bare enum qualifier UnknownNamespace (at the
+    # qualifier), and the qualified names are ordinary values. (The bare
+    # error's location, the function's header, is not pinned: the Tcl test
+    # pins neither.)
+    fn b_names_bare_error() errors compiler::CompilerError:
+        static compile:
+            fn f() errors CompilerError:
+                0
+            0
+    test::rejects("sc-names-qualified/bare-error", compiler::DiagnosticCode::UndeclaredError, b_names_bare_error)
+
+    fn b_names_bare_enum() errors compiler::CompilerError:
+        static compile:
+            x = DiagnosticCode::Unbound
+            0
+    test::rejects_at("sc-names-qualified/bare-enum", compiler::DiagnosticCode::UnknownNamespace, 258, 17, b_names_bare_enum)
+
+    fn b_names_qualified() errors compiler::CompilerError:
+        static compile:
+            x = compiler::SourceLocation {line: 1, column: 2}
+            [x.line, x.column, compiler::DiagnosticCode::Unbound == compiler::DiagnosticCode::Unbound]
+    test::value("sc-names-qualified/qualified", [1, 2, true], b_names_qualified)
+
+# ---------------------------------------------------------------------------
+# Accepted blocks: the body's value, where it stands
+
+fn register_accepted_block_tests():
+    # sc-positive-arithmetic: a valid body runs with its ordinary value.
+    fn b_positive_arithmetic() errors compiler::CompilerError:
+        static compile:
+            1 + 2
+    test::value("sc-positive-arithmetic", 3, b_positive_arithmetic)
+
+    # sc-positive-call: a block calling a function of the program.
+    fn b_positive_call() errors compiler::CompilerError:
+        static compile:
+            fn inc(x: int):
+                x + 1
+
+            static compile:
+                inc(3)
+    test::value("sc-positive-call", 4, b_positive_call)
+
+    # sc-positive-lexical: the block sees the lexical environment where it
+    # stands -- a parameter, its declared type, a function before it, an
+    # imported namespace (f has no `errors` clause: the block must be
+    # accepted).
+    fn b_positive_lexical() errors compiler::CompilerError:
+        static compile:
+            fn helper(x):
+                x + 1
+
+            fn f(x: int):
+                static compile:
+                    helper(x) + list::length([x, x])
+
+            f(40)
+    test::value("sc-positive-lexical", 43, b_positive_lexical)
+
+    # sc-success-value: the body's value is the block's in every accepted
+    # position: a return value, a destructuring value, binding values.
+    fn b_success_value() errors compiler::CompilerError:
+        static compile:
+            fn t(v: int) -> int:
+                return static compile:
+                    v * 2
+
+            fn u(v: int) -> int:
+                {a, b} = static compile:
+                    {a: v, b: v + 1}
+                a + b
+
+            x = static compile:
+                20 + 22
+            y = static compile:
+                z = 40
+                z + 2
+            [x, y, t(4), u(10)]
+    test::value("sc-success-value", [42, 42, 8, 21], b_success_value)
+
+    # sc-native-type-error-is-runtime: a native's argument kinds are checked
+    # at run time, never by the compiler: the block `1 + "xy"` is accepted
+    # (f has no `errors` clause, so a rejected block would reject the body's
+    # block with UnhandledError). It stands on a path no call takes: its
+    # run-time TYPE failure would abort the run.
+    fn b_native_type_error_is_runtime() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) -> int:
+                if n > 100:
+                    static compile:
+                        1 + "xy"
+                n
+
+            f(1)
+    test::value("sc-native-type-error-is-runtime/accepted", 1, b_native_type_error_is_runtime)
+
+    # sc-control-flow: an accepted block is the ordinary block where it
+    # stands: `continue` and `break` reach the enclosing loop, `return`
+    # returns from the enclosing function.
+    fn b_control_flow() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) -> int errors compiler::CompilerError:
+                total = loop i from 0 to n:
+                    static compile:
+                        if i == 2:
+                            continue
+                        if i == 4:
+                            break
+                        i * 10
+                static compile:
+                    return 7 + list::length(total)
+
+            r = f(9):
+                on compiler::CompilerError:
+                    -1
+            r
+    test::value("sc-control-flow", 10, b_control_flow)
+
+    # sc-warnings-visible: a block whose body carries a warning (a
+    # one-character String literal) is accepted and runs.
+    fn b_warnings_visible() errors compiler::CompilerError:
+        static compile:
+            fn t() -> str:
+                static compile:
+                    x = "a"
+                    x
+
+            t()
+    test::value("sc-warnings-visible/body-runs", "a", b_warnings_visible)
+
+# ---------------------------------------------------------------------------
+# Rejected blocks: the reified diagnostic
+
+fn register_rejected_block_tests():
+    # sc-diag-exact-*: the payload a rejected block completes with is the
+    # ordinary compiler's first diagnostic in the block -- code, primary
+    # location, related locations, message -- one per diagnostic kind.
+    # (sc-negative-type is sc-diag-exact-type's program.)
+    fn b_exact_unbound() errors compiler::CompilerError:
+        static compile:
+            missing
+    rejects_with("sc-diag-exact-unbound", compiler::DiagnosticCode::Unbound, 385, 13, [], "unbound name \"missing\"", b_exact_unbound)
+
+    fn b_exact_unbound_later() errors compiler::CompilerError:
+        static compile:
+            y = later
+            later = 1
+            y
+    rejects_with("sc-diag-exact-unbound-later", compiler::DiagnosticCode::Unbound, 390, 17, [], "unbound name \"later\": \"later\" is declared later; forward references are not allowed (a binding is visible only after it is established)", b_exact_unbound_later)
+
+    fn b_exact_type() errors compiler::CompilerError:
+        static compile:
+            needs_int("s")
+    rejects_with("sc-diag-exact-type", compiler::DiagnosticCode::Type, 397, 23, [], "argument for parameter \"v\" cannot be proven to satisfy int (argument type: str)", b_exact_type)
+
+    fn b_exact_result_type() errors compiler::CompilerError:
+        static compile:
+            fn g() -> str:
+                1
+            0
+    rejects_with("sc-diag-exact-result-type", compiler::DiagnosticCode::Type, 402, 17, [], "function result does not prove declared type str", b_exact_result_type)
+
+    fn b_exact_unknown_field() errors compiler::CompilerError:
+        static compile:
+            p = {a: 1}
+            p.b
+    rejects_with("sc-diag-exact-unknown-field", compiler::DiagnosticCode::UnknownField, 410, 15, [], "struct type struct{a: int} has no field \"b\" (known fields: a)", b_exact_unknown_field)
+
+    fn b_exact_duplicate() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            x = 2
+            x
+    rejects_with("sc-diag-exact-duplicate", compiler::DiagnosticCode::Duplicate, 416, 13, [], "duplicate binding \"x\" in the same lexical scope", b_exact_duplicate)
+
+    fn b_exact_break_outside() errors compiler::CompilerError:
+        static compile:
+            break
+    rejects_with("sc-diag-exact-break-outside", compiler::DiagnosticCode::BreakOutsideLoop, 422, 13, [], "break outside lexical loop", b_exact_break_outside)
+
+    fn b_exact_unhandled_fail() errors compiler::CompilerError:
+        static compile:
+            fail Boom
+    rejects_with("sc-diag-exact-unhandled-fail", compiler::DiagnosticCode::UnhandledError, 427, 13, [], "\"fail Boom\" is not admitted here: the enclosing function does not declare \"errors Boom\"", b_exact_unhandled_fail)
+
+    fn b_exact_undeclared_error() errors compiler::CompilerError:
+        static compile:
+            fail NoSuchError
+    rejects_with("sc-diag-exact-undeclared-error", compiler::DiagnosticCode::UndeclaredError, 432, 13, [], "unknown error \"NoSuchError\": no \"error NoSuchError\" declaration is visible", b_exact_undeclared_error)
+
+    fn b_exact_flag_unknown() errors compiler::CompilerError:
+        static compile:
+            fn opt(x, flags :quiet):
+                x
+            opt(1, :loud)
+    rejects_with("sc-diag-exact-flag-unknown", compiler::DiagnosticCode::UnknownFlag, 439, 20, [], "function opt does not accept flag :loud (accepted flags: :quiet)", b_exact_flag_unknown)
+
+    # The message embeds this file's name: its parts around it are compared.
+    fn b_exact_use_after_move() errors compiler::CompilerError:
+        static compile:
+            fn w(s: int, resume Mark) -> int:
+                m = yield s
+                m.v
+            fn use(c: Coroutine{args: [Mark], return: int}) -> int:
+                c(Mark {v: 1})
+            coroutine {step} = w(1)
+            use(step)
+            use(step)
+    rejects_with_parts("sc-diag-exact-use-after-move", compiler::DiagnosticCode::UseAfterMove, 452, 17, [[451, 17]], ["`step` was used after its coroutine value was moved\n\nmoved here:\n    step passed to use  (", ":451:17)\n\nused here:\n    ", ":452:17"], b_exact_use_after_move)
+
+    fn b_exact_erased_unhandled() errors compiler::CompilerError:
+        static compile:
+            generic_e1_e2(0):
+                on E2:
+                    -1
+    rejects_with("sc-diag-exact-erased-unhandled", compiler::DiagnosticCode::UnhandledError, 457, 13, [], "this call may produce the declared error \"E1\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_exact_erased_unhandled)
+
+    # (list::length([]) there: this suite imports list, not mutable_vector.)
+    fn b_exact_missing_import() errors compiler::CompilerError:
+        static compile:
+            mutable_vector::length([])
+    rejects_with("sc-diag-exact-missing-import", compiler::DiagnosticCode::MissingImport, 465, 13, [], "namespace \"mutable_vector\" is not imported; add `import mutable_vector` to use `mutable_vector::length`", b_exact_missing_import)
+
+    # (The message names this checkout's library directory.)
+    fn b_exact_unknown_namespace() errors compiler::CompilerError:
+        static compile:
+            nosuch::f()
+    rejects_with_parts("sc-diag-exact-unknown-namespace", compiler::DiagnosticCode::UnknownNamespace, 471, 13, [], ["unknown namespace \"nosuch\": no such module file ", "/nosuch.bot and no intrinsics of that namespace (nor is \"nosuch\" an enum type visible in this file: a case is written Enum::Case)"], b_exact_unknown_namespace)
+
+    fn b_exact_not_an_enum() errors compiler::CompilerError:
+        static compile:
+            bool::Yes
+    rejects_with("sc-diag-exact-not-an-enum", compiler::DiagnosticCode::NotAnEnum, 476, 13, [], "\"bool\" is a built-in type, not an enum: only an enum type qualifies a case (\"Enum::Case\"), and a type is not a namespace, so \"bool::Yes\" names nothing", b_exact_not_an_enum)
+
+    # sc-location-original-span: the primary location is the original file
+    # line and column, after the blank lines the block starts with -- never
+    # a coordinate of the block.
+    fn b_location_original_span() errors compiler::CompilerError:
+        static compile:
+
+
+            1 + 2
+            first_of(1, missing)
+    rejects_with("sc-location-original-span", compiler::DiagnosticCode::Unbound, 487, 25, [], "unbound name \"missing\"", b_location_original_span)
+
+    # sc-list-at-empty-is-known-error: the completion proofs see the empty
+    # List, so the call is KnownError -- a rejection, not a run-time
+    # IndexNotFound.
+    fn b_list_at_empty() errors compiler::CompilerError:
+        static compile:
+            list::at([], 0)
+    test::rejects_at("sc-list-at-empty-is-known-error", compiler::DiagnosticCode::KnownError, 495, 13, b_list_at_empty)
+
+    # sc-opaque: outside its module an opaque struct's construction is
+    # OpaqueConstruction and its projection OpaqueRepresentation; the
+    # module's own operations are accepted. (abi::bytes::Bytes, whose hidden
+    # field is `storage`, stands in for the private module's token::Token.)
+    fn b_opaque_construction() errors compiler::CompilerError:
+        static compile:
+            abi::bytes::Bytes {storage: 1}
+    test::rejects_at("sc-opaque/construction", compiler::DiagnosticCode::OpaqueConstruction, 504, 13, b_opaque_construction)
+
+    fn b_opaque_projection() errors compiler::CompilerError:
+        static compile:
+            t = abi::bytes::from_list([])
+            t.storage
+    test::rejects_at("sc-opaque/projection", compiler::DiagnosticCode::OpaqueRepresentation, 510, 15, b_opaque_projection)
+
+    fn b_opaque_operations() errors compiler::CompilerError:
+        static compile:
+            abi::bytes::length(abi::bytes::from_list(str::encode_utf8("abc"))).value
+    test::value("sc-opaque/operations", 3, b_opaque_operations)
+
+# ---------------------------------------------------------------------------
+# Blocks in one program: independent, nested, in a trait program
+
+fn register_program_shape_tests():
+    # sc-independent-sites: accepted, rejected, accepted, rejected and
+    # accepted blocks in one program, each with its own outcome (a rejected
+    # one's code and location reach run's handler).
+    fn b_independent_sites() errors compiler::CompilerError:
+        static compile:
+            fn s1() -> int errors compiler::CompilerError:
+                static compile:
+                    1
+
+            fn f1() -> int errors compiler::CompilerError:
+                static compile:
+                    missing_a
+
+            fn s2() -> int errors compiler::CompilerError:
+                static compile:
+                    2
+
+            fn f2() -> int errors compiler::CompilerError:
+                static compile:
+                    needs_int("b")
+
+            fn s3() -> int errors compiler::CompilerError:
+                static compile:
+                    3
+
+            fn run(f):
+                r = f():
+                    on compiler::CompilerError {code, primary}:
+                        [test::code_name(code), primary.line, primary.column]
+                r
+
+            [run(s1), run(f1), run(s2), run(f2), run(s3)]
+    test::value("sc-independent-sites", [1, ["Unbound", 533, 21], 2, ["Type", 541, 31], 3], b_independent_sites)
+
+    # sc-nested: a nested block is its own boundary: the inner rejection is
+    # an ordinary CompilerError completion of the outer body, which is
+    # accepted -- outer's caller sees the inner payload.
+    fn b_nested() errors compiler::CompilerError:
+        static compile:
+            fn outer() errors compiler::CompilerError:
+                static compile:
+                    static compile:
+                        missing
+
+            r = outer():
+                on compiler::CompilerError {code, primary}:
+                    [test::code_name(code), primary.line, primary.column]
+            r
+    test::value("sc-nested", ["Unbound", 564, 25], b_nested)
+
+    # sc-trait-program: a block in a trait program is decided by the checked
+    # build and runs in the monomorphized one: an operation of the trait is
+    # accepted, one it does not declare is TraitUnknownOperation (at the
+    # operation's name).
+    fn b_trait_program() errors compiler::CompilerError:
+        static compile:
+            r = shape_area_plus_one(Square {side: 3}):
+                on compiler::CompilerError:
+                    -1
+            r2 = shape_perimeter(Square {side: 3}):
+                on compiler::CompilerError {code}:
+                    if code == compiler::DiagnosticCode::TraitUnknownOperation:
+                        -2
+                    else:
+                        -3
+            [r, r2]
+    test::value("sc-trait-program", [10, -2], b_trait_program)
+
+    fn b_trait_program_site() errors compiler::CompilerError:
+        static compile:
+            shape_perimeter(Square {side: 3})
+    test::rejects_at("sc-trait-program/unknown-operation-site", compiler::DiagnosticCode::TraitUnknownOperation, 163, 11, b_trait_program_site)
+
+# ---------------------------------------------------------------------------
+# Transactions: a rejected block leaves nothing behind
+
+fn register_transaction_tests():
+    # sc-tx-binding: the outer binding, its type and value survive a
+    # rejected block that used it.
+    fn b_tx_binding() errors compiler::CompilerError:
+        static compile:
+            x = 41
+            fn t() errors compiler::CompilerError:
+                static compile:
+                    y = x + 1
+                    missing
+
+            r = t():
+                on compiler::CompilerError:
+                    x + 1
+            [r, x]
+    test::value("sc-tx-binding", [42, 41], b_tx_binding)
+
+    # sc-tx-binding-no-export: a rejected body's bindings and functions do
+    # not exist after it: the enclosing scope binds the same names.
+    fn b_tx_binding_no_export() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) -> int errors compiler::CompilerError:
+                if n > 100:
+                    static compile:
+                        y = n + 1
+                        fn helper(v):
+                            v
+                        missing
+                y = n * 2
+                fn helper(v):
+                    v + 1000
+                helper(y)
+
+            r = f(4):
+                on compiler::CompilerError:
+                    -1
+            r
+    test::value("sc-tx-binding-no-export", 1008, b_tx_binding_no_export)
+
+    # sc-no-prefix: nothing of a rejected body runs, not even its valid
+    # prefix: list::at, which would fail with IndexNotFound, does not run.
+    fn b_no_prefix() errors compiler::CompilerError:
+        static compile:
+            fn f(xs: List[int], i: int) -> int errors IndexNotFound, compiler::CompilerError:
+                static compile:
+                    list::at(xs, i)
+                    missing
+
+            fn probe(i: int) -> int:
+                r = f([1], i):
+                    on IndexNotFound:
+                        -1
+                    on compiler::CompilerError:
+                        -2
+                r
+
+            probe(9)
+    test::value("sc-no-prefix", -2, b_no_prefix)
+
+    # sc-tx-scope: an accepted block's bindings are scoped to it, exactly an
+    # `if true:` block's.
+    fn b_tx_scope_block() errors compiler::CompilerError:
+        static compile:
+            static compile:
+                x = 3
+            x
+    test::rejects_at("sc-tx-scope/block", compiler::DiagnosticCode::Unbound, 663, 13, b_tx_scope_block)
+
+    fn b_tx_scope_shadow() errors compiler::CompilerError:
+        static compile:
+            x = 1
+            static compile:
+                x = 3
+                x
+    test::value("sc-tx-scope/shadow", 3, b_tx_scope_shadow)
+
+    fn b_tx_scope_if_true() errors compiler::CompilerError:
+        static compile:
+            if true:
+                x = 3
+            x
+    test::rejects_at("sc-tx-scope/if-true", compiler::DiagnosticCode::Unbound, 678, 13, b_tx_scope_if_true)
+
+    # sc-tx-refinement: a refinement established by a rejected body does not
+    # survive it; an accepted body's does.
+    fn b_tx_refinement_rejected() errors compiler::CompilerError:
+        static compile:
+            fn use(n: int) -> int errors NotSmall, compiler::CompilerError:
+                static compile:
+                    validate_small(n)
+                    missing
+                need(n)
+            0
+    test::rejects_at("sc-tx-refinement/rejected", compiler::DiagnosticCode::Type, 689, 22, b_tx_refinement_rejected)
+
+    fn b_tx_refinement_accepted() errors compiler::CompilerError:
+        static compile:
+            fn use(n: int) -> int errors NotSmall, compiler::CompilerError:
+                static compile:
+                    validate_small(n)
+                need(n)
+
+            r = use(3):
+                on NotSmall:
+                    -1
+                on compiler::CompilerError:
+                    -2
+            r
+    test::value("sc-tx-refinement/accepted", 3, b_tx_refinement_accepted)
+
+    # sc-tx-context: an installation inside a block is the nested-scope
+    # installation the ordinary block would be: rejected.
+    fn b_tx_context() errors compiler::CompilerError:
+        static compile:
+            with context linux::io::create()
+            1
+    test::rejects_at("sc-tx-context/installation", compiler::DiagnosticCode::ContextInstallationUnsupported, 712, 13, b_tx_context)
+
+    # sc-tx-callable: a function declared in a rejected body leaves no
+    # binding and no method-call candidate behind; in an accepted body it
+    # is both.
+    fn b_tx_callable_binding() errors compiler::CompilerError:
+        static compile:
+            fn f() errors compiler::CompilerError:
+                static compile:
+                    fn twice(x):
+                        x * 2
+                    missing
+                twice(1)
+            0
+    test::rejects_at("sc-tx-callable/binding", compiler::DiagnosticCode::Unbound, 726, 17, b_tx_callable_binding)
+
+    fn b_tx_callable_method() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) errors compiler::CompilerError:
+                if n > 100:
+                    static compile:
+                        fn twice(x):
+                            x * 2
+                        missing
+                3.twice()
+            0
+    test::rejects_at("sc-tx-callable/method", compiler::DiagnosticCode::NotAStruct, 738, 19, b_tx_callable_method)
+
+    fn b_tx_callable_accepted() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int errors compiler::CompilerError:
+                static compile:
+                    fn twice(x):
+                        x * 2
+                    3.twice()
+
+            r = f():
+                on compiler::CompilerError:
+                    -1
+            r
+    test::value("sc-tx-callable/accepted", 6, b_tx_callable_accepted)
+
+# ---------------------------------------------------------------------------
+# Transactions of affine values: a rejected block's moves are gone with it
+
+fn register_affine_transaction_tests():
+    # sc-affine-rollback: a rejected block that moved the handle leaves it
+    # unmoved: the code after it resumes it (probe(1)); probe(500) runs the
+    # block and completes with its UseAfterMove.
+    fn b_affine_rollback() errors compiler::CompilerError:
+        static compile:
+            fn probe(n: int) -> int errors compiler::CompilerError:
+                coroutine {step} = worker(10)
+                if flag(n):
+                    static compile:
+                        consume(step, 1)
+                        consume(step, 2)
+                e = step(Message {value: 5})
+                e.value
+
+            r = probe(1):
+                on compiler::CompilerError:
+                    -1
+            r2 = probe(500):
+                on compiler::CompilerError {code}:
+                    if code == compiler::DiagnosticCode::UseAfterMove:
+                        -2
+                    else:
+                        -3
+            [r, r2]
+    test::value("sc-affine-rollback", [5, -2], b_affine_rollback)
+
+    # sc-affine-rollback-next-block: a later block is judged after an
+    # earlier rejected block's move is gone: it uses the handle and is
+    # accepted; the earlier block is UseAfterMove at its second use.
+    fn b_affine_rollback_next_block() errors compiler::CompilerError:
+        static compile:
+            fn probe(n: int) -> int errors compiler::CompilerError:
+                coroutine {step} = worker(10)
+                if flag(n):
+                    static compile:
+                        consume(step, 1)
+                        consume(step, 2)
+                static compile:
+                    consume(step, 7)
+
+            r = probe(1):
+                on compiler::CompilerError:
+                    -1
+            r
+    test::value("sc-affine-rollback-next-block", 7, b_affine_rollback_next_block)
+
+    fn b_affine_rollback_first_block() errors compiler::CompilerError:
+        static compile:
+            fn probe(n: int) -> int errors compiler::CompilerError:
+                coroutine {step} = worker(10)
+                if flag(n):
+                    static compile:
+                        consume(step, 1)
+                        consume(step, 2)
+                static compile:
+                    consume(step, 7)
+
+            probe(500)
+    test::rejects_at("sc-affine-rollback-next-block/first-block", compiler::DiagnosticCode::UseAfterMove, 813, 33, b_affine_rollback_first_block)
+
+    # sc-affine-accepted-moves: an accepted block's moves are the ordinary
+    # block's: using the handle after it is UseAfterMove (of the body's
+    # block here, the whole program's there).
+    fn b_affine_accepted_moves() errors compiler::CompilerError:
+        static compile:
+            fn probe() -> int:
+                coroutine {step} = worker(10)
+                static compile:
+                    consume(step, 1)
+                e = step(Message {value: 5})
+                e.value
+            0
+    test::rejects_at("sc-affine-accepted-moves", compiler::DiagnosticCode::UseAfterMove, 829, 21, b_affine_accepted_moves)
+
+    # sc-tx-deterministic: a block's diagnostic does not depend on rejected
+    # blocks before it: probe's two moves are UseAfterMove in a body of its
+    # own and after four rejected (Unbound) blocks that each move their own
+    # handle -- and so is the same block again (probe2). (outcome names the
+    # code a call completes with; it returns the name, since a handler's
+    # value must fit the call's own result type.)
+    fn b_tx_deterministic_alone() errors compiler::CompilerError:
+        static compile:
+            fn probe() -> int errors compiler::CompilerError:
+                coroutine {step} = worker(10)
+                static compile:
+                    consume(step, 1)
+                    consume(step, 2)
+
+            fn outcome(t):
+                value = t():
+                    on compiler::CompilerError {code}:
+                        return test::code_name(code)
+                "completed normally"
+
+            outcome(probe)
+    test::value("sc-tx-deterministic/alone", "UseAfterMove", b_tx_deterministic_alone)
+
+    fn b_tx_deterministic_after() errors compiler::CompilerError:
+        static compile:
+            fn bad0() errors compiler::CompilerError:
+                coroutine {step} = worker(0)
+                static compile:
+                    consume(step, 1)
+                    missing0
+
+            fn bad1() errors compiler::CompilerError:
+                coroutine {step} = worker(1)
+                static compile:
+                    consume(step, 1)
+                    missing1
+
+            fn bad2() errors compiler::CompilerError:
+                coroutine {step} = worker(2)
+                static compile:
+                    consume(step, 1)
+                    missing2
+
+            fn bad3() errors compiler::CompilerError:
+                coroutine {step} = worker(3)
+                static compile:
+                    consume(step, 1)
+                    missing3
+
+            fn probe2() -> int errors compiler::CompilerError:
+                coroutine {step} = worker(10)
+                static compile:
+                    consume(step, 1)
+                    consume(step, 2)
+
+            fn probe() -> int errors compiler::CompilerError:
+                coroutine {step} = worker(10)
+                static compile:
+                    consume(step, 1)
+                    consume(step, 2)
+
+            fn outcome(t):
+                value = t():
+                    on compiler::CompilerError {code}:
+                        return test::code_name(code)
+                "completed normally"
+
+            [outcome(bad0), outcome(bad1), outcome(bad2), outcome(bad3), outcome(probe2), outcome(probe)]
+    test::value("sc-tx-deterministic/after-rejected-blocks", ["Unbound", "Unbound", "Unbound", "Unbound", "UseAfterMove", "UseAfterMove"], b_tx_deterministic_after)
+
+    # sc-gc-stress (its source half): a rejected block's payload -- primary
+    # location, related List, message -- read after an accepted block in the
+    # handler starts and resumes a coroutine, five times (the message is
+    # compared by its parts around this file's name).
+    fn b_gc_stress_payloads() errors compiler::CompilerError:
+        static compile:
+            fn bad(k: int) -> List[int] errors compiler::CompilerError:
+                if k > 0:
+                    static compile:
+                        coroutine {step} = worker(k)
+                        consume(step, 1)
+                        consume(step, 2)
+                [k]
+
+            fn good(k: int) -> int:
+                static compile:
+                    coroutine {step, first} = worker(k)
+                    first.value + consume(step, k)
+
+            fn probe(i: int) -> List[int]:
+                r = bad(i):
+                    on compiler::CompilerError {code, primary, related, message}:
+                        g = good(i)
+                        rel = loop l in related:
+                            l.line * 1000 + l.column
+                        first = list::at(rel, 0):
+                            on IndexNotFound:
+                                -1
+                        moved = test::contains_text?(message, "`step` was used after its coroutine value was moved\n\nmoved here:\n    step passed to consume  (")
+                        used = test::contains_text?(message, ":914:33)\n\nused here:\n    ")
+                        intact = if moved and used:
+                            1
+                        else:
+                            0
+                        [g, primary.line * 1000 + primary.column, first, intact]
+                r
+
+            loop i from 1 to 6:
+                probe(i)
+    test::value("sc-gc-stress/payloads", [[2, 915033, 914033, 1], [4, 915033, 914033, 1], [6, 915033, 914033, 1], [8, 915033, 914033, 1], [10, 915033, 914033, 1]], b_gc_stress_payloads)
+
+# ---------------------------------------------------------------------------
+# Completions: the CompilerError of a rejected block is an ordinary error
+
+fn register_completion_tests():
+    # sc-contract-admitted: a rejected block's CompilerError must be handled
+    # or admitted like any error: f has no `errors` clause, so the block
+    # around it is UnhandledError at f's block, saying how to fix it.
+    fn b_contract_admitted() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                static compile:
+                    missing
+
+            0
+    test::rejects_at("sc-contract-admitted", compiler::DiagnosticCode::UnhandledError, 955, 17, b_contract_admitted)
+    test::rejects_message("sc-contract-admitted/message", compiler::DiagnosticCode::UnhandledError, "this \"static compile:\" block's body was rejected (UNBOUND), so the block completes with the error \"compiler::CompilerError\", which is not admitted here: handle it, or declare \"errors compiler::CompilerError\" on the enclosing function", b_contract_admitted)
+
+    # sc-contract-accepted-none: an accepted block contributes no
+    # CompilerError: f needs no `errors` clause and its caller handles
+    # nothing.
+    fn b_contract_accepted_none() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> int:
+                static compile:
+                    x + 1
+
+            f(1)
+    test::value("sc-contract-accepted-none", 2, b_contract_accepted_none)
+
+    # sc-contract-unhandled-call: a caller of a function whose block was
+    # rejected handles the error or is UnhandledError (caller has no
+    # `errors` clause).
+    fn b_contract_unhandled_call() errors compiler::CompilerError:
+        static compile:
+            fn f() errors compiler::CompilerError:
+                static compile:
+                    missing
+
+            fn caller():
+                f()
+
+            0
+    test::rejects_at("sc-contract-unhandled-call", compiler::DiagnosticCode::UnhandledError, 984, 17, b_contract_unhandled_call)
+
+    # sc-known-error-exempt: a call whose callee always completes with a
+    # rejected block's error is not KnownError; an ordinary always-failing
+    # call still is, also when its failure comes before a rejected block;
+    # a callee failing ordinarily on some paths and with the rejected block
+    # on the rest is accepted.
+    fn b_known_error_exempt_rejected_block() errors compiler::CompilerError:
+        static compile:
+            fn f() errors compiler::CompilerError:
+                static compile:
+                    missing
+
+            r = f():
+                on compiler::CompilerError:
+                    1
+            r
+    test::value("sc-known-error-exempt/rejected-block", 1, b_known_error_exempt_rejected_block)
+
+    fn b_known_error_exempt_ordinary() errors compiler::CompilerError:
+        static compile:
+            fn g() -> int errors Boom:
+                fail Boom
+
+            r = g():
+                on Boom:
+                    1
+            r
+    test::rejects_at("sc-known-error-exempt/ordinary", compiler::DiagnosticCode::KnownError, 1011, 17, b_known_error_exempt_ordinary)
+
+    fn b_known_error_exempt_ordinary_first() errors compiler::CompilerError:
+        static compile:
+            fn g() -> int errors Boom, compiler::CompilerError:
+                if true:
+                    fail Boom
+                static compile:
+                    missing
+
+            r = g():
+                on Boom:
+                    1
+                on compiler::CompilerError:
+                    2
+            r
+    test::rejects_at("sc-known-error-exempt/ordinary-before-block", compiler::DiagnosticCode::KnownError, 1025, 17, b_known_error_exempt_ordinary_first)
+
+    fn b_known_error_exempt_mixed() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors Boom, compiler::CompilerError:
+                if x > 0:
+                    fail Boom
+                static compile:
+                    missing
+
+            fn probe(x: int):
+                r = g(x):
+                    on Boom:
+                        1
+                    on compiler::CompilerError:
+                        2
+                r
+
+            [probe(1), probe(0)]
+    test::value("sc-known-error-exempt/mixed", [1, 2], b_known_error_exempt_mixed)
+
+fn register_static_compile_tests():
+    register_grammar_tests()
+    register_accepted_block_tests()
+    register_rejected_block_tests()
+    register_program_shape_tests()
+    register_transaction_tests()
+    register_affine_transaction_tests()
+    register_completion_tests()
+
+# ===========================================================================
+# static-economics.test: the decisions the batched scheduler makes, pinned
+# as outcomes (their equality with the sequential order, and what they
+# cost, stay in Tcl)
+
+fn register_independent_decision_tests():
+    # se-equal-independent: independent failures at every stage (accepted,
+    # resolution, checker), nested in one function: each its own outcome.
+    fn b_equal_independent() errors compiler::CompilerError:
+        static compile:
+            fn t0() -> int errors compiler::CompilerError:
+                static compile:
+                    0 + 1
+            fn t1() -> int errors compiler::CompilerError:
+                static compile:
+                    missing_1
+            fn t2() -> int errors compiler::CompilerError:
+                static compile:
+                    needs_int("s2")
+            fn t3() -> int errors compiler::CompilerError:
+                static compile:
+                    3 + 1
+            fn t4() -> int errors compiler::CompilerError:
+                static compile:
+                    missing_4
+            fn t5() -> int errors compiler::CompilerError:
+                static compile:
+                    needs_int("s5")
+            fn t6() -> int errors compiler::CompilerError:
+                static compile:
+                    6 + 1
+            fn t7() -> int errors compiler::CompilerError:
+                static compile:
+                    missing_7
+            fn t8() -> int errors compiler::CompilerError:
+                static compile:
+                    needs_int("s8")
+            fn outcome(t: Fn{args: [], return: int, errors: [compiler::CompilerError]}):
+                r = t():
+                    on compiler::CompilerError {code}:
+                        return test::code_name(code)
+                r
+            [outcome(t0), outcome(t1), outcome(t2), outcome(t3), outcome(t4), outcome(t5), outcome(t6), outcome(t7), outcome(t8)]
+    test::value("se-equal-independent", [1, "Unbound", "Type", 4, "Unbound", "Type", 7, "Unbound", "Type"], b_equal_independent)
+
+    # se-equal-ownership-siblings: sibling blocks with ownership effects. In
+    # run, the first block (it moves the handle, then fails the checker) is
+    # Type; the block after it is accepted because the move is gone with
+    # the rejected block (observed with the first block behind a run-time
+    # condition, as sc-affine-rollback-next-block does); beside them, an
+    # independent UseAfterMove and an accepted block whose handle lives
+    # across an error edge.
+    fn b_ownership_siblings_first() errors compiler::CompilerError:
+        static compile:
+            fn producer():
+                yield 1
+                2
+
+            fn run() -> int errors compiler::CompilerError:
+                coroutine {step} = producer()
+                static compile:
+                    other = step
+                    needs_int("s")
+                static compile:
+                    step()
+                0
+
+            run()
+    test::rejects_at("se-equal-ownership-siblings/first-block", compiler::DiagnosticCode::Type, 1123, 31, b_ownership_siblings_first)
+
+    fn b_ownership_siblings_second() errors compiler::CompilerError:
+        static compile:
+            fn producer():
+                yield 1
+                2
+
+            fn run(n: int) -> int errors compiler::CompilerError:
+                coroutine {step} = producer()
+                if n > 100:
+                    static compile:
+                        other = step
+                        needs_int("s")
+                static compile:
+                    step()
+
+            r = run(1):
+                on compiler::CompilerError:
+                    -1
+            r
+    test::value("se-equal-ownership-siblings/second-block", 2, b_ownership_siblings_second)
+
+    fn b_ownership_siblings_moved() errors compiler::CompilerError:
+        static compile:
+            fn producer():
+                yield 1
+                2
+
+            fn moved() -> int errors compiler::CompilerError:
+                static compile:
+                    coroutine {step: s1} = producer()
+                    other = s1
+                    s1()
+                    0
+
+            moved()
+    test::rejects_at("se-equal-ownership-siblings/moved", compiler::DiagnosticCode::UseAfterMove, 1162, 21, b_ownership_siblings_moved)
+
+    fn b_ownership_siblings_edge() errors compiler::CompilerError:
+        static compile:
+            fn boom(x: int) -> int errors Boom:
+                if x > 5:
+                    fail Boom
+                x
+
+            fn producer():
+                yield 1
+                2
+
+            fn edge() -> int errors compiler::CompilerError:
+                static compile:
+                    coroutine {step: s2} = producer()
+                    r = boom(3):
+                        on Boom:
+                            0
+                    s2()
+                    r
+
+            r = edge():
+                on compiler::CompilerError:
+                    -1
+            r
+    test::value("se-equal-ownership-siblings/error-edge", 3, b_ownership_siblings_edge)
+
+    # se-equal-untyped-capture: two blocks capture the untyped parameter n,
+    # whose contract is inferred from every use: a's String use would fail
+    # b's Int use, but a is rejected (Type: -1) and b, judged again, is
+    # accepted (want_int(1): 1).
+    fn b_equal_untyped_capture() errors compiler::CompilerError:
+        static compile:
+            fn want_int(x: int) -> int:
+                x
+
+            fn register(n) -> int:
+                fn a() -> int errors compiler::CompilerError:
+                    static compile:
+                        q = str::length(n)
+                        want_int("s")
+                fn b() -> int errors compiler::CompilerError:
+                    static compile:
+                        want_int(n)
+                ra = a():
+                    on compiler::CompilerError:
+                        -1
+                rb = b():
+                    on compiler::CompilerError:
+                        -1
+                ra + rb
+
+            register(1)
+    test::value("se-equal-untyped-capture", 0, b_equal_untyped_capture)
+
+fn register_nested_decision_tests():
+    # se-equal-nested-chain: a nested block whose rejection rejects the
+    # block around it, level by level: outer completes with its own block's
+    # UnhandledError, at level_0's block.
+    fn b_equal_nested_chain() errors compiler::CompilerError:
+        static compile:
+            fn outer() -> int errors compiler::CompilerError:
+                static compile:
+                    fn level_0() -> int:
+                        static compile:
+                            fn level_1() -> int:
+                                static compile:
+                                    missing
+                            level_1()
+                    level_0()
+
+            outer()
+    test::rejects_at("se-equal-nested-chain", compiler::DiagnosticCode::UnhandledError, 1231, 25, b_equal_nested_chain)
+
+    # se-equal-nested-checked: a nested block rejected by the checker: the
+    # block around it is judged again, and its first diagnostic is then the
+    # inner block's unadmitted CompilerError, not its own later Type error.
+    fn b_equal_nested_checked() errors compiler::CompilerError:
+        static compile:
+            fn want_int(x: int) -> int:
+                x
+
+            fn outer() -> int errors compiler::CompilerError:
+                static compile:
+                    fn level_0() -> int:
+                        static compile:
+                            want_int("s")
+                    want_int("t")
+                    level_0()
+
+            outer()
+    test::rejects_at("se-equal-nested-checked", compiler::DiagnosticCode::UnhandledError, 1252, 25, b_equal_nested_checked)
+
+fn register_erased_contract_tests():
+    # se-equal-erased: beside the erased-callable contract (generic_e1
+    # erases raise_e1), a contributor block that erases raise_e2 and a
+    # consumer of generic_e1 bounded by its declared contract are accepted;
+    # four independent checker failures are each Type.
+    fn b_equal_erased_contributor() errors compiler::CompilerError:
+        static compile:
+            fn gen2(x) -> int errors E2:
+                call(raise_e2, x)
+            r = gen2(0):
+                on E2:
+                    0
+            r
+    test::value("se-equal-erased/contributor", 0, b_equal_erased_contributor)
+
+    fn b_equal_erased_consumer() errors compiler::CompilerError:
+        static compile:
+            r = generic_e1(0):
+                on E1:
+                    -1
+            r
+    test::value("se-equal-erased/consumer", 0, b_equal_erased_consumer)
+
+    fn b_equal_erased_failures() errors compiler::CompilerError:
+        static compile:
+            fn t0() -> int errors compiler::CompilerError:
+                static compile:
+                    fn want_0(x: int) -> int:
+                        x
+                    want_0("s")
+            fn t1() -> int errors compiler::CompilerError:
+                static compile:
+                    fn want_1(x: int) -> int:
+                        x
+                    want_1("s")
+            fn t2() -> int errors compiler::CompilerError:
+                static compile:
+                    fn want_2(x: int) -> int:
+                        x
+                    want_2("s")
+            fn t3() -> int errors compiler::CompilerError:
+                static compile:
+                    fn want_3(x: int) -> int:
+                        x
+                    want_3("s")
+            fn outcome(t: Fn{args: [], return: int, errors: [compiler::CompilerError]}):
+                r = t():
+                    on compiler::CompilerError {code}:
+                        return test::code_name(code)
+                r
+            [outcome(t0), outcome(t1), outcome(t2), outcome(t3)]
+    test::value("se-equal-erased/independent-failures", ["Type", "Type", "Type", "Type"], b_equal_erased_failures)
+
+    # se-equal-multiple-contributors: contributors rejected by the checker
+    # (c1) and by resolution (c2); the consumer, judged against what their
+    # final forms leave, is se-equal-erased/consumer.
+    fn b_multiple_contributors_checker() errors compiler::CompilerError:
+        static compile:
+            fn gen2(x) -> int errors E2:
+                call(raise_e2, x)
+            r = gen2(0):
+                on E2:
+                    0
+            r
+            fn want_9(x: int) -> int:
+                x
+            want_9("s")
+    test::rejects_at("se-equal-multiple-contributors/checker", compiler::DiagnosticCode::Type, 1326, 20, b_multiple_contributors_checker)
+
+    fn b_multiple_contributors_resolution() errors compiler::CompilerError:
+        static compile:
+            fn gen2(x) -> int errors E2:
+                call(raise_e2, x)
+            r = gen2(0):
+                on E2:
+                    0
+            r
+            missing_name
+    test::rejects_at("se-equal-multiple-contributors/resolution", compiler::DiagnosticCode::Unbound, 1337, 13, b_multiple_contributors_resolution)
+
+    # se-method-invalidated: mk() is a List until its block is rejected,
+    # then never: xs.length() is then ambiguous between list::length and
+    # str::length (outside any block of its own: the body's block here).
+    fn b_method_invalidated() errors compiler::CompilerError:
+        static compile:
+            fn mk() errors compiler::CompilerError:
+                static compile:
+                    fn want_0(x: int) -> int:
+                        x
+                    want_0("s")
+                    [1, 2]
+
+            fn outside() -> int errors compiler::CompilerError:
+                xs = mk()
+                xs.length()
+
+            0
+    test::rejects_at("se-method-invalidated", compiler::DiagnosticCode::AmbiguousMethodCall, 1354, 20, b_method_invalidated)
+
+fn register_analysis_property_tests():
+    # se-property-nested-entry: a nested function is analyzed from its own
+    # entry: g, defined after f's `fail Boom` (its definition unreachable),
+    # still reports its use after move and its always-failing call.
+    fn b_property_nested_entry_ownership() errors compiler::CompilerError:
+        static compile:
+            fn gen():
+                yield 1
+                2
+
+            fn f() errors Boom:
+                fail Boom
+                fn g():
+                    coroutine {step} = gen()
+                    step()
+                    other = step
+                    step()
+                0
+
+            0
+    test::rejects_at("se-property-nested-entry/ownership", compiler::DiagnosticCode::UseAfterMove, 1375, 21, b_property_nested_entry_ownership)
+
+    fn b_property_nested_entry_completion() errors compiler::CompilerError:
+        static compile:
+            fn bang() errors Bang:
+                fail Bang
+
+            fn f() errors Boom:
+                fail Boom
+                fn g():
+                    bang()
+                0
+
+            0
+    test::rejects_at("se-property-nested-entry/completion", compiler::DiagnosticCode::KnownError, 1389, 21, b_property_nested_entry_completion)
+
+    # se-property-capture-narrowing: a captured binding is seen with the
+    # facts its mentions before the definition establish -- an integer?
+    # condition (f), a native's parameter types (h) -- and with no others
+    # (m: an un-narrowed `any` is Type at want(u)).
+    fn b_property_capture_narrowed() errors compiler::CompilerError:
+        static compile:
+            fn want(x: int) -> int:
+                x
+
+            fn f(things: List[any]) -> int errors IndexNotFound:
+                v = list::at(things, 0)
+                if integer?(v):
+                    fn g() -> int:
+                        want(v)
+                    g()
+                else:
+                    0
+
+            fn h(things: List[any]) -> int errors IndexNotFound:
+                w = list::at(things, 0)
+                w + 1
+                fn k() -> int:
+                    want(w)
+                k()
+
+            fn all() -> int errors IndexNotFound:
+                f([1]) + h([2])
+
+            r = all():
+                on IndexNotFound:
+                    0
+            r
+    test::value("se-property-capture-narrowing/narrowed", 3, b_property_capture_narrowed)
+
+    fn b_property_capture_unnarrowed() errors compiler::CompilerError:
+        static compile:
+            fn want(x: int) -> int:
+                x
+
+            fn m(things: List[any]) -> int errors IndexNotFound:
+                u = list::at(things, 0)
+                fn q() -> int:
+                    want(u)
+                q()
+
+            0
+    test::rejects_at("se-property-capture-narrowing/unnarrowed", compiler::DiagnosticCode::Type, 1437, 26, b_property_capture_unnarrowed)
+
+fn register_static_economics_tests():
+    register_independent_decision_tests()
+    register_nested_decision_tests()
+    register_erased_contract_tests()
+    register_analysis_property_tests()
+
+with context test::suite()
+register_static_compile_tests()
+register_static_economics_tests()
+test::report()

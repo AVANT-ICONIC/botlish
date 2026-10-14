@@ -1,0 +1,169 @@
+# imports-abi-child.bot -- a child namespace and type imports without the
+# parent namespace (IMPORTS.md): the source-level specification of
+#
+#   * exact nested imports: `import abi::x86_64` authorizes abi::x86_64's
+#     members and nothing of abi (MissingImport, saying that imports are
+#     exact); `import linux::abi` authorizes the intrinsic namespace's
+#     linux::abi::syscall;
+#   * a nested namespace's members: an unknown one is UnknownSymbol, naming
+#     the nested namespace; its type is importable (`import type
+#     abi::x86_64::Register64Word`) and spelled qualified after the
+#     namespace import;
+#   * `import type abi::U8Value` without `import abi`: it binds exactly one
+#     short type name (U8Value, not U16Value), grants no qualified access
+#     to abi (neither a type annotation nor a type predicate), creates no
+#     value or function binding (a value may be named U8Value: values and
+#     types are separate), and the type it names is the module's own
+#     (f(300) is rejected against abi's 0..255).
+#
+# Ported from tests/imports.test and tests/surface-modules.test, which stay
+# authoritative (audit/golden/migration/fragments/imports-abi-child.tsv maps
+# every test). The Tcl tests' private modules (example_types with Count and
+# Index, foo::bar with Baz, outer::ok) are abi (U8Value, U16Value) and
+# abi::x86_64 (Register64Word) here.
+#
+# Imports: compiler and test (the framework); abi::x86_64 and linux::abi
+# (two child namespaces whose parents, abi and linux, are not imported);
+# `import type abi::U8Value` (a type import whose namespace is not
+# imported); `import type abi::x86_64::Register64Word` (a nested
+# namespace's type). linux::abi::syscall is only compiled here, never
+# called.
+import abi::x86_64
+import compiler
+import linux::abi
+import test
+import type abi::U8Value
+import type abi::x86_64::Register64Word
+
+fn register_child_namespace_tests():
+    # imports-nested-namespace-import: `import abi::x86_64` authorizes
+    # abi::x86_64::register64 ...
+    fn b_child_member() errors compiler::CompilerError:
+        static compile:
+            x = abi::x86_64::register64(1)
+            abi::x86_64::to_int(x)
+    test::value("imports-nested-namespace-import/child-imported", 1, b_child_member)
+    # ... and not abi::u8: the diagnostic names the import to add, and
+    # that imports are exact.
+    fn b_parent_member() errors compiler::CompilerError:
+        static compile:
+            x = abi::u8(1)
+            1
+    test::rejects_message("imports-nested-namespace-import/parent-not-imported", compiler::DiagnosticCode::MissingImport, "namespace \"abi\" is not imported; add `import abi` to use `abi::u8` (imports are exact: `import abi::x86_64` does not import \"abi\")", b_parent_member)
+
+    # imports-nested-import-is-exact: importing the child does not import
+    # the parent (the other directions are imports.bot's and
+    # imports-abi-family.bot's).
+    fn b_parent_not_imported() errors compiler::CompilerError:
+        static compile:
+            abi::u8(1).value
+    test::rejects("imports-nested-import-is-exact/parent-not-imported", compiler::DiagnosticCode::MissingImport, b_parent_not_imported)
+
+    # imports-linux-abi-intrinsic-namespace: `import linux::abi` authorizes
+    # the intrinsic linux::abi::syscall (g is compiled, never called; the
+    # half where only linux is imported is imports-library-modules.bot's).
+    fn b_syscall_authorized() errors compiler::CompilerError:
+        static compile:
+            fn g():
+                linux::abi::syscall({rax: abi::x86_64::register64(39)})
+            1
+    test::value("imports-linux-abi-intrinsic-namespace/child-imported", 1, b_syscall_authorized)
+
+    # surface-modules-nested-namespace-errors: an unknown member of a
+    # nested namespace names that namespace.
+    fn b_unknown_nested_member() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::g()
+    test::rejects_containing("surface-modules-nested-namespace-errors/unknown-member", compiler::DiagnosticCode::UnknownSymbol, "namespace \"abi::x86_64\" has no definition \"g\"", b_unknown_nested_member)
+
+    # imports-nested-type-import: a nested namespace's type is importable
+    # by `import type`, and spelled qualified after the namespace import.
+    fn b_nested_type_short() errors compiler::CompilerError:
+        static compile:
+            fn f(x: Register64Word):
+                x
+            f(3)
+    test::value("imports-nested-type-import/type-import", 3, b_nested_type_short)
+    fn b_nested_namespace_call() errors compiler::CompilerError:
+        static compile:
+            abi::x86_64::to_int(abi::x86_64::register64(4))
+    test::value("imports-nested-type-import/namespace-import", 4, b_nested_namespace_call)
+    fn b_nested_type_qualified() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::x86_64::Register64Word):
+                x
+            f(2)
+    test::value("imports-nested-type-import/qualified-type", 2, b_nested_type_qualified)
+
+fn register_type_import_tests():
+    # imports-type-import-short-name: `import type abi::U8Value` binds
+    # exactly the short type name U8Value.
+    fn b_imported_short_name() errors compiler::CompilerError:
+        static compile:
+            fn f(x: U8Value):
+                x + 1
+            f(5)
+    test::value("imports-type-import-short-name/imported", 6, b_imported_short_name)
+    fn b_other_short_name() errors compiler::CompilerError:
+        static compile:
+            fn f(x: U16Value):
+                x
+            1
+    test::rejects("imports-type-import-short-name/not-imported", compiler::DiagnosticCode::Type, b_other_short_name)
+
+    # imports-type-import-authorizes-nothing-else: the type import grants no
+    # qualified access to its namespace: neither another type's annotation
+    # nor the imported type's own predicate.
+    fn b_qualified_other_type() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::U16Value):
+                x
+            1
+    test::rejects("imports-type-import-authorizes-nothing-else/annotation", compiler::DiagnosticCode::MissingImport, b_qualified_other_type)
+    fn b_qualified_predicate() errors compiler::CompilerError:
+        static compile:
+            abi::U8Value?(1)
+    test::rejects("imports-type-import-authorizes-nothing-else/predicate", compiler::DiagnosticCode::MissingImport, b_qualified_predicate)
+
+    # imports-type-no-value-binding: the type import binds no value and no
+    # function; a value of that spelling is an ordinary binding.
+    fn b_type_as_value() errors compiler::CompilerError:
+        static compile:
+            U8Value
+    test::rejects("imports-type-no-value-binding/reference", compiler::DiagnosticCode::Unbound, b_type_as_value)
+    fn b_type_as_function() errors compiler::CompilerError:
+        static compile:
+            U8Value(5)
+    test::rejects("imports-type-no-value-binding/call", compiler::DiagnosticCode::Unbound, b_type_as_function)
+    fn b_value_named_like_type() errors compiler::CompilerError:
+        static compile:
+            U8Value = 5
+            U8Value
+    test::value("imports-type-no-value-binding/binding", 5, b_value_named_like_type)
+
+    # imports-type-values-and-types-are-separate-namespaces: the value
+    # U8Value and the type U8Value in one function.
+    fn b_value_and_type() errors compiler::CompilerError:
+        static compile:
+            U8Value = 5
+            fn f(x: U8Value):
+                x
+            f(U8Value)
+    test::value("imports-type-values-and-types-are-separate-namespaces", 5, b_value_and_type)
+
+    # imports-abi-types: the imported short name is abi's own 0..255 domain
+    # (with only the type import: 300 is statically rejected).
+    fn b_out_of_domain() errors compiler::CompilerError:
+        static compile:
+            fn f(x: U8Value):
+                x
+            f(300)
+    test::rejects("imports-abi-types/out-of-domain", compiler::DiagnosticCode::Type, b_out_of_domain)
+
+fn register_abi_child_tests():
+    register_child_namespace_tests()
+    register_type_import_tests()
+
+with context test::suite()
+register_abi_child_tests()
+test::report()

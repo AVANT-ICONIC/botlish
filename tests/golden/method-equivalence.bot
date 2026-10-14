@@ -1,0 +1,584 @@
+# method-equivalence.bot -- the source half of the METHOD-ELIGIBLE round-trip
+# law (WARNINGS-METHOD-ELIGIBLE.md) and of the `nomethod fn` declaration, as a
+# source-level specification:
+#
+#     receiver.f(a, b)   is the call   f(receiver, a, b)
+#
+# A call written as a function call and the same call written with method
+# sugar resolve to the same callee and compute the same value, whatever the
+# receiver's form (a name, a field chain, a call or method-call result, a
+# parenthesized expression, a literal of every kind, a list, an anonymous or
+# named struct construction), whatever the callee (a function with flags, a
+# chain, a nested function, a recursive self-call, a handled call), and on
+# every backend. A function declared `nomethod fn` is an ordinary function
+# for every functional call, and its receiver-form call is the resolution
+# error NomethodCall: through an alias as well, and for the natives the
+# warning-driven refactor marked (bit_and, bit_or, bit_xor; the shifts stay
+# method-callable).
+#
+# Ports the value and diagnostic halves of tests/method-eligible.test, which
+# stays authoritative and unchanged. The warning itself (which calls are
+# reported, where, with which data) and the round-trip law's program
+# identity (the same HIR text, core IR and NIR, specialized and generic)
+# are observable from Tcl only: those halves stay there. A Tcl round-trip
+# test compiles two programs, the functional and the sugared spelling of one
+# call, each driven by the same call (`t(5)`); here both spellings are
+# functions of one block, `sugared` and `functional`, and the test's value
+# is [the sugared spelling's value, the functional spelling's value]. Every
+# other Tcl program is a block of its own.
+#
+# The tests whose Tcl program imports a namespace (str, list, mutable_array,
+# or a private module, for which a stock module stands in) are in
+# method-equivalence-imported.bot: an imported namespace's members are
+# method candidates of every body in a suite, and with `import list` the
+# local `find` of me-chain-fully-sugared-is-silent would have list::find as a
+# second candidate (AmbiguousMethodCall), a program the Tcl test does not
+# write.
+#
+# Imports: compiler and test (the framework) only, as the Tcl programs here
+# import nothing. No member of either is named like a function a body
+# calls with method syntax.
+import compiler
+import test
+
+# ---------------------------------------------------------------------------
+# Shared declarations
+
+# The Tcl file's $::prelude: two functions every program can call, `two` of
+# two parameters and `one` of one. `two` returns its first argument: the
+# value of r.two(y) is r, which shows that the receiver was passed first
+# whenever it differs from y.
+fn two(a, b):
+    a
+
+fn one(a):
+    a
+
+# me-form-named-struct: the named struct whose construction is a receiver
+# (the Tcl program's `struct P`).
+struct Boxed:
+    a: int
+
+# me-handled-call: the error the handled callee raises (the Tcl program's
+# `error Bad`).
+error Declined
+
+# ---------------------------------------------------------------------------
+# Receiver forms: every receiver the grammar accepts is the first argument
+#
+#   postfix = primary { "(" args ")" | "." IDENT [ "(" args ")" ] }
+#   primary = literal | name | qualified name | list | struct | "(" expr ")"
+#
+# (The module-qualified name is me-form-qualified-name, in
+# method-equivalence-imported.bot.)
+
+fn register_receiver_form_tests():
+    # me-one-param-sugar-stays-legal: one-parameter sugar is still the
+    # language: x.one() is one(x) (the 2-parameter rule is the warning's,
+    # not the grammar's).
+    fn one_parameter() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return x.one()
+            fn functional(x):
+                return one(x)
+            [sugared(1), functional(1)]
+    test::value("me-one-param-sugar-stays-legal", [1, 1], one_parameter)
+
+    # me-form-name: a plain name is a receiver.
+    fn name() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return x.two(1)
+            fn functional(x):
+                return two(x, 1)
+            [sugared(5), functional(5)]
+    test::value("me-form-name", [5, 5], name)
+
+    # me-form-field-chain: a field chain is a receiver.
+    fn field_chain() errors compiler::CompilerError:
+        static compile:
+            fn sugared(n):
+                s = {a: {b: n}}
+                return s.a.b.two(2)
+            fn functional(n):
+                s = {a: {b: n}}
+                return two(s.a.b, 2)
+            [sugared(5), functional(5)]
+    test::value("me-form-field-chain", [5, 5], field_chain)
+
+    # me-form-call-result: a call result is a receiver.
+    fn call_result() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return one(x).two(1)
+            fn functional(x):
+                return two(one(x), 1)
+            [sugared(5), functional(5)]
+    test::value("me-form-call-result", [5, 5], call_result)
+
+    # me-form-method-call-result: a method-call result is a receiver (a
+    # chain).
+    fn method_call_result() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return x.one().two(1)
+            fn functional(x):
+                return two(x.one(), 1)
+            [sugared(5), functional(5)]
+    test::value("me-form-method-call-result", [5, 5], method_call_result)
+
+    # me-form-parenthesized-call: a parenthesized call is the call.
+    fn parenthesized_call() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return (one(x)).two(1)
+            fn functional(x):
+                return two((one(x)), 1)
+            [sugared(5), functional(5)]
+    test::value("me-form-parenthesized-call", [5, 5], parenthesized_call)
+
+    # me-form-int-literal: an Int literal is a receiver (Botlish has no
+    # float literal, so `5.two` cannot re-lex). Driven by 9, not the Tcl
+    # program's 5, so that the receiver and the argument differ.
+    fn int_literal() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return 5.two(x)
+            fn functional(x):
+                return two(5, x)
+            [sugared(9), functional(9)]
+    test::value("me-form-int-literal", [5, 5], int_literal)
+
+    # me-form-string-literal: a String literal is a receiver.
+    fn string_literal() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return "s".two(x)
+            fn functional(x):
+                return two("s", x)
+            [sugared(5), functional(5)]
+    test::value("me-form-string-literal", ["s", "s"], string_literal)
+
+    # me-form-char-literal: a UnicodeChar literal is a receiver.
+    fn char_literal() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return 'a'.two(x)
+            fn functional(x):
+                return two('a', x)
+            [sugared(5), functional(5)]
+    test::value("me-form-char-literal", ['a', 'a'], char_literal)
+
+    # me-form-bool-and-unit: true, false and unit are receivers (the Tcl
+    # test exercises true and unit; false, which its title names, is added).
+    fn true_literal() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return true.two(x)
+            fn functional(x):
+                return two(true, x)
+            [sugared(5), functional(5)]
+    test::value("me-form-bool-and-unit/true", [true, true], true_literal)
+
+    fn false_literal() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return false.two(x)
+            fn functional(x):
+                return two(false, x)
+            [sugared(5), functional(5)]
+    test::value("me-form-bool-and-unit/false", [false, false], false_literal)
+
+    fn unit_literal() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return unit.two(x)
+            fn functional(x):
+                return two(unit, x)
+            [sugared(5), functional(5)]
+    test::value("me-form-bool-and-unit/unit", [unit, unit], unit_literal)
+
+    # me-form-list-literal: a list literal is a receiver.
+    fn list_literal() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return [1, 2].two(x)
+            fn functional(x):
+                return two([1, 2], x)
+            [sugared(5), functional(5)]
+    test::value("me-form-list-literal", [[1, 2], [1, 2]], list_literal)
+
+    # me-form-anonymous-struct: an anonymous struct literal is a receiver.
+    fn anonymous_struct() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return {a: 1}.two(x)
+            fn functional(x):
+                return two({a: 1}, x)
+            [sugared(5), functional(5)]
+    test::value("me-form-anonymous-struct", [{a: 1}, {a: 1}], anonymous_struct)
+
+    # me-form-named-struct: a named struct construction is a receiver.
+    fn named_struct() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return Boxed {a: 1}.two(x)
+            fn functional(x):
+                return two(Boxed {a: 1}, x)
+            [sugared(5), functional(5)]
+    test::value("me-form-named-struct", [Boxed {a: 1}, Boxed {a: 1}], named_struct)
+
+    # me-form-negative-with-parens-is-valid-but-not-suggested: a negative
+    # literal is `-` applied to a literal; parenthesized, it is a valid
+    # receiver meaning two(-1, x) (the warning's silence on two(-1, x) is
+    # conservatism, not invalidity).
+    fn parenthesized_negative() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return (-1).two(x)
+            fn functional(x):
+                return two(-1, x)
+            [sugared(5), functional(5)]
+    test::value("me-form-negative-with-parens-is-valid-but-not-suggested", [-1, -1], parenthesized_negative)
+
+    # me-form-parenthesized-operator-not-eligible: a parenthesized operator
+    # expression is a valid receiver meaning two((x + 1), 1).
+    fn parenthesized_operator() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return (x + 1).two(1)
+            fn functional(x):
+                return two((x + 1), 1)
+            [sugared(5), functional(5)]
+    test::value("me-form-parenthesized-operator-not-eligible", [6, 6], parenthesized_operator)
+
+# ---------------------------------------------------------------------------
+# Callees: whatever the callee, the sugared call is the functional one
+
+fn register_callee_tests(zero: int):
+    # me-call-with-flags-warns: two ordinary parameters and a flag; the
+    # flagged sugar passes the receiver first and the flag. (The Tcl q
+    # returns a; here it returns a only when the flag is set, so the value
+    # shows the flag reached the callee. Driven by 5, not the Tcl program's
+    # 1, so that the receiver and the argument differ.)
+    fn flagged() errors compiler::CompilerError:
+        static compile:
+            fn q(a, b, flags :quiet):
+                if quiet:
+                    a
+                else:
+                    b
+            fn sugared(x):
+                return x.q(1, :quiet)
+            fn functional(x):
+                return q(x, 1, :quiet)
+            [sugared(5), functional(5)]
+    test::value("me-call-with-flags-warns", [5, 5], flagged)
+
+    # me-chain-fully-sugared-is-silent: the fully sugared chain
+    # xs.map(norm).find(ok?) is find(map(xs, norm), ok?) (the block's local
+    # ok? shadows the root native of that name, as in the Tcl program).
+    fn chain() errors compiler::CompilerError:
+        static compile:
+            fn map(xs, f):
+                xs
+            fn find(xs, p):
+                xs
+            fn norm(x):
+                x
+            fn ok?(x):
+                x
+            fn sugared(xs):
+                return xs.map(norm).find(ok?)
+            fn functional(xs):
+                return find(map(xs, norm), ok?)
+            [sugared(1), functional(1)]
+    test::value("me-chain-fully-sugared-is-silent", [1, 1], chain)
+
+    # me-local-nested-function-callee: a function declared inside a function
+    # is a declared named function: sugar reaches it.
+    fn nested_callee() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                fn inner(a, b):
+                    a
+                return x.inner(1)
+            fn functional(x):
+                fn inner(a, b):
+                    a
+                return inner(x, 1)
+            [sugared(5), functional(5)]
+    test::value("me-local-nested-function-callee", [5, 5], nested_callee)
+
+    # me-recursion-self-call: a recursive self-call is an ordinary call.
+    # Both Tcl programs end with the sugared top-level call 1.rec(3).
+    fn recursion() errors compiler::CompilerError:
+        static compile:
+            fn sugared():
+                fn rec(a, b):
+                    if b == 0:
+                        return a
+                    return a.rec(b - 1)
+                1.rec(3)
+            fn functional():
+                fn rec(a, b):
+                    if b == 0:
+                        return a
+                    return rec(a, b - 1)
+                1.rec(3)
+            [sugared(), functional()]
+    test::value("me-recursion-self-call", [1, 1], recursion)
+
+    # me-handled-call: the call of a handled-call statement, sugared, is
+    # handled exactly like the functional one. ZERO (0, given at the
+    # registration call) takes the handler path at run time; a constant 0
+    # would be a failure the compiler proves (KnownError).
+    fn handled() errors compiler::CompilerError:
+        static compile:
+            fn h(a, b) errors Declined:
+                if a == 0:
+                    fail Declined
+                return b
+            fn sugared(x):
+                r = x.h(1):
+                    on Declined:
+                        return 0
+                return r
+            fn functional(x):
+                r = h(x, 1):
+                    on Declined:
+                        return 0
+                return r
+            [sugared(1), functional(1), sugared(zero), functional(zero)]
+    test::value("me-handled-call", [1, 1, 0, 0], handled)
+
+# ---------------------------------------------------------------------------
+# Candidates: what a sugared call can mean is decided by the resolver's own
+# candidate gathering
+
+fn register_candidate_tests():
+    # me-shadowing-later-binding-does-not-silence: a binding established
+    # after the call is invisible to it: both spellings mean the outer two.
+    fn later_binding() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                r = x.two(1)
+                two = 5
+                r
+            fn functional(x):
+                r = two(x, 1)
+                two = 5
+                r
+            [sugared(5), functional(5)]
+    test::value("me-shadowing-later-binding-does-not-silence", [5, 5], later_binding)
+
+    # me-field-named-like-function-is-a-real-ambiguity: a struct with a
+    # field `two` reaching an untyped receiver makes x.two(1) ambiguous
+    # between the field's function and the function two: rejected (in t's
+    # instance for the struct, so Type), with the message naming the
+    # receiver's type.
+    fn field_ambiguity() errors compiler::CompilerError:
+        static compile:
+            s = {two: one}
+            fn t(x):
+                return x.two(1)
+            t(s)
+    test::rejects_containing("me-field-named-like-function-is-a-real-ambiguity", compiler::DiagnosticCode::Type, "method-style call \"two\" is ambiguous: the receiver (type struct{two: ", field_ambiguity)
+
+    # me-field-named-like-function-known-receiver-warns: a receiver of
+    # statically known non-struct type cannot be that struct: no ambiguity.
+    fn known_receiver() errors compiler::CompilerError:
+        static compile:
+            s = {two: one}
+            fn sugared():
+                return [1, 2].two(1)
+            fn functional():
+                return two([1, 2], 1)
+            [sugared(), functional()]
+    test::value("me-field-named-like-function-known-receiver-warns", [[1, 2], [1, 2]], known_receiver)
+
+# ---------------------------------------------------------------------------
+# nomethod fn: an ordinary function for every functional call; its
+# receiver-form call is NomethodCall
+
+fn register_nomethod_tests():
+    # me-nomethod-parses: a nomethod function is called functionally like
+    # any other.
+    fn parses() errors compiler::CompilerError:
+        static compile:
+            nomethod fn atan2(y, x):
+                y + x
+            atan2(1, 2)
+    test::value("me-nomethod-parses", 3, parses)
+
+    # me-nomethod-nested-declaration: nomethod fn is accepted wherever fn
+    # is, nested included: its functional call is the function, its
+    # receiver-form call NomethodCall.
+    fn nested_functional() errors compiler::CompilerError:
+        static compile:
+            fn outer(a):
+                nomethod fn inner(y, x):
+                    y + x
+                return inner(a, 1)
+            outer(1)
+    test::value("me-nomethod-nested-declaration/functional", 2, nested_functional)
+
+    fn nested_sugared() errors compiler::CompilerError:
+        static compile:
+            fn outer(a):
+                nomethod fn inner(y, x):
+                    y + x
+                return a.inner(1)
+            outer(1)
+    test::rejects("me-nomethod-nested-declaration/sugared", compiler::DiagnosticCode::NomethodCall, nested_sugared)
+
+    # me-nomethod-alias-is-the-same-function: a name bound to a nomethod
+    # function is that function: sugar through the alias is NomethodCall.
+    fn alias() errors compiler::CompilerError:
+        static compile:
+            nomethod fn atan2(y, x):
+                y + x
+            g = atan2
+            5.g(1)
+    test::rejects("me-nomethod-alias-is-the-same-function", compiler::DiagnosticCode::NomethodCall, alias)
+
+    # me-nomethod-field-call-written-with-parentheses: a struct field of the
+    # name is called as (s.f)(...).
+    fn field_call() errors compiler::CompilerError:
+        static compile:
+            nomethod fn atan2(y, x):
+                y + x
+            s = {atan2: atan2}
+            (s.atan2)(1, 2)
+    test::value("me-nomethod-field-call-written-with-parentheses", 3, field_call)
+
+    # me-nomethod-identical-program: the modifier changes no behavior of a
+    # functional call.
+    fn plain() errors compiler::CompilerError:
+        static compile:
+            fn f(x, y):
+                x * y
+            fn t(a):
+                return f(a, 3)
+            t(5)
+    test::value("me-nomethod-identical-program/plain", 15, plain)
+
+    fn marked() errors compiler::CompilerError:
+        static compile:
+            nomethod fn f(x, y):
+                x * y
+            fn t(a):
+                return f(a, 3)
+            t(5)
+    test::value("me-nomethod-identical-program/marked", 15, marked)
+
+    # me-nomethod-contextual-word: nomethod is an ordinary name everywhere
+    # but before fn.
+    fn contextual_word() errors compiler::CompilerError:
+        static compile:
+            nomethod = 3
+            fn f(nomethod):
+                nomethod
+            f(nomethod)
+    test::value("me-nomethod-contextual-word", 3, contextual_word)
+
+# The shipped markings (REFACTOR-WARNINGS-CLEAN.md, P1): bit_and, bit_or and
+# bit_xor are nomethod (their operands are symmetric, so neither reads as a
+# receiver): the receiver form is NomethodCall at the method name with the
+# pinned message, and the functional call is the native's own value. The
+# shifts are not marked.
+fn register_shipped_nomethod_tests():
+    fn bit_and_sugared() errors compiler::CompilerError:
+        static compile:
+            fn t(a):
+                return a.bit_and(3)
+            t(6)
+    test::rejects_at("me-nomethod-shipped-bit-and/sugared-location", compiler::DiagnosticCode::NomethodCall, 495, 26, bit_and_sugared)
+    test::rejects_message("me-nomethod-shipped-bit-and/sugared-message", compiler::DiagnosticCode::NomethodCall, "`bit_and` is declared nomethod and cannot be called with method syntax; call it as bit_and(receiver, ...)", bit_and_sugared)
+
+    fn bit_and_functional() errors compiler::CompilerError:
+        static compile:
+            fn t(a):
+                return bit_and(a, 3)
+            t(6)
+    test::value("me-nomethod-shipped-bit-and/functional", 2, bit_and_functional)
+
+    fn bit_or_sugared() errors compiler::CompilerError:
+        static compile:
+            fn t(a):
+                return a.bit_or(3)
+            t(6)
+    test::rejects_at("me-nomethod-shipped-bit-or/sugared-location", compiler::DiagnosticCode::NomethodCall, 510, 26, bit_or_sugared)
+    test::rejects_message("me-nomethod-shipped-bit-or/sugared-message", compiler::DiagnosticCode::NomethodCall, "`bit_or` is declared nomethod and cannot be called with method syntax; call it as bit_or(receiver, ...)", bit_or_sugared)
+
+    fn bit_or_functional() errors compiler::CompilerError:
+        static compile:
+            fn t(a):
+                return bit_or(a, 3)
+            t(6)
+    test::value("me-nomethod-shipped-bit-or/functional", 7, bit_or_functional)
+
+    fn bit_xor_sugared() errors compiler::CompilerError:
+        static compile:
+            fn t(a):
+                return a.bit_xor(3)
+            t(6)
+    test::rejects_at("me-nomethod-shipped-bit-xor/sugared-location", compiler::DiagnosticCode::NomethodCall, 525, 26, bit_xor_sugared)
+    test::rejects_message("me-nomethod-shipped-bit-xor/sugared-message", compiler::DiagnosticCode::NomethodCall, "`bit_xor` is declared nomethod and cannot be called with method syntax; call it as bit_xor(receiver, ...)", bit_xor_sugared)
+
+    fn bit_xor_functional() errors compiler::CompilerError:
+        static compile:
+            fn t(a):
+                return bit_xor(a, 3)
+            t(6)
+    test::value("me-nomethod-shipped-bit-xor/functional", 5, bit_xor_functional)
+
+    # me-nomethod-shipped-shifts-stay-eligible: a shift's value is its
+    # subject: v.shift_left(1) is accepted and is shift_left(v, 1).
+    fn shift() errors compiler::CompilerError:
+        static compile:
+            fn sugared(v):
+                return v.shift_left(1)
+            fn functional(v):
+                return shift_left(v, 1)
+            [sugared(640), functional(640)]
+    test::value("me-nomethod-shipped-shifts-stay-eligible", [1280, 1280], shift)
+
+# ---------------------------------------------------------------------------
+# Backend independence: the program and its two spellings run identically on
+# every backend. N (5, given at the registration call) reaches the call at
+# run time.
+
+fn register_backend_tests(n: int):
+    # me-backend-independent-off (and the source half of
+    # me-backend-independent): the Tcl file's $::runSource.
+    fn run_source() errors compiler::CompilerError:
+        static compile:
+            fn t(x):
+                return two(x, 1)
+            t(n)
+    test::value("me-backend-independent-off", 5, run_source)
+
+    # me-sugared-and-functional-run-identically: both spellings give the
+    # same value on every backend.
+    fn both_spellings() errors compiler::CompilerError:
+        static compile:
+            fn sugared(x):
+                return x.two(1)
+            fn functional(x):
+                return two(x, 1)
+            [sugared(n), functional(n)]
+    test::value("me-sugared-and-functional-run-identically", [5, 5], both_spellings)
+
+fn register_method_eligible_tests():
+    register_receiver_form_tests()
+    register_callee_tests(0)
+    register_candidate_tests()
+    register_nomethod_tests()
+    register_shipped_nomethod_tests()
+    register_backend_tests(5)
+
+with context test::suite()
+register_method_eligible_tests()
+test::report()

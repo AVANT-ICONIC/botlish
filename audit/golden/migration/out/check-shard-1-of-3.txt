@@ -1,0 +1,152 @@
+# Side-by-side agreement on this checkout
+
+1512 ported rows of 1520 selected, 78 old test files, 30 golden suites, backends interp, compile, cranelift-generic, cranelift, 1 jobs
+
+old pass, new pass: 1512
+GENERIC STAND-IN: representation.bot (cranelift ran in place of cranelift-generic for the whole suite)
+
+Static decisions per suite (rounds, builds, method trials, mispredicted, compile s):
+    abi-bytes-native.bot                               1    1    0   0      1.5 
+    abi-numeric.bot                                    2    2    0   0      9.1 
+    callable-contracts-contravariant-rejected.bot      2    2    0   0      1.6 
+    callable-contracts-handle.bot                      1    1    0   0      0.8 
+    callable-contracts.bot                             4    8    2   0     52.3 
+    closure-escape.bot                                 1    1    0   0      3.1 
+    compiled-values.bot                                4    4    0   0     34.7 
+    core-semantics.bot                                 3    3    0   0     12.6 
+    declared-errors.bot                                3    7    3   0     28.6 
+    diagnostics.bot                                    4    6    1   0      6.9 
+    framework-semantics.bot                            4    8    2   0     20.6 
+    hir-values.bot                                     2    2    0   0      1.4 
+    imports-library-modules.bot                        3    3    0   0      4.3 
+    linux-io-native.bot                                1    1    0   0      1.5 
+    loop-collecting-refined-checks.bot                 1    1    0   0      1.7 
+    method-equivalence-imported.bot                    3    5    1   0      5.9 
+    methods-list-without-str.bot                       2    2    0   0      1.4 
+    methods.bot                                        4    6    1   0     51.5 
+    mutable-vector-str.bot                             1    1    0   0      0.9 
+    native-aggregates.bot                              1    1    0   0      5.0 
+    opaque.bot                                         6   10    2   0     42.6 
+    raw-int-abi.bot                                    1    1    0   0      3.0 
+    representation.bot                                 2    2    0   0      3.5 
+    stdlib-namespaces-entry-members.bot                1    1    0   0      0.8 
+    stdlib-namespaces.bot                              3    9    5   0     45.8 
+    strings.bot                                        2    2    0   0      7.6 
+    structs-and-enums-instances.bot                    1    1    0   0      0.9 
+    traits-path.bot                                    1    2    0   0      1.6 
+    unicode-strings.bot                                1    1    0   0      1.6 
+    warning-programs.bot                               3    4    0   0      5.3 
+
+Old tests, wall seconds per file (one tclsh each, startup included):
+    tests/abi-bytes.test                                 3.1
+    tests/abi-numeric.test                              11.2
+    tests/acceptance.test                                0.1
+    tests/ascii.test                                     7.1
+    tests/backends.test                                  0.1
+    tests/bindings.test                                  0.1
+    tests/blockescape-called-generic.test                0.3
+    tests/blockescape-nested-capturers.test              0.6
+    tests/blocks.test                                    0.1
+    tests/calls.test                                     0.1
+    tests/compiler-opt.test                             20.3
+    tests/control.test                                   0.1
+    tests/direct-hir-native.test                        13.8
+    tests/dormant-instances.test                         1.0
+    tests/elif.test                                      3.6
+    tests/emailish-predicate.test                       17.7
+    tests/enums.test                                     0.3
+    tests/error-payloads.test                            8.6
+    tests/errors.test                                    1.5
+    tests/exact-callable-executable.test                 4.8
+    tests/fixed-arity-list-return.test                   0.4
+    tests/flags.test                                     0.1
+    tests/golden-framework.test                         66.6
+    tests/higher-order-completions.test                  5.1
+    tests/hir-aot.test                                   0.1
+    tests/hir-lowering.test                              0.2
+    tests/hir-resolution.test                            0.1
+    tests/hir-samples.test                               0.2
+    tests/hir-specialize.test                            0.1
+    tests/imports.test                                   0.8
+    tests/inference.test                                 0.2
+    tests/linux-syscall.test                             1.1
+    tests/loop-collecting.test                           0.1
+    tests/loop-counted.test                              0.1
+    tests/many-boolean-arguments.test                    0.4
+    tests/method-eligible.test                           0.6
+    tests/method-sugar.test                             16.3
+    tests/module-static-values.test                      1.4
+    tests/mutable-vector.test                            0.4
+    tests/namespaced-errors.test                         1.4
+    tests/native-bitshift.test                           0.3
+    tests/native-block-escape.test                       3.5
+    tests/native-escape.test                             1.4
+    tests/native-hashing.test                            0.1
+    tests/native-listloop.test                           0.6
+    tests/native-mutarray.test                           7.4
+    tests/native-param-aggregate.test                    2.8
+    tests/native-refinement-propagation.test             2.2
+    tests/native-string-region.test                      0.2
+    tests/native-tcl-unicode.test                       26.6
+    tests/native-tiny-leaf-inline.test                   0.9
+    tests/native.test                                    0.4
+    tests/one-char-string-literal.test                   0.8
+    tests/opaque-struct.test                             3.1
+    tests/proves-naming.test                             0.5
+    tests/raw-count-loops.test                           1.4
+    tests/raw-int-abi.test                              25.4
+    tests/raw-internal-abi.test                          2.3
+    tests/same-failure.test                              0.3
+    tests/scalarbits.test                                0.1
+    tests/semantic-instances.test                        1.1
+    tests/short-demand.test                              3.4
+    tests/short-string.test                              0.8
+    tests/static-compile.test                            0.5
+    tests/stdlib-namespaces.test                         8.5
+    tests/str-char-at.test                               0.7
+    tests/strict-references.test                         0.1
+    tests/struct-scalar-replacement.test                 0.2
+    tests/structs.test                                   0.3
+    tests/structural-contract-completions.test           7.8
+    tests/surface-lowering.test                          0.1
+    tests/surface-modules.test                           1.1
+    tests/surface-samples.test                           0.5
+    tests/traits.test                                    0.4
+    tests/typed-parameters.test                          0.1
+    tests/unicode-char.test                              0.7
+    tests/value-transport.test                           4.5
+    tests/web-unreserved.test                            8.3
+    total                                              309.8 (elapsed 309.9 with 1 jobs)
+Golden suites, wall seconds per suite (compile once, run on interp, compile, cranelift-generic, cranelift):
+    abi-bytes-native.bot                                 2.6   ok
+    abi-numeric.bot                                     58.8   ok
+    callable-contracts-contravariant-rejected.bot        3.8   ok
+    callable-contracts-handle.bot                        3.1   ok
+    callable-contracts.bot                             137.8   ok
+    closure-escape.bot                                  25.3   ok
+    compiled-values.bot                                178.3   ok
+    core-semantics.bot                                  73.5   ok
+    declared-errors.bot                                104.7   ok
+    diagnostics.bot                                     15.1   ok
+    framework-semantics.bot                             33.3   ok
+    hir-values.bot                                       5.6   ok
+    imports-library-modules.bot                         15.8   ok
+    linux-io-native.bot                                  2.5   ok
+    loop-collecting-refined-checks.bot                  20.1   ok
+    method-equivalence-imported.bot                     13.5   ok
+    methods-list-without-str.bot                         4.1   ok
+    methods.bot                                        158.8   ok
+    mutable-vector-str.bot                               3.0   ok
+    native-aggregates.bot                               54.9   ok
+    opaque.bot                                          95.5   ok
+    raw-int-abi.bot                                     40.0   ok
+    representation.bot                                  12.1   ok
+    stdlib-namespaces-entry-members.bot                  3.0   ok
+    stdlib-namespaces.bot                              110.7   ok
+    strings.bot                                         50.1   ok
+    structs-and-enums-instances.bot                      3.1   ok
+    traits-path.bot                                      4.1   ok
+    unicode-strings.bot                                  7.3   ok
+    warning-programs.bot                                14.2   ok
+    total                                             1254.7 (elapsed 1254.8 with 1 jobs)
+RSS-WALL 1565.38 s, peak RSS 630 MB, user 1532.2 s, sys 16.8 s, status 0

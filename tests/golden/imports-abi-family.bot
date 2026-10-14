@@ -1,0 +1,89 @@
+# imports-abi-family.bot -- a parent namespace, its child and a type
+# import, all imported (IMPORTS.md): the source-level specification of
+#
+#   * nested namespaces: abi (lib/abi.bot) and abi::x86_64
+#     (lib/abi/x86_64.bot) are two unrelated modules, each imported and
+#     used qualified -- functions, a typed parameter, a qualified struct
+#     construction -- and each import authorizes exactly its own namespace,
+#     so with both imported both are usable;
+#   * method candidates follow the imports exactly: with abi::x86_64
+#     imported, its from_u8 is a method of an abi::U8 receiver;
+#   * a namespace import and a type import are two capabilities that
+#     combine: `import abi` authorizes abi::U8Value, `import type
+#     abi::U8Value` its short name, and both spell one type.
+#
+# Ported from tests/imports.test and tests/surface-modules.test, which stay
+# authoritative (audit/golden/migration/fragments/imports-abi-family.tsv
+# maps every test). The Tcl tests' private modules foo and foo::bar (or
+# outer and outer::inner) and example_types are abi and abi::x86_64 here.
+#
+# Imports: compiler and test (the framework); abi and abi::x86_64 (a parent
+# and its child, both imported); `import type abi::U8Value` (the short
+# name beside the namespace import). The other halves of these theorems
+# need other import sets: imports.bot (abi without abi::x86_64) and
+# imports-abi-child.bot (abi::x86_64 and the type import without abi).
+import abi
+import abi::x86_64
+import compiler
+import test
+import type abi::U8Value
+
+fn register_nested_namespace_tests():
+    # imports-nested-import-is-exact: with the parent and the child
+    # imported, both are authorized.
+    fn b_both_imported() errors compiler::CompilerError:
+        static compile:
+            [abi::u8(1).value, abi::x86_64::to_int(abi::x86_64::register64(4))]
+    test::value("imports-nested-import-is-exact/both-imported", [1, 4], b_both_imported)
+
+    # surface-modules-nested-namespace-file: the parent's function, the
+    # child's functions, a parameter typed with the child's struct and a
+    # qualified construction of it, in one program.
+    fn b_nested_namespace_program() errors compiler::CompilerError:
+        static compile:
+            fn twice(p: abi::x86_64::Register64):
+                p.word * 2
+            q = abi::x86_64::Register64 {word: 3}
+            [abi::u8(1).value, abi::x86_64::to_int(abi::x86_64::register64(4)), twice(q), q]
+    test::value("surface-modules-nested-namespace-file", [1, 4, 6, abi::x86_64::Register64 {word: 3}], b_nested_namespace_program)
+
+    # imports-method-nested-is-exact: with abi::x86_64 imported, its
+    # from_u8 (an abi::U8 parameter) and to_int are method candidates (the
+    # rejections, without the import, are imports.bot's).
+    fn b_child_methods() errors compiler::CompilerError:
+        static compile:
+            abi::u8(7).from_u8().to_int()
+    test::value("imports-method-nested-is-exact/child-imported", 7, b_child_methods)
+
+fn register_type_import_tests():
+    # imports-abi-types: abi::U8Value is one type, spelled qualified, or
+    # short through the type import, in one signature.
+    fn b_qualified_type() errors compiler::CompilerError:
+        static compile:
+            fn f(x: abi::U8Value):
+                x
+            f(200)
+    test::value("imports-abi-types/qualified", 200, b_qualified_type)
+    fn b_short_and_qualified_type() errors compiler::CompilerError:
+        static compile:
+            fn f(x: U8Value) -> abi::U8Value:
+                x
+            f(200)
+    test::value("imports-abi-types/short-and-qualified", 200, b_short_and_qualified_type)
+
+    # imports-type-import-and-namespace-import: the two imports are two
+    # capabilities, and they combine.
+    fn b_both_capabilities() errors compiler::CompilerError:
+        static compile:
+            fn f(x: U8Value) -> abi::U8Value:
+                x
+            f(7)
+    test::value("imports-type-import-and-namespace-import", 7, b_both_capabilities)
+
+fn register_abi_family_tests():
+    register_nested_namespace_tests()
+    register_type_import_tests()
+
+with context test::suite()
+register_abi_family_tests()
+test::report()

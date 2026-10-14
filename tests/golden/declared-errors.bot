@@ -1,0 +1,1996 @@
+# declared-errors.bot -- declared errors: the source-level specification of
+#
+#   * declaring an error (`error NAME`, or `error NAME:` and a block of
+#     `field: Type` lines: any declarable type, a struct declared later
+#     included), naming errors in a function's `errors` clause (once each:
+#     Duplicate) and raising one with `fail NAME` / `fail NAME {field: value}`,
+#     whose payload is checked like a struct literal (MissingField,
+#     UnknownField, DuplicateField, Type) and evaluated in written order -- a
+#     field that fails raises its own error instead;
+#   * handling: `EXPR: on NAME:` supplies the value the call rejoins with (the
+#     call's own type: Type otherwise), runs only when the call fails, may
+#     `return` from the enclosing function, may not name an error twice
+#     (Duplicate) and selects by identity only (no guards, no shapes: a
+#     second handler of one error is Duplicate, a same-shaped error is not
+#     handled); its payload is ignored, bound whole (`on NAME d:`, the
+#     anonymous struct of the declared fields: projected, compared by
+#     structure, captured) or destructured (`on NAME {a, b: c}:`, partially,
+#     nested, with the ordinary destructuring diagnostics and scope), and a
+#     payload-free error has nothing to bind (UnexpectedErrorPayload);
+#   * the static rule: what a call may raise, minus what its handlers name,
+#     must be declared by the enclosing function (UnhandledError, one charge
+#     per identity), `fail` included; partial handling with re-declaration;
+#     propagation through declaring functions, an untyped helper, a typed
+#     `Fn` contract (whose error set the callable must fit: Type), a
+#     translating handler and a validator; every backend agreeing;
+#   * the call-specific completion proofs: byte::from_int with a provably
+#     safe literal needs no handler, with a provably failing one is
+#     KnownError, with a nonnegative argument needs only AboveRange, and the
+#     native range analysis sees handled calls and handler returns;
+#   * payloads with enum, List, MutableVector and MutableArray fields, and a
+#     CompileError-shaped error needing no new mechanism;
+#   * affine payloads: failing moves the field (UseAfterMove), every handler
+#     form, propagation, partial construction, handler exits, re-failing and
+#     pending arguments run correctly; a coroutine may not fail with an
+#     affine payload (CoroutineContract) and raises its cached failure --
+#     identity and payload -- again on a later resume;
+#   * module-qualified identity: an entry error beside a module's error of
+#     the same short name, `fail` of a module's error outside its module, two
+#     handlers of one identity (Duplicate) against handlers of two same-named
+#     identities, the builtin IndexNotFound named bare in a module and in the
+#     entry program, function-type contracts comparing identities, and a
+#     coroutine's cached module error.
+#
+# Ported from tests/errors.test, tests/error-payloads.test and
+# tests/namespaced-errors.test, which stay authoritative
+# (audit/golden/migration/fragments/declared-errors.tsv maps every test of
+# the batch). The import-authorization theorems need an import set of their
+# own and live in declared-errors-imports.bot. What only Tcl observes stays
+# there: HIR, Core IR and NIR text, payload types as the compiler renders
+# them, every diagnostic beyond the first of a program, release and
+# allocation counts, forced GC stress, parser errors, an uncaught error at the
+# program boundary, and test-written modules. Every program here is strict:
+# a run-time theorem the Tcl suite ran with -strict 0 takes its inputs as
+# parameters of its registration function, so no exact-value fact decides
+# it; the native range-analysis regressions keep the Tcl programs' literals,
+# which are their subject.
+#
+# Imports: compiler and test (the framework); byte (byte::from_int and its
+# BelowRange / AboveRange, the module error of the qualified-identity tests);
+# list and str (the payload programs' list::length, list::at, list::get,
+# str::length and str::concat); coroutine (the affine payloads and the
+# coroutine failures); mutable_vector and mutable_array (payload fields of
+# those types); abi and abi::bytes (ep-principal-bytes' Bytes stream). No test
+# here is about a missing import or about which methods are visible.
+import abi
+import abi::bytes
+import byte
+import compiler
+import coroutine
+import list
+import mutable_array
+import mutable_vector
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations (top-level only). Each keeps the Tcl test's name unless two
+# tests here would collide; renames are noted.
+
+# errors.test: the TooSmall / TooBig pair of check(n), and the error of a
+# function rejecting a negative argument (the Tcl tests' E and Neg).
+error TooSmall
+error TooBig
+error Negative
+
+# errors.test: errors-callable-syntax-removed's refinement type.
+type Small = Int in 0..10
+
+# error-payloads.test: the principal declarations (epDecls).
+struct Response:
+    payloadStream: str
+    length: int
+
+error PageNotFound:
+    uri: str
+    statusCode: int
+    response: Response
+
+error ObjectNotFound:
+    uri: str
+
+error ConnectionLost
+
+# ep-declaration-field-types: every declarable field type; Later is
+# declared after the error that uses it.
+enum Kind:
+    Missing,
+    Gone,
+
+error Rich:
+    kind: Kind
+    tags: List[str]
+    later: Later
+    cb: Fn{args: [int], return: int, errors: []}
+
+struct Later:
+    n: int
+
+# ep-principal-bytes: the principal declarations with a Bytes stream
+# (renamed from Response / PageNotFound).
+struct BytesResponse:
+    payloadStream: abi::bytes::Bytes
+    length: int
+
+error BytesPageNotFound:
+    uri: str
+    statusCode: int
+    response: BytesResponse
+
+# ep-fail-written-order and the affine payloads (epAffine): a payload-free
+# error a payload field may raise.
+error Boom
+
+# ep-partial-destructuring: the declaration before and after a field is
+# added (the Tcl test's two versions of E).
+error Redirect:
+    uri: str
+
+error RedirectWithStatus:
+    uri: str
+    statusCode: int
+
+# ep-same-shape-not-interchangeable: ObjectNotFound's twin (the Tcl test's A).
+error ObjectMoved:
+    uri: str
+
+# ep-translate.
+error PageLoadFailed:
+    uri: str
+    causeText: str
+
+# ep-validator.
+error Invalid:
+    reason: str
+    at: int
+
+refined type Short = str
+
+# ep-enum-and-list-fields.
+enum ParseErrorKind:
+    UnexpectedEnd,
+    BadDigit,
+
+error ParseFailed:
+    kind: ParseErrorKind
+    offset: int
+    expected: List[str]
+
+# ep-mutable-collection-fields (the Tcl test's two versions of Full are
+# Full and FullItems).
+error Full:
+    items: MutableVector[int]
+    size: int
+
+error FullItems:
+    items: MutableVector[int]
+
+error Bad:
+    cells: MutableArray[int]
+
+# error-payloads.test: the affine declarations (epAffine).
+struct Message:
+    value: int
+
+struct Event:
+    value: int
+
+error ReadFailed:
+    stream: Coroutine{args: [Message], return: Event}
+    bytesRead: int
+
+error Plain:
+    code: int
+
+# ep-affine-exit-after-payload.
+struct Holder:
+    tag: int
+    step: Coroutine{args: [Message], return: Event}
+
+error Tagged:
+    tag: int
+
+# ep-coroutine-cached-payload, and ep-gc-stress-coroutine's version
+# (renamed OverflowNote: its second field is a String).
+error Overflow:
+    limit: int
+    seen: int
+
+error OverflowNote:
+    limit: int
+    note: str
+
+# ep-compile-error-shape: an error shaped like compiler::CompilerError (the
+# Tcl test's DiagnosticCode, SourceLocation and CompileError, renamed so that
+# they cannot be read as the compiler's own).
+enum LintCode:
+    Type,
+    Unbound,
+    UseAfterMove,
+
+struct LintLocation:
+    line: int
+    column: int
+
+error LintFailed:
+    code: LintCode
+    primary: LintLocation
+    related: List[LintLocation]
+    message: str
+
+# namespaced-errors.test: entry errors with a stock module error's short
+# name and payload -- the entry program's own AboveRange beside
+# byte::AboveRange (payload-free, both), and its own CompilerError beside
+# compiler::CompilerError (the same fields). The Tcl tests write modules a
+# and nsco declaring the twins; a suite cannot write a module.
+error AboveRange
+
+error CompilerError:
+    code: compiler::DiagnosticCode
+    primary: compiler::SourceLocation
+    related: List[compiler::SourceLocation]
+    message: str
+
+# ---------------------------------------------------------------------------
+# The shared preludes of error-payloads.test: functions every payload or
+# affine program there declares (epDecls' fetch, epAffine's helpers). They
+# compile with the suite; each test's own functions are in its block.
+
+fn fetch(uri: str) -> str errors PageNotFound:
+    if uri == "":
+        return "home"
+    fail PageNotFound {
+        uri: uri,
+        statusCode: 404,
+        response: Response {
+            payloadStream: "",
+            length: 0,
+        },
+    }
+
+fn worker(seed: int, resume Message) -> Event:
+    message = yield Event {value: seed}
+    return Event {value: message.value}
+
+fn make(seed: int) -> Coroutine{args: [Message], return: Event}:
+    coroutine {step} = worker(seed)
+    step
+
+fn read(n: int) -> int errors ReadFailed:
+    s = make(n)
+    if n > 0:
+        fail ReadFailed {stream: s, bytesRead: n}
+    0
+
+fn consume(s: Coroutine{args: [Message], return: Event}) -> int:
+    e = s(Message {value: 2})
+    e.value
+
+fn might_fail(x: int) -> int errors Boom:
+    if x > 1:
+        fail Boom
+    x
+
+# ---------------------------------------------------------------------------
+# Declaring errors and failing
+
+fn register_declaration_tests():
+    # errors-parse-decl-and-fn: an error declaration, an errors clause, fail
+    # and a handled call are accepted (the Tcl test checks only that there is
+    # no diagnostic; the program's value is pinned too).
+    fn b_decl_and_fn() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors TooSmall, TooBig:
+                if n < 0:
+                    fail TooSmall
+                else:
+                    if n > 10:
+                        fail TooBig
+                    else:
+                        n
+            r = check(5):
+                on TooSmall:
+                    0
+                on TooBig:
+                    10
+            r
+    test::value("errors-parse-decl-and-fn", 5, b_decl_and_fn)
+
+    # errors-parse-multiple-errors-clause: an errors clause names three
+    # errors.
+    fn b_three_errors() errors compiler::CompilerError:
+        static compile:
+            fn f(n) -> int errors TooSmall, TooBig, Negative:
+                fail TooSmall
+            0
+    test::value("errors-parse-multiple-errors-clause", 0, b_three_errors)
+
+    # errors-rejects-fail-not-in-own-errors-clause: `fail` of a declared error
+    # its function does not declare is UnhandledError.
+    fn b_fail_undeclared_by_function() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int:
+                fail Negative
+            0
+    test::rejects("errors-rejects-fail-not-in-own-errors-clause", compiler::DiagnosticCode::UnhandledError, b_fail_undeclared_by_function)
+
+    # errors-rejects-duplicate-in-errors-clause: an errors clause names an
+    # error once.
+    fn b_clause_twice() errors compiler::CompilerError:
+        static compile:
+            fn f() -> int errors Negative, Negative:
+                fail Negative
+            0
+    test::rejects("errors-rejects-duplicate-in-errors-clause", compiler::DiagnosticCode::Duplicate, b_clause_twice)
+
+    # errors-callable-syntax-removed: a refinement type is no constructor: a
+    # call of its name is Unbound.
+    fn b_type_call() errors compiler::CompilerError:
+        static compile:
+            Small(5)
+    test::rejects("errors-callable-syntax-removed", compiler::DiagnosticCode::Unbound, b_type_call)
+
+    # ep-declaration-field-types: a payload field may be an enum, a List, a
+    # struct declared later and a function type; every one is usable through
+    # the handler's destructuring. (The Tcl test observes the payload type
+    # as the compiler renders it.)
+    fn b_rich_fields() errors compiler::CompilerError:
+        static compile:
+            fn double(x: int) -> int:
+                x * 2
+            fn g(n: int) -> int errors Rich:
+                if n > 0:
+                    fail Rich {kind: Kind::Gone, tags: ["a", "b"], later: Later {n: n}, cb: double}
+                n
+            fn f(n: int):
+                g(n):
+                    on Rich {kind, tags, later, cb}:
+                        return [kind == Kind::Gone, list::length(tags), later.n, cb(later.n)]
+                []
+            f(3)
+    test::value("ep-declaration-field-types/usable", [true, 2, 3, 6], b_rich_fields)
+
+    # ep-fail-fields-like-a-struct-literal: a payload names every declared
+    # field once, no other, each with a value proven admissible for its
+    # declared type -- no run-time guard for an untyped one.
+    fn b_payload_missing_field() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int, y) errors ObjectNotFound:
+                fail ObjectNotFound {}
+            1
+    test::rejects("ep-fail-fields-like-a-struct-literal/missing", compiler::DiagnosticCode::MissingField, b_payload_missing_field)
+
+    fn b_payload_unknown_field() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int, y) errors ObjectNotFound:
+                fail ObjectNotFound {uri: "a", extra: 1}
+            1
+    test::rejects("ep-fail-fields-like-a-struct-literal/unknown", compiler::DiagnosticCode::UnknownField, b_payload_unknown_field)
+
+    fn b_payload_duplicate_field() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int, y) errors ObjectNotFound:
+                fail ObjectNotFound {uri: "a", uri: "b"}
+            1
+    test::rejects("ep-fail-fields-like-a-struct-literal/duplicate", compiler::DiagnosticCode::DuplicateField, b_payload_duplicate_field)
+
+    fn b_payload_wrong_type() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int, y) errors ObjectNotFound:
+                fail ObjectNotFound {uri: x}
+            1
+    test::rejects_message("ep-fail-fields-like-a-struct-literal/type", compiler::DiagnosticCode::Type, "payload field \"uri\" of error ObjectNotFound cannot be proven to satisfy its declared type str (value type: int)", b_payload_wrong_type)
+
+    fn b_payload_untyped() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int, y) errors ObjectNotFound:
+                fail ObjectNotFound {uri: y}
+            1
+    test::rejects("ep-fail-fields-like-a-struct-literal/untyped", compiler::DiagnosticCode::Type, b_payload_untyped)
+
+    # ep-fail-written-order: the payload's fields evaluate, then the error is
+    # raised; a field that fails raises its own error instead.
+    fn b_written_order() errors compiler::CompilerError:
+        static compile:
+            fn inner(b: int) -> str errors Boom:
+                if b > 5:
+                    fail Boom
+                "x"
+            fn g(a: int, b: int) -> int errors ObjectNotFound, Boom:
+                if a == b:
+                    fail ObjectNotFound {uri: str::concat("a", inner(b))}
+                a
+            fn f(a: int, b: int) -> str:
+                v = g(a, b):
+                    on ObjectNotFound {uri}:
+                        return uri
+                    on Boom:
+                        return "boom"
+                "none"
+            [f(1, 1), f(7, 7), f(1, 2)]
+    test::value("ep-fail-written-order", ["ax", "boom", "none"], b_written_order)
+
+# ---------------------------------------------------------------------------
+# Handlers
+
+# errors-handler-fallback / errors-handler-not-taken-on-success: a handler's
+# value is the fallback of a failing call, and does not run when the call
+# succeeds. INPUT is the argument of the handled call.
+fn register_fallback_test(name: str, input: int, expected: int):
+    fn b_fallback() errors compiler::CompilerError:
+        static compile:
+            fn f(n) -> int errors Negative:
+                if n < 0:
+                    fail Negative
+                else:
+                    n
+            r = f(input):
+                on Negative:
+                    999
+            r
+    test::value(name, expected, b_fallback)
+
+# errors-handler-early-return / -not-taken: a handler may `return` from the
+# function enclosing the handled call (it is part of that function, not a new
+# one); on success it does not.
+fn register_early_return_test(name: str, input: int, expected: int):
+    fn b_early_return() errors compiler::CompilerError:
+        static compile:
+            fn f(n) -> int errors Negative:
+                if n < 0:
+                    fail Negative
+                else:
+                    n
+            fn caller(n):
+                r = f(n):
+                    on Negative:
+                        return -1
+                r + 100
+            caller(input)
+    test::value(name, expected, b_early_return)
+
+fn register_handler_tests(top_input: int):
+    register_fallback_test("errors-handler-fallback", -5, 999)
+    register_fallback_test("errors-handler-not-taken-on-success", 7, 7)
+    register_early_return_test("errors-handler-early-return", -3, -1)
+    register_early_return_test("errors-handler-early-return-not-taken", 3, 103)
+
+    # errors-top-level-handled-directly: a call whose errors are all handled
+    # needs no errors declaration where it stands (the Tcl program's top
+    # level; here the block's, in a body declaring only
+    # compiler::CompilerError).
+    fn b_handled_directly() errors compiler::CompilerError:
+        static compile:
+            fn f(n) -> int errors Negative:
+                if n < 0:
+                    fail Negative
+                else:
+                    n
+            r = f(top_input):
+                on Negative:
+                    42
+            r
+    test::value("errors-top-level-handled-directly", 42, b_handled_directly)
+
+    # errors-rejects-wrong-handler-type: a handler's value must be admissible
+    # as the handled call's result type.
+    fn b_wrong_handler_type() errors compiler::CompilerError:
+        static compile:
+            fn f(n) -> int errors Negative:
+                if n < 0:
+                    fail Negative
+                else:
+                    n
+            fn g(m):
+                r = f(m):
+                    on Negative:
+                        "not an int"
+                r
+            0
+    test::rejects("errors-rejects-wrong-handler-type", compiler::DiagnosticCode::Type, b_wrong_handler_type)
+
+    # errors-rejects-duplicate-handler: one handled call names an error once.
+    fn b_duplicate_handler() errors compiler::CompilerError:
+        static compile:
+            fn f(n) -> int errors Negative:
+                if n < 0:
+                    fail Negative
+                else:
+                    n
+            fn g(m):
+                r = f(m):
+                    on Negative:
+                        1
+                    on Negative:
+                        2
+                r
+            0
+    test::rejects("errors-rejects-duplicate-handler", compiler::DiagnosticCode::Duplicate, b_duplicate_handler)
+
+    # ep-no-guards: handlers select by identity only, so a second handler of
+    # one error is Duplicate whatever it destructures. (The guard, several
+    # errors in one handler and positional payload forms are syntax errors:
+    # Tcl.)
+    fn b_second_handler() errors compiler::CompilerError:
+        static compile:
+            fn f(uri: str) -> int:
+                v = fetch(uri):
+                    on PageNotFound {statusCode}:
+                        return 1
+                    on PageNotFound {uri}:
+                        return 2
+                0
+            1
+    test::rejects("ep-no-guards/second-handler", compiler::DiagnosticCode::Duplicate, b_second_handler)
+
+    # ep-rejoin-unchanged: a handled payload error rejoins with the call's own
+    # type, like a payload-free one.
+    fn b_rejoin() errors compiler::CompilerError:
+        static compile:
+            fn f(uri: str) -> int:
+                page = fetch(uri):
+                    on PageNotFound {uri}:
+                        str::concat(uri, "!")
+                str::length(page)
+            [f(""), f("/x")]
+    test::value("ep-rejoin-unchanged/value", [4, 3], b_rejoin)
+
+    fn b_rejoin_wrong_type() errors compiler::CompilerError:
+        static compile:
+            fn f(uri: str) -> int:
+                page = fetch(uri):
+                    on PageNotFound {statusCode}:
+                        statusCode
+                str::length(page)
+            1
+    test::rejects("ep-rejoin-unchanged/type", compiler::DiagnosticCode::Type, b_rejoin_wrong_type)
+
+    # ep-handler-scope: payload bindings exist only in their handler, and may
+    # shadow an outer binding.
+    fn b_binding_leaks() errors compiler::CompilerError:
+        static compile:
+            fn f(uri: str) -> int:
+                v = fetch(uri):
+                    on PageNotFound {statusCode}:
+                        "x"
+                statusCode
+            1
+    test::rejects("ep-handler-scope/leak", compiler::DiagnosticCode::Unbound, b_binding_leaks)
+
+    fn b_binding_shadows() errors compiler::CompilerError:
+        static compile:
+            fn f(uri: str) -> int:
+                statusCode = 7
+                v = fetch(uri):
+                    on PageNotFound {statusCode}:
+                        return statusCode
+                statusCode
+            [f(""), f("/a")]
+    test::value("ep-handler-scope/shadow", [7, 404], b_binding_shadows)
+
+    # ep-bind-payload-free: a payload-free error has no payload to bind or
+    # destructure; ignoring it is unchanged.
+    fn b_bind_payload_free() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors ConnectionLost:
+                if x > 1:
+                    fail ConnectionLost
+                x
+            fn f(x: int) -> int:
+                g(x):
+                    on ConnectionLost details:
+                        1
+            1
+    test::rejects("ep-bind-payload-free/whole", compiler::DiagnosticCode::UnexpectedErrorPayload, b_bind_payload_free)
+
+    fn b_destructure_payload_free() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors ConnectionLost:
+                if x > 1:
+                    fail ConnectionLost
+                x
+            fn f(x: int) -> int:
+                g(x):
+                    on ConnectionLost {a}:
+                        1
+            1
+    test::rejects("ep-bind-payload-free/destructure", compiler::DiagnosticCode::UnexpectedErrorPayload, b_destructure_payload_free)
+
+    fn b_ignore_payload_free() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors ConnectionLost:
+                if x > 1:
+                    fail ConnectionLost
+                x
+            fn f(x: int) -> int:
+                g(x):
+                    on ConnectionLost:
+                        -1
+            [f(1), f(2)]
+    test::value("ep-bind-payload-free/ignored", [1, -1], b_ignore_payload_free)
+
+# ---------------------------------------------------------------------------
+# Payload bindings and payload field types
+
+fn register_payload_binding_tests():
+    # ep-principal-bytes: the nested destructuring reads a payload whose
+    # stream is the stdlib's Bytes.
+    fn b_principal_bytes() errors compiler::CompilerError:
+        static compile:
+            fn fetch_bytes(uri: str) -> str errors BytesPageNotFound:
+                if uri == "":
+                    return "home"
+                fail BytesPageNotFound {
+                    uri: uri,
+                    statusCode: 404,
+                    response: BytesResponse {
+                        payloadStream: abi::bytes::from_list([]),
+                        length: 0,
+                    },
+                }
+            fn nested(uri: str) -> int:
+                page = fetch_bytes(uri):
+                    on BytesPageNotFound {
+                        response: {
+                            payloadStream,
+                            length,
+                        }
+                    }:
+                        return length + abi::bytes::length(payloadStream).value
+                -1
+            [nested("/w"), nested("")]
+    test::value("ep-principal-bytes", [0, -1], b_principal_bytes)
+
+    # ep-whole-binding-is-the-payload: the whole binding is the anonymous
+    # struct of the declared fields (no identity field): equal by structure,
+    # a value like any other, projected by ordinary projection.
+    fn b_whole_equal() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors ObjectNotFound:
+                if x > 1:
+                    fail ObjectNotFound {uri: "o"}
+                x
+            fn f(x: int) -> bool:
+                v = g(x):
+                    on ObjectNotFound d:
+                        return d == {uri: "o"}
+                false
+            [f(1), f(2)]
+    test::value("ep-whole-binding-is-the-payload/equal", [false, true], b_whole_equal)
+
+    fn b_whole_value() errors compiler::CompilerError:
+        static compile:
+            fn g(uri: str):
+                v = fetch(uri):
+                    on PageNotFound details:
+                        return [details]
+                []
+            g("/p")
+    test::value("ep-whole-binding-is-the-payload/whole", [{response: Response {payloadStream: "", length: 0}, statusCode: 404, uri: "/p"}], b_whole_value)
+
+    fn b_whole_unknown_field() errors compiler::CompilerError:
+        static compile:
+            fn g(uri: str):
+                v = fetch(uri):
+                    on PageNotFound details:
+                        return details.kind
+                ""
+            1
+    test::rejects("ep-whole-binding-is-the-payload/unknown-field", compiler::DiagnosticCode::UnknownField, b_whole_unknown_field)
+
+    # ep-captured-payload-binding: a nested function captures a payload
+    # binding like any binding.
+    fn b_captured_payload() errors compiler::CompilerError:
+        static compile:
+            fn f(uri: str) -> str:
+                v = fetch(uri):
+                    on PageNotFound details:
+                        fn show() -> str:
+                            str::concat(details.uri, "?")
+                        return show()
+                "ok"
+            [f(""), f("/c")]
+    test::value("ep-captured-payload-binding", ["ok", "/c?"], b_captured_payload)
+
+    # ep-partial-destructuring: a handler names only the fields it uses; a
+    # field added to the declaration does not affect it.
+    fn b_partial_v1() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors Redirect:
+                if x > 1:
+                    fail Redirect {uri: "u"}
+                x
+            fn f(x: int) -> str:
+                v = g(x):
+                    on Redirect {uri}:
+                        return uri
+                "ok"
+            [f(1), f(2)]
+    test::value("ep-partial-destructuring/v1", ["ok", "u"], b_partial_v1)
+
+    fn b_partial_v2() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors RedirectWithStatus:
+                if x > 1:
+                    fail RedirectWithStatus {uri: "u", statusCode: 3}
+                x
+            fn f(x: int) -> str:
+                v = g(x):
+                    on RedirectWithStatus {uri}:
+                        return uri
+                "ok"
+            [f(1), f(2)]
+    test::value("ep-partial-destructuring/v2", ["ok", "u"], b_partial_v2)
+
+    # ep-destructuring-diagnostics: a handler's destructuring has the
+    # ordinary diagnostics: an unknown field, a non-struct field destructured
+    # as a struct, a name bound twice, a binding written again. (The list
+    # pattern and the rest field are syntax errors: Tcl.)
+    fn b_destructure_unknown() errors compiler::CompilerError:
+        static compile:
+            fn f(uri: str) -> int:
+                v = fetch(uri):
+                    on PageNotFound {nope}:
+                        return 1
+                0
+            1
+    test::rejects("ep-destructuring-diagnostics/unknown-field", compiler::DiagnosticCode::UnknownField, b_destructure_unknown)
+
+    fn b_destructure_not_struct() errors compiler::CompilerError:
+        static compile:
+            fn f(uri: str) -> int:
+                v = fetch(uri):
+                    on PageNotFound {statusCode: {a}}:
+                        return 1
+                0
+            1
+    test::rejects("ep-destructuring-diagnostics/not-a-struct", compiler::DiagnosticCode::NotAStruct, b_destructure_not_struct)
+
+    fn b_destructure_twice() errors compiler::CompilerError:
+        static compile:
+            fn f(uri: str) -> int:
+                v = fetch(uri):
+                    on PageNotFound {uri: a, statusCode: a}:
+                        return 1
+                0
+            1
+    test::rejects("ep-destructuring-diagnostics/duplicate-binding", compiler::DiagnosticCode::Duplicate, b_destructure_twice)
+
+    fn b_destructure_rebound() errors compiler::CompilerError:
+        static compile:
+            fn f(uri: str) -> int:
+                v = fetch(uri):
+                    on PageNotFound {uri: x}:
+                        x = 1
+                        return 1
+                0
+            1
+    test::rejects("ep-destructuring-diagnostics/rebinding", compiler::DiagnosticCode::Duplicate, b_destructure_rebound)
+
+    # ep-native-whole-binding-materializes-once: a whole binding used as a
+    # value and projected beside it. (The Tcl test also counts the payload
+    # struct built natively: once.)
+    fn b_whole_and_projection() errors compiler::CompilerError:
+        static compile:
+            fn f(uri: str):
+                v = fetch(uri):
+                    on PageNotFound details:
+                        return [details.statusCode, details]
+                []
+            f("/a")
+    test::value("ep-native-whole-binding-materializes-once/value", [404, {response: Response {payloadStream: "", length: 0}, statusCode: 404, uri: "/a"}], b_whole_and_projection)
+
+    # ep-enum-and-list-fields: an enum field is branched on with `if` after
+    # selection; a List field is an ordinary value.
+    fn b_enum_list_fields() errors compiler::CompilerError:
+        static compile:
+            fn parse(n: int) -> int errors ParseFailed:
+                if n == 0:
+                    fail ParseFailed {kind: ParseErrorKind::UnexpectedEnd, offset: 0, expected: ["digit"]}
+                if n < 0:
+                    fail ParseFailed {kind: ParseErrorKind::BadDigit, offset: 3, expected: ["0", "1"]}
+                n
+            fn f(n: int) -> int:
+                parse(n):
+                    on ParseFailed {kind, offset, expected}:
+                        if kind == ParseErrorKind::BadDigit:
+                            offset * 10 + list::length(expected)
+                        else:
+                            -1
+            [f(0), f(-1), f(5)]
+    test::value("ep-enum-and-list-fields", [-1, 32, 5], b_enum_list_fields)
+
+    # ep-mutable-collection-fields: a MutableVector or MutableArray field is
+    # an ordinary payload value, moved in as a logical copy and mutated
+    # through the handler's bindings (a payload binding is a place).
+    fn b_vector_field() errors compiler::CompilerError:
+        static compile:
+            fn fill(n: int) -> int errors Full:
+                v = mutable_vector::from_list([1, 2])
+                v.push(n)
+                if n > 2:
+                    fail Full {items: v, size: v.length()}
+                v.length()
+            fn f(n: int):
+                r = fill(n):
+                    on Full {items, size}:
+                        items.push(99)
+                        return [items.length(), size]
+                [r]
+            [f(1), f(5)]
+    test::value("ep-mutable-collection-fields/vector", [[3], [4, 3]], b_vector_field)
+
+    fn b_vector_whole() errors compiler::CompilerError:
+        static compile:
+            fn fill(n: int) -> int errors FullItems:
+                v = mutable_vector::from_list([1, 2])
+                if n > 2:
+                    fail FullItems {items: v}
+                v.length()
+            fn f(n: int):
+                r = fill(n):
+                    on FullItems details:
+                        details.items.push(7)
+                        return [details.items.length()]
+                [r]
+            [f(1), f(5)]
+    test::value("ep-mutable-collection-fields/vector-whole", [[2], [3]], b_vector_whole)
+
+    fn b_array_field() errors compiler::CompilerError:
+        static compile:
+            fn g(n: int) -> int errors Bad:
+                a = mutable_array::create(3, 0)
+                a.set(0, n):
+                    on IndexNotFound:
+                        unit
+                if n > 2:
+                    fail Bad {cells: a}
+                n
+            fn f(n: int) -> int:
+                g(n):
+                    on Bad {cells}:
+                        cells.at(0):
+                            on IndexNotFound:
+                                -1
+            [f(1), f(5)]
+    test::value("ep-mutable-collection-fields/array", [1, 5], b_array_field)
+
+    # ep-compile-error-shape: an error shaped like compiler::CompilerError --
+    # an enum code, a struct location, a List of them, a message -- is failed
+    # and handled with no new mechanism.
+    fn b_compile_error_shape() errors compiler::CompilerError:
+        static compile:
+            fn check(n: int) -> int errors LintFailed:
+                if n < 0:
+                    fail LintFailed {code: LintCode::Unbound, primary: LintLocation {line: 3, column: 7}, related: [], message: "unbound"}
+                n
+            fn assert_compiles(n: int) -> int:
+                check(n):
+                    on LintFailed {code, primary}:
+                        if code == LintCode::Unbound:
+                            primary.line * 100 + primary.column
+                        else:
+                            -1
+            [assert_compiles(-1), assert_compiles(5)]
+    test::value("ep-compile-error-shape", [307, 5], b_compile_error_shape)
+
+# ---------------------------------------------------------------------------
+# The static rule and propagation
+
+# errors-partial-handling / -propagates-other: a function handling one of two
+# errors and declaring the other; the other propagates through it. INPUT is
+# middle's argument.
+fn register_partial_handling_test(name: str, input: int, expected: int):
+    fn b_partial_handling() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors TooSmall, TooBig:
+                if n < 0:
+                    fail TooSmall
+                else:
+                    if n > 10:
+                        fail TooBig
+                    else:
+                        n
+            fn middle(n) -> int errors TooBig:
+                r = check(n):
+                    on TooSmall:
+                        0
+                r
+            r = middle(input):
+                on TooBig:
+                    -1
+            r
+    test::value(name, expected, b_partial_handling)
+
+fn register_propagation_tests():
+    # errors-rejects-unhandled-at-top-level: a call of a dynamic value that
+    # may raise errors its function neither handles nor declares is
+    # UnhandledError -- charged once per identity: handling either one still
+    # leaves the other unhandled, named by the diagnostic.
+    fn b_unhandled_both() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors TooSmall, TooBig:
+                if n < 0:
+                    fail TooSmall
+                else:
+                    if n > 10:
+                        fail TooBig
+                    else:
+                        n
+            fn g(m: int):
+                check(m)
+            0
+    test::rejects("errors-rejects-unhandled-at-top-level/both", compiler::DiagnosticCode::UnhandledError, b_unhandled_both)
+
+    fn b_unhandled_too_big() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors TooSmall, TooBig:
+                if n < 0:
+                    fail TooSmall
+                else:
+                    if n > 10:
+                        fail TooBig
+                    else:
+                        n
+            fn g(m: int):
+                check(m):
+                    on TooSmall:
+                        0
+            0
+    test::rejects_containing("errors-rejects-unhandled-at-top-level/too-big", compiler::DiagnosticCode::UnhandledError, "declared error \"TooBig\"", b_unhandled_too_big)
+
+    fn b_unhandled_too_small() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors TooSmall, TooBig:
+                if n < 0:
+                    fail TooSmall
+                else:
+                    if n > 10:
+                        fail TooBig
+                    else:
+                        n
+            fn g(m: int):
+                check(m):
+                    on TooBig:
+                        0
+            0
+    test::rejects_containing("errors-rejects-unhandled-at-top-level/too-small", compiler::DiagnosticCode::UnhandledError, "declared error \"TooSmall\"", b_unhandled_too_small)
+
+    register_partial_handling_test("errors-partial-handling", -5, 0)
+    register_partial_handling_test("errors-partial-handling-propagates-other", 20, -1)
+
+    # errors-partial-handling-without-redeclaration-rejected: handling one of
+    # two errors without declaring the other is UnhandledError.
+    fn b_partial_undeclared() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors TooSmall, TooBig:
+                if n < 0:
+                    fail TooSmall
+                else:
+                    if n > 10:
+                        fail TooBig
+                    else:
+                        n
+            fn middle(n) -> int:
+                r = check(n):
+                    on TooSmall:
+                        0
+                r
+            0
+    test::rejects("errors-partial-handling-without-redeclaration-rejected", compiler::DiagnosticCode::UnhandledError, b_partial_undeclared)
+
+    # ep-same-shape-not-interchangeable: a handler of one error does not
+    # handle a same-shaped other error.
+    fn b_same_shape() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors ObjectMoved:
+                if x == 1:
+                    fail ObjectMoved {uri: "a"}
+                x
+            fn f(x: int) -> int:
+                g(x):
+                    on ObjectNotFound {uri}:
+                        1
+            1
+    test::rejects("ep-same-shape-not-interchangeable", compiler::DiagnosticCode::UnhandledError, b_same_shape)
+
+    # ep-multiple-payload-errors: a function failing with several payload
+    # errors; each handler knows its own error's payload type (no union).
+    fn b_several_payloads() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors PageNotFound, ObjectNotFound, ConnectionLost:
+                if x == 1:
+                    fail ObjectNotFound {uri: "o"}
+                if x == 2:
+                    fail ConnectionLost
+                str::length(fetch("/p"))
+            fn f(x: int) -> int:
+                g(x):
+                    on PageNotFound {statusCode, response}:
+                        statusCode + response.length
+                    on ObjectNotFound {uri}:
+                        str::length(uri)
+                    on ConnectionLost:
+                        -1
+            [f(1), f(2), f(3)]
+    test::value("ep-multiple-payload-errors/value", [1, -1, 404], b_several_payloads)
+
+    fn b_other_errors_field() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors PageNotFound, ObjectNotFound:
+                if x == 1:
+                    fail ObjectNotFound {uri: "o"}
+                str::length(fetch("/p"))
+            fn f(x: int):
+                g(x):
+                    on ObjectNotFound {statusCode}:
+                        statusCode
+                    on PageNotFound:
+                        0
+            1
+    test::rejects("ep-multiple-payload-errors/unknown-field", compiler::DiagnosticCode::UnknownField, b_other_errors_field)
+
+    # ep-propagation: a payload propagates unchanged through declaring
+    # functions.
+    fn b_payload_propagates() errors compiler::CompilerError:
+        static compile:
+            fn mid(uri: str) -> int errors PageNotFound:
+                str::length(fetch(uri)) + 1
+            fn outer(uri: str) -> int errors PageNotFound:
+                mid(uri) * 2
+            fn f(uri: str) -> str:
+                v = outer(uri):
+                    on PageNotFound details:
+                        return details.uri
+                "ok"
+            [f("/deep"), f("")]
+    test::value("ep-propagation", ["/deep", "ok"], b_payload_propagates)
+
+    # ep-generic-propagation: an untyped `call(f, x): f(x)` propagates the
+    # payload exactly.
+    fn b_generic_propagation() errors compiler::CompilerError:
+        static compile:
+            fn call(f, x):
+                f(x)
+            fn g(x: int) -> int errors PageNotFound:
+                if x > 1:
+                    fetch("/g")
+                x
+            fn h(x: int) -> int errors PageNotFound:
+                call(g, x)
+            fn k(x: int) -> int:
+                h(x):
+                    on PageNotFound {statusCode, uri}:
+                        statusCode + str::length(uri)
+            [k(1), k(7)]
+    test::value("ep-generic-propagation", [1, 406], b_generic_propagation)
+
+    # ep-function-values: a typed Fn value's contract names the error, and
+    # its call carries the payload; a callable raising an error the contract
+    # does not allow is not admitted (Type).
+    fn b_contract_carries_payload() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors ObjectNotFound:
+                if x > 1:
+                    fail ObjectNotFound {uri: "g"}
+                x
+            fn apply(f: Fn{args: [int], return: int, errors: [ObjectNotFound]}, x: int) -> str:
+                v = f(x):
+                    on ObjectNotFound details:
+                        return details.uri
+                "ok"
+            [apply(g, 1), apply(g, 5)]
+    test::value("ep-function-values/contract", ["ok", "g"], b_contract_carries_payload)
+
+    fn b_contract_subset() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors ObjectNotFound:
+                if x > 1:
+                    fail ObjectNotFound {uri: "g"}
+                x
+            fn apply(f: Fn{args: [int], return: int, errors: []}, x: int) -> int:
+                f(x)
+            apply(g, 1)
+    test::rejects("ep-function-values/subset", compiler::DiagnosticCode::Type, b_contract_subset)
+
+    # ep-translate: a handler fails another error built from the payload it
+    # received (no automatic cause chain).
+    fn b_translate() errors compiler::CompilerError:
+        static compile:
+            fn load(uri: str) -> str errors PageLoadFailed:
+                fetch(uri):
+                    on PageNotFound details:
+                        fail PageLoadFailed {uri: uri, causeText: str::concat("status ", "404")}
+            fn f(uri: str) -> str:
+                load(uri):
+                    on PageLoadFailed {causeText, uri: u}:
+                        str::concat(u, causeText)
+            [f("/a"), f("")]
+    test::value("ep-translate", ["/astatus 404", "home"], b_translate)
+
+    # ep-validator: a validator failing with a payload error proves its
+    # refinement on success only: a handler that rejoins leaves the value
+    # unproven (Type at its use).
+    fn b_validator() errors compiler::CompilerError:
+        static compile:
+            fn validate_short(value: str) -> unit proves value: Short errors Invalid:
+                if str::length(value) > 3:
+                    fail Invalid {reason: "too long", at: str::length(value)}
+            fn use(s: Short) -> int:
+                str::length(s)
+            fn f(text: str) -> int:
+                validate_short(text):
+                    on Invalid {at}:
+                        return -at
+                use(text)
+            [f("ab"), f("abcdef")]
+    test::value("ep-validator/value", [2, -6], b_validator)
+
+    fn b_validator_rejoins() errors compiler::CompilerError:
+        static compile:
+            fn validate_short(value: str) -> unit proves value: Short errors Invalid:
+                if str::length(value) > 3:
+                    fail Invalid {reason: "too long", at: str::length(value)}
+            fn use(s: Short) -> int:
+                str::length(s)
+            fn f(text: str) -> int:
+                validate_short(text):
+                    on Invalid {at}:
+                        -1
+                use(text)
+            [f("ab"), f("abcdef")]
+    test::rejects("ep-validator/rejoin", compiler::DiagnosticCode::Type, b_validator_rejoins)
+
+# ---------------------------------------------------------------------------
+# Every backend agrees (the runner compares the four reports)
+
+# errors-all-backends-success-path / -first-branch / -second-branch: one
+# handled call of check, its argument INPUT.
+fn register_backend_agreement_test(name: str, input: int, expected: int):
+    fn b_one_path() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors TooSmall, TooBig:
+                if n < 0:
+                    fail TooSmall
+                else:
+                    if n > 10:
+                        fail TooBig
+                    else:
+                        n
+            r = check(input):
+                on TooSmall:
+                    -1
+                on TooBig:
+                    -2
+            r
+    test::value(name, expected, b_one_path)
+
+fn register_backend_agreement_tests(small: int, below: int, above: int):
+    register_backend_agreement_test("errors-all-backends-success-path", 5, 5)
+    register_backend_agreement_test("errors-all-backends-first-branch", -5, -1)
+    register_backend_agreement_test("errors-all-backends-second-branch", 20, -2)
+
+    # errors-all-backends-values: all three paths in one program.
+    fn b_all_paths() errors compiler::CompilerError:
+        static compile:
+            fn check(n) -> int errors TooSmall, TooBig:
+                if n < 0:
+                    fail TooSmall
+                else:
+                    if n > 10:
+                        fail TooBig
+                    else:
+                        n
+            fn convert(n) -> int:
+                r = check(n):
+                    on TooSmall:
+                        -1
+                    on TooBig:
+                        -2
+                r
+            [convert(small), convert(below), convert(above)]
+    test::value("errors-all-backends-values", [5, -1, -2], b_all_paths)
+
+# ---------------------------------------------------------------------------
+# Call-specific completion proofs and the native range analysis
+
+# errors-byte-from-int-in-range / -below-range / -above-range: byte::from_int
+# succeeds in range and reaches the handler of the error it raises. The Tcl
+# programs' handler values -1 and -2 rejoin as the call's Byte, which strict
+# code rejects (Type): here the handlers return them from conv.
+fn register_from_int_test(name: str, input: int, expected: int):
+    fn b_from_int() errors compiler::CompilerError:
+        static compile:
+            byte::high_nibble(0)
+            fn conv(v: int) -> int:
+                b = byte::from_int(v):
+                    on byte::BelowRange:
+                        return -1
+                    on byte::AboveRange:
+                        return -2
+                b
+            conv(input)
+    test::value(name, expected, b_from_int)
+
+fn register_completion_proof_tests():
+    register_from_int_test("errors-byte-from-int-in-range", 200, 200)
+    register_from_int_test("errors-byte-from-int-below-range", 0 - 1, -1)
+    register_from_int_test("errors-byte-from-int-above-range", 256, -2)
+
+    # errors-byte-from-int-unhandled-rejected: byte::from_int of a dynamic
+    # value, unhandled, is UnhandledError once per error it may raise.
+    fn b_from_int_unhandled() errors compiler::CompilerError:
+        static compile:
+            byte::high_nibble(0)
+            fn g(m: int):
+                byte::from_int(m)
+            0
+    test::rejects("errors-byte-from-int-unhandled-rejected/both", compiler::DiagnosticCode::UnhandledError, b_from_int_unhandled)
+
+    fn b_from_int_below_handled() errors compiler::CompilerError:
+        static compile:
+            byte::high_nibble(0)
+            fn g(m: int):
+                byte::from_int(m):
+                    on byte::BelowRange:
+                        0
+            0
+    test::rejects_containing("errors-byte-from-int-unhandled-rejected/above-range", compiler::DiagnosticCode::UnhandledError, "declared error \"byte::AboveRange\"", b_from_int_below_handled)
+
+    fn b_from_int_above_handled() errors compiler::CompilerError:
+        static compile:
+            byte::high_nibble(0)
+            fn g(m: int):
+                byte::from_int(m):
+                    on byte::AboveRange:
+                        255
+            0
+    test::rejects_containing("errors-byte-from-int-unhandled-rejected/below-range", compiler::DiagnosticCode::UnhandledError, "declared error \"byte::BelowRange\"", b_from_int_above_handled)
+
+    # errors-byte-from-int-known-safe-literal-no-handler: a provably in-range
+    # literal needs no handler.
+    fn b_from_int_known_safe() errors compiler::CompilerError:
+        static compile:
+            byte::high_nibble(0)
+            byte::from_int(5)
+    test::value("errors-byte-from-int-known-safe-literal-no-handler", 5, b_from_int_known_safe)
+
+    # errors-byte-from-int-known-failure-literal: a provably out-of-range
+    # literal is KnownError, not UnhandledError.
+    fn b_from_int_known_failure() errors compiler::CompilerError:
+        static compile:
+            byte::high_nibble(0)
+            byte::from_int(999)
+    test::rejects("errors-byte-from-int-known-failure-literal", compiler::DiagnosticCode::KnownError, b_from_int_known_failure)
+
+    # errors-byte-from-int-partial-range-elimination: an argument known
+    # nonnegative but not bounded above needs only byte::AboveRange.
+    fn b_from_int_nonnegative() errors compiler::CompilerError:
+        static compile:
+            byte::high_nibble(0)
+            fn nonneg(m) -> int:
+                if m < 0:
+                    0 - m
+                else:
+                    m
+            fn g(m) -> int errors byte::AboveRange:
+                byte::from_int(nonneg(m))
+            0
+    test::value("errors-byte-from-int-partial-range-elimination", 0, b_from_int_nonnegative)
+
+    # errors-handled-call-joins-callee-entry-range: a handled call's unbounded
+    # argument widens the callee's entry range (the unhandled f(5) alone must
+    # not make x + 1 a raw small-Int addition natively).
+    fn b_handled_call_range() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> int errors Negative:
+                if x < 0:
+                    fail Negative
+                else:
+                    x + 1
+            a = f(5)
+            ns = [4611686018427387903]
+            bs = loop n in ns:
+                r = f(n):
+                    on Negative:
+                        0
+                r
+            [a, bs]
+    test::value("errors-handled-call-joins-callee-entry-range", [6, [4611686018427387904]], b_handled_call_range)
+
+    # errors-handler-return-joins-result-range: a handler's return is part of
+    # its function's result range (g's call is no proven constant).
+    fn b_handler_return_range() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> int errors Negative:
+                if x < 0:
+                    fail Negative
+                else:
+                    x
+            fn g(x: int) -> int:
+                r = f(x):
+                    on Negative:
+                        return 4611686018427387903
+                5
+            fn h(x: int) -> int:
+                g(x) + 1
+            [h(0 - 1), h(3)]
+    test::value("errors-handler-return-joins-result-range", [4611686018427387904, 6], b_handler_return_range)
+
+    # errors-handled-byte-from-int-bigint: byte::from_int(45) alone does not
+    # narrow from_int's shared instance: a BigInt reaching it through a
+    # handled call is range-checked as a BigInt.
+    fn b_from_int_bigint() errors compiler::CompilerError:
+        static compile:
+            a = byte::from_int(45)
+            ns = [0 - 100000000000000000000000, 100000000000000000000000]
+            bs = loop n in ns:
+                b = byte::from_int(n):
+                    on byte::BelowRange:
+                        1
+                    on byte::AboveRange:
+                        2
+                b
+            [a, bs]
+    test::value("errors-handled-byte-from-int-bigint", [45, [1, 2]], b_from_int_bigint)
+
+# ---------------------------------------------------------------------------
+# Affine payloads (epAffine: a payload owning a coroutine)
+
+fn register_affine_payload_tests():
+    # ep-affine-fail-moves: failing with an affine field moves it into the
+    # payload: a later use, in a later field or after another move, is
+    # UseAfterMove.
+    fn b_moved_then_used() errors compiler::CompilerError:
+        static compile:
+            fn g(n: int) -> int errors ReadFailed:
+                s = make(n)
+                if n > 0:
+                    fail ReadFailed {stream: s, bytesRead: consume(s)}
+                0
+            1
+    test::rejects("ep-affine-fail-moves/later-field", compiler::DiagnosticCode::UseAfterMove, b_moved_then_used)
+
+    fn b_moved_before_fail() errors compiler::CompilerError:
+        static compile:
+            fn g(n: int) -> int errors ReadFailed:
+                s = make(n)
+                t = s
+                if n > 0:
+                    fail ReadFailed {stream: s, bytesRead: 1}
+                0
+            1
+    test::rejects("ep-affine-fail-moves/moved", compiler::DiagnosticCode::UseAfterMove, b_moved_before_fail)
+
+    # ep-affine-handlers: an ignored payload, a whole binding, a destructured
+    # stream used in the handler, and a partial destructuring all run. (The
+    # Tcl test also counts the coroutines left alive: none.)
+    fn b_affine_ignored() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) -> int:
+                read(n):
+                    on ReadFailed:
+                        7
+            [f(3), f(0)]
+    test::value("ep-affine-handlers/ignored", [7, 0], b_affine_ignored)
+
+    fn b_affine_whole() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) -> int:
+                read(n):
+                    on ReadFailed details:
+                        details.bytesRead
+            [f(3), f(0)]
+    test::value("ep-affine-handlers/whole", [3, 0], b_affine_whole)
+
+    fn b_affine_destructured() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) -> int:
+                read(n):
+                    on ReadFailed {stream, bytesRead}:
+                        e = stream(Message {value: 40})
+                        e.value + bytesRead
+            [f(3), f(0)]
+    test::value("ep-affine-handlers/destructured", [43, 0], b_affine_destructured)
+
+    fn b_affine_partial() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) -> int:
+                read(n):
+                    on ReadFailed {bytesRead}:
+                        bytesRead
+            [f(3), f(0)]
+    test::value("ep-affine-handlers/partial", [3, 0], b_affine_partial)
+
+    # ep-affine-propagation: an affine payload propagates through a declaring
+    # function to the handler that takes it.
+    fn b_affine_propagation() errors compiler::CompilerError:
+        static compile:
+            fn mid(n: int) -> int errors ReadFailed:
+                read(n) + 1
+            fn f(n: int) -> int:
+                mid(n):
+                    on ReadFailed {stream: s, bytesRead: b}:
+                        e = s(Message {value: 5})
+                        e.value * 100 + b
+            [f(3), f(0)]
+    test::value("ep-affine-propagation", [503, 1], b_affine_propagation)
+
+    # ep-affine-partial-construction: a later payload field that fails
+    # abandons the payload, whose moved affine field is released.
+    fn b_affine_partial_construction() errors compiler::CompilerError:
+        static compile:
+            fn g(n: int) -> int errors ReadFailed, Boom:
+                s = make(n)
+                if n > 0:
+                    fail ReadFailed {stream: s, bytesRead: might_fail(n)}
+                0
+            fn f(n: int) -> int:
+                g(n):
+                    on ReadFailed {bytesRead}:
+                        bytesRead
+                    on Boom:
+                        -1
+            [f(3), f(1), f(0)]
+    test::value("ep-affine-partial-construction", [-1, 1, 0], b_affine_partial_construction)
+
+    # ep-affine-handler-exits: a handler that returns, fails, continues or
+    # breaks releases the payload bindings it still owns.
+    fn b_affine_exit_return() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) -> int:
+                x = read(n):
+                    on ReadFailed {stream, bytesRead}:
+                        if bytesRead > 2:
+                            return 99
+                        consume(stream)
+                x + 1
+            [f(3), f(2), f(0)]
+    test::value("ep-affine-handler-exits/return", [99, 3, 1], b_affine_exit_return)
+
+    fn b_affine_exit_fail() errors compiler::CompilerError:
+        static compile:
+            fn f(n: int) -> int errors Boom:
+                x = read(n):
+                    on ReadFailed details:
+                        might_fail(n)
+                x + 1
+            fn h(n: int) -> int:
+                f(n):
+                    on Boom:
+                        -5
+            [h(3), h(1), h(0)]
+    test::value("ep-affine-handler-exits/fail", [-5, 2, 1], b_affine_exit_fail)
+
+    fn b_affine_exit_loop() errors compiler::CompilerError:
+        static compile:
+            fn f(k: int) -> int:
+                total = loop i from 0 to k:
+                    x = read(i):
+                        on ReadFailed {stream, bytesRead}:
+                            if bytesRead == 2:
+                                continue
+                            if bytesRead == 4:
+                                break
+                            consume(stream)
+                    x
+                list::length(total)
+            [f(6)]
+    test::value("ep-affine-handler-exits/loop", [3], b_affine_exit_loop)
+
+    # ep-affine-refail: a handler destructures an affine payload and fails
+    # another error built from an unrestricted field.
+    fn b_affine_refail() errors compiler::CompilerError:
+        static compile:
+            fn mid(n: int) -> int errors Plain:
+                read(n):
+                    on ReadFailed {bytesRead}:
+                        fail Plain {code: bytesRead}
+            fn f(n: int) -> int:
+                mid(n):
+                    on Plain {code}:
+                        code
+            [f(3), f(0)]
+    test::value("ep-affine-refail", [3, 0], b_affine_refail)
+
+    # ep-affine-pending-arguments: a call abandoned by a payload error
+    # releases the caller's pending affine argument.
+    fn b_affine_pending() errors compiler::CompilerError:
+        static compile:
+            fn use2(c: Coroutine{args: [Message], return: Event}, n: int) -> int:
+                consume(c) + n
+            fn g(n: int) -> int errors ReadFailed:
+                use2(make(1), read(n))
+            fn f(n: int) -> int:
+                g(n):
+                    on ReadFailed {bytesRead}:
+                        bytesRead * 10
+            [f(3), f(0)]
+    test::value("ep-affine-pending-arguments", [30, 2], b_affine_pending)
+
+    # ep-affine-exit-after-payload: a fail whose payload reads an
+    # unrestricted field of an affine owner releases the owner as it leaves,
+    # after the payload is evaluated.
+    fn b_affine_exit_after_payload() errors compiler::CompilerError:
+        static compile:
+            fn g(n: int) -> int errors Tagged:
+                h = Holder {tag: n, step: make(n)}
+                if n > 1:
+                    fail Tagged {tag: h.tag * 2}
+                {step} = h
+                e = step(Message {value: 5})
+                e.value
+            fn f(n: int) -> int:
+                g(n):
+                    on Tagged {tag}:
+                        tag
+            [f(3), f(1)]
+    test::value("ep-affine-exit-after-payload", [6, 5], b_affine_exit_after_payload)
+
+    # ep-uncaught-strict: an affine payload error never reaches the program
+    # boundary: unhandled and undeclared, it is UnhandledError.
+    fn b_affine_unhandled() errors compiler::CompilerError:
+        static compile:
+            fn top(n: int) -> int:
+                read(n)
+            1
+    test::rejects("ep-uncaught-strict", compiler::DiagnosticCode::UnhandledError, b_affine_unhandled)
+
+    # ep-gc-stress: heap payloads crossing several frames, handled after
+    # allocations, and an affine payload re-failed while allocating. (The Tcl
+    # test runs them with a collection at every native allocation; the golden
+    # suites run so only under BOTLISH_NATIVE_GC_STRESS.)
+    fn b_heap_payloads() errors compiler::CompilerError:
+        static compile:
+            fn mid(uri: str) -> int errors PageNotFound:
+                str::length(fetch(str::concat(uri, "/x")))
+            fn outer(uri: str) -> int errors PageNotFound:
+                junk = [str::concat(uri, "a"), str::concat(uri, "b")]
+                mid(uri) + list::length(junk)
+            fn f(uri: str) -> str:
+                v = outer(uri):
+                    on PageNotFound {uri: u, response}:
+                        more = [str::concat(u, "!"), str::concat(u, "?")]
+                        return str::concat(list::at(more, 1), response.payloadStream):
+                            on IndexNotFound:
+                                ""
+                "none"
+            [f("/p"), f("/q")]
+    test::value("ep-gc-stress/heap", ["/p/x?", "/q/x?"], b_heap_payloads)
+
+    fn b_affine_refail_allocating() errors compiler::CompilerError:
+        static compile:
+            fn mid(n: int) -> int errors Plain:
+                read(n):
+                    on ReadFailed {bytesRead}:
+                        junk = [make(1), make(2)]
+                        fail Plain {code: bytesRead + list::length(junk)}
+            fn f(n: int) -> int:
+                mid(n):
+                    on Plain {code}:
+                        code
+            [f(3), f(0)]
+    test::value("ep-gc-stress/affine", [5, 0], b_affine_refail_allocating)
+
+# ---------------------------------------------------------------------------
+# Coroutines that fail
+
+fn register_coroutine_failure_tests():
+    # ep-coroutine-affine-payload-rejected: a coroutine may not fail with an
+    # error whose payload is affine (its cached failure is raised again):
+    # CoroutineContract; an unrestricted payload is fine.
+    fn b_coroutine_affine_payload() errors compiler::CompilerError:
+        static compile:
+            fn gen(resume Message) -> Event errors ReadFailed:
+                m = yield Event {value: 1}
+                if m.value > 1:
+                    s = make(1)
+                    fail ReadFailed {stream: s, bytesRead: 1}
+                Event {value: 2}
+            coroutine {step} = gen():
+                on ReadFailed:
+                    Event {value: 0}
+            1
+    test::rejects("ep-coroutine-affine-payload-rejected/affine", compiler::DiagnosticCode::CoroutineContract, b_coroutine_affine_payload)
+
+    fn b_coroutine_plain_payload() errors compiler::CompilerError:
+        static compile:
+            fn gen(resume Message) -> Event errors Plain:
+                m = yield Event {value: 1}
+                if m.value > 1:
+                    fail Plain {code: m.value}
+                Event {value: 2}
+            coroutine {step} = gen():
+                on Plain:
+                    Event {value: 0}
+            1
+    test::value("ep-coroutine-affine-payload-rejected/unrestricted", 1, b_coroutine_plain_payload)
+
+    # ep-coroutine-cached-payload: a coroutine that failed with a payload
+    # raises the same payload again on a later resume, never running its body
+    # again.
+    fn b_cached_payload() errors compiler::CompilerError:
+        static compile:
+            fn counter(limit: int, resume Message) -> int errors Overflow:
+                m = yield 0
+                if m.value > limit:
+                    fail Overflow {limit: limit, seen: m.value}
+                m.value
+            fn go(n: int) -> int:
+                coroutine {step} = counter(3):
+                    on Overflow:
+                        return -1
+                a = step(Message {value: n}):
+                    on Overflow {seen}:
+                        seen * 10
+                b = step(Message {value: 1}):
+                    on Overflow details:
+                        details.limit * 100 + details.seen
+                a + b
+            [go(2), go(9)]
+    test::value("ep-coroutine-cached-payload", [4, 399], b_cached_payload)
+
+    # ep-gc-stress-coroutine: a coroutine's cached failure keeps its heap
+    # payload alive and raises it again (under forced GC stress in Tcl).
+    fn b_cached_heap_payload() errors compiler::CompilerError:
+        static compile:
+            fn counter(limit: int, resume Message) -> int errors OverflowNote:
+                m = yield 0
+                if m.value > limit:
+                    fail OverflowNote {limit: limit, note: str::concat("over", "flow")}
+                m.value
+            fn go(n: int) -> str:
+                coroutine {step} = counter(3):
+                    on OverflowNote:
+                        return "start"
+                a = step(Message {value: n}):
+                    on OverflowNote {note}:
+                        junk = [str::concat(note, "1"), str::concat(note, "2")]
+                        -1
+                b = step(Message {value: 1}):
+                    on OverflowNote details:
+                        return str::concat(details.note, "!")
+                "done"
+            [go(2), go(9)]
+    test::value("ep-gc-stress-coroutine", ["done", "overflow!"], b_cached_heap_payload)
+
+# ---------------------------------------------------------------------------
+# Module-qualified error identity (namespaced-errors.test). The Tcl tests'
+# test-written modules are stock ones here: byte (a module raising its own
+# payload-free errors), compiler (a module's payload-bearing error) and list
+# (a module handling the builtin IndexNotFound); the entry program's
+# same-named errors are the top-level AboveRange and CompilerError.
+
+fn register_qualified_identity_tests():
+    # nerr-entry-beside-module: the entry program's AboveRange is the bare
+    # identity beside byte::AboveRange: both raised, both handled, never
+    # confused -- the entry's bare handler does not handle the module's error.
+    fn b_entry_beside_module() errors compiler::CompilerError:
+        static compile:
+            fn mine(x: int) -> int errors AboveRange:
+                if x < 0:
+                    fail AboveRange
+                x
+            fn f(x: int):
+                r = mine(x):
+                    on AboveRange:
+                        return ["mine", x]
+                s = byte::from_int(r + 250):
+                    on byte::AboveRange:
+                        return ["byte", r]
+                    on byte::BelowRange:
+                        return ["below", r]
+                s
+            [f(-1), f(3), f(20)]
+    test::value("nerr-entry-beside-module/both", [["mine", -1], 253, ["byte", 20]], b_entry_beside_module)
+
+    fn b_entry_handler_for_module_error() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> int:
+                b = byte::from_int(x):
+                    on AboveRange:
+                        return 0
+                    on byte::BelowRange:
+                        return 1
+                b
+            0
+    test::rejects_containing("nerr-entry-beside-module/bare-handler", compiler::DiagnosticCode::UnhandledError, "declared error \"byte::AboveRange\"", b_entry_handler_for_module_error)
+
+    # nerr-fail-outside-owner: outside its module, `fail compiler::CompilerError
+    # {...}` constructs the payload under exactly the ordinary checks.
+    fn b_fail_outside_owner() errors compiler::CompilerError:
+        static compile:
+            fn mk(x: int) -> int errors compiler::CompilerError, byte::BelowRange:
+                if x < 0:
+                    fail compiler::CompilerError {
+                        code: compiler::DiagnosticCode::Type,
+                        primary: compiler::SourceLocation {line: 7, column: 1},
+                        related: [],
+                        message: "m",
+                    }
+                x
+            fn f(x: int) -> int:
+                mk(x):
+                    on compiler::CompilerError {primary}:
+                        primary.line
+                    on byte::BelowRange:
+                        0
+            [f(-1), f(2)]
+    test::value("nerr-fail-outside-owner/value", [7, 2], b_fail_outside_owner)
+
+    fn b_outside_missing_payload() errors compiler::CompilerError:
+        static compile:
+            fn mk(x: int) -> int errors compiler::CompilerError, byte::BelowRange:
+                if x < 0:
+                    fail compiler::CompilerError
+                x
+            0
+    test::rejects("nerr-fail-outside-owner/missing-payload", compiler::DiagnosticCode::MissingErrorPayload, b_outside_missing_payload)
+
+    fn b_outside_unexpected_payload() errors compiler::CompilerError:
+        static compile:
+            fn mk(x: int) -> int errors compiler::CompilerError, byte::BelowRange:
+                if x < 0:
+                    fail byte::BelowRange {code: 1}
+                x
+            0
+    test::rejects("nerr-fail-outside-owner/unexpected-payload", compiler::DiagnosticCode::UnexpectedErrorPayload, b_outside_unexpected_payload)
+
+    fn b_outside_missing_field() errors compiler::CompilerError:
+        static compile:
+            fn mk(x: int) -> int errors compiler::CompilerError, byte::BelowRange:
+                if x < 0:
+                    fail compiler::CompilerError {}
+                x
+            0
+    test::rejects("nerr-fail-outside-owner/missing-field", compiler::DiagnosticCode::MissingField, b_outside_missing_field)
+
+    fn b_outside_unknown_field() errors compiler::CompilerError:
+        static compile:
+            fn mk(x: int) -> int errors compiler::CompilerError, byte::BelowRange:
+                if x < 0:
+                    fail compiler::CompilerError {
+                        code: compiler::DiagnosticCode::Type,
+                        primary: compiler::SourceLocation {line: 7, column: 1},
+                        related: [],
+                        message: "m",
+                        x: 2,
+                    }
+                x
+            0
+    test::rejects("nerr-fail-outside-owner/unknown-field", compiler::DiagnosticCode::UnknownField, b_outside_unknown_field)
+
+    fn b_outside_duplicate_field() errors compiler::CompilerError:
+        static compile:
+            fn mk(x: int) -> int errors compiler::CompilerError, byte::BelowRange:
+                if x < 0:
+                    fail compiler::CompilerError {
+                        code: compiler::DiagnosticCode::Type,
+                        primary: compiler::SourceLocation {line: 7, column: 1},
+                        related: [],
+                        message: "m",
+                        message: "n",
+                    }
+                x
+            0
+    test::rejects("nerr-fail-outside-owner/duplicate-field", compiler::DiagnosticCode::DuplicateField, b_outside_duplicate_field)
+
+    fn b_outside_wrong_type() errors compiler::CompilerError:
+        static compile:
+            fn mk(x: int) -> int errors compiler::CompilerError, byte::BelowRange:
+                if x < 0:
+                    fail compiler::CompilerError {
+                        code: compiler::DiagnosticCode::Type,
+                        primary: compiler::SourceLocation {line: 7, column: 1},
+                        related: [],
+                        message: 1,
+                    }
+                x
+            0
+    test::rejects("nerr-fail-outside-owner/type", compiler::DiagnosticCode::Type, b_outside_wrong_type)
+
+    # nerr-duplicate-handlers: two handlers of one identity are Duplicate;
+    # handlers of two identities sharing a short name are not.
+    fn b_qualified_twice() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> int:
+                b = byte::from_int(x):
+                    on byte::AboveRange:
+                        return 0
+                    on byte::AboveRange:
+                        return 1
+                    on byte::BelowRange:
+                        return 2
+                b
+            0
+    test::rejects("nerr-duplicate-handlers/qualified-twice", compiler::DiagnosticCode::Duplicate, b_qualified_twice)
+
+    fn b_same_short_name_pair() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> int:
+                b = byte::from_int(x):
+                    on byte::AboveRange:
+                        return 0
+                    on AboveRange:
+                        return 1
+                    on byte::BelowRange:
+                        return 2
+                b
+            [f(300), f(-1), f(5)]
+    test::value("nerr-duplicate-handlers/same-short-name", [0, 2, 5], b_same_short_name_pair)
+
+    # nerr-both-handlers: one call that may raise both the entry's AboveRange
+    # and byte::AboveRange has a handler for each identity, and each runs for
+    # its own identity only -- the entry's error passes the handler written
+    # first, byte::AboveRange's, to its own.
+    fn b_both_handlers() errors compiler::CompilerError:
+        static compile:
+            fn mine(x: int) -> int errors AboveRange:
+                if x < 0:
+                    fail AboveRange
+                x
+            fn mix(x: int, which: int) errors AboveRange, byte::AboveRange, byte::BelowRange:
+                if which == 0:
+                    return mine(x)
+                byte::from_int(x)
+            fn f(x: int, which: int):
+                r = mix(x, which):
+                    on byte::AboveRange:
+                        return ["byte", x]
+                    on AboveRange:
+                        return ["mine", x]
+                    on byte::BelowRange:
+                        return ["below", x]
+                r
+            [f(-9, 0), f(300, 1), f(3, 1)]
+    test::value("nerr-both-handlers", [["mine", -9], ["byte", 300], 3], b_both_handlers)
+
+    # nerr-completion-sets: a call that may raise byte::AboveRange or the
+    # entry's AboveRange keeps both, a handler for each catching its own (the
+    # entry's error passes byte::AboveRange's handler); and where exact
+    # narrowing excludes the entry's error, handling byte::AboveRange alone
+    # is enough.
+    fn b_completion_sets() errors compiler::CompilerError:
+        static compile:
+            fn pick(x: int) -> int errors byte::AboveRange, AboveRange:
+                if x < 0:
+                    fail byte::AboveRange
+                if x > 100:
+                    fail AboveRange
+                x
+            fn both(k: int):
+                pick(k):
+                    on byte::AboveRange:
+                        0
+                    on AboveRange:
+                        1
+            fn low(k: int):
+                if k > 50:
+                    return 0
+                pick(k):
+                    on byte::AboveRange:
+                        k
+            [both(-1), both(200), low(-7), low(60)]
+    test::value("nerr-completion-sets/value", [0, 1, -7, 0], b_completion_sets)
+
+    # nerr-builtin-root: the runtime's builtin IndexNotFound is a root
+    # identity named bare everywhere: in a module (list::get handles it) and
+    # in the entry program.
+    fn b_builtin_root() errors compiler::CompilerError:
+        static compile:
+            fn g(xs: List[int]) -> int:
+                list::at(xs, 1):
+                    on IndexNotFound:
+                        -2
+            [list::get([], 0, -1), g([7]), list::get([4], 0, -1)]
+    test::value("nerr-builtin-root/bare", [-1, -2, 4], b_builtin_root)
+
+    # nerr-contracts: an errors clause and a function type name a module's
+    # error by its identity; the contract's subset check compares identities,
+    # never short names.
+    fn b_contract_identity() errors compiler::CompilerError:
+        static compile:
+            fn run(x: int) -> int errors byte::AboveRange:
+                if x < 0:
+                    fail byte::AboveRange
+                x
+            fn apply(k: Fn{args: [int], return: int, errors: [byte::AboveRange]}, x: int) -> int errors byte::AboveRange:
+                k(x)
+            fn f(x: int) -> int:
+                apply(run, x):
+                    on byte::AboveRange:
+                        -1
+            [f(-6), f(6)]
+    test::value("nerr-contracts/value", [-1, 6], b_contract_identity)
+
+    fn b_contract_short_name() errors compiler::CompilerError:
+        static compile:
+            fn run(x: int) -> int errors AboveRange:
+                if x < 0:
+                    fail AboveRange
+                x
+            fn apply(k: Fn{args: [int], return: int, errors: [byte::AboveRange]}, x: int) -> int errors byte::AboveRange:
+                k(x)
+            fn f(x: int) -> int:
+                apply(run, x):
+                    on byte::AboveRange:
+                        -1
+            0
+    test::rejects_containing("nerr-contracts/same-short-name", compiler::DiagnosticCode::Type, "error set incompatible: the callable may raise AboveRange, but the function type allows only [byte::AboveRange]", b_contract_short_name)
+
+    # nerr-coroutine-cached-identity: a coroutine failing with a module's
+    # error raises the same identity and payload again on a later resume --
+    # never the entry program's same-named CompilerError, whose handler does
+    # not handle it.
+    fn b_cached_module_error() errors compiler::CompilerError:
+        static compile:
+            fn counter(limit: int, resume Message) -> int errors compiler::CompilerError:
+                m = yield 0
+                if m.value > limit:
+                    fail compiler::CompilerError {
+                        code: compiler::DiagnosticCode::Type,
+                        primary: compiler::SourceLocation {line: limit, column: m.value},
+                        related: [],
+                        message: "overflow",
+                    }
+                m.value
+            fn go(n: int) -> int:
+                coroutine {step} = counter(3):
+                    on compiler::CompilerError:
+                        return -1
+                a = step(Message {value: n}):
+                    on compiler::CompilerError {primary}:
+                        primary.column * 10
+                b = step(Message {value: 1}):
+                    on compiler::CompilerError details:
+                        details.primary.line * 100 + details.primary.column
+                a + b
+            [go(2), go(9)]
+    test::value("nerr-coroutine-cached-identity/cached", [4, 399], b_cached_module_error)
+
+    fn b_cached_entry_twin() errors compiler::CompilerError:
+        static compile:
+            fn counter(limit: int, resume Message) -> int errors compiler::CompilerError:
+                m = yield 0
+                if m.value > limit:
+                    fail compiler::CompilerError {
+                        code: compiler::DiagnosticCode::Type,
+                        primary: compiler::SourceLocation {line: limit, column: m.value},
+                        related: [],
+                        message: "overflow",
+                    }
+                m.value
+            fn go(n: int) -> int:
+                coroutine {step} = counter(3):
+                    on compiler::CompilerError:
+                        return -1
+                a = step(Message {value: n}):
+                    on CompilerError {primary}:
+                        primary.column
+                a
+            0
+    test::rejects_containing("nerr-coroutine-cached-identity/entry-twin", compiler::DiagnosticCode::UnhandledError, "declared error \"compiler::CompilerError\"", b_cached_entry_twin)
+
+# ---------------------------------------------------------------------------
+
+with context test::suite()
+register_declaration_tests()
+register_handler_tests(0 - 1)
+register_payload_binding_tests()
+register_propagation_tests()
+register_backend_agreement_tests(5, 0 - 5, 20)
+register_completion_proof_tests()
+register_affine_payload_tests()
+register_coroutine_failure_tests()
+register_qualified_identity_tests()
+test::report()

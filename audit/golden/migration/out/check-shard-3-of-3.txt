@@ -1,0 +1,147 @@
+# Side-by-side agreement on this checkout
+
+1840 ported rows of 1857 selected, 76 old test files, 29 golden suites, backends interp, compile, cranelift-generic, cranelift, 1 jobs
+
+old pass, new pass: 1840
+
+Static decisions per suite (rounds, builds, method trials, mispredicted, compile s):
+    abi-numeric-native.bot                             1    1    0   0      1.3 
+    bits-bytes-hashing.bot                             1    1    0   0      3.1 
+    callable-contracts-fallback.bot                    2    2    0   0      1.9 
+    callable-contracts-unerased.bot                    1    1    0   0      0.9 
+    closure-escape-instances.bot                       1    1    0   0      0.9 
+    compiled-values-struct-transport.bot               1    1    0   0      2.8 
+    contexts.bot                                       3    4    0   0     15.9 
+    declared-errors-imports.bot                        2    3    0   0      1.7 
+    destructuring.bot                                  5    7    1   0    100.7 
+    flags.bot                                          2    2    0   0      7.7 
+    harness.bot                                        2    2    0   0      1.5 
+    imports-abi-family.bot                             1    1    0   0      1.2 
+    imports.bot                                        4   16   11   0     35.8 
+    lists-and-sets.bot                                 3    3    0   0      6.4 
+    loops.bot                                          2    2    0   0      2.8 
+    methods-byte-without-list.bot                      2    2    0   0      1.5 
+    methods-type-import-only.bot                       2    2    0   0      1.5 
+    mutable-array.bot                                  5   20   14   0    300.7 
+    names-and-scoping.bot                              2    2    0   0      3.0 
+    opaque-instances.bot                               1    1    0   0      1.1 
+    range-and-contract-values.bot                      4    4    0   0     24.5 
+    refinements.bot                                    3   10    5   0     46.0 
+    static-compile.bot                                 7   14    4   0     60.1 
+    stdlib-namespaces-unimported.bot                   2    2    0   0      1.4 
+    string-representations.bot                         1    1    0   0      3.2 
+    struct-representation.bot                          1    1    0   0      8.6 
+    structs-and-enums.bot                              4   17   11   0     57.2 
+    types.bot                                          3    3    0   0     11.2 
+    values.bot                                         1    1    0   0      4.2 
+
+Old tests, wall seconds per file (one tclsh each, startup included):
+    tests/abi-numeric.test                               0.7
+    tests/applied-types.test                             0.4
+    tests/argv.test                                      0.2
+    tests/blocks.test                                    0.1
+    tests/byte-set.test                                  2.2
+    tests/calls.test                                     0.1
+    tests/checked-domain-proof-provenance.test           0.4
+    tests/closed-closure-entry-facts.test                0.6
+    tests/conjunctive-entry-facts.test                   0.2
+    tests/context-traits.test                            2.6
+    tests/contexts.test                                  4.6
+    tests/control.test                                   0.1
+    tests/coroutines.test                                0.5
+    tests/elif.test                                      4.7
+    tests/empty-collection-admissibility.test            0.6
+    tests/enums.test                                     2.7
+    tests/exact-value-facts.test                         0.4
+    tests/flags.test                                     8.5
+    tests/higher-order-completions.test                  0.4
+    tests/hir-lowering.test                              0.1
+    tests/hir-range.test                                 0.5
+    tests/hir-resolution.test                            0.1
+    tests/hir-syntax.test                                0.1
+    tests/immutable-set.test                             0.9
+    tests/imports.test                                   3.8
+    tests/inference.test                                 0.1
+    tests/instance-entry-range-facts.test                0.1
+    tests/intrinsic-contracts.test                       2.8
+    tests/linux-path.test                                4.0
+    tests/list-stdlib.test                               1.1
+    tests/lists.test                                     0.2
+    tests/loop-collecting.test                           0.3
+    tests/loop-counted.test                              1.6
+    tests/loop-in.test                                   0.6
+    tests/loops.test                                     0.1
+    tests/method-sugar.test                              0.3
+    tests/mutable-array-type.test                        4.2
+    tests/mutable-array.test                            13.2
+    tests/mutarray-construction.test                     4.5
+    tests/namespaced-errors.test                         0.2
+    tests/native-alloc.test                              0.1
+    tests/native-bitshift.test                           1.0
+    tests/native-byte.test                               2.8
+    tests/native-csv-records.test                        4.2
+    tests/native-executable.test                         9.6
+    tests/native-hashing.test                            0.7
+    tests/native-listloop.test                           0.6
+    tests/native-stack-overflow.test                     0.1
+    tests/native.test                                    0.2
+    tests/opaque-struct.test                             0.2
+    tests/packed-ascii.test                             11.7
+    tests/refined-signatures.test                        0.2
+    tests/refined.test                                   0.1
+    tests/refinement-values.test                         4.6
+    tests/result-range-narrowing.test                    0.5
+    tests/self-recursive-result-ranges.test             16.6
+    tests/setcontains-equality-total.test                0.3
+    tests/setfromlist-equality-total.test                0.4
+    tests/short-string.test                              9.6
+    tests/source-types.test                              0.4
+    tests/static-compile.test                            5.6
+    tests/static-economics.test                          3.0
+    tests/stdlib-namespaces.test                         0.1
+    tests/strict-references.test                         0.5
+    tests/struct-destructuring.test                     18.5
+    tests/struct-scalar-replacement.test                 6.3
+    tests/structs.test                                   2.4
+    tests/structural-contract-completions.test           0.4
+    tests/surface-lowering.test                          0.2
+    tests/surface-modules.test                           0.2
+    tests/surface-samples.test                           0.3
+    tests/symbolic-type-identity.test                    0.7
+    tests/typed-parameters.test                          0.3
+    tests/value-transport.test                           5.2
+    tests/virtual-construction.test                     12.5
+    tests/warnings.test                                  0.2
+    total                                              188.9 (elapsed 189.0 with 1 jobs)
+Golden suites, wall seconds per suite (compile once, run on interp, compile, cranelift-generic, cranelift):
+    abi-numeric-native.bot                               2.2   ok
+    bits-bytes-hashing.bot                              26.2   ok
+    callable-contracts-fallback.bot                      4.6   ok
+    callable-contracts-unerased.bot                      3.1   ok
+    closure-escape-instances.bot                         3.0   ok
+    compiled-values-struct-transport.bot                18.9   ok
+    contexts.bot                                        64.2   ok
+    declared-errors-imports.bot                          5.0   ok
+    destructuring.bot                                  466.8   ok
+    flags.bot                                           86.8   ok
+    harness.bot                                          6.8   ok
+    imports-abi-family.bot                               4.2   ok
+    imports.bot                                         57.0   ok
+    lists-and-sets.bot                                  33.0   ok
+    loops.bot                                           16.8   ok
+    methods-byte-without-list.bot                        4.5   ok
+    methods-type-import-only.bot                         3.9   ok
+    mutable-array.bot                                  527.4   ok
+    names-and-scoping.bot                               15.2   ok
+    opaque-instances.bot                                 3.2   ok
+    range-and-contract-values.bot                       92.3   ok
+    refinements.bot                                     76.3   ok
+    static-compile.bot                                 130.3   ok
+    stdlib-namespaces-unimported.bot                     3.6   ok
+    string-representations.bot                          25.0   ok
+    struct-representation.bot                          125.8   ok
+    structs-and-enums.bot                              101.1   ok
+    types.bot                                           40.9   ok
+    values.bot                                          25.2   ok
+    total                                             1973.2 (elapsed 1973.2 with 1 jobs)
+RSS-WALL 2162.82 s, peak RSS 1566 MB, user 2117.6 s, sys 18.1 s, status 0

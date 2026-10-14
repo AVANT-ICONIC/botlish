@@ -1,0 +1,1780 @@
+# callables.bot -- function values and structural function types: the
+# source-level specification of
+#
+#   * structural function types (STRUCTURAL-FUNCTION-TYPES.md):
+#     `Fn{args: [T1, ...], return: R, errors: [E1, ...]}` is a call contract
+#     -- some callable (a native, an envless function or a capturing
+#     closure, which one is not known) that accepts arguments admissible for
+#     T1.., returns R and lets at most E1.. escape. Its fields may span lines
+#     and come in any order; an omitted `errors` field admits no error; it
+#     nests in argument, result and List positions and is a function's
+#     declared result type. An exact callable (a native, a function, a
+#     closure) is admitted by every compatible contract: arguments are
+#     contravariant (a callable accepting all of Byte serves callers that
+#     pass only Nibble), the result covariant, the error set a subset. A
+#     wrong arity, a too-narrow parameter, a too-broad result, an extra
+#     error, a non-callable and an unknown (`any`) value are rejected, each
+#     with its own reason; a call through an Fn is held to the contract's
+#     argument types, arity and error set. A join (an `if`, a List literal,
+#     a returning loop) of compatible callables is their common Fn, never
+#     `any`; a join of incompatible arities falls back to the bare
+#     (dynamically callable) kind, and a join of incompatible typed
+#     callables is rejected as an erasure;
+#   * typed-callable escape (TYPED-CALLABLE-ESCAPE-SOUNDNESS.md): a
+#     callable with a declared parameter type never reaches a call where
+#     that contract could go unchecked. Exact identity survives an alias, a
+#     chain of aliases, a capture, a return and a constant-condition `if`, so
+#     such calls are checked like direct ones; through an untyped
+#     higher-order parameter the helper's semantic instance checks the
+#     callee's contract with the argument types that reach it (and an
+#     instance is keyed by types, so even a valid-looking literal is not
+#     proven); a callable whose only declared type is its result stays
+#     unrestricted;
+#   * exact callable identity through higher-order helpers
+#     (EXACT-CALLABLE-CLOSED-CALLER.md) and Int-keyed closures
+#     (GENERIC-PREDICATE-PROOF-LOSS.md, loss point 1): a function value, a
+#     native or a value-capturing closure passed to, aliased into, returned
+#     to, forwarded through or recursed through a helper computes the same
+#     value on every backend, whatever specialization the compiler chose --
+#     several targets of one helper (more than the per-helper budget too),
+#     same-named functions of different scopes, natives of one signature,
+#     targets chosen dynamically (by `if`, from a List), and closures
+#     capturing Strings, Ints, Lists, MutableArrays and structs.
+#
+# Ported from tests/structural-fn-types.test, tests/typed-callable-escape.test,
+# tests/closure-int-keys.test and tests/exact-callable-key.test, which stay
+# authoritative and unchanged (audit/golden/migration/fragments/callables.tsv
+# maps every test). Those files' Tcl-only halves stay there: the lattice laws
+# of hir::types, the static types hir::typeOf shows, specialization labels
+# and keys, NIR instance, callvalue and closure-allocation counts, the
+# compiler options (-exact-callable-opt, -block-escape-opt, the exact-target
+# budget) and the forced in-process GC stress. Here a Tcl program that is
+# only compiled also runs, on every backend, and its value is compared; a
+# rejected program is a rejected block compared by its compiler::DiagnosticCode
+# and, where the Tcl test globs the message for the reason of the rejection
+# (an arity mismatch, a return or error-set incompatibility, the semantic
+# instance's admissibility diagnostic against the erasure diagnostic), by
+# the fragment that names the reason. The exact-callable-key and
+# closure-int-keys programs were compiled -strict 0 in Tcl; here they are
+# strict, a few with the declared errors of str::substring, list::at and
+# mutable_array::at admitted or handled (each noted at its test).
+#
+# Imports: compiler and test (the framework); list (list::all?, list::at:
+# the Tcl preludes import it), str (str::is_tcl_alpha, str::is_tcl_alnum,
+# str::length, str::substring, str::concat) and mutable_array (a closure
+# capturing a MutableArray). No test is about imports or method-call
+# candidates, and no body uses method-call syntax.
+import compiler
+import list
+import mutable_array
+import str
+import test
+
+# ---------------------------------------------------------------------------
+# Declarations the tests need (top-level only): the Tcl files' preludes
+# (structural-fn-types.test's fnDecls: Byte, Nibble, NotFound,
+# PermissionDenied; typed-callable-escape.test's byteDecl and its Small and
+# Mark programs; exact-callable-typed-callable-with-errors' NotFound, the
+# same payload-free declaration).
+
+type Byte = Int in 0..255
+type Nibble = Int in 0..15
+type Small = Int in 0..10
+type Mark = Int in {0,4,8,12}
+
+error NotFound
+error PermissionDenied
+
+# ===========================================================================
+# tests/structural-fn-types.test
+
+# ---------------------------------------------------------------------------
+# Surface syntax
+
+fn register_fn_syntax_tests():
+    # fn-syntax-multiline-any-order-omitted-errors: an Fn type's fields may
+    # span lines and come in any order (with a trailing comma), and f and g
+    # are both callable with a String, returning a Bool.
+    fn multiline_fields() errors compiler::CompilerError:
+        static compile:
+            fn apply(
+                f: Fn{
+                    return: bool,
+                    args: [str],
+                },
+                g: Fn{args: [str], return: bool, errors: []}
+            ):
+                [f("a"), g("1")]
+            apply(str::is_tcl_alpha, str::is_tcl_alpha)
+    test::value("fn-syntax-multiline-any-order-omitted-errors/fields", [true, false], multiline_fields)
+
+    # ... and the omitted errors field is errors: [] -- no error may escape:
+    # a callable that may raise NotFound does not satisfy f.
+    fn omitted_errors_admit_none() errors compiler::CompilerError:
+        static compile:
+            fn apply(
+                f: Fn{
+                    return: bool,
+                    args: [str],
+                },
+                g: Fn{args: [str], return: bool, errors: []}
+            ):
+                1
+            fn raising(x) -> bool errors NotFound:
+                if x == "a":
+                    fail NotFound
+                true
+            apply(raising, str::is_tcl_alpha)
+    test::rejects_containing("fn-syntax-multiline-any-order-omitted-errors/omitted-errors-admit-none", compiler::DiagnosticCode::Type, "error set incompatible: the callable may raise NotFound, but the function type allows only []", omitted_errors_admit_none)
+
+    # fn-syntax-return-annotation: Fn is a function's declared result type
+    # (its result is called here: a body never returns a function value).
+    fn return_annotation() errors compiler::CompilerError:
+        static compile:
+            fn pick() -> Fn{args: [str], return: bool}:
+                str::is_tcl_alpha
+            pick()("a")
+    test::value("fn-syntax-return-annotation", true, return_annotation)
+
+    # fn-syntax-nested: Fn nests in argument, result and List positions
+    # (and resolves: the program is accepted).
+    fn nested() errors compiler::CompilerError:
+        static compile:
+            fn run(fs: List[Fn{args: [int], return: Fn{args: [], return: int}}]):
+                1
+            1
+    test::value("fn-syntax-nested", 1, nested)
+
+    # fn-syntax-unknown-error: an error name in an Fn type must be a
+    # declared error identity (Nope is not declared here).
+    fn unknown_error() errors compiler::CompilerError:
+        static compile:
+            fn f(g: Fn{args: [str], return: bool, errors: [Nope]}):
+                1
+            1
+    test::rejects_containing("fn-syntax-unknown-error", compiler::DiagnosticCode::Type, "unknown error \"Nope\" in the function type's \"errors\" list", unknown_error)
+
+    # fn-syntax-unknown-type: an unknown argument type is the ordinary
+    # unknown-type diagnostic.
+    fn unknown_type() errors compiler::CompilerError:
+        static compile:
+            fn f(g: Fn{args: [Nope], return: bool}):
+                1
+            1
+    test::rejects_containing("fn-syntax-unknown-type", compiler::DiagnosticCode::Type, "unknown type \"Nope\"", unknown_type)
+
+# ---------------------------------------------------------------------------
+# Acceptance: exact callables, joins and contracts. The Tcl prelude's apply
+# (applyStr, written there across lines) is written on one line here.
+
+fn register_fn_acceptance_tests():
+    # fn-accept-exact-envless-block: an exact envless function passes a
+    # structural Fn parameter.
+    fn exact_envless_block() errors compiler::CompilerError:
+        static compile:
+            fn apply(predicate: Fn{args: [str], return: bool, errors: []}, value: str) -> bool:
+                predicate(value)
+            fn is_x?(c):
+                c == "x"
+            [apply(is_x?, "x"), apply(is_x?, "y")]
+    test::value("fn-accept-exact-envless-block", [true, false], exact_envless_block)
+
+    # fn-accept-exact-native: an exact native passes the same parameter.
+    fn exact_native() errors compiler::CompilerError:
+        static compile:
+            fn apply(predicate: Fn{args: [str], return: bool, errors: []}, value: str) -> bool:
+                predicate(value)
+            [apply(str::is_tcl_alpha, "a"), apply(str::is_tcl_alnum, "-")]
+    test::value("fn-accept-exact-native", [true, false], exact_native)
+
+    # fn-accept-exact-capturing-block: a capturing closure passes too.
+    fn exact_capturing_block() errors compiler::CompilerError:
+        static compile:
+            fn apply(predicate: Fn{args: [str], return: bool, errors: []}, value: str) -> bool:
+                predicate(value)
+            fn make(target):
+                fn eq?(c):
+                    c == target
+                eq?
+            q? = make("q")
+            r? = make("r")
+            [apply(q?, "q"), apply(r?, "q"), q?("q")]
+    test::value("fn-accept-exact-capturing-block", [true, false, true], exact_capturing_block)
+
+    # fn-accept-returned-fn: a declared Fn result joins a native and a
+    # nested closure.
+    fn returned_fn() errors compiler::CompilerError:
+        static compile:
+            fn pick(strict) -> Fn{args: [str], return: bool}:
+                if strict:
+                    str::is_tcl_alnum
+                else:
+                    fn lenient?(c):
+                        str::is_tcl_alnum(c) or c == "_"
+                    lenient?
+            [pick(true)("_"), pick(false)("_")]
+    test::value("fn-accept-returned-fn", [false, true], returned_fn)
+
+    # fn-accept-list-inference: a List of mixed compatible callables (natives
+    # and functions) is iterated and each element called.
+    fn list_inference() errors compiler::CompilerError:
+        static compile:
+            fn under?(c):
+                c == "_"
+            fn dash?(c):
+                c == "-"
+            checks = [str::is_tcl_alpha, str::is_tcl_alnum, under?, dash?]
+            loop check in checks:
+                check("_")
+    test::value("fn-accept-list-inference/value", [false, false, true, false], list_inference)
+
+    # ... and its loop element is a known callable (their common Fn, not
+    # any): it satisfies an Fn parameter, which `any` never does
+    # (fn-reject-any-is-not-fn).
+    fn list_element_is_fn() errors compiler::CompilerError:
+        static compile:
+            fn apply(predicate: Fn{args: [str], return: bool, errors: []}, value: str) -> bool:
+                predicate(value)
+            fn under?(c):
+                c == "_"
+            fn dash?(c):
+                c == "-"
+            checks = [str::is_tcl_alpha, str::is_tcl_alnum, under?, dash?]
+            loop check in checks:
+                apply(check, "_")
+    test::value("fn-accept-list-inference/element-is-fn", [false, false, true, false], list_element_is_fn)
+
+    # fn-accept-if-join: an if choosing between a native and a function.
+    fn if_join() errors compiler::CompilerError:
+        static compile:
+            fn lenient?(c):
+                str::is_tcl_alnum(c) or c == "_"
+            fn choose(strict):
+                if strict:
+                    str::is_tcl_alnum
+                else:
+                    lenient?
+            classifier = choose(false)
+            [choose(true)("_"), classifier("_")]
+    test::value("fn-accept-if-join/value", [false, true], if_join)
+
+    # ... and the binding keeps their common Fn type (not any): it satisfies
+    # an Fn parameter.
+    fn if_join_is_fn() errors compiler::CompilerError:
+        static compile:
+            fn apply(predicate: Fn{args: [str], return: bool, errors: []}, value: str) -> bool:
+                predicate(value)
+            fn lenient?(c):
+                str::is_tcl_alnum(c) or c == "_"
+            fn choose(strict):
+                if strict:
+                    str::is_tcl_alnum
+                else:
+                    lenient?
+            classifier = choose(false)
+            [apply(choose(true), "_"), apply(classifier, "_")]
+    test::value("fn-accept-if-join/keeps-fn-type", [false, true], if_join_is_fn)
+
+    # fn-accept-typed-callable: a Byte-parameter function satisfies
+    # Fn{args: [Byte]}, and the call through it runs.
+    fn typed_callable() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x + 1
+            fn apply(f: Fn{args: [Byte], return: int}, v: Byte) -> int:
+                f(v)
+            apply(take_byte, 7)
+    test::value("fn-accept-typed-callable", 8, typed_callable)
+
+    # fn-accept-narrower-domain-arg: a callable accepting all of Byte
+    # satisfies a contract whose callers pass only Nibble.
+    fn narrower_domain_arg() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn apply(f: Fn{args: [Nibble], return: int}, v: Nibble) -> int:
+                f(v)
+            apply(take_byte, 9)
+    test::value("fn-accept-narrower-domain-arg", 9, narrower_domain_arg)
+
+    # fn-accept-closure-factory: a factory satisfies a contract returning a
+    # function type, and the closure it returns stays callable directly.
+    fn closure_factory() errors compiler::CompilerError:
+        static compile:
+            fn make(k):
+                fn add(x):
+                    x + k
+                add
+            fn apply(f: Fn{args: [int], return: Fn{args: [int], return: any}}) -> any:
+                f(1)(2)
+            add5 = make(5)
+            [apply(make), add5(1)]
+    test::value("fn-accept-closure-factory", [3, 6], closure_factory)
+
+    # fn-accept-recursive: a recursive function's structural contract is
+    # derived (compilation terminates) and it satisfies Fn{args: [int]}.
+    fn recursive() errors compiler::CompilerError:
+        static compile:
+            fn count(n) -> int:
+                if n == 0:
+                    return 0
+                1 + count(n - 1)
+            fn apply(f: Fn{args: [int], return: int}) -> int:
+                f(3)
+            apply(count)
+    test::value("fn-accept-recursive", 3, recursive)
+
+    # fn-accept-untyped-hof-unaffected: a structural value with no
+    # obligation still passes an untyped higher-order parameter.
+    fn untyped_hof_unaffected() errors compiler::CompilerError:
+        static compile:
+            fn lenient?(c):
+                str::is_tcl_alnum(c) or c == "_"
+            fn choose(strict):
+                if strict:
+                    str::is_tcl_alnum
+                else:
+                    lenient?
+            [list::all?(["a", "_"], choose(true)), list::all?(["a", "_"], choose(false))]
+    test::value("fn-accept-untyped-hof-unaffected", [false, true], untyped_hof_unaffected)
+
+    # fn-accept-untyped-forwarder: an untyped parameter passed where an Fn
+    # is declared infers that Fn as its own contract: the forwarder is valid
+    # for a callable ...
+    fn untyped_forwarder() errors compiler::CompilerError:
+        static compile:
+            fn apply(predicate: Fn{args: [str], return: bool, errors: []}, value: str) -> bool:
+                predicate(value)
+            fn pass(g):
+                apply(g, "a")
+            pass(str::is_tcl_alpha)
+    test::value("fn-accept-untyped-forwarder/accepted", true, untyped_forwarder)
+
+    # ... and its callers are held to the inferred contract.
+    fn untyped_forwarder_rejected() errors compiler::CompilerError:
+        static compile:
+            fn apply(predicate: Fn{args: [str], return: bool, errors: []}, value: str) -> bool:
+                predicate(value)
+            fn pass(g):
+                apply(g, "a")
+            pass(1)
+    test::rejects_containing("fn-accept-untyped-forwarder/rejected", compiler::DiagnosticCode::Type, "argument for parameter \"g\" cannot be proven to satisfy Fn{args: [str], return: bool, errors: []}, the parameter type inferred from the function body", untyped_forwarder_rejected)
+
+# ---------------------------------------------------------------------------
+# Rejection: each reason a callable does not satisfy an Fn, and calls
+# through an Fn held to its contract
+
+fn register_fn_rejection_tests():
+    # fn-reject-arity: the wrong arity, said so.
+    fn wrong_arity() errors compiler::CompilerError:
+        static compile:
+            fn apply(predicate: Fn{args: [str], return: bool, errors: []}, value: str) -> bool:
+                predicate(value)
+            fn two(a, b):
+                true
+            apply(two, "a")
+    test::rejects_containing("fn-reject-arity", compiler::DiagnosticCode::Type, "arity mismatch: the callable takes 2 argument(s), the function type 1", wrong_arity)
+
+    # fn-reject-argument-too-narrow: a parameter narrower than the contract's
+    # argument type, at the argument position.
+    fn argument_too_narrow() errors compiler::CompilerError:
+        static compile:
+            fn apply(f: Fn{args: [int], return: int}):
+                f(1000)
+            fn take_byte(x: Byte) -> int:
+                x
+            apply(take_byte)
+    test::rejects_containing("fn-reject-argument-too-narrow", compiler::DiagnosticCode::Type, "argument 1 is incompatible: the callable's parameter requires int[Byte], but callers of the function type may pass any int", argument_too_narrow)
+
+    # fn-reject-return-too-broad: a result wider than the contract promises.
+    fn return_too_broad() errors compiler::CompilerError:
+        static compile:
+            fn apply(predicate: Fn{args: [str], return: bool, errors: []}, value: str) -> bool:
+                predicate(value)
+            fn ident(x):
+                x
+            apply(ident, "a")
+    test::rejects_containing("fn-reject-return-too-broad", compiler::DiagnosticCode::Type, "return incompatible: the callable returns any, not usable as bool", return_too_broad)
+
+    # fn-reject-extra-error: an error the contract does not allow, named.
+    fn extra_error() errors compiler::CompilerError:
+        static compile:
+            fn apply(f: Fn{args: [str], return: int, errors: [NotFound]}) -> int:
+                f("a"):
+                    on NotFound:
+                        0
+            fn find(x) -> int errors NotFound, PermissionDenied:
+                if x == "a":
+                    fail PermissionDenied
+                1
+            apply(find)
+    test::rejects_containing("fn-reject-extra-error", compiler::DiagnosticCode::Type, "error set incompatible: the callable may raise PermissionDenied, but the function type allows only [NotFound]", extra_error)
+
+    # fn-reject-non-callable: an Int is not a callable.
+    fn non_callable() errors compiler::CompilerError:
+        static compile:
+            fn apply(predicate: Fn{args: [str], return: bool, errors: []}, value: str) -> bool:
+                predicate(value)
+            apply(5, "a")
+    test::rejects_containing("fn-reject-non-callable", compiler::DiagnosticCode::Type, "a value of type int is not known to be callable", non_callable)
+
+    # fn-reject-any-is-not-fn: an element of a heterogeneous List is any,
+    # not a known callable.
+    fn any_is_not_fn() errors compiler::CompilerError:
+        static compile:
+            fn apply(predicate: Fn{args: [str], return: bool, errors: []}, value: str) -> bool:
+                predicate(value)
+            fn pass(gs):
+                apply(list::at(gs, 0), "a")
+            pass([str::is_tcl_alpha, 1])
+    test::rejects_containing("fn-reject-any-is-not-fn", compiler::DiagnosticCode::Type, "a value of type any is not known to be callable", any_is_not_fn)
+
+    # fn-reject-call-argument: a call through an Fn is held to its argument
+    # types (no run-time check).
+    fn call_argument() errors compiler::CompilerError:
+        static compile:
+            fn apply(f: Fn{args: [Byte], return: int}) -> int:
+                f(9999)
+            1
+    test::rejects_containing("fn-reject-call-argument", compiler::DiagnosticCode::Type, "argument 1 cannot be proven to satisfy int[Byte], the parameter type the callee's function type Fn{args: [int[Byte]]", call_argument)
+
+    # fn-reject-call-arity: ... and to its arity.
+    fn call_arity() errors compiler::CompilerError:
+        static compile:
+            fn apply(predicate: Fn{args: [str], return: bool, errors: []}, value: str) -> bool:
+                predicate(value)
+            fn bad(f: Fn{args: [str], return: bool}):
+                f("a", "b")
+            1
+    test::rejects_containing("fn-reject-call-arity", compiler::DiagnosticCode::Type, "passes 2 argument(s) to a callable of function type Fn{args: [str], return: bool, errors: []}, whose contract takes 1", call_arity)
+
+    # fn-reject-incompatible-join-falls-back: a join of different arities
+    # falls back to the bare kind, still callable dynamically ...
+    fn join_falls_back() errors compiler::CompilerError:
+        static compile:
+            fn one(a):
+                1
+            fn two(a, b):
+                2
+            fn choose(c):
+                if c:
+                    one
+                else:
+                    two
+            choose(true)(5)
+    test::value("fn-reject-incompatible-join-falls-back/fallback", 1, join_falls_back)
+
+    # ... and a join of incompatible typed callables is rejected at the join
+    # as an erasure.
+    fn join_rejected() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn take_str(x: str) -> str:
+                x
+            fn choose(c):
+                if c:
+                    take_byte
+                else:
+                    take_str
+            choose(true)
+    test::rejects_containing("fn-reject-incompatible-join-falls-back/rejected", compiler::DiagnosticCode::Type, "typed parameter requirements that cannot be preserved", join_rejected)
+
+# ---------------------------------------------------------------------------
+# Error contracts. HIT is the String the find functions fail on ("a"), a
+# parameter so that the failure is decided at run time.
+
+fn register_fn_error_contract_tests(hit: str, miss: str):
+    # fn-errors-impl-none-declared-a: a declared error set is an upper bound.
+    fn impl_none_declared_a() errors compiler::CompilerError:
+        static compile:
+            fn f(x) -> int errors NotFound:
+                1
+            f(1):
+                on NotFound:
+                    0
+    test::value("fn-errors-impl-none-declared-a", 1, impl_none_declared_a)
+
+    # fn-errors-impl-a-declared-ab: emitting [A] while declaring [A, B].
+    fn impl_a_declared_ab() errors compiler::CompilerError:
+        static compile:
+            fn f(x) -> int errors NotFound, PermissionDenied:
+                if x == 1:
+                    fail NotFound
+                2
+            fn g(x) -> int:
+                r = f(x):
+                    on NotFound:
+                        0
+                    on PermissionDenied:
+                        -1
+                r
+            [g(1), g(2)]
+    test::value("fn-errors-impl-a-declared-ab", [0, 2], impl_a_declared_ab)
+
+    # fn-errors-impl-ab-declared-a: emitting [A, B] while declaring only [A].
+    fn impl_ab_declared_a() errors compiler::CompilerError:
+        static compile:
+            fn f(x) -> int errors NotFound:
+                if x == 1:
+                    fail NotFound
+                if x == 2:
+                    fail PermissionDenied
+                2
+            f(3):
+                on NotFound:
+                    0
+    test::rejects_containing("fn-errors-impl-ab-declared-a", compiler::DiagnosticCode::UnhandledError, "\"fail PermissionDenied\" is not admitted here", impl_ab_declared_a)
+
+    # fn-errors-narrower-satisfies-wider: fewer declared errors satisfy a
+    # contract allowing more, and the error propagates through the
+    # structural call at run time.
+    fn narrower_satisfies_wider() errors compiler::CompilerError:
+        static compile:
+            fn apply(f: Fn{args: [str], return: int, errors: [NotFound, PermissionDenied]}, v: str) -> int:
+                f(v):
+                    on NotFound:
+                        0
+                    on PermissionDenied:
+                        -1
+            fn find(x) -> int errors NotFound:
+                if x == "a":
+                    fail NotFound
+                1
+            [apply(find, hit), apply(find, miss)]
+    test::value("fn-errors-narrower-satisfies-wider", [0, 1], narrower_satisfies_wider)
+
+    # fn-errors-wider-rejected: more declared errors than the contract allows.
+    fn wider_rejected() errors compiler::CompilerError:
+        static compile:
+            fn apply(f: Fn{args: [str], return: int}) -> int:
+                f("a")
+            fn find(x) -> int errors NotFound:
+                1
+            apply(find)
+    test::rejects_containing("fn-errors-wider-rejected", compiler::DiagnosticCode::Type, "error set incompatible: the callable may raise NotFound, but the function type allows only []", wider_rejected)
+
+    # fn-errors-structural-call-propagates: a call through an Fn exposes its
+    # declared errors: unhandled and undeclared is rejected.
+    fn structural_call_propagates() errors compiler::CompilerError:
+        static compile:
+            fn apply(f: Fn{args: [str], return: int, errors: [NotFound]}) -> int:
+                f("a")
+            1
+    test::rejects_containing("fn-errors-structural-call-propagates", compiler::DiagnosticCode::UnhandledError, "through a callable of function type Fn{args: [str], return: int, errors: [NotFound]} may produce the declared error \"NotFound\"", structural_call_propagates)
+
+    # fn-errors-structural-call-declared: an enclosing errors declaration
+    # admits it, and it reaches the exact caller's handler at run time.
+    fn structural_call_declared() errors compiler::CompilerError:
+        static compile:
+            fn apply(f: Fn{args: [str], return: int, errors: [NotFound]}) -> int errors NotFound:
+                f("a")
+            fn find(x) -> int errors NotFound:
+                if x == hit:
+                    fail NotFound
+                1
+            apply(find):
+                on NotFound:
+                    42
+    test::value("fn-errors-structural-call-declared", 42, structural_call_declared)
+
+    # fn-errors-join-union: a join of two compatible callables unions their
+    # errors; handling both is accepted ...
+    fn join_union_handled() errors compiler::CompilerError:
+        static compile:
+            fn a(x) -> int errors NotFound:
+                1
+            fn b(x) -> int errors PermissionDenied:
+                2
+            fn choose(c):
+                if c:
+                    a
+                else:
+                    b
+            choose(true)(0):
+                on NotFound:
+                    -1
+                on PermissionDenied:
+                    -2
+    test::value("fn-errors-join-union/handled", 1, join_union_handled)
+
+    # ... handling one is not.
+    fn join_union_unhandled() errors compiler::CompilerError:
+        static compile:
+            fn a(x) -> int errors NotFound:
+                1
+            fn b(x) -> int errors PermissionDenied:
+                2
+            fn choose(c):
+                if c:
+                    a
+                else:
+                    b
+            choose(true)(0):
+                on NotFound:
+                    -1
+    test::rejects_containing("fn-errors-join-union/unhandled", compiler::DiagnosticCode::UnhandledError, "may produce the declared error \"PermissionDenied\"", join_union_unhandled)
+
+    # fn-errors-exact-call-keeps-narrower-set: an exact callable keeps its
+    # own narrower error set where it is still exact: its direct call
+    # handles only NotFound.
+    fn exact_call_keeps_narrower_set() errors compiler::CompilerError:
+        static compile:
+            fn find(x) -> int errors NotFound:
+                if x == "a":
+                    fail NotFound
+                1
+            fn apply(f: Fn{args: [str], return: int, errors: [NotFound, PermissionDenied]}) -> int:
+                f("b"):
+                    on NotFound:
+                        0
+                    on PermissionDenied:
+                        -1
+            direct = find("a"):
+                on NotFound:
+                    0
+            [apply(find), direct]
+    test::value("fn-errors-exact-call-keeps-narrower-set", [1, 0], exact_call_keeps_narrower_set)
+
+# ---------------------------------------------------------------------------
+# Typed contracts through untyped code
+
+fn register_fn_escape_tests():
+    # fn-escape-declared-param-erased: a declared Fn parameter passed on to
+    # an untyped helper keeps its contract in the helper's instance.
+    fn declared_param_erased() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn apply(f: Fn{args: [Byte], return: int}):
+                fn inner(g, v):
+                    g(v)
+                inner(f, 9999)
+            apply(take_byte)
+    test::rejects_containing("fn-escape-declared-param-erased", compiler::DiagnosticCode::Type, "call to inner with g : Fn{args: [int[Byte]], return: int, errors: []}, v : int is invalid: argument 1 cannot be proven to satisfy int[Byte]", declared_param_erased)
+
+    # fn-escape-typed-list: a List of typed callables is callable through
+    # its elements with checked arguments ...
+    fn typed_list() errors compiler::CompilerError:
+        static compile:
+            fn a(x: Byte) -> int:
+                x
+            fn b(x: Byte) -> int:
+                x + 1
+            fs = [a, b]
+            loop f in fs:
+                f(3)
+    test::value("fn-escape-typed-list/list", [3, 4], typed_list)
+
+    # ... and through an untyped parameter the element contract is kept.
+    fn typed_list_sneak() errors compiler::CompilerError:
+        static compile:
+            fn a(x: Byte) -> int:
+                x
+            fn b(x: Byte) -> int:
+                x + 1
+            fn sneak(xs):
+                loop f in xs:
+                    f(9999)
+            sneak([a, b])
+    test::rejects_containing("fn-escape-typed-list/sneak", compiler::DiagnosticCode::Type, "call to sneak with xs : List[Fn{args: [int[Byte]], return: int, errors: []}] is invalid: argument 1 cannot be proven to satisfy int[Byte]", typed_list_sneak)
+
+    # fn-escape-returning-loop-element: collecting typed callables keeps
+    # their contract ...
+    fn loop_element_kept() errors compiler::CompilerError:
+        static compile:
+            fn tb(x: Byte) -> int:
+                x
+            ys = loop x in [1, 2]:
+                tb
+            loop f in ys:
+                f(7)
+    test::value("fn-escape-returning-loop-element/kept", [7, 7], loop_element_kept)
+
+    # ... but collecting them where the aggregate depth bound cuts the
+    # element type is rejected as an erasure.
+    fn loop_element_depth_cut() errors compiler::CompilerError:
+        static compile:
+            fn tb(x: Byte) -> int:
+                x
+            nested = [[[tb]]]
+            ys = loop x in [1]:
+                nested
+            list::at(list::at(list::at(list::at(ys, 0), 0), 0), 0)(9999)
+    test::rejects_containing("fn-escape-returning-loop-element/depth-cut", compiler::DiagnosticCode::Type, "cannot be preserved as a returning loop's collected element", loop_element_depth_cut)
+
+    # fn-escape-returned-typed-callable: a callable returning a typed
+    # callable is itself precondition-bearing.
+    fn returned_typed_callable() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn chooser():
+                take_byte
+            fn apply(f):
+                g = f()
+                g(9999)
+            apply(chooser)
+    test::rejects_containing("fn-escape-returned-typed-callable", compiler::DiagnosticCode::Type, "\"chooser\" has typed parameter requirements that cannot be preserved", returned_typed_callable)
+
+    # fn-escape-declared-result-must-preserve: a declared Fn result keeps
+    # the returned callable's obligations.
+    fn declared_result_must_preserve() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn chooser():
+                take_byte
+            fn wrap() -> Fn{args: [], return: any}:
+                chooser
+            1
+    test::rejects_containing("fn-escape-declared-result-must-preserve", compiler::DiagnosticCode::Type, "declared result type Fn{args: [], return: any, errors: []} would erase", declared_result_must_preserve)
+
+fn register_structural_fn_types_tests():
+    register_fn_syntax_tests()
+    register_fn_acceptance_tests()
+    register_fn_rejection_tests()
+    register_fn_error_contract_tests("a", "b")
+    register_fn_escape_tests()
+
+# ===========================================================================
+# tests/typed-callable-escape.test
+
+# ---------------------------------------------------------------------------
+# Through an untyped higher-order parameter: the helper's semantic instance
+
+fn register_callable_escape_helper_tests(run: bool):
+    # callable-escape-bug-rejected (and callable-escape-apply-bad-arg-
+    # rejected, the same program and assertion): the reported unsound
+    # program is a compile-time error, the admissibility diagnostic of
+    # apply's instance ...
+    fn bug() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn apply(f, v):
+                f(v)
+            apply(take_byte, 9999)
+    test::rejects_containing("callable-escape-bug-rejected", compiler::DiagnosticCode::Type, "call to apply with f : take_byte/1 -> int, v : int is invalid: argument for parameter \"x\" cannot be proven to satisfy int[Byte]", bug)
+
+    # callable-escape-bug-is-an-admissibility-error-in-the-instance: ...
+    # the callee's own admissibility wording (not the erasure diagnostic's
+    # "cannot be preserved"), reported at the call of apply.
+    test::rejects_containing("callable-escape-bug-is-an-admissibility-error-in-the-instance/wording", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", bug)
+    test::rejects_at("callable-escape-bug-is-an-admissibility-error-in-the-instance/at-the-call-of-apply", compiler::DiagnosticCode::Type, 757, 13, bug)
+
+    # callable-escape-apply-good-arg-still-rejected: an instance is keyed by
+    # types, not values: 7 is an int, not proven Byte inside it.
+    fn good_arg() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn apply(f, v):
+                f(v)
+            apply(take_byte, 7)
+    test::rejects_containing("callable-escape-apply-good-arg-still-rejected", compiler::DiagnosticCode::Type, "call to apply with f : take_byte/1 -> int, v : int is invalid: argument for parameter \"x\" cannot be proven to satisfy int[Byte]", good_arg)
+
+    # callable-escape-ordinary-untyped-callable-unaffected: an untyped
+    # callable passes through apply freely.
+    fn untyped_unaffected() errors compiler::CompilerError:
+        static compile:
+            fn identity(x):
+                x
+            fn apply(f, v):
+                f(v)
+            apply(identity, 9999)
+    test::value("callable-escape-ordinary-untyped-callable-unaffected", 9999, untyped_unaffected)
+
+    # callable-escape-typed-result-only-unrestricted: a declared result type
+    # alone adds no restriction.
+    fn typed_result_only() errors compiler::CompilerError:
+        static compile:
+            fn make_small(x) -> Small:
+                if x < 0:
+                    0
+                else:
+                    1
+            fn apply(f, v):
+                f(v)
+            apply(make_small, 5)
+    test::value("callable-escape-typed-result-only-unrestricted", 1, typed_result_only)
+
+    # callable-escape-mixed-typed-untyped-params-rejected: one typed
+    # parameter is enough to be protected.
+    fn mixed_params() errors compiler::CompilerError:
+        static compile:
+            fn f(x: Byte, y):
+                x
+            fn apply(g, v, w):
+                g(v, w)
+            apply(f, 7, 1)
+    test::rejects_containing("callable-escape-mixed-typed-untyped-params-rejected", compiler::DiagnosticCode::Type, "call to apply with g : f/2 -> int[Byte], v : int, w : int is invalid: argument for parameter \"x\" cannot be proven to satisfy int[Byte]", mixed_params)
+
+    # callable-escape-arity-mismatch-is-a-runtime-error: a typed callable
+    # called through a helper with the wrong number of arguments is
+    # accepted (the arity error is a run-time one, never an escape). RUN is
+    # false: the call is compiled but never made (its ARITY failure would
+    # abort the suite).
+    fn arity_mismatch() errors compiler::CompilerError:
+        static compile:
+            fn f(x: Byte, y):
+                x
+            fn apply(g, v):
+                g(v)
+            if run:
+                apply(f, 7)
+            else:
+                0
+    test::value("callable-escape-arity-mismatch-is-a-runtime-error", 0, arity_mismatch)
+
+    # callable-escape-source-defined-type-escape-rejected: a source-defined
+    # bounded type is protected the same way.
+    fn source_type_escape() errors compiler::CompilerError:
+        static compile:
+            fn take_small(x: Small) -> int:
+                x
+            fn apply(f, v):
+                f(v)
+            apply(take_small, 3)
+    test::rejects_containing("callable-escape-source-defined-type-escape-rejected", compiler::DiagnosticCode::Type, "call to apply with f : take_small/1 -> int, v : int is invalid: argument for parameter \"x\" cannot be proven to satisfy int[Small]", source_type_escape)
+
+    # callable-escape-semantic-soundness-legal-calls-only: every legal call
+    # proves x <= 255 ...
+    fn soundness_legal() errors compiler::CompilerError:
+        static compile:
+            fn always_true_for_byte(x: Byte) -> int:
+                if x <= 255:
+                    1
+                else:
+                    2
+            always_true_for_byte(200)
+    test::value("callable-escape-semantic-soundness-legal-calls-only/legal", 1, soundness_legal)
+
+    # ... and the only way to the else branch, an erased call with 9999, is
+    # rejected.
+    fn soundness_escape() errors compiler::CompilerError:
+        static compile:
+            fn always_true_for_byte(x: Byte) -> int:
+                if x <= 255:
+                    1
+                else:
+                    2
+            fn apply(f, v):
+                f(v)
+            apply(always_true_for_byte, 9999)
+    test::rejects("callable-escape-semantic-soundness-legal-calls-only/escape", compiler::DiagnosticCode::Type, soundness_escape)
+
+# ---------------------------------------------------------------------------
+# Exact identity: direct calls, aliases, constant branches, returns and
+# captures are checked like direct calls
+
+fn register_callable_escape_identity_tests():
+    # callable-escape-direct-call-valid-unaffected / -invalid-unaffected.
+    fn direct_valid() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            take_byte(7)
+    test::value("callable-escape-direct-call-valid-unaffected", 7, direct_valid)
+
+    fn direct_invalid() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            take_byte(9999)
+    test::rejects_containing("callable-escape-direct-call-invalid-unaffected", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", direct_invalid)
+
+    # callable-escape-alias-valid / -invalid: f = take_byte resolves exactly.
+    fn alias_valid() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            f = take_byte
+            f(7)
+    test::value("callable-escape-alias-valid", 7, alias_valid)
+
+    fn alias_invalid() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            f = take_byte
+            f(9999)
+    test::rejects_containing("callable-escape-alias-invalid", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", alias_invalid)
+
+    # callable-escape-transitive-alias-valid / -invalid: g = f = take_byte.
+    fn transitive_valid() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            f = take_byte
+            g = f
+            g(7)
+    test::value("callable-escape-transitive-alias-valid", 7, transitive_valid)
+
+    fn transitive_invalid() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            f = take_byte
+            g = f
+            g(9999)
+    test::rejects_containing("callable-escape-transitive-alias-invalid", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", transitive_invalid)
+
+    # callable-escape-branch-known-condition-preserves-identity: a constant
+    # condition selects one branch outright: no join.
+    fn known_condition() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            f = if true:
+                take_byte
+            else:
+                take_byte
+            f(7)
+    test::value("callable-escape-branch-known-condition-preserves-identity", 7, known_condition)
+
+    # callable-escape-return-preserved-valid / -invalid: a returned typed
+    # callable keeps its identity.
+    fn return_valid() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn chooser():
+                take_byte
+            f = chooser()
+            f(7)
+    test::value("callable-escape-return-preserved-valid", 7, return_valid)
+
+    fn return_invalid() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn chooser():
+                take_byte
+            f = chooser()
+            f(9999)
+    test::rejects_containing("callable-escape-return-preserved-invalid", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", return_invalid)
+
+    # callable-escape-capture-typed-wrapper-valid / -invalid: a closure
+    # capturing a typed callable, with a typed parameter of its own.
+    fn capture_typed_valid() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn outer():
+                f = take_byte
+                fn inner(v: Byte):
+                    f(v)
+                inner(7)
+            outer()
+    test::value("callable-escape-capture-typed-wrapper-valid", 7, capture_typed_valid)
+
+    fn capture_typed_invalid() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn outer():
+                f = take_byte
+                fn inner(v: Byte):
+                    f(v)
+                inner(9999)
+            outer()
+    test::rejects_containing("callable-escape-capture-typed-wrapper-invalid", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", capture_typed_invalid)
+
+    # callable-escape-capture-untyped-wrapper-rejected: the closure's
+    # untyped parameter infers the captured callable's contract: valid when
+    # its callers prove Byte ...
+    fn capture_untyped_accepted() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn outer(n):
+                f = take_byte
+                fn inner(v):
+                    f(v)
+                inner(n)
+            outer(7)
+    test::value("callable-escape-capture-untyped-wrapper-rejected/accepted", 7, capture_untyped_accepted)
+
+    # ... rejected when they do not.
+    fn capture_untyped_rejected() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn outer(n):
+                f = take_byte
+                fn inner(v):
+                    f(v)
+                inner(n)
+            fn bad():
+                f = take_byte
+                fn inner(v):
+                    f(v)
+                inner(9999)
+            bad()
+    test::rejects_containing("callable-escape-capture-untyped-wrapper-rejected/rejected", compiler::DiagnosticCode::Type, "argument for parameter \"v\" cannot be proven to satisfy int[Byte], the parameter type inferred from the function body", capture_untyped_rejected)
+
+    # callable-escape-source-defined-type-alias-valid,
+    # callable-escape-sparse-type-exact-alias(-invalid): source-defined
+    # bounded and sparse types through an exact alias.
+    fn source_type_alias() errors compiler::CompilerError:
+        static compile:
+            fn take_small(x: Small) -> int:
+                x
+            f = take_small
+            f(7)
+    test::value("callable-escape-source-defined-type-alias-valid", 7, source_type_alias)
+
+    fn sparse_alias() errors compiler::CompilerError:
+        static compile:
+            fn take_mark(x: Mark) -> int:
+                x
+            f = take_mark
+            f(4)
+    test::value("callable-escape-sparse-type-exact-alias", 4, sparse_alias)
+
+    fn sparse_alias_invalid() errors compiler::CompilerError:
+        static compile:
+            fn take_mark(x: Mark) -> int:
+                x
+            f = take_mark
+            f(5)
+    test::rejects_containing("callable-escape-sparse-type-exact-alias-invalid", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", sparse_alias_invalid)
+
+# ---------------------------------------------------------------------------
+# Joins: an if or a function's return sites joining callables
+
+fn register_callable_escape_join_tests():
+    # callable-escape-branch-join-same-callable-ok: both branches the same
+    # exact typed callable.
+    fn same_callable() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn choose(cond):
+                f = if cond:
+                    take_byte
+                else:
+                    take_byte
+                f(7)
+            choose(true)
+    test::value("callable-escape-branch-join-same-callable-ok", 7, same_callable)
+
+    # callable-escape-branch-join-different-callables-structural: two
+    # compatible callables join to Fn{args: [Byte], ...}: a call respecting
+    # it is accepted, a call violating it rejected at the call.
+    fn different_accepted() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn take_other(x):
+                x
+            fn choose(cond):
+                f = if cond:
+                    take_byte
+                else:
+                    take_other
+                f(7)
+            choose(true)
+    test::value("callable-escape-branch-join-different-callables-structural/accepted", 7, different_accepted)
+
+    fn different_rejected() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn take_other(x):
+                x
+            fn choose(cond):
+                f = if cond:
+                    take_byte
+                else:
+                    take_other
+                f(9999)
+            choose(true)
+    test::rejects_containing("callable-escape-branch-join-different-callables-structural/rejected", compiler::DiagnosticCode::Type, "argument 1 cannot be proven to satisfy int[Byte], the parameter type the callee's function type Fn{args: [int[Byte]]", different_rejected)
+
+    # callable-escape-branch-join-untyped-vs-typed-structural: an untyped
+    # and a typed callable join to the typed contract.
+    fn untyped_vs_typed_accepted() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn other(x):
+                x
+            fn choose(cond):
+                f = if cond:
+                    take_byte
+                else:
+                    other
+                f(7)
+            choose(true)
+    test::value("callable-escape-branch-join-untyped-vs-typed-structural/accepted", 7, untyped_vs_typed_accepted)
+
+    fn untyped_vs_typed_rejected() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn other(x):
+                x
+            fn choose(cond, v):
+                f = if cond:
+                    take_byte
+                else:
+                    other
+                f(v)
+            choose(true, 9999)
+    test::rejects("callable-escape-branch-join-untyped-vs-typed-structural/rejected", compiler::DiagnosticCode::Type, untyped_vs_typed_rejected)
+
+    # callable-escape-branch-join-incompatible-typed-rejected: no
+    # representable argument meet (Byte vs str): rejected at the join.
+    fn incompatible_typed() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn take_str(x: str) -> str:
+                x
+            fn choose(cond):
+                f = if cond:
+                    take_byte
+                else:
+                    take_str
+                f(7)
+            choose(true)
+    test::rejects_containing("callable-escape-branch-join-incompatible-typed-rejected", compiler::DiagnosticCode::Type, "typed parameter requirements that cannot be preserved", incompatible_typed)
+
+    # callable-escape-branch-join-two-untyped-ok: two untyped callables have
+    # no precondition to lose.
+    fn two_untyped() errors compiler::CompilerError:
+        static compile:
+            fn identity(x):
+                x
+            fn other(x):
+                x
+            fn choose(cond):
+                f = if cond:
+                    identity
+                else:
+                    other
+                f(9999)
+            choose(true)
+    test::value("callable-escape-branch-join-two-untyped-ok", 9999, two_untyped)
+
+    # callable-escape-return-join-different-structural: a function's return
+    # sites joining two compatible callables return their Fn, checked at
+    # the caller.
+    fn return_join_accepted() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn take_other(x):
+                x
+            fn chooser(cond):
+                if cond:
+                    return take_byte
+                take_other
+            chooser(true)(7)
+    test::value("callable-escape-return-join-different-structural/accepted", 7, return_join_accepted)
+
+    fn return_join_rejected() errors compiler::CompilerError:
+        static compile:
+            fn take_byte(x: Byte) -> int:
+                x
+            fn take_other(x):
+                x
+            fn chooser(cond):
+                if cond:
+                    return take_byte
+                take_other
+            chooser(true)(9999)
+    test::rejects("callable-escape-return-join-different-structural/rejected", compiler::DiagnosticCode::Type, return_join_rejected)
+
+fn register_typed_callable_escape_tests():
+    register_callable_escape_helper_tests(false)
+    register_callable_escape_identity_tests()
+    register_callable_escape_join_tests()
+
+# ===========================================================================
+# tests/closure-int-keys.test: closures with a String capture called with
+# Ints (the inner<int> keys), on every backend
+
+fn register_closure_int_keys_tests():
+    # closure-int-keys-parity-int: Int arguments of a closure capturing a
+    # String.
+    fn parity_int() errors compiler::CompilerError:
+        static compile:
+            fn outer(tag):
+                fn inner(x):
+                    x + str::length(tag)
+                inner(1) + inner(2)
+            outer("v")
+    test::value("closure-int-keys-parity-int", 5, parity_int)
+
+    # closure-int-keys-parity-mixed: String and Int arguments of one closure.
+    fn parity_mixed() errors compiler::CompilerError:
+        static compile:
+            fn outer(tag):
+                fn inner(x):
+                    str::concat(tag, "")
+                    x
+                [inner(tag), inner(1), inner(2)]
+            outer("v")
+    test::value("closure-int-keys-parity-mixed", ["v", 1, 2], parity_mixed)
+
+    # closure-int-keys-parity-scanner: nested closures over a String and an
+    # Int bound, called with Int positions. Strict: at's str::substring
+    # handles LowerUnderrun and UpperOverrun (never raised: every index is
+    # in range).
+    fn parity_scanner() errors compiler::CompilerError:
+        static compile:
+            fn first_space(s):
+                n = str::length(s)
+                fn at(i):
+                    c = str::substring(s, i, i + 1):
+                        on LowerUnderrun:
+                            ""
+                        on UpperOverrun:
+                            ""
+                    c
+                fn scan(start):
+                    loop i from start to n:
+                        if at(i) == " ":
+                            return i
+                    n
+                fn tail(i):
+                    e = scan(i)
+                    e - i
+                [scan(0), tail(1), tail(n)]
+            [first_space("abc def"), first_space("abcdef"), first_space("")]
+    test::value("closure-int-keys-parity-scanner", [[3, 2, 0], [6, 5, 0], [0, -1, 0]], parity_scanner)
+
+# ===========================================================================
+# tests/exact-callable-key.test: exact callables through higher-order
+# helpers compute the same value on every backend
+
+# ---------------------------------------------------------------------------
+# One target, several targets, the budget
+
+fn register_exact_callable_target_tests():
+    # exact-callable-botlish-single-value: one exact function.
+    fn botlish_single() errors compiler::CompilerError:
+        static compile:
+            fn inc(x):
+                x + 1
+            fn apply_loop(f, i, n):
+                loop j from i to n:
+                    if f(j) > 41:
+                        return j + 1
+                n
+            apply_loop(inc, 0, 100)
+    test::value("exact-callable-botlish-single-value", 42, botlish_single)
+
+    # exact-callable-native-single-value (and exact-callable-gc-exact-
+    # native-region's program): one exact native over a substring.
+    fn native_single() errors compiler::CompilerError:
+        static compile:
+            fn count_while(p, s):
+                loop i from 0 to str::length(s):
+                    if p(str::substring(s, i, i + 1)):
+                        continue
+                    return i
+                str::length(s)
+            count_while(str::is_tcl_alpha, "abc1")
+    test::value("exact-callable-native-single-value", 3, native_single)
+
+    # exact-callable-mixed-parity: one helper, a function and a native.
+    fn mixed() errors compiler::CompilerError:
+        static compile:
+            fn bot_alpha(c):
+                str::is_tcl_alpha(c) or c == "_"
+            fn count_while(p, s):
+                loop i from 0 to str::length(s):
+                    if p(str::substring(s, i, i + 1)):
+                        continue
+                    return i
+                str::length(s)
+            [count_while(bot_alpha, "ab_c1"), count_while(str::is_tcl_alpha, "abc1")]
+    test::value("exact-callable-mixed-parity", [4, 3], mixed)
+
+    # exact-callable-two-botlish-two-natives.
+    fn two_and_two() errors compiler::CompilerError:
+        static compile:
+            fn lt5(x):
+                x < 5
+            fn lt9(x):
+                x < 9
+            fn run(f, n):
+                loop j from 0 to n:
+                    if f(j) == false:
+                        return j
+                n
+            fn alpha_run(p, s):
+                loop j from 0 to str::length(s):
+                    if p(str::substring(s, j, j + 1)):
+                        continue
+                    return j
+                str::length(s)
+            [run(lt5, 100), run(lt9, 100), alpha_run(str::is_tcl_alpha, "ab1"), alpha_run(str::is_tcl_alnum, "ab1_")]
+    test::value("exact-callable-two-botlish-two-natives", [5, 9, 2, 3], two_and_two)
+
+    # exact-callable-budget-fallback-correct: six targets of one helper,
+    # more than the per-helper budget (4 by default), so the shared
+    # fallback instance runs too (the Tcl test generates this program,
+    # budgetProgram 6, and forces a budget of 2).
+    fn budget_fallback() errors compiler::CompilerError:
+        static compile:
+            fn p1(x):
+                x < 3
+            fn p2(x):
+                x < 6
+            fn p3(x):
+                x < 9
+            fn p4(x):
+                x < 12
+            fn p5(x):
+                x < 15
+            fn p6(x):
+                x < 18
+            fn apply_loop(f, i, n):
+                loop j from i to n:
+                    if f(j) == false:
+                        return j
+                n
+            [apply_loop(p1, 0, 100), apply_loop(p2, 0, 100), apply_loop(p3, 0, 100), apply_loop(p4, 0, 100), apply_loop(p5, 0, 100), apply_loop(p6, 0, 100)]
+    test::value("exact-callable-budget-fallback-correct", [3, 6, 9, 12, 15, 18], budget_fallback)
+
+# ---------------------------------------------------------------------------
+# Dynamic controls: a callable chosen at run time
+
+fn register_exact_callable_dynamic_tests():
+    # exact-callable-dynamic-if-chosen: a predicate chosen by if.
+    fn if_chosen() errors compiler::CompilerError:
+        static compile:
+            fn a_alpha(c):
+                str::is_tcl_alpha(c)
+            fn b_alnum(c):
+                str::is_tcl_alnum(c)
+            fn count_while(p, s):
+                loop i from 0 to str::length(s):
+                    if p(str::substring(s, i, i + 1)):
+                        continue
+                    return i
+                str::length(s)
+            fn pick(flag):
+                if flag:
+                    a_alpha
+                else:
+                    b_alnum
+            [count_while(pick(true), "ab1"), count_while(pick(false), "12a_")]
+    test::value("exact-callable-dynamic-if-chosen", [2, 3], if_chosen)
+
+    # exact-callable-dynamic-list-held: a callable read from a List. Strict:
+    # nth handles list::at's IndexNotFound (never raised).
+    fn list_held() errors compiler::CompilerError:
+        static compile:
+            fn a_alpha(c):
+                str::is_tcl_alpha(c)
+            fn b_alnum(c):
+                str::is_tcl_alnum(c)
+            fn count_while(p, s):
+                loop i from 0 to str::length(s):
+                    if p(str::substring(s, i, i + 1)):
+                        continue
+                    return i
+                str::length(s)
+            fn nth(preds, k):
+                p = list::at(preds, k):
+                    on IndexNotFound:
+                        b_alnum
+                p
+            preds = [a_alpha, b_alnum]
+            [count_while(nth(preds, 0), "ab1"), count_while(nth(preds, 1), "12a_")]
+    test::value("exact-callable-dynamic-list-held", [2, 3], list_held)
+
+    # exact-callable-escaping-exact-stays-sound: an exact callable also
+    # stored in a List and called through a read.
+    fn escaping() errors compiler::CompilerError:
+        static compile:
+            fn is_small(x):
+                x < 10
+            fn apply_loop(f, i, n):
+                loop j from i to n:
+                    if f(j) == false:
+                        return j
+                n
+            fs = [is_small]
+            [apply_loop(is_small, 0, 100), list::at(fs, 0)(3)]
+    test::value("exact-callable-escaping-exact-stays-sound", [10, true], escaping)
+
+# ---------------------------------------------------------------------------
+# Alias, returned callable, recursion, forwarding
+
+fn register_exact_callable_flow_tests(some_small: List[int], none_big: List[int]):
+    # exact-callable-alias: p = is_small; q = p.
+    fn alias() errors compiler::CompilerError:
+        static compile:
+            fn is_small(x):
+                x < 10
+            fn apply_loop(f, i, n):
+                loop j from i to n:
+                    if f(j) == false:
+                        return j
+                n
+            p = is_small
+            q = p
+            apply_loop(q, 0, 100)
+    test::value("exact-callable-alias", 10, alias)
+
+    # exact-callable-function-returned: make() returns the callable.
+    fn function_returned() errors compiler::CompilerError:
+        static compile:
+            fn is_small(x):
+                x < 10
+            fn make():
+                is_small
+            fn apply_loop(f, i, n):
+                loop j from i to n:
+                    if f(j) == false:
+                        return j
+                n
+            apply_loop(make(), 0, 100)
+    test::value("exact-callable-function-returned", 10, function_returned)
+
+    # exact-callable-recursive-hof: the predicate carried through every
+    # level of a tail recursion.
+    fn recursive_hof() errors compiler::CompilerError:
+        static compile:
+            fn is_small(x):
+                x < 10
+            fn count_up(p, i, n):
+                if i >= n:
+                    return i
+                if p(i):
+                    return count_up(p, i + 1, n)
+                i
+            count_up(is_small, 0, 100)
+    test::value("exact-callable-recursive-hof", 10, recursive_hof)
+
+    # exact-callable-non-tail-recursive-hof: ... and of a non-tail one.
+    fn non_tail_recursive_hof() errors compiler::CompilerError:
+        static compile:
+            fn is_small(x):
+                x < 10
+            fn is_big(x):
+                x > 10
+            fn depth(p, i, n):
+                if i >= n:
+                    return 0
+                if p(i):
+                    return 1 + depth(p, i + 1, n)
+                0
+            [depth(is_small, 0, 100), depth(is_big, 0, 100), depth(is_small, 20, 100)]
+    test::value("exact-callable-non-tail-recursive-hof", [10, 0, 0], non_tail_recursive_hof)
+
+    # exact-callable-recursion-new-closure-each-level: a new closure around
+    # the predicate at every level (compilation terminates).
+    fn new_closure_each_level() errors compiler::CompilerError:
+        static compile:
+            fn is_small(x):
+                x < 10
+            fn walk(p, i, n):
+                if i >= n:
+                    return i
+                fn next(x):
+                    p(x)
+                if p(i):
+                    return walk(next, i + 1, n)
+                i
+            walk(is_small, 0, 50)
+    test::value("exact-callable-recursion-new-closure-each-level", 10, new_closure_each_level)
+
+    # exact-callable-forwarded-through-layers: forwarded through two helper
+    # layers and composed in all four combinations.
+    fn forwarded() errors compiler::CompilerError:
+        static compile:
+            fn twice(f, x):
+                f(f(x))
+            fn apply_twice(g, y):
+                twice(g, y)
+            fn inc(n):
+                n + 1
+            fn dbl(n):
+                n * 2
+            fn compose(f, g, x):
+                f(g(x))
+            [apply_twice(inc, 5), apply_twice(dbl, 5), compose(inc, dbl, 5), compose(dbl, inc, 5), compose(inc, inc, 5), compose(dbl, dbl, 5)]
+    test::value("exact-callable-forwarded-through-layers", [7, 20, 11, 12, 7, 20], forwarded)
+
+    # exact-callable-typed-callable-with-errors: typed callables through a
+    # helper declaring NotFound, which reaches the handler at run time (the
+    # Lists searched are the parameters SOME_SMALL and NONE_BIG, so that the
+    # failure is decided at run time).
+    fn typed_with_errors() errors compiler::CompilerError:
+        static compile:
+            fn find_first(p, xs: List[int]) -> int errors NotFound:
+                loop x in xs:
+                    if p(x):
+                        return x
+                fail NotFound
+            fn small?(n: int) -> bool:
+                n < 4
+            fn big?(n: int) -> bool:
+                n > 100
+            r1 = find_first(small?, some_small):
+                on NotFound:
+                    -2
+            r2 = find_first(big?, none_big):
+                on NotFound:
+                    -1
+            [r1, r2]
+    test::value("exact-callable-typed-callable-with-errors", [3, -1], typed_with_errors)
+
+# ---------------------------------------------------------------------------
+# Identity: never a printed name, never a signature
+
+fn register_exact_callable_identity_tests():
+    # exact-callable-same-name-different-blocks: two functions named pred
+    # in different scopes are two targets (keyed by name, both would give 5).
+    fn same_name() errors compiler::CompilerError:
+        static compile:
+            fn apply_loop(f, i, n):
+                loop j from i to n:
+                    if f(j) == false:
+                        return j
+                n
+            fn left():
+                fn pred(x):
+                    x < 5
+                apply_loop(pred, 0, 100)
+            fn right():
+                fn pred(x):
+                    x < 7
+                apply_loop(pred, 0, 100)
+            [left(), right()]
+    test::value("exact-callable-same-name-different-blocks", [5, 7], same_name)
+
+    # exact-callable-natives-same-signature: two natives of one type.
+    fn natives_same_signature() errors compiler::CompilerError:
+        static compile:
+            fn alpha_run(p, s):
+                loop j from 0 to str::length(s):
+                    if p(str::substring(s, j, j + 1)):
+                        continue
+                    return j
+                str::length(s)
+            [alpha_run(str::is_tcl_alpha, "ab1"), alpha_run(str::is_tcl_alnum, "ab1_")]
+    test::value("exact-callable-natives-same-signature", [2, 3], natives_same_signature)
+
+    # exact-callable-blocks-same-signature: two functions of one type.
+    fn blocks_same_signature() errors compiler::CompilerError:
+        static compile:
+            fn lt5(x):
+                x < 5
+            fn lt7(x):
+                x < 7
+            fn run(f, n):
+                loop j from 0 to n:
+                    if f(j) == false:
+                        return j
+                n
+            [run(lt5, 100), run(lt7, 100)]
+    test::value("exact-callable-blocks-same-signature", [5, 7], blocks_same_signature)
+
+# ---------------------------------------------------------------------------
+# Value-capturing closures as targets, and closures that call a target.
+# Strict: the closures over str::substring with an unbounded index declare
+# its LowerUnderrun and UpperOverrun (never raised), handled at the top.
+
+fn register_exact_callable_closure_tests():
+    # exact-callable-capturing-closure-direct: a closure capturing a String
+    # and an Int.
+    fn capturing_direct() errors compiler::CompilerError:
+        static compile:
+            fn run(s, items, n):
+                fn longer(x):
+                    str::length(x) > str::length(s) + n
+                fn first_match(p, xs):
+                    loop x in xs:
+                        if p(x):
+                            return x
+                    ""
+                first_match(longer, items)
+            run("ab", ["a", "abc", "abcdef", "abcdefgh"], 2)
+    test::value("exact-callable-capturing-closure-direct", "abcdef", capturing_direct)
+
+    # exact-callable-capturing-closure-no-closure-allocated: one closure
+    # literal called with three exact predicates.
+    fn several_instances() errors compiler::CompilerError:
+        static compile:
+            fn run(s) errors LowerUnderrun, UpperOverrun:
+                fn char_at(i) errors LowerUnderrun, UpperOverrun:
+                    str::substring(s, i, i + 1)
+                fn bot_alpha(c):
+                    str::is_tcl_alpha(c)
+                fn scan(start, predicate) errors LowerUnderrun, UpperOverrun:
+                    loop i from start to str::length(s):
+                        if predicate(char_at(i)):
+                            continue
+                        return i
+                    str::length(s)
+                [scan(0, bot_alpha), scan(0, str::is_tcl_alnum), scan(1, str::is_tcl_alpha)]
+            r = run("ab1_"):
+                on LowerUnderrun:
+                    []
+                on UpperOverrun:
+                    []
+            r
+    test::value("exact-callable-capturing-closure-no-closure-allocated", [2, 3, 2], several_instances)
+
+    # exact-callable-closure-recursion-several-instances: closures recursing
+    # (tail and non-tail) with two exact predicates.
+    fn closure_recursion() errors compiler::CompilerError:
+        static compile:
+            fn run(v) errors LowerUnderrun, UpperOverrun:
+                fn walk(i, p) errors LowerUnderrun, UpperOverrun:
+                    if i >= str::length(v):
+                        return i
+                    if p(str::substring(v, i, i + 1)):
+                        return walk(i + 1, p)
+                    i
+                fn depth(i, p) errors LowerUnderrun, UpperOverrun:
+                    if i >= str::length(v):
+                        return 0
+                    if p(str::substring(v, i, i + 1)):
+                        return 1 + depth(i + 1, p)
+                    0
+                fn a() errors LowerUnderrun, UpperOverrun:
+                    walk(0, str::is_tcl_alpha)
+                fn b() errors LowerUnderrun, UpperOverrun:
+                    walk(0, str::is_tcl_alnum)
+                [a(), b(), depth(0, str::is_tcl_alpha), depth(0, str::is_tcl_alnum), walk(1, str::is_tcl_alnum)]
+            r = run("ab1_"):
+                on LowerUnderrun:
+                    []
+                on UpperOverrun:
+                    []
+            r
+    test::value("exact-callable-closure-recursion-several-instances", [2, 3, 2, 3, 3], closure_recursion)
+
+    # exact-callable-many-closures-one-target: many closures of one code
+    # target, each capturing a different value.
+    fn many_closures() errors compiler::CompilerError:
+        static compile:
+            fn first_match(p, xs):
+                loop x in xs:
+                    if p(x):
+                        return x
+                0
+            fn go(i, k, total):
+                if i > k:
+                    return total
+                fn big(x):
+                    x > i
+                go(i + 1, k, total + first_match(big, [1, 2, 3, 4, 5, 6]))
+            go(1, 5, 0)
+    test::value("exact-callable-many-closures-one-target", 20, many_closures)
+
+    # exact-callable-captured-callable-boundary: a callable captured by a
+    # nested closure, two different ones.
+    fn captured_callable() errors compiler::CompilerError:
+        static compile:
+            fn outer(p, s) errors LowerUnderrun, UpperOverrun:
+                fn inner(x):
+                    p(x)
+                fn count(i) errors LowerUnderrun, UpperOverrun:
+                    if i >= str::length(s):
+                        return i
+                    if inner(str::substring(s, i, i + 1)):
+                        return count(i + 1)
+                    i
+                count(0)
+            fn go() errors LowerUnderrun, UpperOverrun:
+                [outer(str::is_tcl_alpha, "ab1"), outer(str::is_tcl_alnum, "ab1_")]
+            r = go():
+                on LowerUnderrun:
+                    []
+                on UpperOverrun:
+                    []
+            r
+    test::value("exact-callable-captured-callable-boundary", [2, 3], captured_callable)
+
+    # exact-callable-dead-self-call-keeps-closure: the type tests integer?
+    # and string? as exact targets of a recursive closure.
+    fn dead_self_call() errors compiler::CompilerError:
+        static compile:
+            fn run(v) errors LowerUnderrun, UpperOverrun:
+                fn walk(i, p) errors LowerUnderrun, UpperOverrun:
+                    if i >= str::length(v):
+                        return i
+                    if p(str::substring(v, i, i + 1)):
+                        return walk(i + 1, p)
+                    i
+                [walk(0, integer?), walk(0, string?)]
+            r = run("ab1"):
+                on LowerUnderrun:
+                    []
+                on UpperOverrun:
+                    []
+            r
+    test::value("exact-callable-dead-self-call-keeps-closure", [0, 3], dead_self_call)
+
+    # exact-callable-gc-capture-string-list: a closure capturing a String
+    # and a List (strict: heavy handles list::at's IndexNotFound, never
+    # raised).
+    fn capture_string_list() errors compiler::CompilerError:
+        static compile:
+            fn run(tag, words):
+                fn heavy(x):
+                    w = list::at(words, 0):
+                        on IndexNotFound:
+                            ""
+                    str::length(str::concat(tag, x)) > str::length(w) + 3
+                fn first(p, xs):
+                    loop x in xs:
+                        if p(str::concat(x, tag)):
+                            return x
+                    ""
+                first(heavy, ["a", "bbbb", "ccccccc"])
+            run("xy", ["pqr", "st"])
+    test::value("exact-callable-gc-capture-string-list", "bbbb", capture_string_list)
+
+    # exact-callable-gc-capture-mutarray-struct: a closure capturing a
+    # MutableArray (element 1 is 7) and a struct. Strict: the array is
+    # built by make (a place run mutated could not be captured:
+    # MUTABLE-PLACE-CAPTURE), and probe handles mutable_array::at's
+    # IndexNotFound (never raised).
+    fn capture_mutarray_struct() errors compiler::CompilerError:
+        static compile:
+            fn make():
+                arr = mutable_array::allocate(4)
+                mutable_array::set(arr, 1, 7)
+                arr
+            fn run(n):
+                arr = make()
+                rec = {a: 5, b: "zz"}
+                fn probe(x):
+                    e = mutable_array::at(arr, 1):
+                        on IndexNotFound:
+                            0
+                    x + e + rec.a > n
+                fn find_first(p, lo, hi):
+                    loop i from lo to hi:
+                        if p(i):
+                            return i
+                    hi
+                find_first(probe, 0, 100)
+            run(30)
+    test::value("exact-callable-gc-capture-mutarray-struct", 19, capture_mutarray_struct)
+
+fn register_exact_callable_key_tests():
+    register_exact_callable_target_tests()
+    register_exact_callable_dynamic_tests()
+    register_exact_callable_flow_tests([7, 3, 4, 6], [1, 3, 4])
+    register_exact_callable_identity_tests()
+    register_exact_callable_closure_tests()
+
+with context test::suite()
+register_structural_fn_types_tests()
+register_typed_callable_escape_tests()
+register_closure_int_keys_tests()
+register_exact_callable_key_tests()
+test::report()

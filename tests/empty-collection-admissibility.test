@@ -312,16 +312,23 @@ fn first(xs: List[S]) -> int:
 first([])}
 } -result {value 7}
 
+# The empty caller reaches `first` through run's parameter: a handled
+# first([]) at the top level is a statically known failure (the empty literal
+# reaches xs as zero elements, so list::at(xs, 0) always fails -- KNOWN-ERROR,
+# which a handler does not make legal), while run's own body is legal for
+# every ys; run([]) still makes first's List[never] instance.
 test empty-caller-element-read-propagated {an empty caller's list::at failure propagated through a declared errors clause, and lib/list.bot's list::get with a default, both agree on every backend} -body {
     list [sourceAgree {import list
 struct S:
     f: int
 fn first(xs: List[S]) -> int errors IndexNotFound:
     list::at(xs, 0).f
-r = first([]):
-    on IndexNotFound:
-        5
-r}] [sourceAgree {import list
+fn run(ys: List[S]) -> int:
+    r = first(ys):
+        on IndexNotFound:
+            5
+    r
+run([])}] [sourceAgree {import list
 struct S:
     f: int
 fn first(xs: List[S]) -> int:

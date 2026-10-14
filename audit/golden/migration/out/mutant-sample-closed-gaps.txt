@@ -1,0 +1,23 @@
+# The three mutants whose first-run verdicts were migration gaps (out/mutant-sample.txt), re-run on the final tree
+# after ce34e1d closed them: tclsh9.0 audit/golden/migration/sample.tcl -only contravariant-erasure-dropped,handler-dispatch-short-name-tcl,caller-imports-provide -jobs 2
+# (LARGE-SCALE-GOLDEN-MIGRATION.md, Mutation). Exit status 0, 129 s.
+
+== handler-dispatch-short-name-tcl (error-payloads.test,errors.test,namespaced-errors.test; compile,interp; 113s): BOTH
+BOTH audit/error-payloads/tools/mutants.txt:handler-dispatch-short-name-tcl (2 rows; suites declared-errors.bot) -- the interpreter selects a handler by the error's short name
+    old failed: 2 (tests/namespaced-errors.test nerr-both-handlers, tests/namespaced-errors.test nerr-completion-sets)
+    new failed (related): 2 (declared-errors.bot nerr-both-handlers, declared-errors.bot nerr-completion-sets/value)
+    new failed (other rows): 0 (); suites not ok: declared-errors.bot=disagree
+== contravariant-erasure-dropped (structural-contract-completions.test,higher-order-completions.test; interp; 3s): BOTH
+BOTH audit/structural-contracts/tools/mutants.txt:contravariant-erasure-dropped (6 rows; suites callable-contracts-contravariant-rejected.bot, callable-contracts-contravariant.bot) -- a callable reaching an untyped parameter through a structural call's typed argument is not part of the erased-callable contract
+    old failed: 6 (tests/structural-contract-completions.test scc-contravariant-admitted, tests/structural-contract-completions.test scc-contravariant-rejected)
+    new failed (related): 2 (callable-contracts-contravariant.bot scc-contravariant-admitted/erased, callable-contracts-contravariant.bot scc-contravariant-admitted/erased/identity)
+    new failed (other rows): 0 (); suites not ok: callable-contracts-contravariant-rejected.bot=aborted
+    rows weaker for this mutant: callable-contracts-contravariant.bot scc-contravariant-admitted (tests/structural-contract-completions.test scc-contravariant-admitted); callable-contracts-contravariant.bot scc-contravariant-admitted/erased-exactly (tests/structural-contract-completions.test scc-contravariant-admitted); callable-contracts-contravariant-rejected.bot scc-contravariant-rejected (tests/structural-contract-completions.test scc-contravariant-rejected); callable-contracts-contravariant-rejected.bot scc-contravariant-rejected/identity (tests/structural-contract-completions.test scc-contravariant-rejected)
+== caller-imports-provide (context-traits.test; interp; 13s): BOTH-SUITE-LEVEL
+BOTH-SUITE-LEVEL audit/context-traits/tools/mutants.txt:caller-imports-provide (1 rows; suites contexts.bot) -- a function in the calling program provides a context's implementation when its owner has none
+    old failed: 1 (tests/context-traits.test ct-owner-only)
+    new failed (related): 0 ()
+    new failed (other rows): 0 (); suites not ok: contexts.bot=compile-error
+    rows weaker for this mutant: contexts.bot ct-owner-only (tests/context-traits.test ct-owner-only)
+
+3 mutants: BOTH 2, BOTH-SUITE-LEVEL 1
