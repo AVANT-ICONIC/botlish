@@ -26,17 +26,24 @@ proc readText {path} {
 }
 
 # Runs one vertical via replay.tcl; returns the normalized "result|... exit|..."
+# or the literal HANG when the replay produced no verdict within 60 s
+# (hang-class findings never terminate; the bound is the datum).
 proc replay {vertical target input} {
     variable root
-    set cmd [list tclsh9.0 [file join $root fuzz scripts replay.tcl] \
+    set cmd [list timeout 60 tclsh9.0 [file join $root fuzz scripts replay.tcl] \
         $vertical $target $input]
     if {[catch {exec -- {*}$cmd} output options]} {
+        set errorcode [dict get $options -errorcode]
+        if {[lindex $errorcode 0] eq "CHILDSTATUS" && [lindex $errorcode 2] == 124} {
+            return "HANG"
+        }
         # replay.tcl exits 0 on success; treat any failure as the answer
         set output [dict get $options -errorcode]
         if {[string match "CHILDSTATUS*" $output]} {
             set output "(replay failed: exit [lindex $output 2])"
         }
     }
+    if {[string trim $output] eq ""} { return "HANG" }
     return [string map {\n " "} [string trim $output]]
 }
 

@@ -29,6 +29,18 @@ compare_one() {  # compare_one TARGET SEEDNAME SEEDPATH VERTICAL...
         if [[ "$vertical" == "aot" && ! -x "$ROOT/fuzz/build/aot/$target" ]]; then continue; fi
         normalized="$(tclsh9.0 "$ROOT/fuzz/scripts/replay.tcl" "$vertical" "$target" "$seed" 2>/dev/null | paste -sd' ' -)"
         [[ -z "$normalized" ]] && continue
+        # Documented interpreter limitation, not a finding: the Tcl
+        # reference interpreter does not eliminate tail calls (a Botlish
+        # recursion is a Tcl recursion), so deep input-driven recursion
+        # hits Tcl's recursion limit and completes with TCL LIMIT STACK --
+        # the exact behavior examples/stdlib/corpus.tcl documents and
+        # works around by raising the limit. Native verticals eliminate
+        # self tail calls (hir::aot's `tail` facts) and agree on the
+        # value. Clean error, one vertical, depth-dependent.
+        if [[ "$vertical" == "interp" && "$normalized" == *"TCL LIMIT STACK"* ]]; then
+            printf '%s\t%s\t%s\t%s\tinterp-depth-limit\n' "$target" "$seedname" "$vertical" "$normalized" >> "$REPORT"
+            continue
+        fi
         # Documented per-vertical baseline, not a finding: a native-only
         # program (its own header documents the NATIVE-ONLY refusal, e.g.
         # examples/linux/getpid.bot) refuses on the Tcl backends by design.

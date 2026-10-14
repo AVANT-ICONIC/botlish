@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 AFL="$ROOT/fuzz/tools/afl/bin"
 export AFL_PATH="$ROOT/fuzz/tools/afl/lib/afl" \
        AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-       AFL_SKIP_CPUFREQ=1 AFL_NO_UI=1
+       AFL_SKIP_CPUFREQ=1 AFL_NO_UI=1 AFL_NO_AFFINITY=1
 export ASAN_OPTIONS=abort_on_error=1:detect_leaks=0:symbolize=0
 BUDGET="${1:-600}"
 OUT="$ROOT/fuzz/out-asan"

@@ -1,0 +1,5 @@
+aot	result|value|[[""]] exit|0
+interp	result|value|[[""]] exit|0
+compile	result|value|[[""]] exit|0
+cranelift	result|value|[[""]] exit|0
+cranelift-generic	result|value|[[""]] exit|0

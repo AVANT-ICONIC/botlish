@@ -857,7 +857,16 @@ outcome depend on the scheduler, never add a source-layout rule or annotation
 to make compilation cheaper, and never key a reused method-call decision by
 name. A missed cross-function channel shows up as a `mispredicted` build or a
 difference from `BOTLISH_STATIC_SCHEDULER=sequential`: add its edge to
-`hir/staticdeps.tcl`, not a special case to the scheduler. If you change the
+`hir/staticdeps.tcl`, not a special case to the scheduler. The sequential
+order's waiting rule (STATIC-COMPILE.md, "The waiting rule";
+`hir::staticdeps::Waiting`) reads that analysis's waiting channels
+(`C:erased`, `C:budget:B`; never the gates `C:verdict` and `C:plan`): a
+failing block consuming one waits while a failing block contributes to it,
+so a consumer's verdict does not depend on where its contributors are
+written. An edge into a waiting channel's part of the graph, or a new link
+label the rule must skip, can therefore change an outcome, not only a build
+count: check the fuzzer's layout claim on several seeds (17 and 41 among
+them). If you change the
 schedulers, the dependency analysis, the method-call seeds or build reuse
 (`hir/hir.tcl`), or add a fact an analysis reads across functions (a summary,
 an inferred contract, the erased-callable contract, an instance budget, a

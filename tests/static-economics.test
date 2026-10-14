@@ -227,6 +227,108 @@ proc sePlanTraits {} {
     return "import compiler\n\ntrait Named:\n    fn name(value: Named) -> str\n\nstruct Person:\n    v: str\n\nfn second(v: Named) -> str errors compiler::CompilerError:\n    static compile:\n        v.name()\n\nfn first(v: Named) -> str errors compiler::CompilerError:\n    static compile:\n        a = v.name()\n        second(v)\n\nr0 = first(Person \{v: \"a\"\}):\n    on compiler::CompilerError:\n        \"rejected\"\n\nfn name(p: Person) -> str:\n    p.v\n\nr1 = second(Person \{v: \"b\"\}):\n    on compiler::CompilerError:\n        \"rejected\"\n\[r0, r1\]\n"
 }
 
+# Two trait-polymorphic functions whose bodies are sites holding a trait
+# operation, each first needed (its specialization placed) before its
+# implementation is declared: TRAIT-IMPL-ORDER at both, the plan's, and
+# nothing else links them. The first one's caller is called at the top level
+# without a handler, so its rejection makes that call an UNHANDLED-ERROR --
+# a diagnostic in no site, which closes the gate again.
+set ::sePlanReclosed {import compiler
+
+trait LateNamed:
+    fn late_name(value: LateNamed) -> str
+
+struct LatePerson:
+    v: str
+
+fn late_named(v: LateNamed) -> str errors compiler::CompilerError:
+    static compile:
+        v.late_name()
+
+fn early() -> str errors compiler::CompilerError:
+    late_named(LatePerson {v: "a"})
+
+fn late_name(p: LatePerson) -> str:
+    p.v
+
+trait OtherNamed:
+    fn other_name(value: OtherNamed) -> str
+
+struct OtherPerson:
+    v: str
+
+fn other_named(v: OtherNamed) -> str errors compiler::CompilerError:
+    static compile:
+        v.other_name()
+
+fn early_other() -> str errors compiler::CompilerError:
+    other_named(OtherPerson {v: "b"})
+
+fn other_name(p: OtherPerson) -> str:
+    p.v
+
+a = early()
+b = early_other():
+    on compiler::CompilerError:
+        "rejected"
+0
+}
+
+# A generic top-level function whose body is a site giving its untyped
+# parameter to a nested generic function: specialized for a coroutine handle
+# (a clone, AFFINE-VALUES.md) only once its caller's argument is one -- here
+# when a rejection makes the other branch of the `if` producing it `never`.
+# In the clone's view the nested call is AFFINE-GENERIC-NESTED-UNSUPPORTED,
+# the plan's, though nothing of the site's own changed.
+set ::sePlanClone {import compiler
+
+struct Command:
+    value: int
+
+struct Event:
+    value: int
+
+fn worker(seed: int, resume Command) -> Event:
+    command = yield Event {value: seed}
+    return Event {value: command.value + seed}
+
+fn make(seed: int) -> Coroutine{args: [Command], return: Event}:
+    coroutine {step} = worker(seed)
+    step
+
+fn want_int(x: int) -> int:
+    x
+
+fn first() -> int errors compiler::CompilerError:
+    static compile:
+        want_int("a")
+
+fn keep(h) -> int errors compiler::CompilerError:
+    static compile:
+        fn inner(c) -> int:
+            1
+        inner(h)
+
+fn pick() errors compiler::CompilerError:
+    static compile:
+        want_int("b")
+
+fn caller(flag: bool) -> int errors compiler::CompilerError:
+    x = if flag:
+        make(1)
+    else:
+        pick()
+    keep(x)
+
+r1 = first():
+    on compiler::CompilerError:
+        -1
+r2 = caller(true):
+    on compiler::CompilerError:
+        -1
+0
+}
+
 # K sibling functions, each with a checker-rejected site, nested in one
 # enclosing site (the golden framework's registration function, written as
 # a static block), or (NESTED 0) in a plain function.
@@ -423,6 +525,99 @@ test se-equal-erased-consumer {a genuine consumer of the erased-callable contrac
         [llength [dict get [lindex [dict get $hir staticStats trace] 0] deferred]]
 } -result {{} {TYPE accepted} 2 1}
 
+# The consumer and contributor of se-equal-erased-consumer as two
+# functions, the consumer's written first when CONSUMERFIRST.
+proc seConsumerContributor {consumerFirst} {
+    set text "import compiler\nimport list\n\nerror E2\n\nfn raise_e2() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\n"
+    set consumer [seSite consumer {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
+    set eraser [seSite eraser [concat {"r = store(raise_e2)"} [seTypeFail 0]]]
+    append text [expr {$consumerFirst ? "$consumer$eraser" : "$eraser$consumer"}]
+    append text "a = consumer():\n    on compiler::CompilerError:\n        -1\nb = eraser():\n    on compiler::CompilerError:\n        -1\n\[a, b\]\n"
+    return $text
+}
+
+test se-equal-consumer-waits {the waiting rule: a consumer of the erased-callable contract is judged only once no failing contributor remains, so its verdict does not depend on where it is written -- written first, it waits for the contributor's rejection and is accepted, as when written second; batched, sequential and legacy decide alike, in the same rounds} -body {
+    set results {}
+    foreach consumerFirst {1 0} {
+        set text [seConsumerContributor $consumerFirst]
+        lappend results [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
+    }
+    set hir::static::trace 1
+    try {
+        set stats [dict get [seHir [seConsumerContributor 1] sequential] staticStats]
+    } finally {
+        set hir::static::trace 0
+    }
+    set deferred [dict get [lindex [dict get $stats trace] 0] deferred]
+    lappend results [llength $deferred] \
+        [regexp {^waits for f[0-9]+:[0-9]+, a failing contributor to the erased-callable contract it consumes$} \
+            [lindex $deferred 0 1]]
+} -result {{} {accepted TYPE} 2 {} {TYPE accepted} 2 1 1}
+
+test se-equal-consumer-waits-residual {the residual case of the waiting rule (STATIC-COMPILE.md): a contributor whose own verdict another block decides -- the erasing block is ok until the block nested in a function in its body is rejected (TYPE), whose CompilerError that function does not admit; then it is rejected too and the program erases nothing. The contributors are the blocks holding a contribution, not closed under what they read (that closure made ordinary failures wait for each other, one build each), so a consumer written first does not wait for the nested block and is rejected (UNHANDLED-ERROR); written second it is judged once the eraser is gone and accepted. Batched, sequential and legacy decide alike} -body {
+    set results {}
+    foreach consumerFirst {1 0} {
+        set text "import compiler\nimport list\n\nerror E2\n\nfn raise_e2() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\n"
+        set consumer [seSite consumer {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
+        set eraser [seSite eraser [concat {"r = store(raise_e2)" "fn g() -> int:" "    static compile:"} \
+            [lmap line [seTypeFail 0] {string cat "        " $line}] {"    1" "g()"}]]
+        append text [expr {$consumerFirst ? "$consumer$eraser" : "$eraser$consumer"}]
+        append text "a = consumer():\n    on compiler::CompilerError:\n        -1\nb = eraser():\n    on compiler::CompilerError:\n        -1\n\[a, b\]\n"
+        lappend results [seSame $text] [seOutcomes $text]
+    }
+    set results
+} -result {{} {UNHANDLED-ERROR TYPE UNHANDLED-ERROR} {} {TYPE UNHANDLED-ERROR accepted}}
+
+test se-builds-erasing-consumers {blocks that each erase and each call through an uncontracted value, failing for a reason of their own the completion walk reports (KNOWN-ERROR: always() never completes normally): each consumes what the others contribute, so they wait on each other -- a cycle, decided in post-order in one build (2 rounds at 4 and 8 blocks), as before the waiting rule: the contributors are every block holding a contribution, not only the witness, which would make each wait on the last of them, one build each (mutant erasure-contributors-witnesses-only)} -body {
+    set results {}
+    foreach n {4 8} {
+        set text "import compiler\nimport list\n\nerror E\nerror Boom\n\nfn raise_e() -> int errors E:\n    fail E\n\nfn always() -> int errors Boom:\n    fail Boom\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\n"
+        set calls {}
+        for {set i 0} {$i < $n} {incr i} {
+            append text [seSite s$i {"s = store(raise_e)" "fn run(fs: List\[any\]) errors IndexNotFound, E:" "    f = list::at(fs, 0)" \
+                "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "    on E:" "        -3" "always()"}]
+            append calls "r$i = s${i}():\n    on compiler::CompilerError:\n        -1\n"
+        }
+        append text $calls "0\n"
+        lappend results [seSame $text 0] [lsort -unique [seOutcomes $text]] [lindex [seEcon $text] 0]
+    }
+    set results
+} -result {{} KNOWN-ERROR 2 {} KNOWN-ERROR 2}
+
+test se-builds-early-consumer {a block that calls through an uncontracted value but fails with a diagnostic reported before the completion walk (TYPE) does not wait for the erased contract's failing contributor: no erasure can cause or precede that diagnostic (only the ownership analysis's exit releases read the contract before the walk, and they report nothing), so both blocks are rejected in the first build -- 2 rounds, not 3 (mutant early-consumes-erased)} -body {
+    set text "import compiler\nimport list\n\nerror E\n\nfn raise_e() -> int errors E:\n    fail E\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\nfn want(x: int) -> int:\n    x\n\n"
+    append text [seSite y {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" {want("y")}}]
+    append text [seSite z {"s = store(raise_e)" {want("z")}}]
+    append text "ry = y():\n    on compiler::CompilerError:\n        -1\nrz = z():\n    on compiler::CompilerError:\n        -1\n0\n"
+    list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
+} -result {{} {TYPE TYPE} 2}
+
+# Block NAME erasing raise_E (store's untyped parameter) and calling through
+# an `any` element under a handler of IndexNotFound and E only, then failing
+# with KNOWN-ERROR when BAD (always() never completes normally: a diagnostic
+# of the completion walk, so the block still consumes what the program
+# erases).
+proc seErasingConsumer {name e bad} {
+    set E [string toupper $e]
+    set body [list "s = store(raise_$e)" "fn run_${name}(fs: List\[any\]) errors IndexNotFound, $E:" \
+        "    f = list::at(fs, 0)" "    f()" "r = run_${name}(\[harmless\]):" "    on IndexNotFound:" "        -2" \
+        "    on $E:" "        -3"]
+    return [seSite $name [concat $body [expr {$bad ? {always()} : {1}}]]]
+}
+
+test se-equal-channel-cycle {a cycle through the erased-callable contract: each block erases what the other's call through an uncontracted value does not admit, and fails for a reason the completion walk reports (b: KNOWN-ERROR), so each waits on the other and the first in post-order is rejected -- for the other's erasure (UNHANDLED-ERROR), whichever it is: one of the places the waiting rule leaves a verdict to layout (STATIC-COMPILE.md, "The waiting rule"); batched, sequential and legacy decide alike} -body {
+    set results {}
+    foreach order {{a b} {b a}} {
+        set text "import compiler\nimport list\n\nerror E1\nerror E2\nerror Boom\n\nfn raise_e1() -> int errors E1:\n    fail E1\n\nfn raise_e2() -> int errors E2:\n    fail E2\n\nfn always() -> int errors Boom:\n    fail Boom\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\n"
+        foreach name $order {
+            append text [seErasingConsumer $name [expr {$name eq "a" ? "e1" : "e2"}] [expr {$name eq "b"}]]
+        }
+        append text "ra = a():\n    on compiler::CompilerError:\n        -1\nrb = b():\n    on compiler::CompilerError:\n        -1\n\[ra, rb\]\n"
+        lappend results [seSame $text] [seOutcomes $text]
+    }
+    set results
+} -result {{} {UNHANDLED-ERROR KNOWN-ERROR} {} {UNHANDLED-ERROR accepted}}
+
 test se-equal-multiple-contributors {several contributors, rejected by the checker and by resolution: the consumer is judged against the contract their final forms leave} -body {
     set text $::seErased
     append text [seSite c1 [concat $::seContributor [seTypeFail 9]]]
@@ -490,6 +685,19 @@ test se-equal-plan-gate {the trait monomorphization's plan runs only on a progra
     }
     set results
 } -result {{} {TYPE AFFINE-GENERIC-NESTED-UNSUPPORTED TYPE} {} {} {TRAIT-IMPL-ORDER TRAIT-IMPL-ORDER} {}}
+
+test se-equal-plan-reclosed {while every diagnostic of a build may be the plan's (the gate is open), a rejection can close the gate again: rejecting the first of two independent TRAIT-IMPL-ORDER sites makes a top-level call of its function an UNHANDLED-ERROR, in no site, and the sequential order then accepts the second -- so the plan's diagnostics are decided one per build, never beside each other} -body {
+    # (Not against the legacy scheduler: it knows no gate, and rejects both.)
+    set hir [seHir $::sePlanReclosed]
+    list [seSame $::sePlanReclosed 0] [seOutcomes $::sePlanReclosed] \
+        [lmap d [dict get $hir diagnostics] {dict get $d kind}] [dict get $hir staticStats mispredicted]
+} -result {{} {TRAIT-IMPL-ORDER accepted} UNHANDLED-ERROR {}}
+
+test se-equal-plan-clone {a site the plan diagnoses only in a clone's view: a generic function's site giving its parameter to a nested generic function is specialized for a coroutine handle once a rejection narrows its caller's argument (an `any`) to one -- the site is the gate's consumer though nothing of its own changes, and no build contradicts a prediction} -body {
+    set hir [seHir $::sePlanClone]
+    list [seSame $::sePlanClone 0] [seOutcomes $::sePlanClone] [dict get $hir staticStats mispredicted] \
+        [dict get $hir staticStats rounds]
+} -result {{} {TYPE AFFINE-GENERIC-NESTED-UNSUPPORTED TYPE} {} 3}
 
 test se-equal-internal-ids-exact {only a message naming an internal id the way the compiler prints one (`block(e12)`) waits for the sequential order's own build: a USE-AFTER-MOVE naming the binding `s1` after an earlier rejection is committed beside it (it was once held back as if `s1` were a scope id)} -body {
     set text "import compiler\n\nfn needs_int(v: int) -> int:\n    v\n\nfn producer():\n    yield 1\n    2\n\n"
@@ -676,14 +884,14 @@ test se-equal-hygiene-trait-witness {a trait view's parameter witness is named b
     seHygiene $text
 } -result {{} {TYPE TRAIT-WITNESS-JOIN} {expression has trait type Named but may contain either the witness of parameter "list" of pick or the witness of parameter "b" of pick; heterogeneous trait values are not supported (there is no erased trait representation to hold a run-time choice between witnesses)}}
 
-test se-equal-erased-witness {the erased-callable contract is a set of errors, which loses one only once every contribution erasing it is gone: it depends on one witness per error (the contribution the sequential order removes last) -- and every other contributor is linked to it: here the consumer turns unknown when the block in mk() is rejected (the witness, in w(), erases mk()'s result, which then never exists), and the other contributor of E2, l(), must not be rejected in the same run, or the next build judges the consumer without E2 -- the batched decisions are the sequential ones. store() escapes (`keep`), so what its parameter may hold is no input of the contract boundary (P:input), whose own witness link would hold l() back as well} -body {
+test se-equal-erased-witness {the erased-callable contract is a set of errors, which loses one only once every contribution erasing it is gone: it depends on one witness per error (the contribution last in post-order): here the witness, in w(), erases mk()'s result, which never exists once the block in mk() is rejected, and the other contributor of E2, l(), fails as well. The consumer waits for both (the waiting rule) and is accepted: the final program erases nothing. Before the rule it was judged while l()'s erasure was still in the program and rejected (UNHANDLED-ERROR) -- the batched decisions are the sequential ones either way. store() escapes (`keep`), so what its parameter may hold is no input of the contract boundary (P:input), whose own witness link would hold l() back as well} -body {
     set text "import compiler\nimport list\n\nerror E1\nerror E2\n\nfn harmless() -> int:\n    1\n\nfn raise2() -> int errors E2:\n    fail E2\n\nfn raise2b() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn want(x: int) -> int:\n    x\n\nfn mk() errors compiler::CompilerError:\n    static compile:\n        want(\"z\")\n        raise2b\n\n"
     append text [seSite y {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
     append text [seSite l {"s = store(raise2)" {want("l")}}]
     append text [seSite w {"store(mk())"}]
     append text "keep = \[store\]\nr1 = y():\n    on compiler::CompilerError:\n        -1\nr2 = l():\n    on compiler::CompilerError:\n        -1\nr3 = w():\n    on compiler::CompilerError:\n        -1\nr1 + r2 + r3\n"
     list [seSame $text] [seOutcomes $text]
-} -result {{} {TYPE UNHANDLED-ERROR TYPE accepted}}
+} -result {{} {TYPE accepted TYPE accepted}}
 
 test se-equal-subsume-gate {a block whose first diagnostic is a contract-boundary report depends on what the program erases: mutable_array::generate given Fn{args: [int, any], ...}, and a coroutine handle leaving its construction in make (a function used as a value, whose parameter stands for whatever the program erases), are TYPE while the contributor erases raise_e and accepted once it is rejected -- judged after that rejection, as in the sequential order (a block whose first diagnostic came before the completion walk has no such edge: se-builds-subsume-gate)} -body {
     set results {}
@@ -995,6 +1203,24 @@ test se-simulate-independent {independent failing sites are all committed in one
     list [dict get $result committed] [dict get $result predicted] \
         [dict get [lindex [dict get $result decisions d] 1] kind]
 } -result {{a c d} {} UNBOUND}
+
+test se-simulate-consumer-waits {a failing consumer of a channel waits while a failing contributor to it remains: the contributor written after it is committed first, and the consumer, which depends on it, is left for a build} -body {
+    set sites [list [seSyntheticSite y ""] [seSyntheticSite z ""]]
+    set own [dict create y [list [seSyntheticDiagnostic UNHANDLED-ERROR]] z [list [seSyntheticDiagnostic TYPE]]]
+    set deps [dict create sites [dict create y {z} z {}] consumes [dict create y C:erased z {}] \
+        contributors [dict create C:erased {z}]]
+    set result [hir::static::Simulate $sites {} $own $deps]
+    list [dict get $result committed] [dict get $result predicted] [lindex [hir::static::Next $sites {} $own $deps] 0]
+} -result {z {} z}
+
+test se-simulate-cycle {failing sites that wait on each other (each consumes a channel the other contributes to): the first one in post-order is rejected, by the batched run as by the sequential order} -body {
+    set sites [list [seSyntheticSite y ""] [seSyntheticSite z ""]]
+    set own [dict create y [list [seSyntheticDiagnostic UNHANDLED-ERROR]] z [list [seSyntheticDiagnostic TYPE]]]
+    set deps [dict create sites [dict create y {z} z {y}] consumes [dict create y C:erased z C:erased] \
+        contributors [dict create C:erased {y z}]]
+    set result [hir::static::Simulate $sites {} $own $deps]
+    list [dict get $result committed] [dict get $result predicted] [lindex [hir::static::Next $sites {} $own $deps] 0]
+} -result {y {} y}
 
 # ---------------------------------------------------------------------------
 # Scheduling diagnostics

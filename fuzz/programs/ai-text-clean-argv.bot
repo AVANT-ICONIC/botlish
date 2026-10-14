@@ -1,0 +1,73 @@
+# ai-text-clean-argv.bot -- the ai_text_clean example as an input-driven
+# program: the text to clean is the first process argument (argv()[1]).
+#
+# Fuzz-campaign program (FUZZING-ARGV-PROGRAMS.md), not an example: the
+# definitions are copied verbatim from examples/stdlib/ai_text_clean.bot;
+# only the driver reads argv() instead of the fixed sample list.
+#
+# Behavior contract:
+#   * no argument                 -> clean_ai_text("")
+#   * valid UTF-8 argument        -> clean_ai_text(argument)
+#   * invalid UTF-8 anywhere      -> clean_ai_text("")
+import list
+import str
+
+# The character at index, or "" past the end (examples/stdlib/csv.bot's peek).
+fn peek(text, index) errors LowerUnderrun:
+    if index >= str::length(text):
+        return ""
+
+    str::substring(text, index, index + 1)
+
+# 1 if character (one peek()'d character) is in this benchmark's explicit
+# emoji set -- see the example's header for why this is not general
+# Unicode emoji detection.
+fn cleaner_emoji(character):
+    (character == "😀" or character == "😂" or character == "🙂" or character == "😍"
+        or character == "🔥" or character == "🚀" or character == "✅" or character == "❌"
+        or character == "🎉" or character == "🤖" or character == "👍" or character == "💡")
+
+# character, cleaned in isolation: "" for a removed emoji, the ASCII
+# normalization of a targeted punctuation mark, or character itself
+# unchanged.
+fn clean_char(character):
+    if cleaner_emoji(character):
+        return ""
+
+    if character == "–" or character == "—":
+        return "-"
+
+    if character == "‘" or character == "’":
+        return "'"
+
+    if character == "“" or character == "”":
+        return "\""
+
+    if character == "…":
+        return "..."
+
+    character
+
+# text's characters from index on, cleaned and appended to done.
+fn clean_from(text, index, done) errors LowerUnderrun:
+    if index >= str::length(text):
+        return done
+
+    clean_from(text, index + 1, str::concat(done, clean_char(peek(text, index))))
+
+fn clean_ai_text(text) errors LowerUnderrun:
+    clean_from(text, 0, "")
+
+args = argv():
+    on InvalidArgumentEncoding:
+        []
+
+text = if list::length(args) > 1:
+    list::get(args, 1, "")
+else:
+    ""
+
+result = clean_ai_text(text):
+    on LowerUnderrun:
+        ""
+result

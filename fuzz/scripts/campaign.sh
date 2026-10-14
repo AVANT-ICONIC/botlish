@@ -34,7 +34,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 AFL="$ROOT/fuzz/tools/afl/bin"
 export AFL_PATH="$ROOT/fuzz/tools/afl/lib/afl" \
        AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-       AFL_SKIP_CPUFREQ=1 AFL_NO_UI=1 AFL_AUTORESUME=1
+       AFL_SKIP_CPUFREQ=1 AFL_NO_UI=1 AFL_AUTORESUME=1 AFL_NO_AFFINITY=1
+# AFL_NO_AFFINITY: core-binding aborts ("No more free CPU cores") when a
+# verification job shares the machine mid-campaign; spread is acceptable,
+# aborted targets are not.
 BUDGET="${1:-1200}"
 OUT="$ROOT/fuzz/out"
 SNAP="$ROOT/fuzz/out/snapshots"

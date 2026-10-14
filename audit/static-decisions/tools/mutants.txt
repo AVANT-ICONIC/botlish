@@ -202,13 +202,6 @@
             if {0} {
 >>>>
 
-@@ erasure-unlinked the erased-callable contract's contributors are not linked to it: a consumer turned unknown (a witness's errors may be gone) does not hold back another contributor of the same errors, and the next build judges it without both
-## hir/staticdeps.tcl
-<<<<
-                dict set succ C:erased erasure-contributor
-====
->>>>
-
 @@ hygiene-names-printed a diagnostic prints a binding hygiene renamed by its NAME#N, whose number counts that name's renames across the whole program: another site's rejection renumbers it, so a rejection committed beside an earlier one carries another message than the sequential order's
 ## hir/semantic.tcl
 <<<<
@@ -413,6 +406,77 @@
     if {[dict exists $state methodTrial $q]} {
 ====
     if {0} {
+>>>>
+
+@@ consumers-do-not-wait no site waits for the contributors to a channel it consumes (the definition before the waiting rule): a consumer written before a failing contributor is rejected for an erasure the final program does not have
+## hir/static.tcl
+<<<<
+proc hir::static::Waits {key status deps} {
+    if {$deps eq "" || ![dict exists $deps consumes $key]} {
+====
+proc hir::static::Waits {key status deps} {
+    if {1} {
+>>>>
+
+@@ batched-ignores-waiting the batched run commits a failing consumer while a failing contributor to its channel remains, which the sequential order makes wait
+## hir/static.tcl
+<<<<
+            if {$w ne ""} {
+                dict set waiting $key $w
+                if {![dict exists $cycle $c]} {
+                    dict set cycle $c $key
+                }
+                continue
+            }
+====
+>>>>
+
+@@ channels-not-consumed the dependency analysis records no site as a channel's consumer: nothing waits, in either scheduler
+## hir/staticdeps.tcl
+<<<<
+                        if {$w eq "C:erased" || [string match C:budget:* $w]} {
+====
+                        if {0} {
+>>>>
+
+@@ early-consumes-erased a failing site whose first diagnostic precedes the completion walk still waits for the erased contract's failing contributors, though no erasure can cause or precede that diagnostic: it is judged a build later
+## hir/staticdeps.tcl
+<<<<
+        if {[dict exists $state early $key]} {
+            # Its first diagnostic was reported before the completion walk,
+====
+        if {0} {
+            # Its first diagnostic was reported before the completion walk,
+>>>>
+
+@@ erasure-contributors-witnesses-only the erased-callable contract's contributors under the waiting rule are its witnesses' sites only, not every site holding a contribution: blocks that each erase and each call through an uncontracted value, failing for reasons of their own, wait one by one on the last of them -- one build each instead of one cycle in one build
+## hir/staticdeps.tcl
+<<<<
+            lappend base {*}[dict keys [dict get $state erasureSites]]
+====
+>>>>
+
+@@ plan-open-witness while every diagnostic may be the plan's (the gate is open), the plan's sites wait for one witness as when it is closed: a rejection that closes the gate again (an UNHANDLED-ERROR in no site) is committed beside an independent plan diagnostic the sequential order then accepts
+## hir/staticdeps.tcl
+<<<<
+    if {$open} {
+====
+    if {0} {
+>>>>
+
+@@ plan-any-settled an argument typed `any` cannot become affine: a call giving it to a nested generic function is no consumer of the plan's gate, though a clone its caller's narrowed argument creates diagnoses it
+## hir/staticdeps.tcl
+<<<<
+    if {[hir::types::IsAffine $type]} {
+        return 1
+    }
+    if {$type eq "any"} {
+        return 1
+    }
+====
+    if {[hir::types::IsAffine $type]} {
+        return 1
+    }
 >>>>
 
 # ---------------------------------------------------------------------------
