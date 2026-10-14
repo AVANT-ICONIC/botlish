@@ -329,6 +329,131 @@ r2 = caller(true):
 0
 }
 
+# A site calling a trait-polymorphic function that has its instance (`d`),
+# beside two checker failures, one in that function's own site (`f_poly`):
+# the call is no consumer of the plan's gate -- the plan reports at a call of
+# such a function only where a context it walks has no instance for it
+# (TRAIT-INSTANCE-BUDGET) -- so `w`, the gate's witness, does not join its
+# component.
+set ::sePlanInstances {import compiler
+
+trait Shape:
+    fn area(shape: Shape) -> int
+
+struct Square:
+    side: int
+
+fn area(s: Square) -> int:
+    s.side
+
+fn want_int(x: int) -> int:
+    x
+
+fn f_poly(s: Shape) -> int errors compiler::CompilerError:
+    static compile:
+        s.area() + want_int("f")
+
+fn p_poly(s: Shape) -> int errors compiler::CompilerError:
+    static compile:
+        s.area()
+
+fn d() -> int errors compiler::CompilerError:
+    static compile:
+        f_poly(Square {side: 2})
+
+fn w() -> int errors compiler::CompilerError:
+    static compile:
+        want_int("w")
+
+r_p = p_poly(Square {side: 3}):
+    on compiler::CompilerError:
+        -1
+r_d = d():
+    on compiler::CompilerError:
+        -1
+r_w = w():
+    on compiler::CompilerError:
+        -1
+0
+}
+
+# A call of a trait-polymorphic function that has no instance (`use`): its
+# argument, mk(), is `never` once mk's site is rejected (a dead call is
+# never requested), and the plan reports TRAIT-INSTANCE-BUDGET there. (That
+# report at a dead call is itself a defect -- the call never runs -- but it
+# is what the plan does, and the gate must model it. A nesting decline is the
+# other way to lack an instance, and needs a chain of instances deeper than
+# a test can build: past the per-block budget a trait-polymorphic request is
+# granted however deep.) Two checker failures that wait for mk's rejection,
+# x1 and x2, keep the gate closed in the build that first finds `use` dead.
+set ::sePlanUnplanned {import compiler
+
+trait Shape:
+    fn area(s: Shape) -> int
+
+struct Square:
+    side: int
+
+fn area(s: Square) -> int:
+    s.side
+
+fn measure(s: Shape) -> int:
+    s.area()
+
+fn want(x: int) -> int:
+    x
+
+fn mk() errors compiler::CompilerError:
+    static compile:
+        Square {side: want("mk")}
+
+fn x1() -> int errors compiler::CompilerError:
+    static compile:
+        a = mk()
+        want("x1")
+
+fn x2() -> int errors compiler::CompilerError:
+    static compile:
+        a = mk()
+        want("x2")
+
+fn use() -> int errors compiler::CompilerError:
+    static compile:
+        measure(mk())
+
+r1 = x1():
+    on compiler::CompilerError:
+        -1
+r2 = x2():
+    on compiler::CompilerError:
+        -1
+r3 = use():
+    on compiler::CompilerError:
+        -1
+0
+}
+
+# A chain c1 .. cN of untyped functions, N one past the semantic layer's
+# nesting limit (hir::semantic's maxDepth): `late`'s call c1(1) requests cN's
+# int instance that deep, a cache hit while `early`'s body requests it
+# directly first, declined for nesting once `early` is rejected -- then
+# c1(1) keeps its generic result, `any`, a TYPE failure at want(...).
+# `other` is a second, independent failure.
+proc seDeepFirstRequest {} {
+    set n [expr {$hir::semantic::maxDepth + 1}]
+    set text "import compiler\n\nfn want(x: int) -> int:\n    x\n\nfn c$n\(x):\n    x\n\n"
+    for {set i [expr {$n - 1}]} {$i >= 1} {incr i -1} {
+        append text "fn c$i\(x):\n    c[expr {$i + 1}](x)\n\n"
+    }
+    append text [seSite early [list "c$n\(1) + want(\"early\")"]]
+    append text [seSite late {"want(c1(1))"}]
+    append text [seSite other {{want("other")}}]
+    foreach name {other early late} {
+        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+    }
+    return "${text}0\n"
+}
+
 # K sibling functions, each with a checker-rejected site, nested in one
 # enclosing site (the golden framework's registration function, written as
 # a static block), or (NESTED 0) in a plain function.
@@ -699,6 +824,17 @@ test se-equal-plan-clone {a site the plan diagnoses only in a clone's view: a ge
         [dict get $hir staticStats rounds]
 } -result {{} {TYPE AFFINE-GENERIC-NESTED-UNSUPPORTED TYPE} {} 3}
 
+test se-equal-plan-unplanned {a call of a trait-polymorphic function that a context the plan walks has no instance for is the gate's consumer: `use`'s call is dead (no instance) once mk's site is rejected, beside x1's and x2's checker failures, and waits for them instead of being predicted ok (the plan, once it runs, reports TRAIT-INSTANCE-BUDGET there) -- the batched decisions are the sequential ones, with no build contradicting a prediction} -body {
+    set hir [seHir $::sePlanUnplanned]
+    list [seSame $::sePlanUnplanned 0] [seOutcomes $::sePlanUnplanned] [dict get $hir staticStats mispredicted]
+} -result {{} {TYPE TYPE TYPE TRAIT-INSTANCE-BUDGET} {}}
+
+test se-equal-deep-first-request {the semantic layer declines a request for nesting only when it is the first for its instance (a cache hit never is), so rejecting the site that made the first request can make a deep one the first, and declined: `late`'s deep request is a hit until `early` is rejected, then declined, and `late` fails (TYPE: the call keeps its generic result). Every request at half the nesting limits or deeper is recorded (hir::semantic's `deep`) and puts the instance budget under pressure (C:budget), so `late` waits for `early` -- it was once predicted ok beside the two rejections, and the next build contradicted it} -body {
+    set text [seDeepFirstRequest]
+    set hir [seHir $text]
+    list [seSame $text 0] [seOutcomes $text] [dict get $hir staticStats mispredicted]
+} -result {{} {TYPE TYPE TYPE} {}}
+
 test se-equal-internal-ids-exact {only a message naming an internal id the way the compiler prints one (`block(e12)`) waits for the sequential order's own build: a USE-AFTER-MOVE naming the binding `s1` after an earlier rejection is committed beside it (it was once held back as if `s1` were a scope id)} -body {
     set text "import compiler\n\nfn needs_int(v: int) -> int:\n    v\n\nfn producer():\n    yield 1\n    2\n\n"
     append text [seSite t [list {needs_int("s")}]]
@@ -1053,6 +1189,12 @@ test se-builds-plan-gate {a site whose diagnostic only the plan reports, ahead o
     set hir [seHir $text]
     list [dict get $hir staticStats rounds] [dict get $hir staticStats mispredicted] [lindex [seEcon $text sequential] 0] [seSame $text 0]
 } -result {3 {} 6 {}}
+
+test se-builds-plan-instances {a call of a trait-polymorphic function that has its instance in every context the plan walks is no consumer of the plan's gate (its one diagnostic, TRAIT-INSTANCE-BUDGET, is reported only where a context has none): the site holding it does not join the gate's witness's component, so both checker failures are rejected in one round (every such call was once a consumer: the witness waited a round for the site)} -body {
+    set hir [seHir $::sePlanInstances]
+    list [dict get $hir staticStats rounds] [dict get $hir staticStats builds] [dict get $hir staticStats mispredicted] \
+        [lrange [seEcon $::sePlanInstances sequential] 0 1] [seSame $::sePlanInstances 0] [seOutcomes $::sePlanInstances]
+} -result {2 3 {} {3 4} {} {TYPE accepted accepted TYPE}}
 
 test se-builds-erased-empty {sites that each pass a function to the untyped list::any? -- erasure sites of the erased-callable contract and callers of its consumer -- are decided together: rejecting one removes nothing from the contract when its function raises nothing (it erased nothing), or when another site still erases the same error (the contract is a set of errors), so no other is judged again; nor does a function passed to an untyped parameter (run(bN)) put its body into the contract (what it carries is its declared errors)} -body {
     set results {}

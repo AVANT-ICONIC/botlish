@@ -161,7 +161,14 @@
 #                       instances depends on every other call requesting one.
 #                       Open only under pressure -- a request declined, or B
 #                       holding half its per-block budget -- and then every
-#                       call of B is both. What the allocation reads is the
+#                       call of B is both; every B at once when half of all
+#                       instances exist, or a request was made at half the
+#                       nesting limits or deeper (hir::semantic's `deep`):
+#                       only a first request is declined for nesting, and a
+#                       rejection removing the first request for an
+#                       instance makes a deep one the first, which a cache
+#                       hit before hid (tests/static-economics.test,
+#                       se-equal-deep-first-request). What the allocation reads is the
 #                       number of distinct instances requested: B's own body,
 #                       each call's place, and the facts of its arguments --
 #                       of an argument naming a function only its place, since
@@ -213,12 +220,26 @@
 #                       ORDER, AFFINE-GENERIC-NESTED-UNSUPPORTED, TRAIT-
 #                       INSTANCE-BUDGET, ...). Its *consumers* (PlanGate):
 #                       Z:site -> C:plan for each site holding a call the plan
-#                       can report at -- a trait operation, a call of a trait-
-#                       polymorphic function or of one requiring a context
-#                       trait, a call giving an untyped parameter an argument
-#                       that is or may become affine -- in a program that can
+#                       can report at -- a trait operation; a call of a trait-
+#                       polymorphic function that a context the plan walks
+#                       has no instance for (Unplanned: TRAIT-INSTANCE-BUDGET
+#                       is its one diagnostic there); a call giving an untyped
+#                       parameter an argument that is or may become affine
+#                       (AFFINE-GENERIC-NESTED-UNSUPPORTED, AFFINE-INSTANCE-
+#                       BUDGET; the one diagnostic of a call of a function
+#                       requiring a context trait) -- in a program that can
 #                       plan at all (trait declarations, or a coroutine
-#                       construction). Its successors, while the build has a
+#                       construction). Whether a trait-polymorphic call has
+#                       its instance changes with the call's own facts (an
+#                       argument's type `never`: a dead call is never
+#                       requested), which its site's edges read, or with a
+#                       decline: a budget never declines such a request (it
+#                       is re-keyed and granted), a top-level function's
+#                       environment is recorded at its definition, and a
+#                       nesting decline is C:budget's (the pressure of a
+#                       deep request); a context a rejection creates walks
+#                       the function's body afresh, requesting each call of
+#                       it. Its successors, while the build has a
 #                       diagnostic the plan does not report (the gate is
 #                       closed): one *witness*, the site of the diagnostic last
 #                       in post-order (Z and F: the gate cannot open while it
@@ -1162,6 +1183,11 @@ proc hir::staticdeps::Prepare {hir sites decisions} {
         if {$total >= $::hir::semantic::maxInstances / 2} {
             set global 1
         }
+        if {[dict exists $hir semantic deep] && [dict size [dict get $hir semantic deep]] > 0} {
+            # A request at half the nesting limits: a rejection removing the
+            # request before it can make it the first one, declined for nesting.
+            set global 1
+        }
         dict for {callKey reason} [dict get $hir semantic declined] {
             if {$reason in {budget-total nesting}} {
                 set global 1
@@ -1351,12 +1377,13 @@ proc hir::staticdeps::PlanGate {hir state} {
     # The consumers: the sites holding a call the plan can report at (its
     # diagnostics are anchored at the call, hir::traits::Plan) -- a trait
     # operation (TRAIT-NOT-SATISFIED in a clone's view, TRAIT-IMPL-ORDER); a
-    # call of a trait-polymorphic function or of one requiring a context
-    # trait (TRAIT-INSTANCE-BUDGET, the context-trait AFFINE-GENERIC-NESTED-
-    # UNSUPPORTED); a call giving an untyped parameter an argument whose type
-    # is affine or may become affine (MayBecomeAffine: a clone's view, or a
-    # rejection narrowing an `any`, may make it so: AFFINE-GENERIC-NESTED-
-    # UNSUPPORTED, AFFINE-INSTANCE-BUDGET). (A call whose target or trait
+    # call of a trait-polymorphic function some context of the plan has no
+    # instance for (Unplanned: TRAIT-INSTANCE-BUDGET); a call giving an
+    # untyped parameter an argument whose type is affine or may become
+    # affine (MayBecomeAffine: a clone's view, or a rejection narrowing an
+    # `any`, may make it so: AFFINE-GENERIC-NESTED-UNSUPPORTED -- also a
+    # call of a function requiring a context trait, whose other outcomes are
+    # no site's diagnostic --, AFFINE-INSTANCE-BUDGET). (A call whose target or trait
     # operation a rejection would first have to make exact is not one: such
     # a site, if any, is predicted ok and the build that reports its plan
     # diagnostic records a misprediction -- the audits fail on it.)
@@ -1379,12 +1406,16 @@ proc hir::staticdeps::PlanGate {hir state} {
             lassign [dict get $node target] tk tb
             if {$tk ne "block" || ![dict exists $exprs $tb]} continue
             if {![dict exists $polymorphic $tb]} {
-                dict set polymorphic $tb [expr {[hir::traits::IsPolymorphic $hir $tb]
-                    || [hir::traits::ContextTraitsOf $hir $tb] ne {}}]
+                dict set polymorphic $tb [hir::traits::IsPolymorphic $hir $tb]
             }
             if {[dict get $polymorphic $tb]} {
-                dict set consumers $site 1
-                break
+                # Its one diagnostic, TRAIT-INSTANCE-BUDGET, only where a plan
+                # context has no instance for it (Unplanned).
+                if {[Unplanned $hir $regionOf $e]} {
+                    dict set consumers $site 1
+                    break
+                }
+                continue
             }
             set found 0
             foreach arg [dict get $node args] declared [dict get $exprs $tb declaredParamTypes] {
@@ -1487,6 +1518,35 @@ proc hir::staticdeps::PlanGate {hir state} {
         }
     }
     return [list $consumers $plan 0]
+}
+
+# 1 if call E of a trait-polymorphic function may lack an instance in a
+# context hir::traits::Plan walks it in: E is in the generic program (or a
+# function requiring only a context trait, analyzed generically) and has no
+# generic instance, or E is in a trait-polymorphic function -- top-level only
+# (TRAIT-NESTED-POLYMORPHIC) -- some instance of which has none for it.
+# (Instances the plan never reaches are counted too: an over-approximation.)
+proc hir::staticdeps::Unplanned {hir regionOf e} {
+    if {![dict exists $hir semantic calls]} {
+        return 1
+    }
+    set calls [dict get $hir semantic calls]
+    set top [dict get $regionOf $e]
+    while {$top ne "program" && [dict get $regionOf $top] ne "program"} {
+        set top [dict get $regionOf $top]
+    }
+    if {$top eq "program" || ![hir::traits::IsPolymorphic $hir $top]} {
+        return [expr {![dict exists $calls [list generic $e]]}]
+    }
+    if {![dict exists $hir semantic instsOf $top]} {
+        return 0
+    }
+    foreach id [dict get $hir semantic instsOf $top] {
+        if {![dict exists $calls [list $id $e]]} {
+            return 1
+        }
+    }
+    return 0
 }
 
 # The ownership verdict's part of the graph (header, C:verdict), from STATE

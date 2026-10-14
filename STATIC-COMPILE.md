@@ -477,7 +477,12 @@ extra one only costs a build. Its header lists every edge; in short:
     separate yield edge above;
   * **the semantic-instance budget** of a function: open only under
     pressure (a request declined, or half the per-block budget used), and
-    then every call of the function is both contributor and consumer;
+    then every call of the function is both contributor and consumer --
+    every function's at once when half of all instances exist, or a request
+    was made at half the nesting limits or deeper: only a first request is
+    declined for nesting, and rejecting the site that made the first request
+    for an instance can make a deep one the first, which a cache hit hid
+    before (`se-equal-deep-first-request`);
   * **the ownership verdict** (`hir::affine::verify`'s `accepted`): release
     scopes, and with them `AFFINE-PATH-RELEASE-UNSUPPORTED`, are computed
     only while the ownership analysis finds nothing anywhere in the
@@ -514,7 +519,11 @@ extra one only costs a build. Its header lists every edge; in short:
     diagnostic at all, and whose diagnostics (TRAIT-IMPL-ORDER,
     AFFINE-GENERIC-NESTED-UNSUPPORTED, TRAIT-INSTANCE-BUDGET, ...) are a
     site's. Its *consumers* are the sites holding a call the plan can
-    report at and no diagnostic of their own; while some diagnostic it
+    report at and no diagnostic of their own -- a trait operation, an
+    argument that is or may become affine at an untyped parameter, and a
+    call of a trait-polymorphic function only where a context the plan
+    walks has no instance for it (`se-builds-plan-instances`,
+    `se-equal-plan-unplanned`); while some diagnostic it
     does not report stays, it depends on one witness (the site of the last
     in post-order: the gate cannot open while it stays); while every
     diagnostic may be its own, on every site holding one, decided one per

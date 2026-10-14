@@ -467,8 +467,11 @@ AFFINE-GENERIC-NESTED-UNSUPPORTED one: `mispredicted`).
 
 * **consumers**: `Z:site -> C:plan` for every site that holds a call the
   plan can report at -- a trait operation, a call of a trait-polymorphic
-  function or of one requiring a context trait, a call giving an untyped
-  parameter an argument that is or may become affine (an `any`) -- in a
+  function that a context the plan walks has no instance for (`Unplanned`,
+  [below](#trait-polymorphic-calls-with-their-instances)), a call giving an
+  untyped parameter an argument that is or may become affine (an `any`; of a
+  function requiring a context trait too, whose one site diagnostic is that
+  one) -- in a
   program that can plan at all (trait declarations, or a coroutine
   construction), and that has no diagnostic of its own in the build (one
   that has keeps the gate closed itself: its status changes only once that
@@ -520,10 +523,11 @@ changes (`se-equal-plan-clone`, mutant `plan-any-settled`: mispredicted).
 | two TRAIT-IMPL-ORDER sites (`se-equal-plan-gate`) | 3 rounds | 3 rounds | 3 rounds |
 | two independent TRAIT-IMPL-ORDER sites, the first one's function called unhandled at the top level (`se-equal-plan-reclosed`) | 2 rounds, the second site rejected (another program) | 2 rounds, the second accepted | 2 rounds |
 | a clone created by a caller's rejection (`se-equal-plan-clone`) | 3 rounds, mispredicted | 3 rounds | 4 rounds |
-| `traits.bot` | 5 rounds / 10 builds, 2 mispredicted | 8 / 13 | 33 / 74 |
+| `traits.bot` | 5 rounds / 10 builds, 2 mispredicted | 8 / 13; 5 / 10 with the narrower consumers below | 33 / 74 |
 | `affinity.bot` | 9 / 10, 1 mispredicted | 6 / 7 (4 / 5 once callables are named by source, below) | 25 / 26 |
 
-`traits.bot` pays for its correct prediction: its 36 consumers without a
+`traits.bot` paid for its correct prediction (until the narrower consumers
+below): its 36 consumers without a
 diagnostic depend on the last failing site, so they share its component, and
 whenever one of them turns unknown on its own account (a site of a function
 it calls is rejected) the later failing sites of that component wait
@@ -545,6 +549,73 @@ build per rejection). The programs of `se-equal-plan-reclosed` and
 `se-equal-plan-clone` come from a parallel implementation of the channel,
 merged here as tests and mutants only: `plan-open-witness` and
 `plan-any-settled` survived every earlier test and the fuzzer.
+
+##### Trait-polymorphic calls with their instances
+
+Every call of a trait-polymorphic function (or of one requiring a context
+trait) used to be a consumer. The plan reports at such a call only
+TRAIT-INSTANCE-BUDGET, and only in a context it walks -- the generic program,
+or an instance of the trait-polymorphic function around the call (top-level
+only: TRAIT-NESTED-POLYMORPHIC) -- that has no semantic instance for it
+(`hir/traits.tcl`, `Plan`; TRAIT-INTERNAL is a compiler failure, no site's).
+So the consumer is now the call some such context has no instance for
+(`Unplanned`: no `generic` request, or some instance of the enclosing
+function without one; instances the plan never reaches count too). A call of
+a function requiring a context trait reports, as a site's diagnostic, only
+AFFINE-GENERIC-NESTED-UNSUPPORTED, for an affine argument at an untyped
+parameter: the argument rule. (A trait view crosses an untyped parameter as
+`any`, and a List or struct holding one is the checker's
+AFFINE-ERASURE-UNSUPPORTED, so a clone's view adds no affine argument the
+rule misses.)
+
+That is sound only if no rejection elsewhere can take away an instance a
+site's call has without the site depending on it. An instance exists unless
+the call is not requested or the request is declined:
+
+* *not requested*: an arity mismatch, or an argument typed `never` (a dead
+  call) -- the call's own facts, which its site's edges read. In a clone's
+  view a trait operation's result is the requirement's type, never an
+  implementation's, so no rejection inside an implementation makes a clone's
+  call dead (`never` arguments come only from a rejected site's reified
+  failure; any other always-failing call is a KNOWN-ERROR);
+* *declined for the budget*: never -- a trait-polymorphic request past the
+  budget is re-keyed by its views and granted (`hir::semantic::Call`);
+* *declined for want of an environment*: never -- a top-level function's
+  creation environment is recorded at its definition, and nothing calls it
+  before (no forward references);
+* *declined for nesting*: only a first request is, and a cache hit never
+  is. Rejecting the site that made the first request for an instance makes
+  a deep request the first one. That is a gap of `C:budget` itself, for
+  every instance-derived diagnostic: `se-equal-deep-first-request` is a
+  plain TYPE failure it mispredicted on main (`late`'s request 25 deep is a
+  hit until `early`, which requested the same instance directly, is
+  rejected). Every request at half the nesting limits or deeper is now
+  recorded (`hir::semantic`'s `deep`), and one puts every budget under
+  pressure, as half of all instances does. No golden suite has one: the
+  deepest request of the 88 is at stack 7 and Tcl level 75, against 12 and
+  350.
+
+A context a rejection creates (a new witness) walks the function's body
+afresh and requests every call in it, under the same four rules.
+
+Today the only way a site's trait-polymorphic call lacks an instance is a
+dead call (a nesting decline at such a call is all but unreachable: past the
+per-block budget, which a chain of trait-polymorphic functions reaches long
+before the nesting limit, a request is granted however deep). The plan then
+reports TRAIT-INSTANCE-BUDGET at a call that never runs -- a defect of the
+plan, which should drop such a call's specialization, recorded here rather
+than fixed: `se-equal-plan-unplanned` pins the gate on it (mutant
+`plan-unplanned-ignored`: mispredicted).
+
+| program | every call a consumer | narrowed | sequential |
+|---|---|---|---|
+| a site calling a trait-polymorphic function with its instance, beside two checker failures (`se-builds-plan-instances`) | 3 rounds / 4 builds | 2 / 3 | 3 / 4 |
+| `traits.bot` (consumers in its first checked round: 37 -> 6) | 8 / 13 | 5 / 10 | 36 / 77 (compare.tcl agrees) |
+
+No other golden suite changes (88 files: 210 -> 207 rounds, 321 -> 318
+builds, the same outcomes, no misprediction before or after). Mutants:
+`plan-unplanned-ignored`, `budget-deep-ignored` (semantic: mispredicted),
+`plan-instances-ignored` (economic: every call a consumer again).
 
 #### Internal ids, exactly
 
