@@ -17,6 +17,8 @@
 //!                                        without compiling
 //!   botlish-native object OUT FILE.nir   write a relocatable program object
 //!   botlish-native executable OUT FILE.nir  link a standalone Linux executable
+//!                                        (BOTLISH_NATIVE_LINKER: rustc, the
+//!                                        default, or stub: codegen/aot.rs)
 //!   botlish-native check FILE.nir        parse and validate only
 //! ```
 //!

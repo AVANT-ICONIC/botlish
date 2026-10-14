@@ -44,7 +44,10 @@
 #                                       to a whole number
 #   native::object HIR PATH ?OPTIONS?   writes an object file (AOT smoke test)
 #   native::executable HIR PATH ?OPTIONS?  links a standalone Linux x86_64/glibc
-#                                         executable; rejects non-closed HIR
+#                                         executable; rejects non-closed HIR.
+#                                         BOTLISH_NATIVE_LINKER picks the
+#                                         linker: rustc (default) or stub
+#                                         (no toolchain, SINGLE-EXECUTABLE.md)
 #   native::report HIR                  guard accounting and instance counts
 #   native::codeSize HIR ?OPTIONS?      {TOTAL-BYTES {FUNCTION-BYTES ...}} of
 #                                       the machine code

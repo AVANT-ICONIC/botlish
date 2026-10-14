@@ -87,6 +87,36 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  stub-linker:
+    name: tests (stub-linked executables)
+    # Every test file that builds a standalone executable, with executables
+    # linked by the toolchain-free `stub` linker the single-file compiler uses
+    # (SINGLE-EXECUTABLE.md) instead of rustc. The tests that read a
+    # rustc-linked executable's Botlish function symbols (objdump, strace
+    # stacks) or rustc's invocation are constrained to rustcLinker
+    # (tests/helpers.tcl) and skip here; tests/aot-stub-linker.test compares
+    # the two linkers' executables directly.
+    runs-on: ubuntu-latest
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+      CORE_BACKEND: compile
+      BOTLISH_NATIVE_LINKER: stub
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Executable tests, stub-linked
+        shell: bash
+        run: |
+          files=$(grep -l -e 'native::executable' -e 'emit-native-executable' tests/*.test | xargs -n1 basename | tr '\n' ' ')
+          tclsh9.0 tests/all.tcl -file "$files"
+
   warning-gate:
     name: warning gate (manifest)
     # The shipped stdlib, libraries, examples and benchmarks compile with

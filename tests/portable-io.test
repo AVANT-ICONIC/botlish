@@ -274,7 +274,7 @@ test io-routing-utf8 {print and print_line write to descriptor 1, write_error an
 } {err: done
 } 18}
 
-test io-strace {each portable operation is one write(2) of the complete text on the right descriptor; the Hello World's write comes from the raw syscall boundary through linux::write, linux::io::write_all, linux::io::write_text, print_line's clone and hello's clone -- no libc frame} -constraints {linuxX86_64 strace posixShell} -body {
+test io-strace {each portable operation is one write(2) of the complete text on the right descriptor; the Hello World's write comes from the raw syscall boundary through linux::write, linux::io::write_all, linux::io::write_text, print_line's clone and hello's clone -- no libc frame} -constraints {linuxX86_64 strace posixShell rustcLinker} -body {
     set exe [buildExecutable routing $::routingText]
     set log [file join $::scratch strace.routing]
     exec strace -f -qq -e trace=write -o $log $exe >/dev/null 2>/dev/null

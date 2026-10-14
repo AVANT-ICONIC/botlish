@@ -76,6 +76,7 @@ examples/surface/  source programs (.bot)
 examples/stdlib/   algorithm corpus in Botlish: reverse, replace, CSV, matmul (§18)
 tests/*.test     tcltest suite
 main.tcl         example runner
+single/          main.tcl and the compiler stack as one executable (SINGLE-EXECUTABLE.md)
 ```
 
 ```sh
@@ -97,7 +98,16 @@ tclsh9.0 bench/corpus.tcl                      # baseline timings of the algorit
 tclsh9.0 main.tcl -warnings off FILE.bot       # compiler warnings: default | off | error (§23)
 tclsh9.0 main.tcl -aot examples/stdlib/matmul.bot   # closed-AOT readiness report (§19)
 tclsh9.0 main.tcl -aot-spec examples/stdlib/matmul.bot   # the same per specialized instance (§21)
+single/build.sh                                # single/out/botlish: main.tcl as one executable
+single/out/botlish -emit-native-executable FILE.bot   # ... needing no Tcl, Rust or linker
 ```
+
+The single-file compiler (`single/build.sh`, SINGLE-EXECUTABLE.md) is a Tcl 9
+zipkit: a static tclsh with this stack and the native backend packed into its
+attached zip. It takes main.tcl's options, runs every backend, and emits
+standalone executables through the toolchain-free `stub` linker. It needs only
+glibc. CI builds it on every push to `main` and publishes it as the
+`botlish-linux-x86_64` artifact.
 
 ```tcl
 source compiler/compiler.tcl       ;# loads core too; core/core.tcl alone is interp-only
@@ -2292,13 +2302,21 @@ including retained generic entries, before expanding registered native
 implementations into runtime support. Range checks, arbitrary-precision Ints,
 closures and allocation remain supported runtime operations in closed code.
 
-Compilation needs the built native backend, its adjacent
-`libbotlish_native.rlib` and `deps/`, the matching `rustc` (or `RUSTC`
-executable), and the system C linker. Cranelift compiles the program; rustc
-compiles only its generated startup metadata and statically links the shared
-Botlish runtime. The executable uses baseline x86-64 instructions and system
-glibc/libm/libgcc; it needs no Tcl, Rust installation, source files, checkout,
-or JIT at execution time. The build host determines the minimum glibc version.
+Cranelift compiles the program; `BOTLISH_NATIVE_LINKER` picks how it becomes
+an executable (SINGLE-EXECUTABLE.md):
+
+* `rustc` (the default) needs the built native backend, its adjacent
+  `libbotlish_native.rlib` and `deps/`, the matching `rustc` (or the `RUSTC`
+  executable), and the system C linker. rustc compiles only the generated
+  startup metadata and statically links the shared Botlish runtime.
+* `stub` needs only `botlish-aot-stub` beside the driver (or
+  `BOTLISH_NATIVE_AOT_STUB`): the prebuilt runtime with the program's image
+  appended, which it maps and relocates at startup. The single-file compiler
+  links this way. Its executables have no ELF symbols for Botlish functions.
+
+The executable uses baseline x86-64 instructions and system glibc/libm/libgcc;
+it needs no Tcl, Rust installation, source files, checkout, or JIT at
+execution time. The build host determines the minimum glibc version.
 `BOTLISH_NATIVE_GC_STRESS` and `BOTLISH_NATIVE_STACK_BYTES` also work for
 standalone executables. Failed compilation leaves an existing output intact.
 

@@ -239,6 +239,12 @@ tests/affine.test af-principal-theorem pass
 tests/affine.test af-recursive-container-rejected pass
 tests/affine.test af-recursive-struct pass
 tests/affine.test af-restrictions pass
+tests/aot-stub-linker.test stub-linker-damaged pass
+tests/aot-stub-linker.test stub-linker-failures pass
+tests/aot-stub-linker.test stub-linker-image pass
+tests/aot-stub-linker.test stub-linker-near-mapping pass
+tests/aot-stub-linker.test stub-linker-outcomes pass
+tests/aot-stub-linker.test stub-linker-parity pass
 tests/applied-types.test applied-type-alias-preserved pass
 tests/applied-types.test applied-type-bare-list-arity pass
 tests/applied-types.test applied-type-callable-escape-exact-alias-still-legal pass

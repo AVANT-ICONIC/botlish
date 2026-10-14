@@ -99,6 +99,17 @@ if {[info exists ::env(CORE_BACKEND)]} {
 # themselves run on the interpreter only.
 testConstraint coreScoping [expr {[core::useBackend] eq "interp"}]
 
+# Standalone executables (native::executable) are linked by
+# BOTLISH_NATIVE_LINKER (native/src/codegen/aot.rs, SINGLE-EXECUTABLE.md):
+# `rustc` (the default) or `stub`. A rustc-linked executable carries the
+# program's machine code as an ELF section with a botlish_fn_N symbol per
+# function, which tests disassemble (objdump) or find in stack traces
+# (strace -k); a stub-linked one maps that code at startup and has no such
+# symbols. Those tests, and tests of rustc's own invocation, need rustcLinker.
+# CI's stub-linker job runs every executable test with the stub linker.
+testConstraint rustcLinker [expr {![info exists ::env(BOTLISH_NATIVE_LINKER)] ||
+    $::env(BOTLISH_NATIVE_LINKER) in {"" rustc}}]
+
 # Native coverage (tests/native-coverage.tcl): NATIVE_COVERAGE=FILE appends
 # one line per test: {NAME PASSED NATIVE-RUNS UNSUPPORTED-ERRORS}.
 if {[info exists ::env(NATIVE_COVERAGE)] && [info commands ::CoverageTest] eq ""} {

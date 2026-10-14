@@ -1,13 +1,46 @@
 //! Linux x86-64/glibc executable linking. Cranelift emits the program object;
-//! rustc compiles a small data initializer and statically links our runtime.
-//! The executable needs neither Tcl, rustc, the source nor this checkout.
+//! a linker turns it and the runtime into an executable. The executable needs
+//! neither Tcl, rustc, the source nor this checkout.
+//!
+//! Two linkers, chosen by `BOTLISH_NATIVE_LINKER` (SINGLE-EXECUTABLE.md):
+//!
+//!   * `rustc` (the default): rustc compiles a small data initializer and
+//!     statically links our runtime (`libbotlish_native.rlib` beside the
+//!     driver), through the system linker.
+//!   * `stub`: no toolchain at all. The prebuilt `botlish-aot-stub` (this
+//!     runtime and a loader, beside the driver or `BOTLISH_NATIVE_AOT_STUB`)
+//!     is copied and the program's image appended to it: the object's
+//!     sections laid out and relocated here, by `image` below, into a
+//!     `runtime::aotimage::Image` the stub maps at startup. This is how the
+//!     single-file compiler (single/) emits executables.
+//!
+//! Both link the same machine code (`emit_object`) and start it the same way
+//! (`runtime::aot::run`); `tests/aot-stub-linker.test` runs programs linked
+//! both ways side by side.
 use super::{Const, ObjectProgram, emit_object};
 use crate::nir::Program;
+use botlish_native::runtime::aotimage::{self, Fixup, FunctionCode, Image, Target};
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 struct WorkDir(PathBuf);
+
+impl WorkDir {
+    /// A fresh directory beside DESTINATION (so the finished executable is
+    /// published by a rename on the same filesystem).
+    fn beside(destination: &Path) -> Result<WorkDir, String> {
+        let parent = destination.parent().ok_or("output has no parent directory")?;
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_nanos();
+        let work = parent.join(format!(".botlish-aot-{}-{nonce}", std::process::id()));
+        std::fs::create_dir(&work).map_err(|e| format!("{}: {e}", work.display()))?;
+        Ok(WorkDir(work))
+    }
+}
 
 impl Drop for WorkDir {
     fn drop(&mut self) {
@@ -140,6 +173,18 @@ pub fn emit_executable(program: &Program, destination: &Path) -> Result<(), Stri
     if !cfg!(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu")) {
         return Err("executable emission requires Linux x86_64 glibc".into());
     }
+    let destination = std::path::absolute(destination).map_err(|e| e.to_string())?;
+    match std::env::var("BOTLISH_NATIVE_LINKER").as_deref() {
+        Err(std::env::VarError::NotPresent) | Ok("" | "rustc") => link_rustc(program, &destination),
+        Ok("stub") => link_stub(program, &destination),
+        Ok(other) => Err(format!("unknown BOTLISH_NATIVE_LINKER {other:?} (known: rustc stub)")),
+        Err(e) => Err(format!("BOTLISH_NATIVE_LINKER: {e}")),
+    }
+}
+
+/// The `rustc` linker: a generated startup crate, compiled and linked
+/// against this build's runtime library.
+fn link_rustc(program: &Program, destination: &Path) -> Result<(), String> {
     let driver = std::env::current_exe().map_err(|e| e.to_string())?;
     let release = driver.parent().ok_or("cannot locate native runtime")?;
     let library = release.join("libbotlish_native.rlib");
@@ -149,15 +194,7 @@ pub fn emit_executable(program: &Program, destination: &Path) -> Result<(), Stri
             library.display()
         ));
     }
-    let destination = std::path::absolute(destination).map_err(|e| e.to_string())?;
-    let parent = destination.parent().ok_or("output has no parent directory")?;
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_nanos();
-    let work = parent.join(format!(".botlish-aot-{}-{nonce}", std::process::id()));
-    std::fs::create_dir(&work).map_err(|e| format!("{}: {e}", work.display()))?;
-    let work = WorkDir(work);
+    let work = WorkDir::beside(destination)?;
     let object = emit_object(program).map_err(|e| e.message().to_string())?;
     let object_path = work.0.join("program.o");
     let source_path = work.0.join("startup.rs");
@@ -197,4 +234,336 @@ pub fn emit_executable(program: &Program, destination: &Path) -> Result<(), Stri
     // failed build leaves any previous executable intact.
     std::fs::rename(&executable, &destination).map_err(|e| format!("{}: {e}", destination.display()))?;
     Ok(())
+}
+
+/// The `stub` linker: the prebuilt `botlish-aot-stub` with the program's
+/// image appended (runtime/aotimage.rs).
+fn link_stub(program: &Program, destination: &Path) -> Result<(), String> {
+    let stub = match std::env::var_os("BOTLISH_NATIVE_AOT_STUB") {
+        Some(path) => PathBuf::from(path),
+        None => {
+            let driver = std::env::current_exe().map_err(|e| e.to_string())?;
+            driver.parent().ok_or("cannot locate native runtime")?.join("botlish-aot-stub")
+        }
+    };
+    let mut bytes = std::fs::read(&stub).map_err(|e| {
+        format!(
+            "runtime stub missing: {}: {e}; run cargo build --release --manifest-path native/Cargo.toml",
+            stub.display()
+        )
+    })?;
+    if bytes.ends_with(aotimage::MAGIC) {
+        return Err(format!("{} already carries a program image: not a botlish-aot-stub", stub.display()));
+    }
+    let object = emit_object(program).map_err(|e| e.message().to_string())?;
+    let payload = image(program, &object)?.encode();
+    bytes.extend_from_slice(&payload);
+    bytes.extend_from_slice(&aotimage::trailer(payload.len()));
+    let work = WorkDir::beside(destination)?;
+    let executable = work.0.join("executable");
+    std::fs::write(&executable, &bytes).map_err(|e| e.to_string())?;
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+    }
+    // Publish only a complete file, on the same filesystem, as link_rustc.
+    std::fs::rename(&executable, destination).map_err(|e| format!("{}: {e}", destination.display()))?;
+    Ok(())
+}
+
+// The ELF64 x86-64 relocatable object `emit_object` writes: just what `image`
+// reads of it.
+const SHT_RELA: u32 = 4;
+const SHT_NOBITS: u32 = 8;
+const SHT_SYMTAB: u32 = 2;
+const SHF_ALLOC: u64 = 2;
+const SHF_EXECINSTR: u64 = 4;
+const SHN_UNDEF: u16 = 0;
+const SHN_LORESERVE: u16 = 0xff00;
+const R_X86_64_64: u32 = 1;
+const R_X86_64_PC32: u32 = 2;
+const R_X86_64_PLT32: u32 = 4;
+const R_X86_64_GOTPCREL: u32 = 9;
+const R_X86_64_GOTPCRELX: u32 = 41;
+const R_X86_64_REX_GOTPCRELX: u32 = 42;
+
+struct Section {
+    kind: u32,
+    flags: u64,
+    offset: usize,
+    size: usize,
+    link: usize,
+    info: usize,
+    align: u64,
+    entsize: usize,
+}
+
+struct Symbol {
+    name: String,
+    section: u16,
+    value: u64,
+}
+
+struct Rela {
+    section: usize,
+    offset: u64,
+    kind: u32,
+    symbol: usize,
+    addend: i64,
+}
+
+fn read_object(bytes: &[u8]) -> Result<(Vec<Section>, Vec<Symbol>, Vec<Rela>), String> {
+    let bad = || "malformed program object".to_string();
+    let get = |at: usize, n: usize| bytes.get(at..at + n).ok_or_else(bad);
+    let u16_at = |at: usize| get(at, 2).map(|b| u16::from_le_bytes(b.try_into().unwrap()));
+    let u32_at = |at: usize| get(at, 4).map(|b| u32::from_le_bytes(b.try_into().unwrap()));
+    let u64_at = |at: usize| get(at, 8).map(|b| u64::from_le_bytes(b.try_into().unwrap()));
+    if bytes.len() < 64 || &bytes[0..4] != b"\x7fELF" || bytes[4] != 2 || bytes[5] != 1 || u16_at(0x12)? != 62 {
+        return Err("program object is not an ELF64 x86-64 object".to_string());
+    }
+    let shoff = u64_at(0x28)? as usize;
+    let shentsize = u16_at(0x3a)? as usize;
+    let mut sections = Vec::new();
+    for i in 0..u16_at(0x3c)? as usize {
+        let h = shoff + i * shentsize;
+        sections.push(Section {
+            kind: u32_at(h + 4)?,
+            flags: u64_at(h + 8)?,
+            offset: u64_at(h + 0x18)? as usize,
+            size: u64_at(h + 0x20)? as usize,
+            link: u32_at(h + 0x28)? as usize,
+            info: u32_at(h + 0x2c)? as usize,
+            align: u64_at(h + 0x30)?.max(1),
+            entsize: u64_at(h + 0x38)? as usize,
+        });
+    }
+    let mut symbols = Vec::new();
+    let symtab = sections.iter().find(|s| s.kind == SHT_SYMTAB && s.entsize > 0).ok_or_else(bad)?;
+    let strtab = sections.get(symtab.link).ok_or_else(bad)?;
+    for index in 0..symtab.size / symtab.entsize {
+        let e = symtab.offset + index * symtab.entsize;
+        let start = strtab.offset + u32_at(e)? as usize;
+        let tail = bytes.get(start..strtab.offset + strtab.size).ok_or_else(bad)?;
+        let end = tail.iter().position(|&c| c == 0).ok_or_else(bad)?;
+        symbols.push(Symbol {
+            name: String::from_utf8_lossy(&tail[..end]).into_owned(),
+            section: u16_at(e + 6)?,
+            value: u64_at(e + 8)?,
+        });
+    }
+    let mut relas = Vec::new();
+    for s in sections.iter().filter(|s| s.kind == SHT_RELA && s.entsize > 0) {
+        for index in 0..s.size / s.entsize {
+            let e = s.offset + index * s.entsize;
+            let info = u64_at(e + 8)?;
+            relas.push(Rela {
+                section: s.info,
+                offset: u64_at(e)?,
+                kind: info as u32,
+                symbol: (info >> 32) as usize,
+                addend: u64_at(e + 16)? as i64,
+            });
+        }
+    }
+    Ok((sections, symbols, relas))
+}
+
+/// Lays out OBJECT's allocated sections as one image and relocates it, the
+/// way a static linker relocates the same object into an executable:
+///
+/// ```text
+///   [machine code][trampolines]  page-aligned: executable
+///   [GOT][data][.bss]            writable
+/// ```
+///
+/// A reference inside the image is resolved here, a PC-relative call to a
+/// runtime helper becomes a `Call32` fixup (a direct call at load time, or
+/// one through the helper's trampoline if the helper is out of rel32 reach),
+/// and an absolute address (a data word, a GOT slot) an `Abs64` fixup.
+/// GOT-relative loads of an image symbol are relaxed to `lea` when the
+/// relocation allows it (`R_X86_64_[REX_]GOTPCRELX` on a `mov`, as GNU ld
+/// and lld relax them: the context area's accesses, mod.rs's
+/// `relax_context_got`); every other GOT-relative load gets a GOT slot.
+fn image(program: &Program, object: &ObjectProgram) -> Result<Image, String> {
+    let bytes = &object.bytes;
+    let (sections, symbols, relas) = read_object(bytes)?;
+    let unsupported = |r: &Rela| format!("unsupported relocation type {} against {}", r.kind, symbols[r.symbol].name);
+    let allocated = |s: &Section| s.flags & SHF_ALLOC != 0;
+
+    // Imports, in first-use order, and what each relocation needs.
+    let mut imports: Vec<String> = Vec::new();
+    let mut import_index: HashMap<String, u32> = HashMap::new();
+    let mut calls: Vec<u32> = Vec::new();
+    let mut got: Vec<Target> = Vec::new();
+    let mut got_index: HashMap<Target, usize> = HashMap::new();
+    let relaxable = |r: &Rela| -> bool {
+        // `mov disp32(%rip), %reg` (opcode 0x8b, ModRM mod=00 rm=101) is
+        // the instruction both GOTPCRELX relocations may rewrite to `lea`.
+        let s = &sections[r.section];
+        let at = s.offset + r.offset as usize;
+        matches!(r.kind, R_X86_64_GOTPCRELX | R_X86_64_REX_GOTPCRELX)
+            && symbols[r.symbol].section != SHN_UNDEF
+            && r.offset >= 2
+            && bytes.get(at - 2) == Some(&0x8b)
+            && bytes.get(at - 1).is_some_and(|m| m & 0xc7 == 0x05)
+    };
+    // Symbols resolve to Local targets once laid out: until then, GOT keys
+    // for image symbols are (section, value) pairs, packed into Local.
+    let mut pre_target = |symbol: &Symbol, imports: &mut Vec<String>| -> Result<Target, String> {
+        if symbol.section == SHN_UNDEF {
+            let next = imports.len() as u32;
+            let index = *import_index.entry(symbol.name.clone()).or_insert_with(|| {
+                imports.push(symbol.name.clone());
+                next
+            });
+            Ok(Target::Import(index))
+        } else if symbol.section < SHN_LORESERVE && sections.get(symbol.section as usize).is_some_and(allocated) {
+            Ok(Target::Local(((symbol.section as u64) << 48) | symbol.value))
+        } else {
+            Err(format!("program object symbol {} is not in an allocated section", symbol.name))
+        }
+    };
+    let mut targets = Vec::with_capacity(relas.len());
+    for r in &relas {
+        if !sections.get(r.section).is_some_and(allocated) {
+            continue;
+        }
+        let symbol = symbols.get(r.symbol).ok_or("malformed program object relocation")?;
+        let target = pre_target(symbol, &mut imports)?;
+        match (r.kind, target) {
+            (R_X86_64_PLT32, Target::Import(i)) if !calls.contains(&i) => calls.push(i),
+            (R_X86_64_GOTPCREL | R_X86_64_GOTPCRELX | R_X86_64_REX_GOTPCRELX, _) if !relaxable(r) => {
+                got_index.entry(target).or_insert_with(|| {
+                    got.push(target);
+                    got.len() - 1
+                });
+            }
+            _ => {}
+        }
+        targets.push(target);
+    }
+    // Every helper reached by a call has a trampoline, and so a GOT slot.
+    for &i in &calls {
+        got_index.entry(Target::Import(i)).or_insert_with(|| {
+            got.push(Target::Import(i));
+            got.len() - 1
+        });
+    }
+
+    // Layout.
+    let mut place: Vec<Option<u64>> = vec![None; sections.len()];
+    let mut cursor = 0u64;
+    let mut lay = |i: usize, s: &Section, cursor: &mut u64| {
+        *cursor = cursor.next_multiple_of(s.align);
+        place[i] = Some(*cursor);
+        *cursor += s.size as u64;
+    };
+    for (i, s) in sections.iter().enumerate() {
+        if allocated(s) && s.flags & SHF_EXECINSTR != 0 {
+            lay(i, s, &mut cursor);
+        }
+    }
+    cursor = cursor.next_multiple_of(16);
+    let trampolines = cursor;
+    cursor += 8 * calls.len() as u64;
+    let executable = cursor.next_multiple_of(4096);
+    let got_base = executable;
+    cursor = got_base + 8 * got.len() as u64;
+    for (i, s) in sections.iter().enumerate() {
+        if allocated(s) && s.flags & SHF_EXECINSTR == 0 && s.kind != SHT_NOBITS {
+            lay(i, s, &mut cursor);
+        }
+    }
+    let initialized = cursor;
+    for (i, s) in sections.iter().enumerate() {
+        if allocated(s) && s.flags & SHF_EXECINSTR == 0 && s.kind == SHT_NOBITS {
+            lay(i, s, &mut cursor);
+        }
+    }
+    let size = cursor;
+
+    let mut code = vec![0u8; initialized as usize];
+    for (i, s) in sections.iter().enumerate() {
+        if let (Some(at), true) = (place[i], s.kind != SHT_NOBITS) {
+            let data = bytes.get(s.offset..s.offset + s.size).ok_or("malformed program object section")?;
+            code[at as usize..at as usize + s.size].copy_from_slice(data);
+        }
+    }
+    let local = |t: Target| -> Target {
+        match t {
+            Target::Local(packed) => {
+                Target::Local(place[(packed >> 48) as usize].expect("allocated section") + (packed & 0xffff_ffff_ffff))
+            }
+            import => import,
+        }
+    };
+    let rel32 = |code: &mut [u8], at: u64, value: i128| -> Result<(), String> {
+        let value = i32::try_from(value).map_err(|_| "program image relocation out of rel32 range".to_string())?;
+        code[at as usize..at as usize + 4].copy_from_slice(&value.to_le_bytes());
+        Ok(())
+    };
+    let mut fixups = Vec::new();
+    for (slot, &target) in got.iter().enumerate() {
+        fixups.push(Fixup::Abs64 { at: got_base + 8 * slot as u64, target: local(target), addend: 0 });
+    }
+    let mut trampoline_of = HashMap::new();
+    for (n, &i) in calls.iter().enumerate() {
+        // jmp *GOT(%rip); int3; int3
+        let at = trampolines + 8 * n as u64;
+        let slot = got_base + 8 * got_index[&Target::Import(i)] as u64;
+        code[at as usize..at as usize + 2].copy_from_slice(&[0xff, 0x25]);
+        rel32(&mut code, at + 2, i128::from(slot) - i128::from(at + 6))?;
+        code[at as usize + 6..at as usize + 8].copy_from_slice(&[0xcc, 0xcc]);
+        trampoline_of.insert(i, at);
+    }
+    let applied = relas.iter().filter(|r| sections.get(r.section).is_some_and(allocated));
+    for (r, &target) in applied.zip(&targets) {
+        let at = place[r.section].expect("allocated section") + r.offset;
+        let a = i128::from(r.addend);
+        match (r.kind, local(target)) {
+            (R_X86_64_64, resolved) => fixups.push(Fixup::Abs64 { at, target: resolved, addend: r.addend }),
+            (R_X86_64_PC32 | R_X86_64_PLT32, Target::Local(s)) => rel32(&mut code, at, i128::from(s) + a - i128::from(at))?,
+            (R_X86_64_PLT32, Target::Import(i)) => {
+                fixups.push(Fixup::Call32 { at, import: i, addend: r.addend, trampoline: trampoline_of[&i] })
+            }
+            (R_X86_64_GOTPCREL | R_X86_64_GOTPCRELX | R_X86_64_REX_GOTPCRELX, resolved) => {
+                if let (true, Target::Local(s)) = (relaxable(r), resolved) {
+                    code[at as usize - 2] = 0x8d;
+                    rel32(&mut code, at, i128::from(s) + a - i128::from(at))?;
+                } else {
+                    let slot = got_base + 8 * got_index[&target] as u64;
+                    rel32(&mut code, at, i128::from(slot) + a - i128::from(at))?;
+                }
+            }
+            _ => return Err(unsupported(r)),
+        }
+    }
+
+    let defined: HashMap<&str, u64> = symbols
+        .iter()
+        .filter(|s| s.section != SHN_UNDEF && s.section < SHN_LORESERVE)
+        .filter_map(|s| Some((s.name.as_str(), place.get(s.section as usize).copied().flatten()? + s.value)))
+        .collect();
+    let mut functions = Vec::with_capacity(program.functions.len());
+    for (f, compiled) in program.functions.iter().zip(&object.functions) {
+        let find = |name: String| defined.get(name.as_str()).copied().ok_or(format!("program object lacks {name}"));
+        functions.push(FunctionCode {
+            direct: find(format!("botlish_fn_{}", f.id))?,
+            direct_size: compiled.direct_size,
+            entry: find(format!("botlish_entry_{}", f.id))?,
+            entry_size: compiled.entry_size,
+            safepoints: compiled.safepoints.clone(),
+        });
+    }
+    Ok(Image {
+        info: crate::program_info(program),
+        constants: object.pool.entries.clone(),
+        statics: program.statics,
+        imports,
+        code,
+        size,
+        executable,
+        fixups,
+        functions,
+    })
 }
