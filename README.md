@@ -32,8 +32,11 @@ There are three backends that implement the same semantics:
 The whole test suite runs against `interp` and `compile`. The algorithm
 corpus and the native tests run on all of them, and
 `tests/native-coverage.tcl` classifies every test of the suite on
-`cranelift` (through a test-harness backend that hands each test program's
-HIR to `native::evalHir`; `native/` itself registers no core IR backend).
+`cranelift` and `cranelift-generic` (through a test-harness backend that
+hands each test program's HIR to `native::evalHir`; `native/` itself
+registers no core IR backend). Locally, `tests/local.tcl` runs the golden
+suites in place of the Tcl tests they duplicate (AGENTS.md, "Running the
+tests locally"); CI runs every test.
 
 Three representations, three roles:
 
@@ -80,9 +83,10 @@ single/          main.tcl and the compiler stack as one executable (SINGLE-EXECU
 ```
 
 ```sh
-tclsh9.0 tests/all.tcl                         # test suite, interp and compile
+tclsh9.0 tests/local.tcl                       # local run: Tcl tests minus golden duplicates, golden suites, in parallel
+tclsh9.0 tests/all.tcl                         # test suite, interp and compile (every test, as CI)
 cargo build --release --manifest-path native/Cargo.toml   # build the native backend (§20)
-tclsh9.0 tests/native-coverage.tcl             # test suite on cranelift, classified (§20)
+tclsh9.0 tests/native-coverage.tcl             # test suite on cranelift, classified (§20; -backend cranelift-generic)
 tclsh9.0 main.tcl -backend cranelift FILE.bot  # run natively
 tclsh9.0 main.tcl -emit-native-executable FILE.bot  # compile to ./FILE (Linux x86_64 glibc)
 tclsh9.0 main.tcl -emit-nir -emit-clif FILE.bot   # show NIR, then Cranelift IR, of every function
@@ -2232,6 +2236,7 @@ tclsh9.0 main.tcl -backend cranelift examples/stdlib/csv.bot
 tclsh9.0 main.tcl -emit-nir examples/stdlib/matmul.bot       # native IR
 tclsh9.0 main.tcl -emit-clif examples/stdlib/matmul.bot      # Cranelift IR
 tclsh9.0 tests/native-coverage.tcl                           # whole suite on cranelift, classified
+tclsh9.0 tests/native-coverage.tcl -backend cranelift-generic # the same, unspecialized
 tclsh9.0 bench/corpus.tcl                                    # corpus timings, all backends
 ```
 
