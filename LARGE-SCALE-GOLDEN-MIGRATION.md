@@ -903,6 +903,12 @@ All of it measures the tree before the merge of main's 14a1143 (cc7f69b): the
 `compile` backend here, and every total or ratio below that includes it, is
 `compile` on its former core IR path ([Outcome](#outcome)).
 
+GOLDEN-VS-TCL-BENCHMARK.md measures the two layers again on a later tree
+(a9d81f9), with the `compile` backend on the direct HIR path, on all four
+backends, with and without the front-end cache, profiled. Without the cache
+the golden corpus costs 2.5-3.9 times the Tcl tests it duplicates; with a
+warm cache 0.14-0.98 times.
+
 ### Where a suite's time goes
 
 `bench/golden-suites.tcl`, each suite in a fresh process, one at a time,

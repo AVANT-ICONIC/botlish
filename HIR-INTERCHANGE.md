@@ -312,6 +312,12 @@ Each time is the best of 3, in ms.
   contexts.bot rows were taken while another validation ran. Fresh-process
   builds on an idle machine took 1.6, 19.2 and 30.9 s for traits-path.bot,
   contexts.bot and declared-errors.bot.
+* **The whole corpus.** GOLDEN-VS-TCL-BENCHMARK.md runs all 88 golden suites
+  through the cache, on every backend, as the golden runner does. Each
+  backend's run of the corpus costs 4.0 to 17 times less with a warm cache;
+  the 88 hits cost 4.6 s in all and the entries take 185 MB. Keeping an entry
+  slows the specialized native lowering that runs after it in the same
+  process by 20-25%, which is the whole of a cold cache's extra cost (3%).
 
 ## Towards a front end in Botlish
 
