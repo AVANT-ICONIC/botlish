@@ -252,7 +252,8 @@ per test file or suite, each with a private `-tmpdir`):
   the parser, warnings, several programs, `main.tcl`, executables and the
   process boundary, run-time-only failures, the internal half of every SPLIT
   test, and every Tcl test whose golden port is weaker;
-* **every golden suite on all four backends**, in their place.
+* **every golden suite on all four backends**, in their place, **through the
+  front-end cache** (`.hirx` entries; HIR-INTERCHANGE.md).
 
 It prints a line per file and suite, then every failure with the command
 that reruns it, and exits 1 on any. The whole run took [[LOCAL]] on the
@@ -267,12 +268,28 @@ through `tests/local.tcl -all 1`.
   argument runs that suite; `-parts tcl` or `-parts golden` runs one layer.
   Wherever this file says to run a Tcl test file, run it this way. The
   fuzzers and mutation harnesses are unchanged: they run what they name.
-* **Keep the golden front ends between runs** with `BOTLISH_HIR_CACHE=DIR`
-  (a directory of your own outside the repository; HIR-INTERCHANGE.md). The
-  cache key leaves out `compiler/` and `native/`. After an edit there, a golden
-  suite is not compiled again, and the whole golden corpus costs a fraction
-  of the Tcl tests it replaces (GOLDEN-VS-TCL-BENCHMARK.md). The Tcl tests
-  never use the cache.
+* **Run the golden suites with the front-end cache.** `tests/local.tcl`
+  always does, unless told not to.
+  - **Which directory:** `BOTLISH_HIR_CACHE` when set; otherwise this
+    checkout's own directory under the user's cache directory
+    (`~/.cache/botlish/hir/`, or `$XDG_CACHE_HOME`, or `%LOCALAPPDATA%`). The
+    run then removes the entries another front end wrote, so the directory
+    stays at one front end's worth (about 190 MB).
+  - **Why it pays:** a suite whose text, imported modules and front end
+    (`core/`, `hir/`, `surface/`, lib's Tcl libraries) are unchanged is read
+    from its entry, not compiled again. The key leaves out `compiler/` and
+    `native/`, so after an edit there the golden corpus costs only the
+    backends' runs, a fraction of the Tcl tests it replaces
+    (GOLDEN-VS-TCL-BENCHMARK.md). A hit equals the build exactly (the cache
+    is audited for it).
+  - **One suite:** run a single golden suite the same way with
+    `tclsh9.0 tests/local.tcl SUITE.bot`, not a bare
+    `tests/golden/run.tcl`, which uses no cache unless `BOTLISH_HIR_CACHE`
+    is set.
+  - **Opting out:** `-hir-cache ""` turns the cache off, for timing the
+    front end.
+  - **The Tcl tests never use it,** and neither does CI: every CI run
+    compiles from scratch.
 * **When a golden test fails,** its Tcl originals are its manifest rows
   (`old_file`, `old_test`). `tclsh9.0 tests/X.test` runs every test of a
   file, and `tests/local.tcl -all 1` runs every Tcl test, duplicates
@@ -1055,7 +1072,9 @@ A new golden test must be able to fail: run `audit/golden/tools/perturb.tcl` on
 its suite. By default `tests/golden.test` runs the eight validation-sample
 suites (`BOTLISH_GOLDEN_SUITES=all` or a list of files runs others); CI's
 `golden` shards run every suite on every backend beside its Tcl originals
-(`check.tcl -shard I/4`). A suite that cannot run on a backend declares
+(`check.tcl -shard I/4`). Locally, `tests/local.tcl` runs every suite on
+every backend, through the front-end cache (Running the tests locally,
+above). A suite that cannot run on a backend declares
 `# golden-exclude: BACKEND -- REASON` in its leading comments; keep such tests
 in a companion suite so the main suite keeps all four backends.
 

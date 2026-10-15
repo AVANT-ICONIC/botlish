@@ -3,7 +3,8 @@
 # in their place, in parallel.
 #
 #   tclsh9.0 tests/local.tcl ?-jobs N? ?-backends LIST? ?-golden-backends LIST?
-#                            ?-all 0|1? ?-parts LIST? ?-verbose 0|1? ?FILE ...?
+#                            ?-hir-cache DIR? ?-all 0|1? ?-parts LIST?
+#                            ?-verbose 0|1? ?FILE ...?
 #
 # Tcl tests: every tests/*.test file once per backend of -backends (default
 # CORE_BACKEND if set, else interp,compile -- what tests/all.tcl runs), each
@@ -14,9 +15,17 @@
 #
 # Golden suites: every tests/golden/*.bot, one tests/golden/run.tcl process
 # per suite on the backends of -golden-backends (default all four; a suite's
-# recorded exclusions are skipped by the runner). BOTLISH_HIR_CACHE, when set,
-# is passed on: a suite whose front end and modules are unchanged is not
-# compiled again (HIR-INTERCHANGE.md).
+# recorded exclusions are skipped by the runner), through the front-end cache
+# (HIR-INTERCHANGE.md): a suite whose text, modules and front end are unchanged
+# since it was last compiled is read from its entry, not compiled again -- an
+# edit to compiler/ or native/ only, which the cache key leaves out, reruns
+# the whole golden corpus for the backends' cost alone. The cache is
+# -hir-cache DIR ("" for none), else BOTLISH_HIR_CACHE when set, else this
+# checkout's own directory under the user's cache directory
+# ($XDG_CACHE_HOME, %LOCALAPPDATA% or ~/.cache, then botlish/hir/), from which
+# the run then removes the entries another front end wrote (Prune), so it
+# holds about one front end's entries. The Tcl tests never use the cache
+# (tests/helpers.tcl unsets it).
 #
 # FILE arguments narrow the run: a test file (tests/X.test or X.test) runs
 # that file, and a suite (X.bot) that suite. Given test files and no suite,
@@ -34,7 +43,7 @@ set testDir [file dirname [file normalize [info script]]]
 set root [file dirname $testDir]
 
 proc usage {} {
-    puts stderr "usage: tclsh9.0 tests/local.tcl ?-jobs N? ?-backends LIST? ?-golden-backends LIST? ?-all 0|1? ?-parts LIST? ?-verbose 0|1? ?FILE ...?"
+    puts stderr "usage: tclsh9.0 tests/local.tcl ?-jobs N? ?-backends LIST? ?-golden-backends LIST? ?-hir-cache DIR? ?-all 0|1? ?-parts LIST? ?-verbose 0|1? ?FILE ...?"
     exit 2
 }
 
@@ -45,7 +54,8 @@ proc processors {} {
 
 set options [dict create -jobs [processors] \
     -backends [expr {[info exists ::env(CORE_BACKEND)] && $::env(CORE_BACKEND) ne "" ? $::env(CORE_BACKEND) : "interp,compile"}] \
-    -golden-backends interp,compile,cranelift-generic,cranelift -all 0 -parts tcl,golden -verbose 0]
+    -golden-backends interp,compile,cranelift-generic,cranelift -hir-cache default \
+    -all 0 -parts tcl,golden -verbose 0]
 set arguments {}
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
@@ -63,6 +73,57 @@ set parts [{*}$listOf [dict get $options -parts]]
 set jobs [dict get $options -jobs]
 set skipDuplicates [expr {![dict get $options -all]}]
 set verbose [dict get $options -verbose]
+
+# This checkout's own front-end cache directory, under the user's cache
+# directory: "" when there is none to put it in.
+proc defaultCacheDir {root} {
+    foreach {variable under} {XDG_CACHE_HOME {} LOCALAPPDATA {} HOME .cache} {
+        if {[info exists ::env($variable)] && $::env($variable) ne ""} {
+            set base [file join $::env($variable) {*}$under]
+            set bytes [encoding convertto utf-8 $root]
+            return [file join $base botlish hir [format %s-%08x [file tail $root] [zlib crc32 $bytes]]]
+        }
+    }
+    return ""
+}
+set hirCache [dict get $options -hir-cache]
+set prune 0
+if {$hirCache eq "default"} {
+    if {[info exists ::env(BOTLISH_HIR_CACHE)] && $::env(BOTLISH_HIR_CACHE) ne ""} {
+        set hirCache $::env(BOTLISH_HIR_CACHE)
+    } else {
+        set hirCache [defaultCacheDir $root]
+        set prune [expr {$hirCache ne ""}]
+    }
+}
+if {$hirCache ne ""} {
+    set hirCache [file normalize $hirCache]
+}
+
+# Removes from the cache directory DIR the entries another front end wrote
+# than the one in ROOT now (they hit again only if the front end returns to
+# that exact text) and the private files of writes interrupted a day ago or
+# more (surface/cache.tcl writes an entry under a private name, then renames
+# it): the number removed.
+proc Prune {dir root} {
+    source [file join $root hir interchange.tcl]
+    set current [hir::interchange::Fingerprint $root]
+    set removed 0
+    foreach path [glob -nocomplain -directory $dir -types f *] {
+        if {[string match *.hirc $path]} {
+            set f [open $path rb]
+            set head [read $f 512]
+            close $f
+            if {[regexp {front-end (\S+)} $head -> fingerprint] && $fingerprint eq $current} continue
+        } elseif {[file mtime $path] > [clock seconds] - 86400} {
+            continue
+        }
+        if {![catch {file delete $path}]} {
+            incr removed
+        }
+    }
+    return $removed
+}
 foreach name {LANG LC_ALL} {
     if {![info exists ::env($name)] || $::env($name) eq ""} { set ::env($name) C.utf8 }
 }
@@ -132,7 +193,7 @@ set items [dict create]
 foreach path [lsort -command {apply {{a b} {expr {[file size $b] - [file size $a]}}}} $suites] {
     dict set items golden:[file tail $path] [list golden \
         [list [info nameofexecutable] [file join $testDir golden run.tcl] -backends [join $goldenBackends ,] -quiet $path] \
-        {} "golden [file tail $path]"]
+        [list BOTLISH_HIR_CACHE $hirCache] "golden [file tail $path]"]
 }
 foreach path [lsort -command {apply {{a b} {expr {[file size $b] - [file size $a]}}}} $testFiles] {
     foreach backend $backends {
@@ -253,7 +314,7 @@ proc report {key} {
     flush stdout
 }
 
-puts "local run: [llength $testFiles] Tcl test files on [join $backends {, }][expr {$skipDuplicates ? " (golden duplicates skipped)" : " (every test)"}], [llength $suites] golden suites on [join $goldenBackends {, }], $jobs at a time"
+puts "local run: [llength $testFiles] Tcl test files on [join $backends {, }][expr {$skipDuplicates ? " (golden duplicates skipped)" : " (every test)"}], [llength $suites] golden suites on [join $goldenBackends {, }] ([expr {$hirCache eq "" ? "no front-end cache" : "front-end cache $hirCache"}]), $jobs at a time"
 flush stdout
 try {
     while {[llength $pending] > 0 || $running > 0} {
@@ -314,6 +375,13 @@ if {[dict get $goldenTotals suites]} {
             : [continue]}
     }]
     puts "Golden suites: [dict get $goldenTotals suites] run, [dict get $goldenTotals failedSuites] failed; tests passed: [join $perBackend {, }]"
+}
+if {$suites ne {} && $hirCache ne ""} {
+    set removed [expr {$prune ? [Prune $hirCache $root] : 0}]
+    set entries [glob -nocomplain -directory $hirCache *.hirc]
+    set bytes [tcl::mathop::+ 0 {*}[lmap path $entries {file size $path}]]
+    puts [format "Front-end cache %s: %d entries, %.0f MB%s" $hirCache [llength $entries] [expr {$bytes / 1e6}] \
+        [expr {$removed ? ", $removed of other front ends removed" : ""}]]
 }
 puts [format "Wall time %.1f s with %d jobs." $wall $jobs]
 
