@@ -78,9 +78,16 @@ jobs:
       # The corpus, the source samples and the HIR fixtures (native compiles
       # HIR, never core IR text: the examples/*.ir programs run on the Tcl
       # backends above); surface samples 09 and 10 expect an error (09 became a
-      # rejection example with strict reference determinism).
+      # rejection example with strict reference determinism). Specialized
+      # only: unspecialized native code has no slot for a projection only a
+      # semantic instance proves (STRUCTS.md, "Known limitations"), so
+      # csv_records.bot and hashtable.bot are NATIVE UNSUPPORTED struct-shape
+      # on cranelift-generic; the corpus tests run every program there, with
+      # the specialized outcome standing in (tests/helpers.tcl,
+      # GenericBaselineUndefined).
       - name: Run examples
-        run: tclsh9.0 main.tcl -backend ${{ matrix.backend }} examples/stdlib/*.bot examples/surface/0[1-8]*.bot examples/surface/1[1-3]*.bot examples/hir/0[1-3]*.hir
+        if: matrix.backend == 'cranelift'
+        run: tclsh9.0 main.tcl -backend cranelift examples/stdlib/*.bot examples/surface/0[1-8]*.bot examples/surface/1[1-3]*.bot examples/hir/0[1-3]*.hir
 
       - name: Publish summary
         if: always()
