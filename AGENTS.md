@@ -256,10 +256,22 @@ per test file or suite, each with a private `-tmpdir`):
   front-end cache** (`.hirx` entries; HIR-INTERCHANGE.md).
 
 It prints a line per file and suite, then every failure with the command
-that reruns it, and exits 1 on any. The whole run took [[LOCAL]] on the
-4-core container this was written on, against [[ALL]] for `tests/all.tcl`
-(both passes, every test, one file at a time) and [[ALLPAR]] for every test
-through `tests/local.tcl -all 1`.
+that reruns it, and exits 1 on any.
+
+What it costs, measured on a 4-core container (2026-10-15):
+
+| run | wall | CPU |
+|---|---:|---:|
+| `tests/local.tcl`, warm cache | 26 min | 6,060 s |
+| `tests/local.tcl`, empty cache | 33 min | 7,710 s |
+| `tests/all.tcl` (every Tcl test, one file at a time) | [[SEQ]] min | [[SEQCPU]] s |
+| every Tcl test at the same parallelism (`tests/local.tcl -all 1 -parts tcl`) | 26 min | 6,100 s |
+
+* **The speed-up over `tests/all.tcl` is the parallelism.**
+* **The golden layer is free once the cache is warm.** The 2,043 duplicated
+  Tcl tests cost about 600 s of process time per run (both passes). The
+  golden corpus on four backends costs 630 s with a warm cache and 2,160 s
+  with an empty one.
 
 * **Narrow it to what an edit touches.** `tclsh9.0 tests/local.tcl
   tests/affine.test tests/coroutines.test` runs those files minus their
