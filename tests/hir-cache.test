@@ -148,6 +148,23 @@ test hc-module-edited {an edited module the program imports makes the entry stal
     removeDirectory hc-module
 } -result {11 21 {misses 1 stores 1 stale 1} 1 21 0 {hits 1}}
 
+test hc-type-import-edited {a module the program reads only through `import type NS::Type` is a dependency too: editing it makes the entry stale} -setup {
+    set dir [makeDirectory hc-type-import]
+    set path [hcWrite [file join $dir program.bot] "import type hcbox::Small\n\nfn twice(n: Small) -> int:\n    n * 2\n\ntwice(3)\n"]
+    set cache [file join $dir cache]
+} -body {
+    withPrivateLibrary {
+        hcWrite [file join $::core::libraryDir hcbox.bot] "type Small = Int in 0..10\n"
+        lassign [hcCompile $path $cache -warnings off] first
+        # Now 3 is no Small: the program no longer compiles.
+        hcWrite [file join $::core::libraryDir hcbox.bot] "type Small = Int in 0..2\n"
+        set failed [catch {hcCompile $path $cache -warnings off} message options]
+        list [hcValue $first] [dict get [surface::cache::stats] stale] $failed [dict get $options -errorcode]
+    }
+} -cleanup {
+    removeDirectory hc-type-import
+} -result {6 1 1 {CORE SEMANTIC TYPE}}
+
 test hc-module-edited-during-build {a module edited after the build read it but before its HIR is kept: the entry records the text the build read, so the next compilation misses and builds against the edit (it never hits with the HIR of the old text)} -setup {
     set dir [makeDirectory hc-during]
     set path [hcWrite [file join $dir program.bot] "import hcmod\n\nhcmod::f(1)\n"]

@@ -126,11 +126,20 @@
         scheduler {}]
 >>>>
 
-@@ deps-ignore-imports an entry has no dependencies: an edited module, or a namespace that gains a module file, hits the old HIR
+@@ deps-ignore-imports an entry's dependencies leave out the modules `import NS` names: an edited module, or a namespace that gains a module file, hits the old HIR
 ## surface/cache.tcl
 <<<<
-        foreach imported [dict get $environment namespaces] {
-            lappend paths [surface::modules::ModulePath $imported]
+        set imported [dict get $environment namespaces]
+====
+        set imported {}
+>>>>
+
+@@ deps-ignore-type-imports an entry's dependencies leave out the modules imported only by `import type NS::Type`: an edited one hits the old HIR
+## surface/cache.tcl
+<<<<
+        dict for {short qualified} [dict get $environment types] {
+            set segments [split [string map {:: \x00} $qualified] \x00]
+            lappend imported [join [lrange $segments 0 end-1] ::]
         }
 ====
 >>>>

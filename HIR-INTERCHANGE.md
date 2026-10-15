@@ -38,7 +38,7 @@ which is what lets it cross a process boundary.
   differ.
 * **Evidence.**
   - `tests/hir-interchange.test` (11 tests) and `tests/hir-cache.test`
-    (14 tests).
+    (15 tests).
   - `audit/hir-interchange/tools/roundtrip.tcl`: nine golden suites written by
     one process and read by a fresh one, through the format and through the
     cache. Every HIR, artifact checksum and outcome on four backends is
@@ -183,8 +183,8 @@ tclsh9.0 tests/golden/run.tcl tests/golden/traits-path.bot
     loaded;
   - `-strict`, the warning mode, and `BOTLISH_STATIC_SCHEDULER`.
 * **The dependencies**, checked on every hit: the module path of every
-  namespace a file of the program imports, with the exact text the build read
-  there, or none.
+  namespace a file of the program imports, by `import NS` or by `import type
+  NS::Type`, with the exact text the build read there, or none.
   - Imports are the only thing that loads a module (IMPORTS.md: dependencies
     are declared, never discovered), so these are all the files a build reads
     besides the program. The cache audit checks this for every suite.
@@ -233,6 +233,7 @@ tclsh9.0 tests/golden/run.tcl tests/golden/traits-path.bot
     program's (with its source build) included;
   - a hit in a fresh process;
   - an edited program, and an edited module (stale);
+  - a module read only through `import type` (stale when edited);
   - a module edited during the build (stale);
   - a namespace that gains a module file (stale);
   - each part of the key, the Tcl libraries loaded included;

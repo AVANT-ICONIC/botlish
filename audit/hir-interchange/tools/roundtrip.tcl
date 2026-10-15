@@ -25,8 +25,8 @@
 # process built after the suites before it (a hit is exact only because a
 # build is a pure function of the cache's key and dependencies; the HIRs are
 # compared without staticStats' depMs, a time), and every file a suite's HIR
-# was built from must be its program or a module an import names (the cache's
-# dependencies). Exits non-zero, naming each difference, otherwise.
+# was built from must be its program or one of its cache entry's dependencies
+# (surface::cache::Dependencies). Exits non-zero, naming each difference, otherwise.
 
 set root [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]]
 set options [dict create \
@@ -152,15 +152,14 @@ try {
         if {[dict get $options -via] eq "cache"} {
             set hir [cached $source [file join $dir cache]]
             lappend files [list $source [file join $dir cache]]
-            # The cache's dependencies are the imported namespaces' module
-            # paths (surface::cache::Dependencies): every other file the HIR
-            # was built from must be one of them.
-            set imported [lmap ns [concat {*}[lmap {- environment} [dict get $hir declarations imports] {
-                dict get $environment namespaces}]] {surface::modules::ModulePath $ns}]
+            # The cache's dependencies are the imported modules' paths
+            # (surface::cache::Dependencies): every other file the HIR was
+            # built from must be one of them.
+            set imported [lmap dependency [surface::cache::Dependencies $hir {}] {lindex $dependency 0}]
             dict for {id file} [dict get $hir files] {
                 if {[dict get $file path] ne $source && [dict get $file path] ni $imported} {
                     incr undeclared
-                    puts "DIFFERS [file rootname $suite]: built from [dict get $file path], which no import names"
+                    puts "DIFFERS [file rootname $suite]: built from [dict get $file path], which is no dependency of its cache entry"
                 }
             }
         } else {

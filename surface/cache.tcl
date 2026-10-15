@@ -25,8 +25,9 @@
 #   -strict, the warning mode, and the static scheduler (BOTLISH_STATIC_SCHEDULER)
 #
 # The dependencies, checked on every hit: the module path of each namespace
-# a file of the program imports (imports are the only thing that loads a
-# module), with the exact text the build read there, or none for a namespace
+# a file of the program imports, by `import NS` or `import type NS::Type`
+# (imports are the only thing that loads a module), with the exact text the
+# build read there, or none for a namespace
 # that had no module file (an intrinsics-only one: `str`), which must still
 # have none. A module's path is a function of its namespace and the library
 # directory alone (surface/modules.tcl: no search path), so nothing else can
@@ -93,16 +94,21 @@ proc surface::cache::Contents {path existsVar} {
 }
 
 # HIR's dependencies besides the program itself: {PATH EXISTS TEXT} for the
-# module path of each namespace a file of it imports -- imports are the only
-# thing that loads a module (IMPORTS.md: dependencies are declared, never
-# discovered), so these are every file its build read besides the program,
-# and the paths it found no file at -- with the text its build read (READS:
-# PATH -> text).
+# module path of each namespace a file of it imports, by `import NS` or by
+# `import type NS::Type` -- imports are the only thing that loads a module
+# (IMPORTS.md: dependencies are declared, never discovered), so these are
+# every file its build read besides the program, and the paths it found no
+# file at -- with the text its build read (READS: PATH -> text).
 proc surface::cache::Dependencies {hir reads} {
     set paths {}
     dict for {ns environment} [dict get $hir declarations imports] {
-        foreach imported [dict get $environment namespaces] {
-            lappend paths [surface::modules::ModulePath $imported]
+        set imported [dict get $environment namespaces]
+        dict for {short qualified} [dict get $environment types] {
+            set segments [split [string map {:: \x00} $qualified] \x00]
+            lappend imported [join [lrange $segments 0 end-1] ::]
+        }
+        foreach namespace $imported {
+            lappend paths [surface::modules::ModulePath $namespace]
         }
     }
     set result {}
