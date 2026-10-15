@@ -20,6 +20,21 @@ by the change that added this paragraph (each item says how, and which tests
 pin it), 4.3 by the C:plan port. The performance backlog of section 3 is
 unchanged.
 
+That change was validated as follows:
+
+- `tests/all.tcl` on interp and compile: 170 files, every test passing.
+- The trait mutants: 20 of 20 killed. The context-trait mutants: 23 of 23.
+- The static-decision mutants of the plan's gate and the budget (`plan-*`, `budget-deep-ignored`): 7 of 7.
+- The error-identity mutants: 10 of 10. The SAME-FAILURE mutants: 15 of 15.
+- `tests/traits.test` under `BOTLISH_NATIVE_GC_STRESS=1`.
+- Fuzzers with 0 failures:
+  - traits;
+  - context traits;
+  - static compile;
+  - static decisions, seeds 17, 41 and 5 (seed 41's output byte-identical to the tree before the change);
+  - structural contracts, seeds 1 and 7, and the `carrier`, `unknown` and `drop` faults;
+  - error payloads, plain and with the `unhandled` and `wrong-namespace` faults.
+
 ## 1. Summary
 
 The front end is the cost. Running the tests costs almost nothing, and code
