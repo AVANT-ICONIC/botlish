@@ -101,6 +101,12 @@ proc goldentools::makeTree {native} {
         if {[file tail $entry] ne "target"} {
             file copy $entry [file join $tree native]
         } elseif {$native} {
+            # Copy the directory, following links: when native/target links
+            # to another checkout's (AGENTS.md, "Running tests concurrently"),
+            # a copied link would build every native mutant into that checkout.
+            while {[file type $entry] eq "link"} {
+                set entry [file join [file dirname $entry] [file readlink $entry]]
+            }
             exec cp -a $entry [file join $tree native target]
         } else {
             file link -symbolic [file join $tree native target] $entry

@@ -164,7 +164,15 @@ proc copyTree {destination copyTarget} {
             foreach item [glob -directory $source -tails *] {
                 if {$item eq "target"} {
                     if {$copyTarget} {
-                        file copy $source/target $destination/native/target
+                        # Copy the directory, following links: when
+                        # native/target links to another checkout's
+                        # (AGENTS.md, "Running tests concurrently"), a
+                        # copied link would build every Rust mutant there.
+                        set target $source/target
+                        while {[file type $target] eq "link"} {
+                            set target [file join [file dirname $target] [file readlink $target]]
+                        }
+                        file copy $target $destination/native/target
                     } else {
                         file link -symbolic $destination/native/target $source/target
                     }
