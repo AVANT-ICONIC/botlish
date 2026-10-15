@@ -6,7 +6,7 @@
 #
 #   tclsh9.0 bench/golden-vs-tcl.tcl run -layer tcl|golden -backends LIST
 #            -name NAME -out DIR ?-jobs N? ?-profile 0|1? ?-hir-cache DIR?
-#            ?-order FILE? ?-items LIST?
+#            ?-order FILE? ?-items LIST? ?-env LIST? ?-wrap SCRIPT?
 #   tclsh9.0 bench/golden-vs-tcl.tcl report -out DIR ?-runs LIST?
 #
 # run, -layer tcl: every Tcl file holding a test the manifest ports (rows
@@ -23,6 +23,9 @@
 # -hir-cache DIR sets BOTLISH_HIR_CACHE=DIR in every child (unset otherwise).
 # The Tcl suite's harness unsets it (tests/helpers.tcl), so for -layer tcl it
 # is a control: the run must equal one without it, and DIR must stay empty.
+# -env LIST adds VAR=VALUE settings to every child's environment. -wrap
+# SCRIPT runs every item's script under a wrapper (`tclsh9.0 SCRIPT ITEM-SCRIPT
+# ARG ...`: an experiment's instrumented or patched procedures).
 # -order FILE runs the items longest first by an earlier run's seconds (a
 # NAME.runs file of DIR, or lines "ITEM SECONDS"); else by size. -items limits
 # the run to those items (file or suite tails).
@@ -78,14 +81,14 @@ proc timedCommand {env args} {
 }
 
 proc environment {options extra} {
-    set env {}
+    # (env's -u options come before its settings.)
     set cache [dict get $options -hir-cache]
     if {$cache eq ""} {
-        lappend env -u BOTLISH_HIR_CACHE
+        set env [list -u BOTLISH_HIR_CACHE]
     } else {
-        lappend env BOTLISH_HIR_CACHE=$cache
+        set env [list BOTLISH_HIR_CACHE=$cache]
     }
-    return [concat $env $extra]
+    return [concat $env [dict get $options -env] $extra]
 }
 
 # An earlier run's seconds by item, for -order.
@@ -137,6 +140,21 @@ proc parseGolden {output} {
     return $r
 }
 
+# The interpreter command an item's script runs under: tclsh9.0, through the
+# phase profiler with -profile 1, and through the wrapper script -wrap (run
+# as `tclsh9.0 WRAPPER SCRIPT ARG ...`) when given.
+proc prefix {options profileDir item} {
+    set prefix tclsh9.0
+    if {[dict get $options -wrap] ne ""} {
+        lappend prefix [file normalize [dict get $options -wrap]]
+    }
+    if {[dict get $options -profile]} {
+        if {[dict get $options -wrap] ne ""} { error "-profile and -wrap do not combine" }
+        lappend prefix [file join $::root bench phase-profile.tcl] [file join $profileDir $item.prof]
+    }
+    return $prefix
+}
+
 proc run {options} {
     set layer [dict get $options -layer]
     set backends [split [dict get $options -backends] ,]
@@ -163,10 +181,7 @@ proc run {options} {
             lappend tmps $tmp
             set script [list [file join $::root $file] -tmpdir $tmp -verbose bu \
                 -match [lmap n $names {globEscape $n}]]
-            set prefix tclsh9.0
-            if {[dict get $options -profile]} {
-                lappend prefix [file join $::root bench phase-profile.tcl] [file join $profileDir $item.prof]
-            }
+            set prefix [prefix $options $profileDir $item]
             dict set commands $item [timedCommand [environment $options [list CORE_BACKEND=[lindex $backends 0]]] {*}$prefix {*}$script]
             dict set sizes $item [llength $names]
         }
@@ -174,10 +189,7 @@ proc run {options} {
         foreach path [lsort [glob -directory [file join $::root tests golden] *.bot]] {
             set item [file tail $path]
             if {$only ne "" && $item ni $only} continue
-            set prefix tclsh9.0
-            if {[dict get $options -profile]} {
-                lappend prefix [file join $::root bench phase-profile.tcl] [file join $profileDir $item.prof]
-            }
+            set prefix [prefix $options $profileDir $item]
             dict set commands $item [timedCommand [environment $options {}] {*}$prefix \
                 [file join $::root tests golden run.tcl] -backends [join $backends ,] -quiet $path]
             dict set sizes $item [file size $path]
@@ -498,7 +510,7 @@ proc report {options} {
 
 set command [lindex $argv 0]
 set options [dict create -layer golden -backends interp -name "" -out "" -jobs 4 -profile 0 \
-    -hir-cache "" -order "" -items "" -runs ""]
+    -hir-cache "" -order "" -items "" -runs "" -env "" -wrap ""]
 foreach {option value} [lrange $argv 1 end] {
     if {![dict exists $options $option]} { error "golden-vs-tcl.tcl: unknown option $option" }
     dict set options $option $value
