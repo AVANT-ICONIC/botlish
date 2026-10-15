@@ -17,8 +17,10 @@ is quoted from the document named beside it.
 
 Since then the correctness defects of section 4 are fixed: 4.1, 4.2 and 4.4
 by the change that added this paragraph (each item says how, and which tests
-pin it), 4.3 by the C:plan port. The performance backlog of section 3 is
-unchanged.
+pin it), 4.3 by the C:plan port. Of the performance backlog of section 3,
+3.9 is partly done: the demotion re-check reuses the part of the check
+before it that the demotion cannot change (3.9 says what, with its
+measurements on a39f9dc). The rest of section 3 is unchanged.
 
 That change was validated as follows:
 
@@ -53,7 +55,7 @@ inefficiency is multiplied by the build count.
 | 6 | `hir::contexts::Walk` rebuilds the same maps about 10 times per build | repeated work | 9.4% of representation.bot | small |
 | 7 | `Conjuncts` re-walks an `and` chain at every level | quadratic | a 900-conjunct chain costs 170-260 s | small |
 | 8 | The signature fixpoint's second round re-types the program to confirm unchanged seeds | 2x typing | round 2 is 51-62% of typing | medium (needs incremental re-typing) |
-| 9 | A demoted contract re-runs the whole `CheckOnce` | 2x check | about 21% of callables.bot | medium (static-decision coupling) |
+| 9 | A demoted contract re-runs `CheckOnce` | 2x check, less its unseeded prefix since 3.9's reuse | about 21% of callables.bot; a demoting mutable-array.bot check 12.7 -> 10.4 s with the reuse | prefix reuse done; the rest needs incremental analyses (large) |
 | 10 | Library modules are re-analysed in every build | per-build | about 0.5 s x 329 builds, about 165 s | large (needs 4.1 first) |
 | 11 | Method-call trial builds | whole builds | 81 of 328 corpus builds; mutable-array.bot 14 of 20 | medium |
 | 12 | Native NIR lowering copies the program per instance view | O(instances x program) | 36% of suite time (TEST-SUITE-COST.md) | large |
@@ -114,6 +116,7 @@ Correctness defects found alongside (section 4), all fixed now:
     | traits.bot | 38.0 s | 8 / 13 (5 / 10 with the C:plan port) |
 
   - mutable-array.bot costs about 9 s per build. Its builds are mostly method-call trials (item 11), and each build pays items 1, 3 and 5.
+  - Re-measured on a39f9dc (other jobs on the same cores): mutable-array.bot's front end is 298 s over its 20 builds. 16 of those builds demote a contract and check twice (item 9), at 13-18 s of check each against 6.5-7 s in the others. With 3.9's reuse the front end is 271 s.
 
 ## 3. The backlog, in detail
 
@@ -215,10 +218,53 @@ Correctness defects found alongside (section 4), all fixed now:
 
 ### 3.9 The demotion re-check
 
-- **Where.** `hir::check` (`hir/hir.tcl`) runs `CheckOnce` a second time whenever a trusted contract is demoted.
-- **Evidence.** About 21% of callables.bot once items 3.1 and 3.3 are fixed.
-- **Fix.** Re-check only the blocks the demoted parameters reach.
-- **Coupling.** `hir/staticdeps.tcl` reads the HIR this produces, so it needs the static-decision harnesses (tests/static-economics.test, `se-property-demotion-keeps-diagnostics`).
+- **Where.** `hir::check` (`hir/hir.tcl`) checks a program a second time whenever its first check finds a call or an erasure that violates a trusted inferred contract. The second check demotes those parameters to checked-only. The HIR keeps the first check's diagnostics and `beforeCompletions` and everything else from the second.
+- **Evidence.**
+  - About 21% of callables.bot once items 3.1 and 3.3 are fixed.
+  - mutable-array.bot (*measured here* on a39f9dc, before the change below): builds 2-17 each demote two parameters, until round 2 rejects the two blocks that cause it. The parameter is the untyped `fwd(xs)` of `mat-bd-1/wrong-element` and `mat-bd-1/raw`, inferred `MutableArray[str]` and called with an `int` array and a raw one.
+  - Each of those builds ran `CheckOnce` twice and `hir::types::infer` four times: 13-18 s of check in a 14-20 s build. Builds 18-20 checked once, in 6.5-8 s.
+  - Any program with such a negative test pays the second check in every build until the block is rejected.
+- **Done: the second check reuses what the demotion cannot change.**
+  - The coroutine protocols are a function of the HIR alone. `hir::check` infers them once, before both checks.
+  - A round of the signature fixpoint is a function of the HIR and the round's seeds alone, and the demotion only filters the seeds a round hands to the next (`hir::signatures::infer`).
+  - So the first check records every round it does not converge on, keyed by the round's seeds, and the second check takes a round from that memo whenever it reaches the same seeds. It always reaches the first round, which is unseeded.
+  - It also reaches a later round when the demoted contract first appears in that later round, for example a callable contract that only the body's seeded types make inferable. Then the second check may type nothing new.
+  - Everything from the second check's first newly seeded typing on reads the demoted contracts, so it runs again.
+  - The memo belongs to one `hir::check`, so it covers one HIR. Nothing else is shared, and nothing in the HIR changes: the result is the same by construction.
+  - `hir::recheckReuse 0` makes the second check from the start, sharing nothing.
+- **Effect** (*measured here*, a39f9dc, with the other agent's jobs on the same 4 cores; paired runs of the two trees, side by side):
+  - mutable-array.bot's build-2 check, captured and replayed 3 times alternately: 12.3-13.4 s -> 9.8-10.9 s (means 12.7 -> 10.4 s, -18%).
+    - `hir::types::infer` runs 3 times instead of 4.
+    - The second check alone takes 3.8 s instead of 5.4-5.8 s: one typing with its solve (1.6 s), the semantic instances (0.8 s), the completion walk (0.6 s) and the rest (about 0.8 s).
+  - mutable-array.bot, whole front end: 298 -> 271 s (-9%). The checks of builds 2-17 add up to 237 -> 201 s.
+  - callables.bot (one demoting build of three), 3 paired runs:
+    - its demoting build 9.2-9.4 s -> 6.9-8.2 s (means 9.3 -> 7.7 s, -17%);
+    - front end means 17.9 -> 16.2 s (-10%).
+  - Peak RSS grows by the round the memo keeps through the first check: 324 -> 349 MB on mutable-array.bot, 171 -> 189 MB on callables.bot.
+- **Validation.**
+  - `audit/demotion-recheck/tools/audit.tcl` sets `hir::recheckAudit 1`, which makes every demoting check from the start as well and fails on any difference (`hir::AuditRecheck`). Over the 129 golden suites, examples and benchmarks, 9 suites demote in 37 checks (mutable-array.bot 16, refinements.bot 7, framework-semantics.bot 5). Every one gave the same HIR.
+  - The final HIR of each of the 129 programs is byte-identical to the one the tree before the change gives, once the tree's path is normalized and the decisions' timing (`depMs`) is zeroed.
+  - Tests: `se-demotion-recheck-identical`, `-economics` and `-audit` in tests/static-economics.test. Their programs cover three cases: a second check that reuses only the first round, one that reuses the first two rounds, and one that reuses the first round and then types a round of its own.
+  - Mutants: `recheck-round-by-number`, `recheck-rounds-across-checks`, `recheck-rounds-not-shared` and `recheck-analysis-repeated` in audit/static-decisions/tools/mutants.txt.
+- **What is left, and why it is not done.**
+  - The second check still runs its seeded typing and every analysis after it: about 3.8 s of a demoting mutable-array.bot build.
+  - On that build the two checks' HIRs differ in only:
+    - four expressions (the two `fwd` blocks' contracts and two types);
+    - two interned type forms;
+    - the semantic-instance table.
+  - So re-checking only what the demotion reaches would remove most of the 3.8 s. It is not done because nothing after the first typing is local to a region today:
+    - Typing interns types in walk order, so a region typed again must keep every later id.
+    - The analyses read other functions' contracts across calls:
+      - `verifyDeclaredParams` checks every call of a demoted function;
+      - the semantic instances analyse every caller;
+      - the completion walk reads callee summaries, and the erased-callable contract, which `hir::completions::InstanceErasures` computes from every instance of an uncontracted parameter: a demotion can widen it and change verdicts anywhere in the program;
+      - the ownership analysis gives a whole-program verdict.
+    - Each analysis would need a region re-run and a proof that nothing outside the region reads what changed. That is the incremental re-typing of 3.8, and the same for every analysis after it.
+  - Skipping each check's discarded half phase by phase is not sound either:
+    - The first check's diagnostics come from every phase, and every one is read (the static decisions read every diagnostic).
+    - The second check's annotations read its own diagnostics: `hir::semantic::verify` sorts an instance's diagnostics against the generic ones into `semantic status`, and the ownership analysis computes release scopes only for a program it accepts.
+  - Detecting the violation earlier does not help, because both checks' complete results are needed whenever it is found.
+- **Coupling.** `hir/staticdeps.tcl` reads the HIR this produces, so it needs the static-decision harnesses (tests/static-economics.test, `se-property-demotion-keeps-diagnostics` and `se-demotion-recheck-*`; the `recheck-*` mutants).
 
 ### 3.10 Per-build re-analysis: library modules, method trials, the trait rebuild
 
@@ -457,7 +503,7 @@ walk. The completion verdicts feed NIR, so this needs its own audit.
 1. **Exact, small fixes with large measured effects:** 3.4 (temporaries once), 3.3 (one walk), 3.5 (hygiene index), 3.6 (memoized contexts walk), 3.7 (memoized conjuncts), 3.12 (statics once). Each changes no output: validate by byte-identical final HIR on the corpus, plus the harnesses AGENTS.md names for the area.
 2. **3.1**, from its prototype; then **3.2**, which multiplies with it.
 3. ~~**4.1 and 4.2**, before anything that compiles many programs per process or reuses analyses across builds.~~ Done.
-4. **3.8 and 3.9**, with the static-decision harnesses: both change what a build's HIR holds.
+4. **3.8 and 3.9**, with the static-decision harnesses: both change what a build's HIR holds. 3.9's reuse of the unseeded prefix is done; what remains of it needs the incremental re-typing 3.8 needs, and the same for every analysis after the typing.
 5. **3.10** (method trials, then library reuse once 4.1 is fixed) and **3.13**'s bookkeeping.
 6. **3.11**, the largest. (**4.4** is done, with its audit.)
 

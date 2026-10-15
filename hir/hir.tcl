@@ -242,6 +242,17 @@ namespace eval hir {
     # 0 makes DecideMethodCalls build every trial and final build again even
     # when it is the build it started from (measurement and audits only).
     variable methodBuildReuse 1
+    # 0 makes hir::check redo the check after a demotion from the start,
+    # sharing nothing with the check before it (measurement and audits only).
+    variable recheckReuse 1
+    # 1 makes hir::check redo that check from the start as well and fail
+    # unless both give the same HIR; recheckAudits counts the checks it
+    # compared (audit/demotion-recheck). Kept when this file is sourced again,
+    # so an audit can set it and then run a tool that loads the compiler.
+    if {![info exists ::hir::recheckAudit]} {
+        variable recheckAudit 0
+        variable recheckAudits 0
+    }
     # The Tcl recursion limit the front end runs under at least (hir::Deep):
     # what most test files and audit tools already set for themselves.
     variable recursionFloor 100000
@@ -935,19 +946,51 @@ proc hir::TraitCallsDecided {hir calls decidedVar} {
 # the violation is recorded as `violatedDeclared` (parameter BindingId -> the
 # offending argument) so that a consumer that must not compile a body on the
 # assumption of a broken contract can recover: native::prepareHir does.
+#
+# The check after the demotion computes again only what the demotion can
+# change (COMPILER-BOTTLENECKS.md, 3.9). The coroutine protocols are a
+# function of the HIR alone, so both checks start from one inference of
+# them. The signature fixpoint's rounds are a function of the HIR and their
+# seeds alone, and the demotion only filters the seeds a round hands the
+# next (hir::signatures::infer), so the second check reuses every round of
+# the first whose seeds it reaches again -- always the first round, which
+# has none. Everything from the first seeded typing on reads the demoted
+# contracts and runs again. recheckReuse 0 redoes the second check from the
+# start instead; recheckAudit 1 does that as well and fails unless both give
+# the same HIR.
 proc hir::check {hirVar} {
     upvar 1 $hirVar hir
+    variable recheckReuse
+    variable recheckAudit
     # (Under the front end's recursion floor even when not entered through
     # hir::buildSyntax: native::prepareHir re-checks a HIR itself.)
     Deep {
+        set input $hir
+        # The coroutine protocols (hir/coroutines.tcl) type every yield, so
+        # they are inferred before the types are.
+        hir::coroutines::analyze hir
         set pre $hir
-        CheckOnce hir {}
+        set rounds [dict create]
+        CheckOnce hir {} rounds
         if {[dict exists $hir violatedContracts]} {
             set diagnostics [dict get $hir diagnostics]
             set before [dict get $hir beforeCompletions]
             set demote [lsort -unique [dict keys [dict get $hir violatedContracts]]]
-            set hir $pre
-            CheckOnce hir $demote
+            if {$recheckAudit || !$recheckReuse} {
+                # The second check from the start, sharing nothing.
+                set full $input
+                hir::coroutines::analyze full
+                CheckOnce full $demote
+            }
+            if {$recheckReuse} {
+                set hir $pre
+                CheckOnce hir $demote rounds
+                if {$recheckAudit} {
+                    AuditRecheck $full $hir
+                }
+            } else {
+                set hir $full
+            }
             dict unset hir violatedContracts
             dict set hir diagnostics $diagnostics
             dict set hir beforeCompletions $before
@@ -957,12 +1000,48 @@ proc hir::check {hirVar} {
     return
 }
 
-proc hir::CheckOnce {hirVar demote} {
+# Fails unless SHARED, the second check hir::check made reusing the first's
+# work, is FULL, the same check made from the start (recheckAudit).
+proc hir::AuditRecheck {full shared} {
+    variable recheckAudits
+    if {$full eq $shared} {
+        incr recheckAudits
+        return
+    }
+    set where {}
+    foreach key [lsort -unique [concat [dict keys $full] [dict keys $shared]]] {
+        if {![dict exists $full $key] || ![dict exists $shared $key]} {
+            lappend where "$key (present in one only)"
+        } elseif {[dict get $full $key] ne [dict get $shared $key]} {
+            set detail ""
+            if {$key in {exprs bindings types scopes}} {
+                set a [dict get $full $key]
+                set b [dict get $shared $key]
+                set ids [lmap id [lsort -unique [concat [dict keys $a] [dict keys $b]]] {
+                    if {[dict exists $a $id] && [dict exists $b $id]
+                            && [dict get $a $id] eq [dict get $b $id]} continue
+                    set id
+                }]
+                set detail " [lrange $ids 0 9]"
+            }
+            lappend where $key$detail
+        }
+    }
+    error "hir::check: the demotion re-check that reuses the first check differs from the one made from the start in: [join $where {; }]"
+}
+
+# The checks of hir::check, one pass: HIR is the program with its coroutine
+# protocols inferred; DEMOTE as for hir::signatures::infer; ROUNDSVAR, if
+# given, names hir::check's memo of the signature fixpoint's rounds over
+# this same HIR (hir::signatures::infer).
+proc hir::CheckOnce {hirVar demote {roundsVar ""}} {
     upvar 1 $hirVar hir
-    # The coroutine protocols (hir/coroutines.tcl) type every yield, so they
-    # are inferred before the types are.
-    hir::coroutines::analyze hir
-    hir::signatures::infer hir $demote
+    if {$roundsVar ne ""} {
+        upvar 1 $roundsVar rounds
+        hir::signatures::infer hir $demote rounds
+    } else {
+        hir::signatures::infer hir $demote
+    }
     hir::range::verifyDeclaredResults hir
     hir::range::verifyDeclaredParams hir
     hir::callables::verify hir

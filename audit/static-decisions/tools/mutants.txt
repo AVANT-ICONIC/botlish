@@ -1,8 +1,10 @@
 # Mutants of the static decision schedulers (audit/static-decisions/tools/
 # mutate.tcl; STATIC-COMPILE.md, "Decision economics"): deliberate bugs in
 # the batched scheduler (hir/static.tcl), its dependency analysis
-# (hir/staticdeps.tcl) and the reuse of method-call decisions
-# (hir/static.tcl's MethodSeeds, hir/hir.tcl), and in what a diagnostic
+# (hir/staticdeps.tcl), the reuse of method-call decisions
+# (hir/static.tcl's MethodSeeds, hir/hir.tcl) and the demotion re-check's
+# reuse of the check before it (hir::check, hir::signatures::infer's
+# rounds; COMPILER-BOTTLENECKS.md 3.9), and in what a diagnostic
 # prints that differs between builds (hir/semantic.tcl's SourceName and
 # RefName, and every message naming a binding, a reference or a function by
 # them). The first group changes what is decided (semantic); the second only
@@ -496,6 +498,26 @@ proc hir::static::Waits {key status deps} {
         if {0} {
 >>>>
 
+@@ recheck-round-by-number the check after a demotion reuses the first check's signature rounds by their number, not by their seeds: its second round is the first check's, seeded with the contract it demotes
+## hir/signatures.tcl
+<<<<
+        set key [lsort -stride 2 $seeds]
+====
+        set key $round
+>>>>
+
+@@ recheck-rounds-across-checks the signature rounds are remembered across checks instead of per checked HIR: a later build's or program's check takes an earlier one's unseeded typing for its own
+## hir/hir.tcl
+<<<<
+        set rounds [dict create]
+====
+        global hirRecheckRounds
+        if {![info exists hirRecheckRounds]} {
+            set hirRecheckRounds [dict create]
+        }
+        upvar #0 hirRecheckRounds rounds
+>>>>
+
 # ---------------------------------------------------------------------------
 # Economic
 
@@ -686,4 +708,23 @@ proc hir::static::Waits {key status deps} {
                 if {[Unplanned $hir $regionOf $e]} {
 ====
                 if {1} {
+>>>>
+
+@@ recheck-rounds-not-shared the check after a demotion types every signature round again, the unseeded first one included (COMPILER-BOTTLENECKS.md 3.9)
+## hir/hir.tcl
+<<<<
+                CheckOnce hir $demote rounds
+====
+                CheckOnce hir $demote
+>>>>
+
+@@ recheck-analysis-repeated the check after a demotion infers the coroutine protocols again
+## hir/hir.tcl
+<<<<
+                set hir $pre
+                CheckOnce hir $demote rounds
+====
+                set hir $input
+                hir::coroutines::analyze hir
+                CheckOnce hir $demote rounds
 >>>>
