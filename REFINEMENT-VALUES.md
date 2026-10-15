@@ -543,8 +543,10 @@ static.
 
 No type declaration -- `refined type`, an integer domain `type D = Int in
 LO..HI`, a struct, an enum -- adds a value, a function or a method candidate
-to its namespace: `D`, `D(x)`, `D?(x)`, `x.D?()` and `ns::D?` are unbound
-names unless the program declares a function of that name itself
+to its namespace: `D`, `D(x)`, `D?(x)`, `x.D?()` and `ns::D?` are unknown
+names (`UNBOUND`, `NOT-A-STRUCT` naming the missing function for method
+sugar, `UNKNOWN-SYMBOL` for a qualified one) unless the program declares a
+function of that name itself
 (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md, which removed the last automatic
 `NAME?` membership predicate of an integer domain). The three ways into a
 refined value are ordinary functions:

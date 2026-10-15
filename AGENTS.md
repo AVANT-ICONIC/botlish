@@ -488,8 +488,8 @@ joins its handlers (`hir/types.tcl`'s `Call` and `Handle`), repeatability
 
 No type declaration makes the type callable or gives it a predicate
 (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md): `T`, `T(x)`, `T?`, `ns::T?` and
-`x.T?()` are unbound unless the program declares a function of that name.
-An integer domain is entered through an ordinary converter (a function
+`x.T?()` are unknown names unless the program declares a function of that
+name. An integer domain is entered through an ordinary converter (a function
 whose declared result is the domain, checked like any result) or admitted
 by comparisons, whose range facts both analyses derive through `and`, `or`
 and `not` (`hir::range::Paths`/`OutcomeFacts`); a refinement through its
