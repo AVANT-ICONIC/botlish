@@ -21,3 +21,6 @@ __pycache__/
 /fuzz/out-asan/
 /fuzz/seeds-src/
 /fuzz/harness/argv-file
+
+# single/build.sh's default output (SINGLE-EXECUTABLE.md).
+/single/out/

@@ -155,7 +155,7 @@ test native-executable-output-kinds {standalone rendering supports blocks, mutab
     }
 } -result {[ok(5), error("bad"), <block (x)>, <mutable-array [unit, unit]>]}
 
-test native-executable-link-failure {a failed linker invocation preserves the old file and removes temporary artifacts} -constraints executableAot -body {
+test native-executable-link-failure {a failed linker invocation preserves the old file and removes temporary artifacts} -constraints {executableAot rustcLinker} -body {
     set dir [makeDirectory {aot link failure test}]
     set saved [expr {[info exists ::env(RUSTC)] ? [list $::env(RUSTC)] : {}}]
     set channel [open [file join $dir program] w]; puts -nonewline $channel previous; close $channel

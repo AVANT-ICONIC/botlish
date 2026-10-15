@@ -123,7 +123,11 @@
 # parameters no instance context, so hir::callables still rejects a bearing
 # argument (a MutableArray[T], a typed callable) that would cross an untyped
 # parameter -- a budget never accepts an erasure. A real type error found in an
-# instance is never turned into a fallback.
+# instance is never turned into a fallback. Only a first request is declined
+# for nesting (a cache hit never is), so which request is declined depends on
+# the requests before it: every request made at half the nesting limits or
+# deeper is recorded (`deep`), for the static decisions' dependency analysis
+# (hir/staticdeps.tcl, C:budget).
 #
 # Validity
 # --------
@@ -177,7 +181,7 @@ proc hir::semantic::Enabled {} {
 proc hir::semantic::Begin {envs} {
     variable state
     set state [dict create envs $envs pendingEnv {} instances {} keys {} byBlock {} \
-        calls {} declined {} stack {} queue {} deps {} base "" next 0 regions {} instsOf {} \
+        calls {} declined {} deep {} stack {} queue {} deps {} base "" next 0 regions {} instsOf {} \
         requests 0 trivial 0 hits 0 walks 0 declinedCount {}]
 }
 
@@ -338,6 +342,14 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
         }
     }
     set callKey [list $caller $e]
+    if {2 * [llength [dict get $state stack]] >= $maxDepth || 2 * [info level] > $levelLimit} {
+        # A request at half the nesting limits or deeper, answered or not: a
+        # cache hit is never declined, but once a rejection removes the
+        # request that created its instance, this one may be the first and
+        # be declined (`deep`: hir/staticdeps.tcl reads it as pressure on the
+        # instance budget, C:budget).
+        dict set state deep $callKey 1
+    }
     if {[dict exists $state keys $key]} {
         dict incr state hits
         set id [dict get $state keys $key]

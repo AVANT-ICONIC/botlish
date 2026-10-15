@@ -39,7 +39,9 @@
 # need no -backend cranelift; with -backend cranelift-generic, or
 # BOTLISH_NATIVE_SPECIALIZE=0, they show the unspecialized code).
 # -emit-native-executable compiles closed specialized workloads to standalone
-# Linux x86_64/glibc executables beside the inputs, removing the extension.
+# Linux x86_64/glibc executables beside the inputs, removing the extension,
+# linked as BOTLISH_NATIVE_LINKER says (rustc by default; stub needs no
+# toolchain, and is what the single-file compiler uses: SINGLE-EXECUTABLE.md).
 # It does not evaluate the program. Running the executable prints its value.
 #
 # A .hir file (HIR text, e.g. examples/hir/*.hir) is read with hir::readFile;

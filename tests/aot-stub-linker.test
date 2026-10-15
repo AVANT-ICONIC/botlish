@@ -1,0 +1,264 @@
+# The `stub` linker (SINGLE-EXECUTABLE.md, native/src/codegen/aot.rs,
+# native/src/runtime/aotimage.rs): standalone executables linked without
+# rustc or a system linker, by appending the program's image to the prebuilt
+# botlish-aot-stub. Programs linked both ways behave identically; the image
+# is exactly what the format says; a damaged image, the bare stub, a missing
+# stub and an unknown linker fail clearly.
+#
+# The whole executable test suite also runs with BOTLISH_NATIVE_LINKER=stub
+# (.github/workflows/tests.yml's stub-linker job); its tests that read Botlish
+# function symbols out of an executable (objdump, strace stacks) are
+# constrained to symbolizedExecutables, which the stub linker's executables
+# are not: their machine code is mapped at startup, not an ELF section.
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+testConstraint stubLinker [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64} &&
+    [file executable [file join $native::home target release botlish-aot-stub]]}]
+testConstraint rustcAvailable [expr {[testConstraint stubLinker] && [auto_execok rustc] ne "" &&
+    [file isfile [file join $native::home target release libbotlish_native.rlib]]}]
+
+# Runs BODY with the environment variables NAME VALUE ... set (VALUE {} unsets
+# NAME), restoring them afterwards.
+proc withEnv {settings body} {
+    set saved {}
+    foreach {name value} $settings {
+        lappend saved $name [expr {[info exists ::env($name)] ? [list $::env($name)] : {}}]
+        if {$value eq ""} { unset -nocomplain ::env($name) } else { set ::env($name) $value }
+    }
+    try {
+        uplevel 1 $body
+    } finally {
+        foreach {name value} $saved {
+            if {$value eq ""} { unset -nocomplain ::env($name) } else { set ::env($name) [lindex $value 0] }
+        }
+    }
+}
+
+# Links HIR with LINKER (rustc or stub) to PATH.
+proc linkWith {linker hir path} {
+    withEnv [list BOTLISH_NATIVE_LINKER $linker] {
+        native::executable $hir $path
+    }
+}
+
+# {EXIT-STATUS STDOUT STDERR} of running EXECUTABLE with ARGS and STDIN, in
+# an empty environment plus ENV.
+proc runCaptured {executable stdin args} {
+    set output [makeFile {} captured-stdout]
+    set errors [makeFile {} captured-stderr]
+    set status 0
+    if {[catch {exec env -i {*}$args $executable << $stdin > $output 2> $errors} message options]} {
+        set code [dict get $options -errorcode]
+        if {[lindex $code 0] ne "CHILDSTATUS"} { return -options $options $message }
+        set status [lindex $code 2]
+    }
+    set result [list $status]
+    foreach file [list $output $errors] {
+        set channel [open $file rb]
+        lappend result [string trimright [read $channel] \n]
+        close $channel
+    }
+    removeFile captured-stdout
+    removeFile captured-stderr
+    return $result
+}
+
+# Programs covering what the image must carry: constants of every kind, the
+# context area (.bss, relaxed GOT loads), generic entries (GOT slots for
+# function addresses), shapes, enums, natives, module statics, coroutines,
+# runtime errors, the process arguments and standard input.
+set ::stubPrograms {
+    values {import immutable_set
+import str
+big = 9223372036854775808
+[big * big, "aé🙂\n\t", '🙂', true, unit, [1, [2, 3]],
+ immutable_set::from_list([3, 2, 3]), str::length, {a: 1, b: [2]}]}
+    closures {import str
+fn build():
+    str::concat("x", "y")
+fn other():
+    str::concat("z", "w")
+fn pick(flag: bool):
+    if flag:
+        build
+    else:
+        other
+fn apply(f):
+    prefix = str::concat("a", "b")
+    [prefix, f()]
+[apply(pick(true)), apply(pick(false))]}
+    enums {enum Color:
+    Red,
+    Green,
+fn flip(c: Color) -> Color:
+    if c == Color::Red:
+        Color::Green
+    else:
+        Color::Red
+[flip(Color::Red), flip(Color::Green)]}
+    modules {import web
+import type byte::Byte
+fn check(b: Byte) -> bool:
+    web::is_unreserved(b)
+[check(45), check(32), web::uri_escape_text("a b/é🙂")]}
+    error {import mutable_array
+mutable_array::allocate(0 - 1)}
+    argv {args = argv():
+    on InvalidArgumentEncoding:
+        ["fallback"]
+args}
+}
+
+test stub-linker-parity {examples and feature programs linked with rustc and with the stub produce the same standard output, standard error and exit status, also under GC stress} -constraints rustcAvailable -body {
+    set dir [makeDirectory stub-linker-parity]
+    set inputs {}
+    foreach name {io/hello linux/context-hello linux/read-stdin linux/getpid} {
+        lappend inputs [file join $::projectRoot examples $name.bot]
+    }
+    foreach {name text} $::stubPrograms {
+        set path [file join $dir $name.bot]
+        set channel [open $path w]
+        fconfigure $channel -encoding utf-8
+        puts -nonewline $channel $text
+        close $channel
+        lappend inputs $path
+    }
+    set differences {}
+    foreach input $inputs {
+        set hir [surface::readProgramFile $input]
+        set name [file rootname [file tail $input]]
+        linkWith rustc $hir [file join $dir $name.rustc]
+        linkWith stub $hir [file join $dir $name.stub]
+        # (argv() is each executable's own argument vector: argv[0], its own
+        # path, differs; it is compared below, through one path.)
+        if {$name eq "argv"} continue
+        foreach extra {{} {BOTLISH_NATIVE_GC_STRESS=1}} {
+            set rustc [runCaptured [file join $dir $name.rustc] "some input\n" {*}$extra]
+            set stub [runCaptured [file join $dir $name.stub] "some input\n" {*}$extra]
+            if {$rustc ne $stub} { lappend differences [list $name $extra $rustc $stub] }
+        }
+    }
+    # argv() of each, run with the same argument vector through one path.
+    file copy [file join $dir argv.stub] [file join $dir same]
+    set fromStub [lindex [runCaptured [file join $dir same] "" ] 1]
+    file delete [file join $dir same]
+    file copy [file join $dir argv.rustc] [file join $dir same]
+    set fromRustc [lindex [runCaptured [file join $dir same] "" ] 1]
+    removeDirectory stub-linker-parity
+    list $differences [expr {$fromStub eq $fromRustc}] [llength $inputs]
+} -result {{} 1 10}
+
+test stub-linker-outcomes {stub-linked executables print their value, report a runtime error with a failing status, and read their own arguments and standard input} -constraints stubLinker -body {
+    set dir [makeDirectory stub-linker-outcomes]
+    set results {}
+    foreach {name text} [dict create {*}$::stubPrograms] {
+        if {$name ni {enums error argv}} continue
+        set hir [surface::compile $text $name.bot]
+        linkWith stub $hir [file join $dir $name]
+        lassign [runCaptured [file join $dir $name] "" ] status stdout stderr
+        lappend results $name $status $stdout [string match {*(CORE SEMANTIC RANGE)*} $stderr]
+    }
+    set hir [surface::readProgramFile [file join $::projectRoot examples linux read-stdin.bot]]
+    linkWith stub $hir [file join $dir read-stdin]
+    lappend results stdin [lrange [runCaptured [file join $dir read-stdin] "hello from stdin\n"] 0 1]
+    set results [string map [list $dir DIR] $results]
+    removeDirectory stub-linker-outcomes
+    set results
+} -result {enums 0 {[Color::Green, Color::Red]} 0 error 1 {} 1 argv 0 {["DIR/argv"]} 0 stdin {0 {hello from stdin
+17}}}
+
+test stub-linker-image {a stub-linked executable is the stub's own bytes, then the program image, its length and the magic; the bare stub refuses to run} -constraints stubLinker -body {
+    set dir [makeDirectory stub-linker-image]
+    set stub [file join $native::home target release botlish-aot-stub]
+    set exe [file join $dir program]
+    linkWith stub [surface::compile "1 + 2" one.bot] $exe
+    set channel [open $exe rb]; set bytes [read $channel]; close $channel
+    set channel [open $stub rb]; set stubBytes [read $channel]; close $channel
+    set n [string length $stubBytes]
+    binary scan [string range $bytes end-15 end-8] w payload
+    set bare [runCaptured $stub ""]
+    set result [list [expr {[string range $bytes 0 $n-1] eq $stubBytes}] [string range $bytes end-7 end] \
+        [expr {$n + $payload + 16 == [string length $bytes]}] [file executable $exe] \
+        [lindex $bare 0] [string match {*no program image*(NATIVE STARTUP)*} [lindex $bare 2]]]
+    removeDirectory stub-linker-image
+    set result
+} -result {1 BOTLIMG1 1 1 1 1}
+
+test stub-linker-damaged {a truncated or altered image is refused at startup, before any program code runs} -constraints stubLinker -body {
+    set dir [makeDirectory stub-linker-damaged]
+    set exe [file join $dir program]
+    linkWith stub [surface::compile "1 + 2" one.bot] $exe
+    set channel [open $exe rb]; set bytes [read $channel]; close $channel
+    set results {}
+    # One byte of the image dropped (the trailer kept): the image no longer
+    # decodes. The format word changed: refused by format.
+    binary scan [string range $bytes end-15 end-8] w payload
+    set start [expr {[string length $bytes] - 16 - $payload}]
+    foreach damaged [list \
+            [string replace $bytes end-20 end-20] \
+            [string replace $bytes $start $start [binary format c 9]]] {
+        set channel [open $exe wb]; puts -nonewline $channel $damaged; close $channel
+        lassign [runCaptured $exe ""] status stdout stderr
+        lappend results $status $stdout [string match {*(NATIVE STARTUP)*} $stderr]
+    }
+    removeDirectory stub-linker-damaged
+    set results
+} -result {1 {} 1 1 {} 1}
+
+test stub-linker-failures {an unknown linker or a missing stub is a {NATIVE AOT} error that leaves no executable and no work directory behind} -constraints stubLinker -body {
+    set dir [makeDirectory stub-linker-failures]
+    set hir [surface::compile "1 + 2" one.bot]
+    set results {}
+    withEnv [list BOTLISH_NATIVE_LINKER linker-of-the-future] {
+        lappend results [catch {native::executable $hir [file join $dir a]} message options] \
+            [dict get $options -errorcode] [string match {*unknown BOTLISH_NATIVE_LINKER*} $message]
+    }
+    withEnv [list BOTLISH_NATIVE_LINKER stub BOTLISH_NATIVE_AOT_STUB [file join $dir no-such-stub]] {
+        lappend results [catch {native::executable $hir [file join $dir b]} message options] \
+            [dict get $options -errorcode] [string match {*runtime stub missing*} $message]
+    }
+    lappend results [glob -nocomplain -tails -directory $dir *] [glob -nocomplain -tails -types hidden -directory $dir .botlish-aot-*]
+    removeDirectory stub-linker-failures
+    set results
+} -result {1 {NATIVE AOT} 1 1 {NATIVE AOT} 1 {} {}}
+
+test stub-linker-near-mapping {the program's code is mapped executable within rel32 reach of the stub's own code, so its runtime-helper calls are direct calls} -constraints {stubLinker} -body {
+    set dir [makeDirectory stub-linker-near]
+    set exe [file join $dir program]
+    linkWith stub [surface::readProgramFile [file join $::projectRoot examples linux read-stdin.bot]] $exe
+    # The program blocks reading standard input: its mappings are inspected
+    # meanwhile. The stub's own code is the executable file's r-xp mapping;
+    # the image's is the anonymous r-xp one.
+    set pipe [open |[list $exe 2>@1] r+]
+    try {
+        set pid [pid $pipe]
+        for {set i 0} {$i < 500} {incr i} {
+            set stubCode {}
+            set imageCode {}
+            set channel [open /proc/$pid/maps r]; set maps [read $channel]; close $channel
+            foreach line [split $maps \n] {
+                lassign $line range permissions offset device inode path
+                if {$permissions ne "r-xp"} continue
+                lassign [split $range -] low high
+                if {$path eq $exe} { lappend stubCode 0x$low 0x$high }
+                if {$inode eq "0" && $path eq ""} { lappend imageCode 0x$low 0x$high }
+            }
+            if {$imageCode ne ""} break
+            after 10
+        }
+        set far [expr {max([lindex $stubCode end], [lindex $imageCode end]) - min([lindex $stubCode 0], [lindex $imageCode 0])}]
+        puts $pipe "done"
+        flush $pipe
+        set output [read $pipe]
+        list [llength $stubCode] [llength $imageCode] [expr {$far < 0x7fffffff}] $output
+    } finally {
+        catch {close $pipe}
+        removeDirectory stub-linker-near
+    }
+} -result {2 2 1 {done
+5
+}}
+
+cleanupTests

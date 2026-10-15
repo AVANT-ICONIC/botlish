@@ -1,0 +1,84 @@
+name: single executable
+
+# The single-file Botlish compiler (SINGLE-EXECUTABLE.md): one Linux x86-64
+# executable, needing only glibc, that takes main.tcl's options and runs every
+# backend, -emit-native-executable included. Built on every push to main
+# (merges included), smoke-tested in stock Ubuntu containers -- no Tcl, Rust,
+# C compiler or linker installed -- and uploaded as the workflow run's
+# `botlish-linux-x86_64` artifact.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    # Pinned, not ubuntu-latest: the executable needs the glibc it was built
+    # against or newer, so the build runs on the oldest release it supports.
+    runs-on: ubuntu-24.04
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+    steps:
+      - uses: actions/checkout@v5
+
+      # The pinned cranelift crates need a recent stable rustc (AGENTS.md);
+      # nothing else of .devcontainer/setup.sh is needed: the base kit is a
+      # static Tcl built from source, not the system's.
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      # single/build.sh pins the Tcl source release (version and sha256), so
+      # its text is the base kit's cache key.
+      - name: Cache the static Tcl base kit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/botlish-single
+          key: single-basekit-${{ runner.os }}-${{ hashFiles('single/build.sh') }}
+
+      - name: Build the single executable
+        run: single/build.sh -o dist/botlish
+
+      - name: Smoke test on the build machine
+        run: single/smoke-test.sh dist/botlish
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: botlish-linux-x86_64
+          path: dist/botlish
+          if-no-files-found: error
+
+  smoke:
+    name: smoke test (${{ matrix.image }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["ubuntu:24.04", "ubuntu:latest"]
+    container: ${{ matrix.image }}
+    steps:
+      # The image has no git: checkout downloads the tree through the API.
+      # Only examples/ and single/smoke-test.sh are used.
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: botlish-linux-x86_64
+          path: dist
+
+      # Artifacts do not keep file modes.
+      - name: Smoke test
+        run: |
+          chmod +x dist/botlish
+          single/smoke-test.sh dist/botlish

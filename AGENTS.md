@@ -134,6 +134,42 @@ rustup default stable
 then build as usual. Without this, `cranelift`/`cranelift-generic` tests
 and benchmarks report `{error {NATIVE NOT-BUILT}}` instead of running.
 
+## The single-file compiler and the stub linker
+
+`single/build.sh` builds `single/out/botlish` (SINGLE-EXECUTABLE.md): a Tcl 9
+zipkit holding main.tcl, the compiler stack and both native executables,
+needing only glibc. The workflow `.github/workflows/single-executable.yml`
+builds it on every push to `main` and smoke-tests it in stock Ubuntu
+containers (`single/smoke-test.sh`). Its base kit is a static tclsh that the
+script builds once from the pinned Tcl 9.0.1 source release. That build is
+the one exception to "do not build Tcl 9 from source" above: no package ships
+a static zipfs tclsh. `--basekit PATH` uses a prebuilt zipkit instead. To run
+the test suite, still install the `.deb`s.
+
+* `single/package.tcl` packs exactly main.tcl, LICENSE, `core/`,
+  `compiler/`, `hir/`, `surface/`, `native/*.tcl`, `lib/` and
+  `examples/*.ir`. If the compiler starts reading another file at run time,
+  add it there. Never make main.tcl or the compiler depend on the single
+  executable: `single/main.tcl` only sets the environment and sources
+  main.tcl unchanged.
+* Standalone executables have two linkers, chosen by `BOTLISH_NATIVE_LINKER`:
+  `rustc` (the default) and `stub` (no toolchain: `botlish-aot-stub` with the
+  program image appended, `native/src/runtime/aotimage.rs`; the single
+  executable uses it). A test that reads a rustc-linked executable's
+  `botlish_fn_N` symbols (objdump, `strace -k`) or tests rustc's invocation
+  carries the `rustcLinker` constraint (`tests/helpers.tcl`). CI's
+  `stub-linker` job runs every executable test file with the stub linker.
+* The two startups must build the Vm identically: the generated startup crate
+  (`codegen/aot.rs`'s `startup`) and `aotimage::Loaded::instantiate`. If you
+  change either, `runtime::aot::run`, `constants::install`, what
+  `emit_object` emits (sections, relocation types: `codegen::aot::image`
+  rejects any type it does not handle), the image format, or the ABI
+  fingerprint's inputs, run `cargo test --release --manifest-path
+  native/Cargo.toml --lib aotimage`, `tests/aot-stub-linker.test`, and the
+  executable test files with the stub linker. The `stub-linker` job in
+  `.github/workflows/tests.yml` has the command. Run them once more under
+  `BOTLISH_NATIVE_GC_STRESS=1`.
+
 ## Running Linux tests from Windows with WSL
 
 The Windows development machine has an Ubuntu 24.04 WSL distribution with
@@ -821,7 +857,16 @@ outcome depend on the scheduler, never add a source-layout rule or annotation
 to make compilation cheaper, and never key a reused method-call decision by
 name. A missed cross-function channel shows up as a `mispredicted` build or a
 difference from `BOTLISH_STATIC_SCHEDULER=sequential`: add its edge to
-`hir/staticdeps.tcl`, not a special case to the scheduler. If you change the
+`hir/staticdeps.tcl`, not a special case to the scheduler. The sequential
+order's waiting rule (STATIC-COMPILE.md, "The waiting rule";
+`hir::staticdeps::Waiting`) reads that analysis's waiting channels
+(`C:erased`, `C:budget:B`; never the gates `C:verdict` and `C:plan`): a
+failing block consuming one waits while a failing block contributes to it,
+so a consumer's verdict does not depend on where its contributors are
+written. An edge into a waiting channel's part of the graph, or a new link
+label the rule must skip, can therefore change an outcome, not only a build
+count: check the fuzzer's layout claim on several seeds (17 and 41 among
+them). If you change the
 schedulers, the dependency analysis, the method-call seeds or build reuse
 (`hir/hir.tcl`), or add a fact an analysis reads across functions (a summary,
 an inferred contract, the erased-callable contract, an instance budget, a

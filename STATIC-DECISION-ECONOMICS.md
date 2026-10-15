@@ -59,6 +59,9 @@ and the two golden tests written around it are back in their natural form.
 * [The old procedure](#the-old-procedure)
 * [The theorem](#the-theorem)
 * [The dependency graph](#the-dependency-graph)
+* [The waiting rule](#the-waiting-rule) -- a change of the definition made
+  after this milestone: a consumer of a program-wide channel waits for its
+  failing contributors
 * [Method-call decisions](#method-call-decisions)
 * [Instrumentation](#instrumentation)
 * [Measurements](#measurements)
@@ -464,8 +467,11 @@ AFFINE-GENERIC-NESTED-UNSUPPORTED one: `mispredicted`).
 
 * **consumers**: `Z:site -> C:plan` for every site that holds a call the
   plan can report at -- a trait operation, a call of a trait-polymorphic
-  function or of one requiring a context trait, a call giving an untyped
-  parameter an argument that is or may become affine (an `any`) -- in a
+  function that a context the plan walks has no instance for (`Unplanned`,
+  [below](#trait-polymorphic-calls-with-their-instances)), a call giving an
+  untyped parameter an argument that is or may become affine (an `any`; of a
+  function requiring a context trait too, whose one site diagnostic is that
+  one) -- in a
   program that can plan at all (trait declarations, or a coroutine
   construction), and that has no diagnostic of its own in the build (one
   that has keeps the gate closed itself: its status changes only once that
@@ -490,24 +496,38 @@ AFFINE-GENERIC-NESTED-UNSUPPORTED one: `mispredicted`).
   The plan is one computation over the whole program whose stages hide each
   other's diagnostics (TRAIT-IMPL-ORDER appears only once no stage-one
   diagnostic is left); its diagnostics are decided one per build, as the
-  sequential order decides them. (No program was found where a finer rule --
-  one witness -- decides another program; this is the conservative rule.)
+  sequential order decides them. A finer rule -- one witness -- decides
+  another program: a rejection can close the gate again, by a diagnostic it
+  causes anywhere. Rejecting the first of two independent TRAIT-IMPL-ORDER
+  sites makes a top-level call of its function, unhandled, an
+  UNHANDLED-ERROR in no site, and the sequential order then *accepts* the
+  second; the finer rule rejects it beside the first
+  (`se-equal-plan-reclosed`, mutant `plan-open-witness`).
 
 Consumers a rejection would first have to *create* (a callee whose type
 becomes an exact function once a join loses a branch, a receiver that
 becomes a trait view) are not detected: such a site, if one exists, is
 predicted ok, and the build that reports its plan diagnostic records a
-misprediction, which every audit fails on.
+misprediction, which every audit fails on. An argument a rejection makes
+affine is detected (`MayBecomeAffine`: an `any`), and must be: a generic
+function's site giving its untyped parameter to a nested generic function
+is AFFINE-GENERIC-NESTED-UNSUPPORTED in the clone a caller's coroutine
+handle creates, and that handle may be an `any` until a rejection makes the
+other branch of the `if` producing it `never` -- nothing of the site's own
+changes (`se-equal-plan-clone`, mutant `plan-any-settled`: mispredicted).
 
 | program | before | after | sequential |
 |---|---|---|---|
 | the three-site program (`se-equal-plan-gate`) | 3 rounds, mispredicted | 3 rounds | 4 rounds |
 | the plan site ahead of four TYPE failures (`se-builds-plan-gate`) | 3 rounds, mispredicted | 3 rounds | 6 rounds |
 | two TRAIT-IMPL-ORDER sites (`se-equal-plan-gate`) | 3 rounds | 3 rounds | 3 rounds |
-| `traits.bot` | 5 rounds / 10 builds, 2 mispredicted | 8 / 13 | 33 / 74 |
+| two independent TRAIT-IMPL-ORDER sites, the first one's function called unhandled at the top level (`se-equal-plan-reclosed`) | 2 rounds, the second site rejected (another program) | 2 rounds, the second accepted | 2 rounds |
+| a clone created by a caller's rejection (`se-equal-plan-clone`) | 3 rounds, mispredicted | 3 rounds | 4 rounds |
+| `traits.bot` | 5 rounds / 10 builds, 2 mispredicted | 8 / 13; 5 / 10 with the narrower consumers below | 33 / 74 |
 | `affinity.bot` | 9 / 10, 1 mispredicted | 6 / 7 (4 / 5 once callables are named by source, below) | 25 / 26 |
 
-`traits.bot` pays for its correct prediction: its 36 consumers without a
+`traits.bot` paid for its correct prediction (until the narrower consumers
+below): its 36 consumers without a
 diagnostic depend on the last failing site, so they share its component, and
 whenever one of them turns unknown on its own account (a site of a function
 it calls is rejected) the later failing sites of that component wait
@@ -522,8 +542,80 @@ the "finer components" opportunity of [point 72](#72-next-optimization-opportuni
 would recover these rounds.
 
 Mutants: `plan-consumers-ignored`, `plan-witness-ignored` (semantic: the
-build that opens the gate contradicts a prediction), `plan-every-diagnostic`
-(economic: the site ahead of four failures takes a build per rejection).
+build that opens the gate contradicts a prediction), `plan-open-witness`
+(semantic: another program), `plan-any-settled` (semantic: mispredicted),
+`plan-every-diagnostic` (economic: the site ahead of four failures takes a
+build per rejection). The programs of `se-equal-plan-reclosed` and
+`se-equal-plan-clone` come from a parallel implementation of the channel,
+merged here as tests and mutants only: `plan-open-witness` and
+`plan-any-settled` survived every earlier test and the fuzzer.
+
+##### Trait-polymorphic calls with their instances
+
+Every call of a trait-polymorphic function (or of one requiring a context
+trait) used to be a consumer. The plan reports at such a call only
+TRAIT-INSTANCE-BUDGET, and only in a context it walks -- the generic program,
+or an instance of the trait-polymorphic function around the call (top-level
+only: TRAIT-NESTED-POLYMORPHIC) -- that has no semantic instance for it
+(`hir/traits.tcl`, `Plan`; TRAIT-INTERNAL is a compiler failure, no site's).
+So the consumer is now the call some such context has no instance for
+(`Unplanned`: no `generic` request, or some instance of the enclosing
+function without one; instances the plan never reaches count too). A call of
+a function requiring a context trait reports, as a site's diagnostic, only
+AFFINE-GENERIC-NESTED-UNSUPPORTED, for an affine argument at an untyped
+parameter: the argument rule. (A trait view crosses an untyped parameter as
+`any`, and a List or struct holding one is the checker's
+AFFINE-ERASURE-UNSUPPORTED, so a clone's view adds no affine argument the
+rule misses.)
+
+That is sound only if no rejection elsewhere can take away an instance a
+site's call has without the site depending on it. An instance exists unless
+the call is not requested or the request is declined:
+
+* *not requested*: an arity mismatch, or an argument typed `never` (a dead
+  call) -- the call's own facts, which its site's edges read. In a clone's
+  view a trait operation's result is the requirement's type, never an
+  implementation's, so no rejection inside an implementation makes a clone's
+  call dead (`never` arguments come only from a rejected site's reified
+  failure; any other always-failing call is a KNOWN-ERROR);
+* *declined for the budget*: never -- a trait-polymorphic request past the
+  budget is re-keyed by its views and granted (`hir::semantic::Call`);
+* *declined for want of an environment*: never -- a top-level function's
+  creation environment is recorded at its definition, and nothing calls it
+  before (no forward references);
+* *declined for nesting*: only a first request is, and a cache hit never
+  is. Rejecting the site that made the first request for an instance makes
+  a deep request the first one. That is a gap of `C:budget` itself, for
+  every instance-derived diagnostic: `se-equal-deep-first-request` is a
+  plain TYPE failure it mispredicted on main (`late`'s request 25 deep is a
+  hit until `early`, which requested the same instance directly, is
+  rejected). Every request at half the nesting limits or deeper is now
+  recorded (`hir::semantic`'s `deep`), and one puts every budget under
+  pressure, as half of all instances does. No golden suite has one: the
+  deepest request of the 88 is at stack 7 and Tcl level 75, against 12 and
+  350.
+
+A context a rejection creates (a new witness) walks the function's body
+afresh and requests every call in it, under the same four rules.
+
+Today the only way a site's trait-polymorphic call lacks an instance is a
+dead call (a nesting decline at such a call is all but unreachable: past the
+per-block budget, which a chain of trait-polymorphic functions reaches long
+before the nesting limit, a request is granted however deep). The plan then
+reports TRAIT-INSTANCE-BUDGET at a call that never runs -- a defect of the
+plan, which should drop such a call's specialization, recorded here rather
+than fixed: `se-equal-plan-unplanned` pins the gate on it (mutant
+`plan-unplanned-ignored`: mispredicted).
+
+| program | every call a consumer | narrowed | sequential |
+|---|---|---|---|
+| a site calling a trait-polymorphic function with its instance, beside two checker failures (`se-builds-plan-instances`) | 3 rounds / 4 builds | 2 / 3 | 3 / 4 |
+| `traits.bot` (consumers in its first checked round: 37 -> 6) | 8 / 13 | 5 / 10 | 36 / 77 (compare.tcl agrees) |
+
+No other golden suite changes (88 files: 210 -> 207 rounds, 321 -> 318
+builds, the same outcomes, no misprediction before or after). Mutants:
+`plan-unplanned-ignored`, `budget-deep-ignored` (semantic: mispredicted),
+`plan-instances-ignored` (economic: every call a consumer again).
 
 #### Internal ids, exactly
 
@@ -685,7 +777,9 @@ fixed in `hir/staticdeps.tcl`:
   present. `se-equal-erased-witness` pins that link: without it the
   consumer is accepted, where the sequential order rejects it
   (UNHANDLED-ERROR) -- mutant `erasure-unlinked`, semantic; the economic
-  `erased-every-contributor` restores one witness per contribution.
+  `erased-every-contributor` restores one witness per contribution. (Since
+  [the waiting rule](#the-waiting-rule) the sequential order accepts that
+  consumer too, and the link is gone: see there.)
 
 The same holds for **what an uncontracted input may hold** at the contract
 boundary (`P:input`, `hir::completions::Possible`): a set of errors and
@@ -950,7 +1044,8 @@ and every capture keeps its `P:` edge as before.
   and is killed.
 
 **A consumer's verdict depends on where its contributor is written** (seed
-17's program 6 and seed 41's program 0; open). Under both schedulers, and on the tree before this
+17's program 6 and seed 41's program 0; closed since by [the waiting
+rule](#the-waiting-rule)). Under both schedulers, and on the tree before this
 work as on the tree after it, the split layout accepts a block the nested
 layout rejects. Reduced: two functions, each holding one block --
 `consumer` (a call through an `any` element, in a function declaring only
@@ -966,7 +1061,8 @@ order judges each consumer after the contributors before it; this is the
 consequence for the verdict, not only for the rounds. It is the sequential
 order's definition at work (STATIC-COMPILE.md, step 3), not a scheduler's
 error, and making the verdict independent of layout is a decision about
-that definition; it is recorded, not made.
+that definition; it is recorded, not made here ([the waiting
+rule](#the-waiting-rule) made it).
 
 ### The first diagnostic, and what method-call trials read
 
@@ -1064,6 +1160,192 @@ failures; `compare.tcl` on linux-io (batched 2/2, sequential 30/30) and the
 validation sample: batched = sequential exactly, no misprediction;
 `mutate.tcl`: 58 mutants, every one applies and is killed; the 88 golden
 suites before and after, above.
+
+## The waiting rule
+
+A change of the definition, made after this milestone (STATIC-COMPILE.md,
+"The waiting rule", has the rule; this is its account).
+
+**The finding.** The static-decision fuzzer on seeds beyond the 1-3 this
+milestone was validated with found a verdict that depends on layout: seed
+17's program 6 and seed 41's program 0 failed the layout check ("layout
+split gives other verdicts than nested"), under both schedulers, on the tree
+before as after this milestone. Reduced: a block `consumer` calling through
+an `any` element in a function declaring only `IndexNotFound`, and a block
+`eraser` passing an E2-declaring function into an untyped parameter
+(`store(raise_e2)`) and then failing with TYPE. Written consumer first, the
+sequential order judged `consumer` while `eraser`'s erasure was still in the
+program and rejected it (UNHANDLED-ERROR); `eraser` was rejected next, and
+the final program erased nothing. Written eraser first, `consumer` was
+accepted. The program's value was `[-1, -1]` in one order and `[1, -1]` in
+the other. Not a scheduler's error: the sequential order's definition at
+work, which judged each consumer after only the contributors written before
+it ([point 70](#70-remaining-unavoidable-dependency-cases)).
+
+**The decision.** Three definitions were on the table: judge the consumers
+of a program-wide channel only once no undecided contributor remains;
+iterate to a fixpoint (judge a rejected consumer again when a contributor's
+later rejection removes its reason); or keep the layout dependence and
+narrow the fuzzer's claim. The first was chosen. Precisely: in a checked
+round, a failing block *waits* while another failing block contributes to a
+channel it consumes; the order rejects the first failing block in
+post-order that does not wait, and accepts the blocks before it that have
+no diagnostic. What consumes and what contributes is read off the
+dependency graph (`hir::staticdeps::Waiting`):
+
+* a block *consumes* a channel its node `Z:` reaches over the edges that
+  read something -- not a contributor's link to a channel (the ownership
+  verdict's, an input's: they exist to order the batched run,
+  [above](#forms-the-plans-gate-and-the-witnesses)) and not an edge to a
+  gate -- except that a block whose first diagnostic was reported before
+  the completion walk (Prepare's `early`) does not consume the erased
+  contract: before the walk only the ownership analysis's exit releases read
+  it (`hir::completions::erasureFacts`), and they report nothing, so no
+  erasure can cause or precede that diagnostic;
+* a channel's *contributors* are every block holding a contribution (the
+  erased contract's every one, not only its witnesses: the contract keeps an
+  error while any of them does) and every block whose form the channel's
+  node reaches.
+
+Three points follow:
+
+* *Failing* contributors, not undecided ones. An ok contributor's body is in
+  the final program unless a later decision makes it fail, so the rule needs
+  no acceptance state, and with one failing block nothing waits: the
+  sequential and legacy schedulers read the dependency analysis only for a
+  build with two or more failing blocks (`WaitingDeps`). The case it leaves
+  open is an ok contributor that a later rejection makes fail
+  (`se-equal-consumer-waits-residual`: an erasing block whose nested block's
+  `CompilerError` the function around it does not admit): a consumer
+  written before it is judged while its erasure stands. Closing the
+  contributors under what their diagnostics read (Deps' `sites`) closes
+  it, and was tried: the closure took in ordinary failing blocks that a
+  contributor's code reads, and the consumers waited for them one build
+  each -- `methods.bot` 4 rounds to 7 (four NOT-A-STRUCT and UNKNOWN-FIELD
+  blocks, rejected in one build before, one per build in reverse order),
+  `ownership.bot` 3 to 5, `errors.bot` and `static-compile.bot` one more
+  each. Builds would scale with the blocks such a read reaches, not with the
+  dependency depth, so the case stays open and documented, with cycles.
+* *Cycles.* When every failing block waits on another -- each consumes what
+  another contributes: two blocks that both erase and both call through an
+  uncontracted value, or the calls of one instance budget under pressure,
+  every one of which is both -- the first in post-order is rejected, as
+  before. That, and the open case above, are where a channel still lets
+  layout decide a verdict (`se-equal-channel-cycle`). Where the cycle is
+  genuine, each block's verdict depends on the other's decision (and
+  first-come first-served is what the budget is); the conservative analysis
+  may also report one that is not. Blocks that each
+  erase and each call through an uncontracted value but fail for reasons of
+  their own (callable-contracts.bot's shape) wait on each other and are
+  rejected in post-order in one build, as before: each depends on the
+  witness's form only (`se-builds-erasing-consumers`). Blocks failing for
+  reasons the completion walk does not report do not wait at all (the
+  early refinement, `se-builds-early-consumer`).
+* *All schedulers.* `Next` and `Waits` (hir/static.tcl) are the rule; the
+  sequential scheduler takes `Next`'s block per build; the legacy one takes it
+  first, and only it while a block waits; the batched run (`Simulate`) takes
+  each component's next block by the rule. A block may wait on a
+  contributor whose form it does not read (a linked contribution, a block in
+  the closure), so `Components` links a failing block to every
+  contributor of what it consumes as well (only a failing block waits:
+  within a run an ok one stays ok or turns unknown), and the rule stays each
+  component's own. A component
+  stops at a failing block that may or may not wait (a contributor's status
+  is unknown), as at an unknown block. A message naming internal ids is
+  committed only when no block numbered before its ids differs from the
+  sequential order's build: a waiting block of a component not stopped keeps
+  its form until then, and with that the run's first pick is never held, so
+  every run commits at least one rejection. The witnesses stay the
+  contributions last in post-order: a waiting contributor removed after its
+  witness makes the consumers unknown one build early, never a
+  misprediction (they depend on the witness's form; a contributor committed
+  after the witness in the same run is one whose diagnostics do not read
+  the contract).
+* *The contract's links are gone.* Every site holding a contribution used to
+  be linked to the contract (`Z:site -> C:erased`), so that a consumer
+  turned unknown held the other contributors back and the next build judged
+  it with them present, as the sequential order did. Under the rule the
+  order judges a failing consumer only once no failing contributor remains,
+  and the rule reads the sites holding a contribution itself (Prepare's
+  `erasureSites`), so the link had no role left: `erasure-unlinked`
+  survived every test and the fuzzer. Both are removed; the mutant
+  `erasure-contributors-witnesses-only` pins what the sites now do -- with
+  the witnesses' sites alone, blocks that each erase and each call through
+  an uncontracted value, failing for reasons of their own, would wait one by
+  one on the last of them (`se-builds-erasing-consumers`: 2 rounds at 4 and
+  8 blocks; 5 and 9 with the mutant).
+
+**The channels' shapes.** The rule is for a channel whose contributors'
+*presence* causes a consumer's diagnostic:
+
+| channel | shape | under the rule |
+|---|---|---|
+| `C:erased` | a contribution adds errors every consumer is charged | consumers wait for failing contributors |
+| `C:budget:B` | every request takes from one budget | the same; every call of B is both, so its members form cycles (post-order, as before) |
+| `C:verdict`, `C:plan` | a gate: the consumer's diagnostic exists only while no contributor has one (the ownership analysis's whole-program verdict; the trait plan, run only on a program with no diagnostic) | no block waits on them: a consumer cannot fail by the gate while a contributor fails, so the layout dependence cannot arise. Read as waiting channels, every failing block holding a trait call would wait for the plan's witness, the last failing block of the program -- one rejection per build |
+
+**Economics.** The rule changes no build count where nothing waits. Where
+a failing consumer is written before a failing contributor, the
+contributor's rejection now comes first and the consumer, depending on it,
+waits for the next build -- as when the two are written the other way
+round; before, the consumer was rejected in the first build. The
+reproducer takes 2 rounds and 2 builds in both orders, as before. On the 88
+golden suites (batched, against the tree before the rule): 84 take exactly
+the rounds and builds they took, and three take one or two more, each a
+stratum the rule adds, never a chain -- `compiled-values.bot` 4/4 to 5/5
+(a failing contributor to `list::find`'s instance budget, under pressure,
+is rejected before the three failing blocks that consume it),
+`contexts.bot` 3/4 to 4/5 (a TRAIT-UNKNOWN-OPERATION reported after the
+completion walk waits for an erasing block: its function defines one that
+calls through an uncontracted value), `opaque.bot` 6/10 to 8/12 (every
+block is linked through the golden framework's `test::value` erasure and
+`test::equal`'s instance budget, and the contributors among them now go
+first). Without the early refinement six more suites took one to three more
+rounds (`static-compile.bot` 7 to 10); with the closure under what
+contributors read, `methods.bot` 4 to 7, `ownership.bot` 3 to 5.
+
+**Validation** (the tree with the rule against the tree before it):
+
+* the reproducer, both orders, all three schedulers: `[1, -1]` (was
+  `[-1, -1]` consumer first); `se-equal-consumer-waits` pins it (batched =
+  sequential = legacy, 2 rounds either way, the sequential trace's reason
+  "waits for ..., a failing contributor to the erased-callable contract it
+  consumes"); `se-equal-erased-witness` now accepts its consumer (the final
+  program erases nothing; it was UNHANDLED-ERROR); `se-equal-channel-cycle`
+  and `se-equal-consumer-waits-residual` pin the two residual cases,
+  `se-builds-erasing-consumers` and `se-builds-early-consumer` the economics
+  of every holder as a contributor and of the early refinement,
+  `se-simulate-consumer-waits` and `se-simulate-cycle` the batched run on
+  synthetic dependencies;
+* the fuzzer (four layouts, batched = sequential exactly, legacy up to
+  ids): seeds 17 and 41, which failed the layout check before, pass, as do
+  seeds 1, 2, 3 and 29 -- 0 failures. Seed 17 rejects 260 blocks where it
+  rejected 263 (program 6's consumer, now accepted in the three layouts
+  that rejected it) and seed 41 340 where 351; seed 3 360 where 372 -- its
+  program 4 writes three consumers before a rejected erasing block in
+  every layout, so they were rejected in all four and the layout check
+  could not see it; they are accepted in all four now;
+* the 88 golden suites: every site's outcome and code, the program's
+  diagnostics and the decided HIR identical to the tree before, except one
+  message in `callable-contracts.bot`: a rejection decided in another build
+  than before, whose message names an internal id of that build
+  (`block(e3066)` became `block(e3801)`); with the ids blanked, identical. `compare.tcl
+  tests/golden/*.bot` (batched against sequential): every one of the 88
+  agrees, no misprediction (`mutable-array.bot` compared from saved records,
+  its sequential run -- 69 rounds, 1089 builds -- taking longer than the
+  harness's time limit). The rule's own cost in the sequential reference is
+  the dependency analysis it now reads for every build with two or more
+  failing blocks: on `mutable-array.bot` 1.5 s beside a build of 165 s,
+  about 1%;
+* `tests/static-economics.test` 76/76, `tests/static-compile.test` 83/83,
+  `tests/golden.test` 9/9 (interp and compile backends);
+* `audit/static-decisions/tools/mutate.tcl`: 62 mutants, every one applies
+  and is killed (`erasure-unlinked` removed, five new). The new
+  mutants: `consumers-do-not-wait` (the definition before the rule),
+  `batched-ignores-waiting` (the batched run alone without it),
+  `channels-not-consumed` (no consumer recorded),
+  `early-consumes-erased` and `erasure-contributors-witnesses-only` (the
+  two economic choices above); `erasure-unlinked` is gone with the link.
 
 ## Method-call decisions
 
@@ -2109,7 +2391,12 @@ fact the previous one changes:
   consumer's diagnostic may change with each. Layouts of the same blocks
   differ by at most one round fewer than the blocks the contract links, and
   not at all without such blocks (the fuzzer checks both: seed 3's program 6
-  takes 5 rounds nested and 7 split, with six linked blocks).
+  takes 5 rounds nested and 7 split, with six linked blocks). Since [the
+  waiting rule](#the-waiting-rule) a failing consumer waits for every
+  failing contributor, wherever it is written: the rounds of two layouts may
+  still differ, but the verdicts no longer do (on the tree before it, the
+  sequential order judged a consumer after only the contributors written
+  before it, which could decide its verdict).
 
 ### 71. New expected complexity model
 
