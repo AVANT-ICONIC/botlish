@@ -237,7 +237,13 @@ shared (TEST-SUITE-COST.md section 4 has the measurements):
   there, and the executable (AOT) tests link `libbotlish_native.rlib` at test
   time. A `cargo build` during a run swaps them under it. A copied tree needs
   all of `native/target` (a symlink to the original works); a copy with only
-  the binary fails every AOT test with `runtime library missing`.
+  the binary fails every AOT test with `runtime library missing`. A symlink
+  is only for a tree nothing rebuilds: the mutation harnesses whose private
+  tree rebuilds the native backend (`audit/*/tools/mutate.tcl` with a native
+  mutant selected, `audit/golden/tools/tree.tcl`) copy the directory a linked
+  `native/target` points to, never the link (a copied link builds every
+  mutant into the original checkout's `native/target`), and a new one must
+  too.
 
 So for concurrent runs in one checkout: one `-tmpdir` per run, and no native
 rebuild until they finish:
