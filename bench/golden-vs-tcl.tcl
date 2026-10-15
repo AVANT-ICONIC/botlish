@@ -408,8 +408,8 @@ proc report {options} {
         set names [lmap p [lsort [glob -nocomplain -directory $out *.meta]] {file rootname [file tail $p]}]
     }
     puts "## Runs\n"
-    puts "| run | layer | backends | HIR cache | jobs | items | wall s | process s summed | CPU s summed | tests passed / failed | problems |"
-    puts "|---|---|---|---|---|---|---:|---:|---:|---|---|"
+    puts "| run | finished | layer | backends | HIR cache | jobs | items | wall s | process s summed | CPU s summed | tests passed / failed | problems |"
+    puts "|---|---|---|---|---|---|---|---:|---:|---:|---|---|"
     foreach name $names {
         lassign [loadRun $out $name] meta records
         set processSum [sum [lmap r $records {dict get $r seconds}]]
@@ -430,7 +430,7 @@ proc report {options} {
             }
         }
         set cache [expr {[dict get $meta hirCache] eq "" ? "off" : "on ([dict get $meta cacheEntries] entries after)"}]
-        puts "| $name | [dict get $meta layer] | [join [dict get $meta backends] {, }] | $cache | [dict get $meta jobs] | [dict get $meta items] | [f1 [dict get $meta wall]] | [f1 $processSum] | [f1 $cpuSum] | $passed / $failed | [dict get $meta problems] |"
+        puts "| $name | [dict get $meta date] | [dict get $meta layer] | [join [dict get $meta backends] {, }] | $cache | [dict get $meta jobs] | [dict get $meta items] | [f1 [dict get $meta wall]] | [f1 $processSum] | [f1 $cpuSum] | $passed / $failed | [dict get $meta problems] |"
     }
 
     # Golden: the compilation (front end or cache hit) and each backend's run.
