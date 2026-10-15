@@ -678,7 +678,9 @@ proc core::compiler::GenerateUnit {mode unitHir} {
             PushScope ctx $scopeId [dict create materialized 1 frame base locals {}]
         }
     }
-    set result [CompileSequence ctx [hir::roots $hir]]
+    # Every block body and expression the generation lowers to core IR
+    # (hir::lower::body, Lower) reads the temporaries computed above.
+    set result [hir::lower::withTemporaries $temps {CompileSequence ctx [hir::roots $hir]}]
     Emit ctx "return [BoxWord $result]"
     set name unit[NewId]
     lappend pending [UnitProcSource $name $ctx]
