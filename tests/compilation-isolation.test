@@ -1,0 +1,368 @@
+# compilation-isolation.test -- a HIR's backends see its own declarations,
+# whatever was compiled since (COMPILATION-ISOLATION.md).
+#
+# A compilation registers its declarations -- source-defined types and their
+# membership predicates, structs, enums, error payloads, traits, imports --
+# in process-wide registries that the analyses and the backends read by bare
+# name. Every HIR records the declaration state its build left behind
+# (`declarations`, hir/declarations.tcl), and every backend entry point
+# activates it first, so compiling another program in between no longer
+# changes what an earlier HIR's lowering or run sees.
+#
+# Each case compiles a program A, runs it, compiles another program B, and
+# runs A's same HIR again: the outcomes must be equal, and are pinned. They
+# are the reproducers of the investigation that found the defect (a silently
+# wrong value on the Tcl backends, a native build that traps at run time, a
+# coroutine never released, lowering failures). Backends:
+#
+#   interp     hir::lower, then the reference interpreter
+#   compile    the Tcl compiler on the HIR (core::compiler::evalHir)
+#   coretext   hir::lower's core IR text through the Tcl compiler's text
+#              entry point (core::compiler::runProgram and its code cache;
+#              the harness's own `compile` backend compiles the HIR instead)
+#   cranelift / cranelift-generic   native::evalHir, specialized or not
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+core::registerBackend coretext core::compiler::runSequence core::compiler::runProgram
+
+testConstraint stubLinker [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64} &&
+    [file executable [file join $native::home target release botlish-aot-stub]]}]
+
+proc ciCompile {text {name a.bot}} {
+    return [surface::compile $text $name -warnings off]
+}
+
+# BACKEND's outcome for HIR: {ok VALUE} or {error CODE}.
+proc ciRun {hir backend} {
+    set failed [catch {
+        switch -- $backend {
+            interp - coretext {
+                set saved [core::useBackend]
+                core::useBackend $backend
+                try {
+                    core::formatValue [core::evalProgram [hir::lower $hir]]
+                } finally {
+                    core::useBackend $saved
+                }
+            }
+            compile { core::formatValue [core::compiler::evalHir $hir] }
+            cranelift { core::formatValue [native::evalHir $hir] }
+            cranelift-generic { core::formatValue [native::evalHir $hir -specialize 0] }
+        }
+    } value options]
+    if {$failed} {
+        return [list error [dict get $options -errorcode]]
+    }
+    return [list ok $value]
+}
+
+# For each backend of BACKENDS: BACKEND, whether A's outcome after compiling
+# B equals its outcome before, and that outcome.
+proc ciPair {a b backends} {
+    set hA [ciCompile $a a.bot]
+    set alone [dict create]
+    foreach backend $backends {
+        dict set alone $backend [ciRun $hA $backend]
+    }
+    ciCompile $b b.bot
+    set result {}
+    foreach backend $backends {
+        set after [ciRun $hA $backend]
+        lappend result $backend [expr {$after eq [dict get $alone $backend]}] $after
+    }
+    return $result
+}
+
+set ciAll {interp compile coretext cranelift cranelift-generic}
+
+set ciDomain {type Small = Int in 0..10
+
+fn chk(n: int) -> bool:
+    Small?(n)
+
+[chk(5), chk(150)]
+}
+
+set ciPoint {struct Point:
+    x: int
+    y: int
+
+fn sum(p: Point) -> int:
+    p.x + p.y
+
+fn make(n: int) -> Point:
+    Point {x: n, y: n + 1}
+
+[sum(make(1)), make(4).y]
+}
+
+set ciLight {enum Light:
+    Red,
+    Green,
+
+fn flip(l: Light) -> Light:
+    if l == Light::Red:
+        Light::Green
+    else:
+        Light::Red
+
+[flip(Light::Red), flip(Light::Green)]
+}
+
+set ciBoom {error Boom:
+    code: int
+
+fn boom(n: int) -> int errors Boom:
+    if n > 3:
+        fail Boom {code: n * 100}
+    else:
+        n
+
+fn safe(n: int) -> int:
+    r = boom(n):
+        on Boom details:
+            details.code + 5
+    r
+
+[safe(1), safe(4)]
+}
+
+set ciRunning {struct Message:
+    value: int
+
+struct Event:
+    value: int
+
+struct Running:
+    name: str
+    step: Coroutine{
+        args: [Message],
+        return: Event,
+        errors: []
+    }
+
+fn worker(seed: int, resume Message) -> Event:
+    message = yield Event {value: seed}
+    return Event {value: message.value}
+
+fn make(seed: int) -> Running:
+    coroutine {step} = worker(seed)
+
+    Running {
+        name: "worker",
+        step: step
+    }
+
+fn nameOf(seed: int) -> str:
+    running = make(seed)
+    running.name
+
+[nameOf(1), nameOf(2)]
+}
+
+# ---------------------------------------------------------------------------
+# Declarations a later compilation replaces or drops
+
+test ci-domain-redeclared {a later program declaring `type Small` with another domain: the Tcl backends of the earlier HIR used the later domain for Small? (a silently wrong value)} -body {
+    ciPair $ciDomain "type Small = Int in 100..200\n\n1\n" {interp compile coretext}
+} -result {interp 1 {ok {[true, false]}} compile 1 {ok {[true, false]}} coretext 1 {ok {[true, false]}}}
+
+test ci-domain-dropped {a later program declaring no type: every backend of the earlier HIR lost Small (an unbound Small?, an unknown type)} -body {
+    concat [ciPair $ciDomain "1\n" {interp compile coretext}] \
+        [ciPair "type Small = Int in 0..10\n\nfn below(x: Small) -> bool:\n    x < 50\n\nfn twice(x: Small) -> int:\n    x + x\n\n\[below(5), twice(7)\]\n" "1\n" $ciAll]
+} -result {interp 1 {ok {[true, false]}} compile 1 {ok {[true, false]}} coretext 1 {ok {[true, false]}} interp 1 {ok {[true, 14]}} compile 1 {ok {[true, 14]}} coretext 1 {ok {[true, 14]}} cranelift 1 {ok {[true, 14]}} cranelift-generic 1 {ok {[true, 14]}}}
+
+test ci-struct {a later program declaring the struct with other fields, or none: specialized native lowering of the earlier HIR built code that trapped at run time, the generic one failed} -body {
+    concat [ciPair $ciPoint "struct Point:\n    z: int\n\nPoint {z: 1}.z\n" $ciAll] [ciPair $ciPoint "1\n" $ciAll]
+} -result [concat {*}[lrepeat 2 {interp 1 {ok {[3, 5]}} compile 1 {ok {[3, 5]}} coretext 1 {ok {[3, 5]}} cranelift 1 {ok {[3, 5]}} cranelift-generic 1 {ok {[3, 5]}}}]]
+
+test ci-enum {a later program declaring the enum with other cases, or none: native lowering of the earlier HIR numbered the cases from the registry} -body {
+    concat [ciPair $ciLight "enum Light:\n    Blue,\n    Red,\n\nLight::Blue\n" $ciAll] [ciPair $ciLight "1\n" $ciAll]
+} -result [concat {*}[lrepeat 2 {interp 1 {ok {[Light::Green, Light::Red]}} compile 1 {ok {[Light::Green, Light::Red]}} coretext 1 {ok {[Light::Green, Light::Red]}} cranelift 1 {ok {[Light::Green, Light::Red]}} cranelift-generic 1 {ok {[Light::Green, Light::Red]}}}]]
+
+test ci-error-payload {a later program declaring the error without a payload, or no error: native lowering of the earlier HIR lost the payload layout its handler projects} -body {
+    concat [ciPair $ciBoom "error Boom\n\nfn f(n: int) -> int errors Boom:\n    if n > 1:\n        fail Boom\n    else:\n        n\n\nr = f(1):\n    on Boom:\n        2\nr\n" $ciAll] \
+        [ciPair $ciBoom "1\n" $ciAll]
+} -result [concat {*}[lrepeat 2 {interp 1 {ok {[1, 405]}} compile 1 {ok {[1, 405]}} coretext 1 {ok {[1, 405]}} cranelift 1 {ok {[1, 405]}} cranelift-generic 1 {ok {[1, 405]}}}]]
+
+test ci-payload-release-edge {a payload-bearing error crossing an error edge that releases a coroutine, after a program declaring no error: hir::lower re-raised it without its payload, and the handler failed at run time} -body {
+    ciPair {struct Message:
+    value: int
+
+struct Event:
+    value: int
+
+error Boom:
+    code: int
+
+fn worker(seed: int, resume Message) -> Event:
+    message = yield Event {value: seed}
+    return Event {value: message.value}
+
+fn risky(n: int) -> int errors Boom:
+    if n > 3:
+        fail Boom {code: n}
+    else:
+        n
+
+fn work(n: int) -> int errors Boom:
+    coroutine {step} = worker(n)
+    x = risky(n)
+    r = step(Message {value: x})
+    r.value
+
+fn safe(n: int) -> int:
+    r = work(n):
+        on Boom details:
+            details.code + 1000
+    r
+
+[safe(1), safe(5)]
+} "1\n" $ciAll
+} -result {interp 1 {ok {[1, 1005]}} compile 1 {ok {[1, 1005]}} coretext 1 {ok {[1, 1005]}} cranelift 1 {ok {[1, 1005]}} cranelift-generic 1 {ok {[1, 1005]}}}
+
+test ci-affine-release {an earlier HIR whose struct owns a coroutine, after a program declaring nothing: the Tcl compiler emitted no drop for the dying struct (its coroutine never released), hir::lower and native lowering failed on the missing layout} -body {
+    set hA [ciCompile $ciRunning]
+    set drops [regexp -all {core::affine::dropImpl} [dict get [core::compiler::compileHir $hA] code]]
+    set result [ciPair $ciRunning "1\n" {interp compile cranelift cranelift-generic}]
+    ciCompile "1\n" b.bot
+    list $result $drops [regexp -all {core::affine::dropImpl} [dict get [core::compiler::compileHir $hA] code]]
+} -cleanup {unset -nocomplain hA drops result} -result {{interp 1 {ok {["worker", "worker"]}} compile 1 {ok {["worker", "worker"]}} cranelift 1 {ok {["worker", "worker"]}} cranelift-generic 1 {ok {["worker", "worker"]}}} 1 1}
+
+test ci-failed-compilation {a later compilation that fails after it has started rewriting the registries (an invalid declaration): the earlier HIR's activation must not take the registries for its own and do nothing} -body {
+    set hA [ciCompile $ciDomain]
+    set alone [ciRun $hA interp]
+    set failed [catch {ciCompile "type Small = Int in 5..1\nstruct Q:\n    v: int\n\n1\n" b.bot}]
+    list $failed $alone [ciRun $hA interp] [ciRun $hA compile]
+} -cleanup {unset -nocomplain hA alone failed} -result {1 {ok {[true, false]}} {ok {[true, false]}} {ok {[true, false]}}}
+
+# ---------------------------------------------------------------------------
+# Compiled code kept across compilations
+
+test ci-unit-reuse {a unit the Tcl compiler compiled once (core::compiler::compileHir) and ran again after a later compilation: its code calls the predicate by name as it runs, and saw the later domain, or none} -body {
+    set result {}
+    foreach b [list "type Small = Int in 100..200\n\n1\n" "1\n"] {
+        set unit [core::compiler::compileHir [ciCompile $ciDomain]]
+        set before [core::formatValue [core::compiler::evalUnit $unit]]
+        ciCompile $b b.bot
+        lappend result $before [catch {core::formatValue [core::compiler::evalUnit $unit]} after] $after
+    }
+    set result
+} -cleanup {unset -nocomplain result b unit before after} -result {{[true, false]} 0 {[true, false]} {[true, false]} 0 {[true, false]}}
+
+test ci-coretext-cache {the Tcl compiler's code cache (keyed by core IR text, never evicted) once kept a unit compiled under another program's declarations: A's core IR, first compiled after B was, failed, and kept failing after A was compiled again from source} -body {
+    # (A's core IR text must not be cached yet: an earlier case ran it.)
+    set ::core::compiler::cache [dict create]
+    set hA [ciCompile $ciPoint]
+    ciCompile "struct Point:\n    z: int\n\nPoint {z: 1}.z\n" b.bot
+    list [ciRun $hA coretext] [ciRun [ciCompile $ciPoint] coretext]
+} -cleanup {unset -nocomplain hA} -result {{ok {[3, 5]}} {ok {[3, 5]}}}
+
+test ci-coretext-cache-declarations {one core IR text, two programs whose declarations differ (`type Small` with two domains: the predicate is called by name, so the text is the same): the code cache's unit for that text is the one compiled under the active program's declarations, never reused from the other's} -body {
+    set h1 [ciCompile $ciDomain]
+    set h2 [ciCompile [string map {0..10 100..200} $ciDomain] b.bot]
+    set key [list program [hir::lower $h2]]
+    set result [list [expr {[hir::lower $h1] eq [hir::lower $h2]}]]
+    foreach h [list $h1 $h2 $h1] {
+        lappend result [ciRun $h coretext] \
+            [expr {[dict get $::core::compiler::cache $key hir declarations] eq [dict get $h declarations]}]
+    }
+    set result
+} -cleanup {unset -nocomplain h1 h2 key result h} -result {1 {ok {[true, false]}} 1 {ok {[false, true]}} 1 {ok {[true, false]}} 1}
+
+# ---------------------------------------------------------------------------
+# Reading HIR text, real programs, executables
+
+test ci-hir-read {reading HIR text registers its declarations (hir::read): the HIR compiled just before became the earlier one, and its native lowering failed} -body {
+    set text [hir::format [ciCompile "enum Light:\n    Red,\n    Green,\n\nLight::Green\n"]]
+    set hB [ciCompile "enum Light:\n    Blue,\n    Amber,\n\nfn next(l: Light) -> Light:\n    if l == Light::Blue:\n        Light::Amber\n    else:\n        Light::Blue\n\n\[next(Light::Blue), next(Light::Amber)\]\n" b.bot]
+    set alone [lmap backend {interp compile cranelift} {ciRun $hB $backend}]
+    set hA [hir::parse $text]
+    set result [list [expr {[lmap backend {interp compile cranelift} {ciRun $hB $backend}] eq $alone}] [lindex $alone 2]]
+    # The HIR read back records its declarations too: it runs after another
+    # compilation.
+    ciCompile "1\n" c.bot
+    concat $result [list [ciRun $hA interp] [ciRun $hA cranelift]]
+} -cleanup {unset -nocomplain text hB alone hA result} -result {1 {ok {[Light::Amber, Light::Blue]}} {ok Light::Green} {ok Light::Green}}
+
+test ci-hir-format {hir::format of an earlier HIR prints its own declarations and types after a later compilation (it reads the registries too: a source-defined integer type is shown from its registered domain)} -body {
+    set hA [ciCompile "type Small = Int in 0..10\n\nfn twice(x: Small) -> int:\n    x + x\n\ntwice(3)\n"]
+    set before [hir::format $hA]
+    ciCompile "1\n" b.bot
+    expr {[hir::format $hA] eq $before}
+} -cleanup {unset -nocomplain hA before} -result 1
+
+test ci-golden-pair {two golden suites in one process: traits-path.bot's HIR, lowered natively after contexts.bot was compiled, failed (its struct WindowsPath was no longer registered)} -body {
+    set hA [surface::readProgramFile [file join $::projectRoot tests golden traits-path.bot] -warnings off]
+    set alone [lmap backend {interp cranelift cranelift-generic} {ciRun $hA $backend}]
+    surface::readProgramFile [file join $::projectRoot tests golden contexts.bot] -warnings off
+    list [expr {[lmap backend {interp cranelift cranelift-generic} {ciRun $hA $backend}] eq $alone}] [lindex $alone 1]
+} -cleanup {unset -nocomplain hA alone} -result {1 {ok {["PASS trait-import-type/imported", "PASS trait-future-path-shape", "2 passed, 0 failed"]}}}
+
+test ci-executable {a standalone executable of an earlier HIR built after a later compilation (native::executable, the stub linker): it linked, then trapped at run time} -constraints stubLinker -setup {
+    set dir [file join [temporaryDirectory] ci-executable-[pid]]
+    file mkdir $dir
+    set savedLinker [expr {[info exists ::env(BOTLISH_NATIVE_LINKER)] ? [list $::env(BOTLISH_NATIVE_LINKER)] : {}}]
+    set ::env(BOTLISH_NATIVE_LINKER) stub
+} -body {
+    set hA [ciCompile $ciPoint]
+    native::executable $hA [file join $dir alone]
+    ciCompile "struct Point:\n    z: int\n\nPoint {z: 1}.z\n" b.bot
+    native::executable $hA [file join $dir after]
+    list [exec [file join $dir alone]] [catch {exec [file join $dir after]} out] $out
+} -cleanup {
+    file delete -force $dir
+    if {$savedLinker eq ""} { unset -nocomplain ::env(BOTLISH_NATIVE_LINKER) } else { set ::env(BOTLISH_NATIVE_LINKER) [lindex $savedLinker 0] }
+    unset -nocomplain dir savedLinker hA out
+} -result {{[3, 5]} 0 {[3, 5]}}
+
+test ci-analysis-entry-points {the analyses tools call on a HIR they are given -- the semantic AOT analysis (hir::aot::analyze, main.tcl -aot) and the specializer (hir::specialize::analyze, main.tcl -aot-spec) -- see its own declarations after a later compilation} -body {
+    set hA [ciCompile "type Small = Int in 0..10\n\nfn twice(x: Small) -> int:\n    x + x\n\n$ciPoint"]
+    set aot [hir::aot::analyze $hA]
+    set spec [hir::specialize::analyze $hA]
+    ciCompile "struct Point:\n    z: int\n\nPoint {z: 1}.z\n" b.bot
+    set aotAfter [catch {hir::aot::analyze $hA} result]
+    lappend aotAfter [expr {$result eq $aot}]
+    ciCompile "1\n" c.bot
+    set specAfter [catch {hir::specialize::analyze $hA} result]
+    lappend specAfter [expr {$result eq $spec}]
+    list $aotAfter $specAfter
+} -cleanup {unset -nocomplain hA aot spec aotAfter specAfter result} -result {{0 1} {0 1}}
+
+test ci-native-recheck {a -strict 0 HIR whose program breaks a declared parameter type is re-checked by native lowering with that contract demoted (native::prepareHir): the re-check reads the registries before any analysis, so it must see the HIR's own declarations after a later compilation} -body {
+    set hA [surface::compile "type Small = Int in 0..10\n\nstruct P:\n    v: int\n\nfn f(x: Small) -> int:\n    x + 1\n\nfn g(p: P) -> int:\n    p.v\n\n\[f(99), g(P {v: 2})\]\n" a.bot -strict 0 -warnings off]
+    set before [native::nir $hA]
+    ciCompile "1\n" b.bot
+    list [dict exists $hA violatedDeclared] [expr {[native::nir $hA] eq $before}]
+} -cleanup {unset -nocomplain hA before} -result {1 1}
+
+# ---------------------------------------------------------------------------
+# Activation itself
+
+test ci-activation-switches {activating the HIR whose declarations are active switches nothing (one comparison); alternating two HIRs of different declarations switches each time, unregistering what the other declared (a source type and its predicate included); a HIR without recorded declarations leaves the registries as they are} -body {
+    set h1 [ciCompile "type Small = Int in 0..10\n$ciPoint"]
+    set h2 [ciCompile $ciLight b.bot]
+    set start $::hir::declarations::switches
+    hir::activate $h2
+    set same [expr {$::hir::declarations::switches - $start}]
+    hir::activate $h1
+    set first [list [core::type::valid Small] [core::native::exists Small?] [hir::structs::declared Point] [hir::enums::declared Light]]
+    hir::activate $h1
+    hir::activate $h2
+    set alternating [expr {$::hir::declarations::switches - $start - $same}]
+    hir::activate [dict remove $h1 declarations]
+    list $same $first $alternating [expr {$::hir::declarations::switches - $start - $same - $alternating}] \
+        [core::type::valid Small] [core::native::exists Small?] [hir::structs::declared Point] [hir::enums::declared Light]
+} -cleanup {unset -nocomplain h1 h2 start same first alternating} -result {0 {1 1 1 0} 2 0 0 0 0 1}
+
+test ci-declarations-recorded {every HIR records the declaration state its build left behind, the registries' own values: the struct and enum registries, the source types and their predicates, the errors} -body {
+    set h [ciCompile "type Small = Int in 0..10\nerror Boom\nstruct S:\n    v: int\nenum E:\n    A, B\n\n1\n"]
+    set d [dict get $h declarations]
+    list [lsort [dict keys $d]] [dict keys [dict get $d structs]] [dict keys [dict get $d enums]] \
+        [dict keys [dict get $d types]] [dict keys [dict get $d natives]] [dict get $d errors]
+} -cleanup {unset -nocomplain h d} -result {{enums errors generation impls imports natives payloads structs traits types unitNames} S E Small Small? Boom}
+
+cleanupTests

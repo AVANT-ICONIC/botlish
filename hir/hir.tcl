@@ -510,6 +510,9 @@ proc hir::BuildOnce {nodes options given choices halt checkedVar} {
     variable buildStats
     dict incr buildStats builds
     set checked 0
+    # The build rewrites the registries below; the state they hold is this
+    # build's once it stamps its HIR (hir/declarations.tcl).
+    hir::declarations::invalidate
     if {[dict exists $given -imports]} {
         hir::imports::apply [dict get $options -imports]
     }
@@ -583,8 +586,10 @@ proc hir::BuildOnce {nodes options given choices halt checkedVar} {
         # all resolved. A caller that raises later (the source frontend adds
         # source locations to the message) asks to stop here with
         # -halt-on-resolution-errors and raises the diagnostics itself.
+        hir::declarations::stamp hir
         return $hir
     }
+    hir::declarations::stamp hir
     hir::check hir
     set checked 1
     return $hir
@@ -1281,7 +1286,7 @@ proc hir::exprsAt {hir origin} {
 }
 
 apply {{dir} {
-    foreach file {syntax static staticdeps imports resolve flags contexts coroutines affine mutvec refcheck hygiene sourcetypes structs enums traits syscall errordecls types exactvalue signatures modulebinding refine repeatable lower format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings} {
+    foreach file {syntax static staticdeps imports resolve flags contexts coroutines affine mutvec refcheck hygiene sourcetypes structs enums traits syscall errordecls types exactvalue signatures modulebinding refine repeatable lower format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings declarations} {
         uplevel #0 [list source [file join $dir $file.tcl]]
     }
 }} $hir::home

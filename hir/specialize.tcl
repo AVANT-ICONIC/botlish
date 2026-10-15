@@ -217,6 +217,7 @@ namespace eval hir::specialize {
 }
 
 proc hir::specialize::analyze {hir args} {
+    hir::activate $hir
     variable state
     set options [hir::Options hir::specialize::analyze \
         {-specialize 1 -call-facts-opt 1 -closed-caller-facts-opt 1 -exact-callable-opt 1

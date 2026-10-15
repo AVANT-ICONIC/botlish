@@ -225,7 +225,7 @@ Correctness defects found alongside (section 4), all fixed now:
 - **Library modules.**
   - Every build re-resolves and re-analyses every imported module (`hir::BuildOnce`).
   - Cost: about 0.5 s per build for about 1,450 library expressions, about 165 s over the corpus's 329 builds. `lib/test.bot` alone is about 75 s.
-  - Reusing an unchanged module's analysis within one compilation needs compilation isolation first. 4.1's leak is fixed, but the registries are still process-global and reset per compilation (SOURCE-DEFINED-INTEGER-DOMAINS.md, "Compilation isolation"), so reuse must not outlive the compilation that registered them.
+  - Reusing an unchanged module's analysis within one compilation needed compilation isolation first. That is done (COMPILATION-ISOLATION.md): a HIR carries the declaration state its backends need. Reuse across builds still has to partition that state by owner namespace.
 - **Method-call trials.**
   - 81 of the corpus's 328 builds are trials (`hir::DecideMethodCalls`). mutable-array.bot has 14 trial builds of its 20.
   - The remaining trials are ones the dependency analysis does not cheapen.
@@ -353,19 +353,16 @@ six kinds (error, integer domain, refinement, enum, trait, struct): each use
 is rejected as unknown right after a program that declares it. The error and
 source-type cases fail without the fix.
 
-What stays open is the rest of compilation isolation: the registries are
-still process-global, so the backends of an earlier HIR read whatever a
-later compilation registered (SOURCE-DEFINED-INTEGER-DOMAINS.md,
-"Compilation isolation"). One consequence: a program that declares no error
-now also clears an earlier program's errors, as one that declares no struct
-already cleared its structs, so an earlier HIR lowered after it finds
-neither.
+The rest of compilation isolation was closed afterwards: the registries are
+still process-global, but every HIR records the state its build left behind
+and every backend entry point re-activates it, so an earlier HIR's backends
+no longer read what a later compilation registered (COMPILATION-ISOLATION.md).
 
 Why it matters beyond the failure:
 
 - Any tool that compiles several programs in one process can mis-compile, not only slow down: the warm runs of `bench/golden-suites.tcl -warm N`, the audits' and fuzzers' loops, and `tests/golden.test`'s runner.
-- It is a concrete instance of LARGE-SCALE-GOLDEN-MIGRATION.md's recommendation 2, compilation isolation, which is "plausibly the cause" of the unexplained process-history slowdown: pass 2 of the golden suites takes 2,440 s against 2,055 s for pass 1 and 1,518 s cold. SOURCE-DEFINED-INTEGER-DOMAINS.md, "Compilation isolation", documents the wider gap.
-- Item 3.10's module reuse needs isolation first.
+- It is a concrete instance of LARGE-SCALE-GOLDEN-MIGRATION.md's recommendation 2, compilation isolation, once thought "plausibly the cause" of the unexplained process-history slowdown (pass 2 of the golden suites takes 2,440 s against 2,055 s for pass 1 and 1,518 s cold). The investigation behind COMPILATION-ISOLATION.md found it is not: the slowdown appears with a fresh child interpreter per compilation too, and this container's timings drift about 12% across fresh processes.
+- Item 3.10's module reuse needed isolation first (now in place).
 
 ### 4.2 A dead call of a trait-polymorphic function fails compilation (fixed)
 

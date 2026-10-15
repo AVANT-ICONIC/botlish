@@ -25,6 +25,7 @@
 # (`refined type`, `proves`) in lib/web.bot: no native needs either any more,
 # and both mechanisms are gone.
 proc native::prepareHir {hir} {
+    hir::activate $hir
     return [RecoverDeclaredContracts $hir]
 }
 

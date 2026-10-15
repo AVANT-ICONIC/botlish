@@ -350,6 +350,9 @@ proc hir::read::ErrorDecls {lines} {
 }
 
 proc hir::read::Program {text} {
+    # Reading registers the text's declarations (TypeDecls, ErrorDecls): the
+    # registries' state is the text's once Program stamps the HIR.
+    hir::declarations::invalidate
     set lines [Lines $text]
     if {$lines eq ""} {
         Fail 0 "empty HIR text"
@@ -403,6 +406,7 @@ proc hir::read::Program {text} {
         dict set hir traitFunctions $lastTraitFunctions
     }
     Finish hir
+    hir::declarations::stamp hir
     return $hir
 }
 

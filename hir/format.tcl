@@ -70,6 +70,9 @@
 namespace eval hir::format {}
 
 proc hir::format {hir args} {
+    # (It prints types the registries describe: the HIR's own declarations,
+    # hir/declarations.tcl.)
+    hir::activate $hir
     set options [dict create -origins 0]
     foreach {option value} $args {
         if {![dict exists $options $option]} {

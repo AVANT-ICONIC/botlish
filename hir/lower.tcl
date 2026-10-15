@@ -39,6 +39,7 @@ namespace eval hir::lower {}
 
 # The core IR program of HIR: a list of expressions.
 proc hir::lower {hir} {
+    hir::activate $hir
     return [hir::lower::Seq $hir [dict get $hir roots]]
 }
 

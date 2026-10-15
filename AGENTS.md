@@ -34,6 +34,36 @@ explicitly asked to.
   from (or read hand-written IR text into HIR); they are not production entry
   points.
 
+## Compilation isolation
+
+A compilation registers its declarations in process-wide registries that the
+analyses and the backends read by bare name: the source-defined entries of
+`core::type` and `core::native` (a domain and its `T?` predicate),
+`hir::structs`, `hir::enums`, `hir::errordecls`, `hir::traits` and
+`hir::imports`. Every HIR records the state its build left behind (its
+`declarations` side table, `hir/declarations.tcl`), and every entry point that
+reads the registries for a HIR it is given calls `hir::activate` first, so
+compiling another program never changes an earlier HIR's lowering or run
+(COMPILATION-ISOLATION.md). Two rules keep it so:
+
+* A new registry -- process-wide state a build fills from the program's
+  declarations and something reads later -- goes into
+  `hir::declarations::capture` and `Install`.
+* A new entry point that reads the registries for a HIR it is given (a
+  backend, an analysis a tool calls, a printer) calls `hir::activate $hir`
+  before reading anything. Code that writes the registries (a build, a read
+  of HIR text) calls `hir::declarations::invalidate` first and stamps the
+  HIR it returns.
+
+If you change either, or what a build or `hir::read` registers, run
+`tests/compilation-isolation.test`,
+`audit/compilation-isolation/tools/interleave.tcl` (every golden suite's
+artifacts and outcomes, right after its own compilation and after all the
+others, must be identical) and `audit/compilation-isolation/tools/mutate.tcl`
+(every mutant in its `mutants.txt` must still apply and be killed). Core IR
+text has no declarations: core IR kept and run on a Tcl backend after another
+compilation still reads the later one's (run a HIR, or lower it again).
+
 ## Installing Tcl 9
 
 This project's reference evaluator requires Tcl 9.x (`core/core.tcl` checks

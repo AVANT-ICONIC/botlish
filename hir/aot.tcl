@@ -134,6 +134,7 @@ namespace eval hir::aot {
 }
 
 proc hir::aot::analyze {hir} {
+    hir::activate $hir
     set context [context $hir]
     set regions [dict create]
     foreach id [dict keys [dict get $context exprs]] {

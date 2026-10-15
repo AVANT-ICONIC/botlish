@@ -1,0 +1,149 @@
+# Mutants of compilation isolation (audit/compilation-isolation/tools/mutate.tcl,
+# COMPILATION-ISOLATION.md).
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# Lines starting with # outside an edit are comments.
+
+@@ activate-lower hir::lower lowers a HIR without activating its declarations: the interpreter and hir::lower's own payload and drop decisions read whatever was compiled last
+## hir/lower.tcl
+<<<<
+proc hir::lower {hir} {
+    hir::activate $hir
+====
+proc hir::lower {hir} {
+>>>>
+
+@@ activate-format hir::format prints a HIR without activating its declarations: types are shown from another program's registries
+## hir/format.tcl
+<<<<
+    # (It prints types the registries describe: the HIR's own declarations,
+    # hir/declarations.tcl.)
+    hir::activate $hir
+====
+
+>>>>
+
+@@ activate-compilehir the Tcl compiler compiles a HIR without activating its declarations
+## compiler/compiler.tcl
+<<<<
+proc core::compiler::compileHir {hir} {
+    hir::activate $hir
+====
+proc core::compiler::compileHir {hir} {
+>>>>
+
+@@ activate-rununit a unit the Tcl compiler compiled once runs without activating its HIR's declarations: its code calls predicates by name and sees another program's
+## compiler/compiler.tcl
+<<<<
+    # Compiled code reads the declarations by name as it runs.
+    hir::activate [dict get $unit hir]
+====
+
+>>>>
+
+@@ activate-preparehir native lowering prepares a HIR without activating its declarations
+## native/prepare.tcl
+<<<<
+proc native::prepareHir {hir} {
+    hir::activate $hir
+====
+proc native::prepareHir {hir} {
+>>>>
+
+@@ activate-specialize the specializer analyzes a HIR without activating its declarations
+## hir/specialize.tcl
+<<<<
+proc hir::specialize::analyze {hir args} {
+    hir::activate $hir
+====
+proc hir::specialize::analyze {hir args} {
+>>>>
+
+@@ activate-aot the semantic AOT analysis analyzes a HIR without activating its declarations
+## hir/aot.tcl
+<<<<
+proc hir::aot::analyze {hir} {
+    hir::activate $hir
+====
+proc hir::aot::analyze {hir} {
+>>>>
+
+@@ cache-ignores-declarations the Tcl compiler's code cache reuses a unit compiled from the same core IR text under another program's declarations
+## compiler/compiler.tcl
+<<<<
+            && [dict get $cache $key hir declarations] ne $::hir::declarations::active} {
+====
+            && 0} {
+>>>>
+
+@@ build-unstamped a build records no declarations in its HIR: activation does nothing
+## hir/hir.tcl
+<<<<
+    hir::declarations::stamp hir
+    hir::check hir
+====
+    hir::check hir
+>>>>
+
+@@ read-unstamped a HIR read back from text records no declarations: it cannot be activated after another compilation
+## hir/read.tcl
+<<<<
+    Finish hir
+    hir::declarations::stamp hir
+====
+    Finish hir
+>>>>
+
+@@ build-not-invalidated a build does not forget the active state before rewriting the registries: after a compilation that fails half way, the earlier HIR's activation is a no-op over registries that compilation rewrote
+## hir/hir.tcl
+<<<<
+    # The build rewrites the registries below; the state they hold is this
+    # build's once it stamps its HIR (hir/declarations.tcl).
+    hir::declarations::invalidate
+====
+
+>>>>
+
+@@ install-keeps-source-types a switch installs the HIR's source types over the previous state's instead of unregistering those first: a domain and its predicate survive into a program that never declared them
+## hir/declarations.tcl
+<<<<
+    # Unregisters the source-defined types and natives of the state in
+    # force (and its structs) ...
+    hir::sourcetypes::Reset
+====
+
+>>>>
+
+@@ install-keeps-enums a switch leaves the enum registry as it was
+## hir/declarations.tcl
+<<<<
+    set ::hir::enums::registry [dict get $state enums]
+====
+
+>>>>
+
+@@ install-keeps-payloads a switch leaves the error payload registry as it was
+## hir/declarations.tcl
+<<<<
+    set ::hir::errordecls::payloads [dict get $state payloads]
+====
+
+>>>>
+
+@@ activation-always-switches activating the HIR whose declarations are already active reinstalls them (correct, but a switch per backend entry point)
+## hir/declarations.tcl
+<<<<
+    if {$state eq $::hir::declarations::active} {
+        set ::hir::declarations::active $state
+        return
+    }
+====
+
+>>>>

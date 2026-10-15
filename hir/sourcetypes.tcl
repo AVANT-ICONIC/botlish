@@ -60,19 +60,15 @@
 #     module rewritten from `refined type Item = int` to `struct Item:`
 #     compiles in the same process (hir/read.tcl's struct-only text resets
 #     the same way).
-# What this does NOT give: two *live* HIR objects, from two different
-# hir::buildSyntax calls, whose compiled Tcl procs or native code both
-# still need a same-spelled-but-different-domain source type to resolve
-# correctly *at the same time*, after a third build has reset the registry
-# in between. That would need every core::type/core::native lookup site
-# (hir/resolve.tcl, compiler.tcl, native/lower.tcl, ...) to thread a
-# compilation-scoped environment through instead of consulting one global
-# registry by bare name -- a real redesign of machinery items 93/136 ask
-# this milestone to leave alone. This compiler is not built for concurrent
-# or nested compilation today (nothing in hir/, compiler/ or native/ passes
-# a compilation identity anywhere), so that gap is accepted and documented,
-# not silently papered over -- see SOURCE-DEFINED-INTEGER-DOMAINS.md's
-# "Compilation isolation" section for the full argument and its tests.
+# Two *live* HIR objects, from two different hir::buildSyntax calls, whose
+# backends need a same-spelled-but-different source type at different times
+# are served by activation instead (hir/declarations.tcl,
+# COMPILATION-ISOLATION.md): each HIR records the registry state its build
+# left behind, and every entry point that reads the registries for a HIR
+# reinstalls that state first, so the lookups keep consulting one global
+# registry by bare name. Concurrent compilation (two builds at once) is
+# still not supported: nothing in hir/, compiler/ or native/ passes a
+# compilation identity anywhere.
 
 namespace eval hir::sourcetypes {
     # {type NAME} / {native NAME} entries the previous apply call

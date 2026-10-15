@@ -625,8 +625,10 @@ wrong reason. It is not a migration blocker and is not fixed here
 ([Recommendations](#recommendations), 2). (The forward leaks are fixed since:
 a frontend's program resets the error and source-type registries even when it
 declares nothing, and a program's refinement carriers no longer resolve an
-earlier program's structs -- COMPILER-BOTTLENECKS.md, 4.1. The backends of an
-earlier HIR still read the registries a later compilation filled.)
+earlier program's structs -- COMPILER-BOTTLENECKS.md, 4.1. And an earlier
+HIR's backends no longer read the registries a later compilation filled:
+every HIR records the state its build left behind and every backend entry
+point re-activates it -- COMPILATION-ISOLATION.md.)
 
 **Found, not fixed: a `static compile:` verdict that depends on layout** (the
 static-decision fuzzer's seeds 17 and 41 on the final tree; the same on the
@@ -1496,7 +1498,8 @@ implications, not decisions.
    staged plan's indexes and the native specializer's copies. Re-measure the corpus with
    `bench/golden-suites.tcl` and `bench/golden-workflows.tcl` after each; the
    local-default question should be decided on those numbers, not today's.
-2. **Fix compilation isolation.** A compilation's declarations live in
+2. **Fix compilation isolation** (done since: COMPILATION-ISOLATION.md).
+   A compilation's declarations live in
    process-wide registries the next compilation overwrites (backends of an
    earlier HIR then miscompile or fail) or keeps (error declarations, source
    types: a program using an undeclared error compiles after another program

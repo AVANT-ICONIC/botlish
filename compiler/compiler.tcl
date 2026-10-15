@@ -171,6 +171,13 @@ proc core::compiler::Run {unit env} {
 proc core::compiler::compileUnit {mode exprs} {
     variable cache
     set key [list $mode $exprs]
+    if {[dict exists $cache $key] && [dict exists $cache $key hir declarations]
+            && [dict get $cache $key hir declarations] ne $::hir::declarations::active} {
+        # Compiled under other declarations (hir/declarations.tcl): the unit
+        # was generated from a HIR built against them, which the text alone
+        # does not say.
+        dict unset cache $key
+    }
     if {![dict exists $cache $key]} {
         dict set cache $key [Define [GenerateUnit $mode [hir::build $exprs -mode $mode -strict 0]]]
     }
@@ -197,12 +204,15 @@ proc core::compiler::Define {unit} {
 # for core IR text, here for the HIR itself. Its procs are defined. The HIR is
 # trusted: it may come from hir::parse rather than a front end.
 proc core::compiler::compileHir {hir} {
+    hir::activate $hir
     return [Define [GenerateUnit [hir::mode $hir] $hir]]
 }
 
 # Runs the program-mode UNIT (compileHir's) in the existing environment ENV,
 # as runProgram runs core IR text. Returns a completion.
 proc core::compiler::runUnit {unit env} {
+    # Compiled code reads the declarations by name as it runs.
+    hir::activate [dict get $unit hir]
     return [Run [dict get $unit name] $env]
 }
 

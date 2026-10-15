@@ -231,34 +231,26 @@ a reset.
   type), where it once compiled against the earlier declaration — and
   likewise for an error, a refinement, an enum, a trait and a struct
   (`source-type-declarations-do-not-leak-forward`).
-- What it does **not** guarantee: two *live* HIR objects from two different
-  `hir::buildSyntax` calls, holding conflicting same-spelled declarations,
-  both still needing correct name-based resolution *after* a third,
-  colliding build has run in between. Compiled Tcl procs
-  (`core::compiler::cache`) and native code both persist for the rest of
-  the process and re-consult `core::type`/`core::native` by bare name at
-  every future invocation; a later, colliding declaration would shadow an
-  earlier one's meaning for anything that looks it up again after that
-  point.
+- What it did **not** guarantee at first: two *live* HIR objects from two
+  different `hir::buildSyntax` calls, holding conflicting same-spelled
+  declarations, both still needing correct name-based resolution *after* a
+  third, colliding build has run in between. Compiled Tcl procs
+  (`core::compiler::cache`) and native lowering re-consult
+  `core::type`/`core::native` by bare name, so a later declaration shadowed
+  an earlier one's meaning for anything that looked it up again.
 
-**Why this is the right line to draw here, not a gap papered over:** giving
-every source-declared type a truly compilation-scoped identity (so two
-live, colliding registrations could coexist correctly) requires threading a
-compilation/program identity through every name-based lookup —
-`core::type::normalize`, `::subtype`, `::integerFacts`, `core::native::
-metadata`, the compiled-Tcl-proc's own embedded contract checks — a real
-redesign of otherwise name-keyed machinery, exactly what items 93/136/16 of
-this milestone's brief ask *not* to do (no production changes to
-`hir/range.tcl`, `native/lower.tcl`, `native/src/**`; "prefer program-local
-state when reasonably aligned with current architecture," not forced).
-This compiler has no other notion of concurrent or nested compilation
-today — nothing in `hir/`, `compiler/`, or `native/` passes a compilation
-identity anywhere, and every actual caller in this codebase (every test,
-`main.tcl`, the module loader) builds, consumes, and moves on before
-building the next thing. The reset-on-next-batch model matches that usage
-exactly, is proven against it by the isolation tests above, and is
-documented here rather than silently relied upon — see "Deferred features"
-for what a fuller compilation-scoped environment would need.
+**That gap is closed** (COMPILATION-ISOLATION.md). Rather than thread a
+compilation identity through every name-based lookup — `core::type::normalize`,
+`::subtype`, `::integerFacts`, `core::native::metadata`, the compiled code's
+own contract checks, about 1,400 call sites — every HIR records the registry
+state its build left behind (its `declarations` side table) and every entry
+point that reads the registries for a HIR re-activates that state first
+(`hir::activate`: `hir::lower`, `hir::format`, the analyses, the Tcl
+compiler's `compileHir` and `runUnit`, `native::prepareHir`). The registries
+stay single and global, the lookups unchanged; what changed is that a HIR
+carries what they must hold while its backends run. What remains uncovered is
+core IR *text* kept and run on a Tcl backend after another compilation: core
+IR carries no declarations.
 
 ## Module/name resolution
 
