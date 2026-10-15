@@ -1,0 +1,354 @@
+# local.tcl -- the local test run (AGENTS.md, "Running the tests locally"):
+# the Tcl tests minus those a golden test duplicates, and the golden suites
+# in their place, in parallel.
+#
+#   tclsh9.0 tests/local.tcl ?-jobs N? ?-backends LIST? ?-golden-backends LIST?
+#                            ?-all 0|1? ?-parts LIST? ?-verbose 0|1? ?FILE ...?
+#
+# Tcl tests: every tests/*.test file once per backend of -backends (default
+# CORE_BACKEND if set, else interp,compile -- what tests/all.tcl runs), each
+# in its own tclsh with a private -tmpdir, with BOTLISH_SKIP_GOLDEN_DUPLICATES=1:
+# the tests the manifest classifies FROZEN-DUPLICATE-ORACLE, whose whole
+# theorem a golden test carries, are skipped (tests/helpers.tcl). -all 1 runs
+# every Tcl test, as CI does.
+#
+# Golden suites: every tests/golden/*.bot, one tests/golden/run.tcl process
+# per suite on the backends of -golden-backends (default all four; a suite's
+# recorded exclusions are skipped by the runner). BOTLISH_HIR_CACHE, when set,
+# is passed on: a suite whose front end and modules are unchanged is not
+# compiled again (HIR-INTERCHANGE.md).
+#
+# FILE arguments narrow the run: a test file (tests/X.test or X.test) runs
+# that file, and a suite (X.bot) that suite. Given test files and no suite,
+# the suites run are those holding the golden tests that replace the files'
+# skipped tests, so the run covers what the files covered. -parts tcl or
+# -parts golden runs one layer only.
+#
+# -jobs N processes at a time (default: the number of processors), the
+# golden suites and the largest files first. Prints a line per finished
+# process (-verbose 1 also prints each one's output), then every failure;
+# exits 1 if any Tcl test or golden test failed, a file or suite did not
+# complete, or a test file wrote to stderr (as tests/all.tcl counts it).
+
+set testDir [file dirname [file normalize [info script]]]
+set root [file dirname $testDir]
+
+proc usage {} {
+    puts stderr "usage: tclsh9.0 tests/local.tcl ?-jobs N? ?-backends LIST? ?-golden-backends LIST? ?-all 0|1? ?-parts LIST? ?-verbose 0|1? ?FILE ...?"
+    exit 2
+}
+
+proc processors {} {
+    if {![catch {exec nproc} n] && [string is integer -strict $n]} { return $n }
+    return 4
+}
+
+set options [dict create -jobs [processors] \
+    -backends [expr {[info exists ::env(CORE_BACKEND)] && $::env(CORE_BACKEND) ne "" ? $::env(CORE_BACKEND) : "interp,compile"}] \
+    -golden-backends interp,compile,cranelift-generic,cranelift -all 0 -parts tcl,golden -verbose 0]
+set arguments {}
+for {set i 0} {$i < [llength $argv]} {incr i} {
+    set arg [lindex $argv $i]
+    if {[string match -* $arg]} {
+        if {![dict exists $options $arg] || $i + 1 >= [llength $argv]} usage
+        dict set options $arg [lindex $argv [incr i]]
+    } else {
+        lappend arguments $arg
+    }
+}
+set listOf {apply {{value} {lsearch -all -inline -not -exact [split [string map {" " ,} $value] ,] ""}}}
+set backends [{*}$listOf [dict get $options -backends]]
+set goldenBackends [{*}$listOf [dict get $options -golden-backends]]
+set parts [{*}$listOf [dict get $options -parts]]
+set jobs [dict get $options -jobs]
+set skipDuplicates [expr {![dict get $options -all]}]
+set verbose [dict get $options -verbose]
+foreach name {LANG LC_ALL} {
+    if {![info exists ::env($name)] || $::env($name) eq ""} { set ::env($name) C.utf8 }
+}
+
+# ---------------------------------------------------------------------------
+# What runs.
+
+set testFiles {}
+set suites {}
+foreach arg $arguments {
+    set tail [file tail $arg]
+    if {[string match *.bot $tail]} {
+        set path [file join $testDir golden $tail]
+        if {![file exists $path]} { puts stderr "no golden suite $tail"; exit 2 }
+        lappend suites $path
+    } elseif {[string match *.test $tail]} {
+        set path [file join $testDir $tail]
+        if {![file exists $path]} { puts stderr "no test file $tail"; exit 2 }
+        lappend testFiles $path
+    } else {
+        puts stderr "not a test file or golden suite: $arg"
+        exit 2
+    }
+}
+if {$arguments eq {}} {
+    set testFiles [lsort [glob -directory $testDir *.test]]
+    set suites [lsort [glob -directory [file join $testDir golden] *.bot]]
+} elseif {$suites eq {} && $skipDuplicates} {
+    # The suites holding the golden tests that replace the given files'
+    # skipped tests (tests/helpers.tcl's GoldenDuplicates: the same rows).
+    set channel [open [file join $testDir golden manifest.tsv] r]
+    fconfigure $channel -encoding utf-8
+    set header [split [gets $channel] \t]
+    set rows [split [read $channel] \n]
+    close $channel
+    set columns {}
+    foreach column {old_file old_test suite freeze} {
+        lappend columns [lsearch -exact $header $column]
+    }
+    set wanted [lmap path $testFiles {file tail $path}]
+    set suitesOf [dict create]
+    set active [dict create]
+    foreach line $rows {
+        if {$line eq ""} continue
+        set row [split $line \t]
+        lassign [lmap c $columns {lindex $row $c}] file name suite freeze
+        set file [file tail $file]
+        if {$file ni $wanted} continue
+        if {$freeze eq "FROZEN-DUPLICATE-ORACLE"} {
+            dict lappend suitesOf [list $file $name] $suite
+        } else {
+            dict set active [list $file $name] 1
+        }
+    }
+    set names {}
+    dict for {key list} $suitesOf {
+        if {![dict exists $active $key]} { lappend names {*}$list }
+    }
+    set suites [lmap suite [lsort -unique $names] {file join $testDir golden $suite}]
+}
+if {"tcl" ni $parts} { set testFiles {} }
+if {"golden" ni $parts} { set suites {} }
+
+# Item key -> {kind command environment label}, the golden suites and the
+# largest files first.
+set items [dict create]
+foreach path [lsort -command {apply {{a b} {expr {[file size $b] - [file size $a]}}}} $suites] {
+    dict set items golden:[file tail $path] [list golden \
+        [list [info nameofexecutable] [file join $testDir golden run.tcl] -backends [join $goldenBackends ,] -quiet $path] \
+        {} "golden [file tail $path]"]
+}
+foreach path [lsort -command {apply {{a b} {expr {[file size $b] - [file size $a]}}}} $testFiles] {
+    foreach backend $backends {
+        set environment [list CORE_BACKEND $backend]
+        if {$skipDuplicates} { lappend environment BOTLISH_SKIP_GOLDEN_DUPLICATES 1 }
+        dict set items tcl:$backend:[file tail $path] [list tcl \
+            [list [info nameofexecutable] $path] $environment "tcl $backend [file tail $path]"]
+    }
+}
+
+# ---------------------------------------------------------------------------
+# The pool: JOBS processes at a time, stdout through a pipe, stderr to a
+# file (any stderr output counts as a test file error, as for tests/all.tcl).
+
+set scratch [file tempdir botlish-local]
+set results [dict create]
+set pending [dict keys $items]
+set running 0
+set started [clock milliseconds]
+
+proc launch {key} {
+    global items scratch running
+    lassign [dict get $items $key] kind command environment
+    set id [incr ::launched]
+    set err [file join $scratch $id.stderr]
+    if {$kind eq "tcl"} {
+        set tmp [file join $scratch $id.tmp]
+        file mkdir $tmp
+        lappend command -tmpdir $tmp
+    }
+    set saved [dict create]
+    foreach {name value} $environment {
+        dict set saved $name [expr {[info exists ::env($name)] ? [list $::env($name)] : {}}]
+        set ::env($name) $value
+    }
+    set channel [open |[concat $command [list 2> $err]] r]
+    dict for {name value} $saved {
+        if {$value eq {}} { unset ::env($name) } else { set ::env($name) [lindex $value 0] }
+    }
+    fconfigure $channel -blocking 0 -encoding utf-8
+    set ::pipeOutput($channel) ""
+    set ::pipeStart($channel) [clock milliseconds]
+    fileevent $channel readable [list collect $channel $key $err]
+    incr running
+}
+
+proc collect {channel key err} {
+    global results running
+    append ::pipeOutput($channel) [read $channel]
+    if {![eof $channel]} return
+    fconfigure $channel -blocking 1
+    set status 0
+    if {[catch {close $channel} message options]} {
+        set code [dict get $options -errorcode]
+        set status [expr {[lindex $code 0] eq "CHILDSTATUS" ? [lindex $code end] : 1}]
+    }
+    set stderr ""
+    if {[file exists $err]} {
+        set f [open $err r]
+        fconfigure $f -encoding utf-8
+        set stderr [read $f]
+        close $f
+    }
+    set seconds [expr {([clock milliseconds] - $::pipeStart($channel)) / 1000.0}]
+    dict set results $key [list $status $::pipeOutput($channel) $stderr $seconds]
+    unset ::pipeOutput($channel) ::pipeStart($channel)
+    incr running -1
+    report $key
+    set ::event $key
+}
+
+# The verdict of a finished item: {OK SUMMARY}.
+proc verdict {key} {
+    global items results
+    lassign [dict get $items $key] kind
+    lassign [dict get $results $key] status output stderr
+    if {$kind eq "tcl"} {
+        if {![regexp {Total\s+(\d+)\s+Passed\s+(\d+)\s+Skipped\s+(\d+)\s+Failed\s+(\d+)} $output -> total passed skipped failed]} {
+            return [list 0 "did not complete (status $status)"]
+        }
+        set duplicates 0
+        regexp -line {^\s+(\d+)\s+goldenDuplicate$} $output -> duplicates
+        set summary "$passed passed, $failed failed, $skipped skipped"
+        if {$duplicates} { append summary " ($duplicates golden duplicates)" }
+        if {[string trim $stderr] ne ""} {
+            return [list 0 "$summary; wrote to stderr"]
+        }
+        return [list [expr {$failed == 0}] $summary]
+    }
+    set compile ""
+    set parts {}
+    foreach line [split $output \n] {
+        if {[regexp {^\S+\s+(\S+)\s+(\d+) passed, (\d+) failed \(compile ([\d.]+)s} $line -> backend passed failed compile]} {
+            lappend parts "$backend $passed/[expr {$passed + $failed}]"
+        } elseif {[regexp {^\S+\s+(\S+)\s+ABORTED .*\(compile ([\d.]+)s} $line -> backend compile]} {
+            lappend parts "$backend ABORTED"
+        } elseif {[regexp {^\S+\s+(\S+)\s+excluded} $line -> backend]} {
+            lappend parts "$backend excluded"
+        } elseif {[regexp {DISAGREE|COMPILE ERROR} $line]} {
+            lappend parts [string trim $line]
+        }
+    }
+    set summary [join $parts ", "]
+    if {$compile ne ""} { set summary "front end ${compile} s; $summary" }
+    return [list [expr {$status == 0}] $summary]
+}
+
+proc report {key} {
+    global items results verbose
+    lassign [dict get $items $key] kind command environment label
+    lassign [dict get $results $key] status output stderr seconds
+    lassign [verdict $key] ok summary
+    puts [format "%-6s %-44s %7.1f s  %s" [expr {$ok ? "ok" : "FAIL"}] $label $seconds $summary]
+    if {$verbose} {
+        puts $output
+        if {$stderr ne ""} { puts "-- stderr:\n$stderr" }
+    }
+    flush stdout
+}
+
+puts "local run: [llength $testFiles] Tcl test files on [join $backends {, }][expr {$skipDuplicates ? " (golden duplicates skipped)" : " (every test)"}], [llength $suites] golden suites on [join $goldenBackends {, }], $jobs at a time"
+flush stdout
+try {
+    while {[llength $pending] > 0 || $running > 0} {
+        while {$running < $jobs && [llength $pending] > 0} {
+            set pending [lassign $pending key]
+            launch $key
+        }
+        vwait ::event
+    }
+} finally {
+    file delete -force $scratch
+}
+set wall [expr {([clock milliseconds] - $started) / 1000.0}]
+
+# ---------------------------------------------------------------------------
+# The summary.
+
+set failures {}
+set totals [dict create]
+set goldenTotals [dict create suites 0 failedSuites 0]
+dict for {key item} $items {
+    lassign $item kind command environment label
+    lassign [dict get $results $key] status output stderr
+    lassign [verdict $key] ok summary
+    if {$kind eq "tcl"} {
+        set backend [lindex [split $key :] 1]
+        if {[regexp {Total\s+(\d+)\s+Passed\s+(\d+)\s+Skipped\s+(\d+)\s+Failed\s+(\d+)} $output -> total passed skipped failed]} {
+            set duplicates 0
+            regexp -line {^\s+(\d+)\s+goldenDuplicate$} $output -> duplicates
+            foreach {name value} [list passed $passed failed $failed skipped [expr {$skipped - $duplicates}] duplicates $duplicates] {
+                dict incr totals $backend,$name $value
+            }
+        }
+    } else {
+        dict incr goldenTotals suites
+        if {!$ok} { dict incr goldenTotals failedSuites }
+        foreach {- backend passed failed} [regexp -all -inline -line {^\S+\s+(\S+)\s+(\d+) passed, (\d+) failed} $output] {
+            dict incr goldenTotals $backend,passed $passed
+            dict incr goldenTotals $backend,failed $failed
+        }
+    }
+    if {!$ok} {
+        lappend failures $key
+    }
+}
+
+puts ""
+foreach backend $backends {
+    if {![dict exists $totals $backend,passed]} continue
+    puts [format "Tcl tests on %-8s %5d passed, %d failed, %d skipped, %d golden duplicates skipped" $backend \
+        [dict get $totals $backend,passed] [dict get $totals $backend,failed] \
+        [dict get $totals $backend,skipped] [dict get $totals $backend,duplicates]]
+}
+if {[dict get $goldenTotals suites]} {
+    set perBackend [lmap backend $goldenBackends {
+        expr {[dict exists $goldenTotals $backend,passed]
+            ? "$backend [dict get $goldenTotals $backend,passed]/[expr {[dict get $goldenTotals $backend,passed] + [dict get $goldenTotals $backend,failed]}]"
+            : [continue]}
+    }]
+    puts "Golden suites: [dict get $goldenTotals suites] run, [dict get $goldenTotals failedSuites] failed; tests passed: [join $perBackend {, }]"
+}
+puts [format "Wall time %.1f s with %d jobs." $wall $jobs]
+
+if {$failures ne {}} {
+    puts "\nFAILURES ([llength $failures]):"
+    foreach key $failures {
+        lassign [dict get $items $key] kind command environment label
+        lassign [dict get $results $key] status output stderr
+        puts "\n==== $label: [lindex [verdict $key] 1]"
+        if {$kind eq "tcl"} {
+            # Each failed test's block, "==== NAME DESCRIPTION FAILED" to
+            # "==== NAME FAILED"; or the output's end, for a file that did
+            # not complete.
+            set lines [split $output \n]
+            set shown {}
+            set inside ""
+            foreach line $lines {
+                if {$inside eq "" && [regexp {^==== (\S+) .*FAILED$} $line -> name]} {
+                    set inside $name
+                }
+                if {$inside ne ""} {
+                    lappend shown $line
+                    if {$line eq "==== $inside FAILED"} { set inside "" }
+                }
+            }
+            if {$shown eq {}} { set shown [lrange $lines end-15 end] }
+            puts [join [lrange $shown 0 200] \n]
+            if {[string trim $stderr] ne ""} { puts "-- stderr:\n[string range $stderr 0 4000]" }
+            puts "rerun: [expr {[llength $environment] ? "env [join [lmap {n v} $environment {string cat $n = $v}] { }] " : ""}]tclsh9.0 [file join tests [file tail [lindex $command 1]]]"
+        } else {
+            puts [string trim $output]
+            if {[string trim $stderr] ne ""} { puts "-- stderr:\n[string range $stderr 0 4000]" }
+            puts "rerun: tclsh9.0 tests/golden/run.tcl -backends [join $goldenBackends ,] tests/golden/[file tail [lindex $command end]]"
+        }
+    }
+    exit 1
+}
+exit 0

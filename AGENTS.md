@@ -235,6 +235,64 @@ the test suite, still install the `.deb`s.
   `.github/workflows/tests.yml` has the command. Run them once more under
   `BOTLISH_NATIVE_GC_STRESS=1`.
 
+## Running the tests locally
+
+Run the tests locally with `tclsh9.0 tests/local.tcl`, not `tests/all.tcl`.
+It runs, in parallel (`-jobs N`, default the processor count; one process
+per test file or suite, each with a private `-tmpdir`):
+
+* **every Tcl test file on interp and compile** (`-backends`; CORE_BACKEND
+  when set), minus the Tcl tests a golden test duplicates: the ones the
+  manifest classifies FROZEN-DUPLICATE-ORACLE (`tests/golden/manifest.tsv`'s
+  `freeze` column; LARGE-SCALE-GOLDEN-MIGRATION.md, "Freeze
+  classification"), whose whole theorem golden tests carry on every backend.
+  They are reported skipped, by the constraint `goldenDuplicate`
+  (`BOTLISH_SKIP_GOLDEN_DUPLICATES=1`, tests/helpers.tcl). Everything Botlish
+  source cannot express keeps running in Tcl: compiler and runtime internals,
+  the parser, warnings, several programs, `main.tcl`, executables and the
+  process boundary, run-time-only failures, the internal half of every SPLIT
+  test, and every Tcl test whose golden port is weaker;
+* **every golden suite on all four backends**, in their place.
+
+It prints a line per file and suite, then every failure with the command
+that reruns it, and exits 1 on any. The whole run took [[LOCAL]] on the
+4-core container this was written on, against [[ALL]] for `tests/all.tcl`
+(both passes, every test, one file at a time) and [[ALLPAR]] for every test
+through `tests/local.tcl -all 1`.
+
+* **Narrow it to what an edit touches.** `tclsh9.0 tests/local.tcl
+  tests/affine.test tests/coroutines.test` runs those files minus their
+  duplicated tests, plus the golden suites that hold those tests'
+  replacements, so the run still covers what the files covered. A `X.bot`
+  argument runs that suite; `-parts tcl` or `-parts golden` runs one layer.
+  Wherever this file says to run a Tcl test file, run it this way. The
+  fuzzers and mutation harnesses are unchanged: they run what they name.
+* **Keep the golden front ends between runs** with `BOTLISH_HIR_CACHE=DIR`
+  (a directory of your own outside the repository; HIR-INTERCHANGE.md). The
+  cache key leaves out `compiler/` and `native/`. After an edit there, a golden
+  suite is not compiled again, and the whole golden corpus costs a fraction
+  of the Tcl tests it replaces (GOLDEN-VS-TCL-BENCHMARK.md). The Tcl tests
+  never use the cache.
+* **When a golden test fails,** its Tcl originals are its manifest rows
+  (`old_file`, `old_test`). `tclsh9.0 tests/X.test` runs every test of a
+  file, and `tests/local.tcl -all 1` runs every Tcl test, duplicates
+  included, as CI does.
+* **CI runs every test, every time:**
+  - the whole Tcl suite, duplicates included, on interp and compile;
+  - its coverage on cranelift and cranelift-generic;
+  - every golden suite on every backend beside its Tcl originals
+    (`audit/golden/tools/check.tcl`);
+  - the native Rust unit tests;
+  - the stub-linked executables;
+  - the warning gate;
+  - on pushes to main, the GC-stress run.
+
+  Never set `BOTLISH_SKIP_GOLDEN_DUPLICATES` or run `tests/local.tcl` in a
+  workflow: `tests/golden-duplicates.test` fails if one does.
+* **The skipped set is the manifest's, never a list kept by hand.** A Tcl
+  test leaves it when its port is reclassified, through the census and the
+  fragments (Golden tests, below).
+
 ## Running Linux tests from Windows with WSL
 
 The Windows development machine has an Ubuntu 24.04 WSL distribution with
@@ -242,7 +300,7 @@ the repository toolchain already installed. Run Linux-native validation from
 PowerShell through that distribution, using the mounted Windows checkout:
 
 ```powershell
-wsl.exe -d Ubuntu-24.04 -- bash -lc 'cd /mnt/c/Users/MarkusWagner/dev/botlish && export LANG=C.utf8 LC_ALL=C.utf8 && tclsh9.0 tests/all.tcl'
+wsl.exe -d Ubuntu-24.04 -- bash -lc 'cd /mnt/c/Users/MarkusWagner/dev/botlish && export LANG=C.utf8 LC_ALL=C.utf8 && tclsh9.0 tests/local.tcl'
 ```
 
 The WSL checkout is the same working tree as the Windows checkout, not a
