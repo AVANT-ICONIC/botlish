@@ -276,17 +276,20 @@ test dormant-refined-checks-char-at-entry {refined-checks: char_at.i loses the -
 
 # char_at (lib/web.bot) guards its slice (`if i < 0 or i >= n: return ""`,
 # which proves the substring's bounds): with dormant instances on, i's entry
-# Range [0, ...] also decides the `i < 0` test statically (no ilt).
+# Range [0, ...] also decides the `i < 0` test statically (no ilt). With them
+# off, the guard's own false edge narrows i to [0, n - 1] (an `or` narrows
+# by every operand, hir/range.tcl's Paths and OutcomeFacts), so i + 1 is a raw
+# riadd there too; only the ilt remains.
 # The guard also makes the slice's bounds a completion proof, so its checks are
 # gone from the NIR: no `regioncheck` before the region, `substrproven` (no
 # check, no error exit) where the String is materialized (PROOF-FACT-REPAIRS.md).
 # Since the warning-driven refactor (REFACTOR-WARNINGS-CLEAN.md) the
 # materializing variant is emitted first.
-test dormant-refined-checks-char-at-nir {refined-checks: char_at's i + 1 is a raw riadd (no tag test, no overflow check) in both of its emitted variants, instead of a tagged iadd} -body {
+test dormant-refined-checks-char-at-nir {refined-checks: char_at's i + 1 is a raw riadd (no tag test, no overflow check) in both of its emitted variants, with dormant instances on or off; on, the i < 0 test is decided (no ilt)} -body {
     set hir [surface::readProgramFile [file join $::projectRoot bench refined-checks.bot]]
     set off [withDormant 0 {nirOpsOf [native::nir $hir] char_at}]
     list $off [nirOpsOf [native::nir $hir] char_at]
-} -result {{{ilt runbox runbox rige iadd substrproven} {ilt runbox runbox rige iadd}} {{runbox runbox rige runbox riadd rbox substrproven} {runbox runbox rige runbox riadd rbox}}}
+} -result {{{ilt runbox runbox rige runbox riadd rbox substrproven} {ilt runbox runbox rige runbox riadd rbox}} {{runbox runbox rige runbox riadd rbox substrproven} {runbox runbox rige runbox riadd rbox}}}
 
 test dormant-scan-shape-entry {the emailish? scanner shape: get.i is [0, …] once scan<generic>'s unbounded loop counter no longer reaches it} -body {
     set off [withDormant 0 {

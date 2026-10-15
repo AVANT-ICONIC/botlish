@@ -211,8 +211,10 @@ proc core::compiler::compileHir {hir} {
 # Runs the program-mode UNIT (compileHir's) in the existing environment ENV,
 # as runProgram runs core IR text. Returns a completion.
 proc core::compiler::runUnit {unit env} {
-    # Compiled code reads the declarations by name as it runs.
-    hir::activate [dict get $unit hir]
+    # Compiled code reads no declaration as it runs (compileHir activated
+    # its HIR's while generating it; a domain's run-time predicate, the one
+    # thing it once called by name, is gone: ELIMINATE-AUTOMATIC-TYPE-
+    # PREDICATES.md), so a unit runs the same after another compilation.
     return [Run [dict get $unit name] $env]
 }
 

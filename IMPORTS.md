@@ -265,9 +265,12 @@ only. Structs keep their qualified spelling after `import NS`
 (`x: abi::U8`, `abi::U8 { value: v }`). Errors are not namespaced
 (below).
 
-The type predicate of a type, `U8Value?(v)`, is the type's own member: bare
-inside the declaring file for the entry program or module that declares it,
-`abi::U8Value?(v)` (after `import abi`) elsewhere.
+A type is never a value: a `type` declaration adds no member to its
+namespace's values, so neither `import NS` nor `import type NS::T` brings a
+value or a function with it. There is no type predicate `U8Value?(v)` (nor
+`abi::U8Value?(v)`): a namespace offers exactly the functions it declares --
+a converter such as `abi::u8`, or a predicate it writes itself
+(ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md).
 
 ### Collision rules
 

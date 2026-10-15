@@ -36,10 +36,10 @@
 # declaring `errors BelowRange, AboveRange` and produced through the
 # source-level `fail` primitive -- an application-visible declared error,
 # not the old undeclared {CORE SEMANTIC RANGE}. This is now a property of
-# every source-declared bounded-integer type generically
-# (hir/sourcetypes.tcl's own core::type::declareIntConstructor, which
-# registers only the NAME? membership predicate now, no callable
-# constructor), not something this file arranges.
+# every source-declared bounded-integer type generically: a type
+# declaration registers no callable at all, neither a constructor nor (since
+# ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md) a NAME? membership predicate --
+# not something this file arranges.
 #
 # byte::high_nibble/byte::low_nibble/byte::nibble/byte::complement/
 # byte::position_low/byte::position_high (lib/byte.bot) are ordinary,

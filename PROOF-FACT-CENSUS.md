@@ -978,7 +978,12 @@ Compile-time notes are estimates.
   the local verify-mode Range at that use before recording the requirement.
 * **Compile-time:** moderate (needs local Ranges during inference).
 
-**G11: range has no `and`/`or` decomposition.**
+**G11: range has no `and`/`or` decomposition.** *Closed by
+ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md*: range's `If` and completions'
+`BranchOutcome` share `hir::range::Paths`/`OutcomeFacts` (`and`, `or`,
+`not`), because comparisons became the way a program admits an Int into an
+integer domain once the domain's `T?` predicate was removed -- no longer
+optimization only. The record below is the census's.
 
 * **Producer:** branch conditions.
 * **Expected boundary:** range narrowing.

@@ -511,7 +511,10 @@ from the annotation itself. A definitely-incompatible argument and a
 merely-unproven one are both compile-time errors -- the strict model has
 no middle ground. The explicit mechanism for establishing an uncertain
 value's membership remains the pre-existing checked constructor/predicate
-(`Small(x)`/`Small?(x)`), untouched by this milestone. Nominal subtype
+(`Small(x)`/`Small?(x)`), untouched by this milestone. (Both were removed
+later -- EXPLICIT-ERROR-COMPLETIONS.md, ELIMINATE-AUTOMATIC-TYPE-
+PREDICATES.md: today the mechanism is an ordinary converter returning the
+domain, or comparisons whose range facts prove membership.) Nominal subtype
 implies admissibility; admissibility can also succeed without nominal
 subtype (the same-domain-sibling case); same-domain siblings remain
 nominally distinct types that may still satisfy each other's parameter
@@ -558,7 +561,10 @@ Int and wants to call a bounded-parameter function must either receive it
 already narrowed by a declared result type, or go through an explicit
 checked constructor -- there is still no way to *locally* refine an
 arbitrary value's type from a runtime test (`if Byte?(x): ...`) the way
-flow-sensitive comparison narrowing already refines ranges. That predicate
+flow-sensitive comparison narrowing already refines ranges. (Since
+ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md there is no `Byte?`, and the
+comparisons themselves are that runtime test: `if 0 <= x and x <= 255:`
+admits `x` where a `Byte` is required.) That predicate
 flow refinement is the most immediately useful next step this milestone's
 own restrictions expose; minimal parameterized container typing
 (`List[UnicodeChar]` → `ImmutableSet[Byte]`) remains the other, independent

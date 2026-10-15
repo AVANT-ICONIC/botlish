@@ -174,9 +174,9 @@ test hir-call-6 {type tests are decided from static types} -body {
                         {call {ref integer?} {const 1}}
                         {call {ref integer?} {const a}}
                         {call {ref integer?} {ref v}}
-                        {call {ref NonEmpty?} {ref q}}
-                        {call {ref NonEmpty?} {const 5}}
-                        {call {ref NonEmpty?} {ref v}}}}}]
+                        {call {ref non_empty?} {ref q}}
+                        {call {ref non_empty?} {const 5}}
+                        {call {ref non_empty?} {ref v}}}}}]
     set calls [lrange [hirFind $h call] 2 end]
     lmap e $calls {hir::get $h $e known}
 } -result {1 0 {} 1 {} {}}

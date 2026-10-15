@@ -600,8 +600,9 @@ each finding was checked by a separate skeptic. Fixed as a result:
 
 1. **Namespace additions.** `abi::x86_64` (lib/abi/x86_64.bot): struct
    `Register64`, functions `register64`, `to_int`; and, global by the
-   language's rules, the type `Register64Word` (with its predicate native
-   `Register64Word?`) and the errors `Register64BelowRange`,
+   language's rules, the type `Register64Word` (with, at the time, its
+   automatic predicate native `Register64Word?`, removed by
+   ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md) and the errors `Register64BelowRange`,
    `Register64AboveRange`. `linux::abi`: the root native
    `linux::abi::syscall` (core/linuxabi.tcl); no module file. Language: nested
    namespaces and qualified root natives.

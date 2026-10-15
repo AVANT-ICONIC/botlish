@@ -1316,32 +1316,12 @@ proc hir::completions::ValueCarries {hirVar ctxVar guard a} {
 }
 
 # ---------------------------------------------------------------------------
-# Branch feasibility (item 29): a Range this file's own ComparisonNarrowing-
-# derived facts computed that is empty (both bounds finite, min > max) means
-# the outcome that produced it cannot actually happen -- a genuine
-# contradiction between the incoming argument facts and this branch's own
+# Branch feasibility (item 29): a path of a condition whose narrowing is an
+# empty Range (both bounds finite, min > max) cannot actually happen -- a
+# genuine contradiction between the incoming argument facts and the
 # condition, not merely "no new information" (hir::range::Narrowed's own ""
-# return, which means the opposite: nothing to prune).
-proc hir::completions::RangeEmpty {r} {
-    if {$r eq {never}} {
-        return 1
-    }
-    set mn [dict get $r min]
-    set mx [dict get $r max]
-    return [expr {$mn ne {-inf} && $mx ne {+inf} && $mn > $mx}]
-}
-
-# 1 if any Range in FACTS (a bindingId -> Range dict, as hir::range::
-# ComparisonNarrowing returns) is empty: this outcome is infeasible under
-# the current bindings.
-proc hir::completions::FactsContradictory {facts} {
-    foreach {b r} $facts {
-        if {[RangeEmpty $r]} {
-            return 1
-        }
-    }
-    return 0
-}
+# return, which means the opposite: nothing to prune). hir::range::
+# OutcomeFacts decides it (BranchOutcome, below).
 
 # The Range to seed parameter binding B with, given its declared type
 # (possibly ""): always hir::range::unknown -- exactly like hir::range's own
@@ -1626,11 +1606,13 @@ proc hir::completions::Eval {hirVar ctxVar diagnose enclosing guard e} {
 }
 
 # EXPR's outcome-1/outcome-0 branch feasibility and narrowing facts, using
-# the SAME machinery hir::range::If uses to narrow a `<`/`<=`/`>`/`>=`/`==`
-# condition (reused directly, not reimplemented): hir::types::KnownOutcome
-# first (a purely syntactic/type-level decided condition), then
-# hir::range::ComparisonNarrowing against this walk's own ctx.exprs cache.
-# Returns {feasible 0|1 facts BINDINGS-DICT}.
+# the SAME machinery hir::range::If uses to narrow a condition (reused
+# directly, not reimplemented): hir::types::KnownOutcome first (a purely
+# syntactic/type-level decided condition), then hir::range::OutcomeFacts
+# against this walk's own ctx.exprs cache -- the condition's paths (`and`,
+# `or`, `not`), each the ComparisonNarrowing of its pairs: the outcome is
+# feasible when one of its paths is, and its facts are what every feasible
+# path narrows. Returns {feasible 0|1 facts BINDINGS-DICT}.
 proc hir::completions::BranchOutcome {hir ctx condition outcome} {
     set known [hir::types::KnownOutcome $hir $condition]
     if {$known ne {} && $known != $outcome} {
@@ -1646,43 +1628,11 @@ proc hir::completions::BranchOutcome {hir ctx condition outcome} {
     # `==` purely from concrete exact-value facts, never a step-direction
     # proof.
     set shim [dict create exprs [dict get $ctx exprs] monotone {}]
-    set facts [dict create]
-    foreach conjunct [Conjuncts $hir $condition $outcome] {
-        set narrowed [hir::range::ComparisonNarrowing $hir $shim {*}$conjunct]
-        if {[FactsContradictory $narrowed]} {
-            return [list 0 {}]
-        }
-        dict for {b r} $narrowed {
-            if {[dict exists $facts $b]} {
-                set r [hir::range::intersect [dict get $facts $b] $r]
-            }
-            dict set facts $b $r
-        }
+    lassign [hir::range::OutcomeFacts $hir $shim $condition $outcome] feasible facts
+    if {!$feasible} {
+        return [list 0 {}]
     }
     return [list 1 $facts]
-}
-
-# The {condition outcome} pairs that all hold when CONDITION has OUTCOME:
-# `A or B` (lowered to `if A: true else: B`) being false means A and B are
-# both false, `A and B` (`if A: B else: false`) being true means both are
-# true -- recursively, so a chain of `or`s (`i < 0 or i >= n`) narrows its
-# false branch by every operand. Anything else is the one pair itself.
-proc hir::completions::Conjuncts {hir condition outcome} {
-    set node [hir::node $hir $condition]
-    if {[dict get $node kind] eq {if}} {
-        set then [dict get $node thenBody]
-        set else [dict get $node elseBody]
-        if {[llength $then] == 1 && [llength $else] == 1} {
-            set test [dict get $node condition]
-            if {!$outcome && [hir::types::KnownOutcome $hir [lindex $then 0]] eq {1}} {
-                return [concat [Conjuncts $hir $test 0] [Conjuncts $hir [lindex $else 0] 0]]
-            }
-            if {$outcome && [hir::types::KnownOutcome $hir [lindex $else 0]] eq {0}} {
-                return [concat [Conjuncts $hir $test 1] [Conjuncts $hir [lindex $then 0] 1]]
-            }
-        }
-    }
-    return [list [list $condition $outcome]]
 }
 
 # The relational facts the `if` condition CONDITION establishes on its
@@ -1697,7 +1647,7 @@ proc hir::completions::Conjuncts {hir condition outcome} {
 # branch. Each of the condition's Conjuncts contributes its own facts.
 proc hir::completions::BranchRelations {hir ctxVar condition outcome} {
     upvar 1 $ctxVar ctx
-    foreach conjunct [Conjuncts $hir $condition $outcome] {
+    foreach conjunct [hir::range::Conjuncts $hir $condition $outcome] {
         BranchRelation $hir ctx {*}$conjunct
     }
 }

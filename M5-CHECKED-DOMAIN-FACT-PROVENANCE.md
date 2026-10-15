@@ -62,9 +62,9 @@ already an ancestor of this milestone's own starting `HEAD`, merged via
 `aececac Merge main`) removed the bare `NAME(x)` callable-constructor
 syntax from the language entirely. `core::type::declareIntConstructor`
 (`core/type.tcl:290-292`) now registers *only* the type's membership
-predicate (`NAME?`, itself unreachable from any Botlish source program --
-see "HighNibble control" below, a separate, pre-existing, unrelated
-limitation), never a callable native. `native::lower::CheckedIntDomainConstruct`
+predicate (`NAME?`, which this report believed unreachable from Botlish
+source -- see "HighNibble control" below; it was reachable, and was removed
+by ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md), never a callable native. `native::lower::CheckedIntDomainConstruct`
 (`native/lower.tcl:4155-4197`, the native-lowering fix
 `BYTE-SET.md` describes as "the one real gap this milestone closed") is
 now confirmed **dead code**: no native is registered anywhere with `-impl
@@ -354,7 +354,10 @@ one of the 16 exact members. `core::type::validate` (the one generic
 runtime membership check every `NAME?` predicate -- and any future
 checked-construction proof consumer -- would have to share) correctly
 rejects `17` and accepts `16`/`240`/`0`, confirmed directly against the
-real, unmodified `lib/byte.bot` registration. (Note: `NAME?` predicates
+real, unmodified `lib/byte.bot` registration. (Note, superseded:
+R2A2-TRAILING-QUESTION-IDENTIFIERS.md made `NAME?` spellable, and
+ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md removed the predicates. As written
+at the time: `NAME?` predicates
 have no Botlish source spelling at all -- `surface/lexer.tcl` rejects a
 trailing `?` as "reserved and cannot be part of a name" -- a separate,
 pre-existing, unrelated limitation this milestone neither touches nor

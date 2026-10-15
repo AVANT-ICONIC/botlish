@@ -8,8 +8,7 @@
 #
 # A compilation registers its declarations in process-wide registries
 # (hir/sourcetypes.tcl, "Compilation isolation"): the source-defined entries
-# of core::type and core::native (a domain and its membership predicate),
-# hir::structs, hir::enums, hir::errordecls, hir::traits and hir::imports.
+# of core::type (a domain or a refinement), hir::structs, hir::enums, hir::errordecls, hir::traits and hir::imports.
 # The analyses and the backends read them by bare name, so a HIR is not
 # self-contained: compiling another program used to change what an earlier
 # HIR's lowering or run saw (a silently wrong value, native code that traps,
@@ -17,13 +16,13 @@
 #
 # Every HIR therefore records the state its build left behind (`declarations`,
 # a HIR side table of plain values: the registry entries themselves, which
-# name only fixed procedures -- a predicate is core::type::PredicateImpl with
-# its type's name -- so the state also survives serialization), and every
+# name only fixed procedures -- a domain's validator is
+# core::type::IntegerDomainValidator with its domain -- so the state also
+# survives serialization), and every
 # entry point that reads the registries for an existing HIR activates it
 # first: hir::lower, hir::format, hir::specialize::analyze, hir::aot::analyze
 # (and so native::executable and native::report, which start with them),
-# core::compiler::compileHir and runUnit (compiled code calls predicates by
-# name as it runs) and native::prepareHir (every native lowering). The Tcl
+# core::compiler::compileHir and native::prepareHir (every native lowering). The Tcl
 # compiler's code cache, keyed
 # by core IR text, drops a unit compiled under another state. A new registry
 # belongs in capture and Install; a new entry point reading the registries
@@ -47,24 +46,14 @@ namespace eval hir::declarations {
 # The current declaration state, as one dict of the registries' values.
 proc hir::declarations::capture {} {
     set types {}
-    set natives {}
     foreach entry $::hir::sourcetypes::generation {
         lassign $entry kind name
-        switch -- $kind {
-            type {
-                if {[dict exists $::core::type::registry $name]} {
-                    lappend types $name [dict get $::core::type::registry $name]
-                }
-            }
-            native {
-                if {[dict exists $::core::native::registry $name]} {
-                    lappend natives $name [dict get $::core::native::registry $name]
-                }
-            }
+        if {[dict exists $::core::type::registry $name]} {
+            lappend types $name [dict get $::core::type::registry $name]
         }
     }
     return [dict create \
-        generation $::hir::sourcetypes::generation types $types natives $natives \
+        generation $::hir::sourcetypes::generation types $types \
         structs $::hir::structs::registry enums $::hir::enums::registry \
         errors $::hir::errordecls::current payloads $::hir::errordecls::payloads \
         traits $::hir::traits::registry impls $::hir::traits::impls \
@@ -117,17 +106,13 @@ proc hir::declarations::Install {state} {
     variable active
     variable switches
     incr switches
-    # Unregisters the source-defined types and natives of the state in
-    # force (and its structs) ...
+    # Unregisters the source-defined types of the state in force (and its
+    # structs) ...
     hir::sourcetypes::Reset
     # ... and installs STATE's, as they were registered (already validated:
     # no declaration is resolved again).
     dict for {name meta} [dict get $state types] {
         dict set ::core::type::registry $name $meta
-    }
-    dict for {name meta} [dict get $state natives] {
-        dict set ::core::native::registry $name $meta
-        dict set ::core::native::sourceNatives $name 1
     }
     set ::hir::sourcetypes::generation [dict get $state generation]
     set ::hir::structs::registry [dict get $state structs]

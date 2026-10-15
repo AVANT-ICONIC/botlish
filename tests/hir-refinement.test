@@ -107,17 +107,20 @@ test hir-refine-8 {refinement rules come from native metadata, including false b
     list [branchFacts $h $first] [branchFacts $h $second] [hirRefTypes $h a] [hirRefTypes $h b]
 } -result {{{} {{b2 a : int}}} {{{b2 a : int} {b3 b : int}} {}} {any any int any} {any int}}
 
-# A second validator type on str, beside the harness's NonEmpty.
+# A second validator type on str, beside the harness's NonEmpty, with its
+# explicitly registered type test lower_ascii? (as non_empty?).
 if {![core::type::isNamed LowerAscii]} {
     core::type::register LowerAscii -base str \
         -validator {apply {{v} {regexp {^[a-z]*$} [core::value::strOf $v]}}}
-    core::type::definePredicate LowerAscii
+    core::registerNative lower_ascii? -arity 1 \
+        -impl {apply {{v} {core::value::bool [core::type::validate LowerAscii $v]}}} \
+        -param-types str -tests-type LowerAscii
 }
 
 test hir-refine-9 {named-type facts accumulate across nested branches} -body {
     set h [hirOf {bind f {block {s}
-        {if {call {ref LowerAscii?} {ref s}}
-            {block {} {if {call {ref NonEmpty?} {ref s}} {block {} {bind both {ref s}}} {block {}}}}
+        {if {call {ref lower_ascii?} {ref s}}
+            {block {} {if {call {ref non_empty?} {ref s}} {block {} {bind both {ref s}}} {block {}}}}
             {block {}}}}}]
     list [hir::types::show [hir::typeOf $h [hirFind $h bind both]]] \
          [dict get [hir::refinementsAt $h [hir::get $h [lindex [hirFind $h if] 1] thenScope]] b2]
@@ -125,8 +128,8 @@ test hir-refine-9 {named-type facts accumulate across nested branches} -body {
 
 test hir-refine-10 {a refinement is not repeated when it is already known} -body {
     set h [hirOf {bind f {block {s}
-        {if {call {ref NonEmpty?} {ref s}}
-            {block {} {if {call {ref NonEmpty?} {ref s}} {block {} {const yes}} {block {} {const no}}}}
+        {if {call {ref non_empty?} {ref s}}
+            {block {} {if {call {ref non_empty?} {ref s}} {block {} {const yes}} {block {} {const no}}}}
             {block {} {const no}}}}}]
     set inner [lindex [hirFind $h if] 1]
     list [hir::get $h [hir::get $h $inner condition] known] \

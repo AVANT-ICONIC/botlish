@@ -182,9 +182,9 @@ check_all(0, true)
 # syntax entirely: source-defined refinement types have no callable form
 # any more, so those tests (and the native checked-constructor lowering
 # they exercised, core/type.tcl's CheckedConstruct/native/lower.tcl's own
-# {core::type::CheckedConstruct NAME} path, both now unreachable dead code
-# left in place per that milestone's own item 44) are removed rather than
-# rewritten. The property they pinned -- a source-declared interval domain
+# {core::type::CheckedConstruct NAME} path, left in place as unreachable
+# dead code by that milestone and deleted by ELIMINATE-AUTOMATIC-TYPE-
+# PREDICATES.md) are removed rather than rewritten. The property they pinned -- a source-declared interval domain
 # gets a real, dynamic, cross-backend-identical runtime check for a
 # genuinely dynamic value -- is now demonstrated through an explicit
 # `errors`/`fail`/`handle` function instead (byte::from_int is the Byte

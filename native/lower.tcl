@@ -7490,56 +7490,6 @@ proc native::lower::EmitArgGuards {fnVar e argExprs argRegs paramTypes name} {
     }
 }
 
-# Checked construction for a source-defined *interval*-domain integer
-# refinement (Byte(x), a source-declared Small(x), ... --
-# SOURCE-DEFINED-INTEGER-DOMAINS.md): NAME's own registered -impl is
-# {core::type::CheckedConstruct NAME}, the one generic Tcl implementation
-# every such type's constructor shares (core/type.tcl), never a per-type
-# native. This is composed entirely from *existing* NIR forms (guard, op
-# ige/ile, br/raise/label) -- no new NIR instruction and no Rust codegen
-# change: NAME's own LO/HI domain bounds are ordinary compile-time-known Int
-# constants (hir/sourcetypes.tcl already validated and registered them when
-# the type was declared), so the only genuinely dynamic thing here is the
-# *value* being checked, exactly the shape an ordinary hand-written `if v >=
-# LO and v <= HI` guard already lowers to. Returns {REG tagged} when NAME is
-# such a constructor over an interval domain (the only domain shape this
-# handles: byte::set's own Byte(...) calls, and every other interval-domain
-# type, e.g. Nibble/LowNibble/a source-declared Small); "" for anything else
-# (an *exact*-domain constructor such as HighNibble, or an ordinary
-# unsupported native), so the caller falls through to the existing {NATIVE
-# UNSUPPORTED} diagnostic completely unchanged -- no Byte-specific path, no
-# special-casing by name anywhere in this proc.
-proc native::lower::CheckedIntDomainConstruct {fnVar e node name meta argRegs} {
-    upvar 1 $fnVar fn
-    set impl [dict get $meta impl]
-    if {[lindex $impl 0] ne "core::type::CheckedConstruct"} {
-        return ""
-    }
-    set typeName [lindex $impl 1]
-    set domain [dict get [core::type::metadata $typeName] integerDomain]
-    if {[lindex $domain 0] ne "interval"} {
-        return ""
-    }
-    lassign $domain _ lo hi
-    dict lappend fn calls [list native $name]
-    EmitArgGuards fn $e [dict get $node args] $argRegs [dict get $meta paramTypes] $name
-    set v [lindex $argRegs 0]
-    set loReg [IntConst fn $lo $e]
-    set hiReg [IntConst fn $hi $e]
-    set okLo [Assign fn "op ige $v $loReg" $e]
-    set checkHi [NewLabel fn]
-    set fail [NewLabel fn]
-    set ok [NewLabel fn]
-    Emit fn "br $okLo $checkHi $fail" $e
-    EmitLabel fn $checkHi
-    set okHi [Assign fn "op ile $v $hiReg" $e]
-    Emit fn "br $okHi $ok $fail" $e
-    EmitLabel fn $fail
-    Emit fn "raise RANGE [Quote "$typeName: value is not a valid $typeName"]" $e
-    EmitLabel fn $ok
-    return [list $v tagged]
-}
-
 proc native::lower::NativeCall {fnVar e node name argRegs rawEligible op want} {
     upvar 1 $fnVar fn
     variable hir
@@ -7562,17 +7512,9 @@ proc native::lower::NativeCall {fnVar e node name argRegs rawEligible op want} {
         return [list [Assign fn "bool [expr {[dict get $node known] ? "true" : "false"}]" $e] tagged]
     }
     if {![dict exists $natives $name]} {
-        set checked [CheckedIntDomainConstruct fn $e $node $name $meta $argRegs]
-        if {$checked ne ""} {
-            return $checked
-        }
         Unsupported $e "native $name" "the native \"$name\" has no native implementation"
     }
     dict lappend fn calls [list native $name]
-    set testsType [dict get $meta testsType]
-    if {$testsType ne "" && [llength $testsType] > 1 && $name ni {ok? error?}} {
-        Unsupported $e "native $name" "type tests of named types need evidence, which is not supported natively"
-    }
     # Unaffected by rawEligible: RawEligibleCall already required every
     # int-typed operand to need neither a guard nor a known-error guard, so
     # this loop is a no-op (falls through its subtype-proven case) whenever

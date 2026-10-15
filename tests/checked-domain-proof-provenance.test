@@ -386,12 +386,13 @@ dyn(45)} q-shared-fromint.bot]
 # accepted merely because it lies within [0, 240] -- 17 does, but is not one
 # of the 16 exact members. Nothing in this milestone adds a new proof
 # consumer (Outcome B), so this pins that the *existing* exact-domain
-# membership machinery (core::type::validate, via the generated `NAME?`
-# predicate every source-defined integer-domain type gets) is already sound
+# membership machinery (core::type::validate, the runtime's contract check
+# of a named type; a source-defined integer domain has no runtime membership
+# predicate, ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md) is already sound
 # today, confirming there is no latent unsoundness for a future milestone
 # to inherit if Outcome A ever becomes available for an exact domain.
 
-test checked-domain-highnibble-membership-exact-not-interval {HighNibble's own membership check: 17 is inside HighNibble's [0,240] interval hull but is not one of its 16 exact members -- core::type::validate (the generic runtime membership check every NAME? predicate and every future checked-construction proof would have to share) correctly rejects it, using the real, unmodified lib/byte.bot registration. NAME? predicates have no Botlish source spelling at all (surface/lexer.tcl rejects a trailing "?" as reserved), so this is exercised at the Tcl/core::type layer directly -- spec item 58's "test at the appropriate analysis layer"} -body {
+test checked-domain-highnibble-membership-exact-not-interval {HighNibble's own membership check: 17 is inside HighNibble's [0,240] interval hull but is not one of its 16 exact members -- core::type::validate (the generic runtime membership check any future checked-construction proof would have to share) correctly rejects it, using the real, unmodified lib/byte.bot registration. A domain has no membership predicate in Botlish source (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md), so this is exercised at the Tcl/core::type layer directly -- spec item 58's "test at the appropriate analysis layer"} -body {
     # Loading any program that references byte:: registers HighNibble in
     # core::type's own registry (SOURCE-DEFINED-INTEGER-DOMAINS.md).
     set path [makeFile {import byte

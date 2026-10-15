@@ -260,13 +260,13 @@ test xcheck-intentional-completions-rules {mod's bounded divisor and char::scala
     }
 } -result {{m within} {s within}}
 
-test xcheck-and-or-conjunct-narrowing {completions decomposes `and`/`or` conditions (range does not, census G11): completions only ever narrower, never crossing} -body {
+test xcheck-and-or-conjunct-narrowing {range and completions both decompose `and`/`or` conditions (hir::range::Paths; census G11, closed by ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md): they agree} -body {
     set src "fn probe(i, n):\n    if i < 0 or i >= n:\n        0\n    else:\n        t = i\n        t\n    i"
     set hir [xHir $src]
     lassign [bothOf $hir [list [iv -5 50] [iv 10 10]]] rx cx
     set e [bindValue $hir t]
     list [show [dict get $rx $e]] [show [dict get $cx $e]] [relation [dict get $cx $e] [dict get $rx $e]]
-} -result {-5..50 0..9 within}
+} -result {0..9 0..9 equal}
 
 # ---------------------------------------------------------------------------
 # Corpus sweep

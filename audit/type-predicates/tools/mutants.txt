@@ -1,0 +1,191 @@
+# Mutants of ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md (audit/type-predicates/
+# tools/mutate.tcl): the milestone's kill list, each a deliberate bug that
+# brings an automatic type predicate back, lets a converter or a range fact
+# prove more than it may, or breaks a proof form the converters stand beside
+# -- in the type declarations (hir/sourcetypes.tcl), the loader
+# (surface/modules.tcl), the range analysis (hir/range.tcl), the proof forms
+# (hir/refine.tcl) or native lowering (native/lower.tcl).
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. Lines starting with # outside an edit
+# are comments. Update a mutant's text when the code it mutates changes,
+# keeping it a mutant of the same rule.
+
+@@ type-names-resolve-as-predicates a domain declaration registers its membership predicate NAME? again (a root native, so `Small?(x)` resolves)
+## hir/sourcetypes.tcl
+<<<<
+    core::type::register $id -base int -parents $parents -integer-domain $domain -source 1
+    lappend generation [list type $id]
+====
+    core::type::register $id -base int -parents $parents -integer-domain $domain -source 1
+    lappend generation [list type $id]
+    catch {core::native::register $id? -arity 1 -param-types int \
+        -impl [list apply {{t v} {core::value::bool [core::type::validate $t $v]}} $id] \
+        -tests-type $id}
+>>>>
+
+@@ module-member-admits-type-predicate the loader accepts `ns::T?` for a type T of ns as if it were a member (the old qualified-predicate allowance)
+## surface/modules.tcl
+<<<<
+    set functionNames [dict get $state loaded $namespaceName]
+    if {$symbolName ni $functionNames} {
+====
+    set functionNames [dict get $state loaded $namespaceName]
+    if {$symbolName ni $functionNames
+            && !([string index $symbolName end] eq "?"
+                && [string range $symbolName 0 end-1] in [dict get $state loadedTypes $namespaceName])} {
+>>>>
+
+@@ converter-return-skips-proof a function's declared result is never checked: a converter returning its unproven argument is a cast
+## hir/range.tcl
+<<<<
+        if {![ProvesValueAcceptedBy $inferred $result $declared]} {
+            hir::Diagnose hir TYPE [format {function result does not prove declared type %s%s%s} \
+====
+        if {0 && ![ProvesValueAcceptedBy $inferred $result $declared]} {
+            hir::Diagnose hir TYPE [format {function result does not prove declared type %s%s%s} \
+>>>>
+
+@@ converter-refines-input a call of a function declaring an integer-domain result refines its one argument to that domain once it completes (a converter as an implicit validator)
+## hir/refine.tcl
+<<<<
+    foreach {index fact} [ProofRules $hir $target normal] {
+        AddArgumentFact $hir result normal [dict get $node args] $index $fact
+    }
+    return [dict get $result normal]
+====
+    foreach {index fact} [ProofRules $hir $target normal] {
+        AddArgumentFact $hir result normal [dict get $node args] $index $fact
+    }
+    set targetNode [dict get $hir exprs $target]
+    set declared [expr {[dict exists $targetNode declaredResult] ? [dict get $targetNode declaredResult] : ""}]
+    if {$declared ne "" && [llength [dict get $node args]] == 1
+            && ![catch {core::type::integerFacts $declared} facts] && $facts ne {}} {
+        AddArgumentFact $hir result normal [dict get $node args] 0 $declared
+    }
+    return [dict get $result normal]
+>>>>
+
+@@ predicate-annotation-ignored a predicate's proof clause proves nothing on its true edge
+## hir/refine.tcl
+<<<<
+        if {[dict get $proof outcome] eq $outcome} {
+            lappend rules [dict get $proof param] [dict get $proof fact]
+        }
+====
+        if {[dict get $proof outcome] eq $outcome && $outcome ne "1"} {
+            lappend rules [dict get $proof param] [dict get $proof fact]
+        }
+>>>>
+
+@@ validator-annotation-ignored a validator's proof clause proves nothing after the call completes
+## hir/refine.tcl
+<<<<
+        if {[dict get $proof outcome] eq $outcome} {
+            lappend rules [dict get $proof param] [dict get $proof fact]
+        }
+====
+        if {[dict get $proof outcome] eq $outcome && $outcome ne "normal"} {
+            lappend rules [dict get $proof param] [dict get $proof fact]
+        }
+>>>>
+
+@@ range-proves-refinement a Range proves a refinement over a domain (the soundness hole closed with the predicates' removal): an in-range carrier value is admitted with no proof
+## hir/range.tcl
+<<<<
+            if {[core::type::isRefinement $name] && $name ni $held} {
+                return 0
+            }
+====
+            if {0 && [core::type::isRefinement $name] && $name ni $held} {
+                return 0
+            }
+>>>>
+
+@@ conditions-not-decomposed the range analysis narrows by a condition as one opaque pair again: `and`/`or`/`not` admit no domain (census G11)
+## hir/range.tcl
+<<<<
+proc hir::range::Paths {hir condition outcome {limit 16}} {
+    set budget 64
+====
+proc hir::range::Paths {hir condition outcome {limit 16}} {
+    return [list [list [list $condition $outcome]]]
+    set budget 64
+>>>>
+
+@@ disjunction-paths-intersected the facts of a condition's several paths are intersected instead of joined: `x < 0 or x > 9` true proves x in no interval, so anything
+## hir/range.tcl
+<<<<
+            if {[dict exists $facts $b]} {
+                dict set joined $b [join $r [dict get $facts $b]]
+            }
+====
+            if {[dict exists $facts $b]} {
+                dict set joined $b [Meet $r [dict get $facts $b]]
+            }
+>>>>
+
+@@ infeasible-paths-kept a path whose narrowing is empty still contributes to the join: an impossible disjunct widens what the condition proves
+## hir/range.tcl
+<<<<
+        if {$feasible} {
+            lappend feasibleFacts $facts
+        }
+====
+        lappend feasibleFacts $facts
+>>>>
+
+@@ path-order-ignored an `if` used as a condition contributes its else-branch's paths without its test's false outcome: `A or B` false proves only B false
+## hir/range.tcl
+<<<<
+                foreach path [PathsWithin $hir $test $testOutcome $limit budget] {
+                    if {$known ne {}} {
+====
+                foreach path [expr {$testOutcome ? [PathsWithin $hir $test $testOutcome $limit budget] : [list {}]}] {
+                    if {$known ne {}} {
+>>>>
+
+@@ paths-budget-exhausted the decomposition budget is spent before any node: no condition is decomposed (`and`/`or`/`not` admit no domain), though each path is still sound
+## hir/range.tcl
+<<<<
+proc hir::range::Paths {hir condition outcome {limit 16}} {
+    set budget 64
+====
+proc hir::range::Paths {hir condition outcome {limit 16}} {
+    set budget 0
+>>>>
+
+@@ completion-disjunction-unseen the completion analysis decides a condition's feasibility from its first path alone: an exact argument through a converter's `or` guard is undecided again, or decided wrongly
+## hir/range.tcl
+<<<<
+    if {$feasibleFacts eq {}} {
+        set empty [dict create min 1 max 0]
+====
+    if {[llength $feasibleFacts] > 1} {
+        set feasibleFacts [lrange $feasibleFacts 0 0]
+    }
+    if {$feasibleFacts eq {}} {
+        set empty [dict create min 1 max 0]
+>>>>
+
+@@ native-recognizes-type-predicate native lowering lowers a call of a native named after a type, `NAME?`, as that type's membership test (the special case this milestone refused to add)
+## native/lower.tcl
+<<<<
+    if {![dict exists $natives $name]} {
+        Unsupported $e "native $name" "the native \"$name\" has no native implementation"
+    }
+====
+    if {[string index $name end] eq "?" && [core::type::isNamed [string range $name 0 end-1]]} {
+        return [list [Assign fn "bool true" $e] tagged]
+    }
+    if {![dict exists $natives $name]} {
+        Unsupported $e "native $name" "the native \"$name\" has no native implementation"
+    }
+>>>>

@@ -1,9 +1,11 @@
 # refined.test -- core-IR programs using named type tests, on both backends.
 #
 # A validator type (core/type.tcl) is a structural, runtime-checked named
-# type; its predicate NAME? is a native type test (-tests-type) that refines
-# its argument in the true branch, and that compilers may decide from static
-# types. The tests use the harness's NonEmpty (tests/helpers.tcl).
+# type; a native registered as its type test (-tests-type) refines its
+# argument in the true branch, and compilers may decide it from static
+# types. The tests use the harness's NonEmpty and its explicitly registered
+# test non_empty? (tests/helpers.tcl): a type brings no predicate of its own
+# (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md).
 #
 # Source-level refinement types (`refined type`, proof-producing functions)
 # are a different mechanism -- nominal, proven, never tested at run time --
@@ -27,12 +29,12 @@ proc boundType {exprs name} {
 
 set nonEmptyProgram {
     {bind x {const str foo}}
-    {if {call {ref NonEmpty?} {ref x}}
+    {if {call {ref non_empty?} {ref x}}
         {block {} {bind seen {ref x}} {ref seen}}
         {block {} {bind other {ref x}} {const str empty}}}
 }
 
-test refined-1 {NonEmpty? program evaluates in the then branch} -body {
+test refined-1 {non_empty? program evaluates in the then branch} -body {
     list [run {*}$nonEmptyProgram] [differential $nonEmptyProgram]
 } -result {{"foo"} same}
 
@@ -42,7 +44,7 @@ test refined-2 {compiler sees x : NonEmpty in the then branch only} -body {
 
 test refined-3 {interpreter records the NonEmpty refinement for the branch} -body {
     set v [runValue {bind x {const str foo}} \
-                    {if {call {ref NonEmpty?} {ref x}}
+                    {if {call {ref non_empty?} {ref x}}
                         {block {} {block {} {ref x}}}
                         {block {} {const unreachable}}}]
     core::refinementsOf [core::blockEnv $v] x
@@ -50,19 +52,19 @@ test refined-3 {interpreter records the NonEmpty refinement for the branch} -bod
 
 test refined-4 {a failing validator takes the else branch} -body {
     set p {{bind x {const str {}}}
-           {if {call {ref NonEmpty?} {ref x}} {block {} {const yes}} {block {} {const no}}}}
+           {if {call {ref non_empty?} {ref x}} {block {} {const yes}} {block {} {const no}}}}
     list [run {*}$p] [differential $p]
 } -result {{"no"} same}
 
-test refined-5 {NonEmpty? requires a string} -body {
-    list [differential {{call {ref NonEmpty?} {const 5}}}] \
-         [catch {core::eval {call {ref NonEmpty?} {const 5}}} m opts] $m [dict get $opts -errorcode]
-} -result {same 1 {NonEmpty?: expected str, got 5} {CORE SEMANTIC TYPE}}
+test refined-5 {non_empty? requires a string} -body {
+    list [differential {{call {ref non_empty?} {const 5}}}] \
+         [catch {core::eval {call {ref non_empty?} {const 5}}} m opts] $m [dict get $opts -errorcode]
+} -result {same 1 {non_empty?: expected str, got 5} {CORE SEMANTIC TYPE}}
 
 test refined-6 {string transformations discard refinements} -body {
     set p {
         {bind x {const str abc}}
-        {if {call {ref NonEmpty?} {ref x}}
+        {if {call {ref non_empty?} {ref x}}
             {block {}
                 {bind lower {call {ref str::lowercase} {ref x}}}
                 {bind joined {call {ref str::concat} {ref x} {const str !}}}
@@ -105,20 +107,20 @@ test refined-library-1 {lib/ has no Tcl-registered library left} -body {
 
 set typeTestCases {
     param-kind-error-not-folded {
-        {call {ref NonEmpty?} {const 5}}
+        {call {ref non_empty?} {const 5}}
     }
     param-kind-error-through-unknown-type {
-        {bind f {block {v} {call {ref NonEmpty?} {ref v}}}}
+        {bind f {block {v} {call {ref non_empty?} {ref v}}}}
         {call {ref list} {call {ref f} {const str a}} {call {ref f} {const 5}}}
     }
     plain-string-is-not-proven {
-        {call {ref list} {call {ref NonEmpty?} {const str {}}} {call {ref NonEmpty?} {const str a}}}
+        {call {ref list} {call {ref non_empty?} {const str {}}} {call {ref non_empty?} {const str a}}}
     }
     refinement-decides-nested-test {
         {bind f {block {s}
-            {if {call {ref NonEmpty?} {ref s}}
-                {block {} {call {ref list} {call {ref NonEmpty?} {ref s}} {call {ref string?} {ref s}}}}
-                {block {} {call {ref list} {call {ref NonEmpty?} {ref s}}}}}}}
+            {if {call {ref non_empty?} {ref s}}
+                {block {} {call {ref list} {call {ref non_empty?} {ref s}} {call {ref string?} {ref s}}}}
+                {block {} {call {ref list} {call {ref non_empty?} {ref s}}}}}}}
         {call {ref list} {call {ref f} {const str a}} {call {ref f} {const str {}}}}
     }
     result-tag-tests {
@@ -141,8 +143,8 @@ foreach {name exprs} $typeTestCases {
 test refined-type-test-fold-2 {a test proven by an enclosing refinement is not repeated} -body {
     set code [core::compiler::generatedCode {
         {bind f {block {s}
-            {if {call {ref NonEmpty?} {ref s}}
-                {block {} {if {call {ref NonEmpty?} {ref s}} {block {} {const yes}} {block {} {const no}}}}
+            {if {call {ref non_empty?} {ref s}}
+                {block {} {if {call {ref non_empty?} {ref s}} {block {} {const yes}} {block {} {const no}}}}
                 {block {} {const no}}}}}
         {call {ref f} {const str a}}
     }]
@@ -151,10 +153,10 @@ test refined-type-test-fold-2 {a test proven by an enclosing refinement is not r
 
 test refined-type-test-fold-3 {an undecided test is inline, not a native call} -body {
     set code [core::compiler::generatedCode {
-        {bind f {block {s} {call {ref NonEmpty?} {ref s}}}}
+        {bind f {block {s} {call {ref non_empty?} {ref s}}}}
         {call {ref f} {const str a}}
     }]
-    list [regexp {callValue} $code] [regexp {core::value::expect str \$v[0-9]+ NonEmpty\?} $code] \
+    list [regexp {callValue} $code] [regexp {core::value::expect str \$v[0-9]+ non_empty\?} $code] \
          [regexp {acceptsCanonical \{refined str NonEmpty\}} $code]
 } -result {0 1 1}
 
@@ -172,7 +174,7 @@ test refined-type-test-register-1 {type test registration rules} -body {
 } -result [lrepeat 4 {1 1}]
 
 test refined-type-test-register-2 {a type test gets bool result and its refinement} -body {
-    set meta [core::native::metadata NonEmpty?]
+    set meta [core::native::metadata non_empty?]
     list [dict get $meta resultType] [dict get $meta paramTypes] [dict get $meta testsType] \
          [dict get $meta refinesTrue] [dict get [core::native::metadata integer?] testsType]
 } -result {bool str {refined str NonEmpty} {0 {refined str NonEmpty}} int}

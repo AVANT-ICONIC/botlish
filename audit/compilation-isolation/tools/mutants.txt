@@ -10,6 +10,11 @@
 #   >>>>
 #
 # Lines starting with # outside an edit are comments.
+#
+# (`activate-rununit`, core::compiler::runUnit running a unit without
+# activating its HIR, went with the domains' run-time predicates
+# (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md): compiled code no longer reads a
+# declaration as it runs, so runUnit no longer activates anything.)
 
 @@ activate-lower hir::lower lowers a HIR without activating its declarations: the interpreter and hir::lower's own payload and drop decisions read whatever was compiled last
 ## hir/lower.tcl
@@ -37,15 +42,6 @@ proc core::compiler::compileHir {hir} {
     hir::activate $hir
 ====
 proc core::compiler::compileHir {hir} {
->>>>
-
-@@ activate-rununit a unit the Tcl compiler compiled once runs without activating its HIR's declarations: its code calls predicates by name and sees another program's
-## compiler/compiler.tcl
-<<<<
-    # Compiled code reads the declarations by name as it runs.
-    hir::activate [dict get $unit hir]
-====
-
 >>>>
 
 @@ activate-preparehir native lowering prepares a HIR without activating its declarations
@@ -111,11 +107,11 @@ proc hir::aot::analyze {hir} {
 
 >>>>
 
-@@ install-keeps-source-types a switch installs the HIR's source types over the previous state's instead of unregistering those first: a domain and its predicate survive into a program that never declared them
+@@ install-keeps-source-types a switch installs the HIR's source types over the previous state's instead of unregistering those first: a domain survives into a program that never declared it
 ## hir/declarations.tcl
 <<<<
-    # Unregisters the source-defined types and natives of the state in
-    # force (and its structs) ...
+    # Unregisters the source-defined types of the state in force (and its
+    # structs) ...
     hir::sourcetypes::Reset
 ====
 

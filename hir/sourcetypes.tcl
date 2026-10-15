@@ -17,14 +17,14 @@
 # registration (core::type::register, core/type.tcl) would have produced:
 # it is the only thing that changes. Everything downstream of core::type's
 # registry (hir::resolve's `core::type::normalize $declared` on a function's
-# result-type annotation, hir/range.tcl's core::type::integerFacts, native
-# constructor lowering, ...) neither knows nor cares whether a name's
+# result-type annotation, hir/range.tcl's core::type::integerFacts, ...)
+# neither knows nor cares whether a name's
 # metadata came from Tcl source or Botlish source.
 #
 # Compilation isolation
 # ----------------------
-# core::type::registry (core/type.tcl) and core::native::registry
-# (core/native.tcl) are single, process-global Tcl dicts: this is
+# core::type::registry (core/type.tcl) is a single, process-global Tcl
+# dict: this is
 # pre-existing architecture (every compiler-registered type -- Emailish,
 # NonEmpty, the old Byte/Nibble/... -- already lived there, for the whole
 # process's lifetime, registered once when core/scalarbits.tcl and friends
@@ -38,7 +38,7 @@
 # apply's own answer: a call that declares any source type -- a non-empty
 # DECLS, or a non-empty STRUCTDECLS (struct declarations, hir/structs.tcl,
 # which share this type namespace) -- first Resets -- unregisters -- every
-# type/native the *previous* such call registered (`generation`, below) and
+# type the *previous* such call registered (`generation`, below) and
 # the previous compilation's structs, before resolving any declaration of
 # its own (a refinement carrier resolved while an earlier program's `struct
 # Query` was still registered named that struct: COMPILER-BOTTLENECKS.md,
@@ -71,8 +71,9 @@
 # compilation identity anywhere.
 
 namespace eval hir::sourcetypes {
-    # {type NAME} / {native NAME} entries the previous apply call
-    # registered, to unregister before registering the next batch.
+    # {type NAME} entries the previous apply call registered, to unregister
+    # before registering the next batch. A declaration registers only a
+    # type: nothing in core::native.
     variable generation {}
 }
 
@@ -80,10 +81,7 @@ proc hir::sourcetypes::Reset {} {
     variable generation
     foreach entry $generation {
         lassign $entry kind name
-        switch -- $kind {
-            native { core::native::unregister $name }
-            type   { core::type::unregister $name }
-        }
+        core::type::unregister $name
     }
     set generation {}
     # The previous compilation's structs go with its other source types, and
@@ -479,10 +477,14 @@ proc hir::sourcetypes::ValueStability {type {visiting {}}} {
 }
 
 # Validates DECL's parent (PARENTID, its resolved identity, "" if none is
-# visible) and domain, registers it (core::type::register, plus its
-# membership predicate, core::type::declareIntConstructor), and returns its
+# visible) and domain, registers it (core::type::register), and returns its
 # own {name .. parent .. domain ..} summary: `name` and `parent` are
-# identities.
+# identities. A declaration registers a type and nothing else: no value,
+# no callable, no membership predicate (ELIMINATE-AUTOMATIC-TYPE-
+# PREDICATES.md). A program that wants a value of the domain from an Int
+# calls an ordinary function returning it (a converter, `byte::from_int`),
+# or tests the bounds with ordinary comparisons, whose range facts admit the
+# value (hir/range.tcl).
 proc hir::sourcetypes::RegisterOne {decl parentId} {
     variable generation
     set name [dict get $decl name]
@@ -518,9 +520,6 @@ proc hir::sourcetypes::RegisterOne {decl parentId} {
     }
     core::type::register $id -base int -parents $parents -integer-domain $domain -source 1
     lappend generation [list type $id]
-    core::type::declareIntConstructor $id
-    core::native::markSource $id?
-    lappend generation [list native $id] [list native $id?]
     return [dict create name $id parent [expr {$parentName eq "Int" ? "Int" : $parentId}] \
         domain [dict get [core::type::metadata $id] integerDomain]]
 }

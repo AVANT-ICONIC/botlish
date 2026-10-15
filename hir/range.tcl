@@ -1266,8 +1266,30 @@ proc hir::range::Call {hirVar ctxVar e node} {
     return [unknown]
 }
 
-proc hir::range::ProvesType {range type} {
+proc hir::range::ProvesType {range type {held {}}} {
     if {$range eq {never}} { return 0 }
+    # A Range is a fact about an Int's value: it proves an integer domain,
+    # never a refinement (REFINEMENT-VALUES.md: a refinement is a nominal
+    # proof fact, and there is no implicit strengthening). A refinement of
+    # a domain inherits the domain's integer facts (core::type::
+    # integerFacts reads its carrier's), so without this check a value of
+    # the carrier in range was admitted where the refinement is required --
+    # no proof needed. HELD are the named types the value already has (its
+    # static type's evidence closure, ProvesValueAcceptedBy): a refinement
+    # among them is proven, and the Range proves the rest.
+    if {![catch {core::type::evidenceClosure $type} closure]} {
+        foreach name $closure {
+            if {[core::type::isRefinement $name] && $name ni $held} {
+                return 0
+            }
+        }
+    }
+    if {[IsEmpty $range]} {
+        # The Range of a value no execution produces (a narrowing
+        # contradiction: the code that reads it is dead, OutcomeFacts) proves
+        # every integer domain.
+        return [expr {[core::type::base $type] eq {int}}]
+    }
     set facts [core::type::integerFacts $type]
     if {$facts eq {}} {
         # TYPE places no domain restriction beyond "is an Int" (either it is
@@ -1382,7 +1404,12 @@ proc hir::range::ProvesValueAcceptedBy {argType argRange declared} {
         # one of a callable.
         return [hir::types::subtype $argType $declared]
     }
-    return [expr {[hir::types::subtype $argType $declared] || [ProvesType $argRange $declared]}]
+    if {[hir::types::subtype $argType $declared]} {
+        return 1
+    }
+    set held {}
+    catch {set held [core::type::evidenceClosure [hir::types::semantic $argType]]}
+    return [ProvesType $argRange $declared $held]
 }
 
 # 1 if aggregate value type ARG (already Unshaped) is admissible for
@@ -1980,7 +2007,7 @@ proc hir::range::If {hirVar ctxVar e node} {
             continue
         }
         dict set ctx bindings $saved
-        foreach {b r} [ComparisonNarrowing $hir $ctx $condition $outcome] {
+        foreach {b r} [lindex [OutcomeFacts $hir $ctx $condition $outcome] 1] {
             dict set ctx bindings $b $r
         }
         dict set branches $outcome [Sequence hir ctx [dict get $node ${role}Body]]
@@ -2062,6 +2089,171 @@ proc hir::range::RefBinding {hir e} {
         return ""
     }
     return $b
+}
+
+# The ways CONDITION can evaluate to OUTCOME, as a list of paths, each a
+# list of {condition outcome} pairs that all hold on that path: a
+# disjunctive normal form of the Boolean structure `and`, `or`, `not` and
+# `!=` lower to (surface/lower.tcl: `if A: B else: false`, `if A: true else:
+# B`, `if A: false else: true`). An `if` whose branches are one expression
+# each has OUTCOME on its then-branch's paths (its test true, then the
+# branch's expression OUTCOME) and on its else-branch's; a branch whose
+# expression is a known Boolean contributes its test's paths alone when the
+# Boolean is OUTCOME, nothing otherwise. Anything else -- a comparison, a
+# call, a reference -- is one path of one pair. So `A and B` true is the one
+# path {A 1} {B 1}, `A or B` false the one path {A 0} {B 0}, `not A` true
+# the one path {A 0}, and `A or B` true the two paths {A 1} and {A 0} {B 1}.
+# A condition is decomposed only as far as a budget of 64 of its nodes and
+# into at most LIMIT paths; past either, a subcondition is one pair of
+# itself, which narrows nothing -- sound, and it keeps a long chain (one
+# `and` of hundreds of operands, each operand's `if` a condition of its own)
+# linear in its length rather than cubic.
+proc hir::range::Paths {hir condition outcome {limit 16}} {
+    set budget 64
+    return [PathsWithin $hir $condition $outcome $limit budget]
+}
+
+proc hir::range::PathsWithin {hir condition outcome limit budgetVar} {
+    upvar 1 $budgetVar budget
+    set node [hir::node $hir $condition]
+    if {[incr budget -1] >= 0 && [dict get $node kind] eq {if}} {
+        set then [dict get $node thenBody]
+        set else [dict get $node elseBody]
+        if {[llength $then] == 1 && [llength $else] == 1} {
+            set test [dict get $node condition]
+            set paths {}
+            foreach {testOutcome body} [list 1 [lindex $then 0] 0 [lindex $else 0]] {
+                set known [hir::types::KnownOutcome $hir $body]
+                if {$known ne {} && $known != $outcome} {
+                    continue
+                }
+                foreach path [PathsWithin $hir $test $testOutcome $limit budget] {
+                    if {$known ne {}} {
+                        lappend paths $path
+                        continue
+                    }
+                    foreach rest [PathsWithin $hir $body $outcome $limit budget] {
+                        lappend paths [concat $path $rest]
+                    }
+                }
+                if {[llength $paths] > $limit} {
+                    return [list [list [list $condition $outcome]]]
+                }
+            }
+            return $paths
+        }
+    }
+    return [list [list [list $condition $outcome]]]
+}
+
+# The {condition outcome} pairs that all hold when CONDITION has OUTCOME:
+# its one path (Paths: `A and B` true, `A or B` false, `not A`, recursively,
+# so a chain of `or`s, `i < 0 or i >= n`, gives its false outcome every
+# operand), or, when it has several (or none), the one pair itself.
+# hir/completions.tcl's BranchRelations reads it.
+proc hir::range::Conjuncts {hir condition outcome} {
+    set paths [Paths $hir $condition $outcome]
+    if {[llength $paths] == 1} {
+        return [lindex $paths 0]
+    }
+    return [list [list $condition $outcome]]
+}
+
+# {FEASIBLE FACTS}: what CONDITION establishes when it evaluates to OUTCOME,
+# FACTS a {binding Range ...} dict. Each of its Paths narrows the bindings
+# its pairs compare (ComparisonNarrowing of each pair, intersected; a pair
+# evaluated after another -- the right operand of an `and`/`or` -- already
+# had its argument Ranges computed under the earlier one's narrowing). A
+# path is infeasible when one of its pairs is statically decided the other
+# way (hir::types::KnownOutcome) or narrows a binding to an empty Range.
+# FACTS are the join, binding by binding, of the feasible paths' facts, for
+# the bindings every feasible path narrows: `0 <= x and x <= 9` true and
+# `x < 0 or x > 9` false both give x [0, 9]; `x < 0 or x > 9` true gives
+# x nothing. FEASIBLE is 0 when no path is feasible -- the outcome cannot
+# occur -- and FACTS then give every binding the first path narrows an
+# empty Range: no value reaches that branch, so whatever it requires of
+# them is proven (ProvesType), as a single impossible comparison's empty
+# Range always did. hir::range::If and hir/completions.tcl's BranchOutcome
+# both read it.
+proc hir::range::OutcomeFacts {hir ctx condition outcome} {
+    set feasibleFacts {}
+    set first {}
+    set seen 0
+    foreach path [Paths $hir $condition $outcome] {
+        set facts [dict create]
+        set feasible 1
+        foreach pair $path {
+            lassign $pair c o
+            set known [hir::types::KnownOutcome $hir $c]
+            if {$known ne {} && $known != $o} {
+                set feasible 0
+            }
+            foreach {b r} [ComparisonNarrowing $hir $ctx $c $o] {
+                if {[dict exists $facts $b]} {
+                    set r [Meet [dict get $facts $b] $r]
+                }
+                dict set facts $b $r
+                if {$r eq {never} || [IsEmpty $r]} {
+                    set feasible 0
+                }
+            }
+        }
+        if {!$seen} {
+            set first $facts
+            set seen 1
+        }
+        if {$feasible} {
+            lappend feasibleFacts $facts
+        }
+    }
+    if {$feasibleFacts eq {}} {
+        set empty [dict create min 1 max 0]
+        dict for {b r} $first {
+            if {$r ne {never} && [IsEmpty $r]} {
+                set empty $r
+                break
+            }
+        }
+        set dead [dict create]
+        dict for {b r} $first {
+            dict set dead $b [expr {$r ne {never} && [IsEmpty $r] ? $r : $empty}]
+        }
+        return [list 0 $dead]
+    }
+    set result [lindex $feasibleFacts 0]
+    foreach facts [lrange $feasibleFacts 1 end] {
+        set joined [dict create]
+        dict for {b r} $result {
+            if {[dict exists $facts $b]} {
+                dict set joined $b [join $r [dict get $facts $b]]
+            }
+        }
+        set result $joined
+    }
+    return [list 1 $result]
+}
+
+# The intersection of Ranges A and B, empty (min > max) when they do not
+# overlap -- unlike intersect, which keeps A then, for callers that must
+# not learn a contradiction.
+proc hir::range::Meet {a b} {
+    if {$a eq {never} || $b eq {never}} {
+        return never
+    }
+    if {[IsEmpty $a]} {
+        return $a
+    }
+    if {[IsEmpty $b]} {
+        return $b
+    }
+    set mn [expr {[dict get $a min] eq {-inf} ? [dict get $b min]
+        : ([dict get $b min] eq {-inf} ? [dict get $a min] : [Max [dict get $a min] [dict get $b min]])}]
+    set mx [expr {[dict get $a max] eq {+inf} ? [dict get $b max]
+        : ([dict get $b max] eq {+inf} ? [dict get $a max] : [Min [dict get $a max] [dict get $b max]])}]
+    if {$mn ne {-inf} && $mx ne {+inf} && $mn > $mx} {
+        return [dict create min $mn max $mx]
+    }
+    return [intersect $a $b]
 }
 
 # {binding Range ...}: what CONDITION (a call already evaluated into CTX's

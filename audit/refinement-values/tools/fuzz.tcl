@@ -1,6 +1,10 @@
 # fuzz.tcl -- differential fuzzer for refinement values (REFINEMENT-VALUES.md).
 #
-#   tclsh9.0 audit/refinement-values/tools/fuzz.tcl ?-seed N? ?-count N? ?-backends LIST? ?-accept P? ?-validators 0|1? ?-v 1? ?-show 1?
+#   tclsh9.0 audit/refinement-values/tools/fuzz.tcl ?-seed N? ?-count N? ?-backends LIST? ?-accept P? ?-validators 0|1? ?-domains 0|1? ?-v 1? ?-show 1?
+#
+# -domains 1 fuzzes another program family instead: integer domains entered
+# through converters, comparisons and a refinement's predicate and validator
+# over them (domains.tcl, ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md).
 #
 # -accept P: the share of programs drawn (by retrying) until the oracle
 # accepts them; the rest are taken as generated, mostly rejections (with
@@ -76,7 +80,7 @@ source [file join $root surface surface.tcl]
 source [file join $root native native.tcl]
 interp recursionlimit {} 200000
 
-set options [dict create -seed 1 -count 200 -backends {interp compile cranelift-generic cranelift} -accept 0.7 -validators 1 -v 0 -show 0]
+set options [dict create -seed 1 -count 200 -backends {interp compile cranelift-generic cranelift} -accept 0.7 -validators 1 -domains 0 -v 0 -show 0]
 foreach {option value} $argv {
     if {![dict exists $options $option]} { error "unknown option $option" }
     dict set options $option $value
@@ -990,6 +994,13 @@ proc outcome {backend hir} {
 
 # ---------------------------------------------------------------------------
 # Driver
+
+if {[dict get $options -domains]} {
+    # Integer domains entered through converters, comparisons and the proof
+    # forms of a refinement over them (domains.tcl): a program family of its
+    # own, with its own oracle and summary line.
+    source [file join [file dirname [file normalize [info script]]] domains.tcl]
+}
 
 set stats [dict create programs 0 accepted 0 rejected 0 calls 0 decided 0 vcalls 0 failures 0]
 set failures {}

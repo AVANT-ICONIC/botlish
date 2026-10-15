@@ -220,9 +220,6 @@
 
 namespace eval core::native {
     variable registry [dict create]
-    # NAME -> 1: the registered natives that are the predicates of
-    # source-declared types, not compiler intrinsics (markSource).
-    variable sourceNatives [dict create]
     # Runtime requirement tags (-runtime):
     #   bigint               arbitrary-precision integer arithmetic or
     #                        comparison (a small-integer fast path still needs
@@ -312,6 +309,11 @@ proc core::native::register {name args} {
         set testsType [CanonicalType $name -tests-type $testsType]
         if {$arity ne "1"} {
             error "core::native::register: a -tests-type native must have -arity 1"
+        }
+        foreach typeName [core::type::evidenceOf $testsType] {
+            if {[core::type::isRefinement $typeName]} {
+                error "core::native::register: -tests-type of \"$name\" names the refinement type $typeName: its membership is proven by its owner's proof-producing functions, never tested at run time"
+            }
         }
         if {[dict get $options -param-types] eq ""} {
             dict set options -param-types any
@@ -647,9 +649,7 @@ proc core::native::names {} {
 # (surface/modules.tcl, surface/lower.tcl).
 proc core::native::isQualifiedNative {name} {
     variable registry
-    variable sourceNatives
-    return [expr {[string first :: $name] > 0 && [dict exists $registry $name]
-        && ![dict exists $sourceNatives $name]}]
+    return [expr {[string first :: $name] > 0 && [dict exists $registry $name]}]
 }
 
 # The member names of the qualified root natives that live directly in
@@ -659,10 +659,8 @@ proc core::native::isQualifiedNative {name} {
 # NS::MEMBER always denotes. Empty for a namespace with none.
 proc core::native::qualifiedMembers {ns} {
     variable registry
-    variable sourceNatives
     set members {}
     foreach name [dict keys $registry] {
-        if {[dict exists $sourceNatives $name]} continue
         if {[string first ${ns}:: $name] == 0} {
             set member [string range $name [string length ${ns}::] end]
             if {$member ne "" && [string first :: $member] < 0} {
@@ -673,27 +671,13 @@ proc core::native::qualifiedMembers {ns} {
     return [lsort $members]
 }
 
-# Removes a previously registered native NAME. Only hir/sourcetypes.tcl uses
-# this, to undo the root constructor/predicate natives it registers for a
-# source-declared type at the start of the next compilation (see
-# SOURCE-DEFINED-INTEGER-DOMAINS.md's "Compilation isolation") -- ordinary
-# (compiler-registered, process-lifetime) natives are never unregistered.
+# Removes a previously registered native NAME: tests that register a probe
+# native (tests/many-boolean-arguments.test, tests/method-eligible.test)
+# remove it again. Nothing in the compiler unregisters a native: a source
+# declaration registers none (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md).
 proc core::native::unregister {name} {
     variable registry
-    variable sourceNatives
     dict unset registry $name
-    dict unset sourceNatives $name
-}
-
-# Marks the registered native NAME as declared by Botlish source (the
-# membership predicate of a source-declared type, hir/sourcetypes.tcl) rather
-# than provided by the compiler: such a native is not an *intrinsic* of its
-# namespace -- it does not make the namespace exist, is not protected
-# against redefinition, and is reached by a qualified reference through the
-# namespace's own type, never by surface lowering's intrinsic shortcut.
-proc core::native::markSource {name} {
-    variable sourceNatives
-    dict set sourceNatives $name 1
 }
 
 proc core::native::metadata {name} {

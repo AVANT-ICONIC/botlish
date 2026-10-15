@@ -600,21 +600,18 @@ test imports-type-no-value-binding {a type import creates no value or function b
     }
 } -result {UNBOUND UNBOUND 5}
 
-test imports-type-predicate {a module type's membership predicate is its member: qualified outside, bare inside (the Tcl backends: native code has no type-test predicates of named types)} -body {
+test imports-type-no-predicate {a module type brings no membership predicate (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md): `ns::Type?` is no member of the namespace, a bare `Type?` inside the module is unbound, `import type` binds none; a predicate is a function the module declares, and runs on every backend} -body {
     withScratchLibrary {
         writeFixtures $dir
         writeModule $dir inside "type Small = Int in 0..9\n\nfn small?(x):\n    Small?(x)\n"
-        set results {}
-        foreach source {
-            "import example_types\nexample_types::Count?(5) and not example_types::Count?(500)\n"
-            "import inside\ninside::small?(3)\n"
-        } {
-            set hir [hirOfSource $source]
-            lappend results [lmap backend {interp compile} {lindex [outcomeUnderHir $backend $hir] 1}]
-        }
-        set results
+        writeModule $dir ordinary "type Small = Int in 0..9\n\nfn small?(x: int) -> bool:\n    x >= 0 and x <= 9\n"
+        set hir [hirOfSource "import ordinary\n\[ordinary::small?(3), ordinary::small?(12)\]\n"]
+        list [rejectionKind "import example_types\nexample_types::Count?(5)\n"] \
+            [rejectionKind "import inside\ninside::small?(3)\n"] \
+            [rejectionKind "import type example_types::Count\nCount?(5)\n"] \
+            [lsort -unique [lmap backend {interp compile cranelift-generic cranelift} {lindex [outcomeUnderHir $backend $hir] 1}]]
     }
-} -result {{true true} {true true}}
+} -result {UNKNOWN-SYMBOL UNBOUND UNBOUND {{[true, false]}}}
 
 test imports-type-own-names-in-own-namespace {a module's types stay usable by short name inside it, with no import} -body {
     withScratchLibrary {

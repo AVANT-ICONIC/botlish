@@ -33,6 +33,15 @@
 #     carrier's own named types, so it is a subtype of its carrier (and of
 #     its carrier's carrier): forgetting a refinement is ordinary subtyping.
 #
+# A type is never a value: registering one registers nothing callable. No
+# type gets a membership predicate (a `NAME?`), a constructor or any other
+# native from its registration (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md). A
+# validator decides membership for the runtime's own contract checks
+# (acceptsValue, below) and for a native explicitly registered as a type
+# test of the type (core/native.tcl's -tests-type: `ok?`/`error?` of the
+# Result tags); Botlish source admits a value into an integer domain by
+# range facts (hir/range.tcl), and into a refinement by a proof.
+#
 # Values carry no type information beyond their kind: there is no runtime
 # evidence (Strings used to carry "evidence" of opaque named types, attached
 # by trusted natives; REFINEMENT-VALUES.md replaced that with source-level
@@ -317,48 +326,6 @@ proc core::type::showIntegerDomain {domain} {
     return "{[join [lindex $domain 1] {, }]}"
 }
 
-# Checked construction from an arbitrary Int: succeeds (returning the same
-# Int, refined) iff the value is actually in the named type NAME's domain,
-# else raises {CORE SEMANTIC RANGE} -- never masks or truncates. Formerly
-# also registered as every named refined-int type's own callable
-# constructor native (a bare "Byte(x)"); EXPLICIT-ERROR-COMPLETIONS.md
-# removes that source-level callable-type surface entirely (spec items 19-
-# 20, 43-45: a type name is not a magical value-level function; a runtime-
-# fallible conversion must be an ordinary, explicitly-fallible function, so
-# library code now calls this generic domain check only through its own
-# error-declaring wrapper -- byte::from_int, lib/byte.bot -- never as a
-# bare NAME(x) call). Kept, unmodified and still generic over any declared
-# integer-domain type, as the shared runtime/domain-check implementation
-# such a wrapper's own `fail` branches are built on: item 44's own
-# "separate the semantic source API from the runtime/domain-check
-# implementation" -- only the *registration* as a root callable native is
-# removed (declareIntConstructor below), never this generic primitive
-# itself. {CORE SEMANTIC RANGE} remains this proc's own *internal*
-# (compiler-trusted-Tcl-code) failure signal, never exposed to Botlish
-# source as an application error (item 43): a caller that wants a source-
-# visible declared error translates this into one explicitly (see
-# byte::from_int's own body, which does not even call this -- it
-# reimplements the same two-sided bounds check directly in Botlish so its
-# `fail BelowRange`/`fail AboveRange` are ordinary source statements, not a
-# native's internal signal).
-proc core::type::CheckedConstruct {typeName v} {
-    core::value::expect int $v $typeName
-    if {![validate $typeName $v]} {
-        core::semanticError RANGE \
-            "$typeName: [core::value::show $v] is not a valid $typeName"
-    }
-    return $v
-}
-
-# Registers NAME's membership predicate (NAME?, definePredicate) -- the one
-# thing every named refined int type still gets automatically, whether NAME
-# came from compiler registration or a source declaration. No longer also
-# registers a callable constructor native (a bare "Byte(x)"): see
-# CheckedConstruct's own comment just above for why, and spec items 19-20.
-proc core::type::declareIntConstructor {name} {
-    definePredicate $name
-}
-
 proc core::type::names {} {
     variable registry
     return [dict keys $registry]
@@ -432,33 +399,6 @@ proc core::type::IntersectIntegerFacts {a b} {
     set result [dict create min $lo max $hi]
     if {$exact ne {}} { dict set result exact $exact }
     return $result
-}
-
-# Registers NAME? (or PREDICATE-NAME): an ordinary native predicate that
-# requires a value of the type's base kind and answers whether it satisfies
-# NAME. It is declared a type test of NAME (see native.tcl -tests-type), so
-# it refines its argument to NAME in the true branch and compilers may
-# decide it from static types. Only a validator type has one: a refinement
-# type's membership is a proof, not a runtime test, and its predicates are
-# the owner's own proof-producing functions (REFINEMENT-VALUES.md).
-proc core::type::definePredicate {name {predicateName ""}} {
-    if {$predicateName eq ""} {
-        set predicateName $name?
-    }
-    set meta [metadata $name]
-    if {[dict get $meta refinement] ne {}} {
-        error "core::type::definePredicate: \"$name\" is a refinement type: its membership is proven by its owner's proof-producing functions, never tested at run time"
-    }
-    set base [dict get $meta base]
-    return [core::native::register $predicateName -arity 1 \
-        -impl [list core::type::PredicateImpl $name] \
-        -param-types [list $base] \
-        -tests-type [list refined $base [list $name]]]
-}
-
-# The runtime has already checked the base kind (a -tests-type contract).
-proc core::type::PredicateImpl {name v} {
-    return [core::value::bool [validate $name $v]]
 }
 
 # ---------------------------------------------------------------------------

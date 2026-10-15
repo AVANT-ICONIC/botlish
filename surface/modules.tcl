@@ -902,9 +902,7 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
         return
     }
     set functionNames [dict get $state loaded $namespaceName]
-    if {$symbolName ni $functionNames
-            && !([string index $symbolName end] eq "?"
-                && [string range $symbolName 0 end-1] in [dict get $state loadedTypes $namespaceName])} {
+    if {$symbolName ni $functionNames} {
         Error UNKNOWN-SYMBOL $span \
             "namespace \"$namespaceName\" has no definition \"$symbolName\" (it defines: [join [lsort [concat $functionNames $natives]] {, }])"
     }

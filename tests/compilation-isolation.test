@@ -78,10 +78,22 @@ proc ciPair {a b backends} {
 
 set ciAll {interp compile coretext cranelift cranelift-generic}
 
+# A domain entered through an ordinary converter: `s < 50` is decided from
+# the domain's facts (s is a Small), which every backend's lowering reads
+# from the registry by the type's name.
 set ciDomain {type Small = Int in 0..10
+error Out
+
+fn small(n: int) -> Small errors Out:
+    if n < 0 or n > 10:
+        fail Out
+    n
 
 fn chk(n: int) -> bool:
-    Small?(n)
+    s = small(n):
+        on Out:
+            return false
+    s < 50
 
 [chk(5), chk(150)]
 }
@@ -166,14 +178,14 @@ fn nameOf(seed: int) -> str:
 # ---------------------------------------------------------------------------
 # Declarations a later compilation replaces or drops
 
-test ci-domain-redeclared {a later program declaring `type Small` with another domain: the Tcl backends of the earlier HIR used the later domain for Small? (a silently wrong value)} -body {
-    ciPair $ciDomain "type Small = Int in 100..200\n\n1\n" {interp compile coretext}
-} -result {interp 1 {ok {[true, false]}} compile 1 {ok {[true, false]}} coretext 1 {ok {[true, false]}}}
+test ci-domain-redeclared {a later program declaring `type Small` with another domain: every backend of the earlier HIR keeps its own domain (once, the Tcl backends ran its membership predicate Small? against the later domain, a silently wrong value; a type has no predicate now)} -body {
+    ciPair $ciDomain "type Small = Int in 100..200\n\n1\n" $ciAll
+} -result {interp 1 {ok {[true, false]}} compile 1 {ok {[true, false]}} coretext 1 {ok {[true, false]}} cranelift 1 {ok {[true, false]}} cranelift-generic 1 {ok {[true, false]}}}
 
-test ci-domain-dropped {a later program declaring no type: every backend of the earlier HIR lost Small (an unbound Small?, an unknown type)} -body {
-    concat [ciPair $ciDomain "1\n" {interp compile coretext}] \
+test ci-domain-dropped {a later program declaring no type: every backend of the earlier HIR keeps Small (once: an unbound Small?, an unknown type)} -body {
+    concat [ciPair $ciDomain "1\n" $ciAll] \
         [ciPair "type Small = Int in 0..10\n\nfn below(x: Small) -> bool:\n    x < 50\n\nfn twice(x: Small) -> int:\n    x + x\n\n\[below(5), twice(7)\]\n" "1\n" $ciAll]
-} -result {interp 1 {ok {[true, false]}} compile 1 {ok {[true, false]}} coretext 1 {ok {[true, false]}} interp 1 {ok {[true, 14]}} compile 1 {ok {[true, 14]}} coretext 1 {ok {[true, 14]}} cranelift 1 {ok {[true, 14]}} cranelift-generic 1 {ok {[true, 14]}}}
+} -result {interp 1 {ok {[true, false]}} compile 1 {ok {[true, false]}} coretext 1 {ok {[true, false]}} cranelift 1 {ok {[true, false]}} cranelift-generic 1 {ok {[true, false]}} interp 1 {ok {[true, 14]}} compile 1 {ok {[true, 14]}} coretext 1 {ok {[true, 14]}} cranelift 1 {ok {[true, 14]}} cranelift-generic 1 {ok {[true, 14]}}}
 
 test ci-struct {a later program declaring the struct with other fields, or none: specialized native lowering of the earlier HIR built code that trapped at run time, the generic one failed} -body {
     concat [ciPair $ciPoint "struct Point:\n    z: int\n\nPoint {z: 1}.z\n" $ciAll] [ciPair $ciPoint "1\n" $ciAll]
@@ -242,7 +254,7 @@ test ci-failed-compilation {a later compilation that fails after it has started 
 # ---------------------------------------------------------------------------
 # Compiled code kept across compilations
 
-test ci-unit-reuse {a unit the Tcl compiler compiled once (core::compiler::compileHir) and ran again after a later compilation: its code calls the predicate by name as it runs, and saw the later domain, or none} -body {
+test ci-unit-reuse {a unit the Tcl compiler compiled once (core::compiler::compileHir) and ran again after a later compilation: its code once called the domain's predicate by name as it ran, and saw the later domain, or none; with no predicate, nothing it runs reads the domain} -body {
     set result {}
     foreach b [list "type Small = Int in 100..200\n\n1\n" "1\n"] {
         set unit [core::compiler::compileHir [ciCompile $ciDomain]]
@@ -261,9 +273,10 @@ test ci-coretext-cache {the Tcl compiler's code cache (keyed by core IR text, ne
     list [ciRun $hA coretext] [ciRun [ciCompile $ciPoint] coretext]
 } -cleanup {unset -nocomplain hA} -result {{ok {[3, 5]}} {ok {[3, 5]}}}
 
-test ci-coretext-cache-declarations {one core IR text, two programs whose declarations differ (`type Small` with two domains: the predicate is called by name, so the text is the same): the code cache's unit for that text is the one compiled under the active program's declarations, never reused from the other's} -body {
-    set h1 [ciCompile $ciDomain]
-    set h2 [ciCompile [string map {0..10 100..200} $ciDomain] b.bot]
+test ci-coretext-cache-declarations {one core IR text, two programs whose declarations differ (`type Small` with two domains, used only in a parameter annotation, so the text is the same): the code cache's unit for that text is the one compiled under the active program's declarations, never reused from the other's} -body {
+    set ciTwice "type Small = Int in 0..10\n\nfn below(x: Small) -> bool:\n    x < 8\n\n\[below(7), below(9)\]\n"
+    set h1 [ciCompile $ciTwice]
+    set h2 [ciCompile [string map {0..10 7..9} $ciTwice] b.bot]
     set key [list program [hir::lower $h2]]
     set result [list [expr {[hir::lower $h1] eq [hir::lower $h2]}]]
     foreach h [list $h1 $h2 $h1] {
@@ -271,7 +284,7 @@ test ci-coretext-cache-declarations {one core IR text, two programs whose declar
             [expr {[dict get $::core::compiler::cache $key hir declarations] eq [dict get $h declarations]}]
     }
     set result
-} -cleanup {unset -nocomplain h1 h2 key result h} -result {1 {ok {[true, false]}} 1 {ok {[false, true]}} 1 {ok {[true, false]}} 1}
+} -cleanup {unset -nocomplain ciTwice h1 h2 key result h} -result {1 {ok {[true, false]}} 1 {ok {[true, false]}} 1 {ok {[true, false]}} 1}
 
 # ---------------------------------------------------------------------------
 # Reading HIR text, real programs, executables
@@ -342,7 +355,7 @@ test ci-native-recheck {a -strict 0 HIR whose program breaks a declared paramete
 # ---------------------------------------------------------------------------
 # Activation itself
 
-test ci-activation-switches {activating the HIR whose declarations are active switches nothing (one comparison); alternating two HIRs of different declarations switches each time, unregistering what the other declared (a source type and its predicate included); a HIR without recorded declarations leaves the registries as they are} -body {
+test ci-activation-switches {activating the HIR whose declarations are active switches nothing (one comparison); alternating two HIRs of different declarations switches each time, unregistering what the other declared (a source type, which registers no predicate); a HIR without recorded declarations leaves the registries as they are} -body {
     set h1 [ciCompile "type Small = Int in 0..10\n$ciPoint"]
     set h2 [ciCompile $ciLight b.bot]
     set start $::hir::declarations::switches
@@ -356,13 +369,13 @@ test ci-activation-switches {activating the HIR whose declarations are active sw
     hir::activate [dict remove $h1 declarations]
     list $same $first $alternating [expr {$::hir::declarations::switches - $start - $same - $alternating}] \
         [core::type::valid Small] [core::native::exists Small?] [hir::structs::declared Point] [hir::enums::declared Light]
-} -cleanup {unset -nocomplain h1 h2 start same first alternating} -result {0 {1 1 1 0} 2 0 0 0 0 1}
+} -cleanup {unset -nocomplain h1 h2 start same first alternating} -result {0 {1 0 1 0} 2 0 0 0 0 1}
 
-test ci-declarations-recorded {every HIR records the declaration state its build left behind, the registries' own values: the struct and enum registries, the source types and their predicates, the errors} -body {
+test ci-declarations-recorded {every HIR records the declaration state its build left behind, the registries' own values: the struct and enum registries, the source types (and no native: a type registers no predicate), the errors} -body {
     set h [ciCompile "type Small = Int in 0..10\nerror Boom\nstruct S:\n    v: int\nenum E:\n    A, B\n\n1\n"]
     set d [dict get $h declarations]
     list [lsort [dict keys $d]] [dict keys [dict get $d structs]] [dict keys [dict get $d enums]] \
-        [dict keys [dict get $d types]] [dict keys [dict get $d natives]] [dict get $d errors]
-} -cleanup {unset -nocomplain h d} -result {{enums errors generation impls imports natives payloads structs traits types unitNames} S E Small Small? Boom}
+        [dict keys [dict get $d types]] [dict get $d errors] [core::native::exists Small?]
+} -cleanup {unset -nocomplain h d} -result {{enums errors generation impls imports payloads structs traits types unitNames} S E Small Boom 0}
 
 cleanupTests

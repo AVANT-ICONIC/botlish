@@ -533,6 +533,63 @@ static.
   counts only the callee's errors as handled), even though at run time the
   handler catches it; the handler-entry rule above is sound for both readings.
 
+## Converters, and why a type is never callable
+
+> A refined or domain type is not callable and does not automatically
+> provide a predicate. Caller-side refinement is established by explicitly
+> annotated validators or predicates. A conversion API may instead return
+> the refined type directly; such a converter is an ordinary function and
+> needs no proof annotation because its return type is checked normally.
+
+No type declaration -- `refined type`, an integer domain `type D = Int in
+LO..HI`, a struct, an enum -- adds a value, a function or a method candidate
+to its namespace: `D`, `D(x)`, `D?(x)`, `x.D?()` and `ns::D?` are unbound
+names unless the program declares a function of that name itself
+(ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md, which removed the last automatic
+`NAME?` membership predicate of an integer domain). The three ways into a
+refined value are ordinary functions:
+
+| form | shape | what it proves | annotation |
+|---|---|---|---|
+| predicate | `T -> bool` | the argument is `R`, on the true edge only | `proves x: R` |
+| validator | `T -> unit errors E` | the argument is `R`, after a normal completion | `proves x: R` |
+| converter | `T -> R errors E` | the *result* is `R`; the argument keeps its type | none |
+
+A **converter** is a pattern, not a construct: a function whose declared
+result is the refined type. The result check every function's body passes
+(hir/range.tcl's `verifyDeclaredResults` for a domain, the refinement
+proof for a refinement) is its proof, so it needs no clause, adds no
+callable kind, and fails through its own declared errors:
+
+```
+type Small = Int in 0..9
+error OutOfRange
+
+fn small(x: int) -> Small errors OutOfRange:
+    if x < 0 or x > 9:
+        fail OutOfRange
+    x
+```
+
+`s = small(x)` makes `s` a `Small` and leaves `x` an `int` (unless some
+other fact narrows it); a caller handles or declares `OutOfRange` like any
+error, and an exact argument is decided by the ordinary completion analysis
+(`small(3)` needs no handler, `small(12)` is a `KNOWN-ERROR`). The same body
+returning an unproven `x` (no guard, or a guard off by one) is rejected as
+any function whose result does not prove its declared type: there is no
+implicit cast. For a refinement, a converter is built on one of the owner's
+proofs (`if mail?(s): s else: fail Invalid`).
+
+An **integer domain** has no proof clause (a `proves` clause names a
+refinement): its membership is the range analysis's business, so the
+comparisons themselves are its predicate. `if 0 <= x and x <= 9:` admits
+`x` as a `Small` in the true branch, `if x < 0 or x > 9: return ...` after
+it, exactly as a nested `if` does (`and`/`or` conditions narrow every
+conjunct, hir/range.tcl's `Paths` and `OutcomeFacts`). A library that wants a
+named, reusable check of a domain writes a converter; one that wants a
+nominal fact over it declares a refinement whose carrier is the domain and
+proves it with a predicate or validator.
+
 ## Naming
 
 The names of proof-producing functions are part of this feature's declared

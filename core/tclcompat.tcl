@@ -6,7 +6,8 @@
 # STATUS: temporary compatibility primitives -- NOT Botlish's eventual
 # public Unicode character-classification API.
 #
-#   These exist only to let lib/web.tcl's `Emailish?` validator (whose
+#   These exist only to let the Emailish validator (lib/web.tcl's
+#   `Emailish?` when written, today lib/web.bot's `web::emailish?`; whose
 #   grammar uses Tcl's `[:alpha:]`/`[:alnum:]` regexp bracket-expression
 #   classes -- core/regex.tcl, core::web::emailRegex) be expressed as
 #   ordinary compiled core IR instead of running through the Tcl-only regex

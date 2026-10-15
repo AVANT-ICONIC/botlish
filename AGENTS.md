@@ -38,7 +38,7 @@ explicitly asked to.
 
 A compilation registers its declarations in process-wide registries that the
 analyses and the backends read by bare name: the source-defined entries of
-`core::type` and `core::native` (a domain and its `T?` predicate),
+`core::type` (a domain or a refinement; a type registers no native),
 `hir::structs`, `hir::enums`, `hir::errordecls`, `hir::traits` and
 `hir::imports`. Every HIR records the state its build left behind (its
 `declarations` side table, `hir/declarations.tcl`), and every entry point that
@@ -483,6 +483,29 @@ joins its handlers (`hir/types.tcl`'s `Call` and `Handle`), repeatability
 `tests/refinement-validators.test`, `tests/emailish-predicate.test` and
 `audit/refinement-values/tools/fuzz.tcl` (validators are on by default;
 `-validators 0` reproduces the predicate-only generator's runs).
+
+## No type is callable
+
+No type declaration makes the type callable or gives it a predicate
+(ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md): `T`, `T(x)`, `T?`, `ns::T?` and
+`x.T?()` are unbound unless the program declares a function of that name.
+An integer domain is entered through an ordinary converter (a function
+whose declared result is the domain, checked like any result) or admitted
+by comparisons, whose range facts both analyses derive through `and`, `or`
+and `not` (`hir::range::Paths`/`OutcomeFacts`); a refinement through its
+owner's `proves` predicates and validators. A Range proves a domain, never a
+refinement (`hir::range::ProvesType`). Never register a native, a value or a
+method candidate from a type declaration, never resolve a missing name by
+its spelling (`NAME?`), and never lower a native by a type's name;
+`-tests-type` is for explicitly registered type tests (the kind and Result
+tag tests), never of a refinement. If you change type-declaration
+registration (`hir/sourcetypes.tcl`), the resolver's or loader's handling of
+an unknown name, `Paths`/`OutcomeFacts`/`ProvesType`, or the completion
+analysis's `BranchOutcome`, run `tests/type-predicates.test`,
+`audit/refinement-values/tools/fuzz.tcl -domains 1` (several seeds) and
+`audit/type-predicates/tools/mutate.tcl` (every mutant in its
+`mutants.txt` must still apply and be killed: update a mutant's text when
+you change the code it mutates, keeping it a mutant of the same rule).
 
 ## Traits
 

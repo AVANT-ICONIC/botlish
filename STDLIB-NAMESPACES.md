@@ -87,9 +87,10 @@ and `ns-qualified-inventory` pin the after-state in a fresh process):
 | (added later, MUTABLE-BYTES.md) `mutable_byte_store::zeroed/_from/_count/_set/_copy`, `mutable_byte_store::freeze`, `mutable_byte_store::freeze_prefix` | standard type ops of the writable byte-storage value kind behind `abi::bytes::MutableBytes` | `byte_store::*` |
 | (added later, MUTABLE-BYTES.md) `abi::x86_64::from_mutable_bytes` | platform-ABI writable raw address bridge, already qualified | `abi::x86_64::from_mutable_bytes` |
 
-Source-declared types still register their constructor/predicate natives at
-the root for the duration of one compilation (`hir/sourcetypes.tcl`); those
-are user names, not standard intrinsics. Internal-only natives (the test
+Source-declared types register no natives at all: a type declaration
+registers a type, never a callable (their constructor natives went with
+EXPLICIT-ERROR-COMPLETIONS.md, their `T?` predicates with
+ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md). Internal-only natives (the test
 harness's `test-log`/`test-tick`) are registered by `tests/helpers.tcl` only.
 
 Why the primitives stay at the root: each is either an operator spelling,

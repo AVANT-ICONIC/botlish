@@ -144,8 +144,11 @@ global, unqualified names (hir/errordecls.tcl), hence the errors
 `import abi`, and **every program that imports `abi::x86_64` -- the raw
 `register64`/`to_int` included -- also loads `lib/abi.bot`** (a dependency of
 the module, not of the program's source: the program can use none of `abi`
-without its own `import abi`), with the two global error names and the ten
-generic predicate natives every source `type` gets (`abi::U8Value?`, ...).
+without its own `import abi`), with the two global error names. (The ten
+`abi::U8Value?`-style predicate natives every source `type` used to get are
+gone: a type declaration registers no callable,
+ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md; the checked creators `abi::u8`, ...
+are the family's converters.)
 The layering requires the edge (`abi::U32 -> abi::x86_64::Register64`), and
 one namespace is one file, so the encoders cannot live in a module that
 loads only when used.

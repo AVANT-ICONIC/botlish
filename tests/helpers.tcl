@@ -339,11 +339,15 @@ if {"test-log" ni [core::native::names]} {
     core::registerNative test-tick -arity 0 -impl testTickImpl
 
     # A validator type on str for the type-lattice and contract tests (a
-    # structural, runtime-checked named type: core/type.tcl), with its
-    # type-test predicate NonEmpty?.
+    # structural, runtime-checked named type: core/type.tcl), and a native
+    # registered as its type test, non_empty? (-tests-type: the mechanism of
+    # ok?/error?). The test is a registration of its own: a type never
+    # brings a predicate (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md).
     core::type::register NonEmpty -base str \
         -validator {apply {{v} {expr {[string length [core::value::strOf $v]] > 0}}}}
-    core::type::definePredicate NonEmpty
+    core::registerNative non_empty? -arity 1 \
+        -impl {apply {{v} {core::value::bool [core::type::validate NonEmpty $v]}}} \
+        -param-types str -tests-type NonEmpty
 
     # A native that breaks its declared contract: it claims to return a
     # NonEmpty but returns its argument, which may be "".

@@ -367,6 +367,13 @@ semantically live (`source-type-hir-roundtrip-interval`,
 
 ## Constructor behavior
 
+> **Superseded.** Both automatic operations are gone: the constructor
+> `Small(x)` by EXPLICIT-ERROR-COMPLETIONS.md, the predicate `Small?` by
+> ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md. A type declaration registers a type
+> and nothing callable; a domain is entered through an ordinary converter
+> (`byte::from_int`, `abi::u8`) or admitted by ordinary comparisons, whose
+> range facts prove membership. The paragraph below is the original record.
+
 Every source-declared integer-domain type automatically gets a checked
 constructor (`Small(x)`) and predicate (`Small?`), via
 `core::type::declareIntConstructor` — the exact generic mechanism the four
@@ -551,7 +558,8 @@ Everything above describes one flat type namespace. A `type` declared in a
 module is now a member of that module's namespace and has the qualified
 identity `NAMESPACE::Name` (`abi::U8Value`): the identity registered in
 `core::type`, kept in HIR's `sourceTypes`, shown in diagnostics
-(`int[abi::U8Value]`) and used by its membership predicate (`abi::U8Value?`).
+(`int[abi::U8Value]`); it once also named its membership predicate
+(`abi::U8Value?`), removed by ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md.
 The entry program's own types keep their bare identity. The declaration
 rules above (domain checks, parents, DFS, cycles, isolation by generation)
 are unchanged; what changed is what a *name* denotes:

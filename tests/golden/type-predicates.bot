@@ -1,0 +1,514 @@
+# type-predicates.bot -- no type is callable, and no type has a membership
+# predicate (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md): the source-level
+# specification of
+#
+#   * a type's name is not a value: `Small?(3)`, an alias of `Small?`, a
+#     method call `x.Small?()`, `Tag?`, `Point?` and `Light?` are unbound
+#     (Unbound; NotAStruct for method sugar), for a module's type too
+#     (`abi::U8Value?` is no member of abi: UnknownSymbol; `import type
+#     abi::U8Value` binds no `U8Value?`);
+#   * a converter -- an ordinary function returning the domain, no proof
+#     clause -- is the way in from an Int: its guards prove its result
+#     (two guards, an `or` guard, an elif chain, `not` of a conjunction,
+#     nested ifs, an exact constant); an unproven result, a guard off by
+#     one or a missing bound is rejected (Type: no implicit cast); its
+#     failure is its declared error, handled or declared like any (an
+#     exact argument in range needs no handler, out of range is KnownError);
+#     it refines its result, never its argument;
+#   * comparisons admit a domain: `0 <= x and x <= 9` on its true edge,
+#     `x < 0 or x > 9` on its false edge and after an early return, `not`
+#     swapping them;
+#   * a refinement over the domain keeps the established proof forms: a
+#     predicate refines its argument on its true edge only, a validator
+#     after a normal completion, a converter its result; a Bool function
+#     without a proof clause proves nothing, and a Range never proves a
+#     refinement.
+#
+# Ported from tests/type-predicates.test, which stays authoritative
+# (audit/golden/migration/fragments/type-predicates.tsv maps every test;
+# what only Tcl observes -- the native registry, HIR types, NIR, the source
+# audit -- stays there). The Tcl tests' private modules are abi here.
+#
+# Imports: compiler and test (the framework); abi (a module declaring
+# integer domains and their converters) and `import type abi::U8Value`.
+import abi
+import compiler
+import list
+import test
+import type abi::U8Value
+
+type Small = Int in 0..9
+refined type Tag = str
+refined type Even = Small
+error OutOfRange
+error Odd
+
+struct Point:
+    x: int
+
+enum Light:
+    Red,
+    Green,
+
+fn small(x: int) -> Small errors OutOfRange:
+    if x < 0 or x > 9:
+        fail OutOfRange
+    x
+
+fn use_small(s: Small) -> int:
+    s + 100
+
+fn even?(x: Small) -> bool proves x: Even:
+    x == 0 or x == 2 or x == 4 or x == 6 or x == 8
+
+fn validate_even(x: Small) -> unit proves x: Even errors Odd:
+    if not even?(x):
+        fail Odd
+    unit
+
+fn even(x: int) -> Even errors OutOfRange, Odd:
+    s = small(x)
+    if even?(s):
+        return s
+    fail Odd
+
+fn half(e: Even) -> int:
+    e + 1
+
+# Inputs no static analysis decides (the bodies capture them): a test of a
+# converter's run-time failure would otherwise be a KnownError.
+fn register_no_predicate_tests():
+    # tp-type-name-not-a-value: a type's name, called or spelled with `?`,
+    # is an unbound name -- for an integer domain, a refinement, a struct
+    # and an enum alike; method sugar finds no function of that name.
+    fn b_domain_call() errors compiler::CompilerError:
+        static compile:
+            Small?(3)
+    test::rejects("tp-type-name-not-a-value/domain-predicate", compiler::DiagnosticCode::Unbound, b_domain_call)
+    fn b_domain_value() errors compiler::CompilerError:
+        static compile:
+            f = Small?
+            f(3)
+    test::rejects("tp-type-name-not-a-value/domain-predicate-value", compiler::DiagnosticCode::Unbound, b_domain_value)
+    fn b_domain_constructor() errors compiler::CompilerError:
+        static compile:
+            Small(3)
+    test::rejects("tp-type-name-not-a-value/domain-constructor", compiler::DiagnosticCode::Unbound, b_domain_constructor)
+    fn b_domain_method() errors compiler::CompilerError:
+        static compile:
+            x = 3
+            x.Small?()
+    test::rejects("tp-type-name-not-a-value/domain-method", compiler::DiagnosticCode::NotAStruct, b_domain_method)
+    fn b_refinement() errors compiler::CompilerError:
+        static compile:
+            Tag?("a")
+    test::rejects("tp-type-name-not-a-value/refinement", compiler::DiagnosticCode::Unbound, b_refinement)
+    fn b_struct() errors compiler::CompilerError:
+        static compile:
+            Point?(Point {x: 1})
+    test::rejects("tp-type-name-not-a-value/struct", compiler::DiagnosticCode::Unbound, b_struct)
+    fn b_enum() errors compiler::CompilerError:
+        static compile:
+            Light?(Light::Red)
+    test::rejects("tp-type-name-not-a-value/enum", compiler::DiagnosticCode::Unbound, b_enum)
+
+    # tp-type-name-not-a-value-messages: the diagnostics are the ordinary
+    # ones for an unknown name, nothing about a removed predicate.
+    test::rejects_message("tp-type-name-not-a-value-messages/unbound", compiler::DiagnosticCode::Unbound, "unbound name \"Small?\"", b_domain_call)
+    test::rejects_containing("tp-type-name-not-a-value-messages/method", compiler::DiagnosticCode::NotAStruct, "no function named \"Small?\" is visible here", b_domain_method)
+
+    # tp-method-candidates: method sugar applies the functions a namespace
+    # declares (abi's converter u8), and the type beside them adds none.
+    fn b_module_method() errors compiler::CompilerError:
+        static compile:
+            x = 41
+            x.u8().value
+    test::value("tp-method-candidates/module-function", 41, b_module_method)
+    fn b_module_type_method() errors compiler::CompilerError:
+        static compile:
+            x = 41
+            x.U8Value?()
+    test::rejects("tp-method-candidates/module-type", compiler::DiagnosticCode::NotAStruct, b_module_type_method)
+
+    # tp-namespaced: a module's type brings no member: `abi::U8Value?` is
+    # no definition of abi; `import type abi::U8Value` binds no `U8Value?`;
+    # the module's own converter is its member.
+    fn b_qualified() errors compiler::CompilerError:
+        static compile:
+            abi::U8Value?(3)
+    test::rejects("tp-namespaced/qualified", compiler::DiagnosticCode::UnknownSymbol, b_qualified)
+    fn b_type_import() errors compiler::CompilerError:
+        static compile:
+            U8Value?(3)
+    test::rejects("tp-namespaced/type-import", compiler::DiagnosticCode::Unbound, b_type_import)
+    fn b_module_converter() errors compiler::CompilerError:
+        static compile:
+            fn f(v: U8Value) -> int:
+                v + 1
+            f(abi::u8(41).value)
+    test::value("tp-namespaced/module-converter", 42, b_module_converter)
+
+    # tp-proves-names-a-refinement: a proof clause names a refinement, never
+    # an integer domain: no function mints a domain by a claim.
+    fn b_proves_domain() errors compiler::CompilerError:
+        static compile:
+            fn small_claim?(x: int) -> bool proves x: Small:
+                x >= 0 and x <= 9
+            1
+    test::rejects("tp-proves-names-a-refinement", compiler::DiagnosticCode::ProofClause, b_proves_domain)
+
+fn register_converter_tests(inputs: List[int]):
+    # tp-converter-errors-ordinary: the converter's failure is its declared
+    # error: unhandled and undeclared, UnhandledError; handled, the handler
+    # runs for exactly the inputs outside the domain.
+    fn b_unhandled() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int:
+                use_small(small(x))
+            1
+    test::rejects("tp-converter-errors-ordinary/unhandled", compiler::DiagnosticCode::UnhandledError, b_unhandled)
+    fn b_handled() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int:
+                s = small(x):
+                    on OutOfRange:
+                        return -1
+                use_small(s)
+            ys = loop x in inputs:
+                g(x)
+            ys
+    test::value("tp-converter-errors-ordinary/handled", [103, -1, -1, 109, 100, -1], b_handled)
+
+    # tp-converter-exact-arguments: an exact argument is decided by the
+    # completion analysis through the converter's `or` guard.
+    fn b_exact_in_range() errors compiler::CompilerError:
+        static compile:
+            use_small(small(3))
+    test::value("tp-converter-exact-arguments/in-range", 103, b_exact_in_range)
+    fn b_exact_above() errors compiler::CompilerError:
+        static compile:
+            s = small(12):
+                on OutOfRange:
+                    -1
+            s
+    test::rejects("tp-converter-exact-arguments/above", compiler::DiagnosticCode::KnownError, b_exact_above)
+    fn b_exact_below() errors compiler::CompilerError:
+        static compile:
+            use_small(small(-1))
+    test::rejects("tp-converter-exact-arguments/below", compiler::DiagnosticCode::KnownError, b_exact_below)
+
+    # tp-converter-guard-shapes: the converter's return proof is ordinary
+    # control flow; every shape converts the same inputs.
+    fn b_two_guards() errors compiler::CompilerError:
+        static compile:
+            fn conv(x: int) -> Small errors OutOfRange:
+                if x < 0:
+                    fail OutOfRange
+                if x > 9:
+                    fail OutOfRange
+                x
+            fn g(x: int) -> int:
+                s = conv(x):
+                    on OutOfRange:
+                        return -1
+                s
+            ys = loop x in inputs:
+                g(x)
+            ys
+    test::value("tp-converter-guard-shapes/two-guards", [3, -1, -1, 9, 0, -1], b_two_guards)
+    fn b_elif() errors compiler::CompilerError:
+        static compile:
+            fn conv(x: int) -> Small errors OutOfRange:
+                if x < 0:
+                    fail OutOfRange
+                elif x > 9:
+                    fail OutOfRange
+                else:
+                    x
+            fn g(x: int) -> int:
+                s = conv(x):
+                    on OutOfRange:
+                        return -1
+                s
+            ys = loop x in inputs:
+                g(x)
+            ys
+    test::value("tp-converter-guard-shapes/elif", [3, -1, -1, 9, 0, -1], b_elif)
+    fn b_not_and() errors compiler::CompilerError:
+        static compile:
+            fn conv(x: int) -> Small errors OutOfRange:
+                if not (0 <= x and x <= 9):
+                    fail OutOfRange
+                x
+            fn g(x: int) -> int:
+                s = conv(x):
+                    on OutOfRange:
+                        return -1
+                s
+            ys = loop x in inputs:
+                g(x)
+            ys
+    test::value("tp-converter-guard-shapes/not-and", [3, -1, -1, 9, 0, -1], b_not_and)
+    fn b_nested() errors compiler::CompilerError:
+        static compile:
+            fn conv(x: int) -> Small errors OutOfRange:
+                if x >= 0:
+                    if x <= 9:
+                        return x
+                fail OutOfRange
+            fn g(x: int) -> int:
+                s = conv(x):
+                    on OutOfRange:
+                        return -1
+                s
+            ys = loop x in inputs:
+                g(x)
+            ys
+    test::value("tp-converter-guard-shapes/nested", [3, -1, -1, 9, 0, -1], b_nested)
+    fn b_exact_constant() errors compiler::CompilerError:
+        static compile:
+            fn five() -> Small:
+                5
+            five()
+    test::value("tp-converter-guard-shapes/exact-constant", 5, b_exact_constant)
+
+    # tp-converter-unproven-rejected: a converter is no cast.
+    fn b_unproven() errors compiler::CompilerError:
+        static compile:
+            fn conv(x: int) -> Small:
+                x
+            1
+    test::rejects("tp-converter-unproven-rejected/no-guard", compiler::DiagnosticCode::Type, b_unproven)
+    fn b_off_by_one() errors compiler::CompilerError:
+        static compile:
+            fn conv(x: int) -> Small errors OutOfRange:
+                if x < 0 or x > 10:
+                    fail OutOfRange
+                x
+            1
+    test::rejects("tp-converter-unproven-rejected/off-by-one", compiler::DiagnosticCode::Type, b_off_by_one)
+    fn b_missing_bound() errors compiler::CompilerError:
+        static compile:
+            fn conv(x: int) -> Small errors OutOfRange:
+                if x > 9:
+                    fail OutOfRange
+                x
+            1
+    test::rejects("tp-converter-unproven-rejected/missing-bound", compiler::DiagnosticCode::Type, b_missing_bound)
+    fn b_and_for_or() errors compiler::CompilerError:
+        static compile:
+            fn conv(x: int) -> Small errors OutOfRange:
+                if x < 0 and x > 9:
+                    fail OutOfRange
+                x
+            1
+    test::rejects("tp-converter-unproven-rejected/and-for-or", compiler::DiagnosticCode::Type, b_and_for_or)
+    fn b_out_of_range_constant() errors compiler::CompilerError:
+        static compile:
+            fn ten() -> Small:
+                10
+            1
+    test::rejects("tp-converter-unproven-rejected/constant", compiler::DiagnosticCode::Type, b_out_of_range_constant)
+
+    # tp-converter-does-not-refine-input: the result is a Small, the
+    # argument stays an int.
+    fn b_result_refined() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors OutOfRange:
+                s = small(x)
+                use_small(s)
+            1
+    test::value("tp-converter-does-not-refine-input/result", 1, b_result_refined)
+    fn b_input_not_refined() errors compiler::CompilerError:
+        static compile:
+            fn g(x: int) -> int errors OutOfRange:
+                s = small(x)
+                use_small(x)
+            1
+    test::rejects("tp-converter-does-not-refine-input/input", compiler::DiagnosticCode::Type, b_input_not_refined)
+
+fn register_comparison_tests(inputs: List[int]):
+    # tp-comparison-branch: comparisons admit the domain on the edge that
+    # proves it, and only there.
+    fn b_and_true() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> int:
+                if 0 <= x and x <= 9:
+                    use_small(x)
+                else:
+                    0
+            ys = loop x in inputs:
+                f(x)
+            ys
+    test::value("tp-comparison-backends/and-true-edge", [103, 0, 0, 109, 100, 0], b_and_true)
+    fn b_or_early_return() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> int:
+                if x < 0 or x > 9:
+                    return -1
+                use_small(x)
+            ys = loop x in inputs:
+                f(x)
+            ys
+    test::value("tp-comparison-backends/or-early-return", [103, -1, -1, 109, 100, -1], b_or_early_return)
+    fn b_not_or() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> int:
+                if not (x < 0 or x > 9):
+                    use_small(x)
+                else:
+                    0
+            ys = loop x in inputs:
+                f(x)
+            ys
+    test::value("tp-comparison-branch/not-or", [103, 0, 0, 109, 100, 0], b_not_or)
+    fn b_and_false_edge() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> int:
+                if 0 <= x and x <= 9:
+                    0
+                else:
+                    use_small(x)
+            1
+    test::rejects("tp-comparison-branch/and-false-edge", compiler::DiagnosticCode::Type, b_and_false_edge)
+    fn b_or_true_edge() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> int:
+                if x < 0 or x > 9:
+                    use_small(x)
+                else:
+                    0
+            1
+    test::rejects("tp-comparison-branch/or-true-edge", compiler::DiagnosticCode::Type, b_or_true_edge)
+    fn b_or_for_and() errors compiler::CompilerError:
+        static compile:
+            fn f(x: int) -> int:
+                if 0 <= x or x <= 9:
+                    use_small(x)
+                else:
+                    0
+            1
+    test::rejects("tp-comparison-branch/or-for-and", compiler::DiagnosticCode::Type, b_or_for_and)
+
+fn register_refinement_tests(inputs: List[int]):
+    # tp-refinement-forms: the predicate refines its argument on the true
+    # edge only, the validator after it completes, the converter its result.
+    fn b_predicate() errors compiler::CompilerError:
+        static compile:
+            fn p(x: Small) -> int:
+                if even?(x):
+                    half(x)
+                else:
+                    -1
+            fn g(x: int) -> int:
+                s = small(x):
+                    on OutOfRange:
+                        return -9
+                p(s)
+            ys = loop x in inputs:
+                g(x)
+            ys
+    test::value("tp-refinement-backends/predicate", [-1, -9, -9, -1, 1, -9], b_predicate)
+    fn b_predicate_false_edge() errors compiler::CompilerError:
+        static compile:
+            fn p(x: Small) -> int:
+                if even?(x):
+                    -1
+                else:
+                    half(x)
+            1
+    test::rejects("tp-refinement-forms/predicate-false-edge", compiler::DiagnosticCode::Type, b_predicate_false_edge)
+    fn b_predicate_statement() errors compiler::CompilerError:
+        static compile:
+            fn p(x: Small) -> int:
+                even?(x)
+                half(x)
+            1
+    test::rejects("tp-refinement-forms/predicate-statement", compiler::DiagnosticCode::Type, b_predicate_statement)
+    fn b_validator() errors compiler::CompilerError:
+        static compile:
+            fn v(x: Small) -> int:
+                r = validate_even(x):
+                    on Odd:
+                        return -2
+                half(x)
+            fn g(x: int) -> int:
+                s = small(x):
+                    on OutOfRange:
+                        return -9
+                v(s)
+            ys = loop x in inputs:
+                g(x)
+            ys
+    test::value("tp-refinement-backends/validator", [-2, -9, -9, -2, 1, -9], b_validator)
+    fn b_before_validator() errors compiler::CompilerError:
+        static compile:
+            fn v(x: Small) -> int errors Odd:
+                h = half(x)
+                validate_even(x)
+                h
+            1
+    test::rejects("tp-refinement-forms/before-validator", compiler::DiagnosticCode::Type, b_before_validator)
+    fn b_converter() errors compiler::CompilerError:
+        static compile:
+            fn c(x: int) -> int:
+                e = even(x):
+                    on OutOfRange:
+                        return -3
+                    on Odd:
+                        return -4
+                half(e)
+            ys = loop x in inputs:
+                c(x)
+            ys
+    test::value("tp-refinement-backends/converter", [-4, -3, -3, -4, 1, -3], b_converter)
+    fn b_converter_input() errors compiler::CompilerError:
+        static compile:
+            fn c(x: int) -> int errors OutOfRange, Odd:
+                e = even(x)
+                half(x)
+            1
+    test::rejects("tp-refinement-forms/converter-input", compiler::DiagnosticCode::Type, b_converter_input)
+
+    # tp-refinement-unannotated-predicate: a Bool function without a proof
+    # clause proves nothing, whatever its body or name.
+    fn b_unannotated() errors compiler::CompilerError:
+        static compile:
+            fn even_plain?(x: Small) -> bool:
+                x == 0 or x == 2 or x == 4 or x == 6 or x == 8
+            fn p(x: Small) -> int:
+                if even_plain?(x):
+                    half(x)
+                else:
+                    -1
+            1
+    test::rejects("tp-refinement-unannotated-predicate", compiler::DiagnosticCode::Type, b_unannotated)
+
+    # tp-range-never-proves-refinement: a value of the refinement's domain
+    # carrier, in range or exact, is not an Even.
+    fn b_carrier_value() errors compiler::CompilerError:
+        static compile:
+            fn p(x: Small) -> int:
+                half(x)
+            1
+    test::rejects("tp-range-never-proves-refinement/carrier", compiler::DiagnosticCode::Type, b_carrier_value)
+    fn b_carrier_result() errors compiler::CompilerError:
+        static compile:
+            fn q(x: Small) -> Even:
+                x
+            1
+    test::rejects("tp-range-never-proves-refinement/result", compiler::DiagnosticCode::Type, b_carrier_result)
+    fn b_exact() errors compiler::CompilerError:
+        static compile:
+            half(4)
+    test::rejects("tp-range-never-proves-refinement/exact", compiler::DiagnosticCode::Type, b_exact)
+
+fn register_type_predicates_tests(inputs: List[int]):
+    register_no_predicate_tests()
+    register_converter_tests(inputs)
+    register_comparison_tests(inputs)
+    register_refinement_tests(inputs)
+
+with context test::suite()
+register_type_predicates_tests([3, 12, -1, 9, 0, 10])
+test::report()

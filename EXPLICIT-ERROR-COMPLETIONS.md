@@ -240,7 +240,9 @@ confirmed directly in `tests/errors.test`'s own
 ## Callable-type-syntax removal
 
 `core::type::declareIntConstructor` (`core/type.tcl`) now only calls
-`definePredicate` (the type's `NAME?` membership predicate); it no longer
+`definePredicate` (the type's `NAME?` membership predicate; both were later
+removed with the predicate itself, ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md,
+which also deleted the dead code this section keeps); it no longer
 calls `core::native::register`, so a source-defined refinement type has no
 callable form at all. `Byte(5)` is now simply an unbound-name reference
 (`CORE SEMANTIC UNBOUND`), pinned directly by `tests/errors.test`'s

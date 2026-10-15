@@ -1,0 +1,400 @@
+# type-predicates.test -- no type is callable, and no type gets a membership
+# predicate (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md).
+#
+# A source `type D = Int in LO..HI` used to register a root native `D?` (its
+# membership predicate, `m::D?` for a module's type), reachable bare, through
+# an alias, by method sugar and qualified -- and unsupported by native
+# lowering whenever HIR could not decide it. The mechanism is gone: a type
+# declaration registers a type and nothing else. A domain is entered through
+# ordinary Botlish:
+#
+#   * a converter: an ordinary function whose declared result is the domain
+#     (no proof clause: its result check is the proof);
+#   * comparisons, whose range facts admit the value (`and`/`or` conditions
+#     narrow every operand: hir/range.tcl's Paths and OutcomeFacts);
+#   * for a refinement (`refined type`), the existing proof forms: a
+#     predicate (`-> bool proves x: R`) or a validator (`-> unit proves x: R`).
+#
+# These tests pin what a golden suite cannot observe: the native and type
+# registries, HIR types of bindings, NIR, the source of the backends. The
+# source-level behavior is also ported to tests/golden/type-predicates.bot.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+
+# The kind and location-free message of the first compile rejection of
+# SOURCE, or "accepted".
+proc tpRejection {source} {
+    if {[catch {surface::compile $source -warnings off} message options]} {
+        set code [dict get $options -errorcode]
+        set kind [expr {[lindex $code 1] eq "SYNTAX" ? "SYNTAX" : [lindex $code end]}]
+        return [list $kind [regsub {^[^ ]*:[0-9]+:[0-9]+: } $message {}]]
+    }
+    return accepted
+}
+
+proc tpKind {source} {
+    return [lindex [tpRejection $source] 0]
+}
+
+# The shown static type of the last binding named NAME in HIR.
+proc tpBoundType {hir name} {
+    set binds [hirFind $hir bind $name]
+    return [hir::types::show [hir::typeOf $hir [lindex $binds end]]]
+}
+
+# The registered natives spelled like a type predicate: a capitalized last
+# name segment ending in `?` (`Small?`, `abi::U8Value?`).
+proc tpTypePredicateNatives {} {
+    return [lsearch -all -inline -regexp [core::native::names] {(^|::)[A-Z][A-Za-z0-9_]*\?$}]
+}
+
+# The body lines of NIR function NAME in NIR text, registers kept, origins
+# dropped.
+proc tpNirBody {nir name} {
+    set lines {}
+    set inside 0
+    foreach line [split $nir \n] {
+        if {[string match "func *" $line]} {
+            set inside [string match "func * \"$name\" *" $line]
+            continue
+        }
+        if {$line eq "end"} {
+            set inside 0
+            continue
+        }
+        if {$inside} {
+            lappend lines [regsub -all { ?@e[0-9]+} [string trim $line] ""]
+        }
+    }
+    return $lines
+}
+
+# Writes CONTENT as module NAME into the private library (withPrivateLibrary).
+proc tpModule {name content} {
+    set channel [open [file join $::core::libraryDir $name.bot] w]
+    fconfigure $channel -encoding utf-8
+    puts -nonewline $channel $content
+    close $channel
+}
+
+# A domain, its converter and a consumer: the shapes every case below uses.
+set tpPrelude {import list
+
+type Small = Int in 0..9
+error OutOfRange
+
+fn small(x: int) -> Small errors OutOfRange:
+    if x < 0 or x > 9:
+        fail OutOfRange
+    x
+
+fn use_small(s: Small) -> int:
+    s + 100
+
+}
+
+# ---------------------------------------------------------------------------
+# No type predicate exists
+
+test tp-no-native-registered {a type declaration registers a type and no native: no `Small?` after compiling a program declaring it, and none for any type of the standard library's modules (byte's Byte..HighNibble, abi's ten *Value domains, abi::x86_64's Register64Word)} -body {
+    surface::compile "type Small = Int in 0..9\n\n1\n" -warnings off
+    set own [list [core::type::valid Small] [core::native::exists Small?]]
+    surface::compile [withImports "import abi::x86_64\nimport byte\nimport web\n\[byte::from_int(3), abi::u8(4).value\]\n"] -warnings off
+    list $own [core::type::valid abi::U8Value] [core::type::valid byte::Byte] [tpTypePredicateNatives]
+} -result {{1 0} 1 1 {}}
+
+test tp-type-name-not-a-value {a type's name is not a value: the type, a call of it, its `?` spelling, a call, an alias and method sugar are all unbound names (UNBOUND, or NOT-A-STRUCT naming the missing function for method sugar) -- for an integer domain, a refinement, a struct and an enum alike} -body {
+    set results {}
+    foreach {decl spelled} {
+        "type Small = Int in 0..9" Small
+        "refined type Tag = str" Tag
+        "struct Point:\n    x: int" Point
+        "enum Light:\n    Red, Green" Light
+    } {
+        foreach use [list "$spelled\n" "$spelled\(3)\n" "$spelled?\n" "$spelled?(3)\n" "f = $spelled?\nf(3)\n" "x = 3\nx.$spelled?()\n"] {
+            lappend results [tpKind "$decl\n\n$use"]
+        }
+    }
+    lsort -unique $results
+} -result {NOT-A-STRUCT UNBOUND}
+
+test tp-type-name-not-a-value-messages {the diagnostics are the ordinary ones for an unknown name, nothing about a removed predicate} -body {
+    list [tpRejection "type Small = Int in 0..9\n\nSmall?(3)\n"] \
+        [string match {*no function named "Small?" is visible here*} [lindex [tpRejection "type Small = Int in 0..9\n\nx = 3\nx.Small?()\n"] 1]]
+} -result {{UNBOUND {unbound name "Small?"}} 1}
+
+test tp-namespaced {a module's type brings no predicate: `m::Small?` is no member of m, `import type m::Small` binds no `Small?`, and inside m a bare `Small?` is unbound; only m's own declared functions are its members} -body {
+    withPrivateLibrary {
+        tpModule tpm "type Small = Int in 0..9\n\nfn one() -> int:\n    1\n"
+        tpModule tpinside "type Small = Int in 0..9\n\nfn small?(x):\n    Small?(x)\n"
+        list [tpRejection "import tpm\ntpm::Small?(3)\n"] \
+            [tpKind "import type tpm::Small\nSmall?(3)\n"] \
+            [tpKind "import tpinside\ntpinside::small?(3)\n"] \
+            [tpKind "import tpm\nimport type tpm::Small\nfn f(x: Small) -> int:\n    x + tpm::one()\nf(3)\n"]
+    }
+} -result {{UNKNOWN-SYMBOL {namespace "tpm" has no definition "Small?" (it defines: one)}} UNBOUND UNBOUND accepted}
+
+test tp-method-candidates {method sugar sees exactly the functions a namespace declares: an ordinary `small?` of a module is a candidate, the type beside it adds none} -body {
+    withPrivateLibrary {
+        tpModule tpm "type Small = Int in 0..9\n\nfn small?(x: int) -> bool:\n    x >= 0 and x <= 9\n"
+        set hir [surface::compile "import tpm\nx = 3\ny = 12\n\[x.small?(), y.small?()\]\n" -warnings off]
+        list [lrange [outcomeUnderHir cranelift $hir] 0 1] \
+            [tpKind "import tpm\nx = 3\nx.Small?()\n"]
+    }
+} -result {{value {[true, false]}} NOT-A-STRUCT}
+
+test tp-proves-names-a-refinement {an integer domain is not a refinement: a proof clause naming one is rejected (PROOF-CLAUSE), so no function can mint a domain by a claim; its membership is the range analysis's} -body {
+    tpRejection "type Small = Int in 0..9\n\nfn small?(x: int) -> bool proves x: Small:\n    x >= 0 and x <= 9\n\n1\n"
+} -result {PROOF-CLAUSE {the proven type of "proves x: Small" is int[Small], which is not a refinement type: a proof clause establishes a refinement declared with "refined type NAME = CARRIER"}}
+
+test tp-tests-type-of-refinement-rejected {a native cannot be registered as the run-time type test of a refinement: its membership is a proof (core::native::register; the old core::type::definePredicate guard, generalized)} -body {
+    surface::compile "refined type Tag = str\n\n1\n" -warnings off
+    list [catch {core::registerNative tp-tag? -arity 1 -param-types str -impl {apply {{v} {core::value::true}}} -tests-type Tag} m] $m \
+        [core::native::exists tp-tag?]
+} -result {1 {core::native::register: -tests-type of "tp-tag?" names the refinement type Tag: its membership is proven by its owner's proof-producing functions, never tested at run time} 0}
+
+# ---------------------------------------------------------------------------
+# Converters
+
+test tp-converter-result-type {a converter's declared result is its proof: `small` has the result type int[Small], a binding of its call is a Small, and the argument keeps its own type} -body {
+    set hir [surface::compile "$tpPrelude\nfn g(x: int) -> int:\n    s = small(x):\n        on OutOfRange:\n            return 0\n    after = x\n    use_small(s)\n\ng(3)\n" -warnings off]
+    list [tpBoundType $hir s] [tpBoundType $hir after]
+} -result {{int[Small]} int}
+
+test tp-converter-does-not-refine-input {a converter refines its result, never its argument: after `s = small(x)`, `use_small(s)` is accepted and `use_small(x)` is not} -body {
+    list [tpKind "$tpPrelude\nfn g(x: int) -> int errors OutOfRange:\n    s = small(x)\n    use_small(s)\n\n1\n"] \
+        [tpRejection "$tpPrelude\nfn g(x: int) -> int errors OutOfRange:\n    s = small(x)\n    use_small(x)\n\n1\n"]
+} -result {accepted {TYPE {argument for parameter "s" cannot be proven to satisfy int[Small] (argument type: int, facts: [-∞, +∞])}}}
+
+test tp-converter-errors-ordinary {a converter's failure is its declared error, charged like any: unhandled and undeclared it is UNHANDLED-ERROR; handled, every backend agrees on dynamic inputs} -body {
+    list [tpKind "$tpPrelude\nfn g(x: int) -> int:\n    use_small(small(x))\n\n1\n"] \
+        [sourceAgree "$tpPrelude\nfn g(x: int) -> int:\n    s = small(x):\n        on OutOfRange:\n            return -1\n    use_small(s)\n\nxs = \[3, 12, -1, 9, 0, 10\]\nys = loop x in xs:\n    g(x)\nys\n"]
+} -result {UNHANDLED-ERROR {value {[103, -1, -1, 109, 100, -1]}}}
+
+test tp-converter-exact-arguments {exact arguments are decided by the ordinary completion analysis, through the converter's `or` guard: in range, no handler is needed; out of range, the call is a KNOWN-ERROR} -body {
+    list [sourceAgree "$tpPrelude\nuse_small(small(3))\n"] \
+        [tpKind "$tpPrelude\nuse_small(small(12))\n"] \
+        [tpKind "$tpPrelude\nuse_small(small(-1))\n"]
+} -result {{value 103} KNOWN-ERROR KNOWN-ERROR}
+
+test tp-converter-guard-shapes {the converter's return proof is ordinary control flow: two guards, one `or` guard, an elif chain, a `not` of a conjunction, nested ifs and an exact constant all prove the domain} -body {
+    set results {}
+    foreach body {
+        "    if x < 0:\n        fail OutOfRange\n    if x > 9:\n        fail OutOfRange\n    x"
+        "    if x < 0 or x > 9:\n        fail OutOfRange\n    x"
+        "    if x < 0:\n        fail OutOfRange\n    elif x > 9:\n        fail OutOfRange\n    else:\n        x"
+        "    if not (0 <= x and x <= 9):\n        fail OutOfRange\n    x"
+        "    if x >= 0:\n        if x <= 9:\n            return x\n    fail OutOfRange"
+        "    if 0 <= x and x <= 9:\n        return x\n    fail OutOfRange"
+        "    5"
+    } {
+        lappend results [tpKind "type Small = Int in 0..9\nerror OutOfRange\n\nfn small(x: int) -> Small errors OutOfRange:\n$body\n\n1\n"]
+    }
+    set results
+} -result {accepted accepted accepted accepted accepted accepted accepted}
+
+test tp-converter-unproven-rejected {a converter is no cast: a body returning an unproven value, a guard off by one, a missing bound or an out-of-range constant fails its return proof (TYPE), exactly as any function's declared result} -body {
+    set results {}
+    foreach body {
+        "    x"
+        "    if x < 0 or x > 10:\n        fail OutOfRange\n    x"
+        "    if x > 9:\n        fail OutOfRange\n    x"
+        "    if x < 0 and x > 9:\n        fail OutOfRange\n    x"
+        "    if x < 0 or x > 9:\n        return x\n    x"
+        "    10"
+    } {
+        lappend results [lindex [tpRejection "type Small = Int in 0..9\nerror OutOfRange\n\nfn small(x: int) -> Small errors OutOfRange:\n$body\n\n1\n"] 1]
+    }
+    lsort -unique [lmap r $results {regsub {\(facts: [^)]*\)} $r {(facts: ...)}}]
+} -result {{function result does not prove declared type int[Small] (facts: ...)}}
+
+test tp-converter-module {a module's converter is an ordinary member: called qualified, by method sugar, through `import type` for the result; its error is the module's, handled by its qualified name} -body {
+    withPrivateLibrary {
+        tpModule tpconv "type Small = Int in 0..9\nerror OutOfRange\n\nfn small(x: int) -> Small errors OutOfRange:\n    if x < 0 or x > 9:\n        fail OutOfRange\n    x\n"
+        set source "import tpconv\nimport type tpconv::Small\n\nfn use(s: Small) -> int:\n    s * 2\n\nfn g(x: int) -> int:\n    s = x.small():\n        on tpconv::OutOfRange:\n            return -1\n    use(s)\n\nfn h(x: int) -> int:\n    s = tpconv::small(x):\n        on tpconv::OutOfRange:\n            return -1\n    use(s)\n\nxs = \[4, 40\]\n\[g(list::at(xs, 0)), g(list::at(xs, 1)), h(list::at(xs, 0))\]\n"
+        sourceAgree [withImports $source]
+    }
+} -result {value {[8, -1, 8]}}
+
+# ---------------------------------------------------------------------------
+# Comparisons: the predicate of an integer domain
+
+test tp-comparison-branch {comparisons admit a domain: `0 <= x and x <= 9` refines x on its true edge only, `x < 0 or x > 9` on its false edge (after an early return too), and `not` of either swaps the edges} -body {
+    set accepted {
+        "fn f(x: int) -> int:\n    if 0 <= x and x <= 9:\n        use_small(x)\n    else:\n        0"
+        "fn f(x: int) -> int:\n    if x < 0 or x > 9:\n        return 0\n    use_small(x)"
+        "fn f(x: int) -> int:\n    if x < 0 or x > 9:\n        0\n    else:\n        use_small(x)"
+        "fn f(x: int) -> int:\n    if not (x < 0 or x > 9):\n        use_small(x)\n    else:\n        0"
+        "fn f(x: int) -> int:\n    ok = 0 <= x and x <= 9\n    if x >= 0:\n        if x <= 9:\n            return use_small(x)\n    0"
+    }
+    set rejected {
+        "fn f(x: int) -> int:\n    if 0 <= x and x <= 9:\n        0\n    else:\n        use_small(x)"
+        "fn f(x: int) -> int:\n    if 0 <= x or x <= 9:\n        use_small(x)\n    else:\n        0"
+        "fn f(x: int) -> int:\n    if x < 0 or x > 9:\n        use_small(x)\n    else:\n        0"
+        "fn f(x: int) -> int:\n    if 0 <= x and x <= 10:\n        use_small(x)\n    else:\n        0"
+    }
+    list [lmap body $accepted {tpKind "$tpPrelude\n$body\n\n1\n"}] [lmap body $rejected {tpKind "$tpPrelude\n$body\n\n1\n"}]
+} -result {{accepted accepted accepted accepted accepted} {TYPE TYPE TYPE TYPE}}
+
+test tp-comparison-backends {a comparison-guarded domain use runs alike on every backend, on dynamic inputs} -body {
+    sourceAgree "$tpPrelude\nfn f(x: int) -> int:\n    if 0 <= x and x <= 9:\n        use_small(x)\n    else:\n        0\n\nfn g(x: int) -> int:\n    if x < 0 or x > 9:\n        return -1\n    use_small(x)\n\nxs = \[3, 12, -1, 9\]\nfs = loop x in xs:\n    f(x)\ngs = loop x in xs:\n    g(x)\n\[fs, gs\]\n"
+} -result {value {[[103, 0, 0, 109], [103, -1, -1, 109]]}}
+
+test tp-paths-shapes {hir::range::Paths, the decomposition both analyses share: `A and B` true is one path of both, `A or B` true two paths, `not A` the other outcome of A, and a chain of 300 operands decomposes only as far as its node budget (a bounded number of pairs, so a long `and`-reduced value stays linear to compile, tests/native-csv-records.test's property cases)} -body {
+    set n 0
+    set chain [join [lmap _ [lrepeat 300 0] {set _ "x != [incr n]"}] { and }]
+    set hir [surface::compile "fn f(x: int) -> int:\n    a = if 0 <= x and x <= 9:\n        1\n    else:\n        0\n    b = if x < 0 or x > 9:\n        1\n    else:\n        0\n    c = if not (x < 0):\n        1\n    else:\n        0\n    d = if $chain:\n        1\n    else:\n        0\n    a + b + c + d\n\nf(3)\n" -warnings off]
+    set ifs [lmap e [hirFind $hir if] {
+        if {[hir::kind $hir [hir::get $hir $e condition]] ne "if"} continue
+        set e
+    }]
+    set shapes {}
+    foreach e [lrange $ifs 0 2] {
+        set c [hir::get $hir $e condition]
+        lappend shapes [list [llength [hir::range::Paths $hir $c 1]] [lmap p [hir::range::Paths $hir $c 1] {llength $p}] \
+            [lmap p [hir::range::Paths $hir $c 0] {llength $p}]]
+    }
+    set long [hir::range::Paths $hir [hir::get $hir [lindex $ifs 3] condition] 1]
+    set pairs 0
+    foreach p $long { incr pairs [llength $p] }
+    # Each node the budget admits adds at most one pair, and so does each
+    # branch it is then refused at: at most twice the budget.
+    list $shapes [llength $long] [expr {$pairs <= 128}]
+} -result {{{1 2 {2 1}} {2 {1 2} 2} {1 1 1}} 1 1}
+
+# ---------------------------------------------------------------------------
+# The proof forms of refinements are unchanged
+
+set tpRefined {import list
+
+type Small = Int in 0..9
+refined type Even = Small
+error OutOfRange
+error Odd
+
+fn small(x: int) -> Small errors OutOfRange:
+    if x < 0 or x > 9:
+        fail OutOfRange
+    x
+
+fn even?(x: Small) -> bool proves x: Even:
+    x == 0 or x == 2 or x == 4 or x == 6 or x == 8
+
+fn validate_even(x: Small) -> unit proves x: Even errors Odd:
+    if not even?(x):
+        fail Odd
+    unit
+
+fn even(x: int) -> Even errors OutOfRange, Odd:
+    s = small(x)
+    if even?(s):
+        return s
+    fail Odd
+
+fn half(e: Even) -> int:
+    e + 1
+
+}
+
+test tp-refinement-forms {a user refinement over a domain takes all three forms with the mechanisms the standard library uses: a predicate refines its argument on the true edge only, a validator after a normal completion, a converter its result (built on the predicate) -- and the converter's argument stays an int} -body {
+    set accepted {
+        "fn p(x: Small) -> int:\n    if even?(x):\n        half(x)\n    else:\n        -1"
+        "fn v(x: Small) -> int errors Odd:\n    validate_even(x)\n    half(x)"
+        "fn c(x: int) -> int errors OutOfRange, Odd:\n    e = even(x)\n    half(e)"
+    }
+    set rejected {
+        "fn p(x: Small) -> int:\n    if even?(x):\n        -1\n    else:\n        half(x)"
+        "fn p(x: Small) -> int:\n    even?(x)\n    half(x)"
+        "fn v(x: Small) -> int errors Odd:\n    half(x)\n    validate_even(x)\n    1"
+        "fn c(x: int) -> int errors OutOfRange, Odd:\n    e = even(x)\n    half(x)"
+        "fn bad(x: Small) -> Even:\n    x"
+    }
+    list [lmap body $accepted {tpKind "$tpRefined\n$body\n\n1\n"}] [lmap body $rejected {tpKind "$tpRefined\n$body\n\n1\n"}]
+} -result {{accepted accepted accepted} {TYPE TYPE TYPE TYPE TYPE}}
+
+test tp-range-never-proves-refinement {a Range proves an integer domain, never a refinement (hir::range::ProvesType): a value of a refinement's domain carrier, in range or exact, is not admitted where the refinement is required -- before, the refinement inherited the domain's integer facts and was admitted with no proof -- while a value proven the refinement is} -body {
+    list [tpRejection "$tpRefined\nfn p(x: Small) -> int:\n    half(x)\n\n1\n"] \
+        [tpKind "$tpRefined\nfn q(x: Small) -> Even:\n    x\n\n1\n"] \
+        [tpKind "$tpRefined\nhalf(small(4))\n"] \
+        [tpKind "$tpRefined\nhalf(4)\n"] \
+        [sourceAgree "$tpRefined\ns = small(4)\nif even?(s):\n    half(s)\nelse:\n    0\n"]
+} -result {{TYPE {argument for parameter "e" cannot be proven to satisfy int[Even] (argument type: int[Small], facts: [0, 9]); expected Even but found int[Small]: a refinement proof is required (a int[Small] value becomes Even only where one of its owner's proof-producing functions has proven it: a predicate returned true for it, or a validator completed normally for it; there is no implicit conversion)}} TYPE TYPE TYPE {value 5}}
+
+test tp-refinement-unannotated-predicate {a Bool function without a proof clause proves nothing, whatever its body or name} -body {
+    tpKind "$tpRefined\nfn even_plain?(x: Small) -> bool:\n    x == 0 or x == 2 or x == 4 or x == 6 or x == 8\n\nfn p(x: Small) -> int:\n    if even_plain?(x):\n        half(x)\n    else:\n        -1\n\n1\n"
+} -result TYPE
+
+test tp-refinement-backends {the three forms run alike on every backend: the predicate's branch, the validator's error, the converter's two errors} -body {
+    sourceAgree "$tpRefined\nfn p(x: Small) -> int:\n    if even?(x):\n        half(x)\n    else:\n        -1\n\nfn v(x: Small) -> int:\n    r = validate_even(x):\n        on Odd:\n            return -2\n    half(x)\n\nfn c(x: int) -> int:\n    e = even(x):\n        on OutOfRange:\n            return -3\n        on Odd:\n            return -4\n    half(e)\n\nxs = \[4, 7, 12\]\ncs = loop x in xs:\n    c(x)\nsmalls = \[small(4), small(7)\]\nps = loop s in smalls:\n    p(s)\nvs = loop s in smalls:\n    v(s)\n\[ps, vs, cs\]\n"
+} -result {value {[[5, -1], [5, -2], [5, -4, -3]]}}
+
+# ---------------------------------------------------------------------------
+# Ordinary lowering: no backend knows a type predicate
+
+test tp-converter-nir-ordinary {a converter lowers to ordinary comparisons, branches and a declared failure: no native call, nothing named after the type} -body {
+    set hir [surface::compile "$tpPrelude\nfn g(x: int) -> int:\n    s = small(x):\n        on OutOfRange:\n            return -1\n    use_small(s)\n\nxs = \[3, 12\]\nys = loop x in xs:\n    g(x)\nys\n" -warnings off]
+    set body [tpNirBody [native::nir $hir] small]
+    list [expr {[lsearch -regexp $body {op r?i(lt|gt|le|ge) }] >= 0}] \
+        [expr {[lsearch -regexp $body {^br }] >= 0}] \
+        [expr {[lsearch -regexp $body {^faildeclared [0-9]+ "OutOfRange"}] >= 0}] \
+        [lsearch -all -inline -regexp $body {native|Small|call}]
+} -result {1 1 1 {}}
+
+test tp-library-converter-is-ordinary {a library converter (byte::from_int, abi::u8) is an ordinary module function: a HIR block with a declared domain result, an NIR function of its own built from comparisons, called like any function} -body {
+    set hir [surface::compile [withImports "fn f(x: int) -> int:\n    b = byte::from_int(x):\n        on byte::BelowRange:\n            return -1\n        on byte::AboveRange:\n            return -2\n    u = abi::u8(x):\n        on abi::AbiIntegerBelowRange:\n            return -3\n        on abi::AbiIntegerAboveRange:\n            return -4\n    b + u.value\n\nxs = \[7, 300\]\nys = loop x in xs:\n    f(x)\nys\n"] -warnings off]
+    set nir [native::nir $hir]
+    list [lrange [outcomeUnderHir cranelift $hir] 0 1] \
+        [expr {[lsearch -regexp [tpNirBody $nir byte::from_int] {op r?i(lt|gt) }] >= 0}] \
+        [lsearch -all -inline -regexp [concat [tpNirBody $nir byte::from_int] [tpNirBody $nir abi::u8]] {native|Byte\?|U8Value\?}]
+} -result {{value {[14, -2]}} 1 {}}
+
+test tp-converter-source-equivalent {a converter declared by a module and the same converter written in the program lower to the same NIR function body: nothing below HIR knows where a converter came from} -body {
+    withPrivateLibrary {
+        tpModule tpconv "type Small = Int in 0..9\nerror OutOfRange\n\nfn small(x: int) -> Small errors OutOfRange:\n    if x < 0 or x > 9:\n        fail OutOfRange\n    x\n"
+        set use "xs = \[3, 12\]\nys = loop x in xs:\n    CALL\nys\n"
+        set own [surface::compile "import list\ntype Small = Int in 0..9\nerror OutOfRange\n\nfn small(x: int) -> Small errors OutOfRange:\n    if x < 0 or x > 9:\n        fail OutOfRange\n    x\n\nfn g(x: int) -> int:\n    s = small(x):\n        on OutOfRange:\n            return -1\n    s + 0\n\n[string map {CALL g(x)} $use]" -warnings off]
+        set lib [surface::compile "import list\nimport tpconv\n\nfn g(x: int) -> int:\n    s = tpconv::small(x):\n        on tpconv::OutOfRange:\n            return -1\n    s + 0\n\n[string map {CALL g(x)} $use]" -warnings off]
+        # The error's canonical identity is the module-qualified one
+        # (ERROR-PAYLOADS.md): a name, not a shape.
+        set a [tpNirBody [native::nir $own] small]
+        set b [string map {tpconv::OutOfRange OutOfRange} [tpNirBody [native::nir $lib] tpconv::small]]
+        list [expr {[llength $a] > 0}] [expr {$a eq $b}] \
+            [lrange [outcomeUnderHir cranelift $own] 0 1] [lrange [outcomeUnderHir cranelift $lib] 0 1]
+    }
+} -result {1 1 {value {[3, -1]}} {value {[3, -1]}}}
+
+test tp-comparison-nir-ordinary {a comparison-admitted domain lowers to the comparisons themselves: no call is left for the membership} -body {
+    set hir [surface::compile "$tpPrelude\nfn f(x: int) -> int:\n    if 0 <= x and x <= 9:\n        use_small(x)\n    else:\n        0\n\nxs = \[3, 12\]\nys = loop x in xs:\n    f(x)\nys\n" -warnings off]
+    set body [tpNirBody [native::nir $hir] f]
+    list [llength [lsearch -all -regexp $body {op r?i(le|ge|lt|gt) }]] [lsearch -all -inline -regexp $body {native|call}]
+} -result {2 {}}
+
+test tp-source-audit {no compiler, runtime or backend source derives a callable from a type: the removed mechanism (definePredicate, declareIntConstructor, markSource, sourceNatives, CheckedConstruct and its native lowering) is gone, nothing builds a `NAME?` native name from a variable, and nothing but the PROVES-NAMING warning (which reads a function's own written name) tests whether a name ends in `?`} -body {
+    set hits {}
+    set files [concat \
+        [glob -directory [file join $::projectRoot core] *.tcl] \
+        [glob -directory [file join $::projectRoot hir] *.tcl] \
+        [glob -directory [file join $::projectRoot surface] *.tcl] \
+        [glob -directory [file join $::projectRoot compiler] *.tcl] \
+        [glob -directory [file join $::projectRoot native] *.tcl] \
+        [glob -directory [file join $::projectRoot native src] -type f *.rs] \
+        [glob -directory [file join $::projectRoot native src runtime] -type f *.rs] \
+        [glob -directory [file join $::projectRoot native src codegen] -type f *.rs]]
+    foreach file $files {
+        set channel [open $file]
+        fconfigure $channel -encoding utf-8
+        set lineNumber 0
+        foreach line [split [read $channel] \n] {
+            incr lineNumber
+            if {[regexp {^\s*(#|//)} $line]} continue
+            if {[regexp {definePredicate|declareIntConstructor|markSource|sourceNatives|CheckedConstruct|CheckedIntDomainConstruct|PredicateImpl|\$\{?[A-Za-z_]+\}?\?[^:A-Za-z]} $line]
+                    || ([regexp {end\] eq "\?"} $line] && [file tail $file] ne "warnings.tcl")} {
+                lappend hits [file tail $file]:$lineNumber
+            }
+        }
+        close $channel
+    }
+    set hits
+} -result {}
+
+cleanupTests

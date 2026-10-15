@@ -163,10 +163,10 @@ enum Color:
 
 error TooBig
 
-fn chk(n: int) -> bool:
-    Small?(n)
+fn chk(n: Small) -> bool:
+    n < 150
 
-[chk(5), chk(150)]
+[chk(105), chk(150)]
 }
 
 set ::hxTraitProgram {trait Named:

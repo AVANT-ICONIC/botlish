@@ -1764,14 +1764,6 @@ proc hir::resolve::ResolveQualifiedRef {hirVar e pair ctx} {
     set qualified "${ns}::${name}"
     SetField hir $e name $qualified
     if {![dict exists $hir modules $ns] || ![dict exists $hir scopes [dict get $hir modules $ns] names $name]} {
-        if {[NativeNamed $qualified]} {
-            # The membership predicate of a source-declared type of that
-            # namespace (`abi::U8Value?`): a native registered for this
-            # compilation under its qualified name, reached like any root
-            # native -- no module binding stands behind it.
-            ResolveRef hir $e $qualified 1 $ctx
-            return
-        }
         if {$ns eq [CtxNamespace $ctx] && [dict exists $hir modules $ns]} {
             # A member of the module's own namespace that is not established
             # yet: the ordinary forward-reference rule (nothing is hoisted).
@@ -1856,11 +1848,6 @@ proc hir::resolve::EnumHint {name ns} {
     return ""
 }
 
-# 1 if NAME is a registered native (a root native of this compilation).
-proc hir::resolve::NativeNamed {name} {
-    return [core::native::exists $name]
-}
-
 # Resolves reference E to NAME; ROOT 1: to the root binding NAME, whatever
 # local bindings are called (hygiene.tcl keeps lowering faithful).
 proc hir::resolve::ResolveRef {hirVar e name root ctx} {
@@ -1876,14 +1863,6 @@ proc hir::resolve::ResolveRef {hirVar e name root ctx} {
         dict lappend hir rootRefs $e
     } else {
         set b [Lookup hir $scope $name]
-        if {$b eq "" && [set ns [CtxNamespace $ctx]] ne "" && [NativeNamed ${ns}::$name]} {
-            # The membership predicate of a type the module itself declares
-            # (`Small?` inside namespace m is the native `m::Small?`).
-            set name ${ns}::$name
-            SetField hir $e name $name
-            set b [RootBinding hir [dict get $hir scopes [dict get $hir top] parent] $name]
-            dict lappend hir rootRefs $e
-        }
     }
     SetField hir $e binding $b
     if {$b eq ""} {

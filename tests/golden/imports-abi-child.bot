@@ -11,7 +11,9 @@
 #     namespace import;
 #   * `import type abi::U8Value` without `import abi`: it binds exactly one
 #     short type name (U8Value, not U16Value), grants no qualified access
-#     to abi (neither a type annotation nor a type predicate), creates no
+#     to abi (neither a type annotation nor any member, `abi::U8Value?`
+#     included -- a type has no predicate at all, tests/golden/
+#     type-predicates.bot), creates no
 #     value or function binding (a value may be named U8Value: values and
 #     types are separate), and the type it names is the module's own
 #     (f(300) is rejected against abi's 0..255).
@@ -113,7 +115,8 @@ fn register_type_import_tests():
 
     # imports-type-import-authorizes-nothing-else: the type import grants no
     # qualified access to its namespace: neither another type's annotation
-    # nor the imported type's own predicate.
+    # nor a qualified value (`abi::U8Value?` names no member at all -- a type
+    # has no predicate -- but the missing import is reported first).
     fn b_qualified_other_type() errors compiler::CompilerError:
         static compile:
             fn f(x: abi::U16Value):

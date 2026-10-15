@@ -585,7 +585,8 @@ construction changes.
 ## Deferred (unchanged from the brief)
 
 `UnicodeChar`, character literals, `ImmutableSet[T]`, `byte::set`, ASCII
-work, predicate/flow refinement (`if List::all(xs, Small?): ...`),
+work, predicate/flow refinement (`if List::all(xs, Small?): ...`; there is
+no `Small?` any more, ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md),
 variance (covariant or contravariant), user-defined generic type
 constructors or functions, typed locals, contextual/bidirectional list-
 literal typing, casts, a checked broad-to-`List[T]` conversion function,

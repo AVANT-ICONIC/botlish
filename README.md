@@ -611,6 +611,8 @@ pure one-argument predicate that returns exactly `core::type::acceptsValue T ARG
 * Its parameter type must be `any` or a primitive kind `P`, with `T` a
   subtype of `P`. The runtime itself rejects arguments not of kind `P`, with
   `core::value::expect`'s `TYPE` error, before calling the implementation.
+* `T` may not name a refinement type: a refinement's membership is a proof,
+  never a run-time test (REFINEMENT-VALUES.md).
 * The result type is `bool`. Unless given explicitly, `-refines-true {0 T}`
   is added.
 * The reference runtime verifies every answer against `acceptsValue`. A
@@ -619,8 +621,11 @@ pure one-argument predicate that returns exactly `core::type::acceptsValue T ARG
 Because the answer is fully specified by the type, a compiler may decide the
 call from static types, or replace it with an inline membership test (§13).
 Compiled code trusts the declaration, so only the interpreter catches a lying
-type test. `core::type::definePredicate` registers type tests, and so do the
-builtin kind and tag predicates.
+type test. A type test is always a native registered as one -- the builtin
+kind and tag predicates (`integer?`, `string?`, `list?`, `mutarray?`, `ok?`,
+`error?`) and the test harness's `non_empty?`: no type, built-in or declared
+in source, gets a predicate by being a type (ELIMINATE-AUTOMATIC-TYPE-
+PREDICATES.md).
 
 **Strings discard refinements.** A string transformation's result carries no
 refinement unless its contract explicitly establishes one. So `str::substring`
@@ -2525,7 +2530,8 @@ backend was introduced (757 tests predated it) the classes were 171 native,
 
 The 60 unsupported tests need: a Block value returned to the host (13),
 `test-log`/`test_log` (19), `test-tick`/`test_tick` (12), sequence mode (7),
-the Tcl-registered test validator `NonEmpty?` and the test natives
+the Tcl-registered test validator's type test `non_empty?` (then spelled
+`NonEmpty?`) and the test natives
 `test-fake-nonempty`, `test-both-ints?` (7), and a native's validator
 named-type contract (`test-lax-param`, 2).
 `tests/native.test` (55 tests) checks lowering and CLIF structure, and

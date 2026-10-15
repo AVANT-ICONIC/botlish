@@ -123,8 +123,9 @@ test type-11 {refinement metadata: carrier, owner, identity} -body {
 } -result {1 0 {refined str types_test::Query} types_test types_test::Encoded types_test::Encoded {} {}}
 
 test type-12 {a refinement has no runtime predicate} -body {
-    core::type::definePredicate types_test::Mail
-} -returnCodes error -match glob -result {*is a refinement type*}
+    core::registerNative types_test::mail? -arity 1 -param-types str \
+        -impl {apply {{v} {core::value::true}}} -tests-type types_test::Mail
+} -returnCodes error -match glob -result {*names the refinement type types_test::Mail*never tested at run time}
 
 test type-13 {a refinement's base and parents are its carrier's} -body {
     list [catch {core::type::register types_test::Bad1 -base int -refinement {carrier str owner x}} m1] \
@@ -152,7 +153,7 @@ test type-16 {native registry delegates type checking to core::type} -body {
     list [catch {core::registerNative test-bad-1 -arity 1 -impl list -param-types {Nope}} m1] $m1 \
          [catch {core::registerNative test-bad-2 -arity 1 -impl list -refines-true {0 Int}} m2] $m2 \
          [dict get [core::native::metadata test-fake-nonempty] resultType] \
-         [dict get [core::native::metadata NonEmpty?] refinesTrue]
+         [dict get [core::native::metadata non_empty?] refinesTrue]
 } -result {1 {core::native::register: -param-types of "test-bad-1": core::type: unknown type "Nope"} 1 {core::native::register: -refines-true of "test-bad-2": core::type: unknown type "Int"} {refined str NonEmpty} {0 {refined str NonEmpty}}}
 
 cleanupTests

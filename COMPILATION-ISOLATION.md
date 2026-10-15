@@ -16,7 +16,9 @@ counts) was produced outside the repository; its findings are summarized here.
   failed on main at `2873664`. Each compiles A, runs it, compiles B, then runs
   A's same HIR again.
   - **Silently wrong values.** The Tcl backends used B's domain for A's
-    `Small?`.
+    `Small?` (a domain's automatic membership predicate, since removed:
+    ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md; `ci-domain-redeclared` now
+    checks every backend with a domain entered through a converter).
   - **Silently missing releases.** A coroutine owned by a dying struct was
     never released.
   - **Native code that built and then trapped.** Specialized lowering emitted
@@ -60,7 +62,6 @@ re-registers the declarations printed in HIR text.
 | Registry | Holds | Read by a backend |
 |---|---|---|
 | `core::type::registry`, source entries | integer domains, refinements | the interpreter (`validate`), compiled code (contract checks), native lowering (`normalize`, `integerFacts`) |
-| `core::native::registry` and `sourceNatives`, source entries | each domain's `T?` predicate | the interpreter and compiled code, on every native call |
 | `hir::sourcetypes::generation` | what to unregister | — |
 | `hir::structs::registry` | fields, field types, opacity | `hir::lower` (drop descriptors), the Tcl compiler, native lowering (layouts, NIR shapes) |
 | `hir::enums::registry` | cases in declaration order | native lowering (the NIR enum table) |
@@ -110,9 +111,12 @@ It is called by:
 * `hir::format`, which prints types from the registries;
 * `hir::specialize::analyze` and `hir::aot::analyze`. `native::executable`,
   `native::report` and `main.tcl -aot`/`-aot-spec` start with these.
-* `core::compiler::compileHir`, and `runUnit`: a compiled unit calls
-  predicates by name as it runs, so running it again after another
-  compilation activates its HIR again;
+* `core::compiler::compileHir`. (`runUnit` activated its unit's HIR too,
+  because a compiled unit called a domain's predicate by name as it ran;
+  with the predicates gone, ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md,
+  compiled code reads no declaration at run time, so it no longer does;
+  `ci-unit-reuse` keeps checking that a unit runs the same after another
+  compilation.)
 * `native::prepareHir`, through which every native lowering passes
   (`native::lowered`).
 
