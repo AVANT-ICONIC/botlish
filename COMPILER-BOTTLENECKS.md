@@ -118,6 +118,7 @@ Correctness defects found alongside (section 4), all fixed now:
   - mutable-array.bot costs about 9 s per build. Its builds are mostly method-call trials (item 11), and each build pays items 1, 3 and 5.
   - Since a decision builds no configuration twice (3.10), mutable-array.bot takes 5 rounds and 18 builds (12 of them trials).
   - Re-measured on a39f9dc (other jobs on the same cores): mutable-array.bot's front end is 298 s over its 20 builds. 16 of those builds demote a contract and check twice (item 9), at 13-18 s of check each against 6.5-7 s in the others. With 3.9's reuse the front end is 271 s.
+  - Both changes together (3.9's reuse and 3.10's one build per configuration), side by side with a39f9dc on the same loaded cores: mutable-array.bot's front end 265.5 s -> 216.1 s, 5 rounds, 20 -> 18 builds (14 -> 12 trials). Its final HIR is byte-identical to a39f9dc's, also with both audits on (`hir::methodBuildAudit`, `hir::recheckAudit`: 17 demoting checks compared).
 
 ## 3. The backlog, in detail
 
