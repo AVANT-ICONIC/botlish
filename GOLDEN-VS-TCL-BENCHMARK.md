@@ -352,10 +352,38 @@ while the interpreter's run did not change (190 against 188 s self).
   - interp 191 against 204 s;
   - compile 28 against 29 s.
 
+## After the temporaries fix
+
+The first recommendation below is done (84dcc6a). `hir::lower` and the Tcl
+compiler's unit generation now compute the pending temporaries once and
+install them for their own extent (`hir::lower::withTemporaries`).
+
+The golden corpus on all four backends, a process per suite, 4 at a time
+(runs `golden-all-fixed` and `golden-all-warm-fixed`):
+
+| | wall s | CPU s | interp runs | compile runs | cranelift-generic runs | cranelift runs |
+|---|---:|---:|---:|---:|---:|---:|
+| no cache, before | 933 | 3,670 | 750 | 1,004 | 92 | 376 |
+| no cache, after | 494 | 1,938 | 174 | 25 | 87 | 331 |
+| warm cache, before | 373 | 1,460 | 483 | 554 | 81 | 359 |
+| warm cache, after | 152 | 595 | 171 | 23 | 76 | 326 |
+
+* **The savings match the experiment's:** 47% without the cache, 59% with it.
+* **What is left of a warm run** is mostly the specialized native lowering
+  (326 s) and the interpreter's own runs.
+* **Validation:** every golden test passes, as do the Tcl suite on both
+  passes, both native coverage passes, the affine, coroutine,
+  MutableVector and MutableArray fuzzers, and all 157 of their mutants
+  (killed).
+* **Local runs.** The golden suites now replace the Tcl tests they duplicate
+  in local runs, through the cache: `tests/local.tcl` (AGENTS.md, "Running
+  the tests locally").
+
 ## What would remove the rest
 
-* **Memoize `hir::affine::temporaries` per lowering.** This is the measured
-  win, 44-52% of the golden corpus's CPU on all four backends.
+* **Memoize `hir::affine::temporaries` per lowering.** Done; see the section
+  above. This was the measured win, 44-52% of the golden corpus's CPU on all
+  four backends.
   - The fix is a small change: compute it once per `hir::lower` and per
     `core::compiler::GenerateUnit`, which already computes it, and pass it
     to `hir::lower::Pending`.
@@ -462,6 +490,10 @@ in `audit/golden/out/golden-vs-tcl/report.md`.
   - `report.md`: the full report over every run.
   - `hir-shape.txt` and `store-effect.txt`: the two experiments' output.
   - `native-coverage-ported.txt`: which ported Tcl tests run natively.
+  - `local-runs/`: `tests/local.tcl` after the fix (every Tcl test; the
+    local run with an empty and a warm cache) and both native coverage
+    classifications, the validation behind AGENTS.md's "Running the tests
+    locally".
   - `run-matrix.sh`: the matrix.
   - `experiments/`: the experiments, which inject at load time and change no
     file.
