@@ -78,7 +78,9 @@ process_finding() {  # process_finding TARGET KIND RAWFILE   (kind: crash|hang)
     local signature="$target|$kind|$verdict"
     if [[ -n "${signatures[$signature]:-}" ]]; then
         echo "triage: $raw duplicates ${signatures[$signature]} ($signature)"
-        cp "$raw" "${signatures[$signature]}/raw-$(basename "$raw")" 2>/dev/null || true
+        # Colon-free name: Windows checkouts cannot represent AFL's
+        # id:NNN,src:... basenames.
+        cp "$raw" "${signatures[$signature]}/raw-$(basename "$raw" | tr ':,' '__')" 2>/dev/null || true
         return
     fi
     local id; id="$(printf 'FZ-%03d' "$next_id")"; next_id=$((next_id + 1))
