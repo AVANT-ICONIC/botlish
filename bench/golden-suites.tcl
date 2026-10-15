@@ -125,7 +125,7 @@ proc measureOne {path backends profile} {
     set result [dict create suite [file tail $path] lines [llength [split [string trimright $text \n] \n]] \
         staticText [regexp -all -line {^\s*static compile:} $text]]
     prof::reset
-    set us [lindex [time {set hir [surface::readProgramFile $path -warnings off]}] 0]
+    set us [lindex [time {set hir [surface::readProgramFile $path -warnings off -cache ""]}] 0]
     dict set result frontend [seconds $us]
     dict set result frontendProfile $::prof::self
     dict set result hirExprs [dict size [dict get $hir exprs]]
@@ -234,7 +234,7 @@ if {[dict get $options -warm] > 0} {
     for {set pass 1} {$pass <= [dict get $options -warm]} {incr pass} {
         set total 0
         foreach path $files {
-            set us [lindex [time {surface::readProgramFile $path -warnings off}] 0]
+            set us [lindex [time {surface::readProgramFile $path -warnings off -cache ""}] 0]
             dict lappend times [file tail $path] [seconds $us]
             set total [expr {$total + $us}]
         }

@@ -83,6 +83,12 @@ if {![info exists ::env(BOTLISH_WARNINGS)]} {
     set ::env(BOTLISH_WARNINGS) off
 }
 
+# The front-end cache (surface/cache.tcl, HIR-INTERCHANGE.md) is a host's
+# opt-in: a developer's BOTLISH_HIR_CACHE must not decide what a test
+# compiles (build counts, warnings printed, a stale fixture), here or in the
+# main.tcl children tests spawn. tests/hir-cache.test passes -cache itself.
+unset -nocomplain ::env(BOTLISH_HIR_CACHE)
+
 # The backend under test: CORE_BACKEND=interp (default), compile or cranelift.
 if {[info exists ::env(CORE_BACKEND)]} {
     core::useBackend $::env(CORE_BACKEND)

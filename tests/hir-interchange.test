@@ -1,0 +1,352 @@
+# hir-interchange.test -- the HIR interchange format (HIR-INTERCHANGE.md,
+# hir/interchange.tcl).
+#
+# A fully analyzed HIR written as text and read back -- in this process after
+# other compilations, or in a fresh one that runs no front end -- lowers and
+# runs exactly as the HIR it was written from: the same core IR, the same
+# NIR, the same outcome on every backend. The text is valid for the front end
+# that built it only. audit/hir-interchange/tools/roundtrip.tcl checks
+# the same over the golden corpus.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+testConstraint stubLinker [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64} &&
+    [file executable [file join $native::home target release botlish-aot-stub]]}]
+
+proc hxCompile {text {name a.bot}} {
+    return [surface::compile $text $name -warnings off]
+}
+
+# BACKEND's outcome for HIR: {ok VALUE} or {error CODE}.
+proc hxRun {hir backend} {
+    set failed [catch {
+        switch -- $backend {
+            interp {
+                set saved [core::useBackend]
+                core::useBackend interp
+                try {
+                    core::formatValue [core::evalProgram [hir::lower $hir]]
+                } finally {
+                    core::useBackend $saved
+                }
+            }
+            compile { core::formatValue [core::compiler::evalHir $hir] }
+            cranelift { core::formatValue [native::evalHir $hir] }
+            cranelift-generic { core::formatValue [native::evalHir $hir -specialize 0] }
+        }
+    } value options]
+    if {$failed} {
+        return [list error [dict get $options -errorcode]]
+    }
+    return [list ok $value]
+}
+
+proc hxOutcomes {hir} {
+    return [lmap backend {interp compile cranelift cranelift-generic} {hxRun $hir $backend}]
+}
+
+# The backend artifacts of HIR, as text: core IR, specialized and generic NIR.
+proc hxArtifacts {hir} {
+    return [list [hir::lower $hir] [native::nir $hir] [native::nir $hir -specialize 0]]
+}
+
+proc hxWrite {path text} {
+    set channel [open $path w]
+    fconfigure $channel -encoding utf-8 -translation lf
+    puts -nonewline $channel $text
+    close $channel
+    return $path
+}
+
+proc hxRead {path} {
+    set channel [open $path r]
+    fconfigure $channel -encoding utf-8 -translation lf
+    try {
+        return [read $channel]
+    } finally {
+        close $channel
+    }
+}
+
+# A program with one declaration of every kind the backends read: a
+# source-defined integer domain (a parameter's type), a struct, an enum, an error
+# with a payload, and a coroutine owned by a dying struct (a release the
+# backends emit from the struct's layout).
+set ::hxProgram {type Small = Int in 0..10
+
+struct Pair:
+    left: int
+    right: int
+
+enum Color:
+    Red,
+    Green,
+    Blue,
+
+error TooBig:
+    limit: int
+
+struct Message:
+    value: int
+
+struct Event:
+    value: int
+
+struct Running:
+    name: str
+    step: Coroutine{
+        args: [Message],
+        return: Event,
+        errors: []
+    }
+
+fn code(c: Color) -> int:
+    if c == Color::Red:
+        1
+    else:
+        if c == Color::Green:
+            2
+        else:
+            3
+
+fn twice(n: Small) -> int:
+    n * 2
+
+fn check(n: int) -> int errors TooBig:
+    if n > 10:
+        fail TooBig {limit: 10}
+    else:
+        if n < 0:
+            fail TooBig {limit: 0}
+        else:
+            twice(n)
+
+fn safe(n: int) -> int:
+    r = check(n):
+        on TooBig details:
+            details.limit + 100
+    r
+
+fn worker(seed: int, resume Message) -> Event:
+    message = yield Event {value: seed}
+    return Event {value: message.value}
+
+fn make(seed: int) -> Running:
+    coroutine {step} = worker(seed)
+
+    Running {
+        name: "worker",
+        step: step
+    }
+
+fn nameOf(seed: int) -> str:
+    running = make(seed)
+    running.name
+
+p = Pair {left: 3, right: 4}
+[p.left * 10 + p.right, code(Color::Blue), safe(5), safe(50), nameOf(1)]
+}
+
+# A program declaring the same names differently, or not at all.
+set ::hxOther {type Small = Int in 100..200
+
+struct Pair:
+    right: int
+    left: int
+    extra: int
+
+enum Color:
+    Blue,
+    Red,
+
+error TooBig
+
+fn chk(n: int) -> bool:
+    Small?(n)
+
+[chk(5), chk(150)]
+}
+
+set ::hxTraitProgram {trait Named:
+    fn name(value: Named) -> str
+
+struct Person:
+    value: str
+
+fn name(value: Person) -> str:
+    value.value
+
+fn describe(value: Named) -> str:
+    value.name()
+
+describe(Person {value: "ada"})
+}
+
+test hx-program-runs {the test program runs on every backend (its outcome is the baseline of every round trip below)} -body {
+    hxOutcomes [hxCompile $::hxProgram]
+} -result {{ok {[34, 3, 10, 110, "worker"]}} {ok {[34, 3, 10, 110, "worker"]}} {ok {[34, 3, 10, 110, "worker"]}} {ok {[34, 3, 10, 110, "worker"]}}}
+
+test hx-roundtrip-in-process {a HIR encoded, then decoded after another program declaring the same names differently was compiled: the HIR read back is the HIR written (without its trait source), its declarations are the active ones (as after its build), and it lowers and runs exactly as it did} -body {
+    set hir [hxCompile $::hxProgram]
+    set before [hxOutcomes $hir]
+    set artifacts [hxArtifacts $hir]
+    set text [hir::interchange::encode $hir]
+    hxCompile $::hxOther b.bot
+    set read [hir::interchange::decode $text]
+    set active [expr {$::hir::declarations::active eq [dict get $read declarations]}]
+    list [expr {$read eq [dict remove $hir traitSource]}] $active \
+        [expr {[hxArtifacts $read] eq $artifacts}] \
+        [expr {[hxOutcomes $read] eq $before}] [hxOutcomes $read]
+} -result {1 1 1 1 {{ok {[34, 3, 10, 110, "worker"]}} {ok {[34, 3, 10, 110, "worker"]}} {ok {[34, 3, 10, 110, "worker"]}} {ok {[34, 3, 10, 110, "worker"]}}}}
+
+test hx-text-shape {the text: a header line naming the format and its version, then a Tcl dict of the compiler's fingerprint, the Tcl libraries required and the HIR, whose declaration state it keeps} -body {
+    set hir [hxCompile $::hxProgram]
+    set text [hir::interchange::encode $hir]
+    set newline [string first \n $text]
+    set body [string range $text [expr {$newline + 1}] end]
+    list [string range $text 0 [expr {$newline - 1}]] [dict keys $body] \
+        [expr {[dict get $body compiler] eq [hir::interchange::fingerprint]}] \
+        [dict exists $body hir declarations] [dict exists $body hir traitSource] \
+        [string index $text end]
+} -result {{botlish-hir-interchange 1} {compiler requires hir} 1 1 0 {
+}}
+
+test hx-fresh-process {a HIR written to a file and read by a fresh process, which runs no front end (no build): the same core IR, the same NIR and the same outcome on every backend} -setup {
+    set dir [makeDirectory hx-fresh]
+} -body {
+    set hir [hxCompile $::hxProgram]
+    set path [hir::interchange::writeFile [file join $dir program.hirx] $hir]
+    set script [hxWrite [file join $dir child.tcl] [string map [list @ROOT@ $::projectRoot] {
+        source [file join {@ROOT@} compiler compiler.tcl]
+        source [file join {@ROOT@} native native.tcl]
+        set builds [dict get [hir::BuildStats] builds]
+        set hir [hir::interchange::readFile [lindex $argv 0]]
+        set outcomes {}
+        foreach backend {interp compile cranelift cranelift-generic} {
+            set failed [catch {
+                switch -- $backend {
+                    interp {
+                        core::useBackend interp
+                        core::formatValue [core::evalProgram [hir::lower $hir]]
+                    }
+                    compile { core::formatValue [core::compiler::evalHir $hir] }
+                    cranelift { core::formatValue [native::evalHir $hir] }
+                    cranelift-generic { core::formatValue [native::evalHir $hir -specialize 0] }
+                }
+            } value options]
+            lappend outcomes [expr {$failed ? [list error [dict get $options -errorcode]] : [list ok $value]}]
+        }
+        set artifacts [list [hir::lower $hir] [native::nir $hir] [native::nir $hir -specialize 0]]
+        puts [list [zlib crc32 [encoding convertto utf-8 $artifacts]] $outcomes \
+            [expr {[dict get [hir::BuildStats] builds] - $builds}]]
+    }]]
+    lassign [exec [info nameofexecutable] $script $path] crc outcomes builds
+    list [expr {$crc == [zlib crc32 [encoding convertto utf-8 [hxArtifacts $hir]]]}] \
+        [expr {$outcomes eq [hxOutcomes $hir]}] $outcomes $builds
+} -cleanup {
+    removeDirectory hx-fresh
+} -result {1 1 {{ok {[34, 3, 10, 110, "worker"]}} {ok {[34, 3, 10, 110, "worker"]}} {ok {[34, 3, 10, 110, "worker"]}} {ok {[34, 3, 10, 110, "worker"]}}} 0}
+
+test hx-trait-source {a trait program's checked source build (traitSource) is left out by default and kept with -trait-source 1; the monomorphized HIR read back runs the same either way} -body {
+    set hir [hxCompile $::hxTraitProgram]
+    set lean [hir::interchange::decode [hir::interchange::encode $hir]]
+    set full [hir::interchange::decode [hir::interchange::encode $hir -trait-source 1]]
+    list [dict exists $hir traitSource] [dict exists $lean traitSource] \
+        [expr {$full eq $hir}] [hxOutcomes $lean] [hxOutcomes $full]
+} -result {1 0 1 {{ok {"ada"}} {ok {"ada"}} {ok {"ada"}} {ok {"ada"}}} {{ok {"ada"}} {ok {"ada"}} {ok {"ada"}} {ok {"ada"}}}}
+
+test hx-decode-after-failed-compilation {decoding after a compilation that failed half way installs the text's declarations (the failure left the registries unknown, never the HIR's own)} -body {
+    set hir [hxCompile $::hxProgram]
+    set text [hir::interchange::encode $hir]
+    catch {hxCompile {type Small = Int in 5..1
+0
+} c.bot}
+    hxOutcomes [hir::interchange::decode $text]
+} -result {{ok {[34, 3, 10, 110, "worker"]}} {ok {[34, 3, 10, 110, "worker"]}} {ok {[34, 3, 10, 110, "worker"]}} {ok {[34, 3, 10, 110, "worker"]}}}
+
+test hx-format-errors {text that is not the format (a HIR, an unbalanced first line), another version, a body without its HIR, not a dict or with a HIR that is not one, or built by another front end: each refused, the last with its own error code} -body {
+    set hir [hxCompile $::hxProgram]
+    set text [hir::interchange::encode $hir]
+    set newline [string first \n $text]
+    set body [string range $text [expr {$newline + 1}] end]
+    set result {}
+    foreach bad [list \
+        "{bind x {const 1}}\n" \
+        "\{ unbalanced\n" \
+        "botlish-hir-interchange 2\n$body" \
+        "botlish-hir-interchange 1\n[list compiler [hir::interchange::fingerprint]]\n" \
+        "botlish-hir-interchange 1\n\{\n" \
+        "botlish-hir-interchange 1\n[list compiler [hir::interchange::fingerprint] hir "\{ x"]\n" \
+        "botlish-hir-interchange 1\n[dict replace $body compiler 0000-0]\n"] {
+        catch {hir::interchange::decode $bad} message options
+        lappend result [dict get $options -errorcode]
+    }
+    set result
+} -result {{HIR INTERCHANGE FORMAT} {HIR INTERCHANGE FORMAT} {HIR INTERCHANGE FORMAT} {HIR INTERCHANGE FORMAT} {HIR INTERCHANGE FORMAT} {HIR INTERCHANGE FORMAT} {HIR INTERCHANGE COMPILER}}
+
+test hx-unstamped {a HIR that records no declaration state (built before compilation isolation, or assembled by hand) is not self-contained: encode refuses it} -body {
+    set hir [dict remove [hxCompile $::hxProgram] declarations]
+    list [catch {hir::interchange::encode $hir} message] $message
+} -result {1 {hir::interchange::encode: the HIR records no declaration state (hir/declarations.tcl): it is not self-contained}}
+
+test hx-fingerprint {the fingerprint is the front end's Tcl sources (core, hir, surface, Tcl libraries): the same for a copy of them; unchanged by an edited backend (compiler, native) or a file that is no Tcl source; another for one character changed in a front-end file, its size the same} -setup {
+    set dir [makeDirectory hx-fingerprint]
+} -body {
+    foreach sub {core hir surface compiler native lib} {
+        file mkdir [file join $dir $sub]
+        foreach path [glob -nocomplain -directory [file join $::projectRoot $sub] -types f *.tcl] {
+            file copy $path [file join $dir $sub]
+        }
+    }
+    set copy [hir::interchange::Fingerprint $dir]
+    hxWrite [file join $dir lib extra.bot] "fn f() -> int:\n    1\n"
+    hxWrite [file join $dir hir README.md] "notes\n"
+    foreach path [list [file join $dir native lower.tcl] [file join $dir compiler compiler.tcl]] {
+        hxWrite $path "[hxRead $path]\n"
+    }
+    set unrelated [hir::interchange::Fingerprint $dir]
+    # One character of a front-end file replaced by another: the same size.
+    set path [file join $dir hir declarations.tcl]
+    set text [hxRead $path]
+    hxWrite $path "[expr {[string index $text 0] eq "#" ? ";" : "#"}][string range $text 1 end]"
+    set changed [hir::interchange::Fingerprint $dir]
+    list [expr {$copy eq [hir::interchange::fingerprint]}] [expr {$unrelated eq $copy}] \
+        [expr {$changed ne $copy}] [regexp {^[0-9a-f]{16}-[0-9]+$} $copy]
+} -cleanup {
+    removeDirectory hx-fingerprint
+} -result {1 1 1 1}
+
+test hx-main {main.tcl -emit-hir-interchange writes FILE.hirx beside FILE.bot without running it; main.tcl runs FILE.hirx on every backend with the value FILE.bot has} -setup {
+    set dir [makeDirectory hx-main]
+} -body {
+    set path [hxWrite [file join $dir program.bot] $::hxProgram]
+    set main [file join $::projectRoot main.tcl]
+    set emitted [exec [info nameofexecutable] $main -warnings off -emit-hir-interchange $path]
+    set result [list [expr {$emitted eq "hir interchange: [file join $dir program.hirx]"}] \
+        [file exists [file join $dir program.hirx]]]
+    foreach backend {interp compile cranelift cranelift-generic} {
+        set fromSource [exec [info nameofexecutable] $main -warnings off -backend $backend $path]
+        set fromText [exec [info nameofexecutable] $main -backend $backend [file join $dir program.hirx]]
+        lappend result [regexp -inline {value: [^\n]*} $fromText] \
+            [expr {[regexp -inline {value: [^\n]*} $fromSource] eq [regexp -inline {value: [^\n]*} $fromText]}]
+    }
+    set result
+} -cleanup {
+    removeDirectory hx-main
+} -result {1 1 {{value: [34, 3, 10, 110, "worker"]}} 1 {{value: [34, 3, 10, 110, "worker"]}} 1 {{value: [34, 3, 10, 110, "worker"]}} 1 {{value: [34, 3, 10, 110, "worker"]}} 1}
+
+test hx-executable {a standalone executable built from a .hirx file (main.tcl -emit-native-executable, the stub linker) prints the program's value} -constraints stubLinker -setup {
+    set dir [makeDirectory hx-executable]
+} -body {
+    set hir [hxCompile $::hxProgram]
+    set path [hir::interchange::writeFile [file join $dir program.hirx] $hir]
+    exec env BOTLISH_NATIVE_LINKER=stub [info nameofexecutable] [file join $::projectRoot main.tcl] \
+        -emit-native-executable $path
+    exec env PATH= [file join $dir program]
+} -cleanup {
+    removeDirectory hx-executable
+} -result {[34, 3, 10, 110, "worker"]}
+
+cleanupTests

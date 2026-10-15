@@ -365,7 +365,7 @@ foreach k $sizes {
     backendRow "$k passing cases" $hir $us
 }
 foreach path [lsort [glob -directory [file join $root tests golden] *.bot]] {
-    set us [lindex [time {set hir [surface::readProgramFile $path -warnings off]}] 0]
+    set us [lindex [time {set hir [surface::readProgramFile $path -warnings off -cache ""]}] 0]
     backendRow [file tail $path] $hir $us
 }
 }

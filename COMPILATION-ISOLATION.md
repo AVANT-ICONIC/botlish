@@ -187,6 +187,6 @@ covered.
 ## What it enables
 
 A HIR together with its `declarations` is self-contained: it can be lowered
-and run in any order. That is the precondition of the HIR interchange format
-and of the front-end cache built on it (LARGE-SCALE-GOLDEN-MIGRATION.md,
-Recommendation 3).
+and run in any order, and in another process. The HIR interchange format
+(HIR-INTERCHANGE.md) is built on that, and so is the front-end cache built on
+the format (LARGE-SCALE-GOLDEN-MIGRATION.md, Recommendation 3).

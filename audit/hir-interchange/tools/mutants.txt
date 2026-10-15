@@ -1,0 +1,213 @@
+# Mutants of the HIR interchange format and the front-end cache
+# (audit/hir-interchange/tools/mutate.tcl, HIR-INTERCHANGE.md).
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# Lines starting with # outside an edit are comments.
+
+@@ decode-skips-fingerprint decode reads a text whatever front end built it: another front end's HIR is believed
+## hir/interchange.tcl
+<<<<
+    if {[dict get $body compiler] ne [fingerprint]} {
+====
+    if {0} {
+>>>>
+
+@@ decode-skips-activation decode returns the HIR without installing its declarations: the registries stay those of the last compilation until a backend activates it
+## hir/interchange.tcl
+<<<<
+    set hir [dict get $body hir]
+    hir::activate $hir
+    return $hir
+====
+    set hir [dict get $body hir]
+    return $hir
+>>>>
+
+@@ encode-drops-declarations the text leaves out the HIR's declaration state: a process that did not build it cannot install it
+## hir/interchange.tcl
+<<<<
+    if {![dict get $options -trait-source]} {
+        set hir [dict remove $hir traitSource]
+    }
+====
+    set hir [dict remove $hir declarations]
+    if {![dict get $options -trait-source]} {
+        set hir [dict remove $hir traitSource]
+    }
+>>>>
+
+@@ encode-keeps-unstamped encode writes a HIR that records no declaration state
+## hir/interchange.tcl
+<<<<
+    if {![dict exists $hir declarations]} {
+        error "hir::interchange::encode: the HIR records no declaration state (hir/declarations.tcl): it is not self-contained"
+    }
+====
+>>>>
+
+@@ fingerprint-misses-hir the fingerprint leaves out hir/: a changed analysis keeps every text valid
+## hir/interchange.tcl
+<<<<
+    foreach dir {core hir surface lib} {
+====
+    foreach dir {core surface lib} {
+>>>>
+
+@@ fingerprint-names-only the fingerprint reads the front end's file names and sizes, not their contents
+## hir/interchange.tcl
+<<<<
+            lappend lines [list $dir/[file tail $path] [string length $bytes] \
+                [zlib crc32 $bytes] [zlib adler32 $bytes]]
+====
+            lappend lines [list $dir/[file tail $path] [string length $bytes]]
+>>>>
+
+@@ key-ignores-source the cache key leaves out the program's text: an edited program hits the old HIR
+## surface/cache.tcl
+<<<<
+        path $path source $source library $::core::libraryDir \
+====
+        path $path source {} library $::core::libraryDir \
+>>>>
+
+@@ key-ignores-path the cache key leaves out the program's path as given, which the HIR records
+## surface/cache.tcl
+<<<<
+        path $path source $source library $::core::libraryDir \
+====
+        path {} source $source library $::core::libraryDir \
+>>>>
+
+@@ key-ignores-library the cache key leaves out the library directory modules are read from
+## surface/cache.tcl
+<<<<
+        path $path source $source library $::core::libraryDir \
+====
+        path $path source $source library {} \
+>>>>
+
+@@ key-ignores-libraries the cache key leaves out the Tcl libraries loaded
+## surface/cache.tcl
+<<<<
+        libraries $::core::loadedLibraries strict $strict warnings $mode \
+====
+        libraries {} strict $strict warnings $mode \
+>>>>
+
+@@ key-ignores-strict the cache key leaves out -strict
+## surface/cache.tcl
+<<<<
+        libraries $::core::loadedLibraries strict $strict warnings $mode \
+====
+        libraries $::core::loadedLibraries strict {} warnings $mode \
+>>>>
+
+@@ key-ignores-warnings the cache key leaves out the warning mode: a HIR built with warnings off answers a compilation that prints them
+## surface/cache.tcl
+<<<<
+        libraries $::core::loadedLibraries strict $strict warnings $mode \
+====
+        libraries $::core::loadedLibraries strict $strict warnings {} \
+>>>>
+
+@@ key-ignores-scheduler the cache key leaves out the static scheduler
+## surface/cache.tcl
+<<<<
+        scheduler [expr {[info exists ::env(BOTLISH_STATIC_SCHEDULER)]
+            ? $::env(BOTLISH_STATIC_SCHEDULER) : ""}]]
+====
+        scheduler {}]
+>>>>
+
+@@ deps-ignore-imports an entry has no dependencies: an edited module, or a namespace that gains a module file, hits the old HIR
+## surface/cache.tcl
+<<<<
+        foreach imported [dict get $environment namespaces] {
+            lappend paths [surface::modules::ModulePath $imported]
+        }
+====
+>>>>
+
+@@ deps-read-when-kept an entry records its modules' texts when it is kept, not the texts the build read: a module edited during the build hits the old HIR
+## surface/cache.tcl
+<<<<
+        if {[dict exists $reads $dependency]} {
+====
+        if {0} {
+>>>>
+
+@@ lookup-skips-dependencies a hit checks no dependency
+## surface/cache.tcl
+<<<<
+            if {[Contents $file present] ne $text || $present != $exists} {
+====
+            if {0} {
+>>>>
+
+@@ lookup-trusts-checksum a hit trusts the entry's file name (a checksum of the key) without comparing the key it holds
+## surface/cache.tcl
+<<<<
+        if {[dict get $entry $magic] ne $version || [dict get $entry key] ne $key} {
+====
+        if {[dict get $entry $magic] ne $version} {
+>>>>
+
+@@ lookup-raises a damaged entry is an error instead of a miss
+## surface/cache.tcl
+<<<<
+    } on error {} {
+        dict incr stats invalid
+====
+    } on error {message options} {
+        return -options $options $message
+>>>>
+
+@@ replay-silent a hit in the default warning mode prints none of the warnings the build printed
+## surface/cache.tcl
+<<<<
+    if {$mode eq "default" && $channel ne ""} {
+====
+    if {0} {
+>>>>
+
+@@ usable-while-tracing a compilation tracing its static decisions uses the cache: a hit prints no trace
+## surface/cache.tcl
+<<<<
+    return [expr {$dir ne "" && !([info exists ::env(BOTLISH_STATIC_TRACE)]
+        && $::env(BOTLISH_STATIC_TRACE) ni {"" 0})}]
+====
+    return [expr {$dir ne ""}]
+>>>>
+
+@@ store-without-trait-source an entry keeps the HIR without its trait source build: a hit is not the HIR the build returned
+## surface/cache.tcl
+<<<<
+            interchange [hir::interchange::encode $hir -trait-source 1]]
+====
+            interchange [hir::interchange::encode $hir]]
+>>>>
+
+@@ store-raises a cache directory that cannot be written fails the compilation
+## surface/cache.tcl
+<<<<
+    } on error {} {
+        dict incr stats unstored
+====
+    } on error {message options} {
+        return -options $options $message
+>>>>
+
+@@ hook-ignores-option compileProgramFile ignores -cache and always uses the environment's directory
+## surface/modules.tcl
+<<<<
+    set cache [dict get $options -cache]
+====
+    set cache [surface::cache::directory]
+>>>>

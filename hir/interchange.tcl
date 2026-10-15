@@ -1,0 +1,142 @@
+# interchange.tcl -- the HIR interchange format (HIR-INTERCHANGE.md).
+#
+#   hir::interchange::encode HIR ?-trait-source 0|1?    the format's text of HIR
+#   hir::interchange::decode TEXT                       the HIR it holds, activated
+#   hir::interchange::writeFile PATH HIR ?-trait-source 0|1?
+#   hir::interchange::readFile PATH
+#   hir::interchange::fingerprint                       this front end's identity
+#
+# A fully analyzed HIR -- the front end's output, what every backend starts
+# from -- written so that another process, or this one later, can lower and
+# run it exactly as if it had just been built: the same core IR, the same Tcl
+# code, the same NIR, the same outcomes (audit/hir-interchange/tools/
+# roundtrip.tcl checks it over the golden corpus, in a fresh process).
+#
+# That is possible because a HIR is self-contained: it holds every analysis
+# fact its backends read (side tables included: semantic instances,
+# coroutine protocols, completion verdicts, ...), and its `declarations` side
+# table holds the registry state its build left behind (COMPILATION-
+# ISOLATION.md), which decode installs. Unlike hir::format's text -- a
+# readable rendering for debugging and tests, which does not carry module
+# sections or the side tables -- the format is the HIR value itself.
+#
+# Text:
+#
+#   botlish-hir-interchange VERSION
+#   compiler FINGERPRINT requires LIBRARIES hir HIR
+#
+# the second line a Tcl dict (it may span many lines): FINGERPRINT the front
+# end that built the HIR (fingerprint), LIBRARIES the Tcl libraries
+# core::loadLibrary had loaded (natives a `# requires:` program file calls),
+# HIR the HIR without its `traitSource` (the checked source build of a trait
+# program, kept for warnings and the context-trait summary; half the size),
+# unless -trait-source 1 keeps it.
+#
+# A HIR's representation is the front end's own, so the format is valid for
+# the front end that built it only: decode refuses another one's text
+# ({HIR INTERCHANGE COMPILER}). The backends may differ: they read a HIR.
+
+namespace eval hir::interchange {
+    variable version 1
+    variable magic botlish-hir-interchange
+    # The front end's identity, computed on first use.
+    variable fingerprint ""
+}
+
+# This compiler's front end's identity (Fingerprint of the tree it was loaded
+# from), computed once.
+proc hir::interchange::fingerprint {} {
+    variable fingerprint
+    if {$fingerprint eq ""} {
+        set fingerprint [Fingerprint [file dirname $::hir::home]]
+    }
+    return $fingerprint
+}
+
+# The identity of the front end in the tree ROOT: a checksum of every Tcl
+# source file that can change the HIR it builds -- core (the registered types
+# and natives, the evaluator the front end shares), hir, surface, and any Tcl
+# library in lib -- with their names and sizes, and the Tcl version. The
+# backends (compiler, native) are not in it: they read a HIR, never shape it,
+# and a HIR built by an unchanged front end is the HIR they would see from a
+# fresh build (HIR-INTERCHANGE.md, "Validity").
+proc hir::interchange::Fingerprint {root} {
+    set lines [list [list tcl [info patchlevel]]]
+    set total 0
+    foreach dir {core hir surface lib} {
+        foreach path [lsort [glob -nocomplain -directory [file join $root $dir] -types f *.tcl]] {
+            set f [open $path rb]
+            set bytes [read $f]
+            close $f
+            incr total [string length $bytes]
+            lappend lines [list $dir/[file tail $path] [string length $bytes] \
+                [zlib crc32 $bytes] [zlib adler32 $bytes]]
+        }
+    }
+    set digest [encoding convertto utf-8 [join $lines \n]]
+    return [format %08x%08x-%d [zlib crc32 $digest] [zlib adler32 $digest] $total]
+}
+
+proc hir::interchange::encode {hir args} {
+    variable version
+    variable magic
+    set options [hir::Options hir::interchange::encode {-trait-source 0} $args]
+    if {![dict exists $hir declarations]} {
+        error "hir::interchange::encode: the HIR records no declaration state (hir/declarations.tcl): it is not self-contained"
+    }
+    if {![dict get $options -trait-source]} {
+        set hir [dict remove $hir traitSource]
+    }
+    return "$magic $version\n[list compiler [fingerprint] requires $::core::loadedLibraries hir $hir]\n"
+}
+
+proc hir::interchange::decode {text} {
+    variable version
+    variable magic
+    set newline [string first \n $text]
+    set header [string range $text 0 [expr {$newline < 0 ? "end" : $newline - 1}]]
+    if {[catch {llength $header} words] || $words != 2 || [lindex $header 0] ne $magic} {
+        throw {HIR INTERCHANGE FORMAT} "not HIR interchange text (it starts \"[string range $header 0 40]\")"
+    }
+    if {[lindex $header 1] ne $version} {
+        throw {HIR INTERCHANGE FORMAT} "HIR interchange version [lindex $header 1]: this compiler reads version $version"
+    }
+    set body [string range $text [expr {$newline + 1}] end]
+    if {[catch {dict size $body}] || ![dict exists $body compiler] || ![dict exists $body hir]
+            || [catch {dict size [dict get $body hir]}]} {
+        throw {HIR INTERCHANGE FORMAT} "HIR interchange text without its compiler or its HIR"
+    }
+    if {[dict get $body compiler] ne [fingerprint]} {
+        throw {HIR INTERCHANGE COMPILER} "HIR interchange text built by another front end ([dict get $body compiler]; this one is [fingerprint])"
+    }
+    foreach name [expr {[dict exists $body requires] ? [dict get $body requires] : {}}] {
+        core::loadLibrary $name
+    }
+    set hir [dict get $body hir]
+    hir::activate $hir
+    return $hir
+}
+
+# Files are UTF-8 with LF line ends, whatever the platform.
+proc hir::interchange::writeFile {path hir args} {
+    set text [encode $hir {*}$args]
+    set f [open $path w]
+    try {
+        fconfigure $f -encoding utf-8 -translation lf
+        puts -nonewline $f $text
+    } finally {
+        close $f
+    }
+    return $path
+}
+
+proc hir::interchange::readFile {path} {
+    set f [open $path r]
+    try {
+        fconfigure $f -encoding utf-8 -translation lf
+        set text [read $f]
+    } finally {
+        close $f
+    }
+    return [decode $text]
+}

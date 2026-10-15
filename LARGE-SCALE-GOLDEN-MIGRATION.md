@@ -1506,7 +1506,9 @@ implications, not decisions.
    declared it). It is a correctness defect of the Tcl tests that compile
    several programs per process, a precondition for caching the front end's
    output, and plausibly the cause of the warm-run slowdown.
-3. **Then build a complete interchange format** (analyzed HIR plus the
+3. **Then build a complete interchange format** (done since:
+   HIR-INTERCHANGE.md, checked over the golden suites by
+   `audit/hir-interchange/tools/roundtrip.tcl`) (analyzed HIR plus the
    declarations, versioned; `traitSource` can stay out) with a byte-identical
    NIR check. It enables compile-once across processes (in the coupling
    study, a reloaded HIR plus a replay of `hir::format`'s declaration header

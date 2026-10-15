@@ -64,6 +64,41 @@ others, must be identical) and `audit/compilation-isolation/tools/mutate.tcl`
 text has no declarations: core IR kept and run on a Tcl backend after another
 compilation still reads the later one's (run a HIR, or lower it again).
 
+## HIR interchange
+
+`hir/interchange.tcl` (HIR-INTERCHANGE.md) writes an analyzed HIR as text --
+`main.tcl -emit-hir-interchange` writes `FILE.hirx`, which `main.tcl` runs on
+any backend -- and reads it back in any process with the same front end, as if
+it had just been built. It holds the HIR dict itself (minus `traitSource`)
+and relies on compilation isolation for the rest: everything a backend reads
+must be in the HIR, its side tables or its `declarations`. So a new fact a
+backend reads from process state, rather than from the HIR, breaks it the way
+it breaks isolation. Text is valid for the front end that built it only (a
+fingerprint of `core`, `hir`, `surface` and lib's Tcl libraries; the backends
+are left out because they never shape a HIR -- keep it so: a backend must not
+define or change a front-end procedure or register a type or native). Never
+add a way to skip that check or to read another front end's text; a front end
+written in Botlish needs a specified schema and a validating reader first (a
+format version 2).
+
+The front-end cache (`surface/cache.tcl`, opt-in through `BOTLISH_HIR_CACHE`
+or `surface::readProgramFile -cache DIR`; the test harness unsets the
+variable) keeps program files' HIRs in that format. A hit must equal the
+build, so the key and the dependencies must hold everything a build reads: if
+the front end starts reading another input -- an environment variable, a file
+other than an imported module, an option of `compileProgramFile` -- add it to
+`surface::cache::Key` or `Dependencies`, never leave it out.
+
+If you change what a backend reads, the HIR's side tables, the format, the
+cache or what the front end reads, run `tests/hir-interchange.test`,
+`tests/hir-cache.test`, `audit/hir-interchange/tools/roundtrip.tcl` with
+`-via interchange` and `-via cache` (every HIR, artifact and outcome of the
+suites, written and then read by a fresh process that runs no build, must be
+identical; `-suites all` for the whole corpus) and
+`audit/hir-interchange/tools/mutate.tcl` (every mutant in its `mutants.txt`
+must still apply and be killed: update a mutant's text when you change the
+code it mutates, keeping it a mutant of the same rule).
+
 ## Installing Tcl 9
 
 This project's reference evaluator requires Tcl 9.x (`core/core.tcl` checks

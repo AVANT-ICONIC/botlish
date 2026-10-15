@@ -124,12 +124,19 @@ namespace eval surface::modules {
     # itself, never by a timestamp, so it cannot go stale; a file that does
     # not parse raises and is never stored. Cleared whole past 64 entries.
     variable parsed [dict create]
+    # The module files read since the last compileProgramFile began: PATH ->
+    # the text read. The front-end cache keeps these as the entry's
+    # dependencies (surface/cache.tcl): the texts the HIR was built from,
+    # never what the files hold by the time it is kept.
+    variable reads [dict create]
 }
 
 # The AST of the module file PATH (see `parsed` above).
 proc surface::modules::ParseModule {path} {
     variable parsed
+    variable reads
     set source [core::ReadFile $path]
+    dict set reads $path $source
     set key [list $path $source]
     if {[dict exists $parsed $key]} {
         return [dict get $parsed $key]
@@ -1112,17 +1119,36 @@ proc surface::modules::BuildProgram {ast strict} {
 
 # The HIR of the .bot program file PATH, after loading (and compiling once,
 # alongside it) every module its imports name, transitively.
-# -strict as surface::lowerToHir's.
+# -strict as surface::lowerToHir's. -cache DIR reads the HIR from the
+# front-end cache in DIR when it holds this compilation's, and keeps it there
+# otherwise (surface/cache.tcl; "" for none, the default
+# surface::cache::directory).
 proc surface::modules::compileProgramFile {path args} {
-    set options [dict create -strict 1 -warnings [hir::warnings::defaultMode] -warning-channel stderr]
+    set options [dict create -strict 1 -warnings [hir::warnings::defaultMode] -warning-channel stderr \
+        -cache [surface::cache::directory]]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "surface::modules::compileProgramFile: unknown option \"$option\""
         }
         dict set options $option $value
     }
-    set ast [surface::parse [core::ReadFile $path] $path]
-    set hir [BuildProgram $ast [dict get $options -strict]]
-    return [surface::lower::Finish $hir [dict get $options -strict] \
-        [dict get $options -warnings] [dict get $options -warning-channel]]
+    set source [core::ReadFile $path]
+    set strict [dict get $options -strict]
+    set mode [dict get $options -warnings]
+    if {$mode eq ""} {
+        set mode [hir::warnings::defaultMode]
+    }
+    set mode [hir::warnings::Mode $mode]
+    set channel [dict get $options -warning-channel]
+    set cache [dict get $options -cache]
+    set hir [surface::cache::lookup $cache $path $source $mode $strict]
+    if {$hir ne ""} {
+        return [surface::cache::Replay $hir $mode $channel]
+    }
+    variable reads
+    set reads [dict create]
+    set ast [surface::parse $source $path]
+    set hir [surface::lower::Finish [BuildProgram $ast $strict] $strict $mode $channel]
+    surface::cache::store $cache $path $source $mode $strict $hir $reads
+    return $hir
 }

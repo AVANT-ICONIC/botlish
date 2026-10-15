@@ -1,0 +1,343 @@
+# hir-cache.test -- the front-end cache (surface/cache.tcl, HIR-INTERCHANGE.md,
+# "The front-end cache").
+#
+# A program file's analyzed HIR kept in a directory across processes: a later
+# compilation of the same program by the same front end, against the same
+# modules, under the same options, reads it instead of building (no build
+# runs), and gets exactly the HIR the build returns. Anything else -- another
+# text, an edited or newly created module, other options, a damaged entry, a
+# directory that cannot be written -- is a miss, never an error or a stale
+# HIR.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+proc hcWrite {path text} {
+    file mkdir [file dirname $path]
+    set channel [open $path w]
+    fconfigure $channel -encoding utf-8 -translation lf
+    puts -nonewline $channel $text
+    close $channel
+    return $path
+}
+
+proc hcRead {path} {
+    set channel [open $path r]
+    fconfigure $channel -encoding utf-8
+    try {
+        return [read $channel]
+    } finally {
+        close $channel
+    }
+}
+
+# The HIR of the program file PATH through the cache in DIR, and what the
+# compilation did: {HIR BUILDS STATS} (BUILDS the front-end builds it ran,
+# STATS the cache's counters that changed).
+proc hcCompile {path dir args} {
+    surface::cache::resetStats
+    set builds [dict get [hir::BuildStats] builds]
+    set hir [surface::readProgramFile $path -cache $dir {*}$args]
+    set changed {}
+    dict for {name count} [surface::cache::stats] {
+        if {$count} {
+            lappend changed $name $count
+        }
+    }
+    return [list $hir [expr {[dict get [hir::BuildStats] builds] - $builds}] $changed]
+}
+
+proc hcValue {hir} {
+    return [core::formatValue [core::compiler::evalHir $hir]]
+}
+
+set ::hcProgram {import str
+
+type Small = Int in 0..10
+
+struct Pair:
+    left: int
+    right: int
+
+fn twice(n: Small) -> int:
+    n * 2
+
+p = Pair {left: twice(3), right: str::length("abc")}
+[p.left, p.right]
+}
+
+test hc-miss-then-hit {the first compilation builds and keeps the HIR; the next reads it without building, and it is exactly the HIR the build returned} -setup {
+    set dir [makeDirectory hc-hit]
+    set path [hcWrite [file join $dir program.bot] $::hcProgram]
+    set cache [file join $dir cache]
+} -body {
+    lassign [hcCompile $path $cache -warnings off] built builds1 stats1
+    lassign [hcCompile $path $cache -warnings off] read builds2 stats2
+    list $stats1 [expr {$builds1 > 0}] $stats2 $builds2 [expr {$read eq $built}] \
+        [hcValue $read] [llength [glob -directory $cache *.hirc]]
+} -cleanup {
+    removeDirectory hc-hit
+} -result {{misses 1 stores 1} 1 {hits 1} 0 1 {[6, 3]} 1}
+
+test hc-trait-program {a trait program's HIR keeps its checked source build (traitSource, which warnings and the context-trait summary read) through the cache: the hit is the HIR the build returned} -setup {
+    set dir [makeDirectory hc-trait]
+    set path [hcWrite [file join $dir program.bot] "trait Named:\n    fn name(value: Named) -> str\n\nstruct Person:\n    value: str\n\nfn name(value: Person) -> str:\n    value.value\n\nfn describe(value: Named) -> str:\n    value.name()\n\ndescribe(Person {value: \"ada\"})\n"]
+    set cache [file join $dir cache]
+} -body {
+    lassign [hcCompile $path $cache -warnings off] built
+    lassign [hcCompile $path $cache -warnings off] read builds stats
+    list [dict exists $built traitSource] $stats $builds [expr {$read eq $built}] [hcValue $read]
+} -cleanup {
+    removeDirectory hc-trait
+} -result {1 {hits 1} 0 1 {"ada"}}
+
+test hc-fresh-process {a later process reads the kept HIR without building, and runs it as the building process did} -setup {
+    set dir [makeDirectory hc-fresh]
+    set path [hcWrite [file join $dir program.bot] $::hcProgram]
+    set cache [file join $dir cache]
+} -body {
+    lassign [hcCompile $path $cache -warnings off] built
+    set script [hcWrite [file join $dir child.tcl] [string map [list @ROOT@ $::projectRoot] {
+        source [file join {@ROOT@} compiler compiler.tcl]
+        source [file join {@ROOT@} surface surface.tcl]
+        lassign $argv path cache
+        set builds [dict get [hir::BuildStats] builds]
+        set hir [surface::readProgramFile $path -cache $cache -warnings off]
+        puts [list [expr {[dict get [hir::BuildStats] builds] - $builds}] \
+            [dict get [surface::cache::stats] hits] \
+            [zlib crc32 [encoding convertto utf-8 $hir]] \
+            [core::formatValue [core::compiler::evalHir $hir]]]
+    }]]
+    lassign [exec [info nameofexecutable] $script $path $cache] builds hits crc value
+    list $builds $hits [expr {$crc == [zlib crc32 [encoding convertto utf-8 $built]]}] $value
+} -cleanup {
+    removeDirectory hc-fresh
+} -result {0 1 1 {[6, 3]}}
+
+test hc-program-edited {an edited program is another key: it builds and is kept beside the first, and the first text hits again} -setup {
+    set dir [makeDirectory hc-edited]
+    set path [hcWrite [file join $dir program.bot] $::hcProgram]
+    set cache [file join $dir cache]
+} -body {
+    hcCompile $path $cache -warnings off
+    hcWrite $path [string map {twice(3) twice(4)} $::hcProgram]
+    lassign [hcCompile $path $cache -warnings off] edited builds stats
+    set result [list $stats [expr {$builds > 0}] [hcValue $edited]]
+    hcWrite $path $::hcProgram
+    lassign [hcCompile $path $cache -warnings off] again builds stats
+    lappend result $stats $builds [hcValue $again] [llength [glob -directory $cache *.hirc]]
+} -cleanup {
+    removeDirectory hc-edited
+} -result {{misses 1 stores 1} 1 {[8, 3]} {hits 1} 0 {[6, 3]} 2}
+
+test hc-module-edited {an edited module the program imports makes the entry stale: the program builds again, against the edited module, and the new HIR replaces the old} -setup {
+    set dir [makeDirectory hc-module]
+    set path [hcWrite [file join $dir program.bot] "import hcmod\n\nhcmod::f(1)\n"]
+    set cache [file join $dir cache]
+} -body {
+    withPrivateLibrary {
+        hcWrite [file join $::core::libraryDir hcmod.bot] "fn f(x: int) -> int:\n    x + 10\n"
+        lassign [hcCompile $path $cache -warnings off] first
+        hcWrite [file join $::core::libraryDir hcmod.bot] "fn f(x: int) -> int:\n    x + 20\n"
+        lassign [hcCompile $path $cache -warnings off] second builds stats
+        lassign [hcCompile $path $cache -warnings off] third builds3 stats3
+        list [hcValue $first] [hcValue $second] $stats [expr {$builds > 0}] \
+            [hcValue $third] $builds3 $stats3
+    }
+} -cleanup {
+    removeDirectory hc-module
+} -result {11 21 {misses 1 stores 1 stale 1} 1 21 0 {hits 1}}
+
+test hc-module-edited-during-build {a module edited after the build read it but before its HIR is kept: the entry records the text the build read, so the next compilation misses and builds against the edit (it never hits with the HIR of the old text)} -setup {
+    set dir [makeDirectory hc-during]
+    set path [hcWrite [file join $dir program.bot] "import hcmod\n\nhcmod::f(1)\n"]
+    set cache [file join $dir cache]
+    rename surface::cache::store surface::cache::hcStore
+    proc surface::cache::store {args} {
+        ::hcWrite [file join $::core::libraryDir hcmod.bot] "fn f(x: int) -> int:\n    x + 20\n"
+        hcStore {*}$args
+    }
+} -body {
+    withPrivateLibrary {
+        hcWrite [file join $::core::libraryDir hcmod.bot] "fn f(x: int) -> int:\n    x + 10\n"
+        lassign [hcCompile $path $cache -warnings off] first
+        rename surface::cache::store {}
+        rename surface::cache::hcStore surface::cache::store
+        lassign [hcCompile $path $cache -warnings off] second builds stats
+        list [hcValue $first] [hcValue $second] $stats [expr {$builds > 0}]
+    }
+} -cleanup {
+    if {[info commands surface::cache::hcStore] ne ""} {
+        rename surface::cache::store {}
+        rename surface::cache::hcStore surface::cache::store
+    }
+    removeDirectory hc-during
+} -result {11 21 {misses 1 stores 1 stale 1} 1}
+
+test hc-namespace-gains-file {a namespace the program imported with no module file (an intrinsics-only namespace) that has one now makes the entry stale: the module file would be read} -setup {
+    set dir [makeDirectory hc-gains]
+    set path [hcWrite [file join $dir program.bot] "import str\n\nstr::length(\"abc\")\n"]
+    set cache [file join $dir cache]
+} -body {
+    withPrivateLibrary {
+        lassign [hcCompile $path $cache -warnings off] first builds1 stats1
+        set exists [file exists [file join $::core::libraryDir str.bot]]
+        hcWrite [file join $::core::libraryDir str.bot] "fn extra() -> int:\n    1\n"
+        lassign [hcCompile $path $cache -warnings off] second builds2 stats2
+        list $exists $stats1 $stats2 [expr {$builds2 > 0}] [hcValue $second]
+    }
+} -cleanup {
+    removeDirectory hc-gains
+} -result {0 {misses 1 stores 1} {misses 1 stores 1 stale 1} 1 3}
+
+test hc-key {the key holds the program's path as given, the library directory, -strict, the warning mode and the static scheduler: each other value is another entry} -setup {
+    set dir [makeDirectory hc-key]
+    set path [hcWrite [file join $dir program.bot] $::hcProgram]
+    set cache [file join $dir cache]
+} -body {
+    set result {}
+    foreach options {{-warnings off} {-warnings off -strict 0} {-warnings default -warning-channel ""}} {
+        lappend result [lindex [hcCompile $path $cache {*}$options] 2]
+    }
+    set saved [pwd]
+    cd $dir
+    try {
+        lappend result [lindex [hcCompile program.bot $cache -warnings off] 2]
+    } finally {
+        cd $saved
+    }
+    withPrivateLibrary {
+        lappend result [lindex [hcCompile $path $cache -warnings off] 2]
+    }
+    set ::env(BOTLISH_STATIC_SCHEDULER) sequential
+    try {
+        lappend result [lindex [hcCompile $path $cache -warnings off] 2]
+    } finally {
+        unset ::env(BOTLISH_STATIC_SCHEDULER)
+    }
+    lappend result [lindex [hcCompile $path $cache -warnings off -strict 0] 2] \
+        [llength [glob -directory $cache *.hirc]]
+} -cleanup {
+    removeDirectory hc-key
+} -result {{misses 1 stores 1} {misses 1 stores 1} {misses 1 stores 1} {misses 1 stores 1} {misses 1 stores 1} {misses 1 stores 1} {hits 1} 6}
+
+test hc-warnings-replayed {in the default warning mode a hit prints the warnings the build printed, on the compilation's channel, in the same order and words} -setup {
+    set dir [makeDirectory hc-warnings]
+    set path [hcWrite [file join $dir program.bot] "fn sep() -> str:\n    \"/\"\n\nfn dash() -> str:\n    \"-\"\n\n\[sep(), dash()\]\n"]
+    set cache [file join $dir cache]
+} -body {
+    set outputs {}
+    foreach round {1 2} {
+        set log [file join $dir warnings-$round.txt]
+        set channel [open $log w]
+        try {
+            lassign [hcCompile $path $cache -warnings default -warning-channel $channel] hir builds stats
+        } finally {
+            close $channel
+        }
+        lappend outputs [string trimright [hcRead $log] \n] $stats
+    }
+    list [expr {[lindex $outputs 0] eq [lindex $outputs 2]}] [lindex $outputs 1] [lindex $outputs 3] \
+        [regexp -all -line {warning: .*\(ONE-CHAR-STRING-LITERAL\)$} [lindex $outputs 2]]
+} -cleanup {
+    removeDirectory hc-warnings
+} -result {1 {misses 1 stores 1} {hits 1} 2}
+
+test hc-damaged-entries {an entry that is not the cache's text, holds another key under the same name, or holds a HIR of another front end is a miss: the program builds, and its entry is written again} -setup {
+    set dir [makeDirectory hc-damaged]
+    set path [hcWrite [file join $dir program.bot] $::hcProgram]
+    set cache [file join $dir cache]
+} -body {
+    hcCompile $path $cache -warnings off
+    set entry [lindex [glob -directory $cache *.hirc] 0]
+    set good [hcRead $entry]
+    set result {}
+    foreach damaged [list \
+        "not a cache entry \{" \
+        [dict replace $good key [dict replace [dict get $good key] source "other"]] \
+        [dict replace $good interchange [string map [list [hir::interchange::fingerprint] 0000000000000000-0] [dict get $good interchange]]]] {
+        hcWrite $entry $damaged
+        lassign [hcCompile $path $cache -warnings off] hir builds stats
+        lappend result $stats [expr {$builds > 0}] [hcValue $hir] [expr {[hcRead $entry] eq $good}]
+    }
+    set result
+} -cleanup {
+    removeDirectory hc-damaged
+} -result {{misses 1 stores 1 invalid 1} 1 {[6, 3]} 1 {misses 1 stores 1} 1 {[6, 3]} 1 {misses 1 stores 1 invalid 1} 1 {[6, 3]} 1}
+
+test hc-failure-not-kept {a compilation that fails keeps nothing, and fails the same way next time} -setup {
+    set dir [makeDirectory hc-failure]
+    set path [hcWrite [file join $dir program.bot] "fn f(x: int) -> int:\n    x + 1\n\nmissing(f(1))\n"]
+    set cache [file join $dir cache]
+} -body {
+    set first [catch {hcCompile $path $cache -warnings off} message1 options1]
+    set second [catch {hcCompile $path $cache -warnings off} message2 options2]
+    list $first $second [expr {$message1 eq $message2}] \
+        [expr {[dict get $options1 -errorcode] eq [dict get $options2 -errorcode]}] \
+        [llength [glob -nocomplain -directory $cache *]]
+} -cleanup {
+    removeDirectory hc-failure
+} -result {1 1 1 1 0}
+
+test hc-unwritable {a cache directory that cannot be written (here: a file stands in its place) costs the compilation nothing but the cache} -setup {
+    set dir [makeDirectory hc-unwritable]
+    set path [hcWrite [file join $dir program.bot] $::hcProgram]
+    set cache [hcWrite [file join $dir cache] "a file\n"]
+} -body {
+    lassign [hcCompile $path $cache -warnings off] hir builds stats
+    list $stats [hcValue $hir] [hcRead $cache]
+} -cleanup {
+    removeDirectory hc-unwritable
+} -result {{misses 1 unstored 1} {[6, 3]} {a file
+}}
+
+test hc-environment {BOTLISH_HIR_CACHE names the directory compilations use by default (main.tcl's children included); -cache "" turns it off; a compilation tracing its static decisions never uses it} -setup {
+    set dir [makeDirectory hc-environment]
+    set path [hcWrite [file join $dir program.bot] $::hcProgram]
+    set cache [file join $dir cache]
+} -body {
+    set ::env(BOTLISH_HIR_CACHE) $cache
+    try {
+        set result [list [expr {[surface::cache::directory] eq $cache}]]
+        surface::cache::resetStats
+        surface::readProgramFile $path -warnings off
+        lappend result [surface::cache::stats]
+        surface::cache::resetStats
+        surface::readProgramFile $path -warnings off -cache ""
+        lappend result [dict get [surface::cache::stats] hits] [dict get [surface::cache::stats] misses]
+        set ::env(BOTLISH_STATIC_TRACE) 1
+        try {
+            surface::cache::resetStats
+            surface::readProgramFile $path -warnings off
+            lappend result [dict get [surface::cache::stats] hits]
+        } finally {
+            unset ::env(BOTLISH_STATIC_TRACE)
+        }
+        set output [exec [info nameofexecutable] [file join $::projectRoot main.tcl] -warnings off -backend interp $path]
+        lappend result [regexp -inline {value: [^\n]*} $output]
+    } finally {
+        unset ::env(BOTLISH_HIR_CACHE)
+    }
+    lappend result [surface::cache::directory] [llength [glob -directory $cache *.hirc]]
+} -cleanup {
+    removeDirectory hc-environment
+} -result {1 {hits 0 misses 1 stores 1 stale 0 invalid 0 unstored 0} 0 0 0 {{value: [6, 3]}} {} 1}
+
+# (Last: a Tcl library, once loaded, stays loaded in this process.)
+test hc-key-libraries {the key holds the Tcl libraries loaded (core::loadLibrary, `# requires:`), which register natives every later compilation can resolve: a library loaded since is another entry} -setup {
+    set dir [makeDirectory hc-libraries]
+    set path [hcWrite [file join $dir program.bot] $::hcProgram]
+    set cache [file join $dir cache]
+} -body {
+    withPrivateLibrary {
+        hcWrite [file join $::core::libraryDir hclib.tcl] "# an empty Tcl library\n"
+        set before [lindex [hcCompile $path $cache -warnings off] 2]
+        core::loadLibrary hclib
+        list $before [lindex [hcCompile $path $cache -warnings off] 2] \
+            [lindex [hcCompile $path $cache -warnings off] 2]
+    }
+} -cleanup {
+    removeDirectory hc-libraries
+} -result {{misses 1 stores 1} {misses 1 stores 1} {hits 1}}
+
+cleanupTests

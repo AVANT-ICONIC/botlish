@@ -2,9 +2,10 @@
 #
 #   tclsh9.0 main.tcl [-backend interp|compile|cranelift|cranelift-generic] [-code] [-hir] [-ast]
 #                    [-aot] [-aot-data] [-aot-spec] [-contexts] [-traits] [-emit-nir] [-emit-clif]
-#                    [-emit-native-executable] [-argv TEXT]... [-argv-hex HEX]...
+#                    [-emit-native-executable] [-emit-hir-interchange]
+#                    [-argv TEXT]... [-argv-hex HEX]...
 #                    [-argv-none] [-warnings default|off|error]
-#                    [FILE.bot|FILE.hir|FILE.ir ...]
+#                    [FILE.bot|FILE.hir|FILE.hirx|FILE.ir ...]
 #
 # -warnings sets the one global compiler-warning policy of a .bot compilation
 # (WARNINGS-SAME-RETURN.md): default prints warnings on stderr and runs the
@@ -43,8 +44,16 @@
 # linked as BOTLISH_NATIVE_LINKER says (rustc by default; stub needs no
 # toolchain, and is what the single-file compiler uses: SINGLE-EXECUTABLE.md).
 # It does not evaluate the program. Running the executable prints its value.
+# -emit-hir-interchange writes each .bot or .hir input's analyzed HIR in the
+# HIR interchange format (HIR-INTERCHANGE.md) beside it, as FILE.hirx, without
+# evaluating it; a .hirx input is run like any other, on any backend, with no
+# front end at all (the same front end only). With BOTLISH_HIR_CACHE=DIR in
+# the environment, a .bot input's analyzed HIR is kept in DIR and read back,
+# with no front end, while the program, its modules and the front end are
+# unchanged (the front-end cache, surface/cache.tcl).
 #
 # A .hir file (HIR text, e.g. examples/hir/*.hir) is read with hir::readFile;
+# a .hirx file (HIR interchange) with hir::interchange::readFile;
 # a .bot file (Botlish source, e.g. examples/surface/*.bot) is parsed and
 # lowered to HIR with surface::readProgramFile. From that HIR, the interpreter
 # runs the core IR it lowers to (the Tcl reference branch), the compiler
@@ -100,9 +109,14 @@ proc runFile {path showCode showHir showAst showAot showNative} {
             return 1
         }
     }
-    if {$extension in {.hir .bot}} {
+    if {$extension in {.hir .hirx .bot}} {
         if {$extension eq ".hir"} {
             set hir [hir::readFile $path]
+        } elseif {$extension eq ".hirx"} {
+            if {[catch {hir::interchange::readFile $path} hir options]} {
+                puts "   error: $hir ([dict get $options -errorcode])"
+                return 1
+            }
         } elseif {[catch {surface::readProgramFile $path -warnings $warnings} hir options]} {
             puts "   error: $hir ([dict get $options -errorcode])"
             return 1
@@ -165,8 +179,8 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         data { puts [hir::aot::analyze $shownHir] }
         spec { puts [hir::specialize::explain $shownHir] }
     }
-    # A .bot/.hir program: the Tcl compiler's one compilation of its HIR.
-    set compiled [expr {$extension in {.hir .bot} && ($backend eq "compile" || $showCode)}]
+    # A .bot/.hir/.hirx program: the Tcl compiler's one compilation of its HIR.
+    set compiled [expr {$extension in {.hir .hirx .bot} && ($backend eq "compile" || $showCode)}]
     if {$compiled && [catch {core::compiler::compileHir $hir} unit options]} {
         puts "   error: $unit ([dict get $options -errorcode])"
         return 1
@@ -209,13 +223,33 @@ proc runFile {path showCode showHir showAst showAot showNative} {
     return 0
 }
 
+# Writes the analyzed HIR of the .bot or .hir file PATH in the HIR
+# interchange format, as PATH without its extension plus .hirx.
+proc emitInterchange {path} {
+    global warnings
+    if {[catch {
+        switch -- [file extension $path] {
+            .bot { set hir [surface::readProgramFile $path -warnings $warnings] }
+            .hir { set hir [hir::readFile $path] }
+            default { throw {HIR INTERCHANGE INPUT} "expected a .bot or .hir input file: $path" }
+        }
+        hir::interchange::writeFile [file rootname $path].hirx $hir
+    } message options]} {
+        puts stderr "$path: $message ([dict get $options -errorcode])"
+        return 1
+    }
+    puts "hir interchange: [file rootname $path].hirx"
+    return 0
+}
+
 proc emitExecutable {path} {
     global warnings
     if {[catch {
         switch -- [file extension $path] {
             .bot { set hir [surface::readProgramFile $path -warnings $warnings] }
             .hir { set hir [hir::readFile $path] }
-            default { throw {NATIVE AOT INPUT} "expected a .bot or .hir input file (native executables are built from HIR, never from core IR text): $path" }
+            .hirx { set hir [hir::interchange::readFile $path] }
+            default { throw {NATIVE AOT INPUT} "expected a .bot, .hir or .hirx input file (native executables are built from HIR, never from core IR text): $path" }
         }
         native::executable $hir [file rootname $path]
     } message options]} {
@@ -272,6 +306,7 @@ for {set i 0} {$i < [llength $argv]} {incr i} {
         -emit-nir { set showNative nir }
         -emit-clif { set showNative clif }
         -emit-native-executable { set showNative executable }
+        -emit-hir-interchange { set showNative interchange }
         -argv - -argv-hex {
             if {!$injectedArgvGiven} { set injectedArgv {}; set injectedArgvGiven 1 }
             set value [lindex $argv [incr i]]
@@ -292,8 +327,8 @@ for {set i 0} {$i < [llength $argv]} {incr i} {
     }
 }
 if {$files eq ""} {
-    if {$showNative eq "executable"} {
-        puts stderr "usage: tclsh9.0 main.tcl -emit-native-executable FILE.bot"
+    if {$showNative in {executable interchange}} {
+        puts stderr "usage: tclsh9.0 main.tcl -emit-[expr {$showNative eq "executable" ? "native-executable" : "hir-interchange"}] FILE.bot"
         exit 1
     }
     set files [lsort [glob -directory [file join $root examples] *.ir]]
@@ -302,6 +337,8 @@ set failures 0
 foreach path $files {
     if {$showNative eq "executable"} {
         incr failures [emitExecutable $path]
+    } elseif {$showNative eq "interchange"} {
+        incr failures [emitInterchange $path]
     } else {
         incr failures [runFile $path $showCode $showHir $showAst $showAot $showNative]
     }
