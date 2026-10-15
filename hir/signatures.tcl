@@ -240,17 +240,38 @@ proc hir::signatures::paramType {param} {
 # contracts checked-only: hir::buildSyntax's -strict 0 recovery for a
 # program one of whose calls violates a trusted inferred contract, so no
 # backend compiles a body assuming a contract its program breaks.
-proc hir::signatures::infer {hirVar {demote {}}} {
+#
+# ROUNDSVAR, if given, names the caller's memo of the rounds already typed
+# over this same HIR (hir::check's two passes, COMPILER-BOTTLENECKS.md 3.9):
+# a dict, a round's seeds (lsort -stride 2) -> {TYPED A SOLUTION}. A round
+# is a function of the HIR and its seeds alone -- Install, hir::types::infer,
+# Collect and Solve read nothing else a check changes -- and DEMOTE only
+# filters which seeds the next round gets, so a round found there is exactly
+# the round this inference would type: the first, unseeded, always is. Every
+# round typed here that does not converge is added; a converging one is not
+# (its seeds hold every demoted parameter, which the recovery's seeds never
+# do).
+proc hir::signatures::infer {hirVar {demote {}} {roundsVar ""}} {
     upvar 1 $hirVar hir
     variable maxRounds
+    if {$roundsVar ne ""} {
+        upvar 1 $roundsVar rounds
+    } else {
+        set rounds [dict create]
+    }
     set base $hir
     set seeds [dict create]
     for {set round 1} {$round <= $maxRounds} {incr round} {
-        set typed $base
-        Install typed $seeds {} {}
-        hir::types::infer typed
-        set A [Collect $typed]
-        set solution [Solve $typed $A]
+        set key [lsort -stride 2 $seeds]
+        if {[dict exists $rounds $key]} {
+            lassign [dict get $rounds $key] typed A solution
+        } else {
+            set typed $base
+            Install typed $seeds {} {}
+            hir::types::infer typed
+            set A [Collect $typed]
+            set solution [Solve $typed $A]
+        }
         set next [dict create]
         dict for {p contract} $solution {
             set t [dict get $contract trusted]
@@ -272,6 +293,9 @@ proc hir::signatures::infer {hirVar {demote {}}} {
             Diagnose typed $A $solution
             set hir $typed
             return
+        }
+        if {$roundsVar ne "" && ![dict exists $rounds $key]} {
+            dict set rounds $key [list $typed $A $solution]
         }
         set seeds $next
     }

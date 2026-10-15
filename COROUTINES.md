@@ -248,8 +248,9 @@ Being *in* the effect (may yield) is reachability-based and recorded in
 
 ### 7. Direct-yield analysis
 
-`hir::coroutines::analyze` (run first in `hir::CheckOnce`, before type
-inference) walks the program once (`hir::contexts::Walk`) and records every
+`hir::coroutines::analyze` (run first in `hir::check`, before type
+inference, once for both checks of a demotion: COMPILER-BOTTLENECKS.md 3.9)
+walks the program once (`hir::contexts::Walk`) and records every
 `coroutine#yield` call with its function -- the innermost enclosing function
 body, never a nested function's. A yield in top-level code has no function:
 `YIELD-OUTSIDE-FUNCTION` (`co-yield-outside-function`). After type
