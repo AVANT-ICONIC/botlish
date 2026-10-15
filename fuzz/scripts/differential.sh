@@ -41,6 +41,19 @@ compare_one() {  # compare_one TARGET SEEDNAME SEEDPATH VERTICAL...
             printf '%s\t%s\t%s\t%s\tinterp-depth-limit\n' "$target" "$seedname" "$vertical" "$normalized" >> "$REPORT"
             continue
         fi
+        # Documented runner limitation, not a finding: an I/O program (it
+        # writes its own bytes to stdout -- fuzz/stdin-targets,
+        # fuzz/write-targets) can glue those bytes onto the driver's
+        # "value ..." line when they carry no trailing newline (NUL bytes
+        # especially), and the in-process runner then misreports the
+        # successful run as "native backend produced no result". The aot
+        # vertical, which has no framing, verifies the real behavior.
+        if [[ "$vertical" == "cranelift" || "$vertical" == "cranelift-generic" ]] && \
+           [[ "$normalized" == "result|raw|=="* ]] && \
+           { grep -qx "$target" "$ROOT/fuzz/stdin-targets" 2>/dev/null || grep -qx "$target" "$ROOT/fuzz/write-targets" 2>/dev/null; }; then
+            printf '%s\t%s\t%s\t%s\tin-process-io-glue\n' "$target" "$seedname" "$vertical" "$normalized" >> "$REPORT"
+            continue
+        fi
         # Documented per-vertical baseline, not a finding: a native-only
         # program (its own header documents the NATIVE-ONLY refusal, e.g.
         # examples/linux/getpid.bot) refuses on the Tcl backends by design.

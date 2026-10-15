@@ -20,16 +20,25 @@ for target_dir in "$ROOT"/fuzz/seeds/*/; do
     [[ -x "$binary" ]] || continue
     tsv="$OUT/$target.tsv"
     printf 'seed\texit\twall_ms\tstdout\tstderr-first-line\n' > "$tsv"
-    # A plain no-harness run first: the program with no arguments at all.
+    # A plain no-harness run first: the program with no arguments at all
+    # (stdin targets get an empty stdin instead).
     start=${EPOCHREALTIME/./}
-    out="$("$binary" 2>/tmp/baseline-err.$$)"; code=$?
+    if grep -qx "$target" "$ROOT/fuzz/stdin-targets" 2>/dev/null; then
+        out="$("$binary" </dev/null 2>/tmp/baseline-err.$$)"; code=$?
+    else
+        out="$("$binary" 2>/tmp/baseline-err.$$)"; code=$?
+    fi
     end=${EPOCHREALTIME/./}
     err="$(head -1 /tmp/baseline-err.$$ 2>/dev/null || true)"; rm -f /tmp/baseline-err.$$
     printf '%s\t%d\t%d\t%s\t%s\n' "plain" "$code" "$(((end - start) / 1000))" "$out" "$err" >> "$tsv"
     for seed in "$target_dir"/*; do
         [[ -f "$seed" ]] || continue
         start=${EPOCHREALTIME/./}
-        out="$("$ROOT/fuzz/harness/argv-file" "$binary" "$seed" 2>/tmp/baseline-err.$$)"; code=$?
+        if grep -qx "$target" "$ROOT/fuzz/stdin-targets" 2>/dev/null; then
+            out="$("$binary" <"$seed" 2>/tmp/baseline-err.$$)"; code=$?
+        else
+            out="$("$ROOT/fuzz/harness/argv-file" "$binary" "$seed" 2>/tmp/baseline-err.$$)"; code=$?
+        fi
         end=${EPOCHREALTIME/./}
         err="$(head -1 /tmp/baseline-err.$$ 2>/dev/null || true)"; rm -f /tmp/baseline-err.$$
         printf '%s\t%d\t%d\t%s\t%s\n' "$(basename "$seed")" "$code" "$(((end - start) / 1000))" "$out" "$err" >> "$tsv"
