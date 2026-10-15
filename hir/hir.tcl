@@ -240,8 +240,17 @@ namespace eval hir {
     # by an analysis.
     variable buildStats [dict create builds 0 methodTrials 0 methodFinals 0 methodReused 0]
     # 0 makes DecideMethodCalls build every trial and final build again even
-    # when it is the build it started from (measurement and audits only).
+    # when a build of the same configuration was already made (measurement
+    # and audits only).
     variable methodBuildReuse 1
+    # 1 makes DecideMethodCalls build again every build it reuses and fail
+    # unless the decision reads the same of both (the audit of the reuse:
+    # tests and audit tools only). BOTLISH_METHOD_BUILD_AUDIT=1 sets it for a
+    # whole process, so the existing suites and fuzzers run under it.
+    variable methodBuildAudit 0
+    if {[info exists ::env(BOTLISH_METHOD_BUILD_AUDIT)] && $::env(BOTLISH_METHOD_BUILD_AUDIT) ni {"" 0}} {
+        set methodBuildAudit 1
+    }
     # The Tcl recursion limit the front end runs under at least (hir::Deep):
     # what most test files and audit tools already set for themselves.
     variable recursionFloor 100000
@@ -672,14 +681,27 @@ proc hir::MethodCallProblems {hir expr} {
 # be another undecided call's result. Only calls with several candidates ever
 # cost a build; a program without one is built once. Returns the final HIR.
 #
-# A build whose choices resolve every call to the candidate HIR (the build
-# this procedure starts from) already resolved it to is HIR itself
-# (SameChoices): it is not made again -- a trial of the stand-in candidates,
-# and the final build when nothing else was built since (so the
-# per-compilation registries are still that build's).
+# A build is a pure function of its *configuration* (MethodConfig: the
+# candidate every call resolves to), so no configuration is built twice. A
+# trial whose configuration an earlier build of this decision had -- HIR (the
+# build this procedure starts from), or a trial of an earlier pass -- is read
+# from what the decision recorded of that build (MethodTrialRecord): a chain
+# of calls on one receiver decides one link per pass, and a pass whose newly
+# decided calls all chose the t-th candidate leaves the next pass's trial t
+# the configuration it already built. The final build is not made when the
+# last build made has its configuration (HIR when no trial was built since):
+# that build is the final program, and the process state it left behind --
+# the per-compilation registries, the analyses' namespace state -- is the
+# final build's. (An older build of the final configuration is not reused:
+# a later trial's state would be left behind it, and what runs after the
+# decision -- BuildFull's elaborations, hir/static.tcl's attribution and
+# dependency analysis, the warnings -- is not audited for reading it.)
+# hir::methodBuildAudit builds every reused build again and fails unless the
+# decision reads the same of both.
 proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
     variable buildStats
     variable methodBuildReuse
+    variable methodBuildAudit
     set calls [dict get $hir methodCalls]
     set decided [dict create]
     # Calls decided before this build (BuildFull's SEEDS) are decided -- a
@@ -689,8 +711,14 @@ proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
             dict set decided $key $choice
         }
     }
-    # Whether the last build made is HIR (no trial was built since).
-    set lastIsInitial 1
+    # The configuration of HIR: what its build resolved every call to.
+    set initial [lmap {key info} $calls {dict get $info chosen}]
+    # Configuration -> what the decision read of the build of it
+    # (MethodTrialRecord), for every build this decision has read.
+    set records [dict create]
+    # The configuration and the HIR of the last build made (HIR, until a
+    # trial is built).
+    set last [list $initial $hir]
     set validity [dict create]
     set problemsOf [dict create]
     # A method-style call on a trait view is an operation of the trait
@@ -720,31 +748,51 @@ proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
                 set candidates [dict get $calls $key candidates]
                 dict set choices $key [lindex $candidates [expr {min($t, [llength $candidates] - 1)}]]
             }
-            if {$methodBuildReuse && [SameChoices $hir $choices]} {
-                set trial $hir
-                set checked 1
+            set config [MethodConfig $calls $choices]
+            if {$methodBuildReuse && ([dict exists $records $config] || $config eq $initial)} {
+                if {[dict exists $records $config]} {
+                    set record [dict get $records $config]
+                } else {
+                    # HIR itself, asked about for the first time: recorded
+                    # for the calls undecided now, which include every call
+                    # a later pass asks about.
+                    set record [MethodTrialRecord $hir $calls $undecided 1]
+                    dict set records $config $record
+                }
                 dict incr buildStats methodReused
+                if {$methodBuildAudit} {
+                    set trial [BuildOnce $nodes $options $given $choices 0 checked]
+                    set last [list $config $trial]
+                    MethodBuildAudit "trial $t" [MethodRecordFor $record $undecided] \
+                        [MethodTrialRecord $trial $calls $undecided $checked] $choices
+                }
             } else {
                 set trial [BuildOnce $nodes $options $given $choices 0 checked]
                 dict incr buildStats methodTrials
-                set lastIsInitial 0
+                set record [MethodTrialRecord $trial $calls $undecided $checked]
+                dict set records $config $record
+                set last [list $config $trial]
             }
-            if {!$checked} {
+            if {![dict get $record checked]} {
                 # Not typeable: no call can be decided on types.
                 set undecided {}
                 break
             }
             foreach key $undecided {
                 set candidates [dict get $calls $key candidates]
-                if {$t >= [llength $candidates] || ![dict exists $trial methodCalls $key]} continue
-                set callExpr [dict get $trial methodCalls $key expr]
-                dict set problemsOf $key [lindex $candidates $t] [MethodCallProblems $trial $callExpr]
-                set callArgs [dict get $trial exprs $callExpr args]
-                if {$callArgs ne ""} {
-                    dict lappend receivers $key [hir::typeOf $trial [lindex $callArgs 0]]
+                if {$t >= [llength $candidates] || ![dict exists $record calls $key]} continue
+                set entry [dict get $record calls $key]
+                dict set problemsOf $key [lindex $candidates $t] [dict get $entry problems]
+                if {[dict exists $entry receiver]} {
+                    dict lappend receivers $key [dict get $entry receiver]
                 }
             }
-            TraitCallsDecided $trial $calls decided
+            # (TraitCallsDecided, as the build of the record reads.)
+            dict for {key chosen} [dict get $record traits] {
+                if {![dict exists $decided $key]} {
+                    dict set decided $key $chosen
+                }
+            }
         }
         if {$undecided eq ""} break
         # A problem every candidate shares says nothing about which fits.
@@ -810,10 +858,17 @@ proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
         }
         lappend rejected $key $valid
     }
-    if {$methodBuildReuse && $lastIsInitial && [SameChoices $hir $choices]} {
-        set final $hir
+    if {$methodBuildReuse && [MethodConfig $calls $choices] eq [lindex $last 0]} {
+        set final [lindex $last 1]
         dict set final methodChoices $choices
         dict incr buildStats methodReused
+        if {$methodBuildAudit} {
+            set fresh [BuildOnce $nodes $options $given $choices 0 checked]
+            if {[list $fresh] ne [list $final]} {
+                error "hir::DecideMethodCalls: the reused final build differs from building it again (choices: $choices)"
+            }
+            set final $fresh
+        }
     } else {
         set final [BuildOnce $nodes $options $given $choices 0 checked]
         dict incr buildStats methodFinals
@@ -862,25 +917,85 @@ proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
     return $final
 }
 
-# 1 if a build given the method-call choices CHOICES (key -> candidate
-# display) resolves every multi-candidate method call of HIR (a typed build:
-# its `methodCalls`) to the candidate HIR resolved it to -- a call CHOICES
-# does not name, or names with a display that is not one of its candidates,
-# stands in with its first candidate (hir::resolve::MethodChoice). Such a
-# build is HIR itself: hir::BuildOnce is a pure function of its inputs, and
-# the choices are the only one that differs.
-proc hir::SameChoices {hir choices} {
-    dict for {key info} [dict get $hir methodCalls] {
+# The configuration of a build given the method-call choices CHOICES (key ->
+# candidate display): the candidate it resolves each multi-candidate method
+# call of CALLS (a typed build's `methodCalls`) to, in CALLS' order -- as
+# hir::resolve::MethodChoice picks it: the call's choice when that is one of
+# its candidates, else its first, which is also the candidate of a call with
+# no source identity (keyed by its expression, which no choice names). Builds
+# of one configuration are one build: hir::BuildOnce is a pure function of
+# its inputs, and the choices are the only one that differs between the
+# builds of one decision (DecideMethodCalls).
+proc hir::MethodConfig {calls choices} {
+    set config {}
+    dict for {key info} $calls {
         set candidates [dict get $info candidates]
         set want [lindex $candidates 0]
-        if {[dict exists $choices $key] && [dict get $choices $key] in $candidates} {
+        if {$key ne [dict get $info expr] && [dict exists $choices $key] && [dict get $choices $key] in $candidates} {
             set want [dict get $choices $key]
         }
-        if {$want ne [dict get $info chosen]} {
-            return 0
+        lappend config $want
+    }
+    return $config
+}
+
+# What DecideMethodCalls reads of TRIAL, one build of the program (CHECKED:
+# whether its static checks ran), while the calls UNDECIDED (keys of CALLS)
+# are undecided: a dict
+#
+#   checked  CHECKED
+#   calls    KEY -> {problems P ?receiver T?} for each of UNDECIDED the build
+#            has: the problems of the call with the candidate the build
+#            resolved it to (MethodCallProblems) and its receiver's type
+#            (absent for a call without arguments)
+#   traits   KEY -> the candidate the call stood in with, for every call of
+#            CALLS the build has that it types as a trait operation (what
+#            TraitCallsDecided reads), in CALLS' order
+#
+# Calls are only ever decided, never undecided again, so whenever the
+# decision reads the record again (a later trial of the same configuration)
+# it asks about some of UNDECIDED.
+proc hir::MethodTrialRecord {trial calls undecided checked} {
+    set record [dict create checked $checked calls [dict create] traits [dict create]]
+    if {!$checked} {
+        return $record
+    }
+    foreach key $undecided {
+        if {![dict exists $trial methodCalls $key]} continue
+        set callExpr [dict get $trial methodCalls $key expr]
+        set entry [dict create problems [MethodCallProblems $trial $callExpr]]
+        set callArgs [dict get $trial exprs $callExpr args]
+        if {$callArgs ne ""} {
+            dict set entry receiver [hir::typeOf $trial [lindex $callArgs 0]]
+        }
+        dict set record calls $key $entry
+    }
+    set decided [dict create]
+    TraitCallsDecided $trial $calls decided
+    dict set record traits $decided
+    return $record
+}
+
+# RECORD (MethodTrialRecord) as it reads while the calls UNDECIDED are
+# undecided: its entries of the other calls dropped.
+proc hir::MethodRecordFor {record undecided} {
+    set entries [dict create]
+    foreach key $undecided {
+        if {[dict exists $record calls $key]} {
+            dict set entries $key [dict get $record calls $key]
         }
     }
-    return 1
+    dict set record calls $entries
+    return $record
+}
+
+# hir::methodBuildAudit's check of one reused build (WHAT, made with the
+# choices CHOICES): REUSED, the record the decision read, must be FRESH, the
+# record of the same build made again.
+proc hir::MethodBuildAudit {what reused fresh choices} {
+    if {$reused ne $fresh} {
+        error "hir::DecideMethodCalls: the reused build of $what differs from building it again (choices: $choices)"
+    }
 }
 
 # 1 if every candidate's problems (PERCANDIDATE, as MethodCallProblems gives
