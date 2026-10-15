@@ -32,6 +32,14 @@ mkdir -p "$OUT"
 MANIFEST="$OUT/manifest.tsv"
 printf 'name\tsource\tresult\tnote\n' > "$MANIFEST"
 
+# Clean stale copies first: examples come and go upstream, and orphaned
+# sources in the build tree would be re-emitted (and trip library loads
+# for modules that no longer exist). Keep emitted binaries and logs; the
+# emitter overwrites what it rebuilds.
+find "$OUT" -maxdepth 1 -name '*.bot' -delete
+find "$OUT" -maxdepth 1 -name '*.hir' -delete
+find "$OUT" -maxdepth 1 -name '*.ir' -delete
+
 # Every example program, in a stable order, plus the campaign's own
 # argv-driven programs (fuzz/programs/*.bot -- FUZZING-ARGV-PROGRAMS.md:
 # example logic re-driven from argv()). The classifier (inventory.tcl,

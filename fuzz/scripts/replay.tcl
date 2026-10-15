@@ -78,6 +78,31 @@ if {[string length $bytes] > 0} {
     set arguments $segments
 }
 
+# Stdin mode (fuzz/stdin-targets): the input file is the program's stdin,
+# not an argv vector. Such programs (read-stdin.bot) print the echoed raw
+# bytes and then their value, possibly glued when the echo has no trailing
+# newline, so their value is the trailing integer of stdout.
+set stdinTargets {}
+set stdinList [file join $root fuzz stdin-targets]
+if {[file exists $stdinList]} {
+    set channel [open $stdinList r]
+    foreach line [split [read $channel] \n] {
+        if {[string trim $line] ne ""} { lappend stdinTargets [string trim $line] }
+    }
+    close $channel
+}
+set stdinMode [expr {$target in $stdinTargets}]
+set writeTargets {}
+set writeList [file join $root fuzz write-targets]
+if {[file exists $writeList]} {
+    set channel [open $writeList r]
+    foreach line [split [read $channel] \n] {
+        if {[string trim $line] ne ""} { lappend writeTargets [string trim $line] }
+    }
+    close $channel
+}
+set writeMode [expr {$target in $writeTargets}]
+
 # Runs CMD with extra env vars. Returns {code signal stdout stderr} where
 # signal is a name like SIGSEGV (empty if none).
 # Temp paths are built by hand -- deliberately NOT [file tempfile], which
@@ -89,13 +114,26 @@ proc tempPath {role} {
     if {![file writable $dir]} { set dir $::env(TMPDIR) }
     return [file join $dir "replay-[pid]-[clock microseconds]-$role"]
 }
-proc run {cmd envExtra} {
+proc run {cmd envExtra {stdinPath ""}} {
     foreach {name value} $envExtra { set ::env($name) $value }
     set outPath [tempPath out]
     set errPath [tempPath err]
     set code 0
     set signal ""
-    if {[catch {exec -- {*}$cmd >$outPath 2>$errPath} message options]} {
+    if {$stdinPath ne ""} {
+        if {[catch {exec -- {*}$cmd <$stdinPath >$outPath 2>$errPath} message options]} {
+            set errorcode [dict get $options -errorcode]
+            lassign $errorcode kind first second
+            if {$kind eq "CHILDSTATUS"} {
+                set code $second
+            } elseif {$kind eq "CHILDKILLED"} {
+                set signal $second
+                set code 128
+            } else {
+                set code -1
+            }
+        }
+    } elseif {[catch {exec -- {*}$cmd >$outPath 2>$errPath} message options]} {
         set errorcode [dict get $options -errorcode]
         lassign $errorcode kind first second
         if {$kind eq "CHILDSTATUS"} {
@@ -114,7 +152,7 @@ proc run {cmd envExtra} {
 }
 proc ReadFile {path} {
     if {![file exists $path]} { return "" }
-    set channel [open $path r]
+    set channel [open $path rb]
     try { return [read $channel] } finally { close $channel }
 }
 
@@ -127,9 +165,9 @@ switch -- $vertical {
             puts stderr "replay.tcl: $source is core IR text; only interp and compile run it (NATIVE AOT INPUT by design)"
             exit 2
         }
-        # The vector is handed over via a stdin script rather than the
-        # command line: a 100 KiB argument hex-doubles past the kernel's
-        # 128 KiB per-argument limit (E2BIG), and stdin has no such limit.
+        # The vector is handed over via a script rather than the command
+        # line: a 100 KiB argument hex-doubles past the kernel's 128 KiB
+        # per-argument limit (E2BIG), and stdin has no such limit.
         # main.tcl reads the global argv, which the script sets before
         # sourcing it.
         #
@@ -138,6 +176,10 @@ switch -- $vertical {
         # (argv-file uses the binary path as argv[0]). Without this, every
         # index shifts by one between the verticals and input-consuming
         # programs diverge for a harness reason, not a semantic one.
+        #
+        # Stdin targets: the script goes to a temp FILE and the input file
+        # becomes the process's stdin, which the native driver inherits
+        # down to the program's read.
         set words [list -backend $vertical]
         lappend words -argv-hex [binary encode hex [file join $build $target]]
         foreach argument $arguments {
@@ -145,7 +187,17 @@ switch -- $vertical {
         }
         lappend words $source
         set script "set argv [list $words]\nsource \[file join {$root} main.tcl\]\n"
-        set cmd [list tclsh9.0 << $script]
+        if {$stdinMode && $vertical in {cranelift cranelift-generic}} {
+            set scriptPath [tempPath script]
+            set channel [open $scriptPath w]
+            puts -nonewline $channel $script
+            close $channel
+            set cmd [list tclsh9.0 $scriptPath]
+            set runStdin $input
+        } else {
+            set cmd [list tclsh9.0 << $script]
+            set runStdin ""
+        }
         set inProcess 1
     }
     aot - aot-asan {
@@ -154,7 +206,13 @@ switch -- $vertical {
         if {![file executable $binary]} {
             puts stderr "replay.tcl: no executable \"$binary\" (built by fuzz/scripts/build-aot.sh / build-asan.sh)"; exit 2
         }
-        set cmd [list [file join $root fuzz harness argv-file] $binary $input]
+        if {$stdinMode} {
+            set cmd [list $binary]
+            set runStdin $input
+        } else {
+            set cmd [list [file join $root fuzz harness argv-file] $binary $input]
+            set runStdin ""
+        }
         if {$valgrind} { set cmd [list valgrind -q --error-exitcode=88 -- {*}$cmd] }
         if {$vertical eq "aot-asan"} {
             dict set envExtra ASAN_OPTIONS {abort_on_error=1:detect_leaks=0:symbolize=0}
@@ -164,7 +222,7 @@ switch -- $vertical {
     default { puts stderr $usage; exit 2 }
 }
 
-lassign [run $cmd $envExtra] code signal stdout stderrText
+lassign [run $cmd $envExtra $runStdin] code signal stdout stderrText
 
 if {$raw} {
     puts "--- exit $code signal $signal"
@@ -180,9 +238,52 @@ if {$raw} {
 #   aot stdout: V (the bare shown value)   aot stderr: "M (CODE)"
 # Compile-time warnings (stderr, WARNINGS-SAME-RETURN.md) are ignored by
 # design (#54 of the campaign brief): they do not affect behavior.
+#
+# Stdin targets: the AOT executable's own echo (raw input bytes) precedes
+# the value on stdout and may glue to it when the echo has no trailing
+# newline. The value is recovered by trying every suffix of the trailing
+# digit run that satisfies read-stdin's value domain (0..4096 bytes read,
+# or a negative raw -errno) and requiring the residual to equal the
+# expected echo EXACTLY: the first min(4096, input) bytes of the input
+# when n > 0, empty otherwise. Exactly one candidate must fit; none is a
+# genuine violation (a finding-class result), more than one is reported
+# as ambiguous. The in-process verticals are extracted by the ordinary
+# value line below: main.tcl captures and reprints only the driver's
+# value, so their stdout never carries the raw echo (a runner property,
+# not a divergence -- the echo is verified on the aot side, which has no
+# framing).
 set result ""
 set panic ""
-if {$signal ne ""} {
+if {$stdinMode && $vertical in {aot aot-asan} && $signal eq ""} {
+    set text [string trimright $stdout \n]
+    set expectedEcho ""
+    if {[string length $bytes] > 0} {
+        set expectedEcho [string range $bytes 0 [expr {min(4095, [string length $bytes]-1)}]]
+    }
+    if {![regexp {(-?[0-9]+)$} $text -> digits]} {
+        set result "raw|[string range $text end-100 end]"
+    } else {
+        set fits {}
+        for {set take 1} {$take <= [string length $digits]} {incr take} {
+            set n [string range $digits end-[expr {$take - 1}] end]
+            if {$take < [string length $digits] && [string index $digits 0] eq "-"} continue
+            if {![regexp {^-?[0-9]+$} $n]} continue
+            if {$n > 4096} continue
+            if {$n < -4095} continue
+            set residual [string range $text 0 end-$take]
+            set echo ""
+            if {$n > 0} { set echo $expectedEcho }
+            if {$residual eq $echo} { lappend fits $n }
+        }
+        if {[llength $fits] == 1} {
+            set result "value|[lindex $fits 0]"
+        } elseif {[llength $fits] == 0} {
+            set result "stdin-violation|stdout does not decompose into echo + value"
+        } else {
+            set result "stdin-ambiguous|candidates: $fits"
+        }
+    }
+} elseif {$signal ne ""} {
     set result "signal|$signal"
 } else {
     foreach line [split $stdout \n] {
@@ -191,8 +292,19 @@ if {$signal ne ""} {
             if {[regexp {^\s+value: (.*)$} $line -> value]} { set result "value|[string trimright $value]" ; continue }
             if {[regexp {^\s+error: .* \((.+)\)\s*$} $line -> errorcode]} { set result "error|$errorcode" ; continue }
         } else {
-            set value [string trim $line]
-            if {$value ne "" && $result eq ""} { set result "value|$value" }
+            if {$writeMode && $vertical in {aot aot-asan}} {
+                # stdout-writing target: <text><count> possibly glued; the
+                # value is the trailing integer (the byte count).
+                set text [string trimright $stdout \n]
+                if {[regexp {(-?[0-9]+)$} $text -> n]} {
+                    set result "value|$n"
+                } else {
+                    set result "raw|[string range $text 0 120]"
+                }
+            } else {
+                set value [string trim $line]
+                if {$value ne "" && $result eq ""} { set result "value|$value" }
+            }
         }
     }
     foreach line [split $stderrText \n] {

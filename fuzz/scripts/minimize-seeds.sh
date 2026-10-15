@@ -22,8 +22,13 @@ rm -rf "$SEEDS"; mkdir -p "$SEEDS"
 for target in $(ls "$SRC"); do
     binary="$ROOT/fuzz/build/aot/$target"
     [[ -x "$binary" ]] || { echo "minimize-seeds: no binary for $target, skipping"; continue; }
-    "$AFL/afl-cmin" -Q -m none -t 2000 -i "$SRC/$target" -o "$SEEDS/$target" -- \
-        "$ROOT/fuzz/harness/argv-file" "$binary" @@ >/dev/null 2>&1
+    if grep -qx "$target" "$ROOT/fuzz/stdin-targets" 2>/dev/null; then
+        "$AFL/afl-cmin" -Q -m none -t 2000 -i "$SRC/$target" -o "$SEEDS/$target" -- \
+            "$binary" >/dev/null 2>&1
+    else
+        "$AFL/afl-cmin" -Q -m none -t 2000 -i "$SRC/$target" -o "$SEEDS/$target" -- \
+            "$ROOT/fuzz/harness/argv-file" "$binary" @@ >/dev/null 2>&1
+    fi
     printf '%-22s %2d -> %2d seeds\n' "$target" \
         "$(ls "$SRC/$target" | wc -l)" "$(ls "$SEEDS/$target" | wc -l)"
 done

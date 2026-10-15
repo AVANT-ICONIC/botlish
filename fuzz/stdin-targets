@@ -1,0 +1,6 @@
+# fuzz/stdin-targets -- targets whose executable consumes STDIN (not argv).
+# The campaign runs them in AFL's native stdin mode (no @@, no harness):
+# the input file is the target's stdin directly. read-stdin.bot reads one
+# chunk (<= 4096 bytes) through the raw syscall path; see
+# FUZZING-ARGV-PROGRAMS.md's continuation section.
+read-stdin

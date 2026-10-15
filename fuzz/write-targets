@@ -1,0 +1,7 @@
+# fuzz/write-targets -- targets whose executable WRITES its own text to
+# stdout before the runtime prints its value (write.bot, context-hello.bot:
+# the value is the syscall's byte count, an integer). Their aot stdout is
+# <written text><value> possibly glued (no newline between), so the value
+# is the trailing integer. See FUZZING-ARGV-PROGRAMS.md's continuation.
+write
+context-hello

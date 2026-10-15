@@ -78,11 +78,21 @@ run_batch() {  # run_batch target...
         [[ -x "$binary" ]] || { echo "campaign: skip $target (no binary)"; continue; }
         local t; t="$(timeout_for "$target")"
         local dir="$OUT/$target"
-        # shellcheck disable=SC2086
-        "$AFL/afl-fuzz" -Q -i "$ROOT/fuzz/seeds/$target" -o "$dir" \
-            -m none -t "$t" -G 100000 -V "$BUDGET"$(dict_args "$target") \
-            -- "$ROOT/fuzz/harness/argv-file" "$binary" @@ \
-            >"$OUT/$target.afl.log" 2>&1 &
+        # Stdin targets (fuzz/stdin-targets) run in AFL's native stdin mode:
+        # no harness, no @@ -- the input is the executable's stdin.
+        if grep -qx "$target" "$ROOT/fuzz/stdin-targets" 2>/dev/null; then
+            # shellcheck disable=SC2086
+            "$AFL/afl-fuzz" -Q -i "$ROOT/fuzz/seeds/$target" -o "$dir" \
+                -m none -t "$t" -G 100000 -V "$BUDGET"$(dict_args "$target") \
+                -- "$binary" \
+                >"$OUT/$target.afl.log" 2>&1 &
+        else
+            # shellcheck disable=SC2086
+            "$AFL/afl-fuzz" -Q -i "$ROOT/fuzz/seeds/$target" -o "$dir" \
+                -m none -t "$t" -G 100000 -V "$BUDGET"$(dict_args "$target") \
+                -- "$ROOT/fuzz/harness/argv-file" "$binary" @@ \
+                >"$OUT/$target.afl.log" 2>&1 &
+        fi
         pids+=($!)
         targetsRunning+=("$target")
         echo "campaign: $target  -t $t  -V $BUDGET  pid $!"

@@ -131,6 +131,32 @@ seed getpid "syscall-sample-1" '39'
 seed getpid "syscall-sample-2" '0'
 seed getpid "syscall-sample-3" '-1'
 
+# The merged-base examples (campaign continuation): write/context-hello are
+# fixed-output writers (their text as a token), 15-enums an enum demo.
+seed write "hello-sample-1" 'Hello from Botlish!'
+seed context-hello "hello-sample-1" 'hello'
+seed 15-enums "enum-sample-1" 'Red'
+seed 15-enums "enum-sample-2" 'Green'
+
+# read-stdin consumes raw stdin bytes (one chunk, <= 4096): raw payloads,
+# NOT argv vectors -- its campaign mode is AFL's stdin mode.
+raw() { local target="$1" name="$2"; shift 2
+    mkdir -p "$SRC/$target"
+    printf '%b' "$*" > "$SRC/$target/$name"
+}
+rawhex() { local target="$1" name="$2" hex="$3"
+    mkdir -p "$SRC/$target"
+    printf '%s' "$hex" | xxd -r -p > "$SRC/$target/$name"
+}
+raw read-stdin "hello" 'hello from stdin\n'
+: > "$SRC/read-stdin/empty-only"
+head -c 4096 /dev/zero | tr '\0' 'a' > "$SRC/read-stdin/exactly-4096"
+{ head -c 4096 /dev/zero | tr '\0' 'b'; printf 'tail'; } > "$SRC/read-stdin/over-4096"
+rawhex read-stdin "non-utf8" 'fffe80c3'
+rawhex read-stdin "with-nuls" '6162006263'
+raw read-stdin "crlf" 'a\r\nb\r\n'
+raw read-stdin "csv-line" 'name,age\nAlice,30\n'
+
 # --- structural seeds: every target gets the argv-shape checklist ------
 ALL_TARGETS=$(ls "$SRC")
 for t in $ALL_TARGETS; do

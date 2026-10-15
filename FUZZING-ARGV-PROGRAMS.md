@@ -319,6 +319,98 @@ Verification:
   the numeric programs argv-drivable.
 * An argv-driven variant of a NOT-READY program becomes interesting the
   moment its guarded workload closes (then it emits and its input path
-  opens).
+  opens); csv_geometric already closed and is now a target.
 * Persistent-mode harnesses and structure-aware CSV mutation, as in
   campaign 1's list, now with a real parser to aim them at.
+* (from the continuation) `read-stdin` deserves a dedicated longer
+  campaign: it is the only target still finding coverage at budget end,
+  and a multi-chunk or parsing stdin program would go further still.
+
+## 14. Continuation (2026-10-14): the merged-base targets
+
+After merging main (which added `examples/linux/read-stdin.bot`,
+`write.bot`, `context-hello.bot`, `examples/surface/15-enums.bot`, made
+`csv_geometric` AOT-ready, and removed `06-refined-strings`), the
+campaign extended to them on the same rules -- plus one genuinely new
+channel:
+
+* **`read-stdin` is the first stdin-consuming target**: a one-chunk
+  (<= 4096 bytes) raw-syscall echo, native-only by contract. It runs in
+  AFL's native stdin mode (no harness, no `@@`; `fuzz/stdin-targets`
+  names the mode). Its differential needs a decomposing oracle: stdout
+  is `<echoed input bytes><byte-count>` with the value possibly glued to
+  the echo, so the aot vertical recovers the value by trying every
+  bounded digit-suffix against the exact input prefix (exactly one
+  candidate must fit; none is a violation, several are reported
+  ambiguous). In-process verticals get their value from main.tcl's
+  ordinary value line (the runner never shows the raw echo there -- a
+  framing property, not a divergence).
+* `write`, `context-hello`: fixed-output writers whose stdout text
+  precedes the value (`fuzz/write-targets`; value = trailing integer).
+* `15-enums`, `csv_geometric`: ordinary argv-surface targets.
+
+Results (all archived under `fuzz/campaign-stats/2026-10-14/`):
+
+* Release pass: **32 targets, 9,449,522 executions, 0 crashes,
+  0 hangs** (archived `fuzz/campaign-stats/2026-10-14/release/`). The
+  FZ-001 fix held under mutation: `csv-argv` collected zero hangs.
+* `read-stdin` is by far the campaign's richest target: corpus 156 after
+  its first 1200 s (2.91% of the coverage map, vs 0.09% for every other
+  target), still finding at budget end -- so it took the campaign's
+  growth-extension rule (+1800 s): corpus **360**, 3.00%, 26,695 execs,
+  still unplateaued when the extension ended. The only target in either
+  campaign that never stopped finding. Under ASan: 30,951 execs, clean.
+* ASan pass: **31 targets, 1,249,868 executions, 0 crashes, 0 hangs**.
+* Differential (re-run with the io normalizations and two new documented
+  exception classes): **1253 runs, 0 hard mismatches** (native-only-
+  refusal 44, known-limitation 17, in-process-io-glue 4,
+  interp-depth-limit 1, display-divergence 0 -- that class's one program
+  was deleted upstream).
+* Findings: **zero new bugs**; every fuzzer artifact class of this
+  continuation (the io-glue misparses) is an infrastructure observation,
+  not a product defect. FZ-002 remains the only performance observation.
+
+Two new documented exception classes join the four from §5 (now six):
+
+5. `in-process-io-glue` -- an I/O program's own stdout bytes glued onto
+   the driver's value line (no trailing newline, NUL bytes especially)
+   make the in-process runner misreport a successful run as "native
+   backend produced no result"; the aot vertical, which has no framing,
+   verifies the real behavior.
+6. (from the fix pass) `write-targets` value extraction -- the aot value
+   is the trailing integer of stdout for the two fixed-output writers.
+
+The FZ-001 fix from the merge pass is part of this continuation's
+verification: 9.45M release + 1.25M ASan executions over the fixed
+`csv-argv` produced zero hangs -- the fix holds under mutation, and the
+known-failure suite (post-fix expectations) runs green.
+
+## 15. Required questions (continuation)
+
+1. 38 examples + 4 argv programs + the 5 merged-base targets (36
+   AOT-able: 31 binaries + read-stdin in stdin mode); every one
+   inventoried or fuzzed, none hidden.
+2. Fuzzable: all 32 binary targets (31 argv-mode + 1 stdin-mode); the
+   same 11 by-design emission failures as before.
+3. QEMU mode unchanged; the stdin channel is now genuinely exercised
+   (read syscall, freeze_prefix, write syscall all input-dependent).
+4. Compiler changes: **no**.
+5. 1200 s/target (read-stdin +1800 s growth extension), `-t 200`,
+   `-m none`.
+6. Seeds minimized and dictionaries checked in: **yes** (read-stdin:
+   15 -> 3; write: 8 -> 6; csv_geometric rides the csv corpus).
+7-11. Bug oracle unchanged (signals, panics, unexpected exits,
+   mismatches beyond the six documented classes, nondeterminism);
+   expected exit codes excluded; findings deduplicated/minimized/
+   matrix-replayed/manually reproduced as before.
+12-16. Raw: 0 crashes, 0 hangs (release and ASan); deduplicated: 0;
+    confirmed bugs: 0 (FZ-001 remains fixed; FZ-002 remains a
+    performance observation). Classification distribution: empty. No
+    differential mismatches beyond the five documented classes (§14).
+    No hangs. GC-stress replay: no findings to replay.
+17-20. Regression: the full suite passed green on this exact compiler
+   base at merge time (7256 total, 0 failed; the continuation adds only
+   fuzz-tree data, harness scripts and the io-glue exception logic -- no
+   code the test suite compiles); every step reproducible from committed
+   scripts; the known-failure replay suite covers every filed finding
+   and runs green.
