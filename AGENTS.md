@@ -278,8 +278,14 @@ What it costs, measured on a 4-core container (2026-10-15):
   duplicated tests, plus the golden suites that hold those tests'
   replacements, so the run still covers what the files covered. A `X.bot`
   argument runs that suite; `-parts tcl` or `-parts golden` runs one layer.
-  Wherever this file says to run a Tcl test file, run it this way. The
-  fuzzers and mutation harnesses are unchanged: they run what they name.
+  - With an empty cache the golden front ends are most of a narrow run's
+    cost: those two files took 35 s this way, against 14 s run directly on
+    interp.
+  - So, while iterating on one area, `tclsh9.0 tests/X.test` (every test of
+    the file) is the quickest check. Run `tests/local.tcl` (narrowed, or
+    whole) before pushing.
+  - The test files, fuzzers and mutation harnesses the sections below name
+    for an area are run as named.
 * **Run the golden suites with the front-end cache.** `tests/local.tcl`
   always does, unless told not to.
   - **Which directory:** `BOTLISH_HIR_CACHE` when set; otherwise this
