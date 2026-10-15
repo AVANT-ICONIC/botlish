@@ -24,8 +24,8 @@ counts) was produced outside the repository; its findings are summarized here.
   - **Lowering and run failures** in every other case. Two real golden suites
     were among them: traits-path.bot after contexts.bot.
   - **At corpus scale,** 44 of 72 artifact checksums of nine golden suites
-    changed when the other suites were compiled in between. The audit below
-    found the same.
+    changed when the other suites were compiled in between, in the
+    investigation's order. The audit below, in its own order, found 30.
 * **The fix.**
   - `hir/declarations.tcl` captures the registries' state as a HIR side table,
     `declarations`, and `hir::activate` reinstalls it.
@@ -40,12 +40,14 @@ counts) was produced outside the repository; its findings are summarized here.
     64 µs.
   - A build costs 0.5-9 s.
 * **Evidence.**
-  - `tests/compilation-isolation.test`: all of its 18 tests pass, and all fail
+  - `tests/compilation-isolation.test`: all of its 19 tests pass, and all fail
     without the fix.
   - `audit/compilation-isolation/tools/interleave.tcl`: nine golden suites'
-    artifacts and outcomes are identical in both orders. Before the fix,
-    `ownership.bot`'s native outcome changed.
-  - The artifacts are also identical to the tree before the change.
+    artifacts and outcomes are identical in both orders. Before the fix, 30
+    checksums of eight of the suites changed when the others were compiled in
+    between: core IR, Tcl code, NIR and Tcl-backend outcomes.
+  - Each suite's artifacts right after its own compilation are identical to
+    the tree before the change.
   - The mutation harness kills every mutant.
 
 ## The registries
@@ -145,7 +147,7 @@ covered.
 
 ## Tests and audits
 
-* **`tests/compilation-isolation.test`** has 18 tests. They cover each kind of
+* **`tests/compilation-isolation.test`** has 19 tests. They cover each kind of
   declaration on each backend that reads it:
   - a domain redeclared or dropped;
   - structs, enums and error payloads;
