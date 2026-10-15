@@ -53,6 +53,12 @@ proc core::contexts::loadNative {} { return context#load }
 # calls, a call in statically unreachable code -- because no top-level call
 # selects an installed context for it there. It is not a context lookup: it
 # never runs (here it would raise; native code is an `unreachable` trap).
+# It is also what the plan makes of a dead call of a trait-polymorphic
+# function (an argument of type `never`, so no instance to clone): there it
+# takes the call's arguments, which still run, in order, up to the one that
+# never completes -- so it accepts any number, and moves an affine one as the
+# call it replaces would have (`move`, the last role applying to every
+# argument).
 proc core::contexts::unreachableNative {} { return context#unreachable }
 
 proc core::contexts::unreachableImpl {args} {
@@ -101,5 +107,5 @@ core::native::register context#install -arity 1 -impl core::contexts::installImp
     -param-types {struct} -result-type unit
 core::native::register context#load -arity 1 -impl core::contexts::loadImpl \
     -param-types {str} -result-type struct -result-shape {context-struct 0}
-core::native::register context#unreachable -arity 0 -impl core::contexts::unreachableImpl \
-    -result-shape {never}
+core::native::register context#unreachable -arity * -impl core::contexts::unreachableImpl \
+    -result-shape {never} -ownership {move}

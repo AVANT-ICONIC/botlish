@@ -242,12 +242,42 @@ namespace eval hir {
     # 0 makes DecideMethodCalls build every trial and final build again even
     # when it is the build it started from (measurement and audits only).
     variable methodBuildReuse 1
+    # The Tcl recursion limit the front end runs under at least (hir::Deep):
+    # what most test files and audit tools already set for themselves.
+    variable recursionFloor 100000
 }
 
 # The build counters (hir::buildStats) as they are now.
 proc hir::BuildStats {} {
     variable buildStats
     return $buildStats
+}
+
+# Evaluates SCRIPT in the caller's scope with the interpreter's recursion
+# limit at least recursionFloor, restoring the caller's limit afterwards
+# (COMPILER-BOTTLENECKS.md, 4.4). The front end's walks recurse as deep as
+# the program nests -- syntax (a left-deep `and` chain), and the completion
+# analysis also a static call chain, one nested callee analysis per call up
+# to hir::completions::maxDepth -- which Tcl's default limit of 1000 nested
+# evaluations cut short at a 120-function chain. Tcl 9's non-recursive
+# engine does not grow the C stack for a proc call, so the deeper limit costs
+# nothing until it is used. Scoped, not process-wide: the program a backend
+# then runs keeps the caller's limit (a compiled self tail call needs no Tcl
+# depth, tests/compiler-opt.test's opt-tail-2). An embedder's higher limit is
+# kept as it is.
+proc hir::Deep {script} {
+    variable recursionFloor
+    set limit [interp recursionlimit {}]
+    set raise [expr {$limit < $recursionFloor}]
+    if {$raise} {
+        interp recursionlimit {} $recursionFloor
+    }
+    set code [catch {uplevel 1 $script} result options]
+    if {$raise} {
+        interp recursionlimit {} $limit
+    }
+    dict incr options -level
+    return -options $options $result
 }
 
 # ---------------------------------------------------------------------------
@@ -382,6 +412,11 @@ proc hir::build {exprs args} {
 # This is how frontends construct HIR: they state what was written and where;
 # resolution, hygiene (hygiene.tcl), types and refinements happen here.
 proc hir::buildSyntax {nodes args} {
+    # Every pass of the front end runs under its recursion floor (Deep).
+    return [Deep {BuildSyntax $nodes {*}$args}]
+}
+
+proc hir::BuildSyntax {nodes args} {
     set options [Options hir::buildSyntax \
         {-mode program -strict 1 -origin "" -files {} -modules {} \
             -type-decls {} -error-decls {} -struct-decls {} -trait-decls {} -imports {} -halt-on-resolution-errors 0} $args]
@@ -478,6 +513,14 @@ proc hir::BuildOnce {nodes options given choices halt checkedVar} {
     if {[dict exists $given -imports]} {
         hir::imports::apply [dict get $options -imports]
     }
+    if {[dict exists $given -error-decls]} {
+        # A frontend that passes -error-decls (even empty) compiles a program
+        # of its own: no error an earlier compilation declared stays
+        # resolvable (COMPILER-BOTTLENECKS.md, 4.1). Core IR text (hir::build)
+        # passes none and keeps them: its `fail`/`handle` nodes may name the
+        # errors of the program it was lowered from.
+        hir::errordecls::Reset
+    }
     set errorDecls [hir::errordecls::apply [dict get $options -error-decls]]
     if {[dict exists $given -struct-decls] && [dict get $options -struct-decls] eq ""} {
         # A frontend that passes -struct-decls (even empty) compiles a program
@@ -485,10 +528,14 @@ proc hir::BuildOnce {nodes options given choices halt checkedVar} {
         hir::structs::Reset
     }
     if {[dict exists $given -type-decls]} {
-        # Likewise for enums (ENUMS.md), which ride in -type-decls: a
-        # program declaring none must not see an earlier compilation's
-        # (hir::sourcetypes::apply registers this program's own, if any).
+        # Likewise for enums (ENUMS.md), which ride in -type-decls, and for
+        # every other source type: a program declaring none must not see an
+        # earlier compilation's, though hir::sourcetypes::apply, given no
+        # declarations, leaves the registry as it is for core IR text
+        # (hir::build passes no -type-decls). It registers this program's
+        # own, if any.
         hir::enums::Reset
+        hir::sourcetypes::Reset
     }
     set traitDecls ""
     if {[dict exists $given -trait-decls]} {
@@ -885,20 +932,24 @@ proc hir::TraitCallsDecided {hir calls decidedVar} {
 # assumption of a broken contract can recover: native::prepareHir does.
 proc hir::check {hirVar} {
     upvar 1 $hirVar hir
-    set pre $hir
-    CheckOnce hir {}
-    if {![dict exists $hir violatedContracts]} {
-        return
+    # (Under the front end's recursion floor even when not entered through
+    # hir::buildSyntax: native::prepareHir re-checks a HIR itself.)
+    Deep {
+        set pre $hir
+        CheckOnce hir {}
+        if {[dict exists $hir violatedContracts]} {
+            set diagnostics [dict get $hir diagnostics]
+            set before [dict get $hir beforeCompletions]
+            set demote [lsort -unique [dict keys [dict get $hir violatedContracts]]]
+            set hir $pre
+            CheckOnce hir $demote
+            dict unset hir violatedContracts
+            dict set hir diagnostics $diagnostics
+            dict set hir beforeCompletions $before
+            dict set hir demotedContracts $demote
+        }
     }
-    set diagnostics [dict get $hir diagnostics]
-    set before [dict get $hir beforeCompletions]
-    set demote [lsort -unique [dict keys [dict get $hir violatedContracts]]]
-    set hir $pre
-    CheckOnce hir $demote
-    dict unset hir violatedContracts
-    dict set hir diagnostics $diagnostics
-    dict set hir beforeCompletions $before
-    dict set hir demotedContracts $demote
+    return
 }
 
 proc hir::CheckOnce {hirVar demote} {

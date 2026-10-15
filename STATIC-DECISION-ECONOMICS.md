@@ -601,11 +601,19 @@ afresh and requests every call in it, under the same four rules.
 Today the only way a site's trait-polymorphic call lacks an instance is a
 dead call (a nesting decline at such a call is all but unreachable: past the
 per-block budget, which a chain of trait-polymorphic functions reaches long
-before the nesting limit, a request is granted however deep). The plan then
-reports TRAIT-INSTANCE-BUDGET at a call that never runs -- a defect of the
-plan, which should drop such a call's specialization, recorded here rather
-than fixed: `se-equal-plan-unplanned` pins the gate on it (mutant
-`plan-unplanned-ignored`: mispredicted).
+before the nesting limit, a request is granted however deep). The plan used
+to report TRAIT-INSTANCE-BUDGET at a call that never runs, and
+`se-equal-plan-unplanned` pinned the gate on it (mutant
+`plan-unplanned-ignored`: mispredicted). That defect is fixed
+(COMPILER-BOTTLENECKS.md, 4.2): the plan replaces a dead call by the
+placeholder of never-executed code, keeping its arguments
+(`hir::traits::DeadCall`, the `dead` action), and reports nothing there, so
+`se-equal-plan-unplanned` now pins the site accepted, with the batched
+decisions the sequential ones. `Unplanned` still counts a dead call as a
+consumer (an over-approximation; it costs that test nothing: 3 rounds / 4
+builds either way), and `plan-unplanned-ignored` was removed: with a dead
+call no longer diagnosed, what it ignores is only a nesting decline, which no
+deterministic test builds.
 
 | program | every call a consumer | narrowed | sequential |
 |---|---|---|---|
@@ -614,8 +622,9 @@ than fixed: `se-equal-plan-unplanned` pins the gate on it (mutant
 
 No other golden suite changes (88 files: 210 -> 207 rounds, 321 -> 318
 builds, the same outcomes, no misprediction before or after). Mutants:
-`plan-unplanned-ignored`, `budget-deep-ignored` (semantic: mispredicted),
-`plan-instances-ignored` (economic: every call a consumer again).
+`plan-unplanned-ignored` (since removed, above), `budget-deep-ignored`
+(semantic: mispredicted), `plan-instances-ignored` (economic: every call a
+consumer again).
 
 #### Internal ids, exactly
 

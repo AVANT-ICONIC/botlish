@@ -86,7 +86,9 @@ namespace eval hir::structs {
     # and, for an opaque struct, the owner of its representation.
     variable registry [dict create]
     # Entries of the previous compilation's registration are dropped by the
-    # next apply call that brings declarations.
+    # next compilation that brings declarations of any kind, before it
+    # resolves one (hir::sourcetypes::Reset), or by one that brings none
+    # (hir::BuildOnce).
     # ID -> 1|0: whether struct ID is affine (IsAffine), for this registry.
     variable affinity [dict create]
 }

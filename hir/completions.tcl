@@ -142,16 +142,36 @@
 # activation, however the body is later reached.
 
 namespace eval hir::completions {
-    # Recursive nested-call analysis budget (item 35/108-16): once this many
-    # distinct exact-callee analyses have run within one top-level
-    # hir::completions::checkBlock walk, every further nested call falls
-    # back conservatively to its callee's own declared errors and ordinary
-    # (normal-completion-possible) outcome -- never a claim of impossibility
-    # the budget did not actually verify. Generous enough for every corpus
-    # shape (byte::set's own single-level from_int nesting, a handful of
-    # calls per literal-list element) while bounding pathological call
-    # chains.
+    # Recursive nested-call analysis budget (item 35/108-16): once one walk
+    # has started this many distinct exact-callee analyses, every further
+    # call it makes falls back conservatively to its callee's own declared
+    # errors and ordinary (normal-completion-possible) outcome -- never a
+    # claim of impossibility the budget did not actually verify. Each
+    # nested analysis walks with a count of its own (NewCtx), so this bounds
+    # how wide the analyses of one walk get; maxDepth below bounds how deep
+    # they nest. Generous enough for every corpus shape (byte::set's own
+    # single-level from_int nesting, a handful of calls per literal-list
+    # element).
     variable maxAnalyses 256
+    # Nesting bound (COMPILER-BOTTLENECKS.md, 4.4): an exact call analyzed
+    # while this many blocks are being analyzed around it (the size of
+    # EffectiveFacts's `guard`) falls back to its callee's declared contract,
+    # as a recursion cycle does. The per-walk budget above bounds the
+    # analyses one walk starts, not how deep they nest: a static call chain
+    # f1 -> f2 -> ... nests one analysis per call, six to nine Tcl
+    # evaluation levels each (more in a body that nests deeper), so without
+    # this a long enough chain exceeded any Tcl recursion limit (a
+    # 120-function chain at Tcl's default of 1000). With it the walk is at
+    # most this deep, which the recursion floor the front end runs under
+    # (hir::Deep, 100000) leaves room for at up to about 90 levels per
+    # analysis. A chain deeper than this keeps every proof up to the bound
+    # and loses only what the calls past it would have proven: the fallback
+    # never claims an error impossible, but a caller whose call needed no
+    # handler only because of such a proof then needs one. A count of
+    # analyses, never of Tcl frames, so the verdicts do not depend on how
+    # deep the compiler was entered or on the process's recursion limit.
+    # No corpus program comes near it (the deepest nests 12).
+    variable maxDepth 1024
     # Memoization for analyzeBlock's own results, {target argRanges argExact
     # argExactLists} -> {normal errors result}, valid for one whole-program
     # errorsets::verify pass (hir::completions::resetCache clears it at that
@@ -2398,11 +2418,12 @@ proc hir::completions::ArgExactLists {hir ctx argExprs} {
 # ARGRANGES/ARGEXACT/ARGEXACTLISTS/ARGCALLABLES: {normal 0|1 errors NAME-LIST
 # resultRange Range incomplete 0|1}. Recurses via analyzeBlock (item 33),
 # guarded against cycles (item 34) and bounded by hir::completions::
-# maxAnalyses (item 35). This is the function-instance boundary of the
+# maxAnalyses (item 35) and maxDepth. This is the function-instance boundary of the
 # header: an incomplete analysis keeps every error TARGET declares.
 proc hir::completions::EffectiveFacts {hirVar ctxVar target argRanges argExact argExactLists argCallables guard {captureFacts {}}} {
     upvar 1 $hirVar hir $ctxVar ctx
     variable maxAnalyses
+    variable maxDepth
     variable cache
     set declared [hir::get $hir $target declaredErrors]
     if {[dict exists $hir coroutines thunks $target]} {
@@ -2414,6 +2435,11 @@ proc hir::completions::EffectiveFacts {hirVar ctxVar target argRanges argExact a
         # Self/mutual recursion: never assume an error impossible because
         # analysis recursed (item 34) -- the conservative, always-sound
         # fallback is the callee's own full declared contract.
+        return [Fallback $hir $target $declared $argCallables $captureFacts]
+    }
+    if {[dict size $guard] >= $maxDepth} {
+        # The nesting bound (maxDepth): the same fallback, so a static call
+        # chain of any length is analyzed without exhausting Tcl's stack.
         return [Fallback $hir $target $declared $argCallables $captureFacts]
     }
     if {[llength $argRanges] != [llength [hir::get $hir $target params]]} {

@@ -379,13 +379,16 @@ r_w = w():
 
 # A call of a trait-polymorphic function that has no instance (`use`): its
 # argument, mk(), is `never` once mk's site is rejected (a dead call is
-# never requested), and the plan reports TRAIT-INSTANCE-BUDGET there. (That
-# report at a dead call is itself a defect -- the call never runs -- but it
-# is what the plan does, and the gate must model it. A nesting decline is the
-# other way to lack an instance, and needs a chain of instances deeper than
-# a test can build: past the per-block budget a trait-polymorphic request is
-# granted however deep.) Two checker failures that wait for mk's rejection,
-# x1 and x2, keep the gate closed in the build that first finds `use` dead.
+# never requested). The plan once reported TRAIT-INSTANCE-BUDGET there,
+# though the call never runs (COMPILER-BOTTLENECKS.md, 4.2); it now keeps the
+# arguments and calls the placeholder of never-executed code instead, and
+# reports nothing. The gate still counts the site as its consumer (Unplanned
+# asks only whether an instance exists), which costs it nothing here. (A
+# nesting decline is the other way to lack an instance, and needs a chain of
+# instances deeper than a test can build: past the per-block budget a
+# trait-polymorphic request is granted however deep.) Two checker failures
+# that wait for mk's rejection, x1 and x2, keep the gate closed in the build
+# that first finds `use` dead.
 set ::sePlanUnplanned {import compiler
 
 trait Shape:
@@ -824,10 +827,10 @@ test se-equal-plan-clone {a site the plan diagnoses only in a clone's view: a ge
         [dict get $hir staticStats rounds]
 } -result {{} {TYPE AFFINE-GENERIC-NESTED-UNSUPPORTED TYPE} {} 3}
 
-test se-equal-plan-unplanned {a call of a trait-polymorphic function that a context the plan walks has no instance for is the gate's consumer: `use`'s call is dead (no instance) once mk's site is rejected, beside x1's and x2's checker failures, and waits for them instead of being predicted ok (the plan, once it runs, reports TRAIT-INSTANCE-BUDGET there) -- the batched decisions are the sequential ones, with no build contradicting a prediction} -body {
+test se-equal-plan-unplanned {a dead call of a trait-polymorphic function (no instance: its argument mk() is `never` once mk's site is rejected, beside x1's and x2's checker failures) is no plan diagnostic: the plan keeps its argument, which raises mk's reified CompilerError, and `use` is accepted (it was once rejected with TRAIT-INSTANCE-BUDGET, a budget that was never involved) -- the batched decisions are the sequential ones, with no build contradicting a prediction} -body {
     set hir [seHir $::sePlanUnplanned]
     list [seSame $::sePlanUnplanned 0] [seOutcomes $::sePlanUnplanned] [dict get $hir staticStats mispredicted]
-} -result {{} {TYPE TYPE TYPE TRAIT-INSTANCE-BUDGET} {}}
+} -result {{} {TYPE TYPE TYPE accepted} {}}
 
 test se-equal-deep-first-request {the semantic layer declines a request for nesting only when it is the first for its instance (a cache hit never is), so rejecting the site that made the first request can make a deep one the first, and declined: `late`'s deep request is a hit until `early` is rejected, then declined, and `late` fails (TYPE: the call keeps its generic result). Every request at half the nesting limits or deeper is recorded (hir::semantic's `deep`) and puts the instance budget under pressure (C:budget), so `late` waits for `early` -- it was once predicted ok beside the two rejections, and the next build contradicted it} -body {
     set text [seDeepFirstRequest]

@@ -962,9 +962,9 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 # operation to its implementation, a call of a trait-
                 # polymorphic function to its clone for the call's witnesses.
                 ResolvePlannedCall hir $e $node $planned $ctx
-                if {[lindex $planned 0] ne "unreachable"} {
-                    # (The placeholder of never-executed code takes nothing,
-                    # flags included.)
+                if {[lindex $planned 0] ni {unreachable dead}} {
+                    # (The placeholder of never-executed code takes no flags:
+                    # it is no call of the function that declares them.)
                     hir::flags::ResolveCall hir $e $node $ctx
                 }
                 SetField hir $e target ""
@@ -1662,11 +1662,14 @@ proc hir::resolve::ResolveIdent {hirVar e ident ctx} {
 # arguments only -- the context-trait binding that was the receiver is no
 # value and is not evaluated (CONTEXT-TRAITS.md); {unreachable} code no
 # installed context reaches, never executed: the internal native
-# context#unreachable, with no arguments.
+# context#unreachable, with no arguments; {dead} a dead call of a trait-
+# polymorphic function (an argument of type `never`, no instance): the same
+# placeholder given the call's arguments -- the receiver of a method-syntax
+# call first --, which still run in order up to the one that never completes.
 proc hir::resolve::ResolvePlannedCall {hirVar e node action ctx} {
     upvar 1 $hirVar hir
     set written [dict get $node callee]
-    if {[lindex $action 0] in {context unreachable}} {
+    if {[lindex $action 0] in {context unreachable dead}} {
         set origin [expr {[dict exists $node method] ? [dict get $written nameOrigin] : [dict get $written origin]}]
         set c [hir::NewId hir expr]
         dict set hir exprs $c [dict create id $c kind ref origin $origin scope [dict get $ctx scope] type "" reachable 1]
@@ -1674,6 +1677,16 @@ proc hir::resolve::ResolvePlannedCall {hirVar e node action ctx} {
             ResolveRef hir $c [hir::contexts::UnreachableNative] 1 $ctx
             SetField hir $e callee $c
             SetField hir $e args {}
+            return
+        }
+        if {[lindex $action 0] eq "dead"} {
+            set argNodes [dict get $node args]
+            if {[dict exists $node method]} {
+                set argNodes [concat [list [dict get $written receiver]] $argNodes]
+            }
+            ResolveRef hir $c [hir::contexts::UnreachableNative] 1 $ctx
+            SetField hir $e callee $c
+            SetField hir $e args [Sequence hir $argNodes $ctx]
             return
         }
         set operation [lindex $action 1]

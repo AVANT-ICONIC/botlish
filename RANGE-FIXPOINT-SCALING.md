@@ -344,3 +344,32 @@ precision for chains deeper than the bound. A completion verdict feeds
 code generation through a native call's bounds verdict
 (`BoundsVerdictsOf`), so it can change NIR. That needs its own tests and
 its own audit.
+
+**Fixed since** (COMPILER-BOTTLENECKS.md, 4.4), with both parts:
+
+1. `hir::completions::maxDepth` (1024): `EffectiveFacts` falls back to the
+   callee's declared contract once that many blocks are being analyzed
+   around a call (the size of `guard`), as for a cycle. It counts analyses,
+   not Tcl frames, so a verdict never depends on how deep the compiler was
+   entered or on the process's recursion limit. (`maxAnalyses` was no bound
+   on depth: each nested analysis's walk starts its own count.)
+2. `hir::Deep` runs the front end (`hir::buildSyntax`, `hir::check`, the
+   warning passes) with Tcl's recursion limit at least 100000, restoring the
+   caller's limit afterwards. The bound fits under it at up to about 90
+   levels per nested analysis; a minimal chain uses six, the chains above
+   about nine.
+
+**Audit.** The bound is far above anything the corpus reaches: the deepest
+nesting over the 88 golden suites and the 41 example and benchmark programs
+is 12 analyses (`csv_records.bot`; 10 in a golden suite). No verdict of
+theirs changes, so neither does any NIR. The chain programs compile at
+Tcl's default limit: 120, 200 and 400 functions (the 400-function front end
+in about 20 s, 401 analyses deep), and a minimal 2,000-function
+chain without the bound needs about 12,000 levels in 8.5 s.
+`tests/range-fixpoint-scaling.test` 3.1-3.3 pin a 250-function proof chain
+compiling at the default limit (its warnings included, which repeat the
+walk), the bound's fallback (a caller then needs a handler the proof had made
+unnecessary: never a claim the analysis did not verify) and a chain past the
+bound. What still does not run at the default limit is the *program*, on
+the Tcl backends: the reference interpreter's own calls nest as deep as the
+program's, under the caller's limit (cranelift runs the 400-function chain).

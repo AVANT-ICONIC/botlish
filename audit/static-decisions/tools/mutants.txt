@@ -479,17 +479,14 @@ proc hir::static::Waits {key status deps} {
     }
 >>>>
 
-@@ plan-unplanned-ignored a call of a trait-polymorphic function in the generic program is taken to have its instance: a dead one (no instance, TRAIT-INSTANCE-BUDGET once the plan runs) is no consumer of the plan's gate and is predicted ok beside the diagnostics that keep the plan from running
-## hir/staticdeps.tcl
-<<<<
-    if {$top eq "program" || ![hir::traits::IsPolymorphic $hir $top]} {
-        return [expr {![dict exists $calls [list generic $e]]}]
-    }
-====
-    if {$top eq "program" || ![hir::traits::IsPolymorphic $hir $top]} {
-        return 0
-    }
->>>>
+# (plan-unplanned-ignored, which took every call of a trait-polymorphic
+# function in the generic program to have its instance, was killed by
+# se-equal-plan-unplanned while the plan reported TRAIT-INSTANCE-BUDGET at a
+# dead call. It no longer does (COMPILER-BOTTLENECKS.md, 4.2): such a call
+# now lacks an instance only through a nesting decline, which no
+# deterministic test builds, so the mutant changes no outcome and was
+# removed. Unplanned keeps counting a dead call as a consumer: sound, and it
+# costs se-equal-plan-unplanned nothing.)
 
 @@ budget-deep-ignored a request at half the nesting limits puts no pressure on the instance budget: a deep request that is a cache hit is predicted to stay one, though rejecting the site that made the first request makes it the first, declined for nesting
 ## hir/staticdeps.tcl

@@ -43,7 +43,10 @@
 # round-trip tests) leaves the previous batch in place, exactly mirroring
 # hir::sourcetypes::apply's own empty-DECLS rule and for the identical
 # reason (that build's own `fail`/`handle` nodes still need the original
-# program's error names to resolve against).
+# program's error names to resolve against). A frontend's program of its own
+# that declares no error is different: hir::BuildOnce Resets first (it
+# passes -error-decls), so an error an earlier program declared does not
+# resolve in it (COMPILER-BOTTLENECKS.md, 4.1).
 #
 # Same single-process, non-concurrent-compilation caveat as
 # hir::sourcetypes.tcl's "Compilation isolation": `current` is one Tcl
@@ -166,6 +169,16 @@ proc hir::errordecls::Fail {span message} {
 # rejected; the same short name in two modules is two identities. A short
 # name of a builtin error is rejected in every module too: a bare spelling
 # in that module would otherwise name two errors.
+# Drops the declarations of the previous compilation: hir::BuildOnce, for a
+# frontend's program of its own (it passes -error-decls, even empty), before
+# apply registers that program's.
+proc hir::errordecls::Reset {} {
+    variable current
+    variable payloads
+    set current {}
+    set payloads [dict create]
+}
+
 proc hir::errordecls::apply {decls} {
     variable current
     variable payloads

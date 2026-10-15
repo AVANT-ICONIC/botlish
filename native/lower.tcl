@@ -5953,7 +5953,14 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
     }
     if {$targetKind eq "native" && [dict get [hir::symbol $hir $target] name] eq [core::contexts::unreachableNative]} {
         # Code no installed context reaches (CONTEXT-TRAITS.md): HIR
-        # verification proved it never runs, so there is nothing to call.
+        # verification proved it never runs, so there is nothing to call. A
+        # dead call the trait plan replaced keeps its arguments (one of them
+        # never completes): they run first.
+        foreach arg $argExprs {
+            if {[Expr fn $arg] eq "never"} {
+                return {never tagged}
+            }
+        }
         Emit fn unreachable $e
         return {never tagged}
     }

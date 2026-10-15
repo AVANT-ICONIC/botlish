@@ -173,10 +173,15 @@ STRUCTDECLS` before resolution. When the compilation declares any source
 type — `DECLS` (integer domains, refinements) or `STRUCTDECLS` (structs,
 which share the type namespace) is non-empty — `apply` first unregisters
 everything the *previous* such call registered
-(`hir::sourcetypes::generation`), then registers the new batch fresh. When
+(`hir::sourcetypes::generation`) and the previous compilation's structs
+(`hir::structs`' registry), then registers the new batch fresh. When
 both are empty, `apply` does nothing at all — neither reset nor
 register — and leaves the registry exactly as it is. `hir::read` follows
-the same rule for serialized HIR text, struct-only text included.
+the same rule for serialized HIR text, struct-only text included. A
+frontend's program that declares no source type is still a program of its
+own: `hir::BuildOnce` resets the registry for it (it passes `-type-decls`,
+even empty), as it does the error, struct and enum registries; only a build
+that passes none — `hir::build` of core IR text, below — keeps it.
 
 That second rule is deliberate and load-bearing, not an afterthought: every
 internal re-derivation of an *already built* program's HIR (the Tcl
@@ -211,6 +216,21 @@ a reset.
   in the same process instead of colliding with the stale refinement —
   `source-type-struct-only-compilation-reclaims-registry` (and
   `source-type-struct-only-hir-text-reclaims-registry` for HIR text).
+- And a second program that declares both other types and structs: its
+  refinement carriers, domain parents and enums are resolved after the
+  previous compilation's structs are gone, not only once its own structs
+  replace them (`hir::sourcetypes::Reset` drops them; `hir::structs::apply`
+  runs last). After a program declaring `struct Query`, one declaring
+  `refined type Query = str`, `refined type Encoded = Query` and any struct
+  used to resolve `Encoded`'s carrier to the earlier struct and fail
+  (COMPILER-BOTTLENECKS.md, 4.1) --
+  `source-type-struct-registry-reclaimed-before-carriers`,
+  `source-type-struct-registry-isolation-kinds`.
+- And a program that declares nothing: after a program declaring `type
+  Small`, one naming `Small` without declaring it is rejected (an unknown
+  type), where it once compiled against the earlier declaration — and
+  likewise for an error, a refinement, an enum, a trait and a struct
+  (`source-type-declarations-do-not-leak-forward`).
 - What it does **not** guarantee: two *live* HIR objects from two different
   `hir::buildSyntax` calls, holding conflicting same-spelled declarations,
   both still needing correct name-based resolution *after* a third,

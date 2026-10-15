@@ -38,8 +38,11 @@
 # apply's own answer: a call that declares any source type -- a non-empty
 # DECLS, or a non-empty STRUCTDECLS (struct declarations, hir/structs.tcl,
 # which share this type namespace) -- first Resets -- unregisters -- every
-# type/native the *previous* such call registered (`generation`, below),
-# then registers its declarations fresh; a call given neither does nothing
+# type/native the *previous* such call registered (`generation`, below) and
+# the previous compilation's structs, before resolving any declaration of
+# its own (a refinement carrier resolved while an earlier program's `struct
+# Query` was still registered named that struct: COMPILER-BOTTLENECKS.md,
+# 4.1), then registers its declarations fresh; a call given neither does nothing
 # at all, neither resetting nor registering (see apply's own comment for
 # exactly why that half matters just as much). hir::
 # buildSyntax (hir/hir.tcl) calls apply exactly once, right before hir::
@@ -87,6 +90,14 @@ proc hir::sourcetypes::Reset {} {
         }
     }
     set generation {}
+    # The previous compilation's structs go with its other source types, and
+    # before any of this compilation's declarations is resolved: a refinement
+    # carrier, a domain's parent or an enum resolved while they were still
+    # registered could name one of them (`refined type Encoded = Query`
+    # resolving an earlier program's `struct Query`), although this
+    # compilation's own structs are registered only after its other types
+    # (hir::structs::apply, at the end of apply).
+    hir::structs::Reset
 }
 
 proc hir::sourcetypes::Fail {span message {kind TYPE}} {

@@ -349,6 +349,18 @@ is built twice from the same syntax:
    lookup where the clone is placed), so a clone placed in another unit
    calls exactly what the source function would.
 
+**Dead calls.** A call with an argument of type `never` -- a rejected
+static block's reified failure (STATIC-COMPILE.md); any other always-failing
+call is a `KNOWN-ERROR` first -- never reaches its callee, so it requests no
+instance and has no witnesses to clone for. The plan gives it the `dead`
+action (`hir::traits::DeadCall`): build 2 resolves it to a call of the
+placeholder of never-executed code, `context#unreachable` (CONTEXT-TRAITS.md),
+with the call's own arguments, so they still run in order up to the one that
+never completes, and nothing of the trait-polymorphic callee is called (a
+function only dead calls reach gets no clone). It used to be reported as
+`TRAIT-INSTANCE-BUDGET`, though no budget was involved and the call could
+not run (COMPILER-BOTTLENECKS.md, 4.2; `trait-dead-call-keeps-arguments`).
+
 Build 2 is an ordinary program: it is type-checked, analyzed, instanced and
 compiled like any other. A diagnostic there is the compiler's, said so ("in
 the monomorphized program: ...").
@@ -485,7 +497,7 @@ same plan. Ordinary trait requirements still take no context parameter.)
 | `TRAIT-NESTED-POLYMORPHIC` | a trait-polymorphic function that is not top-level |
 | `TRAIT-POLYMORPHIC-RECURSION` | clones of different witnesses calling each other |
 | `TRAIT-IMPL-ORDER` | an implementation declared after the code that first needs it |
-| `TRAIT-INSTANCE-BUDGET` | a call whose specialization the instance analysis declined (only the nesting limit, now) |
+| `TRAIT-INSTANCE-BUDGET` | a call whose specialization the instance analysis declined (only the nesting limit, now; never a dead call, which has no specialization to decline) |
 | `TRAIT-INTERNAL` | a plan invariant failed (a compiler bug, never expected) |
 
 Trait diagnostics are promoted ahead of their consequences
@@ -718,6 +730,13 @@ programs, on the tree merged with `main`): **18 of 18 killed** again. Tests
 failing as above, except #1 (13). Fuzzer failures of 40: #1 31, #2 3, #3 7,
 #4 22, #5 15, #6 12, #7 1, #9 40, #10 14, #11 1 (now killed by the fuzzer
 too), #13 15, #15 23, #16 15; #8, #12, #14, #17 and #18 still 0.
+
+**Dead calls** (COMPILER-BOTTLENECKS.md, 4.2) added two mutants:
+`dead-call-budget` (a dead call reported as `TRAIT-INSTANCE-BUDGET` again)
+and `dead-call-drops-arguments` (the placeholder without the call's
+arguments, so the `never` one no longer raises and the placeholder runs).
+`trait-dead-call-keeps-arguments` kills both; the fuzzer writes no static
+block, so it kills neither.
 
 ## Regression
 

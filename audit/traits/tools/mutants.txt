@@ -312,3 +312,25 @@ proc hir::traits::VerifyFunctionValues {hirVar parents} {
     upvar 1 $hirVar hir
     return
 >>>>
+
+@@ dead-call-budget report a dead call of a trait-polymorphic function (an argument of type never, so no instance) as TRAIT-INSTANCE-BUDGET instead of keeping its arguments around the placeholder
+## hir/traits.tcl
+<<<<
+                            if {![dict exists $calls [list $caller $e]] && [DeadCall $view $e]} {
+====
+                            if {0} {
+>>>>
+
+@@ dead-call-drops-arguments replace a dead call of a trait-polymorphic function by the placeholder without its arguments, so the argument that never completes (a rejected static block's reified failure) no longer runs and the placeholder does
+## hir/resolve.tcl
+<<<<
+            SetField hir $e args [Sequence hir $argNodes $ctx]
+            return
+        }
+        set operation [lindex $action 1]
+====
+            SetField hir $e args {}
+            return
+        }
+        set operation [lindex $action 1]
+>>>>

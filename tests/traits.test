@@ -676,6 +676,97 @@ test trait-instance-budget-fallback {a trait-polymorphic function called with mo
     list [sourceAgree $source] [lsearch -all -inline -glob [functionNames $hir] tag*]
 } -result [list [list value "\[[join [lrepeat 20 {"t"}] {, }]\]"] tag<Person>]
 
+# A dead call of a trait-polymorphic function (COMPILER-BOTTLENECKS.md, 4.2):
+# mk() is `never` once its static block is rejected (it declares no result
+# type: a declared one would type its calls), so a call taking it as an
+# argument never reaches its callee and the semantic
+# layer requests no instance for it. The plan does not report
+# TRAIT-INSTANCE-BUDGET there (no budget is involved, and the call cannot
+# run): it keeps the arguments, which still run in order up to the one that
+# raises the reified CompilerError, and calls the placeholder of
+# never-executed code -- for a call with the view as that argument (dead1),
+# as another argument after one that runs (dead2: bump() runs before mk()
+# raises), a
+# method-syntax call (dead3), and a dead call in a clone's body (dead4: in
+# outer<Person>).
+set deadCalls "import compiler
+import mutable_array
+
+${prelude}context struct Counter:
+    a: MutableArray\[int\]
+
+fn bump(context c: Counter) -> int:
+    v = mutable_array::at(c.a, 0):
+        on IndexNotFound:
+            0
+    mutable_array::set(c.a, 0, v + 1):
+        on IndexNotFound:
+            unit
+    v + 1
+
+fn count(context c: Counter) -> int:
+    mutable_array::at(c.a, 0):
+        on IndexNotFound:
+            -1
+
+fn want_str(s: str) -> str:
+    s
+
+fn tagged(n: int, value: Named, extra: Person) -> str:
+    value.name()
+
+fn mk() errors compiler::CompilerError:
+    static compile:
+        Person {value: want_str(1)}
+
+fn outer(value: Named) -> str errors compiler::CompilerError:
+    tagged(1, value, mk())
+
+fn dead1() -> str errors compiler::CompilerError:
+    describe(mk())
+
+fn dead2() -> str errors compiler::CompilerError:
+    tagged(bump(), Person {value: \"p\"}, mk())
+
+fn dead3() -> str errors compiler::CompilerError:
+    mk().describe()
+
+fn dead4() -> str errors compiler::CompilerError:
+    outer(Person {value: \"o\"})
+
+with context Counter {a: mutable_array::create(1, 0)}
+r1 = dead1():
+    on compiler::CompilerError:
+        \"e1\"
+r2 = dead2():
+    on compiler::CompilerError:
+        \"e2\"
+c1 = count()
+r2b = dead2():
+    on compiler::CompilerError:
+        \"e2\"
+r3 = dead3():
+    on compiler::CompilerError:
+        \"e3\"
+r4 = dead4():
+    on compiler::CompilerError:
+        \"e4\"
+\[r1, r2, c1, r2b, count(), r3, r4, describe(Person {value: \"live\"})\]
+"
+
+test trait-dead-call-keeps-arguments {a dead call of a trait-polymorphic function compiles: no TRAIT-INSTANCE-BUDGET, its arguments still run up to the one that raises, each becomes a call of the placeholder with its arguments, and a function only dead calls reach (tagged) gets no clone -- on every backend} -body {
+    set hir [surface::compile $deadCalls -warnings off]
+    set placeholders {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "call" && [lindex [dict get $node target] 0] eq "native"
+                && [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name] eq "context#unreachable"} {
+            lappend placeholders [llength [dict get $node args]]
+        }
+    }
+    list [sourceAgree $deadCalls] [traitFree $hir] [lsort $placeholders] \
+        [lsort [lsearch -all -inline -regexp [functionNames $hir] {^(describe|tagged|outer)}]]
+} -cleanup {unset -nocomplain hir placeholders} -result {{value {["e1", "e2", 1, "e2", 2, "e3", "e4", "live"]}} 1 {1 1 3 3} {describe<Person> outer<Person>}}
+
 test trait-polymorphic-recursion-rejected {recursion between different witnesses' specializations is rejected} -body {
     set lib {other.bot {struct O:
     v: str

@@ -546,6 +546,70 @@ make().count
         [core::formatValue [core::evalProgram [hir::lower $h]]]
 } -result {1 0 1 3}
 
+test source-type-struct-registry-reclaimed-before-carriers {a refinement carrier is resolved against this compilation's types only: after a program declaring "struct Query", a program declaring "refined type Query = str", "refined type Encoded = Query" and a struct of its own compiles (Encoded's carrier is its own Query, never the earlier struct: hir::sourcetypes::Reset drops the previous compilation's structs before any declaration is resolved, COMPILER-BOTTLENECKS.md 4.1)} -body {
+    surface::compile {struct Query:
+    v: str
+
+Query {v: "a"}.v
+} a.bot
+    set h [surface::compile {refined type Query = str
+refined type Encoded = Query
+struct R:
+    x: int
+
+R {x: 2}.x
+} b.bot]
+    list [hir::sourceTypes $h] [core::formatValue [core::evalProgram [hir::lower $h]]]
+} -cleanup {unset -nocomplain h} -result {{{kind refined name Query carrier str owner {}} {kind refined name Encoded carrier {refined str Query} owner {}} {kind struct name R id R namespace {} opaque 0 fields {x int}}} 2}
+
+test source-type-struct-registry-isolation-kinds {a program declaring X as an enum, a refinement, an integer domain or a trait, naming X as a refinement carrier and declaring a struct, compiles to the same outcome on its own and after a program that declares "struct X" (the earlier struct once leaked into the carrier's resolution whenever the second program also declared a struct)} -body {
+    set first "struct X:\n    v: int\n\n1\n"
+    set outcomes {}
+    foreach {kind decl} {
+        enum    "enum X:\n    A, B\n"
+        refined "refined type X = str\n"
+        domain  "type X = Int in 0..9\n"
+        trait   "trait X:\n    fn size(x: X) -> int\n"
+    } {
+        set text "${decl}refined type Y = X\nstruct R:\n    x: int\n\n1\n"
+        set alone [catch {surface::compile $text p.bot -warnings off} aloneMessage]
+        surface::compile $first p.bot -warnings off
+        set after [catch {surface::compile $text p.bot -warnings off} afterMessage]
+        lappend outcomes $kind [expr {$alone == $after && $aloneMessage eq $afterMessage}] $after
+    }
+    set outcomes
+} -cleanup {unset -nocomplain first outcomes text alone after aloneMessage afterMessage} -result {enum 1 1 refined 1 0 domain 1 0 trait 1 1}
+
+test source-type-declarations-do-not-leak-forward {a program that names an error, integer domain, refinement, enum, trait or struct it does not declare is rejected as naming an unknown one right after a program that declares it: a frontend's program of its own reclaims every registry, also when it declares nothing (the error and source-type registries were once kept for it, so the use compiled against the earlier program's declaration)} -body {
+    set declaring {error Boom
+
+type Small = Int in 0..9
+refined type Mail = str
+enum Color:
+    Red, Green
+trait Named:
+    fn name(v: Named) -> str
+struct S:
+    v: int
+
+1
+}
+    set outcomes {}
+    foreach {what use} {
+        error   "fn f() -> int errors Boom:\n    fail Boom\n\nr = f():\n    on Boom:\n        1\nr\n"
+        domain  "fn f(x: Small) -> int:\n    x\n\nf(3)\n"
+        refined "fn f(x: Mail) -> str:\n    x\n\n1\n"
+        enum    "fn f(c: Color) -> int:\n    1\n\n1\n"
+        trait   "fn f(v: Named) -> int:\n    1\n\n1\n"
+        struct  "fn f(s: S) -> int:\n    1\n\n1\n"
+    } {
+        surface::compile $declaring d.bot -warnings off
+        set rejected [catch {surface::compile $use p.bot -warnings off} message]
+        lappend outcomes $what $rejected [regexp {unknown error "Boom"|unknown or invalid type} $message]
+    }
+    set outcomes
+} -cleanup {unset -nocomplain declaring outcomes what use rejected message} -result {error 1 1 domain 1 1 refined 1 1 enum 1 1 trait 1 1 struct 1 1}
+
 # ---------------------------------------------------------------------------
 # Module tests (items 108, 89-90)
 

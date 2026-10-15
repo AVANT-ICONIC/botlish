@@ -15,6 +15,11 @@ report: single Tcl 9.0.1 processes on a 4-core container, with up to four
 other jobs running. They are indicative, not a benchmark. Every other figure
 is quoted from the document named beside it.
 
+Since then the correctness defects of section 4 are fixed: 4.1, 4.2 and 4.4
+by the change that added this paragraph (each item says how, and which tests
+pin it), 4.3 by the C:plan port. The performance backlog of section 3 is
+unchanged.
+
 ## 1. Summary
 
 The front end is the cost. Running the tests costs almost nothing, and code
@@ -40,11 +45,12 @@ inefficiency is multiplied by the build count.
 | 13 | The erased-callable static walk runs two or three times per build | repeated work | about 3% of a front end | small |
 | 14 | Static-decision bookkeeping scales super-linearly in sites | O(S^2)-O(S^3) per round | under 1% today; 9.7% at 500 blocks | small to medium |
 
-Correctness defects found alongside (section 4):
+Correctness defects found alongside (section 4), all fixed now:
 
-- a struct declaration leaks from one compilation into the next in the same process (root cause and a minimal reproducer in 4.1);
-- a dead call of a trait-polymorphic function fails compilation with TRAIT-INSTANCE-BUDGET;
-- a deep semantic-instance request could be declined by rejecting another site; that one is fixed by the C:plan port.
+- a struct declaration leaked from one compilation into the next in the same process, and so did error and source-type declarations into a program declaring none (4.1; fixed);
+- a dead call of a trait-polymorphic function failed compilation with TRAIT-INSTANCE-BUDGET (4.2; fixed);
+- a deep semantic-instance request could be declined by rejecting another site (4.3; fixed by the C:plan port);
+- deep static call chains exceeded Tcl's recursion limit in the completion analysis (4.4; fixed).
 
 ## 2. Where the time goes
 
@@ -204,7 +210,7 @@ Correctness defects found alongside (section 4):
 - **Library modules.**
   - Every build re-resolves and re-analyses every imported module (`hir::BuildOnce`).
   - Cost: about 0.5 s per build for about 1,450 library expressions, about 165 s over the corpus's 329 builds. `lib/test.bot` alone is about 75 s.
-  - Reusing an unchanged module's analysis within one compilation needs compilation isolation first (4.1).
+  - Reusing an unchanged module's analysis within one compilation needs compilation isolation first. 4.1's leak is fixed, but the registries are still process-global and reset per compilation (SOURCE-DEFINED-INTEGER-DOMAINS.md, "Compilation isolation"), so reuse must not outlive the compilation that registered them.
 - **Method-call trials.**
   - 81 of the corpus's 328 builds are trials (`hir::DecideMethodCalls`). mutable-array.bot has 14 trial builds of its 20.
   - The remaining trials are ones the dependency analysis does not cheapen.
@@ -258,7 +264,7 @@ Batched decisions cost a few percent of a front end today. What remains:
 
 ## 4. Defects found on the way
 
-### 4.1 A declaration leaks from one compilation into the next
+### 4.1 A declaration leaks from one compilation into the next (fixed)
 
 *Measured here.* In one Tcl process, compile `tests/golden/affinity.bot`
 (which declares `struct Query`), then `tests/golden/refinements.bot` (which
@@ -298,13 +304,55 @@ The fix is to drop the previous registration at the top of
 `core::type`/`core::native` entries, rather than in `hir::structs::apply`.
 The fix also needs a regression test that compiles the pair in one process.
 
+**Fixed.** `hir::sourcetypes::Reset`, which `apply` calls before resolving
+any declaration, now also clears the struct registry (`hir::structs::Reset`).
+The HIR-text path (`hir::read`) was never affected: it reads resolved
+carriers. Evidence:
+
+- affinity.bot then refinements.bot in one process: both compile (11 s and
+  39 s).
+- A pairwise harness compiled every ordered pair of small programs declaring
+  `X` as a struct, enum, refinement, integer domain, trait or error, each
+  with an extra declaration (none, a struct, an enum, a refinement, a
+  refinement over `X`, a struct field of type `X`, or both of the last two),
+  comparing each second program's outcome with its outcome after the first.
+  Before the fix 28 pairs differed, every one a `struct X` followed by a
+  program naming `X` as a carrier and declaring a struct. After it, none.
+- `tests/source-types.test`: `source-type-struct-registry-reclaimed-before-carriers`
+  (the minimal pair) and `source-type-struct-registry-isolation-kinds` (the
+  four kinds of `X` a carrier can name, alone and after `struct X`). Both
+  fail without the fix.
+
+Two more declarations leaked forward the same way, into a program that
+declares none of its own (LARGE-SCALE-GOLDEN-MIGRATION.md, "Found, not fixed:
+compilation isolation"). After a program declaring `error Boom` or `type
+Small = Int in 0..9`, a program using `Boom` or `Small` without declaring it
+compiled against the earlier declaration. Both registries kept their
+contents for a compilation that brings no declarations, which is what core
+IR text needs (`hir::build` passes none, and its nodes may name the program
+it was lowered from). A frontend's program now resets them:
+`hir::BuildOnce` calls `hir::errordecls::Reset` when `-error-decls` is given
+and `hir::sourcetypes::Reset` when `-type-decls` is, as it already reset
+structs and enums. `source-type-declarations-do-not-leak-forward` pins all
+six kinds (error, integer domain, refinement, enum, trait, struct): each use
+is rejected as unknown right after a program that declares it. The error and
+source-type cases fail without the fix.
+
+What stays open is the rest of compilation isolation: the registries are
+still process-global, so the backends of an earlier HIR read whatever a
+later compilation registered (SOURCE-DEFINED-INTEGER-DOMAINS.md,
+"Compilation isolation"). One consequence: a program that declares no error
+now also clears an earlier program's errors, as one that declares no struct
+already cleared its structs, so an earlier HIR lowered after it finds
+neither.
+
 Why it matters beyond the failure:
 
 - Any tool that compiles several programs in one process can mis-compile, not only slow down: the warm runs of `bench/golden-suites.tcl -warm N`, the audits' and fuzzers' loops, and `tests/golden.test`'s runner.
 - It is a concrete instance of LARGE-SCALE-GOLDEN-MIGRATION.md's recommendation 2, compilation isolation, which is "plausibly the cause" of the unexplained process-history slowdown: pass 2 of the golden suites takes 2,440 s against 2,055 s for pass 1 and 1,518 s cold. SOURCE-DEFINED-INTEGER-DOMAINS.md, "Compilation isolation", documents the wider gap.
 - Item 3.10's module reuse needs isolation first.
 
-### 4.2 A dead call of a trait-polymorphic function fails compilation
+### 4.2 A dead call of a trait-polymorphic function fails compilation (fixed)
 
 ```
 fn mk() errors compiler::CompilerError:
@@ -323,7 +371,33 @@ fn use() -> int errors compiler::CompilerError:
 - **Correct fixes.**
   - A plan action that keeps the arguments' evaluation and replaces only the call itself, for example a sequence of the arguments followed by `context#unreachable()`.
   - Or request an instance even for a dead call when the callee is trait-polymorphic.
-- **Coupling.** `tests/static-economics.test`'s `se-equal-plan-unplanned` currently pins the gate on exactly this diagnostic: a fix changes that test's last outcome to `accepted`, and the test then needs another call without an instance. Run the trait harnesses (`audit/traits/tools/{fuzz,mutate}.tcl`) too.
+- **Coupling.** `tests/static-economics.test`'s `se-equal-plan-unplanned` pinned the gate on exactly this diagnostic: a fix changes that test's last outcome to `accepted`, and the test then needs another call without an instance. Run the trait harnesses (`audit/traits/tools/{fuzz,mutate}.tcl`) too.
+
+**Fixed**, by the first of the correct fixes:
+
+- The plan gives a dead call with no instance the `dead` action (`hir::traits::DeadCall`: the callee or an argument has type `never`).
+- Build 2 resolves it to a call of `context#unreachable` with the call's own arguments, the receiver of a method call first (`hir::resolve::ResolvePlannedCall`). The arguments run in order up to the one that raises.
+- The placeholder now takes any number of arguments (`-arity *`) and moves an affine one as the replaced call would have (`-ownership {move}`). Native lowering evaluates its arguments before the trap. The Tcl backends needed no change.
+- A function that only dead calls reach gets no clone.
+
+The example above now yields -1 on interp, compile, cranelift, cranelift-generic and as a standalone executable, also under `BOTLISH_NATIVE_GC_STRESS=1`. So do these variants:
+
+- the never argument in a non-trait parameter;
+- method syntax on a never receiver;
+- a dead call inside a clone;
+- an argument with a side effect before the never one (it runs once per call);
+- a MutableArray argument;
+- a coroutine handle argument.
+
+The affine analogue (AFFINE-INSTANCE-BUDGET) does not arise: a generic function becomes a specialization candidate only through an instance, and a dead call requests none.
+
+Tests and mutants:
+
+- `tests/traits.test`'s `trait-dead-call-keeps-arguments` covers the variants on all four backends. It fails without the fix.
+- New trait mutants `dead-call-budget` and `dead-call-drops-arguments`; that test kills both.
+- `se-equal-plan-unplanned` now pins `use` accepted, the batched decisions equal to the sequential ones, no misprediction.
+- `hir::staticdeps::Unplanned` still counts a dead call as a consumer of the plan's gate. That is an over-approximation, and costs the test nothing (3 rounds / 4 builds either way).
+- The static-decision mutant `plan-unplanned-ignored` was removed. It ignored what is now only a nesting decline, which no deterministic test builds (STATIC-DECISION-ECONOMICS.md, "Trait-polymorphic calls with their instances").
 
 ### 4.3 A rejection could make a cached deep request the first one, which the nesting limit then declines (fixed)
 
@@ -343,11 +417,13 @@ A related gap stays open. A trait-polymorphic or affine request past the
 per-block or total budget is re-keyed and granted without the nesting check,
 so nothing bounds those requests' count or depth. That is item 3.2. Chains of
 160 functions still compile at Tcl's default recursion limit, but the limit is
-not enforced.
+not enforced. Since 4.4's fix the front end runs with a recursion limit of at
+least 100000, so the depth such a chain would need to fail is far beyond
+what item 3.2's growth lets compile at all.
 
-### 4.4 Deep static call chains exceed Tcl's recursion limit
+### 4.4 Deep static call chains exceed Tcl's recursion limit (fixed)
 
-A known issue, still open. `hir::completions::EffectiveFacts` has a cycle
+A known issue, open until this fix. `hir::completions::EffectiveFacts` has a cycle
 guard and an analysis budget but no depth bound, and no compiler entry point
 raises `interp recursionlimit`. A 105-function chain compiles and a
 120-function one does not (RANGE-FIXPOINT-SCALING.md section 6); item 3.7's
@@ -355,14 +431,23 @@ left-deep chains are another source of depth. Fix with a depth bound that
 falls back to the declared contract, plus a raised limit or an iterative
 walk. The completion verdicts feed NIR, so this needs its own audit.
 
+**Fixed**, with a depth bound and a scoped raised limit
+(RANGE-FIXPOINT-SCALING.md section 6, "Fixed since"):
+
+- `hir::completions::maxDepth` (1024 nested analyses). Past it, `EffectiveFacts` returns the declared-contract fallback a cycle gets. It counts analyses, not frames, so verdicts do not depend on the caller's stack or limit. (`maxAnalyses` never bounded depth: every nested walk starts its own count.)
+- `hir::Deep` raises the recursion limit to at least 100000 around `hir::buildSyntax`, `hir::check` (`native::prepareHir` calls it directly) and the warning passes, which repeat the completion walk (`hir::completions::reachedExprs`). It restores the caller's limit afterwards. A program the Tcl backends then run keeps the caller's limit: `tests/compiler-opt.test`'s opt-tail-2 runs at 1000 by design.
+- The audit: the deepest nesting over the 88 golden suites and the 41 example and benchmark programs is 12, so no verdict and no NIR of theirs changes.
+- At Tcl's default limit, the 120-, 200- and 400-function chains now compile, and cranelift runs the 400-function one. The interpreter still exceeds the default limit running it: that is the program's own recursion on the reference interpreter, not the compiler's.
+- Tests: `tests/range-fixpoint-scaling.test` 3.1-3.3. Each fails with its part of the fix removed.
+
 ## 5. Suggested order
 
 1. **Exact, small fixes with large measured effects:** 3.4 (temporaries once), 3.3 (one walk), 3.5 (hygiene index), 3.6 (memoized contexts walk), 3.7 (memoized conjuncts), 3.12 (statics once). Each changes no output: validate by byte-identical final HIR on the corpus, plus the harnesses AGENTS.md names for the area.
 2. **3.1**, from its prototype; then **3.2**, which multiplies with it.
-3. **4.1 and 4.2**, before anything that compiles many programs per process or reuses analyses across builds.
+3. ~~**4.1 and 4.2**, before anything that compiles many programs per process or reuses analyses across builds.~~ Done.
 4. **3.8 and 3.9**, with the static-decision harnesses: both change what a build's HIR holds.
 5. **3.10** (method trials, then library reuse once 4.1 is fixed) and **3.13**'s bookkeeping.
-6. **3.11**, the largest; and **4.4**, with its own audit.
+6. **3.11**, the largest. (**4.4** is done, with its audit.)
 
 CI has no compile-time gate, only build-count guards: `tests/static-economics.test`, `golden-static-economics`, `tests/range-fixpoint-scaling.test` and `tests/hir-specialize.test`. A wall-time job over a fixed corpus (`bench/golden-suites.tcl -backends interp`) would catch regressions in the items above.
 

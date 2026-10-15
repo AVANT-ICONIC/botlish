@@ -153,9 +153,13 @@ proc hir::warnings::collect {hir} {
     variable passes
     variable stats
     set warnings {}
-    dict for {code pass} $passes {
-        dict incr stats $code
-        lappend warnings {*}[$pass $hir]
+    # (The completion walk the passes read, hir::completions::reachedExprs,
+    # nests as deep as the front end's: under its recursion floor.)
+    hir::Deep {
+        dict for {code pass} $passes {
+            dict incr stats $code
+            lappend warnings {*}[$pass $hir]
+        }
     }
     return [Sort $hir $warnings]
 }

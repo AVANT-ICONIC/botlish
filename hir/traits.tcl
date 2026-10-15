@@ -1432,7 +1432,8 @@ proc hir::traits::ResultOverride {ctx node head} {
 }
 
 # How the planned build resolves call syntax NODE in CTX: {redirect KEY},
-# {trait RECORD}, {method IDENT}, `field` (a field-value call: no method
+# {trait RECORD}, {method IDENT}, {context ...}, {unreachable} or {dead}
+# (hir::resolve::ResolvePlannedCall), `field` (a field-value call: no method
 # candidates), or "" (ordinarily).
 proc hir::traits::CallAction {ctx node} {
     variable plan
@@ -1626,6 +1627,20 @@ proc hir::traits::UsesCoroutines {nodes modules} {
 proc hir::traits::AffineArgumentsUntyped {view e block} {
     foreach arg [dict get $view exprs $e args] d [dict get $view exprs $block declaredParamTypes] {
         if {$arg ne "" && $d eq {} && [hir::types::IsAffine [hir::typeOf $view $arg]]} {
+            return 1
+        }
+    }
+    return 0
+}
+
+# 1 if call E (in VIEW) is dead: its callee or an argument has type `never`,
+# so the call never happens (hir::types::Call, which requests no semantic
+# instance for it). Such an argument comes from a rejected static block's
+# reified failure: any other always-failing call is a KNOWN-ERROR first.
+proc hir::traits::DeadCall {view e} {
+    set node [dict get $view exprs $e]
+    foreach child [concat [list [dict get $node callee]] [dict get $node args]] {
+        if {$child ne "" && [hir::typeOf $view $child] eq "never"} {
             return 1
         }
     }
@@ -1923,6 +1938,18 @@ proc hir::traits::Plan {hir syntax} {
                             }
                         }
                         if {[dict get $fn trait]} {
+                            if {![dict exists $calls [list $caller $e]] && [DeadCall $view $e]} {
+                                # A dead call (an argument of type `never`,
+                                # which hir::types::Call requests no instance
+                                # for): it never reaches the callee, but its
+                                # arguments still run up to the one that
+                                # never completes -- the error a rejected
+                                # static block reifies, say. It keeps them,
+                                # calling the placeholder of never-executed
+                                # code instead of a clone (ResolvePlannedCall).
+                                SetAction actions diagnostics $ckey $sid [list dead] $e
+                                continue
+                            }
                             if {![dict exists $calls [list $caller $e]]} {
                                 lappend diagnostics [list TRAIT-INSTANCE-BUDGET [format {this call of the trait-polymorphic function %s has no static specialization (the compiler's semantic-instance budget declined it), and there is no runtime trait dispatch to fall back to} \
                                     [dict get $polys $tb name]] $e]

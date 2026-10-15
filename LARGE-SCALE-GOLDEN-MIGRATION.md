@@ -622,7 +622,11 @@ runner runs each suite right after compiling it, and every suite also passes
 alone in its own process (`check.tcl`), so no golden result depends on the
 leak; Tcl tests that compile several programs per process could pass for the
 wrong reason. It is not a migration blocker and is not fixed here
-([Recommendations](#recommendations), 2).
+([Recommendations](#recommendations), 2). (The forward leaks are fixed since:
+a frontend's program resets the error and source-type registries even when it
+declares nothing, and a program's refinement carriers no longer resolve an
+earlier program's structs -- COMPILER-BOTTLENECKS.md, 4.1. The backends of an
+earlier HIR still read the registries a later compilation filled.)
 
 **Found, not fixed: a `static compile:` verdict that depends on layout** (the
 static-decision fuzzer's seeds 17 and 41 on the final tree; the same on the

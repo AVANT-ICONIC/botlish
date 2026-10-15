@@ -340,7 +340,12 @@ again from the same syntax under a plan (build 2, `hir::traits::Plan`):
   which verification checked); build 2 compiles it to a call of the internal
   root native `context#unreachable()`, typed `never` (`-result-shape
   {never}`). The Tcl backends would raise if it ran; native lowering emits an
-  `unreachable` trap. It is not a context lookup and has no arguments.
+  `unreachable` trap. It is not a context lookup and has no arguments here.
+  (The trait plan also replaces a *dead* call of a trait-polymorphic
+  function -- an argument of type `never` -- by it, and there it keeps the
+  call's arguments, which run first: it accepts any number, `-arity *`, and
+  moves an affine one as the call would have, `-ownership {move}`. TRAITS.md,
+  "Dead calls".)
 
 The monomorphized program -- the one every backend compiles -- contains no
 context-trait operation, binding, load or type (`ct-mono-hir`,
@@ -351,8 +356,8 @@ source program stays available as `traitSource` (what warnings read).
 the Tcl compiler run the core IR of the monomorphized program unchanged;
 native lowering compiles it unchanged. The one backend touch is the
 placeholder of dead code: `native/lower.tcl` lowers `context#unreachable` to
-`unreachable` (core/contexts.tcl registers it like the two context
-operations; hir/lower.tcl needed nothing).
+`unreachable`, after its arguments if it has any (core/contexts.tcl registers
+it like the two context operations; hir/lower.tcl needed nothing).
 
 **Native context area.** Unchanged: the installed `LinuxIO` occupies its
 ordinary slot; a context trait never gets a slot, tag, presence word or table

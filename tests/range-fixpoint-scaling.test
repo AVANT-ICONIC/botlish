@@ -97,4 +97,79 @@ test range-fixpoint-scaling-2.2 {narrowing a 40-function chain costs a constant 
     expr {$walks <= 12 * $instances ? "ok" : "$walks walks for $instances instances"}
 } -result ok
 
+# ---------------------------------------------------------------------------
+# Deep static call chains (RANGE-FIXPOINT-SCALING.md section 6,
+# COMPILER-BOTTLENECKS.md 4.4). The completion analysis proves a call's
+# completions by analyzing its exact callee's body under the call's facts,
+# which nests one analysis per call of a static chain. It is bounded by
+# hir::completions::maxDepth (past it a call gets its callee's declared
+# contract), and the front end runs under a recursion floor (hir::Deep) the
+# bound fits under, so the depth no longer runs into Tcl's recursion limit:
+# at the default of 1000 a chain of about 110 functions did.
+
+# g0 .. gN: g0 raises Neg for a negative argument, every other gi passes its
+# argument on, all declaring Neg; top() calls gN(5) with no handler, which is
+# legal only because the analysis proves, through the whole chain, that
+# g0(5) cannot raise Neg. With REPEAT, top(b) also returns 1 at two exits
+# around that call: a SAME-RETURN-VALUE candidate, whose warning pass walks
+# top's body again (hir::completions::reachedExprs), the chain included.
+proc proofChain {n {repeat 0}} {
+    set lines [list "error Neg" "fn g0(x: int) -> int errors Neg:" "    if x < 0:" "        fail Neg" "    x"]
+    for {set i 1} {$i <= $n} {incr i} {
+        lappend lines "fn g$i\(x: int) -> int errors Neg:" "    g[expr {$i - 1}](x)"
+    }
+    if {$repeat} {
+        lappend lines "fn top(b: bool) -> int:" "    if b:" "        return 1" "    g$n\(5)" "    1" "top(false)"
+    } else {
+        lappend lines "fn top() -> int:" "    g$n\(5)" "top()"
+    }
+    return [join $lines \n]
+}
+
+# SCRIPT's result, run in the caller's scope at Tcl's default recursion limit
+# (this file raises it for itself), and the limit after it.
+proc atDefaultLimit {script} {
+    set saved [interp recursionlimit {}]
+    interp recursionlimit {} 1000
+    try {
+        set result [uplevel 1 $script]
+        return [list $result [interp recursionlimit {}]]
+    } finally {
+        interp recursionlimit {} $saved
+    }
+}
+
+test range-fixpoint-scaling-3.1 {at Tcl's default recursion limit, a 250-function chain whose top call is legal only by the proof through all of it compiles, its warnings are collected (SAME-RETURN-VALUE's pass repeats the completion walk of top's body), and the caller's limit is unchanged afterwards; the program then runs (under this file's limit: the reference interpreter's own calls nest as deep as the program's)} -body {
+    lassign [atDefaultLimit {
+        set hir [surface::compile [proofChain 250 1] t.bot -warnings default -warning-channel ""]
+        list [llength [hir::diagnostics $hir]] [lmap w [dict get $hir warnings] {dict get $w code}]
+    }] compiled limit
+    list $compiled $limit [core::formatValue [core::evalProgram [hir::lower $hir]]]
+} -cleanup {unset -nocomplain hir compiled limit} -result {{0 SAME-RETURN-VALUE} 1000 1}
+
+test range-fixpoint-scaling-3.2 {a call analyzed past hir::completions::maxDepth nested analyses gets its callee's declared contract, as a recursion cycle does -- never a proof the analysis did not make: top()'s unhandled call of g5 (line 17) is legal with the bound at its default; with the bound at 4 it may produce Neg, which top() neither handles nor declares, and so may the program's call of top() (line 18), whose analysis loses the same proof} -body {
+    set saved $hir::completions::maxDepth
+    try {
+        set legal [hir::diagnostics [surface::compile [proofChain 5] t.bot -strict 0 -warnings off]]
+        set hir::completions::maxDepth 4
+        set hir [surface::compile [proofChain 5] t.bot -strict 0 -warnings off]
+    } finally {
+        set hir::completions::maxDepth $saved
+    }
+    set bounded [lmap d [hir::diagnostics $hir] {
+        list [dict get $d kind] [dict get [hir::get $hir [dict get $d expr] origin] line] \
+            [string match {this call may produce the declared error "Neg"*} [dict get $d message]]
+    }]
+    list $legal $bounded
+} -cleanup {unset -nocomplain hir} -result {{} {{UNHANDLED-ERROR 18 1} {UNHANDLED-ERROR 17 1}}}
+
+test range-fixpoint-scaling-3.3 {a chain deeper than the bound compiles at Tcl's default recursion limit too: the walk stops nesting at maxDepth (1024), and top()'s call is then charged g1030's contract -- the diagnostic is the compiler's, raised through the front end with the caller's limit restored, never Tcl's "too many nested evaluations"} -body {
+    atDefaultLimit {
+        if {![catch {surface::compile [proofChain 1030] t.bot -warnings off} message options]} {
+            return compiled
+        }
+        list [dict get $options -errorcode] [string match {*may produce the declared error "Neg"*} $message]
+    }
+} -cleanup {unset -nocomplain message options} -result {{{CORE SEMANTIC UNHANDLED-ERROR} 1} 1000}
+
 cleanupTests

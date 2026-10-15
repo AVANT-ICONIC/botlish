@@ -223,8 +223,12 @@
 #                       can report at -- a trait operation; a call of a trait-
 #                       polymorphic function that a context the plan walks
 #                       has no instance for (Unplanned: TRAIT-INSTANCE-BUDGET
-#                       is its one diagnostic there); a call giving an untyped
-#                       parameter an argument that is or may become affine
+#                       is its one diagnostic there, and only for a call that
+#                       is not dead -- a dead one becomes the placeholder of
+#                       never-executed code, which Unplanned still counts:
+#                       sound, if not as tight as it could be); a call
+#                       giving an untyped parameter an argument that is or
+#                       may become affine
 #                       (AFFINE-GENERIC-NESTED-UNSUPPORTED, AFFINE-INSTANCE-
 #                       BUDGET; the one diagnostic of a call of a function
 #                       requiring a context trait) -- in a program that can
@@ -1525,7 +1529,9 @@ proc hir::staticdeps::PlanGate {hir state} {
 # function requiring only a context trait, analyzed generically) and has no
 # generic instance, or E is in a trait-polymorphic function -- top-level only
 # (TRAIT-NESTED-POLYMORPHIC) -- some instance of which has none for it.
-# (Instances the plan never reaches are counted too: an over-approximation.)
+# (Instances the plan never reaches are counted too, and so is a dead call --
+# an argument of type `never` --, at which the plan reports nothing: an
+# over-approximation.)
 proc hir::staticdeps::Unplanned {hir regionOf e} {
     if {![dict exists $hir semantic calls]} {
         return 1
