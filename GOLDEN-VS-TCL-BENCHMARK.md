@@ -52,7 +52,8 @@ on a 4-core cloud container.
   experiment injected at load time, not a fix) **halves the warm run** (CPU
   1,460 s to 696 s; the `compile` backend's runs from 554 s to 29 s) and cuts
   the run without the cache by 44%. With both, the golden corpus on all four
-  backends costs about one Tcl pass (696 against 643 CPU s).
+  backends costs about one Tcl pass (696 against 643 CPU s). Since fixed
+  (84dcc6a), with the same savings: see "After the temporaries fix".
 * Two smaller effects:
   - **Process history.** The backends' Tcl work runs 1.4 to 1.7 times slower in
     the process that has just run the front end than in a fresh process that
