@@ -8,9 +8,9 @@ same NIR, the same outcome on every backend. No front-end work is repeated.
 It serves two purposes:
 
 * **Cross-process caching of the front end** (short term). The front end
-  dominates the cost of every compilation, at 0.5-9 s per build of a golden
-  suite. A cache keyed by the program and the compiler can now skip it in a
-  later process.
+  dominates the cost of every compilation: 1-39 s for each of nine golden
+  suites measured. A cache keyed by the program and the front end can now
+  skip it in a later process, for 15-90 ms.
 * **A front end written in Botlish** (medium term). Such a front end would
   produce this format, and the existing backends would consume it.
   [Towards a front end in Botlish](#towards-a-front-end-in-botlish) says what
@@ -209,9 +209,10 @@ tclsh9.0 tests/golden/run.tcl tests/golden/traits-path.bot
   end's HIR. An unwritable directory just isn't written. An entry is written
   under a private name and renamed into place, so a concurrent reader sees
   all of it or none.
-* **Growth.** Entries are about twice the interchange text, because they keep
-  `traitSource` (1.5 MB for traits-path.bot). Nothing is evicted: entries of
-  an older front end stay until the directory is cleared.
+* **Growth.** An entry keeps `traitSource`, so a trait program's is about
+  twice its interchange text: 1.5 MB for traits-path.bot, 5 MB for
+  contexts.bot. Nothing is evicted: entries of an older front end stay until
+  the directory is cleared.
 * **What it saves.** The front end. See [Cost](#cost).
 
 ## Tests and audits
@@ -274,17 +275,43 @@ tclsh9.0 tests/golden/run.tcl tests/golden/traits-path.bot
 
 ## Cost
 
-Measured on traits-path.bot: the HIR is 1.45 million characters, half of it
-`traitSource`.
+`bench/hir-cache.tcl` measures, for each of nine golden suites in one
+process:
 
-| Step | Time |
-|---|---|
-| `fingerprint` (once per process) | 3 ms |
-| `encode` (without `traitSource`) | 16 ms |
-| `decode`, activation included | 17 ms |
-| the build it replaces | about 2 s |
+- the front end;
+- encoding the HIR, without and with `traitSource`;
+- decoding it, activation included;
+- a compilation through an empty cache (the build plus keeping the entry);
+- a cache hit (reading and checking the entry, then decoding it).
 
-The text is 725 KB without `traitSource`.
+Each time is the best of 3, in ms.
+
+| suite | front end | encode | encode, with `traitSource` | decode | through an empty cache | cache hit | text KB | entry KB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| traits-path.bot | 1139 | 5 | 4 | 5 | 1360 | 25 | 734 | 1521 |
+| harness.bot | 1546 | 4 | 2 | 8 | 1527 | 15 | 1015 | 1074 |
+| contexts.bot | 18677 | 10 | 20 | 18 | 24365 | 88 | 2448 | 5042 |
+| affinity.bot | 15336 | 8 | 8 | 16 | 17312 | 68 | 1995 | 4007 |
+| coroutines.bot | 26543 | 11 | 11 | 20 | 25900 | 88 | 2449 | 4992 |
+| errors.bot | 5560 | 7 | 4 | 11 | 5041 | 24 | 1303 | 1381 |
+| representation.bot | 4459 | 5 | 2 | 8 | 3819 | 17 | 1166 | 1235 |
+| declared-errors.bot | 38911 | 15 | 7 | 34 | 41546 | 50 | 2925 | 3081 |
+| ownership.bot | 26124 | 7 | 7 | 12 | 23971 | 42 | 1535 | 3112 |
+
+* **Totals.** The front end took 138.3 s in all and the cache hits 0.42 s,
+  about 330 times less. The fingerprint costs 4 ms once per process.
+* **What a hit costs.** It is mostly reading and parsing the entry, which
+  grows with the HIR. Encoding and decoding cost a few milliseconds more.
+* **The cost of keeping an entry** is within the front end's run-to-run
+  noise: the "through an empty cache" column is sometimes below the front
+  end's own.
+* **The front end's times** are for a whole suite. It includes the several
+  builds that deciding a suite's `static compile:` blocks takes, so a single
+  build is cheaper.
+* **Measurement conditions.** The traits-path.bot, harness.bot and
+  contexts.bot rows were taken while another validation ran. Fresh-process
+  builds on an idle machine took 1.6, 19.2 and 30.9 s for traits-path.bot,
+  contexts.bot and declared-errors.bot.
 
 ## Towards a front end in Botlish
 

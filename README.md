@@ -86,6 +86,9 @@ tclsh9.0 tests/native-coverage.tcl             # test suite on cranelift, classi
 tclsh9.0 main.tcl -backend cranelift FILE.bot  # run natively
 tclsh9.0 main.tcl -emit-native-executable FILE.bot  # compile to ./FILE (Linux x86_64 glibc)
 tclsh9.0 main.tcl -emit-nir -emit-clif FILE.bot   # show NIR, then Cranelift IR, of every function
+tclsh9.0 main.tcl -emit-hir-interchange FILE.bot   # write the analyzed HIR as FILE.hirx (HIR-INTERCHANGE.md)
+tclsh9.0 main.tcl -backend cranelift FILE.hirx     # run it with no front end (same front end only)
+BOTLISH_HIR_CACHE=DIR tclsh9.0 main.tcl FILE.bot   # keep and reuse the front end's HIR across runs
 CORE_BACKEND=compile tclsh9.0 tests/all.tcl    # test suite, one backend
 tclsh9.0 main.tcl                              # run all examples (interp)
 tclsh9.0 main.tcl -backend compile -code FILE.ir   # compile, show generated Tcl, run
