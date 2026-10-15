@@ -636,4 +636,10 @@ test af-hir-affinity {the central affinity query: a coroutine is affine, a struc
         [hir::types::Affinity [hir::types::MakeFn [list $c] int {}]]
 } -cleanup {unset -nocomplain c} -result {affine affine affine affine unrestricted unrestricted unrestricted unrestricted}
 
+test af-descriptor-exception-safe {hir::affine::Descriptor pops the struct it is visiting when looking up the struct's layout fails: the id was pushed outside the try, so after one such failure every later descriptor of that struct, in any later compilation of the process, was empty -- its coroutines silently never released} -body {
+    set before $::hir::affine::descriptorVisiting
+    set failed [catch {hir::affine::Descriptor {} {nstruct NoSuchStruct}}]
+    list $failed $before $::hir::affine::descriptorVisiting
+} -cleanup {unset -nocomplain before failed} -result {1 {} {}}
+
 cleanupTests

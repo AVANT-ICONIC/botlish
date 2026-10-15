@@ -1891,11 +1891,14 @@ proc hir::affine::Descriptor {hir type {exclude {}}} {
             }
             lappend descriptorVisiting $id
         }
-        set layout [hir::types::StructLayout $type]
         set parts {}
         set n 0
-        set slot [llength $layout]
         try {
+            # (Inside the try: an error in the layout lookup must pop the id
+            # too, or every later descriptor of this struct, in any later
+            # compilation, would be empty -- its coroutines never released.)
+            set layout [hir::types::StructLayout $type]
+            set slot [llength $layout]
             foreach name [lreverse $layout] {
                 incr slot -1
                 if {$name in $exclude} continue
