@@ -3692,9 +3692,15 @@ mod tests {
             (8, false, BigInt::from(0), vec![0; 8]),
         ];
         for (width, signed, n, bytes) in cases {
+            // Rooted (as compiled code's stack maps root operands) before the
+            // next allocation, which may collect (always, under
+            // BOTLISH_NATIVE_GC_STRESS=1).
+            vm.temp_roots.clear();
             let s = rt_bytes_zeroed(p, make_small(12));
+            vm.temp_roots.push(s);
             assert_eq!(bytes_of(s), &[0u8; 12], "byteszeroed is all zero");
             let v = vm.new_big(n.clone());
+            vm.temp_roots.push(v);
             assert_eq!(rt_bin_store(p, s, make_small(3), enc(*width, *signed), v), UNIT);
             let mut expected = vec![0u8; 12];
             expected[3..3 + *width as usize].copy_from_slice(bytes);
@@ -3708,7 +3714,10 @@ mod tests {
     fn bin_store_never_truncates_and_ops_check_their_bounds() {
         let mut vm = vm();
         let p: *mut Vm = &mut *vm;
+        // Every storage is rooted before the next allocation (BigInts below),
+        // which may collect (always, under BOTLISH_NATIVE_GC_STRESS=1).
         let s = rt_bytes_zeroed(p, make_small(4));
+        vm.temp_roots.push(s);
         // 256 is not an unsigned byte, -1 not an unsigned value at all, 128 not
         // a signed byte: RANGE, nothing written.
         for (value, signed) in [(256, false), (-1, false), (128, true)] {
@@ -3718,6 +3727,7 @@ mod tests {
         assert_eq!(bytes_of(s), &[0u8; 4]);
         // BigInts just outside the 8-byte encodings, and far beyond i128.
         let wide = rt_bytes_zeroed(p, make_small(8));
+        vm.temp_roots.push(wide);
         for (n, signed) in [
             (BigInt::from(u64::MAX) + 1, false),
             (BigInt::from(i64::MIN) - 1, true),
