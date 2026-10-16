@@ -201,6 +201,13 @@ proc hir::escape::Classify {hir instance arity e {structOpts {}}} {
             # result register as the field; LINUX-X86-64-SYSCALL.md).
             return [SyscallResult $hir $e $structOpts]
         }
+        if {[hir::layouts::RoleOf [hir::layouts::Role $name] op] eq "parse"} {
+            # binary::parse (BINARY-LAYOUT.md) builds its LayoutStruct from
+            # the field registers its loads produce, exactly as a struct
+            # literal is built (native/lower.tcl's LayoutCall hands them
+            # back as the fields).
+            return [LayoutParseResult $hir $e $structOpts]
+        }
         if {$name ne "list"} {
             return ""
         }
@@ -290,6 +297,22 @@ proc hir::escape::SyscallResult {hir e structOpts} {
         return ""
     }
     return [list local [list 1 [list $id $layout]] {}]
+}
+
+# binary::parse call E's result (BINARY-LAYOUT.md) as a recognized
+# construction: {local {N {ID LAYOUT}} {}} for its LayoutStruct type -- the
+# fields its loads produce (a nested layout's an object built from its own
+# loads) -- "" otherwise.
+proc hir::escape::LayoutParseResult {hir e structOpts} {
+    if {![StructEnabled $structOpts]} {
+        return ""
+    }
+    set type [hir::typeOf $hir $e]
+    if {[hir::layouts::OfType $type] eq ""} {
+        return ""
+    }
+    set layout [hir::types::StructLayout $type]
+    return [list local [list [llength $layout] [list [lindex $type 1] $layout]] {}]
 }
 
 # The register field expressions of linux::abi::syscall call E (VIEW) whose
@@ -765,6 +788,10 @@ proc hir::escape::RegionInfo {hir spec id} {
     # stores its leaves into the context's fixed slot, reading its fields --
     # a structural use whatever the struct's width.
     set ctxUse [dict create]
+    # The value binary::emit writes (BINARY-LAYOUT.md) -> 1: native/lower.tcl's
+    # LayoutCall stores its leaves into the emitted bytes, reading its fields
+    # -- a structural use, like a context installation.
+    set leafUse [dict create]
     foreach e $exprs {
         switch -- [hir::kind $view $e] {
             block {
@@ -801,6 +828,19 @@ proc hir::escape::RegionInfo {hir spec id} {
                 if {[hir::contexts::isInstall $view $e] && [llength $args] == 1} {
                     dict set ctxUse [lindex $args 0] 1
                 }
+                if {$targetKind eq "native"} {
+                    set input [hir::layouts::RoleOf [hir::layouts::Role [dict get [hir::symbol $view $target] name]] input]
+                    if {$input ne "" && $input < [llength $args]} {
+                        # binary::parse's abi::bytes::Bytes is read only for
+                        # its storage field (native/lower.tcl's StorageOf),
+                        # like the address bridge's.
+                        dict set wordUse [lindex $args $input] 1
+                    }
+                    set role [hir::layouts::Role [dict get [hir::symbol $view $target] name]]
+                    if {[hir::layouts::RoleOf $role op] eq "emit" && [llength $args] == 2} {
+                        dict set leafUse [lindex $args 0] 1
+                    }
+                }
                 if {$targetKind eq "native" && [core::bytestore::isBridge [dict get [hir::symbol $view $target] name]]
                         && [llength $args] == 1} {
                     # The address bridge's abi::bytes::Bytes argument is read only for
@@ -827,7 +867,7 @@ proc hir::escape::RegionInfo {hir spec id} {
     return [dict create view $view instance $instance region $region exprs $exprs \
         trailing $trailing captured $captured refsByBinding $refsByBinding \
         listGetByArg $listGetByArg argPos $argPos projByRecv $projByRecv \
-        bindValue $bindValue wordUse $wordUse ctxUse $ctxUse parent $parent loopOf $loopOf]
+        bindValue $bindValue wordUse $wordUse ctxUse $ctxUse leafUse $leafUse parent $parent loopOf $loopOf]
 }
 
 # {PARENT LOOPOF} of the region whose top-level body is TOPBODY (VIEW): PARENT
@@ -1283,6 +1323,12 @@ proc hir::escape::UseVerdict {candidates regions aliasOf id b desc isParam bindE
         }
         if {[dict exists [dict get $info ctxUse] $r]} {
             # A context installation: stores the fields (CONTEXTS.md).
+            incr structural
+            continue
+        }
+        if {[dict exists [dict get $info leafUse] $r]} {
+            # binary::emit's value: its fields are written to the emitted
+            # bytes (BINARY-LAYOUT.md).
             incr structural
             continue
         }

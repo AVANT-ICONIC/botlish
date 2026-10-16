@@ -1,0 +1,625 @@
+# binary-layout.bot -- fixed binary layouts (BINARY-LAYOUT.md): the source-
+# level specification of
+#
+#   * LayoutStruct[L] as consuming code sees it: L's fields with their
+#     declared types, projection, destructuring, equality by fields, distinct
+#     types for distinct layouts, a value like any other;
+#   * the construction LayoutStruct[L] {...}: complete, exact, every field
+#     proven in its domain (no truncation, no conversion);
+#   * imprinting and emission: explicit bytes in both directions, the
+#     round-trip theorem, zero padding that imprinting ignores, determinism,
+#     nested layouts by value, the exact-length rule and its declared error;
+#   * the static operands: a layout is evidence named at the call, never a
+#     value, a type or a computed operand.
+#
+# Ported from tests/binary-layout.test, which stays authoritative
+# (audit/golden/migration/fragments/binary-layout.tsv maps every test; what
+# only Tcl observes -- declaration-time rejections (a layout declaration is
+# top level only, so never a static compile block's), the AST, HIR, the
+# generated Tcl, NIR, allocations, isolation, interchange, executables and GC
+# stress -- stays there).
+#
+# Imports: compiler and test (the framework); abi::bytes, binary and byte
+# (the programs); immutable_set, mutable_array, mutable_vector (consumers).
+import abi
+import abi::bytes
+import binary
+import byte
+import compiler
+import immutable_set
+import mutable_array
+import mutable_vector
+import test
+
+# The representative layouts (the Tcl suite's blLayouts).
+layout Single:
+    size 4
+    align 4
+    field value: binary::U32 at 0
+
+layout Adjacent:
+    size 4
+    align 2
+    field a: binary::U8 at 0
+    field b: binary::I8 at 1
+    field c: binary::U16 at 2
+
+layout Padded:
+    size 12
+    align 4
+    field tag: binary::U8 at 0
+    field value: binary::I32 at 4
+    field flag: binary::U8 at 8
+
+layout Wide:
+    size 16
+    align 8
+    field u: binary::U64 at 0
+    field i: binary::I64 at 8
+
+layout Inner:
+    size 4
+    align 2
+    field x: binary::I16 at 0
+    field y: binary::U16 at 2
+
+layout Outer:
+    size 16
+    align 4
+    field count: binary::U32 at 0
+    field inner: Inner at 4
+    field last: binary::U8 at 12
+
+layout Vendor:
+    size 64
+    align 64
+    field kind: binary::U8 at 0
+    field word: binary::U32 at 1
+    field tail: binary::U16 at 13
+
+# bl-type-distinct-layouts: Single's physical twin.
+layout Twin:
+    size 4
+    align 4
+    field value: binary::U32 at 0
+
+# bl-declaration-encoding-follows-the-domain: encodings from three modules'
+# domains.
+type Own = Int in -128..127
+
+layout Mixed:
+    size 8
+    align 4
+    field a: byte::Byte at 0
+    field b: Own at 1
+    field c: abi::U32Value at 4
+
+# bl-syntax-contextual-words: a field called size.
+layout Sized:
+    size 1
+    align 1
+    field size: binary::U8 at 0
+
+# bl-type-invalid-parameter: one declaration of every other kind.
+struct NotLayout:
+    x: int
+
+refined type Refined = int
+
+enum Kind:
+    A
+
+type Digit = Int in 0..9
+
+# The abi::bytes::Bytes of the Ints VALUES (each 0..255).
+fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+    bs = loop v in values:
+        b = byte::from_int(v):
+            on byte::BelowRange:
+                0
+            on byte::AboveRange:
+                255
+        b
+    abi::bytes::from_list(bs)
+
+fn register_syntax_tests():
+    # bl-syntax-contextual-words: layout, size, align, field and at stay
+    # ordinary names, and `field size: ...` names a field `size`.
+    fn contextual() errors compiler::CompilerError:
+        static compile:
+            layout = 1
+            size = 2
+            align = 3
+            field = 4
+            at = 5
+            l = LayoutStruct[Sized] {size: 9}
+            [layout + size + align + field + at, l.size]
+    test::value("bl-syntax-contextual-words", [15, 9], contextual)
+
+    # bl-syntax-no-generic-struct-declarations: ordinary, opaque and context
+    # struct declarations are unchanged (the Tcl test also pins the syntax
+    # errors of generic declarations).
+    fn plain_structs() errors compiler::CompilerError:
+        static compile:
+            [NotLayout {x: 1}.x, LayoutStruct[Sized] {size: 2}.size]
+    test::value("bl-syntax-no-generic-struct-declarations", [1, 2], plain_structs)
+
+fn register_declaration_tests():
+    # bl-declaration-encoding-follows-the-domain: byte::Byte is an unsigned
+    # byte, the program's Int in -128..127 a signed one, abi::U32Value an
+    # unsigned 32-bit word.
+    fn mixed() errors compiler::CompilerError:
+        static compile:
+            m = LayoutStruct[Mixed] {a: 255, b: -128, c: 4294967295}
+            back = binary::parse(Mixed, binary::emit(m)):
+                on LayoutLengthMismatch:
+                    m
+            [binary::emit(m) == bytes_of([255, 128, 0, 0, 255, 255, 255, 255]), back == m, back.c]
+    test::value("bl-declaration-encoding-follows-the-domain", [true, true, 4294967295], mixed)
+
+    # bl-declaration-vendor-layout: an unaligned field, an alignment beyond
+    # every field's and explicit trailing padding, as stated.
+    fn vendor() errors compiler::CompilerError:
+        static compile:
+            v = LayoutStruct[Vendor] {kind: 1, word: 305419896, tail: 65535}
+            expected = bytes_of([
+                1, 120, 86, 52, 18, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ])
+            [binary::layout_length(Vendor), binary::layout_alignment(Vendor), binary::emit(v) == expected]
+    test::value("bl-declaration-vendor-layout", [64, 64, true], vendor)
+
+fn register_type_tests():
+    # bl-type-field-types: each projection has its declared type (here:
+    # accepted where exactly that type is required, with no conversion).
+    fn field_types() errors compiler::CompilerError:
+        static compile:
+            fn count(c: binary::U32) -> int:
+                c
+            fn inner(i: LayoutStruct[Inner]) -> int:
+                i.x
+            fn x(v: binary::I16) -> int:
+                v
+            o = LayoutStruct[Outer] {count: 1, inner: LayoutStruct[Inner] {x: -1, y: 2}, last: 3}
+            [count(o.count), inner(o.inner), x(o.inner.x)]
+    test::value("bl-type-field-types", [1, -1, -1], field_types)
+
+    # bl-type-unknown-field: a padding byte is no field.
+    fn unknown_field() errors compiler::CompilerError:
+        static compile:
+            p = LayoutStruct[Padded] {tag: 1, value: 2, flag: 3}
+            p.padding
+    test::rejects_at("bl-type-unknown-field", compiler::DiagnosticCode::UnknownField, 193, 15, unknown_field)
+
+    # bl-type-distinct-layouts: identical physical layouts, distinct types.
+    fn twin_for_single() errors compiler::CompilerError:
+        static compile:
+            fn f(t: LayoutStruct[Twin]) -> int:
+                t.value
+            f(LayoutStruct[Single] {value: 1})
+    test::rejects_at("bl-type-distinct-layouts/single-for-twin", compiler::DiagnosticCode::Type, 201, 15, twin_for_single)
+    fn single_for_twin() errors compiler::CompilerError:
+        static compile:
+            fn f(t: LayoutStruct[Single]) -> int:
+                t.value
+            f(LayoutStruct[Twin] {value: 1})
+    test::rejects_at("bl-type-distinct-layouts/twin-for-single", compiler::DiagnosticCode::Type, 207, 15, single_for_twin)
+    fn twins_unequal() errors compiler::CompilerError:
+        static compile:
+            [LayoutStruct[Single] {value: 1} == LayoutStruct[Twin] {value: 1}, LayoutStruct[Single] {value: 1} == LayoutStruct[Single] {value: 1}]
+    test::value("bl-type-distinct-layouts/equality", [false, true], twins_unequal)
+
+    # bl-type-invalid-parameter: LayoutStruct[T] needs T to name a layout.
+    fn of_int() errors compiler::CompilerError:
+        static compile:
+            fn f(x: LayoutStruct[int]):
+                x
+            0
+    test::rejects_at("bl-type-invalid-parameter/int", compiler::DiagnosticCode::LayoutStructParameter, 217, 17, of_int)
+    fn of_struct() errors compiler::CompilerError:
+        static compile:
+            fn f(x: LayoutStruct[NotLayout]):
+                x
+            0
+    test::rejects_at("bl-type-invalid-parameter/struct", compiler::DiagnosticCode::LayoutStructParameter, 223, 17, of_struct)
+    fn of_refinement() errors compiler::CompilerError:
+        static compile:
+            fn f(x: LayoutStruct[Refined]):
+                x
+            0
+    test::rejects_at("bl-type-invalid-parameter/refinement", compiler::DiagnosticCode::LayoutStructParameter, 229, 17, of_refinement)
+    fn of_enum() errors compiler::CompilerError:
+        static compile:
+            fn f(x: LayoutStruct[Kind]):
+                x
+            0
+    test::rejects_at("bl-type-invalid-parameter/enum", compiler::DiagnosticCode::LayoutStructParameter, 235, 17, of_enum)
+    fn of_type() errors compiler::CompilerError:
+        static compile:
+            fn f(x: LayoutStruct[Digit]):
+                x
+            0
+    test::rejects_at("bl-type-invalid-parameter/type", compiler::DiagnosticCode::LayoutStructParameter, 241, 17, of_type)
+    fn of_applied() errors compiler::CompilerError:
+        static compile:
+            fn f(x: LayoutStruct[List[int]]):
+                x
+            0
+    test::rejects_at("bl-type-invalid-parameter/applied", compiler::DiagnosticCode::LayoutStructParameter, 247, 17, of_applied)
+    fn of_unknown() errors compiler::CompilerError:
+        static compile:
+            fn f(x: LayoutStruct[Nope]):
+                x
+            0
+    test::rejects_at("bl-type-invalid-parameter/unknown", compiler::DiagnosticCode::UnknownLayout, 253, 17, of_unknown)
+
+    # bl-type-unapplied.
+    fn unapplied() errors compiler::CompilerError:
+        static compile:
+            fn f(x: LayoutStruct):
+                x
+            0
+    test::rejects_at("bl-type-unapplied", compiler::DiagnosticCode::Type, 261, 17, unapplied)
+
+    # bl-layout-not-a-type-or-value.
+    fn as_type() errors compiler::CompilerError:
+        static compile:
+            fn f(x: Single):
+                x
+            0
+    test::rejects_at("bl-layout-not-a-type-or-value/type", compiler::DiagnosticCode::LayoutNotAType, 269, 17, as_type)
+    fn as_value() errors compiler::CompilerError:
+        static compile:
+            x = Single
+            x
+    test::rejects_at("bl-layout-not-a-type-or-value/value", compiler::DiagnosticCode::LayoutNotAValue, 275, 17, as_value)
+    fn as_callable() errors compiler::CompilerError:
+        static compile:
+            Single(bytes_of([0, 0, 0, 0]))
+    test::rejects_at("bl-layout-not-a-type-or-value/call", compiler::DiagnosticCode::LayoutNotAValue, 280, 13, as_callable)
+    fn as_element() errors compiler::CompilerError:
+        static compile:
+            [Single]
+    test::rejects_at("bl-layout-not-a-type-or-value/element", compiler::DiagnosticCode::LayoutNotAValue, 284, 14, as_element)
+
+fn register_construction_tests(n: int):
+    # bl-construction: fields in any order, from ordinary data, no bytes.
+    fn construction() errors compiler::CompilerError:
+        static compile:
+            fn of(value: binary::I32) -> LayoutStruct[Padded]:
+                LayoutStruct[Padded] {value: value, flag: 1, tag: 255}
+            [of(-7), binary::emit(of(-7)) == bytes_of([255, 0, 0, 0, 249, 255, 255, 255, 1, 0, 0, 0])]
+    test::value("bl-construction", [LayoutStruct[Padded] {value: -7, flag: 1, tag: 255}, true], construction)
+
+    # bl-construction-checks: complete, exact, each field proven.
+    fn missing() errors compiler::CompilerError:
+        static compile:
+            LayoutStruct[Padded] {tag: 1, value: 2}
+    test::rejects_at("bl-construction-checks/missing", compiler::DiagnosticCode::MissingField, 299, 13, missing)
+    fn unknown() errors compiler::CompilerError:
+        static compile:
+            LayoutStruct[Padded] {tag: 1, value: 2, flag: 3, extra: 4}
+    test::rejects_at("bl-construction-checks/unknown", compiler::DiagnosticCode::UnknownField, 303, 62, unknown)
+    fn duplicate() errors compiler::CompilerError:
+        static compile:
+            LayoutStruct[Padded] {tag: 1, value: 2, flag: 3, tag: 4}
+    test::rejects_at("bl-construction-checks/duplicate", compiler::DiagnosticCode::DuplicateField, 307, 62, duplicate)
+    fn out_of_domain() errors compiler::CompilerError:
+        static compile:
+            LayoutStruct[Padded] {tag: 256, value: 2, flag: 3}
+    test::rejects_at("bl-construction-checks/out-of-domain", compiler::DiagnosticCode::Type, 311, 35, out_of_domain)
+    fn out_of_signed() errors compiler::CompilerError:
+        static compile:
+            LayoutStruct[Padded] {tag: 1, value: 2147483648, flag: 3}
+    test::rejects_at("bl-construction-checks/out-of-signed-domain", compiler::DiagnosticCode::Type, 315, 43, out_of_signed)
+    fn other_type() errors compiler::CompilerError:
+        static compile:
+            LayoutStruct[Padded] {tag: "x", value: 2, flag: 3}
+    test::rejects_at("bl-construction-checks/other-type", compiler::DiagnosticCode::Type, 319, 35, other_type)
+
+    # bl-construction-width: a wider domain is not assignable; an Int is
+    # admitted once proven in range.
+    fn wider() errors compiler::CompilerError:
+        static compile:
+            fn f(w: binary::U32) -> LayoutStruct[Inner]:
+                LayoutStruct[Inner] {x: 0, y: w}
+            0
+    test::rejects_at("bl-construction-width/u32-into-u16", compiler::DiagnosticCode::Type, 327, 44, wider)
+    fn signed() errors compiler::CompilerError:
+        static compile:
+            fn f(w: binary::I16) -> LayoutStruct[Inner]:
+                LayoutStruct[Inner] {x: 0, y: w}
+            0
+    test::rejects_at("bl-construction-width/i16-into-u16", compiler::DiagnosticCode::Type, 333, 44, signed)
+    fn proven() errors compiler::CompilerError:
+        static compile:
+            fn f(k: int) -> LayoutStruct[Inner]:
+                if k >= 0 and k <= 65535:
+                    LayoutStruct[Inner] {x: 0, y: k}
+                else:
+                    LayoutStruct[Inner] {x: 0, y: 0}
+            [f(n * 13107), f(n * 13107 + 1)]
+    test::value("bl-construction-width/proven", [LayoutStruct[Inner] {x: 0, y: 65535}, LayoutStruct[Inner] {x: 0, y: 0}], proven)
+
+    # bl-construction-only-layoutstruct.
+    fn list_ctor() errors compiler::CompilerError:
+        static compile:
+            List[int] {value: 1}
+    test::rejects_at("bl-construction-only-layoutstruct/list", compiler::DiagnosticCode::UnknownStruct, 349, 13, list_ctor)
+    fn layout_name() errors compiler::CompilerError:
+        static compile:
+            Single {value: 1}
+    test::rejects_at("bl-construction-only-layoutstruct/layout-name", compiler::DiagnosticCode::UnknownStruct, 353, 13, layout_name)
+
+fn register_consumer_tests():
+    # bl-consumer-struct-behavior.
+    fn behavior() errors compiler::CompilerError:
+        static compile:
+            fn mid(o: LayoutStruct[Outer]) -> LayoutStruct[Inner]:
+                o.inner
+            o = LayoutStruct[Outer] {count: 3, inner: LayoutStruct[Inner] {x: -4, y: 5}, last: 6}
+            {count: c, inner: {x: ix, y: iy}} = o
+            fn keep():
+                o.last
+            set = immutable_set::from_list([mid(o), mid(o), LayoutStruct[Inner] {x: 0, y: 0}])
+            [c, ix, iy, keep(), mid(o), [o.inner] == [LayoutStruct[Inner] {x: -4, y: 5}], immutable_set::contains(set, LayoutStruct[Inner] {x: 0, y: 0})]
+    test::value("bl-consumer-struct-behavior", [3, -4, 5, 6, LayoutStruct[Inner] {x: -4, y: 5}, true, true], behavior)
+
+    # bl-consumer-method-syntax.
+    fn method() errors compiler::CompilerError:
+        static compile:
+            LayoutStruct[Single] {value: 258}.emit() == bytes_of([2, 1, 0, 0])
+    test::value("bl-consumer-method-syntax/emit", true, method)
+    fn parse_method() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> LayoutStruct[Single] errors LayoutLengthMismatch:
+                Single.parse(d)
+            0
+    test::rejects_at("bl-consumer-method-syntax/parse", compiler::DiagnosticCode::LayoutNotAValue, 378, 17, parse_method)
+
+fn register_binary_tests():
+    # bl-parse-explicit-bytes: known bytes imprint the expected fields.
+    fn parsed() errors compiler::CompilerError:
+        static compile:
+            fn p(data: abi::bytes::Bytes) -> List[any] errors LayoutLengthMismatch:
+                s = binary::parse(Single, data)
+                [s.value]
+            fn a(data: abi::bytes::Bytes) -> List[any] errors LayoutLengthMismatch:
+                v = binary::parse(Adjacent, data)
+                [v.a, v.b, v.c]
+            fn pd(data: abi::bytes::Bytes) -> List[any] errors LayoutLengthMismatch:
+                v = binary::parse(Padded, data)
+                [v.tag, v.value, v.flag]
+            fn w(data: abi::bytes::Bytes) -> List[any] errors LayoutLengthMismatch:
+                v = binary::parse(Wide, data)
+                [v.u, v.i]
+            fn all() -> List[any] errors LayoutLengthMismatch:
+                [
+                    p(bytes_of([1, 2, 3, 4])),
+                    p(bytes_of([0, 0, 0, 0])),
+                    p(bytes_of([255, 255, 255, 255])),
+                    a(bytes_of([255, 128, 52, 18])),
+                    a(bytes_of([0, 127, 255, 255])),
+                    pd(bytes_of([7, 9, 9, 9, 254, 255, 255, 255, 1, 9, 9, 9])),
+                    pd(bytes_of([0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0])),
+                    w(bytes_of([255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 128])),
+                    w(bytes_of([0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 127])),
+                    w(bytes_of([0, 0, 0, 0, 0, 0, 0, 128, 255, 255, 255, 255, 255, 255, 255, 255])),
+                ]
+            r = all():
+                on LayoutLengthMismatch:
+                    []
+            r
+    test::value("bl-parse-explicit-bytes", [[67305985], [0], [4294967295], [255, -128, 4660], [0, 127, 65535], [7, -2, 1], [0, -2147483648, 0], [18446744073709551615, -9223372036854775808], [0, 9223372036854775807], [9223372036854775808, -1]], parsed)
+
+    # bl-emit-explicit-bytes: selected values emit exactly these bytes.
+    fn emitted() errors compiler::CompilerError:
+        static compile:
+            [
+                binary::emit(LayoutStruct[Single] {value: 67305985}) == bytes_of([1, 2, 3, 4]),
+                binary::emit(LayoutStruct[Adjacent] {a: 255, b: -128, c: 4660}) == bytes_of([255, 128, 52, 18]),
+                binary::emit(LayoutStruct[Padded] {tag: 7, value: -2, flag: 1}) == bytes_of([7, 0, 0, 0, 254, 255, 255, 255, 1, 0, 0, 0]),
+                binary::emit(LayoutStruct[Wide] {u: 18446744073709551615, i: -9223372036854775808}) == bytes_of([255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 128]),
+                binary::emit(LayoutStruct[Wide] {u: 0, i: 9223372036854775807}) == bytes_of([0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 127]),
+                binary::emit(LayoutStruct[Wide] {u: 9223372036854775808, i: -1}) == bytes_of([0, 0, 0, 0, 0, 0, 0, 128, 255, 255, 255, 255, 255, 255, 255, 255]),
+            ]
+    test::value("bl-emit-explicit-bytes", [true, true, true, true, true, true], emitted)
+
+    # bl-round-trip: parse(L, emit(v)) == v.
+    fn round_trip() errors compiler::CompilerError:
+        static compile:
+            fn back_s(v: LayoutStruct[Single]) -> bool errors LayoutLengthMismatch:
+                binary::parse(Single, binary::emit(v)) == v
+            fn back_a(v: LayoutStruct[Adjacent]) -> bool errors LayoutLengthMismatch:
+                binary::parse(Adjacent, binary::emit(v)) == v
+            fn back_p(v: LayoutStruct[Padded]) -> bool errors LayoutLengthMismatch:
+                binary::parse(Padded, binary::emit(v)) == v
+            fn back_w(v: LayoutStruct[Wide]) -> bool errors LayoutLengthMismatch:
+                binary::parse(Wide, binary::emit(v)) == v
+            fn back_o(v: LayoutStruct[Outer]) -> bool errors LayoutLengthMismatch:
+                binary::parse(Outer, binary::emit(v)) == v
+            fn back_v(v: LayoutStruct[Vendor]) -> bool errors LayoutLengthMismatch:
+                binary::parse(Vendor, binary::emit(v)) == v
+            fn all() -> List[bool] errors LayoutLengthMismatch:
+                [
+                    back_s(LayoutStruct[Single] {value: 4294967295}),
+                    back_a(LayoutStruct[Adjacent] {a: 0, b: -128, c: 65535}),
+                    back_p(LayoutStruct[Padded] {tag: 255, value: -2147483648, flag: 0}),
+                    back_w(LayoutStruct[Wide] {u: 18446744073709551615, i: -9223372036854775808}),
+                    back_o(LayoutStruct[Outer] {count: 1, inner: LayoutStruct[Inner] {x: -32768, y: 65535}, last: 255}),
+                    back_v(LayoutStruct[Vendor] {kind: 9, word: 4294967295, tail: 1}),
+                ]
+            r = all():
+                on LayoutLengthMismatch:
+                    []
+            r
+    test::value("bl-round-trip", [true, true, true, true, true, true], round_trip)
+
+    # bl-padding: zero when emitted, ignored when imprinted.
+    fn padding() errors compiler::CompilerError:
+        static compile:
+            fn both() -> List[any] errors LayoutLengthMismatch:
+                x = binary::parse(Padded, bytes_of([7, 0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0]))
+                y = binary::parse(Padded, bytes_of([7, 170, 187, 204, 5, 0, 0, 0, 1, 221, 238, 255]))
+                [x == y, binary::emit(y) == bytes_of([7, 0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0]), binary::emit(x) == binary::emit(y)]
+            r = both():
+                on LayoutLengthMismatch:
+                    []
+            r
+    test::value("bl-padding", [true, true, true], padding)
+
+    # bl-determinism.
+    fn determinism() errors compiler::CompilerError:
+        static compile:
+            fn mk(t: binary::U8) -> LayoutStruct[Padded]:
+                LayoutStruct[Padded] {tag: t, value: 1, flag: 2}
+            v = mk(3)
+            w = binary::parse(Padded, bytes_of([3, 99, 99, 99, 1, 0, 0, 0, 2, 99, 99, 99])):
+                on LayoutLengthMismatch:
+                    v
+            [binary::emit(v) == binary::emit(v), binary::emit(v) == binary::emit(w), binary::emit(v) == binary::emit(mk(3)), v == w]
+    test::value("bl-determinism", [true, true, true, true], determinism)
+
+    # bl-nested.
+    fn nested() errors compiler::CompilerError:
+        static compile:
+            fn x_of(i: LayoutStruct[Inner]) -> int:
+                i.x
+            fn go() -> List[any] errors LayoutLengthMismatch:
+                o = binary::parse(Outer, bytes_of([1, 0, 0, 0, 254, 255, 2, 0, 9, 9, 9, 9, 3, 9, 9, 9]))
+                [o, x_of(o.inner), o.inner == LayoutStruct[Inner] {x: -2, y: 2}, binary::emit(o) == bytes_of([1, 0, 0, 0, 254, 255, 2, 0, 0, 0, 0, 0, 3, 0, 0, 0])]
+            r = go():
+                on LayoutLengthMismatch:
+                    []
+            r
+    test::value("bl-nested", [LayoutStruct[Outer] {count: 1, inner: LayoutStruct[Inner] {x: -2, y: 2}, last: 3}, -2, true, true], nested)
+
+    # bl-length-rule: exactly the layout's size.
+    fn lengths() errors compiler::CompilerError:
+        static compile:
+            fn try(data: abi::bytes::Bytes) -> any:
+                v = binary::parse(Single, data):
+                    on LayoutLengthMismatch:
+                        return "LayoutLengthMismatch"
+                v
+            [try(abi::bytes::from_list([])), try(bytes_of([1, 2, 3])), try(bytes_of([1, 2, 3, 4])), try(bytes_of([1, 2, 3, 4, 5]))]
+    test::value("bl-length-rule", ["LayoutLengthMismatch", "LayoutLengthMismatch", LayoutStruct[Single] {value: 67305985}, "LayoutLengthMismatch"], lengths)
+
+    # bl-errors-are-declared.
+    fn unhandled() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> LayoutStruct[Single]:
+                binary::parse(Single, d)
+            0
+    test::rejects_at("bl-errors-are-declared/unhandled", compiler::DiagnosticCode::UnhandledError, 514, 17, unhandled)
+    fn declared() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> LayoutStruct[Single] errors LayoutLengthMismatch:
+                binary::parse(Single, d)
+            fn g() -> abi::bytes::Bytes:
+                binary::emit(LayoutStruct[Single] {value: 1})
+            r = f(bytes_of([1])):
+                on LayoutLengthMismatch:
+                    LayoutStruct[Single] {value: 0}
+            [r, g() == bytes_of([1, 0, 0, 0])]
+    test::value("bl-errors-are-declared/declared", [LayoutStruct[Single] {value: 0}, true], declared)
+
+    # bl-layout-queries: compile-time constants, usable as proven Ints.
+    fn queries() errors compiler::CompilerError:
+        static compile:
+            fn size_ok(d: abi::bytes::Bytes) -> bool:
+                abi::bytes::length(d).value == binary::layout_length(Padded)
+            [binary::layout_length(Single), binary::layout_length(Adjacent), binary::layout_length(Padded), binary::layout_length(Wide), binary::layout_length(Outer), binary::layout_length(Vendor), binary::layout_alignment(Wide), size_ok(binary::emit(LayoutStruct[Padded] {tag: 0, value: 0, flag: 0}))]
+    test::value("bl-layout-queries", [4, 4, 12, 16, 16, 64, 8, true], queries)
+
+fn register_operand_tests():
+    # bl-operands: the layout is static evidence.
+    fn unknown_layout() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+                binary::parse(Nope, d)
+            0
+    test::rejects_at("bl-operands/unknown-layout", compiler::DiagnosticCode::UnknownLayout, 542, 31, unknown_layout)
+    fn string_operand() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+                binary::parse("Single", d)
+            0
+    test::rejects_at("bl-operands/string", compiler::DiagnosticCode::LayoutOperand, 548, 31, string_operand)
+    fn value_operand() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+                l = 1
+                binary::parse(l, d)
+            0
+    test::rejects_at("bl-operands/value", compiler::DiagnosticCode::LayoutOperand, 555, 31, value_operand)
+    fn expression_operand() errors compiler::CompilerError:
+        static compile:
+            fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+                binary::parse(binary::layout_length(Single), d)
+            0
+    test::rejects_at("bl-operands/expression", compiler::DiagnosticCode::LayoutOperand, 561, 31, expression_operand)
+    fn untyped_bytes() errors compiler::CompilerError:
+        static compile:
+            fn f(d) -> any errors LayoutLengthMismatch:
+                binary::parse(Single, d)
+            0
+    test::rejects_at("bl-operands/untyped-bytes", compiler::DiagnosticCode::BinaryOperand, 567, 39, untyped_bytes)
+    fn anonymous_value() errors compiler::CompilerError:
+        static compile:
+            binary::emit({value: 1})
+    test::rejects_at("bl-operands/anonymous-struct", compiler::DiagnosticCode::BinaryOperand, 572, 26, anonymous_value)
+    fn untyped_value() errors compiler::CompilerError:
+        static compile:
+            fn f(v):
+                binary::emit(v)
+            f(LayoutStruct[Single] {value: 1})
+    test::rejects_at("bl-operands/untyped-value", compiler::DiagnosticCode::BinaryOperand, 577, 30, untyped_value)
+    fn function_value() errors compiler::CompilerError:
+        static compile:
+            e = binary::emit
+            0
+    test::rejects_at("bl-operands/function-value", compiler::DiagnosticCode::BinaryOperand, 582, 17, function_value)
+    fn query_string() errors compiler::CompilerError:
+        static compile:
+            binary::layout_length("Single")
+    test::rejects_at("bl-operands/query-string", compiler::DiagnosticCode::LayoutOperand, 587, 35, query_string)
+
+# bl-consumer-containers: a LayoutStruct held inside other values (the
+# context-struct field stays in Tcl: a context is installed at the top level).
+struct Holder:
+    name: str
+    raw: LayoutStruct[Inner]
+
+fn register_container_tests():
+    # bl-consumer-containers.
+    fn containers() errors compiler::CompilerError:
+        static compile:
+            fn run() -> List[any] errors IndexNotFound:
+                h = Holder {name: "x", raw: LayoutStruct[Inner] {x: -1, y: 1}}
+                v = mutable_vector::from_list([h.raw])
+                mutable_vector::push(v, LayoutStruct[Inner] {x: 2, y: 2})
+                a = mutable_array::create(2, LayoutStruct[Inner] {x: 9, y: 9})
+                mutable_array::set(a, 1, h.raw)
+                [h.raw.x, mutable_vector::length(v), mutable_vector::at(v, 1), mutable_array::at(a, 1), binary::emit(mutable_vector::at(v, 0)) == bytes_of([255, 255, 1, 0]), binary::emit(mutable_array::at(a, 0)) == bytes_of([9, 0, 9, 0])]
+            r = run():
+                on IndexNotFound:
+                    []
+            r
+    test::value("bl-consumer-containers", [-1, 2, LayoutStruct[Inner] {x: 2, y: 2}, LayoutStruct[Inner] {x: -1, y: 1}, true, true], containers)
+
+fn register_binary_layout_tests():
+    register_syntax_tests()
+    register_declaration_tests()
+    register_type_tests()
+    register_construction_tests(5)
+    register_consumer_tests()
+    register_container_tests()
+    register_binary_tests()
+    register_operand_tests()
+
+with context test::suite()
+register_binary_layout_tests()
+test::report()

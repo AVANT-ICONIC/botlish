@@ -5,33 +5,34 @@
 #   tclsh9.0 audit/hir-interchange/tools/roundtrip.tcl ?-suites FILES|all?
 #            ?-backends LIST? ?-via interchange|cache? ?-trait-source 0|1?
 #
-# Compiles each golden suite of FILES (default: nine suites covering source
-# types, structs, enums, error payloads, traits, context traits and
-# coroutines; `all` for every tests/golden/*.bot) and takes the checksum of
-# its HIR and of each of its backend artifacts -- the core IR, the Tcl
-# compiler's code (unit, block and variable numbers normalized), specialized
-# and generic NIR -- and of the outcome of each backend of LIST (default
-# interp, compile, cranelift, cranelift-generic). With -via interchange (the
-# default) it writes each HIR in the interchange format to a private
-# temporary directory; with -via cache it compiles through a front-end cache
-# there (surface/cache.tcl), which keeps each. A fresh tclsh9.0 process then
-# reads every HIR back, in the same order -- the files, or the same suites
-# through the cache -- and takes the same checksums, running no front end at
-# all (it asserts that no build happened, and with -via cache that every
-# suite was a hit). Every checksum must be the same: the HIR read back is the
-# HIR built (without its traitSource through the interchange format, unless
-# -trait-source 1). With -via cache, a fresh process per suite then builds it
-# alone, with no cache: its HIR must equal the one the cache holds, which this
-# process built after the suites before it (a hit is exact only because a
-# build is a pure function of the cache's key and dependencies; the HIRs are
-# compared without staticStats' depMs, a time), and every file a suite's HIR
-# was built from must be its program or one of its cache entry's dependencies
-# (surface::cache::Dependencies). Exits non-zero, naming each difference, otherwise.
+# Compiles each golden suite of FILES (default: ten suites covering source
+# types, structs, enums, error payloads, traits, context traits, coroutines
+# and binary layouts; `all` for every tests/golden/*.bot) and takes the
+# checksum of its HIR and of each of its backend artifacts -- the core IR, the
+# Tcl compiler's code (unit, block and variable numbers normalized),
+# specialized and generic NIR -- and of the outcome of each backend of LIST
+# (default interp, compile, cranelift, cranelift-generic). With -via
+# interchange (the default) it writes each HIR in the interchange format to a
+# private temporary directory; with -via cache it compiles through a front-end
+# cache there (surface/cache.tcl), which keeps each. A fresh tclsh9.0 process
+# then reads every HIR back, in the same order -- the files, or the same
+# suites through the cache -- and takes the same checksums, running no front
+# end at all (it asserts that no build happened, and with -via cache that
+# every suite was a hit). Every checksum must be the same: the HIR read back
+# is the HIR built (without its traitSource through the interchange format,
+# unless -trait-source 1). With -via cache, a fresh process per suite then
+# builds it alone, with no cache: its HIR must equal the one the cache holds,
+# which this process built after the suites before it (a hit is exact only
+# because a build is a pure function of the cache's key and dependencies; the
+# HIRs are compared without staticStats' depMs, a time), and every file a
+# suite's HIR was built from must be its program or one of its cache entry's
+# dependencies (surface::cache::Dependencies). Exits non-zero, naming each
+# difference, otherwise.
 
 set root [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]]
 set options [dict create \
     -suites {traits-path.bot harness.bot contexts.bot affinity.bot coroutines.bot errors.bot
-        representation.bot declared-errors.bot ownership.bot} \
+        representation.bot declared-errors.bot ownership.bot binary-layout.bot} \
     -backends {interp compile cranelift cranelift-generic} -via interchange -trait-source 0 -child "" \
     -alone ""]
 foreach {option value} $argv {

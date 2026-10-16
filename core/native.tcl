@@ -287,7 +287,7 @@ proc core::native::register {name args} {
     set options [dict create -impl "" -arity "" -refines-true {} -refines-false {} \
         -param-types "" -result-type any -tests-type "" -runtime {} -result-shape {} -result-range {} \
         -context-free 0 -errors {} -bounds {} -nomethod 0 -completion 0 -ownership {} -errors-from {} \
-        -result-length {} -drop-form {}]
+        -result-length {} -drop-form {} -layout {}]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "core::native::register: unknown option \"$option\""
@@ -410,6 +410,10 @@ proc core::native::register {name args} {
             || ([string is digit -strict [lindex $dropForm 1]] && $arity ne "*" && [lindex $dropForm 1] < $arity)))} {
         error "core::native::register: bad -drop-form \"$dropForm\" for \"$name\""
     }
+    set layout [dict get $options -layout]
+    if {$layout ne "" && ![ValidLayoutRole $layout $arity]} {
+        error "core::native::register: bad -layout \"$layout\" for \"$name\""
+    }
     set bounds [dict get $options -bounds]
     if {$bounds ne "" && ![ValidBounds $bounds $arity $errors]} {
         error "core::native::register: bad -bounds \"$bounds\" for \"$name\" (with -errors {$errors})"
@@ -427,8 +431,57 @@ proc core::native::register {name args} {
         resultShape $shape resultRange $range \
         contextFree [dict get $options -context-free] errors $errors bounds $bounds \
         nomethod [dict get $options -nomethod] completion [dict get $options -completion] \
-        ownership $ownership errorsFrom $errorsFrom resultLength $length dropForm $dropForm]
+        ownership $ownership errorsFrom $errorsFrom resultLength $length dropForm $dropForm \
+        layout $layout]
     return [core::value::native $name]
+}
+
+# 1 if ROLE is a valid -layout role (hir/layouts.tcl's "The binary
+# operations"; BINARY-LAYOUT.md) for a native of ARITY: KEY VALUE pairs of
+#
+#   operand K        argument K is the static layout operand
+#   query WHAT       the call is the layout's WHAT (length | alignment), a
+#                    constant (with operand 0, arity 1)
+#   typed {AT FORM}  argument AT's static type is LayoutStruct[L]; the call is
+#                    elaborated to a call of root native FORM with L's
+#                    descriptor appended
+#   input K          argument K is the bytes being imprinted (an abi::bytes::
+#                    Bytes)
+#   op OP            the operation a backend performs with the descriptor
+#                    constant of the operand: parse (imprint) or emit
+proc core::native::ValidLayoutRole {role arity} {
+    if {[catch {llength $role} n] || $n % 2 || ![string is digit -strict $arity]} {
+        return 0
+    }
+    foreach {key value} $role {
+        switch -- $key {
+            operand - input {
+                if {![string is digit -strict $value] || $value >= $arity} {
+                    return 0
+                }
+            }
+            query {
+                if {$value ni {length alignment} || $arity != 1} {
+                    return 0
+                }
+            }
+            typed {
+                if {[llength $value] != 2 || ![string is digit -strict [lindex $value 0]]
+                        || [lindex $value 0] >= $arity} {
+                    return 0
+                }
+            }
+            op {
+                if {$value ni {parse emit}} {
+                    return 0
+                }
+            }
+            default {
+                return 0
+            }
+        }
+    }
+    return 1
 }
 
 # RANGE as the registry stores it (an interval's bounds in decimal), or
@@ -520,6 +573,14 @@ proc core::native::ValidShape {shape count} {
         # {never}: the native never completes normally
         # (context#unreachable, core/contexts.tcl).
         return 1
+    }
+    if {[lindex $shape 0] eq {layout-struct}} {
+        # {layout-struct I}: the result is a LayoutStruct[L] whose layout L
+        # is described by argument I's descriptor constant (binary::parse,
+        # core/binary.tcl; BINARY-LAYOUT.md), resolved by hir::types::
+        # ShapeResult.
+        return [expr {$length == 2 && [string is digit -strict [lindex $shape 1]]
+            && ($count eq "" || [lindex $shape 1] < $count)}]
     }
     if {[lindex $shape 0] eq {context-struct}} {
         # {context-struct I}: the result is the installed context of the

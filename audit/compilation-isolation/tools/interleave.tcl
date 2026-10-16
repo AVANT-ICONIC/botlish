@@ -5,17 +5,16 @@
 #   tclsh9.0 audit/compilation-isolation/tools/interleave.tcl ?-suites FILES?
 #            ?-backends LIST? ?-print 1?
 #
-# In one process, compiles each golden suite of FILES (default: nine suites
+# In one process, compiles each golden suite of FILES (default: ten suites
 # covering source types, structs, enums, error payloads, traits, context
-# traits and coroutines) and takes the checksum of each of its backend
-# artifacts right after its own compilation: the core IR, the Tcl compiler's
-# code (unit, block and variable numbers normalized), specialized and
-# generic NIR, and the outcome of each backend of LIST (default interp,
+# traits, coroutines and binary layouts) and takes the checksum of each of its
+# backend artifacts right after its own compilation: the core IR, the Tcl
+# compiler's code (unit, block and variable numbers normalized), specialized
+# and generic NIR, and the outcome of each backend of LIST (default interp,
 # compile, cranelift, cranelift-generic). Once every suite is compiled, it
-# takes them again, in reverse order, from the HIRs it kept. Every
-# checksum must be the same: a HIR's backends see its own declarations
-# whatever was compiled since. Exits non-zero, naming each difference,
-# otherwise.
+# takes them again, in reverse order, from the HIRs it kept. Every checksum
+# must be the same: a HIR's backends see its own declarations whatever was
+# compiled since. Exits non-zero, naming each difference, otherwise.
 #
 # With -print 1 it also prints each suite's checksums, the tree's root path
 # normalized, so that two trees (before and after a change) can be compared.
@@ -23,7 +22,7 @@
 set root [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]]
 set options [dict create \
     -suites {traits-path.bot harness.bot contexts.bot affinity.bot coroutines.bot errors.bot
-        representation.bot declared-errors.bot ownership.bot} \
+        representation.bot declared-errors.bot ownership.bot binary-layout.bot} \
     -backends {interp compile cranelift cranelift-generic} -print 0]
 foreach {option value} $argv {
     if {![dict exists $options $option]} { error "interleave.tcl: unknown option $option" }

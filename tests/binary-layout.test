@@ -1,0 +1,626 @@
+# binary-layout.test -- fixed binary layouts (BINARY-LAYOUT.md): `layout`
+# declarations, LayoutStruct[L], binary::parse / binary::emit.
+#
+# A `layout` describes a fixed binary representation; the same layout
+# imprints bytes into a LayoutStruct[L] (an ordinary immutable structural
+# value) and emits that value back into bytes. Every program below runs on
+# all four executable paths -- the Tcl interpreter (the core IR the HIR
+# lowers to, core/binary.tcl reading the layout's descriptor), the Tcl
+# compiler and native code with and without specialization (all three
+# straight-line code over the descriptor they read statically) -- and the
+# outcomes must agree. Emitted bytes are compared byte for byte (blBytes
+# shows every abi::bytes::Bytes of a result as hex), parsed values field by
+# field, so a parser and an emitter sharing one wrong assumption fail.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux"
+    && $::tcl_platform(machine) in {x86_64 amd64}}]
+
+set blBackends {interp compile cranelift-generic cranelift}
+
+# The imports and helpers every program below starts with: bytes_of(xs) is
+# the abi::bytes::Bytes of the Ints XS (each 0..255).
+set blPrelude {import abi
+import abi::bytes
+import binary
+import byte
+import immutable_set
+
+fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+    bs = loop v in values:
+        b = byte::from_int(v):
+            on byte::BelowRange:
+                0
+            on byte::AboveRange:
+                255
+        b
+    abi::bytes::from_list(bs)
+
+}
+
+# The representative layouts (tests/golden/binary-layout.bot declares the same).
+set blLayouts {layout Single:
+    size 4
+    align 4
+    field value: binary::U32 at 0
+
+layout Adjacent:
+    size 4
+    align 2
+    field a: binary::U8 at 0
+    field b: binary::I8 at 1
+    field c: binary::U16 at 2
+
+layout Padded:
+    size 12
+    align 4
+    field tag: binary::U8 at 0
+    field value: binary::I32 at 4
+    field flag: binary::U8 at 8
+
+layout Wide:
+    size 16
+    align 8
+    field u: binary::U64 at 0
+    field i: binary::I64 at 8
+
+layout Inner:
+    size 4
+    align 2
+    field x: binary::I16 at 0
+    field y: binary::U16 at 2
+
+layout Outer:
+    size 16
+    align 4
+    field count: binary::U32 at 0
+    field inner: Inner at 4
+    field last: binary::U8 at 12
+
+layout Vendor:
+    size 64
+    align 64
+    field kind: binary::U8 at 0
+    field word: binary::U32 at 1
+    field tail: binary::U16 at 13
+
+}
+
+# A program's value as text, on every backend: an abi::bytes::Bytes shows as
+# bytes(HEX ...) -- its actual bytes, which no Botlish operation exposes --
+# a List element-wise, anything else as core::value::show does.
+proc blShow {v} {
+    switch -- [core::value::kind $v] {
+        struct {
+            if {[core::value::structId $v] eq [core::bytestore::bytesType]} {
+                set hex [core::value::bytestoreHex [lindex [core::value::structValues $v] 0]]
+                return "bytes([join [regexp -all -inline .. $hex] { }])"
+            }
+        }
+        list {
+            return "\[[join [lmap item [core::value::items $v] {blShow $item}] {, }]\]"
+        }
+    }
+    return [core::value::show $v]
+}
+
+# The outcome of HIR on BACKEND: {value TEXT} or {error KIND MESSAGE}.
+proc blOutcome {backend hir} {
+    resetEffects
+    if {[catch {
+        switch -- $backend {
+            interp {
+                set saved [core::useBackend]
+                core::useBackend interp
+                try {
+                    core::evalProgram [hir::lower $hir]
+                } finally {
+                    core::useBackend $saved
+                }
+            }
+            compile { core::compiler::evalHir $hir }
+            cranelift-generic { native::evalHir $hir -specialize 0 }
+            cranelift { native::evalHir $hir }
+        }
+    } result options]} {
+        return [list error [lindex [dict get $options -errorcode] end] $result]
+    }
+    return [list value [blShow $result]]
+}
+
+# The program SOURCE (after the prelude and the representative layouts),
+# compiled strictly once and run on every backend: "same: TEXT" when every
+# backend agrees, otherwise every outcome.
+proc blRun {source {backends ""}} {
+    if {$backends eq ""} {
+        set backends $::blBackends
+    }
+    set hir [surface::compile "$::blPrelude$::blLayouts$source" layout.bot -warnings off]
+    set outcomes [lmap backend $backends {blOutcome $backend $hir}]
+    if {[llength [lsort -unique $outcomes]] == 1} {
+        set first [lindex $outcomes 0]
+        if {[lindex $first 0] eq "value"} {
+            return "same: [lindex $first 1]"
+        }
+        return "same error: [lindex $first 1]: [lindex $first 2]"
+    }
+    return [join [lmap backend $backends outcome $outcomes {list $backend $outcome}] " / "]
+}
+
+# The static error compiling SOURCE (without prelude or layouts) raises, as
+# "KIND LINE:COLUMN: MESSAGE" (the file name dropped), or "no error".
+proc blError {source} {
+    if {[catch {surface::compile $source layout.bot -warnings off} message options]} {
+        regsub {^layout\.bot:} $message {} message
+        return "[lindex [dict get $options -errorcode] end] $message"
+    }
+    return "no error"
+}
+
+# blError's KIND LINE:COLUMN only.
+proc blErrorAt {source} {
+    set text [blError $source]
+    if {[regexp {^(\S+) ([0-9]+:[0-9]+):} $text -> kind at]} {
+        return "$kind $at"
+    }
+    return $text
+}
+
+# The syntax error parsing SOURCE raises (its message), or "no error".
+proc blSyntax {source} {
+    if {[catch {surface::parse $source layout.bot} message]} {
+        return $message
+    }
+    return "no error"
+}
+
+# The NIR text of function NAME of the program SOURCE (after the prelude and
+# the layouts), lowered with specialization.
+proc blNir {source name} {
+    set hir [surface::compile "$::blPrelude$::blLayouts$source" layout.bot -warnings off]
+    set nir [native::nir $hir]
+    set lines {}
+    set inside 0
+    foreach line [split $nir \n] {
+        if {[regexp {^func [0-9]+ "([^"]*)"} $line -> fname]} {
+            set inside [expr {$fname eq $name}]
+        }
+        if {$inside} {
+            lappend lines [regsub { @e[0-9]+$} $line {}]
+            if {$line eq "end"} {
+                set inside 0
+            }
+        }
+    }
+    return [join $lines \n]
+}
+
+# The opcodes of the NIR text NIR, one word each ("op X" as X), in order,
+# without registers, constants or labels: what a layout operation lowers to.
+proc blOps {nir} {
+    set ops {}
+    foreach line [split $nir \n] {
+        if {[regexp {= op (\S+)} $line -> op]} {
+            lappend ops $op
+        } elseif {[regexp {= (structnew|structget|int|rawint)\M} $line -> op]} {
+            lappend ops $op
+        } elseif {[regexp {^\s+(faildeclared|br|ret)\M} $line -> op]} {
+            lappend ops $op
+        }
+    }
+    return $ops
+}
+
+# ---------------------------------------------------------------------------
+# Syntax
+
+test bl-syntax-ast {a layout declaration is its own declaration node: size, alignment and each field's name, type and explicit offset, in written order; LayoutStruct[L] {...} is the applied construction (a namedstruct with its type argument)} -body {
+    surface::formatAst [surface::parse "layout Header:\n    size 8\n    align 4\n    field magic: binary::U32 at 0\n    field count: binary::I16 at 4\n\nh = LayoutStruct\[Header\] \{magic: 1, count: 2\}\nq = LayoutStruct\[geo::Header\] \{magic: 1, count: 2\}\n"]
+} -result {layout Header
+    size 8
+    align 4
+    field magic: binary::U32 at 0
+    field count: binary::I16 at 4
+(bind h (struct LayoutStruct[Header] (magic (int 1)) (count (int 2))))
+(bind q (struct LayoutStruct[geo::Header] (magic (int 1)) (count (int 2))))}
+
+test bl-syntax-errors {a layout states its size, its alignment and every field's offset exactly once, one item per line; each malformed form is a located syntax error} -body {
+    lmap source [list \
+        "layout L:\n    align 1\n    field a: binary::U8 at 0\n" \
+        "layout L:\n    size 1\n    field a: binary::U8 at 0\n" \
+        "layout L:\n    size 1\n    size 2\n    align 1\n    field a: binary::U8 at 0\n" \
+        "layout L:\n    size 1\n    align 1\n    field a: binary::U8\n" \
+        "layout L:\n    size 1\n    align 1\n" \
+        "layout L:\n    size 1\n    align 1\n    a: binary::U8 at 0\n" \
+        "layout L:\n    size -1\n    align 1\n    field a: binary::U8 at 0\n" \
+        "fn f():\n    layout L:\n        size 1\n        align 1\n        field a: binary::U8 at 0\n    0\n" \
+        "layout L: size 1\n"] {
+        blSyntax $source
+    }
+} -result {{layout.bot:1:8: layout "L" has no "size N" line: a layout states its byte size and its alignment explicitly} {layout.bot:1:8: layout "L" has no "align N" line: a layout states its byte size and its alignment explicitly} {layout.bot:3:5: layout "L" already has a "size" line (at layout.bot:2:10): each is written exactly once} {layout.bot:4:24: expected "at OFFSET" after the type of layout field "a" (every field states its byte offset), found end of line} {layout.bot:1:8: layout "L" declares no field: a layout needs at least one "field NAME: TYPE at OFFSET" line} {layout.bot:4:5: expected "size N", "align N" or "field NAME: TYPE at OFFSET" in layout "L", found name "a"} {layout.bot:2:10: expected an integer after "size" (a byte count), found "-"} {layout.bot:2:5: a layout declaration is only allowed at the top level of a module, not nested in a function/if/loop} {layout.bot:1:11: expected a new line and an indented block of "size", "align" and "field" lines after ":", found name "size"}}
+
+test bl-syntax-contextual-words {layout, size, align, field and at are contextual: ordinary names everywhere else, and `field size: ...` names a field `size`} -body {
+    blRun "layout = 1\nsize = 2\nalign = 3\nfield = 4\nat = 5\nlayout L:\n    size 1\n    align 1\n    field size: binary::U8 at 0\n\nl = LayoutStruct\[L\] \{size: 9\}\n\[layout + size + align + field + at, l.size\]\n"
+} -result {same: [15, 9]}
+
+test bl-syntax-no-generic-struct-declarations {no generic struct declaration exists: `struct Foo[T]:`, `LayoutStruct Foo:` and `layout struct Foo:` are syntax errors, and struct, opaque struct and context struct declarations are unchanged} -body {
+    list [blSyntax "struct Foo\[T\]:\n    x: int\n"] \
+        [blSyntax "LayoutStruct Foo:\n    x: int\n"] \
+        [blSyntax "layout struct Foo:\n    x: int\n"] \
+        [blSyntax "context struct Foo\[T\]:\n    x: int\n"] \
+        [blRun "struct Plain:\n    x: int\n\nopaque struct Hidden:\n    x: int\n\ncontext struct Ctx:\n    x: int\n\n\[Plain \{x: 1\}, Hidden \{x: 2\}.x, Ctx \{x: 3\}.x\]\n"]
+} -result {{layout.bot:1:11: expected ":" after the struct name "Foo", found "["} {layout.bot:1:14: expected end of line, found name "Foo"} {layout.bot:1:8: expected end of line, found "struct"} {layout.bot:1:19: expected ":" after the struct name "Foo", found "["} {same: [Plain {x: 1}, 2, 3]}}
+
+# ---------------------------------------------------------------------------
+# Declaration validation (a layout declaration is top level only: its
+# failures are the whole program's, never a static compile block's)
+
+test bl-declaration-size-and-alignment {the size is a byte count from 1, the alignment a power of two; both located at their number} -body {
+    list [blError "import binary\nlayout L:\n    size 0\n    align 1\n    field a: binary::U8 at 0\n"] \
+        [blError "import binary\nlayout L:\n    size 4\n    align 3\n    field a: binary::U8 at 0\n"] \
+        [blError "import binary\nlayout L:\n    size 4\n    align 0\n    field a: binary::U8 at 0\n"] \
+        [blErrorAt "import binary\nlayout L:\n    size 4\n    align 536870912\n    field a: binary::U8 at 0\n"]
+} -result {{LAYOUT-SIZE 3:10: layout "L" has size 0: a layout's size is a byte count from 1 to 2147483647} {LAYOUT-ALIGNMENT 4:11: layout "L" has alignment 3: an alignment is a power of two from 1 to 268435456} {LAYOUT-ALIGNMENT 4:11: layout "L" has alignment 0: an alignment is a power of two from 1 to 268435456} {LAYOUT-ALIGNMENT 4:11}}
+
+test bl-declaration-bounds {every field lies inside the layout's size: a field ending past it is LAYOUT-FIELD-BOUNDS at its offset, naming the bytes it would occupy} -body {
+    list [blError "import binary\nlayout L:\n    size 4\n    align 4\n    field a: binary::U32 at 2\n"] \
+        [blErrorAt "import binary\nlayout L:\n    size 4\n    align 4\n    field a: binary::U8 at 4\n"] \
+        [blError "import binary\nlayout L:\n    size 4\n    align 4\n    field a: binary::U32 at 0\n"]
+} -result {{LAYOUT-FIELD-BOUNDS 5:29: field "a" of layout "L" occupies bytes 2..5 (offset 2, width 4), outside the layout's size 4} {LAYOUT-FIELD-BOUNDS 5:28} {no error}}
+
+test bl-declaration-overlap {no two fields share a byte (an overlay is a future explicit union construct, never implied), not even one at either end of another: the later field of the first overlapping pair is located; fields that only touch are adjacent, in any order} -body {
+    list [blError "import binary\nlayout L:\n    size 8\n    align 4\n    field a: binary::U32 at 0\n    field b: binary::U16 at 2\n"] \
+        [blErrorAt "import binary\nlayout L:\n    size 8\n    align 4\n    field a: binary::U16 at 4\n    field b: binary::U32 at 2\n"] \
+        [blError "import binary\nlayout L:\n    size 8\n    align 4\n    field b: binary::U32 at 4\n    field a: binary::U32 at 0\n"] \
+        [blError "import binary\nlayout L:\n    size 8\n    align 4\n    field a: binary::U32 at 0\n    field b: binary::U8 at 3\n"] \
+        [blErrorAt "import binary\nlayout L:\n    size 8\n    align 4\n    field a: binary::U32 at 4\n    field b: binary::U16 at 3\n"] \
+        [blError "import binary\nlayout L:\n    size 8\n    align 4\n    field a: binary::U32 at 0\n    field b: binary::U8 at 4\n    field c: binary::U16 at 6\n    field d: binary::U8 at 5\n"]
+} -result {{LAYOUT-FIELD-OVERLAP 6:29: field "b" of layout "L" (bytes 2..3) overlaps field "a" (bytes 0..3): the fields of a layout never share a byte (an overlay would be an explicit union construct, which layouts do not have)} {LAYOUT-FIELD-OVERLAP 6:29} {no error} {LAYOUT-FIELD-OVERLAP 6:28: field "b" of layout "L" (bytes 3..3) overlaps field "a" (bytes 0..3): the fields of a layout never share a byte (an overlay would be an explicit union construct, which layouts do not have)} {LAYOUT-FIELD-OVERLAP 6:29} {no error}}
+
+test bl-declaration-duplicate-field {a layout's field names are distinct (no overloading by offset): DUPLICATE-FIELD at the second} -body {
+    blError "import binary\nlayout L:\n    size 8\n    align 4\n    field a: binary::U32 at 0\n    field a: binary::U32 at 4\n"
+} -result {DUPLICATE-FIELD 6:11: duplicate field "a" in layout "L" (first declared at layout.bot:5:11): a layout's fields have distinct names}
+
+test bl-declaration-field-types {a scalar field's type is an integer domain whose values are exactly one fixed-width encoding's; int, a narrower or exact-set domain, a refinement, a String, a struct and an unknown name are LAYOUT-FIELD-TYPE at the type} -body {
+    list [blError "layout L:\n    size 8\n    align 8\n    field a: int at 0\n"] \
+        [blError "type Small = Int in 0..10\nlayout L:\n    size 8\n    align 8\n    field a: Small at 0\n"] \
+        [blError "type Some = Int in \{1, 2, 3\}\nlayout L:\n    size 8\n    align 8\n    field a: Some at 0\n"] \
+        [blError "import binary\nrefined type Port = binary::U16\nlayout L:\n    size 8\n    align 8\n    field a: Port at 0\n"] \
+        [blErrorAt "layout L:\n    size 8\n    align 8\n    field a: str at 0\n"] \
+        [blError "struct S:\n    x: int\n\nlayout L:\n    size 8\n    align 8\n    field a: S at 0\n"] \
+        [blError "layout L:\n    size 8\n    align 8\n    field a: Nope at 0\n"]
+} -result {{LAYOUT-FIELD-TYPE 4:14: field "a" of layout "L" cannot have type int: int has no fixed width: a scalar field is an integer domain whose values are exactly one fixed-width encoding's (e.g. binary::U32, Int in 0..4294967295)} {LAYOUT-FIELD-TYPE 5:14: field "a" of layout "L" cannot have type Small: Small is Int in 0..10, which is not the range of a fixed-width encoding (8, 16, 32 or 64 bits, unsigned 0..2^n-1 or two's-complement -2^(n-1)..2^(n-1)-1), so its width is unknown or not every bit pattern would be a value of it} {LAYOUT-FIELD-TYPE 5:14: field "a" of layout "L" cannot have type Some: Some is a set of exact values, not one fixed-width encoding's whole range (not every bit pattern would be a value of it)} {LAYOUT-FIELD-TYPE 6:14: field "a" of layout "L" cannot have type Port: Port is a refinement: its values carry a proof that imprinting bytes cannot make (use its carrier's integer domain and refine the value afterwards)} {LAYOUT-FIELD-TYPE 4:14} {LAYOUT-FIELD-TYPE 7:14: field "a" of layout "L" cannot have type S: S is a struct type, not an integer domain or a layout (a struct holds domain meaning, not bytes; a nested layout field names a layout)} {LAYOUT-FIELD-TYPE 4:14: unknown type Nope for field "a" of layout "L": no layout, integer domain or other type of that name is visible here (a field names a fixed-width integer domain or a nested layout)}}
+
+test bl-declaration-encoding-follows-the-domain {the encoding of a scalar field is its domain's: any integer domain whose interval is exactly an encoding's value set qualifies, from any module (byte::Byte is an unsigned byte, abi::U32Value an unsigned 32-bit word, a program's own Int in -128..127 a signed byte) -- never a table of type names} -body {
+    blRun "type Own = Int in -128..127\nlayout Mixed:\n    size 8\n    align 4\n    field a: byte::Byte at 0\n    field b: Own at 1\n    field c: abi::U32Value at 4\n\nm = LayoutStruct\[Mixed\] \{a: 255, b: -128, c: 4294967295\}\nback = binary::parse(Mixed, binary::emit(m)):\n    on LayoutLengthMismatch:\n        m\n\[binary::emit(m), back == m, back.c\]\n"
+} -result {same: [bytes(ff 80 00 00 ff ff ff ff), true, 4294967295]}
+
+test bl-declaration-cycle {a layout never contains itself by value (it would have no finite size): LAYOUT-CYCLE, directly or through other layouts} -body {
+    list [blError "layout A:\n    size 8\n    align 4\n    field a: A at 0\n"] \
+        [blError "layout A:\n    size 8\n    align 4\n    field b: B at 0\n\nlayout B:\n    size 8\n    align 4\n    field a: A at 0\n"]
+} -result {{LAYOUT-CYCLE 4:14: layout "A" contains itself by value through A -> A: a fixed layout has a finite size, so it can never contain itself (a reference to one is a pointer field, not a nested layout)} {LAYOUT-CYCLE 9:14: layout "B" contains itself by value through A -> B -> A: a fixed layout has a finite size, so it can never contain itself (a reference to one is a pointer field, not a nested layout)}}
+
+test bl-declaration-one-type-namespace {layouts share the one type namespace: a layout never shares a name with a struct, an integer domain, an enum or a built-in type, and LayoutStruct itself cannot be declared} -body {
+    set layout "layout Pair:\n    size 1\n    align 1\n    field a: Byte at 0\n"
+    list [blErrorAt "type Byte = Int in 0..255\nstruct Pair:\n    x: int\n\n$layout"] \
+        [blErrorAt "type Byte = Int in 0..255\ntype Pair = Int in 0..1\n$layout"] \
+        [blErrorAt "type Byte = Int in 0..255\nenum Pair:\n    A\n\n$layout"] \
+        [blErrorAt "type Byte = Int in 0..255\nlayout int:\n    size 1\n    align 1\n    field a: Byte at 0\n"] \
+        [blErrorAt "struct LayoutStruct:\n    x: int\n"]
+} -cleanup {unset -nocomplain layout} -result {{TYPE 2:8} {TYPE 2:6} {TYPE 5:8} {TYPE 2:8} {TYPE 1:8}}
+
+test bl-declaration-vendor-layout {a resolved foreign layout is authoritative: a field at an unaligned offset, an alignment beyond every field's natural one and explicit trailing padding are all legal as stated (no ABI's alignment algorithm is assumed)} -body {
+    blRun "v = LayoutStruct\[Vendor\] \{kind: 1, word: 305419896, tail: 65535\}\n\[binary::layout_length(Vendor), binary::layout_alignment(Vendor), binary::emit(v) == bytes_of(\[1, 120, 86, 52, 18, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\])\]\n"
+} -result {same: [64, 64, true]}
+
+# ---------------------------------------------------------------------------
+# LayoutStruct[L]: typing
+
+test bl-type-field-types {a LayoutStruct[L]'s fields are exactly L's, each with its declared type -- the integer domain, or LayoutStruct[Inner] for a nested layout -- and a projection has that precise type} -body {
+    set hir [surface::compile "$::blPrelude${::blLayouts}o = LayoutStruct\[Outer\] \{count: 1, inner: LayoutStruct\[Inner\] \{x: -1, y: 2\}, last: 3\}\nc = o.count\ni = o.inner\nx = o.inner.x\n0\n" layout.bot -warnings off]
+    lmap name {o c i x} {
+        set e [lindex [hirFind $hir bind $name] 0]
+        hir::types::show [hir::typeOf $hir $e]
+    }
+} -cleanup {unset -nocomplain hir e} -result {{LayoutStruct[Outer]} {int[binary::U32]} {LayoutStruct[Inner]} {int[binary::I16]}}
+
+test bl-type-unknown-field {an absent field is UNKNOWN-FIELD at the projection, listing L's fields; a padding byte is no field} -body {
+    blError "$::blPrelude${::blLayouts}p = LayoutStruct\[Padded\] \{tag: 1, value: 2, flag: 3\}\np.padding\n"
+} -result {UNKNOWN-FIELD 63:3: struct type LayoutStruct[Padded] has no field "padding" (known fields: tag, value, flag)}
+
+test bl-type-distinct-layouts {two layouts with identical fields, offsets, size and alignment are distinct: LayoutStruct[A] is never accepted for LayoutStruct[B], in either direction, and the values are never equal} -body {
+    set twin "layout Twin:\n    size 4\n    align 4\n    field value: binary::U32 at 0\n\n"
+    list [blErrorAt "$::blPrelude$::blLayouts${twin}fn f(t: LayoutStruct\[Twin\]) -> int:\n    t.value\nf(LayoutStruct\[Single\] \{value: 1\})\n"] \
+        [blErrorAt "$::blPrelude$::blLayouts${twin}fn f(t: LayoutStruct\[Single\]) -> int:\n    t.value\nf(LayoutStruct\[Twin\] \{value: 1\})\n"] \
+        [blRun "${twin}\[LayoutStruct\[Single\] \{value: 1\} == LayoutStruct\[Twin\] \{value: 1\}, LayoutStruct\[Single\] \{value: 1\} == LayoutStruct\[Single\] \{value: 1\}\]\n"]
+} -cleanup {unset -nocomplain twin} -result {{TYPE 69:3} {TYPE 69:3} {same: [false, true]}}
+
+test bl-type-invalid-parameter {LayoutStruct[T] needs T to name a layout: a built-in type, a struct, a refinement, an enum, a source type and an applied type are LAYOUT-STRUCT-PARAMETER, an unknown name UNKNOWN-LAYOUT, an unapplied LayoutStruct an arity error -- each at the annotation} -body {
+    set decls "struct S:\n    x: int\n\nrefined type R = int\nenum E:\n    A\n\ntype D = Int in 0..9\n\n"
+    lmap arg {int S R E D List[int] Nope} {
+        blError "${decls}fn f(x: LayoutStruct\[$arg\]):\n    x\n0\n"
+    }
+} -cleanup {unset -nocomplain decls} -result {{LAYOUT-STRUCT-PARAMETER 10:5: unknown or invalid type LayoutStruct[int] for parameter "x": LayoutStruct[int]: int is a built-in type, not a layout; the argument of LayoutStruct must name a layout declaration (`layout Name:`), whose fields LayoutStruct[Name] has} {LAYOUT-STRUCT-PARAMETER 10:5: unknown or invalid type LayoutStruct[S] for parameter "x": LayoutStruct[S]: S is a struct, not a layout; the argument of LayoutStruct must name a layout declaration (`layout Name:`), whose fields LayoutStruct[Name] has} {LAYOUT-STRUCT-PARAMETER 10:5: unknown or invalid type LayoutStruct[R] for parameter "x": LayoutStruct[R]: R is a refinement type, not a layout; the argument of LayoutStruct must name a layout declaration (`layout Name:`), whose fields LayoutStruct[Name] has} {LAYOUT-STRUCT-PARAMETER 10:5: unknown or invalid type LayoutStruct[E] for parameter "x": LayoutStruct[E]: E is an enum, not a layout; the argument of LayoutStruct must name a layout declaration (`layout Name:`), whose fields LayoutStruct[Name] has} {LAYOUT-STRUCT-PARAMETER 10:5: unknown or invalid type LayoutStruct[D] for parameter "x": LayoutStruct[D]: D is a type, not a layout; the argument of LayoutStruct must name a layout declaration (`layout Name:`), whose fields LayoutStruct[Name] has} {LAYOUT-STRUCT-PARAMETER 10:5: unknown or invalid type LayoutStruct[List[int]] for parameter "x": LayoutStruct[List[int]]: List[int] is an applied or structural type, not a layout; the argument of LayoutStruct must name a layout declaration (`layout Name:`), whose fields LayoutStruct[Name] has} {UNKNOWN-LAYOUT 10:5: unknown or invalid type LayoutStruct[Nope] for parameter "x": unknown layout "Nope" in LayoutStruct[Nope]: no "layout Nope:" declaration is visible (the argument of LayoutStruct must name a layout)}}
+
+test bl-type-refinement-carrier {a LayoutStruct[L] is a struct type: as a refinement's carrier it is REFINEMENT-CARRIER at the carrier, exactly as any struct is (refinements of struct values are not supported yet) -- never an unknown layout} -body {
+    blError "import binary\nlayout L:\n    size 4\n    align 4\n    field x: binary::U32 at 0\n\nrefined type Checked = LayoutStruct\[L\]\n0\n"
+} -result {REFINEMENT-CARRIER 7:24: invalid refinement carrier LayoutStruct[L] for "Checked": LayoutStruct[L] is a struct type (the values a layout imprints), and refinements of struct values are not supported yet (this milestone's carriers are scalar value types: str, int, bool, UnicodeChar, and integer-domain or refinement types over them)}
+
+test bl-type-unapplied {LayoutStruct without its layout argument is the arity error every type constructor gives} -body {
+    blErrorAt "fn f(x: LayoutStruct):\n    x\n0\n"
+} -result {TYPE 1:5}
+
+test bl-layout-not-a-type-or-value {a layout is neither a type (its values are LayoutStruct[L]'s: LAYOUT-NOT-A-TYPE) nor a value (no runtime layout object exists: LAYOUT-NOT-A-VALUE, bare or written where a value is) and never callable} -body {
+    list [blError "$::blPrelude${::blLayouts}fn f(x: Single):\n    x\n0\n"] \
+        [blError "$::blPrelude${::blLayouts}x = Single\nx\n"] \
+        [blErrorAt "$::blPrelude${::blLayouts}Single(bytes_of(\[0, 0, 0, 0\]))\n"] \
+        [blErrorAt "$::blPrelude${::blLayouts}\[Single\]\n"]
+} -result {{LAYOUT-NOT-A-TYPE 62:5: unknown or invalid type Single for parameter "x": "Single" is a layout, not a type: a layout describes bytes, and the values imprinted with it have the type LayoutStruct[Single]} {LAYOUT-NOT-A-VALUE 62:5: "Single" is a layout, not a value: a layout is named in a type (LayoutStruct[Single]) or as the layout operand of a binary operation (binary::parse(Single, data), binary::layout_length(Single)), and no runtime layout object exists} {LAYOUT-NOT-A-VALUE 62:1} {LAYOUT-NOT-A-VALUE 62:2}}
+
+# ---------------------------------------------------------------------------
+# Construction: the applied construction LayoutStruct[L] {...}
+
+test bl-construction {LayoutStruct[L] {field: value, ...} builds a LayoutStruct[L] from its fields without any bytes: every field given once, in any order, each proven in its declared type -- the ordinary named-construction check, so a value from ordinary data reaches emission} -body {
+    blRun "fn of(n: binary::U32, d: binary::I32) -> LayoutStruct\[Padded\]:\n    LayoutStruct\[Padded\] \{value: d, flag: 1, tag: 255\}\n\[of(7, -7), binary::emit(of(7, -7))\]\n"
+} -result {same: [LayoutStruct[Padded] {tag: 255, value: -7, flag: 1}, bytes(ff 00 00 00 f9 ff ff ff 01 00 00 00)]}
+
+test bl-construction-checks {the construction is complete, exact and checked like any named construction: MISSING-FIELD, UNKNOWN-FIELD, DUPLICATE-FIELD, a constant outside a field's domain and a value of another type are rejected -- no implicit conversion, truncation or runtime guard} -body {
+    lmap init {{tag: 1, value: 2} {tag: 1, value: 2, flag: 3, extra: 4} {tag: 1, value: 2, flag: 3, tag: 4} {tag: 256, value: 2, flag: 3} {tag: 1, value: 2147483648, flag: 3} {tag: "x", value: 2, flag: 3}} {
+        blErrorAt "$::blPrelude${::blLayouts}LayoutStruct\[Padded\] \{$init\}\n"
+    }
+} -result {{MISSING-FIELD 62:1} {UNKNOWN-FIELD 62:50} {DUPLICATE-FIELD 62:50} {TYPE 62:23} {TYPE 62:31} {TYPE 62:23}}
+
+test bl-construction-width {a field's type is its encoding's exact domain: a value of a wider domain (a U32 into a U16 field, an I16 into a U16 one) is not assignable merely because some of its values fit, and an Int is admitted only when proven in range} -body {
+    list [blErrorAt "$::blPrelude${::blLayouts}fn f(w: binary::U32) -> LayoutStruct\[Inner\]:\n    LayoutStruct\[Inner\] \{x: 0, y: w\}\n0\n"] \
+        [blErrorAt "$::blPrelude${::blLayouts}fn f(w: binary::I16) -> LayoutStruct\[Inner\]:\n    LayoutStruct\[Inner\] \{x: 0, y: w\}\n0\n"] \
+        [blRun "fn f(n: int) -> LayoutStruct\[Inner\]:\n    if n >= 0 and n <= 65535:\n        LayoutStruct\[Inner\] \{x: 0, y: n\}\n    else:\n        LayoutStruct\[Inner\] \{x: 0, y: 0\}\n\[f(65535), f(65536)\]\n"]
+} -result {{TYPE 63:32} {TYPE 63:32} {same: [LayoutStruct[Inner] {x: 0, y: 65535}, LayoutStruct[Inner] {x: 0, y: 0}]}}
+
+test bl-construction-only-layoutstruct {of the applied types only LayoutStruct[L] has a construction (UNKNOWN-STRUCT for another), and a layout's own name constructs nothing (it is not a struct)} -body {
+    list [blError "$::blPrelude${::blLayouts}List\[int\] \{value: 1\}\n"] \
+        [blErrorAt "$::blPrelude${::blLayouts}Single \{value: 1\}\n"]
+} -result {{UNKNOWN-STRUCT 62:1: List[int] is not a struct type: of the applied types, only LayoutStruct[L] is constructed from field values} {UNKNOWN-STRUCT 62:1}}
+
+# ---------------------------------------------------------------------------
+# Consumer-side struct behavior
+
+test bl-consumer-struct-behavior {a LayoutStruct[L] is an ordinary immutable value to consuming code: projection, destructuring (nested included), equality by fields, a List element, an ImmutableSet member (deduplicated), a function argument and result, a closure capture -- and it prints as LayoutStruct[L] {...}} -body {
+    blRun "fn mid(o: LayoutStruct\[Outer\]) -> LayoutStruct\[Inner\]:\n    o.inner\no = LayoutStruct\[Outer\] \{count: 3, inner: LayoutStruct\[Inner\] \{x: -4, y: 5\}, last: 6\}\n\{count: c, inner: \{x: ix, y: iy\}\} = o\nfn keep():\n    o.last\nset = immutable_set::from_list(\[mid(o), mid(o), LayoutStruct\[Inner\] \{x: 0, y: 0\}\])\n\[c, ix, iy, keep(), mid(o), \[o.inner\] == \[LayoutStruct\[Inner\] \{x: -4, y: 5\}\], immutable_set::contains(set, LayoutStruct\[Inner\] \{x: 0, y: 0\})\]\n"
+} -result {same: [3, -4, 5, 6, LayoutStruct[Inner] {x: -4, y: 5}, true, true]}
+
+test bl-consumer-method-syntax {binary::emit is method-eligible on its value (`v.emit()`); binary::parse takes its layout first and is not (nomethod: `Single.parse(data)` would make the layout a receiver value)} -body {
+    list [blRun "LayoutStruct\[Single\] \{value: 258\}.emit()\n"] \
+        [blErrorAt "$::blPrelude${::blLayouts}fn f(d: abi::bytes::Bytes) -> LayoutStruct\[Single\] errors LayoutLengthMismatch:\n    Single.parse(d)\n0\n"]
+} -result {{same: bytes(02 01 00 00)} {LAYOUT-NOT-A-VALUE 63:5}}
+
+test bl-consumer-containers {a LayoutStruct[L] is held like any immutable value: a field of an ordinary struct and of a context struct (installed, then read by a function's context parameter), an element of a MutableVector and of a MutableArray (pushed, set, read back), and emitted from each} -body {
+    set prelude [string map [list "import immutable_set\n" "import immutable_set\nimport mutable_array\nimport mutable_vector\n"] $::blPrelude]
+    set hir [surface::compile "$prelude${::blLayouts}struct Holder:\n    name: str\n    raw: LayoutStruct\[Inner\]\n\ncontext struct Settings:\n    default_inner: LayoutStruct\[Inner\]\n\nfn from_settings(context settings: Settings) -> LayoutStruct\[Inner\]:\n    settings.default_inner\nfn run() -> List\[any\] errors IndexNotFound:\n    h = Holder \{name: \"x\", raw: LayoutStruct\[Inner\] \{x: -1, y: 1\}\}\n    v = mutable_vector::from_list(\[h.raw\])\n    v.push(LayoutStruct\[Inner\] \{x: 2, y: 2\})\n    a = mutable_array::create(2, LayoutStruct\[Inner\] \{x: 9, y: 9\})\n    a.set(1, h.raw)\n    s = from_settings()\n    \[h, v.length(), v.at(1), a.at(1), s, binary::emit(v.at(0)), binary::emit(a.at(0)), binary::emit(s)\]\nwith context Settings \{default_inner: LayoutStruct\[Inner\] \{x: 5, y: 6\}\}\nr = run():\n    on IndexNotFound:\n        \[\]\nr\n" layout.bot -warnings off]
+    lsort -unique [lmap backend $::blBackends {blOutcome $backend $hir}]
+} -cleanup {unset -nocomplain prelude hir} -result {{value {[Holder {name: "x", raw: LayoutStruct[Inner] {x: -1, y: 1}}, 2, LayoutStruct[Inner] {x: 2, y: 2}, LayoutStruct[Inner] {x: -1, y: 1}, LayoutStruct[Inner] {x: 5, y: 6}, bytes(ff ff 01 00), bytes(09 00 09 00), bytes(05 00 06 00)]}}}
+
+# ---------------------------------------------------------------------------
+# Binary semantics: explicit bytes in both directions (BINARY-LAYOUT.md,
+# "Binary semantics"). Every byte order is little-endian, the target's.
+
+test bl-parse-explicit-bytes {known byte sequences imprint the expected fields: a single scalar, adjacent fields, padding, explicit offsets, signed fields (two's complement), zero, every bit set, the minimum and maximum of every width} -body {
+    blRun "fn p(data: abi::bytes::Bytes) -> List\[any\] errors LayoutLengthMismatch:\n    s = binary::parse(Single, data)\n    \[s.value\]\nfn a(data: abi::bytes::Bytes) -> List\[any\] errors LayoutLengthMismatch:\n    v = binary::parse(Adjacent, data)\n    \[v.a, v.b, v.c\]\nfn pd(data: abi::bytes::Bytes) -> List\[any\] errors LayoutLengthMismatch:\n    v = binary::parse(Padded, data)\n    \[v.tag, v.value, v.flag\]\nfn w(data: abi::bytes::Bytes) -> List\[any\] errors LayoutLengthMismatch:\n    v = binary::parse(Wide, data)\n    \[v.u, v.i\]\nfn all() -> List\[any\] errors LayoutLengthMismatch:\n    \[p(bytes_of(\[1, 2, 3, 4\])), p(bytes_of(\[0, 0, 0, 0\])), p(bytes_of(\[255, 255, 255, 255\])), a(bytes_of(\[255, 128, 52, 18\])), a(bytes_of(\[0, 127, 255, 255\])), pd(bytes_of(\[7, 9, 9, 9, 254, 255, 255, 255, 1, 9, 9, 9\])), pd(bytes_of(\[0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0\])), w(bytes_of(\[255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 128\])), w(bytes_of(\[0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 127\])), w(bytes_of(\[0, 0, 0, 0, 0, 0, 0, 128, 255, 255, 255, 255, 255, 255, 255, 255\]))\]\nr = all():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+} -result {same: [[67305985], [0], [4294967295], [255, -128, 4660], [0, 127, 65535], [7, -2, 1], [0, -2147483648, 0], [18446744073709551615, -9223372036854775808], [0, 9223372036854775807], [9223372036854775808, -1]]}
+
+test bl-emit-explicit-bytes {selected values emit exactly the expected bytes: each field at its offset in its encoding, little-endian, signed fields two's complement, padding zero, every width's extremes} -body {
+    blRun "\[binary::emit(LayoutStruct\[Single\] \{value: 67305985\}), binary::emit(LayoutStruct\[Adjacent\] \{a: 255, b: -128, c: 4660\}), binary::emit(LayoutStruct\[Padded\] \{tag: 7, value: -2, flag: 1\}), binary::emit(LayoutStruct\[Wide\] \{u: 18446744073709551615, i: -9223372036854775808\}), binary::emit(LayoutStruct\[Wide\] \{u: 0, i: 9223372036854775807\}), binary::emit(LayoutStruct\[Wide\] \{u: 9223372036854775808, i: -1\})\]\n"
+} -result {same: [bytes(01 02 03 04), bytes(ff 80 34 12), bytes(07 00 00 00 fe ff ff ff 01 00 00 00), bytes(ff ff ff ff ff ff ff ff 00 00 00 00 00 00 00 80), bytes(00 00 00 00 00 00 00 00 ff ff ff ff ff ff ff 7f), bytes(00 00 00 00 00 00 00 80 ff ff ff ff ff ff ff ff)]}
+
+test bl-round-trip {the round-trip theorem: parse(L, emit(v)) == v for a value of every representative layout, extremes included (the central property; audit/binary-layout/tools/fuzz.tcl checks it on random layouts)} -body {
+    blRun "fn back_s(v: LayoutStruct\[Single\]) -> bool errors LayoutLengthMismatch:\n    binary::parse(Single, binary::emit(v)) == v\nfn back_a(v: LayoutStruct\[Adjacent\]) -> bool errors LayoutLengthMismatch:\n    binary::parse(Adjacent, binary::emit(v)) == v\nfn back_p(v: LayoutStruct\[Padded\]) -> bool errors LayoutLengthMismatch:\n    binary::parse(Padded, binary::emit(v)) == v\nfn back_w(v: LayoutStruct\[Wide\]) -> bool errors LayoutLengthMismatch:\n    binary::parse(Wide, binary::emit(v)) == v\nfn back_o(v: LayoutStruct\[Outer\]) -> bool errors LayoutLengthMismatch:\n    binary::parse(Outer, binary::emit(v)) == v\nfn back_v(v: LayoutStruct\[Vendor\]) -> bool errors LayoutLengthMismatch:\n    binary::parse(Vendor, binary::emit(v)) == v\nfn all() -> List\[bool\] errors LayoutLengthMismatch:\n    \[back_s(LayoutStruct\[Single\] \{value: 4294967295\}), back_a(LayoutStruct\[Adjacent\] \{a: 0, b: -128, c: 65535\}), back_p(LayoutStruct\[Padded\] \{tag: 255, value: -2147483648, flag: 0\}), back_w(LayoutStruct\[Wide\] \{u: 18446744073709551615, i: -9223372036854775808\}), back_o(LayoutStruct\[Outer\] \{count: 1, inner: LayoutStruct\[Inner\] \{x: -32768, y: 65535\}, last: 255\}), back_v(LayoutStruct\[Vendor\] \{kind: 9, word: 4294967295, tail: 1\})\]\nr = all():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+} -result {same: [true, true, true, true, true, true]}
+
+test bl-padding {padding is physical, never a field: emitted padding is zero (deterministic, never uninitialized memory), and two inputs differing only in their padding bytes imprint equal values that emit identical bytes} -body {
+    blRun "fn both() -> List\[any\] errors LayoutLengthMismatch:\n    x = binary::parse(Padded, bytes_of(\[7, 0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0\]))\n    y = binary::parse(Padded, bytes_of(\[7, 170, 187, 204, 5, 0, 0, 0, 1, 221, 238, 255\]))\n    \[x == y, binary::emit(y), binary::emit(x) == binary::emit(y)\]\nr = both():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+} -result {same: [true, bytes(07 00 00 00 05 00 00 00 01 00 00 00), true]}
+
+test bl-determinism {emission is deterministic: one value emits the same bytes every time, and equal values built differently (constructed, imprinted, through a function) emit equal bytes} -body {
+    blRun "fn mk(t: binary::U8) -> LayoutStruct\[Padded\]:\n    LayoutStruct\[Padded\] \{tag: t, value: 1, flag: 2\}\nv = mk(3)\nw = binary::parse(Padded, bytes_of(\[3, 99, 99, 99, 1, 0, 0, 0, 2, 99, 99, 99\])):\n    on LayoutLengthMismatch:\n        v\n\[binary::emit(v) == binary::emit(v), binary::emit(v) == binary::emit(w), binary::emit(v) == binary::emit(mk(3)), v == w\]\n"
+} -result {same: [true, true, true, true]}
+
+test bl-nested {a nested layout is by value: its fields sit at the outer offset plus their own, its value is an ordinary LayoutStruct[Inner] (projected, compared, passed on), and emission recurses symmetrically} -body {
+    blRun "fn x_of(i: LayoutStruct\[Inner\]) -> int:\n    i.x\nfn go() -> List\[any\] errors LayoutLengthMismatch:\n    o = binary::parse(Outer, bytes_of(\[1, 0, 0, 0, 254, 255, 2, 0, 9, 9, 9, 9, 3, 9, 9, 9\]))\n    \[o, x_of(o.inner), o.inner == LayoutStruct\[Inner\] \{x: -2, y: 2\}, binary::emit(o)\]\nr = go():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+} -result {same: [LayoutStruct[Outer] {count: 1, inner: LayoutStruct[Inner] {x: -2, y: 2}, last: 3}, -2, true, bytes(01 00 00 00 fe ff 02 00 00 00 00 00 03 00 00 00)]}
+
+test bl-length-rule {parse requires exactly the layout's size: too few bytes and too many bytes are both the declared error LayoutLengthMismatch (no prefix parse, no cursor); exactly size bytes imprint} -body {
+    blRun "fn try(data: abi::bytes::Bytes) -> any:\n    v = binary::parse(Single, data):\n        on LayoutLengthMismatch:\n            return \"LayoutLengthMismatch\"\n    v\n\[try(abi::bytes::from_list(\[\])), try(bytes_of(\[1, 2, 3\])), try(bytes_of(\[1, 2, 3, 4\])), try(bytes_of(\[1, 2, 3, 4, 5\]))\]\n"
+} -result {same: ["LayoutLengthMismatch", "LayoutLengthMismatch", LayoutStruct[Single] {value: 67305985}, "LayoutLengthMismatch"]}
+
+test bl-errors-are-declared {LayoutLengthMismatch is an ordinary declared error: a call that may fail with it is UNHANDLED-ERROR unless handled or declared, it propagates through a function's errors clause, and emit declares none (emission is infallible)} -body {
+    list [blErrorAt "$::blPrelude${::blLayouts}fn f(d: abi::bytes::Bytes) -> LayoutStruct\[Single\]:\n    binary::parse(Single, d)\n0\n"] \
+        [blRun "fn f(d: abi::bytes::Bytes) -> LayoutStruct\[Single\] errors LayoutLengthMismatch:\n    binary::parse(Single, d)\nfn g() -> abi::bytes::Bytes:\n    binary::emit(LayoutStruct\[Single\] \{value: 1\})\nr = f(bytes_of(\[1\])):\n    on LayoutLengthMismatch:\n        LayoutStruct\[Single\] \{value: 0\}\n\[r, g()\]\n"]
+} -result {{UNHANDLED-ERROR 63:5} {same: [LayoutStruct[Single] {value: 0}, bytes(01 00 00 00)]}}
+
+test bl-layout-queries {binary::layout_length(L) and binary::layout_alignment(L) are compile-time constants of the layout (the call is resolved to its value: no run-time layout object), usable where a proven Int is} -body {
+    set hir [surface::compile "$::blPrelude${::blLayouts}n = binary::layout_length(Outer)\na = binary::layout_alignment(Vendor)\n\[n, a\]\n" layout.bot -warnings off]
+    set kinds [lmap name {n a} {
+        set e [lindex [hirFind $hir bind $name] 0]
+        hir::kind $hir [hir::get $hir $e value]
+    }]
+    list $kinds [blRun "fn size_ok(d: abi::bytes::Bytes) -> bool:\n    abi::bytes::length(d).value == binary::layout_length(Padded)\n\[binary::layout_length(Single), binary::layout_length(Adjacent), binary::layout_length(Padded), binary::layout_length(Wide), binary::layout_length(Outer), binary::layout_length(Vendor), binary::layout_alignment(Wide), size_ok(binary::emit(LayoutStruct\[Padded\] \{tag: 0, value: 0, flag: 0\}))\]\n"]
+} -cleanup {unset -nocomplain hir kinds} -result {{const const} {same: [4, 4, 12, 16, 16, 64, 8, true]}}
+
+test bl-operands {the layout operand is static evidence: an unknown name is UNKNOWN-LAYOUT, a String, an expression or a value is LAYOUT-OPERAND (each at the operand); the bytes must be statically an abi::bytes::Bytes and the emitted value a LayoutStruct (BINARY-OPERAND at the argument); an operation is never a function value} -body {
+    set d "fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n"
+    list [blErrorAt "$::blPrelude$::blLayouts${d}    binary::parse(Nope, d)\n0\n"] \
+        [blErrorAt "$::blPrelude$::blLayouts${d}    binary::parse(\"Single\", d)\n0\n"] \
+        [blErrorAt "$::blPrelude$::blLayouts${d}    l = 1\n    binary::parse(l, d)\n0\n"] \
+        [blErrorAt "$::blPrelude$::blLayouts${d}    binary::parse(binary::layout_length(Single), d)\n0\n"] \
+        [blErrorAt "$::blPrelude${::blLayouts}fn f(d) -> any errors LayoutLengthMismatch:\n    binary::parse(Single, d)\n0\n"] \
+        [blErrorAt "$::blPrelude${::blLayouts}binary::emit(\{value: 1\})\n"] \
+        [blErrorAt "$::blPrelude${::blLayouts}fn f(v):\n    binary::emit(v)\nf(LayoutStruct\[Single\] \{value: 1\})\n"] \
+        [blErrorAt "$::blPrelude${::blLayouts}e = binary::emit\n0\n"] \
+        [blErrorAt "$::blPrelude${::blLayouts}binary::layout_length(\"Single\")\n"]
+} -cleanup {unset -nocomplain d} -result {{UNKNOWN-LAYOUT 63:19} {LAYOUT-OPERAND 63:19} {LAYOUT-OPERAND 64:19} {LAYOUT-OPERAND 63:19} {BINARY-OPERAND 63:27} {BINARY-OPERAND 62:14} {BINARY-OPERAND 63:18} {BINARY-OPERAND 62:5} {LAYOUT-OPERAND 62:23}}
+
+# ---------------------------------------------------------------------------
+# C readiness: examples/binary/c-structs.bot is what a C-header plugin would
+# emit for one target, with ordinary wrapper conversions both ways
+
+test bl-c-structs-example {examples/binary/c-structs.bot -- a naturally aligned C struct (RAWINPUTDEVICE), a padded one, a nested one by value, a packed and an over-aligned vendor layout, and ordinary conversions LayoutStruct[RAWINPUTDEVICE] <-> RawInputDevice (renames, a flag word split and repacked, a failing conversion) -- shows its `# expect:` value on every backend} -body {
+    set path [file join $::projectRoot examples binary c-structs.bot]
+    set source [core::ReadFile $path]
+    regexp -line {^# expect: (.*)$} $source -> expected
+    set hir [surface::modules::compileProgramFile $path -cache "" -warnings off]
+    set outcomes [lsort -unique [lmap backend $::blBackends {blOutcome $backend $hir}]]
+    list [llength $outcomes] [expr {$outcomes eq [list [list value $expected]]}]
+} -cleanup {unset -nocomplain path source expected hir outcomes} -result {1 1}
+
+# ---------------------------------------------------------------------------
+# Representation: HIR, generated Tcl, NIR (BINARY-LAYOUT.md, "Implementation")
+
+test bl-hir-static-layout {the layout is static evidence in HIR: binary::parse's operand is the layout's descriptor constant (resolved from the name), binary::emit(v) is elaborated to binary#emit(v, DESCRIPTOR) from v's static type, and both descriptors describe the same layout} -body {
+    set hir [surface::compile "$::blPrelude${::blLayouts}fn f(d: abi::bytes::Bytes) -> abi::bytes::Bytes errors LayoutLengthMismatch:\n    binary::emit(binary::parse(Inner, d))\n0\n" layout.bot -warnings off]
+    set found {}
+    dict for {e node} [dict get $hir exprs] {
+        set name [hir::layouts::CalledNative $hir $e]
+        if {$name ni {binary::parse binary#emit binary::emit}} continue
+        set descriptors [lmap a [dict get $node args] {
+            expr {[hir::kind $hir $a] eq "const" ? [lindex [hir::get $hir $a literal] end] : [continue]}
+        }]
+        lappend found [list $name $descriptors]
+    }
+    lsort $found
+} -cleanup {unset -nocomplain hir found e node name descriptors} -result {{binary#emit {{{LayoutStruct[Inner]} 4 2 {{x 0 i 2 little} {y 2 u 2 little}}}}} {binary::parse {{{LayoutStruct[Inner]} 4 2 {{x 0 i 2 little} {y 2 u 2 little}}}}}}
+
+test bl-tcl-generated-code {the Tcl compiler compiles a statically known layout to straight-line code: parse is one length check and one `binary scan` holding every field's offset and encoding (nested fields at their absolute offset), emit one `binary format` ending at the size -- no schema walk at run time} -body {
+    set hir [surface::compile "$::blPrelude${::blLayouts}fn f(d: abi::bytes::Bytes) -> LayoutStruct\[Outer\] errors LayoutLengthMismatch:\n    binary::parse(Outer, d)\nfn g(o: LayoutStruct\[Outer\]) -> abi::bytes::Bytes:\n    binary::emit(o)\n0\n" layout.bot -warnings off]
+    set code [dict get [core::compiler::compileHir $hir] code]
+    list [regexp -all {binary scan \S+ @0iu@4s@6su@12cu } $code] \
+        [regexp -all {binary format @0iu@4s@6su@12cu@16 |binary format @0i@4s@6s@12c@16 } $code] \
+        [regexp -all {string length \S+\] != 16} $code] \
+        [regexp -all {core::binary::} $code]
+} -cleanup {unset -nocomplain hir code} -result {1 1 1 0}
+
+test bl-nir-parse {native code of parse: one length check (byteslen against the constant size, the declared error on mismatch), then one binload per scalar field with constant offset and encoding, and the object -- or, when only fields are read, no object at all (scalar replacement)} -body {
+    set call "r = f(bytes_of(\[1, 2, 3, 4\])):\n    on LayoutLengthMismatch:\n        0\nr\n"
+    list [blOps [blNir "fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    binary::parse(Adjacent, d)\n$call" f]] \
+        [blOps [blNir "fn f(d: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    v = binary::parse(Adjacent, d)\n    v.a + v.c\n$call" f]]
+} -cleanup {unset -nocomplain call} -result {{byteslen int ieq br faildeclared int int binload int int binload int int binload structnew ret} {byteslen int ieq br faildeclared int int binload int int binload int int binload runbox runbox riadd rbox ret}}
+
+test bl-nir-parse-constants {each binload carries its field's absolute offset and encoding word as constants (width, plus 16 when signed): Outer's count at 0 (u32), inner.x at 4 (i16), inner.y at 6 (u16), last at 12 (u8)} -body {
+    set nir [blNir "fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    binary::parse(Outer, d)\nr = f(bytes_of(\[1, 2, 3\])):\n    on LayoutLengthMismatch:\n        0\nr\n" f]
+    set ints {}
+    foreach line [split $nir \n] {
+        if {[regexp {= int (-?[0-9]+)$} $line -> n]} {
+            lappend ints $n
+        }
+    }
+    list $ints [regexp -all {op binload} $nir] [regexp -all {structnew} $nir]
+} -cleanup {unset -nocomplain nir ints line n} -result {{16 0 4 4 18 6 2 12 1} 4 2}
+
+test bl-nir-emit {native code of emit: one byteszeroed of the size (zero padding), then one binstore per scalar leaf at its absolute offset; a LayoutStruct held as fields (constructed into a local, or written as the argument) is never built as an object} -body {
+    list [blOps [blNir "fn g(o: LayoutStruct\[Inner\]) -> abi::bytes::Bytes:\n    binary::emit(o)\ng(LayoutStruct\[Inner\] \{x: 1, y: 2\})\n" g]] \
+        [blOps [blNir "fn g(x: binary::I16) -> abi::bytes::Bytes:\n    v = LayoutStruct\[Inner\] \{x: x, y: 1\}\n    binary::emit(v)\ng(5)\n" g]] \
+        [blOps [blNir "fn g(x: binary::I16) -> abi::bytes::Bytes:\n    binary::emit(LayoutStruct\[Inner\] \{x: x, y: 1\})\ng(5)\n" g]]
+} -result {{int byteszeroed int int binstore int int binstore structnew ret} {int rawint int byteszeroed int int binstore int int binstore structnew ret} {int rawint int byteszeroed int int binstore int int binstore structnew ret}}
+
+test bl-allocations {natively, parse followed by field reads allocates nothing per record, and construct-then-emit allocates exactly the emitted storage and its abi::bytes::Bytes per record (1000 records each)} -constraints linuxX86_64 -body {
+    set reports {}
+    foreach program [list \
+        "d = binary::emit(LayoutStruct\[Padded\] \{tag: 1, value: 2, flag: 3\})\nfn f() -> int errors LayoutLengthMismatch:\n    p = binary::parse(Padded, d)\n    p.tag + p.value + p.flag\nfn run(n: int) -> int errors LayoutLengthMismatch:\n    k = loop i from 0 to n:\n        f()\n    0\nr = run(1000):\n    on LayoutLengthMismatch:\n        0\nr\n" \
+        "fn g(v: binary::I32) -> abi::bytes::Bytes:\n    binary::emit(LayoutStruct\[Padded\] \{tag: 1, value: v, flag: 3\})\nfn run(n: int) -> int:\n    k = loop i from 0 to n:\n        g(7)\n    0\nrun(1000)\n"] {
+        set hir [surface::compile "$::blPrelude$::blLayouts$program" layout.bot -warnings off]
+        set report [native::allocationReport $hir summary]
+        lappend reports [list [dict get $report byKind Bytes allocations] [dict get $report byKind Struct allocations]]
+    }
+    set reports
+} -cleanup {unset -nocomplain reports program hir report} -result {{1 1} {1000 1000}}
+
+# ---------------------------------------------------------------------------
+# Compilation isolation, HIR text, HIR interchange
+
+test bl-isolation {two programs declaring a same-named layout with different offsets, compiled one after the other in one process: the earlier HIR still imprints and emits with its own layout on every backend (the layout registry is part of a HIR's declarations, hir::activate installs it)} -body {
+    set a [surface::compile "$::blPrelude${::blLayouts}layout Swap:\n    size 4\n    align 2\n    field first: binary::U16 at 0\n    field second: binary::U16 at 2\n\nbinary::emit(LayoutStruct\[Swap\] \{first: 1, second: 2\})\n" layout.bot -warnings off]
+    set b [surface::compile "$::blPrelude${::blLayouts}layout Swap:\n    size 4\n    align 2\n    field first: binary::U16 at 2\n    field second: binary::U16 at 0\n\nbinary::emit(LayoutStruct\[Swap\] \{first: 1, second: 2\})\n" layout.bot -warnings off]
+    list [lsort -unique [lmap backend $::blBackends {blOutcome $backend $a}]] \
+        [lsort -unique [lmap backend $::blBackends {blOutcome $backend $b}]] \
+        [lsort -unique [lmap backend $::blBackends {blOutcome $backend $a}]]
+} -cleanup {unset -nocomplain a b} -result {{{value {bytes(01 00 02 00)}}} {{value {bytes(02 00 01 00)}}} {{value {bytes(01 00 02 00)}}}}
+
+test bl-hir-text-roundtrip {HIR text carries every layout (identity, namespace, size, alignment, fields with types and offsets) and LayoutStruct[L] types: formatting, reading back and formatting again gives the same text, and the read HIR runs to the same value} -body {
+    set hir [surface::compile "type U8 = Int in 0..255\ntype I16 = Int in -32768..32767\nlayout In:\n    size 4\n    align 2\n    field x: I16 at 0\n    field y: U8 at 3\n\nlayout Out:\n    size 8\n    align 4\n    field a: In at 0\n    field b: U8 at 4\n\nfn y_of(o: LayoutStruct\[Out\]) -> int:\n    o.a.y\no = LayoutStruct\[Out\] \{a: LayoutStruct\[In\] \{x: -1, y: 2\}, b: 3\}\n\[y_of(o), o\]\n" layout.bot -warnings off]
+    set text [hir::format $hir]
+    set lines [lsearch -all -inline -glob [split $text \n] layout*]
+    set again [hir::parse $text]
+    list $lines [expr {[hir::format $again] eq $text}] [core::value::show [core::evalProgram [hir::lower $again]]]
+} -cleanup {unset -nocomplain hir text lines again} -result {{{layout In ns - size 4 align 2 fields x: I16 at 0, y: U8 at 3} {layout Out ns - size 8 align 4 fields a: In at 0, b: U8 at 4}} 1 {[2, LayoutStruct[Out] {a: LayoutStruct[In] {x: -1, y: 2}, b: 3}]}}
+
+test bl-interchange {HIR interchange keeps the layouts: a program written as interchange text and read back after another compilation runs to the same outcome on every backend, its layouts installed with its declarations} -body {
+    set hir [surface::compile "$::blPrelude${::blLayouts}o = LayoutStruct\[Outer\] \{count: 7, inner: LayoutStruct\[Inner\] \{x: -1, y: 1\}, last: 2\}\nback = binary::parse(Outer, binary::emit(o)):\n    on LayoutLengthMismatch:\n        o\n\[binary::emit(o), back == o, binary::layout_length(Vendor)\]\n" layout.bot -warnings off]
+    set text [hir::interchange::encode $hir]
+    set before [lsort -unique [lmap backend $::blBackends {blOutcome $backend $hir}]]
+    surface::compile "layout Outer:\n    size 1\n    align 1\n    field count: Byte at 0\n\ntype Byte = Int in 0..255\n0\n" other.bot -warnings off
+    set read [hir::interchange::decode $text]
+    set after [lsort -unique [lmap backend $::blBackends {blOutcome $backend $read}]]
+    list [expr {$before eq $after}] $after
+} -cleanup {unset -nocomplain hir text before read after} -result {1 {{value {[bytes(07 00 00 00 ff ff 01 00 00 00 00 00 02 00 00 00), true, 64]}}}}
+
+# ---------------------------------------------------------------------------
+# Modules
+
+test bl-modules {a layout is a member of its module like a struct: named qualified (LayoutStruct[geo::shapes::Point], binary::parse(geo::shapes::Box, data)) after `import geo::shapes`; inside its module bare, a nested layout and a field type of the module's own domain included; module functions take and return its LayoutStructs} -body {
+    withPrivateLibrary {
+        file mkdir [file join $::core::libraryDir geo]
+        set f [open [file join $::core::libraryDir geo shapes.bot] w]
+        puts -nonewline $f "import binary\n\ntype Coord = Int in -2147483648..2147483647\n\nlayout Point:\n    size 8\n    align 4\n    field x: Coord at 0\n    field y: binary::I32 at 4\n\nlayout Box:\n    size 16\n    align 4\n    field lo: Point at 0\n    field hi: Point at 8\n\nfn origin() -> LayoutStruct\[Point\]:\n    LayoutStruct\[Point\] \{x: 0, y: 0\}\n\nfn width(b: LayoutStruct\[Box\]) -> int:\n    b.hi.x - b.lo.x\n\nfn size() -> int:\n    binary::layout_length(Box)\n"
+        close $f
+        set hir [surface::compile "import abi::bytes\nimport binary\nimport geo::shapes\n\nb = LayoutStruct\[geo::shapes::Box\] \{lo: geo::shapes::origin(), hi: LayoutStruct\[geo::shapes::Point\] \{x: 5, y: 6\}\}\nback = binary::parse(geo::shapes::Box, binary::emit(b)):\n    on LayoutLengthMismatch:\n        b\n\[geo::shapes::width(back), geo::shapes::size(), binary::layout_length(geo::shapes::Point), back == b, back.hi\]\n" layout.bot -warnings off]
+        lsort -unique [lmap backend $::blBackends {blOutcome $backend $hir}]
+    }
+} -cleanup {unset -nocomplain f hir} -result {{value {[5, 16, 8, true, LayoutStruct[geo::shapes::Point] {x: 5, y: 6}]}}}
+
+test bl-modules-rules {a module's layout follows the ordinary module rules: no qualified use without the import (MISSING-IMPORT), `import type` does not import it (a layout is not a type: NOT-A-TYPE), and it is no value of its module (LAYOUT-NOT-A-VALUE)} -body {
+    withPrivateLibrary {
+        file mkdir [file join $::core::libraryDir geo]
+        set f [open [file join $::core::libraryDir geo shapes.bot] w]
+        puts -nonewline $f "import binary\n\nlayout Point:\n    size 8\n    align 4\n    field x: binary::I32 at 0\n    field y: binary::I32 at 4\n"
+        close $f
+        list [blErrorAt "import binary\np = LayoutStruct\[geo::shapes::Point\] \{x: 1, y: 2\}\n0\n"] \
+            [blError "import type geo::shapes::Point\n0\n"] \
+            [blErrorAt "import geo::shapes\nx = geo::shapes::Point\n0\n"]
+    }
+} -cleanup {unset -nocomplain f} -result {{MISSING-IMPORT 2:18} {NOT-A-TYPE 1:26: "geo::shapes::Point" is a layout, not a type: `import type` imports `type` declarations only; spell the layout geo::shapes::Point after `import geo::shapes` (its values have the type LayoutStruct[geo::shapes::Point])} {LAYOUT-NOT-A-VALUE 2:5}}
+
+# ---------------------------------------------------------------------------
+# Native: standalone executables, GC stress
+
+set blExecutableDir [makeDirectory binary-layout-executables]
+foreach stale [glob -nocomplain -directory $blExecutableDir *] {
+    file delete -force $stale
+}
+
+test bl-executable {a standalone executable (whichever linker BOTLISH_NATIVE_LINKER selects) imprints and emits exactly as the in-process backends do} -constraints linuxX86_64 -body {
+    set source "$::blPrelude${::blLayouts}o = LayoutStruct\[Outer\] \{count: 4294967295, inner: LayoutStruct\[Inner\] \{x: -32768, y: 65535\}, last: 255\}\nw = LayoutStruct\[Wide\] \{u: 18446744073709551615, i: -9223372036854775808\}\nback = binary::parse(Outer, binary::emit(o)):\n    on LayoutLengthMismatch:\n        o\nwide = binary::parse(Wide, binary::emit(w)):\n    on LayoutLengthMismatch:\n        w\n\[back == o, wide == w, wide.u, binary::emit(o) == bytes_of(\[255, 255, 255, 255, 0, 128, 255, 255, 0, 0, 0, 0, 255, 0, 0, 0\])\]\n"
+    set hir [surface::compile $source layout.bot -warnings off]
+    set path [file join $::blExecutableDir layouts]
+    native::executable $hir $path
+    list [exec $path] [blOutcome cranelift $hir]
+} -cleanup {unset -nocomplain source hir path} -result {{[true, true, 18446744073709551615, true]} {value {[true, true, 18446744073709551615, true]}}}
+
+test bl-gc-stress {under BOTLISH_NATIVE_GC_STRESS=1 (a collection at every allocation site) imprinting and emitting stay exact: 64-bit fields that become BigInts mid-parse, nested objects and many records} -constraints linuxX86_64 -body {
+    set source "fn round(n: binary::U64) -> List\[any\] errors LayoutLengthMismatch:\n    w = LayoutStruct\[Wide\] \{u: n, i: -9223372036854775808\}\n    o = LayoutStruct\[Outer\] \{count: 1, inner: LayoutStruct\[Inner\] \{x: -2, y: 3\}, last: 4\}\n    back = binary::parse(Wide, binary::emit(w))\n    outer = binary::parse(Outer, binary::emit(o))\n    \[back == w, back.u, outer.inner, outer == o\]\nfn many(k: int) -> List\[any\] errors LayoutLengthMismatch:\n    rs = loop i from 0 to k:\n        round(18446744073709551615)\n    list::at(rs, 0):\n        on IndexNotFound:\n            \[\]\nr = many(50):\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+    set hir [surface::compile "import list\n$::blPrelude$::blLayouts$source" layout.bot -warnings off]
+    set plain [blOutcome cranelift $hir]
+    set saved [expr {[info exists ::env(BOTLISH_NATIVE_GC_STRESS)] ? $::env(BOTLISH_NATIVE_GC_STRESS) : ""}]
+    set ::env(BOTLISH_NATIVE_GC_STRESS) 1
+    try {
+        set stressed [list [blOutcome cranelift $hir] [blOutcome cranelift-generic $hir]]
+    } finally {
+        if {$saved eq ""} {
+            unset ::env(BOTLISH_NATIVE_GC_STRESS)
+        } else {
+            set ::env(BOTLISH_NATIVE_GC_STRESS) $saved
+        }
+    }
+    list $plain [lsort -unique $stressed]
+} -cleanup {unset -nocomplain source hir plain saved stressed} -result {{value {[true, 18446744073709551615, LayoutStruct[Inner] {x: -2, y: 3}, true]}} {{value {[true, 18446744073709551615, LayoutStruct[Inner] {x: -2, y: 3}, true]}}}}
+
+cleanupTests

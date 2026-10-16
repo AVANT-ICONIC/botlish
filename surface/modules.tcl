@@ -209,6 +209,11 @@ proc surface::modules::QualifiedRefsWalk {node foundVar} {
                 lappend found [list [dict get $node namespace] [dict get $node name] \
                     [dict get $node nameSpan] struct]
             }
+            if {[dict exists $node typeArg]} {
+                # NAME[TYPE] { ... } (BINARY-LAYOUT.md): `LayoutStruct[geo::
+                # Pair] {...}` names the layout geo::Pair.
+                TypeRefs [dict get $node typeArg] [dict get $node typeArgSpan] found
+            }
         }
         function {
             # Qualified struct types in parameter and result annotations,
@@ -233,7 +238,10 @@ proc surface::modules::QualifiedRefsWalk {node foundVar} {
                 TypeRefs [dict get $node carrier] [dict get $node carrierSpan] found
             }
         }
-        structdecl {
+        structdecl - layoutdecl {
+            # A layout field's type (BINARY-LAYOUT.md) is a qualified
+            # integer domain or a qualified nested layout like a struct
+            # field's type.
             foreach field [dict get $node fields] {
                 TypeRefs [dict get $field type] [dict get $field typeSpan] found
             }
@@ -511,9 +519,9 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan} {
             Error CONTEXT-INSTALLATION-UNSUPPORTED [dict get $statement span] \
                 "context installation is currently supported only in the entry program's top-level scope, as a statement (this one is inside a module: \"$name\", $path)"
         }
-        if {[dict get $statement kind] ni {function bind typedecl errordecl structdecl enumdecl traitdecl}} {
+        if {[dict get $statement kind] ni {function bind typedecl errordecl structdecl enumdecl traitdecl layoutdecl}} {
             Error INVALID-TOPLEVEL [dict get $statement span] \
-                "module \"$name\" ($path): only function definitions, immutable bindings, type declarations, struct declarations, enum declarations, trait declarations and error declarations are allowed at module top level, found a \"[dict get $statement kind]\" statement"
+                "module \"$name\" ($path): only function definitions, immutable bindings, type declarations, struct declarations, enum declarations, layout declarations, trait declarations and error declarations are allowed at module top level, found a \"[dict get $statement kind]\" statement"
         }
     }
     CheckNativeMembers $ast $name "module \"$name\" ($path)"
@@ -523,7 +531,7 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan} {
     dict incr state nextFile
     CollectAndLoad state $ast $name
     set functionNames [lmap statement [dict get $ast body] {
-        if {[dict get $statement kind] in {typedecl errordecl structdecl enumdecl traitdecl}} continue
+        if {[dict get $statement kind] in {typedecl errordecl structdecl enumdecl traitdecl layoutdecl}} continue
         dict get $statement name
     }]
     dict set state loaded $name $functionNames
@@ -546,6 +554,15 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan} {
     # types; a case is `NAME::Enum::Case` (EnumQualifier).
     dict set state loadedEnums $name [lmap statement [dict get $ast body] {
         if {[dict get $statement kind] ne "enumdecl"} continue
+        dict get $statement name
+    }]
+    # The layouts it declares (BINARY-LAYOUT.md): members of the namespace
+    # named `NAME::Layout` like its structs -- in a type position
+    # (`LayoutStruct[NAME::Layout]`, a layout field's type) and as the layout
+    # operand of a binary operation (`binary::parse(NAME::Layout, data)`),
+    # never imported with `import type` (a layout is not a type).
+    dict set state loadedLayouts $name [lmap statement [dict get $ast body] {
+        if {[dict get $statement kind] ne "layoutdecl"} continue
         dict get $statement name
     }]
     dict set state loadedErrors $name [lmap statement [dict get $ast body] {
@@ -665,7 +682,7 @@ proc surface::modules::CheckImports {stateVar ast own} {
     set typeSpans [dict create]
     set local [dict create]
     foreach statement [dict get $ast body] {
-        if {[dict get $statement kind] in {typedecl structdecl enumdecl traitdecl} && ![dict exists $local [dict get $statement name]]} {
+        if {[dict get $statement kind] in {typedecl structdecl enumdecl traitdecl layoutdecl} && ![dict exists $local [dict get $statement name]]} {
             dict set local [dict get $statement name] [dict get $statement nameSpan]
         }
     }
@@ -716,6 +733,9 @@ proc surface::modules::CheckImports {stateVar ast own} {
             }
             if {$name in $structs} {
                 Error NOT-A-TYPE $nameSpan "\"$canonical\" is a struct, not a source-defined `type`: `import type` imports `type` declarations only; spell the struct $canonical after `import $ns`"
+            }
+            if {$hasFile && $name in [dict get $state loadedLayouts $ns]} {
+                Error NOT-A-TYPE $nameSpan "\"$canonical\" is a layout, not a type: `import type` imports `type` declarations only; spell the layout $canonical after `import $ns` (its values have the type LayoutStruct\[$canonical\])"
             }
             if {$name in $errors} {
                 Error NOT-A-TYPE $nameSpan "\"$canonical\" is an error declaration, not a type"
@@ -893,12 +913,18 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
     }
     if {$refKind in {struct type}} {
         set structNames [dict get $state loadedStructs $namespaceName]
-        set typeNames [expr {$refKind eq "type" ? [concat [dict get $state loadedTypes $namespaceName] [dict get $state loadedTraits $namespaceName] [dict get $state loadedEnums $namespaceName]] : {}}]
+        set typeNames [expr {$refKind eq "type" ? [concat [dict get $state loadedTypes $namespaceName] [dict get $state loadedTraits $namespaceName] [dict get $state loadedEnums $namespaceName] [dict get $state loadedLayouts $namespaceName]] : {}}]
         if {$symbolName ni $structNames && $symbolName ni $typeNames} {
             set declared [lsort [concat $structNames $typeNames]]
             Error UNKNOWN-SYMBOL $span \
                 "namespace \"$namespaceName\" has no [expr {$refKind eq "type" ? "type" : "struct"}] \"$symbolName\" (it declares: [expr {$declared eq "" ? "no types" : [join $declared {, }]}])"
         }
+        return
+    }
+    if {$symbolName in [dict get $state loadedLayouts $namespaceName]} {
+        # A layout of the module (BINARY-LAYOUT.md), written where a value
+        # would be: legal only as a binary operation's layout operand,
+        # which HIR resolution decides (LAYOUT-NOT-A-VALUE elsewhere).
         return
     }
     set functionNames [dict get $state loaded $namespaceName]
@@ -1061,7 +1087,7 @@ proc surface::modules::NewState {files nextFile} {
     return [dict create files $files nextFile $nextFile \
         loaded [dict create] loadedStructs [dict create] loadedTypes [dict create] \
         loadedErrors [dict create] loadedTraits [dict create] loadedEnums [dict create] \
-        imports [dict create] stack {} sections {} \
+        loadedLayouts [dict create] imports [dict create] stack {} sections {} \
         typeDecls {} errorDecls {} structDecls {} traitDecls {} staticDeferred [dict create]]
 }
 

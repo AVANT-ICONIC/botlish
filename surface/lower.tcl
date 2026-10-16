@@ -173,7 +173,8 @@ proc surface::lowerToHir {ast args} {
 # STATEMENTS split into {EXECUTABLE DECLS ERRORDECLS STRUCTDECLS TRAITDECLS}: EXECUTABLE keeps
 # every statement with runtime meaning, in order (ready for Sequence);
 # DECLS is the type declarations among them (surface/parser.tcl's
-# `typedecl` nodes, and `enumdecl` nodes as `kind enum` entries), converted to the plain dicts hir::buildSyntax's
+# `typedecl` nodes, `enumdecl` nodes as `kind enum` entries and `layoutdecl`
+# nodes as `kind layout` entries), converted to the plain dicts hir::buildSyntax's
 # -type-decls option takes (see hir/sourcetypes.tcl); ERRORDECLS likewise
 # for named-error declarations (`errordecl` nodes, hir/errordecls.tcl's
 # -error-decls); STRUCTDECLS likewise for struct declarations (`structdecl`
@@ -194,6 +195,7 @@ proc surface::lower::SplitTypeDecls {statements {namespace ""}} {
         switch -- [dict get $statement kind] {
             typedecl   { lappend decls [TypeDeclOf $statement $namespace] }
             enumdecl   { lappend decls [EnumDeclOf $statement $namespace] }
+            layoutdecl { lappend decls [LayoutDeclOf $statement $namespace] }
             errordecl  { lappend errorDecls [ErrorDeclOf $statement $namespace] }
             structdecl { lappend structDecls [StructDeclOf $statement $namespace] }
             traitdecl  { lappend traitDecls [TraitDeclOf $statement $namespace] }
@@ -212,6 +214,19 @@ proc surface::lower::SplitTypeDecls {statements {namespace ""}} {
 proc surface::lower::EnumDeclOf {node namespace} {
     return [dict create kind enum name [dict get $node name] nameSpan [dict get $node nameSpan] \
         namespace $namespace cases [dict get $node cases] span [dict get $node span]]
+}
+
+# The declaration dict of a `layoutdecl` node declared in module NAMESPACE (""
+# for the entry program): a `kind layout` entry of hir::buildSyntax's
+# -type-decls (BINARY-LAYOUT.md; hir::sourcetypes::apply hands it to
+# hir/layouts.tcl). `namespace` is the loader's canonical module identity,
+# never read from the (cached, importer-neutral) AST: it makes the layout's
+# identity `NAMESPACE::Name`.
+proc surface::lower::LayoutDeclOf {node namespace} {
+    return [dict create kind layout name [dict get $node name] nameSpan [dict get $node nameSpan] \
+        namespace $namespace size [dict get $node size] sizeSpan [dict get $node sizeSpan] \
+        align [dict get $node align] alignSpan [dict get $node alignSpan] \
+        fields [dict get $node fields] span [dict get $node span]]
 }
 
 # The declaration dict of a `traitdecl` node declared in module NAMESPACE (""
@@ -628,6 +643,13 @@ proc surface::lower::Node {node} {
         namedstruct {
             set type [dict create name [dict get $node name] namespace [dict get $node namespace] \
                 origin [Origin [dict get $node nameSpan] [dict get $node id]/type]]
+            if {[dict exists $node typeArg]} {
+                # NAME[TYPE] { ... } (BINARY-LAYOUT.md): the construction of
+                # an applied type, its argument as written (resolved by
+                # hir/resolve.tcl's ResolveStruct).
+                dict set type typeArg [dict get $node typeArg]
+                dict set type typeArgOrigin [Origin [dict get $node typeArgSpan] [dict get $node id]/typearg]
+            }
             return [hir::syntax::structNode $origin $type [FieldInits $node]]
         }
         project {

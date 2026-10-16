@@ -1895,6 +1895,13 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         BytesLen => ("rt_bytes_len", None, true, None),
                         BytesAddr => ("rt_bytes_addr", None, true, None),
                         KeepAlive => ("rt_keepalive", None, false, None),
+                        // Fixed binary layouts (BINARY-LAYOUT.md): one helper
+                        // call per field; all fallible only on operands a
+                        // checked program never produces. A load may build a
+                        // BigInt (a 64-bit field), so it is a safepoint.
+                        BytesZeroed => ("rt_bytes_zeroed", None, true, Some(("byteszeroed", KIND_BYTES))),
+                        BinLoad => ("rt_bin_load", None, true, Some(("binload", KIND_BIGINT))),
+                        BinStore => ("rt_bin_store", None, true, None),
                         // The writable byte storage (MUTABLE-BYTES.md): new /
                         // from / set / clone allocate one object, freeze and
                         // freeze_prefix one immutable one (all fallible, all

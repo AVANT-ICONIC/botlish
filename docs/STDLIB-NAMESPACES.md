@@ -86,6 +86,7 @@ and `ns-qualified-inventory` pin the after-state in a fresh process):
 | (added later, ABI-BYTES.md) `abi::x86_64::from_bytes` | platform-ABI raw address bridge, already qualified | `abi::x86_64::from_bytes` |
 | (added later, MUTABLE-BYTES.md) `mutable_byte_store::zeroed/_from/_count/_set/_copy`, `mutable_byte_store::freeze`, `mutable_byte_store::freeze_prefix` | standard type ops of the writable byte-storage value kind behind `abi::bytes::MutableBytes` | `byte_store::*` |
 | (added later, MUTABLE-BYTES.md) `abi::x86_64::from_mutable_bytes` | platform-ABI writable raw address bridge, already qualified | `abi::x86_64::from_mutable_bytes` |
+| (added later, BINARY-LAYOUT.md) `binary::parse`, `binary::emit`, `binary::layout_length`, `binary::layout_alignment`, and the internal `binary#emit` | the binary operations of fixed layouts, members of `lib/binary.bot`'s namespace (static layout operands, so never function values) | `binary::*` |
 
 Source-declared types register no natives at all: a type declaration
 registers a type, never a callable (their constructor natives went with

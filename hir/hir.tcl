@@ -515,6 +515,10 @@ proc hir::BuildFull {nodes options given halt checkedVar {seeds {}}} {
         if {[lindex [dict get $options -origin] 0] ne "ir"} {
             hir::mutvec::Elaborate hir
         }
+        # The layout a binary::emit reads from its value's static type
+        # (BINARY-LAYOUT.md), written out as the descriptor constant every
+        # backend reads instead (hir::layouts::Elaborate).
+        hir::layouts::Elaborate hir
     }
     return $hir
 }
@@ -1167,6 +1171,7 @@ proc hir::CheckOnce {hirVar demote {roundsVar ""}} {
     hir::affine::verify hir
     hir::mutvec::verify hir
     hir::syscall::verify hir
+    hir::layouts::verify hir
     hir::semantic::verify hir
     # {FROM TO}: the diagnostics at indices FROM to TO - 1 were reported
     # before the completion walk -- by resolution and the checks above --
@@ -1480,7 +1485,7 @@ proc hir::exprsAt {hir origin} {
 }
 
 apply {{dir} {
-    foreach file {syntax static staticdeps imports resolve flags contexts coroutines affine mutvec refcheck hygiene sourcetypes structs enums traits syscall errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings declarations interchange} {
+    foreach file {syntax static staticdeps imports resolve flags contexts coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts traits syscall errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings declarations interchange} {
         uplevel #0 [list source [file join $dir $file.tcl]]
     }
 }} $hir::home
