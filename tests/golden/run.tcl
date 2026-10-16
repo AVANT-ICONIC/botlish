@@ -26,6 +26,9 @@
 # A suite may exclude backends it cannot run, with the reason, in its leading
 # comment block ("# golden-exclude: cranelift-generic -- REASON"): the runner
 # skips them for that suite and prints the exclusion (golden::exclusions).
+# A suite that only runs on one host -- a live Linux x86-64 syscall -- says
+# so the same way ("# golden-host: linux-x86_64 -- REASON"): elsewhere it is
+# compiled but not run, and its status is host-excluded (golden::host).
 #
 # -lib DIR compiles against the library directory DIR instead of lib/ (a
 # private, mutated copy: audit/golden/tools/). -names prints only the test
@@ -156,10 +159,44 @@ proc golden::exclusions {path} {
     return $excluded
 }
 
+# The host the suite at PATH requires, from its leading comment block
+#
+#   # golden-host: HOST -- REASON
+#
+# as {HOST REASON}, or "" (any host). HOST is linux-x86_64, the one host a
+# suite can need today: its tests make live Linux x86-64 syscalls
+# (linux::abi::syscall), which the native backend compiles for no other
+# target, exactly as the Tcl tests they were ported from carry the
+# linuxX86_64 constraint. Any other HOST is an error, never a silent skip.
+proc golden::host {path} {
+    set f [open $path]
+    fconfigure $f -encoding utf-8
+    set required ""
+    while {[gets $f line] >= 0} {
+        if {![string match "#*" $line]} break
+        if {[regexp {^#\s*golden-host:\s*(\S+)\s+--\s+(.+)$} $line -> host reason]} {
+            if {$host ne "linux-x86_64"} {
+                close $f
+                error "$path: unknown golden-host $host (known: linux-x86_64)"
+            }
+            set required [list $host $reason]
+        }
+    }
+    close $f
+    return $required
+}
+
+# Whether this process runs on HOST (a golden::host name).
+proc golden::onHost {host} {
+    return [expr {$host eq "linux-x86_64" && $::tcl_platform(os) eq "Linux"
+        && $::tcl_platform(machine) in {x86_64 amd64}}]
+}
+
 # Runs the suite at PATH on BACKENDS (minus those it excludes). Returns a
 # dict: path, compile {ok|error ...}, outcomes {BACKEND {lines|abort ...}},
 # excluded {BACKEND REASON ...}, status ok|failed|aborted|disagree|
-# compile-error.
+# compile-error|host-excluded (and, for host-excluded, host {HOST REASON}:
+# compiled, not run, golden::host).
 proc golden::suite {path backends} {
     set excluded [exclusions $path]
     set result [dict create path $path outcomes {} excluded {}]
@@ -176,6 +213,12 @@ proc golden::suite {path backends} {
         return $result
     }
     set hir [lindex $compiled 1]
+    set required [host $path]
+    if {$required ne "" && ![onHost [lindex $required 0]]} {
+        dict set result host $required
+        dict set result status host-excluded
+        return $result
+    }
     set before $::golden::genericStandIns
     foreach backend $backends {
         dict set result outcomes $backend [run $hir $backend]
@@ -218,7 +261,7 @@ proc golden::main {argv} {
     foreach path $files {
         set result [suite $path $backends]
         set status [dict get $result status]
-        if {$status ne "ok"} { set exit 1 }
+        if {$status ni {ok host-excluded}} { set exit 1 }
         set name [file tail $path]
         if {$mode eq "names"} {
             puts "$name STATUS $status"
@@ -238,6 +281,11 @@ proc golden::main {argv} {
         }
         if {$status eq "compile-error"} {
             puts "== $name: COMPILE ERROR [lindex [dict get $result compile] 1]"
+            continue
+        }
+        if {$status eq "host-excluded"} {
+            lassign [dict get $result host] host reason
+            if {$mode ne "names"} { puts "== $name: not run on this host (needs $host) -- $reason" }
             continue
         }
         set compileSeconds [lindex [dict get $result compile] 2]

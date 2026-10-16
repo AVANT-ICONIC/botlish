@@ -661,7 +661,7 @@ test enum-native-gc-stress {case values survive collection at every allocation} 
     list [expr {$plain eq $stressed}] [enumOutcomes $hir]
 } -result {1 {same: [30, true, {VehicleType::Boat, VehicleType::Car}]}}
 
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
+testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 test enum-executable-parity {a standalone executable carries the enum table and prints, compares and hashes cases identically} -constraints executableAot -body {
     withEnumModules {

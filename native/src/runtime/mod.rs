@@ -15,7 +15,7 @@ pub mod heap;
 pub mod metrics;
 pub mod mutvec;
 pub mod native_stack;
-#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 pub mod platform;
 pub mod ops;
 pub mod show;

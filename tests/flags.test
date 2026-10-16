@@ -962,7 +962,7 @@ test flags-warnings-none {flags (used or not) produce no compiler warning under 
 } -result {value {[2, 2, false, true]} {}}
 
 testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64}}]
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 proc executableValue {text} {
     set dir [makeDirectory {flags executable}]

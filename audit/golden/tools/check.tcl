@@ -17,7 +17,9 @@
 # "++++ NAME SKIPPED"): absence of failure output is never a pass. New side:
 # each golden suite holding a ported row (or the -suites given) compiles once
 # and runs on every backend of -backends (tests/golden/run.tcl -names), at most
-# -jobs suites at a time. Every ported row must be "old pass, new pass"; the
+# -jobs suites at a time. Every ported row must be "old pass, new pass" (or,
+# for a suite whose golden-host this host is not, "old skip, new
+# host-excluded": tests/golden/run.tcl); the
 # report lists every other pair, and every suite whose state is not ok
 # (compile-error, aborted, disagree) or that reports a test the manifest does
 # not list, or does not report one it lists.
@@ -174,15 +176,31 @@ proc runNew {tree suites timeout backends jobs} {
     return [list $verdicts $states $seconds $reported]
 }
 
+# Suite -> state of the last side-by-side run (newVerdict reads it).
+set ::suiteStates [dict create]
+
 proc oldKey {row} { return "[dict get $row old_file] [dict get $row old_test]" }
 proc newKey {row} { return "[dict get $row suite] [dict get $row new_test]" }
 proc isPorted {row} { return [expr {[dict get $row new_test] ne "-" && [dict get $row suite] ne "-"}] }
 
 # A golden test with no verdict (its suite did not compile, or aborted on
-# every backend, or did not report it) is no-verdict: not a pass.
+# every backend, or did not report it) is no-verdict: not a pass. A test of a
+# suite this host does not run (tests/golden/run.tcl's golden-host) is
+# host-excluded.
 proc newVerdict {new row} {
     set key [newKey $row]
+    if {[dict exists $::suiteStates [dict get $row suite]]
+            && [dict get $::suiteStates [dict get $row suite]] eq "host-excluded"} {
+        return host-excluded
+    }
     return [expr {[dict exists $new $key] ? [dict get $new $key] : "no-verdict"}]
+}
+
+# Whether a row's pair of verdicts agrees: both pass, or -- on a host the
+# golden suite does not run on -- the Tcl original skipped too (its own host
+# constraint), so neither side ran here.
+proc agrees {pair} {
+    return [expr {$pair in {{old pass, new pass} {old skip, new host-excluded}}}]
 }
 
 set allRows [manifestRows $root]
@@ -239,12 +257,13 @@ if {[dict get $options -mutants] eq {}} {
     }
     set start [clock milliseconds]
     lassign [runNew $root $suites $timeout $backends $jobs] new states newSeconds reported
+    set ::suiteStates $states
     set newWall [expr {([clock milliseconds] - $start) / 1000.0}]
     set pairs [dict create]
     foreach row $ported {
         set pair "old [dict get $old [oldKey $row]], new [newVerdict $new $row]"
         dict incr pairs $pair
-        if {$pair ne "old pass, new pass"} {
+        if {![agrees $pair]} {
             puts "DISAGREE: [oldKey $row] -> [newKey $row]: $pair"
             set exit 1
         }
@@ -255,7 +274,7 @@ if {[dict get $options -mutants] eq {}} {
         set exit 1
     }
     dict for {suite state} $states {
-        if {$state ne "ok"} {
+        if {$state ni {ok host-excluded}} {
             puts "SUITE NOT OK: $suite $state"
             set exit 1
         }
@@ -264,7 +283,7 @@ if {[dict get $options -mutants] eq {}} {
     # suites, whatever the selection): a test reported and not listed, or
     # listed and not reported.
     foreach suite $suites {
-        if {[dict get $states $suite] in {compile-error incomplete}} continue
+        if {[dict get $states $suite] in {compile-error incomplete host-excluded}} continue
         set listed [lmap row $allRows {expr {[isPorted $row] && [dict get $row suite] eq $suite ? [dict get $row new_test] : [continue]}}]
         foreach n [dict get $reported $suite] {
             if {$n ni $listed} { puts "UNLISTED GOLDEN TEST: $suite $n"; set exit 1 }

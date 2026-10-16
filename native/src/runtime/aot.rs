@@ -32,10 +32,10 @@ pub fn run(argv: Vec<Vec<u8>>, init: impl FnOnce() -> (Box<Vm>, ProgramEntry) + 
         let (mut vm, entry) = init();
         vm.set_argv(argv);
         debug_assert!(matches!(vm.metrics.mode, AllocMode::Off));
-        #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+        #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
         let _guard = {
             let stack = super::native_stack::NativeStack::current().expect("pthread stack bounds");
-            super::platform::x86_64_linux::OverflowGuard::install_executable(&stack).expect("pthread stack guard")
+            super::platform::linux::OverflowGuard::install_executable(&stack).expect("pthread stack guard")
         };
         let result = entry(&mut *vm);
         if result == NO_VALUE {

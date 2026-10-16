@@ -720,7 +720,7 @@ else:
     list [expr {$plain eq $stressed}] [structOutcomes $hir]
 } -result {1 {same: [40, 1, 40, ["ab", "cd"]]}}
 
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
+testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 test struct-executable-parity {a standalone executable prints the same struct values, under GC stress too} -constraints executableAot -body {
     set dir [makeDirectory struct-exe]

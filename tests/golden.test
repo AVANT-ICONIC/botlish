@@ -94,6 +94,10 @@ foreach path $goldenSelected {
         if {$status eq "compile-error"} {
             return "compile error: [lindex [dict get $result compile] 1]"
         }
+        if {$status eq "host-excluded"} {
+            # Compiled, not run: its golden-host is another host (run.tcl).
+            return ok
+        }
         set hir [lindex [dict get $result compile] 1]
         if {[dict exists $hir staticStats]} {
             dict set ::goldenStatic $suite [dict get $hir staticStats]

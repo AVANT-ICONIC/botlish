@@ -43,7 +43,8 @@
 #                                       derived) microseconds, not truncated
 #                                       to a whole number
 #   native::object HIR PATH ?OPTIONS?   writes an object file (AOT smoke test)
-#   native::executable HIR PATH ?OPTIONS?  links a standalone Linux x86_64/glibc
+#   native::executable HIR PATH ?OPTIONS?  links a standalone Linux glibc (x86_64,
+#                                         or aarch64 with the rustc linker)
 #                                         executable; rejects non-closed HIR.
 #                                         BOTLISH_NATIVE_LINKER picks the
 #                                         linker: rustc (default) or stub
@@ -253,7 +254,8 @@ proc native::evalHir {hir args} {
     return [Outcome [Driver run [nir $hir {*}$args]]]
 }
 
-# Compile closed, specialized HIR to a standalone Linux x86_64/glibc ELF.
+# Compile closed, specialized HIR to a standalone Linux glibc ELF (x86_64, or
+# aarch64 with the rustc linker).
 # Readiness is the public -aot-spec contract, checked before expanding native
 # implementations (which are runtime support, like the Rust helpers). Never
 # run the program while compiling it, and never fall back to another backend.

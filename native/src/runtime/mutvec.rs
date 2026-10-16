@@ -468,7 +468,7 @@ mod tests {
         assert_eq!(contents(v), (0..100).collect::<Vec<i64>>());
     }
 
-    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+    #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
     mod affine {
         use super::*;
         use crate::runtime::coroutine::{coroutine_of, rt_co_create, CO_FRESH, CO_RELEASED};
