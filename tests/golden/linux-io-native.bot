@@ -9,6 +9,7 @@
 # survive allocation unchanged.
 #
 # golden-exclude: interp, compile -- CORE SEMANTIC NATIVE-ONLY: linux::abi::syscall executes the x86-64 syscall instruction and the Tcl backends refuse it at run time by design (tests/linux-syscall.test linux-syscall-tcl-backends-refuse pins the refusal); a refusal aborts a suite, so these tests run on cranelift-generic and cranelift only
+# golden-host: linux-x86_64 -- live getpid syscalls through linux::abi::syscall, which the native backend compiles for Linux x86-64 only (tests/linux-syscall.test's live tests carry the linuxX86_64 constraint)
 #
 # The only live syscall is getpid, in the runner's process: no other syscall
 # number is ever executed. Ported from tests/linux-syscall.test, which stays

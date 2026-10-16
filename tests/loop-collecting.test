@@ -597,7 +597,7 @@ test loop-collecting-core-ir-lockloop-shape {raw core IR validation of the new n
 # stress, agree with every in-process backend.
 
 testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64}}]
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 proc aotParity {text} {
     set dir [makeDirectory {collecting loops executable test}]

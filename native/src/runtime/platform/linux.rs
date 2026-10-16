@@ -1,5 +1,7 @@
-//! Linux pthread stack discovery. The worker and Rust/JIT helper frames
-//! use the same pthread stack and the normal SysV ABI.
+//! Linux pthread stack discovery and the stack-overflow guard, for x86-64 and
+//! AArch64 alike (pthread_getattr_np, sigaltstack and SA_ONSTACK work the same
+//! on both). The worker and Rust/JIT helper frames use the same pthread stack
+//! and the platform's ordinary C calling convention.
 use crate::runtime::native_stack::{NativeStack, StackState};
 use std::io;
 

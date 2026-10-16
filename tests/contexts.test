@@ -31,6 +31,12 @@ set nativeBackends {cranelift-generic cranelift}
 
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
+
+# Linux on x86-64 or AArch64: the native backend's whole runtime (native
+# stack maps, the stack guard, coroutines) without the x86-64 syscall that
+# linuxX86_64 tests need.
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint objdump [expr {[auto_execok objdump] ne ""}]
 testConstraint posixShell [expr {[auto_execok sh] ne ""}]
 testConstraint strace [expr {[auto_execok strace] ne "" && ![catch {exec strace -f -qq -o /dev/null true 2>@1}]}]
@@ -713,7 +719,7 @@ test contexts-native-clif {CLIF of linux::io::write: the signature is (vm, data)
         [regexp {symbol_value\.i64 gv[0-9]+} $f] [regexp {load\.i64 notrap aligned v[0-9]+\+8} $f]
 } -result {1 1 1 1}
 
-test contexts-native-eligibility {a context whose layout cannot live in fixed program data is CONTEXT-NATIVE-LOWERING-UNSUPPORTED, naming the reason; the Tcl backends run it; an eligible nested layout (Bool, bounded Int, nested struct) is flattened} -constraints linuxX86_64 -body {
+test contexts-native-eligibility {a context whose layout cannot live in fixed program data is CONTEXT-NATIVE-LOWERING-UNSUPPORTED, naming the reason; the Tcl backends run it; an eligible nested layout (Bool, bounded Int, nested struct) is flattened} -constraints nativeLinux -body {
     set unbounded "context struct Big:\n    n: int\nfn get(context b: Big):\n    b.n\nwith context Big {n: 99999999999999999999}\nget()\n"
     set text "context struct Named:\n    name: str\nfn get(context b: Named):\n    b.name\nwith context Named {name: \"x\"}\nget()\n"
     set nested "type Small = Int in 0..9\nstruct Inner:\n    a: Small\n    b: bool\ncontext struct Outer:\n    inner: Inner\n    c: Small\nfn get(context o: Outer):\n    \[o.inner.a, o.inner.b, o.c, o.inner\]\nwith context Outer {inner: Inner {a: 1, b: true}, c: 2}\nget()\n"
@@ -737,7 +743,7 @@ test contexts-native-allocations {allocations: installing a literal context and 
         [counts "${::linuxPrelude}with context linux::io::create()\nm = mk(\"x\\n\")\nloop i from 0 to 20:\n    linux::io::write(m)\n0\n"]
 } -result {{0 0} {7 7} {9 7} {9 7}}
 
-test contexts-native-gc-stress {context programs under a collection at every allocation site: the context words are never roots and survive every collection} -constraints linuxX86_64 -body {
+test contexts-native-gc-stress {context programs under a collection at every allocation site: the context words are never roots and survive every collection} -constraints nativeLinux -body {
     withEnv BOTLISH_NATIVE_GC_STRESS 1 {
         list [agree "import list\n${::synthetic}fn many(n):\n    xs = \[n, n + 1\]\n    if n == 0:\n        read_value()\n    else:\n        many(n - 1) + list::length(xs) - 2\nwith context Counter {value: 2, enabled: true}\nmany(30)\n" $::nativeBackends] \
             [agree "type Small = Int in 0..9\nstruct Inner:\n    a: Small\n    b: bool\ncontext struct Outer:\n    inner: Inner\n    c: Small\nfn get(context o: Outer):\n    \[o.inner, o.inner, \[o.c\]\]\nwith context Outer {inner: Inner {a: 1, b: true}, c: 2}\nget()\n" $::nativeBackends]
@@ -821,7 +827,7 @@ test contexts-native-strace {the kernel receives write(1, "Hello, world!\n", 14)
         $frames [regexp {__write|libc\.so\.6\(write} $stack]
 } -result {{write(1, "Hello, world!\n", 14) = 14} 1 1 {1 1 1} 0}
 
-test contexts-native-jit-absolute {the in-process JIT addresses the same area by its absolute address (no rel32 reach to vouch for): the program runs and reads the installed values} -constraints linuxX86_64 -body {
+test contexts-native-jit-absolute {the in-process JIT addresses the same area by its absolute address (no rel32 reach to vouch for): the program runs and reads the installed values} -constraints nativeLinux -body {
     agree "${::synthetic}with context Counter {value: 77, enabled: false}\n\[read_value(), read_enabled()\]\n" {cranelift cranelift-generic}
 } -result {[77, false]}
 

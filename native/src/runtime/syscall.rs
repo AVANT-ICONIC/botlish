@@ -36,8 +36,9 @@
 //! preserves the callee-saved ones.
 //!
 //! Target gating: the boundary exists only when compiling for Linux x86-64.
-//! Code generation refuses the op for any other target (codegen/clif.rs), and
-//! the helper is never reached there.
+//! For any other target the op still compiles (codegen/clif.rs), so a program
+//! that only defines a syscall runs; running it fails with NATIVE UNSUPPORTED
+//! (`syscall_words` below), never with another target's convention.
 
 use super::error::RtError;
 use super::value::*;
@@ -161,7 +162,8 @@ pub fn rax_value(vm: &mut Vm, rax: i64) -> Value {
 
 #[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
 fn syscall_words(p: *mut Vm, _w: [i64; 7]) -> Value {
-    // Unreachable: codegen/clif.rs refuses the op for any other target.
+    // Any other target: running the transport is unsupported (the op
+    // compiles, so a program that only defines a syscall runs).
     vm(p).fail(RtError::Unsupported("linux::abi::syscall needs a Linux x86-64 target".to_string()))
 }
 

@@ -1,4 +1,4 @@
-//! The x86-64 native-frame GC root walker: the runtime half of the
+//! The native-frame GC root walker (x86-64 and AArch64): the runtime half of the
 //! native-stack-map mechanism (see runtime::framemap's own doc for the
 //! compile-time half, and codegen::clif's module doc for what generated
 //! code guarantees this walker relies on).
@@ -71,22 +71,40 @@
 //! The compile-time metadata (runtime::framemap) does not encode this
 //! choice anywhere -- a DWARF-based walker could read the very same table
 //! -- so switching later remains possible without touching it.
+//!
+//! # AArch64
+//!
+//! The chain is the same AAPCS64 frame-record chain: x29 addresses a
+//! 16-byte record `[x29 + 0] == caller's x29`, `[x29 + 8] == return address
+//! (x30)`. Cranelift's AArch64 prologue (cranelift-codegen 0.135.2,
+//! `isa::aarch64::abi::AArch64MachineDeps::gen_prologue_frame_setup`) is
+//! `stp x29, x30, [sp, #-16]!; mov x29, sp`, and this crate's own Rust frames
+//! keep frame pointers too (`-C force-frame-pointers=yes`, .cargo/config.toml).
+//! What differs is the step from a record to the *caller's* stack pointer:
+//! LLVM's AArch64 Linux prologues place a Rust helper's frame record at the
+//! bottom of its callee-save area (`sub sp, sp, #N; stp x29, x30, [sp, #K]`),
+//! so `record + 16` is not the SP of the Botlish frame that called it. The
+//! walker therefore never derives that SP: on AArch64 the stack-map entries
+//! are distances below the Botlish frame's *own* frame pointer, which the
+//! callee's record holds as its saved x29 (codegen::clif's `define` converts
+//! Cranelift's SP-relative offsets with the function's `frame_to_fp_offset`),
+//! and a root's address is `caller_fp - entry` (`root_address`).
 use super::framemap::ProgramMap;
 use super::native_stack::NativeStack;
 use super::value::Value;
 
 /// Defensive cap against a malformed frame-pointer chain. The native
-/// stack bound is the authoritative address range on x86-64/Linux.
+/// stack bound is the authoritative address range on Linux.
 const MAX_FRAMES: usize = 1 << 22;
 
-/// Reads the current value of the `rbp` register. `#[inline(always)]`: an
-/// inlined call still executes with the caller's own `rbp` (this function
-/// would otherwise establish a frame of its own between the caller and
-/// whatever collection-triggering call site we actually want to start the
+/// Reads the current frame pointer (`rbp`). `#[inline(always)]`: an
+/// inlined call still executes with the caller's own frame pointer (this
+/// function would otherwise establish a frame of its own between the caller
+/// and whatever collection-triggering call site we actually want to start the
 /// ascent from -- see `walk`'s own use).
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
-fn current_rbp() -> usize {
+fn current_fp() -> usize {
     let rbp: usize;
     // SAFETY: reads a register; no memory access, no side effect.
     unsafe {
@@ -95,7 +113,38 @@ fn current_rbp() -> usize {
     rbp
 }
 
-/// Walks the native call stack from the current frame (see `current_rbp`)
+/// Reads the current frame pointer (`x29`); `#[inline(always)]` as on x86-64.
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+fn current_fp() -> usize {
+    let fp: usize;
+    // SAFETY: reads a register; no memory access, no side effect.
+    unsafe {
+        std::arch::asm!("mov {}, x29", out(reg) fp, options(nomem, nostack, preserves_flags));
+    }
+    fp
+}
+
+/// The address of the root a stack-map ENTRY of a safepoint names, for the
+/// frame whose record is at RECORD (the callee of the Botlish frame the
+/// safepoint belongs to) and holds CALLER_FP (that Botlish frame's own frame
+/// pointer). x86-64: the entry is an offset from the Botlish frame's SP at
+/// the call, which is `RECORD + 16` (this module's header derivation).
+#[cfg(target_arch = "x86_64")]
+#[inline]
+fn root_address(record: usize, _caller_fp: usize, entry: u32) -> Option<usize> {
+    record.checked_add(16)?.checked_add(entry as usize)
+}
+
+/// AArch64: the entry is the root's distance below CALLER_FP (header,
+/// "AArch64").
+#[cfg(target_arch = "aarch64")]
+#[inline]
+fn root_address(_record: usize, caller_fp: usize, entry: u32) -> Option<usize> {
+    caller_fp.checked_sub(entry as usize)
+}
+
+/// Walks the native call stack from the current frame (see `current_fp`)
 /// up through every Botlish-compiled frame it finds, calling VISIT once for
 /// every live root's address at each one's own safepoint (an address the
 /// caller may read for tracing and, for a future moving collector, write
@@ -122,56 +171,54 @@ fn current_rbp() -> usize {
 /// walk naturally ends, bounded by `MAX_FRAMES` and the monotonicity check
 /// below as defensive backstops rather than as the intended termination
 /// condition.
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 pub fn walk(map: &ProgramMap, stack: Option<&NativeStack>, visit: impl FnMut(*mut Value)) {
-    walk_from(map, current_rbp(), stack, visit)
+    walk_from(map, current_fp(), stack, visit)
 }
 
-/// `walk`, starting at the frame record RBP instead of the current frame: a
-/// stack that is not running now -- a suspended coroutine's, or a running
+/// `walk`, starting at the frame record START instead of the current frame:
+/// a stack that is not running now -- a suspended coroutine's, or a running
 /// coroutine's resumer's (COROUTINES.md, runtime/coroutine.rs) -- whose chain
 /// starts at the frame its stack switch opened. STACK bounds the walk to that
 /// one stack, which is also where its chain ends (a coroutine stack's first
 /// frame record holds a zero frame pointer).
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 pub fn walk_from(map: &ProgramMap, start: usize, stack: Option<&NativeStack>, mut visit: impl FnMut(*mut Value)) {
-    let mut rbp = start;
+    let mut record = start;
     for _ in 0..MAX_FRAMES {
-        if rbp == 0 || rbp % 8 != 0 || stack.is_some_and(|s| !s.contains(rbp, 16)) {
+        if record == 0 || record % 8 != 0 || stack.is_some_and(|s| !s.contains(record, 16)) {
             break;
         }
-        // SAFETY: `rbp` is either the register value just read above (this
+        // SAFETY: `record` is either the register value just read above (this
         // thread's own current frame, unconditionally valid) or, on a later
-        // iteration, a value read from `[rbp + 0]` of a previous,
+        // iteration, a value read from `[record + 0]` of a previous,
         // successfully-read frame -- i.e. a real saved frame-pointer this
         // same convention wrote, not attacker- or arbitrarily-controlled
-        // data. `saved_rbp > rbp` below additionally rejects any frame
+        // data. `saved_fp > record` below additionally rejects any frame
         // whose chain does not monotonically ascend the (downward-growing)
         // native stack, as a backstop against misreading this invariant.
-        let (saved_rbp, return_addr) = unsafe {
-            let base = rbp as *const usize;
+        let (saved_fp, return_addr) = unsafe {
+            let base = record as *const usize;
             (*base, *base.add(1))
         };
 
-        for &offset in map.roots_at(return_addr) {
-            // This safepoint's own SP (this module's header derivation),
-            // plus this root's byte offset within it.
-            let Some(root_addr) = rbp.checked_add(16).and_then(|p| p.checked_add(offset as usize)) else { break; };
+        for &entry in map.roots_at(return_addr) {
+            let Some(root_addr) = root_address(record, saved_fp, entry) else { break };
             if stack.is_some_and(|s| !s.contains(root_addr, 8)) { continue; }
             visit(root_addr as *mut Value);
         }
 
-        if saved_rbp <= rbp {
+        if saved_fp <= record {
             break;
         }
-        rbp = saved_rbp;
+        record = saved_fp;
     }
 }
 
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 pub fn walk_from(_map: &ProgramMap, _start: usize, _stack: Option<&NativeStack>, _visit: impl FnMut(*mut Value)) {}
 
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 pub fn walk(_map: &ProgramMap, _stack: Option<&NativeStack>, _visit: impl FnMut(*mut Value)) {
     // No frame-walker on this host: every function stays on the fallback
     // RootStorage rules (codegen::roots's `plan`, `native_frame_supported
@@ -179,7 +226,7 @@ pub fn walk(_map: &ProgramMap, _stack: Option<&NativeStack>, _visit: impl FnMut(
     // codegen::clif's module doc and runtime::heap's `collect_with`.
 }
 
-#[cfg(all(test, target_arch = "x86_64"))]
+#[cfg(all(test, any(target_arch = "x86_64", target_arch = "aarch64")))]
 mod tests {
     use super::*;
     use crate::runtime::framemap::FunctionMap;

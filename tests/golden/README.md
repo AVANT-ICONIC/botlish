@@ -186,7 +186,14 @@ A suite that cannot run on a backend says so in its leading comment block,
 `# golden-exclude: BACKEND,... -- REASON`; keep such tests in a companion suite
 of their own, so that the main suite keeps its full backend matrix (run.tcl
 used to stand cranelift in for a whole suite's cranelift-generic run when one
-program reported `NATIVE UNSUPPORTED struct-shape`; it now reports it).
+program reported `NATIVE UNSUPPORTED struct-shape`; it now reports it). A
+suite whose tests make live Linux x86-64 syscalls says
+`# golden-host: linux-x86_64 -- REASON`: on another host it is compiled but
+not run (status `host-excluded`). On such a host `check.tcl` reports a Tcl
+original skipped by a host constraint (`linuxX86_64`, `stubLinker`,
+`x86_64Host`) as `host-skip` and accepts its row only as "old host-skip, new
+pass" or "old host-skip, new host-excluded": the row is compared on the
+host the constraint names (CI's x86-64 jobs).
 
 The columns, tab-separated, with a header row:
 

@@ -6729,6 +6729,7 @@ tests/surface-parser.test parse-error-unterminated-string pass
 tests/surface-parser.test parse-field-forms-unchanged pass
 tests/surface-parser.test parse-find-node pass
 tests/surface-parser.test parse-function pass
+tests/surface-parser.test parse-function-result-types pass
 tests/surface-parser.test parse-function-spans pass
 tests/surface-parser.test parse-ids pass
 tests/surface-parser.test parse-ids-stable pass
@@ -6740,6 +6741,8 @@ tests/surface-parser.test parse-left-associative pass
 tests/surface-parser.test parse-lists pass
 tests/surface-parser.test parse-literals pass
 tests/surface-parser.test parse-loop pass
+tests/surface-parser.test parse-loop-value-spans-and-ids pass
+tests/surface-parser.test parse-loop-values pass
 tests/surface-parser.test parse-method-call pass
 tests/surface-parser.test parse-method-call-chain pass
 tests/surface-parser.test parse-method-call-error-empty-argument pass
@@ -6775,6 +6778,7 @@ tests/surface-parser.test parse-recover-range-outside-type-decl pass
 tests/surface-parser.test parse-recover-statements pass
 tests/surface-parser.test parse-spans pass
 tests/surface-parser.test parse-unary pass
+tests/surface-parser.test parse-value-forms-format pass
 tests/surface-samples.test surface-run-abs pass
 tests/surface-samples.test surface-run-continue pass
 tests/surface-samples.test surface-run-duplicate-in-branch pass

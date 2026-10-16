@@ -134,7 +134,7 @@ test structsyn-domain-and-fn-type-braces-unchanged {the other two uses of braces
     ast "type Small = Int in \{1, 2, 3\}\ntype Byte = Int in 0..255\nfn f(g: Fn\{args: \[int\], return: int\}) -> int:\n    g(1)\n"
 } -result {type Small = Int in {1, 2, 3}
 type Byte = Int in 0..255
-fn f (g:Fn{args: [int], return: int, errors: []})
+fn f (g:Fn{args: [int], return: int, errors: []}) -> int
     (call (name g) (int 1))}
 
 test structsyn-keyword-not-a-name {struct is a keyword and cannot be used as a name} -body {

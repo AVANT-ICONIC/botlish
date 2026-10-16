@@ -25,28 +25,28 @@
 //! (codegen::roots's `RootStorage`, see its own doc), and, for
 //! `NativeFrame`, on `self.stack_maps` (this function's own copy of
 //! `roots::plan`'s `native_frame_supported` argument -- true when
-//! `module.isa().name() == "x64"`, mirroring `Symbols::direct_helpers`'s
-//! own check):
+//! `module.isa().name()` is `"x64"` or `"aarch64"`):
 //!
 //!   * `RuntimeStack`: the shared shadow-stack array, indexed via
 //!     `vm.ss_top`/`ss_limit`; at least one slot always, so the shared
 //!     array's bounds check still bounds native recursion depth even for a
 //!     function with zero roots (`prologue_runtime_stack`).
-//!   * `NativeFrame`, x86-64 (`self.stack_maps`, the primary path this
-//!     module implements): this function's own Cranelift-managed native
-//!     stack slot (`self.root_slot`/`self.base`). No publish/restore of any
-//!     kind -- the collector discovers these slots by walking the native
-//!     call stack's rbp chain and consulting Cranelift `UserStackMapEntry`s
+//!   * `NativeFrame`, x86-64 and AArch64 (`self.stack_maps`, the primary
+//!     path this module implements): this function's own Cranelift-managed
+//!     native stack slot (`self.root_slot`/`self.base`). No publish/restore
+//!     of any kind -- the collector discovers these slots by walking the
+//!     native call stack's frame-pointer chain (rbp, x29) and consulting
+//!     Cranelift `UserStackMapEntry`s
 //!     attached to each safepoint's own `call` instruction
 //!     (`mark_safepoint`, runtime/framewalk.rs). Eligible for every
 //!     function, called or not, recursive or not.
-//!   * `NativeFrame`, fallback (`!self.stack_maps`, e.g. non-x86-64):
+//!   * `NativeFrame`, fallback (`!self.stack_maps`, any other ISA):
 //!     the original, narrower mechanism -- only eligible for a function
 //!     with no Botlish call, published to `vm.native_roots_ptr`/`_len`
 //!     (`prologue_native_frame`).
 //!
-//! On x86-64/Linux the pthread guard handles native overflow, so a
-//! calling function has no Botlish-specific depth-token instructions.
+//! On Linux x86-64 and AArch64 the pthread guard handles native overflow,
+//! so a calling function has no Botlish-specific depth-token instructions.
 //! Other targets retain the one-slot shadow depth check.
 //!
 //! Whichever combination applies, `self.base` is simply "the address slot 0
@@ -319,20 +319,40 @@ pub fn define<M: Module>(
     // each live root's byte offset from that call's own stack pointer,
     // already fully resolved (Cranelift's own per-callsite `sp_to_sized_
     // stack_slots` accounting -- see `UserStackMap`'s doc).
-    let safepoints: Vec<(u32, Vec<u32>)> = ctx
-        .compiled_code()
-        .map(|code| {
-            code.buffer
-                .user_stack_maps()
-                .iter()
-                .map(|(pc, _span, stack_map)| {
-                    let mut offsets: Vec<u32> = stack_map.entries().map(|(_ty, offset)| offset).collect();
-                    offsets.sort_unstable();
-                    (*pc, offsets)
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    //
+    // On AArch64 each offset is re-expressed as the root's distance *below
+    // this function's own frame pointer* (`frame_to_fp_offset - offset`), the
+    // form runtime::framewalk reads there: Cranelift's SP stays at the bottom
+    // of the frame for the whole body, `frame_to_fp_offset` bytes below FP
+    // (cranelift-codegen 0.135.2's `MachBufferFrameLayout`), so this is exact.
+    // The walker cannot derive the SP from the callee's frame record as it
+    // does on x86-64: LLVM's AArch64 Linux prologues put a Rust helper's
+    // frame record at the bottom of its save area, not at its incoming SP.
+    let below_fp = module.isa().name() == "aarch64";
+    let mut safepoints: Vec<(u32, Vec<u32>)> = Vec::new();
+    if let Some(code) = ctx.compiled_code() {
+        let frame_to_fp = code.buffer.frame_layout().map(|layout| layout.frame_to_fp_offset);
+        for (pc, _span, stack_map) in code.buffer.user_stack_maps() {
+            let mut offsets: Vec<u32> = Vec::new();
+            for (_ty, offset) in stack_map.entries() {
+                if !below_fp {
+                    offsets.push(offset);
+                    continue;
+                }
+                match frame_to_fp.and_then(|fp| fp.checked_sub(offset)).filter(|&below| below > 0) {
+                    Some(below) => offsets.push(below),
+                    None => {
+                        return Err(BackendError::Codegen(format!(
+                            "function {} ({}): stack map root at SP+{offset} is not below the frame pointer ({frame_to_fp:?})",
+                            f.id, f.name
+                        )))
+                    }
+                }
+            }
+            offsets.sort_unstable();
+            safepoints.push((*pc, offsets));
+        }
+    }
     module.clear_context(&mut ctx);
 
     // Generic entry: unpack the argument array and call the direct function.
@@ -553,13 +573,15 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         let body = b.create_block();
         let error_exit = b.create_block();
         let placeholder = ir::Value::from_u32(0);
-        // Mirrors `Symbols::direct_helpers`'s own check (see that field's
-        // doc): the native-stack-map frame-walker (runtime/framewalk.rs) is
-        // implemented for x86-64 only, verified against this repo's pinned
-        // Cranelift and its own generated assembly (see this file's
-        // header). Every other host keeps the original, narrower
-        // RootStorage::NativeFrame rule (roots::plan's own doc).
-        let stack_maps = module.isa().name() == "x64";
+        // The native-stack-map frame-walker (runtime/framewalk.rs) is
+        // implemented for x86-64 and AArch64, verified against this repo's
+        // pinned Cranelift and its own generated assembly (see this file's
+        // header, and `define`'s safepoint extraction for AArch64's
+        // frame-pointer-relative roots). Every other host keeps the
+        // original, narrower RootStorage::NativeFrame rule (roots::plan's
+        // own doc). Must agree with roots::report's
+        // `native_frame_supported` and framewalk's own target gates.
+        let stack_maps = matches!(module.isa().name(), "x64" | "aarch64");
         let plan = roots::plan(f, stack_maps);
         let listget_fast = std::env::var("BOTLISH_NATIVE_LISTGET_FAST_OPT").ok().as_deref() != Some("0");
         let root_init_opt = std::env::var("BOTLISH_NATIVE_ROOT_INIT_OPT").ok().as_deref() != Some("0");
@@ -1451,25 +1473,13 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 self.def(*dst, v);
             }
             Inst::Op { dst, op, args } => {
-                if *op == OpCode::SyscallLinuxX86_64 && !cfg!(all(target_arch = "x86_64", target_os = "linux")) {
-                    // The x86-64 Linux syscall transport is the only one
-                    // Botlish has: never compiled for another target, where
-                    // its register convention would mean something else.
-                    return Err(BackendError::Codegen(
-                        "linux::abi::syscall is the Linux x86-64 syscall transport: this target is not Linux x86-64"
-                            .to_string(),
-                    ));
-                }
-                if matches!(*op, OpCode::BytesAddr | OpCode::MBytesAddr) && !cfg!(all(target_arch = "x86_64", target_os = "linux")) {
-                    // The payload address is only ever consumed by the Linux
-                    // x86-64 syscall transport, and the small-Int
-                    // representation of an address is argued for its 47-bit
-                    // user space: never compiled for another target.
-                    return Err(BackendError::Codegen(
-                        "abi::x86_64::from_bytes is the Linux x86-64 address bridge: this target is not Linux x86-64"
-                            .to_string(),
-                    ));
-                }
+                // linux::abi::syscall compiles on every target: off Linux
+                // x86-64 its helper fails at run time (NATIVE UNSUPPORTED,
+                // runtime/syscall.rs), as the Tcl backends refuse it at run
+                // time, so a program that only defines a write still compiles
+                // and runs everywhere. The address bridges compute a payload
+                // address on every target (range-checked into a small Int,
+                // runtime/ops.rs; a 48-bit AArch64 Linux user address fits).
                 let v = self.op(*op, args);
                 if op.result_kind() != nir::RegKind::Tagged {
                     self.def_raw(*dst, v);

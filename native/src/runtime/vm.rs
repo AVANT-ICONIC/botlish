@@ -276,9 +276,9 @@ impl Vm {
             empty_mutbytes: BytesObj::new_static_mutable_empty(),
             framemap: Rc::new(ProgramMap::new()),
             native_stack: {
-                #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+                #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
                 { Some(NativeStack::current().expect("pthread stack bounds")) }
-                #[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
+                #[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
                 { None }
             },
             co_current: std::ptr::null_mut(),
@@ -289,14 +289,14 @@ impl Vm {
     /// now, for the overflow handler: a fault in its guard is a stack
     /// overflow (runtime/coroutine.rs switches stacks).
     pub fn publish_active_stack(&mut self, stack: Option<NativeStack>) {
-        #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+        #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
         {
             let stack = stack.or(self.native_stack);
             if let Some(stack) = stack {
-                super::platform::x86_64_linux::set_active_stack(&stack);
+                super::platform::linux::set_active_stack(&stack);
             }
         }
-        #[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
+        #[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
         let _ = stack;
     }
 

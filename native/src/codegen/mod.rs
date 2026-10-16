@@ -473,6 +473,10 @@ mod context_area_tests {
         assert!(crate::nir::parse(&text).is_err(), "a slot beyond the area must be rejected");
     }
 
+    /// x86-64 only: the relocation types and the relaxation are the x86-64
+    /// psABI's (on AArch64 the object addresses the area with ADRP/LDR GOT
+    /// pairs, which `relax_context_got` leaves alone).
+    #[cfg(target_arch = "x86_64")]
     #[test]
     fn the_object_addresses_the_area_with_relaxable_relocations_only() {
         let program = crate::nir::parse(PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));

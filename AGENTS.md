@@ -773,9 +773,27 @@ checkout's). A change to native stack switching or its GC walk also needs a
 `cargo test --release --manifest-path native/Cargo.toml --lib coroutine`.
 `bench/coroutines.tcl` regenerates the performance report.
 
-Native coroutines switch stacks with hand-written x86-64 assembly and exist
-on x86-64 Linux only; elsewhere the native backend reports them unsupported
-(the Tcl backends run them everywhere).
+Native coroutines switch stacks with hand-written x86-64 and AArch64
+assembly and exist on Linux x86-64 and AArch64 only; elsewhere the native
+backend reports them unsupported (the Tcl backends run them everywhere).
+
+## Linux AArch64
+
+The native backend runs on Linux AArch64 (the `tests-arm64.yml` CI jobs) with
+the x86-64 feature set except what is tied to the x86-64 instruction set:
+the JIT, native-frame stack maps (runtime/framewalk.rs; on AArch64 a stack
+map entry is a root's distance below its own frame's FP, codegen::clif's
+`define`), the pthread overflow guard (runtime/platform/linux.rs), coroutines
+and rustc-linked executables. `linux::abi::syscall` (and so `linux::io`) and
+the `stub` linker remain x86-64 only: the Tcl tests that need them carry
+`linuxX86_64` or `stubLinker`, golden suites that make live syscalls
+`# golden-host: linux-x86_64 -- REASON` (tests/golden/run.tcl). A Tcl test
+that needs the native runtime on Linux (coroutines, stack maps, GC-stress
+evidence) but no syscall carries `nativeLinux`; one that only needs a
+standalone executable, `executableAot`. Never gate a test on
+`linuxX86_64` for anything but the x86-64 instruction set or syscall ABI. A change to
+the walker, the switch or root lowering needs a GC-stress run on both
+architectures; CI's arm64 workflow has one.
 
 ## Affine values
 
@@ -1232,7 +1250,12 @@ suites (`BOTLISH_GOLDEN_SUITES=all` or a list of files runs others); CI's
 every backend, through the front-end cache (Running the tests locally,
 above). A suite that cannot run on a backend declares
 `# golden-exclude: BACKEND -- REASON` in its leading comments; keep such tests
-in a companion suite so the main suite keeps all four backends.
+in a companion suite so the main suite keeps all four backends. A suite that
+runs on one host only (live Linux x86-64 syscalls) declares
+`# golden-host: linux-x86_64 -- REASON`: elsewhere it compiles but does not
+run. On such a host check.tcl accepts a row whose Tcl original a host
+constraint skipped (`host-skip`) with its golden test passing or
+host-excluded; every other row must still be "old pass, new pass".
 
 If you change `lib/test.bot`, run `tests/golden-framework.test`,
 `tests/golden.test`, `tclsh9.0 tests/golden/run.tcl`,
