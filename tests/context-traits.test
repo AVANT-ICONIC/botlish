@@ -33,6 +33,12 @@ interp recursionlimit {} 100000
 
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
+
+# Linux on x86-64 or AArch64: the native backend's whole runtime (native
+# stack maps, the stack guard, coroutines) without the x86-64 syscall that
+# linuxX86_64 tests need.
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint objdump [expr {[auto_execok objdump] ne ""}]
 testConstraint posixShell [expr {[auto_execok sh] ne ""}]
 testConstraint strace [expr {[auto_execok strace] ne "" && ![catch {exec strace -f -qq -o /dev/null true 2>@1}]}]
@@ -766,7 +772,7 @@ test ct-allocation-free {context-trait specialization allocates nothing: 100 ope
     }
 } -result {{0 0} {0 0}}
 
-test ct-machine-code-direct {machine code: the clone calls the implementation with a direct call (no indirect call), and is exactly as long as the hand-written concrete function} -constraints {linuxX86_64 objdump posixShell rustcLinker} -body {
+test ct-machine-code-direct {machine code: the clone calls the implementation with a direct call (no indirect call), and is exactly as long as the hand-written concrete function} -constraints {nativeLinux objdump posixShell rustcLinker} -body {
     set dir [makeDirectory ct-exe-[pid]]
     set exe [file join $dir evidence]
     set hir [surface::compile "$::evidence\n\[sum(50, 0), sum_a(50, 0)\]\n" -warnings off]
@@ -782,11 +788,21 @@ test ct-machine-code-direct {machine code: the clone calls the implementation wi
     }]
     set code [exec objdump -d --no-show-raw-insn $exe]
     set body [lindex [regexp -inline "<$clone>:\n(.*?)\n\n" "$code\n\n"] 1]
+    # A direct call and an indirect one in the host's own disassembly: x86-64
+    # `call ADDR <f>` and `call *...`, AArch64 `bl ADDR <f>` and `blr REG`.
+    if {$::tcl_platform(machine) eq "aarch64"} {
+        set direct "bl\\s+\[0-9a-f\]+ <$emit>"
+        set indirect {blr\s}
+    } else {
+        set direct "call +\[0-9a-f\]+ <$emit>"
+        set indirect {call +\*}
+    }
     set result [list [exec $exe] [lindex $sizes 0] [expr {[lindex $sizes 0] == [lindex $sizes 1]}] \
-        [regexp -all "call +\[0-9a-f\]+ <$emit>" $body] [regexp -all {call +\*} $body]]
+        [regexp -all $direct $body] [regexp -all $indirect $body]]
     removeDirectory ct-exe-[pid]
     set result
-} -result {{[2650, 2650]} 89 1 2 0}
+} -result [expr {$::tcl_platform(machine) eq "aarch64"
+    ? {{[2650, 2650]} 76 1 2 0} : {{[2650, 2650]} 89 1 2 0}}]
 
 test ct-tooling {-contexts names the context trait, its bindings, the source functions requiring it, each call's selection with its implementation mapping, and the clones; -traits shows which context structs implement it} -body {
     set hir [moduleHir $::ctLib [selectionProgram {ct::a::create()}]]

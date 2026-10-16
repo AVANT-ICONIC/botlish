@@ -27,6 +27,12 @@ interp recursionlimit {} 100000
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
 
+# Linux on x86-64 or AArch64: the native backend's whole runtime (native
+# stack maps, the stack guard, coroutines) without the x86-64 syscall that
+# linuxX86_64 tests need.
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
+
 # ---------------------------------------------------------------------------
 # Helpers
 
@@ -356,7 +362,7 @@ b = s()
 }
 } -result {value {[1, false, 11, 20, 30, 31, true]}}
 
-test co-binding-no-aggregate {the binding form builds no two-field value: the construction allocates the handle and nothing else (the literal-argument thunk is a static closure)} -constraints linuxX86_64 -body {
+test co-binding-no-aggregate {the binding form builds no two-field value: the construction allocates the handle and nothing else (the literal-argument thunk is a static closure)} -constraints nativeLinux -body {
     set hir [surface::compile "struct T:\n    n: int\nfn t(k: int) -> T:\n    yield T {n: k}\n    return T {n: k + 1}\ncoroutine {step, first} = t(1)\n1\n" -warnings off]
     set report [native::allocationReport $hir summary]
     list [dict get $report byKind Coroutine allocations] [dict get $report byKind Struct allocations] \
@@ -569,7 +575,7 @@ test co-errors-internal {a failure handled inside the coroutine never reaches th
     coAgree "${errorDecls}fn handled(n: int, resume Msg) -> Ev:\n    v = deep(n):\n        on Broken:\n            42\n    m = yield Ev {v: v}\n    return Ev {v: m.v + 1}\ncoroutine {step, first} = handled(0 - 5)\nsecond = step(Msg {v: 10})\n\[first.v, second.v\]\n"
 } -result {value {[42, 11]}}
 
-test co-errors-uncaught-native-limit {a native stack overflow on a coroutine's own stack is the ordinary NATIVE LIMIT STACK} -constraints linuxX86_64 -body {
+test co-errors-uncaught-native-limit {a native stack overflow on a coroutine's own stack is the ordinary NATIVE LIMIT STACK} -constraints nativeLinux -body {
     set hir [surface::compile "struct V:\n    n: int\nfn down(n: int) -> int:\n    if n == 0:\n        yield V {n: 0}\n        return 0\n    1 + down(n - 1)\nfn worker(n: int) -> V:\n    return V {n: down(n)}\ncoroutine {step, first} = worker(100000000)\nfirst.n\n" -warnings off]
     catch {native::evalHir $hir} message options
     dict get $options -errorcode
@@ -848,7 +854,7 @@ test co-executable-linux-io {a standalone executable printing through io::print_
 report after
 [1, 3]} 1}
 
-test co-context-trait-native {native evidence: the yielding clone of deep takes no context argument and calls the selected implementation directly; the thunk calls the clone of worker} -constraints linuxX86_64 -body {
+test co-context-trait-native {native evidence: the yielding clone of deep takes no context argument and calls the selected implementation directly; the thunk calls the clone of worker} -constraints nativeLinux -body {
     set nir [coNir $contextProgram]
     set deep [lsearch -inline -regexp [split $nir \n] {^func [0-9]+ "deep<}]
     list [regexp {params=1 } $deep] [regexp {op coyield} $nir] [expr {[regexp -all {op cocreate} $nir] == 1}] \
@@ -892,7 +898,7 @@ test co-hir-text {checked HIR states each yielding function's effect, the handle
         [expr {[hir::format [hir::parse $text]] eq $text}]
 } -cleanup {unset -nocomplain hir text} -result {2 1 1 1}
 
-test co-nir-operations {construction is cocreate then costart (eager); a resume is coresume of the one handle register; a move copies no state; done? is codone; the handle's last use is followed by corelease of that register; a yield is coyield in the deep function, reached by an ordinary direct call} -constraints linuxX86_64 -body {
+test co-nir-operations {construction is cocreate then costart (eager); a resume is coresume of the one handle register; a move copies no state; done? is codone; the handle's last use is followed by corelease of that register; a yield is coyield in the deep function, reached by an ordinary direct call} -constraints nativeLinux -body {
     set nir [coNir "import coroutine\n${principal}other = step\nx = other(Message {value: 1})\ny = coroutine::done?(other)\nx.value\n"]
     set ops {}
     set handle ""
@@ -962,7 +968,7 @@ test co-gc-suspended-stacks {values held only by suspended frames at several dep
     coAgree $gcProgram
 } -result $gcExpected
 
-test co-gc-stress {the same program with a collection before every native allocation} -constraints linuxX86_64 -body {
+test co-gc-stress {the same program with a collection before every native allocation} -constraints nativeLinux -body {
     withGcStress {
         set hir [surface::compile $gcProgram -warnings off]
         list [outcomeUnderHir cranelift $hir] [outcomeUnderHir cranelift-generic $hir]
@@ -1095,7 +1101,7 @@ test co-release-tcl-runtime {on the Tcl backends a released suspended coroutine 
     }]
 } -cleanup {unset -nocomplain pre programs results} -result {{{[9, 0, 0]} {[50, 0]} {[50, 0]}} {{[0, 0, 0]} {[50, 0]} {[50, 0]}} {{[0, 0, 0]} {[50, 0]} {[50, 0]}}}
 
-test co-release-native-stacks {natively a released suspended coroutine's stack goes back to the pool at once: 2000 constructions abandoned in a loop map one stack and reuse it 1999 times, and no collection sweeps a coroutine still holding one; the same under GC stress} -constraints linuxX86_64 -body {
+test co-release-native-stacks {natively a released suspended coroutine's stack goes back to the pool at once: 2000 constructions abandoned in a loop map one stack and reuse it 1999 times, and no collection sweeps a coroutine still holding one; the same under GC stress} -constraints nativeLinux -body {
     set hir [surface::compile "${releaseDecls}xs = loop i from 0 to 2000:\n    coroutine {first} = w(i)\n    first.n\nlist::length(xs)\n" -warnings off]
     set report [native::allocationReport $hir summary]
     list [dict get $report coroutines] [withGcStress {lrange [outcomeUnderHir cranelift $hir] 0 1}]
@@ -1237,7 +1243,7 @@ test co-exit-release-tcl-runtime {on the Tcl backends no exit leaves a suspended
     }] [core::value::show [core::compiler::evalHir [surface::compile $text -warnings off]] 1 1]
 } -cleanup {unset -nocomplain text} -result {{value 0} {value 0} 0}
 
-test co-exit-release-native-stacks {natively every coroutine an exit leaves is released, none is left for a collection: 2100 rows (27900 constructions, 18000 abandoned suspended on an exit or at a last use) map two stacks (an outer and a loop's inner coroutine are alive at once) and sweep none; the same under GC stress} -constraints linuxX86_64 -body {
+test co-exit-release-native-stacks {natively every coroutine an exit leaves is released, none is left for a collection: 2100 rows (27900 constructions, 18000 abandoned suspended on an exit or at a last use) map two stacks (an outer and a loop's inner coroutine are alive at once) and sweep none; the same under GC stress} -constraints nativeLinux -body {
     set hir [surface::compile "import list\n${exitDecls}${exitProgram}xs = loop j from 0 to 300:\n    ys = loop k from 0 to 7:\n        row(k)\n    list::length(ys)\nlist::length(xs)\n" -warnings off]
     set report [native::allocationReport $hir summary]
     list [dict get $report coroutines] [withGcStress {lrange [outcomeUnderHir cranelift $hir] 0 1}]

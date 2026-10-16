@@ -787,7 +787,11 @@ map entry is a root's distance below its own frame's FP, codegen::clif's
 and rustc-linked executables. `linux::abi::syscall` (and so `linux::io`) and
 the `stub` linker remain x86-64 only: the Tcl tests that need them carry
 `linuxX86_64` or `stubLinker`, golden suites that make live syscalls
-`# golden-host: linux-x86_64 -- REASON` (tests/golden/run.tcl). A change to
+`# golden-host: linux-x86_64 -- REASON` (tests/golden/run.tcl). A Tcl test
+that needs the native runtime on Linux (coroutines, stack maps, GC-stress
+evidence) but no syscall carries `nativeLinux`; one that only needs a
+standalone executable, `executableAot`. Never gate a test on
+`linuxX86_64` for anything but the x86-64 instruction set or syscall ABI. A change to
 the walker, the switch or root lowering needs a GC-stress run on both
 architectures; CI's arm64 workflow has one.
 
