@@ -92,6 +92,9 @@ proc hir::sourcetypes::Reset {} {
     # compilation's own structs are registered only after its other types
     # (hir::structs::apply, at the end of apply).
     hir::structs::Reset
+    # Likewise its layouts (BINARY-LAYOUT.md): registered after this
+    # compilation's integer domains, which their fields name.
+    hir::layouts::Reset
 }
 
 proc hir::sourcetypes::Fail {span message {kind TYPE}} {
@@ -152,9 +155,16 @@ proc hir::sourcetypes::apply {decls {structDecls {}}} {
     # declarations of this batch below (one type namespace).
     set enumDecls {}
     set typeDecls {}
+    set layoutDecls {}
     foreach decl $decls {
         if {[dict exists $decl kind] && [dict get $decl kind] eq "enum"} {
             lappend enumDecls $decl
+        } elseif {[dict exists $decl kind] && [dict get $decl kind] eq "layout"} {
+            # Layout declarations (BINARY-LAYOUT.md, hir/layouts.tcl) ride in
+            # DECLS as `kind layout` entries, registered after the integer
+            # domains their scalar fields name and before the structs whose
+            # fields may name LayoutStruct[L].
+            lappend layoutDecls $decl
         } else {
             lappend typeDecls $decl
         }
@@ -168,6 +178,12 @@ proc hir::sourcetypes::apply {decls {structDecls {}}} {
             if {[hir::enums::declared $id]} {
                 Fail [dict get $decl nameSpan] "type \"$id\" is already declared (as an enum)"
             }
+            foreach layout $layoutDecls {
+                if {[Identity $layout] eq $id} {
+                    # One type namespace (BINARY-LAYOUT.md).
+                    Fail [dict get $decl nameSpan] "type \"$id\" is already declared (as a layout)"
+                }
+            }
             if {[dict exists $byName $id]} {
                 Fail [dict get $decl nameSpan] "type \"$id\" is already declared[ElsewhereClause [dict get $byName $id nameSpan] [dict get $decl nameSpan]]"
             }
@@ -178,6 +194,9 @@ proc hir::sourcetypes::apply {decls {structDecls {}}} {
         foreach decl $decls {
             Resolve [Identity $decl] $byName registered visiting order $structDecls
         }
+    }
+    if {$layoutDecls ne ""} {
+        lappend order {*}[hir::layouts::apply $layoutDecls]
     }
     if {$structDecls ne ""} {
         # Struct declarations (STRUCTS.md, hir/structs.tcl) are type

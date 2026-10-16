@@ -194,7 +194,12 @@ namespace eval hir::types {
     # resolution-mechanism change -- confirming the List[T] milestone's own
     # claim that a future unary container needs only another entry here
     # (plus a case in resolveApplication/MakeSet below), never new syntax.
-    variable constructors [dict create List 1 ImmutableSet 1 MutableArray 1 MutableVector 1]
+    # LayoutStruct (BINARY-LAYOUT.md) is registered for its name and arity
+    # (an unapplied `LayoutStruct` is the arity error, no declaration may be
+    # named so); its one argument is a layout, not a type, so
+    # hir::resolve::ResolveTypeExpr resolves it (hir::layouts::
+    # ResolveLayoutStruct) before any argument is resolved as a type.
+    variable constructors [dict create List 1 ImmutableSet 1 MutableArray 1 MutableVector 1 LayoutStruct 1]
 }
 
 # The canonical resolved type for a bare (unapplied) type name NAME -- an
@@ -238,6 +243,13 @@ proc hir::types::resolveNamed {name {ns ""}} {
     set trait [hir::traits::lookup $name $ns]
     if {$trait ne ""} {
         return [list trait $trait]
+    }
+    # A layout (BINARY-LAYOUT.md) is not a type: its values are
+    # LayoutStruct[L]'s.
+    set layout [hir::layouts::lookup $name $ns]
+    if {$layout ne ""} {
+        return -code error -errorcode {BOTLISH LAYOUT-NOT-A-TYPE} \
+            "\"$name\" is a layout, not a type: a layout describes bytes, and the values imprinted with it have the type LayoutStruct\[$name\]"
     }
     # A source-defined `type`: spelled bare it is the code's own namespace's
     # (declared there) or the one a `import type` of its file binds to that
@@ -318,6 +330,12 @@ proc hir::types::resolveApplication {ctor argTypes} {
         }
     }
     switch -- $ctor {
+        LayoutStruct {
+            # Only from a resolved argument type (never a layout): see
+            # hir::layouts::ResolveLayoutStruct.
+            return -code error -errorcode {BOTLISH LAYOUT-STRUCT-PARAMETER} \
+                "LayoutStruct\[[show [lindex $argTypes 0]]\]: the argument of LayoutStruct must name a layout declaration, not a type"
+        }
         List { return [MakeList [lindex $argTypes 0] {} 0 0] }
         ImmutableSet { return [MakeSet [lindex $argTypes 0] 0] }
         MutableArray { return [MakeMutArray [lindex $argTypes 0] 0] }
@@ -1992,6 +2010,19 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
                     # installed context that provides them is selected
                     # statically and never becomes this binding's type.
                     return [list trait $id]
+                }
+            }
+            return $result
+        }
+        layout-struct {
+            # binary::parse(L, data) (core/binary.tcl, BINARY-LAYOUT.md): a
+            # LayoutStruct[L], L the layout argument I's descriptor
+            # constant describes (hir/resolve.tcl's LayoutOperand).
+            set arg [lindex $argExprs [lindex $shape 1]]
+            if {$arg ne "" && [hir::kind $hir $arg] eq "const"} {
+                set id [hir::layouts::DescriptorLayout [lindex [hir::get $hir $arg literal] end]]
+                if {$id ne "" && [hir::layouts::declared $id]} {
+                    return [hir::layouts::structType $id]
                 }
             }
             return $result

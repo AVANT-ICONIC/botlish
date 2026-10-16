@@ -40,7 +40,11 @@
 #              value (STRUCTS.md)
 #   namedstruct namespace ("" or the module namespace), name, nameSpan
 #              (covers "NAMESPACE::NAME"), init (a fieldinits node)
-#              Name { x: a, y: b }: a named struct construction
+#              Name { x: a, y: b }: a named struct construction; with
+#              typeArg (a surface::parser::TypeExpr result) and typeArgSpan,
+#              the construction of an applied type: NAME[TYPE] { ... }
+#              (BINARY-LAYOUT.md, `LayoutStruct[Pair] {...}`; NAME is then
+#              the bare constructor name)
 #   fieldinits fields ({name nameSpan value} dicts in written order) -- the
 #              one shared field-initializer payload of anonstruct and
 #              namedstruct
@@ -144,6 +148,14 @@
 #              owner is not in the AST (the cached AST is importer- and
 #              path-neutral): the loader supplies the module's namespace when
 #              it lowers the declaration (surface/lower.tcl's StructDeclOf).
+#   layoutdecl name, nameSpan, size, sizeSpan, align, alignSpan, fields
+#              ({name nameSpan type typeSpan offset offsetSpan} dicts in
+#              written order; TYPE as surface::parser::TypeExpr returns it,
+#              SIZE/ALIGN/OFFSET decimal text) -- a top-level fixed binary
+#              layout ("layout NAME:" with its indented `size`, `align` and
+#              `field NAME: TYPE at OFFSET` lines; BINARY-LAYOUT.md). A
+#              declaration like structdecl: no runtime meaning, no binding;
+#              the owner (the declaring module) is supplied by the loader.
 #   enumdecl   name, nameSpan, cases ({name nameSpan} dicts in declaration
 #              order) -- a top-level enum declaration ("enum NAME:" followed
 #              by its indented, comma-separated payload-free cases; ENUMS.md).
@@ -657,6 +669,9 @@ proc surface::ast::Expr {node show} {
             if {[dict get $node namespace] ne ""} {
                 set name "[dict get $node namespace]::$name"
             }
+            if {[dict exists $node typeArg]} {
+                append name "\[[showType [dict get $node typeArg]]\]"
+            }
             return "([::join [concat struct $name [FieldsText $node $show]] { }])$at"
         }
         project {
@@ -792,6 +807,15 @@ proc surface::ast::Statement {node indent show linesVar} {
             lappend lines "${pad}enum [dict get $node name]$at"
             foreach case [dict get $node cases] {
                 lappend lines "${pad}    [dict get $case name],"
+            }
+            return
+        }
+        layoutdecl {
+            lappend lines "${pad}layout [dict get $node name]$at"
+            lappend lines "${pad}    size [dict get $node size]"
+            lappend lines "${pad}    align [dict get $node align]"
+            foreach field [dict get $node fields] {
+                lappend lines "${pad}    field [dict get $field name]: [showType [dict get $field type]] at [dict get $field offset]"
             }
             return
         }

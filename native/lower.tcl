@@ -4710,6 +4710,167 @@ proc native::lower::BytesAddrCall {fnVar e node wantVirtual} {
     return [list $object tagged]
 }
 
+# ---------------------------------------------------------------------------
+# Fixed binary layouts (BINARY-LAYOUT.md)
+#
+# binary::parse(L, data) and binary#emit(value, L) (hir::layouts::Elaborate's
+# form of binary::emit) carry L's descriptor (hir::layouts::descriptor) as a
+# constant argument: it is read here, at compile time, and the call becomes
+# straight-line code over that one layout -- one `binload` / `binstore` per
+# scalar field at its constant offset with its constant encoding, one
+# `structnew` per (nested) LayoutStruct, one length check before any load,
+# one `byteszeroed` before any store. No descriptor or schema is read at run
+# time, and nothing is specialized: two layouts lower differently only
+# because their offsets differ, exactly as two struct types' projections do.
+
+# The encoding word of `binload`/`binstore` (native/src/runtime/ops.rs's
+# bin_encoding) of the descriptor scalar SIGN WIDTH ENDIAN.
+proc native::lower::LayoutEncoding {sign width endian} {
+    return [expr {$width + ($sign eq "i" ? 16 : 0) + ($endian eq "big" ? 32 : 0)}]
+}
+
+# Call E (NODE) of a binary operation: {REGISTER tagged} or {never tagged}.
+proc native::lower::LayoutCall {fnVar e node wantVirtual} {
+    upvar 1 $fnVar fn
+    variable hir
+    set name [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name]
+    set role [hir::layouts::Role $name]
+    set args [dict get $node args]
+    set problems [hir::layouts::Problems $hir $e $name $role]
+    if {$problems ne ""} {
+        # A -strict 0 program whose call HIR rejected: the problem, replayed
+        # before anything runs (no layout is read off a value nothing proved).
+        lassign [lindex $problems 0] kind message
+        Emit fn "raise $kind [Quote $message]" $e
+        return {never tagged}
+    }
+    set operand [lindex $args [hir::layouts::RoleOf $role operand]]
+    if {[hir::kind $hir $operand] ne "const"} {
+        throw {NATIVE BUG} "native lowering: the layout operand of $name ($e) is not its descriptor constant"
+    }
+    set descriptor [lindex [hir::get $hir $operand literal] end]
+    if {[hir::layouts::DescriptorLayout $descriptor] eq ""} {
+        throw {NATIVE BUG} "native lowering: the layout operand of $name ($e) is not a layout descriptor"
+    }
+    dict lappend fn calls [list native $name]
+    switch -- [hir::layouts::RoleOf $role op] {
+        parse {
+            set storage [StorageOf fn [lindex $args [hir::layouts::RoleOf $role input]]]
+            if {$storage eq "never"} {
+                return {never tagged}
+            }
+            set length [Assign fn "op byteslen $storage" $e]
+            set size [Assign fn "int [lindex $descriptor 1]" $e]
+            set fits [Assign fn "op ieq $length $size" $e]
+            set good [NewLabel fn]
+            set bad [NewLabel fn]
+            Emit fn "br $fits $good $bad" $e
+            EmitLabel fn $bad
+            Emit fn "faildeclared [ErrorId LayoutLengthMismatch] [Quote LayoutLengthMismatch]" $e
+            EmitLabel fn $good
+            if {$wantVirtual ne ""} {
+                # Held as virtual fields (hir::escape's LayoutParseResult):
+                # the loads' registers are the fields; no object is built.
+                set fields [LayoutDecode fn $e $storage $descriptor 0 1]
+                if {[llength $fields] != $wantVirtual} {
+                    throw {NATIVE BUG} "native lowering: expected a $wantVirtual-field LayoutStruct at $e"
+                }
+                return [list $fields virtual]
+            }
+            return [list [LayoutDecode fn $e $storage $descriptor 0] tagged]
+        }
+        emit {
+            if {$wantVirtual ne ""} {
+                throw {NATIVE BUG} "native lowering: binary::emit $e asked for virtual fields (hir::escape never classifies one as a construction)"
+            }
+            set arg [lindex $args 0]
+            set b [expr {[hir::kind $hir $arg] eq "ref" ? [hir::get $hir $arg binding] : ""}]
+            set local [expr {$b ne "" && [dict exists $fn locals $b] ? [dict get $fn locals $b] : ""}]
+            if {[lindex $local 0] eq "virtual" && [lindex $local 2] ne ""} {
+                # The value held as fields (hir/escape.tcl's leafUse): its
+                # leaves without the object, a closed inner struct read with
+                # `structget`.
+                lassign $local - fields shape - - cut
+                set leaves [ContextLeafRegs fn $e $shape $cut $fields]
+            } else {
+                set value [Expr fn $arg]
+                if {$value eq "never"} {
+                    return {never tagged}
+                }
+                set leaves [ContextObjectLeaves fn $e [lindex $descriptor 0] $value]
+            }
+            set size [Assign fn "int [lindex $descriptor 1]" $e]
+            set storage [Assign fn "op byteszeroed $size" $e]
+            LayoutEncode fn $e $storage $leaves $descriptor
+            set bytesType [core::bytestore::bytesType]
+            if {![hir::structs::declared $bytesType]} {
+                throw {NATIVE BUG} "native lowering: binary::emit without a declared $bytesType ($e)"
+            }
+            return [list [Assign fn "structnew [ShapeIndex $bytesType [hir::structs::names $bytesType]] $storage" $e] tagged]
+        }
+    }
+    throw {NATIVE BUG} "native lowering: binary operation $name ($e) has no operation"
+}
+
+# The LayoutStruct DESCRIPTOR describes, imprinted from the bytes of STORAGE
+# at byte BASE: its fields' loads in declared (slot) order, then its object
+# (or, FIELDS 1, the field registers without the object).
+proc native::lower::LayoutDecode {fnVar e storage descriptor base {fieldsOnly 0}} {
+    upvar 1 $fnVar fn
+    lassign $descriptor structId size align fields
+    set names {}
+    set registers {}
+    foreach field $fields {
+        lassign $field name offset kind
+        lappend names $name
+        if {$kind eq "layout"} {
+            lappend registers [LayoutDecode fn $e $storage [lindex $field 3] [expr {$base + $offset}]]
+            continue
+        }
+        lassign $field name offset sign width endian
+        set at [Assign fn "int [expr {$base + $offset}]" $e]
+        set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+        lappend registers [Assign fn "op binload $storage $at $code" $e]
+    }
+    if {$fieldsOnly} {
+        return $registers
+    }
+    return [Assign fn "structnew [ShapeIndex $structId $names] [join $registers { }]" $e]
+}
+
+# {OFFSET SIGN WIDTH ENDIAN} of every scalar field of DESCRIPTOR at byte BASE,
+# depth-first in declared order: the order of a LayoutStruct's leaves
+# (ContextObjectLeaves, ContextLeafRegs).
+proc native::lower::LayoutLeaves {descriptor base} {
+    set leaves {}
+    foreach field [lindex $descriptor 3] {
+        lassign $field name offset kind
+        if {$kind eq "layout"} {
+            lappend leaves {*}[LayoutLeaves [lindex $field 3] [expr {$base + $offset}]]
+        } else {
+            lassign $field name offset sign width endian
+            lappend leaves [list [expr {$base + $offset}] $sign $width $endian]
+        }
+    }
+    return $leaves
+}
+
+# Writes the leaf registers LEAVES of a LayoutStruct of DESCRIPTOR (depth-
+# first, declared order) into the fresh storage STORAGE.
+proc native::lower::LayoutEncode {fnVar e storage leaves descriptor} {
+    upvar 1 $fnVar fn
+    set scalars [LayoutLeaves $descriptor 0]
+    if {[llength $leaves] != [llength $scalars]} {
+        throw {NATIVE BUG} "native lowering: binary::emit $e has [llength $leaves] leaves for [llength $scalars] scalar fields"
+    }
+    foreach leaf $scalars r $leaves {
+        lassign $leaf offset sign width endian
+        set at [Assign fn "int $offset" $e]
+        set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+        Assign fn "op binstore $storage $at $code $r" $e
+    }
+}
+
 # The byte storage (a register) of abi::bytes::Bytes expression ARG, evaluated here,
 # or "never": the one field of a Bytes held as virtual fields (a virtual local,
 # or a virtual parameter of a `fields` variant), else read out of the object
@@ -5980,6 +6141,13 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
         if {$static ne ""} {
             return $static
         }
+    }
+    if {$targetKind eq "native"
+            && [hir::layouts::RoleOf [hir::layouts::Role [dict get [hir::symbol $hir $target] name]] op] ne ""} {
+        # A binary operation of a fixed layout (BINARY-LAYOUT.md): its layout
+        # is the descriptor constant the call carries, read here, so the
+        # call becomes straight-line code over that one layout.
+        return [LayoutCall fn $e $node $wantVirtual]
     }
     if {$targetKind eq "native" && [core::bytestore::isBridge [dict get [hir::symbol $hir $target] name]]} {
         # The raw address bridge (core/bytestore.tcl, ABI-BYTES.md): reads the

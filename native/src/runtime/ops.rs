@@ -114,6 +114,9 @@ pub fn op_may_allocate(op: OpCode) -> bool {
             // but length/address makes a fresh object (a collection may run
             // first, with the operands rooted).
             | MBytesNew | MBytesFrom | MBytesSet | MBytesClone | MBytesFreeze | MBytesFreezePrefix
+            // Fixed binary layouts (BINARY-LAYOUT.md): a fresh zeroed storage;
+            // a 64-bit field read outside the small-Int range is a BigInt.
+            | BytesZeroed | BinLoad
             // The proven siblings allocate exactly like their checked forms; only
             // their op_may_error classification differs.
             | SubstrProven | MutArrayFreezeProven | MkError
@@ -160,6 +163,12 @@ pub fn op_may_error(op: OpCode) -> bool {
         // a value that is not a byte (TYPE). Checked programs cannot produce
         // any of them: lib/abi/bytes.bot's wrappers prove each before the call.
         | MBytesNew | MBytesFrom | MBytesLen | MBytesSet | MBytesClone | MBytesFreeze | MBytesFreezePrefix | MBytesAddr
+        // Fixed binary layouts: an operand of the wrong kind (TYPE), an
+        // offset or length outside the storage or a value outside its
+        // encoding (RANGE). A checked program produces none of them: the
+        // layout's fields lie inside its size, the length is checked before
+        // any load, and a field's type is its encoding's exact range.
+        | BinLoad | BinStore | BytesZeroed
         // Only on an operand that is not a 64-bit register word (TYPE, never
         // a truncation: runtime/syscall.rs), which a checked program cannot
         // produce. The kernel's own result is never an error here.
@@ -830,6 +839,115 @@ pub extern "C" fn rt_bytes_addr(p: *mut Vm, v: Value) -> Value {
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_keepalive(_p: *mut Vm, v: Value) -> Value {
     std::hint::black_box(v);
+    UNIT
+}
+
+// ---------------------------------------------------------------------------
+// Fixed binary layouts (BINARY-LAYOUT.md; core/binary.tcl is the reference).
+//
+// native/lower.tcl lowers binary::parse / binary::emit of one statically
+// known layout to one `binload` / `binstore` per scalar field at a constant
+// offset with a constant encoding (no descriptor is read at run time), after
+// one length check (parse) or one `byteszeroed` (emit). Every byte order is
+// little-endian, the target's; the encoding word keeps room for big-endian.
+
+/// The scalar encoding word of `binload`/`binstore`: width in bytes (1, 2, 4
+/// or 8), signedness, byte order -- or None for a malformed word.
+fn bin_encoding(code: Value) -> Option<(usize, bool, bool)> {
+    let c = int_small(code)?;
+    let width = (c & 15) as usize;
+    if !matches!(width, 1 | 2 | 4 | 8) || c & !63 != 0 {
+        return None;
+    }
+    Some((width, c & 16 != 0, c & 32 != 0))
+}
+
+/// The storage, offset and encoding operands of a fixed-layout op, checked:
+/// the storage is a byte storage and WIDTH bytes at OFFSET lie inside it.
+/// (offset, width, signed, big-endian).
+fn bin_operands(p: *mut Vm, storage: Value, offset: Value, code: Value, context: &str) -> Result<(usize, usize, bool, bool), Value> {
+    bytes_operand(p, storage, context)?;
+    let Some((width, signed, big)) = bin_encoding(code) else {
+        let message = format!("{context}: malformed scalar encoding {}", super::show::int_text(code));
+        return Err(vm(p).fail(RtError::Semantic { kind: "RANGE", message }));
+    };
+    let len = bytes_of(storage).len();
+    match int_small(offset) {
+        Some(o) if o >= 0 && (o as usize).checked_add(width).is_some_and(|end| end <= len) => Ok((o as usize, width, signed, big)),
+        _ => {
+            let message = format!("{context}: {width} bytes at offset {} lie outside a storage of {len} bytes", super::show::int_text(offset));
+            Err(vm(p).fail(RtError::Semantic { kind: "RANGE", message }))
+        }
+    }
+}
+
+/// `byteszeroed %n`: a fresh storage of N zero bytes, private to the code
+/// that writes its fields next (`binstore`).
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_bytes_zeroed(p: *mut Vm, n: Value) -> Value {
+    let count = match index_operand(p, n, "binary::emit", "the layout size", MAX_COLLECTION_LENGTH) {
+        Ok(count) => count,
+        Err(failed) => return failed,
+    };
+    vm(p).new_bytes_with(count, |init| init.push_zeros(count))
+}
+
+/// `binload %s %o %c`: the Int at offset O of storage S in encoding C.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_bin_load(p: *mut Vm, storage: Value, offset: Value, code: Value) -> Value {
+    let (at, width, signed, big) = match bin_operands(p, storage, offset, code, "binary::parse") {
+        Ok(operands) => operands,
+        Err(failed) => return failed,
+    };
+    let mut word = [0u8; 8];
+    word[..width].copy_from_slice(&bytes_of(storage)[at..at + width]);
+    if big {
+        word[..width].reverse();
+    }
+    let raw = u64::from_le_bytes(word);
+    if signed {
+        let shift = 64 - 8 * width as u32;
+        vm(p).new_int(((raw << shift) as i64) >> shift)
+    } else if raw <= i64::MAX as u64 {
+        vm(p).new_int(raw as i64)
+    } else {
+        vm(p).new_big(BigInt::from(raw))
+    }
+}
+
+/// `binstore %s %o %c %v`: writes Int V at offset O of the fresh storage S
+/// in encoding C. RANGE (never a truncation) if V is outside the encoding.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_bin_store(p: *mut Vm, storage: Value, offset: Value, code: Value, value: Value) -> Value {
+    use num_traits::ToPrimitive;
+    let (at, width, signed, big) = match bin_operands(p, storage, offset, code, "binary::emit") {
+        Ok(operands) => operands,
+        Err(failed) => return failed,
+    };
+    if !is_small(value) && heap_kind(value) != KIND_BIGINT {
+        return vm(p).fail(RtError::Type { context: "binary::emit".to_string(), expected: Kind::Int, got: value });
+    }
+    let n = int_to_big(value);
+    let bits = 8 * width as u32;
+    let (lo, hi) = if signed {
+        (-(BigInt::from(1u8) << (bits - 1)), (BigInt::from(1u8) << (bits - 1)) - 1)
+    } else {
+        (BigInt::from(0u8), (BigInt::from(1u8) << bits) - 1)
+    };
+    if n < lo || n > hi {
+        let message = format!("binary::emit: {} is outside the {width}-byte encoding {lo}..{hi}", super::show::int_text(value));
+        return vm(p).fail(RtError::Semantic { kind: "RANGE", message });
+    }
+    let word: u64 = if signed { n.to_i64().unwrap_or(0) as u64 } else { n.to_u64().unwrap_or(0) };
+    let mut bytes = word.to_le_bytes();
+    let field = &mut bytes[..width];
+    if big {
+        field.reverse();
+    }
+    // SAFETY: STORAGE is the fresh, non-empty storage `byteszeroed` made for
+    // this emission (native/lower.tcl's LayoutEmit): no value holds it yet,
+    // and the range was checked above.
+    unsafe { BytesObj::payload_mut(storage)[at..at + width].copy_from_slice(field) };
     UNIT
 }
 
@@ -2403,7 +2521,11 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         // linux::abi::syscall and the raw address bridge are never values
         // (hir/syscall.tcl rejects any use but a direct call), so no Native
         // value ever dispatches to them; keepalive is a lowering-internal op.
-        | SyscallLinuxX86_64 | BytesAddr | MBytesAddr | KeepAlive => {
+        | SyscallLinuxX86_64 | BytesAddr | MBytesAddr | KeepAlive
+        // The fixed-layout ops exist only in the straight-line code of one
+        // statically known layout (native/lower.tcl's LayoutParse /
+        // LayoutEmit): a binary operation is never a value.
+        | BinLoad | BinStore | BytesZeroed => {
             // Raw (untagged) representation ops, StringRegion ops and String
             // traversal ops never implement a dynamic native: native/lower.tcl
             // emits them only directly, as `op` instructions inline in a
@@ -2475,6 +2597,9 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_mbytes_freeze, 2),
         h!(rt_mbytes_freeze_prefix, 3),
         h!(rt_mbytes_addr, 2),
+        h!(rt_bytes_zeroed, 2),
+        h!(rt_bin_load, 4),
+        h!(rt_bin_store, 5),
         h!(rt_is_tcl_alpha, 2),
         h!(rt_is_tcl_alnum, 2),
         h!(rt_str_region_is_tcl_alpha, 4),
@@ -3529,6 +3654,64 @@ mod tests {
         assert_eq!(shl_i64_exact(0, 100), Some(0));
         assert_eq!(shl_i64_exact(1, 64), None);
         assert_eq!(shl_i64_exact(-1, 64), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // Fixed binary layouts (BINARY-LAYOUT.md): binload / binstore / byteszeroed
+
+    /// The encoding word of WIDTH bytes, SIGNED, little-endian.
+    fn enc(width: i64, signed: bool) -> Value {
+        make_small(width + if signed { 16 } else { 0 })
+    }
+
+    #[test]
+    fn bin_store_then_load_every_encoding_at_its_extremes() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let cases: &[(i64, bool, BigInt, Vec<u8>)] = &[
+            (1, false, BigInt::from(255), vec![0xff]),
+            (1, true, BigInt::from(-128), vec![0x80]),
+            (1, true, BigInt::from(127), vec![0x7f]),
+            (2, false, BigInt::from(0x1234), vec![0x34, 0x12]),
+            (2, true, BigInt::from(-2), vec![0xfe, 0xff]),
+            (4, false, BigInt::from(4_000_000_000u64), vec![0x00, 0x28, 0x6b, 0xee]),
+            (4, true, BigInt::from(i32::MIN), vec![0x00, 0x00, 0x00, 0x80]),
+            (8, false, BigInt::from(u64::MAX), vec![0xff; 8]),
+            (8, true, BigInt::from(i64::MIN), vec![0, 0, 0, 0, 0, 0, 0, 0x80]),
+            (8, true, BigInt::from(-1), vec![0xff; 8]),
+            (8, false, BigInt::from(0), vec![0; 8]),
+        ];
+        for (width, signed, n, bytes) in cases {
+            let s = rt_bytes_zeroed(p, make_small(12));
+            assert_eq!(bytes_of(s), &[0u8; 12], "byteszeroed is all zero");
+            let v = vm.new_big(n.clone());
+            assert_eq!(rt_bin_store(p, s, make_small(3), enc(*width, *signed), v), UNIT);
+            let mut expected = vec![0u8; 12];
+            expected[3..3 + *width as usize].copy_from_slice(bytes);
+            assert_eq!(bytes_of(s), &expected[..], "store {n} as {width}/{signed}");
+            let back = rt_bin_load(p, s, make_small(3), enc(*width, *signed));
+            assert_eq!(int_to_big(back), *n, "load {width}/{signed}");
+        }
+    }
+
+    #[test]
+    fn bin_store_never_truncates_and_ops_check_their_bounds() {
+        let mut vm = vm();
+        let p: *mut Vm = &mut *vm;
+        let s = rt_bytes_zeroed(p, make_small(4));
+        // 256 is not an unsigned byte, -1 not an unsigned value at all, 128 not
+        // a signed byte: RANGE, nothing written.
+        for (value, signed) in [(256, false), (-1, false), (128, true)] {
+            assert_eq!(rt_bin_store(p, s, make_small(0), enc(1, signed), make_small(value)), NO_VALUE);
+            assert!(vm.error.take().is_some());
+        }
+        assert_eq!(bytes_of(s), &[0u8; 4]);
+        // Four bytes at offset 1 of a 4-byte storage, and a malformed encoding.
+        assert_eq!(rt_bin_load(p, s, make_small(1), enc(4, false)), NO_VALUE);
+        assert!(vm.error.take().is_some());
+        assert_eq!(rt_bin_load(p, s, make_small(0), make_small(3)), NO_VALUE);
+        assert!(vm.error.take().is_some());
+        assert_eq!(rt_bin_load(p, s, make_small(0), enc(4, false)), make_small(0));
     }
 
     // -----------------------------------------------------------------------

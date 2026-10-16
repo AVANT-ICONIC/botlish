@@ -591,6 +591,10 @@ proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""}} {
         }
         return [hir::types::MakeFn $argTypes $result [dict get $arg errors]]
     }
+    if {$name eq "LayoutStruct"} {
+        # LayoutStruct[L] (BINARY-LAYOUT.md): L names a layout, never a type.
+        return [hir::layouts::ResolveLayoutStruct $arg $ns]
+    }
     return [hir::types::resolveApplication $name [list [ResolveTypeExpr $arg $ns]]]
 }
 
@@ -765,6 +769,9 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 # `Enum::Case` (ENUMS.md): the qualifier names an enum type,
                 # so this is a case of it, never a namespace member.
                 ResolveEnumCase hir $e $enumId [lindex [dict get $node qualified] 1] $ctx
+            } elseif {[dict exists $node qualified] && [LayoutAsValue hir $e $node $ctx]} {
+                # A layout written where a value is (BINARY-LAYOUT.md):
+                # diagnosed by LayoutAsValue.
             } elseif {[dict exists $node qualified]} {
                 ResolveQualifiedRef hir $e [dict get $node qualified] $ctx
             } else {
@@ -971,6 +978,14 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 SetField hir $e known ""
                 return $e
             }
+            set layoutNative [LayoutNative $written]
+            set layoutRole [expr {$layoutNative eq "" || [dict exists $node method] ? "" : [hir::layouts::Role $layoutNative]}]
+            if {[hir::layouts::RoleOf $layoutRole query] ne ""} {
+                # A compile-time fact of a layout (BINARY-LAYOUT.md):
+                # binary::layout_length(L) is L's size, a constant.
+                ResolveLayoutQuery hir $e $node $layoutNative $layoutRole $ctx
+                return $e
+            }
             if {[dict exists $node method] && $planned ne "field"} {
                 set candidates [MethodCandidates hir $scope [dict get $written name] $ctx \
                     [expr {[llength [dict get $node args]] + 1}] hidden]
@@ -1009,7 +1024,25 @@ proc hir::resolve::Expr {hirVar node ctx} {
                     ns [CtxNamespace $ctx]]
             } else {
                 SetField hir $e callee [Expr hir $written $ctx]
-                SetField hir $e args [Sequence hir [dict get $node args] $ctx]
+                set operand [hir::layouts::RoleOf $layoutRole operand]
+                if {$operand ne ""} {
+                    # The static layout operand of a binary operation
+                    # (BINARY-LAYOUT.md): a layout name, resolved to the
+                    # layout's descriptor constant -- never an expression.
+                    set args {}
+                    set index 0
+                    foreach arg [dict get $node args] {
+                        if {$index == $operand} {
+                            lappend args [LayoutOperand hir $arg $layoutNative $ctx]
+                        } else {
+                            lappend args [Expr hir $arg $ctx]
+                        }
+                        incr index
+                    }
+                    SetField hir $e args $args
+                } else {
+                    SetField hir $e args [Sequence hir [dict get $node args] $ctx]
+                }
                 if {![dict exists $node method]} {
                     # `step(m)` on a coroutine handle (COROUTINES.md) is the
                     # explicit resume operation, not a call of a function
@@ -1452,6 +1485,25 @@ proc hir::resolve::ResolveStruct {hirVar e node ctx} {
                     "unknown struct type \"$id\": no such struct declaration is visible" $e
                 set id ""
             }
+        } elseif {[dict exists $typeRef typeArg]} {
+            # NAME[TYPE] { ... } (BINARY-LAYOUT.md): the construction of an
+            # applied type, the explicit type the imprinting design writes on
+            # an expression. Only LayoutStruct[L] has one: its fields are L's.
+            set ctor [dict get $typeRef name]
+            set argText [ShowTypeExpr [dict get $typeRef typeArg]]
+            set spelling "$ctor\[$argText\]"
+            if {$ctor ne "LayoutStruct"} {
+                set id ""
+                hir::DiagnoseAt hir UNKNOWN-STRUCT \
+                    "$spelling is not a struct type: of the applied types, only LayoutStruct\[L\] is constructed from field values" \
+                    $e [dict get $typeRef origin]
+            } elseif {[catch {hir::layouts::ResolveLayoutStruct [dict get $typeRef typeArg] $ns} type options]} {
+                set id ""
+                hir::DiagnoseAt hir [TypeErrorKind $options LAYOUT-STRUCT-PARAMETER] $type $e \
+                    [dict get $typeRef typeArgOrigin]
+            } else {
+                set id [lindex $type 1]
+            }
         } else {
             set tns [dict get $typeRef namespace]
             set tname [dict get $typeRef name]
@@ -1798,6 +1850,133 @@ proc hir::resolve::ResolveQualifiedRef {hirVar e pair ctx} {
     Capture hir $ctx [dict get $hir bindings $b scope] $b
 }
 
+# ---------------------------------------------------------------------------
+# Layouts in expressions (BINARY-LAYOUT.md)
+#
+# A layout is never a value. It is written in an expression only as the
+# layout operand of a binary operation -- a root native whose registration
+# carries a -layout role (hir/layouts.tcl) -- where it is the static evidence
+# imprinting reads: the operand is resolved here, by name, to the layout's
+# descriptor constant (no runtime layout object exists), and a query
+# (binary::layout_length(L)) is replaced by the fact it asks for.
+#
+#   UNKNOWN-LAYOUT       the operand names no visible layout
+#   LAYOUT-OPERAND       the operand is not a layout name (an expression, a
+#                        value)
+#   LAYOUT-NOT-A-VALUE   a layout named anywhere else in an expression
+
+# The root native the callee syntax WRITTEN denotes when it is a root
+# reference (a bare root name, or a qualified intrinsic, which surface/
+# lower.tcl lowers to one) of a native with a -layout role, else "". A root
+# reference denotes its native whatever local bindings are called.
+proc hir::resolve::LayoutNative {written} {
+    if {[dict get $written kind] ne "ref" || ![dict exists $written root] || ![dict get $written root]} {
+        return ""
+    }
+    set name [dict get $written name]
+    return [expr {[hir::layouts::Role $name] ne "" ? $name : ""}]
+}
+
+proc hir::resolve::LayoutNotAValueMessage {name} {
+    return "\"$name\" is a layout, not a value: a layout is named in a type (LayoutStruct\[$name\]) or as the layout operand of a binary operation (binary::parse($name, data), binary::layout_length($name)), and no runtime layout object exists"
+}
+
+# If the qualified reference syntax NODE (resolved as E) names a layout and
+# no definition of its module, diagnoses LAYOUT-NOT-A-VALUE and returns 1;
+# else 0.
+proc hir::resolve::LayoutAsValue {hirVar e node ctx} {
+    upvar 1 $hirVar hir
+    lassign [dict get $node qualified] ns name
+    set qualified "${ns}::$name"
+    if {[hir::layouts::lookup $qualified] eq ""} {
+        return 0
+    }
+    if {[dict exists $hir modules $ns] && [dict exists $hir scopes [dict get $hir modules $ns] names $name]} {
+        return 0
+    }
+    SetField hir $e name $qualified
+    SetField hir $e binding ""
+    SetField hir $e init yes
+    hir::Diagnose hir LAYOUT-NOT-A-VALUE [LayoutNotAValueMessage $qualified] $e
+    return 1
+}
+
+# The layout identity the operand syntax ARG of binary operation NATIVE
+# names in code of namespace NS, or "" after diagnosing (as E, with HIR) why
+# it names none.
+proc hir::resolve::LayoutOperandId {hirVar e arg native ctx} {
+    upvar 1 $hirVar hir
+    set ns [CtxNamespace $ctx]
+    set kind [dict get $arg kind]
+    set origin [dict get $arg origin]
+    set name ""
+    if {$kind eq "ref" && [dict exists $arg qualified]} {
+        lassign [dict get $arg qualified] qns qname
+        set name "${qns}::$qname"
+    } elseif {$kind eq "ref" && !([dict exists $arg root] && [dict get $arg root])} {
+        set name [dict get $arg name]
+    }
+    if {$name eq ""} {
+        hir::DiagnoseAt hir LAYOUT-OPERAND \
+            "the layout operand of $native must be the name of a layout (binary::parse(Pair, data)): the layout is static evidence, never a computed value" $e $origin
+        return ""
+    }
+    set id [hir::layouts::lookup $name $ns]
+    if {$id ne ""} {
+        return $id
+    }
+    if {![dict exists $arg qualified] && [Lookup hir [dict get $ctx scope] $name] ne ""} {
+        hir::DiagnoseAt hir LAYOUT-OPERAND \
+            "the layout operand of $native must be the name of a layout, but \"$name\" is a value here: the layout is static evidence, never a computed value" $e $origin
+        return ""
+    }
+    hir::DiagnoseAt hir UNKNOWN-LAYOUT \
+        "unknown layout \"$name\" (the layout operand of $native): no \"layout [lindex [split [string map {:: \x01} $name] \x01] end]:\" declaration is visible" $e $origin
+    return ""
+}
+
+# Resolves the layout operand syntax ARG of a call of binary operation
+# NATIVE: the ExprId of the constant holding the layout's descriptor
+# (hir::layouts::descriptor). Core IR spells the operand as that constant
+# already (it is past the source boundary): it is resolved as written.
+proc hir::resolve::LayoutOperand {hirVar arg native ctx} {
+    upvar 1 $hirVar hir
+    if {[dict get $arg kind] eq "const" && [lindex [dict get $arg origin] 0] eq "ir"} {
+        return [Expr hir $arg $ctx]
+    }
+    set placeholder [Expr hir [hir::syntax::constNode [dict get $arg origin] str ""] $ctx]
+    set id [LayoutOperandId hir $placeholder $arg $native $ctx]
+    if {$id ne ""} {
+        set descriptor [hir::layouts::descriptor $id]
+        SetField hir $placeholder literal [list str $descriptor]
+        SetField hir $placeholder value [core::value::str $descriptor]
+    }
+    return $placeholder
+}
+
+# Resolves call E (syntax NODE) of the layout query NATIVE (ROLE its -layout
+# role) to the constant it asks for: E becomes a `const` node.
+proc hir::resolve::ResolveLayoutQuery {hirVar e node native role ctx} {
+    upvar 1 $hirVar hir
+    set value 0
+    set args [dict get $node args]
+    if {[llength $args] != 1} {
+        hir::Diagnose hir ARITY \
+            "$native takes exactly one argument, a layout name ([llength $args] given)" $e
+    } else {
+        set id [LayoutOperandId hir $e [lindex $args 0] $native $ctx]
+        if {$id ne ""} {
+            switch -- [hir::layouts::RoleOf $role query] {
+                length    { set value [hir::layouts::size $id] }
+                alignment { set value [hir::layouts::align $id] }
+            }
+        }
+    }
+    dict set hir exprs $e kind const
+    SetField hir $e literal [list int $value]
+    SetField hir $e value [core::ir::literalValue [list const int $value]]
+}
+
 # Resolves E, written `QUALIFIER::CASE` where QUALIFIER denotes the enum ID
 # (hir::enums::lookup, from the code's own namespace: the visibility of any
 # nominal type), to the case CASE of ID (ENUMS.md). Type-qualified case
@@ -1872,6 +2051,10 @@ proc hir::resolve::ResolveRef {hirVar e name root ctx} {
             append message ": \"$name\" is declared later; forward references are not allowed (a binding is visible only after it is established)"
         } elseif {!$root} {
             append message [EnumHint $name [CtxNamespace $ctx]]
+        }
+        if {!$root && [hir::layouts::lookup $name [CtxNamespace $ctx]] ne ""} {
+            hir::Diagnose hir LAYOUT-NOT-A-VALUE [LayoutNotAValueMessage $name] $e
+            return
         }
         hir::Diagnose hir UNBOUND $message $e
         return

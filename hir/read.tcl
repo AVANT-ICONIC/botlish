@@ -284,6 +284,21 @@ proc hir::read::StructDeclLine {content number} {
 # own), or "" if CONTENT is not a type-declaration line.
 proc hir::read::TypeDeclLine {content number} {
     set span [dict create file <hir-text> line $number column 1]
+    if {[regexp {^layout (\S+) ns (\S+) size ([0-9]+) align ([0-9]+) fields (.+)$} $content -> id ns size align fieldsText]} {
+        # A layout (hir::format::TypeDecl, BINARY-LAYOUT.md): registered from
+        # its canonical identity and its fields' canonical type identities by
+        # hir::layouts::apply, after the integer domains (printed earlier).
+        set fields {}
+        foreach item [SplitTop $fieldsText ", "] {
+            if {![regexp {^(\S+): (\S+) at ([0-9]+)$} $item -> fname ftype offset]} {
+                Fail $number "expected \"FIELD: TYPE at OFFSET\" in a layout declaration, got \"$item\""
+            }
+            lappend fields [dict create name $fname nameSpan $span type $ftype typeSpan $span \
+                offset $offset offsetSpan $span]
+        }
+        return [dict create kind layout resolved 1 name $id namespace [expr {$ns eq "-" ? "" : $ns}] \
+            nameSpan $span size $size sizeSpan $span align $align alignSpan $span fields $fields span $span]
+    }
     if {[regexp {^refined type (\S+) carrier (.+) owner (\S+)$} $content -> name carrier owner]} {
         # A refinement type (hir::format::TypeDecl): registered from its
         # canonical identity, resolved carrier text and owner, in printed

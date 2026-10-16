@@ -258,6 +258,25 @@ pub enum OpCode {
     /// `%u = op keepalive %b`: a use of %b that is never removed and does
     /// nothing, so %b stays a GC root until here. Result unit.
     KeepAlive,
+    /// Fixed binary layouts (BINARY-LAYOUT.md, core/binary.tcl): the
+    /// straight-line code native/lower.tcl emits for one statically known
+    /// layout, one op per field. `binload %s %o %c`: the Int encoded at byte
+    /// offset %o of immutable byte storage %s by the scalar encoding %c (a
+    /// small Int: width in bytes 1|2|4|8, plus 16 when signed, plus 32 when
+    /// big-endian); a 64-bit value outside the small-Int range is a BigInt
+    /// (so it may allocate). `binstore %s %o %c %v`: writes Int %v at offset
+    /// %o of storage %s in encoding %c; %s is a storage `byteszeroed` just
+    /// made, still private to this code (nothing else holds it before the
+    /// struct that publishes it is built), so the write is its
+    /// initialization, never a mutation of a value. `byteszeroed %n`: a
+    /// fresh immutable-kind storage of %n zero bytes (the deterministic
+    /// padding of every emitted record). All three are fallible only on an
+    /// operand a checked program cannot produce (TYPE/RANGE: the layout's
+    /// offsets lie inside its size, and a field's value is in its encoding's
+    /// range by its type).
+    BinLoad,
+    BinStore,
+    BytesZeroed,
     /// Coroutines (COROUTINES.md, runtime/coroutine.rs). `cocreate %t`: a
     /// fresh coroutine handle around the zero-argument Block %t (allocates).
     /// `costart %h`: the eager start, the body to its first outward boundary
@@ -578,6 +597,9 @@ op_spellings! {
     "byteslen" => BytesLen,
     "bytesaddr" => BytesAddr,
     "keepalive" => KeepAlive,
+    "binload" => BinLoad,
+    "binstore" => BinStore,
+    "byteszeroed" => BytesZeroed,
     "cocreate" => CoCreate,
     "costart" => CoStart,
     "coresume" => CoResume,
@@ -650,13 +672,13 @@ impl OpCode {
             | IsOk | IsError | ResultValue | ResultError | MkOk | MkError | Hash | RBox | RUnbox
             | StrByteLen | StrUtf8Bytes | StrIsTclAlpha | StrIsTclAlnum | CharCodepoint | SetFromList
             | SetFromListTotal | StrToShort | ShortToStr | ShortLen | StrToAscii | AsciiToStr | AsciiLen
-            | AsciiToShort | BytesFromList | BytesLen | BytesAddr | KeepAlive | MBytesNew | MBytesFrom | MBytesLen
+            | AsciiToShort | BytesFromList | BytesLen | BytesAddr | KeepAlive | BytesZeroed | MBytesNew | MBytesFrom | MBytesLen
             | MBytesClone | MBytesFreeze | MBytesAddr | CoCreate | CoStart | CoResume0 | CoYield | CoDone
             | CoRelease | MvFromList | MvLen | MvEmpty | MvPop | MvClear | MvToList | MvTakeFront | CtxRoot
             | MutArrayFromList | MutArrayToList | MutArrayEmpty | MutArrayTakeFront => Some(1),
-            Substr | SubstrProven | MutArraySet | MutArraySetProven | MBytesSet | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum | StrSliceShort
+            Substr | SubstrProven | MutArraySet | MutArraySetProven | MBytesSet | BinLoad | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum | StrSliceShort
             | MvSwap | MutArraySwap | MutArrayGenerateDrop => Some(3),
-            RegionEq | MvSwapDrop | MutArraySwapDrop | MutArraySetDrop => Some(4),
+            RegionEq | MvSwapDrop | MutArraySwapDrop | MutArraySetDrop | BinStore => Some(4),
             MutArrayCopy | MutArrayCopyProven => Some(5),
             _ => Some(2),
         }

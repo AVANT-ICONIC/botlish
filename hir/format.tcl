@@ -129,6 +129,19 @@ proc hir::format::TypeDecl {entry} {
         set ns [dict get $entry namespace]
         return "enum [dict get $entry id] name [dict get $entry name] ns [expr {$ns eq "" ? "-" : $ns}] cases [join [dict get $entry cases] {, }]"
     }
+    if {[dict exists $entry kind] && [dict get $entry kind] eq "layout"} {
+        # A layout declaration (hir/layouts.tcl, BINARY-LAYOUT.md): "layout
+        # ID ns NS size N align A fields F1: T1 at O1, F2: T2 at O2" (NS "-"
+        # for the entry program), the fields in declared order, each type
+        # the canonical identity of its integer domain or nested layout.
+        # Read back by hir::read::TypeDeclLine through the same validation.
+        set fields [lmap field [dict get $entry fields] {
+            format {%s: %s at %s} [dict get $field name] \
+                [hir::layouts::FieldTypeText [dict get $field type]] [dict get $field offset]
+        }]
+        set ns [dict get $entry namespace]
+        return "layout [dict get $entry id] ns [expr {$ns eq "" ? "-" : $ns}] size [dict get $entry size] align [dict get $entry align] fields [join $fields {, }]"
+    }
     if {[dict exists $entry kind] && [dict get $entry kind] eq "struct"} {
         # A struct declaration (hir/structs.tcl): "struct ID name NAME ns NS
         # [opaque] fields F1: T1, F2: T2" (NS "-" for the entry program), the

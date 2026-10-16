@@ -8,7 +8,8 @@
 #
 # A compilation registers its declarations in process-wide registries
 # (hir/sourcetypes.tcl, "Compilation isolation"): the source-defined entries
-# of core::type (a domain or a refinement), hir::structs, hir::enums, hir::errordecls, hir::traits and hir::imports.
+# of core::type (a domain or a refinement), hir::structs, hir::enums,
+# hir::layouts, hir::errordecls, hir::traits and hir::imports.
 # The analyses and the backends read them by bare name, so a HIR is not
 # self-contained: compiling another program used to change what an earlier
 # HIR's lowering or run saw (a silently wrong value, native code that traps,
@@ -55,6 +56,7 @@ proc hir::declarations::capture {} {
     return [dict create \
         generation $::hir::sourcetypes::generation types $types \
         structs $::hir::structs::registry enums $::hir::enums::registry \
+        layouts $::hir::layouts::registry \
         errors $::hir::errordecls::current payloads $::hir::errordecls::payloads \
         traits $::hir::traits::registry impls $::hir::traits::impls \
         unitNames $::hir::traits::unitNames imports $::hir::imports::table]
@@ -118,6 +120,7 @@ proc hir::declarations::Install {state} {
     set ::hir::structs::registry [dict get $state structs]
     set ::hir::structs::affinity [dict create]
     set ::hir::enums::registry [dict get $state enums]
+    set ::hir::layouts::registry [dict get $state layouts]
     set ::hir::errordecls::current [dict get $state errors]
     set ::hir::errordecls::payloads [dict get $state payloads]
     set ::hir::traits::registry [dict get $state traits]
