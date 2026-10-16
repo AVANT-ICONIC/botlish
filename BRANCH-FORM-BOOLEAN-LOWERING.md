@@ -34,9 +34,14 @@ condition is demanded as a branch and is lowered straight to control flow:
   all four backends. The fuzzers, the compilation-isolation and interchange
   audits and 18 new mutants agree.
 
-The win is structural on every backend. It is measurable in the Tcl
-compiler, where the conditions of the domain benchmark now cost what the
-nested `if`s cost (section 10).
+The win is structural on every backend: across the 13-program corpus, NIR
+Bool constants fall 57%, moves 29%, NIR lines 12% and machine code 1.5%,
+and no function grew. The run-time win is measurable natively. In a loop
+where the condition is most of the work, `and` and `not` run 12-13%
+faster (specialized; `and` 6% generic), and every direct condition costs
+what nested `if`s cost. In the Tcl compiler the bytecode of such a loop is
+22-28% smaller, but its run time moves only within the measurement noise,
+which is up to 10% on this container (section 10).
 
 ## 1. Before: where the temporary Bool came from
 
@@ -74,7 +79,7 @@ x} {const 0}} {block {} {if {call {ref <=} ...} {block {} {ref true}}
 {block {} {ref false}}}} {block {} {ref false}}} {block {} {const 1}}
 {block {} {const 2}}}`. `op-if` evaluates the inner `if` to `{bool true}`
 or `{bool false}` (a root lookup) and then tests it. This is unchanged
-(section 4).
+(section 3).
 
 **Tcl compiler (before).** `CompileIf` compiled its condition with
 `CompileExpr`. The inner `if` became a Tcl `if` whose arms set a join
@@ -336,7 +341,8 @@ backend that is the reference semantics, not a performance target.
 
 **HIR (item 64)** is unchanged. There is no branch-context node, flag or
 side table. The `-hir` text of the corpus is identical, and the HIR
-interchange and cache audits agree (section 9). Branch context is a
+interchange round trip and the compilation-isolation audit find every
+artifact equal (section 9). Branch context is a
 property of where an expression is consumed, which HIR already says (the
 `condition` of an `if`), so nothing needed to be added.
 
@@ -346,7 +352,7 @@ property of where an expression is consumed, which HIR already says (the
 |---|---|---|
 | source `if`/`elif`, early-return guards (`if c: return`), `break` conditions | value, then branch | **branch form** (both compilers) |
 | the condition of a Boolean-valued `if` (`and`/`or`/`not`/`!=`, nested) | a join | **branch form, compositional** |
-| `if (if a: b else: c):` | n/a | not writable in source: an `if` value must be the whole right side of `=` or `return`. HIR text can write it, and the rule lowers it (`a` to the bodies, each body to TRUE/FALSE) |
+| `if (if a: b else: c):` | a join | not writable in source: an `if` value must be the whole right side of `=` or `return`. HIR and core IR text can write it, and the rule lowers it: `a` to the two bodies, each body to the arms (`bf-boolean-valued-if`: Tcl `(A)?(B):(C)`, no Bool natively) |
 | loop conditions | -- | Botlish has no `while`: loops exit through `if ...: break` (covered). Counted, list and lockstep loops test their own bounds with one compare and `br` (no Boolean expression) |
 | a value-context `if` whose condition is Boolean structure (`x = if a and b: 1 else: 2`) | value, then branch | **branch form** (it is a condition) |
 | an inlined region-consumer predicate's own nested conditions | joins | **branch form** (`EmitRegionConsumerCondition`) |
@@ -412,7 +418,8 @@ and in the golden suite:
   `if` structure. No completion rule was added.
 * **Affine values (item 13).** In `flag and take(h)`, the handle is moved
   only where `take` runs. The other path releases it and then jumps
-  (`bf-nir-affine-rhs`). The ownership analysis's release placement is
+  (`bf-nir-affine-rhs`); in the Tcl compiler the release is inside the
+  other side of the test (`bf-tcl-affine-rhs`). The ownership analysis's release placement is
   unchanged, and the lowering emits it on the edge it belongs to.
 * **Coroutines (item 14).** Yields inside operands keep their order: every
   log test yields from inside the operands, on all backends, natively
@@ -456,10 +463,13 @@ and `hir/range.tcl` and the evaluator call nothing in `hir::condition`
 |---|---|
 | `tests/local.tcl` (175 Tcl files on interp and compile, 89 golden suites on 4 backends) | TBD |
 | native coverage (the Tcl suite on cranelift and cranelift-generic) | TBD |
-| `tests/branch-form-boolean.test` | 35/35; 35/35 under `BOTLISH_NATIVE_GC_STRESS=1` |
+| `tests/branch-form-boolean.test` | 37/37, and 37/37 under `BOTLISH_NATIVE_GC_STRESS=1` |
+| `tests/affine.test`, `tests/coroutines.test` under `BOTLISH_NATIVE_GC_STRESS=1` | 48/48, 79/79 |
+| `audit/affine/tools/fuzz.tcl` (seeds 1-3, 30 programs each) | 0 disagreements |
 | golden suite `branch-form-boolean.bot` | 18/18 on each backend; `perturb.tcl`: 18/18 fail inverted and altered; `check.tcl`: 19 old/new pairs pass |
-| `audit/branch-form-boolean/tools/mutate.tcl` | TBD |
+| `audit/branch-form-boolean/tools/mutate.tcl` | 18 mutants, 18 killed (one, `shared-constant-ignores-releases`, survived the first run: only the Tcl compiler relies on that check, and no test looked at the Tcl release; `bf-tcl-affine-rhs` now does) |
 | refinement fuzzer, static-decision fuzzer | 0 failures (above) |
+| `audit/static-decisions/tools/compare.tcl` on branch-form-boolean.bot, type-predicates.bot, strings.bot | batched and sequential agree exactly: every site's outcome and reified diagnostic, the decided HIR text (batched 2, 3 and 2 rounds and builds; sequential 2, 24 and 18) |
 | `audit/compilation-isolation/tools/interleave.tcl` | 9 suites, 72 artifacts and outcomes, 0 differ |
 | `audit/hir-interchange/tools/roundtrip.tcl -via interchange` | 9 suites, 81 artifacts and outcomes, 0 differ |
 | warning gate (`audit/refactor/tools/gate.tcl`) | passed: the observed warnings are exactly the manifest |
@@ -467,11 +477,133 @@ and `hir/range.tcl` and the evaluator call nothing in `hir::condition`
 
 ## 10. Performance (items 25, 66-70, 83)
 
-TBD
+Measured with `bench/branch-form-boolean.tcl`, on the unmodified tree
+("before", `-root`) and this one ("after"), on a 4-core container that is
+shared and noisy. A form the change does not touch (`nested`, `value`)
+moves by up to about 10% from run to run. Numbers are the best of 5 runs
+in one process. The A/B rows alternate the two trees three times and take
+the minimum of those.
+
+**The domain benchmark** (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md's
+workload: `ys = loop i from 0 to N: step(mod(i, 20) - 5)`, where `step`
+admits `v` into `Small = Int in 0..9` and calls `use_small`). Run time, ms:
+
+| step admits v by | interp (N = 2,000) | compile (N = 20,000) | cranelift-generic (N = 3,000,000) | cranelift |
+|---|---|---|---|---|
+| nested `if 0 <= v:` / `if v <= 9:` | 659 / 709 | 122 / 135 | 148 / 141 | 143 / 148 |
+| `if 0 <= v and v <= 9:` | 723 / 746 | 130 / 126 | 139 / 163 | 143 / 143 |
+| `if v < 0 or v > 9:` | 758 / 733 | 130 / 126 | 136 / 150 | 142 / 149 |
+| `if not (v < 0 or v > 9):` | 770 / 808 | 135 / 134 | 157 / 146 | 144 / 144 |
+| the converter `small(v)`, handled | 909 / 806 | 164 / 152 | 243 / 271 | 245 / 262 |
+| `ok = 0 <= v and v <= 9` then `if ok:` (value) | 713 / 714 | 131 / 147 | 140 / 139 | 173 / 143 |
+
+(before / after). Here every iteration makes two calls, a `mod` and a List
+append. The conditions are a small share of that work, and every
+difference is inside the noise. The earlier report's 135 ms (nested)
+against 177 ms (`and`) in the Tcl compiler is no longer the baseline:
+other compiler work merged since then had already brought `and` to within
+about 6% of nested before this change. After it, `and`, `or` and `not`
+cost what nested costs, on every backend.
+
+**The condition alone** (`-workload tight`): a self-tail-recursive
+`count(i, n, acc)`, a loop in both compilers, that tests
+`v = mod(i, 20) - 5` each way and counts the admitted values. There is no
+call per iteration. A/B minimum run time, ms:
+
+| form | compile (N = 200,000) | cranelift-generic (N = 30,000,000) | cranelift |
+|---|---|---|---|
+| nested | 987 → 988 (+0.0%) | 205 → 207 (+0.9%) | 212 → 217 (+2.5%) |
+| `and` | 1047 → 1018 (−2.8%) | 216 → 203 (**−6.1%**) | 236 → 207 (**−12.2%**) |
+| `or` | 992 → 991 (−0.1%) | 200 → 198 (−1.0%) | 212 → 206 (−2.9%) |
+| `not (… or …)` | 1003 → 1000 (−0.3%) | 230 → 224 (−2.6%) | 232 → 203 (**−12.8%**) |
+| value `ok = … and …` | 1028 → 1004 (−2.3%) | 219 → 220 (+0.2%) | 239 → 238 (−0.6%) |
+
+Natively, `and` and `not` lose their materialization cost, and every
+direct condition now runs at the nested form's speed or better (203-207
+against 217). In the Tcl compiler, the loop's own machinery dominates: argument
+lists, boxed Ints, `mod`. The Tcl bytecode of `count` is 22-28% smaller
+for the Boolean forms (below), but that shows as at most 3% of the run, as
+much as the noise. The interpreter is unchanged by design.
+
+**Real workloads** (`-programs`):
+
+| program | compile run | native run (generic / specialized) | NIR lines (specialized) | NIR Bool constants |
+|---|---|---|---|---|
+| bench/uri-steady.bot (lib/web.bot's URI escaping) | 931-965 / 949-1006 ms | 3.1 / 2.2 → 2.8 / 2.1 ms | 419 → 409 | 20 → 18 |
+| bench/refined-checks.bot (web::emailish?, uri_query_value?) | 537 → 511 ms | 0.6 / 0.5 → 0.6 / 0.9 ms | 1018 → 863 | 65 → 36 |
+| examples/stdlib/ai_text_clean.bot | 5.0 → 4.8 ms | below 0.1 ms | 444 → 223 | 42 → 3 |
+| examples/stdlib/csv_records.bot | 11.5 → 10.9 ms | (generic: struct-shape unsupported, unchanged) / below 0.1 ms | 978 → 890 | 24 → 8 |
+
+Their run times are within noise, or too short to measure, and their code
+is categorically simpler. The golden suites with the most Boolean
+conditions (`type-predicates.bot`, `strings.bot`) take the same time on
+every backend, within noise.
+
+**Compile cost (item 67)**, ms, best of 5, alternating trees:
+
+| program | front end | Core lowering (interp) | Tcl codegen (`compileHir`) | NIR lowering generic / specialized | Cranelift codegen |
+|---|---|---|---|---|---|
+| domain benchmark (any form) | 26-36, the same | 0.2-0.4, the same | 2.9-5.1 → 2.9-3.5 | 13-45, the same | 2-3, the same |
+| bench/refined-checks.bot | 476 / 432 (unchanged code) | -- | 28-32 → 29-41 | 160 / 276-287 → 150-161 / 282-306 | 16 → 15-21 |
+| examples/stdlib/ai_text_clean.bot | 141 / 127 (unchanged code) | -- | 7.3-15.7 → 6.3-7.1 | 50-51 / 79-81 → 48-51 / 69 | 4.6-8.5 → 3.9-6.0 |
+| a 100 / 200-operand `and` | -- | -- | 52 / 124 → 37 / 120 | 1,798 / 4,119 → 1,770 / 4,151 (whole program) | -- |
+
+Lowering a condition costs no more than lowering its value did. It does
+less: no join register, no join block, no Bool. With less NIR, the
+specialized lowering of ai_text_clean is about 13% faster. Everything else
+is within noise.
+
+**Value position (item 69).** `ok = 0 <= v and v <= 9`, then `if ok:`,
+genuinely builds its Bool, before and after: 3 constants, 3 moves and a
+join in the NIR. It is the one form whose cost did not move. It is now the
+slowest of the forms natively (238 ms against 203-217), which is the
+materialization the direct forms no longer pay.
+
+**Item 68 (expected result).** Met: nested explicit control and the
+direct `and`/`or`/`not` conditions have the same code shape: compare,
+branch, compare, branch. Natively the direct forms are even shorter (42
+NIR lines for `count`, against 49 for nested, whose else-less `if`s join a
+`unit`). They run at the same speed on every backend, within noise.
 
 ## 11. Code size (item 84)
 
-TBD
+**NIR** of the 13 programs of the scalar-assembly corpus (bench/\*.bot,
+examples/stdlib/\*.bot), totals:
+
+| | lines | `bool` constants | `move` | `br` | `jump` | `label` |
+|---|---|---|---|---|---|---|
+| specialized, before | 5,824 | 227 | 543 | 328 | 546 | 1,014 |
+| specialized, after | 5,121 (−12%) | 98 (−57%) | 385 (−29%) | 278 (−15%) | 388 (−29%) | 806 (−21%) |
+| generic, before | 3,988 | 180 | 396 | 230 | 397 | 711 |
+| generic, after | 3,471 (−13%) | 85 (−53%) | 280 (−29%) | 193 (−16%) | 281 (−29%) | 558 (−22%) |
+
+The number of `br` falls too: the re-test of a joined Bool is gone. No
+label or edge was added anywhere that a join did not lose more.
+
+**Machine code** of the same corpus (`native/generate-scalar-audit.tcl`,
+both trees, the same toolchain):
+
+| program | bytes before → after | functions changed |
+|---|---|---|
+| bench/refined-checks | 10,655 → 10,319 (−3.2%) | 7 of 30 |
+| examples/stdlib/ai_text_clean | 2,641 → 2,273 (−13.9%) | 2 of 6 |
+| examples/stdlib/csv, csv_chunked, csv_geometric | −56 bytes each (about −1%) | 1 each |
+| examples/stdlib/csv_records | 19,726 → 19,582 (−0.7%) | 3 of 51 |
+| examples/stdlib/hashtable | 10,892 → 10,804 (−0.8%) | 2 of 24 |
+| fib, loop-count, sum-refined, matmul, string_replace, string_reverse | unchanged (no Boolean conditions) | 0 |
+| **total** | **72,369 → 71,265 (−1.5%)** | **17 smaller, none larger** |
+
+The committed snapshot in audit/native-scalar-asm/ is regenerated by CI on
+`main` (scalar-asm-audit.yml); it is not regenerated on this branch.
+
+**Tcl bytecode** (`tcl::unsupported::disassemble`) of the tight
+benchmark's compiled `count`, instructions: nested 147 → 132, `and`
+162 → 127, `or` 162 → 127, `not` 177 → 128, value 162 → 147. Nested
+shrinks too, because a comparison condition is now the `if`'s own test.
+
+**Per function**, for the section 1 example: NIR `f` 17 → 12 registers,
+3 → 2 `br`, 3 → 0 Bool constants, 3 join blocks → 0; CLIF 3 → 1 block
+parameters; machine code 19 → 12 instructions, for `and` and `or` alike.
 
 ## 12. Size, depth and complexity (items 38-40, 85)
 
@@ -522,12 +654,13 @@ deterministically and computes what Tcl's own `expr` computes
 
 ## 14. Tests, mutants, tools
 
-* **tests/branch-form-boolean.test** (35 tests): the shared rule; the
+* **tests/branch-form-boolean.test** (37 tests): the shared rule; the
   generated Tcl (`&&`, `||`, `!`, nesting, operand code inside its side,
   value context, value positions, a Bool call); NIR of `and`, `or`, `not`,
   `not` of a conjunction, nesting, `!=`, generic, value context, value
   positions, a Bool call, a range-decided operand, an affine right
-  operand, an inlined region consumer, the converter; Cranelift IR;
+  operand (natively and in Tcl), an inlined region consumer, the converter,
+  a Boolean-valued `if` from core IR text; Cranelift IR;
   semantics on every backend; proofs; linear work and size; depth; a
   source audit.
 * **tests/golden/branch-form-boolean.bot** (18 golden tests, every
@@ -551,3 +684,22 @@ deterministically and computes what Tcl's own `expr` computes
   - `StaticOutcome` unmemoized.
 * **bench/branch-form-boolean.tcl**: the benchmark below, for any checkout
   (`-root`), on real programs too (`-programs`).
+
+## 15. Tooling (item 54)
+
+No CLI changed. No IR shape name was added or renamed. The NIR vocabulary
+is `br`, `jump` and `label`, as before. `main.tcl -emit-nir`, `-emit-clif`
+and `-code` show the new shapes as they are: the examples in sections 1
+and 2 are their output.
+
+## 16. Success criteria (items 90-95)
+
+| criterion | evidence |
+|---|---|
+| semantic identity (90) | Corpus outputs, diagnostics and HIR are byte-identical. Order, counts, short circuits, errors, affine moves and yields are pinned on every backend (sections 7-9) |
+| no Bool in condition context (91) | `if a and b:` / `if a or b:` have no Bool constant, move or join (`bf-tcl-and`, `bf-tcl-or`, `bf-nir-and`, `bf-nir-or`, `bf-clif-and`, the generic lowering) |
+| value semantics (92) | `x = a and b` builds its Bool, through the old code (section 6) |
+| structured nesting (93) | `a and (b or c)`, `not (a and b)`, 60-level trees, 400-operand chains, Boolean-valued `if`s, all lowered through the true/false targets |
+| proof symmetry (94) | One structure, two readers: `hir::range::Paths` (path facts) and `hir::condition` with each compiler's emitter (control-flow edges). They share no code (`bf-source-audit`) |
+| measurable or structural win (95) | Both. NIR Bool constants −57%, moves −29%, machine code −1.5% with no function larger, Tcl bytecode −22-28% per Boolean condition; `and`/`not` 12-13% faster natively where the condition dominates; no regression (sections 10, 11) |
+

@@ -326,6 +326,21 @@ test bf-clif-and {Cranelift IR: the conjunction's blocks carry no Bool parameter
     list [regexp -all {\nblock[0-9]+\(v[0-9]+: i64\):} $f] [regexp -all {brif} $f]
 } -result {1 2}
 
+test bf-boolean-valued-if {a Boolean-valued `if` as a condition -- not writable in source (an `if` value must be a whole right side), but in HIR or core IR text -- lowers by the same rule: its condition to its two branches, each branch to the arms (Tcl `(C)?(T):(E)`; natively no Bool), with the interpreter's values on every backend} -body {
+    set exprs {
+        {bind f {block {a b c} {if {if {call {ref ==} {ref a} {const 1}} {block {} {call {ref ==} {ref b} {const 1}}} {block {} {call {ref ==} {ref c} {const 1}}}} {block {} {const 10}} {block {} {const 20}}}}}
+        {call {ref list} {call {ref f} {const 1} {const 1} {const 0}} {call {ref f} {const 1} {const 0} {const 1}} {call {ref f} {const 0} {const 1} {const 0}} {call {ref f} {const 0} {const 0} {const 1}}}
+    }
+    set hir [hir::build $exprs -strict 0]
+    set body [bfNirBody [native::nir $hir] f]
+    set code [dict get [core::compiler::compileHir $hir] code]
+    set test [string range $code [string first "    if \{(" $code] end]
+    list [lsort -unique [concat [list [lrange [outcomeUnder interp $exprs] 0 1]] \
+            [lmap b {compile cranelift-generic cranelift} {lrange [outcomeUnderHir $b $hir] 0 1}]]] \
+        [bfBools $body] [llength [bfBranches $body]] \
+        [expr {[string first ")?(" $test] > 0 && [string first "):(" $test] > [string first ")?(" $test]}]
+} -result {{{value {[10, 20, 20, 10]}}} {0 0} 3 1}
+
 # ---------------------------------------------------------------------------
 # Semantics on every backend: evaluation order and counts, short circuits
 

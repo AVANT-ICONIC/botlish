@@ -481,6 +481,7 @@ tests/blocks.test params-2 pass
 tests/blocks.test params-3 pass
 tests/blocks.test params-4 pass
 tests/branch-form-boolean.test bf-beyond-proof-budget pass
+tests/branch-form-boolean.test bf-boolean-valued-if pass
 tests/branch-form-boolean.test bf-clif-and pass
 tests/branch-form-boolean.test bf-converter-nir pass
 tests/branch-form-boolean.test bf-deep-nesting pass
