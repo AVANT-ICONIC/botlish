@@ -509,7 +509,10 @@ test bf-large-chain {a 400-operand conjunction compiles and runs exactly on ever
     set sizes {}
     foreach n {100 200 300} {
         set hir [bfHir [bfProgram [bfChain $n] "x: int" "\[f(0), f($n), f([expr {$n + 1}])\]"]]
-        lappend sizes [list [llength [bfNirBody [native::nir $hir] f]] [string length [bfTclBody $hir f]]]
+        # (The Tcl compiler's variable numbers count across compilations:
+        # their digits are not the condition's size.)
+        lappend sizes [list [llength [bfNirBody [native::nir $hir] f]] \
+            [string length [regsub -all {\m([vt]|block)[0-9]+\M} [bfTclBody $hir f] {\1}]]]
     }
     lassign $sizes a b c
     set value [bfValue [bfProgram [bfChain 400] "x: int" "\[f(0), f(400), f(401)\]"]]
