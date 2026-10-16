@@ -39,8 +39,8 @@ explicitly asked to.
 A compilation registers its declarations in process-wide registries that the
 analyses and the backends read by bare name: the source-defined entries of
 `core::type` (a domain or a refinement; a type registers no native),
-`hir::structs`, `hir::enums`, `hir::errordecls`, `hir::traits` and
-`hir::imports`. Every HIR records the state its build left behind (its
+`hir::structs`, `hir::enums`, `hir::errordecls`, `hir::traits`,
+`hir::imports` and `hir::layouts`. Every HIR records the state its build left behind (its
 `declarations` side table, `hir/declarations.tcl`), and every entry point that
 reads the registries for a HIR it is given calls `hir::activate` first, so
 compiling another program never changes an earlier HIR's lowering or run
@@ -1026,6 +1026,44 @@ and be killed) and `cargo test --release --manifest-path native/Cargo.toml
 any change they name. A change to native tracing or drops also needs a
 `BOTLISH_NATIVE_GC_STRESS=1` run of `tests/mutable-array.test`.
 `bench/mutable-array.tcl` regenerates the performance report.
+
+## Fixed binary layouts
+
+A `layout` (BINARY-LAYOUT.md) is a compile-time schema of a fixed number of
+bytes -- explicit size, alignment and per-field offsets, scalar fields whose
+integer domain is exactly one fixed-width encoding's, nested layouts by value
+-- and `LayoutStruct[L]` the immutable struct its imprinting
+(`binary::parse(L, data)`) produces and its emission (`binary::emit(v)`)
+consumes. `hir/layouts.tcl`'s registry is the one representation of a
+resolved layout: `LayoutStruct[L]` is the named struct `{nstruct
+LayoutStruct[L]}`, whose schema `hir/structs.tcl` reads from it, never a
+second registration. Never add a generic struct declaration (`struct
+Foo[T]:`, `LayoutStruct Foo:`), a runtime layout object or value, a layout
+read at run time by a compiled backend (the Tcl compiler and native lowering
+read the descriptor constant statically: one `binary scan`/`binary format`,
+one `binload`/`binstore` per scalar field), structural compatibility between
+two layouts, a prefix parse, a cursor, a retained input buffer, an implied
+overlay, an alignment rule a resolved layout must satisfy, or a check keyed
+on a binary operation's name (register a `-layout` role). A layout knows no
+C: a C layer emits resolved layouts.
+
+If you change the layout grammar, `hir/layouts.tcl`, the `LayoutStruct`
+cases of `hir/types.tcl` and `hir/resolve.tcl`, the registration order in
+`hir/sourcetypes.tcl`, the layout cases of `hir/escape.tcl`, the HIR text of
+layouts, the binary operations' registrations (`core/binary.tcl`,
+`core/native.tcl`'s `-layout`), the Tcl compiler's `CompileLayoutOperation`,
+native lowering's `LayoutCall`/`LayoutDecode`/`LayoutEncode` or the native
+ops (`binload`, `binstore`, `byteszeroed`), run `tests/binary-layout.test`,
+its golden suite (`tclsh9.0 tests/local.tcl tests/golden/binary-layout.bot`),
+`audit/binary-layout/tools/fuzz.tcl` (several seeds, once with `-gc-stress
+1`), `audit/binary-layout/tools/mutate.tcl` (every mutant in
+`audit/binary-layout/tools/mutants.txt` must still apply and be killed:
+update a mutant's text when you change the code it mutates, keeping it a
+mutant of the same rule) and `cargo test --release --manifest-path
+native/Cargo.toml --lib bin_`. The registry is a declaration registry
+(compilation isolation and HIR interchange, above), and a new diagnostic
+kind is classified in `tests/static-compile.test`'s census.
+`bench/binary-layout.tcl` regenerates the performance report.
 
 ## Static intrinsics
 

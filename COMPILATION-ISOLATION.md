@@ -69,6 +69,7 @@ re-registers the declarations printed in HIR text.
 | `hir::errordecls::payloads` | payload layouts | `hir::lower` (`ReleasingOnError`), native lowering |
 | `hir::traits::registry`, `impls`, `unitNames` | trait requirements and candidates | — |
 | `hir::imports::table` | import environments | — |
+| `hir::layouts::registry` | resolved binary layouts: size, alignment, fields with offsets, widths and types (BINARY-LAYOUT.md) | through `hir::structs` (a `LayoutStruct[L]`'s field names and types), as a struct's are; the binary operations carry their descriptor instead |
 
 * **Derived caches.** `hir::structs::affinity`, `hir::traits::cache` and
   `hir::contexts::traitCache` are reset when a state is installed.
