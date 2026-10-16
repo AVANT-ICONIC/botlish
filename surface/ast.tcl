@@ -60,7 +60,7 @@
 #   not        opSpan, operand
 #   binary     op (+ - * == != < <= > >=), opSpan, left, right
 #   logical    op (and | or), opSpan, left, right
-#   bind       name, nameSpan, value (an expression or an if)
+#   bind       name, nameSpan, value (an expression, an if or a loop)
 #   destructure  pattern, value (like a bind's) -- "{a, b: c} = value"
 #              (STRUCT-DESTRUCTURING.md). pattern is {span SPAN fields
 #              {FIELD...}}, a FIELD {name nameSpan span local localSpan nested
@@ -121,7 +121,7 @@
 #              begins at: core/ir.tcl's `countloop`, R2A3-COUNTED-LOOPS-
 #              FINAL-SOURCE.md, COLLECTING-LOOPS.md); plain "loop:" (no
 #              clause) repeats until break
-#   return     value (an expression, an if, or "")
+#   return     value (an expression, an if, a loop, or "")
 #   break      value (an expression, an if, or "")
 #   continue
 #   typedecl   name, nameSpan, form, and then, for form `domain`: parent,
@@ -435,6 +435,16 @@ proc surface::ast::Ids {node id} {
                     incr index
                 }
                 dict set node clauses $clauses
+            } elseif {[llength [dict get $node clauses]] == 1} {
+                # The one clause the per-form fields mirror: the same operand
+                # nodes, ids included.
+                set clause [lindex [dict get $node clauses] 0]
+                foreach {field mirror} {iterable iterable start countStart end countEnd} {
+                    if {[dict get $clause $field] ne ""} {
+                        dict set clause $field [dict get $node $mirror]
+                    }
+                }
+                dict set node clauses [list $clause]
             }
             dict set node body [Suite [dict get $node body] $id]
         }
@@ -902,12 +912,7 @@ proc surface::ast::Statement {node indent show linesVar} {
             return
         }
         loop {
-            if {[llength [dict get $node clauses]] > 0} {
-                lappend lines "${pad}loop [join [lmap clause [dict get $node clauses] {Clause $clause $show}] { and }]$at"
-            } else {
-                lappend lines "${pad}loop$at"
-            }
-            Body [dict get $node body] [expr {$indent + 1}] $show lines
+            Loop $node "" $indent $show lines
             return
         }
         with {
@@ -928,6 +933,10 @@ proc surface::ast::Statement {node indent show linesVar} {
             }]
             if {$value ne "" && [dict get $value kind] eq "if"} {
                 If $value $prefix $indent $show lines
+                return
+            }
+            if {$value ne "" && [dict get $value kind] eq "loop"} {
+                Loop $value $prefix $indent $show lines
                 return
             }
             if {$value ne "" && [dict get $value kind] eq "handledcall"} {
@@ -967,6 +976,21 @@ proc surface::ast::PatternText {pattern show} {
         lappend parts "$text[At $field $show]"
     }
     return "\{[::join $parts {, }]\}"
+}
+
+# Lines of the loop NODE, its first line starting with PREFIX (mirrors If's
+# own PREFIX convention): a collecting loop is a value where an if is, the
+# right side of "=", "return" or a destructuring (COLLECTING-LOOPS.md), and
+# prints as its statement form does after the prefix.
+proc surface::ast::Loop {node prefix indent show linesVar} {
+    upvar 1 $linesVar lines
+    set pad [string repeat {    } $indent]
+    set header loop
+    if {[llength [dict get $node clauses]] > 0} {
+        append header " [join [lmap clause [dict get $node clauses] {Clause $clause $show}] { and }]"
+    }
+    lappend lines "$pad$prefix$header[At $node $show]"
+    Body [dict get $node body] [expr {$indent + 1}] $show lines
 }
 
 # Source text of one loop iteration CLAUSE (see the `loop` node above).
