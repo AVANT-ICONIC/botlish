@@ -1195,7 +1195,9 @@ above). A suite that cannot run on a backend declares
 in a companion suite so the main suite keeps all four backends. A suite that
 runs on one host only (live Linux x86-64 syscalls) declares
 `# golden-host: linux-x86_64 -- REASON`: elsewhere it compiles but does not
-run, and check.tcl accepts its rows only when the Tcl originals skipped too.
+run. On such a host check.tcl accepts a row whose Tcl original a host
+constraint skipped (`host-skip`) with its golden test passing or
+host-excluded; every other row must still be "old pass, new pass".
 
 If you change `lib/test.bot`, run `tests/golden-framework.test`,
 `tests/golden.test`, `tclsh9.0 tests/golden/run.tcl`,

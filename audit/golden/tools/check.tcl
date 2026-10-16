@@ -17,9 +17,11 @@
 # "++++ NAME SKIPPED"): absence of failure output is never a pass. New side:
 # each golden suite holding a ported row (or the -suites given) compiles once
 # and runs on every backend of -backends (tests/golden/run.tcl -names), at most
-# -jobs suites at a time. Every ported row must be "old pass, new pass" (or,
-# for a suite whose golden-host this host is not, "old skip, new
-# host-excluded": tests/golden/run.tcl); the
+# -jobs suites at a time. Every ported row must be "old pass, new pass" --
+# or, when the Tcl test cannot run on this host (skipped by a host
+# constraint: linuxX86_64, stubLinker, x86_64Host), "old host-skip, new pass"
+# or "old host-skip, new host-excluded" (a suite whose golden-host this host
+# is not: tests/golden/run.tcl); the
 # report lists every other pair, and every suite whose state is not ok
 # (compile-error, aborted, disagree) or that reports a test the manifest does
 # not list, or does not report one it lists.
@@ -131,12 +133,17 @@ proc runOld {tree byFile timeout jobs} {
         dict set seconds $file $wall
         lassign [goldentools::testVerdicts $output] failed passed skipped incomplete
         if {$incomplete ne ""} { dict set incompleteFiles $file $incomplete }
+        # Skipped by a host constraint (tcltest names the first unmet one):
+        # the test cannot run on this host at all.
+        foreach {- n constraint} [regexp -all -inline -line {^\+\+\+\+ (\S+) SKIPPED: (\S+)} $output] {
+            if {$constraint in $::hostConstraints} { dict set ::hostSkipped "$file $n" 1 }
+        }
         foreach n $passed { dict set discovered "$file $n" pass }
         foreach n $skipped { dict set discovered "$file $n" skip }
         foreach n $failed { dict set discovered "$file $n" fail }
         foreach n $names {
-            dict set verdicts "$file $n" [expr {$n in $failed || ($incomplete ne "" && $n ni $passed) ? "fail"
-                : $n in $passed ? "pass" : $n in $skipped ? "skip" : "not-run"}]
+            dict set verdicts "$file $n" [hostVerdict "$file $n" [expr {$n in $failed || ($incomplete ne "" && $n ni $passed) ? "fail"
+                : $n in $passed ? "pass" : $n in $skipped ? "skip" : "not-run"}]]
         }
     }
     return [list $verdicts $seconds $discovered $incompleteFiles]
@@ -179,6 +186,16 @@ proc runNew {tree suites timeout backends jobs} {
 # Suite -> state of the last side-by-side run (newVerdict reads it).
 set ::suiteStates [dict create]
 
+# The Tcl suite's host constraints: a test they skip cannot run on this host
+# (linuxX86_64: a live Linux x86-64 syscall or x86-64 machine code; stubLinker
+# and x86_64Host: the x86-64-only stub linker and object relocations). Old
+# tests skipped by one are "host-skip" (::hostSkipped, "FILE NAME" -> 1).
+set ::hostConstraints {linuxX86_64 stubLinker x86_64Host}
+set ::hostSkipped [dict create]
+proc hostVerdict {key verdict} {
+    return [expr {$verdict eq "skip" && [dict exists $::hostSkipped $key] ? "host-skip" : $verdict}]
+}
+
 proc oldKey {row} { return "[dict get $row old_file] [dict get $row old_test]" }
 proc newKey {row} { return "[dict get $row suite] [dict get $row new_test]" }
 proc isPorted {row} { return [expr {[dict get $row new_test] ne "-" && [dict get $row suite] ne "-"}] }
@@ -196,11 +213,13 @@ proc newVerdict {new row} {
     return [expr {[dict exists $new $key] ? [dict get $new $key] : "no-verdict"}]
 }
 
-# Whether a row's pair of verdicts agrees: both pass, or -- on a host the
-# golden suite does not run on -- the Tcl original skipped too (its own host
-# constraint), so neither side ran here.
+# Whether a row's pair of verdicts agrees: both pass, or the Tcl original
+# cannot run on this host (host-skip) and the golden test passes here or is
+# host-excluded too. A host-skipped row is compared on the host its
+# constraint names (CI's x86-64 jobs), never accepted as a pass of the old
+# test: the report counts these rows separately.
 proc agrees {pair} {
-    return [expr {$pair in {{old pass, new pass} {old skip, new host-excluded}}}]
+    return [expr {$pair in {{old pass, new pass} {old host-skip, new pass} {old host-skip, new host-excluded}}}]
 }
 
 set allRows [manifestRows $root]
@@ -252,7 +271,7 @@ if {[dict get $options -mutants] eq {}} {
         # Whole files ran: the verdict of a ported row is its discovered one.
         foreach row $ported {
             set key [oldKey $row]
-            dict set old $key [expr {[dict exists $discovered $key] ? [dict get $discovered $key] : "not-run"}]
+            dict set old $key [hostVerdict $key [expr {[dict exists $discovered $key] ? [dict get $discovered $key] : "not-run"}]]
         }
     }
     set start [clock milliseconds]

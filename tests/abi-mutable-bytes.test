@@ -719,7 +719,7 @@ r2 = rd(0, original)
     list $stdout $f3
 } -result {{[6, 0, 6, 6, 6, true, false, true]} abcdef____________}
 
-test abi-mutable-bytes-read-result-copies-are-independent {a linux::ReadResult contains a MutableBytes, so copying the result copies the value: r2 = r1, then updating the buffer derived from one leaves the other result's logical contents unchanged (value-copy semantics recurse through ordinary structs), through a List and a function parameter as well} -constraints {nativeLinux posixShell} -body {
+test abi-mutable-bytes-read-result-copies-are-independent {a linux::ReadResult contains a MutableBytes, so copying the result copies the value: r2 = r1, then updating the buffer derived from one leaves the other result's logical contents unchanged (value-copy semantics recurse through ordinary structs), through a List and a function parameter as well} -constraints {linuxX86_64 posixShell} -body {
     set exe [buildExecutable resultcopy "${::linuxPrelude}
 fn bump(r: linux::ReadResult) -> linux::ReadResult:
     linux::ReadResult {result: r.result, data: put(r.data, 0, byte::from_int(90))}
