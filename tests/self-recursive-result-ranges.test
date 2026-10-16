@@ -345,7 +345,13 @@ test rec-neg-unbounded-entry {an unbounded external entry is not eligible} -body
             else:
                 f(n - 1) + 1
 
-        f(mod(500, 11))
+        fn count(n, acc):
+            if n <= 0:
+                f(acc)
+            else:
+                count(n - 1, acc + 1)
+
+        count(500, 0)
     } f
 } -result {rejected unbounded-entry {[-∞, +∞]}}
 

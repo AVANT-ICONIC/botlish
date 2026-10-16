@@ -65,7 +65,7 @@
 # Result range: masked to 61 bits (always 0 <= result < 2^61), comfortably
 # inside the runtime's small-Int envelope (2^62): a hash result can never
 # itself force a BigInt allocation, on either backend. This is a result
-# *shape* guarantee (-result-range nonneg, like mod's), not a new integer
+# *shape* guarantee (-result-range {interval 0 2^61-1}), not a new integer
 # representation: the result is an ordinary arbitrary-precision Botlish Int
 # that merely never happens to need more than 61 bits.
 
@@ -236,4 +236,5 @@ proc core::hashing::hash {v} {
 }
 
 core::native::register hash -arity 1 -impl core::hashing::hash \
-    -param-types any -result-type int -result-range nonneg -runtime hash -ownership {equality}
+    -param-types any -result-type int -result-range [list interval 0 [expr {(1 << 61) - 1}]] \
+    -runtime hash -ownership {equality}

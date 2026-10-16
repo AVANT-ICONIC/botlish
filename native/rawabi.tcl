@@ -343,7 +343,7 @@ namespace eval native::rawabi {
     # The tagged native ops -> raw op, of the raw-representable family (the
     # same table native::lower::NativeCall's rawEligible branch uses).
     variable rawOps [dict create + riadd - risub * rimul < rilt <= rile > rigt >= rige \
-        == rieq shift_left rishl shift_right rishr]
+        == rieq shift_left rishl shift_right rishr bit_and riand bit_or rior bit_xor rixor]
 }
 
 # The display label of instance ID, computed once per Demand pass.

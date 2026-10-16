@@ -91,7 +91,7 @@ test native-report-inlined-leaf-2 {web.bot's high_nibble owns the two inlined bi
     set info [loweredFunction $lowered high_nibble]
     list [dict get $info blockers] [dict get $info guards] \
         [guardLines [dict get $lowered text] high_nibble]
-} -result {2 2 {{guard int %0 "bit_and"} {guard int %3 "bit_and"}}}
+} -result {2 2 {{guard int %0 "bit_and"} {guard int %5 "bit_and"}}}
 
 test native-report-inlined-leaf-3 {inlining moves guards and blockers together: the totals do not depend on it} -body {
     set hir [sourceHir $uriEscapeSource]

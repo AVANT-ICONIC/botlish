@@ -7,10 +7,17 @@ Botlish reads like a scripting language: indentation, closures, immutable
 bindings, loops that are expressions. Underneath, its compiler proves things
 about your program: which errors a call can actually raise, which Strings
 have passed a validation, who owns a coroutine, whether two lists have the
-same length. What it proves, it takes off your hands: a handler for an error that
-cannot happen is not needed, a check that cannot fail is not emitted, and an
-abstraction leaves nothing behind in the machine code. What it cannot prove,
-it asks you to say.
+same length. What it proves, it takes off your hands: a handler for an error
+that cannot happen is not needed, a check that cannot fail is not emitted,
+and many high-level abstractions leave no trace in the machine code. What it
+cannot prove, it asks you to say.
+
+Botlish is **value-oriented**, in the spirit of Erlang, SQL and Tcl: a
+program computes with values that are what they contain (compared, hashed
+and printed by content) rather than with objects that have an identity.
+Bindings are immutable, nothing is shared by reference, and even the mutable
+collections, `MutableVector` and `MutableArray`, are values: copy-on-write,
+and changed only through a binding the compiler can see.
 
 The same program runs on a reference interpreter, on a compiler to Tcl, and
 on a native backend that compiles through [Cranelift](https://cranelift.dev)
@@ -47,14 +54,43 @@ call: no dispatch, no hidden argument, no libc in the path. The one way
 handles it. ([examples/io/hello.bot](examples/io/hello.bot),
 [CONTEXT-TRAITS.md](docs/CONTEXT-TRAITS.md))
 
+## Botlish and Rust
+
+Botlish shares some of Rust's goals: native code, errors in a function's
+signature, abstractions that cost nothing at run time. It aims at different
+work. Rust is a systems language: it gives you exact control over memory
+layout, allocation, sharing and threads, and its borrow checker makes that
+control safe, at the price of lifetimes and ownership in nearly every
+signature. Botlish is for building applications, and trades that control for
+simplicity: values instead of references, memory managed by the runtime,
+representation left to the compiler, and no borrow checker or lifetimes (its
+one ownership rule, affinity, applies only to resources such as coroutine
+handles). Concurrency follows the same trade. Rust offers a flexible kit of
+threads, locks, channels and async runtimes; Botlish is heading for one
+opinionated, actor-like model. By default, actors are isolated computations
+that share nothing and exchange values; a value is shared only where the
+program explicitly declares it shared, so sharing is always visible in the
+code. (Today Botlish has coroutines; the actor model is planned.) If you
+need a custom allocator, a hand-tuned memory layout or a lock-free data
+structure, use Rust. If you would rather the compiler made those decisions,
+Botlish is meant for you.
+
+Botlish also builds the development tooling into the compiler instead of
+leaving it to separate tools. Its warnings are an integrated linter (think
+ESLint, built in, backed by proofs, with nothing to configure), and its test
+framework is ordinary Botlish. Planned next: a "compilerpedia", where the
+compiler itself carries the language's documentation; `botlish explain`,
+which asks the compiler what it knows about a definition
+(`botlish explain types module::submodule::function`); and an interpreter
+built for rich debugging.
+
 ## Why Botlish
 
-* **High-level.** Bindings are immutable and everything has value
-  semantics: `Int` is arbitrary precision (nothing overflows), a String is a sequence of
-  Unicode scalar values, and even `MutableVector` and `MutableArray` are
-  values, never shared references. Closures, structs and destructuring,
-  enums, traits, coroutines and modules, with a small standard library
-  written in Botlish itself.
+* **High-level.** Values, not references; `Int` is arbitrary precision
+  (nothing overflows), a String is a sequence of Unicode scalar values, and
+  memory is managed for you. Closures, structs and destructuring, enums,
+  traits, coroutines and modules, with a small standard library written in
+  Botlish itself.
 * **Native-capable.** One semantics, several backends. The native one
   lowers the analyzed program to its own IR and then to machine code with
   Cranelift. Standalone executables are self-contained, and Botlish code
@@ -64,9 +100,14 @@ handles it. ([examples/io/hello.bot](examples/io/hello.bot),
   call that might raise it handles it or declares it. A refinement type such
   as `web::Emailish` carries a proof only its owning module can produce, and
   an integer domain such as `byte::Byte` (`Int in 0..255`) is checked by
-  range analysis. Coroutine handles are affine: using one after moving it is
-  a compile-time error. A declared parameter type is a static obligation at
-  every call, never a run-time check.
+  range analysis. Access to the environment is explicit too: a function that
+  does I/O needs a context (such as `linux::io::LinuxIO`, which only its own
+  module can create), the compiler derives that requirement through every
+  caller, and only the entry program installs contexts. Contexts are
+  capabilities, and the standard library is being built with capability
+  security as its design goal. Coroutine handles are affine: using one after
+  moving it is a compile-time error. A declared parameter type is a static
+  obligation at every call, never a run-time check.
 * **Friendly.** Indentation-based syntax, method-call sugar, loop
   expressions instead of a zoo of combinators, and diagnostics that say what
   is wrong, where, and usually what to write instead. Warnings exist only
@@ -137,11 +178,10 @@ type Byte = Int in 0..255
 fn from_int(value: int) -> Byte errors BelowRange, AboveRange:
     if value < 0:
         fail BelowRange
+    elif value > 255:
+        fail AboveRange
     else:
-        if value > 255:
-            fail AboveRange
-        else:
-            value
+        value
 ```
 
 The obligation is decided per call, from what the compiler knows about that
@@ -306,14 +346,15 @@ describe(Person {value: "Alice"})   # "Alice", through describe<Person>
 ```
 
 At run time there is no trait object, vtable, dictionary, tag or hidden
-argument. In the committed evidence ([audit/traits/principal/](audit/traits/principal/)),
-`describe<Person>` is the same 31 bytes of machine code as a hand-written
-`describe_person(value: Person)`, and calling it allocates nothing. The rest of the
-language follows the same rule: a refined `web::Emailish` is exactly its
-`str`, a `byte::Byte` is exactly an `Int`, an installed context is a fixed
+argument. In the committed evidence
+([audit/traits/principal/](audit/traits/principal/)), `describe<Person>` is
+the same 31 bytes of machine code as a hand-written
+`describe_person(value: Person)`, and calling it allocates nothing. Not
+every abstraction is free yet, but many follow the same rule: a refined
+`web::Emailish` is exactly its `str`, a `byte::Byte` is exactly an `Int`, an installed context is a fixed
 slot the compiler reads directly rather than an argument threaded through
-every call, and a context trait such as `io::IO` becomes direct calls of
-the installed implementation. ([TRAITS.md](docs/TRAITS.md),
+every call, and a context trait such as `io::IO` becomes direct calls of the
+installed implementation. ([TRAITS.md](docs/TRAITS.md),
 [CONTEXTS.md](docs/CONTEXTS.md))
 
 ### Tests are Botlish programs
@@ -440,9 +481,9 @@ the tests, and what to re-run when you change a given part of the compiler.
 ## Status
 
 Botlish is young and changes quickly; most of its features arrived as
-milestones whose reports are in [docs/](docs/INDEX.md). Standalone
-executables and native coroutines are x86-64 Linux only; the Tcl backends
-run wherever Tcl 9 does.
+milestones whose reports are in [docs/](docs/INDEX.md). CI runs the native
+backend on x86-64 and arm64 Linux; standalone executables and native
+coroutines are x86-64 Linux only; the Tcl backends run wherever Tcl 9 does.
 
 ## License
 
