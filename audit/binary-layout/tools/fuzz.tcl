@@ -190,12 +190,6 @@ proc valueText {layout value} {
 }
 
 proc bytesText {bytes} {
-    if {$bytes eq {}} {
-        # (bytes_of([]) is rejected: an empty literal's List[never]
-        # instance of bytes_of fails to type its loop -- a front-end
-        # limitation unrelated to layouts.)
-        return "abi::bytes::from_list(\[\])"
-    }
     return "bytes_of(\[[join $bytes {, }]\])"
 }
 

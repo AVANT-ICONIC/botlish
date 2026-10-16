@@ -203,4 +203,62 @@ test native-listloop-never-element-neighbours {the same projection reached throu
     }
 } -result {{value 0} {value 1} {value 0} {value 0} {value {[1, 0]}}}
 
+# ---------------------------------------------------------------------------
+# The body of a loop over a List[never] (an empty domain) never runs, and HIR
+# types it as unreachable code (hir::types' listloop and lockloop cases).
+# Like a decided `if`'s dead arm it is not lowered (IterationBody): the
+# specialization records no call from unreachable code, so a call there has
+# no instance to lower to.
+
+test native-listloop-empty-domain-body-not-lowered {the body of a loop over [] lowers to one unreachable; the function only it calls is not emitted} -body {
+    set text [native::nir [sourceHir {fn only_dead(x: int) -> int:
+    x * 2
+
+fn f() -> list:
+    loop v in []:
+        only_dead(3)
+
+f()}]]
+    list [regexp -all {unreachable} $text] [expr {[string first {"only_dead"} $text] >= 0}]
+} -result {1 0}
+
+test native-listloop-empty-domain-bodies-run {loops over an empty domain whose bodies call a function only they call, create and call a closure, and move a coroutine handle -- a list loop, and a lockstep loop in the empty caller's instance -- run on every backend} -body {
+    sourceAgree {import coroutine
+import list
+
+fn only_dead(x: int) -> int:
+    x * 2
+
+fn counter(start: int) -> int:
+    yield start
+    return start + 1
+
+fn eat(c) -> int:
+    c()
+
+fn calls() -> list:
+    loop v in []:
+        only_dead(3)
+
+fn closes(n: int) -> list:
+    loop v in []:
+        fn step(x):
+            x + n
+        step(5)
+
+fn moves() -> list:
+    coroutine {step, first} = counter(10)
+    ys = loop v in []:
+        eat(step)
+    [ys, first, step()]
+
+fn lockstep(xs: List[int]) -> list:
+    loop x in xs and i from 0 to list::length(xs):
+        fn add(y):
+            y + i
+        add(x)
+
+[calls(), closes(1), moves(), lockstep([]), lockstep([4, 5])]}
+} -result {value {[[], [], [[], 10, 11], [], [4, 6]]}}
+
 cleanupTests

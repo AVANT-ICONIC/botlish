@@ -357,6 +357,24 @@ fn register_bytes_typing_tests():
             f([1])
     test::rejects("abi-bytes-an-untyped-list-parameter-is-not-accepted/int-list", compiler::DiagnosticCode::Type, int_list_parameter)
 
+    # empty-caller-collecting-loop-typed-consumer: the loop of bytes_of([])'s
+    # instance runs over an empty domain, so it is the empty List (List[never]),
+    # whatever its body's type: the handled byte::from_int of an element that
+    # cannot exist is typed by its handlers' join, an Int.
+    fn empty_caller_collecting_loop() errors compiler::CompilerError:
+        static compile:
+            fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+                bs = loop v in values:
+                    b = byte::from_int(v):
+                        on byte::BelowRange:
+                            0
+                        on byte::AboveRange:
+                            255
+                    b
+                abi::bytes::from_list(bs)
+            [abi::bytes::length(bytes_of([])).value, abi::bytes::length(bytes_of([1, 300, -4])).value]
+    test::value("empty-caller-collecting-loop-typed-consumer", [0, 3], empty_caller_collecting_loop)
+
 # ---------------------------------------------------------------------------
 # Bytes: the opacity boundary (existing and guessed fields alike)
 

@@ -325,6 +325,10 @@ correctness (not merely dead-code elimination) is confirmed independently
 by `empty-listloop-runtime-zero-iterations`/`-nonempty-caller-still-correct`
 on all four backends (interp, compile, cranelift-generic, cranelift).
 
+(Later: the semantic analysis now proves this too. A loop over a
+`List[never]` has an unreachable body and is itself `List[never]`; see
+"Addendum: collecting loops over an empty domain" at the end.)
+
 ## Nested empty collection behavior (spec items 14, 43)
 
 - `[[]]` (`List[List[never]]`) against declared `List[List[int]]`: accepted
@@ -942,3 +946,68 @@ M7.b (revised)
        confirmed already unaffected by M7.a.a (see "Generated-code/instance
        deltas" above).
 ```
+
+## Addendum: collecting loops over an empty domain
+
+The producer table above lists a `listloop`'s natural completion as
+`MakeList $bodyType`, which is `{list never}` only when the body's own type
+is `never`. That left the loop's type to the body even when the *domain* is
+provably empty, and the body's type then describes an iteration that cannot
+happen: its element binding is `never`, and a handled call of it
+(`b = byte::from_int(v): on BelowRange: 0 ...`) is typed by its handlers'
+join, an Int. So the `List[never]` instance of
+
+```botlish
+fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+    bs = loop v in values:
+        b = byte::from_int(v):
+            on byte::BelowRange:
+                0
+            on byte::AboveRange:
+                255
+        b
+    abi::bytes::from_list(bs)
+```
+
+typed `bs` as `List[int]` and rejected its own call of `abi::bytes::from_list`
+("call to bytes_of with values : List[never] is invalid"), though the
+generic analysis (`bs : List[Byte]`) and every non-empty caller were fine.
+The same happened, with no instance, to a `loop v in []:` written in a
+function body.
+
+The rule, in `hir::types::Expr`'s `listloop` and `lockloop` cases: when a
+list domain's element type is `never` (the iterable is a `List[never]`,
+which by the audit above only an empty List is), the body never runs. It is
+walked as unreachable code, like a decided `if`'s dead arm, and the loop is
+`List[never]` whatever the body's type. A lockstep loop with one such domain
+is empty too: every domain has the one proven cardinality. A
+`MutableVector[never]` is not covered: `IterationElementOf` already refuses
+to read its element type as emptiness, and `MakeMutArray` never produces a
+`MutableArray[never]`.
+
+Two consequences follow from the body being unreachable code rather than
+only typed:
+
+- A semantic instance's diagnostics in code that instance proves unreachable
+  are not the call's (`hir::semantic::verify`): a typed call *inside* the
+  body (`abi::bytes::from_list([b])` per element) no longer makes the empty
+  caller's instance invalid. The definition's own verification still checks
+  the body as written.
+- Native lowering does not lower an unreachable loop body
+  (`native::lower::IterationBody`, as `If` does not lower a dead arm): the
+  specialization records no call edge from unreachable code, so a call
+  there had no instance to lower to. The body is one `unreachable`.
+
+The analyses that read reachability treat the body like any dead arm: the
+ownership analysis sees no move there (a coroutine handle passed to a call
+in a `loop v in []:` body is still live after the loop), and a function
+whose only `yield` is in such a body does not yield
+(`COROUTINE-RHS-NOT-YIELDING` at its construction, exactly as for a yield in
+an `if false:` arm).
+
+Tests: `tests/empty-collection-admissibility.test` (the `empty-caller-*`
+and `empty-literal-*` collecting-loop tests, with the negative control
+`empty-caller-collected-ints-still-rejected`), `si-list-5` in
+`tests/semantic-instances.test`, and `native-listloop-empty-domain-*` in
+`tests/native-listloop.test`; golden ports in `abi-bytes.bot`, `types.bot`
+and `closure-escape.bot`.
