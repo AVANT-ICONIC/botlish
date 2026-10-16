@@ -141,8 +141,12 @@
 # (hir::callables::verifyBlocks). A diagnostic there means "this function is
 # invalid for this call": it is reported at the CALL that needed the instance
 # (status invalid); the source function is not rejected and other calls are
-# unaffected. A call to an invalid instance from inside another instance makes
-# that one invalid too. Explicit parameter declarations and intrinsic
+# unaffected. A diagnostic in code the instance proves unreachable (an arm its
+# types decide against, the body of a loop over an empty domain) is not one:
+# the call never runs that code, whose typing describes values that cannot
+# exist (a loop element of type `never`); the definition's own verification
+# still checks it as written. A call to an invalid instance from inside
+# another instance makes that one invalid too. Explicit parameter declarations and intrinsic
 # contracts (hir/signatures.tcl) are not changed by any of this: contracts are
 # still derived from declaration + body alone, and hir::moduleSignatures never
 # reports an instance.
