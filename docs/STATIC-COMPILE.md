@@ -1368,8 +1368,12 @@ suppressed by reachability or by a whole-program verdict (as
 rejects) -- run `tests/static-economics.test`,
 `tests/static-compile.test`, `audit/static-decisions/tools/fuzz.tcl`
 (several seeds; `-legacy 1` also checks the legacy scheduler),
-`audit/static-decisions/tools/compare.tcl` (the golden suites and the
-corpus under every scheduler) and `audit/static-decisions/tools/mutate.tcl`
+`audit/static-decisions/tools/compare.tcl` (the golden suites, the only
+programs with static sites, batched against sequential: in CI, never
+locally -- the `static-decisions` workflow,
+`.github/workflows/static-decisions.yml`; AGENTS.md, "The sequential
+comparison runs in CI, never locally") and
+`audit/static-decisions/tools/mutate.tcl`
 (every mutant in its `mutants.txt` must still apply and be killed: update a
 mutant's text when you change the code it mutates, keeping it a mutant of
 the same rule), and `tests/golden.test` (`golden-static-economics` bounds

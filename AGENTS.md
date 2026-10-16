@@ -340,6 +340,10 @@ What it costs, measured on a 4-core container (2026-10-15):
   - the stub-linked executables;
   - the warning gate;
   - on pushes to main, the GC-stress run;
+  - on pushes to main that change the front end, the golden suites'
+    static decisions under the batched and the sequential scheduler
+    (`static-decisions.yml`, up to six hours; Static intrinsics, "The
+    sequential comparison runs in CI, never locally");
   - on Linux arm64 (`.github/workflows/tests-arm64.yml`, ubuntu-24.04-arm):
     the Tcl suite on interp and compile, its cranelift and cranelift-generic
     coverage, the golden suites, the native Rust unit tests (also under GC
@@ -1207,11 +1211,48 @@ another's presence: a site's contract-boundary edges read
 contract-boundary report and stays first whatever the program erases), run
 `tests/static-economics.test`, `tests/static-compile.test`, `tests/golden.test`
 (`golden-static-economics`), `audit/static-decisions/tools/fuzz.tcl` (several
-seeds), `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` and
-`audit/static-decisions/tools/mutate.tcl` (every mutant in its `mutants.txt`
-must still apply and be killed, the economic ones -- a build too many -- as
-much as the semantic ones). `bench/static-decisions.tcl` regenerates the
-economics report.
+seeds) and `audit/static-decisions/tools/mutate.tcl` (every mutant in its
+`mutants.txt` must still apply and be killed, the economic ones -- a build too
+many -- as much as the semantic ones), and check the golden suites' batched
+against sequential comparison in CI (next section). `bench/static-decisions.tcl`
+regenerates the economics report.
+
+### The sequential comparison runs in CI, never locally
+
+`audit/static-decisions/tools/compare.tcl` compiles each golden suite under
+the batched scheduler and the sequential reference and requires them to
+agree. The sequential order is one whole-program build per typed rejection,
+which takes hours on the largest suites: mutable-array.bot 69 rounds and
+1,089 builds (about five hours), destructuring.bot 205 builds (about one).
+That is beyond an agent's 2-hour background-task limit, and it starves
+everything else on the machine. So:
+
+* **Never run it locally.** Don't run `compare.tcl` on a golden suite, all
+  of them or one, and don't compile one under
+  `BOTLISH_STATIC_SCHEDULER=sequential`. A small program of your own (a
+  reproducer of a disagreement CI found) is fine.
+* **The `static-decisions` workflow runs it**
+  (`.github/workflows/static-decisions.yml`), one job for each of the two
+  largest suites and the others in shards:
+  - automatically on every push to main that changes `core/`, `hir/`,
+    `surface/`, `lib/`, a golden suite or `audit/static-decisions/tools/`,
+    which covers every change the list above names;
+  - on demand, on any branch, when you judge your change likely to move a
+    decision (the schedulers, the dependency analysis, a new cross-function
+    fact) and want the verdict before main has it: push the branch, then
+    dispatch the workflow on it (`workflow_dispatch` of
+    `static-decisions.yml` with your branch as the ref: the GitHub MCP
+    server's `actions_run_trigger`, method `run_workflow`, or `gh workflow
+    run static-decisions.yml --ref BRANCH`). The optional `suites` input (file
+    names, separated by spaces or commas) narrows it.
+* **Read its result.** A run takes up to about six hours (mutable-array.bot's
+  job; the others take an hour or two at most). Don't wait idle for it: carry
+  on, and before you call the change done read the run's jobs. Each job's
+  summary lists every suite's rounds and builds under both schedulers, and
+  any `DISAGREE` or `DOES NOT COMPILE`. If the run has not finished, report
+  it as pending, never as passed.
+* **A failing run on main is a standing signal**, like a failing `gc-stress`
+  run: reproduce the disagreement on a small program and fix it.
 
 ## Golden tests (Botlish-native test framework)
 
