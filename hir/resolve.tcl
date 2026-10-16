@@ -1513,6 +1513,11 @@ proc hir::resolve::ResolveStruct {hirVar e node ctx} {
                 set why [expr {[hir::structs::IsOtherType $tname] && $tns eq ""
                     ? "\"$tname\" is not a struct type"
                     : "unknown struct type \"$spelling\": no \"struct $tname\" declaration is visible"}]
+                if {[hir::layouts::lookup $spelling $ns] ne ""} {
+                    # BINARY-LAYOUT.md: a layout is no struct; its values
+                    # are LayoutStruct[L]'s.
+                    set why "\"$spelling\" is a layout, not a struct: its structural value is constructed as LayoutStruct\[$spelling\] \{...\}"
+                }
                 hir::DiagnoseAt hir UNKNOWN-STRUCT $why $e [dict get $typeRef origin]
             } elseif {[hir::structs::representationDenied $id $ns]} {
                 set denied 1
