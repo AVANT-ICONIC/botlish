@@ -700,8 +700,11 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
     layout's "one byte fewer" input is empty, and `bytes_of([])` hits a
     front-end limitation unrelated to layouts (an empty literal's
     `List[never]` instance of a loop-collecting function fails to type,
-    reproduced on the commit before this work); the generator spells it
-    `abi::bytes::from_list([])`.
+    reproduced on the commit before this work); the generator spelled it
+    `abi::bytes::from_list([])` until that was fixed
+    (M7AA-EMPTY-COLLECTION-AND-APPLIED-TYPE-SEMANTICS.md, "Addendum:
+    collecting loops over an empty domain"), and spells it `bytes_of([])`
+    again.
 
 ### Performance (49-56)
 
