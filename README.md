@@ -1,0 +1,449 @@
+# Botlish
+
+**A high-level, native-capable, safe and friendly language for building
+applications, designed to be written and read by humans and agents alike.**
+
+Botlish reads like a scripting language: indentation, closures, immutable
+bindings, loops that are expressions. Underneath, its compiler proves things
+about your program: which errors a call can actually raise, which Strings
+have passed a validation, who owns a coroutine, whether two lists have the
+same length. What it proves, it takes off your hands: a handler for an error that
+cannot happen is not needed, a check that cannot fail is not emitted, and an
+abstraction leaves nothing behind in the machine code. What it cannot prove,
+it asks you to say.
+
+The same program runs on a reference interpreter, on a compiler to Tcl, and
+on a native backend that compiles through [Cranelift](https://cranelift.dev)
+to machine code, either just in time or as a standalone Linux x86-64
+executable.
+
+```botlish
+import io
+import linux::io
+
+fn hello() errors io::WriteFailed:
+    io::print_line("Hello, world!")
+
+with context linux::io::create()
+
+hello():
+    on io::WriteFailed:
+        unit
+```
+
+```console
+$ tclsh9.0 main.tcl -emit-native-executable examples/io/hello.bot
+$ examples/io/hello
+Hello, world!
+unit
+```
+
+(An executable prints its program's value last: here `unit`.) `hello` never
+says where its output goes. `io::print_line` needs an `io::IO` context; the
+program installs one, `linux::io::LinuxIO`; and the compiler turns the call
+into a direct call of `linux::io::write_text`, which is one `write(2)` system
+call: no dispatch, no hidden argument, no libc in the path. The one way
+`hello` can fail, `io::WriteFailed`, is part of its signature, and its caller
+handles it. ([examples/io/hello.bot](examples/io/hello.bot),
+[CONTEXT-TRAITS.md](docs/CONTEXT-TRAITS.md))
+
+## Why Botlish
+
+* **High-level.** Bindings are immutable and everything has value
+  semantics: `Int` is arbitrary precision (nothing overflows), a String is a sequence of
+  Unicode scalar values, and even `MutableVector` and `MutableArray` are
+  values, never shared references. Closures, structs and destructuring,
+  enums, traits, coroutines and modules, with a small standard library
+  written in Botlish itself.
+* **Native-capable.** One semantics, several backends. The native one
+  lowers the analyzed program to its own IR and then to machine code with
+  Cranelift. Standalone executables are self-contained, and Botlish code
+  reaches the Linux kernel directly (`linux::abi::syscall`): the I/O library
+  above is ordinary Botlish source.
+* **Safe.** Every error a function can raise is in its signature, and every
+  call that might raise it handles it or declares it. A refinement type such
+  as `web::Emailish` carries a proof only its owning module can produce, and
+  an integer domain such as `byte::Byte` (`Int in 0..255`) is checked by
+  range analysis. Coroutine handles are affine: using one after moving it is
+  a compile-time error. A declared parameter type is a static obligation at
+  every call, never a run-time check.
+* **Friendly.** Indentation-based syntax, method-call sugar, loop
+  expressions instead of a zoo of combinators, and diagnostics that say what
+  is wrong, where, and usually what to write instead. Warnings exist only
+  where the compiler can prove the finding, with one policy for the whole
+  compilation (`-warnings default|off|error`) and nothing to tune.
+* **For agents as well as people.** Contracts are checked, not documented:
+  what a call can fail with, what a value has been proven to be, where
+  ownership moves. Diagnostics name a kind, a location and a cause. And
+  "this must not compile" is an ordinary test: `static compile:` turns a
+  compiler rejection into a value a Botlish program can inspect. The test
+  suite checks every backend against the reference interpreter.
+
+## A tour
+
+Every program below runs, with the value shown, on the interpreter, the Tcl
+compiler and the native backend.
+
+### Loops are expressions
+
+A loop over a domain collects its body's values into a List. `continue`
+contributes nothing, so a filter is just a loop; `return` leaves the
+function; and clauses joined by `and` advance in lockstep, over iteration
+counts the compiler must prove equal.
+
+```botlish
+import list
+import str
+
+squares = loop i from 1 through 5:
+    i * i
+
+countdown = loop i down from 3 through 1:
+    i
+
+odd_squares = loop s in squares:
+    if s.mod(2) == 0:
+        continue
+    s
+
+names = ["ada", "grace", "edsger"]
+numbered = loop name in names and i from 1 through list::length(names):
+    [i, name]
+
+fn first_long(words: List[str]) -> str:
+    loop word in words:
+        if str::length(word) > 4:
+            return word
+    "none"
+
+[squares, countdown, odd_squares, numbered, first_long(names)]
+# [[1, 4, 9, 16, 25], [3, 2, 1], [1, 9, 25],
+#  [[1, "ada"], [2, "grace"], [3, "edsger"]], "grace"]
+```
+
+`loop x in [1, 2] and y in [1, 2, 3]:` does not compile: *lockstep loop
+requires equal iteration counts; clause 1 iterates 2 times but clause 2
+iterates 3 times*. ([COLLECTING-LOOPS.md](docs/COLLECTING-LOOPS.md))
+
+### Errors are contracts, and proofs make them disappear
+
+An error is a declared name, possibly with a payload. A function lists the
+errors it can raise, and every call either handles them or declares them.
+`byte::from_int` from the standard library ([lib/byte.bot](lib/byte.bot)):
+
+```botlish
+type Byte = Int in 0..255
+
+fn from_int(value: int) -> Byte errors BelowRange, AboveRange:
+    if value < 0:
+        fail BelowRange
+    else:
+        if value > 255:
+            fail AboveRange
+        else:
+            value
+```
+
+The obligation is decided per call, from what the compiler knows about that
+call's arguments: provable success needs no handler, provable failure is a
+compile-time error, and only a genuinely uncertain call has to deal with the
+error.
+
+```botlish
+import byte
+import immutable_set
+
+# A dynamic Int: both declared errors are possible, so both are handled.
+fn to_byte(n: int) -> byte::Byte:
+    byte::from_int(n):
+        on byte::BelowRange:
+            0
+        on byte::AboveRange:
+            255
+
+# Proven in range at this call: no handler, no `errors` clause.
+dot = byte::from_int(46)
+
+# Every element is a known character below U+0100, so byte::set's
+# AboveRange is proven impossible here: no handler either.
+unreserved = byte::set(['-', '.', '_', '~'])
+
+[to_byte(-5), to_byte(300), unreserved.contains(dot)]   # [0, 255, true]
+```
+
+Leave out `to_byte`'s handlers and the call is rejected (*may produce the
+declared error "byte::AboveRange", which is neither handled here nor
+admitted by the enclosing function's own "errors" declaration*). Write
+`byte::from_int(999)` and it is rejected too, handler or not: *this call can
+never complete normally under the facts proven for its arguments here*.
+([STATIC-COMPLETION-PROOFS.md](docs/STATIC-COMPLETION-PROOFS.md),
+[ERROR-PAYLOADS.md](docs/ERROR-PAYLOADS.md))
+
+### Proofs you can name
+
+A refinement type is a nominal type over a carrier, with the carrier's exact
+run-time representation. Only its owning module can prove a value into it:
+[lib/web.bot](lib/web.bot) declares
+
+```botlish
+refined type Emailish = str
+
+fn emailish?(v: str) -> bool proves v: Emailish:
+    ...
+```
+
+and any program can then use the proof:
+
+```botlish
+import str
+import web
+
+fn contact(address: web::Emailish) -> int:
+    str::length(address)
+
+address = "foo@x.com.au"
+
+n = if web::emailish?(address):
+    contact(address)        # address is a web::Emailish in this branch
+else:
+    0
+
+prefix = if str::length(address) < 3:
+    ""
+else:
+    address.substring(0, 3) # in bounds, proven: no handler needed
+
+[n, prefix]                 # [12, "foo"]
+```
+
+Calling `contact("foo@x.com.au")` directly is a compile-time error: *a
+refinement proof is required ... there is no implicit conversion*. A
+validator works the same way through errors: after
+`linux::path::validate(value)` completes, `value` is a
+`linux::path::LinuxPath` and still a `str`
+([examples/io/show-path.bot](examples/io/show-path.bot)). Integer domains
+work alongside: `type Byte = Int in 0..255`, or an exact set such as
+`HighNibble`, is a subtype of `Int` whose membership the range analysis
+proves from comparisons and from checked results.
+([REFINEMENT-VALUES.md](docs/REFINEMENT-VALUES.md),
+[SOURCE-DEFINED-INTEGER-DOMAINS.md](docs/SOURCE-DEFINED-INTEGER-DOMAINS.md),
+[examples/refinement/refined-strings.bot](examples/refinement/refined-strings.bot))
+
+### Coroutines
+
+A coroutine is started eagerly and runs to its first `yield`, which may be
+any number of calls deep. Each later call of its handle resumes it with one
+message of a statically fixed type.
+
+```botlish
+struct Message:
+    value: int
+
+struct Event:
+    value: int
+
+fn deep(base: int, resume Message) -> int:
+    message = yield Event {value: base}
+    message.value
+
+fn worker(base: int, resume Message) -> Event:
+    x = deep(base)
+    message = yield Event {value: x}
+    return Event {value: message.value}
+
+coroutine {step, first} = worker(10)
+
+second = step(Message {value: 20})
+final = step(Message {value: 30})
+again = step(Message {value: 999})
+[first, second, final, again]
+# [Event {value: 10}, Event {value: 20}, Event {value: 30}, Event {value: 30}]
+```
+
+The handle `step` is affine: it can move, but never be copied, so a
+coroutine is never forked or aliased. Ending the program with these two
+lines instead does not compile:
+
+```botlish
+other = step
+step(Message {value: 1})
+```
+
+```text
+program.bot:22:1: `step` was used after its coroutine value was moved
+
+moved here:
+    other = step  (program.bot:21:1)
+
+used here:
+    program.bot:22:1 (CORE SEMANTIC USE-AFTER-MOVE)
+```
+
+The compiler also releases a coroutine right after its handle's last use,
+and on every early exit. ([COROUTINES.md](docs/COROUTINES.md),
+[AFFINE-VALUES.md](docs/AFFINE-VALUES.md))
+
+### Zero-cost abstractions
+
+Traits are structural: a type satisfies `Named` because its own namespace
+defines `name`, with no `implements`. A function over a trait is compiled
+once per concrete type it is called with, and the trait disappears.
+
+```botlish
+trait Named:
+    fn name(value: Named) -> str
+
+struct Person:
+    value: str
+
+fn name(value: Person) -> str:
+    value.value
+
+fn describe(value: Named) -> str:
+    value.name()    # the trait's operation, and nothing else of Person
+
+describe(Person {value: "Alice"})   # "Alice", through describe<Person>
+```
+
+At run time there is no trait object, vtable, dictionary, tag or hidden
+argument. In the committed evidence ([audit/traits/principal/](audit/traits/principal/)),
+`describe<Person>` is the same 31 bytes of machine code as a hand-written
+`describe_person(value: Person)`, and calling it allocates nothing. The rest of the
+language follows the same rule: a refined `web::Emailish` is exactly its
+`str`, a `byte::Byte` is exactly an `Int`, an installed context is a fixed
+slot the compiler reads directly rather than an argument threaded through
+every call, and a context trait such as `io::IO` becomes direct calls of
+the installed implementation. ([TRAITS.md](docs/TRAITS.md),
+[CONTEXTS.md](docs/CONTEXTS.md))
+
+### Tests are Botlish programs
+
+[lib/test.bot](lib/test.bot) is an ordinary library: no test syntax, no
+assertion keyword, no test-only native. A suite is a context holding a
+`MutableVector` of cases, the runner is a coroutine, and `static compile:`
+turns "the compiler rejects this" into an ordinary value, so a test can
+expect a compile error as easily as a result. An excerpt of
+[tests/golden/loop-collecting.bot](tests/golden/loop-collecting.bot), one of
+the 90 golden suites that run on every backend:
+
+```botlish
+import compiler
+import list
+import test
+
+fn register_lockstep_tests():
+    # x in xs and i from 0 to list::length(xs).
+    fn length_proof() errors compiler::CompilerError:
+        static compile:
+            fn f(xs):
+                loop x in xs and i from 0 to list::length(xs):
+                    [x, i]
+            f([10, 20])
+    test::value("loop-collecting-lockstep-length-proof", [[10, 0], [20, 1]], length_proof)
+
+    # Literal lists of different length.
+    fn literal_vs_literal() errors compiler::CompilerError:
+        static compile:
+            fn f():
+                loop x in [1, 2] and y in [1, 2, 3]:
+                    x
+            f()
+    test::rejects("loop-collecting-reject-literal-vs-literal", compiler::DiagnosticCode::LockstepUnequal, literal_vs_literal)
+
+with context test::suite()
+register_lockstep_tests()
+test::report()
+# ["PASS loop-collecting-lockstep-length-proof",
+#  "PASS loop-collecting-reject-literal-vs-literal", "2 passed, 0 failed"]
+```
+
+([GOLDEN-TEST-FRAMEWORK.md](docs/GOLDEN-TEST-FRAMEWORK.md),
+[STATIC-COMPILE.md](docs/STATIC-COMPILE.md),
+[tests/golden/README.md](tests/golden/README.md))
+
+### And more
+
+Structs with [destructuring](docs/STRUCT-DESTRUCTURING.md) and
+[opaque](docs/OPAQUE-STRUCTS.md) construction, [enums](docs/ENUMS.md),
+[errors with payloads](docs/ERROR-PAYLOADS.md),
+[`MutableVector`](docs/MUTABLE-VECTOR.md) and
+[`MutableArray`](docs/MUTABLE-ARRAY.md) with value semantics,
+[structural function types](docs/STRUCTURAL-FUNCTION-TYPES.md),
+[flag parameters](docs/FLAGS.md), [method-call sugar](docs/METHOD-SUGAR.md),
+[modules and explicit imports](docs/IMPORTS.md),
+[`mutual:` recursion groups](docs/MUTUAL-RECURSION.md), and
+[compiler warnings](docs/WARNINGS-SAME-RETURN.md) backed by proofs.
+[docs/INDEX.md](docs/INDEX.md) lists every design document.
+
+## Getting started
+
+You need Tcl 9.0 (`tclsh9.0`; AGENTS.md shows how CI installs it on Ubuntu)
+and, for the native backend, a stable Rust toolchain (1.95 or newer).
+
+```sh
+export LANG=C.utf8 LC_ALL=C.utf8
+
+tclsh9.0 main.tcl examples/surface/02-recursion.bot           # run on the reference interpreter
+tclsh9.0 main.tcl -backend compile examples/stdlib/csv.bot    # run through the Tcl compiler
+
+cargo build --release --manifest-path native/Cargo.toml       # build the native backend
+tclsh9.0 main.tcl -backend cranelift examples/stdlib/csv.bot  # run natively, just in time
+tclsh9.0 main.tcl -emit-native-executable examples/io/hello.bot && examples/io/hello
+
+tclsh9.0 tests/golden/run.tcl tests/golden/coroutines.bot     # one golden suite, on every backend
+tclsh9.0 tests/local.tcl                                      # the whole test suite, in parallel
+```
+
+`single/build.sh` packs the compiler, both native executables and the
+standard library into one Linux x86-64 executable that needs nothing but
+glibc ([SINGLE-EXECUTABLE.md](docs/SINGLE-EXECUTABLE.md)); CI publishes it
+as the `botlish-linux-x86_64` artifact.
+
+## How it is built
+
+```
+source ──parse──▶ AST ──lower──▶ HIR ──┬──▶ core IR ──▶ reference interpreter
+                                       ├──────────────▶ Tcl compiler
+                                       └──▶ NIR ──▶ Cranelift ──▶ machine code (JIT, objects, executables)
+```
+
+HIR, the semantic representation, is where every analysis lives: name
+resolution, types, ranges and exact values, completion proofs, ownership,
+trait monomorphization, warnings. Every backend compiles the same analyzed
+HIR, and the native path never goes through core IR
+([DIRECT-HIR-NATIVE-PATH.md](docs/DIRECT-HIR-NATIVE-PATH.md)). The compiler
+front end and the reference interpreter are written in Tcl, as an
+executable specification that favors clarity over speed; the native runtime
+and code generation are Rust. [docs/README.md](docs/README.md) is the full
+reference.
+
+| Directory | Contents |
+|---|---|
+| `surface/` | lexer, parser, surface AST, lowering to HIR |
+| `hir/` | the semantic representation and its analyses |
+| `core/` | core IR, values, and the reference interpreter |
+| `compiler/` | the HIR to Tcl compiler |
+| `native/` | the native backend: lowering to NIR (Tcl), runtime and code generation (Rust) |
+| `lib/` | the standard library, in Botlish |
+| `examples/` | example programs; `examples/stdlib/` is the algorithm corpus |
+| `tests/` | the Tcl test suite; `tests/golden/` holds the suites written in Botlish |
+| `bench/` | benchmarks |
+| `audit/` | fuzzers, mutation harnesses, and the evidence behind the design documents |
+| `fuzz/` | the AFL++ campaign over the example executables |
+| `single/` | the single-file compiler |
+| `docs/` | the reference and the design documents ([index](docs/INDEX.md)) |
+| `main.tcl` | the command line |
+
+Contributors, human or not, start with [AGENTS.md](AGENTS.md): how to run
+the tests, and what to re-run when you change a given part of the compiler.
+
+## Status
+
+Botlish is young and changes quickly; most of its features arrived as
+milestones whose reports are in [docs/](docs/INDEX.md). Standalone
+executables and native coroutines are x86-64 Linux only; the Tcl backends
+run wherever Tcl 9 does.
+
+## License
+
+[MIT](LICENSE)
