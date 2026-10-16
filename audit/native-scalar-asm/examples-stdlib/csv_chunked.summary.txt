@@ -2,7 +2,7 @@ source:  examples/stdlib/csv_chunked.bot
 backend: Cranelift (specialize=1)
 asm:     csv_chunked.asm
 vcode:   csv_chunked.vcode
-machine-code bytes: 6885 (per function: 312 315 757 757 504 625 365 309 526 932 311 630 388 154)
+machine-code bytes: 6829 (per function: 312 315 757 757 504 625 365 309 470 932 311 630 388 154)
 
 functions:
   0 <program entry>: nir-regs=9
@@ -13,7 +13,7 @@ functions:
   5 chunked_finish<ChunkedBuilder>: nir-regs=23
   6 peek<str, int>: nir-regs=11
   7 quote_at?<str, int>: nir-regs=12
-  8 scan_unquoted<str, int, int>: nir-regs=29
+  8 scan_unquoted<str, int, int>: nir-regs=18
   9 scan_quoted<str, int, str>: nir-regs=25
   10 scan_field<str, int>: nir-regs=13
   11 scan_record<str, int, ChunkedBuilder>: nir-regs=27
@@ -126,9 +126,9 @@ GC roots (csv_chunked.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 8 "scan_unquoted"
-    NIR regs: 29
+    NIR regs: 18
     raw regs: 1
-    managed-capable regs: 28
+    managed-capable regs: 17
     effects: may_error=true may_gc=true
     safepoints: 2
     root candidates: 4

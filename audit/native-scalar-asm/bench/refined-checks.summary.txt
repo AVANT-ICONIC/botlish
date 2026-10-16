@@ -2,7 +2,7 @@ source:  bench/refined-checks.bot
 backend: Cranelift (specialize=1)
 asm:     refined-checks.asm
 vcode:   refined-checks.vcode
-machine-code bytes: 10655 (per function: 1415 217 745 74 74 74 128 128 336 154 115 216 176 176 295 344 183 564 140 60 501 757 127 103 345 219 287 1255 1079 368)
+machine-code bytes: 10319 (per function: 1415 217 745 74 74 74 128 128 336 129 88 192 176 176 295 344 183 504 140 60 421 661 127 103 345 219 287 1255 1055 368)
 
 functions:
   0 <program entry>: nir-regs=43
@@ -14,26 +14,26 @@ functions:
   6 ascii::is_alphabetic<int>: nir-regs=8
   7 ascii::is_alphanumeric<int>: nir-regs=8
   8 web::emailish?<str>: nir-regs=24
-  9 char_at<int>: nir-regs=18
-  10 char_at<int>: nir-regs=21
-  11 char_is?<int, any>: nir-regs=15
+  9 char_at<int>: nir-regs=15
+  10 char_at<int>: nir-regs=18
+  11 char_is?<int, any>: nir-regs=12
   12 local_char?<str>: nir-regs=9
   13 local_char?<generic>: nir-regs=9
   14 scan_while<int, block(e276)>: nir-regs=16
   15 scan_while<int, native(str::is_tcl_alpha)>: nir-regs=18
   16 tld?<int>: nir-regs=14
-  17 domain?<int>: nir-regs=52
+  17 domain?<int>: nir-regs=44
   18 web::is_unreserved<int>: nir-regs=10
   19 web::uri_query_value?<str>: nir-regs=4
-  20 upper_hex?<int>: nir-regs=37
-  21 valid_from?<int>: nir-regs=52
+  20 upper_hex?<int>: nir-regs=24
+  21 valid_from?<int>: nir-regs=39
   22 web::uri_escape_text<str>: nir-regs=5
   23 high_nibble<int>: nir-regs=15
   24 hex_pair<int>: nir-regs=10
   25 pct<int>: nir-regs=4
   26 cont<int, int>: nir-regs=10
   27 esc_scalar<int>: nir-regs=55
-  28 esc_from<str, int, str>: nir-regs=38
+  28 esc_from<str, int, str>: nir-regs=35
   29 check<int, int, str, str>: nir-regs=24
 
 GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
@@ -155,9 +155,9 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 9 "char_at"
-    NIR regs: 18
+    NIR regs: 15
     raw regs: 5
-    managed-capable regs: 13
+    managed-capable regs: 10
     effects: may_error=false may_gc=true
     safepoints: 1
     root candidates: 3
@@ -168,9 +168,9 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 10 "char_at"
-    NIR regs: 21
+    NIR regs: 18
     raw regs: 7
-    managed-capable regs: 14
+    managed-capable regs: 11
     effects: may_error=false may_gc=false
     safepoints: 0
     root candidates: 0
@@ -181,9 +181,9 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 11 "char_is?"
-    NIR regs: 15
+    NIR regs: 12
     raw regs: 2
-    managed-capable regs: 13
+    managed-capable regs: 10
     effects: may_error=false may_gc=false
     safepoints: 0
     root candidates: 0
@@ -259,9 +259,9 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 17 "domain?"
-    NIR regs: 52
+    NIR regs: 44
     raw regs: 9
-    managed-capable regs: 43
+    managed-capable regs: 35
     effects: may_error=true may_gc=false
     safepoints: 0
     root candidates: 0
@@ -298,9 +298,9 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 20 "upper_hex?"
-    NIR regs: 37
+    NIR regs: 24
     raw regs: 4
-    managed-capable regs: 33
+    managed-capable regs: 20
     effects: may_error=false may_gc=false
     safepoints: 0
     root candidates: 0
@@ -311,9 +311,9 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 21 "valid_from?"
-    NIR regs: 52
+    NIR regs: 39
     raw regs: 9
-    managed-capable regs: 43
+    managed-capable regs: 30
     effects: may_error=false may_gc=true
     safepoints: 2
     root candidates: 4
@@ -402,9 +402,9 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 28 "esc_from"
-    NIR regs: 38
+    NIR regs: 35
     raw regs: 12
-    managed-capable regs: 26
+    managed-capable regs: 23
     effects: may_error=true may_gc=true
     safepoints: 7
     root candidates: 7

@@ -2,7 +2,7 @@ source:  examples/stdlib/csv_geometric.bot
 backend: Cranelift (specialize=1)
 asm:     csv_geometric.asm
 vcode:   csv_geometric.vcode
-machine-code bytes: 6386 (per function: 312 89 89 357 420 420 202 202 81 365 309 526 932 311 758 215 480 318)
+machine-code bytes: 6330 (per function: 312 89 89 357 420 420 202 202 81 365 309 470 932 311 758 215 480 318)
 
 functions:
   0 <program entry>: nir-regs=9
@@ -16,7 +16,7 @@ functions:
   8 geo_finish<mutarray, int>: nir-regs=3
   9 peek<str, int>: nir-regs=11
   10 quote_at?<str, int>: nir-regs=12
-  11 scan_unquoted<str, int, int>: nir-regs=29
+  11 scan_unquoted<str, int, int>: nir-regs=18
   12 scan_quoted<str, int, str>: nir-regs=25
   13 scan_field<str, int>: nir-regs=13
   14 scan_record_rest<str, int, mutarray, int>: nir-regs=31
@@ -169,9 +169,9 @@ GC roots (csv_geometric.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 11 "scan_unquoted"
-    NIR regs: 29
+    NIR regs: 18
     raw regs: 1
-    managed-capable regs: 28
+    managed-capable regs: 17
     effects: may_error=true may_gc=true
     safepoints: 2
     root candidates: 4

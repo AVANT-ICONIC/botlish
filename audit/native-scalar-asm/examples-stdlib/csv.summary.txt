@@ -2,13 +2,13 @@ source:  examples/stdlib/csv.bot
 backend: Cranelift (specialize=1)
 asm:     csv.asm
 vcode:   csv.vcode
-machine-code bytes: 5478 (per function: 312 365 309 526 932 311 782 870 388 516 167)
+machine-code bytes: 5422 (per function: 312 365 309 470 932 311 782 870 388 516 167)
 
 functions:
   0 <program entry>: nir-regs=9
   1 peek<str, int>: nir-regs=11
   2 quote_at?<str, int>: nir-regs=12
-  3 scan_unquoted<str, int, int>: nir-regs=29
+  3 scan_unquoted<str, int, int>: nir-regs=18
   4 scan_quoted<str, int, str>: nir-regs=25
   5 scan_field<str, int>: nir-regs=13
   6 scan_record<str, int, List[never]>: nir-regs=29
@@ -58,9 +58,9 @@ GC roots (csv.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 3 "scan_unquoted"
-    NIR regs: 29
+    NIR regs: 18
     raw regs: 1
-    managed-capable regs: 28
+    managed-capable regs: 17
     effects: may_error=true may_gc=true
     safepoints: 2
     root candidates: 4

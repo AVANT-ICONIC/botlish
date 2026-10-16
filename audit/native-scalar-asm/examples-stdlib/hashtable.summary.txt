@@ -2,7 +2,7 @@ source:  examples/stdlib/hashtable.bot
 backend: Cranelift (specialize=1)
 asm:     hashtable.asm
 vcode:   hashtable.vcode
-machine-code bytes: 10892 (per function: 45 427 385 70 69 69 46 182 228 636 1040 341 261 388 407 616 654 801 673 920 700 925 862 147)
+machine-code bytes: 10804 (per function: 45 427 385 70 69 69 46 182 228 604 984 341 261 388 407 616 654 801 673 920 700 925 862 147)
 
 functions:
   0 <program entry>: nir-regs=1
@@ -14,8 +14,8 @@ functions:
   6 ht_capacity<HashTable>: nir-regs=3
   7 ht_probe_start<HashTable, str>: nir-regs=5
   8 ht_probe_next<HashTable, int>: nir-regs=7
-  9 ht_find_get<HashTable, str, int>: nir-regs=30
-  10 ht_find_insert<HashTable, str, int, int>: nir-regs=42
+  9 ht_find_get<HashTable, str, int>: nir-regs=25
+  10 ht_find_insert<HashTable, str, int, int>: nir-regs=32
   11 ht_get<HashTable, str>: nir-regs=12
   12 ht_contains<HashTable, str>: nir-regs=7
   13 ht_rehash_probe<mutarray, int, int>: nir-regs=13
@@ -149,9 +149,9 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 9 "ht_find_get"
-    NIR regs: 30
+    NIR regs: 25
     raw regs: 5
-    managed-capable regs: 25
+    managed-capable regs: 20
     effects: may_error=true may_gc=true
     safepoints: 1
     root candidates: 3
@@ -162,9 +162,9 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 10 "ht_find_insert"
-    NIR regs: 42
+    NIR regs: 32
     raw regs: 5
-    managed-capable regs: 37
+    managed-capable regs: 27
     effects: may_error=true may_gc=true
     safepoints: 2
     root candidates: 4
