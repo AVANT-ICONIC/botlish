@@ -100,9 +100,14 @@ built for rich debugging.
   call that might raise it handles it or declares it. A refinement type such
   as `web::Emailish` carries a proof only its owning module can produce, and
   an integer domain such as `byte::Byte` (`Int in 0..255`) is checked by
-  range analysis. Coroutine handles are affine: using one after moving it is
-  a compile-time error. A declared parameter type is a static obligation at
-  every call, never a run-time check.
+  range analysis. Access to the environment is explicit too: a function that
+  does I/O needs a context (such as `linux::io::LinuxIO`, which only its own
+  module can create), the compiler derives that requirement through every
+  caller, and only the entry program installs contexts. Contexts are
+  capabilities, and the standard library is being built with capability
+  security as its design goal. Coroutine handles are affine: using one after
+  moving it is a compile-time error. A declared parameter type is a static
+  obligation at every call, never a run-time check.
 * **Friendly.** Indentation-based syntax, method-call sugar, loop
   expressions instead of a zoo of combinators, and diagnostics that say what
   is wrong, where, and usually what to write instead. Warnings exist only
