@@ -1,7 +1,7 @@
 # Post-M8.a cross-workload common-inefficiency census
 
 Audit only. No production compiler, runtime or source change. Raw data,
-tools and reproduction steps: [`audit/post-m8a-common-inefficiency/`](audit/post-m8a-common-inefficiency/README.md).
+tools and reproduction steps: [`audit/post-m8a-common-inefficiency/`](../audit/post-m8a-common-inefficiency/README.md).
 
 ## Outcome
 

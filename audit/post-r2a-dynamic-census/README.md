@@ -1,6 +1,6 @@
 # Post-R2.a frozen-baseline dynamic census: artifacts
 
-Raw data for [POST-R2A-DYNAMIC-CENSUS.md](../../POST-R2A-DYNAMIC-CENSUS.md).
+Raw data for [POST-R2A-DYNAMIC-CENSUS.md](../../docs/POST-R2A-DYNAMIC-CENSUS.md).
 Nothing here is a build product or a production change. Every tool only
 observes. The instrumentation (`tools/audit-native.patch`) is applied to a
 *scratch copy* of `native/`, never to the tree, and its generated code is

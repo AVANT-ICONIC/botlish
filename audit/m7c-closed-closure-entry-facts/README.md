@@ -1,7 +1,7 @@
 # M7.c closed-closure entry-facts audit artifacts
 
 Frozen-corpus census output for
-[M7C-CLOSED-CLOSURE-ENTRY-FACTS.md](../../M7C-CLOSED-CLOSURE-ENTRY-FACTS.md),
+[M7C-CLOSED-CLOSURE-ENTRY-FACTS.md](../../docs/M7C-CLOSED-CLOSURE-ENTRY-FACTS.md),
 generated with M7.a's own unmodified tool
 (`audit/m7a-instance-selection/tools/corpus.tcl`) against the frozen
 `bench/uri-steady.bot`/`bench/refined-checks.ir` workloads, kept in this

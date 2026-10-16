@@ -2,7 +2,7 @@
 
 Investigation only. No compiler, runtime, library or canonical `.bot` change,
 and no fix. Raw data, tools and reproduction:
-[`audit/machine-code-proof-loss/`](audit/machine-code-proof-loss/README.md).
+[`audit/machine-code-proof-loss/`](../audit/machine-code-proof-loss/README.md).
 
 ## Outcome
 

@@ -3,7 +3,7 @@
 Audit only. No production compiler, runtime or library change. The
 counterfactual exists only in scratch git worktrees. Raw data, tools and
 reproduction steps:
-[`audit/post-module-static-exact-target-census/`](audit/post-module-static-exact-target-census/README.md).
+[`audit/post-module-static-exact-target-census/`](../audit/post-module-static-exact-target-census/README.md).
 
 ## Outcome
 

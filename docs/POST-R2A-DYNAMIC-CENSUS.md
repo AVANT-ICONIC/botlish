@@ -2,7 +2,7 @@
 
 Audit only. No production compiler, runtime or `web::emailish?` source
 change. Raw data, tools and reproduction steps:
-[`audit/post-r2a-dynamic-census/`](audit/post-r2a-dynamic-census/README.md).
+[`audit/post-r2a-dynamic-census/`](../audit/post-r2a-dynamic-census/README.md).
 
 ## Outcome
 

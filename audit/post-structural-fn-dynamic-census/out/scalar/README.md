@@ -7,7 +7,7 @@ tclsh9.0 native/generate-scalar-audit.tcl
 ```
 
 This directory is not a canonical build product. It may be removed once the
-scalar audit (see /SCALAR-ASM-AUDIT.md) and any follow-up fixes it leads to
+scalar audit (see /docs/SCALAR-ASM-AUDIT.md) and any follow-up fixes it leads to
 are complete.
 
 ## Compiler revision
@@ -49,6 +49,6 @@ are complete.
 | examples/stdlib/string_replace.bot | compiled / inspected | [examples-stdlib/string_replace.asm](examples-stdlib/string_replace.asm) / [examples-stdlib/string_replace.vcode](examples-stdlib/string_replace.vcode) | 4 functions, 2618 bytes |
 | examples/stdlib/string_reverse.bot | compiled / inspected | [examples-stdlib/string_reverse.asm](examples-stdlib/string_reverse.asm) / [examples-stdlib/string_reverse.vcode](examples-stdlib/string_reverse.vcode) | 3 functions, 990 bytes |
 
-See /SCALAR-ASM-AUDIT.md at the repository root for the analysis of this
+See /docs/SCALAR-ASM-AUDIT.md for the analysis of this
 corpus (per-function classification, findings, severity, and the milestone
 recommendation).

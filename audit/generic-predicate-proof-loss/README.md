@@ -1,6 +1,6 @@
 # Generic predicate proof loss: audit tools and artifacts
 
-Report: `/GENERIC-PREDICATE-PROOF-LOSS.md`. Observation only; nothing here
+Report: `/docs/GENERIC-PREDICATE-PROOF-LOSS.md`. Observation only; nothing here
 changes the compiler. Run from the repository root with Tcl 9.0.1 and the
 release native backend built (`cargo build --release --manifest-path
 native/Cargo.toml`); `LANG=C.utf8 LC_ALL=C.utf8`. The tools toggle fix 3's

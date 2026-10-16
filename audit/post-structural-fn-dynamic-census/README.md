@@ -1,6 +1,6 @@
 # Post-structural-Fn dynamic callable census
 
-Observation-only artifacts for [the report](../../POST-STRUCTURAL-FN-DYNAMIC-CENSUS.md).
+Observation-only artifacts for [the report](../../docs/POST-STRUCTURAL-FN-DYNAMIC-CENSUS.md).
 The measured compiler/source revision is
 `a8a306f986809c0a8b54f4763013070f209c248c`. Only current surface `.bot` inputs
 enter the canonical population. There are 31 files, 30 executable programs,

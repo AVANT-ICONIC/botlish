@@ -1,6 +1,6 @@
 # Proof/fact census: probes, tools and outputs
 
-Report: `/PROOF-FACT-CENSUS.md`. Observation only, except the three narrow
+Report: `/docs/PROOF-FACT-CENSUS.md`. Observation only, except the three narrow
 soundness fixes the report describes (commit "Fix three proof soundness bugs
 found by the proof-fact census"). Run from the repository root with Tcl 9.0.1,
 `LANG=C.utf8 LC_ALL=C.utf8`, and the release native backend built

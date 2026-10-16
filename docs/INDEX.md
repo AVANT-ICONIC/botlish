@@ -1,0 +1,222 @@
+# Botlish documentation
+
+Start with the [project overview](../README.md). The
+[language and implementation reference](README.md) (formerly the
+repository's README) describes the values, the IR, HIR, the surface
+language, the backends and the public API in one long document.
+
+Everything else in this directory is a design document: most are the report
+of one milestone (what was built, why, and the evidence), some are audits,
+censuses or research notes. A document's name is its identity: code
+comments, tests and other documents cite them by bare name
+(`COROUTINES.md`), and they all live here.
+
+Where a later document changed a decision, the earlier one usually says so
+at its top ("Superseded by ...", "Partially superseded by ...").
+
+## Language
+
+### Values, syntax and functions
+
+- [STRUCTS.md](STRUCTS.md) -- structs and struct values
+- [STRUCT-DESTRUCTURING.md](STRUCT-DESTRUCTURING.md) -- struct destructuring
+- [ENUMS.md](ENUMS.md) -- enums: named, closed, nominal sums of payload-free cases
+- [OPAQUE-STRUCTS.md](OPAQUE-STRUCTS.md) -- `opaque struct`: module-owned representation and construction authority
+- [UNICODE-CHAR-LITERALS.md](UNICODE-CHAR-LITERALS.md) -- `UnicodeChar`: a scalar type distinct from Int and String
+- [ELIF.md](ELIF.md) -- `elif`
+- [METHOD-SUGAR.md](METHOD-SUGAR.md) -- method-call sugar
+- [FLAGS.md](FLAGS.md) -- flag parameters
+- [MULTI-VALUE-RESULTS.md](MULTI-VALUE-RESULTS.md) -- multi-value results: name the parts
+- [MUTUAL-RECURSION.md](MUTUAL-RECURSION.md) -- mutual recursion: `mutual:` groups
+- [STRUCTURAL-FUNCTION-TYPES.md](STRUCTURAL-FUNCTION-TYPES.md) -- structural function types (`Fn{...}`)
+- [STRICT-TYPED-PARAMETERS.md](STRICT-TYPED-PARAMETERS.md) -- strict typed parameters
+- [MINIMAL-APPLIED-LIST-TYPES.md](MINIMAL-APPLIED-LIST-TYPES.md) -- minimal applied `List[T]` types
+- [M7AA-EMPTY-COLLECTION-AND-APPLIED-TYPE-SEMANTICS.md](M7AA-EMPTY-COLLECTION-AND-APPLIED-TYPE-SEMANTICS.md) -- empty-collection admissibility and applied-type canonicalization
+
+### Loops
+
+- [COLLECTING-LOOPS.md](COLLECTING-LOOPS.md) -- the numeric loop forms (`to`, `through`, `down from`) and lockstep iteration with a proven common cardinality
+- [RETURNING-ITERABLE-LOOPS.md](RETURNING-ITERABLE-LOOPS.md) -- `loop x in xs:` as an expression that returns a List
+- [PAYLOAD-FREE-BREAK.md](PAYLOAD-FREE-BREAK.md) -- `break` never carries a value
+- [LISTLOOP-BREAK-TYPE-SOUNDNESS.md](LISTLOOP-BREAK-TYPE-SOUNDNESS.md) -- the earlier `break VALUE` design (superseded)
+
+### Errors
+
+- [EXPLICIT-ERROR-COMPLETIONS.md](EXPLICIT-ERROR-COMPLETIONS.md) -- `error`, `errors`, `fail` and handlers
+- [STATIC-COMPLETION-PROOFS.md](STATIC-COMPLETION-PROOFS.md) -- provable success needs no handler, provable failure is a compile-time error
+- [ERROR-PAYLOADS.md](ERROR-PAYLOADS.md) -- errors with a statically known named-field payload; module-qualified error identity
+- [ERROR-IDENTITY-AND-COMPLETION-SOUNDNESS.md](ERROR-IDENTITY-AND-COMPLETION-SOUNDNESS.md) -- two correctness repairs to error identity and completions
+- [VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md](VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md) -- calls through a structural `Fn` type are bounded by its checked contract
+- [TYPED-CALLABLE-ESCAPE-SOUNDNESS.md](TYPED-CALLABLE-ESCAPE-SOUNDNESS.md) -- typed-callable escape soundness
+
+### Proofs, refinements and integer domains
+
+- [REFINEMENT-VALUES.md](REFINEMENT-VALUES.md) -- `refined type` and `proves`
+- [SOURCE-DEFINED-INTEGER-DOMAINS.md](SOURCE-DEFINED-INTEGER-DOMAINS.md) -- `type Byte = Int in 0..255`
+- [BYTE-NIBBLE-BIT-ARITHMETIC.md](BYTE-NIBBLE-BIT-ARITHMETIC.md) -- scalar domains and typed bit arithmetic: `Byte`, `Nibble`, `LowNibble`, `HighNibble`
+- [ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md](ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md) -- no type is callable
+- [CROSS-MODULE-REFINED-SIGNATURES.md](CROSS-MODULE-REFINED-SIGNATURES.md) -- cross-module refined signatures
+- [EXACT-VALUE-FACTS.md](EXACT-VALUE-FACTS.md) -- exact constants and value-fact propagation
+- [INTRINSIC-FUNCTION-CONTRACT-INFERENCE.md](INTRINSIC-FUNCTION-CONTRACT-INFERENCE.md) -- intrinsic function contract inference
+
+### Abstraction: traits, contexts and modules
+
+- [TRAITS.md](TRAITS.md) -- traits: eager structural views, monomorphized away
+- [CONTEXTS.md](CONTEXTS.md) -- contexts: static execution-environment dependencies
+- [CONTEXT-TRAITS.md](CONTEXT-TRAITS.md) -- context traits: portable I/O and textual paths
+- [IMPORTS.md](IMPORTS.md) -- imports: explicit namespace dependencies
+- [STDLIB-NAMESPACES.md](STDLIB-NAMESPACES.md) -- standard namespaces, intrinsics, `at` and `get`
+- [MODULE-BINDINGS.md](MODULE-BINDINGS.md) -- immutable module bindings
+- [MODULE-STATIC-RETAINED-VALUES.md](MODULE-STATIC-RETAINED-VALUES.md) -- module-static retained values
+- [NATIVE-MODULES.md](NATIVE-MODULES.md) -- the first cross-file module system
+
+### Ownership, coroutines and mutable collections
+
+- [AFFINE-VALUES.md](AFFINE-VALUES.md) -- affinity as a compositional property of a value's type
+- [COROUTINES.md](COROUTINES.md) -- eagerly started, affine, resumable computations with deep `yield`
+- [COROUTINE-PREREQUISITES.md](COROUTINE-PREREQUISITES.md) -- the research coroutines were built on
+- [MUTABLE-VECTOR.md](MUTABLE-VECTOR.md) -- `MutableVector[T]`: a growable mutable value
+- [MUTABLE-ARRAY.md](MUTABLE-ARRAY.md) -- `MutableArray[T]` as a copy-on-write value
+- [PARAMETERIZED-MUTABLEARRAY.md](PARAMETERIZED-MUTABLEARRAY.md) -- parameterized `MutableArray[T]`
+- [MUTABLEARRAY-CONSTRUCTION-REFINEMENT.md](MUTABLEARRAY-CONSTRUCTION-REFINEMENT.md) -- `MutableArray` construction and refinement
+- [TYPED-MUTARRAY-BUILDER-REFACTOR.md](TYPED-MUTARRAY-BUILDER-REFACTOR.md) -- typed `MutableArray` builder source refactor
+- [MINIMAL-IMMUTABLE-SET.md](MINIMAL-IMMUTABLE-SET.md) -- `ImmutableSet[T]`
+
+### Strings, bytes and text
+
+- [STRING-ALLOCATION.md](STRING-ALLOCATION.md) -- one allocation per dynamic String
+- [STRING-VIEW-ALLOCATIONS.md](STRING-VIEW-ALLOCATIONS.md) -- closing the `char_at` allocation gap
+- [CAPTURE-EXPLICIT-STRINGREGION.md](CAPTURE-EXPLICIT-STRINGREGION.md) -- capture-explicit StringRegion companions
+- [SHORT-STRING.md](SHORT-STRING.md) -- ShortString1: one-i64 Strings of at most one character
+- [SHORT-STRING-TIERS.md](SHORT-STRING-TIERS.md) -- tiered short Strings: packed ASCII, ShortString1, tagged
+- [SHORT-STRING-WORK.md](SHORT-STRING-WORK.md) -- the short-String work, in full
+- [STRING-BYTES-CONSTRUCTION-AUDIT.md](STRING-BYTES-CONSTRUCTION-AUDIT.md) -- String/Bytes construction audit
+- [ENCODE-UTF8-ALLOCATION-RESEARCH.md](ENCODE-UTF8-ALLOCATION-RESEARCH.md) -- eliminating `str::encode_utf8`'s read-only Lists
+- [UNICODECHAR-MODULE-RETENTION.md](UNICODECHAR-MODULE-RETENTION.md) -- `UnicodeChar` module retention
+- [BYTE-SET.md](BYTE-SET.md) -- `byte::set`: UnicodeChar to checked Byte to `ImmutableSet[Byte]`
+- [ASCII-AND-URI-UNRESERVED.md](ASCII-AND-URI-UNRESERVED.md) -- ASCII classification and `web::is_unreserved`
+- [ASCII-SUBSTRINGS-RECOMMENDATION.md](ASCII-SUBSTRINGS-RECOMMENDATION.md) -- should `substring` results be proven ASCII?
+- [NATIVE-TCL-UNICODE.md](NATIVE-TCL-UNICODE.md) -- Tcl-compatible Unicode character classification
+
+### Systems boundary: ABI, Linux and process I/O
+
+- [ABI-BYTES.md](ABI-BYTES.md) -- `abi::bytes::Bytes` and `linux::write`
+- [MUTABLE-BYTES.md](MUTABLE-BYTES.md) -- `abi::bytes::MutableBytes` and `linux::read`
+- [ABI-NUMERIC-DOMAINS.md](ABI-NUMERIC-DOMAINS.md) -- `abi::I8` ... `abi::Usize`
+- [LINUX-X86-64-SYSCALL.md](LINUX-X86-64-SYSCALL.md) -- direct Linux x86-64 syscalls
+- [ARGV.md](ARGV.md) -- `argv()`: the process argument vector
+
+### Compile-time evaluation and testing
+
+- [STATIC-COMPILE.md](STATIC-COMPILE.md) -- `static compile:`: compiler diagnostics as recoverable values
+- [STATIC-DECISION-ECONOMICS.md](STATIC-DECISION-ECONOMICS.md) -- how many builds deciding static blocks takes
+- [GOLDEN-TEST-FRAMEWORK.md](GOLDEN-TEST-FRAMEWORK.md) -- `lib/test.bot`: a test framework written in Botlish
+- [LARGE-SCALE-GOLDEN-MIGRATION.md](LARGE-SCALE-GOLDEN-MIGRATION.md) -- porting the Tcl tests to golden suites
+- [GOLDEN-VS-TCL-BENCHMARK.md](GOLDEN-VS-TCL-BENCHMARK.md) -- golden suites against their Tcl originals
+- [TEST-SUITE-COST.md](TEST-SUITE-COST.md) -- where local test runs spend their time
+
+### Compiler warnings
+
+- [WARNINGS-SAME-RETURN.md](WARNINGS-SAME-RETURN.md) -- the warnings framework and `SAME-RETURN-VALUE`
+- [WARNINGS-METHOD-ELIGIBLE.md](WARNINGS-METHOD-ELIGIBLE.md) -- `METHOD-ELIGIBLE` and `nomethod fn`
+- [WARNINGS-FIXED-ARITY-LIST-RETURN.md](WARNINGS-FIXED-ARITY-LIST-RETURN.md) -- `FIXED-ARITY-LIST-RETURN`
+- [WARNINGS-SAME-FAILURE.md](WARNINGS-SAME-FAILURE.md) -- `SAME-FAILURE`
+- [WARNINGS-PROVES-NAMING.md](WARNINGS-PROVES-NAMING.md) -- `PROVES-NAMING`
+- [WARNINGS-ONE-CHAR-STRING-LITERAL.md](WARNINGS-ONE-CHAR-STRING-LITERAL.md) -- `ONE-CHAR-STRING-LITERAL`
+- [WARNINGS-MANY-BOOLEAN-ARGUMENTS.md](WARNINGS-MANY-BOOLEAN-ARGUMENTS.md) -- `MANY-BOOLEAN-ARGUMENTS`
+- [REFACTOR-WARNINGS-CLEAN.md](REFACTOR-WARNINGS-CLEAN.md) -- the corpus under its own warnings
+- [LANGUAGE-LIBRARY-DEFICIENCIES.md](LANGUAGE-LIBRARY-DEFICIENCIES.md) -- language and library gaps that refactor found
+
+## Implementation
+
+### Architecture and toolchain
+
+- [DIRECT-HIR-NATIVE-PATH.md](DIRECT-HIR-NATIVE-PATH.md) -- HIR to NIR, never through core IR
+- [COMPILATION-ISOLATION.md](COMPILATION-ISOLATION.md) -- a HIR's backends see its own declarations
+- [HIR-INTERCHANGE.md](HIR-INTERCHANGE.md) -- the analyzed HIR as a file, and the front-end cache
+- [SINGLE-EXECUTABLE.md](SINGLE-EXECUTABLE.md) -- the single-file compiler and the stub linker
+- [STRICT-REFERENCE-DETERMINISM.md](STRICT-REFERENCE-DETERMINISM.md) -- strict reference determinism
+- [CANONICAL-SURFACE-BENCHMARKS.md](CANONICAL-SURFACE-BENCHMARKS.md) -- every benchmark as ordinary `.bot` source
+- [COMPILER-BOTTLENECKS.md](COMPILER-BOTTLENECKS.md) -- compiler performance bugs: what to tackle next
+- [RANGE-FIXPOINT-SCALING.md](RANGE-FIXPOINT-SCALING.md) -- range fixpoint scaling
+- [CRANELIFT-WASM.md](CRANELIFT-WASM.md) -- WebAssembly for the Cranelift backend
+- [VM-OPCODE-VIABILITY.md](VM-OPCODE-VIABILITY.md) -- a register bytecode compiled from NIR
+- [NATIVE-BOTLISH-LOWERING-IMPL.md](NATIVE-BOTLISH-LOWERING-IMPL.md) -- native lowering written in Botlish: what it would take
+
+### Native code generation and runtime
+
+- [NATIVE-STACK-MAPS.md](NATIVE-STACK-MAPS.md) -- stack maps and frame walking for the GC
+- [NATIVE-STACK-OVERFLOW.md](NATIVE-STACK-OVERFLOW.md) -- native stack overflow protection
+- [RAW-INT-ABI.md](RAW-INT-ABI.md) -- the raw 64-bit Int ABI
+- [RAW-RESULT-REGISTER-COST.md](RAW-RESULT-REGISTER-COST.md) -- the cost of a raw result of a fallible function
+- [BRANCH-FORM-BOOLEAN-LOWERING.md](BRANCH-FORM-BOOLEAN-LOWERING.md) -- `if` conditions lowered as branches
+- [BOUNDED-BIT-SHIFT-LOWERING.md](BOUNDED-BIT-SHIFT-LOWERING.md) -- bounded bit-shift lowering
+- [M6-RANGE-DECIDED-BRANCH-LOWERING.md](M6-RANGE-DECIDED-BRANCH-LOWERING.md) -- range-decided branch lowering
+- [NATIVE-BLOCK-ESCAPE.md](NATIVE-BLOCK-ESCAPE.md) -- block escape analysis and virtualization
+- [NESTED-CLOSURE-ALLOCATIONS.md](NESTED-CLOSURE-ALLOCATIONS.md) -- de-closure conversion
+- [STRUCT-SCALAR-REPLACEMENT.md](STRUCT-SCALAR-REPLACEMENT.md) -- struct-aware scalar replacement
+- [NATIVE-PARAM-AGGREGATE.md](NATIVE-PARAM-AGGREGATE.md) -- parameter and result virtualization across closed calls
+- [M8A-VIRTUAL-IMMUTABLE-CONSTRUCTION.md](M8A-VIRTUAL-IMMUTABLE-CONSTRUCTION.md) -- virtual immutable construction plans
+- [VALUE-TRANSPORT-MATERIALIZATION.md](VALUE-TRANSPORT-MATERIALIZATION.md) -- value transport and materialization frontiers
+- [TINY-EXACT-LEAF-INLINING.md](TINY-EXACT-LEAF-INLINING.md) -- tiny exact-leaf inlining
+- [TINY-LEAF-DEFAULT-ON.md](TINY-LEAF-DEFAULT-ON.md) -- tiny exact-leaf inlining on by default
+- [OPPORTUNISTIC-SEMANTIC-INSTANCES.md](OPPORTUNISTIC-SEMANTIC-INSTANCES.md) -- opportunistic semantic function instances
+- [SYMBOLIC-TYPE-IDENTITY.md](SYMBOLIC-TYPE-IDENTITY.md) -- symbolic native result-type identity
+- [NATIVE-OPAQUE-REFINEMENT.md](NATIVE-OPAQUE-REFINEMENT.md) -- trusted opaque refinement across specialization
+
+### Analysis: facts, effects and specialization
+
+- [CLOSED-CALL-FACTS.md](CLOSED-CALL-FACTS.md) -- closed-call value facts
+- [CLOSED-CALL-PARAMETER-FACTS.md](CLOSED-CALL-PARAMETER-FACTS.md) -- closed-call parameter fact propagation
+- [CLOSED-CALL-EFFECTS.md](CLOSED-CALL-EFFECTS.md) -- closed-call effect summaries
+- [EXACT-CALLABLE-CLOSED-CALLER.md](EXACT-CALLABLE-CLOSED-CALLER.md) -- the closed-caller theorem and exact callable identity
+- [FINITE-CALLABLE-TARGET-PROVENANCE-RESEARCH.md](FINITE-CALLABLE-TARGET-PROVENANCE-RESEARCH.md) -- finite callable-target provenance: research notes
+- [SELF-RECURSIVE-RESULT-RANGES.md](SELF-RECURSIVE-RESULT-RANGES.md) -- self-recursive result Ranges
+- [GENERIC-PREDICATE-PROOF-LOSS.md](GENERIC-PREDICATE-PROOF-LOSS.md) -- generic predicate proof loss
+- [PROOF-FACT-REPAIRS.md](PROOF-FACT-REPAIRS.md) -- proof/fact repairs and drift tests
+- [HIGHER-ORDER-DOGFOODING.md](HIGHER-ORDER-DOGFOODING.md) -- real-world higher-order dogfooding
+
+The M-series milestones, in order:
+
+- [M0-MODULE-CLOSURE-AND-URI-BASELINE.md](M0-MODULE-CLOSURE-AND-URI-BASELINE.md) -- module-closure correctness and the URI/Byte benchmark
+- [M1-DECLARED-PARAMETER-FACT-TRANSPORT.md](M1-DECLARED-PARAMETER-FACT-TRANSPORT.md) -- declared-parameter facts in every instance
+- [M2-EXACT-CALLABLE-TARGET-PROVENANCE.md](M2-EXACT-CALLABLE-TARGET-PROVENANCE.md) -- exact callable-target provenance and devirtualization
+- [M3-EQUALITY-TOTAL-SETCONTAINS-EFFECT.md](M3-EQUALITY-TOTAL-SETCONTAINS-EFFECT.md) -- equality-total SetContains effect
+- [M4-EQUALITY-TOTAL-SETFROMLIST-EFFECT.md](M4-EQUALITY-TOTAL-SETFROMLIST-EFFECT.md) -- equality-total SetFromList effect
+- [M5-CHECKED-DOMAIN-FACT-PROVENANCE.md](M5-CHECKED-DOMAIN-FACT-PROVENANCE.md) -- checked-domain construction fact provenance
+- [M7A-INSTANCE-SELECTION-THEOREM-AUDIT.md](M7A-INSTANCE-SELECTION-THEOREM-AUDIT.md) -- instance selection and theorem semantics
+- [M7B-CONJUNCTIVE-ENTRY-FACTS.md](M7B-CONJUNCTIVE-ENTRY-FACTS.md) -- conjunctive entry facts
+- [M7C-CLOSED-CLOSURE-ENTRY-FACTS.md](M7C-CLOSED-CLOSURE-ENTRY-FACTS.md) -- closed-closure instances and caller-derived entry kinds
+- [M7C1-CLOSECALLERS-CONVERGENCE-FENCE.md](M7C1-CLOSECALLERS-CONVERGENCE-FENCE.md) -- CloseCallers convergence fence
+- [M9-INSTANCE-ENTRY-INT-FACTS.md](M9-INSTANCE-ENTRY-INT-FACTS.md) -- instance-entry Int facts
+
+(M6, M7.a.a and M8.a are listed above, under the topics they belong to.)
+
+### The `emailish?` and URI series
+
+How two hand-written native predicates became ordinary Botlish library code:
+
+- [NATIVE-URI-ESCAPE.md](NATIVE-URI-ESCAPE.md) -- de-nativizing `uriEscape`
+- [NATIVE-EMAILISH.md](NATIVE-EMAILISH.md) -- de-nativizing `Emailish?`
+- [OPAQUE-TYPE-PREDICATE-FINDINGS.md](OPAQUE-TYPE-PREDICATE-FINDINGS.md) -- `UriQueryValue?` and opaque types
+- [R2-ORDINARY-EMAILISH-PREDICATE.md](R2-ORDINARY-EMAILISH-PREDICATE.md) -- an ordinary Botlish `emailish?`
+- [R2A-IDIOMATIC-EMAILISH-SOURCE.md](R2A-IDIOMATIC-EMAILISH-SOURCE.md) -- idiomatic `emailish?` source
+- [R2A1-MODULE-FN-BRIDGE-REACHABILITY.md](R2A1-MODULE-FN-BRIDGE-REACHABILITY.md) -- module-function bridge reachability
+- [R2A2-TRAILING-QUESTION-IDENTIFIERS.md](R2A2-TRAILING-QUESTION-IDENTIFIERS.md) -- ordinary trailing-`?` identifiers
+- [R2A3-COUNTED-LOOPS-FINAL-SOURCE.md](R2A3-COUNTED-LOOPS-FINAL-SOURCE.md) -- counted loops and the final `emailish?` source
+
+## Audits, censuses and investigations
+
+- [NATIVE-AUDIT.md](NATIVE-AUDIT.md) -- native code-quality audit: fib, loop-count, refined-checks, sum-refined
+- [SCALAR-ASM-AUDIT.md](SCALAR-ASM-AUDIT.md) -- scalar machine-code quality audit (corpus: `audit/native-scalar-asm/`)
+- [COMPREHENSIVE-GENERATED-CODE-AUDIT.md](COMPREHENSIVE-GENERATED-CODE-AUDIT.md) -- comprehensive generated-code audit
+- [MACHINE-CODE-PROOF-LOSS-INVESTIGATION.md](MACHINE-CODE-PROOF-LOSS-INVESTIGATION.md) -- bottom-up machine-code regression investigation
+- [PROOF-FACT-CENSUS.md](PROOF-FACT-CENSUS.md) -- proof/fact census
+- [POST-CALL-EFFECTS-AUDIT.md](POST-CALL-EFFECTS-AUDIT.md) -- post-call-effects diagnostic closure audit
+- [POST-NATIVE-STACK-AUDIT.md](POST-NATIVE-STACK-AUDIT.md) -- post native stack audit
+- [POST-R2A-DYNAMIC-CENSUS.md](POST-R2A-DYNAMIC-CENSUS.md) -- post-R2.a frozen-baseline dynamic census
+- [POST-M8A-COMMON-INEFFICIENCY-CENSUS.md](POST-M8A-COMMON-INEFFICIENCY-CENSUS.md) -- post-M8.a cross-workload inefficiency census
+- [POST-MODULE-STATIC-EXACT-TARGET-CENSUS.md](POST-MODULE-STATIC-EXACT-TARGET-CENSUS.md) -- post-module-statics exact-target census
+- [POST-STRUCTURAL-FN-DYNAMIC-CENSUS.md](POST-STRUCTURAL-FN-DYNAMIC-CENSUS.md) -- dynamic callable census after structural function types
+- [FUZZING-EXAMPLES-AOT.md](FUZZING-EXAMPLES-AOT.md) -- fuzzing the example applications as executables
+- [FUZZING-ARGV-PROGRAMS.md](FUZZING-ARGV-PROGRAMS.md) -- fuzzing argv-driven programs

@@ -1,6 +1,6 @@
 # Comprehensive generated-code audit: evidence
 
-Supporting material for `/COMPREHENSIVE-GENERATED-CODE-AUDIT.md` (the final
+Supporting material for `/docs/COMPREHENSIVE-GENERATED-CODE-AUDIT.md` (the final
 semantic source fence audit). Nothing here is a build product or a
 benchmark source. All of it is diagnostic and can be regenerated.
 

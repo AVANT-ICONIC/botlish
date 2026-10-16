@@ -1,7 +1,7 @@
 # Post-M8.a common-inefficiency census: artifacts
 
 Raw data for
-[POST-M8A-COMMON-INEFFICIENCY-CENSUS.md](../../POST-M8A-COMMON-INEFFICIENCY-CENSUS.md).
+[POST-M8A-COMMON-INEFFICIENCY-CENSUS.md](../../docs/POST-M8A-COMMON-INEFFICIENCY-CENSUS.md).
 Nothing here is a build product or a production change: every tool is
 observation-only, and the one piece of instrumentation (`tools/audit-native.patch`)
 is applied to a *scratch copy* of `native/`, never to the tree.

@@ -6,7 +6,7 @@ The compiler already knew which callable it was passing; this milestone stops
 throwing that away before code generation, and makes one proof of "no unknown
 callers" serve every analysis that needs it.
 
-Measurements: [`audit/exact-callable/`](audit/exact-callable/README.md). Every
+Measurements: [`audit/exact-callable/`](../audit/exact-callable/README.md). Every
 dynamic count is callgrind instructions per steady-state run (Ir/run) on **one**
 runtime binary (the audit build of the frozen runtime; `native/src` is
 unchanged by this milestone), so before and after differ only in the NIR the

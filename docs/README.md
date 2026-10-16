@@ -1,5 +1,10 @@
 # Core evaluator — executable semantic specification
 
+> This is Botlish's language and implementation reference; it was the
+> repository's README. The project overview is the [root README](../README.md),
+> and [INDEX.md](INDEX.md) lists the design documents beside this one. Paths
+> below (`core/`, `tests/local.tcl`, ...) are relative to the repository root.
+
 A small reference evaluator, written in Tcl, for the semantic core of a new
 language. It is a specification you can run, not a production runtime: it
 aims for clarity over speed.

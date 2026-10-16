@@ -1,6 +1,6 @@
 # Post native stack machine-code audit corpus
 
-This is the baseline analyzed in [POST-NATIVE-STACK-AUDIT.md](../../POST-NATIVE-STACK-AUDIT.md).
+This is the baseline analyzed in [POST-NATIVE-STACK-AUDIT.md](../../docs/POST-NATIVE-STACK-AUDIT.md).
 Regenerate the corpus and selected details with:
 
     tclsh9.0 native/generate-scalar-audit.tcl -outdir audit/post-native-stack
@@ -49,6 +49,6 @@ CLIF construction logs despite their names.
 | examples/stdlib/string_replace.bot | compiled / inspected | [examples-stdlib/string_replace.asm](examples-stdlib/string_replace.asm) / [examples-stdlib/string_replace.vcode](examples-stdlib/string_replace.vcode) | 4 functions, 2322 bytes |
 | examples/stdlib/string_reverse.bot | compiled / inspected | [examples-stdlib/string_reverse.asm](examples-stdlib/string_reverse.asm) / [examples-stdlib/string_reverse.vcode](examples-stdlib/string_reverse.vcode) | 3 functions, 798 bytes |
 
-See /POST-NATIVE-STACK-AUDIT.md at the repository root for the analysis of this
+See /docs/POST-NATIVE-STACK-AUDIT.md for the analysis of this
 corpus (per-function classification, findings, severity, and the milestone
 recommendation).

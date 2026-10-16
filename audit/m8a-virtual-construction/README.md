@@ -1,7 +1,7 @@
 # M8.a virtual-construction audit artifacts
 
 Measurement and census output for
-[M8A-VIRTUAL-IMMUTABLE-CONSTRUCTION.md](../../M8A-VIRTUAL-IMMUTABLE-CONSTRUCTION.md).
+[M8A-VIRTUAL-IMMUTABLE-CONSTRUCTION.md](../../docs/M8A-VIRTUAL-IMMUTABLE-CONSTRUCTION.md).
 Every before/after pair comes from the *same* tree and binary, switched only
 by native lowering's `-virtual-construction-opt 0|1` (or
 `BOTLISH_NATIVE_VIRTUAL_CONSTRUCTION_OPT=0|1` for tools that do not take

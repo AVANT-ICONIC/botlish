@@ -6,6 +6,20 @@ Push finished work directly to `main`. This project does not use a
 feature-branch-plus-pull-request review cycle: don't open a PR unless
 explicitly asked to.
 
+## Documentation layout
+
+The root `README.md` is the project overview. Everything else is in `docs/`:
+`docs/README.md` is the language and implementation reference (the former
+root README), and every design document, milestone report and audit this
+file names (`DIRECT-HIR-NATIVE-PATH.md`, `COROUTINES.md`, ...) is
+`docs/NAME.md`, listed in `docs/INDEX.md`. Code comments, tests and the
+documents themselves cite them by bare name too. A comment citing "README
+§N" or a README section by name means `docs/README.md`, unless it sits
+beside a README of its own (`tests/golden/README.md`, an `audit/`
+directory's). A new design document goes in `docs/`, with a line in
+`docs/INDEX.md`, never in the repository root; a link in one to a file
+outside `docs/` starts with `../`.
+
 ## Compiler architecture (three representations)
 
 * **HIR** (`hir/`) is the authoritative semantic representation; every analysis
