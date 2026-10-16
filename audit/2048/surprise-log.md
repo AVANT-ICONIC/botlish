@@ -768,3 +768,9 @@ the repository, run with `env -i` (no PATH):
   tests on interp 7522 passed, on compile 7518 passed (4 skipped), 91
   golden suites with 0 failures (interp 4690, compile 4690,
   cranelift-generic 4597, cranelift 4699), 2080 s with 4 jobs.
+* The same run on the final tree (both fixes, the workload test, the new
+  block-escape tests, the extended closure-escape.bot): Tcl tests on
+  interp 7529 passed, on compile 7525 passed (4 skipped), 91 golden
+  suites with 0 failures (interp 4691, compile 4691, cranelift-generic
+  4598, cranelift 4700), 1591 s with 4 jobs. Not run here: AArch64
+  (CI's tests-arm64.yml).

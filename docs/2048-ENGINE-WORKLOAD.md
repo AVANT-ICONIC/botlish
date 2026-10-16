@@ -273,8 +273,12 @@ without GC stress (pinned by `tests/workload-2048.test`), and the whole
 test suite passes under GC stress: `BOTLISH_NATIVE_GC_STRESS=1 tclsh9.0
 tests/local.tcl -all 1` -- every Tcl test on interp (7,522 passed) and
 compile (7,518 passed, 4 skipped), and the 91 golden suites on all four
-backends (4,690 / 4,690 / 4,597 / 4,699 tests), no failure.
-<!-- TBD-GC2: final run -->
+backends (4,690 / 4,690 / 4,597 / 4,699 tests), no failure. The same run
+on the final tree (both fixes, `tests/workload-2048.test`, the new
+block-escape tests and the extended `closure-escape.bot`): 7,529 and
+7,525 Tcl tests (4 skipped), 91 golden suites with 4,691 / 4,691 / 4,598
+/ 4,700 tests, no failure. Not run here: the AArch64 GC-stress run
+AGENTS.md asks for after a root-lowering change (CI's tests-arm64.yml).
 
 ## 3. Compiler behavior
 
