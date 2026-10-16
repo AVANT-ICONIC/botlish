@@ -137,6 +137,10 @@ sudo dpkg -i libtommath1_1.3.0-1_amd64.deb libtcl9.0_9.0.1+dfsg-1_amd64.deb tcl9
 echo 'puts "Tcl [info patchlevel], tcltest [package require tcltest 2.5]"' | tclsh9.0
 ```
 
+On arm64 the same three packages, with `arm64` for `amd64`, come from
+`http://ports.ubuntu.com/ubuntu-ports/pool/universe` (`.devcontainer/setup.sh`
+picks by `dpkg --print-architecture`).
+
 This installs the `tclsh9.0` binary and it is the canonical baseline for
 this repo. Use `tclsh9.0` to run everything in this repo (`tests/all.tcl`,
 `main.tcl`, `bench/*.tcl`, etc.), matching CI.
@@ -335,7 +339,12 @@ What it costs, measured on a 4-core container (2026-10-15):
   - the native Rust unit tests;
   - the stub-linked executables;
   - the warning gate;
-  - on pushes to main, the GC-stress run.
+  - on pushes to main, the GC-stress run;
+  - on Linux arm64 (`.github/workflows/tests-arm64.yml`, ubuntu-24.04-arm):
+    the Tcl suite on interp and compile, its cranelift and cranelift-generic
+    coverage, the golden suites, the native Rust unit tests (also under GC
+    stress) and, except on pull requests, the GC-stress run. Run it on a
+    branch with workflow_dispatch.
 
   Never set `BOTLISH_SKIP_GOLDEN_DUPLICATES` or run `tests/local.tcl` in a
   workflow: `tests/golden-duplicates.test` fails if one does.
