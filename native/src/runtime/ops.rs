@@ -927,18 +927,28 @@ pub extern "C" fn rt_bin_store(p: *mut Vm, storage: Value, offset: Value, code: 
     if !is_small(value) && heap_kind(value) != KIND_BIGINT {
         return vm(p).fail(RtError::Type { context: "binary::emit".to_string(), expected: Kind::Int, got: value });
     }
-    let n = int_to_big(value);
+    // Every encoding's range lies inside i128, so the check needs no BigInt
+    // for a small Int (the common case: no allocation per store); a BigInt
+    // beyond i128 is outside every encoding.
+    let n: i128 = match int_small(value) {
+        Some(small) => small as i128,
+        None => {
+            let big = int_to_big(value);
+            big.to_i128().unwrap_or(if big < BigInt::from(0u8) { i128::MIN } else { i128::MAX })
+        }
+    };
     let bits = 8 * width as u32;
-    let (lo, hi) = if signed {
-        (-(BigInt::from(1u8) << (bits - 1)), (BigInt::from(1u8) << (bits - 1)) - 1)
+    let (lo, hi): (i128, i128) = if signed {
+        (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
     } else {
-        (BigInt::from(0u8), (BigInt::from(1u8) << bits) - 1)
+        (0, (1i128 << bits) - 1)
     };
     if n < lo || n > hi {
         let message = format!("binary::emit: {} is outside the {width}-byte encoding {lo}..{hi}", super::show::int_text(value));
         return vm(p).fail(RtError::Semantic { kind: "RANGE", message });
     }
-    let word: u64 = if signed { n.to_i64().unwrap_or(0) as u64 } else { n.to_u64().unwrap_or(0) };
+    // The low 64 bits: two's complement for a negative N, N itself otherwise.
+    let word = n as u64;
     let mut bytes = word.to_le_bytes();
     let field = &mut bytes[..width];
     if big {
@@ -3706,6 +3716,20 @@ mod tests {
             assert!(vm.error.take().is_some());
         }
         assert_eq!(bytes_of(s), &[0u8; 4]);
+        // BigInts just outside the 8-byte encodings, and far beyond i128.
+        let wide = rt_bytes_zeroed(p, make_small(8));
+        for (n, signed) in [
+            (BigInt::from(u64::MAX) + 1, false),
+            (BigInt::from(i64::MIN) - 1, true),
+            (BigInt::from(i64::MAX) + 1, true),
+            (BigInt::from(1u8) << 200usize, false),
+            (-(BigInt::from(1u8) << 200usize), true),
+        ] {
+            let v = vm.new_big(n.clone());
+            assert_eq!(rt_bin_store(p, wide, make_small(0), enc(8, signed), v), NO_VALUE, "store {n}");
+            assert!(vm.error.take().is_some());
+        }
+        assert_eq!(bytes_of(wide), &[0u8; 8]);
         // Four bytes at offset 1 of a 4-byte storage, and a malformed encoding.
         assert_eq!(rt_bin_load(p, s, make_small(1), enc(4, false)), NO_VALUE);
         assert!(vm.error.take().is_some());
