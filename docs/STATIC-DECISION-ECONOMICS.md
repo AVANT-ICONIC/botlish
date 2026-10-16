@@ -2610,7 +2610,8 @@ STATIC-COMPILE.md, "What to run when changing this", and AGENTS.md
 `audit/static-decisions/tools/fuzz.tcl` (several seeds) and
 `audit/static-decisions/tools/mutate.tcl`, and
 `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` in CI, never
-locally (the `static-decisions` workflow: the sequential reference takes
-hours on the largest suites); a new cross-function fact an
+locally (the `static-decisions` workflow: the sequential reference of
+mutable-array.bot alone takes 75 minutes on a GitHub runner and hours in an
+agent's container); a new cross-function fact an
 analysis reads is a new edge of `hir/staticdeps.tcl`, never a special case of
 the scheduler.

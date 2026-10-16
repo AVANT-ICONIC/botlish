@@ -6,10 +6,12 @@ name: static-decisions
 # site's outcome and reified diagnostic, the program's diagnostics and the
 # decided HIR must agree, with no misprediction.
 #
-# The sequential order is one whole-program build per typed rejection, which
-# takes hours on the largest suites (mutable-array.bot: 69 rounds and 1,089
-# builds; destructuring.bot: 69 rounds and 205 builds), beyond an agent's
-# 2-hour background-task limit. So the comparison runs here, never locally.
+# The sequential order is one whole-program build per typed rejection. On a
+# hosted runner mutable-array.bot takes 75 minutes of it (69 rounds, 953
+# builds; the first run here, eaac3dd), destructuring.bot 15 (205 builds) and
+# every other suite under 8. In an agent's container it is several times
+# slower (mutable-array.bot did not finish in 2 h 37 min), beyond the 2-hour
+# background-task limit. So the comparison runs here, never locally.
 #
 # It runs on every push to main that changes what a front end builds -- the
 # directories the front-end cache fingerprints (core/, hir/, surface/, lib/;
@@ -18,9 +20,10 @@ name: static-decisions
 # narrows it to some suites). No program outside tests/golden has a static
 # site, so the golden suites are the whole corpus.
 #
-# The two suites whose sequential run alone takes an hour or more get a job
-# each; the others are split round-robin into at most MAX_SHARDS jobs. A job
-# may take up to 6 hours, GitHub's limit for a hosted runner.
+# mutable-array.bot, the one suite whose sequential run takes over an hour,
+# gets a job of its own; the others are split round-robin into at most
+# MAX_SHARDS jobs, which finish well within its time. A job may take up to 6
+# hours, GitHub's limit for a hosted runner.
 
 on:
   push:
@@ -65,8 +68,8 @@ jobs:
         shell: bash
         env:
           SUITES: ${{ inputs.suites }}
-          OWN_JOB: mutable-array.bot destructuring.bot
-          MAX_SHARDS: "8"
+          OWN_JOB: mutable-array.bot
+          MAX_SHARDS: "4"
         run: |
           cd tests/golden
           selected=()

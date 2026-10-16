@@ -342,7 +342,7 @@ What it costs, measured on a 4-core container (2026-10-15):
   - on pushes to main, the GC-stress run;
   - on pushes to main that change the front end, the golden suites'
     static decisions under the batched and the sequential scheduler
-    (`static-decisions.yml`, up to six hours; Static intrinsics, "The
+    (`static-decisions.yml`, about 80 minutes; Static intrinsics, "The
     sequential comparison runs in CI, never locally");
   - on Linux arm64 (`.github/workflows/tests-arm64.yml`, ubuntu-24.04-arm):
     the Tcl suite on interp and compile, its cranelift and cranelift-generic
@@ -1260,19 +1260,20 @@ regenerates the economics report.
 
 `audit/static-decisions/tools/compare.tcl` compiles each golden suite under
 the batched scheduler and the sequential reference and requires them to
-agree. The sequential order is one whole-program build per typed rejection,
-which takes hours on the largest suites: mutable-array.bot 69 rounds and
-1,089 builds (about five hours), destructuring.bot 205 builds (about one).
-That is beyond an agent's 2-hour background-task limit, and it starves
-everything else on the machine. So:
+agree. The sequential order is one whole-program build per typed rejection:
+mutable-array.bot takes 69 rounds and 953 builds, destructuring.bot 205. On a
+GitHub runner that is 75 and 15 minutes; in an agent's container it is
+several times slower (mutable-array.bot did not finish in 2 h 37 min), beyond
+the 2-hour background-task limit, and it starves everything else on the
+machine. So:
 
 * **Never run it locally.** Don't run `compare.tcl` on a golden suite, all
   of them or one, and don't compile one under
   `BOTLISH_STATIC_SCHEDULER=sequential`. A small program of your own (a
   reproducer of a disagreement CI found) is fine.
 * **The `static-decisions` workflow runs it**
-  (`.github/workflows/static-decisions.yml`), one job for each of the two
-  largest suites and the others in shards:
+  (`.github/workflows/static-decisions.yml`), one job for mutable-array.bot
+  and the other suites in four shards:
   - automatically on every push to main that changes `core/`, `hir/`,
     `surface/`, `lib/`, a golden suite or `audit/static-decisions/tools/`,
     which covers every change the list above names;
@@ -1284,12 +1285,12 @@ everything else on the machine. So:
     server's `actions_run_trigger`, method `run_workflow`, or `gh workflow
     run static-decisions.yml --ref BRANCH`). The optional `suites` input (file
     names, separated by spaces or commas) narrows it.
-* **Read its result.** A run takes up to about six hours (mutable-array.bot's
-  job; the others take an hour or two at most). Don't wait idle for it: carry
-  on, and before you call the change done read the run's jobs. Each job's
-  summary lists every suite's rounds and builds under both schedulers, and
-  any `DISAGREE` or `DOES NOT COMPILE`. If the run has not finished, report
-  it as pending, never as passed.
+* **Read its result.** A run takes about 80 minutes, mutable-array.bot's job
+  (the shards finish within it), and on main it may first wait for the run
+  before it. Don't wait idle for it: carry on, and before you call the change
+  done read the run's jobs. Each job's summary lists every suite's rounds and
+  builds under both schedulers, and any `DISAGREE` or `DOES NOT COMPILE`. If
+  the run has not finished, report it as pending, never as passed.
 * **A failing run on main is a standing signal**, like a failing `gc-stress`
   run: reproduce the disagreement on a small program and fix it.
 
