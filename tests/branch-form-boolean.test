@@ -210,6 +210,15 @@ test bf-tcl-value-positions {argument, return, collection element, struct field 
         [lrange [outcomeUnderHir compile $hir] 0 1]
 } -result {11 3 {value {[[true, true, [false], false], true]}}}
 
+test bf-tcl-affine-rhs {in the Tcl compiler too, a right operand that moves a coroutine handle moves it only where it runs: the other side of the test releases it (a Boolean constant with a release after it is no bare constant)} -body {
+    set source "import coroutine\n\nfn ticker() -> int:\n    loop i from 0 to 1000:\n        yield i\n    return -1\n\nfn take(c: Coroutine{args: \[\], return: int}) -> bool:\n    c() > 0\n\nfn f(flag: bool) -> int:\n    coroutine {step: h} = ticker()\n    if flag and take(h):\n        1\n    else:\n        2\n\n\[f(true), f(false)\]\n"
+    set body [bfTclBody [bfHir $source] f]
+    set test [string first "    if \{" $body]
+    set release [string first releaseImpl $body]
+    list [regexp -all {releaseImpl} $body] [expr {$release > $test && $release < [string first "\n        set t" $body $test]}] \
+        [lrange [outcomeUnderHir compile [bfHir $source]] 0 1]
+} -result {1 1 {value {[1, 2]}}}
+
 test bf-tcl-call-bool {a Bool-returning call is a value, branched on: no special call form} -body {
     set body [bfTclBody [bfHir "fn p(x: int) -> bool:\n    x > 5\n\n[bfProgram {p(x)}]"] f]
     bfTclTest $body

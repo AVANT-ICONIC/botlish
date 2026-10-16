@@ -6,6 +6,7 @@
 #
 #   tclsh9.0 bench/branch-form-boolean.tcl ?-root DIR? ?-n N? ?-interp-n N?
 #       ?-native-n N? ?-reps R? ?-forms LIST? ?-programs FILES?
+#       ?-workload calls|tight? ?-backends LIST?
 #
 # -root runs the compiler of another checkout (its own compiler, native and
 # lib; its native/target must be built): the same script measures a tree
@@ -23,13 +24,19 @@
 # times in milliseconds, and the shape of step's NIR (lines, `br`, Bool
 # constants, moves of one) and machine code size (native::codeSize).
 #
+# -workload tight measures the condition alone: a self-tail-recursive
+# count(i, n, acc) (a loop in both compilers) testing v = mod(i, 20) - 5
+# each way and counting the admitted values, so no call is made per
+# iteration and the condition is most of its cost.
+#
 # -programs FILES measures whole program files instead (a real workload,
 # bench/uri-steady.bot say): the front end, the Tcl compiler's compile and
 # best run, and natively the NIR lowering, codegen and best run, with the
 # shape of the whole program's NIR.
 
 set options [dict create -root "" -n 20000 -interp-n 2000 -native-n 3000000 -reps 5 \
-    -forms {nested and or not converter value} -programs ""]
+    -forms {nested and or not converter value} -programs "" -workload calls \
+    -backends {interp compile cranelift-generic cranelift}]
 foreach {option value} $argv {
     if {![dict exists $options $option]} { error "unknown option $option" }
     dict set options $option $value
@@ -95,8 +102,30 @@ set steps [dict create \
         0
 }]
 
+set counts [dict create \
+    nested {    if 0 <= v:
+        if v <= 9:
+            return count(i + 1, n, acc + 1)
+    count(i + 1, n, acc)} \
+    and {    if 0 <= v and v <= 9:
+        return count(i + 1, n, acc + 1)
+    count(i + 1, n, acc)} \
+    or {    if v < 0 or v > 9:
+        return count(i + 1, n, acc)
+    count(i + 1, n, acc + 1)} \
+    not {    if not (v < 0 or v > 9):
+        return count(i + 1, n, acc + 1)
+    count(i + 1, n, acc)} \
+    value {    ok = 0 <= v and v <= 9
+    if ok:
+        return count(i + 1, n, acc + 1)
+    count(i + 1, n, acc)}]
+
 proc program {step n} {
-    global prelude
+    global prelude options counts form
+    if {[dict get $options -workload] eq "tight"} {
+        return "$prelude\nfn count(i: int, n: int, acc: int) -> int:\n    if i >= n:\n        return acc\n    v = mod(i, 20) - 5\n[dict get $counts $form]\n\ncount(0, $n, 0)\n"
+    }
     return "$prelude\n$step\nys = loop i from 0 to $n:\n    step(mod(i, 20) - 5)\nlist::length(ys)\n"
 }
 
@@ -150,6 +179,10 @@ proc nirShape {nir name} {
 }
 
 set reps [dict get $options -reps]
+if {[dict get $options -workload] eq "tight"} {
+    # The interpreter runs count's self tail calls as nested calls.
+    interp recursionlimit {} 1000000
+}
 if {[dict get $options -programs] ne ""} {
     puts "root $root; reps $reps"
     foreach path [dict get $options -programs] {
@@ -174,28 +207,48 @@ if {[dict get $options -programs] ne ""} {
 }
 puts "root $root; reps $reps; n [dict get $options -n] compile, [dict get $options -interp-n] interp, [dict get $options -native-n] native"
 foreach form [dict get $options -forms] {
+    if {[dict get $options -workload] eq "tight" && ![dict exists $counts $form]} {
+        continue
+    }
     set step [dict get $steps $form]
     set source [program $step [dict get $options -n]]
     set front [best $reps {set hir [surface::compile $source -warnings off]}]
     puts "\n$form: front end [ms $front] ms"
 
-    set isource [program $step [dict get $options -interp-n]]
-    set ihir [surface::compile $isource -warnings off]
-    set lower [best $reps {set ir [hir::lower $ihir]}]
-    set run [best [expr {min($reps, 3)}] {set value [core::evalProgram $ir]}]
-    puts [format "  %-18s lower %7s ms  run %9s ms  value %s" interp [ms $lower] [ms $run] [core::value::show $value]]
+    set backends [dict get $options -backends]
+    if {"interp" in $backends} {
+        set isource [program $step [dict get $options -interp-n]]
+        set ihir [surface::compile $isource -warnings off]
+        set lower [best $reps {set ir [hir::lower $ihir]}]
+        set run [best [expr {min($reps, 3)}] {set value [core::evalProgram $ir]}]
+        puts [format "  %-18s lower %7s ms  run %9s ms  value %s" interp [ms $lower] [ms $run] [core::value::show $value]]
+    }
 
-    set compile [best $reps {set unit [core::compiler::compileHir $hir]}]
-    set run [best $reps {set value [core::compiler::evalUnit $unit]}]
-    puts [format "  %-18s compile %5s ms  run %9s ms  value %s" compile [ms $compile] [ms $run] [core::value::show $value]]
+    if {"compile" in $backends} {
+        set compile [best $reps {set unit [core::compiler::compileHir $hir]}]
+        set run [best $reps {set value [core::compiler::evalUnit $unit]}]
+        # The Tcl bytecode of the compiled function (its instruction count).
+        set fname [expr {[dict get $options -workload] eq "tight" ? "count" : "step"}]
+        set bytecode ""
+        foreach {- temp proc defined use} [regexp -all -inline \
+                {set (t[0-9]+) \[core::value::block [^\n]* ::core::compiler::code::(block[0-9]+)\]\n[ \t]*core::env::define \$base (\S+) \$(t[0-9]+)\n} [dict get $unit code]] {
+            if {$defined eq $fname && $use eq $temp} {
+                set text [tcl::unsupported::disassemble proc ::core::compiler::code::$proc]
+                set bytecode "; $fname bytecode [regexp -all -line {^\s+\([0-9]+\) } $text] instructions"
+            }
+        }
+        puts [format "  %-18s compile %5s ms  run %9s ms  value %s%s" compile [ms $compile] [ms $run] [core::value::show $value] $bytecode]
+    }
 
     set nsource [program $step [dict get $options -native-n]]
     set nhir [surface::compile $nsource -warnings off]
     foreach {backend specialize} {cranelift-generic 0 cranelift 1} {
+        if {$backend ni $backends} continue
         lassign [native::measure $nhir $reps -specialize $specialize] lowerUs codegenUs bestUs collections value
         set nir [native::nir $nhir -specialize $specialize]
         set shapes {}
-        foreach name [expr {$form eq "converter" ? {step small} : {step}}] {
+        foreach name [expr {[dict get $options -workload] eq "tight" ? {count}
+                : $form eq "converter" ? {step small} : {step}}] {
             lassign [nirShape $nir $name] lines brs bools moves
             lappend shapes "$name NIR $lines lines, $brs br, $bools bool, $moves bool moves"
         }
