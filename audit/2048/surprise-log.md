@@ -1,7 +1,9 @@
 # 2048 workload: running surprise and research log
 
-Written as the work happens (2026-10-16, starting 19:14 UTC), not
-reconstructed afterwards. Each entry: context, expectation, actual,
+Written as the work happens (2026-10-16), not reconstructed afterwards;
+entries are in the order they happened. (The first draft carried
+clock times in the headings; they were estimates, not readings of the
+clock, so they were removed rather than left to mislead.) Each entry: context, expectation, actual,
 hypothesis, research (commands/files), failed attempts, explanation,
 fix/workaround, classification, what would have shortened discovery.
 
@@ -17,7 +19,7 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
 
 ## Log
 
-### S1 (19:20) No Int-to-String conversion in the stdlib
+### S1 No Int-to-String conversion in the stdlib
 
 * Context: planning the demo's board printer (`   2    .    4`).
 * Expected: some `str::of_int`/`int::text` or a `show` for Ints.
@@ -40,7 +42,7 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
 * Shortening: a stdlib `int` (or `str`) module with a decimal
   formatter; a "what is NOT in the stdlib" list in the reference.
 
-### S2 (19:21) There is no integer division
+### S2 There is no integer division
 
 * Context: same read of lib/test.bot (`digit_value`: "by subtraction:
   Botlish has no division").
@@ -56,7 +58,7 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
   absence is stated nowhere as a deliberate choice; found in a helper's
   comment).
 
-### S3 (19:24) Golden-suite infrastructure assumes every golden test is a port of a Tcl test
+### S3 Golden-suite infrastructure assumes every golden test is a port of a Tcl test
 
 * Context: deciding where the 2048 golden suite goes.
 * Expected: `tests/golden/2048.bot` picked up like any suite.
@@ -75,7 +77,7 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
   but not what a new, original suite should do).
 * Resolution: see D5 (placement decision).
 
-### S4 (19:27) An application cannot have its own importable module
+### S4 An application cannot have its own importable module
 
 * Context: the brief wants the engine importable by a demo, a golden
   suite and a benchmark, in "an ordinary non-stdlib library location".
@@ -96,7 +98,7 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
   MAJOR for any multi-file application workload.
 * Resolution: see D5.
 
-### S5 (19:33) A descending loop does not prove its own index in range
+### S5 A descending loop does not prove its own index in range
 
 * Context: `reversed(xs)` for the "right = reverse, left, reverse" plan.
 * Expected: `loop i down from n - 1 through 0: list::at(xs, i)` with
@@ -118,7 +120,7 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
   `list::reverse`). The diagnostic was accurate and well located but
   says nothing about which shapes *are* provable.
 * Workaround: decided later (D2/D3).
-  (19:40 addendum) The single executable is the same: single/main.tcl
+  (addendum) The single executable is the same: single/main.tcl
   runs main.tcl with lib/ inside the zipfs archive, so a single-exe
   user cannot import any module of their own at all. For iteration I
   had to copy lib/ to a scratch directory, link the engine into it and
@@ -126,7 +128,7 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
   re-sources core.tcl, which resets the variable, so a wrapper cannot
   set it first). 1 more source read (core/core.tcl, single/main.tcl).
 
-### S6 (19:47) An empty MutableVector literal has no element type; the fix is a typed helper function
+### S6 An empty MutableVector literal has no element type; the fix is a typed helper function
 
 * Context: collecting the empty positions of a board (nested collecting
   loops give a List of Lists and there is no concat/flatten, so the
@@ -149,7 +151,7 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
   inferred type (`... inferred List[any] because the vector's element
   type is unknown`).
 
-### S7 (19:49) A loop bounded by `list::length(rows)` cannot prove a Coordinate; a 4x4 size the types cannot carry
+### S7 A loop bounded by `list::length(rows)` cannot prove a Coordinate; a 4x4 size the types cannot carry
 
 * Context: same probe, `loop row in b.rows and r from 0 to
   list::length(b.rows): ... Position {row: r, ...}`.
@@ -168,7 +170,7 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
   COMPILER-PRECISION (no length fact through a struct field).
   MODERATE; recurring for any grid workload.
 
-### P1 (19:50) Pleasant: domain-typed struct fields from comparisons and counted loops
+### P1 Pleasant: domain-typed struct fields from comparisons and counted loops
 
 `type Coordinate = Int in 0..3` on `Position`'s fields is proven from
 `loop r from 0 to 4` directly, and from `if r >= 0 and r <= 3 and c >=
@@ -181,7 +183,7 @@ try on all four backends.
 
 ## Decision points (recorded when made)
 
-### D1 (19:52) Board = opaque struct over four rows (List[List[int]])
+### D1 Board = opaque struct over four rows (List[List[int]])
 
 * Alternatives: List[int] of 16 (index 4r+c); struct of four row
   structs; List[List[int]] rows; MutableArray.
@@ -197,7 +199,7 @@ try on all four backends.
   `rows(board)`.
 * Botlish influence: strong (division, concat, describe).
 
-### D2 (19:53) Empty cell = 0
+### D2 Empty cell = 0
 
 * Alternatives: an enum `Cell` (Empty / Tile) -- impossible, enums are
   payload-free; a struct {occupied, value}; 0.
@@ -208,14 +210,14 @@ try on all four backends.
 * Botlish influence: payload-free enums rule out the sum type; `get`'s
   default makes 0 pleasant.
 
-### D3 (19:54) Line algorithm: filter loop, recursive merge, padding loop
+### D3 Line algorithm: filter loop, recursive merge, padding loop
 
 * compact = a filtering collecting loop (`continue` on empty).
 * merge = a self-recursive nested function carrying the position and the
   result so far (no loop can carry state; S8 below).
 * pad = a counted loop over `get` with the `empty` default.
 
-### D4 (19:55) Directions: view the board from the direction
+### D4 Directions: view the board from the direction
 
 * `lines_toward(rows, d)`: left = rows, right = each row reversed, up =
   transpose, down = transpose then reverse; `rows_from(lines, d)` is
@@ -223,7 +225,7 @@ try on all four backends.
   involutions (reverse, transpose) instead of four algorithms or an
   index formula.
 
-### D6 (19:56) Spawn: Position of Coordinates, SpawnTile enum, one runtime error
+### D6 Spawn: Position of Coordinates, SpawnTile enum, one runtime error
 
 * Out-of-range position and invalid tile value are made
   unrepresentable statically (Coordinate domain; `enum SpawnTile: Two,
@@ -231,7 +233,7 @@ try on all four backends.
   CellOccupied`. Not enforced: "only after a changed move" (a caller
   rule; the engine has no history).
 
-### S8 (20:02) A named program-level Int constant is not a fact inside the functions that read it
+### S8 A named program-level Int constant is not a fact inside the functions that read it
 
 * Context: engine v1, `size = 4` at module level, `empty_positions`:
   `loop r from 0 to size: ... Position {row: r, ...}`.
@@ -254,8 +256,7 @@ try on all four backends.
 * Research: 2 probes, 1 Tcl probe against the HIR, read
   hir/exactvalue.tcl (header, `Eval`), hir/range.tcl `Expr` (lines
   906-1000), grep of docs for capture facts (CLOSED-CALL-FACTS.md,
-  COMPREHENSIVE-GENERATED-CODE-AUDIT.md). 3 wrong turns: none fatal;
-  ~15 minutes.
+  COMPREHENSIVE-GENERATED-CODE-AUDIT.md). 1 wrong hypothesis.
 * Classification: COMPILER-PRECISION. MODERATE: it forces a choice
   between a named constant and a proof. Compiler source was needed to
   understand it; the diagnostic's "facts: [0, +∞]" was the clue that
@@ -267,7 +268,7 @@ try on all four backends.
 * CLI wish: "what Range does the compiler know for `size` at line N,
   and why?"
 
-### S9 (20:05) Lockstep over a field projection is unproven; the message says "(expression)"
+### S9 Lockstep over a field projection is unproven; the message says "(expression)"
 
 * Context: `spawn`: `loop row in game.board.rows and r from 0 to
   list::length(game.board.rows):`.
@@ -284,7 +285,7 @@ try on all four backends.
   an atom), DIAGNOSTIC ("(expression)" hides which expressions; the
   fix -- "bind it to a name" -- is not suggested). MINOR.
 
-### S10 (20:14) Two warnings on engine v1, both answered in the code
+### S10 Two warnings on engine v1, both answered in the code
 
 * `METHOD-ELIGIBLE` on `from(0, Slide {cells: [], score: 0})`, the
   first call of the recursive merge helper (the sugared spelling would
@@ -303,7 +304,7 @@ try on all four backends.
   ceremony: a recursive helper whose first argument is a counter is a
   common shape).
 
-### P2 (20:15) Pleasant: the first full engine was correct on the first run
+### P2 Pleasant: the first full engine was correct on the first run
 
 Seven merge-once cases, all four directions, a double move, a spawn,
 game over on a full checkerboard, empty positions: every value equal to
@@ -312,7 +313,7 @@ cranelift-generic. Value equality made `changed` one expression
 (`moved != rows`), and `list::get`'s default made padding and reversal
 total without a single handler.
 
-### D5 (20:22) Placement: everything under examples/games/2048/, run through a private library directory
+### D5 Placement: everything under examples/games/2048/, run through a private library directory
 
 Forced by S3 and S4. The engine module, the demo, the golden suite and
 the benchmark program live together in examples/games/2048/; a small
@@ -327,7 +328,7 @@ stdlib by location, ship inside the single executable and be visible to
 the paired run's agent); tests/golden/2048.bot (needs Tcl originals for
 the manifest); one file with the engine copied into each consumer.
 
-### S11 (20:24) The warning gate cannot cover a program that imports a non-lib module
+### S11 The warning gate cannot cover a program that imports a non-lib module
 
 * audit/refactor/tools/sweep.tcl enumerates a fixed list of directories
   (examples/{stdlib,surface,...}, bench, lib) and compiles each program
@@ -337,7 +338,7 @@ the manifest); one file with the engine copied into each consumer.
   test compiles each of them with `-warnings error` itself.
 * Classification: TEST-FRAMEWORK/CLI (tooling follows from S4). MINOR.
 
-### S12 (20:52) A local List named `rows` makes `board.rows()` ambiguous
+### S12 A local List named `rows` makes `board.rows()` ambiguous
 
 * Context: first compile of the golden suite. Property tests loop
   `loop rows in samples():` and call `m.game.board.rows()`
@@ -368,7 +369,7 @@ the manifest); one file with the engine copied into each consumer.
   semantic error per compile, and not the earliest. MODERATE, likely
   recurring.
 
-### S13 (20:50) A bare `List` result type is rejected; the raw kind is `list`
+### S13 A bare `List` result type is rejected; the raw kind is `list`
 
 `fn moved(...) -> List:` (a heterogeneous [rows, score, changed]) is
 `unknown or invalid result type List: type constructor "List" requires
@@ -378,7 +379,7 @@ FIXED-ARITY-LIST-RETURN paragraph ("`-> list`, `-> List[T]`"), not from
 the diagnostic, which suggests only `List[...]`. DIAGNOSTIC (could
 mention `list`), DOCUMENTATION. MINOR. 1 retry.
 
-### S14 (21:20) Mutation found a weak test of mine
+### S14 Mutation found a weak test of mine
 
 * `game-over-ignores-horizontal` survived every game-over test and was
   killed only by the long scenario: the board of
@@ -396,7 +397,7 @@ mention `list`), DOCUMENTATION. MINOR. 1 retry.
   (`2048-move-again-merges-produced-tiles`) and tests the true
   property instead: a move that scored nothing is idempotent.
 
-### S15 (21:42) A program's output is discarded under `-backend cranelift`; the Tcl backends cannot print at all
+### S15 A program's output is discarded under `-backend cranelift`; the Tcl backends cannot print at all
 
 * Context: first run of the demo (io::print_line under `with context
   linux::io::create()`).
@@ -421,7 +422,7 @@ mention `list`), DOCUMENTATION. MINOR. 1 retry.
   Must-fix candidate before the paired run: a black-box agent will run
   a printing program with `-backend cranelift` and see nothing.
 
-### S16 (21:43) Every program that imports io gets two warnings about the stdlib's own source
+### S16 Every program that imports io gets two warnings about the stdlib's own source
 
 `/tmp/tcl_nbTpQP/io.bot:59:31: warning: the String literal "\n" is one
 character long ... (ONE-CHAR-STRING-LITERAL)` (twice) on every compile of
@@ -431,7 +432,7 @@ loads them"), but a user cannot act on them and they appear in their
 build output (here with a temporary path, because of D5).
 DIAGNOSTIC/STDLIB. MODERATE (noise that trains users to ignore warnings).
 
-### S17 (21:44) METHOD-ELIGIBLE fires 12 times on the demo's ordinary calls
+### S17 METHOD-ELIGIBLE fires 12 times on the demo's ordinary calls
 
 `fits(n, p)`, `digits(n, next)`, `show(title, board)`, `play(start, 3)`,
 `spawned(game, seed, moves)`, ... Each is accurate. The engine (written
@@ -442,7 +443,7 @@ swapped the parameters to `board.show(title)`). DIAGNOSTIC (accurate,
 but no fixit and one line per call). MINOR; the language's preference is
 documented (METHOD-SUGAR.md) but a newcomer learns it from the warnings.
 
-### P3 (22:05) Pleasant: three independent agreements
+### P3 Pleasant: three independent agreements
 
 The golden suite's long scenario equals audit/2048/oracle.py (a flat,
 index-mapped, imperative Python implementation): board, score 796, 91
@@ -450,7 +451,7 @@ moves, game over. The benchmark's 100,000-move checksum (1238344689)
 equals an imperative Python transcription of bench.bot driving the same
 oracle. All four backends agree on every suite report and checksum.
 
-### S18 (22:10) The obvious immutable engine allocates ~168 objects (7.7 KB) per move natively, and is ~3x slower than CPython
+### S18 The obvious immutable engine allocates ~168 objects (7.7 KB) per move natively, and is ~3x slower than CPython
 
 * Measured: bench/2048.tcl, 100,000 moves: cranelift 13.29 us/move,
   cranelift-generic 13.17 us/move (specialization buys nothing here),
@@ -490,11 +491,11 @@ oracle. All four backends agree on every suite report and checksum.
   complexity, but the natural program pays ~3x CPython; the
   allocation-free board the brief hoped for does not happen),
   COMPILER-PRECISION (the discarded nested loop; the never-used
-  default). Research: 1 allocation report, 2 NIR dumps, ~10 minutes.
+  default). Research: 1 allocation report, 2 NIR dumps.
 * CLI wish: "why does this expression allocate?" and "is this loop's
   List discarded?" -- the site report gives a line, not a reason.
 
-### S19 (22:31) COMPILER-CORRECTNESS: the demo crashes under GC stress on specialized native
+### S19 COMPILER-CORRECTNESS: the demo crashes under GC stress on specialized native
 
 * Context: pinning the demo executable's output for the workload test;
   ran it once more under `BOTLISH_NATIVE_GC_STRESS=1`, as
@@ -507,3 +508,135 @@ oracle. All four backends agree on every suite report and checksum.
   fine.
 * Classification: COMPILER-CORRECTNESS (GC root liveness or a stale
   pointer in specialized native code). BLOCKER: fix before proceeding.
+* Reduction, in order: the demo without any text or I/O
+  still crashed (b.bot); an unrolled `choose` did not (c.bot), nor did
+  one without the Choice wrapper (d.bot); disabling each native
+  optimization in turn: ESCAPE_OPT=0 or STRUCT_OPT=0 hide it,
+  BLOCK_ESCAPE_OPT=0 or VIRTUAL_CONSTRUCTION_OPT=0 turn the crash into
+  a spurious uncaught IndexNotFound (both clean without GC stress). A
+  rustc-linked executable under gdb crashed in `botlish_fn_28` =
+  `choose` (NIR of the .hirx), on `mov (%rcx,%rax,8)` after `mov
+  0x10(%r15),%rcx`: an element load through a List's data pointer --
+  the `listget` of the preferences List at the loop head, after a
+  `callmulti` of `move`. Five synthetic reproducers (min/m1..m9); m9,
+  25 lines and no engine, returns a WRONG VALUE under GC stress (644
+  instead of 350): a loop over a List whose body calls a function
+  returning a struct through `callmulti`, returning a struct holding
+  that result from inside the loop, in a function that itself returns
+  multiple results.
+* Root cause (native/src/codegen/roots.rs, read `analyze`, `color`,
+  `plan`): shadow-stack slots are shared by registers that never occur
+  together in one safepoint's root set, but codegen::clif's `def`
+  stores a slotted register into its slot at *every definition*. In
+  `choose`, `%17` (the call's List result, a root only on the
+  return path, at `structnew`) and `%9` (the loop's List, a root at the
+  call, on the loop path) never co-occur, so they share a slot; the
+  store of `%17` right after the call overwrites `%9`'s root while `%9`
+  is still live, and at the next iteration's call `%9` is not rooted:
+  the collector frees it. The missing rule is the standard one: a
+  definition interferes with every register live after it.
+* Research distance: 9 reproducer programs, 22 optimization toggles,
+  1 gdb session, 3 NIR dumps, 2 Rust source reads (clif.rs call_multi,
+  roots.rs). Compiler source was indispensable; a user
+  sees only "Segmentation fault" or a wrong value.
+* Fix (F2): roots.rs records, in its existing backward pass, an
+  interference edge from every managed register an instruction defines
+  to every other managed register live after it, and `color` adds those
+  edges (about 25 lines plus doc). Regressions: Rust unit test
+  `definition_does_not_overwrite_a_live_root` (hand NIR, the exact
+  shape; fails without the fix), Tcl test `root-def-interference-1` in
+  tests/native-root-liveness.test (m9 under GC stress: 644 without the
+  fix, 350 with it), and the 2048 demo executable's output under GC
+  stress, pinned by tests/workload-2048.test.
+* Cost: 2126 -> 2134 shadow slots over the 550 functions of
+  examples/stdlib, bench/*.bot and the 2048 programs (+0.4%); only the
+  demo (+4), examples/stdlib/csv_records.bot (+2) and hashtable.bot
+  (+2) change -- so two corpus programs had the hazard shape latently
+  (no observed failure: the clobbered register was presumably not
+  needed at a later collection in their runs).
+* Validation: `cargo test --release` under GC stress (225 + 32 pass);
+  native-root-liveness.test and native-root-storage.test; then the
+  whole Tcl suite and every golden suite under GC stress
+  (`BOTLISH_NATIVE_GC_STRESS=1 tclsh9.0 tests/local.tcl -all 1`,
+  result recorded below when it finishes). Not possible here: the
+  AArch64 GC-stress run AGENTS.md asks for a root-lowering change
+  (CI's tests-arm64.yml covers it).
+
+### S20 The golden runner compiles suites with warnings off, so a suite author never sees its warnings
+
+tests/golden/run.tcl's `golden::compile` uses `-warnings off` (as the Tcl
+harness does), so the suite's 13 METHOD-ELIGIBLE and 2 SAME-RETURN-VALUE
+findings appeared only when tests/workload-2048.test compiled it with
+warnings on. Answered in the code: method syntax for `moved`/`play`, and
+a suite helper `with_tile(game, at, tile)` (the game itself when the
+cell is occupied) replacing nine per-test `on CellOccupied: return []`
+handlers -- the SAME-RETURN-VALUE answer made the spawn tests one line
+each. (The helper could not be called `placed`: tests bind locals named
+`placed`, which would make `x.placed(...)` ambiguous, S12.)
+TEST-FRAMEWORK (tooling default), MINOR.
+
+### S12 addendum Why a List binding is a method candidate
+
+IMPORTS.md, "Methods": with several candidates "the ordinary call with
+the receiver as first argument is tried with each ... and counts a
+candidate valid if its call has no diagnostic of its own". Calling a List
+value is not a *static* error in Botlish (it fails at run time), so
+`rows(board)` with `rows` a List is a valid candidate and the call is
+ambiguous. A rule a user cannot guess from the diagnostic; found by
+reading a design document's section on imports (1 more doc read).
+
+### S21 Modules have no private members, so every engine helper is API -- and method-sugar surface
+
+All 27 top-level functions of game2048.bot are importable: the intended
+API (board, empty_board, rows, cell, empty_positions, reached?, new_game,
+move, spawn, game_over?, slide, value) and 15 helpers (merged, reversed,
+each_reversed, transposed, lines_toward, rows_from, replaced, total,
+cell?, board_row?, board_rows?, no_positions, has_empty?,
+equal_neighbours?, tile?). IMPORTS.md lists "export lists" and
+"public/private" among deliberate non-goals. Combined with S12, every
+public helper name is a potential AMBIGUOUS-METHOD-CALL for an importer
+that binds or defines the same short name (a test helper named
+`transposed`, a local `total`). Mitigation used: none (the suite's own
+helpers have different names: `mirrored`, `flipped`, `sum`). LANGUAGE,
+MODERATE for library authors.
+
+### S18 addendum Half of the native run is garbage collection
+
+100,000 moves (scratch alloc.tcl, specialized): 16,891,007 objects /
+770.8 MB allocated, 9.54 M of them Lists; peak live 22,957 objects / 1.0
+MB; 742 GC cycles, 628 ms of GC in a ~1,330 ms run. The engine's working
+set is tiny; it is the allocation rate (~169 objects, 7.7 KB per move)
+that costs. CLIF of equal_neighbours? (main.tcl -emit-clif on a .hirx):
+calls rt_list_len, rt_list_get, rt_list_new + rt_construct (the discarded
+inner loop's List), out-of-line list::get twice per comparison, and
+rt_int_cmp / rt_int_add on the slow path of the boxed `loop line in
+lines` position (the fast path is inline: tag test, compare, select):
+the List loop's position register stays tagged while a numeric loop's is
+raw (`ilt`/`iadd` vs `rilt`/`riadd` in NIR).
+
+### S22 The reference interpreter under main.tcl fails a 200-deep self tail call
+
+While reducing S19, a reproducer's `many(200, 0)` failed on interp under
+main.tcl with `too many nested evaluations (infinite loop?) (TCL LIMIT
+STACK)`. Measured with `fn down(k): if k == 0: return 0 / down(k - 1)`:
+depth 150 works, 200 fails on interp; compile is fine. tests/golden/
+run.tcl and the corpus scripts raise `interp recursionlimit` (100000 /
+1000000); main.tcl does not, so the CLI's default backend cannot run an
+ordinary recursive Botlish loop of a few hundred steps -- and recursion
+is how Botlish carries loop state (S23). examples/games/2048/run.tcl
+inherits the golden runner's limit, which is why the workload never hit
+it. CLI, MAJOR for the paired run (a black-box agent's first
+interpreted run of any stateful loop).
+
+### S23 Loop-carried state needs recursion or a mutable place
+
+Collecting loops cannot carry a value from one iteration to the next
+(bindings are immutable, there is no fold), so every accumulation in the
+workload is a self-recursive helper: the merge pass (`merged`'s `from`),
+the sum of four line scores (`total`), the suite's `sum`, the demo's
+`fits`/`digits`/`joined`/`play`, the benchmark's `played`, and the
+suite's `play`. The alternative the stdlib itself uses is a
+MutableVector as a one-cell accumulator (lib/test.bot's `joined`); the
+engine uses a MutableVector only to flatten (empty_positions). Natively
+self tail calls are loops; on interp they are Tcl recursion (S22).
+LANGUAGE (or STDLIB: a sum/fold), recurring, MODERATE.

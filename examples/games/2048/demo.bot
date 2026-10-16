@@ -169,7 +169,7 @@ fn main() errors io::WriteFailed:
     first = game2048::new_game().spawned(2048, 0)
     start = first.game.spawned(first.seed, 0)
     start.game.board.show("start")
-    final = start.play(3)
+    final = start.play(5)
     final.game.board.show("game over after ".concat(decimal(final.moves)).concat(" moves"))
     io::print_line("score ".concat(decimal(final.game.score)).concat(", largest tile ").concat(decimal(largest(final.game.board))))
 

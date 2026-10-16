@@ -1,0 +1,175 @@
+# workload-2048.test -- the 2048 workload (examples/games/2048/,
+# 2048-ENGINE-WORKLOAD.md) as part of the Tcl suite: its golden suite on the
+# backends of this pass, its programs warning-clean, its benchmark's
+# checksum on every backend, and its demo as a standalone executable, with
+# and without GC stress.
+#
+# The engine is an ordinary module that is not standard library, so it is
+# not in lib/: every program here is compiled against the private library
+# directory examples/games/2048/run.tcl builds (lib/ plus game2048.bot).
+#
+# Backends, as tests/golden.test's: the outer pass's own (CORE_BACKEND
+# interp or compile) plus cranelift in the interp pass and
+# cranelift-generic in the compile pass; all four when run directly.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+source [file join $::projectRoot examples games 2048 run.tcl]
+
+interp recursionlimit {} 100000
+
+if {![info exists ::env(CORE_BACKEND)]} {
+    set workloadBackends {interp compile cranelift-generic cranelift}
+} elseif {$::env(CORE_BACKEND) eq "interp"} {
+    set workloadBackends {interp cranelift}
+} elseif {$::env(CORE_BACKEND) eq "compile"} {
+    set workloadBackends {compile cranelift-generic}
+} else {
+    set workloadBackends [list $::env(CORE_BACKEND)]
+}
+# lib/test.bot's runner is a coroutine: natively, x86-64 Linux only
+# (COROUTINES.md), as tests/golden.test.
+set nativeSuite [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
+set suiteBackends [expr {$nativeSuite ? $workloadBackends : [lsearch -all -inline -not -glob $workloadBackends cranelift*]}]
+testConstraint suiteBackends [expr {[llength $suiteBackends] > 0}]
+testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
+
+set gameDir [file join $::projectRoot examples games 2048]
+
+# Runs SCRIPT with ::core::libraryDir at the private library, restoring
+# the library directory and removing the private one afterwards.
+proc with2048 {script} {
+    set saved $::core::libraryDir
+    try {
+        game2048::library
+        uplevel 1 $script
+    } finally {
+        game2048::cleanup
+        set ::core::libraryDir $saved
+    }
+}
+
+# The HIR of bench.bot making MOVES moves.
+proc benchHir {moves} {
+    set path [file join $::gameDir bench.bot]
+    regsub -line {^benchmark\(\d+, (.*)\)$} [core::ReadFile $path] "benchmark($moves, \\1)" text
+    return [surface::compile $text $path -warnings off]
+}
+
+test workload-2048-golden-suite "golden.bot: compiles once, all 68 tests pass on [join $suiteBackends {, }], the same report on each" -constraints suiteBackends -body {
+    with2048 {
+        set result [golden::suite [file join $gameDir golden.bot] $suiteBackends]
+    }
+    set status [dict get $result status]
+    if {$status eq "compile-error"} {
+        return "compile error: [lindex [dict get $result compile] 1]"
+    }
+    set problems {}
+    foreach {backend outcome} [dict get $result outcomes] {
+        if {[lindex $outcome 0] eq "abort"} {
+            lappend problems "$backend aborted: [lindex $outcome 1]"
+            continue
+        }
+        set lines [lindex $outcome 1]
+        foreach line $lines {
+            if {[string match "FAIL *" $line]} { lappend problems "$backend: $line" }
+        }
+        set names [lmap line [golden::verdicts $lines] {string range $line 5 end}]
+        if {[llength $names] != 68 || [llength [lsort -unique $names]] != 68} {
+            lappend problems "$backend: [llength $names] verdicts, [llength [lsort -unique $names]] distinct, expected 68"
+        }
+        if {[lindex $lines end] ne "68 passed, 0 failed"} {
+            lappend problems "$backend: [lindex $lines end]"
+        }
+    }
+    if {$status eq "disagree"} {
+        lappend problems "the backends' reports differ"
+    }
+    expr {$problems eq {} ? "ok" : [join $problems \n]}
+} -result ok
+
+test workload-2048-warning-clean {the engine, the demo, the suite and the benchmark have no warnings of their own (the stdlib's own findings, manifested by the warning gate, are not theirs)} -body {
+    with2048 {
+        set found {}
+        foreach name {game2048.bot demo.bot golden.bot bench.bot} {
+            set hir [surface::readProgramFile [file join $gameDir $name] -warnings default -warning-channel ""]
+            foreach warning [hir::warnings::of $hir] {
+                set text [hir::warnings::render $hir $warning]
+                if {[string match "$::core::libraryDir/*" $text] && ![string match "$::core::libraryDir/game2048.bot:*" $text]} {
+                    continue
+                }
+                lappend found "$name: [lindex [split $text \n] 0]"
+            }
+        }
+    }
+    join $found \n
+} -result {}
+
+test workload-2048-bench-checksum "bench.bot's 200-move checksum is the same on [join $workloadBackends {, }] (and equals the independent Python oracle's, audit/2048/oracle.py)" -body {
+    with2048 {
+        set hir [benchHir 200]
+        lmap backend $workloadBackends {
+            core::value::show [game2048::run $hir $backend]
+        }
+    }
+} -result [lrepeat [llength $workloadBackends] 2002720]
+
+# The demo's whole output: a deterministic game from a fixed seed.
+set demoOutput {start
+     .     .     .     .
+     2     .     .     .
+     .     2     .     .
+     .     .     .     .
+move 1: down, +0
+     .     .     .     .
+     .     .     .     .
+     .     .     .     .
+     2     2     .     .
+move 2: down, +0
+     .     .     .     .
+     .     .     .     .
+     .     .     .     .
+     2     2     .     2
+move 3: down, +0
+     .     .     .     .
+     .     .     .     .
+     .     .     .     .
+     2     2     2     2
+move 4: down, +4
+     .     .     .     .
+     .     .     .     .
+     .     .     .     .
+     2     4     2     2
+move 5: down, +4
+     .     .     .     .
+     .     .     .     .
+     .     .     .     .
+     2     4     4     2
+game over after 316 moves
+     2     8     4     2
+    32    16     8     4
+   128    64     2     8
+   256     4   128    32
+score 3888, largest tile 256
+unit}
+
+# 2048-ENGINE-WORKLOAD.md, S19: under GC stress this executable crashed
+# (native/src/codegen/roots.rs shared a root slot between a call's result
+# and a List live across the call; tests/native-root-liveness.test's
+# root-def-interference-1 is the reduced case).
+test workload-2048-demo-executable {the demo as a standalone executable prints the whole game, identically under GC stress} -constraints executableAot -body {
+    set dir [makeDirectory workload-2048-demo]
+    try {
+        with2048 {
+            set hir [surface::readProgramFile [file join $gameDir demo.bot] -warnings off]
+            native::executable $hir [file join $dir demo]
+        }
+        list [string equal [exec [file join $dir demo]] $demoOutput] \
+            [string equal [exec env BOTLISH_NATIVE_GC_STRESS=1 [file join $dir demo]] $demoOutput]
+    } finally {
+        removeDirectory workload-2048-demo
+    }
+} -result {1 1}
+
+cleanupTests

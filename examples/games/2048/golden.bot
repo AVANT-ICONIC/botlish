@@ -44,6 +44,14 @@ fn slid(cells: List[int]) -> list:
 fn at(row: game2048::Coordinate, column: game2048::Coordinate) -> game2048::Position:
     game2048::Position {row: row, column: column}
 
+# GAME with TILE spawned at AT, or GAME itself when the cell is occupied (a
+# test that expected the spawn then fails on the board it compares).
+fn with_tile(game: game2048::Game, at: game2048::Position, tile: game2048::SpawnTile) -> game2048::Game:
+    after = game.spawn(at, tile):
+        on game2048::CellOccupied:
+            game
+    after
+
 # ROWS with every row reversed: the board seen in a mirror.
 fn mirrored(rows: List[List[int]]) -> List[List[int]]:
     loop row in rows:
@@ -171,45 +179,45 @@ fn start() -> List[List[int]]:
 
 fn register_move_tests():
     fn left() -> list:
-        moved(start(), game2048::Direction::Left)
+        start().moved(game2048::Direction::Left)
     test::value("2048-move-left", [[[4, 4, 0, 0], [8, 0, 0, 0], [16, 0, 0, 0], [4, 4, 0, 0]], 36, true], left)
 
     fn right() -> list:
-        moved(start(), game2048::Direction::Right)
+        start().moved(game2048::Direction::Right)
     test::value("2048-move-right", [[[0, 0, 4, 4], [0, 0, 0, 8], [0, 0, 0, 16], [0, 0, 4, 4]], 36, true], right)
 
     fn up() -> list:
-        moved(start(), game2048::Direction::Up)
+        start().moved(game2048::Direction::Up)
     test::value("2048-move-up", [[[2, 4, 2, 4], [8, 2, 4, 8], [2, 0, 2, 2], [0, 0, 0, 0]], 0, true], up)
 
     fn down() -> list:
-        moved(start(), game2048::Direction::Down)
+        start().moved(game2048::Direction::Down)
     test::value("2048-move-down", [[[0, 0, 0, 0], [2, 0, 2, 4], [8, 4, 4, 8], [2, 2, 2, 2]], 0, true], down)
 
     # start() has no vertical pair, so up and down only slide it; here two
     # vertical pairs merge.
     fn up_merges_columns() -> list:
-        moved([[2, 0, 0, 0], [2, 0, 0, 0], [4, 0, 0, 0], [4, 0, 0, 0]], game2048::Direction::Up)
+        [[2, 0, 0, 0], [2, 0, 0, 0], [4, 0, 0, 0], [4, 0, 0, 0]].moved(game2048::Direction::Up)
     test::value("2048-move-up-merges-columns", [[[4, 0, 0, 0], [8, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 12, true], up_merges_columns)
 
     fn down_merges_from_bottom() -> list:
-        moved([[0, 2, 0, 0], [0, 2, 0, 0], [0, 2, 0, 0], [0, 0, 0, 0]], game2048::Direction::Down)
+        [[0, 2, 0, 0], [0, 2, 0, 0], [0, 2, 0, 0], [0, 0, 0, 0]].moved(game2048::Direction::Down)
     test::value("2048-move-down-merges-from-bottom", [[[0, 0, 0, 0], [0, 0, 0, 0], [0, 2, 0, 0], [0, 4, 0, 0]], 4, true], down_merges_from_bottom)
 
     fn right_merges_from_right() -> list:
-        moved([[2, 2, 2, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], game2048::Direction::Right)
+        [[2, 2, 2, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]].moved(game2048::Direction::Right)
     test::value("2048-move-right-merges-from-right", [[[0, 0, 2, 4], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 4, true], right_merges_from_right)
 
     fn stable_left() -> list:
-        moved([[4, 2, 0, 0], [8, 0, 0, 0], [2, 4, 8, 16], [0, 0, 0, 0]], game2048::Direction::Left)
+        [[4, 2, 0, 0], [8, 0, 0, 0], [2, 4, 8, 16], [0, 0, 0, 0]].moved(game2048::Direction::Left)
     test::value("2048-move-unchanged", [[[4, 2, 0, 0], [8, 0, 0, 0], [2, 4, 8, 16], [0, 0, 0, 0]], 0, false], stable_left)
 
     fn stable_empty() -> list:
-        moved([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], game2048::Direction::Down)
+        [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]].moved(game2048::Direction::Down)
     test::value("2048-move-unchanged-empty-board", [[[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 0, false], stable_empty)
 
     fn slide_without_merge() -> list:
-        moved([[0, 0, 0, 2], [0, 0, 4, 0], [0, 0, 0, 0], [0, 0, 0, 0]], game2048::Direction::Left)
+        [[0, 0, 0, 2], [0, 0, 4, 0], [0, 0, 0, 0], [0, 0, 0, 0]].moved(game2048::Direction::Left)
     test::value("2048-move-changed-without-merge", [[[2, 0, 0, 0], [4, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 0, true], slide_without_merge)
 
     # The game's score grows by exactly what the move gained.
@@ -236,28 +244,16 @@ fn register_move_tests():
 
 fn register_spawn_tests():
     fn two() -> List[List[int]]:
-        placed = game2048::new_game().spawn(at(1, 2), game2048::SpawnTile::Two):
-            on game2048::CellOccupied:
-                return []
-        placed.board.rows()
+        game2048::new_game().with_tile(at(1, 2), game2048::SpawnTile::Two).board.rows()
     test::value("2048-spawn-two", [[0, 0, 0, 0], [0, 0, 2, 0], [0, 0, 0, 0], [0, 0, 0, 0]], two)
 
     fn four() -> List[List[int]]:
-        placed = game_of(start()).spawn(at(2, 1), game2048::SpawnTile::Four):
-            on game2048::CellOccupied:
-                return []
-        placed.board.rows()
+        game_of(start()).with_tile(at(2, 1), game2048::SpawnTile::Four).board.rows()
     test::value("2048-spawn-four", [[2, 0, 2, 4], [0, 4, 4, 0], [8, 4, 0, 8], [2, 2, 2, 2]], four)
 
     fn corners() -> List[List[int]]:
-        g = game2048::new_game()
-        a = g.spawn(at(0, 0), game2048::SpawnTile::Two):
-            on game2048::CellOccupied:
-                return []
-        b = a.spawn(at(3, 3), game2048::SpawnTile::Four):
-            on game2048::CellOccupied:
-                return []
-        b.board.rows()
+        g = game2048::new_game().with_tile(at(0, 0), game2048::SpawnTile::Two)
+        g.with_tile(at(3, 3), game2048::SpawnTile::Four).board.rows()
     test::value("2048-spawn-corners", [[2, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 4]], corners)
 
     fn occupied() -> str:
@@ -267,20 +263,14 @@ fn register_spawn_tests():
         "placed"
     test::value("2048-spawn-occupied", "CellOccupied", occupied)
 
-    fn keeps_score() -> int:
-        g = game2048::Game {board: board_of(start()), score: 40}
-        placed = g.spawn(at(1, 0), game2048::SpawnTile::Four):
-            on game2048::CellOccupied:
-                return 0
-        placed.score
-    test::value("2048-spawn-keeps-score", 40, keeps_score)
+    fn keeps_score() -> list:
+        g = game2048::Game {board: board_of(start()), score: 40}.with_tile(at(1, 0), game2048::SpawnTile::Four)
+        [g.board.cell(at(1, 0)), g.score]
+    test::value("2048-spawn-keeps-score", [4, 40], keeps_score)
 
     fn adds_tile() -> list:
         before = start()
-        placed = game_of(before).spawn(at(1, 3), game2048::SpawnTile::Two):
-            on game2048::CellOccupied:
-                return []
-        after = placed.board.rows()
+        after = game_of(before).with_tile(at(1, 3), game2048::SpawnTile::Two).board.rows()
         [tile_sum(after) - tile_sum(before), tile_count(after) - tile_count(before)]
     test::value("2048-spawn-sum-grows-by-tile", [2, 1], adds_tile)
 
@@ -289,10 +279,7 @@ fn register_spawn_tests():
     test::value("2048-empty-positions", [at(0, 1), at(1, 0), at(1, 3), at(2, 1), at(2, 2)], empties)
 
     fn empties_after_spawn() -> List[game2048::Position]:
-        placed = game_of(start()).spawn(at(1, 3), game2048::SpawnTile::Two):
-            on game2048::CellOccupied:
-                return []
-        placed.board.empty_positions()
+        game_of(start()).with_tile(at(1, 3), game2048::SpawnTile::Two).board.empty_positions()
     test::value("2048-empty-positions-after-spawn", [at(0, 1), at(1, 0), at(2, 1), at(2, 2)], empties_after_spawn)
 
     fn none_empty() -> List[game2048::Position]:
@@ -520,49 +507,28 @@ fn spawned(game: game2048::Game, k: int) -> game2048::Game:
         game2048::SpawnTile::Four
     else:
         game2048::SpawnTile::Two
-    placed = game.spawn(position, tile):
-        on game2048::CellOccupied:
-            game
-    placed
+    game.with_tile(position, tile)
 
 fn play(game: game2048::Game, tried: int, changed: int) -> Played:
     if game.game_over?() or tried == 400:
         return Played {game: game, tried: tried, changed: changed}
     m = game.move(cycle(tried))
     if m.changed:
-        play(m.game.spawned(changed), tried + 1, changed + 1)
+        m.game.spawned(changed).play(tried + 1, changed + 1)
     else:
-        play(m.game, tried + 1, changed)
+        m.game.play(tried + 1, changed)
 
 fn scenario() -> Played:
-    g = game2048::new_game()
-    first = g.spawn(at(0, 0), game2048::SpawnTile::Two):
-        on game2048::CellOccupied:
-            g
-    second = first.spawn(at(3, 3), game2048::SpawnTile::Two):
-        on game2048::CellOccupied:
-            first
-    play(second, 0, 0)
+    first = game2048::new_game().with_tile(at(0, 0), game2048::SpawnTile::Two)
+    first.with_tile(at(3, 3), game2048::SpawnTile::Two).play(0, 0)
 
 fn register_scenario_tests():
     # Two spawns, then up, a spawn, left, a spawn, up.
     fn trace() -> list:
-        g0 = game2048::new_game()
-        g1 = g0.spawn(at(0, 1), game2048::SpawnTile::Two):
-            on game2048::CellOccupied:
-                return []
-        g2 = g1.spawn(at(2, 1), game2048::SpawnTile::Two):
-            on game2048::CellOccupied:
-                return []
-        m1 = g2.move(game2048::Direction::Up)
-        g3 = m1.game.spawn(at(3, 3), game2048::SpawnTile::Four):
-            on game2048::CellOccupied:
-                return []
-        m2 = g3.move(game2048::Direction::Left)
-        g4 = m2.game.spawn(at(1, 0), game2048::SpawnTile::Four):
-            on game2048::CellOccupied:
-                return []
-        m3 = g4.move(game2048::Direction::Up)
+        g = game2048::new_game().with_tile(at(0, 1), game2048::SpawnTile::Two).with_tile(at(2, 1), game2048::SpawnTile::Two)
+        m1 = g.move(game2048::Direction::Up)
+        m2 = m1.game.with_tile(at(3, 3), game2048::SpawnTile::Four).move(game2048::Direction::Left)
+        m3 = m2.game.with_tile(at(1, 0), game2048::SpawnTile::Four).move(game2048::Direction::Up)
         [m1.game.board.rows(), m2.game.board.rows(), m3.game.board.rows(), m3.game.score, m3.changed]
     test::value("2048-scenario-short-trace", [
         [[0, 4, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]],

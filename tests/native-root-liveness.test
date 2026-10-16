@@ -360,6 +360,51 @@ test root-block-capture-1 {a captured managed value through a virtualized Block 
 } -result {{int 15} 0}
 
 # ---------------------------------------------------------------------------
+# A definition interferes with what is live across it (roots.rs's module
+# doc, item 5; 2048-ENGINE-WORKLOAD.md, S19). `choose`'s loop List is live
+# across every `step` call (the next iteration reads it); the call's result
+# is a root only on the path that returns it inside a new struct. The two
+# are never roots at the same safepoint, so they used to share one slot,
+# and storing the call's result overwrote the List's root: under GC stress
+# the List was collected and the program computed 644 instead of 350 (the
+# 2048 demo's `choose`, the same shape, crashed). Ordinary source, through
+# the ordinary pipeline: `step` returns its struct through `callmulti` and
+# `choose` its own through `retmulti`.
+
+test root-def-interference-1 {a register defined by a call never shares a slot with a value live across that call, under GC stress} -body {
+    set text {import list
+
+struct Outer:
+    rows: List[int]
+    changed: bool
+
+struct Choice:
+    outer: Outer
+    d: int
+
+fn step(rows: List[int], d: int) -> Outer:
+    next = loop r in rows:
+        r + d
+    Outer {rows: next, changed: d == 3}
+
+fn choose(rows: List[int]) -> Choice:
+    loop d in [0, 1, 2, 3]:
+        o = step(rows, d)
+        if o.changed:
+            return Choice {outer: o, d: d}
+    Choice {outer: step(rows, 9), d: 9}
+
+fn many(k: int, acc: int) -> int:
+    if k == 0:
+        return acc
+    c = choose([1, 2, 3, k])
+    many(k - 1, acc + list::length(c.outer.rows) + c.d)
+
+many(50, 0)}
+    underGcStress {native::evalHir [sourceHir $text]}
+} -result {int 350}
+
+# ---------------------------------------------------------------------------
 # StringRegion base across a real allocation (#37): the base String must
 # stay rooted; its raw/tagged-but-nonmanaged bounds cost no slot of their
 # own (whether they need one at all is native/lower.tcl's representation

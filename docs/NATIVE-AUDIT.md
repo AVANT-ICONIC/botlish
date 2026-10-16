@@ -905,6 +905,15 @@ during" for free.
 {registers not declared raw}`. Two registers interfere iff some safepoint's
 root set contains both.
 
+> **Corrected by 2048-ENGINE-WORKLOAD.md (S19):** this rule alone was
+> unsound, because `def` stores a slotted register at every definition: a
+> register defined while another is live, the two never roots at the same
+> safepoint, could share its slot and overwrite the live one's root (a
+> call's result, a root only on one path, and a List live across the call
+> on the other: freed under GC stress). Two registers now also interfere
+> when one is defined where the other is live after the defining
+> instruction (`roots.rs`, `Liveness::def_edges`).
+
 **Slot-allocation algorithm:** deterministic greedy coloring — registers
 are colored in ascending numeric order, each taking the lowest-numbered slot
 not already held by a register it interferes with, opening a new slot only

@@ -208,6 +208,13 @@ How two hand-written native predicates became ordinary Botlish library code:
 - [R2A2-TRAILING-QUESTION-IDENTIFIERS.md](R2A2-TRAILING-QUESTION-IDENTIFIERS.md) -- ordinary trailing-`?` identifiers
 - [R2A3-COUNTED-LOOPS-FINAL-SOURCE.md](R2A3-COUNTED-LOOPS-FINAL-SOURCE.md) -- counted loops and the final `emailish?` source
 
+## Workloads
+
+The post-golden stress-test series: real programs written in ordinary
+Botlish to find what the language, library, compiler and tools need.
+
+- [2048-ENGINE-WORKLOAD.md](2048-ENGINE-WORKLOAD.md) -- a deterministic 2048 engine (`examples/games/2048/`), full-discovery baseline: findings, the GC root-slot fix it found, and what to fix before the restricted paired run
+
 ## Audits, censuses and investigations
 
 - [NATIVE-AUDIT.md](NATIVE-AUDIT.md) -- native code-quality audit: fib, loop-count, refined-checks, sum-refined

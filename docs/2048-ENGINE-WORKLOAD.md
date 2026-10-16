@@ -1,0 +1,643 @@
+# 2048 engine: the first post-golden workload (full discovery)
+
+The first workload of the post-golden stress-test series: a deterministic
+2048 engine written in ordinary Botlish, with a demo, a golden suite and a
+benchmark, built with full access to the repository, and recording, as it
+happened, every place where reaching working code needed something a
+Botlish user should not have needed. A later workload of the same kind will
+be attempted with only the single-file executable and a compact prompt; this
+report is the baseline that run is measured against, and the list of what
+should change before it.
+
+The running log the report is drawn from is
+[audit/2048/surprise-log.md](../audit/2048/surprise-log.md) (S1-S23,
+P1-P3, D1-D6): each entry was written when it happened.
+
+## Outcome
+
+* **A working, readable engine** in 277 lines (175 of code):
+  [examples/games/2048/game2048.bot](../examples/games/2048/game2048.bot).
+  It was correct on its first run (P2), and a 68-test golden suite, an
+  independent Python oracle and a 20-mutant harness agree.
+* **One compiler correctness bug found and fixed** (S19, BLOCKER): native
+  shadow-stack root slots were shared between a register defined by an
+  instruction and a register live across that instruction, so the
+  definition's store overwrote a live root. Under GC stress the demo
+  crashed and a 25-line reduction computed a wrong value. Fixed in
+  `native/src/codegen/roots.rs` (definition interference), with a Rust
+  unit test and a Tcl regression; two corpus programs had the same latent
+  shape.
+* **Performance is acceptable but not good**: 13.3 us per move natively,
+  about 3x slower than CPython running the same rules, because the
+  obvious immutable program allocates ~169 objects (7.7 KB) per move and
+  spends about half its time in the collector. Specialization buys nothing
+  on this workload (S18).
+* **The largest obstacles were not the language core** but the product
+  surface around it: an application cannot have its own importable module
+  (S4), a printing program shows nothing under `-backend cranelift` (S15),
+  the interpreter cannot run a 200-deep recursion under main.tcl (S22),
+  and the golden-test tooling assumes every test is a port of a Tcl test
+  (S3).
+* **Zero stdlib changes.** Several general operations were missed (Int to
+  String, reverse, concat/flatten, sum, replace-at); each is recorded with
+  its evidence below.
+
+## Changes, by kind
+
+| kind | change |
+|---|---|
+| 2048 implementation | `examples/games/2048/`: `game2048.bot` (engine module), `demo.bot`, `golden.bot` (suite), `bench.bot`, `run.tcl` (the private-library driver, D5); `bench/2048.tcl`; `tests/workload-2048.test`; `audit/2048/` (`oracle.py`, `mutants.txt`, `mutate.tcl`, `surprise-log.md`) |
+| stdlib | none |
+| test framework (`lib/test.bot`) | none |
+| test tooling | `audit/golden/tools/perturb.tcl`: `-lib DIR` (perturb a suite against a library directory that holds a non-stdlib module) |
+| compiler correctness | `native/src/codegen/roots.rs`: a definition interferes with every managed register live after it; Rust test `definition_does_not_overwrite_a_live_root`; `tests/native-root-liveness.test` `root-def-interference-1` |
+| compiler precision / optimization | none (findings only: S5, S7, S8, S9, S18) |
+| CLI / docs | this report and its line in INDEX.md; no CLI change (findings S4, S15, S22) |
+
+## 1. Implementation
+
+### Architecture
+
+One module, `game2048` (one file, one namespace: IMPORTS.md), and three
+programs that import it: the demo, the golden suite and the benchmark
+program, all in `examples/games/2048/`. Because `import NAME` resolves only
+to `lib/NAME.bot` (S4), the programs are compiled against a private library
+directory -- a temporary copy of `lib/` with `game2048.bot` added -- that
+`examples/games/2048/run.tcl` builds; `tests/workload-2048.test` and
+`bench/2048.tcl` use it too (D5). `run.tcl -hirx OUT FILE.bot` writes the
+analyzed HIR, which `main.tcl` then runs with every option it has
+(`-backend`, `-emit-nir`, `-emit-clif`, `-emit-native-executable`): the
+library is needed only by the front end.
+
+```sh
+tclsh9.0 examples/games/2048/run.tcl -suite                  # the golden suite, four backends
+tclsh9.0 examples/games/2048/run.tcl -hirx /tmp/demo.hirx examples/games/2048/demo.bot
+tclsh9.0 main.tcl -emit-native-executable /tmp/demo.hirx && /tmp/demo
+tclsh9.0 bench/2048.tcl                                      # the performance report
+```
+
+### Representation
+
+| concept | representation | why |
+|---|---|---|
+| board | `opaque struct Board: rows: List[List[int]]` | rows make a line a first-class List, which is what the algorithm consumes; no integer division (S2) rules out a flat 16-cell layout with `i div 4`; `opaque` gives the module sole construction authority, so the invariant is validated once and kept by construction (D1) |
+| cell | `int`: `empty` (0) or a tile, a power of two >= 2 | enums are payload-free, so there is no Empty/Tile(n) sum; with 0, `list::get(xs, i, empty)` reads "the cell at i, or empty past the end", which makes padding and reversal total (D2) |
+| board invariant | four rows of four cells, each empty or a tile | checked at the one public constructor, `board(rows) errors InvalidBoard` (`board_rows?`: three one-line predicates over `list::all?`); kept by construction everywhere else; not representable as a type (no fixed-length List, S7; a power of two is not a range) |
+| game state | `struct Game: board: Board, score: int` | plain value; a move or a spawn returns a new one |
+| direction | `enum Direction: Left, Right, Up, Down` | nominal, compared with `==` |
+| position | `struct Position: row: Coordinate, column: Coordinate`, `type Coordinate = Int in 0..3` | an out-of-range position does not compile (P1) |
+| spawn tile | `enum SpawnTile: Two, Four`, `value(tile) -> int` | an invalid spawn value does not compile |
+| line result | `struct Slide: cells: List[int], score: int` | |
+| move result | `struct Move: game: Game, gained: int, changed: bool` | |
+
+### The line move
+
+```botlish
+fn merged(tiles: List[int]) -> Slide:
+    nomethod fn from(i: int, done: Slide) -> Slide:
+        if i >= list::length(tiles):
+            return done
+        tile = tiles.get(i, empty)
+        if tiles.get(i + 1, empty) == tile:
+            from(i + 2, Slide {cells: done.cells.append(tile * 2), score: done.score + tile * 2})
+        else:
+            from(i + 1, Slide {cells: done.cells.append(tile), score: done.score})
+    from(0, Slide {cells: [], score: 0})
+
+fn slide(cells: List[int]) -> Slide:
+    tiles = loop cell in cells:
+        if cell == empty:
+            continue
+        cell
+    merge = tiles.merged()
+    padded = loop i from 0 to list::length(cells):
+        merge.cells.get(i, empty)
+    Slide {cells: padded, score: merge.score}
+```
+
+Compact is a filtering loop; the merge is a self-recursive helper that
+carries its position and the result so far (no loop carries state, S23) and
+skips both tiles of a pair, which is what makes a produced tile unable to
+merge again; padding is a counted loop over `get`'s default (D3).
+
+### The board move and the score
+
+A move looks at the board from its direction as four lines, each starting at
+the cell the tiles slide toward, slides each line, and looks back:
+
+```botlish
+fn lines_toward(rows: List[List[int]], direction: Direction) -> List[List[int]]:
+    if direction == Direction::Left:
+        rows
+    elif direction == Direction::Right:
+        rows.each_reversed()
+    elif direction == Direction::Up:
+        rows.transposed()
+    else:
+        rows.transposed().each_reversed()
+```
+
+`rows_from` is its inverse (down: `lines.each_reversed().transposed()`).
+Two involutions replace four algorithms or an index formula (D4); the
+mutation `down-inverse-misordered` (reversing after transposing on the way
+back) is caught. Each merge scores the tile it produces; a move's gain is the
+sum of its four lines' scores, and `game.score` grows by exactly that.
+`changed` is one value comparison, `moved != rows`.
+
+### Spawn and game over
+
+`spawn(game, at: Position, tile: SpawnTile) -> Game errors CellOccupied`. An
+out-of-range position and a tile other than 2 or 4 are compile-time errors
+(two `static compile:` tests pin them: `Type`); an occupied cell is the one
+run-time error. "Only after a changed move" is a caller's rule: the engine
+keeps no history.
+
+```botlish
+fn game_over?(game: Game) -> bool:
+    rows = game.board.rows
+    not rows.has_empty?() and not rows.equal_neighbours?() and not rows.transposed().equal_neighbours?()
+```
+
+A direct reading of the rule, not four trial moves.
+
+### Public API
+
+`board(rows)`, `empty_board()`, `rows(board)`, `cell(board, at)`,
+`empty_positions(board)`, `reached?(board, tile)` (a tile of at least that
+value: `reached?(board, 2048)` is "has 2048", and the game does not stop
+there), `new_game()`, `move(game, direction)`, `spawn(game, at, tile)`,
+`game_over?(game)`, `slide(cells)` (the line move, public because it is a
+meaningful operation the suite tests directly) and `value(tile)`. Botlish
+has no private module members, so the fifteen helpers are importable too
+(S21).
+
+### The demo
+
+`demo.bot` plays one game with the corner strategy (try down, left, right,
+up; take the first move that changes the board), spawning from a small
+linear congruential generator with a fixed seed -- randomness lives in the
+caller. It prints the first five boards, the final board, the score and the
+largest tile: 316 moves, score 3888, largest tile 256. It prints through
+`io::print_line`, so it runs only natively (S15); as an executable it takes
+10 ms.
+
+### Size
+
+| file | lines | code (no comments/blank) |
+|---|---:|---:|
+| engine `game2048.bot` | 277 | 175 |
+| demo `demo.bot` | 180 | 124 |
+| golden suite `golden.bot` | 564 | 399 |
+| benchmark program `bench.bot` | 85 | 61 |
+| driver `run.tcl` | 140 | 102 |
+| `bench/2048.tcl` | 98 | 71 |
+| `tests/workload-2048.test` | 175 | 140 |
+| `audit/2048/oracle.py` | 103 | 69 |
+| `audit/2048/mutate.tcl` + `mutants.txt` | 102 + 190 | 79 + 134 |
+
+## 2. Correctness
+
+**68 golden tests**, all passing on interp, compile, cranelift-generic and
+cranelift with identical reports:
+
+| area | tests | covers |
+|---|---:|---|
+| line | 16 | compaction, empty line, single merge, merge across a gap, compact-then-merge, three equal (start and end), four equal, four fours, two pairs, a produced tile that does not merge again (`[2,2,4,4] -> [4,8]`, 12), pair then singles (`[2,2,4,2] -> [4,4,2]`), produced tile next to an equal neighbour (`[8,4,2,2] -> [8,4,4]`), full without merge, already slid, large tiles; every case with its score |
+| move | 13 | left, right, up, down on one board with explicit boards and gains; up/down merging columns; right merging from the right; unchanged move (board, gain 0, `changed` false); unchanged empty board; changed without a merge; score accumulation; unchanged move keeps the score; moving again merges produced tiles |
+| spawn | 11 | Two, Four, two corners, occupied (`CellOccupied`), keeps the score, sum grows by the tile, empty positions (before, after a spawn, on a full board), position outside the board and an Int tile rejected at compile time |
+| board | 11 | rows round trip, rejects a non-tile / 1 / a negative / a short row / three rows, accepts large tiles, construction and field access are the engine's (`OpaqueConstruction`, `OpaqueRepresentation`), `cell`, `reached?` |
+| game over | 8 | full without a merge; not over with an empty cell, a horizontal pair, a vertical pair, a vertical pair at the edge; a new game; over with a 2048 tile; no move changes a game-over board |
+| properties | 7 | right is mirrored left, up is flipped left, down is flipped right (each over seven sample boards); a move conserves the tile sum; a move scores exactly when it merges; a scoreless move is idempotent; `changed` iff the board differs |
+| scenario | 2 | a short trace written out (spawn, up, spawn, left, spawn, up); a long game played to game over |
+
+The property tests compute their expectations with structural relations the
+suite writes itself (`mirrored`, `flipped`, `tile_sum`, `tile_count`), never
+with a second engine. The long scenario (91 moves to game over, score 796)
+has its expected final state from **an independent implementation**,
+[audit/2048/oracle.py](../audit/2048/oracle.py): a flat 16-cell board,
+explicit index lists per direction and an imperative merge with a "may
+merge" flag. The benchmark's 100,000-move checksum also equals a Python
+transcription of `bench.bot` over the oracle (P3).
+
+One property the brief suggested is false: "moving left twice, the second
+move does not change the result" -- `[2,2,2,2]` goes to `[4,4,0,0]` and then
+`[8,0,0,0]`. The suite pins that counterexample and tests the true property
+(a move that scored nothing is idempotent).
+
+**Non-vacuity** (`audit/golden/tools/perturb.tcl -lib DIR`): with every
+verdict inverted, 68 of 68 tests fail; with each alterable expectation
+altered, 60 of 60 fail (8 have no literal to alter: 3 `test::holds`, 4
+computed expectations, 1 empty List; invert covers them).
+
+**Mutation** (`audit/2048/mutate.tcl`, 20 mutants of the engine): every
+mutant is killed -- the brief's list (merge a produced tile again, a merged
+pair's source reused, no compaction before or after merging, score by
+source, right in left order, a wrong transpose, spawn into an occupied cell,
+game over ignoring vertical/horizontal pairs or empty cells, `changed`
+always true) and seven more (score not accumulated, gain of the first line
+only, 1 as a tile, short rows accepted, `reached?` strict, empty positions
+by column, a Four spawning 8). The harness found a weak test of mine: the
+"horizontal merge" game-over board also had a vertical pair, so ignoring
+horizontal pairs was caught only by the long scenario (S14, fixed).
+
+**Backend agreement**: the suite's report, the benchmark's checksums (200
+moves: 2002720; 100,000 moves: 1238344689) and the demo's game (316 moves,
+3888) are identical on every backend.
+
+**GC stress**: the suite passes natively under `BOTLISH_NATIVE_GC_STRESS=1`.
+The demo did not: its executable crashed (S19), which led to the roots fix.
+After the fix the demo executable's output is byte-identical with and
+without GC stress (pinned by `tests/workload-2048.test`), and
+<!-- TBD-GC: full-suite result -->
+
+## 3. Compiler behavior
+
+**HIR.** Every program builds with no diagnostic after the fixes recorded
+in the log; the engine is warning-clean (its two warnings answered in the
+code, S10). The front end proves:
+
+* every `Position {row: r, column: c}` from `loop r from 0 to 4` and from
+  `if r >= 0 and r <= 3 and ...` (through `and`, P1);
+* `spawn`'s lockstep `loop row in old and r from 0 to list::length(old)`;
+* the `CellOccupied` call sites a test handles are uncertain and need their
+  handlers; an Int tile or a row 4 is a `Type` error at the call.
+
+It does not prove: a descending loop's index (S5), anything from a named
+constant (S8), anything about a List's length through a parameter or a
+struct field (S7), or lockstep over a field projection (S9). The engine
+therefore reads cells with `list::get` and a default that never happens
+(10 calls), and spells the board size as the literal 4.
+
+**Generic NIR (cranelift-generic) vs specialized NIR (cranelift).** Nearly
+identical. Specialization's one visible win: `move` returns its `Move`
+through `retmulti` (three registers) instead of allocating the struct.
+Everything else is the same code with different instance labels: Ints stay
+tagged (arbitrary precision with no range), Lists are heap objects either
+way, and the throughput is the same (13.17 vs 13.29 us per move). The merge
+helper's instance key is `int, any`: the declared `done: Slide` is not part
+of it.
+
+**Proofs that removed work.** `Coordinate` fields need no check anywhere;
+`spawn`'s lockstep and every counted `loop i from 0 to list::length(xs)`
+are proven; collecting loops build their result through a construction
+plan, one allocation per loop rather than per element.
+
+**Missed facts with a native consequence.**
+
+* `empty`, a module constant 0, is a `staticget` and a tagged `ieq` at
+  every comparison, never a raw compare with 0 (S8).
+* `list::get` is an out-of-line call with a pushed error exit
+  (`pusherrorexit`/`declarederroreq`) per cell read: never inlined.
+* A `loop x in xs` keeps its position register tagged (`ilt`/`iadd`, an
+  inline small-Int fast path with `rt_int_cmp`/`rt_int_add` behind it),
+  while a numeric `loop i from a to b` is raw (`rilt`/`riadd`).
+* A loop whose value is discarded is lowered without a result List, but a
+  loop that is the *body value* of such a loop is not: empty_positions'
+  and equal_neighbours?'s inner loops build a List of `unit`s per row
+  (`hir/aot.tcl`'s `discarded` marks "all but the last of a sequence, and
+  the last of a loop body", never the last of a discarded collecting
+  loop's body).
+* `cell`'s `[]` default is a fresh `listnew` on every call (a constant
+  List literal is rebuilt per call: LANGUAGE-LIBRARY-DEFICIENCIES.md item
+  6).
+* `loop at in found: at` (MutableVector to List) is an `mvtolist` copy and
+  then a second, element-by-element List build.
+
+**Codegen (CLIF).** `equal_neighbours?` calls `rt_list_len`,
+`rt_list_get`, `rt_list_new`, `rt_construct` and two out-of-line
+`list::get`s; its stack maps show four to six live root slots at each
+call. No categorical pathology (nothing quadratic, no dynamic dispatch: the
+one higher-order call, `list::all?`, is in validation only); the cost is
+allocation.
+
+**Allocations** (`native::allocationReport ... sites`, 1,000 moves): ~169
+objects and 7.7 KB per move; top sites: `Position` structs built for every
+cell of `empty_positions` (15 per move, materialized because one branch
+pushes them), `cell`'s `[]` default (16 per move), the merge helper's
+`Slide` and its `append` copy (22 per move), and one result List per
+collecting loop.
+
+**Correctness bug (S19), fixed.** `native/src/codegen/roots.rs` colours the
+interference graph of shadow-stack root slots. Two registers interfered
+only if they were both roots at one safepoint; but codegen stores a slotted
+register into its slot at every definition. A register defined by a call
+and a root only on the path that returns it (`choose`'s `m`, at a
+`structnew`) never co-occurred with the loop's List (a root at the call, on
+the loop path), so they shared a slot, and the store of the call's result
+overwrote the List's root while the List was still live; the next
+iteration's call collected it. The fix adds the standard rule: a definition
+interferes with every managed register live after it. Cost: 2126 -> 2134
+shadow slots over 550 corpus functions (+0.4%), in three programs (the demo,
+`examples/stdlib/csv_records.bot`, `hashtable.bot`). Reduction took nine
+programs, twenty-two optimization toggles (`ESCAPE_OPT=0` or
+`STRUCT_OPT=0` hid it) and a gdb backtrace of a rustc-linked executable.
+
+**Precision and performance findings deferred**: S5, S7, S8, S9 and the
+native items above. None blocked the engine; S8 is the one worth fixing
+before the paired run (a grid program names its size).
+
+## 4. Performance
+
+`bench.bot`'s `benchmark(moves, seed)` makes exactly MOVES moves: direction
+and spawn from a generator seeded with `2048 + list::length(argv())`, a game
+that is over scored and replaced, the result a checksum of every score,
+gain and changed move. Nothing about the sequence is known at compile time.
+`bench/2048.tcl` reports (best of 3, compilation excluded):
+
+<!-- TBD-BENCH: final table -->
+
+* Front end (parse, resolve, analyses) of the benchmark program: about 0.2
+  s; of the golden suite (with its four `static compile:` sites): 4.3-4.8 s.
+* Native lowering (NIR): 137 ms generic, 234 ms specialized; Cranelift:
+  about 15 ms.
+* Allocation and memory, 100,000 moves (specialized): 16.9 M objects, 771
+  MB allocated (9.5 M Lists), peak live 23 K objects / 1.0 MB, 742 GC
+  cycles, 628 ms of GC in a ~1.33 s run.
+* Reference: the same rules and generator in CPython (flat list,
+  imperative): 4.55 us per move.
+
+The immutable representation stayed: it is clear, correct and fast enough
+for a game (77,000 moves a second), and no mutable alternative was built,
+because what the measurements implicate is how immutable code is lowered
+(the six items above), not immutability: the peak working set is 1 MB.
+
+## 5. Standard library
+
+No stdlib change was made. What the engine and its programs needed:
+
+| operation | where | classification |
+|---|---|---|
+| Int to decimal String | demo (and lib/test.bot's private `int_text`, a third copy in the demo) | missing essential general primitive (S1) |
+| integer division | demo's digits; a flat board layout | missing primitive (S2) |
+| `reverse` | engine `reversed`, suite `mirrored` | convenience, but the natural spelling (`down from`) is not index-proven (S5) |
+| concat / flatten | empty_positions (MutableVector), demo's `joined` | missing general primitive |
+| sum / fold | engine `total`, suite `sum`, `tile_sum`, `tile_count` | missing general primitive (S23) |
+| replace-at | engine `replaced` | convenience |
+| transpose | engine `transposed`, suite `flipped` | game-adjacent; two rectangular helpers are not evidence for a matrix |
+| a typed empty MutableVector | `no_positions()` | language (S6) |
+
+Used and sufficient: `list::length`, `list::get` (10 calls: its default is
+what makes fixed-size access total), `list::append`, `list::all?`, collecting
+loops (filter, map, counted, lockstep), MutableVector `push` and read-out.
+Awkward: `list::at` (never used: every use needed a handler or a guard),
+`list::get` for an invariant the program keeps (a default that never
+happens). Suspected missing but unnecessary: random numbers (a caller's
+generator is eight lines), a grid type, `max` (the demo asks
+`reached?(board, p)` for descending powers).
+
+## 6. Test framework
+
+Used: `test::suite`, `test::value` (61), `test::holds` (3),
+`test::rejects` (4), `test::report`. No custom matcher was needed; values
+are compared as Lists of Ints because `describe` prints Lists but not
+structs (D1). Suite-local helpers: `board_of`, `game_of`, `moved`, `slid`,
+`at`, `with_tile`, `mirrored`, `flipped`, `sum`, `tile_sum`, `tile_count`,
+`samples`, `directions`, `all_true?`, and the scenario's `cycle`,
+`spawned`, `play`, `scenario`. Recurring ceremony: one nested function per
+test (`fn name() -> T:` then `test::value("name", expected, name)`), a
+fallback for every fallible constructor in a body (`board_of` falls back to
+the empty board so a mistyped expectation fails visibly), and expectations
+as nested List literals.
+
+No framework change was made or needed. Considered and rejected: a board
+matcher (Lists print fine), a property-test helper (seven ordinary tests
+were enough). Tooling, not framework: the golden machinery assumes a port
+of a Tcl test (S3), compiles suites with warnings off (S20), and
+`perturb.tcl` needed `-lib` (the one tooling change).
+
+## 7. Discovery
+
+The complete log is [audit/2048/surprise-log.md](../audit/2048/surprise-log.md).
+Its findings, ranked:
+
+| # | finding | categories | severity | fixed |
+|---|---|---|---|---|
+| S19 | a definition overwrote a live root slot: crash / wrong value under GC stress | COMPILER-CORRECTNESS | BLOCKER | yes |
+| S4 | no application module root; with the single executable, no module of one's own at all | LANGUAGE, CLI | MAJOR | no |
+| S15 | program output discarded under `-backend cranelift`; Tcl backends cannot print | CLI, STDLIB, DOCUMENTATION | MAJOR | no |
+| S22 | interp under main.tcl fails a 200-deep recursion | CLI | MAJOR | no |
+| S18 | ~169 allocations and 7.7 KB per move, half the time in GC, ~3x CPython | COMPILER-PERFORMANCE | MAJOR | no |
+| S1 | no Int-to-String | STDLIB, DOCUMENTATION | MODERATE | no |
+| S2 | no integer division | LANGUAGE, DOCUMENTATION | MODERATE | no |
+| S3 | golden tooling assumes ported Tcl tests | TEST-FRAMEWORK, DOCUMENTATION | MODERATE | worked around (D5) |
+| S6 | an empty MutableVector needs a typed helper function | LANGUAGE, DIAGNOSTIC | MODERATE | no |
+| S7 | a List's length is no fact through a parameter or field | LANGUAGE, COMPILER-PRECISION | MODERATE | no |
+| S8 | a named Int constant is no fact inside functions | COMPILER-PRECISION | MODERATE | no |
+| S12 | a local or parameter named like an imported function makes method calls to it ambiguous | LANGUAGE, DIAGNOSTIC | MODERATE | no |
+| S16 | every importer of io gets the stdlib's own two warnings | DIAGNOSTIC, STDLIB | MODERATE | no |
+| S21 | no private module members | LANGUAGE | MODERATE | no |
+| S23 | loop-carried state needs recursion or a mutable place | LANGUAGE, STDLIB | MODERATE | no |
+| S5 | a descending loop's index is not proven | COMPILER-PRECISION, STDLIB | MINOR | no |
+| S9 | lockstep over a field projection is unproven; "(expression)" | COMPILER-PRECISION, DIAGNOSTIC | MINOR | no |
+| S11 | the warning gate cannot cover non-lib imports | TEST-FRAMEWORK | MINOR | no |
+| S13 | bare `List` rejected; the raw kind is `list` | DIAGNOSTIC | MINOR | no |
+| S20 | the golden runner hides a suite's warnings | TEST-FRAMEWORK | MINOR | answered in code |
+| S10 | two warnings on the engine | DIAGNOSTIC | ONE-TIME-NOVELTY | answered in code |
+| S17 | twelve METHOD-ELIGIBLE on the demo | DIAGNOSTIC | ONE-TIME-NOVELTY | answered in code |
+| S14 | a weak game-over test | USER-ERROR | ONE-TIME-NOVELTY | yes |
+
+By category (a finding may have several): COMPILER-CORRECTNESS 1,
+COMPILER-PRECISION 4, COMPILER-PERFORMANCE 1, LANGUAGE 7, STDLIB 5, CLI 3,
+DIAGNOSTIC 7, DOCUMENTATION 4, TEST-FRAMEWORK 3, USER-ERROR 1. By severity:
+BLOCKER 1, MAJOR 4, MODERATE 10, MINOR 5, ONE-TIME-NOVELTY 3.
+
+**Wrong hypotheses** (S8, S12, S19): "module bindings are opaque to the
+analyses" (it is any program-level binding); "a declared List parameter is
+not a method candidate" (every binding is, and the first error reported is
+not the earliest); several reduction guesses for S19 (the loop list from a
+call, the struct nesting, the Choice wrapper) before the multi-result
+shape was isolated.
+
+**Research performed**: about 30 probe programs (scratch; one of the nine
+S19 reproducers is kept as the regression), about ten docs read for semantics
+(the reference's surface and natives sections, METHOD-SUGAR,
+IMPORTS, WARNINGS-SAME-RETURN, WARNINGS-METHOD-ELIGIBLE, MINIMAL-APPLIED-LIST-
+TYPES, LANGUAGE-LIBRARY-DEFICIENCIES, the golden README), and compiler or
+tool source for: module resolution (`surface/modules.tcl`), library
+location (`core/core.tcl`, `single/main.tcl`), the golden manifest
+(`tests/golden.test`, `merge.tcl`), the JIT driver (`native/native.tcl`),
+the range and exact-value analyses (`hir/range.tcl`,
+`hir/exactvalue.tcl`), the discard fact (`hir/aot.tcl`), root planning and
+multi-result calls (`roots.rs`, `clif.rs`). NIR was dumped about a dozen
+times, CLIF once, allocation sites twice; one gdb session.
+
+**Compiler source was needed to understand normal source behavior** for S4
+(where modules may live), S8 (why a constant lost its value), S12 (why a
+List is a callee candidate), S15 (where output went) and S19. **Diagnostics
+alone sufficed** for S5, S7 (an excellent one: it printed the facts it had),
+S9 (with one guess), S10, S13, S17. **Docs alone sufficed** for the
+warnings' intended answers (S10), Tcl installation, and the absence of
+Int-to-String and division (once found in a deficiency report).
+
+## 8. CLI
+
+**Useful as is**: `-emit-nir` and `-emit-clif` on a `.hirx` (both modes,
+with `-backend cranelift-generic`); `-emit-native-executable`, which made
+the demo's output visible and gave gdb named functions; `-warnings
+default|error`; HIR interchange as the bridge from a private library to
+every main.tcl option; `native::allocationReport`, `native::measure` and
+`native::roots` (Tcl API only, no CLI flag); the `BOTLISH_NATIVE_*_OPT=0`
+toggles (undocumented in the CLI, decisive for S19).
+
+**Questions no tool could answer**, ranked by how much they would have
+saved:
+
+1. *What does the compiler know here?* -- the Range and exact value of an
+   expression at a line ("`size` is unknown here: not a local of this
+   function"), the type it inferred where a check failed (S6, S8).
+2. *Why does this allocate?* -- per allocation site: the value, why it is
+   materialized (escapes, a default argument, an undiscarded loop), how
+   often (S18).
+3. *Which names compete for this method call, and why is each a
+   candidate?* (S12).
+4. *Where does a module named N come from, and how do I add one?* (S4).
+5. *Why is this bounds check / handler still needed?* -- the index proof's
+   view of `list::at(xs, i)` (S5, S7).
+6. *Which function is botlish_fn_28?* (S19: a NIR dump answered it).
+7. *Why did this function not specialize better?* -- instance keys and what
+   they drop (`int, any`).
+
+**Searches a command should replace**: the native registry for "is there an
+Int-to-String" (a stdlib inventory with absences); module resolution
+source; the golden manifest tooling; the JIT driver's output handling.
+
+**Single-executable mode** could not have supported this investigation: it
+cannot import a module of the program's own (S4), so the engine, the demo
+and the suite would have to be one file each; NIR, CLIF and executables are
+available, allocation reports and optimization toggles are reachable only
+through the Tcl API (not from the single executable's command line).
+
+**Stale or misleading output**: `-backend cranelift` printing a printing
+program's value and nothing else (S15); the reference's "Known limitations"
+saying `and`/`or`/`not` add no refinements (they do, P1); `main.tcl` with no
+arguments runs four `.ir` examples instead of printing usage, and `-help`
+is an unknown option.
+
+## 9. Documentation and the future prompt
+
+**Gaps**: where application modules go (nowhere, S4); that there is no
+division and no Int-to-String (stated only in a deficiency report and a
+helper's comment); that output needs the native backend and, there, an
+executable; that a loop cannot carry state, and the idioms instead (S23);
+what a golden suite that ports nothing should do (S3).
+
+**Especially useful**: AGENTS.md's Tcl install recipe and its "what to run
+when you change X" map (it named the right audits for the roots fix);
+docs/README.md section 17 (surface syntax, one place); METHOD-SUGAR.md and
+IMPORTS.md for the method rules; the warning documents, which state the
+intended answers.
+
+**Facts for the compact prompt** (core semantics a newcomer cannot
+discover by failing):
+
+* bindings are immutable; loops collect and cannot carry state: accumulate
+  with a self-recursive helper (a tail call is a loop natively) or a
+  MutableVector place;
+* there is no division and no Int-to-String;
+* `x.f(a)` is `f(x, a)` for any visible `f` -- including a local binding
+  named `f`, whatever its type;
+* `list::get(xs, i, default)` is the total read; `list::at` needs a proof
+  or a handler, and only ascending counted loops and guards prove;
+* a List's length is not part of its type; `type T = Int in a..b` is, and
+  comparisons and counted loops prove it;
+* struct and opaque struct syntax, enums are payload-free, errors and
+  `on` handlers, `-> list` for a heterogeneous List.
+
+**Not for the prompt** (tooling should expose them): which index shapes are
+proven (a diagnostic hint), why a method call is ambiguous (the
+diagnostic), what an expression's facts are (a query), allocation causes,
+the golden-suite mechanics, warning answers (the warning documents, linked
+from the warning).
+
+**Terminology an agent will misread**: "module" (only `lib/`), "stdlib"
+vs "library" (the same directory), `list` vs `List[T]`, "discarded"
+(statement position only), `get` vs `at`, "context" (an installed
+capability, not a parameter).
+
+**Hard to infer**: that a non-function binding is a method candidate; that
+a named constant does not carry its value into a function; that output is
+native-only.
+
+## 10. Language ergonomics
+
+**Most natural**: the line move as compact / merge / pad; `changed` as one
+value comparison; the direction-as-viewpoint pair `lines_toward` /
+`rows_from`; opaque struct construction authority; domain-typed positions;
+enums for direction and spawn tile; `static compile:` tests for "this must
+not compile"; validation as three predicates over `list::all?`.
+
+**Least natural**: anything that accumulates (recursion with a `nomethod`
+helper and an accumulator struct, S23); flattening nested loops through a
+MutableVector with a typed-empty helper (S6); decimal output by repeated
+subtraction (S1, S2); fixed-size reads through `get` defaults (S7).
+
+**Narrative coherence**: strong in the engine's line and board sections
+and in `game_over?`, which read as the rules. **Index-heavy**: the merge
+helper (`i + 1`, `i + 2`), `reversed` (`n - 1 - i`), `replaced`; all small.
+**Ceremony**: `nomethod` on position-first helpers (3), the typed empty
+vector, a fallback value for every fallible constructor in a test body,
+the private-library driver.
+
+**Abstractions considered and rejected**: a `Line` struct of four named
+cells (case analysis instead of an algorithm); a flat 16-cell List (no
+division); a MutableArray board (no measurement asked for it: the working
+set is 1 MB and the cost is allocation, not copying); a matrix module (two
+rectangular helpers are not evidence).
+
+**No anonymous functions**: did not hurt; the one higher-order use
+(`list::all?(cell?)`) reads better with a named predicate. **Value-oriented
+state transitions** felt natural: `move` and `spawn` return new games, and
+tests compare values. **Loop constructs** were sufficient for traversal and
+insufficient for accumulation. **No overloading**: no friction (one
+`value`, one `rows`). **Method sugar** mattered: the engine reads as
+`rows.transposed().each_reversed()`, and the warnings push toward it -- but
+it is also the source of S12.
+
+## 11. Before the paired run
+
+**Fix before the near-neighbor run** (each would otherwise contaminate the
+experiment with a tooling failure rather than ordinary unfamiliarity):
+
+1. S15: show a program's output under `-backend cranelift` (the driver
+   already has it; main.tcl drops it), and say in the reference that
+   output needs the native backend.
+2. S22: raise main.tcl's Tcl recursion limit as the golden runner does.
+3. S4: a way for a program to have its own module, at least next to the
+   entry file, usable from the single executable -- or, if that stays out,
+   say so in the prompt and the reference.
+4. S8: a named program-level Int constant as an exact fact inside
+   functions (`hir/range.tcl`'s `ref` case can consult
+   `hir::exact::IntOf`).
+5. S1: an Int-to-String in the stdlib (the test framework and every
+   printing program reimplement it).
+6. S12: either exclude bindings whose static type is not callable from
+   method candidates, or make the diagnostic name the reason.
+
+**Leave unfixed** (they distinguish learning from hand-holding): no
+division, no fold, the typed-empty-vector idiom, the descending-loop index
+proof, METHOD-ELIGIBLE's volume, the golden manifest's port assumption (the
+paired agent will not use it), no private members, the allocation rate.
+
+**Recommended near-neighbor workload: the 15-puzzle.** It keeps what made
+2048 informative -- a 4x4 grid of Ints, nominal directions, value-state
+transitions, a validated board invariant, a deterministic engine with
+randomness outside, game-over/solved predicates, scenario tests -- and
+changes the algorithm: moves are swaps of the blank with a neighbour rather
+than slides and merges, legality depends on the blank's position (bounds
+the type system can carry), solvability is a parity computation (an
+accumulation: S23 again) and a shuffle needs a generator. Lights Out is
+too small (XOR toggles), Sokoban adds a second entity kind and rule tables
+that would change the representation question, Minesweeper adds flood fill
+(recursion depth, S22) that would test the interpreter more than transfer.
+
+**Expected traps for the restricted agent**: a module of its own (S4);
+printing (S15); deep recursion on interp (S22); method ambiguity from a
+local name (S12); a typed empty vector (S6); `list::at` proofs and a named
+size (S5, S8); Int-to-String (S1). A tooling failure is a trap whose fix
+needs information only compiler source holds today (S4, S8, S12, S15, S22);
+ordinary unfamiliarity is one the diagnostic or the reference answers
+(S5, S6, S7, S9, S13).
+
+## 12. Single executable
+
+<!-- TBD-SINGLE: smoke test -->

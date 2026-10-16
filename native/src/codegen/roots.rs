@@ -28,11 +28,18 @@
 //!      `LiveOut`, hence `LiveIn`, if not redefined by the call), so no
 //!      separate "argument rooting" or "result rooting" special case is
 //!      needed: see the milestone brief's items 14-16.
-//!   5. Two registers interfere iff some safepoint's root set contains both.
-//!      Greedy-color the interference graph (deterministic: registers and
-//!      slots are tried in ascending numeric order) to assign each register
-//!      that is ever a safepoint root a shadow slot, reusing a slot for any
-//!      two registers that never co-occur.
+//!   5. Two registers interfere iff some safepoint's root set contains both,
+//!      or one is defined where the other is live (live after the defining
+//!      instruction): codegen::clif's `def` stores a slotted register into
+//!      its slot at every definition, so a definition into a slot another
+//!      live register still owns would overwrite that register's root
+//!      before a later safepoint reads it (2048-ENGINE-WORKLOAD.md, S19: a
+//!      call's result, a root only on one path, sharing a slot with a List
+//!      live across the call on the other path). Greedy-color the
+//!      interference graph (deterministic: registers and slots are tried in
+//!      ascending numeric order) to assign each register that is ever a
+//!      safepoint root a shadow slot, reusing a slot for any two registers
+//!      that never interfere.
 //!
 //! A register never live at any safepoint (raw, or tagged but dead before
 //! every safepoint that could see it) gets no slot at all: `RootPlan::slot_of`
@@ -405,6 +412,11 @@ struct Liveness {
     /// body index, for codegen::clif's per-instruction lookup) without
     /// re-walking the CFG.
     safepoint_index: Vec<usize>,
+    /// Definition interference: {DEF, LIVE} for every managed-capable
+    /// register DEF an instruction defines and every other managed-capable
+    /// register LIVE live after that instruction. A slot shared by the two
+    /// would be overwritten by DEF's store while LIVE still needs it.
+    def_edges: Vec<(Reg, Reg)>,
 }
 
 fn analyze(f: &Function, cfg: &Cfg) -> Liveness {
@@ -487,12 +499,26 @@ fn analyze(f: &Function, cfg: &Cfg) -> Liveness {
     // LiveOut, recording each safepoint's root set as we pass it.
     let mut safepoint_roots = Vec::new();
     let mut safepoint_index = Vec::new();
+    let mut def_edges = Vec::new();
+    let managed = |r: usize| !f.scalar_regs[r] && !context_only[r];
     for b in 0..nb {
         let (s, e) = cfg.blocks[b];
         let mut live = live_out[b].clone();
         for idx in (s..e).rev() {
             let inst = &f.body[idx];
             let (defs, uses) = def_use(inst, f.params);
+            // LIVE is this instruction's LiveOut here: a register it
+            // defines must not share a slot with any of them (`def_edges`).
+            for &d in &defs {
+                if !managed(d as usize) {
+                    continue;
+                }
+                for r in 0..regs {
+                    if live[r] && r != d as usize && managed(r) {
+                        def_edges.push((d, r as Reg));
+                    }
+                }
+            }
             let mut live_in_inst = live.clone();
             for d in &defs {
                 live_in_inst[*d as usize] = false;
@@ -509,17 +535,18 @@ fn analyze(f: &Function, cfg: &Cfg) -> Liveness {
             live = live_in_inst;
         }
     }
-    Liveness { safepoint_roots, safepoint_index }
+    Liveness { safepoint_roots, safepoint_index, def_edges }
 }
 
 /// Deterministic greedy coloring of the interference graph implied by
 /// SAFEPOINT_ROOTS (two registers interfere iff some safepoint's root set
-/// contains both): registers are colored in ascending numeric order, each
+/// contains both) and DEF_EDGES (or one is defined where the other is
+/// live; `Liveness::def_edges`): registers are colored in ascending numeric order, each
 /// taking the lowest-numbered slot not already taken by a register it
 /// interferes with, opening a new slot only when none fits (milestone brief
 /// item 18: "do not attempt globally optimal coloring... simple deterministic
 /// greedy... is sufficient").
-fn color(regs: u32, safepoint_roots: &[Vec<Reg>]) -> (Vec<Option<u32>>, u32, u32) {
+fn color(regs: u32, safepoint_roots: &[Vec<Reg>], def_edges: &[(Reg, Reg)]) -> (Vec<Option<u32>>, u32, u32) {
     let mut is_candidate = vec![false; regs as usize];
     let mut adjacency: Vec<HashSet<Reg>> = vec![HashSet::new(); regs as usize];
     let mut max_live = 0u32;
@@ -535,6 +562,13 @@ fn color(regs: u32, safepoint_roots: &[Vec<Reg>]) -> (Vec<Option<u32>>, u32, u32
                 adjacency[b as usize].insert(a);
             }
         }
+    }
+    // A definition interferes with what is live across it. Only edges
+    // between root candidates matter: a register that is never a root gets
+    // no slot, so it can neither overwrite nor be overwritten.
+    for &(a, b) in def_edges {
+        adjacency[a as usize].insert(b);
+        adjacency[b as usize].insert(a);
     }
     let mut slot_of: Vec<Option<u32>> = vec![None; regs as usize];
     let mut slot_members: Vec<Vec<Reg>> = Vec::new();
@@ -744,7 +778,7 @@ fn entry_zero_slots(f: &Function, cfg: &Cfg, slot_of: &[Option<u32>], num_slots:
 pub fn plan(f: &Function, native_frame_supported: bool) -> RootPlan {
     let cfg = Cfg::build(f);
     let liveness = analyze(f, &cfg);
-    let (slot_of, colored_slots, root_candidates) = color(f.regs, &liveness.safepoint_roots);
+    let (slot_of, colored_slots, root_candidates) = color(f.regs, &liveness.safepoint_roots, &liveness.def_edges);
     let max_live = liveness.safepoint_roots.iter().map(Vec::len).max().unwrap_or(0) as u32;
     let has_call = has_botlish_call(f);
     let depth_reservation = has_call && !(native_frame_supported && crate::runtime::native_stack::native_stack_overflow_supported());
@@ -1098,6 +1132,44 @@ mod tests {
         // %1 and %3 never co-occur at any single safepoint: they may share.
         assert_eq!(plan.slot_of[1], plan.slot_of[3]);
         assert!(plan.slot_of[1].is_some());
+    }
+
+    // -----------------------------------------------------------------------
+    // A definition interferes with what is live across it
+    // (2048-ENGINE-WORKLOAD.md, S19). %0 is live across the call (the loop
+    // reads it after every call), a root at the call only; %1, the call's
+    // result, is a root at the strcat only. They never share a safepoint's
+    // root set, but `def` stores %1 into its slot right after the call,
+    // while %0 is still live: one slot for both would leave %0 unrooted at
+    // the next iteration's call (the 2048 demo's `choose`: the preferences
+    // List freed under GC stress).
+
+    #[test]
+    fn definition_does_not_overwrite_a_live_root() {
+        let program = parse_program(concat!(
+            "nir 1 call-effects=0\n\n",
+            "func 0 \"<program>\" params=0 env=0 regs=4 pnames=\"\" captures=0 rawregs=\"\"\n",
+            "    %0 = str \"kept\"\n",
+            "  label L0\n",
+            "    %1 = call 1\n",
+            "    %2 = op streq %1 %0\n",
+            "    br %2 L1 L2\n",
+            "  label L1\n",
+            "    %3 = op strcat %1 %1\n",
+            "    ret %3\n",
+            "  label L2\n",
+            "    jump L0\n",
+            "end\n",
+            "func 1 \"f\" params=0 env=0 regs=1 pnames=\"\" captures=0 rawregs=\"\"\n",
+            "    %0 = str \"x\"\n",
+            "    ret %0\n",
+            "end\n",
+        ));
+        let plan = plan(&program.functions[0], true);
+        assert_eq!(plan.max_live, 1, "%0 and %1 are never roots at the same safepoint");
+        assert!(plan.slot_of[0].is_some());
+        assert!(plan.slot_of[1].is_some());
+        assert_ne!(plan.slot_of[0], plan.slot_of[1], "%1's definition must not overwrite live %0's slot");
     }
 
     // -----------------------------------------------------------------------
