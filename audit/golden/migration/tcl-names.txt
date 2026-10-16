@@ -422,6 +422,7 @@ tests/binary-layout.test bl-construction pass
 tests/binary-layout.test bl-construction-checks pass
 tests/binary-layout.test bl-construction-only-layoutstruct pass
 tests/binary-layout.test bl-construction-width pass
+tests/binary-layout.test bl-consumer-containers pass
 tests/binary-layout.test bl-consumer-method-syntax pass
 tests/binary-layout.test bl-consumer-struct-behavior pass
 tests/binary-layout.test bl-declaration-bounds pass
@@ -463,6 +464,7 @@ tests/binary-layout.test bl-tcl-generated-code pass
 tests/binary-layout.test bl-type-distinct-layouts pass
 tests/binary-layout.test bl-type-field-types pass
 tests/binary-layout.test bl-type-invalid-parameter pass
+tests/binary-layout.test bl-type-refinement-carrier pass
 tests/binary-layout.test bl-type-unapplied pass
 tests/binary-layout.test bl-type-unknown-field pass
 tests/bindings.test bind-1 pass

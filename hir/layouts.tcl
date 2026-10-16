@@ -325,11 +325,18 @@ proc hir::layouts::OtherDeclaration {id name} {
 # No alignment of a field's offset is required: the declared, resolved layout
 # is authoritative (a packed or vendor-aligned C layout is legal as stated),
 # and `align` is the layout's own requirement for placement and storage.
-proc hir::layouts::apply {decls} {
+proc hir::layouts::apply {decls {structDecls {}}} {
     variable registry
     variable maxAlign
     variable maxSize
+    variable batchStructs
     Reset
+    # The structs of the same batch, registered after the layouts: a field
+    # type naming one is reported as a struct, not as an unknown type.
+    set batchStructs [dict create]
+    foreach struct $structDecls {
+        dict set batchStructs [identity [dict get $struct name] [dict get $struct namespace]] 1
+    }
     set byId [dict create]
     foreach decl $decls {
         set name [dict get $decl name]
@@ -427,7 +434,7 @@ proc hir::layouts::Resolve {id byId doneVar stack} {
         } else {
             set spelled [ShowTypeExpr $typeExpr]
             if {[catch {hir::resolve::ResolveTypeExpr $typeExpr $ns} resolved]} {
-                Fail $typeSpan "unknown or invalid type $spelled for field \"$fieldName\" of layout \"$name\": $resolved" LAYOUT-FIELD-TYPE
+                Fail $typeSpan [UnresolvedFieldType $typeExpr $ns $spelled $fieldName $name $resolved] LAYOUT-FIELD-TYPE
             }
             set encoding [Encoding $resolved]
             if {$encoding eq ""} {
@@ -468,6 +475,22 @@ proc hir::layouts::Resolve {id byId doneVar stack} {
         dict remove $f span typeSpan offsetSpan
     }]
     dict set done $id 1
+}
+
+# The message of a field type TYPEEXPR (written SPELLED in namespace NS)
+# that does not resolve, DETAIL the resolver's reason: a struct of the same
+# compilation (registered after the layouts) is named as one, a single
+# unknown name as unknown.
+proc hir::layouts::UnresolvedFieldType {typeExpr ns spelled fieldName layoutName detail} {
+    variable batchStructs
+    if {[llength $typeExpr] == 1} {
+        set id [expr {[string first :: $typeExpr] >= 0 ? $typeExpr : [identity $typeExpr $ns]}]
+        if {[info exists batchStructs] && [dict exists $batchStructs $id]} {
+            return "field \"$fieldName\" of layout \"$layoutName\" cannot have type $spelled: $spelled is a struct type, not an integer domain or a layout (a struct holds domain meaning, not bytes; a nested layout field names a layout)"
+        }
+        return "unknown type $spelled for field \"$fieldName\" of layout \"$layoutName\": no layout, integer domain or other type of that name is visible here (a field names a fixed-width integer domain or a nested layout)"
+    }
+    return "unknown or invalid type $spelled for field \"$fieldName\" of layout \"$layoutName\": $detail"
 }
 
 # "FILE:LINE:COLUMN" of SPAN.

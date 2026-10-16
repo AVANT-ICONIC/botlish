@@ -196,7 +196,7 @@ proc hir::sourcetypes::apply {decls {structDecls {}}} {
         }
     }
     if {$layoutDecls ne ""} {
-        lappend order {*}[hir::layouts::apply $layoutDecls]
+        lappend order {*}[hir::layouts::apply $layoutDecls $structDecls]
     }
     if {$structDecls ne ""} {
         # Struct declarations (STRUCTS.md, hir/structs.tcl) are type
@@ -380,6 +380,14 @@ proc hir::sourcetypes::RegisterRefinement {decl structDecls} {
     }
     set carrierText [hir::resolve::ShowTypeExpr [dict get $decl carrier]]
     foreach spelled [TypeExprNames [dict get $decl carrier]] {
+        if {$spelled eq "LayoutStruct"} {
+            # BINARY-LAYOUT.md: LayoutStruct[L] is a struct type (layouts
+            # register after the source types, so it is recognized by its
+            # constructor here, never left to resolve as an unknown layout).
+            Fail [dict get $decl carrierSpan] \
+                "invalid refinement carrier $carrierText for \"$id\": LayoutStruct\[L\] is a struct type (the values a layout imprints), and refinements of struct values are not supported yet (this milestone's carriers are scalar value types: str, int, bool, UnicodeChar, and integer-domain or refinement types over them)" \
+                REFINEMENT-CARRIER
+        }
         foreach struct $structDecls {
             set structId [expr {[dict get $struct namespace] eq "" ? [dict get $struct name]
                 : "[dict get $struct namespace]::[dict get $struct name]"}]
