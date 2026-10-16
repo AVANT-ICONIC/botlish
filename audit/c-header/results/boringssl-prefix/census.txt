@@ -1,0 +1,491 @@
+== toplevel
+  public functions                                                                 3926
+  public pragmas                                                                   3239
+  public functions-declared                                                        3109
+  public functions-inline-definitions                                              817
+  public typedefs                                                                  344
+  public struct-declarations                                                       137
+  public struct-definitions                                                        100
+  public extern-objects-and-variables                                              36
+  public union-declarations                                                        23
+  public union-definitions                                                         23
+  public enum-declarations                                                         14
+  public enum-definitions                                                          14
+  api struct tags, defined in: none                                                103
+  api struct tags, defined in: public                                              100
+  api union tags, defined in: public                                               23
+  api enum tags, defined in: public                                                14
+  api struct tags, defined in: system                                              2
+
+== functions
+  extern total                                                                     3109
+  extern pointers                                                                  3012
+  extern pointer-param                                                             2705
+  extern params=2                                                                  938
+  extern pointer-result                                                            922
+  extern params=1                                                                  870
+  inline total                                                                     817
+  inline pointers                                                                  813
+  inline pointer-param                                                             753
+  extern params=3                                                                  504
+  extern void-result                                                               462
+  inline pointer-result                                                            391
+  extern pointer-to-pointer                                                        367
+  extern params=0                                                                  318
+  inline params=1                                                                  305
+  inline function-pointer-param                                                    300
+  inline params=2                                                                  270
+  inline params=3                                                                  212
+  inline void-result                                                               211
+  extern params=4                                                                  209
+  extern function-pointer-param                                                    151
+  extern params=5                                                                  114
+  extern array-param-spelling                                                      98
+  extern no-pointers                                                               97
+  extern params=>6                                                                 97
+  extern params=6                                                                  59
+  inline function-pointer-result                                                   30
+  inline params=0                                                                  30
+  extern function-pointer-result                                                   22
+  extern enum                                                                      21
+  extern variadic                                                                  5
+  inline no-pointers                                                               4
+  extern builtin-__builtin_va_list                                                 2
+  extern floating                                                                  1
+
+== types
+  pointer                                                                          8936
+  typedef-reference (library)                                                      5443
+  function                                                                         4181
+  qualified                                                                        3394
+  typedef-reference (system)                                                       2501
+  integer int                                                                      2461
+  void                                                                             1356
+  struct-reference                                                                 1122
+  integer char                                                                     361
+  array                                                                            197
+  integer long                                                                     143
+  integer unsigned int                                                             90
+  integer unsigned long                                                            44
+  integer unsigned char                                                            29
+  enum-reference                                                                   27
+  union-reference                                                                  23
+  floating double                                                                  2
+  max pointer depth (as spelled)                                                   2
+  max pointer depth (typedefs resolved)                                            2
+
+== pointers
+  param depth=1                                                                    6128
+  param pointee spelled through a typedef                                          4227
+  param depth=1 pointee=opaque-struct                                              2827
+  result depth=1                                                                   1313
+  param depth=1 pointee=complete-struct                                            1277
+  result pointee spelled through a typedef                                         947
+  param depth=1 pointee=char                                                       786
+  result depth=1 pointee=opaque-struct                                             783
+  param depth=1 pointee=function                                                   504
+  param depth=2                                                                    478
+  param depth=1 pointee=void                                                       421
+  param depth hidden by a typedef (0 as spelled, 1 resolved)                       355
+  param depth=1 pointee=scalar                                                     309
+  result depth=1 pointee=complete-struct                                           299
+  param depth=2 pointee=char                                                       236
+  field depth=1                                                                    208
+  param depth=2 pointee=opaque-struct                                              155
+  typedef depth=1                                                                  147
+  typedef depth=1 pointee=function                                                 145
+  field pointee spelled through a typedef                                          132
+  result depth=1 pointee=char                                                      94
+  result depth=1 pointee=void                                                      85
+  param depth=2 pointee=complete-struct                                            82
+  field depth=1 pointee=complete-struct                                            75
+  result depth=1 pointee=function                                                  52
+  field depth=1 pointee=opaque-struct                                              50
+  field depth=1 pointee=function                                                   38
+  result depth hidden by a typedef (0 as spelled, 1 resolved)                      34
+  field depth=1 pointee=char                                                       32
+  field depth=1 pointee=void                                                       12
+  field depth hidden by a typedef (0 as spelled, 1 resolved)                       10
+  param depth=1 pointee=array                                                      3
+  param depth=2 pointee=void                                                       3
+  param depth=2 pointee=scalar                                                     2
+  field depth=1 pointee=scalar                                                     1
+  param depth=1 pointee=enum                                                       1
+  typedef depth=1 pointee=char                                                     1
+  typedef depth=1 pointee=void                                                     1
+
+== qualifiers
+  any const                                                                        3394
+  param pointee(level 1) const                                                     2549
+  result pointee(level 1) const                                                    305
+  param pointee(level 2) const                                                     157
+  field pointee(level 1) const                                                     38
+  variable top-level const                                                         36
+  param top-level const                                                            5
+  field top-level const                                                            1
+  typedef top-level const                                                          1
+
+== typedefs
+  category function pointer                                                        145
+  category struct (complete)                                                       95
+  category struct (opaque)                                                         79
+  category function type                                                           7
+  category void                                                                    5
+  category alias-of-typedef -> integer                                             3
+  category integer                                                                 3
+  category alias-of-typedef -> function type                                       1
+  category alias-of-typedef -> struct (complete)                                   1
+  category alias-of-typedef -> struct (opaque)                                     1
+  category array                                                                   1
+  category enum                                                                    1
+  category pointer to char                                                         1
+  category pointer to void                                                         1
+  chain length 1                                                                   338
+  chain length 2                                                                   4
+  chain length 3                                                                   2
+  distinct typedef names used in function signatures (library)                     310
+  distinct typedef names used in function signatures (system)                      10   {FILE int32_t int64_t size_t time_t uint16_t uint32_t uint64_t uint8_t va_list}
+  integer typedefs over int                                                        3   {ASN1_BOOLEAN CRYPTO_EX_unused CRYPTO_THREADID}
+  integer typedefs over long                                                       1   ossl_ssize_t
+  integer typedefs over unsigned int                                               1   CBS_ASN1_TAG
+  integer typedefs over unsigned long                                              1   BN_ULONG
+
+== structs
+  complete structs                                                                 100
+  complete unions                                                                  23
+  complete, anonymous (no tag)                                                     28
+  complete, defined inside another struct                                          23
+  opaque structs (declared or referenced, defined nowhere in the TU)               103
+  opaque unions                                                                    0
+  complete, no keep-out comment: heuristic                                         79
+  complete, its comments say keep out (private/opaque/internal/do not): heuristic  21
+  complete, used by value somewhere (param/result/field/variable)                  32
+  complete, used only behind pointers                                              87
+  complete, not used by any declaration (or only via typedef)                      4
+
+== fields
+  struct field: pointer                                                            123
+  struct field: typedef scalar                                                     57
+  struct field: integer scalar                                                     53
+  union field: pointer                                                             47
+  struct field: function pointer                                                   38
+  struct field: fixed array                                                        32
+  struct field: union by value                                                     21
+  union field: fixed array                                                         17
+  union field: typedef scalar                                                      17
+  struct field: nested struct by value                                             8
+  struct field: bitfield                                                           3
+  struct field: anonymous union member                                             2
+  union field: nested struct by value                                              2
+  union field: anonymous struct member                                             1
+
+== layout
+  complete structs and unions (top-level or named)                                 100
+  REPRESENTABLE-NOW                                                                1   {{struct openssl_method_common_st}}
+  NEEDS-POINTER-SCALAR                                                             68   {{struct ACCESS_DESCRIPTION_st} {struct ASN1_ADB_TABLE_st} {struct ASN1_ADB_st} {struct ASN1_AUX_st} {struct ASN1_ITEM_st} {struct ASN1_TEMPLATE_st}}
+  NEEDS-FIXED-ARRAY                                                                39   {{struct DES_cblock_st} {struct DES_ks} {struct HRSS_private_key} {struct HRSS_public_key} {struct MLDSA44_prehash} {struct MLDSA44_private_key}}
+  NEEDS-FLOAT                                                                      0
+  NEEDS-UNION                                                                      26   {{struct DIST_POINT_NAME_st} {struct GENERAL_NAME_st} {struct MLDSA44_prehash} {struct MLDSA44_private_key} {struct MLDSA44_public_key} {struct MLDSA65_prehash}}
+  NEEDS-BITFIELD                                                                   3   {{struct cbb_buffer_st} {struct cbb_child_st} {struct cbb_st}}
+  NEEDS-OTHER                                                                      0
+  (abi fact) ABI-CHAR-SIGNEDNESS                                                   6
+  combination NEEDS-POINTER-SCALAR                                                 52
+  combination NEEDS-FIXED-ARRAY+NEEDS-UNION                                        16
+  combination NEEDS-FIXED-ARRAY                                                    15
+  combination NEEDS-POINTER-SCALAR+NEEDS-UNION                                     5
+  combination NEEDS-FIXED-ARRAY+NEEDS-POINTER-SCALAR                               4
+  combination NEEDS-FIXED-ARRAY+NEEDS-POINTER-SCALAR+NEEDS-UNION                   4
+  combination NEEDS-BITFIELD+NEEDS-POINTER-SCALAR                                  2
+  combination NEEDS-BITFIELD+NEEDS-POINTER-SCALAR+NEEDS-UNION                      1
+  combination REPRESENTABLE-NOW                                                    1
+  unlocked by pointer scalar + fixed array + union                                 96
+  unlocked by NEEDS-POINTER-SCALAR alone                                           52
+  unlocked by NEEDS-FIXED-ARRAY alone                                              15
+  unlocked by pointer scalar + fixed array together                                4
+  storage-only structs (every field an opaque-storage union: size + alignment suffice) 14   {MLDSA65_private_key MLDSA65_public_key MLDSA65_prehash MLDSA87_private_key MLDSA87_public_key MLDSA87_prehash MLDSA44_private_key MLDSA44_public_key}
+  storage-only structs whose fields as written need NEEDS-FIXED-ARRAY+NEEDS-UNION  14
+
+== arrays
+  param bound lit                                                                  142
+  param element byte                                                               142
+  field element byte                                                               36
+  field bound lit                                                                  33
+  field element scalar                                                             13
+  field bound expr:muldiv+addsub                                                   12
+  param element scalar                                                             4
+  field bound expr:sizeof+muldiv+addsub+cast+identifier                            3
+  param bound expr:addsub                                                          2
+  param bound expr:muldiv                                                          2
+  field bound expr:addsub                                                          1
+  field bound expr:muldiv                                                          1
+  field element multidimensional                                                   1
+  typedef bound lit                                                                1
+  typedef element byte                                                             1
+
+== unions
+  field union by value                                                             23
+  union definitions inside a struct                                                22
+  union definitions, anonymous                                                     22
+  union definitions: opaque storage (a byte array and an alignment scalar)         16
+  union definitions, tagged                                                        1
+
+== bitfields
+  bitfields                                                                        3
+  struct cbb_buffer_st.can_resize                                                  unsigned int : 1
+  struct cbb_buffer_st.error                                                       unsigned int : 1
+  struct cbb_child_st.pending_is_asn1                                              unsigned int : 1
+
+== enums
+  enumerators                                                                      95
+  enumerator value form: implicit                                                  62
+  enumerator value form: literal                                                   30
+  enum-typed param                                                                 15
+  enum definitions, tagged                                                         12
+  enum types used in function signatures                                           8
+  enum-typed result                                                                6
+  enum definitions, anonymous (constants only)                                     2
+  enumerator value form: negated-literal                                           2
+  enum definitions with a typedef                                                  1
+  enum pointer params/results                                                      1
+  enum-typed typedef                                                               1
+  enumerator value form: ref                                                       1
+  enums whose every value the parser computes (literal, negated literal, char, previous enumerator, implicit) 14 of 14
+
+== constants
+  macro constant: integer literal                                                  2867
+  macro constant: string literal                                                   1404
+  macro constant: integer expression                                               123
+  enum member                                                                      95
+  extern const object                                                              36
+  macro constant: enumerator alias                                                 33
+  macro constant: expression with sizeof (needs ABI)                               2
+
+== callbacks
+  functions accepting callbacks: inline definitions                                300
+  callback params (inline functions): no void* userdata                            176
+  callback typedefs naming a function pointer                                      145
+  callback params (inline functions): void* userdata beside and inside             120
+  callback params (extern functions): void* userdata beside and inside             106
+  callback params (extern functions): no void* userdata                            45
+  callback fields (function pointers in structs)                                   38
+  callback fields outside stub tables                                              38
+  callback params (inline functions): void* beside the callback only               30
+  callback params (extern functions): void* inside the callback only               20
+  callback typedefs naming a function type                                         7
+  callback params (inline functions): void* inside the callback only               4
+  callback params (extern functions): void* beside the callback only               3
+  API functions accepting callbacks                                                451
+  API functions returning a function pointer                                       52
+  distinct callback signature shapes (params and fields)                           89
+  shape (*char, int, int, *void) -> int                                            64
+  shape (*complete-struct) -> void                                                 45
+  shape (*opaque-struct) -> void                                                   39
+  shape (*void) -> void                                                            39
+  shape (**void, **void) -> int                                                    34
+  shape (*void) -> *void                                                           32
+  shape (*void, *void) -> int                                                      32
+  shape (**complete-struct, **complete-struct) -> int                              30
+  shape (**opaque-struct, **opaque-struct) -> int                                  26
+  shape (*opaque-struct, *void) -> int                                             17
+  shape (*complete-struct) -> *complete-struct                                     15
+  shape (*complete-struct, *void) -> int                                           15
+  shape (*opaque-struct) -> *opaque-struct                                         13
+  shape (*opaque-struct, *opaque-struct, **void, int, int, *void) -> int           10
+  shape (*void, *void, *opaque-struct, int, int, *void) -> void                    10
+
+== opaque
+  typedef names an opaque tag (typedef struct X X)                                 79
+  declared functions with an opaque handle (T * to an incomplete tag) in their signature 2098 of 3109
+  declared functions whose every type is an opaque handle, an integer, an enum, void, or a char/void/integer pointer 1506 of 3109
+
+== strings
+  params: char-like pointer followed by an integer (pointer + length)              508
+  params: const uint8_t *                                                          412
+  params: const char *                                                             172
+  params: uint8_t *                                                                166
+  params: char-like pointer followed by an integer pointer (pointer + output length) 78
+  results: const char *                                                            47
+  params: char *                                                                   20
+  results: char *                                                                  17
+  results: uint8_t *                                                               11
+  results: const uint8_t *                                                         9
+  params: const unsigned char *                                                    7
+  params: unsigned char *                                                          3
+  results: const unsigned char *                                                   1
+  results: unsigned char *                                                         1
+
+== outparams
+  params named like an output (out*, *Ptr, *result)                                818
+  T** params (non-const outer pointee: possible out-pointer)                       472
+  pointer to non-const integer (possible out-scalar)                               252
+  T** params (const outer pointee)                                                 6
+
+== attributes
+  api gnu unused (diagnostic) at spec                                              817
+  system gnu nothrow (optimization) at decl                                        176
+  system gnu leaf (optimization) at decl                                           169
+  system gnu nonnull (nullability) at decl                                         120
+  system gnu malloc (optimization) at decl                                         22
+  system gnu format (diagnostic) at decl                                           13
+  system extension extension (none) at spec                                        12
+  api gnu deprecated (diagnostic) at spec                                          10
+  system gnu const (optimization) at decl                                          10
+  api gnu format (diagnostic) at decl                                              6
+  system asm asm (link) at decl                                                    6
+  system gnu alloc_size (optimization) at decl                                     6
+  system gnu access (diagnostic) at decl                                           5
+  system gnu pure (optimization) at decl                                           5
+  system gnu noreturn (optimization) at decl                                       4
+  system gnu aligned (abi) at decl                                                 2
+  system gnu warn_unused_result (diagnostic) at decl                               2
+  system gnu alloc_align (optimization) at decl                                    1
+  system gnu cold (optimization) at decl                                           1
+  system gnu mode (abi) at decl                                                    1
+
+== variadic
+  variadic functions                                                               5
+  va_list (builtin) parameters                                                     2
+  ERR_add_error_data                                                               void ERR_add_error_data(unsigned count, ...);
+  ERR_add_error_dataf                                                              void ERR_add_error_dataf(const char *format, ...) __attribute__((__format__(__printf__, 1, 2)));
+  BIO_printf                                                                       int BIO_printf(BIO *bio, const char *format, ...) __attribute__((__format__(__printf__, 2, 3)));
+  BIO_snprintf                                                                     int BIO_snprintf(char *buf, size_t n, const char *format, ...) __attribute__((__format__(__printf__, 3, 4)));
+  OPENSSL_asprintf                                                                 int OPENSSL_asprintf(char **str, const char *format, ...) __attribute__((__format__(__printf__, 2, 3)));
+
+== byvalue
+
+== inline
+  inline definitions (no link symbol)                                              817
+  storage static, fnspec inline                                                    817
+  generated by DEFINE_STACK_OF                                                     729
+  generated by DEFINE_CONST_STACK_OF                                               54
+  generated by DEFINE_NAMED_STACK_OF                                               27
+  written directly                                                                 7
+
+== links
+  #pragma redefine_extname                                                         3149
+  pragma redefine_extname                                                          3149
+  pragma GCC                                                                       90
+
+== subset
+  functions (declared + inline definitions)                                        3926
+  declared (have a link symbol)                                                    3109
+  simple subset: callable                                                          2929
+  simple subset: of which use an enum type (needs its ABI width)                   21
+  simple subset: excluded by inline definition (no symbol)                         817
+  simple subset: excluded by callback                                              472
+  simple subset: excluded by variadic                                              5
+  simple subset: excluded by builtin __builtin_va_list                             2
+  simple subset: excluded by floating                                              1
+  callbacks subset: callable                                                       3092
+  callbacks subset: of which use an enum type (needs its ABI width)                21
+  callbacks subset: excluded by inline definition (no symbol)                      817
+  callbacks subset: excluded by callback taking a callback                         9
+  callbacks subset: excluded by variadic                                           5
+  callbacks subset: excluded by builtin __builtin_va_list                          2
+  callbacks subset: excluded by floating                                           1
+  floats subset: callable                                                          3093
+  floats subset: of which use an enum type (needs its ABI width)                   21
+  floats subset: excluded by inline definition (no symbol)                         817
+  floats subset: excluded by callback taking a callback                            9
+  floats subset: excluded by variadic                                              5
+  floats subset: excluded by builtin __builtin_va_list                             2
+
+== unsupported
+  library records parsed                                                           4480
+  library unsupported                                                              0
+  system records parsed                                                            485
+  system unsupported                                                               0
+
+== macros
+  library macros (final definitions)                                               6673
+  function: call wrapper: computed arguments                                       21   {OPENSSL_PUT_ERROR BIO_set_app_data BIO_get_app_data BN_mod}
+  function: call wrapper: rename                                                   55   {M_ASN1_STRING_length M_ASN1_STRING_type M_ASN1_STRING_data M_ASN1_BIT_STRING_new}
+  function: call wrapper: undeclared callee                                        1   IMPLEMENT_ASN1_FUNCTIONS_ENCODE_name
+  function: declaration-generating                                                 29   {DECLARE_STACK_OF DEFINE_NAMED_STACK_OF DEFINE_STACK_OF DEFINE_CONST_STACK_OF}
+  function: decoration: attribute                                                  1   OPENSSL_PRINTF_FORMAT_FUNC
+  function: empty                                                                  8   {OPENSSL_CLANG_PRAGMA OPENSSL_MSVC_PRAGMA BORINGSSL_MAKE_DELETER BORINGSSL_MAKE_UP_REF}
+  function: expression                                                             19   {BORINGSSL_CONCAT_INNER BORINGSSL_CONCAT BORINGSSL_ADD_PREFIX BORINGSSL_ADD_USER_LABEL_AND_PREFIX}
+  function: expression: calls a function                                           2   {SSL_want_read SSL_want_write}
+  function: expression: member access                                              2   {ASN1_TEMPLATE_item ASN1_TEMPLATE_adb}
+  function: initializer fragment                                                   24   {ASN1_EX_TEMPLATE_TYPE ASN1_EX_TYPE ASN1_IMP_EX ASN1_EXP_EX}
+  function: statement                                                              21   {BSSL_CHECK OPENSSL_PUT_SYSTEM_ERROR DECLARE_ASN1_FUNCTIONS DECLARE_ASN1_ALLOC_FUNCTIONS}
+  function: syntax-sensitive: rejected with identifier arguments                   1   OPENSSL_GNUC_CLANG_PRAGMA
+  function: type-producing                                                         1   STACK_OF
+  object: alias: function                                                          78   {EVP_PKEY_CTX_set_rsa_oaep_md EVP_PKEY_CTX_set0_rsa_oaep_label X509_CRL_set_lastUpdate X509_CRL_set_nextUpdate}
+  object: alias: undeclared identifier                                             57   {ERR_R_DSO_LIB ERR_R_STORE_LIB ERR_R_FIPS_LIB ERR_R_TS_LIB}
+  object: comma list (an initializer or argument fragment)                         1778   {OBJ_rsadsi OBJ_ENC_rsadsi OBJ_pkcs OBJ_ENC_pkcs}
+  object: constant: enumerator alias                                               33   {ERR_R_SYS_LIB ERR_R_BN_LIB ERR_R_RSA_LIB ERR_R_DH_LIB}
+  object: constant: expression with sizeof (needs ABI)                             2   {DES_KEY_SZ DES_SCHEDULE_SZ}
+  object: constant: integer expression                                             123   {ERR_R_MALLOC_FAILURE ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED ERR_R_PASSED_NULL_PARAMETER ERR_R_INTERNAL_ERROR}
+  object: constant: integer literal                                                2867   {OPENSSL_VERSION_NUMBER SSLEAY_VERSION_NUMBER BORINGSSL_API_VERSION EVP_AEAD_MAX_KEY_LENGTH}
+  object: constant: string literal                                                 1404   {OPENSSL_VERSION_TEXT SN_undef LN_undef SN_rsadsi}
+  object: decoration: attribute                                                    3   {OPENSSL_DEPRECATED OPENSSL_UNUSED OPENSSL_INLINE}
+  object: empty: flag (tested by #if, or unused)                                   58   {OPENSSL_NO_ASYNC OPENSSL_NO_BF OPENSSL_NO_BLAKE2 OPENSSL_NO_BUF_FREELISTS}
+  object: empty: include guard                                                     80   {OPENSSL_HEADER_AEAD_H OPENSSL_HEADER_BASE_H OPENSSL_HEADER_OPENSSLCONF_H OPENSSL_HEADER_TARGET_H}
+  object: empty: used on declaration lines                                         2   {OPENSSL_EXPORT BORINGSSL_ENUM_INT}
+  object: initializer (braced)                                                     1   OSSL_PARAM_END
+  object: other                                                                    1   BSSL_NAMESPACE_END
+  object: statement or declaration                                                 1   BSSL_NAMESPACE_BEGIN
+  function flag: assignment                                                        25
+  function flag: calls-through-pointer                                             5
+  function flag: location-sensitive                                                4
+  function flag: member-access                                                     2
+  function flag: multiple-evaluation                                               31
+  function flag: paste                                                             84
+  function flag: stringify                                                         37
+  function flag: type-generic                                                      29
+  function flag: unused-argument                                                   14
+  function thunk: n/a (a type, resolved at each use)                               1   STACK_OF
+  function thunk: n/a (erased by preprocessing)                                    9   {OPENSSL_PRINTF_FORMAT_FUNC OPENSSL_CLANG_PRAGMA OPENSSL_MSVC_PRAGMA BORINGSSL_MAKE_DELETER}
+  function thunk: n/a (import the callee)                                          55   {M_ASN1_STRING_length M_ASN1_STRING_type M_ASN1_STRING_data M_ASN1_BIT_STRING_new}
+  function thunk: no (a fragment of an initializer or argument list, not an expression) 24   {ASN1_EX_TEMPLATE_TYPE ASN1_EX_TYPE ASN1_IMP_EX ASN1_EXP_EX}
+  function thunk: no (import the declarations it generates)                        29   {DECLARE_STACK_OF DEFINE_NAMED_STACK_OF DEFINE_STACK_OF DEFINE_CONST_STACK_OF}
+  function thunk: no (syntax-sensitive: needs literal or identifier arguments)     1   OPENSSL_GNUC_CLANG_PRAGMA
+  function thunk: per identifier argument (an argument pasted or stringified is a name, not a value) 31   {BORINGSSL_CONCAT_INNER BORINGSSL_CONCAT BORINGSSL_ADD_PREFIX BORINGSSL_ADD_USER_LABEL_AND_PREFIX}
+  function thunk: per signature (type-generic)                                     2   {DECIMAL_SIZE CHECKED_CAST}
+  function thunk: yes                                                              27   {ERR_PACK BIO_set_app_data BIO_get_app_data BN_mod}
+  function thunk: yes (a read; the expansion is an lvalue too: writing needs a second wrapper) 2   {ASN1_TEMPLATE_item ASN1_TEMPLATE_adb}
+  function thunk: yes (a void wrapper)                                             1   BSSL_CHECK
+  function thunk: yes, but __FILE__/__LINE__ become the wrapper's                  3   {OPENSSL_PUT_SYSTEM_ERROR EVPerr SSLerr}
+  object thunk: constant (value import, or a thunk returning it)                   4429   {OPENSSL_VERSION_NUMBER SSLEAY_VERSION_NUMBER BORINGSSL_API_VERSION EVP_AEAD_MAX_KEY_LENGTH}
+  object thunk: n/a (erased by preprocessing)                                      143   {OPENSSL_HEADER_AEAD_H OPENSSL_HEADER_BASE_H OPENSSL_HEADER_OPENSSLCONF_H OPENSSL_NO_ASYNC}
+  object thunk: n/a (import the function under the alias)                          78   {EVP_PKEY_CTX_set_rsa_oaep_md EVP_PKEY_CTX_set0_rsa_oaep_label X509_CRL_set_lastUpdate X509_CRL_set_nextUpdate}
+  object thunk: n/a (names nothing declared in this profile)                       57   {ERR_R_DSO_LIB ERR_R_STORE_LIB ERR_R_FIPS_LIB ERR_R_TS_LIB}
+  object thunk: no (a fragment, not an expression)                                 1780   {BSSL_NAMESPACE_BEGIN OBJ_rsadsi OBJ_ENC_rsadsi OBJ_pkcs}
+  object thunk: unclear                                                            1   BSSL_NAMESPACE_END
+  function-like macros with the name of a declared function (shadowing it)         0
+
+== declmacros
+  function: declaration-generating (declaration uses)                              1000
+  function: declaration-generating (macros)                                        5   {{DEFINE_STACK_OF 864} {DEFINE_CONST_STACK_OF 64} {DECLARE_ASN1_ITEM 36} {DEFINE_NAMED_STACK_OF 32} {DECLARE_STACK_OF 4}}
+  function: decoration: attribute (declaration uses)                               6
+  function: decoration: attribute (macros)                                         1   {{OPENSSL_PRINTF_FORMAT_FUNC 6}}
+  function: expression (declaration uses)                                          1
+  function: expression (macros)                                                    1   {{ASN1_SEQUENCE 1}}
+  function: type-producing (declaration uses)                                      110
+  function: type-producing (macros)                                                1   {{STACK_OF 110}}
+  object: constant: integer expression (declaration uses)                          4
+  object: constant: integer expression (macros)                                    3   {{BLAKE2B256_DIGEST_LENGTH 2} {HRSS_GENERATE_KEY_BYTES 1} {HRSS_ENCAP_BYTES 1}}
+  object: constant: integer literal (declaration uses)                             122
+  object: constant: integer literal (macros)                                       57   {{MLDSA_MU_BYTES 9} {SLHDSA_SHA2_128S_PRIVATE_KEY_BYTES 6} {SLHDSA_SHA2_128S_PUBLIC_KEY_BYTES 6} {MLKEM_SHARED_SECRET_BYTES 4} {SLHDSA_SHAKE_256F_PRIVATE_KEY_BYTES 4} {SLHDSA_SHAKE_256F_PUBLIC_KEY_BYTES 4}}
+  object: decoration: attribute (declaration uses)                                 17
+  object: decoration: attribute (macros)                                           2   {{OPENSSL_DEPRECATED 10} {OPENSSL_INLINE 7}}
+  object: empty (declaration uses)                                                 3110
+  object: empty (macros)                                                           2   {{OPENSSL_EXPORT 3102} {BORINGSSL_ENUM_INT 8}}
+  declarations whose source span contains a preprocessor conditional               2   {{struct cbs_st} {struct sha_state_st}}
+
+== systemrefs
+  system typedef size_t                                                            1062
+  system typedef uint8_t                                                           1045
+  system typedef uint32_t                                                          151
+  system typedef FILE                                                              94
+  system typedef uint16_t                                                          64
+  system typedef uint64_t                                                          51
+  system typedef int64_t                                                           22
+  system typedef time_t                                                            8
+  system struct tm                                                                 5
+  system struct timeval                                                            2
+  system typedef va_list                                                           2
+  system typedef int32_t                                                           1
+  system typedef ptrdiff_t                                                         1
+

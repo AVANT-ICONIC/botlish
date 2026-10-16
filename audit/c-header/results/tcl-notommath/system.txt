@@ -1,0 +1,68 @@
+# C header experiment IR (C-HEADER-ARCHAEOLOGY.md): profile tcl-notommath
+# revision 6230a12b3bf6f7d8128f6ef14b0a3650a9d479e0
+# toolchain cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# the system declarations the library's declarations refer to (transitively)
+typedef size_t {
+    loc {/usr/lib/gcc/x86_64-linux-gnu/13/include/stddef.h 214 214}
+    origin system
+    storage typedef
+    type {int {unsigned long}}
+    attrs {}
+    text {typedef long unsigned int size_t;}
+}
+typedef __uint8_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/types.h 38 38}
+    origin system
+    storage typedef
+    type {int {unsigned char}}
+    attrs {}
+    text {typedef unsigned char __uint8_t;}
+}
+typedef __int64_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/types.h 44 44}
+    origin system
+    storage typedef
+    type {int long}
+    attrs {}
+    text {typedef signed long int __int64_t;}
+}
+typedef __uint64_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/types.h 45 45}
+    origin system
+    storage typedef
+    type {int {unsigned long}}
+    attrs {}
+    text {typedef unsigned long int __uint64_t;}
+}
+typedef ptrdiff_t {
+    loc {/usr/lib/gcc/x86_64-linux-gnu/13/include/stddef.h 145 145}
+    origin system
+    storage typedef
+    type {int long}
+    attrs {}
+    text {typedef long int ptrdiff_t;}
+}
+typedef int64_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/stdint-intn.h 27 27}
+    origin system
+    storage typedef
+    type {typedef __int64_t}
+    attrs {}
+    text {typedef __int64_t int64_t;}
+}
+typedef uint8_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/stdint-uintn.h 24 24}
+    origin system
+    storage typedef
+    type {typedef __uint8_t}
+    attrs {}
+    text {typedef __uint8_t uint8_t;}
+}
+typedef uint64_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/stdint-uintn.h 27 27}
+    origin system
+    storage typedef
+    type {typedef __uint64_t}
+    attrs {}
+    text {typedef __uint64_t uint64_t;}
+}

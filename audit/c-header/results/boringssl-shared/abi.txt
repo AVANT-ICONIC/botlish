@@ -1,0 +1,3560 @@
+# ABI probe (C-HEADER-ARCHAEOLOGY.md): profile boringssl-shared, toolchain cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, native Linux 6.18.44-fc-v139 x86_64
+scalar char 1 1 1
+scalar {signed char} 1 1 1
+scalar {unsigned char} 1 1 0
+scalar short 2 2 1
+scalar {unsigned short} 2 2 0
+scalar int 4 4 1
+scalar {unsigned int} 4 4 0
+scalar long 8 8 1
+scalar {unsigned long} 8 8 0
+scalar {long long} 8 8 1
+scalar {unsigned long long} 8 8 0
+scalar _Bool 1 1 0
+scalar pointer 8 8 0
+scalar float 4 4 1
+scalar double 8 8 1
+scalar {long double} 16 16 1
+scalar ossl_ssize_t 8 8 1
+scalar CBS_ASN1_TAG 4 4 0
+scalar CRYPTO_THREADID 4 4 1
+scalar ASN1_BOOLEAN 4 4 1
+scalar CRYPTO_EX_unused 4 4 1
+scalar BN_ULONG 8 8 0
+struct {union evp_aead_ctx_st_state} 560 8
+field {union evp_aead_ctx_st_state}.opaque 0 560
+field {union evp_aead_ctx_st_state}.alignment 0 8
+struct {struct evp_aead_ctx_st} 576 8
+field {struct evp_aead_ctx_st}.aead 0 8
+field {struct evp_aead_ctx_st}.state 8 560
+field {struct evp_aead_ctx_st}.tag_len 568 1
+struct {struct crypto_ivec_st} 16 8
+field {struct crypto_ivec_st}.in 0 8
+field {struct crypto_ivec_st}.len 8 8
+struct {struct crypto_iovec_st} 24 8
+field {struct crypto_iovec_st}.out 0 8
+field {struct crypto_iovec_st}.in 8 8
+field {struct crypto_iovec_st}.len 16 8
+struct {struct aes_key_st} 244 4
+field {struct aes_key_st}.rd_key 0 240
+field {struct aes_key_st}.rounds 240 4
+struct {struct buf_mem_st} 24 8
+field {struct buf_mem_st}.length 0 8
+field {struct buf_mem_st}.data 8 8
+field {struct buf_mem_st}.max 16 8
+struct {struct bn_gencb_st} 16 8
+field {struct bn_gencb_st}.arg 0 8
+field {struct bn_gencb_st}.callback 8 8
+struct {struct bignum_st} 24 8
+field {struct bignum_st}.d 0 8
+field {struct bignum_st}.width 8 4
+field {struct bignum_st}.dmax 12 4
+field {struct bignum_st}.neg 16 4
+field {struct bignum_st}.flags 20 4
+struct {struct asn1_string_st} 24 8
+field {struct asn1_string_st}.length 0 4
+field {struct asn1_string_st}.type 4 4
+field {struct asn1_string_st}.data 8 8
+field {struct asn1_string_st}.flags 16 8
+struct {struct asn1_type_st} 16 8
+field {struct asn1_type_st}.type 0 4
+field {struct asn1_type_st}.value 8 8
+struct {struct ASN1_TEMPLATE_st} 32 8
+field {struct ASN1_TEMPLATE_st}.flags 0 4
+field {struct ASN1_TEMPLATE_st}.tag 4 4
+field {struct ASN1_TEMPLATE_st}.offset 8 8
+field {struct ASN1_TEMPLATE_st}.field_name 16 8
+field {struct ASN1_TEMPLATE_st}.item 24 8
+struct {struct ASN1_ADB_st} 56 8
+field {struct ASN1_ADB_st}.flags 0 4
+field {struct ASN1_ADB_st}.offset 8 8
+field {struct ASN1_ADB_st}.unused 16 8
+field {struct ASN1_ADB_st}.tbl 24 8
+field {struct ASN1_ADB_st}.tblcount 32 8
+field {struct ASN1_ADB_st}.default_tt 40 8
+field {struct ASN1_ADB_st}.null_tt 48 8
+struct {struct ASN1_ADB_TABLE_st} 40 8
+field {struct ASN1_ADB_TABLE_st}.value 0 4
+field {struct ASN1_ADB_TABLE_st}.tt 8 32
+struct {struct ASN1_ITEM_st} 48 8
+field {struct ASN1_ITEM_st}.itype 0 1
+field {struct ASN1_ITEM_st}.utype 4 4
+field {struct ASN1_ITEM_st}.templates 8 8
+field {struct ASN1_ITEM_st}.tcount 16 8
+field {struct ASN1_ITEM_st}.funcs 24 8
+field {struct ASN1_ITEM_st}.size 32 8
+field {struct ASN1_ITEM_st}.sname 40 8
+struct {struct ASN1_AUX_st} 32 8
+field {struct ASN1_AUX_st}.app_data 0 8
+field {struct ASN1_AUX_st}.flags 8 4
+field {struct ASN1_AUX_st}.ref_offset 12 4
+field {struct ASN1_AUX_st}.asn1_cb 16 8
+field {struct ASN1_AUX_st}.enc_offset 24 4
+struct {struct evp_encode_ctx_st} 56 4
+field {struct evp_encode_ctx_st}.data_used 0 4
+field {struct evp_encode_ctx_st}.data 4 48
+field {struct evp_encode_ctx_st}.eof_seen 52 1
+field {struct evp_encode_ctx_st}.error_encountered 53 1
+struct {struct blake2b_state_st} 208 8
+field {struct blake2b_state_st}.h 0 64
+field {struct blake2b_state_st}.t_low 64 8
+field {struct blake2b_state_st}.t_high 72 4
+field {struct blake2b_state_st}.block_used 76 4
+field {struct blake2b_state_st}.block 80 128
+struct {struct bf_key_st} 4168 4
+field {struct bf_key_st}.P 0 72
+field {struct bf_key_st}.S 72 4096
+struct {struct cbs_st} 16 8
+field {struct cbs_st}.data 0 8
+field {struct cbs_st}.len 8 8
+struct {struct cbb_buffer_st} 32 8
+field {struct cbb_buffer_st}.buf 0 8
+field {struct cbb_buffer_st}.len 8 8
+field {struct cbb_buffer_st}.cap 16 8
+struct {struct cbb_child_st} 24 8
+field {struct cbb_child_st}.base 0 8
+field {struct cbb_child_st}.offset 8 8
+field {struct cbb_child_st}.pending_len_len 16 1
+struct {struct cbb_st} 48 8
+field {struct cbb_st}.child 0 8
+field {struct cbb_st}.is_child 8 1
+field {struct cbb_st}.u 16 32
+struct {struct cast_key_st} 132 4
+field {struct cast_key_st}.data 0 128
+field {struct cast_key_st}.short_key 128 4
+struct {struct evp_cipher_ctx_st} 144 8
+field {struct evp_cipher_ctx_st}.cipher 0 8
+field {struct evp_cipher_ctx_st}.app_data 8 8
+field {struct evp_cipher_ctx_st}.cipher_data 16 8
+field {struct evp_cipher_ctx_st}.key_len 24 4
+field {struct evp_cipher_ctx_st}.encrypt 28 4
+field {struct evp_cipher_ctx_st}.flags 32 4
+field {struct evp_cipher_ctx_st}.oiv 36 16
+field {struct evp_cipher_ctx_st}.iv 52 16
+field {struct evp_cipher_ctx_st}.buf 68 32
+field {struct evp_cipher_ctx_st}.buf_len 100 4
+field {struct evp_cipher_ctx_st}.num 104 4
+field {struct evp_cipher_ctx_st}.final_used 108 4
+field {struct evp_cipher_ctx_st}.final 112 32
+struct {struct evp_cipher_info_st} 24 8
+field {struct evp_cipher_info_st}.cipher 0 8
+field {struct evp_cipher_info_st}.iv 8 16
+struct {struct conf_value_st} 24 8
+field {struct conf_value_st}.section 0 8
+field {struct conf_value_st}.name 8 8
+field {struct conf_value_st}.value 16 8
+struct {struct sha256_state_st} 112 4
+field {struct sha256_state_st}.h 0 32
+field {struct sha256_state_st}.Nl 32 4
+field {struct sha256_state_st}.Nh 36 4
+field {struct sha256_state_st}.data 40 64
+field {struct sha256_state_st}.num 104 4
+field {struct sha256_state_st}.md_len 108 4
+struct {struct sha512_state_st} 208 8
+field {struct sha512_state_st}.h 0 64
+field {struct sha512_state_st}.num 64 2
+field {struct sha512_state_st}.md_len 66 2
+field {struct sha512_state_st}.bytes_so_far_high 68 4
+field {struct sha512_state_st}.bytes_so_far_low 72 8
+field {struct sha512_state_st}.p 80 128
+struct {struct sha_state_st} 96 4
+field {struct sha_state_st}.h 0 20
+field {struct sha_state_st}.h0 0 4
+field {struct sha_state_st}.h1 4 4
+field {struct sha_state_st}.h2 8 4
+field {struct sha_state_st}.h3 12 4
+field {struct sha_state_st}.h4 16 4
+field {struct sha_state_st}.Nl 20 4
+field {struct sha_state_st}.Nh 24 4
+field {struct sha_state_st}.data 28 64
+field {struct sha_state_st}.num 92 4
+struct {struct anon@thread.h:78} 16 8
+field {struct anon@thread.h:78}.references 0 4
+field {struct anon@thread.h:78}.data 8 8
+struct {struct DES_cblock_st} 8 1
+field {struct DES_cblock_st}.bytes 0 8
+struct {struct DES_ks} 128 4
+field {struct DES_ks}.subkeys 0 128
+struct {struct env_md_ctx_st} 232 8
+field {struct env_md_ctx_st}.md_data 0 208
+field {struct env_md_ctx_st}.alignment 0 8
+field {struct env_md_ctx_st}.digest 208 8
+field {struct env_md_ctx_st}.pctx 216 8
+field {struct env_md_ctx_st}.pctx_ops 224 8
+struct {struct DSA_SIG_st} 16 8
+field {struct DSA_SIG_st}.r 0 8
+field {struct DSA_SIG_st}.s 8 8
+struct {struct anon@ec.h:457} 16 8
+field {struct anon@ec.h:457}.nid 0 4
+field {struct anon@ec.h:457}.comment 8 8
+struct {struct openssl_method_common_st} 8 4
+field {struct openssl_method_common_st}.references 0 4
+field {struct openssl_method_common_st}.is_static 4 1
+struct {struct ecdsa_method_st} 48 8
+field {struct ecdsa_method_st}.common 0 8
+field {struct ecdsa_method_st}.app_data 8 8
+field {struct ecdsa_method_st}.init 16 8
+field {struct ecdsa_method_st}.finish 24 8
+field {struct ecdsa_method_st}.sign 32 8
+field {struct ecdsa_method_st}.flags 40 4
+struct {struct ecdsa_sig_st} 16 8
+field {struct ecdsa_sig_st}.r 0 8
+field {struct ecdsa_sig_st}.s 8 8
+struct {struct hmac_ctx_st} 704 8
+field {struct hmac_ctx_st}.md 0 8
+field {struct hmac_ctx_st}.md_ctx 8 232
+field {struct hmac_ctx_st}.i_ctx 240 232
+field {struct hmac_ctx_st}.o_ctx 472 232
+struct {struct evp_hpke_ctx_st} 704 8
+field {struct evp_hpke_ctx_st}.kem 0 8
+field {struct evp_hpke_ctx_st}.aead 8 8
+field {struct evp_hpke_ctx_st}.kdf 16 8
+field {struct evp_hpke_ctx_st}.aead_ctx 24 576
+field {struct evp_hpke_ctx_st}.base_nonce 600 24
+field {struct evp_hpke_ctx_st}.exporter_secret 624 64
+field {struct evp_hpke_ctx_st}.seq 688 8
+field {struct evp_hpke_ctx_st}.is_sender 696 4
+struct {struct evp_hpke_key_st} 1648 8
+field {struct evp_hpke_key_st}.kem 0 8
+field {struct evp_hpke_key_st}.private_key 8 64
+field {struct evp_hpke_key_st}.public_key 72 1568
+field {struct evp_hpke_key_st}.pkey 1640 8
+struct {struct HRSS_private_key} 1808 1
+field {struct HRSS_private_key}.opaque 0 1808
+struct {struct HRSS_public_key} 1424 1
+field {struct HRSS_public_key}.opaque 0 1424
+struct {struct md4_state_st} 92 4
+field {struct md4_state_st}.h 0 16
+field {struct md4_state_st}.Nl 16 4
+field {struct md4_state_st}.Nh 20 4
+field {struct md4_state_st}.data 24 64
+field {struct md4_state_st}.num 88 4
+struct {struct md5_state_st} 92 4
+field {struct md5_state_st}.h 0 16
+field {struct md5_state_st}.Nl 16 4
+field {struct md5_state_st}.Nh 20 4
+field {struct md5_state_st}.data 24 64
+field {struct md5_state_st}.num 88 4
+struct {struct MLDSA65_private_key} 23680 4
+field {struct MLDSA65_private_key}.opaque 0 23680
+struct {struct MLDSA65_public_key} 6240 4
+field {struct MLDSA65_public_key}.opaque 0 6240
+struct {struct MLDSA65_prehash} 240 8
+field {struct MLDSA65_prehash}.opaque 0 240
+struct {struct MLDSA87_private_key} 31872 4
+field {struct MLDSA87_private_key}.opaque 0 31872
+struct {struct MLDSA87_public_key} 8288 4
+field {struct MLDSA87_public_key}.opaque 0 8288
+struct {struct MLDSA87_prehash} 240 8
+field {struct MLDSA87_prehash}.opaque 0 240
+struct {struct MLDSA44_private_key} 16512 4
+field {struct MLDSA44_private_key}.opaque 0 16512
+struct {struct MLDSA44_public_key} 4192 4
+field {struct MLDSA44_public_key}.opaque 0 4192
+struct {struct MLDSA44_prehash} 240 8
+field {struct MLDSA44_prehash}.opaque 0 240
+struct {struct MLKEM768_public_key} 6208 2
+field {struct MLKEM768_public_key}.opaque 0 6208
+struct {struct MLKEM768_private_key} 7776 2
+field {struct MLKEM768_private_key}.opaque 0 7776
+struct {struct MLKEM1024_public_key} 10304 2
+field {struct MLKEM1024_public_key}.opaque 0 10304
+struct {struct MLKEM1024_private_key} 12384 2
+field {struct MLKEM1024_private_key}.opaque 0 12384
+struct {struct obj_name_st} 24 8
+field {struct obj_name_st}.type 0 4
+field {struct obj_name_st}.alias 4 4
+field {struct obj_name_st}.name 8 8
+field {struct obj_name_st}.data 16 8
+struct {struct ossl_param_st} 40 8
+field {struct ossl_param_st}.key 0 8
+field {struct ossl_param_st}.data_type 8 4
+field {struct ossl_param_st}.data 16 8
+field {struct ossl_param_st}.data_size 24 8
+field {struct ossl_param_st}.return_size 32 8
+struct {struct anon@pkcs7.h:111} 16 8
+field {struct anon@pkcs7.h:111}.cert 0 8
+field {struct anon@pkcs7.h:111}.crl 8 8
+struct {struct anon@pkcs7.h:116} 16 8
+field {struct anon@pkcs7.h:116}.cert 0 8
+field {struct anon@pkcs7.h:116}.crl 8 8
+struct {struct anon@pkcs7.h:126} 32 8
+field {struct anon@pkcs7.h:126}.ber_bytes 0 8
+field {struct anon@pkcs7.h:126}.ber_len 8 8
+field {struct anon@pkcs7.h:126}.type 16 8
+field {struct anon@pkcs7.h:126}.d 24 8
+struct {struct rsa_meth_st} 72 8
+field {struct rsa_meth_st}.common 0 8
+field {struct rsa_meth_st}.app_data 8 8
+field {struct rsa_meth_st}.init 16 8
+field {struct rsa_meth_st}.finish 24 8
+field {struct rsa_meth_st}.sign 32 8
+field {struct rsa_meth_st}.sign_raw 40 8
+field {struct rsa_meth_st}.decrypt 48 8
+field {struct rsa_meth_st}.private_transform 56 8
+field {struct rsa_meth_st}.flags 64 4
+struct {struct BASIC_CONSTRAINTS_st} 16 8
+field {struct BASIC_CONSTRAINTS_st}.ca 0 4
+field {struct BASIC_CONSTRAINTS_st}.pathlen 8 8
+struct {struct otherName_st} 16 8
+field {struct otherName_st}.type_id 0 8
+field {struct otherName_st}.value 8 8
+struct {struct EDIPartyName_st} 16 8
+field {struct EDIPartyName_st}.nameAssigner 0 8
+field {struct EDIPartyName_st}.partyName 8 8
+struct {struct GENERAL_NAME_st} 16 8
+field {struct GENERAL_NAME_st}.type 0 4
+field {struct GENERAL_NAME_st}.d 8 8
+struct {struct AUTHORITY_KEYID_st} 24 8
+field {struct AUTHORITY_KEYID_st}.keyid 0 8
+field {struct AUTHORITY_KEYID_st}.issuer 8 8
+field {struct AUTHORITY_KEYID_st}.serial 16 8
+struct {struct GENERAL_SUBTREE_st} 24 8
+field {struct GENERAL_SUBTREE_st}.base 0 8
+field {struct GENERAL_SUBTREE_st}.minimum 8 8
+field {struct GENERAL_SUBTREE_st}.maximum 16 8
+struct {struct NAME_CONSTRAINTS_st} 16 8
+field {struct NAME_CONSTRAINTS_st}.permittedSubtrees 0 8
+field {struct NAME_CONSTRAINTS_st}.excludedSubtrees 8 8
+struct {struct ACCESS_DESCRIPTION_st} 16 8
+field {struct ACCESS_DESCRIPTION_st}.method 0 8
+field {struct ACCESS_DESCRIPTION_st}.location 8 8
+struct {struct DIST_POINT_NAME_st} 16 8
+field {struct DIST_POINT_NAME_st}.type 0 4
+field {struct DIST_POINT_NAME_st}.name 8 8
+struct {struct DIST_POINT_st} 24 8
+field {struct DIST_POINT_st}.distpoint 0 8
+field {struct DIST_POINT_st}.reasons 8 8
+field {struct DIST_POINT_st}.CRLissuer 16 8
+struct {struct ISSUING_DIST_POINT_st} 32 8
+field {struct ISSUING_DIST_POINT_st}.distpoint 0 8
+field {struct ISSUING_DIST_POINT_st}.onlyuser 8 4
+field {struct ISSUING_DIST_POINT_st}.onlyCA 12 4
+field {struct ISSUING_DIST_POINT_st}.onlysomereasons 16 8
+field {struct ISSUING_DIST_POINT_st}.indirectCRL 24 4
+field {struct ISSUING_DIST_POINT_st}.onlyattr 28 4
+struct {struct NOTICEREF_st} 16 8
+field {struct NOTICEREF_st}.organization 0 8
+field {struct NOTICEREF_st}.noticenos 8 8
+struct {struct USERNOTICE_st} 16 8
+field {struct USERNOTICE_st}.noticeref 0 8
+field {struct USERNOTICE_st}.exptext 8 8
+struct {struct POLICYQUALINFO_st} 16 8
+field {struct POLICYQUALINFO_st}.pqualid 0 8
+field {struct POLICYQUALINFO_st}.d 8 8
+struct {struct POLICYINFO_st} 16 8
+field {struct POLICYINFO_st}.policyid 0 8
+field {struct POLICYINFO_st}.qualifiers 8 8
+struct {struct POLICY_MAPPING_st} 16 8
+field {struct POLICY_MAPPING_st}.issuerDomainPolicy 0 8
+field {struct POLICY_MAPPING_st}.subjectDomainPolicy 8 8
+struct {struct POLICY_CONSTRAINTS_st} 16 8
+field {struct POLICY_CONSTRAINTS_st}.requireExplicitPolicy 0 8
+field {struct POLICY_CONSTRAINTS_st}.inhibitPolicyMapping 8 8
+struct {struct Netscape_spki_st} 24 8
+field {struct Netscape_spki_st}.spkac 0 8
+field {struct Netscape_spki_st}.sig_algor 8 8
+field {struct Netscape_spki_st}.signature 16 8
+struct {struct Netscape_spkac_st} 16 8
+field {struct Netscape_spkac_st}.pubkey 0 8
+field {struct Netscape_spkac_st}.challenge 8 8
+struct {struct rsa_pss_params_st} 40 8
+field {struct rsa_pss_params_st}.hashAlgorithm 0 8
+field {struct rsa_pss_params_st}.maskGenAlgorithm 8 8
+field {struct rsa_pss_params_st}.saltLength 16 8
+field {struct rsa_pss_params_st}.trailerField 24 8
+field {struct rsa_pss_params_st}.maskHash 32 8
+struct {struct private_key_st} 8 8
+field {struct private_key_st}.dec_pkey 0 8
+struct {struct X509_info_st} 64 8
+field {struct X509_info_st}.x509 0 8
+field {struct X509_info_st}.crl 8 8
+field {struct X509_info_st}.x_pkey 16 8
+field {struct X509_info_st}.enc_cipher 24 24
+field {struct X509_info_st}.enc_len 48 4
+field {struct X509_info_st}.enc_data 56 8
+struct {struct v3_ext_method} 104 8
+field {struct v3_ext_method}.ext_nid 0 4
+field {struct v3_ext_method}.ext_flags 4 4
+field {struct v3_ext_method}.it 8 8
+field {struct v3_ext_method}.ext_new 16 8
+field {struct v3_ext_method}.ext_free 24 8
+field {struct v3_ext_method}.d2i 32 8
+field {struct v3_ext_method}.i2d 40 8
+field {struct v3_ext_method}.i2s 48 8
+field {struct v3_ext_method}.s2i 56 8
+field {struct v3_ext_method}.i2v 64 8
+field {struct v3_ext_method}.v2i 72 8
+field {struct v3_ext_method}.i2r 80 8
+field {struct v3_ext_method}.r2i 88 8
+field {struct v3_ext_method}.usr_data 96 8
+struct {struct v3_ext_ctx} 48 8
+field {struct v3_ext_ctx}.flags 0 4
+field {struct v3_ext_ctx}.issuer_cert 8 8
+field {struct v3_ext_ctx}.subject_cert 16 8
+field {struct v3_ext_ctx}.subject_req 24 8
+field {struct v3_ext_ctx}.crl 32 8
+field {struct v3_ext_ctx}.db 40 8
+struct {struct X509_algor_st} 16 8
+field {struct X509_algor_st}.algorithm 0 8
+field {struct X509_algor_st}.parameter 8 8
+struct {struct rand_meth_st} 48 8
+field {struct rand_meth_st}.seed 0 8
+field {struct rand_meth_st}.bytes 8 8
+field {struct rand_meth_st}.cleanup 16 8
+field {struct rand_meth_st}.add 24 8
+field {struct rand_meth_st}.pseudorand 32 8
+field {struct rand_meth_st}.status 40 8
+struct {struct rc4_key_st} 1032 4
+field {struct rc4_key_st}.x 0 4
+field {struct rc4_key_st}.y 4 4
+field {struct rc4_key_st}.data 8 1024
+struct {struct RIPEMD160state_st} 96 4
+field {struct RIPEMD160state_st}.h 0 20
+field {struct RIPEMD160state_st}.Nl 20 4
+field {struct RIPEMD160state_st}.Nh 24 4
+field {struct RIPEMD160state_st}.data 28 64
+field {struct RIPEMD160state_st}.num 92 4
+struct {struct trust_token_st} 16 8
+field {struct trust_token_st}.data 0 8
+field {struct trust_token_st}.len 8 8
+struct {struct XWING_private_key} 7840 2
+field {struct XWING_private_key}.opaque 0 7840
+struct {struct ssl_private_key_method_st} 24 8
+field {struct ssl_private_key_method_st}.sign 0 8
+field {struct ssl_private_key_method_st}.decrypt 8 8
+field {struct ssl_private_key_method_st}.complete 16 8
+struct {struct ssl_ticket_aead_method_st} 24 8
+field {struct ssl_ticket_aead_method_st}.max_overhead 0 8
+field {struct ssl_ticket_aead_method_st}.seal 8 8
+field {struct ssl_ticket_aead_method_st}.open 16 8
+struct {struct srtp_protection_profile_st} 16 8
+field {struct srtp_protection_profile_st}.name 0 8
+field {struct srtp_protection_profile_st}.id 8 8
+struct {struct ssl_quic_method_st} 40 8
+field {struct ssl_quic_method_st}.set_read_secret 0 8
+field {struct ssl_quic_method_st}.set_write_secret 8 8
+field {struct ssl_quic_method_st}.add_handshake_data 16 8
+field {struct ssl_quic_method_st}.flush_flight 24 8
+field {struct ssl_quic_method_st}.send_alert 32 8
+struct {struct ssl_early_callback_ctx} 128 8
+field {struct ssl_early_callback_ctx}.ssl 0 8
+field {struct ssl_early_callback_ctx}.client_hello 8 8
+field {struct ssl_early_callback_ctx}.client_hello_len 16 8
+field {struct ssl_early_callback_ctx}.version 24 2
+field {struct ssl_early_callback_ctx}.random 32 8
+field {struct ssl_early_callback_ctx}.random_len 40 8
+field {struct ssl_early_callback_ctx}.session_id 48 8
+field {struct ssl_early_callback_ctx}.session_id_len 56 8
+field {struct ssl_early_callback_ctx}.dtls_cookie 64 8
+field {struct ssl_early_callback_ctx}.dtls_cookie_len 72 8
+field {struct ssl_early_callback_ctx}.cipher_suites 80 8
+field {struct ssl_early_callback_ctx}.cipher_suites_len 88 8
+field {struct ssl_early_callback_ctx}.compression_methods 96 8
+field {struct ssl_early_callback_ctx}.compression_methods_len 104 8
+field {struct ssl_early_callback_ctx}.extensions 112 8
+field {struct ssl_early_callback_ctx}.extensions_len 120 8
+struct {struct ssl_comp_st} 24 8
+field {struct ssl_comp_st}.id 0 4
+field {struct ssl_comp_st}.name 8 8
+field {struct ssl_comp_st}.method 16 8
+enum {enum evp_aead_direction_t} 4 0
+enumerator evp_aead_open 0
+enumerator evp_aead_seal 1
+enumerator ERR_LIB_NONE 1
+enumerator ERR_LIB_SYS 2
+enumerator ERR_LIB_BN 3
+enumerator ERR_LIB_RSA 4
+enumerator ERR_LIB_DH 5
+enumerator ERR_LIB_EVP 6
+enumerator ERR_LIB_BUF 7
+enumerator ERR_LIB_OBJ 8
+enumerator ERR_LIB_PEM 9
+enumerator ERR_LIB_DSA 10
+enumerator ERR_LIB_X509 11
+enumerator ERR_LIB_ASN1 12
+enumerator ERR_LIB_CONF 13
+enumerator ERR_LIB_CRYPTO 14
+enumerator ERR_LIB_EC 15
+enumerator ERR_LIB_SSL 16
+enumerator ERR_LIB_BIO 17
+enumerator ERR_LIB_PKCS7 18
+enumerator ERR_LIB_PKCS8 19
+enumerator ERR_LIB_X509V3 20
+enumerator ERR_LIB_RAND 21
+enumerator ERR_LIB_ENGINE 22
+enumerator ERR_LIB_OCSP 23
+enumerator ERR_LIB_UI 24
+enumerator ERR_LIB_COMP 25
+enumerator ERR_LIB_ECDSA 26
+enumerator ERR_LIB_ECDH 27
+enumerator ERR_LIB_HMAC 28
+enumerator ERR_LIB_DIGEST 29
+enumerator ERR_LIB_CIPHER 30
+enumerator ERR_LIB_HKDF 31
+enumerator ERR_LIB_TRUST_TOKEN 32
+enumerator ERR_LIB_CMS 33
+enumerator ERR_LIB_USER 34
+enumerator ERR_NUM_LIBS 35
+enum {enum bn_primality_result_t} 4 0
+enumerator bn_probably_prime 0
+enumerator bn_composite 1
+enumerator bn_non_prime_power_composite 2
+enum {enum fips_counter_t} 4 0
+enumerator fips_counter_evp_aes_128_gcm 0
+enumerator fips_counter_evp_aes_256_gcm 1
+enumerator fips_counter_evp_aes_128_ctr 2
+enumerator fips_counter_evp_aes_256_ctr 3
+enumerator fips_counter_max 3
+enum {enum spake2_role_t} 4 0
+enumerator spake2_role_alice 0
+enumerator spake2_role_bob 1
+enum {enum anon@ec.h:31} 4 0
+enumerator POINT_CONVERSION_COMPRESSED 2
+enumerator POINT_CONVERSION_UNCOMPRESSED 4
+enumerator POINT_CONVERSION_HYBRID 6
+enum {enum ssl_private_key_result_t} 4 0
+enumerator ssl_private_key_success 0
+enumerator ssl_private_key_retry 1
+enumerator ssl_private_key_failure 2
+enum {enum ssl_ticket_aead_result_t} 4 0
+enumerator ssl_ticket_aead_success 0
+enumerator ssl_ticket_aead_retry 1
+enumerator ssl_ticket_aead_ignore_ticket 2
+enumerator ssl_ticket_aead_error 3
+enum {enum ssl_verify_result_t} 4 0
+enumerator ssl_verify_ok 0
+enumerator ssl_verify_invalid 1
+enumerator ssl_verify_retry 2
+enum {enum ssl_encryption_level_t} 4 0
+enumerator ssl_encryption_initial 0
+enumerator ssl_encryption_early_data 1
+enumerator ssl_encryption_handshake 2
+enumerator ssl_encryption_application 3
+enum {enum ssl_early_data_reason_t} 4 0
+enumerator ssl_early_data_unknown 0
+enumerator ssl_early_data_disabled 1
+enumerator ssl_early_data_accepted 2
+enumerator ssl_early_data_protocol_version 3
+enumerator ssl_early_data_peer_declined 4
+enumerator ssl_early_data_no_session_offered 5
+enumerator ssl_early_data_session_not_resumed 6
+enumerator ssl_early_data_unsupported_for_session 7
+enumerator ssl_early_data_hello_retry_request 8
+enumerator ssl_early_data_alpn_mismatch 9
+enumerator ssl_early_data_channel_id 10
+enumerator ssl_early_data_ticket_age_skew 12
+enumerator ssl_early_data_quic_parameter_mismatch 13
+enumerator ssl_early_data_alps_mismatch 14
+enumerator ssl_early_data_reason_max_value 14
+enum {enum ssl_renegotiate_mode_t} 4 0
+enumerator ssl_renegotiate_never 0
+enumerator ssl_renegotiate_once 1
+enumerator ssl_renegotiate_freely 2
+enumerator ssl_renegotiate_ignore 3
+enumerator ssl_renegotiate_explicit 4
+enum {enum ssl_select_cert_result_t} 4 1
+enumerator ssl_select_cert_success 1
+enumerator ssl_select_cert_retry 0
+enumerator ssl_select_cert_error -1
+enumerator ssl_select_cert_disable_ech -2
+enum {enum ssl_compliance_policy_t} 4 0
+enumerator ssl_compliance_policy_none 0
+enumerator ssl_compliance_policy_fips_202205 1
+enumerator ssl_compliance_policy_fips_202609 2
+enumerator ssl_compliance_policy_wpa3_192_202304 3
+enumerator ssl_compliance_policy_cnsa_202407 4
+enumerator ssl_compliance_policy_cnsa1_202603 5
+enumerator ssl_compliance_policy_cnsa2_202603 6
+macro OPENSSL_VERSION_NUMBER 269488255
+macro SSLEAY_VERSION_NUMBER 269488255
+macro BORINGSSL_API_VERSION 43
+macro EVP_AEAD_MAX_KEY_LENGTH 80
+macro EVP_AEAD_MAX_NONCE_LENGTH 24
+macro EVP_AEAD_MAX_OVERHEAD 64
+macro EVP_AEAD_MAX_OPEN_OVERHEAD 320
+macro EVP_AEAD_DEFAULT_TAG_LENGTH 0
+macro AES_ENCRYPT 1
+macro AES_DECRYPT 0
+macro AES_MAXNR 14
+macro AES_BLOCK_SIZE 16
+macro ERR_FLAG_STRING 1
+macro ERR_FLAG_MALLOCED 2
+macro ERR_R_FATAL 64
+macro ERR_R_MALLOC_FAILURE 65
+macro ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED 66
+macro ERR_R_PASSED_NULL_PARAMETER 67
+macro ERR_R_INTERNAL_ERROR 68
+macro ERR_R_OVERFLOW 69
+macro ERR_ERROR_STRING_BUF_LEN 120
+macro ERR_TXT_STRING 1
+macro ERR_TXT_MALLOCED 2
+macro ERR_NUM_ERRORS 16
+macro BIO_RR_CONNECT 2
+macro BIO_RR_ACCEPT 3
+macro BIO_NOCLOSE 0
+macro BIO_CLOSE 1
+macro BIO_FP_TEXT 16
+macro BIO_CTRL_DGRAM_QUERY_MTU 40
+macro BIO_CTRL_DGRAM_SET_MTU 42
+macro BIO_CTRL_DGRAM_MTU_EXCEEDED 43
+macro BIO_CTRL_DGRAM_GET_PEER 46
+macro BIO_CTRL_DGRAM_GET_FALLBACK_MTU 47
+macro BIO_CTRL_RESET 1
+macro BIO_CTRL_EOF 2
+macro BIO_CTRL_INFO 3
+macro BIO_CTRL_GET_CLOSE 8
+macro BIO_CTRL_SET_CLOSE 9
+macro BIO_CTRL_PENDING 10
+macro BIO_CTRL_FLUSH 11
+macro BIO_CTRL_WPENDING 13
+macro BIO_CTRL_SET_CALLBACK 14
+macro BIO_CTRL_GET_CALLBACK 15
+macro BIO_CTRL_SET 4
+macro BIO_CTRL_GET 5
+macro BIO_CTRL_PUSH 6
+macro BIO_CTRL_POP 7
+macro BIO_CTRL_DUP 12
+macro BIO_CTRL_SET_FILENAME 30
+macro BIO_FLAGS_READ 1
+macro BIO_FLAGS_WRITE 2
+macro BIO_FLAGS_IO_SPECIAL 4
+macro BIO_FLAGS_RWS 7
+macro BIO_FLAGS_SHOULD_RETRY 8
+macro BIO_FLAGS_BASE64_NO_NL 256
+macro BIO_FLAGS_MEM_RDONLY 512
+macro BIO_TYPE_DESCRIPTOR 256
+macro BIO_TYPE_FILTER 512
+macro BIO_TYPE_SOURCE_SINK 1024
+macro BIO_TYPE_NONE 0
+macro BIO_TYPE_MEM 1025
+macro BIO_TYPE_FILE 1026
+macro BIO_TYPE_FD 1284
+macro BIO_TYPE_SOCKET 1285
+macro BIO_TYPE_NULL 1030
+macro BIO_TYPE_SSL 519
+macro BIO_TYPE_MD 520
+macro BIO_TYPE_BUFFER 521
+macro BIO_TYPE_CIPHER 522
+macro BIO_TYPE_BASE64 523
+macro BIO_TYPE_CONNECT 1292
+macro BIO_TYPE_ACCEPT 1293
+macro BIO_TYPE_PROXY_CLIENT 526
+macro BIO_TYPE_PROXY_SERVER 527
+macro BIO_TYPE_NBIO_TEST 528
+macro BIO_TYPE_NULL_FILTER 529
+macro BIO_TYPE_BER 530
+macro BIO_TYPE_BIO 1043
+macro BIO_TYPE_LINEBUFFER 532
+macro BIO_TYPE_DGRAM 1301
+macro BIO_TYPE_ASN1 534
+macro BIO_TYPE_COMP 535
+macro BIO_TYPE_START 128
+macro BIO_C_SET_CONNECT 100
+macro BIO_C_DO_STATE_MACHINE 101
+macro BIO_C_SET_NBIO 102
+macro BIO_C_SET_PROXY_PARAM 103
+macro BIO_C_SET_FD 104
+macro BIO_C_GET_FD 105
+macro BIO_C_SET_FILE_PTR 106
+macro BIO_C_GET_FILE_PTR 107
+macro BIO_C_SET_FILENAME 108
+macro BIO_C_SET_SSL 109
+macro BIO_C_SET_MD 111
+macro BIO_C_GET_MD 112
+macro BIO_C_GET_CIPHER_STATUS 113
+macro BIO_C_SET_BUF_MEM 114
+macro BIO_C_GET_BUF_MEM_PTR 115
+macro BIO_C_GET_BUFF_NUM_LINES 116
+macro BIO_C_SET_BUFF_SIZE 117
+macro BIO_C_SET_ACCEPT 118
+macro BIO_C_SSL_MODE 119
+macro BIO_C_GET_MD_CTX 120
+macro BIO_C_GET_PROXY_PARAM 121
+macro BIO_C_SET_BUFF_READ_DATA 122
+macro BIO_C_GET_ACCEPT 124
+macro BIO_C_FILE_SEEK 128
+macro BIO_C_GET_CIPHER_CTX 129
+macro BIO_C_SET_BUF_MEM_EOF_RETURN 130
+macro BIO_C_SET_BIND_MODE 131
+macro BIO_C_GET_BIND_MODE 132
+macro BIO_C_FILE_TELL 133
+macro BIO_C_GET_SOCKS 134
+macro BIO_C_SET_SOCKS 135
+macro BIO_C_SET_WRITE_BUF_SIZE 136
+macro BIO_C_GET_WRITE_BUF_SIZE 137
+macro BIO_C_GET_WRITE_GUARANTEE 140
+macro BIO_C_GET_READ_REQUEST 141
+macro BIO_C_SHUTDOWN_WR 142
+macro BIO_C_NREAD0 143
+macro BIO_C_NREAD 144
+macro BIO_C_NWRITE0 145
+macro BIO_C_NWRITE 146
+macro BIO_C_RESET_READ_REQUEST 147
+macro BIO_C_SET_MD_CTX 148
+macro BIO_C_SET_PREFIX 149
+macro BIO_C_GET_PREFIX 150
+macro BIO_C_SET_SUFFIX 151
+macro BIO_C_GET_SUFFIX 152
+macro BIO_C_SET_EX_ARG 153
+macro BIO_C_GET_EX_ARG 154
+macro BIO_R_BAD_FOPEN_MODE 100
+macro BIO_R_BROKEN_PIPE 101
+macro BIO_R_CONNECT_ERROR 102
+macro BIO_R_ERROR_SETTING_NBIO 103
+macro BIO_R_INVALID_ARGUMENT 104
+macro BIO_R_IN_USE 105
+macro BIO_R_KEEPALIVE 106
+macro BIO_R_NBIO_CONNECT_ERROR 107
+macro BIO_R_NO_HOSTNAME_SPECIFIED 108
+macro BIO_R_NO_PORT_SPECIFIED 109
+macro BIO_R_NO_SUCH_FILE 110
+macro BIO_R_NULL_PARAMETER 111
+macro BIO_R_SYS_LIB 112
+macro BIO_R_UNABLE_TO_CREATE_SOCKET 113
+macro BIO_R_UNINITIALIZED 114
+macro BIO_R_UNSUPPORTED_METHOD 115
+macro BIO_R_WRITE_TO_READ_ONLY_BIO 116
+macro BN_BITS2 64
+macro BN_DEC_FMT1 93874973051686
+macro BN_HEX_FMT1 93874973051714
+macro BN_HEX_FMT2 93874973051742
+macro BN_RAND_TOP_ANY -1
+macro BN_RAND_TOP_ONE 0
+macro BN_RAND_TOP_TWO 1
+macro BN_RAND_BOTTOM_ANY 0
+macro BN_RAND_BOTTOM_ODD 1
+macro BN_GENCB_GENERATED 0
+macro BN_GENCB_PRIME_TEST 1
+macro BN_prime_checks_for_validation 64
+macro BN_prime_checks_for_generation 0
+macro BN_prime_checks 64
+macro BN_FLG_MALLOCED 1
+macro BN_FLG_STATIC_DATA 2
+macro BN_R_ARG2_LT_ARG3 100
+macro BN_R_BAD_RECIPROCAL 101
+macro BN_R_BIGNUM_TOO_LONG 102
+macro BN_R_BITS_TOO_SMALL 103
+macro BN_R_CALLED_WITH_EVEN_MODULUS 104
+macro BN_R_DIV_BY_ZERO 105
+macro BN_R_EXPAND_ON_STATIC_BIGNUM_DATA 106
+macro BN_R_INPUT_NOT_REDUCED 107
+macro BN_R_INVALID_RANGE 108
+macro BN_R_NEGATIVE_NUMBER 109
+macro BN_R_NOT_A_SQUARE 110
+macro BN_R_NOT_INITIALIZED 111
+macro BN_R_NO_INVERSE 112
+macro BN_R_PRIVATE_KEY_TOO_LARGE 113
+macro BN_R_P_IS_NOT_PRIME 114
+macro BN_R_TOO_MANY_ITERATIONS 115
+macro BN_R_TOO_MANY_TEMPORARY_VARIABLES 116
+macro BN_R_BAD_ENCODING 117
+macro BN_R_ENCODE_ERROR 118
+macro BN_R_INVALID_INPUT 119
+macro V_ASN1_UNIVERSAL 0
+macro V_ASN1_APPLICATION 64
+macro V_ASN1_CONTEXT_SPECIFIC 128
+macro V_ASN1_PRIVATE 192
+macro V_ASN1_CONSTRUCTED 32
+macro V_ASN1_PRIMITIVE_TAG 31
+macro V_ASN1_MAX_UNIVERSAL 255
+macro V_ASN1_UNDEF -1
+macro V_ASN1_OTHER -3
+macro V_ASN1_ANY -4
+macro V_ASN1_EOC 0
+macro V_ASN1_BOOLEAN 1
+macro V_ASN1_INTEGER 2
+macro V_ASN1_BIT_STRING 3
+macro V_ASN1_OCTET_STRING 4
+macro V_ASN1_NULL 5
+macro V_ASN1_OBJECT 6
+macro V_ASN1_OBJECT_DESCRIPTOR 7
+macro V_ASN1_EXTERNAL 8
+macro V_ASN1_REAL 9
+macro V_ASN1_ENUMERATED 10
+macro V_ASN1_UTF8STRING 12
+macro V_ASN1_SEQUENCE 16
+macro V_ASN1_SET 17
+macro V_ASN1_NUMERICSTRING 18
+macro V_ASN1_PRINTABLESTRING 19
+macro V_ASN1_T61STRING 20
+macro V_ASN1_TELETEXSTRING 20
+macro V_ASN1_VIDEOTEXSTRING 21
+macro V_ASN1_IA5STRING 22
+macro V_ASN1_UTCTIME 23
+macro V_ASN1_GENERALIZEDTIME 24
+macro V_ASN1_GRAPHICSTRING 25
+macro V_ASN1_ISO64STRING 26
+macro V_ASN1_VISIBLESTRING 26
+macro V_ASN1_GENERALSTRING 27
+macro V_ASN1_UNIVERSALSTRING 28
+macro V_ASN1_BMPSTRING 30
+macro V_ASN1_NEG 256
+macro V_ASN1_NEG_INTEGER 258
+macro V_ASN1_NEG_ENUMERATED 266
+macro B_ASN1_NUMERICSTRING 1
+macro B_ASN1_PRINTABLESTRING 2
+macro B_ASN1_T61STRING 4
+macro B_ASN1_TELETEXSTRING 4
+macro B_ASN1_VIDEOTEXSTRING 8
+macro B_ASN1_IA5STRING 16
+macro B_ASN1_GRAPHICSTRING 32
+macro B_ASN1_ISO64STRING 64
+macro B_ASN1_VISIBLESTRING 64
+macro B_ASN1_GENERALSTRING 128
+macro B_ASN1_UNIVERSALSTRING 256
+macro B_ASN1_OCTET_STRING 512
+macro B_ASN1_BIT_STRING 1024
+macro B_ASN1_BMPSTRING 2048
+macro B_ASN1_UTF8STRING 8192
+macro B_ASN1_UTCTIME 16384
+macro B_ASN1_GENERALIZEDTIME 32768
+macro B_ASN1_SEQUENCE 65536
+macro ASN1_BOOLEAN_FALSE 0
+macro ASN1_BOOLEAN_TRUE 255
+macro ASN1_BOOLEAN_NONE -1
+macro MBSTRING_FLAG 4096
+macro MBSTRING_UTF8 4096
+macro MBSTRING_ASC 4097
+macro MBSTRING_BMP 4098
+macro MBSTRING_UNIV 4100
+macro DIRSTRING_TYPE 10246
+macro PKCS9STRING_TYPE 10262
+macro STABLE_NO_MASK 2
+macro B_ASN1_DIRECTORYSTRING 10502
+macro B_ASN1_DISPLAYTEXT 10320
+macro B_ASN1_TIME 49152
+macro ASN1_STRFLGS_ESC_2253 1
+macro ASN1_STRFLGS_ESC_CTRL 2
+macro ASN1_STRFLGS_ESC_MSB 4
+macro ASN1_STRFLGS_ESC_QUOTE 8
+macro ASN1_STRFLGS_UTF8_CONVERT 16
+macro ASN1_STRFLGS_IGNORE_TYPE 32
+macro ASN1_STRFLGS_SHOW_TYPE 64
+macro ASN1_STRFLGS_DUMP_ALL 128
+macro ASN1_STRFLGS_DUMP_UNKNOWN 256
+macro ASN1_STRFLGS_DUMP_DER 512
+macro ASN1_STRFLGS_RFC2253 791
+macro ASN1_STRING_FLAG_BITS_LEFT 8
+macro ASN1_R_ASN1_LENGTH_MISMATCH 100
+macro ASN1_R_AUX_ERROR 101
+macro ASN1_R_BAD_GET_ASN1_OBJECT_CALL 102
+macro ASN1_R_BAD_OBJECT_HEADER 103
+macro ASN1_R_BMPSTRING_IS_WRONG_LENGTH 104
+macro ASN1_R_BN_LIB 105
+macro ASN1_R_BOOLEAN_IS_WRONG_LENGTH 106
+macro ASN1_R_BUFFER_TOO_SMALL 107
+macro ASN1_R_CONTEXT_NOT_INITIALISED 108
+macro ASN1_R_DECODE_ERROR 109
+macro ASN1_R_DEPTH_EXCEEDED 110
+macro ASN1_R_DIGEST_AND_KEY_TYPE_NOT_SUPPORTED 111
+macro ASN1_R_ENCODE_ERROR 112
+macro ASN1_R_ERROR_GETTING_TIME 113
+macro ASN1_R_EXPECTING_AN_ASN1_SEQUENCE 114
+macro ASN1_R_EXPECTING_AN_INTEGER 115
+macro ASN1_R_EXPECTING_AN_OBJECT 116
+macro ASN1_R_EXPECTING_A_BOOLEAN 117
+macro ASN1_R_EXPECTING_A_TIME 118
+macro ASN1_R_EXPLICIT_LENGTH_MISMATCH 119
+macro ASN1_R_EXPLICIT_TAG_NOT_CONSTRUCTED 120
+macro ASN1_R_FIELD_MISSING 121
+macro ASN1_R_FIRST_NUM_TOO_LARGE 122
+macro ASN1_R_HEADER_TOO_LONG 123
+macro ASN1_R_ILLEGAL_BITSTRING_FORMAT 124
+macro ASN1_R_ILLEGAL_BOOLEAN 125
+macro ASN1_R_ILLEGAL_CHARACTERS 126
+macro ASN1_R_ILLEGAL_FORMAT 127
+macro ASN1_R_ILLEGAL_HEX 128
+macro ASN1_R_ILLEGAL_IMPLICIT_TAG 129
+macro ASN1_R_ILLEGAL_INTEGER 130
+macro ASN1_R_ILLEGAL_NESTED_TAGGING 131
+macro ASN1_R_ILLEGAL_NULL 132
+macro ASN1_R_ILLEGAL_NULL_VALUE 133
+macro ASN1_R_ILLEGAL_OBJECT 134
+macro ASN1_R_ILLEGAL_OPTIONAL_ANY 135
+macro ASN1_R_ILLEGAL_OPTIONS_ON_ITEM_TEMPLATE 136
+macro ASN1_R_ILLEGAL_TAGGED_ANY 137
+macro ASN1_R_ILLEGAL_TIME_VALUE 138
+macro ASN1_R_INTEGER_NOT_ASCII_FORMAT 139
+macro ASN1_R_INTEGER_TOO_LARGE_FOR_LONG 140
+macro ASN1_R_INVALID_BIT_STRING_BITS_LEFT 141
+macro ASN1_R_INVALID_BMPSTRING 142
+macro ASN1_R_INVALID_DIGIT 143
+macro ASN1_R_INVALID_MODIFIER 144
+macro ASN1_R_INVALID_NUMBER 145
+macro ASN1_R_INVALID_OBJECT_ENCODING 146
+macro ASN1_R_INVALID_SEPARATOR 147
+macro ASN1_R_INVALID_TIME_FORMAT 148
+macro ASN1_R_INVALID_UNIVERSALSTRING 149
+macro ASN1_R_INVALID_UTF8STRING 150
+macro ASN1_R_LIST_ERROR 151
+macro ASN1_R_MISSING_ASN1_EOS 152
+macro ASN1_R_MISSING_EOC 153
+macro ASN1_R_MISSING_SECOND_NUMBER 154
+macro ASN1_R_MISSING_VALUE 155
+macro ASN1_R_MSTRING_NOT_UNIVERSAL 156
+macro ASN1_R_MSTRING_WRONG_TAG 157
+macro ASN1_R_NESTED_ASN1_ERROR 158
+macro ASN1_R_NESTED_ASN1_STRING 159
+macro ASN1_R_NON_HEX_CHARACTERS 160
+macro ASN1_R_NOT_ASCII_FORMAT 161
+macro ASN1_R_NOT_ENOUGH_DATA 162
+macro ASN1_R_NO_MATCHING_CHOICE_TYPE 163
+macro ASN1_R_NULL_IS_WRONG_LENGTH 164
+macro ASN1_R_OBJECT_NOT_ASCII_FORMAT 165
+macro ASN1_R_ODD_NUMBER_OF_CHARS 166
+macro ASN1_R_SECOND_NUMBER_TOO_LARGE 167
+macro ASN1_R_SEQUENCE_LENGTH_MISMATCH 168
+macro ASN1_R_SEQUENCE_NOT_CONSTRUCTED 169
+macro ASN1_R_SEQUENCE_OR_SET_NEEDS_CONFIG 170
+macro ASN1_R_SHORT_LINE 171
+macro ASN1_R_STREAMING_NOT_SUPPORTED 172
+macro ASN1_R_STRING_TOO_LONG 173
+macro ASN1_R_STRING_TOO_SHORT 174
+macro ASN1_R_TAG_VALUE_TOO_HIGH 175
+macro ASN1_R_TIME_NOT_ASCII_FORMAT 176
+macro ASN1_R_TOO_LONG 177
+macro ASN1_R_TYPE_NOT_CONSTRUCTED 178
+macro ASN1_R_TYPE_NOT_PRIMITIVE 179
+macro ASN1_R_UNEXPECTED_EOC 180
+macro ASN1_R_UNIVERSALSTRING_IS_WRONG_LENGTH 181
+macro ASN1_R_UNKNOWN_FORMAT 182
+macro ASN1_R_UNKNOWN_MESSAGE_DIGEST_ALGORITHM 183
+macro ASN1_R_UNKNOWN_SIGNATURE_ALGORITHM 184
+macro ASN1_R_UNKNOWN_TAG 185
+macro ASN1_R_UNSUPPORTED_ANY_DEFINED_BY_TYPE 186
+macro ASN1_R_UNSUPPORTED_PUBLIC_KEY_TYPE 187
+macro ASN1_R_UNSUPPORTED_TYPE 188
+macro ASN1_R_WRONG_PUBLIC_KEY_TYPE 189
+macro ASN1_R_WRONG_TAG 190
+macro ASN1_R_WRONG_TYPE 191
+macro ASN1_R_NESTED_TOO_DEEP 192
+macro ASN1_R_BAD_TEMPLATE 193
+macro ASN1_R_INVALID_BIT_STRING_PADDING 194
+macro ASN1_R_WRONG_INTEGER_TYPE 195
+macro ASN1_R_INVALID_INTEGER 196
+macro ASN1_TFLG_OPTIONAL 1
+macro ASN1_TFLG_SET_OF 2
+macro ASN1_TFLG_SEQUENCE_OF 4
+macro ASN1_TFLG_SK_MASK 6
+macro ASN1_TFLG_IMPTAG 8
+macro ASN1_TFLG_EXPTAG 16
+macro ASN1_TFLG_TAG_MASK 24
+macro ASN1_TFLG_IMPLICIT 136
+macro ASN1_TFLG_EXPLICIT 144
+macro ASN1_TFLG_UNIVERSAL 0
+macro ASN1_TFLG_APPLICATION 64
+macro ASN1_TFLG_CONTEXT 128
+macro ASN1_TFLG_PRIVATE 192
+macro ASN1_TFLG_TAG_CLASS 192
+macro ASN1_TFLG_ADB_MASK 768
+macro ASN1_TFLG_ADB_OID 256
+macro ASN1_ITYPE_PRIMITIVE 0
+macro ASN1_ITYPE_SEQUENCE 1
+macro ASN1_ITYPE_CHOICE 2
+macro ASN1_ITYPE_EXTERN 4
+macro ASN1_ITYPE_MSTRING 5
+macro ASN1_AFLG_REFCOUNT 1
+macro ASN1_AFLG_ENCODING 2
+macro ASN1_OP_NEW_PRE 0
+macro ASN1_OP_NEW_POST 1
+macro ASN1_OP_FREE_PRE 2
+macro ASN1_OP_FREE_POST 3
+macro ASN1_OP_D2I_PRE 4
+macro ASN1_OP_D2I_POST 5
+macro ASN1_OP_PRINT_PRE 8
+macro ASN1_OP_PRINT_POST 9
+macro ASN1_OP_STREAM_PRE 10
+macro ASN1_OP_STREAM_POST 11
+macro ASN1_OP_DETACHED_PRE 12
+macro ASN1_OP_DETACHED_POST 13
+macro BLAKE2B256_DIGEST_LENGTH 32
+macro BLAKE2B_CBLOCK 128
+macro BF_ENCRYPT 1
+macro BF_DECRYPT 0
+macro BF_ROUNDS 16
+macro BF_BLOCK 8
+macro CBS_ASN1_TAG_SHIFT 24
+macro CBS_ASN1_CONSTRUCTED 536870912
+macro CBS_ASN1_UNIVERSAL 0
+macro CBS_ASN1_APPLICATION 1073741824
+macro CBS_ASN1_CONTEXT_SPECIFIC 2147483648
+macro CBS_ASN1_PRIVATE 3221225472
+macro CBS_ASN1_CLASS_MASK 3221225472
+macro CBS_ASN1_TAG_NUMBER_MASK 536870911
+macro CBS_ASN1_BOOLEAN 1
+macro CBS_ASN1_INTEGER 2
+macro CBS_ASN1_BITSTRING 3
+macro CBS_ASN1_OCTETSTRING 4
+macro CBS_ASN1_NULL 5
+macro CBS_ASN1_OBJECT 6
+macro CBS_ASN1_ENUMERATED 10
+macro CBS_ASN1_UTF8STRING 12
+macro CBS_ASN1_SEQUENCE 536870928
+macro CBS_ASN1_SET 536870929
+macro CBS_ASN1_NUMERICSTRING 18
+macro CBS_ASN1_PRINTABLESTRING 19
+macro CBS_ASN1_T61STRING 20
+macro CBS_ASN1_VIDEOTEXSTRING 21
+macro CBS_ASN1_IA5STRING 22
+macro CBS_ASN1_UTCTIME 23
+macro CBS_ASN1_GENERALIZEDTIME 24
+macro CBS_ASN1_GRAPHICSTRING 25
+macro CBS_ASN1_VISIBLESTRING 26
+macro CBS_ASN1_GENERALSTRING 27
+macro CBS_ASN1_UNIVERSALSTRING 28
+macro CBS_ASN1_BMPSTRING 30
+macro CAST_ENCRYPT 1
+macro CAST_DECRYPT 0
+macro CAST_BLOCK 8
+macro CAST_KEY_LENGTH 16
+macro EVP_CIPH_STREAM_CIPHER 0
+macro EVP_CIPH_ECB_MODE 1
+macro EVP_CIPH_CBC_MODE 2
+macro EVP_CIPH_CFB_MODE 3
+macro EVP_CIPH_OFB_MODE 4
+macro EVP_CIPH_CTR_MODE 5
+macro EVP_CIPH_GCM_MODE 6
+macro EVP_CIPH_XTS_MODE 7
+macro EVP_CIPH_CCM_MODE 8
+macro EVP_CIPH_OCB_MODE 9
+macro EVP_CIPH_WRAP_MODE 10
+macro EVP_CIPH_VARIABLE_LENGTH 64
+macro EVP_CIPH_ALWAYS_CALL_INIT 128
+macro EVP_CIPH_CUSTOM_IV 256
+macro EVP_CIPH_CTRL_INIT 512
+macro EVP_CIPH_FLAG_CUSTOM_CIPHER 1024
+macro EVP_CIPH_FLAG_AEAD_CIPHER 2048
+macro EVP_CIPH_CUSTOM_COPY 4096
+macro EVP_CIPH_FLAG_NON_FIPS_ALLOW 0
+macro EVP_CIPHER_CTX_FLAG_WRAP_ALLOW 0
+macro EVP_CIPH_NO_PADDING 2048
+macro EVP_CTRL_INIT 0
+macro EVP_CTRL_SET_KEY_LENGTH 1
+macro EVP_CTRL_GET_RC2_KEY_BITS 2
+macro EVP_CTRL_SET_RC2_KEY_BITS 3
+macro EVP_CTRL_GET_RC5_ROUNDS 4
+macro EVP_CTRL_SET_RC5_ROUNDS 5
+macro EVP_CTRL_RAND_KEY 6
+macro EVP_CTRL_PBE_PRF_NID 7
+macro EVP_CTRL_COPY 8
+macro EVP_CTRL_AEAD_SET_IVLEN 9
+macro EVP_CTRL_AEAD_GET_TAG 16
+macro EVP_CTRL_AEAD_SET_TAG 17
+macro EVP_CTRL_AEAD_SET_IV_FIXED 18
+macro EVP_CTRL_GCM_IV_GEN 19
+macro EVP_CTRL_AEAD_SET_MAC_KEY 23
+macro EVP_CTRL_GCM_SET_IV_INV 24
+macro EVP_CTRL_GET_IVLEN 25
+macro EVP_GCM_TLS_FIXED_IV_LEN 4
+macro EVP_GCM_TLS_EXPLICIT_IV_LEN 8
+macro EVP_GCM_TLS_TAG_LEN 16
+macro EVP_CTRL_GCM_SET_IVLEN 9
+macro EVP_CTRL_GCM_GET_TAG 16
+macro EVP_CTRL_GCM_SET_TAG 17
+macro EVP_CTRL_GCM_SET_IV_FIXED 18
+macro EVP_MAX_KEY_LENGTH 64
+macro EVP_MAX_IV_LENGTH 16
+macro EVP_MAX_BLOCK_LENGTH 32
+macro CIPHER_R_AES_KEY_SETUP_FAILED 100
+macro CIPHER_R_BAD_DECRYPT 101
+macro CIPHER_R_BAD_KEY_LENGTH 102
+macro CIPHER_R_BUFFER_TOO_SMALL 103
+macro CIPHER_R_CTRL_NOT_IMPLEMENTED 104
+macro CIPHER_R_CTRL_OPERATION_NOT_IMPLEMENTED 105
+macro CIPHER_R_DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH 106
+macro CIPHER_R_INITIALIZATION_ERROR 107
+macro CIPHER_R_INPUT_NOT_INITIALIZED 108
+macro CIPHER_R_INVALID_AD_SIZE 109
+macro CIPHER_R_INVALID_KEY_LENGTH 110
+macro CIPHER_R_INVALID_NONCE_SIZE 111
+macro CIPHER_R_INVALID_OPERATION 112
+macro CIPHER_R_IV_TOO_LARGE 113
+macro CIPHER_R_NO_CIPHER_SET 114
+macro CIPHER_R_OUTPUT_ALIASES_INPUT 115
+macro CIPHER_R_TAG_TOO_LARGE 116
+macro CIPHER_R_TOO_LARGE 117
+macro CIPHER_R_UNSUPPORTED_AD_SIZE 118
+macro CIPHER_R_UNSUPPORTED_INPUT_SIZE 119
+macro CIPHER_R_UNSUPPORTED_KEY_SIZE 120
+macro CIPHER_R_UNSUPPORTED_NONCE_SIZE 121
+macro CIPHER_R_UNSUPPORTED_TAG_SIZE 122
+macro CIPHER_R_WRONG_FINAL_BLOCK_LENGTH 123
+macro CIPHER_R_NO_DIRECTION_SET 124
+macro CIPHER_R_INVALID_NONCE 125
+macro CMS_NOCERTS 2
+macro CMS_DETACHED 64
+macro CMS_BINARY 128
+macro CMS_NOATTR 256
+macro CMS_NOSMIMECAP 512
+macro CMS_STREAM 4096
+macro CMS_PARTIAL 16384
+macro CMS_USE_KEYID 65536
+macro CMS_NO_SIGNING_TIME 4194304
+macro CMS_R_CERTIFICATE_HAS_NO_KEYID 100
+macro CMS_R_PRIVATE_KEY_DOES_NOT_MATCH_CERTIFICATE 101
+macro CONF_MFLAGS_DEFAULT_SECTION 0
+macro CONF_MFLAGS_IGNORE_MISSING_FILE 0
+macro CONF_R_LIST_CANNOT_BE_NULL 100
+macro CONF_R_MISSING_CLOSE_SQUARE_BRACKET 101
+macro CONF_R_MISSING_EQUAL_SIGN 102
+macro CONF_R_NO_CLOSE_BRACE 103
+macro CONF_R_UNABLE_TO_CREATE_NEW_SECTION 104
+macro CONF_R_VARIABLE_HAS_NO_VALUE 105
+macro CONF_R_VARIABLE_EXPANSION_TOO_LONG 106
+macro CONF_R_VARIABLE_EXPANSION_NOT_SUPPORTED 107
+macro SHA224_CBLOCK 64
+macro SHA224_DIGEST_LENGTH 28
+macro SHA256_CBLOCK 64
+macro SHA256_DIGEST_LENGTH 32
+macro SHA384_CBLOCK 128
+macro SHA384_DIGEST_LENGTH 48
+macro SHA512_CBLOCK 128
+macro SHA512_DIGEST_LENGTH 64
+macro SHA512_256_DIGEST_LENGTH 32
+macro SHA_CBLOCK 64
+macro SHA_DIGEST_LENGTH 20
+macro CRYPTO_LOCK 1
+macro CRYPTO_UNLOCK 2
+macro CRYPTO_READ 4
+macro CRYPTO_WRITE 8
+macro OPENSSL_VERSION 0
+macro OPENSSL_CFLAGS 1
+macro OPENSSL_BUILT_ON 2
+macro OPENSSL_PLATFORM 3
+macro OPENSSL_DIR 4
+macro SSLEAY_VERSION 0
+macro SSLEAY_CFLAGS 1
+macro SSLEAY_BUILT_ON 2
+macro SSLEAY_PLATFORM 3
+macro SSLEAY_DIR 4
+macro OPENSSL_INIT_NO_LOAD_CRYPTO_STRINGS 0
+macro OPENSSL_INIT_LOAD_CRYPTO_STRINGS 0
+macro OPENSSL_INIT_ADD_ALL_CIPHERS 0
+macro OPENSSL_INIT_ADD_ALL_DIGESTS 0
+macro OPENSSL_INIT_NO_ADD_ALL_CIPHERS 0
+macro OPENSSL_INIT_NO_ADD_ALL_DIGESTS 0
+macro OPENSSL_INIT_LOAD_CONFIG 0
+macro OPENSSL_INIT_NO_LOAD_CONFIG 0
+macro OPENSSL_INIT_NO_ATEXIT 0
+macro OPENSSL_INIT_ATFORK 0
+macro OPENSSL_INIT_ENGINE_RDRAND 0
+macro OPENSSL_INIT_ENGINE_DYNAMIC 0
+macro OPENSSL_INIT_ENGINE_OPENSSL 0
+macro OPENSSL_INIT_ENGINE_CRYPTODEV 0
+macro OPENSSL_INIT_ENGINE_CAPI 0
+macro OPENSSL_INIT_ENGINE_PADLOCK 0
+macro OPENSSL_INIT_ENGINE_AFALG 0
+macro OPENSSL_INIT_ENGINE_ALL_BUILTIN 0
+macro CTR_DRBG_MIN_ENTROPY_LEN 32
+macro CTR_DRBG_MAX_ENTROPY_LEN 64
+macro CTR_DRBG_ENTROPY_LEN 48
+macro CTR_DRBG_SEED_LEN 48
+macro CTR_DRBG_NONCE_LEN 16
+macro CTR_DRBG_MAX_GENERATE_LENGTH 65536
+macro X25519_PRIVATE_KEY_LEN 32
+macro X25519_PUBLIC_VALUE_LEN 32
+macro X25519_SHARED_KEY_LEN 32
+macro ED25519_PRIVATE_KEY_LEN 64
+macro ED25519_PUBLIC_KEY_LEN 32
+macro ED25519_SIGNATURE_LEN 64
+macro SPAKE2_MAX_MSG_SIZE 32
+macro SPAKE2_MAX_KEY_SIZE 64
+macro DES_KEY_SZ 8
+macro DES_SCHEDULE_SZ 128
+macro DES_ENCRYPT 1
+macro DES_DECRYPT 0
+macro DES_CBC_MODE 0
+macro DES_PCBC_MODE 1
+macro OPENSSL_DH_MAX_MODULUS_BITS 8192
+macro DH_GENERATOR_2 2
+macro DH_GENERATOR_5 5
+macro DH_CHECK_P_NOT_PRIME 1
+macro DH_CHECK_P_NOT_SAFE_PRIME 2
+macro DH_CHECK_UNABLE_TO_CHECK_GENERATOR 4
+macro DH_CHECK_NOT_SUITABLE_GENERATOR 8
+macro DH_CHECK_Q_NOT_PRIME 16
+macro DH_CHECK_INVALID_Q_VALUE 32
+macro DH_NOT_SUITABLE_GENERATOR 8
+macro DH_UNABLE_TO_CHECK_GENERATOR 4
+macro DH_CHECK_PUBKEY_TOO_SMALL 1
+macro DH_CHECK_PUBKEY_TOO_LARGE 2
+macro DH_CHECK_PUBKEY_INVALID 4
+macro DH_R_BAD_GENERATOR 100
+macro DH_R_INVALID_PUBKEY 101
+macro DH_R_MODULUS_TOO_LARGE 102
+macro DH_R_NO_PRIVATE_VALUE 103
+macro DH_R_DECODE_ERROR 104
+macro DH_R_ENCODE_ERROR 105
+macro DH_R_INVALID_PARAMETERS 106
+macro EVP_MAX_MD_SIZE 64
+macro EVP_MAX_MD_BLOCK_SIZE 128
+macro EVP_MD_FLAG_DIGALGID_ABSENT 2
+macro EVP_MD_FLAG_XOF 4
+macro EVP_MD_CTX_FLAG_NON_FIPS_ALLOW 0
+macro EVP_MAX_MD_DATA_SIZE 208
+macro DIGEST_R_INPUT_NOT_INITIALIZED 100
+macro DIGEST_R_DECODE_ERROR 101
+macro DIGEST_R_UNKNOWN_HASH 102
+macro OPENSSL_DSA_MAX_MODULUS_BITS 8192
+macro DSA_R_BAD_Q_VALUE 100
+macro DSA_R_MISSING_PARAMETERS 101
+macro DSA_R_MODULUS_TOO_LARGE 102
+macro DSA_R_NEED_NEW_SETUP_VALUES 103
+macro DSA_R_BAD_VERSION 104
+macro DSA_R_DECODE_ERROR 105
+macro DSA_R_ENCODE_ERROR 106
+macro DSA_R_INVALID_PARAMETERS 107
+macro DSA_R_TOO_MANY_ITERATIONS 108
+macro OPENSSL_EC_EXPLICIT_CURVE 0
+macro OPENSSL_EC_NAMED_CURVE 1
+macro ENGINE_R_OPERATION_NOT_SUPPORTED 100
+macro EC_PKEY_NO_PARAMETERS 1
+macro EC_PKEY_NO_PUBKEY 2
+macro ECDSA_FLAG_OPAQUE 1
+macro EC_R_BUFFER_TOO_SMALL 100
+macro EC_R_COORDINATES_OUT_OF_RANGE 101
+macro EC_R_D2I_ECPKPARAMETERS_FAILURE 102
+macro EC_R_EC_GROUP_NEW_BY_NAME_FAILURE 103
+macro EC_R_GROUP2PKPARAMETERS_FAILURE 104
+macro EC_R_I2D_ECPKPARAMETERS_FAILURE 105
+macro EC_R_INCOMPATIBLE_OBJECTS 106
+macro EC_R_INVALID_COMPRESSED_POINT 107
+macro EC_R_INVALID_COMPRESSION_BIT 108
+macro EC_R_INVALID_ENCODING 109
+macro EC_R_INVALID_FIELD 110
+macro EC_R_INVALID_FORM 111
+macro EC_R_INVALID_GROUP_ORDER 112
+macro EC_R_INVALID_PRIVATE_KEY 113
+macro EC_R_MISSING_PARAMETERS 114
+macro EC_R_MISSING_PRIVATE_KEY 115
+macro EC_R_NON_NAMED_CURVE 116
+macro EC_R_NOT_INITIALIZED 117
+macro EC_R_PKPARAMETERS2GROUP_FAILURE 118
+macro EC_R_POINT_AT_INFINITY 119
+macro EC_R_POINT_IS_NOT_ON_CURVE 120
+macro EC_R_SLOT_FULL 121
+macro EC_R_UNDEFINED_GENERATOR 122
+macro EC_R_UNKNOWN_GROUP 123
+macro EC_R_UNKNOWN_ORDER 124
+macro EC_R_WRONG_ORDER 125
+macro EC_R_BIGNUM_OUT_OF_RANGE 126
+macro EC_R_WRONG_CURVE_PARAMETERS 127
+macro EC_R_DECODE_ERROR 128
+macro EC_R_ENCODE_ERROR 129
+macro EC_R_GROUP_MISMATCH 130
+macro EC_R_INVALID_COFACTOR 131
+macro EC_R_PUBLIC_KEY_VALIDATION_FAILED 132
+macro EC_R_INVALID_SCALAR 133
+macro ECDH_R_KDF_FAILED 100
+macro ECDH_R_NO_PRIVATE_VALUE 101
+macro ECDH_R_POINT_ARITHMETIC_FAILURE 102
+macro ECDH_R_UNKNOWN_DIGEST_LENGTH 103
+macro ECDSA_R_BAD_SIGNATURE 100
+macro ECDSA_R_MISSING_PARAMETERS 101
+macro ECDSA_R_NEED_NEW_SETUP_VALUES 102
+macro ECDSA_R_NOT_IMPLEMENTED 103
+macro ECDSA_R_RANDOM_NUMBER_GENERATION_FAILED 104
+macro ECDSA_R_ENCODE_ERROR 105
+macro ECDSA_R_TOO_MANY_ITERATIONS 106
+macro EVP_R_BUFFER_TOO_SMALL 100
+macro EVP_R_COMMAND_NOT_SUPPORTED 101
+macro EVP_R_DECODE_ERROR 102
+macro EVP_R_DIFFERENT_KEY_TYPES 103
+macro EVP_R_DIFFERENT_PARAMETERS 104
+macro EVP_R_ENCODE_ERROR 105
+macro EVP_R_EXPECTING_A_EC_KEY 106
+macro EVP_R_EXPECTING_AN_RSA_KEY 107
+macro EVP_R_EXPECTING_A_DSA_KEY 108
+macro EVP_R_ILLEGAL_OR_UNSUPPORTED_PADDING_MODE 109
+macro EVP_R_INVALID_DIGEST_LENGTH 110
+macro EVP_R_INVALID_DIGEST_TYPE 111
+macro EVP_R_INVALID_KEYBITS 112
+macro EVP_R_INVALID_MGF1_MD 113
+macro EVP_R_INVALID_OPERATION 114
+macro EVP_R_INVALID_PADDING_MODE 115
+macro EVP_R_INVALID_PSS_SALTLEN 116
+macro EVP_R_KEYS_NOT_SET 117
+macro EVP_R_MISSING_PARAMETERS 118
+macro EVP_R_NO_DEFAULT_DIGEST 119
+macro EVP_R_NO_KEY_SET 120
+macro EVP_R_NO_MDC2_SUPPORT 121
+macro EVP_R_NO_NID_FOR_CURVE 122
+macro EVP_R_NO_OPERATION_SET 123
+macro EVP_R_NO_PARAMETERS_SET 124
+macro EVP_R_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE 125
+macro EVP_R_OPERATION_NOT_INITIALIZED 126
+macro EVP_R_UNKNOWN_PUBLIC_KEY_TYPE 127
+macro EVP_R_UNSUPPORTED_ALGORITHM 128
+macro EVP_R_UNSUPPORTED_PUBLIC_KEY_TYPE 129
+macro EVP_R_NOT_A_PRIVATE_KEY 130
+macro EVP_R_INVALID_SIGNATURE 131
+macro EVP_R_MEMORY_LIMIT_EXCEEDED 132
+macro EVP_R_INVALID_PARAMETERS 133
+macro EVP_R_INVALID_PEER_KEY 134
+macro EVP_R_NOT_XOF_OR_INVALID_LENGTH 135
+macro EVP_R_EMPTY_PSK 136
+macro EVP_R_INVALID_BUFFER_SIZE 137
+macro EVP_R_EXPECTING_A_DH_KEY 138
+macro EVP_R_PRIVATE_KEY_WAS_NOT_SEED 139
+macro EVP_R_MISSING_PUBLIC_KEY 140
+macro EVP_R_INVALID_CIPHERTEXT_LENGTH 141
+macro EVP_R_INVALID_SECRET_LENGTH 142
+macro EVP_R_INVALID_ENTROPY_LENGTH 143
+macro EVP_R_OPERATON_NOT_INITIALIZED 126
+macro NID_undef 0
+macro OBJ_undef 0
+macro NID_rsadsi 1
+macro NID_pkcs 2
+macro NID_md2 3
+macro NID_md5 4
+macro NID_rc4 5
+macro NID_rsaEncryption 6
+macro NID_md2WithRSAEncryption 7
+macro NID_md5WithRSAEncryption 8
+macro NID_pbeWithMD2AndDES_CBC 9
+macro NID_pbeWithMD5AndDES_CBC 10
+macro NID_X500 11
+macro OBJ_ENC_X500 85
+macro NID_X509 12
+macro NID_commonName 13
+macro NID_countryName 14
+macro NID_localityName 15
+macro NID_stateOrProvinceName 16
+macro NID_organizationName 17
+macro NID_organizationalUnitName 18
+macro NID_rsa 19
+macro NID_pkcs7 20
+macro NID_pkcs7_data 21
+macro NID_pkcs7_signed 22
+macro NID_pkcs7_enveloped 23
+macro NID_pkcs7_signedAndEnveloped 24
+macro NID_pkcs7_digest 25
+macro NID_pkcs7_encrypted 26
+macro NID_pkcs3 27
+macro NID_dhKeyAgreement 28
+macro NID_des_ecb 29
+macro NID_des_cfb64 30
+macro NID_des_cbc 31
+macro NID_des_ede_ecb 32
+macro NID_des_ede3_ecb 33
+macro NID_idea_cbc 34
+macro NID_idea_cfb64 35
+macro NID_idea_ecb 36
+macro NID_rc2_cbc 37
+macro NID_rc2_ecb 38
+macro NID_rc2_cfb64 39
+macro NID_rc2_ofb64 40
+macro NID_sha 41
+macro NID_shaWithRSAEncryption 42
+macro NID_des_ede_cbc 43
+macro NID_des_ede3_cbc 44
+macro NID_des_ofb64 45
+macro NID_idea_ofb64 46
+macro NID_pkcs9 47
+macro NID_pkcs9_emailAddress 48
+macro NID_pkcs9_unstructuredName 49
+macro NID_pkcs9_contentType 50
+macro NID_pkcs9_messageDigest 51
+macro NID_pkcs9_signingTime 52
+macro NID_pkcs9_countersignature 53
+macro NID_pkcs9_challengePassword 54
+macro NID_pkcs9_unstructuredAddress 55
+macro NID_pkcs9_extCertAttributes 56
+macro NID_netscape 57
+macro NID_netscape_cert_extension 58
+macro NID_netscape_data_type 59
+macro NID_des_ede_cfb64 60
+macro NID_des_ede3_cfb64 61
+macro NID_des_ede_ofb64 62
+macro NID_des_ede3_ofb64 63
+macro NID_sha1 64
+macro NID_sha1WithRSAEncryption 65
+macro NID_dsaWithSHA 66
+macro NID_dsa_2 67
+macro NID_pbeWithSHA1AndRC2_CBC 68
+macro NID_id_pbkdf2 69
+macro NID_dsaWithSHA1_2 70
+macro NID_netscape_cert_type 71
+macro NID_netscape_base_url 72
+macro NID_netscape_revocation_url 73
+macro NID_netscape_ca_revocation_url 74
+macro NID_netscape_renewal_url 75
+macro NID_netscape_ca_policy_url 76
+macro NID_netscape_ssl_server_name 77
+macro NID_netscape_comment 78
+macro NID_netscape_cert_sequence 79
+macro NID_desx_cbc 80
+macro NID_id_ce 81
+macro NID_subject_key_identifier 82
+macro NID_key_usage 83
+macro NID_private_key_usage_period 84
+macro NID_subject_alt_name 85
+macro NID_issuer_alt_name 86
+macro NID_basic_constraints 87
+macro NID_crl_number 88
+macro NID_certificate_policies 89
+macro NID_authority_key_identifier 90
+macro NID_bf_cbc 91
+macro NID_bf_ecb 92
+macro NID_bf_cfb64 93
+macro NID_bf_ofb64 94
+macro NID_mdc2 95
+macro NID_mdc2WithRSA 96
+macro NID_rc4_40 97
+macro NID_rc2_40_cbc 98
+macro NID_givenName 99
+macro NID_surname 100
+macro NID_initials 101
+macro NID_crl_distribution_points 103
+macro NID_md5WithRSA 104
+macro NID_serialNumber 105
+macro NID_title 106
+macro NID_description 107
+macro NID_cast5_cbc 108
+macro NID_cast5_ecb 109
+macro NID_cast5_cfb64 110
+macro NID_cast5_ofb64 111
+macro NID_pbeWithMD5AndCast5_CBC 112
+macro NID_dsaWithSHA1 113
+macro NID_md5_sha1 114
+macro NID_sha1WithRSA 115
+macro NID_dsa 116
+macro NID_ripemd160 117
+macro NID_ripemd160WithRSA 119
+macro NID_rc5_cbc 120
+macro NID_rc5_ecb 121
+macro NID_rc5_cfb64 122
+macro NID_rc5_ofb64 123
+macro NID_zlib_compression 125
+macro NID_ext_key_usage 126
+macro NID_id_pkix 127
+macro NID_id_kp 128
+macro NID_server_auth 129
+macro NID_client_auth 130
+macro NID_code_sign 131
+macro NID_email_protect 132
+macro NID_time_stamp 133
+macro NID_ms_code_ind 134
+macro NID_ms_code_com 135
+macro NID_ms_ctl_sign 136
+macro NID_ms_sgc 137
+macro NID_ms_efs 138
+macro NID_ns_sgc 139
+macro NID_delta_crl 140
+macro NID_crl_reason 141
+macro NID_invalidity_date 142
+macro NID_sxnet 143
+macro NID_pbe_WithSHA1And128BitRC4 144
+macro NID_pbe_WithSHA1And40BitRC4 145
+macro NID_pbe_WithSHA1And3_Key_TripleDES_CBC 146
+macro NID_pbe_WithSHA1And2_Key_TripleDES_CBC 147
+macro NID_pbe_WithSHA1And128BitRC2_CBC 148
+macro NID_pbe_WithSHA1And40BitRC2_CBC 149
+macro NID_keyBag 150
+macro NID_pkcs8ShroudedKeyBag 151
+macro NID_certBag 152
+macro NID_crlBag 153
+macro NID_secretBag 154
+macro NID_safeContentsBag 155
+macro NID_friendlyName 156
+macro NID_localKeyID 157
+macro NID_x509Certificate 158
+macro NID_sdsiCertificate 159
+macro NID_x509Crl 160
+macro NID_pbes2 161
+macro NID_pbmac1 162
+macro NID_hmacWithSHA1 163
+macro NID_id_qt_cps 164
+macro NID_id_qt_unotice 165
+macro NID_rc2_64_cbc 166
+macro NID_SMIMECapabilities 167
+macro NID_pbeWithMD2AndRC2_CBC 168
+macro NID_pbeWithMD5AndRC2_CBC 169
+macro NID_pbeWithSHA1AndDES_CBC 170
+macro NID_ms_ext_req 171
+macro NID_ext_req 172
+macro NID_name 173
+macro NID_dnQualifier 174
+macro NID_id_pe 175
+macro NID_id_ad 176
+macro NID_info_access 177
+macro NID_ad_OCSP 178
+macro NID_ad_ca_issuers 179
+macro NID_OCSP_sign 180
+macro NID_iso 181
+macro OBJ_iso 1
+macro NID_member_body 182
+macro OBJ_ENC_member_body 42
+macro NID_ISO_US 183
+macro NID_X9_57 184
+macro NID_X9cm 185
+macro NID_pkcs1 186
+macro NID_pkcs5 187
+macro NID_SMIME 188
+macro NID_id_smime_mod 189
+macro NID_id_smime_ct 190
+macro NID_id_smime_aa 191
+macro NID_id_smime_alg 192
+macro NID_id_smime_cd 193
+macro NID_id_smime_spq 194
+macro NID_id_smime_cti 195
+macro NID_id_smime_mod_cms 196
+macro NID_id_smime_mod_ess 197
+macro NID_id_smime_mod_oid 198
+macro NID_id_smime_mod_msg_v3 199
+macro NID_id_smime_mod_ets_eSignature_88 200
+macro NID_id_smime_mod_ets_eSignature_97 201
+macro NID_id_smime_mod_ets_eSigPolicy_88 202
+macro NID_id_smime_mod_ets_eSigPolicy_97 203
+macro NID_id_smime_ct_receipt 204
+macro NID_id_smime_ct_authData 205
+macro NID_id_smime_ct_publishCert 206
+macro NID_id_smime_ct_TSTInfo 207
+macro NID_id_smime_ct_TDTInfo 208
+macro NID_id_smime_ct_contentInfo 209
+macro NID_id_smime_ct_DVCSRequestData 210
+macro NID_id_smime_ct_DVCSResponseData 211
+macro NID_id_smime_aa_receiptRequest 212
+macro NID_id_smime_aa_securityLabel 213
+macro NID_id_smime_aa_mlExpandHistory 214
+macro NID_id_smime_aa_contentHint 215
+macro NID_id_smime_aa_msgSigDigest 216
+macro NID_id_smime_aa_encapContentType 217
+macro NID_id_smime_aa_contentIdentifier 218
+macro NID_id_smime_aa_macValue 219
+macro NID_id_smime_aa_equivalentLabels 220
+macro NID_id_smime_aa_contentReference 221
+macro NID_id_smime_aa_encrypKeyPref 222
+macro NID_id_smime_aa_signingCertificate 223
+macro NID_id_smime_aa_smimeEncryptCerts 224
+macro NID_id_smime_aa_timeStampToken 225
+macro NID_id_smime_aa_ets_sigPolicyId 226
+macro NID_id_smime_aa_ets_commitmentType 227
+macro NID_id_smime_aa_ets_signerLocation 228
+macro NID_id_smime_aa_ets_signerAttr 229
+macro NID_id_smime_aa_ets_otherSigCert 230
+macro NID_id_smime_aa_ets_contentTimestamp 231
+macro NID_id_smime_aa_ets_CertificateRefs 232
+macro NID_id_smime_aa_ets_RevocationRefs 233
+macro NID_id_smime_aa_ets_certValues 234
+macro NID_id_smime_aa_ets_revocationValues 235
+macro NID_id_smime_aa_ets_escTimeStamp 236
+macro NID_id_smime_aa_ets_certCRLTimestamp 237
+macro NID_id_smime_aa_ets_archiveTimeStamp 238
+macro NID_id_smime_aa_signatureType 239
+macro NID_id_smime_aa_dvcs_dvc 240
+macro NID_id_smime_alg_ESDHwith3DES 241
+macro NID_id_smime_alg_ESDHwithRC2 242
+macro NID_id_smime_alg_3DESwrap 243
+macro NID_id_smime_alg_RC2wrap 244
+macro NID_id_smime_alg_ESDH 245
+macro NID_id_smime_alg_CMS3DESwrap 246
+macro NID_id_smime_alg_CMSRC2wrap 247
+macro NID_id_smime_cd_ldap 248
+macro NID_id_smime_spq_ets_sqt_uri 249
+macro NID_id_smime_spq_ets_sqt_unotice 250
+macro NID_id_smime_cti_ets_proofOfOrigin 251
+macro NID_id_smime_cti_ets_proofOfReceipt 252
+macro NID_id_smime_cti_ets_proofOfDelivery 253
+macro NID_id_smime_cti_ets_proofOfSender 254
+macro NID_id_smime_cti_ets_proofOfApproval 255
+macro NID_id_smime_cti_ets_proofOfCreation 256
+macro NID_md4 257
+macro NID_id_pkix_mod 258
+macro NID_id_qt 259
+macro NID_id_it 260
+macro NID_id_pkip 261
+macro NID_id_alg 262
+macro NID_id_cmc 263
+macro NID_id_on 264
+macro NID_id_pda 265
+macro NID_id_aca 266
+macro NID_id_qcs 267
+macro NID_id_cct 268
+macro NID_id_pkix1_explicit_88 269
+macro NID_id_pkix1_implicit_88 270
+macro NID_id_pkix1_explicit_93 271
+macro NID_id_pkix1_implicit_93 272
+macro NID_id_mod_crmf 273
+macro NID_id_mod_cmc 274
+macro NID_id_mod_kea_profile_88 275
+macro NID_id_mod_kea_profile_93 276
+macro NID_id_mod_cmp 277
+macro NID_id_mod_qualified_cert_88 278
+macro NID_id_mod_qualified_cert_93 279
+macro NID_id_mod_attribute_cert 280
+macro NID_id_mod_timestamp_protocol 281
+macro NID_id_mod_ocsp 282
+macro NID_id_mod_dvcs 283
+macro NID_id_mod_cmp2000 284
+macro NID_biometricInfo 285
+macro NID_qcStatements 286
+macro NID_ac_auditEntity 287
+macro NID_ac_targeting 288
+macro NID_aaControls 289
+macro NID_sbgp_ipAddrBlock 290
+macro NID_sbgp_autonomousSysNum 291
+macro NID_sbgp_routerIdentifier 292
+macro NID_textNotice 293
+macro NID_ipsecEndSystem 294
+macro NID_ipsecTunnel 295
+macro NID_ipsecUser 296
+macro NID_dvcs 297
+macro NID_id_it_caProtEncCert 298
+macro NID_id_it_signKeyPairTypes 299
+macro NID_id_it_encKeyPairTypes 300
+macro NID_id_it_preferredSymmAlg 301
+macro NID_id_it_caKeyUpdateInfo 302
+macro NID_id_it_currentCRL 303
+macro NID_id_it_unsupportedOIDs 304
+macro NID_id_it_subscriptionRequest 305
+macro NID_id_it_subscriptionResponse 306
+macro NID_id_it_keyPairParamReq 307
+macro NID_id_it_keyPairParamRep 308
+macro NID_id_it_revPassphrase 309
+macro NID_id_it_implicitConfirm 310
+macro NID_id_it_confirmWaitTime 311
+macro NID_id_it_origPKIMessage 312
+macro NID_id_regCtrl 313
+macro NID_id_regInfo 314
+macro NID_id_regCtrl_regToken 315
+macro NID_id_regCtrl_authenticator 316
+macro NID_id_regCtrl_pkiPublicationInfo 317
+macro NID_id_regCtrl_pkiArchiveOptions 318
+macro NID_id_regCtrl_oldCertID 319
+macro NID_id_regCtrl_protocolEncrKey 320
+macro NID_id_regInfo_utf8Pairs 321
+macro NID_id_regInfo_certReq 322
+macro NID_id_alg_des40 323
+macro NID_id_alg_noSignature 324
+macro NID_id_alg_dh_sig_hmac_sha1 325
+macro NID_id_alg_dh_pop 326
+macro NID_id_cmc_statusInfo 327
+macro NID_id_cmc_identification 328
+macro NID_id_cmc_identityProof 329
+macro NID_id_cmc_dataReturn 330
+macro NID_id_cmc_transactionId 331
+macro NID_id_cmc_senderNonce 332
+macro NID_id_cmc_recipientNonce 333
+macro NID_id_cmc_addExtensions 334
+macro NID_id_cmc_encryptedPOP 335
+macro NID_id_cmc_decryptedPOP 336
+macro NID_id_cmc_lraPOPWitness 337
+macro NID_id_cmc_getCert 338
+macro NID_id_cmc_getCRL 339
+macro NID_id_cmc_revokeRequest 340
+macro NID_id_cmc_regInfo 341
+macro NID_id_cmc_responseInfo 342
+macro NID_id_cmc_queryPending 343
+macro NID_id_cmc_popLinkRandom 344
+macro NID_id_cmc_popLinkWitness 345
+macro NID_id_cmc_confirmCertAcceptance 346
+macro NID_id_on_personalData 347
+macro NID_id_pda_dateOfBirth 348
+macro NID_id_pda_placeOfBirth 349
+macro NID_id_pda_gender 351
+macro NID_id_pda_countryOfCitizenship 352
+macro NID_id_pda_countryOfResidence 353
+macro NID_id_aca_authenticationInfo 354
+macro NID_id_aca_accessIdentity 355
+macro NID_id_aca_chargingIdentity 356
+macro NID_id_aca_group 357
+macro NID_id_aca_role 358
+macro NID_id_qcs_pkixQCSyntax_v1 359
+macro NID_id_cct_crs 360
+macro NID_id_cct_PKIData 361
+macro NID_id_cct_PKIResponse 362
+macro NID_ad_timeStamping 363
+macro NID_ad_dvcs 364
+macro NID_id_pkix_OCSP_basic 365
+macro NID_id_pkix_OCSP_Nonce 366
+macro NID_id_pkix_OCSP_CrlID 367
+macro NID_id_pkix_OCSP_acceptableResponses 368
+macro NID_id_pkix_OCSP_noCheck 369
+macro NID_id_pkix_OCSP_archiveCutoff 370
+macro NID_id_pkix_OCSP_serviceLocator 371
+macro NID_id_pkix_OCSP_extendedStatus 372
+macro NID_id_pkix_OCSP_valid 373
+macro NID_id_pkix_OCSP_path 374
+macro NID_id_pkix_OCSP_trustRoot 375
+macro NID_algorithm 376
+macro NID_rsaSignature 377
+macro NID_X500algorithms 378
+macro NID_org 379
+macro OBJ_ENC_org 43
+macro NID_dod 380
+macro NID_iana 381
+macro NID_Directory 382
+macro NID_Management 383
+macro NID_Experimental 384
+macro NID_Private 385
+macro NID_Security 386
+macro NID_SNMPv2 387
+macro NID_Mail 388
+macro NID_Enterprises 389
+macro NID_dcObject 390
+macro NID_domainComponent 391
+macro NID_Domain 392
+macro NID_selected_attribute_types 394
+macro NID_clearance 395
+macro NID_md4WithRSAEncryption 396
+macro NID_ac_proxying 397
+macro NID_sinfo_access 398
+macro NID_id_aca_encAttrs 399
+macro NID_role 400
+macro NID_policy_constraints 401
+macro NID_target_information 402
+macro NID_no_rev_avail 403
+macro NID_ansi_X9_62 405
+macro NID_X9_62_prime_field 406
+macro NID_X9_62_characteristic_two_field 407
+macro NID_X9_62_id_ecPublicKey 408
+macro NID_X9_62_prime192v1 409
+macro NID_X9_62_prime192v2 410
+macro NID_X9_62_prime192v3 411
+macro NID_X9_62_prime239v1 412
+macro NID_X9_62_prime239v2 413
+macro NID_X9_62_prime239v3 414
+macro NID_X9_62_prime256v1 415
+macro NID_ecdsa_with_SHA1 416
+macro NID_ms_csp_name 417
+macro NID_aes_128_ecb 418
+macro NID_aes_128_cbc 419
+macro NID_aes_128_ofb128 420
+macro NID_aes_128_cfb128 421
+macro NID_aes_192_ecb 422
+macro NID_aes_192_cbc 423
+macro NID_aes_192_ofb128 424
+macro NID_aes_192_cfb128 425
+macro NID_aes_256_ecb 426
+macro NID_aes_256_cbc 427
+macro NID_aes_256_ofb128 428
+macro NID_aes_256_cfb128 429
+macro NID_hold_instruction_code 430
+macro NID_hold_instruction_none 431
+macro NID_hold_instruction_call_issuer 432
+macro NID_hold_instruction_reject 433
+macro NID_data 434
+macro OBJ_ENC_data 9
+macro NID_pss 435
+macro NID_ucl 436
+macro NID_pilot 437
+macro NID_pilotAttributeType 438
+macro NID_pilotAttributeSyntax 439
+macro NID_pilotObjectClass 440
+macro NID_pilotGroups 441
+macro NID_iA5StringSyntax 442
+macro NID_caseIgnoreIA5StringSyntax 443
+macro NID_pilotObject 444
+macro NID_pilotPerson 445
+macro NID_account 446
+macro NID_document 447
+macro NID_room 448
+macro NID_documentSeries 449
+macro NID_rFC822localPart 450
+macro NID_dNSDomain 451
+macro NID_domainRelatedObject 452
+macro NID_friendlyCountry 453
+macro NID_simpleSecurityObject 454
+macro NID_pilotOrganization 455
+macro NID_pilotDSA 456
+macro NID_qualityLabelledData 457
+macro NID_userId 458
+macro NID_textEncodedORAddress 459
+macro NID_rfc822Mailbox 460
+macro NID_info 461
+macro NID_favouriteDrink 462
+macro NID_roomNumber 463
+macro NID_photo 464
+macro NID_userClass 465
+macro NID_host 466
+macro NID_manager 467
+macro NID_documentIdentifier 468
+macro NID_documentTitle 469
+macro NID_documentVersion 470
+macro NID_documentAuthor 471
+macro NID_documentLocation 472
+macro NID_homeTelephoneNumber 473
+macro NID_secretary 474
+macro NID_otherMailbox 475
+macro NID_lastModifiedTime 476
+macro NID_lastModifiedBy 477
+macro NID_aRecord 478
+macro NID_pilotAttributeType27 479
+macro NID_mXRecord 480
+macro NID_nSRecord 481
+macro NID_sOARecord 482
+macro NID_cNAMERecord 483
+macro NID_associatedDomain 484
+macro NID_associatedName 485
+macro NID_homePostalAddress 486
+macro NID_personalTitle 487
+macro NID_mobileTelephoneNumber 488
+macro NID_pagerTelephoneNumber 489
+macro NID_friendlyCountryName 490
+macro NID_organizationalStatus 491
+macro NID_janetMailbox 492
+macro NID_mailPreferenceOption 493
+macro NID_buildingName 494
+macro NID_dSAQuality 495
+macro NID_singleLevelQuality 496
+macro NID_subtreeMinimumQuality 497
+macro NID_subtreeMaximumQuality 498
+macro NID_personalSignature 499
+macro NID_dITRedirect 500
+macro NID_audio 501
+macro NID_documentPublisher 502
+macro NID_x500UniqueIdentifier 503
+macro NID_mime_mhs 504
+macro NID_mime_mhs_headings 505
+macro NID_mime_mhs_bodies 506
+macro NID_id_hex_partial_message 507
+macro NID_id_hex_multipart_message 508
+macro NID_generationQualifier 509
+macro NID_pseudonym 510
+macro NID_id_set 512
+macro NID_set_ctype 513
+macro NID_set_msgExt 514
+macro NID_set_attr 515
+macro NID_set_policy 516
+macro NID_set_certExt 517
+macro NID_set_brand 518
+macro NID_setct_PANData 519
+macro NID_setct_PANToken 520
+macro NID_setct_PANOnly 521
+macro NID_setct_OIData 522
+macro NID_setct_PI 523
+macro NID_setct_PIData 524
+macro NID_setct_PIDataUnsigned 525
+macro NID_setct_HODInput 526
+macro NID_setct_AuthResBaggage 527
+macro NID_setct_AuthRevReqBaggage 528
+macro NID_setct_AuthRevResBaggage 529
+macro NID_setct_CapTokenSeq 530
+macro NID_setct_PInitResData 531
+macro NID_setct_PI_TBS 532
+macro NID_setct_PResData 533
+macro NID_setct_AuthReqTBS 534
+macro NID_setct_AuthResTBS 535
+macro NID_setct_AuthResTBSX 536
+macro NID_setct_AuthTokenTBS 537
+macro NID_setct_CapTokenData 538
+macro NID_setct_CapTokenTBS 539
+macro NID_setct_AcqCardCodeMsg 540
+macro NID_setct_AuthRevReqTBS 541
+macro NID_setct_AuthRevResData 542
+macro NID_setct_AuthRevResTBS 543
+macro NID_setct_CapReqTBS 544
+macro NID_setct_CapReqTBSX 545
+macro NID_setct_CapResData 546
+macro NID_setct_CapRevReqTBS 547
+macro NID_setct_CapRevReqTBSX 548
+macro NID_setct_CapRevResData 549
+macro NID_setct_CredReqTBS 550
+macro NID_setct_CredReqTBSX 551
+macro NID_setct_CredResData 552
+macro NID_setct_CredRevReqTBS 553
+macro NID_setct_CredRevReqTBSX 554
+macro NID_setct_CredRevResData 555
+macro NID_setct_PCertReqData 556
+macro NID_setct_PCertResTBS 557
+macro NID_setct_BatchAdminReqData 558
+macro NID_setct_BatchAdminResData 559
+macro NID_setct_CardCInitResTBS 560
+macro NID_setct_MeAqCInitResTBS 561
+macro NID_setct_RegFormResTBS 562
+macro NID_setct_CertReqData 563
+macro NID_setct_CertReqTBS 564
+macro NID_setct_CertResData 565
+macro NID_setct_CertInqReqTBS 566
+macro NID_setct_ErrorTBS 567
+macro NID_setct_PIDualSignedTBE 568
+macro NID_setct_PIUnsignedTBE 569
+macro NID_setct_AuthReqTBE 570
+macro NID_setct_AuthResTBE 571
+macro NID_setct_AuthResTBEX 572
+macro NID_setct_AuthTokenTBE 573
+macro NID_setct_CapTokenTBE 574
+macro NID_setct_CapTokenTBEX 575
+macro NID_setct_AcqCardCodeMsgTBE 576
+macro NID_setct_AuthRevReqTBE 577
+macro NID_setct_AuthRevResTBE 578
+macro NID_setct_AuthRevResTBEB 579
+macro NID_setct_CapReqTBE 580
+macro NID_setct_CapReqTBEX 581
+macro NID_setct_CapResTBE 582
+macro NID_setct_CapRevReqTBE 583
+macro NID_setct_CapRevReqTBEX 584
+macro NID_setct_CapRevResTBE 585
+macro NID_setct_CredReqTBE 586
+macro NID_setct_CredReqTBEX 587
+macro NID_setct_CredResTBE 588
+macro NID_setct_CredRevReqTBE 589
+macro NID_setct_CredRevReqTBEX 590
+macro NID_setct_CredRevResTBE 591
+macro NID_setct_BatchAdminReqTBE 592
+macro NID_setct_BatchAdminResTBE 593
+macro NID_setct_RegFormReqTBE 594
+macro NID_setct_CertReqTBE 595
+macro NID_setct_CertReqTBEX 596
+macro NID_setct_CertResTBE 597
+macro NID_setct_CRLNotificationTBS 598
+macro NID_setct_CRLNotificationResTBS 599
+macro NID_setct_BCIDistributionTBS 600
+macro NID_setext_genCrypt 601
+macro NID_setext_miAuth 602
+macro NID_setext_pinSecure 603
+macro NID_setext_pinAny 604
+macro NID_setext_track2 605
+macro NID_setext_cv 606
+macro NID_set_policy_root 607
+macro NID_setCext_hashedRoot 608
+macro NID_setCext_certType 609
+macro NID_setCext_merchData 610
+macro NID_setCext_cCertRequired 611
+macro NID_setCext_tunneling 612
+macro NID_setCext_setExt 613
+macro NID_setCext_setQualf 614
+macro NID_setCext_PGWYcapabilities 615
+macro NID_setCext_TokenIdentifier 616
+macro NID_setCext_Track2Data 617
+macro NID_setCext_TokenType 618
+macro NID_setCext_IssuerCapabilities 619
+macro NID_setAttr_Cert 620
+macro NID_setAttr_PGWYcap 621
+macro NID_setAttr_TokenType 622
+macro NID_setAttr_IssCap 623
+macro NID_set_rootKeyThumb 624
+macro NID_set_addPolicy 625
+macro NID_setAttr_Token_EMV 626
+macro NID_setAttr_Token_B0Prime 627
+macro NID_setAttr_IssCap_CVM 628
+macro NID_setAttr_IssCap_T2 629
+macro NID_setAttr_IssCap_Sig 630
+macro NID_setAttr_GenCryptgrm 631
+macro NID_setAttr_T2Enc 632
+macro NID_setAttr_T2cleartxt 633
+macro NID_setAttr_TokICCsig 634
+macro NID_setAttr_SecDevSig 635
+macro NID_set_brand_IATA_ATA 636
+macro NID_set_brand_Diners 637
+macro NID_set_brand_AmericanExpress 638
+macro NID_set_brand_JCB 639
+macro NID_set_brand_Visa 640
+macro NID_set_brand_MasterCard 641
+macro NID_set_brand_Novus 642
+macro NID_des_cdmf 643
+macro NID_rsaOAEPEncryptionSET 644
+macro NID_itu_t 645
+macro OBJ_itu_t 0
+macro NID_joint_iso_itu_t 646
+macro OBJ_joint_iso_itu_t 2
+macro NID_international_organizations 647
+macro OBJ_ENC_international_organizations 103
+macro NID_ms_smartcard_login 648
+macro NID_ms_upn 649
+macro NID_aes_128_cfb1 650
+macro NID_aes_192_cfb1 651
+macro NID_aes_256_cfb1 652
+macro NID_aes_128_cfb8 653
+macro NID_aes_192_cfb8 654
+macro NID_aes_256_cfb8 655
+macro NID_des_cfb1 656
+macro NID_des_cfb8 657
+macro NID_des_ede3_cfb1 658
+macro NID_des_ede3_cfb8 659
+macro NID_streetAddress 660
+macro NID_postalCode 661
+macro NID_id_ppl 662
+macro NID_proxyCertInfo 663
+macro NID_id_ppl_anyLanguage 664
+macro NID_id_ppl_inheritAll 665
+macro NID_name_constraints 666
+macro NID_Independent 667
+macro NID_sha256WithRSAEncryption 668
+macro NID_sha384WithRSAEncryption 669
+macro NID_sha512WithRSAEncryption 670
+macro NID_sha224WithRSAEncryption 671
+macro NID_sha256 672
+macro NID_sha384 673
+macro NID_sha512 674
+macro NID_sha224 675
+macro NID_identified_organization 676
+macro OBJ_ENC_identified_organization 43
+macro NID_certicom_arc 677
+macro NID_wap 678
+macro NID_wap_wsg 679
+macro NID_X9_62_id_characteristic_two_basis 680
+macro NID_X9_62_onBasis 681
+macro NID_X9_62_tpBasis 682
+macro NID_X9_62_ppBasis 683
+macro NID_X9_62_c2pnb163v1 684
+macro NID_X9_62_c2pnb163v2 685
+macro NID_X9_62_c2pnb163v3 686
+macro NID_X9_62_c2pnb176v1 687
+macro NID_X9_62_c2tnb191v1 688
+macro NID_X9_62_c2tnb191v2 689
+macro NID_X9_62_c2tnb191v3 690
+macro NID_X9_62_c2onb191v4 691
+macro NID_X9_62_c2onb191v5 692
+macro NID_X9_62_c2pnb208w1 693
+macro NID_X9_62_c2tnb239v1 694
+macro NID_X9_62_c2tnb239v2 695
+macro NID_X9_62_c2tnb239v3 696
+macro NID_X9_62_c2onb239v4 697
+macro NID_X9_62_c2onb239v5 698
+macro NID_X9_62_c2pnb272w1 699
+macro NID_X9_62_c2pnb304w1 700
+macro NID_X9_62_c2tnb359v1 701
+macro NID_X9_62_c2pnb368w1 702
+macro NID_X9_62_c2tnb431r1 703
+macro NID_secp112r1 704
+macro NID_secp112r2 705
+macro NID_secp128r1 706
+macro NID_secp128r2 707
+macro NID_secp160k1 708
+macro NID_secp160r1 709
+macro NID_secp160r2 710
+macro NID_secp192k1 711
+macro NID_secp224k1 712
+macro NID_secp224r1 713
+macro NID_secp256k1 714
+macro NID_secp384r1 715
+macro NID_secp521r1 716
+macro NID_sect113r1 717
+macro NID_sect113r2 718
+macro NID_sect131r1 719
+macro NID_sect131r2 720
+macro NID_sect163k1 721
+macro NID_sect163r1 722
+macro NID_sect163r2 723
+macro NID_sect193r1 724
+macro NID_sect193r2 725
+macro NID_sect233k1 726
+macro NID_sect233r1 727
+macro NID_sect239k1 728
+macro NID_sect283k1 729
+macro NID_sect283r1 730
+macro NID_sect409k1 731
+macro NID_sect409r1 732
+macro NID_sect571k1 733
+macro NID_sect571r1 734
+macro NID_wap_wsg_idm_ecid_wtls1 735
+macro NID_wap_wsg_idm_ecid_wtls3 736
+macro NID_wap_wsg_idm_ecid_wtls4 737
+macro NID_wap_wsg_idm_ecid_wtls5 738
+macro NID_wap_wsg_idm_ecid_wtls6 739
+macro NID_wap_wsg_idm_ecid_wtls7 740
+macro NID_wap_wsg_idm_ecid_wtls8 741
+macro NID_wap_wsg_idm_ecid_wtls9 742
+macro NID_wap_wsg_idm_ecid_wtls10 743
+macro NID_wap_wsg_idm_ecid_wtls11 744
+macro NID_wap_wsg_idm_ecid_wtls12 745
+macro NID_any_policy 746
+macro NID_policy_mappings 747
+macro NID_inhibit_any_policy 748
+macro NID_ipsec3 749
+macro NID_ipsec4 750
+macro NID_camellia_128_cbc 751
+macro NID_camellia_192_cbc 752
+macro NID_camellia_256_cbc 753
+macro NID_camellia_128_ecb 754
+macro NID_camellia_192_ecb 755
+macro NID_camellia_256_ecb 756
+macro NID_camellia_128_cfb128 757
+macro NID_camellia_192_cfb128 758
+macro NID_camellia_256_cfb128 759
+macro NID_camellia_128_cfb1 760
+macro NID_camellia_192_cfb1 761
+macro NID_camellia_256_cfb1 762
+macro NID_camellia_128_cfb8 763
+macro NID_camellia_192_cfb8 764
+macro NID_camellia_256_cfb8 765
+macro NID_camellia_128_ofb128 766
+macro NID_camellia_192_ofb128 767
+macro NID_camellia_256_ofb128 768
+macro NID_subject_directory_attributes 769
+macro NID_issuing_distribution_point 770
+macro NID_certificate_issuer 771
+macro NID_kisa 773
+macro NID_seed_ecb 776
+macro NID_seed_cbc 777
+macro NID_seed_ofb128 778
+macro NID_seed_cfb128 779
+macro NID_hmac_md5 780
+macro NID_hmac_sha1 781
+macro NID_id_PasswordBasedMAC 782
+macro NID_id_DHBasedMac 783
+macro NID_id_it_suppLangTags 784
+macro NID_caRepository 785
+macro NID_id_smime_ct_compressedData 786
+macro NID_id_ct_asciiTextWithCRLF 787
+macro NID_id_aes128_wrap 788
+macro NID_id_aes192_wrap 789
+macro NID_id_aes256_wrap 790
+macro NID_ecdsa_with_Recommended 791
+macro NID_ecdsa_with_Specified 792
+macro NID_ecdsa_with_SHA224 793
+macro NID_ecdsa_with_SHA256 794
+macro NID_ecdsa_with_SHA384 795
+macro NID_ecdsa_with_SHA512 796
+macro NID_hmacWithMD5 797
+macro NID_hmacWithSHA224 798
+macro NID_hmacWithSHA256 799
+macro NID_hmacWithSHA384 800
+macro NID_hmacWithSHA512 801
+macro NID_dsa_with_SHA224 802
+macro NID_dsa_with_SHA256 803
+macro NID_whirlpool 804
+macro NID_cryptopro 805
+macro NID_cryptocom 806
+macro NID_id_GostR3411_94_with_GostR3410_2001 807
+macro NID_id_GostR3411_94_with_GostR3410_94 808
+macro NID_id_GostR3411_94 809
+macro NID_id_HMACGostR3411_94 810
+macro NID_id_GostR3410_2001 811
+macro NID_id_GostR3410_94 812
+macro NID_id_Gost28147_89 813
+macro NID_gost89_cnt 814
+macro NID_id_Gost28147_89_MAC 815
+macro NID_id_GostR3411_94_prf 816
+macro NID_id_GostR3410_2001DH 817
+macro NID_id_GostR3410_94DH 818
+macro NID_id_Gost28147_89_CryptoPro_KeyMeshing 819
+macro NID_id_Gost28147_89_None_KeyMeshing 820
+macro NID_id_GostR3411_94_TestParamSet 821
+macro NID_id_GostR3411_94_CryptoProParamSet 822
+macro NID_id_Gost28147_89_TestParamSet 823
+macro NID_id_Gost28147_89_CryptoPro_A_ParamSet 824
+macro NID_id_Gost28147_89_CryptoPro_B_ParamSet 825
+macro NID_id_Gost28147_89_CryptoPro_C_ParamSet 826
+macro NID_id_Gost28147_89_CryptoPro_D_ParamSet 827
+macro NID_id_Gost28147_89_CryptoPro_Oscar_1_1_ParamSet 828
+macro NID_id_Gost28147_89_CryptoPro_Oscar_1_0_ParamSet 829
+macro NID_id_Gost28147_89_CryptoPro_RIC_1_ParamSet 830
+macro NID_id_GostR3410_94_TestParamSet 831
+macro NID_id_GostR3410_94_CryptoPro_A_ParamSet 832
+macro NID_id_GostR3410_94_CryptoPro_B_ParamSet 833
+macro NID_id_GostR3410_94_CryptoPro_C_ParamSet 834
+macro NID_id_GostR3410_94_CryptoPro_D_ParamSet 835
+macro NID_id_GostR3410_94_CryptoPro_XchA_ParamSet 836
+macro NID_id_GostR3410_94_CryptoPro_XchB_ParamSet 837
+macro NID_id_GostR3410_94_CryptoPro_XchC_ParamSet 838
+macro NID_id_GostR3410_2001_TestParamSet 839
+macro NID_id_GostR3410_2001_CryptoPro_A_ParamSet 840
+macro NID_id_GostR3410_2001_CryptoPro_B_ParamSet 841
+macro NID_id_GostR3410_2001_CryptoPro_C_ParamSet 842
+macro NID_id_GostR3410_2001_CryptoPro_XchA_ParamSet 843
+macro NID_id_GostR3410_2001_CryptoPro_XchB_ParamSet 844
+macro NID_id_GostR3410_94_a 845
+macro NID_id_GostR3410_94_aBis 846
+macro NID_id_GostR3410_94_b 847
+macro NID_id_GostR3410_94_bBis 848
+macro NID_id_Gost28147_89_cc 849
+macro NID_id_GostR3410_94_cc 850
+macro NID_id_GostR3410_2001_cc 851
+macro NID_id_GostR3411_94_with_GostR3410_94_cc 852
+macro NID_id_GostR3411_94_with_GostR3410_2001_cc 853
+macro NID_id_GostR3410_2001_ParamSet_cc 854
+macro NID_hmac 855
+macro NID_LocalKeySet 856
+macro NID_freshest_crl 857
+macro NID_id_on_permanentIdentifier 858
+macro NID_searchGuide 859
+macro NID_businessCategory 860
+macro NID_postalAddress 861
+macro NID_postOfficeBox 862
+macro NID_physicalDeliveryOfficeName 863
+macro NID_telephoneNumber 864
+macro NID_telexNumber 865
+macro NID_teletexTerminalIdentifier 866
+macro NID_facsimileTelephoneNumber 867
+macro NID_x121Address 868
+macro NID_internationaliSDNNumber 869
+macro NID_registeredAddress 870
+macro NID_destinationIndicator 871
+macro NID_preferredDeliveryMethod 872
+macro NID_presentationAddress 873
+macro NID_supportedApplicationContext 874
+macro NID_member 875
+macro NID_owner 876
+macro NID_roleOccupant 877
+macro NID_seeAlso 878
+macro NID_userPassword 879
+macro NID_userCertificate 880
+macro NID_cACertificate 881
+macro NID_authorityRevocationList 882
+macro NID_certificateRevocationList 883
+macro NID_crossCertificatePair 884
+macro NID_enhancedSearchGuide 885
+macro NID_protocolInformation 886
+macro NID_distinguishedName 887
+macro NID_uniqueMember 888
+macro NID_houseIdentifier 889
+macro NID_supportedAlgorithms 890
+macro NID_deltaRevocationList 891
+macro NID_dmdName 892
+macro NID_id_alg_PWRI_KEK 893
+macro NID_cmac 894
+macro NID_aes_128_gcm 895
+macro NID_aes_128_ccm 896
+macro NID_id_aes128_wrap_pad 897
+macro NID_aes_192_gcm 898
+macro NID_aes_192_ccm 899
+macro NID_id_aes192_wrap_pad 900
+macro NID_aes_256_gcm 901
+macro NID_aes_256_ccm 902
+macro NID_id_aes256_wrap_pad 903
+macro NID_aes_128_ctr 904
+macro NID_aes_192_ctr 905
+macro NID_aes_256_ctr 906
+macro NID_id_camellia128_wrap 907
+macro NID_id_camellia192_wrap 908
+macro NID_id_camellia256_wrap 909
+macro NID_anyExtendedKeyUsage 910
+macro NID_mgf1 911
+macro NID_rsassaPss 912
+macro NID_aes_128_xts 913
+macro NID_aes_256_xts 914
+macro NID_rc4_hmac_md5 915
+macro NID_aes_128_cbc_hmac_sha1 916
+macro NID_aes_192_cbc_hmac_sha1 917
+macro NID_aes_256_cbc_hmac_sha1 918
+macro NID_rsaesOaep 919
+macro NID_dhpublicnumber 920
+macro NID_brainpoolP160r1 921
+macro NID_brainpoolP160t1 922
+macro NID_brainpoolP192r1 923
+macro NID_brainpoolP192t1 924
+macro NID_brainpoolP224r1 925
+macro NID_brainpoolP224t1 926
+macro NID_brainpoolP256r1 927
+macro NID_brainpoolP256t1 928
+macro NID_brainpoolP320r1 929
+macro NID_brainpoolP320t1 930
+macro NID_brainpoolP384r1 931
+macro NID_brainpoolP384t1 932
+macro NID_brainpoolP512r1 933
+macro NID_brainpoolP512t1 934
+macro NID_pSpecified 935
+macro NID_dhSinglePass_stdDH_sha1kdf_scheme 936
+macro NID_dhSinglePass_stdDH_sha224kdf_scheme 937
+macro NID_dhSinglePass_stdDH_sha256kdf_scheme 938
+macro NID_dhSinglePass_stdDH_sha384kdf_scheme 939
+macro NID_dhSinglePass_stdDH_sha512kdf_scheme 940
+macro NID_dhSinglePass_cofactorDH_sha1kdf_scheme 941
+macro NID_dhSinglePass_cofactorDH_sha224kdf_scheme 942
+macro NID_dhSinglePass_cofactorDH_sha256kdf_scheme 943
+macro NID_dhSinglePass_cofactorDH_sha384kdf_scheme 944
+macro NID_dhSinglePass_cofactorDH_sha512kdf_scheme 945
+macro NID_dh_std_kdf 946
+macro NID_dh_cofactor_kdf 947
+macro NID_X25519 948
+macro NID_ED25519 949
+macro NID_chacha20_poly1305 950
+macro NID_kx_rsa 951
+macro NID_kx_ecdhe 952
+macro NID_kx_psk 953
+macro NID_auth_rsa 954
+macro NID_auth_ecdsa 955
+macro NID_auth_psk 956
+macro NID_kx_any 957
+macro NID_auth_any 958
+macro NID_ED448 960
+macro NID_X448 961
+macro NID_sha512_256 962
+macro NID_hkdf 963
+macro NID_X25519Kyber768Draft00 964
+macro NID_X25519MLKEM768 965
+macro NID_ML_KEM_1024 966
+macro NID_ML_DSA_44 967
+macro NID_ML_DSA_65 968
+macro NID_ML_DSA_87 969
+macro NID_ML_KEM_768 970
+macro NID_X_Wing 972
+macro NID_alg_mtcProof_draft 976
+macro NID_rdna_trustAnchorID_draft 977
+macro NID_pe_mtcCertificationAuthority_draft 978
+macro NID_SLH_DSA_SHA2_128s 979
+macro NID_SLH_DSA_SHAKE_256f 980
+macro NID_SLH_DSA_SHA2_128s_WITH_SHA256 981
+macro EVP_PKEY_NONE 0
+macro EVP_PKEY_RSA 6
+macro EVP_PKEY_RSA_PSS 912
+macro EVP_PKEY_DSA 116
+macro EVP_PKEY_EC 408
+macro EVP_PKEY_ED25519 949
+macro EVP_PKEY_X25519 948
+macro EVP_PKEY_HKDF 963
+macro EVP_PKEY_DH 28
+macro EVP_PKEY_ML_DSA_44 967
+macro EVP_PKEY_ML_DSA_65 968
+macro EVP_PKEY_ML_DSA_87 969
+macro EVP_PKEY_ML_KEM_768 970
+macro EVP_PKEY_ML_KEM_1024 966
+macro EVP_PKEY_XWING 972
+macro EVP_PKEY_RSA2 19
+macro EVP_PKEY_X448 961
+macro EVP_PKEY_ED448 960
+macro HKDF_R_OUTPUT_TOO_LARGE 100
+macro EVP_HPKE_DHKEM_P256_HKDF_SHA256 16
+macro EVP_HPKE_DHKEM_X25519_HKDF_SHA256 32
+macro EVP_HPKE_XWING 25722
+macro EVP_HPKE_MLKEM768 65
+macro EVP_HPKE_MLKEM1024 66
+macro EVP_HPKE_MAX_PUBLIC_KEY_LENGTH 1568
+macro EVP_HPKE_MAX_PRIVATE_KEY_LENGTH 64
+macro EVP_HPKE_MAX_ENC_LENGTH 1568
+macro EVP_HPKE_HKDF_SHA256 1
+macro EVP_HPKE_HKDF_SHA384 2
+macro EVP_HPKE_AES_128_GCM 1
+macro EVP_HPKE_AES_256_GCM 2
+macro EVP_HPKE_CHACHA20_POLY1305 3
+macro EVP_HPKE_MAX_OVERHEAD 64
+macro HRSS_SAMPLE_BYTES 700
+macro HRSS_GENERATE_KEY_BYTES 1432
+macro HRSS_ENCAP_BYTES 1400
+macro HRSS_PUBLIC_KEY_BYTES 1138
+macro HRSS_CIPHERTEXT_BYTES 1138
+macro HRSS_KEY_BYTES 32
+macro HRSS_POLY3_BYTES 140
+macro HRSS_PRIVATE_KEY_BYTES 1452
+macro EVP_PKEY_HKDEF_MODE_EXTRACT_AND_EXPAND 0
+macro EVP_PKEY_HKDEF_MODE_EXTRACT_ONLY 1
+macro EVP_PKEY_HKDEF_MODE_EXPAND_ONLY 2
+macro MD4_CBLOCK 64
+macro MD4_DIGEST_LENGTH 16
+macro MD5_CBLOCK 64
+macro MD5_DIGEST_LENGTH 16
+macro MLDSA_SEED_BYTES 32
+macro MLDSA_MU_BYTES 64
+macro MLDSA65_PUBLIC_KEY_BYTES 1952
+macro MLDSA65_SIGNATURE_BYTES 3309
+macro MLDSA87_PUBLIC_KEY_BYTES 2592
+macro MLDSA87_SIGNATURE_BYTES 4627
+macro MLDSA44_PUBLIC_KEY_BYTES 1312
+macro MLDSA44_SIGNATURE_BYTES 2420
+macro MLKEM768_PUBLIC_KEY_BYTES 1184
+macro MLKEM_SEED_BYTES 64
+macro MLKEM768_CIPHERTEXT_BYTES 1088
+macro MLKEM_SHARED_SECRET_BYTES 32
+macro MLKEM1024_PUBLIC_KEY_BYTES 1568
+macro MLKEM1024_CIPHERTEXT_BYTES 1568
+macro OBJ_NAME_TYPE_MD_METH 1
+macro OBJ_NAME_TYPE_CIPHER_METH 2
+macro OBJ_R_UNKNOWN_NID 100
+macro OBJ_R_INVALID_OID_STRING 101
+macro PKCS7_DETACHED 64
+macro PKCS7_TEXT 1
+macro PKCS7_NOCERTS 2
+macro PKCS7_NOSIGS 4
+macro PKCS7_NOCHAIN 8
+macro PKCS7_NOINTERN 16
+macro PKCS7_NOVERIFY 32
+macro PKCS7_BINARY 128
+macro PKCS7_NOATTR 256
+macro PKCS7_NOSMIMECAP 512
+macro PKCS7_STREAM 4096
+macro PKCS7_PARTIAL 16384
+macro PKCS7_R_BAD_PKCS7_VERSION 100
+macro PKCS7_R_NOT_PKCS7_SIGNED_DATA 101
+macro PKCS7_R_NO_CERTIFICATES_INCLUDED 102
+macro PKCS7_R_NO_CRLS_INCLUDED 103
+macro OPENSSL_RSA_MAX_MODULUS_BITS 16384
+macro RSA_PKCS1_PADDING 1
+macro RSA_NO_PADDING 3
+macro RSA_PKCS1_OAEP_PADDING 4
+macro RSA_PKCS1_PSS_PADDING 6
+macro RSA_PSS_SALTLEN_DIGEST -1
+macro RSA_PSS_SALTLEN_AUTO -2
+macro RSA_FLAG_OPAQUE 1
+macro RSA_FLAG_NO_BLINDING 8
+macro RSA_FLAG_EXT_PKEY 32
+macro RSA_FLAG_NO_PUBLIC_EXPONENT 64
+macro RSA_FLAG_LARGE_PUBLIC_EXPONENT 128
+macro RSA_3 3
+macro RSA_F4 65537
+macro RSA_METHOD_FLAG_NO_CHECK 1
+macro RSA_R_BAD_ENCODING 100
+macro RSA_R_BAD_E_VALUE 101
+macro RSA_R_BAD_FIXED_HEADER_DECRYPT 102
+macro RSA_R_BAD_PAD_BYTE_COUNT 103
+macro RSA_R_BAD_RSA_PARAMETERS 104
+macro RSA_R_BAD_SIGNATURE 105
+macro RSA_R_BAD_VERSION 106
+macro RSA_R_BLOCK_TYPE_IS_NOT_01 107
+macro RSA_R_BN_NOT_INITIALIZED 108
+macro RSA_R_CANNOT_RECOVER_MULTI_PRIME_KEY 109
+macro RSA_R_CRT_PARAMS_ALREADY_GIVEN 110
+macro RSA_R_CRT_VALUES_INCORRECT 111
+macro RSA_R_DATA_LEN_NOT_EQUAL_TO_MOD_LEN 112
+macro RSA_R_DATA_TOO_LARGE 113
+macro RSA_R_DATA_TOO_LARGE_FOR_KEY_SIZE 114
+macro RSA_R_DATA_TOO_LARGE_FOR_MODULUS 115
+macro RSA_R_DATA_TOO_SMALL 116
+macro RSA_R_DATA_TOO_SMALL_FOR_KEY_SIZE 117
+macro RSA_R_DIGEST_TOO_BIG_FOR_RSA_KEY 118
+macro RSA_R_D_E_NOT_CONGRUENT_TO_1 119
+macro RSA_R_EMPTY_PUBLIC_KEY 120
+macro RSA_R_ENCODE_ERROR 121
+macro RSA_R_FIRST_OCTET_INVALID 122
+macro RSA_R_INCONSISTENT_SET_OF_CRT_VALUES 123
+macro RSA_R_INTERNAL_ERROR 124
+macro RSA_R_INVALID_MESSAGE_LENGTH 125
+macro RSA_R_KEY_SIZE_TOO_SMALL 126
+macro RSA_R_LAST_OCTET_INVALID 127
+macro RSA_R_MODULUS_TOO_LARGE 128
+macro RSA_R_MUST_HAVE_AT_LEAST_TWO_PRIMES 129
+macro RSA_R_NO_PUBLIC_EXPONENT 130
+macro RSA_R_NULL_BEFORE_BLOCK_MISSING 131
+macro RSA_R_N_NOT_EQUAL_P_Q 132
+macro RSA_R_OAEP_DECODING_ERROR 133
+macro RSA_R_ONLY_ONE_OF_P_Q_GIVEN 134
+macro RSA_R_OUTPUT_BUFFER_TOO_SMALL 135
+macro RSA_R_PADDING_CHECK_FAILED 136
+macro RSA_R_PKCS_DECODING_ERROR 137
+macro RSA_R_SLEN_CHECK_FAILED 138
+macro RSA_R_SLEN_RECOVERY_FAILED 139
+macro RSA_R_TOO_LONG 140
+macro RSA_R_TOO_MANY_ITERATIONS 141
+macro RSA_R_UNKNOWN_ALGORITHM_TYPE 142
+macro RSA_R_UNKNOWN_PADDING_TYPE 143
+macro RSA_R_VALUE_MISSING 144
+macro RSA_R_WRONG_SIGNATURE_LENGTH 145
+macro RSA_R_PUBLIC_KEY_VALIDATION_FAILED 146
+macro RSA_R_D_OUT_OF_RANGE 147
+macro RSA_R_BLOCK_TYPE_IS_NOT_02 148
+macro X509V3_R_BAD_IP_ADDRESS 100
+macro X509V3_R_BAD_OBJECT 101
+macro X509V3_R_BN_DEC2BN_ERROR 102
+macro X509V3_R_BN_TO_ASN1_INTEGER_ERROR 103
+macro X509V3_R_CANNOT_FIND_FREE_FUNCTION 104
+macro X509V3_R_DIRNAME_ERROR 105
+macro X509V3_R_DISTPOINT_ALREADY_SET 106
+macro X509V3_R_DUPLICATE_ZONE_ID 107
+macro X509V3_R_ERROR_CONVERTING_ZONE 108
+macro X509V3_R_ERROR_CREATING_EXTENSION 109
+macro X509V3_R_ERROR_IN_EXTENSION 110
+macro X509V3_R_EXPECTED_A_SECTION_NAME 111
+macro X509V3_R_EXTENSION_EXISTS 112
+macro X509V3_R_EXTENSION_NAME_ERROR 113
+macro X509V3_R_EXTENSION_NOT_FOUND 114
+macro X509V3_R_EXTENSION_SETTING_NOT_SUPPORTED 115
+macro X509V3_R_EXTENSION_VALUE_ERROR 116
+macro X509V3_R_ILLEGAL_EMPTY_EXTENSION 117
+macro X509V3_R_ILLEGAL_HEX_DIGIT 118
+macro X509V3_R_INCORRECT_POLICY_SYNTAX_TAG 119
+macro X509V3_R_INVALID_BOOLEAN_STRING 120
+macro X509V3_R_INVALID_EXTENSION_STRING 121
+macro X509V3_R_INVALID_MULTIPLE_RDNS 122
+macro X509V3_R_INVALID_NAME 123
+macro X509V3_R_INVALID_NULL_ARGUMENT 124
+macro X509V3_R_INVALID_NULL_NAME 125
+macro X509V3_R_INVALID_NULL_VALUE 126
+macro X509V3_R_INVALID_NUMBER 127
+macro X509V3_R_INVALID_NUMBERS 128
+macro X509V3_R_INVALID_OBJECT_IDENTIFIER 129
+macro X509V3_R_INVALID_OPTION 130
+macro X509V3_R_INVALID_POLICY_IDENTIFIER 131
+macro X509V3_R_INVALID_PROXY_POLICY_SETTING 132
+macro X509V3_R_INVALID_PURPOSE 133
+macro X509V3_R_INVALID_SECTION 134
+macro X509V3_R_INVALID_SYNTAX 135
+macro X509V3_R_ISSUER_DECODE_ERROR 136
+macro X509V3_R_MISSING_VALUE 137
+macro X509V3_R_NEED_ORGANIZATION_AND_NUMBERS 138
+macro X509V3_R_NO_CONFIG_DATABASE 139
+macro X509V3_R_NO_ISSUER_CERTIFICATE 140
+macro X509V3_R_NO_ISSUER_DETAILS 141
+macro X509V3_R_NO_POLICY_IDENTIFIER 142
+macro X509V3_R_NO_PROXY_CERT_POLICY_LANGUAGE_DEFINED 143
+macro X509V3_R_NO_PUBLIC_KEY 144
+macro X509V3_R_NO_SUBJECT_DETAILS 145
+macro X509V3_R_ODD_NUMBER_OF_DIGITS 146
+macro X509V3_R_OPERATION_NOT_DEFINED 147
+macro X509V3_R_OTHERNAME_ERROR 148
+macro X509V3_R_POLICY_LANGUAGE_ALREADY_DEFINED 149
+macro X509V3_R_POLICY_PATH_LENGTH 150
+macro X509V3_R_POLICY_PATH_LENGTH_ALREADY_DEFINED 151
+macro X509V3_R_POLICY_WHEN_PROXY_LANGUAGE_REQUIRES_NO_POLICY 152
+macro X509V3_R_SECTION_NOT_FOUND 153
+macro X509V3_R_UNABLE_TO_GET_ISSUER_DETAILS 154
+macro X509V3_R_UNABLE_TO_GET_ISSUER_KEYID 155
+macro X509V3_R_UNKNOWN_BIT_STRING_ARGUMENT 156
+macro X509V3_R_UNKNOWN_EXTENSION 157
+macro X509V3_R_UNKNOWN_EXTENSION_NAME 158
+macro X509V3_R_UNKNOWN_OPTION 159
+macro X509V3_R_UNSUPPORTED_OPTION 160
+macro X509V3_R_UNSUPPORTED_TYPE 161
+macro X509V3_R_USER_TOO_LONG 162
+macro X509V3_R_INVALID_VALUE 163
+macro X509V3_R_TRAILING_DATA_IN_EXTENSION 164
+macro X509_VERSION_1 0
+macro X509_VERSION_2 1
+macro X509_VERSION_3 2
+macro EXFLAG_BCONS 1
+macro EXFLAG_KUSAGE 2
+macro EXFLAG_XKUSAGE 4
+macro EXFLAG_CA 16
+macro EXFLAG_SI 32
+macro EXFLAG_V1 64
+macro EXFLAG_INVALID 128
+macro EXFLAG_SET 256
+macro EXFLAG_CRITICAL 512
+macro EXFLAG_SS 8192
+macro X509v3_KU_DIGITAL_SIGNATURE 128
+macro X509v3_KU_NON_REPUDIATION 64
+macro X509v3_KU_KEY_ENCIPHERMENT 32
+macro X509v3_KU_DATA_ENCIPHERMENT 16
+macro X509v3_KU_KEY_AGREEMENT 8
+macro X509v3_KU_KEY_CERT_SIGN 4
+macro X509v3_KU_CRL_SIGN 2
+macro X509v3_KU_ENCIPHER_ONLY 1
+macro X509v3_KU_DECIPHER_ONLY 32768
+macro XKU_SSL_SERVER 1
+macro XKU_SSL_CLIENT 2
+macro XKU_SMIME 4
+macro XKU_CODE_SIGN 8
+macro XKU_SGC 16
+macro XKU_OCSP_SIGN 32
+macro XKU_TIMESTAMP 64
+macro XKU_DVCS 128
+macro XKU_ANYEKU 256
+macro X509_CRL_VERSION_1 0
+macro X509_CRL_VERSION_2 1
+macro X509_REQ_VERSION_1 0
+macro X509V3_ADD_OP_MASK 15
+macro X509V3_ADD_DEFAULT 0
+macro X509V3_ADD_APPEND 1
+macro X509V3_ADD_REPLACE 2
+macro X509V3_ADD_REPLACE_EXISTING 3
+macro X509V3_ADD_KEEP_EXISTING 4
+macro X509V3_ADD_DELETE 5
+macro X509V3_ADD_SILENT 16
+macro GEN_OTHERNAME 0
+macro GEN_EMAIL 1
+macro GEN_DNS 2
+macro GEN_X400 3
+macro GEN_DIRNAME 4
+macro GEN_EDIPARTY 5
+macro GEN_URI 6
+macro GEN_IPADD 7
+macro GEN_RID 8
+macro X509_LU_NONE 0
+macro X509_LU_X509 1
+macro X509_LU_CRL 2
+macro X509_LU_PKEY 3
+macro X509_V_OK 0
+macro X509_V_ERR_UNSPECIFIED 1
+macro X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT 2
+macro X509_V_ERR_UNABLE_TO_GET_CRL 3
+macro X509_V_ERR_UNABLE_TO_DECRYPT_CERT_SIGNATURE 4
+macro X509_V_ERR_UNABLE_TO_DECRYPT_CRL_SIGNATURE 5
+macro X509_V_ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY 6
+macro X509_V_ERR_CERT_SIGNATURE_FAILURE 7
+macro X509_V_ERR_CRL_SIGNATURE_FAILURE 8
+macro X509_V_ERR_CERT_NOT_YET_VALID 9
+macro X509_V_ERR_CERT_HAS_EXPIRED 10
+macro X509_V_ERR_CRL_NOT_YET_VALID 11
+macro X509_V_ERR_CRL_HAS_EXPIRED 12
+macro X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD 13
+macro X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD 14
+macro X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD 15
+macro X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD 16
+macro X509_V_ERR_OUT_OF_MEM 17
+macro X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT 18
+macro X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN 19
+macro X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY 20
+macro X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE 21
+macro X509_V_ERR_CERT_CHAIN_TOO_LONG 22
+macro X509_V_ERR_CERT_REVOKED 23
+macro X509_V_ERR_INVALID_CA 24
+macro X509_V_ERR_PATH_LENGTH_EXCEEDED 25
+macro X509_V_ERR_INVALID_PURPOSE 26
+macro X509_V_ERR_CERT_UNTRUSTED 27
+macro X509_V_ERR_CERT_REJECTED 28
+macro X509_V_ERR_SUBJECT_ISSUER_MISMATCH 29
+macro X509_V_ERR_AKID_SKID_MISMATCH 30
+macro X509_V_ERR_AKID_ISSUER_SERIAL_MISMATCH 31
+macro X509_V_ERR_KEYUSAGE_NO_CERTSIGN 32
+macro X509_V_ERR_UNABLE_TO_GET_CRL_ISSUER 33
+macro X509_V_ERR_UNHANDLED_CRITICAL_EXTENSION 34
+macro X509_V_ERR_KEYUSAGE_NO_CRL_SIGN 35
+macro X509_V_ERR_UNHANDLED_CRITICAL_CRL_EXTENSION 36
+macro X509_V_ERR_INVALID_NON_CA 37
+macro X509_V_ERR_PROXY_PATH_LENGTH_EXCEEDED 38
+macro X509_V_ERR_KEYUSAGE_NO_DIGITAL_SIGNATURE 39
+macro X509_V_ERR_PROXY_CERTIFICATES_NOT_ALLOWED 40
+macro X509_V_ERR_INVALID_EXTENSION 41
+macro X509_V_ERR_INVALID_POLICY_EXTENSION 42
+macro X509_V_ERR_NO_EXPLICIT_POLICY 43
+macro X509_V_ERR_DIFFERENT_CRL_SCOPE 44
+macro X509_V_ERR_UNSUPPORTED_EXTENSION_FEATURE 45
+macro X509_V_ERR_UNNESTED_RESOURCE 46
+macro X509_V_ERR_PERMITTED_VIOLATION 47
+macro X509_V_ERR_EXCLUDED_VIOLATION 48
+macro X509_V_ERR_SUBTREE_MINMAX 49
+macro X509_V_ERR_APPLICATION_VERIFICATION 50
+macro X509_V_ERR_UNSUPPORTED_CONSTRAINT_TYPE 51
+macro X509_V_ERR_UNSUPPORTED_CONSTRAINT_SYNTAX 52
+macro X509_V_ERR_UNSUPPORTED_NAME_SYNTAX 53
+macro X509_V_ERR_CRL_PATH_VALIDATION_ERROR 54
+macro X509_V_ERR_HOSTNAME_MISMATCH 62
+macro X509_V_ERR_EMAIL_MISMATCH 63
+macro X509_V_ERR_IP_ADDRESS_MISMATCH 64
+macro X509_V_ERR_INVALID_CALL 65
+macro X509_V_ERR_STORE_LOOKUP 66
+macro X509_V_ERR_NAME_CONSTRAINTS_WITHOUT_SANS 67
+macro X509_V_FLAG_CB_ISSUER_CHECK 1
+macro X509_V_FLAG_USE_CHECK_TIME 2
+macro X509_V_FLAG_CRL_CHECK 4
+macro X509_V_FLAG_CRL_CHECK_ALL 8
+macro X509_V_FLAG_IGNORE_CRITICAL 16
+macro X509_V_FLAG_X509_STRICT 0
+macro X509_V_FLAG_ALLOW_PROXY_CERTS 64
+macro X509_V_FLAG_POLICY_CHECK 128
+macro X509_V_FLAG_EXPLICIT_POLICY 256
+macro X509_V_FLAG_INHIBIT_ANY 512
+macro X509_V_FLAG_INHIBIT_MAP 1024
+macro X509_V_FLAG_NOTIFY_POLICY 2048
+macro X509_V_FLAG_EXTENDED_CRL_SUPPORT 4096
+macro X509_V_FLAG_USE_DELTAS 8192
+macro X509_V_FLAG_CHECK_SS_SIGNATURE 16384
+macro X509_V_FLAG_TRUSTED_FIRST 0
+macro X509_V_FLAG_PARTIAL_CHAIN 524288
+macro X509_V_FLAG_NO_ALT_CHAINS 0
+macro X509_V_FLAG_NO_CHECK_TIME 2097152
+macro X509_V_FLAG_ALLOW_TIMEZONE_OFFSET 16777216
+macro X509_V_FLAG_USE_MTC_DRAFT_PLANTS_05 4194304
+macro X509_CHECK_FLAG_NO_WILDCARDS 2
+macro X509_CHECK_FLAG_NEVER_CHECK_SUBJECT 32
+macro X509_PURPOSE_SSL_CLIENT 1
+macro X509_PURPOSE_SSL_SERVER 2
+macro X509_PURPOSE_NS_SSL_SERVER 3
+macro X509_PURPOSE_SMIME_SIGN 4
+macro X509_PURPOSE_SMIME_ENCRYPT 5
+macro X509_PURPOSE_CRL_SIGN 6
+macro X509_PURPOSE_ANY 7
+macro X509_PURPOSE_OCSP_HELPER 8
+macro X509_PURPOSE_TIMESTAMP_SIGN 9
+macro X509_TRUST_COMPAT 1
+macro X509_TRUST_SSL_CLIENT 2
+macro X509_TRUST_SSL_SERVER 3
+macro X509_TRUST_EMAIL 4
+macro X509_TRUST_OBJECT_SIGN 5
+macro X509_TRUST_TSA 8
+macro X509_FILETYPE_PEM 1
+macro X509_FILETYPE_ASN1 2
+macro X509_FILETYPE_DEFAULT 3
+macro X509_L_FILE_LOAD 1
+macro X509_L_ADD_DIR 2
+macro X509_FLAG_COMPAT 0
+macro X509_FLAG_NO_HEADER 1
+macro X509_FLAG_NO_VERSION 2
+macro X509_FLAG_NO_SERIAL 4
+macro X509_FLAG_NO_SIGNAME 8
+macro X509_FLAG_NO_ISSUER 16
+macro X509_FLAG_NO_VALIDITY 32
+macro X509_FLAG_NO_SUBJECT 64
+macro X509_FLAG_NO_PUBKEY 128
+macro X509_FLAG_NO_EXTENSIONS 256
+macro X509_FLAG_NO_SIGDUMP 512
+macro X509_FLAG_NO_AUX 1024
+macro X509_FLAG_NO_ATTRIBUTES 2048
+macro X509_FLAG_NO_IDS 4096
+macro X509V3_EXT_UNKNOWN_MASK 983040
+macro X509V3_EXT_DEFAULT 0
+macro X509V3_EXT_ERROR_UNKNOWN 65536
+macro X509V3_EXT_PARSE_UNKNOWN 131072
+macro X509V3_EXT_DUMP_UNKNOWN 196608
+macro XN_FLAG_COMPAT 0
+macro XN_FLAG_SEP_MASK 983040
+macro XN_FLAG_SEP_COMMA_PLUS 65536
+macro XN_FLAG_SEP_CPLUS_SPC 131072
+macro XN_FLAG_SEP_SPLUS_SPC 196608
+macro XN_FLAG_SEP_MULTILINE 262144
+macro XN_FLAG_DN_REV 1048576
+macro XN_FLAG_FN_MASK 6291456
+macro XN_FLAG_FN_SN 0
+macro XN_FLAG_SPC_EQ 8388608
+macro XN_FLAG_DUMP_UNKNOWN_FIELDS 16777216
+macro XN_FLAG_RFC2253 17892119
+macro XN_FLAG_ONELINE 8520479
+macro X509_TRUST_TRUSTED 1
+macro X509_TRUST_REJECTED 2
+macro X509_TRUST_UNTRUSTED 3
+macro X509V3_EXT_MULTILINE 4
+macro X509V3_CTX_TEST 1
+macro X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT 0
+macro X509_CHECK_FLAG_MULTI_LABEL_WILDCARDS 0
+macro X509_CHECK_FLAG_SINGLE_LABEL_SUBDOMAINS 0
+macro X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS 0
+macro NS_SSL_CLIENT 128
+macro NS_SSL_SERVER 64
+macro NS_SMIME 32
+macro NS_OBJSIGN 16
+macro NS_SSL_CA 4
+macro NS_SMIME_CA 2
+macro NS_OBJSIGN_CA 1
+macro NS_ANY_CA 7
+macro X509_R_AKID_MISMATCH 100
+macro X509_R_BAD_PKCS7_VERSION 101
+macro X509_R_BAD_X509_FILETYPE 102
+macro X509_R_BASE64_DECODE_ERROR 103
+macro X509_R_CANT_CHECK_DH_KEY 104
+macro X509_R_CERT_ALREADY_IN_HASH_TABLE 105
+macro X509_R_CRL_ALREADY_DELTA 106
+macro X509_R_CRL_VERIFY_FAILURE 107
+macro X509_R_IDP_MISMATCH 108
+macro X509_R_INVALID_BIT_STRING_BITS_LEFT 109
+macro X509_R_INVALID_DIRECTORY 110
+macro X509_R_INVALID_FIELD_NAME 111
+macro X509_R_INVALID_PSS_PARAMETERS 112
+macro X509_R_INVALID_TRUST 113
+macro X509_R_ISSUER_MISMATCH 114
+macro X509_R_KEY_TYPE_MISMATCH 115
+macro X509_R_KEY_VALUES_MISMATCH 116
+macro X509_R_LOADING_CERT_DIR 117
+macro X509_R_LOADING_DEFAULTS 118
+macro X509_R_NEWER_CRL_NOT_NEWER 119
+macro X509_R_NOT_PKCS7_SIGNED_DATA 120
+macro X509_R_NO_CERTIFICATES_INCLUDED 121
+macro X509_R_NO_CERT_SET_FOR_US_TO_VERIFY 122
+macro X509_R_NO_CRLS_INCLUDED 123
+macro X509_R_NO_CRL_NUMBER 124
+macro X509_R_PUBLIC_KEY_DECODE_ERROR 125
+macro X509_R_PUBLIC_KEY_ENCODE_ERROR 126
+macro X509_R_SHOULD_RETRY 127
+macro X509_R_UNKNOWN_KEY_TYPE 128
+macro X509_R_UNKNOWN_NID 129
+macro X509_R_UNKNOWN_PURPOSE_ID 130
+macro X509_R_UNKNOWN_TRUST_ID 131
+macro X509_R_UNSUPPORTED_ALGORITHM 132
+macro X509_R_WRONG_LOOKUP_TYPE 133
+macro X509_R_WRONG_TYPE 134
+macro X509_R_NAME_TOO_LONG 135
+macro X509_R_INVALID_PARAMETER 136
+macro X509_R_SIGNATURE_ALGORITHM_MISMATCH 137
+macro X509_R_DELTA_CRL_WITHOUT_CRL_NUMBER 138
+macro X509_R_INVALID_FIELD_FOR_VERSION 139
+macro X509_R_INVALID_VERSION 140
+macro X509_R_NO_CERTIFICATE_FOUND 141
+macro X509_R_NO_CERTIFICATE_OR_CRL_FOUND 142
+macro X509_R_NO_CRL_FOUND 143
+macro X509_R_INVALID_POLICY_EXTENSION 144
+macro X509_R_INVALID_MTC_CA 145
+macro X509_R_INVALID_MTC_PROOF 146
+macro PEM_BUFSIZE 1024
+macro PEM_R_BAD_BASE64_DECODE 100
+macro PEM_R_BAD_DECRYPT 101
+macro PEM_R_BAD_END_LINE 102
+macro PEM_R_BAD_IV_CHARS 103
+macro PEM_R_BAD_PASSWORD_READ 104
+macro PEM_R_CIPHER_IS_NULL 105
+macro PEM_R_ERROR_CONVERTING_PRIVATE_KEY 106
+macro PEM_R_NOT_DEK_INFO 107
+macro PEM_R_NOT_ENCRYPTED 108
+macro PEM_R_NOT_PROC_TYPE 109
+macro PEM_R_NO_START_LINE 110
+macro PEM_R_READ_KEY 111
+macro PEM_R_SHORT_HEADER 112
+macro PEM_R_UNSUPPORTED_CIPHER 113
+macro PEM_R_UNSUPPORTED_ENCRYPTION 114
+macro PEM_R_UNSUPPORTED_PROC_TYPE_VERSION 115
+macro PEM_R_NO_DATA 116
+macro PKCS12_DEFAULT_ITER 2048
+macro PKCS8_R_BAD_PKCS12_DATA 100
+macro PKCS8_R_BAD_PKCS12_VERSION 101
+macro PKCS8_R_CIPHER_HAS_NO_OBJECT_IDENTIFIER 102
+macro PKCS8_R_CRYPT_ERROR 103
+macro PKCS8_R_DECODE_ERROR 104
+macro PKCS8_R_ENCODE_ERROR 105
+macro PKCS8_R_ENCRYPT_ERROR 106
+macro PKCS8_R_ERROR_SETTING_CIPHER_PARAMS 107
+macro PKCS8_R_INCORRECT_PASSWORD 108
+macro PKCS8_R_KEYGEN_FAILURE 109
+macro PKCS8_R_KEY_GEN_ERROR 110
+macro PKCS8_R_METHOD_NOT_SUPPORTED 111
+macro PKCS8_R_MISSING_MAC 112
+macro PKCS8_R_MULTIPLE_PRIVATE_KEYS_IN_PKCS12 113
+macro PKCS8_R_PKCS12_PUBLIC_KEY_INTEGRITY_NOT_SUPPORTED 114
+macro PKCS8_R_PKCS12_TOO_DEEPLY_NESTED 115
+macro PKCS8_R_PRIVATE_KEY_DECODE_ERROR 116
+macro PKCS8_R_PRIVATE_KEY_ENCODE_ERROR 117
+macro PKCS8_R_TOO_LONG 118
+macro PKCS8_R_UNKNOWN_ALGORITHM 119
+macro PKCS8_R_UNKNOWN_CIPHER 120
+macro PKCS8_R_UNKNOWN_CIPHER_ALGORITHM 121
+macro PKCS8_R_UNKNOWN_DIGEST 122
+macro PKCS8_R_UNKNOWN_HASH 123
+macro PKCS8_R_UNSUPPORTED_PRIVATE_KEY_ALGORITHM 124
+macro PKCS8_R_UNSUPPORTED_KEYLENGTH 125
+macro PKCS8_R_UNSUPPORTED_SALT_TYPE 126
+macro PKCS8_R_UNSUPPORTED_CIPHER 127
+macro PKCS8_R_UNSUPPORTED_KEY_DERIVATION_FUNCTION 128
+macro PKCS8_R_BAD_ITERATION_COUNT 129
+macro PKCS8_R_UNSUPPORTED_PRF 130
+macro PKCS8_R_INVALID_CHARACTERS 131
+macro PKCS8_R_UNSUPPORTED_OPTIONS 132
+macro PKCS8_R_AMBIGUOUS_FRIENDLY_NAME 133
+macro RIPEMD160_CBLOCK 64
+macro RIPEMD160_LBLOCK 16
+macro RIPEMD160_DIGEST_LENGTH 20
+macro SLHDSA_SHA2_128S_SEED_BYTES 48
+macro SLHDSA_SHA2_128S_PUBLIC_KEY_BYTES 32
+macro SLHDSA_SHA2_128S_PRIVATE_KEY_BYTES 64
+macro SLHDSA_SHA2_128S_SIGNATURE_BYTES 7856
+macro SLHDSA_SHAKE_256F_SEED_BYTES 96
+macro SLHDSA_SHAKE_256F_PUBLIC_KEY_BYTES 64
+macro SLHDSA_SHAKE_256F_PRIVATE_KEY_BYTES 128
+macro SLHDSA_SHAKE_256F_SIGNATURE_BYTES 49856
+macro TRUST_TOKEN_MAX_PRIVATE_KEY_SIZE 512
+macro TRUST_TOKEN_MAX_PUBLIC_KEY_SIZE 512
+macro TRUST_TOKEN_R_KEYGEN_FAILURE 100
+macro TRUST_TOKEN_R_BUFFER_TOO_SMALL 101
+macro TRUST_TOKEN_R_OVER_BATCHSIZE 102
+macro TRUST_TOKEN_R_DECODE_ERROR 103
+macro TRUST_TOKEN_R_SRR_SIGNATURE_ERROR 104
+macro TRUST_TOKEN_R_DECODE_FAILURE 105
+macro TRUST_TOKEN_R_INVALID_METADATA 106
+macro TRUST_TOKEN_R_TOO_MANY_KEYS 107
+macro TRUST_TOKEN_R_NO_KEYS_CONFIGURED 108
+macro TRUST_TOKEN_R_INVALID_KEY_ID 109
+macro TRUST_TOKEN_R_INVALID_TOKEN 110
+macro TRUST_TOKEN_R_BAD_VALIDITY_CHECK 111
+macro TRUST_TOKEN_R_NO_SRR_KEY_CONFIGURED 112
+macro TRUST_TOKEN_R_INVALID_METADATA_KEY 113
+macro TRUST_TOKEN_R_INVALID_PROOF 114
+macro CRL_REASON_NONE -1
+macro CRL_REASON_UNSPECIFIED 0
+macro CRL_REASON_KEY_COMPROMISE 1
+macro CRL_REASON_CA_COMPROMISE 2
+macro CRL_REASON_AFFILIATION_CHANGED 3
+macro CRL_REASON_SUPERSEDED 4
+macro CRL_REASON_CESSATION_OF_OPERATION 5
+macro CRL_REASON_CERTIFICATE_HOLD 6
+macro CRL_REASON_REMOVE_FROM_CRL 8
+macro CRL_REASON_PRIVILEGE_WITHDRAWN 9
+macro CRL_REASON_AA_COMPROMISE 10
+macro KU_DIGITAL_SIGNATURE 128
+macro KU_NON_REPUDIATION 64
+macro KU_KEY_ENCIPHERMENT 32
+macro KU_DATA_ENCIPHERMENT 16
+macro KU_KEY_AGREEMENT 8
+macro KU_KEY_CERT_SIGN 4
+macro KU_CRL_SIGN 2
+macro KU_ENCIPHER_ONLY 1
+macro KU_DECIPHER_ONLY 32768
+macro XWING_PUBLIC_KEY_BYTES 1216
+macro XWING_PRIVATE_KEY_BYTES 32
+macro XWING_CIPHERTEXT_BYTES 1120
+macro XWING_SHARED_SECRET_BYTES 32
+macro SSL2_MT_CLIENT_HELLO 1
+macro SSL2_VERSION 2
+macro SSL3_CK_RSA_DES_192_CBC3_SHA 50331658
+macro SSL3_CK_SCSV 50331903
+macro SSL3_CK_FALLBACK_SCSV 50353664
+macro SSL3_SSL_SESSION_ID_LENGTH 32
+macro SSL3_MAX_SSL_SESSION_ID_LENGTH 32
+macro SSL3_MASTER_SECRET_SIZE 48
+macro SSL3_RANDOM_SIZE 32
+macro SSL3_SESSION_ID_SIZE 32
+macro SSL3_RT_HEADER_LENGTH 5
+macro SSL3_HM_HEADER_LENGTH 4
+macro SSL3_ALIGN_PAYLOAD 8
+macro SSL3_RT_MAX_MD_SIZE 64
+macro SSL_RT_MAX_CIPHER_BLOCK_SIZE 16
+macro SSL3_RT_MAX_PLAIN_LENGTH 16384
+macro SSL3_RT_MAX_COMPRESSED_OVERHEAD 1024
+macro SSL3_RT_MAX_ENCRYPTED_OVERHEAD 320
+macro SSL3_RT_SEND_MAX_ENCRYPTED_OVERHEAD 88
+macro SSL3_RT_MAX_COMPRESSED_LENGTH 16384
+macro SSL3_RT_MAX_ENCRYPTED_LENGTH 16704
+macro SSL3_RT_MAX_PACKET_SIZE 16709
+macro SSL3_RT_CHANGE_CIPHER_SPEC 20
+macro SSL3_RT_ALERT 21
+macro SSL3_RT_HANDSHAKE 22
+macro SSL3_RT_APPLICATION_DATA 23
+macro SSL3_RT_ACK 26
+macro SSL3_RT_HEADER 256
+macro SSL3_RT_CLIENT_HELLO_INNER 257
+macro SSL3_AL_WARNING 1
+macro SSL3_AL_FATAL 2
+macro SSL3_AD_CLOSE_NOTIFY 0
+macro SSL3_AD_UNEXPECTED_MESSAGE 10
+macro SSL3_AD_BAD_RECORD_MAC 20
+macro SSL3_AD_DECOMPRESSION_FAILURE 30
+macro SSL3_AD_HANDSHAKE_FAILURE 40
+macro SSL3_AD_NO_CERTIFICATE 41
+macro SSL3_AD_BAD_CERTIFICATE 42
+macro SSL3_AD_UNSUPPORTED_CERTIFICATE 43
+macro SSL3_AD_CERTIFICATE_REVOKED 44
+macro SSL3_AD_CERTIFICATE_EXPIRED 45
+macro SSL3_AD_CERTIFICATE_UNKNOWN 46
+macro SSL3_AD_ILLEGAL_PARAMETER 47
+macro SSL3_AD_INAPPROPRIATE_FALLBACK 86
+macro SSL3_CT_RSA_SIGN 1
+macro SSL3_MT_HELLO_REQUEST 0
+macro SSL3_MT_CLIENT_HELLO 1
+macro SSL3_MT_SERVER_HELLO 2
+macro SSL3_MT_NEW_SESSION_TICKET 4
+macro SSL3_MT_END_OF_EARLY_DATA 5
+macro SSL3_MT_ENCRYPTED_EXTENSIONS 8
+macro SSL3_MT_CERTIFICATE 11
+macro SSL3_MT_SERVER_KEY_EXCHANGE 12
+macro SSL3_MT_CERTIFICATE_REQUEST 13
+macro SSL3_MT_SERVER_HELLO_DONE 14
+macro SSL3_MT_CERTIFICATE_VERIFY 15
+macro SSL3_MT_CLIENT_KEY_EXCHANGE 16
+macro SSL3_MT_FINISHED 20
+macro SSL3_MT_CERTIFICATE_STATUS 22
+macro SSL3_MT_SUPPLEMENTAL_DATA 23
+macro SSL3_MT_KEY_UPDATE 24
+macro SSL3_MT_COMPRESSED_CERTIFICATE 25
+macro SSL3_MT_NEXT_PROTO 67
+macro SSL3_MT_CHANNEL_ID 203
+macro SSL3_MT_MESSAGE_HASH 254
+macro DTLS1_MT_HELLO_VERIFY_REQUEST 3
+macro SSL3_MT_SERVER_DONE 14
+macro SSL3_MT_NEWSESSION_TICKET 4
+macro SSL3_MT_CCS 1
+macro TLS1_AD_END_OF_EARLY_DATA 1
+macro TLS1_AD_DECRYPTION_FAILED 21
+macro TLS1_AD_RECORD_OVERFLOW 22
+macro TLS1_AD_UNKNOWN_CA 48
+macro TLS1_AD_ACCESS_DENIED 49
+macro TLS1_AD_DECODE_ERROR 50
+macro TLS1_AD_DECRYPT_ERROR 51
+macro TLS1_AD_EXPORT_RESTRICTION 60
+macro TLS1_AD_PROTOCOL_VERSION 70
+macro TLS1_AD_INSUFFICIENT_SECURITY 71
+macro TLS1_AD_INTERNAL_ERROR 80
+macro TLS1_AD_USER_CANCELLED 90
+macro TLS1_AD_NO_RENEGOTIATION 100
+macro TLS1_AD_MISSING_EXTENSION 109
+macro TLS1_AD_UNSUPPORTED_EXTENSION 110
+macro TLS1_AD_CERTIFICATE_UNOBTAINABLE 111
+macro TLS1_AD_UNRECOGNIZED_NAME 112
+macro TLS1_AD_BAD_CERTIFICATE_STATUS_RESPONSE 113
+macro TLS1_AD_BAD_CERTIFICATE_HASH_VALUE 114
+macro TLS1_AD_UNKNOWN_PSK_IDENTITY 115
+macro TLS1_AD_CERTIFICATE_REQUIRED 116
+macro TLS1_AD_NO_APPLICATION_PROTOCOL 120
+macro TLS1_AD_ECH_REQUIRED 121
+macro TLSEXT_TYPE_server_name 0
+macro TLSEXT_TYPE_status_request 5
+macro TLSEXT_TYPE_ec_point_formats 11
+macro TLSEXT_TYPE_signature_algorithms 13
+macro TLSEXT_TYPE_srtp 14
+macro TLSEXT_TYPE_application_layer_protocol_negotiation 16
+macro TLSEXT_TYPE_client_cert_type 19
+macro TLSEXT_TYPE_server_cert_type 20
+macro TLSEXT_TYPE_padding 21
+macro TLSEXT_TYPE_extended_master_secret 23
+macro TLSEXT_TYPE_quic_transport_parameters_legacy 65445
+macro TLSEXT_TYPE_quic_transport_parameters 57
+macro TLSEXT_TYPE_quic_transport_parameters_standard 57
+macro TLSEXT_TYPE_cert_compression 27
+macro TLSEXT_TYPE_session_ticket 35
+macro TLSEXT_TYPE_supported_groups 10
+macro TLSEXT_TYPE_pre_shared_key 41
+macro TLSEXT_TYPE_early_data 42
+macro TLSEXT_TYPE_supported_versions 43
+macro TLSEXT_TYPE_cookie 44
+macro TLSEXT_TYPE_psk_key_exchange_modes 45
+macro TLSEXT_TYPE_certificate_authorities 47
+macro TLSEXT_TYPE_signature_algorithms_cert 50
+macro TLSEXT_TYPE_key_share 51
+macro TLSEXT_TYPE_renegotiate 65281
+macro TLSEXT_TYPE_delegated_credential 34
+macro TLSEXT_TYPE_application_settings_old 17513
+macro TLSEXT_TYPE_application_settings 17613
+macro TLSEXT_TYPE_encrypted_client_hello 65037
+macro TLSEXT_TYPE_ech_outer_extensions 64768
+macro TLSEXT_TYPE_pake 35387
+macro TLSEXT_TYPE_certificate_timestamp 18
+macro TLSEXT_TYPE_next_proto_neg 13172
+macro TLSEXT_TYPE_channel_id 30032
+macro TLSEXT_TYPE_trust_anchors 51764
+macro TLSEXT_TYPE_server_padding 4832
+macro TLSEXT_TYPE_tls_flags 62
+macro TLSEXT_STATUSTYPE_nothing -1
+macro TLSEXT_STATUSTYPE_ocsp 1
+macro TLSEXT_ECPOINTFORMAT_uncompressed 0
+macro TLSEXT_ECPOINTFORMAT_ansiX962_compressed_prime 1
+macro TLSEXT_signature_anonymous 0
+macro TLSEXT_signature_rsa 1
+macro TLSEXT_signature_dsa 2
+macro TLSEXT_signature_ecdsa 3
+macro TLSEXT_hash_none 0
+macro TLSEXT_hash_md5 1
+macro TLSEXT_hash_sha1 2
+macro TLSEXT_hash_sha224 3
+macro TLSEXT_hash_sha256 4
+macro TLSEXT_hash_sha384 5
+macro TLSEXT_hash_sha512 6
+macro TLSEXT_cert_compression_zlib 1
+macro TLSEXT_cert_compression_brotli 2
+macro TLSEXT_MAXLEN_host_name 255
+macro TLS1_CK_PSK_WITH_AES_128_CBC_SHA 50331788
+macro TLS1_CK_PSK_WITH_AES_256_CBC_SHA 50331789
+macro TLS1_CK_ECDHE_PSK_WITH_AES_128_CBC_SHA 50380853
+macro TLS1_CK_ECDHE_PSK_WITH_AES_256_CBC_SHA 50380854
+macro TLS1_CK_RSA_WITH_AES_128_SHA 50331695
+macro TLS1_CK_RSA_WITH_AES_256_SHA 50331701
+macro TLS1_CK_RSA_WITH_AES_128_GCM_SHA256 50331804
+macro TLS1_CK_RSA_WITH_AES_256_GCM_SHA384 50331805
+macro TLS1_CK_ECDHE_ECDSA_WITH_AES_128_CBC_SHA 50380809
+macro TLS1_CK_ECDHE_ECDSA_WITH_AES_256_CBC_SHA 50380810
+macro TLS1_CK_ECDHE_RSA_WITH_AES_128_CBC_SHA 50380819
+macro TLS1_CK_ECDHE_RSA_WITH_AES_256_CBC_SHA 50380820
+macro TLS1_CK_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 50380835
+macro TLS1_CK_ECDHE_RSA_WITH_AES_128_CBC_SHA256 50380839
+macro TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 50380843
+macro TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 50380844
+macro TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256 50380847
+macro TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384 50380848
+macro TLS1_CK_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 50384040
+macro TLS1_CK_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 50384041
+macro TLS1_CK_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256 50384044
+macro TLS1_3_CK_AES_128_GCM_SHA256 50336513
+macro TLS1_3_CK_AES_256_GCM_SHA384 50336514
+macro TLS1_3_CK_CHACHA20_POLY1305_SHA256 50336515
+macro TLS1_CK_AES_128_GCM_SHA256 50336513
+macro TLS1_CK_AES_256_GCM_SHA384 50336514
+macro TLS1_CK_CHACHA20_POLY1305_SHA256 50336515
+macro TLS_CT_RSA_SIGN 1
+macro TLS_CT_DSS_SIGN 2
+macro TLS_CT_RSA_FIXED_DH 3
+macro TLS_CT_DSS_FIXED_DH 4
+macro TLS_CT_ECDSA_SIGN 64
+macro TLS_CT_RSA_FIXED_ECDH 65
+macro TLS_CT_ECDSA_FIXED_ECDH 66
+macro SSL_KEY_UPDATE_REQUESTED 1
+macro SSL_KEY_UPDATE_NOT_REQUESTED 0
+macro SSL_ERROR_NONE 0
+macro SSL_ERROR_SSL 1
+macro SSL_ERROR_WANT_READ 2
+macro SSL_ERROR_WANT_WRITE 3
+macro SSL_ERROR_WANT_X509_LOOKUP 4
+macro SSL_ERROR_SYSCALL 5
+macro SSL_ERROR_ZERO_RETURN 6
+macro SSL_ERROR_WANT_CONNECT 7
+macro SSL_ERROR_WANT_ACCEPT 8
+macro SSL_ERROR_WANT_CHANNEL_ID_LOOKUP 9
+macro SSL_ERROR_PENDING_SESSION 11
+macro SSL_ERROR_PENDING_CERTIFICATE 12
+macro SSL_ERROR_WANT_PRIVATE_KEY_OPERATION 13
+macro SSL_ERROR_PENDING_TICKET 14
+macro SSL_ERROR_EARLY_DATA_REJECTED 15
+macro SSL_ERROR_WANT_CERTIFICATE_VERIFY 16
+macro SSL_ERROR_HANDOFF 17
+macro SSL_ERROR_HANDBACK 18
+macro SSL_ERROR_WANT_RENEGOTIATE 19
+macro SSL_ERROR_HANDSHAKE_HINTS_READY 20
+macro DTLS1_VERSION_MAJOR 254
+macro SSL3_VERSION_MAJOR 3
+macro SSL3_VERSION 768
+macro TLS1_VERSION 769
+macro TLS1_1_VERSION 770
+macro TLS1_2_VERSION 771
+macro TLS1_3_VERSION 772
+macro DTLS1_VERSION 65279
+macro DTLS1_2_VERSION 65277
+macro DTLS1_3_VERSION 65276
+macro SSL_OP_LEGACY_SERVER_CONNECT 4
+macro SSL_OP_NO_QUERY_MTU 4096
+macro SSL_OP_NO_TICKET 16384
+macro SSL_OP_CIPHER_SERVER_PREFERENCE 4194304
+macro SSL_OP_ALL 4
+macro SSL_OP_NO_TLSv1 67108864
+macro SSL_OP_NO_TLSv1_2 134217728
+macro SSL_OP_NO_TLSv1_1 268435456
+macro SSL_OP_NO_TLSv1_3 536870912
+macro SSL_OP_NO_DTLSv1 67108864
+macro SSL_OP_NO_DTLSv1_2 134217728
+macro SSL_MODE_ENABLE_PARTIAL_WRITE 1
+macro SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER 2
+macro SSL_MODE_NO_AUTO_CHAIN 8
+macro SSL_MODE_ENABLE_FALSE_START 128
+macro SSL_MODE_CBC_RECORD_SPLITTING 256
+macro SSL_MODE_NO_SESSION_CREATION 512
+macro SSL_MODE_SEND_FALLBACK_SCSV 1024
+macro SSL_SIGN_RSA_PKCS1_SHA1 513
+macro SSL_SIGN_RSA_PKCS1_SHA256 1025
+macro SSL_SIGN_RSA_PKCS1_SHA384 1281
+macro SSL_SIGN_RSA_PKCS1_SHA512 1537
+macro SSL_SIGN_ECDSA_SHA1 515
+macro SSL_SIGN_ECDSA_SECP256R1_SHA256 1027
+macro SSL_SIGN_ECDSA_SECP384R1_SHA384 1283
+macro SSL_SIGN_ECDSA_SECP521R1_SHA512 1539
+macro SSL_SIGN_RSA_PSS_RSAE_SHA256 2052
+macro SSL_SIGN_RSA_PSS_RSAE_SHA384 2053
+macro SSL_SIGN_RSA_PSS_RSAE_SHA512 2054
+macro SSL_SIGN_ED25519 2055
+macro SSL_SIGN_ML_DSA_44 2308
+macro SSL_SIGN_ML_DSA_65 2309
+macro SSL_SIGN_ML_DSA_87 2310
+macro SSL_SIGN_RSA_PKCS1_SHA256_LEGACY 1056
+macro SSL_SIGN_RSA_PKCS1_MD5_SHA1 65281
+macro SSL_FILETYPE_PEM 1
+macro SSL_FILETYPE_ASN1 2
+macro SSL_CIPHER_AES_128_GCM_SHA256 4865
+macro SSL_CIPHER_AES_256_GCM_SHA384 4866
+macro SSL_CIPHER_CHACHA20_POLY1305_SHA256 4867
+macro SSL_CIPHER_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 49195
+macro SSL_CIPHER_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 49196
+macro SSL_CIPHER_ECDHE_RSA_WITH_AES_128_GCM_SHA256 49199
+macro SSL_CIPHER_ECDHE_RSA_WITH_AES_256_GCM_SHA384 49200
+macro SSL_CIPHER_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 52392
+macro SSL_CIPHER_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 52393
+macro SSL_CIPHER_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256 52396
+macro SSL_CIPHER_ECDHE_ECDSA_WITH_AES_128_CBC_SHA 49161
+macro SSL_CIPHER_ECDHE_ECDSA_WITH_AES_256_CBC_SHA 49162
+macro SSL_CIPHER_ECDHE_RSA_WITH_AES_128_CBC_SHA 49171
+macro SSL_CIPHER_ECDHE_RSA_WITH_AES_256_CBC_SHA 49172
+macro SSL_CIPHER_ECDHE_PSK_WITH_AES_128_CBC_SHA 49205
+macro SSL_CIPHER_ECDHE_PSK_WITH_AES_256_CBC_SHA 49206
+macro SSL_CIPHER_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 49187
+macro SSL_CIPHER_ECDHE_RSA_WITH_AES_128_CBC_SHA256 49191
+macro SSL_CIPHER_RSA_WITH_AES_128_GCM_SHA256 156
+macro SSL_CIPHER_RSA_WITH_AES_256_GCM_SHA384 157
+macro SSL_CIPHER_RSA_WITH_AES_128_CBC_SHA 47
+macro SSL_CIPHER_RSA_WITH_AES_256_CBC_SHA 53
+macro SSL_CIPHER_PSK_WITH_AES_128_CBC_SHA 140
+macro SSL_CIPHER_PSK_WITH_AES_256_CBC_SHA 141
+macro SSL_CIPHER_RSA_WITH_3DES_EDE_CBC_SHA 10
+macro SSL_CIPHER_EMPTY_RENEGOTIATION_INFO_SCSV 255
+macro SSL_CIPHER_FALLBACK_SCSV 22016
+macro SSL_CIPHER_FLAG_EQUAL_PREFERENCE_WITH_NEXT 1
+macro SSL_MAX_SSL_SESSION_ID_LENGTH 32
+macro SSL_MAX_MASTER_KEY_LENGTH 48
+macro SSL_SESS_CACHE_OFF 0
+macro SSL_SESS_CACHE_CLIENT 1
+macro SSL_SESS_CACHE_SERVER 2
+macro SSL_SESS_CACHE_BOTH 3
+macro SSL_SESS_CACHE_NO_AUTO_CLEAR 128
+macro SSL_SESS_CACHE_NO_INTERNAL_LOOKUP 256
+macro SSL_SESS_CACHE_NO_INTERNAL_STORE 512
+macro SSL_SESS_CACHE_NO_INTERNAL 768
+macro SSL_DEFAULT_SESSION_TIMEOUT 7200
+macro SSL_DEFAULT_SESSION_PSK_DHE_TIMEOUT 172800
+macro SSL_DEFAULT_SESSION_AUTH_TIMEOUT 604800
+macro SSL_MAX_SID_CTX_LENGTH 32
+macro SSL_SESSION_CACHE_MAX_SIZE_DEFAULT 20480
+macro SSL_DEFAULT_TICKET_KEY_ROTATION_INTERVAL 172800
+macro SSL_TICKET_KEY_NAME_LEN 16
+macro SSL_GROUP_SECP256R1 23
+macro SSL_GROUP_SECP384R1 24
+macro SSL_GROUP_SECP521R1 25
+macro SSL_GROUP_X25519 29
+macro SSL_GROUP_X25519_MLKEM768 4588
+macro SSL_GROUP_MLKEM1024 514
+macro SSL_GROUP_FLAG_EQUAL_PREFERENCE_WITH_NEXT 1
+macro SSL_VERIFY_NONE 0
+macro SSL_VERIFY_PEER 1
+macro SSL_VERIFY_FAIL_IF_NO_PEER_CERT 2
+macro TLSEXT_NAMETYPE_host_name 0
+macro SSL_TLSEXT_ERR_OK 0
+macro SSL_TLSEXT_ERR_ALERT_WARNING 1
+macro SSL_TLSEXT_ERR_ALERT_FATAL 2
+macro SSL_TLSEXT_ERR_NOACK 3
+macro OPENSSL_NPN_UNSUPPORTED 0
+macro OPENSSL_NPN_NEGOTIATED 1
+macro OPENSSL_NPN_NO_OVERLAP 2
+macro SRTP_AES128_CM_SHA1_80 1
+macro SRTP_AES128_CM_SHA1_32 2
+macro SRTP_AES128_F8_SHA1_80 3
+macro SRTP_AES128_F8_SHA1_32 4
+macro SRTP_NULL_SHA1_80 5
+macro SRTP_NULL_SHA1_32 6
+macro SRTP_AEAD_AES_128_GCM 7
+macro SRTP_AEAD_AES_256_GCM 8
+macro PSK_MAX_IDENTITY_LEN 128
+macro PSK_MAX_PSK_LEN 256
+macro TLSEXT_cert_type_x509 0
+macro TLSEXT_cert_type_rpk 2
+macro SSL_PAKE_SPAKE2PLUSV1 32150
+macro SSL_AD_REASON_OFFSET 1000
+macro SSL_AD_CLOSE_NOTIFY 0
+macro SSL_AD_UNEXPECTED_MESSAGE 10
+macro SSL_AD_BAD_RECORD_MAC 20
+macro SSL_AD_DECRYPTION_FAILED 21
+macro SSL_AD_RECORD_OVERFLOW 22
+macro SSL_AD_DECOMPRESSION_FAILURE 30
+macro SSL_AD_HANDSHAKE_FAILURE 40
+macro SSL_AD_NO_CERTIFICATE 41
+macro SSL_AD_BAD_CERTIFICATE 42
+macro SSL_AD_UNSUPPORTED_CERTIFICATE 43
+macro SSL_AD_CERTIFICATE_REVOKED 44
+macro SSL_AD_CERTIFICATE_EXPIRED 45
+macro SSL_AD_CERTIFICATE_UNKNOWN 46
+macro SSL_AD_ILLEGAL_PARAMETER 47
+macro SSL_AD_UNKNOWN_CA 48
+macro SSL_AD_ACCESS_DENIED 49
+macro SSL_AD_DECODE_ERROR 50
+macro SSL_AD_DECRYPT_ERROR 51
+macro SSL_AD_EXPORT_RESTRICTION 60
+macro SSL_AD_PROTOCOL_VERSION 70
+macro SSL_AD_INSUFFICIENT_SECURITY 71
+macro SSL_AD_INTERNAL_ERROR 80
+macro SSL_AD_INAPPROPRIATE_FALLBACK 86
+macro SSL_AD_USER_CANCELLED 90
+macro SSL_AD_NO_RENEGOTIATION 100
+macro SSL_AD_MISSING_EXTENSION 109
+macro SSL_AD_UNSUPPORTED_EXTENSION 110
+macro SSL_AD_CERTIFICATE_UNOBTAINABLE 111
+macro SSL_AD_UNRECOGNIZED_NAME 112
+macro SSL_AD_BAD_CERTIFICATE_STATUS_RESPONSE 113
+macro SSL_AD_BAD_CERTIFICATE_HASH_VALUE 114
+macro SSL_AD_UNKNOWN_PSK_IDENTITY 115
+macro SSL_AD_CERTIFICATE_REQUIRED 116
+macro SSL_AD_NO_APPLICATION_PROTOCOL 120
+macro SSL_AD_ECH_REQUIRED 121
+macro SSL_MAX_CERT_LIST_DEFAULT 102400
+macro SSL_ST_CONNECT 4096
+macro SSL_ST_ACCEPT 8192
+macro SSL_ST_MASK 4095
+macro SSL_ST_INIT 12288
+macro SSL_ST_OK 3
+macro SSL_ST_RENEGOTIATE 12292
+macro SSL_ST_BEFORE 12293
+macro TLS_ST_OK 3
+macro TLS_ST_BEFORE 12293
+macro SSL_CB_LOOP 1
+macro SSL_CB_EXIT 2
+macro SSL_CB_READ 4
+macro SSL_CB_WRITE 8
+macro SSL_CB_ALERT 16384
+macro SSL_CB_READ_ALERT 16388
+macro SSL_CB_WRITE_ALERT 16392
+macro SSL_CB_ACCEPT_LOOP 8193
+macro SSL_CB_ACCEPT_EXIT 8194
+macro SSL_CB_CONNECT_LOOP 4097
+macro SSL_CB_CONNECT_EXIT 4098
+macro SSL_CB_HANDSHAKE_START 16
+macro SSL_CB_HANDSHAKE_DONE 32
+macro SSL_SENT_SHUTDOWN 1
+macro SSL_RECEIVED_SHUTDOWN 2
+macro SSL_MODE_HANDSHAKE_CUTTHROUGH 128
+macro SSL_MODE_AUTO_RETRY 0
+macro SSL_MODE_RELEASE_BUFFERS 0
+macro SSL_MODE_SEND_CLIENTHELLO_TIME 0
+macro SSL_MODE_SEND_SERVERHELLO_TIME 0
+macro SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION 0
+macro SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS 0
+macro SSL_OP_EPHEMERAL_RSA 0
+macro SSL_OP_MICROSOFT_BIG_SSLV3_BUFFER 0
+macro SSL_OP_MICROSOFT_SESS_ID_BUG 0
+macro SSL_OP_MSIE_SSLV2_RSA_PADDING 0
+macro SSL_OP_NETSCAPE_CA_DN_BUG 0
+macro SSL_OP_NETSCAPE_CHALLENGE_BUG 0
+macro SSL_OP_NETSCAPE_DEMO_CIPHER_CHANGE_BUG 0
+macro SSL_OP_NETSCAPE_REUSE_CIPHER_CHANGE_BUG 0
+macro SSL_OP_NO_COMPRESSION 0
+macro SSL_OP_NO_RENEGOTIATION 0
+macro SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION 0
+macro SSL_OP_NO_SSLv2 0
+macro SSL_OP_NO_SSLv3 0
+macro SSL_OP_PKCS1_CHECK_1 0
+macro SSL_OP_PKCS1_CHECK_2 0
+macro SSL_OP_SINGLE_DH_USE 0
+macro SSL_OP_SINGLE_ECDH_USE 0
+macro SSL_OP_SSLEAY_080_CLIENT_DH_BUG 0
+macro SSL_OP_SSLREF2_REUSE_CERT_TYPE_BUG 0
+macro SSL_OP_TLS_BLOCK_PADDING_BUG 0
+macro SSL_OP_TLS_D5_BUG 0
+macro SSL_OP_TLS_ROLLBACK_BUG 0
+macro SSL_VERIFY_CLIENT_ONCE 0
+macro SSL_NOTHING 0
+macro SSL_WRITING 3
+macro SSL_READING 2
+macro OPENSSL_INIT_NO_LOAD_SSL_STRINGS 0
+macro OPENSSL_INIT_LOAD_SSL_STRINGS 0
+macro OPENSSL_INIT_SSL_DEFAULT 0
+macro SSL_SIGN_RSA_PSS_SHA256 2052
+macro SSL_SIGN_RSA_PSS_SHA384 2053
+macro SSL_SIGN_RSA_PSS_SHA512 2054
+macro SSL_R_TLSV1_UNSUPPORTED_EXTENSION 1110
+macro SSL_R_TLSV1_CERTIFICATE_UNOBTAINABLE 1111
+macro SSL_R_TLSV1_UNRECOGNIZED_NAME 1112
+macro SSL_R_TLSV1_BAD_CERTIFICATE_STATUS_RESPONSE 1113
+macro SSL_R_TLSV1_BAD_CERTIFICATE_HASH_VALUE 1114
+macro SSL_R_TLSV1_CERTIFICATE_REQUIRED 1116
+macro SSL_CURVE_SECP256R1 23
+macro SSL_CURVE_SECP384R1 24
+macro SSL_CURVE_SECP521R1 25
+macro SSL_CURVE_X25519 29
+macro TLSEXT_nid_unknown 16777216
+macro SSL_R_APP_DATA_IN_HANDSHAKE 100
+macro SSL_R_ATTEMPT_TO_REUSE_SESSION_IN_DIFFERENT_CONTEXT 101
+macro SSL_R_BAD_ALERT 102
+macro SSL_R_BAD_CHANGE_CIPHER_SPEC 103
+macro SSL_R_BAD_DATA_RETURNED_BY_CALLBACK 104
+macro SSL_R_BAD_DH_P_LENGTH 105
+macro SSL_R_BAD_DIGEST_LENGTH 106
+macro SSL_R_BAD_ECC_CERT 107
+macro SSL_R_BAD_ECPOINT 108
+macro SSL_R_BAD_HANDSHAKE_RECORD 109
+macro SSL_R_BAD_HELLO_REQUEST 110
+macro SSL_R_BAD_LENGTH 111
+macro SSL_R_BAD_PACKET_LENGTH 112
+macro SSL_R_BAD_RSA_ENCRYPT 113
+macro SSL_R_BAD_SIGNATURE 114
+macro SSL_R_BAD_SRTP_MKI_VALUE 115
+macro SSL_R_BAD_SRTP_PROTECTION_PROFILE_LIST 116
+macro SSL_R_BAD_SSL_FILETYPE 117
+macro SSL_R_BAD_WRITE_RETRY 118
+macro SSL_R_BIO_NOT_SET 119
+macro SSL_R_BN_LIB 120
+macro SSL_R_BUFFER_TOO_SMALL 121
+macro SSL_R_CA_DN_LENGTH_MISMATCH 122
+macro SSL_R_CA_DN_TOO_LONG 123
+macro SSL_R_CCS_RECEIVED_EARLY 124
+macro SSL_R_CERTIFICATE_VERIFY_FAILED 125
+macro SSL_R_CERT_CB_ERROR 126
+macro SSL_R_CERT_LENGTH_MISMATCH 127
+macro SSL_R_CHANNEL_ID_NOT_P256 128
+macro SSL_R_CHANNEL_ID_SIGNATURE_INVALID 129
+macro SSL_R_CIPHER_OR_HASH_UNAVAILABLE 130
+macro SSL_R_CLIENTHELLO_PARSE_FAILED 131
+macro SSL_R_CLIENTHELLO_TLSEXT 132
+macro SSL_R_CONNECTION_REJECTED 133
+macro SSL_R_CONNECTION_TYPE_NOT_SET 134
+macro SSL_R_CUSTOM_EXTENSION_ERROR 135
+macro SSL_R_DATA_LENGTH_TOO_LONG 136
+macro SSL_R_DECODE_ERROR 137
+macro SSL_R_DECRYPTION_FAILED 138
+macro SSL_R_DECRYPTION_FAILED_OR_BAD_RECORD_MAC 139
+macro SSL_R_DH_PUBLIC_VALUE_LENGTH_IS_WRONG 140
+macro SSL_R_DH_P_TOO_LONG 141
+macro SSL_R_DIGEST_CHECK_FAILED 142
+macro SSL_R_DTLS_MESSAGE_TOO_BIG 143
+macro SSL_R_ECC_CERT_NOT_FOR_SIGNING 144
+macro SSL_R_EMS_STATE_INCONSISTENT 145
+macro SSL_R_ENCRYPTED_LENGTH_TOO_LONG 146
+macro SSL_R_ERROR_ADDING_EXTENSION 147
+macro SSL_R_ERROR_IN_RECEIVED_CIPHER_LIST 148
+macro SSL_R_ERROR_PARSING_EXTENSION 149
+macro SSL_R_EXCESSIVE_MESSAGE_SIZE 150
+macro SSL_R_EXTRA_DATA_IN_MESSAGE 151
+macro SSL_R_FRAGMENT_MISMATCH 152
+macro SSL_R_GOT_NEXT_PROTO_WITHOUT_EXTENSION 153
+macro SSL_R_HANDSHAKE_FAILURE_ON_CLIENT_HELLO 154
+macro SSL_R_HTTPS_PROXY_REQUEST 155
+macro SSL_R_HTTP_REQUEST 156
+macro SSL_R_INAPPROPRIATE_FALLBACK 157
+macro SSL_R_INVALID_COMMAND 158
+macro SSL_R_INVALID_MESSAGE 159
+macro SSL_R_INVALID_SSL_SESSION 160
+macro SSL_R_INVALID_TICKET_KEYS_LENGTH 161
+macro SSL_R_LENGTH_MISMATCH 162
+macro SSL_R_MISSING_EXTENSION 164
+macro SSL_R_MISSING_RSA_CERTIFICATE 165
+macro SSL_R_MISSING_TMP_DH_KEY 166
+macro SSL_R_MISSING_TMP_ECDH_KEY 167
+macro SSL_R_MIXED_SPECIAL_OPERATOR_WITH_GROUPS 168
+macro SSL_R_MTU_TOO_SMALL 169
+macro SSL_R_NEGOTIATED_BOTH_NPN_AND_ALPN 170
+macro SSL_R_NESTED_GROUP 171
+macro SSL_R_NO_CERTIFICATES_RETURNED 172
+macro SSL_R_NO_CERTIFICATE_ASSIGNED 173
+macro SSL_R_NO_CERTIFICATE_SET 174
+macro SSL_R_NO_CIPHERS_AVAILABLE 175
+macro SSL_R_NO_CIPHERS_PASSED 176
+macro SSL_R_NO_CIPHER_MATCH 177
+macro SSL_R_NO_COMPRESSION_SPECIFIED 178
+macro SSL_R_NO_METHOD_SPECIFIED 179
+macro SSL_R_NO_PRIVATE_KEY_ASSIGNED 181
+macro SSL_R_NO_RENEGOTIATION 182
+macro SSL_R_NO_REQUIRED_DIGEST 183
+macro SSL_R_NO_SHARED_CIPHER 184
+macro SSL_R_NULL_SSL_CTX 185
+macro SSL_R_NULL_SSL_METHOD_PASSED 186
+macro SSL_R_OLD_SESSION_CIPHER_NOT_RETURNED 187
+macro SSL_R_OLD_SESSION_VERSION_NOT_RETURNED 188
+macro SSL_R_OUTPUT_ALIASES_INPUT 189
+macro SSL_R_PARSE_TLSEXT 190
+macro SSL_R_PATH_TOO_LONG 191
+macro SSL_R_PEER_DID_NOT_RETURN_A_CERTIFICATE 192
+macro SSL_R_PEER_ERROR_UNSUPPORTED_CERTIFICATE_TYPE 193
+macro SSL_R_PROTOCOL_IS_SHUTDOWN 194
+macro SSL_R_PSK_IDENTITY_NOT_FOUND 195
+macro SSL_R_PSK_NO_CLIENT_CB 196
+macro SSL_R_PSK_NO_SERVER_CB 197
+macro SSL_R_READ_TIMEOUT_EXPIRED 198
+macro SSL_R_RECORD_LENGTH_MISMATCH 199
+macro SSL_R_RECORD_TOO_LARGE 200
+macro SSL_R_RENEGOTIATION_ENCODING_ERR 201
+macro SSL_R_RENEGOTIATION_MISMATCH 202
+macro SSL_R_REQUIRED_CIPHER_MISSING 203
+macro SSL_R_RESUMED_EMS_SESSION_WITHOUT_EMS_EXTENSION 204
+macro SSL_R_RESUMED_NON_EMS_SESSION_WITH_EMS_EXTENSION 205
+macro SSL_R_SCSV_RECEIVED_WHEN_RENEGOTIATING 206
+macro SSL_R_SERVERHELLO_TLSEXT 207
+macro SSL_R_SESSION_ID_CONTEXT_UNINITIALIZED 208
+macro SSL_R_SESSION_MAY_NOT_BE_CREATED 209
+macro SSL_R_SIGNATURE_ALGORITHMS_EXTENSION_SENT_BY_SERVER 210
+macro SSL_R_SRTP_COULD_NOT_ALLOCATE_PROFILES 211
+macro SSL_R_SRTP_UNKNOWN_PROTECTION_PROFILE 212
+macro SSL_R_SSL3_EXT_INVALID_SERVERNAME 213
+macro SSL_R_SSL_CTX_HAS_NO_DEFAULT_SSL_VERSION 214
+macro SSL_R_SSL_HANDSHAKE_FAILURE 215
+macro SSL_R_SSL_SESSION_ID_CONTEXT_TOO_LONG 216
+macro SSL_R_TLS_PEER_DID_NOT_RESPOND_WITH_CERTIFICATE_LIST 217
+macro SSL_R_TLS_RSA_ENCRYPTED_VALUE_LENGTH_IS_WRONG 218
+macro SSL_R_TOO_MANY_EMPTY_FRAGMENTS 219
+macro SSL_R_TOO_MANY_WARNING_ALERTS 220
+macro SSL_R_UNABLE_TO_FIND_ECDH_PARAMETERS 221
+macro SSL_R_UNEXPECTED_EXTENSION 222
+macro SSL_R_UNEXPECTED_MESSAGE 223
+macro SSL_R_UNEXPECTED_OPERATOR_IN_GROUP 224
+macro SSL_R_UNEXPECTED_RECORD 225
+macro SSL_R_UNINITIALIZED 226
+macro SSL_R_UNKNOWN_ALERT_TYPE 227
+macro SSL_R_UNKNOWN_CERTIFICATE_TYPE 228
+macro SSL_R_UNKNOWN_CIPHER_RETURNED 229
+macro SSL_R_UNKNOWN_CIPHER_TYPE 230
+macro SSL_R_UNKNOWN_DIGEST 231
+macro SSL_R_UNKNOWN_KEY_EXCHANGE_TYPE 232
+macro SSL_R_UNKNOWN_PROTOCOL 233
+macro SSL_R_UNKNOWN_SSL_VERSION 234
+macro SSL_R_UNKNOWN_STATE 235
+macro SSL_R_UNSAFE_LEGACY_RENEGOTIATION_DISABLED 236
+macro SSL_R_UNSUPPORTED_CIPHER 237
+macro SSL_R_UNSUPPORTED_COMPRESSION_ALGORITHM 238
+macro SSL_R_UNSUPPORTED_ELLIPTIC_CURVE 239
+macro SSL_R_UNSUPPORTED_PROTOCOL 240
+macro SSL_R_WRONG_CERTIFICATE_TYPE 241
+macro SSL_R_WRONG_CIPHER_RETURNED 242
+macro SSL_R_WRONG_CURVE 243
+macro SSL_R_WRONG_MESSAGE_TYPE 244
+macro SSL_R_WRONG_SIGNATURE_TYPE 245
+macro SSL_R_WRONG_SSL_VERSION 246
+macro SSL_R_WRONG_VERSION_NUMBER 247
+macro SSL_R_X509_LIB 248
+macro SSL_R_X509_VERIFICATION_SETUP_PROBLEMS 249
+macro SSL_R_SHUTDOWN_WHILE_IN_INIT 250
+macro SSL_R_INVALID_OUTER_RECORD_TYPE 251
+macro SSL_R_UNSUPPORTED_PROTOCOL_FOR_CUSTOM_KEY 252
+macro SSL_R_NO_COMMON_SIGNATURE_ALGORITHMS 253
+macro SSL_R_DOWNGRADE_DETECTED 254
+macro SSL_R_EXCESS_HANDSHAKE_DATA 255
+macro SSL_R_INVALID_COMPRESSION_LIST 256
+macro SSL_R_DUPLICATE_EXTENSION 257
+macro SSL_R_MISSING_KEY_SHARE 258
+macro SSL_R_INVALID_ALPN_PROTOCOL 259
+macro SSL_R_TOO_MANY_KEY_UPDATES 260
+macro SSL_R_BLOCK_CIPHER_PAD_IS_WRONG 261
+macro SSL_R_NO_CIPHERS_SPECIFIED 262
+macro SSL_R_RENEGOTIATION_EMS_MISMATCH 263
+macro SSL_R_DUPLICATE_KEY_SHARE 264
+macro SSL_R_NO_GROUPS_SPECIFIED 265
+macro SSL_R_NO_SHARED_GROUP 266
+macro SSL_R_PRE_SHARED_KEY_MUST_BE_LAST 267
+macro SSL_R_OLD_SESSION_PRF_HASH_MISMATCH 268
+macro SSL_R_INVALID_SCT_LIST 269
+macro SSL_R_TOO_MUCH_SKIPPED_EARLY_DATA 270
+macro SSL_R_PSK_IDENTITY_BINDER_COUNT_MISMATCH 271
+macro SSL_R_CANNOT_PARSE_LEAF_CERT 272
+macro SSL_R_SERVER_CERT_CHANGED 273
+macro SSL_R_CERTIFICATE_AND_PRIVATE_KEY_MISMATCH 274
+macro SSL_R_CANNOT_HAVE_BOTH_PRIVKEY_AND_METHOD 275
+macro SSL_R_TICKET_ENCRYPTION_FAILED 276
+macro SSL_R_ALPN_MISMATCH_ON_EARLY_DATA 277
+macro SSL_R_WRONG_VERSION_ON_EARLY_DATA 278
+macro SSL_R_UNEXPECTED_EXTENSION_ON_EARLY_DATA 279
+macro SSL_R_NO_SUPPORTED_VERSIONS_ENABLED 280
+macro SSL_R_EMPTY_HELLO_RETRY_REQUEST 282
+macro SSL_R_EARLY_DATA_NOT_IN_USE 283
+macro SSL_R_HANDSHAKE_NOT_COMPLETE 284
+macro SSL_R_NEGOTIATED_TB_WITHOUT_EMS_OR_RI 285
+macro SSL_R_SERVER_ECHOED_INVALID_SESSION_ID 286
+macro SSL_R_PRIVATE_KEY_OPERATION_FAILED 287
+macro SSL_R_SECOND_SERVERHELLO_VERSION_MISMATCH 288
+macro SSL_R_OCSP_CB_ERROR 289
+macro SSL_R_SSL_SESSION_ID_TOO_LONG 290
+macro SSL_R_APPLICATION_DATA_ON_SHUTDOWN 291
+macro SSL_R_CERT_DECOMPRESSION_FAILED 292
+macro SSL_R_UNCOMPRESSED_CERT_TOO_LARGE 293
+macro SSL_R_UNKNOWN_CERT_COMPRESSION_ALG 294
+macro SSL_R_INVALID_SIGNATURE_ALGORITHM 295
+macro SSL_R_DUPLICATE_SIGNATURE_ALGORITHM 296
+macro SSL_R_TLS13_DOWNGRADE 297
+macro SSL_R_QUIC_INTERNAL_ERROR 298
+macro SSL_R_WRONG_ENCRYPTION_LEVEL_RECEIVED 299
+macro SSL_R_TOO_MUCH_READ_EARLY_DATA 300
+macro SSL_R_INVALID_DELEGATED_CREDENTIAL 301
+macro SSL_R_KEY_USAGE_BIT_INCORRECT 302
+macro SSL_R_INCONSISTENT_CLIENT_HELLO 303
+macro SSL_R_CIPHER_MISMATCH_ON_EARLY_DATA 304
+macro SSL_R_QUIC_TRANSPORT_PARAMETERS_MISCONFIGURED 305
+macro SSL_R_UNEXPECTED_COMPATIBILITY_MODE 306
+macro SSL_R_NO_APPLICATION_PROTOCOL 307
+macro SSL_R_NEGOTIATED_ALPS_WITHOUT_ALPN 308
+macro SSL_R_ALPS_MISMATCH_ON_EARLY_DATA 309
+macro SSL_R_ECH_SERVER_CONFIG_AND_PRIVATE_KEY_MISMATCH 310
+macro SSL_R_ECH_SERVER_CONFIG_UNSUPPORTED_EXTENSION 311
+macro SSL_R_UNSUPPORTED_ECH_SERVER_CONFIG 312
+macro SSL_R_ECH_SERVER_WOULD_HAVE_NO_RETRY_CONFIGS 313
+macro SSL_R_INVALID_CLIENT_HELLO_INNER 314
+macro SSL_R_INVALID_ALPN_PROTOCOL_LIST 315
+macro SSL_R_COULD_NOT_PARSE_HINTS 316
+macro SSL_R_INVALID_ECH_PUBLIC_NAME 317
+macro SSL_R_INVALID_ECH_CONFIG_LIST 318
+macro SSL_R_ECH_REJECTED 319
+macro SSL_R_INVALID_OUTER_EXTENSION 320
+macro SSL_R_INCONSISTENT_ECH_NEGOTIATION 321
+macro SSL_R_INVALID_ALPS_CODEPOINT 322
+macro SSL_R_NO_MATCHING_ISSUER 323
+macro SSL_R_INVALID_SPAKE2PLUSV1_VALUE 324
+macro SSL_R_PAKE_EXHAUSTED 325
+macro SSL_R_PEER_PAKE_MISMATCH 326
+macro SSL_R_UNSUPPORTED_CREDENTIAL_LIST 327
+macro SSL_R_INVALID_TRUST_ANCHOR_LIST 328
+macro SSL_R_INVALID_CERTIFICATE_PROPERTY_LIST 329
+macro SSL_R_DUPLICATE_GROUP 330
+macro SSL_R_INVALID_PSK_FOR_CONNECTION 331
+macro SSL_R_NO_SUPPORTED_PSK_MODE 332
+macro SSL_R_INVALID_CERT_TYPES_LIST 333
+macro SSL_R_UNSUPPORTED_CERTIFICATE 334
+macro SSL_R_MISSING_KEY 335
+macro SSL_R_INVALID_RAW_PUBLIC_KEY 336
+macro SSL_R_UNUSABLE_ECH_CONFIG_LIST 337
+macro SSL_R_INVALID_CIPHER_FLAGS 338
+macro SSL_R_DUPLICATE_CIPHER 339
+macro SSL_R_SSLV3_ALERT_CLOSE_NOTIFY 1000
+macro SSL_R_SSLV3_ALERT_UNEXPECTED_MESSAGE 1010
+macro SSL_R_SSLV3_ALERT_BAD_RECORD_MAC 1020
+macro SSL_R_TLSV1_ALERT_DECRYPTION_FAILED 1021
+macro SSL_R_TLSV1_ALERT_RECORD_OVERFLOW 1022
+macro SSL_R_SSLV3_ALERT_DECOMPRESSION_FAILURE 1030
+macro SSL_R_SSLV3_ALERT_HANDSHAKE_FAILURE 1040
+macro SSL_R_SSLV3_ALERT_NO_CERTIFICATE 1041
+macro SSL_R_SSLV3_ALERT_BAD_CERTIFICATE 1042
+macro SSL_R_SSLV3_ALERT_UNSUPPORTED_CERTIFICATE 1043
+macro SSL_R_SSLV3_ALERT_CERTIFICATE_REVOKED 1044
+macro SSL_R_SSLV3_ALERT_CERTIFICATE_EXPIRED 1045
+macro SSL_R_SSLV3_ALERT_CERTIFICATE_UNKNOWN 1046
+macro SSL_R_SSLV3_ALERT_ILLEGAL_PARAMETER 1047
+macro SSL_R_TLSV1_ALERT_UNKNOWN_CA 1048
+macro SSL_R_TLSV1_ALERT_ACCESS_DENIED 1049
+macro SSL_R_TLSV1_ALERT_DECODE_ERROR 1050
+macro SSL_R_TLSV1_ALERT_DECRYPT_ERROR 1051
+macro SSL_R_TLSV1_ALERT_EXPORT_RESTRICTION 1060
+macro SSL_R_TLSV1_ALERT_PROTOCOL_VERSION 1070
+macro SSL_R_TLSV1_ALERT_INSUFFICIENT_SECURITY 1071
+macro SSL_R_TLSV1_ALERT_INTERNAL_ERROR 1080
+macro SSL_R_TLSV1_ALERT_INAPPROPRIATE_FALLBACK 1086
+macro SSL_R_TLSV1_ALERT_USER_CANCELLED 1090
+macro SSL_R_TLSV1_ALERT_NO_RENEGOTIATION 1100
+macro SSL_R_TLSV1_ALERT_UNSUPPORTED_EXTENSION 1110
+macro SSL_R_TLSV1_ALERT_CERTIFICATE_UNOBTAINABLE 1111
+macro SSL_R_TLSV1_ALERT_UNRECOGNIZED_NAME 1112
+macro SSL_R_TLSV1_ALERT_BAD_CERTIFICATE_STATUS_RESPONSE 1113
+macro SSL_R_TLSV1_ALERT_BAD_CERTIFICATE_HASH_VALUE 1114
+macro SSL_R_TLSV1_ALERT_UNKNOWN_PSK_IDENTITY 1115
+macro SSL_R_TLSV1_ALERT_CERTIFICATE_REQUIRED 1116
+macro SSL_R_TLSV1_ALERT_NO_APPLICATION_PROTOCOL 1120
+macro SSL_R_TLSV1_ALERT_ECH_REQUIRED 1121

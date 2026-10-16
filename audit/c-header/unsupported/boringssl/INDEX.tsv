@@ -1,0 +1,15 @@
+ABI-INFORMATION-REQUIRED--array-bound-sizeof-muldiv-addsub-cast-identifier.c	boringssl-static 3, boringssl-shared 3, boringssl-prefix 3
+ABI-INFORMATION-REQUIRED--bitfield.c	boringssl-static 3, boringssl-shared 3, boringssl-prefix 3
+ABI-INFORMATION-REQUIRED--enum-param.c	boringssl-static 15, boringssl-shared 15, boringssl-prefix 15
+ABI-INFORMATION-REQUIRED--enum-result.c	boringssl-static 6, boringssl-shared 6, boringssl-prefix 6
+ABI-INFORMATION-REQUIRED--pragma-redefine-extname.c	boringssl-prefix 3149
+ABI-INFORMATION-REQUIRED--union-embedded-by-value.c	boringssl-static 21, boringssl-shared 21, boringssl-prefix 21
+ABI-INFORMATION-REQUIRED--va-list-param.c	boringssl-static 2, boringssl-shared 2, boringssl-prefix 2
+CONSTANT-EXPRESSION-UNSUPPORTED--array-bound-addsub.c	boringssl-static 1, boringssl-shared 1, boringssl-prefix 1
+CONSTANT-EXPRESSION-UNSUPPORTED--array-bound-muldiv.c	boringssl-static 1, boringssl-shared 1, boringssl-prefix 1
+CONSTANT-EXPRESSION-UNSUPPORTED--array-bound-muldiv-addsub.c	boringssl-static 12, boringssl-shared 12, boringssl-prefix 12
+POSSIBLE-THUNK-REQUIRED--inline-definition-generated-by-define-const-stack-o.c	boringssl-static 54, boringssl-shared 54, boringssl-prefix 54
+POSSIBLE-THUNK-REQUIRED--inline-definition-generated-by-define-named-stack-o.c	boringssl-static 27, boringssl-shared 27, boringssl-prefix 27
+POSSIBLE-THUNK-REQUIRED--inline-definition-generated-by-define-stack-of.c	boringssl-static 729, boringssl-shared 729, boringssl-prefix 729
+POSSIBLE-THUNK-REQUIRED--inline-definition-written-directly-in-the-header.c	boringssl-static 7, boringssl-shared 7, boringssl-prefix 7
+TYPE-SHAPE-UNSUPPORTED--variadic-function.c	boringssl-static 5, boringssl-shared 5, boringssl-prefix 5

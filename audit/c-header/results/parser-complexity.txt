@@ -1,0 +1,39 @@
+cdecl.tcl lines: code 1019, comment 121, blank 56
+cdecl.tcl procedures: 46
+  tokenizer (2): Lex FileIndex
+  token-access (8): Peek Kind Next Expect Fail TextOf IsKeyword Loc
+  records (8): Origin Emit Tagged Storage Inline Unqualified DirectiveRecord parse
+  grammar (17): ParseAll External AfterDeclarator SkipBraces Balanced Specifiers TypeName BaseType Attribute Items StructSpecifier MemberDeclaration EnumSpecifier EnumValue Declarator Parameters Apply
+  grammar-predicates (4): IsAttributeStart IsTypeStart IsKeywordish NestedStart
+  recovery (1): Recover
+  literals (6): IntLiteral CharLiteral Parenthesized Bound lambda AnonTag
+recognized storageWords: 9 (typedef extern static auto register _Thread_local __thread thread_local constexpr)
+recognized fnspecWords: 5 (inline __inline __inline__ _Noreturn __noreturn__)
+recognized typeWords: 17 (void char short int long float double signed __signed __signed__ unsigned _Bool _Complex __complex__ __complex _Imaginary __int128)
+recognized ccWords: 11 (__cdecl _cdecl __stdcall _stdcall __fastcall _fastcall __thiscall __vectorcall __clrcall __pascal __regcall)
+recognized attrWords: 5 (__attribute__ __attribute __declspec _Alignas alignas)
+recognized typeofWords: 6 (typeof __typeof__ __typeof typeof_unqual __typeof_unqual__ __auto_type)
+recognized builtinTypes: 4 (__builtin_va_list __builtin_ms_va_list __int128_t __uint128_t)
+recognized qualWords: 13 qualifiers in 19 spellings
+recognized softTypes: 15 (_Float16 _Float32 _Float64 _Float128 _Float32x _Float64x _Float128x __float128 __float80 __ibm128 __bf16 _Decimal32 _Decimal64 _Decimal128 bool)
+Fail sites: 15
+  DECLARATION-PARSE-FAILURE (12): unexpected end of input | expected \"$t\", found \"[Peek]\" | unterminated expression | type keyword \"$t\" after a complete type | two types in one declaration | two types in one declaration | no type specifier before \"[Peek]\" | type keywords [list $words] with $base | $kw without a tag or a body | enum without a tag or a body | expected an enumerator, found \"[Peek]\" | expected a declarator, found \"[Peek]\"
+  TYPE-SHAPE-UNSUPPORTED (3): signed and unsigned together: $words | too many longs: $words | type keywords $words
+recovery: Recover (skip to ';' at depth 0 or a function body's '}'), the unknown-type-name heuristic, the soft-type rule
+tool abiprobe.tcl: code 189, comment 33, blank 6
+tool all.tcl: code 24, comment 12, blank 2
+tool cdecl.tcl: code 1019, comment 121, blank 56
+tool census.tcl: code 1694, comment 117, blank 100
+tool common.tcl: code 66, comment 9, blank 9
+tool complexity.tcl: code 59, comment 12, blank 4
+tool corpus.tcl: code 220, comment 24, blank 9
+tool diff.tcl: code 69, comment 11, blank 5
+tool fetch.tcl: code 25, comment 10, blank 3
+tool ir.tcl: code 183, comment 33, blank 19
+tool macros.tcl: code 39, comment 12, blank 3
+tool oracle.tcl: code 200, comment 42, blank 7
+tool query.tcl: code 161, comment 26, blank 6
+tool run.tcl: code 332, comment 49, blank 14
+tool thunks.tcl: code 105, comment 19, blank 5
+tool toolchain.tcl: code 160, comment 42, blank 15
+tool variants.tcl: code 50, comment 11, blank 7

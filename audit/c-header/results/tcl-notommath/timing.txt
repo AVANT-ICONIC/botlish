@@ -1,0 +1,11 @@
+preprocess_seconds 0.025391
+macro_preprocess_seconds 0.026498
+preprocessed_bytes 184768
+preprocessed_lines 5274
+tokens 33749
+records 1280
+parse_seconds 0.477912
+ir_write_seconds 0.086587
+macro_expansion_probe_seconds 0.064992
+census_seconds 1.261163
+ir_bytes ir.txt 614307 system.txt 1905 macros.txt 107761

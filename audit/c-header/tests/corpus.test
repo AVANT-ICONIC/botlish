@@ -1,0 +1,77 @@
+# corpus.test -- every fixture of the unsupported corpus reproduces the
+# parser's behavior without the library (C-HEADER-ARCHAEOLOGY.md, "The
+# unsupported corpus").
+#
+#   tclsh9.0 audit/c-header/tests/corpus.test
+#
+# A fixture (unsupported/LIBRARY/*.c, written by tools/corpus.tcl) is a
+# preprocessed declaration with the typedefs it needs and a header comment
+# whose `expect:` line says what the parser makes of it: KIND NAME (a
+# declaration the parser reads, whose shape the FFI cannot take as is) or
+# unsupported CATEGORY (a declaration the parser cannot read). Each is also
+# checked against the same declaration in the committed IR of the profile
+# it was first seen in, so a fixture and its IR cannot drift apart.
+
+package require tcltest 2.5
+namespace import ::tcltest::*
+set here [file dirname [file normalize [info script]]]
+source [file join $here .. tools cdecl.tcl]
+source [file join $here .. tools ir.tcl]
+
+set root [file dirname $here]
+set irCache [dict create]
+proc irRecord {profile kind name} {
+    global irCache root
+    if {![dict exists $irCache $profile]} {
+        dict set irCache $profile [::cir::read [file join $root results $profile ir.txt]]
+    }
+    set found ""
+    foreach r [dict get $irCache $profile] {
+        if {[lindex $r 0] eq $kind && [lindex $r 1] eq $name} {
+            # A struct's definition, not a forward declaration of its tag.
+            if {$found eq "" || ([dict exists [lindex $r 2] complete] && [dict get [lindex $r 2] complete])} {
+                set found [lindex $r 2]
+            }
+        }
+    }
+    return $found
+}
+
+# Anonymous tags are named by file and line, which a fixture cannot keep.
+proc Anon {text} { regsub -all {anon@[^\s\}]+} [list {*}$text] anon@ }
+
+set fixtures [lsort [glob -nocomplain [file join $root unsupported * *.c]]]
+test corpus-not-empty {the corpus has fixtures} -body {
+    expr {[llength $fixtures] > 0}
+} -result 1
+
+foreach path $fixtures {
+    set f [open $path]
+    set text [read $f]
+    close $f
+    regexp {expect:\s+(\S+)\s+(\S+)} $text -> kind name
+    regexp {first seen:\s+(\S+)} $text -> profile
+    regsub {^/\*.*?\*/\n} $text {} code
+    test corpus-[file tail [file dirname $path]]-[file rootname [file tail $path]] "$kind $name" -body {
+        set records [::cdecl::parse $code]
+        if {$kind eq "unsupported"} {
+            set found [lsearch -inline -index 0 $records unsupported]
+            expr {$found ne "" && [dict get [lindex $found 2] category] eq $name}
+        } elseif {$kind eq "pragma"} {
+            expr {[lsearch -index 0 $records pragma] >= 0}
+        } else {
+            set found ""
+            foreach r $records {
+                if {[lindex $r 0] eq $kind && [Anon [lindex $r 1]] eq [Anon $name]} { set found $r }
+            }
+            set ir [irRecord $profile $kind $name]
+            set same [expr {$found ne "" && $ir ne ""}]
+            foreach key {type fields enumerators} {
+                if {$same && [dict exists $ir $key] && [Anon [dict get [lindex $found 2] $key]] ne [Anon [dict get $ir $key]]} { set same 0 }
+            }
+            set same
+        }
+    } -result 1
+}
+
+cleanupTests

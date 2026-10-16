@@ -1088,6 +1088,26 @@ native/Cargo.toml --lib bin_`. The registry is a declaration registry
 kind is classified in `tests/static-compile.test`'s census.
 `bench/binary-layout.tcl` regenerates the performance report.
 
+## C header archaeology (a research instrument)
+
+`audit/c-header/` (C-HEADER-ARCHAEOLOGY.md) preprocesses BoringSSL's and
+Tcl's public headers with the installed C toolchain, parses the output into
+an exploratory FFI IR and counts what a first C FFI would need. It is
+research tooling, not the FFI: nothing in `core/`, `hir/`, `surface/`,
+`compiler/` or `native/` may load it, `tests/local.tcl` and CI do not run
+it, and ordinary Botlish compilation must never depend on a C preprocessor
+or compiler. Only `tools/toolchain.tcl` builds command lines (the
+`BOTLISH_C_*` variables). Keep it that way: a new tool asks the adapter,
+never `exec`s a compiler itself.
+
+If you change `tools/cdecl.tcl`, `tools/ir.tcl`, `tools/run.tcl` or the
+census, run `tclsh9.0 audit/c-header/tests/parser.test` and
+`tests/corpus.test` (no toolchain needed), then `tools/fetch.tcl` once and
+`tools/all.tcl`: the oracle must stay at 0 rejected with every planted
+check caught, every thunk sample as predicted on gcc and clang. Commit the
+regenerated `results/` and `unsupported/` (they are deterministic; only
+`timing.txt` changes run to run).
+
 ## Static intrinsics
 
 `static compile:` (STATIC-COMPILE.md) is a recoverable semantic-compilation

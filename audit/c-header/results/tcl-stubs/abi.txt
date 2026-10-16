@@ -1,0 +1,1362 @@
+# ABI probe (C-HEADER-ARCHAEOLOGY.md): profile tcl-stubs, toolchain cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, native Linux 6.18.44-fc-v139 x86_64
+scalar char 1 1 1
+scalar {signed char} 1 1 1
+scalar {unsigned char} 1 1 0
+scalar short 2 2 1
+scalar {unsigned short} 2 2 0
+scalar int 4 4 1
+scalar {unsigned int} 4 4 0
+scalar long 8 8 1
+scalar {unsigned long} 8 8 0
+scalar {long long} 8 8 1
+scalar {unsigned long long} 8 8 0
+scalar _Bool 1 1 0
+scalar pointer 8 8 0
+scalar float 4 4 1
+scalar double 8 8 1
+scalar {long double} 16 16 1
+scalar Tcl_WideInt 8 8 1
+scalar Tcl_WideUInt 8 8 0
+scalar Tcl_Size 8 8 1
+scalar Tcl_UniChar 4 4 1
+scalar mp_digit 8 8 0
+scalar private_mp_word 16 16 0
+scalar mp_sign 4 4 1
+scalar mp_ord 4 4 1
+scalar mp_bool 4 4 1
+scalar mp_err 4 4 1
+scalar mp_order 4 4 1
+scalar mp_endian 4 4 1
+struct {struct Tcl_RegExpIndices} 16 8
+field {struct Tcl_RegExpIndices}.start 0 8
+field {struct Tcl_RegExpIndices}.end 8 8
+struct {struct Tcl_RegExpInfo} 24 8
+field {struct Tcl_RegExpInfo}.nsubs 0 8
+field {struct Tcl_RegExpInfo}.matches 8 8
+field {struct Tcl_RegExpInfo}.extendStart 16 8
+struct {struct Tcl_ObjType} 112 8
+field {struct Tcl_ObjType}.name 0 8
+field {struct Tcl_ObjType}.freeIntRepProc 8 8
+field {struct Tcl_ObjType}.dupIntRepProc 16 8
+field {struct Tcl_ObjType}.updateStringProc 24 8
+field {struct Tcl_ObjType}.setFromAnyProc 32 8
+field {struct Tcl_ObjType}.version 40 8
+field {struct Tcl_ObjType}.lengthProc 48 8
+field {struct Tcl_ObjType}.indexProc 56 8
+field {struct Tcl_ObjType}.sliceProc 64 8
+field {struct Tcl_ObjType}.reverseProc 72 8
+field {struct Tcl_ObjType}.getElementsProc 80 8
+field {struct Tcl_ObjType}.setElementProc 88 8
+field {struct Tcl_ObjType}.replaceProc 96 8
+field {struct Tcl_ObjType}.inOperProc 104 8
+struct {union Tcl_ObjInternalRep} 16 8
+field {union Tcl_ObjInternalRep}.longValue 0 8
+field {union Tcl_ObjInternalRep}.doubleValue 0 8
+field {union Tcl_ObjInternalRep}.otherValuePtr 0 8
+field {union Tcl_ObjInternalRep}.wideValue 0 8
+field {union Tcl_ObjInternalRep}.twoPtrValue 0 16
+field {union Tcl_ObjInternalRep}.ptrAndLongRep 0 16
+field {union Tcl_ObjInternalRep}.ptrAndSize 0 16
+struct {struct Tcl_Obj} 48 8
+field {struct Tcl_Obj}.refCount 0 8
+field {struct Tcl_Obj}.bytes 8 8
+field {struct Tcl_Obj}.length 16 8
+field {struct Tcl_Obj}.typePtr 24 8
+field {struct Tcl_Obj}.internalRep 32 16
+struct {struct Tcl_Namespace} 40 8
+field {struct Tcl_Namespace}.name 0 8
+field {struct Tcl_Namespace}.fullName 8 8
+field {struct Tcl_Namespace}.clientData 16 8
+field {struct Tcl_Namespace}.deleteProc 24 8
+field {struct Tcl_Namespace}.parentPtr 32 8
+struct {struct Tcl_CallFrame} 112 8
+field {struct Tcl_CallFrame}.nsPtr 0 8
+field {struct Tcl_CallFrame}.dummy1 8 4
+field {struct Tcl_CallFrame}.dummy2 16 8
+field {struct Tcl_CallFrame}.dummy3 24 8
+field {struct Tcl_CallFrame}.dummy4 32 8
+field {struct Tcl_CallFrame}.dummy5 40 8
+field {struct Tcl_CallFrame}.dummy6 48 8
+field {struct Tcl_CallFrame}.dummy7 56 8
+field {struct Tcl_CallFrame}.dummy8 64 8
+field {struct Tcl_CallFrame}.dummy9 72 8
+field {struct Tcl_CallFrame}.dummy10 80 8
+field {struct Tcl_CallFrame}.dummy11 88 8
+field {struct Tcl_CallFrame}.dummy12 96 8
+field {struct Tcl_CallFrame}.dummy13 104 8
+struct {struct anon@tcl.h:846} 80 8
+field {struct anon@tcl.h:846}.isNativeObjectProc 0 4
+field {struct anon@tcl.h:846}.objProc 8 8
+field {struct anon@tcl.h:846}.objClientData 16 8
+field {struct anon@tcl.h:846}.proc 24 8
+field {struct anon@tcl.h:846}.clientData 32 8
+field {struct anon@tcl.h:846}.deleteProc 40 8
+field {struct anon@tcl.h:846}.deleteData 48 8
+field {struct anon@tcl.h:846}.namespacePtr 56 8
+field {struct anon@tcl.h:846}.objProc2 64 8
+field {struct anon@tcl.h:846}.objClientData2 72 8
+struct {struct Tcl_DString} 224 8
+field {struct Tcl_DString}.string 0 8
+field {struct Tcl_DString}.length 8 8
+field {struct Tcl_DString}.spaceAvl 16 8
+field {struct Tcl_DString}.staticSpace 24 200
+struct {struct Tcl_HashEntry} 40 8
+field {struct Tcl_HashEntry}.nextPtr 0 8
+field {struct Tcl_HashEntry}.tablePtr 8 8
+field {struct Tcl_HashEntry}.hash 16 8
+field {struct Tcl_HashEntry}.clientData 24 8
+field {struct Tcl_HashEntry}.key 32 8
+struct {struct Tcl_HashKeyType} 40 8
+field {struct Tcl_HashKeyType}.version 0 4
+field {struct Tcl_HashKeyType}.flags 4 4
+field {struct Tcl_HashKeyType}.hashKeyProc 8 8
+field {struct Tcl_HashKeyType}.compareKeysProc 16 8
+field {struct Tcl_HashKeyType}.allocEntryProc 24 8
+field {struct Tcl_HashKeyType}.freeEntryProc 32 8
+struct {struct Tcl_HashTable} 104 8
+field {struct Tcl_HashTable}.buckets 0 8
+field {struct Tcl_HashTable}.staticBuckets 8 32
+field {struct Tcl_HashTable}.numBuckets 40 8
+field {struct Tcl_HashTable}.numEntries 48 8
+field {struct Tcl_HashTable}.rebuildSize 56 8
+field {struct Tcl_HashTable}.mask 64 8
+field {struct Tcl_HashTable}.downShift 72 4
+field {struct Tcl_HashTable}.keyType 76 4
+field {struct Tcl_HashTable}.findProc 80 8
+field {struct Tcl_HashTable}.createProc 88 8
+field {struct Tcl_HashTable}.typePtr 96 8
+struct {struct Tcl_HashSearch} 24 8
+field {struct Tcl_HashSearch}.tablePtr 0 8
+field {struct Tcl_HashSearch}.nextIndex 8 8
+field {struct Tcl_HashSearch}.nextEntryPtr 16 8
+struct {struct anon@tcl.h:1259} 24 8
+field {struct anon@tcl.h:1259}.next 0 8
+field {struct anon@tcl.h:1259}.epoch 8 8
+field {struct anon@tcl.h:1259}.dictionaryPtr 16 8
+struct {struct Tcl_Event} 16 8
+field {struct Tcl_Event}.proc 0 8
+field {struct Tcl_Event}.nextPtr 8 8
+struct {struct Tcl_Time} 16 8
+field {struct Tcl_Time}.sec 0 8
+field {struct Tcl_Time}.usec 8 8
+struct {struct Tcl_ChannelType} 136 8
+field {struct Tcl_ChannelType}.typeName 0 8
+field {struct Tcl_ChannelType}.version 8 8
+field {struct Tcl_ChannelType}.closeProc 16 8
+field {struct Tcl_ChannelType}.inputProc 24 8
+field {struct Tcl_ChannelType}.outputProc 32 8
+field {struct Tcl_ChannelType}.seekProc 40 8
+field {struct Tcl_ChannelType}.setOptionProc 48 8
+field {struct Tcl_ChannelType}.getOptionProc 56 8
+field {struct Tcl_ChannelType}.watchProc 64 8
+field {struct Tcl_ChannelType}.getHandleProc 72 8
+field {struct Tcl_ChannelType}.close2Proc 80 8
+field {struct Tcl_ChannelType}.blockModeProc 88 8
+field {struct Tcl_ChannelType}.flushProc 96 8
+field {struct Tcl_ChannelType}.handlerProc 104 8
+field {struct Tcl_ChannelType}.wideSeekProc 112 8
+field {struct Tcl_ChannelType}.threadActionProc 120 8
+field {struct Tcl_ChannelType}.truncateProc 128 8
+struct {struct Tcl_GlobTypeData} 24 8
+field {struct Tcl_GlobTypeData}.type 0 4
+field {struct Tcl_GlobTypeData}.perm 4 4
+field {struct Tcl_GlobTypeData}.macType 8 8
+field {struct Tcl_GlobTypeData}.macCreator 16 8
+struct {struct Tcl_Filesystem} 248 8
+field {struct Tcl_Filesystem}.typeName 0 8
+field {struct Tcl_Filesystem}.structureLength 8 8
+field {struct Tcl_Filesystem}.version 16 8
+field {struct Tcl_Filesystem}.pathInFilesystemProc 24 8
+field {struct Tcl_Filesystem}.dupInternalRepProc 32 8
+field {struct Tcl_Filesystem}.freeInternalRepProc 40 8
+field {struct Tcl_Filesystem}.internalToNormalizedProc 48 8
+field {struct Tcl_Filesystem}.createInternalRepProc 56 8
+field {struct Tcl_Filesystem}.normalizePathProc 64 8
+field {struct Tcl_Filesystem}.filesystemPathTypeProc 72 8
+field {struct Tcl_Filesystem}.filesystemSeparatorProc 80 8
+field {struct Tcl_Filesystem}.statProc 88 8
+field {struct Tcl_Filesystem}.accessProc 96 8
+field {struct Tcl_Filesystem}.openFileChannelProc 104 8
+field {struct Tcl_Filesystem}.matchInDirectoryProc 112 8
+field {struct Tcl_Filesystem}.utimeProc 120 8
+field {struct Tcl_Filesystem}.linkProc 128 8
+field {struct Tcl_Filesystem}.listVolumesProc 136 8
+field {struct Tcl_Filesystem}.fileAttrStringsProc 144 8
+field {struct Tcl_Filesystem}.fileAttrsGetProc 152 8
+field {struct Tcl_Filesystem}.fileAttrsSetProc 160 8
+field {struct Tcl_Filesystem}.createDirectoryProc 168 8
+field {struct Tcl_Filesystem}.removeDirectoryProc 176 8
+field {struct Tcl_Filesystem}.deleteFileProc 184 8
+field {struct Tcl_Filesystem}.copyFileProc 192 8
+field {struct Tcl_Filesystem}.renameFileProc 200 8
+field {struct Tcl_Filesystem}.copyDirectoryProc 208 8
+field {struct Tcl_Filesystem}.lstatProc 216 8
+field {struct Tcl_Filesystem}.loadFileProc 224 8
+field {struct Tcl_Filesystem}.getCwdProc 232 8
+field {struct Tcl_Filesystem}.chdirProc 240 8
+struct {struct Tcl_NotifierProcs} 64 8
+field {struct Tcl_NotifierProcs}.setTimerProc 0 8
+field {struct Tcl_NotifierProcs}.waitForEventProc 8 8
+field {struct Tcl_NotifierProcs}.createFileHandlerProc 16 8
+field {struct Tcl_NotifierProcs}.deleteFileHandlerProc 24 8
+field {struct Tcl_NotifierProcs}.initNotifierProc 32 8
+field {struct Tcl_NotifierProcs}.finalizeNotifierProc 40 8
+field {struct Tcl_NotifierProcs}.alertNotifierProc 48 8
+field {struct Tcl_NotifierProcs}.serviceModeHookProc 56 8
+struct {struct Tcl_Token} 32 8
+field {struct Tcl_Token}.type 0 4
+field {struct Tcl_Token}.start 8 8
+field {struct Tcl_Token}.size 16 8
+field {struct Tcl_Token}.numComponents 24 8
+struct {struct Tcl_Parse} 744 8
+field {struct Tcl_Parse}.commentStart 0 8
+field {struct Tcl_Parse}.commentSize 8 8
+field {struct Tcl_Parse}.commandStart 16 8
+field {struct Tcl_Parse}.commandSize 24 8
+field {struct Tcl_Parse}.numWords 32 8
+field {struct Tcl_Parse}.tokenPtr 40 8
+field {struct Tcl_Parse}.numTokens 48 8
+field {struct Tcl_Parse}.tokensAvailable 56 8
+field {struct Tcl_Parse}.errorType 64 4
+field {struct Tcl_Parse}.incomplete 68 4
+field {struct Tcl_Parse}.string 72 8
+field {struct Tcl_Parse}.end 80 8
+field {struct Tcl_Parse}.interp 88 8
+field {struct Tcl_Parse}.term 96 8
+field {struct Tcl_Parse}.staticTokens 104 640
+struct {struct Tcl_EncodingType} 48 8
+field {struct Tcl_EncodingType}.encodingName 0 8
+field {struct Tcl_EncodingType}.toUtfProc 8 8
+field {struct Tcl_EncodingType}.fromUtfProc 16 8
+field {struct Tcl_EncodingType}.freeProc 24 8
+field {struct Tcl_EncodingType}.clientData 32 8
+field {struct Tcl_EncodingType}.nullSize 40 8
+struct {struct Tcl_Config} 16 8
+field {struct Tcl_Config}.key 0 8
+field {struct Tcl_Config}.value 8 8
+struct {struct anon@tcl.h:2175} 48 8
+field {struct anon@tcl.h:2175}.type 0 4
+field {struct anon@tcl.h:2175}.keyStr 8 8
+field {struct anon@tcl.h:2175}.srcPtr 16 8
+field {struct anon@tcl.h:2175}.dstPtr 24 8
+field {struct anon@tcl.h:2175}.helpStr 32 8
+field {struct anon@tcl.h:2175}.clientData 40 8
+struct {struct anon@tclDecls.h:1879} 24 8
+field {struct anon@tclDecls.h:1879}.tclPlatStubs 0 8
+field {struct anon@tclDecls.h:1879}.tclIntStubs 8 8
+field {struct anon@tclDecls.h:1879}.tclIntPlatStubs 16 8
+struct {struct TclStubs} 5544 8
+field {struct TclStubs}.magic 0 4
+field {struct TclStubs}.hooks 8 8
+field {struct TclStubs}.tcl_PkgProvideEx 16 8
+field {struct TclStubs}.tcl_PkgRequireEx 24 8
+field {struct TclStubs}.tcl_Panic 32 8
+field {struct TclStubs}.tcl_Alloc 40 8
+field {struct TclStubs}.tcl_Free 48 8
+field {struct TclStubs}.tcl_Realloc 56 8
+field {struct TclStubs}.tcl_DbCkalloc 64 8
+field {struct TclStubs}.tcl_DbCkfree 72 8
+field {struct TclStubs}.tcl_DbCkrealloc 80 8
+field {struct TclStubs}.tcl_CreateFileHandler 88 8
+field {struct TclStubs}.tcl_DeleteFileHandler 96 8
+field {struct TclStubs}.tcl_SetTimer 104 8
+field {struct TclStubs}.tcl_Sleep 112 8
+field {struct TclStubs}.tcl_WaitForEvent 120 8
+field {struct TclStubs}.tcl_AppendAllObjTypes 128 8
+field {struct TclStubs}.tcl_AppendStringsToObj 136 8
+field {struct TclStubs}.tcl_AppendToObj 144 8
+field {struct TclStubs}.tcl_ConcatObj 152 8
+field {struct TclStubs}.tcl_ConvertToType 160 8
+field {struct TclStubs}.tcl_DbDecrRefCount 168 8
+field {struct TclStubs}.tcl_DbIncrRefCount 176 8
+field {struct TclStubs}.tcl_DbIsShared 184 8
+field {struct TclStubs}.reserved22 192 8
+field {struct TclStubs}.tcl_DbNewByteArrayObj 200 8
+field {struct TclStubs}.tcl_DbNewDoubleObj 208 8
+field {struct TclStubs}.tcl_DbNewListObj 216 8
+field {struct TclStubs}.reserved26 224 8
+field {struct TclStubs}.tcl_DbNewObj 232 8
+field {struct TclStubs}.tcl_DbNewStringObj 240 8
+field {struct TclStubs}.tcl_DuplicateObj 248 8
+field {struct TclStubs}.tclFreeObj 256 8
+field {struct TclStubs}.tcl_GetBoolean 264 8
+field {struct TclStubs}.tcl_GetBooleanFromObj 272 8
+field {struct TclStubs}.tcl_GetByteArrayFromObj 280 8
+field {struct TclStubs}.tcl_GetDouble 288 8
+field {struct TclStubs}.tcl_GetDoubleFromObj 296 8
+field {struct TclStubs}.reserved36 304 8
+field {struct TclStubs}.tcl_GetInt 312 8
+field {struct TclStubs}.tcl_GetIntFromObj 320 8
+field {struct TclStubs}.tcl_GetLongFromObj 328 8
+field {struct TclStubs}.tcl_GetObjType 336 8
+field {struct TclStubs}.tclGetStringFromObj 344 8
+field {struct TclStubs}.tcl_InvalidateStringRep 352 8
+field {struct TclStubs}.tcl_ListObjAppendList 360 8
+field {struct TclStubs}.tcl_ListObjAppendElement 368 8
+field {struct TclStubs}.tclListObjGetElements 376 8
+field {struct TclStubs}.tcl_ListObjIndex 384 8
+field {struct TclStubs}.tclListObjLength 392 8
+field {struct TclStubs}.tcl_ListObjReplace 400 8
+field {struct TclStubs}.reserved49 408 8
+field {struct TclStubs}.tcl_NewByteArrayObj 416 8
+field {struct TclStubs}.tcl_NewDoubleObj 424 8
+field {struct TclStubs}.reserved52 432 8
+field {struct TclStubs}.tcl_NewListObj 440 8
+field {struct TclStubs}.reserved54 448 8
+field {struct TclStubs}.tcl_NewObj 456 8
+field {struct TclStubs}.tcl_NewStringObj 464 8
+field {struct TclStubs}.reserved57 472 8
+field {struct TclStubs}.tcl_SetByteArrayLength 480 8
+field {struct TclStubs}.tcl_SetByteArrayObj 488 8
+field {struct TclStubs}.tcl_SetDoubleObj 496 8
+field {struct TclStubs}.reserved61 504 8
+field {struct TclStubs}.tcl_SetListObj 512 8
+field {struct TclStubs}.reserved63 520 8
+field {struct TclStubs}.tcl_SetObjLength 528 8
+field {struct TclStubs}.tcl_SetStringObj 536 8
+field {struct TclStubs}.reserved66 544 8
+field {struct TclStubs}.reserved67 552 8
+field {struct TclStubs}.tcl_AllowExceptions 560 8
+field {struct TclStubs}.tcl_AppendElement 568 8
+field {struct TclStubs}.tcl_AppendResult 576 8
+field {struct TclStubs}.tcl_AsyncCreate 584 8
+field {struct TclStubs}.tcl_AsyncDelete 592 8
+field {struct TclStubs}.tcl_AsyncInvoke 600 8
+field {struct TclStubs}.tcl_AsyncMark 608 8
+field {struct TclStubs}.tcl_AsyncReady 616 8
+field {struct TclStubs}.reserved76 624 8
+field {struct TclStubs}.reserved77 632 8
+field {struct TclStubs}.tcl_BadChannelOption 640 8
+field {struct TclStubs}.tcl_CallWhenDeleted 648 8
+field {struct TclStubs}.tcl_CancelIdleCall 656 8
+field {struct TclStubs}.tcl_Close 664 8
+field {struct TclStubs}.tcl_CommandComplete 672 8
+field {struct TclStubs}.tcl_Concat 680 8
+field {struct TclStubs}.tcl_ConvertElement 688 8
+field {struct TclStubs}.tcl_ConvertCountedElement 696 8
+field {struct TclStubs}.tcl_CreateAlias 704 8
+field {struct TclStubs}.tcl_CreateAliasObj 712 8
+field {struct TclStubs}.tcl_CreateChannel 720 8
+field {struct TclStubs}.tcl_CreateChannelHandler 728 8
+field {struct TclStubs}.tcl_CreateCloseHandler 736 8
+field {struct TclStubs}.tcl_CreateCommand 744 8
+field {struct TclStubs}.tcl_CreateEventSource 752 8
+field {struct TclStubs}.tcl_CreateExitHandler 760 8
+field {struct TclStubs}.tcl_CreateInterp 768 8
+field {struct TclStubs}.reserved95 776 8
+field {struct TclStubs}.tcl_CreateObjCommand 784 8
+field {struct TclStubs}.tcl_CreateChild 792 8
+field {struct TclStubs}.tcl_CreateTimerHandler 800 8
+field {struct TclStubs}.tcl_CreateTrace 808 8
+field {struct TclStubs}.tcl_DeleteAssocData 816 8
+field {struct TclStubs}.tcl_DeleteChannelHandler 824 8
+field {struct TclStubs}.tcl_DeleteCloseHandler 832 8
+field {struct TclStubs}.tcl_DeleteCommand 840 8
+field {struct TclStubs}.tcl_DeleteCommandFromToken 848 8
+field {struct TclStubs}.tcl_DeleteEvents 856 8
+field {struct TclStubs}.tcl_DeleteEventSource 864 8
+field {struct TclStubs}.tcl_DeleteExitHandler 872 8
+field {struct TclStubs}.tcl_DeleteHashEntry 880 8
+field {struct TclStubs}.tcl_DeleteHashTable 888 8
+field {struct TclStubs}.tcl_DeleteInterp 896 8
+field {struct TclStubs}.tcl_DetachPids 904 8
+field {struct TclStubs}.tcl_DeleteTimerHandler 912 8
+field {struct TclStubs}.tcl_DeleteTrace 920 8
+field {struct TclStubs}.tcl_DontCallWhenDeleted 928 8
+field {struct TclStubs}.tcl_DoOneEvent 936 8
+field {struct TclStubs}.tcl_DoWhenIdle 944 8
+field {struct TclStubs}.tcl_DStringAppend 952 8
+field {struct TclStubs}.tcl_DStringAppendElement 960 8
+field {struct TclStubs}.tcl_DStringEndSublist 968 8
+field {struct TclStubs}.tcl_DStringFree 976 8
+field {struct TclStubs}.tcl_DStringGetResult 984 8
+field {struct TclStubs}.tcl_DStringInit 992 8
+field {struct TclStubs}.tcl_DStringResult 1000 8
+field {struct TclStubs}.tcl_DStringSetLength 1008 8
+field {struct TclStubs}.tcl_DStringStartSublist 1016 8
+field {struct TclStubs}.tcl_Eof 1024 8
+field {struct TclStubs}.tcl_ErrnoId 1032 8
+field {struct TclStubs}.tcl_ErrnoMsg 1040 8
+field {struct TclStubs}.reserved129 1048 8
+field {struct TclStubs}.tcl_EvalFile 1056 8
+field {struct TclStubs}.reserved131 1064 8
+field {struct TclStubs}.tcl_EventuallyFree 1072 8
+field {struct TclStubs}.tcl_Exit 1080 8
+field {struct TclStubs}.tcl_ExposeCommand 1088 8
+field {struct TclStubs}.tcl_ExprBoolean 1096 8
+field {struct TclStubs}.tcl_ExprBooleanObj 1104 8
+field {struct TclStubs}.tcl_ExprDouble 1112 8
+field {struct TclStubs}.tcl_ExprDoubleObj 1120 8
+field {struct TclStubs}.tcl_ExprLong 1128 8
+field {struct TclStubs}.tcl_ExprLongObj 1136 8
+field {struct TclStubs}.tcl_ExprObj 1144 8
+field {struct TclStubs}.tcl_ExprString 1152 8
+field {struct TclStubs}.tcl_Finalize 1160 8
+field {struct TclStubs}.reserved144 1168 8
+field {struct TclStubs}.tcl_FirstHashEntry 1176 8
+field {struct TclStubs}.tcl_Flush 1184 8
+field {struct TclStubs}.reserved147 1192 8
+field {struct TclStubs}.reserved148 1200 8
+field {struct TclStubs}.tclGetAliasObj 1208 8
+field {struct TclStubs}.tcl_GetAssocData 1216 8
+field {struct TclStubs}.tcl_GetChannel 1224 8
+field {struct TclStubs}.tcl_GetChannelBufferSize 1232 8
+field {struct TclStubs}.tcl_GetChannelHandle 1240 8
+field {struct TclStubs}.tcl_GetChannelInstanceData 1248 8
+field {struct TclStubs}.tcl_GetChannelMode 1256 8
+field {struct TclStubs}.tcl_GetChannelName 1264 8
+field {struct TclStubs}.tcl_GetChannelOption 1272 8
+field {struct TclStubs}.tcl_GetChannelType 1280 8
+field {struct TclStubs}.tcl_GetCommandInfo 1288 8
+field {struct TclStubs}.tcl_GetCommandName 1296 8
+field {struct TclStubs}.tcl_GetErrno 1304 8
+field {struct TclStubs}.tcl_GetHostName 1312 8
+field {struct TclStubs}.tcl_GetInterpPath 1320 8
+field {struct TclStubs}.tcl_GetParent 1328 8
+field {struct TclStubs}.tcl_GetNameOfExecutable 1336 8
+field {struct TclStubs}.tcl_GetObjResult 1344 8
+field {struct TclStubs}.tcl_GetOpenFile 1352 8
+field {struct TclStubs}.tcl_GetPathType 1360 8
+field {struct TclStubs}.tcl_Gets 1368 8
+field {struct TclStubs}.tcl_GetsObj 1376 8
+field {struct TclStubs}.tcl_GetServiceMode 1384 8
+field {struct TclStubs}.tcl_GetChild 1392 8
+field {struct TclStubs}.tcl_GetStdChannel 1400 8
+field {struct TclStubs}.reserved174 1408 8
+field {struct TclStubs}.reserved175 1416 8
+field {struct TclStubs}.tcl_GetVar2 1424 8
+field {struct TclStubs}.reserved177 1432 8
+field {struct TclStubs}.reserved178 1440 8
+field {struct TclStubs}.tcl_HideCommand 1448 8
+field {struct TclStubs}.tcl_Init 1456 8
+field {struct TclStubs}.tcl_InitHashTable 1464 8
+field {struct TclStubs}.tcl_InputBlocked 1472 8
+field {struct TclStubs}.tcl_InputBuffered 1480 8
+field {struct TclStubs}.tcl_InterpDeleted 1488 8
+field {struct TclStubs}.tcl_IsSafe 1496 8
+field {struct TclStubs}.tcl_JoinPath 1504 8
+field {struct TclStubs}.tcl_LinkVar 1512 8
+field {struct TclStubs}.reserved188 1520 8
+field {struct TclStubs}.tcl_MakeFileChannel 1528 8
+field {struct TclStubs}.reserved190 1536 8
+field {struct TclStubs}.tcl_MakeTcpClientChannel 1544 8
+field {struct TclStubs}.tcl_Merge 1552 8
+field {struct TclStubs}.tcl_NextHashEntry 1560 8
+field {struct TclStubs}.tcl_NotifyChannel 1568 8
+field {struct TclStubs}.tcl_ObjGetVar2 1576 8
+field {struct TclStubs}.tcl_ObjSetVar2 1584 8
+field {struct TclStubs}.tcl_OpenCommandChannel 1592 8
+field {struct TclStubs}.tcl_OpenFileChannel 1600 8
+field {struct TclStubs}.tcl_OpenTcpClient 1608 8
+field {struct TclStubs}.tcl_OpenTcpServer 1616 8
+field {struct TclStubs}.tcl_Preserve 1624 8
+field {struct TclStubs}.tcl_PrintDouble 1632 8
+field {struct TclStubs}.tcl_PutEnv 1640 8
+field {struct TclStubs}.tcl_PosixError 1648 8
+field {struct TclStubs}.tcl_QueueEvent 1656 8
+field {struct TclStubs}.tcl_Read 1664 8
+field {struct TclStubs}.tcl_ReapDetachedProcs 1672 8
+field {struct TclStubs}.tcl_RecordAndEval 1680 8
+field {struct TclStubs}.tcl_RecordAndEvalObj 1688 8
+field {struct TclStubs}.tcl_RegisterChannel 1696 8
+field {struct TclStubs}.tcl_RegisterObjType 1704 8
+field {struct TclStubs}.tcl_RegExpCompile 1712 8
+field {struct TclStubs}.tcl_RegExpExec 1720 8
+field {struct TclStubs}.tcl_RegExpMatch 1728 8
+field {struct TclStubs}.tcl_RegExpRange 1736 8
+field {struct TclStubs}.tcl_Release 1744 8
+field {struct TclStubs}.tcl_ResetResult 1752 8
+field {struct TclStubs}.tcl_ScanElement 1760 8
+field {struct TclStubs}.tcl_ScanCountedElement 1768 8
+field {struct TclStubs}.reserved220 1776 8
+field {struct TclStubs}.tcl_ServiceAll 1784 8
+field {struct TclStubs}.tcl_ServiceEvent 1792 8
+field {struct TclStubs}.tcl_SetAssocData 1800 8
+field {struct TclStubs}.tcl_SetChannelBufferSize 1808 8
+field {struct TclStubs}.tcl_SetChannelOption 1816 8
+field {struct TclStubs}.tcl_SetCommandInfo 1824 8
+field {struct TclStubs}.tcl_SetErrno 1832 8
+field {struct TclStubs}.tcl_SetErrorCode 1840 8
+field {struct TclStubs}.tcl_SetMaxBlockTime 1848 8
+field {struct TclStubs}.reserved230 1856 8
+field {struct TclStubs}.tcl_SetRecursionLimit 1864 8
+field {struct TclStubs}.reserved232 1872 8
+field {struct TclStubs}.tcl_SetServiceMode 1880 8
+field {struct TclStubs}.tcl_SetObjErrorCode 1888 8
+field {struct TclStubs}.tcl_SetObjResult 1896 8
+field {struct TclStubs}.tcl_SetStdChannel 1904 8
+field {struct TclStubs}.reserved237 1912 8
+field {struct TclStubs}.tcl_SetVar2 1920 8
+field {struct TclStubs}.tcl_SignalId 1928 8
+field {struct TclStubs}.tcl_SignalMsg 1936 8
+field {struct TclStubs}.tcl_SourceRCFile 1944 8
+field {struct TclStubs}.tclSplitList 1952 8
+field {struct TclStubs}.tclSplitPath 1960 8
+field {struct TclStubs}.reserved244 1968 8
+field {struct TclStubs}.reserved245 1976 8
+field {struct TclStubs}.reserved246 1984 8
+field {struct TclStubs}.reserved247 1992 8
+field {struct TclStubs}.tcl_TraceVar2 2000 8
+field {struct TclStubs}.tcl_TranslateFileName 2008 8
+field {struct TclStubs}.tcl_Ungets 2016 8
+field {struct TclStubs}.tcl_UnlinkVar 2024 8
+field {struct TclStubs}.tcl_UnregisterChannel 2032 8
+field {struct TclStubs}.reserved253 2040 8
+field {struct TclStubs}.tcl_UnsetVar2 2048 8
+field {struct TclStubs}.reserved255 2056 8
+field {struct TclStubs}.tcl_UntraceVar2 2064 8
+field {struct TclStubs}.tcl_UpdateLinkedVar 2072 8
+field {struct TclStubs}.reserved258 2080 8
+field {struct TclStubs}.tcl_UpVar2 2088 8
+field {struct TclStubs}.tcl_VarEval 2096 8
+field {struct TclStubs}.reserved261 2104 8
+field {struct TclStubs}.tcl_VarTraceInfo2 2112 8
+field {struct TclStubs}.tcl_Write 2120 8
+field {struct TclStubs}.tcl_WrongNumArgs 2128 8
+field {struct TclStubs}.tcl_DumpActiveMemory 2136 8
+field {struct TclStubs}.tcl_ValidateAllMemory 2144 8
+field {struct TclStubs}.reserved267 2152 8
+field {struct TclStubs}.reserved268 2160 8
+field {struct TclStubs}.tcl_HashStats 2168 8
+field {struct TclStubs}.tcl_ParseVar 2176 8
+field {struct TclStubs}.reserved271 2184 8
+field {struct TclStubs}.tcl_PkgPresentEx 2192 8
+field {struct TclStubs}.reserved273 2200 8
+field {struct TclStubs}.reserved274 2208 8
+field {struct TclStubs}.reserved275 2216 8
+field {struct TclStubs}.reserved276 2224 8
+field {struct TclStubs}.tcl_WaitPid 2232 8
+field {struct TclStubs}.reserved278 2240 8
+field {struct TclStubs}.tcl_GetVersion 2248 8
+field {struct TclStubs}.tcl_InitMemory 2256 8
+field {struct TclStubs}.tcl_StackChannel 2264 8
+field {struct TclStubs}.tcl_UnstackChannel 2272 8
+field {struct TclStubs}.tcl_GetStackedChannel 2280 8
+field {struct TclStubs}.tcl_SetMainLoop 2288 8
+field {struct TclStubs}.tcl_GetAliasObj 2296 8
+field {struct TclStubs}.tcl_AppendObjToObj 2304 8
+field {struct TclStubs}.tcl_CreateEncoding 2312 8
+field {struct TclStubs}.tcl_CreateThreadExitHandler 2320 8
+field {struct TclStubs}.tcl_DeleteThreadExitHandler 2328 8
+field {struct TclStubs}.reserved290 2336 8
+field {struct TclStubs}.tcl_EvalEx 2344 8
+field {struct TclStubs}.tcl_EvalObjv 2352 8
+field {struct TclStubs}.tcl_EvalObjEx 2360 8
+field {struct TclStubs}.tcl_ExitThread 2368 8
+field {struct TclStubs}.tcl_ExternalToUtf 2376 8
+field {struct TclStubs}.tcl_ExternalToUtfDString 2384 8
+field {struct TclStubs}.tcl_FinalizeThread 2392 8
+field {struct TclStubs}.tcl_FinalizeNotifier 2400 8
+field {struct TclStubs}.tcl_FreeEncoding 2408 8
+field {struct TclStubs}.tcl_GetCurrentThread 2416 8
+field {struct TclStubs}.tcl_GetEncoding 2424 8
+field {struct TclStubs}.tcl_GetEncodingName 2432 8
+field {struct TclStubs}.tcl_GetEncodingNames 2440 8
+field {struct TclStubs}.tcl_GetIndexFromObjStruct 2448 8
+field {struct TclStubs}.tcl_GetThreadData 2456 8
+field {struct TclStubs}.tcl_GetVar2Ex 2464 8
+field {struct TclStubs}.tcl_InitNotifier 2472 8
+field {struct TclStubs}.tcl_MutexLock 2480 8
+field {struct TclStubs}.tcl_MutexUnlock 2488 8
+field {struct TclStubs}.tcl_ConditionNotify 2496 8
+field {struct TclStubs}.tcl_ConditionWait 2504 8
+field {struct TclStubs}.tclNumUtfChars 2512 8
+field {struct TclStubs}.tcl_ReadChars 2520 8
+field {struct TclStubs}.reserved314 2528 8
+field {struct TclStubs}.reserved315 2536 8
+field {struct TclStubs}.tcl_SetSystemEncoding 2544 8
+field {struct TclStubs}.tcl_SetVar2Ex 2552 8
+field {struct TclStubs}.tcl_ThreadAlert 2560 8
+field {struct TclStubs}.tcl_ThreadQueueEvent 2568 8
+field {struct TclStubs}.tcl_UniCharAtIndex 2576 8
+field {struct TclStubs}.tcl_UniCharToLower 2584 8
+field {struct TclStubs}.tcl_UniCharToTitle 2592 8
+field {struct TclStubs}.tcl_UniCharToUpper 2600 8
+field {struct TclStubs}.tcl_UniCharToUtf 2608 8
+field {struct TclStubs}.tclUtfAtIndex 2616 8
+field {struct TclStubs}.tclUtfCharComplete 2624 8
+field {struct TclStubs}.tcl_UtfBackslash 2632 8
+field {struct TclStubs}.tcl_UtfFindFirst 2640 8
+field {struct TclStubs}.tcl_UtfFindLast 2648 8
+field {struct TclStubs}.tclUtfNext 2656 8
+field {struct TclStubs}.tclUtfPrev 2664 8
+field {struct TclStubs}.tcl_UtfToExternal 2672 8
+field {struct TclStubs}.tcl_UtfToExternalDString 2680 8
+field {struct TclStubs}.tcl_UtfToLower 2688 8
+field {struct TclStubs}.tcl_UtfToTitle 2696 8
+field {struct TclStubs}.tcl_UtfToChar16 2704 8
+field {struct TclStubs}.tcl_UtfToUpper 2712 8
+field {struct TclStubs}.tcl_WriteChars 2720 8
+field {struct TclStubs}.tcl_WriteObj 2728 8
+field {struct TclStubs}.tcl_GetString 2736 8
+field {struct TclStubs}.reserved341 2744 8
+field {struct TclStubs}.reserved342 2752 8
+field {struct TclStubs}.tcl_AlertNotifier 2760 8
+field {struct TclStubs}.tcl_ServiceModeHook 2768 8
+field {struct TclStubs}.tcl_UniCharIsAlnum 2776 8
+field {struct TclStubs}.tcl_UniCharIsAlpha 2784 8
+field {struct TclStubs}.tcl_UniCharIsDigit 2792 8
+field {struct TclStubs}.tcl_UniCharIsLower 2800 8
+field {struct TclStubs}.tcl_UniCharIsSpace 2808 8
+field {struct TclStubs}.tcl_UniCharIsUpper 2816 8
+field {struct TclStubs}.tcl_UniCharIsWordChar 2824 8
+field {struct TclStubs}.tcl_Char16Len 2832 8
+field {struct TclStubs}.reserved353 2840 8
+field {struct TclStubs}.tcl_Char16ToUtfDString 2848 8
+field {struct TclStubs}.tcl_UtfToChar16DString 2856 8
+field {struct TclStubs}.tcl_GetRegExpFromObj 2864 8
+field {struct TclStubs}.reserved357 2872 8
+field {struct TclStubs}.tcl_FreeParse 2880 8
+field {struct TclStubs}.tcl_LogCommandInfo 2888 8
+field {struct TclStubs}.tcl_ParseBraces 2896 8
+field {struct TclStubs}.tcl_ParseCommand 2904 8
+field {struct TclStubs}.tcl_ParseExpr 2912 8
+field {struct TclStubs}.tcl_ParseQuotedString 2920 8
+field {struct TclStubs}.tcl_ParseVarName 2928 8
+field {struct TclStubs}.tcl_GetCwd 2936 8
+field {struct TclStubs}.tcl_Chdir 2944 8
+field {struct TclStubs}.tcl_Access 2952 8
+field {struct TclStubs}.tcl_Stat 2960 8
+field {struct TclStubs}.tclUtfNcmp 2968 8
+field {struct TclStubs}.tclUtfNcasecmp 2976 8
+field {struct TclStubs}.tcl_StringCaseMatch 2984 8
+field {struct TclStubs}.tcl_UniCharIsControl 2992 8
+field {struct TclStubs}.tcl_UniCharIsGraph 3000 8
+field {struct TclStubs}.tcl_UniCharIsPrint 3008 8
+field {struct TclStubs}.tcl_UniCharIsPunct 3016 8
+field {struct TclStubs}.tcl_RegExpExecObj 3024 8
+field {struct TclStubs}.tcl_RegExpGetInfo 3032 8
+field {struct TclStubs}.tcl_NewUnicodeObj 3040 8
+field {struct TclStubs}.tcl_SetUnicodeObj 3048 8
+field {struct TclStubs}.tclGetCharLength 3056 8
+field {struct TclStubs}.tclGetUniChar 3064 8
+field {struct TclStubs}.reserved382 3072 8
+field {struct TclStubs}.tclGetRange 3080 8
+field {struct TclStubs}.tcl_AppendUnicodeToObj 3088 8
+field {struct TclStubs}.tcl_RegExpMatchObj 3096 8
+field {struct TclStubs}.tcl_SetNotifier 3104 8
+field {struct TclStubs}.tcl_GetAllocMutex 3112 8
+field {struct TclStubs}.tcl_GetChannelNames 3120 8
+field {struct TclStubs}.tcl_GetChannelNamesEx 3128 8
+field {struct TclStubs}.tcl_ProcObjCmd 3136 8
+field {struct TclStubs}.tcl_ConditionFinalize 3144 8
+field {struct TclStubs}.tcl_MutexFinalize 3152 8
+field {struct TclStubs}.tcl_CreateThread 3160 8
+field {struct TclStubs}.tcl_ReadRaw 3168 8
+field {struct TclStubs}.tcl_WriteRaw 3176 8
+field {struct TclStubs}.tcl_GetTopChannel 3184 8
+field {struct TclStubs}.tcl_ChannelBuffered 3192 8
+field {struct TclStubs}.tcl_ChannelName 3200 8
+field {struct TclStubs}.tcl_ChannelVersion 3208 8
+field {struct TclStubs}.tcl_ChannelBlockModeProc 3216 8
+field {struct TclStubs}.reserved401 3224 8
+field {struct TclStubs}.tcl_ChannelClose2Proc 3232 8
+field {struct TclStubs}.tcl_ChannelInputProc 3240 8
+field {struct TclStubs}.tcl_ChannelOutputProc 3248 8
+field {struct TclStubs}.reserved405 3256 8
+field {struct TclStubs}.tcl_ChannelSetOptionProc 3264 8
+field {struct TclStubs}.tcl_ChannelGetOptionProc 3272 8
+field {struct TclStubs}.tcl_ChannelWatchProc 3280 8
+field {struct TclStubs}.tcl_ChannelGetHandleProc 3288 8
+field {struct TclStubs}.tcl_ChannelFlushProc 3296 8
+field {struct TclStubs}.tcl_ChannelHandlerProc 3304 8
+field {struct TclStubs}.tcl_JoinThread 3312 8
+field {struct TclStubs}.tcl_IsChannelShared 3320 8
+field {struct TclStubs}.tcl_IsChannelRegistered 3328 8
+field {struct TclStubs}.tcl_CutChannel 3336 8
+field {struct TclStubs}.tcl_SpliceChannel 3344 8
+field {struct TclStubs}.tcl_ClearChannelHandlers 3352 8
+field {struct TclStubs}.tcl_IsChannelExisting 3360 8
+field {struct TclStubs}.reserved419 3368 8
+field {struct TclStubs}.reserved420 3376 8
+field {struct TclStubs}.reserved421 3384 8
+field {struct TclStubs}.reserved422 3392 8
+field {struct TclStubs}.tcl_InitCustomHashTable 3400 8
+field {struct TclStubs}.tcl_InitObjHashTable 3408 8
+field {struct TclStubs}.tcl_CommandTraceInfo 3416 8
+field {struct TclStubs}.tcl_TraceCommand 3424 8
+field {struct TclStubs}.tcl_UntraceCommand 3432 8
+field {struct TclStubs}.tcl_AttemptAlloc 3440 8
+field {struct TclStubs}.tcl_AttemptDbCkalloc 3448 8
+field {struct TclStubs}.tcl_AttemptRealloc 3456 8
+field {struct TclStubs}.tcl_AttemptDbCkrealloc 3464 8
+field {struct TclStubs}.tcl_AttemptSetObjLength 3472 8
+field {struct TclStubs}.tcl_GetChannelThread 3480 8
+field {struct TclStubs}.tclGetUnicodeFromObj 3488 8
+field {struct TclStubs}.reserved435 3496 8
+field {struct TclStubs}.reserved436 3504 8
+field {struct TclStubs}.tcl_SubstObj 3512 8
+field {struct TclStubs}.tcl_DetachChannel 3520 8
+field {struct TclStubs}.tcl_IsStandardChannel 3528 8
+field {struct TclStubs}.tcl_FSCopyFile 3536 8
+field {struct TclStubs}.tcl_FSCopyDirectory 3544 8
+field {struct TclStubs}.tcl_FSCreateDirectory 3552 8
+field {struct TclStubs}.tcl_FSDeleteFile 3560 8
+field {struct TclStubs}.tcl_FSLoadFile 3568 8
+field {struct TclStubs}.tcl_FSMatchInDirectory 3576 8
+field {struct TclStubs}.tcl_FSLink 3584 8
+field {struct TclStubs}.tcl_FSRemoveDirectory 3592 8
+field {struct TclStubs}.tcl_FSRenameFile 3600 8
+field {struct TclStubs}.tcl_FSLstat 3608 8
+field {struct TclStubs}.tcl_FSUtime 3616 8
+field {struct TclStubs}.tcl_FSFileAttrsGet 3624 8
+field {struct TclStubs}.tcl_FSFileAttrsSet 3632 8
+field {struct TclStubs}.tcl_FSFileAttrStrings 3640 8
+field {struct TclStubs}.tcl_FSStat 3648 8
+field {struct TclStubs}.tcl_FSAccess 3656 8
+field {struct TclStubs}.tcl_FSOpenFileChannel 3664 8
+field {struct TclStubs}.tcl_FSGetCwd 3672 8
+field {struct TclStubs}.tcl_FSChdir 3680 8
+field {struct TclStubs}.tcl_FSConvertToPathType 3688 8
+field {struct TclStubs}.tcl_FSJoinPath 3696 8
+field {struct TclStubs}.tclFSSplitPath 3704 8
+field {struct TclStubs}.tcl_FSEqualPaths 3712 8
+field {struct TclStubs}.tcl_FSGetNormalizedPath 3720 8
+field {struct TclStubs}.tcl_FSJoinToPath 3728 8
+field {struct TclStubs}.tcl_FSGetInternalRep 3736 8
+field {struct TclStubs}.tcl_FSGetTranslatedPath 3744 8
+field {struct TclStubs}.tcl_FSEvalFile 3752 8
+field {struct TclStubs}.tcl_FSNewNativePath 3760 8
+field {struct TclStubs}.tcl_FSGetNativePath 3768 8
+field {struct TclStubs}.tcl_FSFileSystemInfo 3776 8
+field {struct TclStubs}.tcl_FSPathSeparator 3784 8
+field {struct TclStubs}.tcl_FSListVolumes 3792 8
+field {struct TclStubs}.tcl_FSRegister 3800 8
+field {struct TclStubs}.tcl_FSUnregister 3808 8
+field {struct TclStubs}.tcl_FSData 3816 8
+field {struct TclStubs}.tcl_FSGetTranslatedStringPath 3824 8
+field {struct TclStubs}.tcl_FSGetFileSystemForPath 3832 8
+field {struct TclStubs}.tcl_FSGetPathType 3840 8
+field {struct TclStubs}.tcl_OutputBuffered 3848 8
+field {struct TclStubs}.tcl_FSMountsChanged 3856 8
+field {struct TclStubs}.tcl_EvalTokensStandard 3864 8
+field {struct TclStubs}.tcl_GetTime 3872 8
+field {struct TclStubs}.tcl_CreateObjTrace 3880 8
+field {struct TclStubs}.tcl_GetCommandInfoFromToken 3888 8
+field {struct TclStubs}.tcl_SetCommandInfoFromToken 3896 8
+field {struct TclStubs}.tcl_DbNewWideIntObj 3904 8
+field {struct TclStubs}.tcl_GetWideIntFromObj 3912 8
+field {struct TclStubs}.tcl_NewWideIntObj 3920 8
+field {struct TclStubs}.tcl_SetWideIntObj 3928 8
+field {struct TclStubs}.tcl_AllocStatBuf 3936 8
+field {struct TclStubs}.tcl_Seek 3944 8
+field {struct TclStubs}.tcl_Tell 3952 8
+field {struct TclStubs}.tcl_ChannelWideSeekProc 3960 8
+field {struct TclStubs}.tcl_DictObjPut 3968 8
+field {struct TclStubs}.tcl_DictObjGet 3976 8
+field {struct TclStubs}.tcl_DictObjRemove 3984 8
+field {struct TclStubs}.tclDictObjSize 3992 8
+field {struct TclStubs}.tcl_DictObjFirst 4000 8
+field {struct TclStubs}.tcl_DictObjNext 4008 8
+field {struct TclStubs}.tcl_DictObjDone 4016 8
+field {struct TclStubs}.tcl_DictObjPutKeyList 4024 8
+field {struct TclStubs}.tcl_DictObjRemoveKeyList 4032 8
+field {struct TclStubs}.tcl_NewDictObj 4040 8
+field {struct TclStubs}.tcl_DbNewDictObj 4048 8
+field {struct TclStubs}.tcl_RegisterConfig 4056 8
+field {struct TclStubs}.tcl_CreateNamespace 4064 8
+field {struct TclStubs}.tcl_DeleteNamespace 4072 8
+field {struct TclStubs}.tcl_AppendExportList 4080 8
+field {struct TclStubs}.tcl_Export 4088 8
+field {struct TclStubs}.tcl_Import 4096 8
+field {struct TclStubs}.tcl_ForgetImport 4104 8
+field {struct TclStubs}.tcl_GetCurrentNamespace 4112 8
+field {struct TclStubs}.tcl_GetGlobalNamespace 4120 8
+field {struct TclStubs}.tcl_FindNamespace 4128 8
+field {struct TclStubs}.tcl_FindCommand 4136 8
+field {struct TclStubs}.tcl_GetCommandFromObj 4144 8
+field {struct TclStubs}.tcl_GetCommandFullName 4152 8
+field {struct TclStubs}.tcl_FSEvalFileEx 4160 8
+field {struct TclStubs}.reserved519 4168 8
+field {struct TclStubs}.tcl_LimitAddHandler 4176 8
+field {struct TclStubs}.tcl_LimitRemoveHandler 4184 8
+field {struct TclStubs}.tcl_LimitReady 4192 8
+field {struct TclStubs}.tcl_LimitCheck 4200 8
+field {struct TclStubs}.tcl_LimitExceeded 4208 8
+field {struct TclStubs}.tcl_LimitSetCommands 4216 8
+field {struct TclStubs}.tcl_LimitSetTime 4224 8
+field {struct TclStubs}.tcl_LimitSetGranularity 4232 8
+field {struct TclStubs}.tcl_LimitTypeEnabled 4240 8
+field {struct TclStubs}.tcl_LimitTypeExceeded 4248 8
+field {struct TclStubs}.tcl_LimitTypeSet 4256 8
+field {struct TclStubs}.tcl_LimitTypeReset 4264 8
+field {struct TclStubs}.tcl_LimitGetCommands 4272 8
+field {struct TclStubs}.tcl_LimitGetTime 4280 8
+field {struct TclStubs}.tcl_LimitGetGranularity 4288 8
+field {struct TclStubs}.tcl_SaveInterpState 4296 8
+field {struct TclStubs}.tcl_RestoreInterpState 4304 8
+field {struct TclStubs}.tcl_DiscardInterpState 4312 8
+field {struct TclStubs}.tcl_SetReturnOptions 4320 8
+field {struct TclStubs}.tcl_GetReturnOptions 4328 8
+field {struct TclStubs}.tcl_IsEnsemble 4336 8
+field {struct TclStubs}.tcl_CreateEnsemble 4344 8
+field {struct TclStubs}.tcl_FindEnsemble 4352 8
+field {struct TclStubs}.tcl_SetEnsembleSubcommandList 4360 8
+field {struct TclStubs}.tcl_SetEnsembleMappingDict 4368 8
+field {struct TclStubs}.tcl_SetEnsembleUnknownHandler 4376 8
+field {struct TclStubs}.tcl_SetEnsembleFlags 4384 8
+field {struct TclStubs}.tcl_GetEnsembleSubcommandList 4392 8
+field {struct TclStubs}.tcl_GetEnsembleMappingDict 4400 8
+field {struct TclStubs}.tcl_GetEnsembleUnknownHandler 4408 8
+field {struct TclStubs}.tcl_GetEnsembleFlags 4416 8
+field {struct TclStubs}.tcl_GetEnsembleNamespace 4424 8
+field {struct TclStubs}.tcl_SetTimeProc 4432 8
+field {struct TclStubs}.tcl_QueryTimeProc 4440 8
+field {struct TclStubs}.tcl_ChannelThreadActionProc 4448 8
+field {struct TclStubs}.tcl_NewBignumObj 4456 8
+field {struct TclStubs}.tcl_DbNewBignumObj 4464 8
+field {struct TclStubs}.tcl_SetBignumObj 4472 8
+field {struct TclStubs}.tcl_GetBignumFromObj 4480 8
+field {struct TclStubs}.tcl_TakeBignumFromObj 4488 8
+field {struct TclStubs}.tcl_TruncateChannel 4496 8
+field {struct TclStubs}.tcl_ChannelTruncateProc 4504 8
+field {struct TclStubs}.tcl_SetChannelErrorInterp 4512 8
+field {struct TclStubs}.tcl_GetChannelErrorInterp 4520 8
+field {struct TclStubs}.tcl_SetChannelError 4528 8
+field {struct TclStubs}.tcl_GetChannelError 4536 8
+field {struct TclStubs}.tcl_InitBignumFromDouble 4544 8
+field {struct TclStubs}.tcl_GetNamespaceUnknownHandler 4552 8
+field {struct TclStubs}.tcl_SetNamespaceUnknownHandler 4560 8
+field {struct TclStubs}.tcl_GetEncodingFromObj 4568 8
+field {struct TclStubs}.tcl_GetEncodingSearchPath 4576 8
+field {struct TclStubs}.tcl_SetEncodingSearchPath 4584 8
+field {struct TclStubs}.tcl_GetEncodingNameFromEnvironment 4592 8
+field {struct TclStubs}.tcl_PkgRequireProc 4600 8
+field {struct TclStubs}.tcl_AppendObjToErrorInfo 4608 8
+field {struct TclStubs}.tcl_AppendLimitedToObj 4616 8
+field {struct TclStubs}.tcl_Format 4624 8
+field {struct TclStubs}.tcl_AppendFormatToObj 4632 8
+field {struct TclStubs}.tcl_ObjPrintf 4640 8
+field {struct TclStubs}.tcl_AppendPrintfToObj 4648 8
+field {struct TclStubs}.tcl_CancelEval 4656 8
+field {struct TclStubs}.tcl_Canceled 4664 8
+field {struct TclStubs}.tcl_CreatePipe 4672 8
+field {struct TclStubs}.tcl_NRCreateCommand 4680 8
+field {struct TclStubs}.tcl_NREvalObj 4688 8
+field {struct TclStubs}.tcl_NREvalObjv 4696 8
+field {struct TclStubs}.tcl_NRCmdSwap 4704 8
+field {struct TclStubs}.tcl_NRAddCallback 4712 8
+field {struct TclStubs}.tcl_NRCallObjProc 4720 8
+field {struct TclStubs}.tcl_GetFSDeviceFromStat 4728 8
+field {struct TclStubs}.tcl_GetFSInodeFromStat 4736 8
+field {struct TclStubs}.tcl_GetModeFromStat 4744 8
+field {struct TclStubs}.tcl_GetLinkCountFromStat 4752 8
+field {struct TclStubs}.tcl_GetUserIdFromStat 4760 8
+field {struct TclStubs}.tcl_GetGroupIdFromStat 4768 8
+field {struct TclStubs}.tcl_GetDeviceTypeFromStat 4776 8
+field {struct TclStubs}.tcl_GetAccessTimeFromStat 4784 8
+field {struct TclStubs}.tcl_GetModificationTimeFromStat 4792 8
+field {struct TclStubs}.tcl_GetChangeTimeFromStat 4800 8
+field {struct TclStubs}.tcl_GetSizeFromStat 4808 8
+field {struct TclStubs}.tcl_GetBlocksFromStat 4816 8
+field {struct TclStubs}.tcl_GetBlockSizeFromStat 4824 8
+field {struct TclStubs}.tcl_SetEnsembleParameterList 4832 8
+field {struct TclStubs}.tcl_GetEnsembleParameterList 4840 8
+field {struct TclStubs}.tclParseArgsObjv 4848 8
+field {struct TclStubs}.tcl_GetErrorLine 4856 8
+field {struct TclStubs}.tcl_SetErrorLine 4864 8
+field {struct TclStubs}.tcl_TransferResult 4872 8
+field {struct TclStubs}.tcl_InterpActive 4880 8
+field {struct TclStubs}.tcl_BackgroundException 4888 8
+field {struct TclStubs}.tcl_ZlibDeflate 4896 8
+field {struct TclStubs}.tcl_ZlibInflate 4904 8
+field {struct TclStubs}.tcl_ZlibCRC32 4912 8
+field {struct TclStubs}.tcl_ZlibAdler32 4920 8
+field {struct TclStubs}.tcl_ZlibStreamInit 4928 8
+field {struct TclStubs}.tcl_ZlibStreamGetCommandName 4936 8
+field {struct TclStubs}.tcl_ZlibStreamEof 4944 8
+field {struct TclStubs}.tcl_ZlibStreamChecksum 4952 8
+field {struct TclStubs}.tcl_ZlibStreamPut 4960 8
+field {struct TclStubs}.tcl_ZlibStreamGet 4968 8
+field {struct TclStubs}.tcl_ZlibStreamClose 4976 8
+field {struct TclStubs}.tcl_ZlibStreamReset 4984 8
+field {struct TclStubs}.tcl_SetStartupScript 4992 8
+field {struct TclStubs}.tcl_GetStartupScript 5000 8
+field {struct TclStubs}.tcl_CloseEx 5008 8
+field {struct TclStubs}.tcl_NRExprObj 5016 8
+field {struct TclStubs}.tcl_NRSubstObj 5024 8
+field {struct TclStubs}.tcl_LoadFile 5032 8
+field {struct TclStubs}.tcl_FindSymbol 5040 8
+field {struct TclStubs}.tcl_FSUnloadFile 5048 8
+field {struct TclStubs}.tcl_ZlibStreamSetCompressionDictionary 5056 8
+field {struct TclStubs}.tcl_OpenTcpServerEx 5064 8
+field {struct TclStubs}.tclZipfs_Mount 5072 8
+field {struct TclStubs}.tclZipfs_Unmount 5080 8
+field {struct TclStubs}.tclZipfs_TclLibrary 5088 8
+field {struct TclStubs}.tclZipfs_MountBuffer 5096 8
+field {struct TclStubs}.tcl_FreeInternalRep 5104 8
+field {struct TclStubs}.tcl_InitStringRep 5112 8
+field {struct TclStubs}.tcl_FetchInternalRep 5120 8
+field {struct TclStubs}.tcl_StoreInternalRep 5128 8
+field {struct TclStubs}.tcl_HasStringRep 5136 8
+field {struct TclStubs}.tcl_IncrRefCount 5144 8
+field {struct TclStubs}.tcl_DecrRefCount 5152 8
+field {struct TclStubs}.tcl_IsShared 5160 8
+field {struct TclStubs}.tcl_LinkArray 5168 8
+field {struct TclStubs}.tcl_GetIntForIndex 5176 8
+field {struct TclStubs}.tcl_UtfToUniChar 5184 8
+field {struct TclStubs}.tcl_UniCharToUtfDString 5192 8
+field {struct TclStubs}.tcl_UtfToUniCharDString 5200 8
+field {struct TclStubs}.tclGetBytesFromObj 5208 8
+field {struct TclStubs}.tcl_GetBytesFromObj 5216 8
+field {struct TclStubs}.tcl_GetStringFromObj 5224 8
+field {struct TclStubs}.tcl_GetUnicodeFromObj 5232 8
+field {struct TclStubs}.tcl_GetSizeIntFromObj 5240 8
+field {struct TclStubs}.tcl_UtfCharComplete 5248 8
+field {struct TclStubs}.tcl_UtfNext 5256 8
+field {struct TclStubs}.tcl_UtfPrev 5264 8
+field {struct TclStubs}.tcl_FSTildeExpand 5272 8
+field {struct TclStubs}.tcl_ExternalToUtfDStringEx 5280 8
+field {struct TclStubs}.tcl_UtfToExternalDStringEx 5288 8
+field {struct TclStubs}.tcl_AsyncMarkFromSignal 5296 8
+field {struct TclStubs}.tcl_ListObjGetElements 5304 8
+field {struct TclStubs}.tcl_ListObjLength 5312 8
+field {struct TclStubs}.tcl_DictObjSize 5320 8
+field {struct TclStubs}.tcl_SplitList 5328 8
+field {struct TclStubs}.tcl_SplitPath 5336 8
+field {struct TclStubs}.tcl_FSSplitPath 5344 8
+field {struct TclStubs}.tcl_ParseArgsObjv 5352 8
+field {struct TclStubs}.tcl_UniCharLen 5360 8
+field {struct TclStubs}.tcl_NumUtfChars 5368 8
+field {struct TclStubs}.tcl_GetCharLength 5376 8
+field {struct TclStubs}.tcl_UtfAtIndex 5384 8
+field {struct TclStubs}.tcl_GetRange 5392 8
+field {struct TclStubs}.tcl_GetUniChar 5400 8
+field {struct TclStubs}.tcl_GetBool 5408 8
+field {struct TclStubs}.tcl_GetBoolFromObj 5416 8
+field {struct TclStubs}.tcl_CreateObjCommand2 5424 8
+field {struct TclStubs}.tcl_CreateObjTrace2 5432 8
+field {struct TclStubs}.tcl_NRCreateCommand2 5440 8
+field {struct TclStubs}.tcl_NRCallObjProc2 5448 8
+field {struct TclStubs}.tcl_GetNumberFromObj 5456 8
+field {struct TclStubs}.tcl_GetNumber 5464 8
+field {struct TclStubs}.tcl_RemoveChannelMode 5472 8
+field {struct TclStubs}.tcl_GetEncodingNulLength 5480 8
+field {struct TclStubs}.tcl_GetWideUIntFromObj 5488 8
+field {struct TclStubs}.tcl_DStringToObj 5496 8
+field {struct TclStubs}.tcl_UtfNcmp 5504 8
+field {struct TclStubs}.tcl_UtfNcasecmp 5512 8
+field {struct TclStubs}.tcl_NewWideUIntObj 5520 8
+field {struct TclStubs}.tcl_SetWideUIntObj 5528 8
+field {struct TclStubs}.tclUnusedStubEntry 5536 8
+struct {struct TclPlatStubs} 48 8
+field {struct TclPlatStubs}.magic 0 4
+field {struct TclPlatStubs}.hooks 8 8
+field {struct TclPlatStubs}.reserved0 16 8
+field {struct TclPlatStubs}.tcl_MacOSXOpenVersionedBundleResources 24 8
+field {struct TclPlatStubs}.tcl_MacOSXNotifierAddRunLoopMode 32 8
+field {struct TclPlatStubs}.tcl_WinConvertError 40 8
+struct {struct Tcl_MethodType} 40 8
+field {struct Tcl_MethodType}.version 0 4
+field {struct Tcl_MethodType}.name 8 8
+field {struct Tcl_MethodType}.callProc 16 8
+field {struct Tcl_MethodType}.deleteProc 24 8
+field {struct Tcl_MethodType}.cloneProc 32 8
+struct {struct Tcl_MethodType2} 40 8
+field {struct Tcl_MethodType2}.version 0 4
+field {struct Tcl_MethodType2}.name 8 8
+field {struct Tcl_MethodType2}.callProc 16 8
+field {struct Tcl_MethodType2}.deleteProc 24 8
+field {struct Tcl_MethodType2}.cloneProc 32 8
+struct {struct Tcl_ObjectMetadataType} 32 8
+field {struct Tcl_ObjectMetadataType}.version 0 4
+field {struct Tcl_ObjectMetadataType}.name 8 8
+field {struct Tcl_ObjectMetadataType}.deleteProc 16 8
+field {struct Tcl_ObjectMetadataType}.cloneProc 24 8
+struct {struct anon@tclOODecls.h:141} 8 8
+field {struct anon@tclOODecls.h:141}.tclOOIntStubs 0 8
+struct {struct TclOOStubs} 296 8
+field {struct TclOOStubs}.magic 0 4
+field {struct TclOOStubs}.hooks 8 8
+field {struct TclOOStubs}.tcl_CopyObjectInstance 16 8
+field {struct TclOOStubs}.tcl_GetClassAsObject 24 8
+field {struct TclOOStubs}.tcl_GetObjectAsClass 32 8
+field {struct TclOOStubs}.tcl_GetObjectCommand 40 8
+field {struct TclOOStubs}.tcl_GetObjectFromObj 48 8
+field {struct TclOOStubs}.tcl_GetObjectNamespace 56 8
+field {struct TclOOStubs}.tcl_MethodDeclarerClass 64 8
+field {struct TclOOStubs}.tcl_MethodDeclarerObject 72 8
+field {struct TclOOStubs}.tcl_MethodIsPublic 80 8
+field {struct TclOOStubs}.tcl_MethodIsType 88 8
+field {struct TclOOStubs}.tcl_MethodName 96 8
+field {struct TclOOStubs}.tcl_NewInstanceMethod 104 8
+field {struct TclOOStubs}.tcl_NewMethod 112 8
+field {struct TclOOStubs}.tcl_NewObjectInstance 120 8
+field {struct TclOOStubs}.tcl_ObjectDeleted 128 8
+field {struct TclOOStubs}.tcl_ObjectContextIsFiltering 136 8
+field {struct TclOOStubs}.tcl_ObjectContextMethod 144 8
+field {struct TclOOStubs}.tcl_ObjectContextObject 152 8
+field {struct TclOOStubs}.tcl_ObjectContextSkippedArgs 160 8
+field {struct TclOOStubs}.tcl_ClassGetMetadata 168 8
+field {struct TclOOStubs}.tcl_ClassSetMetadata 176 8
+field {struct TclOOStubs}.tcl_ObjectGetMetadata 184 8
+field {struct TclOOStubs}.tcl_ObjectSetMetadata 192 8
+field {struct TclOOStubs}.tcl_ObjectContextInvokeNext 200 8
+field {struct TclOOStubs}.tcl_ObjectGetMethodNameMapper 208 8
+field {struct TclOOStubs}.tcl_ObjectSetMethodNameMapper 216 8
+field {struct TclOOStubs}.tcl_ClassSetConstructor 224 8
+field {struct TclOOStubs}.tcl_ClassSetDestructor 232 8
+field {struct TclOOStubs}.tcl_GetObjectName 240 8
+field {struct TclOOStubs}.tcl_MethodIsPrivate 248 8
+field {struct TclOOStubs}.tcl_GetClassOfObject 256 8
+field {struct TclOOStubs}.tcl_GetObjectClassName 264 8
+field {struct TclOOStubs}.tcl_MethodIsType2 272 8
+field {struct TclOOStubs}.tcl_NewInstanceMethod2 280 8
+field {struct TclOOStubs}.tcl_NewMethod2 288 8
+struct {struct mp_int} 24 8
+field {struct mp_int}.used 0 4
+field {struct mp_int}.alloc 4 4
+field {struct mp_int}.sign 8 4
+field {struct mp_int}.dp 16 8
+struct {struct TclTomMathStubs} 664 8
+field {struct TclTomMathStubs}.magic 0 4
+field {struct TclTomMathStubs}.hooks 8 8
+field {struct TclTomMathStubs}.tclBN_epoch 16 8
+field {struct TclTomMathStubs}.tclBN_revision 24 8
+field {struct TclTomMathStubs}.tclBN_mp_add 32 8
+field {struct TclTomMathStubs}.tclBN_mp_add_d 40 8
+field {struct TclTomMathStubs}.tclBN_mp_and 48 8
+field {struct TclTomMathStubs}.tclBN_mp_clamp 56 8
+field {struct TclTomMathStubs}.tclBN_mp_clear 64 8
+field {struct TclTomMathStubs}.tclBN_mp_clear_multi 72 8
+field {struct TclTomMathStubs}.tclBN_mp_cmp 80 8
+field {struct TclTomMathStubs}.tclBN_mp_cmp_d 88 8
+field {struct TclTomMathStubs}.tclBN_mp_cmp_mag 96 8
+field {struct TclTomMathStubs}.tclBN_mp_copy 104 8
+field {struct TclTomMathStubs}.tclBN_mp_count_bits 112 8
+field {struct TclTomMathStubs}.tclBN_mp_div 120 8
+field {struct TclTomMathStubs}.tclBN_mp_div_d 128 8
+field {struct TclTomMathStubs}.tclBN_mp_div_2 136 8
+field {struct TclTomMathStubs}.tclBN_mp_div_2d 144 8
+field {struct TclTomMathStubs}.reserved17 152 8
+field {struct TclTomMathStubs}.tclBN_mp_exch 160 8
+field {struct TclTomMathStubs}.tclBN_mp_expt_n 168 8
+field {struct TclTomMathStubs}.tclBN_mp_grow 176 8
+field {struct TclTomMathStubs}.tclBN_mp_init 184 8
+field {struct TclTomMathStubs}.tclBN_mp_init_copy 192 8
+field {struct TclTomMathStubs}.tclBN_mp_init_multi 200 8
+field {struct TclTomMathStubs}.tclBN_mp_init_set 208 8
+field {struct TclTomMathStubs}.tclBN_mp_init_size 216 8
+field {struct TclTomMathStubs}.tclBN_mp_lshd 224 8
+field {struct TclTomMathStubs}.tclBN_mp_mod 232 8
+field {struct TclTomMathStubs}.tclBN_mp_mod_2d 240 8
+field {struct TclTomMathStubs}.tclBN_mp_mul 248 8
+field {struct TclTomMathStubs}.tclBN_mp_mul_d 256 8
+field {struct TclTomMathStubs}.tclBN_mp_mul_2 264 8
+field {struct TclTomMathStubs}.tclBN_mp_mul_2d 272 8
+field {struct TclTomMathStubs}.tclBN_mp_neg 280 8
+field {struct TclTomMathStubs}.tclBN_mp_or 288 8
+field {struct TclTomMathStubs}.tclBN_mp_radix_size 296 8
+field {struct TclTomMathStubs}.tclBN_mp_read_radix 304 8
+field {struct TclTomMathStubs}.tclBN_mp_rshd 312 8
+field {struct TclTomMathStubs}.tclBN_mp_shrink 320 8
+field {struct TclTomMathStubs}.reserved39 328 8
+field {struct TclTomMathStubs}.reserved40 336 8
+field {struct TclTomMathStubs}.tclBN_mp_sqrt 344 8
+field {struct TclTomMathStubs}.tclBN_mp_sub 352 8
+field {struct TclTomMathStubs}.tclBN_mp_sub_d 360 8
+field {struct TclTomMathStubs}.reserved44 368 8
+field {struct TclTomMathStubs}.reserved45 376 8
+field {struct TclTomMathStubs}.reserved46 384 8
+field {struct TclTomMathStubs}.tclBN_mp_ubin_size 392 8
+field {struct TclTomMathStubs}.tclBN_mp_xor 400 8
+field {struct TclTomMathStubs}.tclBN_mp_zero 408 8
+field {struct TclTomMathStubs}.reserved50 416 8
+field {struct TclTomMathStubs}.reserved51 424 8
+field {struct TclTomMathStubs}.reserved52 432 8
+field {struct TclTomMathStubs}.reserved53 440 8
+field {struct TclTomMathStubs}.reserved54 448 8
+field {struct TclTomMathStubs}.reserved55 456 8
+field {struct TclTomMathStubs}.reserved56 464 8
+field {struct TclTomMathStubs}.reserved57 472 8
+field {struct TclTomMathStubs}.reserved58 480 8
+field {struct TclTomMathStubs}.reserved59 488 8
+field {struct TclTomMathStubs}.reserved60 496 8
+field {struct TclTomMathStubs}.reserved61 504 8
+field {struct TclTomMathStubs}.reserved62 512 8
+field {struct TclTomMathStubs}.tclBN_mp_cnt_lsb 520 8
+field {struct TclTomMathStubs}.reserved64 528 8
+field {struct TclTomMathStubs}.tclBN_mp_init_i64 536 8
+field {struct TclTomMathStubs}.tclBN_mp_init_u64 544 8
+field {struct TclTomMathStubs}.reserved67 552 8
+field {struct TclTomMathStubs}.tclBN_mp_set_u64 560 8
+field {struct TclTomMathStubs}.tclBN_mp_get_mag_u64 568 8
+field {struct TclTomMathStubs}.tclBN_mp_set_i64 576 8
+field {struct TclTomMathStubs}.tclBN_mp_unpack 584 8
+field {struct TclTomMathStubs}.tclBN_mp_pack 592 8
+field {struct TclTomMathStubs}.reserved73 600 8
+field {struct TclTomMathStubs}.reserved74 608 8
+field {struct TclTomMathStubs}.reserved75 616 8
+field {struct TclTomMathStubs}.tclBN_mp_signed_rsh 624 8
+field {struct TclTomMathStubs}.tclBN_mp_pack_count 632 8
+field {struct TclTomMathStubs}.tclBN_mp_to_ubin 640 8
+field {struct TclTomMathStubs}.reserved79 648 8
+field {struct TclTomMathStubs}.tclBN_mp_to_radix 656 8
+enum {enum anon@tcl.h:1298} 4 0
+enumerator TCL_QUEUE_TAIL 0
+enumerator TCL_QUEUE_HEAD 1
+enumerator TCL_QUEUE_MARK 2
+enumerator TCL_QUEUE_ALERT_IF_EMPTY 4
+enum {enum Tcl_PathType} 4 0
+enumerator TCL_PATH_ABSOLUTE 0
+enumerator TCL_PATH_RELATIVE 1
+enumerator TCL_PATH_VOLUME_RELATIVE 2
+enum {enum TclOOMethodVersion} 4 0
+enumerator TCL_OO_METHOD_VERSION_1 1
+enumerator TCL_OO_METHOD_VERSION_2 2
+enum {enum TclOOMethodVisibilityFlags} 4 0
+enumerator TCL_OO_METHOD_PUBLIC 1
+enumerator TCL_OO_METHOD_UNEXPORTED 0
+enumerator TCL_OO_METHOD_PRIVATE 32
+enum {enum TclOOMetadataVersion} 4 0
+enumerator TCL_OO_METADATA_VERSION_1 1
+macro TCL_ALPHA_RELEASE 0
+macro TCL_BETA_RELEASE 1
+macro TCL_FINAL_RELEASE 2
+macro TCL_MAJOR_VERSION 9
+macro TCL_MINOR_VERSION 0
+macro TCL_RELEASE_LEVEL 2
+macro TCL_RELEASE_SERIAL 1
+macro TCL_SIZE_MAX 9223372036854775807
+macro TCL_THREAD_STACK_DEFAULT 0
+macro TCL_THREAD_NOFLAGS 0
+macro TCL_THREAD_JOINABLE 1
+macro TCL_MATCH_NOCASE 1
+macro TCL_REG_BASIC 0
+macro TCL_REG_EXTENDED 1
+macro TCL_REG_ADVF 2
+macro TCL_REG_ADVANCED 3
+macro TCL_REG_QUOTE 4
+macro TCL_REG_NOCASE 8
+macro TCL_REG_NOSUB 16
+macro TCL_REG_EXPANDED 32
+macro TCL_REG_NLSTOP 64
+macro TCL_REG_NLANCH 128
+macro TCL_REG_NEWLINE 192
+macro TCL_REG_CANMATCH 512
+macro TCL_REG_NOTBOL 1
+macro TCL_REG_NOTEOL 2
+macro TCL_OK 0
+macro TCL_ERROR 1
+macro TCL_RETURN 2
+macro TCL_BREAK 3
+macro TCL_CONTINUE 4
+macro TCL_CODE_USER_MIN 5
+macro TCL_CODE_USER_MAX 1073741823
+macro TCL_SUBST_COMMANDS 1
+macro TCL_SUBST_VARIABLES 2
+macro TCL_SUBST_BACKSLASHES 4
+macro TCL_SUBST_ALL 7
+macro TCL_DSTRING_STATIC_SIZE 200
+macro TCL_MAX_PREC 17
+macro TCL_DOUBLE_SPACE 27
+macro TCL_INTEGER_SPACE 24
+macro TCL_NUMBER_INT 2
+macro TCL_NUMBER_BIG 3
+macro TCL_NUMBER_DOUBLE 4
+macro TCL_NUMBER_NAN 5
+macro TCL_DONT_USE_BRACES 1
+macro TCL_DONT_QUOTE_HASH 8
+macro TCL_EXACT 1
+macro TCL_NULL_OK 32
+macro TCL_INDEX_TEMP_TABLE 64
+macro TCL_COMBINE 16777216
+macro TCL_NO_EVAL 65536
+macro TCL_EVAL_GLOBAL 131072
+macro TCL_EVAL_DIRECT 262144
+macro TCL_EVAL_INVOKE 524288
+macro TCL_CANCEL_UNWIND 1048576
+macro TCL_EVAL_NOERR 2097152
+macro TCL_VOLATILE 1
+macro TCL_STATIC 0
+macro TCL_DYNAMIC 3
+macro TCL_GLOBAL_ONLY 1
+macro TCL_NAMESPACE_ONLY 2
+macro TCL_APPEND_VALUE 4
+macro TCL_LIST_ELEMENT 8
+macro TCL_TRACE_READS 16
+macro TCL_TRACE_WRITES 32
+macro TCL_TRACE_UNSETS 64
+macro TCL_TRACE_DESTROYED 128
+macro TCL_LEAVE_ERR_MSG 512
+macro TCL_TRACE_ARRAY 2048
+macro TCL_TRACE_RESULT_DYNAMIC 32768
+macro TCL_TRACE_RESULT_OBJECT 65536
+macro TCL_ENSEMBLE_PREFIX 2
+macro TCL_TRACE_RENAME 8192
+macro TCL_TRACE_DELETE 16384
+macro TCL_ALLOW_INLINE_COMPILATION 131072
+macro TCL_LINK_INT 1
+macro TCL_LINK_DOUBLE 2
+macro TCL_LINK_BOOLEAN 3
+macro TCL_LINK_STRING 4
+macro TCL_LINK_WIDE_INT 5
+macro TCL_LINK_CHAR 6
+macro TCL_LINK_UCHAR 7
+macro TCL_LINK_SHORT 8
+macro TCL_LINK_USHORT 9
+macro TCL_LINK_UINT 10
+macro TCL_LINK_LONG 5
+macro TCL_LINK_ULONG 14
+macro TCL_LINK_FLOAT 13
+macro TCL_LINK_WIDE_UINT 14
+macro TCL_LINK_CHARS 15
+macro TCL_LINK_BINARY 16
+macro TCL_LINK_READ_ONLY 128
+macro TCL_HASH_KEY_RANDOMIZE_HASH 1
+macro TCL_HASH_KEY_SYSTEM_HASH 2
+macro TCL_HASH_KEY_DIRECT_COMPARE 4
+macro TCL_HASH_KEY_TYPE_VERSION 1
+macro TCL_SMALL_HASH_TABLE 4
+macro TCL_STRING_KEYS 0
+macro TCL_ONE_WORD_KEYS 1
+macro TCL_CUSTOM_TYPE_KEYS -2
+macro TCL_CUSTOM_PTR_KEYS -1
+macro TCL_DONT_WAIT 2
+macro TCL_WINDOW_EVENTS 4
+macro TCL_FILE_EVENTS 8
+macro TCL_TIMER_EVENTS 16
+macro TCL_IDLE_EVENTS 32
+macro TCL_ALL_EVENTS -3
+macro TCL_SERVICE_NONE 0
+macro TCL_SERVICE_ALL 1
+macro TCL_READABLE 2
+macro TCL_WRITABLE 4
+macro TCL_EXCEPTION 8
+macro TCL_STDIN 2
+macro TCL_STDOUT 4
+macro TCL_STDERR 8
+macro TCL_ENFORCE_MODE 16
+macro TCL_CLOSE_READ 2
+macro TCL_CLOSE_WRITE 4
+macro TCL_CLOSE2PROC 0
+macro TCL_CHANNEL_VERSION_5 5
+macro TCL_CHANNEL_THREAD_INSERT 0
+macro TCL_CHANNEL_THREAD_REMOVE 1
+macro TCL_MODE_BLOCKING 0
+macro TCL_MODE_NONBLOCKING 1
+macro TCL_GLOB_TYPE_BLOCK 1
+macro TCL_GLOB_TYPE_CHAR 2
+macro TCL_GLOB_TYPE_DIR 4
+macro TCL_GLOB_TYPE_PIPE 8
+macro TCL_GLOB_TYPE_FILE 16
+macro TCL_GLOB_TYPE_LINK 32
+macro TCL_GLOB_TYPE_SOCK 64
+macro TCL_GLOB_TYPE_MOUNT 128
+macro TCL_GLOB_PERM_RONLY 1
+macro TCL_GLOB_PERM_HIDDEN 2
+macro TCL_GLOB_PERM_R 4
+macro TCL_GLOB_PERM_W 8
+macro TCL_GLOB_PERM_X 16
+macro TCL_UNLOAD_DETACH_FROM_INTERPRETER 1
+macro TCL_UNLOAD_DETACH_FROM_PROCESS 2
+macro TCL_FILESYSTEM_VERSION_1 1
+macro TCL_CREATE_SYMBOLIC_LINK 1
+macro TCL_CREATE_HARD_LINK 2
+macro TCL_TOKEN_WORD 1
+macro TCL_TOKEN_SIMPLE_WORD 2
+macro TCL_TOKEN_TEXT 4
+macro TCL_TOKEN_BS 8
+macro TCL_TOKEN_COMMAND 16
+macro TCL_TOKEN_VARIABLE 32
+macro TCL_TOKEN_SUB_EXPR 64
+macro TCL_TOKEN_OPERATOR 128
+macro TCL_TOKEN_EXPAND_WORD 256
+macro TCL_PARSE_SUCCESS 0
+macro TCL_PARSE_QUOTE_EXTRA 1
+macro TCL_PARSE_BRACE_EXTRA 2
+macro TCL_PARSE_MISSING_BRACE 3
+macro TCL_PARSE_MISSING_BRACKET 4
+macro TCL_PARSE_MISSING_PAREN 5
+macro TCL_PARSE_MISSING_QUOTE 6
+macro TCL_PARSE_MISSING_VAR_BRACE 7
+macro TCL_PARSE_SYNTAX 8
+macro TCL_PARSE_BAD_NUMBER 9
+macro NUM_STATIC_TOKENS 20
+macro TCL_ENCODING_START 1
+macro TCL_ENCODING_END 2
+macro TCL_ENCODING_STOPONERROR 0
+macro TCL_ENCODING_NO_TERMINATE 8
+macro TCL_ENCODING_CHAR_LIMIT 16
+macro TCL_ENCODING_INTERNAL_USE_MASK 65280
+macro TCL_ENCODING_PROFILE_STRICT 0
+macro TCL_ENCODING_PROFILE_TCL8 16777216
+macro TCL_ENCODING_PROFILE_REPLACE 33554432
+macro TCL_CONVERT_MULTIBYTE -1
+macro TCL_CONVERT_SYNTAX -2
+macro TCL_CONVERT_UNKNOWN -3
+macro TCL_CONVERT_NOSPACE -4
+macro TCL_UTF_MAX 4
+macro TCL_LIMIT_COMMANDS 1
+macro TCL_LIMIT_TIME 2
+macro TCL_ARGV_CONSTANT 15
+macro TCL_ARGV_INT 16
+macro TCL_ARGV_STRING 17
+macro TCL_ARGV_REST 18
+macro TCL_ARGV_FLOAT 19
+macro TCL_ARGV_FUNC 20
+macro TCL_ARGV_GENFUNC 21
+macro TCL_ARGV_HELP 22
+macro TCL_ARGV_END 23
+macro TCL_ZLIB_FORMAT_RAW 1
+macro TCL_ZLIB_FORMAT_ZLIB 2
+macro TCL_ZLIB_FORMAT_GZIP 4
+macro TCL_ZLIB_FORMAT_AUTO 8
+macro TCL_ZLIB_STREAM_DEFLATE 16
+macro TCL_ZLIB_STREAM_INFLATE 32
+macro TCL_ZLIB_COMPRESS_NONE 0
+macro TCL_ZLIB_COMPRESS_FAST 1
+macro TCL_ZLIB_COMPRESS_BEST 9
+macro TCL_ZLIB_COMPRESS_DEFAULT -1
+macro TCL_ZLIB_NO_FLUSH 0
+macro TCL_ZLIB_FLUSH 2
+macro TCL_ZLIB_FULLFLUSH 3
+macro TCL_ZLIB_FINALIZE 4
+macro TCL_LOAD_GLOBAL 1
+macro TCL_LOAD_LAZY 2
+macro TCL_TCPSERVER_REUSEADDR 1
+macro TCL_TCPSERVER_REUSEPORT 2
+macro TCL_IO_FAILURE -1
+macro TCL_AUTO_LENGTH -1
+macro TCL_INDEX_NONE -1
+macro TCL_STUB_MAGIC -56378669
+macro Tcl_ConsolePanic 0
+macro TCLOO_PATCHLEVEL 94507843538430
+macro MP_DIGIT_BIT 60
+macro MP_SIZEOF_MP_DIGIT 8
+macro MP_MASK 1152921504606846975
+macro MP_DIGIT_MAX 1152921504606846975
+macro MP_PRIME_BBS 1
+macro MP_PRIME_SAFE 2
+macro MP_PRIME_2MSB_ON 8
+macro LTM_PRIME_BBS 1
+macro LTM_PRIME_SAFE 2
+macro LTM_PRIME_2MSB_ON 8
+macro MP_ZPOS 0
+macro MP_NEG 1
+macro MP_LT -1
+macro MP_EQ 0
+macro MP_GT 1
+macro MP_YES 1
+macro MP_NO 0
+macro MP_OKAY 0
+macro MP_ERR -1
+macro MP_MEM -2
+macro MP_VAL -3
+macro MP_RANGE -3
+macro MP_ITER -4
+macro MP_BUF -5
+macro MP_LSB_FIRST -1
+macro MP_MSB_FIRST 1
+macro MP_LITTLE_ENDIAN -1
+macro MP_NATIVE_ENDIAN 0
+macro MP_BIG_ENDIAN 1
+macro PRIVATE_MP_PREC 32
+macro MP_PREC 32
+macro PRIVATE_MP_WARRAY 512
+macro MP_WARRAY 512
+macro DIGIT_BIT 60
+macro PRIVATE_MP_PRIME_TAB_SIZE 256
+macro PRIME_SIZE 256
+macro TCLTOMMATH_EPOCH 0
+macro TCLTOMMATH_REVISION 0

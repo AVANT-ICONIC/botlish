@@ -1,0 +1,5709 @@
+# C header experiment IR (C-HEADER-ARCHAEOLOGY.md): profile tcl-embed
+# revision 6230a12b3bf6f7d8128f6ef14b0a3650a9d479e0
+# toolchain cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# macro definitions of the library's headers (-dD)
+macro _TCL {
+    loc {generic/tcl.h 18 18}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro TCL_ALPHA_RELEASE {
+    loc {generic/tcl.h 32 32}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro TCL_BETA_RELEASE {
+    loc {generic/tcl.h 33 33}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_FINAL_RELEASE {
+    loc {generic/tcl.h 34 34}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 2
+    expansion 2
+    redefined 0
+    undefined 0
+}
+macro TCL_MAJOR_VERSION {
+    loc {generic/tcl.h 50 50}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 9
+    expansion 9
+    redefined 0
+    undefined 0
+}
+macro TCL_MINOR_VERSION {
+    loc {generic/tcl.h 53 53}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro TCL_RELEASE_LEVEL {
+    loc {generic/tcl.h 54 54}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TCL_FINAL_RELEASE
+    expansion 2
+    redefined 0
+    undefined 0
+}
+macro TCL_RELEASE_SERIAL {
+    loc {generic/tcl.h 55 55}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_VERSION {
+    loc {generic/tcl.h 57 57}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {"9.0"}
+    expansion {"9.0"}
+    redefined 0
+    undefined 0
+}
+macro TCL_PATCH_LEVEL {
+    loc {generic/tcl.h 58 58}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {"9.0.1"}
+    expansion {"9.0.1"}
+    redefined 0
+    undefined 0
+}
+macro TCL_DECLARE_MUTEX {
+    loc {generic/tcl.h 92 92}
+    origin public
+    form function
+    params name
+    variadic 0
+    body {static Tcl_Mutex name;}
+    expansion {static Tcl_Mutex name;}
+    arguses {{name 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TCL_FORMAT_PRINTF {
+    loc {generic/tcl.h 112 112}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body {__attribute__ ((__format__ (__printf__, a, b)))}
+    expansion {__attribute__((__format__(__printf__, a, b)))}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TCL_NORETURN {
+    loc {generic/tcl.h 114 114}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {__attribute__ ((noreturn))}
+    expansion __attribute__((noreturn))
+    redefined 0
+    undefined 0
+}
+macro TCL_NOINLINE {
+    loc {generic/tcl.h 115 115}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {__attribute__ ((noinline))}
+    expansion __attribute__((noinline))
+    redefined 0
+    undefined 0
+}
+macro TCL_NORETURN1 {
+    loc {generic/tcl.h 116 116}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {__attribute__ ((noreturn))}
+    expansion __attribute__((noreturn))
+    redefined 0
+    undefined 0
+}
+macro TCL_DEPRECATED_API {
+    loc {generic/tcl.h 138 138}
+    origin public
+    form function
+    params msg
+    variadic 0
+    body {__attribute__ ((__deprecated__ (msg)))}
+    expansion __attribute__((__deprecated__(msg)))
+    arguses {{msg 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro DLLIMPORT {
+    loc {generic/tcl.h 175 175}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro DLLEXPORT {
+    loc {generic/tcl.h 177 177}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {__attribute__ ((visibility("default")))}
+    expansion __attribute__((visibility(\"default\")))
+    redefined 0
+    undefined 0
+}
+macro CRTIMPORT {
+    loc {generic/tcl.h 181 181}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro TCL_STORAGE_CLASS {
+    loc {generic/tclTomMathDecls.h 635 635}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body DLLIMPORT
+    expansion {}
+    redefined 6
+    undefined 0
+}
+macro CONST86 {
+    loc {generic/tcl.h 212 212}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body const
+    expansion const
+    redefined 0
+    undefined 0
+}
+macro EXTERN {
+    loc {generic/tcl.h 226 226}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {extern TCL_STORAGE_CLASS}
+    expansion extern
+    redefined 0
+    undefined 0
+}
+macro TCL_WIDE_INT_TYPE {
+    loc {generic/tcl.h 287 287}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {long long}
+    expansion {long long}
+    redefined 0
+    undefined 0
+}
+macro TCL_LL_MODIFIER {
+    loc {generic/tcl.h 297 297}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {"ll"}
+    expansion {"ll"}
+    redefined 0
+    undefined 0
+}
+macro TCL_Z_MODIFIER {
+    loc {generic/tcl.h 302 302}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {"z"}
+    expansion {"z"}
+    redefined 0
+    undefined 0
+}
+macro TCL_T_MODIFIER {
+    loc {generic/tcl.h 311 311}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {"t"}
+    expansion {"t"}
+    redefined 0
+    undefined 0
+}
+macro Tcl_WideAsLong {
+    loc {generic/tcl.h 319 319}
+    origin public
+    form function
+    params val
+    variadic 0
+    body ((long)((Tcl_WideInt)(val)))
+    expansion {((long) ((Tcl_WideInt) (val)))}
+    arguses {{val 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_LongAsWide {
+    loc {generic/tcl.h 320 320}
+    origin public
+    form function
+    params val
+    variadic 0
+    body ((Tcl_WideInt)((long)(val)))
+    expansion {((Tcl_WideInt) ((long) (val)))}
+    arguses {{val 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_WideAsDouble {
+    loc {generic/tcl.h 321 321}
+    origin public
+    form function
+    params val
+    variadic 0
+    body ((double)((Tcl_WideInt)(val)))
+    expansion {((double) ((Tcl_WideInt) (val)))}
+    arguses {{val 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_DoubleAsWide {
+    loc {generic/tcl.h 322 322}
+    origin public
+    form function
+    params val
+    variadic 0
+    body ((Tcl_WideInt)((double)(val)))
+    expansion {((Tcl_WideInt) ((double) (val)))}
+    arguses {{val 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TCL_SIZE_MAX {
+    loc {generic/tcl.h 330 330}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body ((Tcl_Size)(((size_t)-1)>>1))
+    expansion {((Tcl_Size) (((size_t) - 1) >> 1))}
+    redefined 0
+    undefined 0
+}
+macro TCL_SIZE_MODIFIER {
+    loc {generic/tcl.h 331 331}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TCL_T_MODIFIER
+    expansion {"t"}
+    redefined 0
+    undefined 0
+}
+macro Tcl_ThreadCreateType {
+    loc {generic/tcl.h 413 413}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body void
+    expansion void
+    redefined 0
+    undefined 0
+}
+macro TCL_THREAD_CREATE_RETURN {
+    loc {generic/tcl.h 414 414}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro TCL_THREAD_STACK_DEFAULT {
+    loc {generic/tcl.h 422 422}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (0)
+    expansion (0)
+    redefined 0
+    undefined 0
+}
+macro TCL_THREAD_NOFLAGS {
+    loc {generic/tcl.h 423 423}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (0000)
+    expansion (0000)
+    redefined 0
+    undefined 0
+}
+macro TCL_THREAD_JOINABLE {
+    loc {generic/tcl.h 425 425}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (0001)
+    expansion (0001)
+    redefined 0
+    undefined 0
+}
+macro TCL_MATCH_NOCASE {
+    loc {generic/tcl.h 431 431}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<0)
+    expansion {(1 << 0)}
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_BASIC {
+    loc {generic/tcl.h 437 437}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 000000
+    expansion 000000
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_EXTENDED {
+    loc {generic/tcl.h 438 438}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 000001
+    expansion 000001
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_ADVF {
+    loc {generic/tcl.h 439 439}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 000002
+    expansion 000002
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_ADVANCED {
+    loc {generic/tcl.h 440 440}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 000003
+    expansion 000003
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_QUOTE {
+    loc {generic/tcl.h 441 441}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 000004
+    expansion 000004
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_NOCASE {
+    loc {generic/tcl.h 442 442}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 000010
+    expansion 000010
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_NOSUB {
+    loc {generic/tcl.h 443 443}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 000020
+    expansion 000020
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_EXPANDED {
+    loc {generic/tcl.h 444 444}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 000040
+    expansion 000040
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_NLSTOP {
+    loc {generic/tcl.h 446 446}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 000100
+    expansion 000100
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_NLANCH {
+    loc {generic/tcl.h 447 447}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 000200
+    expansion 000200
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_NEWLINE {
+    loc {generic/tcl.h 448 448}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 000300
+    expansion 000300
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_CANMATCH {
+    loc {generic/tcl.h 449 449}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 001000
+    expansion 001000
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_NOTBOL {
+    loc {generic/tcl.h 456 456}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0001
+    expansion 0001
+    redefined 0
+    undefined 0
+}
+macro TCL_REG_NOTEOL {
+    loc {generic/tcl.h 457 457}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0002
+    expansion 0002
+    redefined 0
+    undefined 0
+}
+macro TCL_OK {
+    loc {generic/tcl.h 521 521}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro TCL_ERROR {
+    loc {generic/tcl.h 522 522}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_RETURN {
+    loc {generic/tcl.h 523 523}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 2
+    expansion 2
+    redefined 0
+    undefined 0
+}
+macro TCL_BREAK {
+    loc {generic/tcl.h 524 524}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 3
+    expansion 3
+    redefined 0
+    undefined 0
+}
+macro TCL_CONTINUE {
+    loc {generic/tcl.h 525 525}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 4
+    expansion 4
+    redefined 0
+    undefined 0
+}
+macro TCL_CODE_USER_MIN {
+    loc {generic/tcl.h 526 526}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 5
+    expansion 5
+    redefined 0
+    undefined 0
+}
+macro TCL_CODE_USER_MAX {
+    loc {generic/tcl.h 527 527}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x3fffffff
+    expansion 0x3fffffff
+    redefined 0
+    undefined 0
+}
+macro TCL_SUBST_COMMANDS {
+    loc {generic/tcl.h 534 534}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 001
+    expansion 001
+    redefined 0
+    undefined 0
+}
+macro TCL_SUBST_VARIABLES {
+    loc {generic/tcl.h 535 535}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 002
+    expansion 002
+    redefined 0
+    undefined 0
+}
+macro TCL_SUBST_BACKSLASHES {
+    loc {generic/tcl.h 536 536}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 004
+    expansion 004
+    redefined 0
+    undefined 0
+}
+macro TCL_SUBST_ALL {
+    loc {generic/tcl.h 537 537}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 007
+    expansion 007
+    redefined 0
+    undefined 0
+}
+macro Tcl_ExitProc {
+    loc {generic/tcl.h 593 593}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_FreeProc
+    expansion Tcl_FreeProc
+    redefined 0
+    undefined 0
+}
+macro Tcl_FileFreeProc {
+    loc {generic/tcl.h 595 595}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_FreeProc
+    expansion Tcl_FreeProc
+    redefined 1
+    undefined 0
+}
+macro Tcl_EncodingFreeProc {
+    loc {generic/tcl.h 596 596}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_FreeProc
+    expansion Tcl_FreeProc
+    redefined 0
+    undefined 0
+}
+macro Tcl_PackageInitProc {
+    loc {generic/tcl.h 643 643}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_LibraryInitProc
+    expansion Tcl_LibraryInitProc
+    redefined 0
+    undefined 0
+}
+macro Tcl_PackageUnloadProc {
+    loc {generic/tcl.h 644 644}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_LibraryUnloadProc
+    expansion Tcl_LibraryUnloadProc
+    redefined 0
+    undefined 0
+}
+macro TCL_OBJTYPE_V0 {
+    loc {generic/tcl.h 698 698}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {0, 0,0,0,0,0,0,0,0}
+    expansion {0, 0, 0, 0, 0, 0, 0, 0, 0}
+    redefined 0
+    undefined 0
+}
+macro TCL_OBJTYPE_V1 {
+    loc {generic/tcl.h 700 700}
+    origin public
+    form function
+    params a
+    variadic 0
+    body {offsetof(Tcl_ObjType, indexProc), a,0,0,0,0,0,0,0}
+    expansion {__builtin_offsetof(Tcl_ObjType, indexProc), a, 0, 0, 0, 0, 0, 0, 0}
+    arguses {{a 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TCL_OBJTYPE_V2 {
+    loc {generic/tcl.h 702 702}
+    origin public
+    form function
+    params {a b c d e f g h}
+    variadic 0
+    body {sizeof(Tcl_ObjType), a,b,c,d,e,f,g,h}
+    expansion {sizeof (Tcl_ObjType), a, b, c, d, e, f, g, h}
+    arguses {{a 1 0 0} {b 1 0 0} {c 1 0 0} {d 1 0 0} {e 1 0 0} {f 1 0 0} {g 1 0 0} {h 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TCL_DSTRING_STATIC_SIZE {
+    loc {generic/tcl.h 876 876}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 200
+    expansion 200
+    redefined 0
+    undefined 0
+}
+macro Tcl_DStringLength {
+    loc {generic/tcl.h 889 889}
+    origin public
+    form function
+    params dsPtr
+    variadic 0
+    body ((dsPtr)->length)
+    expansion {((dsPtr) -> length)}
+    arguses {{dsPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_DStringValue {
+    loc {generic/tcl.h 890 890}
+    origin public
+    form function
+    params dsPtr
+    variadic 0
+    body ((dsPtr)->string)
+    expansion {((dsPtr) -> string)}
+    arguses {{dsPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TCL_MAX_PREC {
+    loc {generic/tcl.h 898 898}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 17
+    expansion 17
+    redefined 0
+    undefined 0
+}
+macro TCL_DOUBLE_SPACE {
+    loc {generic/tcl.h 899 899}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (TCL_MAX_PREC+10)
+    expansion {(17 + 10)}
+    redefined 0
+    undefined 0
+}
+macro TCL_INTEGER_SPACE {
+    loc {generic/tcl.h 907 907}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (3*(int)sizeof(Tcl_WideInt))
+    expansion {(3 * (int) sizeof (Tcl_WideInt))}
+    redefined 0
+    undefined 0
+}
+macro TCL_NUMBER_INT {
+    loc {generic/tcl.h 918 918}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 2
+    expansion 2
+    redefined 0
+    undefined 0
+}
+macro TCL_NUMBER_BIG {
+    loc {generic/tcl.h 919 919}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 3
+    expansion 3
+    redefined 0
+    undefined 0
+}
+macro TCL_NUMBER_DOUBLE {
+    loc {generic/tcl.h 920 920}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 4
+    expansion 4
+    redefined 0
+    undefined 0
+}
+macro TCL_NUMBER_NAN {
+    loc {generic/tcl.h 921 921}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 5
+    expansion 5
+    redefined 0
+    undefined 0
+}
+macro TCL_DONT_USE_BRACES {
+    loc {generic/tcl.h 933 933}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_DONT_QUOTE_HASH {
+    loc {generic/tcl.h 934 934}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 8
+    expansion 8
+    redefined 0
+    undefined 0
+}
+macro TCL_EXACT {
+    loc {generic/tcl.h 945 945}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_NULL_OK {
+    loc {generic/tcl.h 946 946}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 32
+    expansion 32
+    redefined 0
+    undefined 0
+}
+macro TCL_INDEX_TEMP_TABLE {
+    loc {generic/tcl.h 947 947}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 64
+    expansion 64
+    redefined 0
+    undefined 0
+}
+macro TCL_COMBINE {
+    loc {generic/tcl.h 955 955}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x1000000
+    expansion 0x1000000
+    redefined 0
+    undefined 0
+}
+macro TCL_NO_EVAL {
+    loc {generic/tcl.h 981 981}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x010000
+    expansion 0x010000
+    redefined 0
+    undefined 0
+}
+macro TCL_EVAL_GLOBAL {
+    loc {generic/tcl.h 982 982}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x020000
+    expansion 0x020000
+    redefined 0
+    undefined 0
+}
+macro TCL_EVAL_DIRECT {
+    loc {generic/tcl.h 983 983}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x040000
+    expansion 0x040000
+    redefined 0
+    undefined 0
+}
+macro TCL_EVAL_INVOKE {
+    loc {generic/tcl.h 984 984}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x080000
+    expansion 0x080000
+    redefined 0
+    undefined 0
+}
+macro TCL_CANCEL_UNWIND {
+    loc {generic/tcl.h 985 985}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x100000
+    expansion 0x100000
+    redefined 0
+    undefined 0
+}
+macro TCL_EVAL_NOERR {
+    loc {generic/tcl.h 986 986}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x200000
+    expansion 0x200000
+    redefined 0
+    undefined 0
+}
+macro TCL_VOLATILE {
+    loc {generic/tcl.h 993 993}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {((Tcl_FreeProc *) 1)}
+    expansion {((Tcl_FreeProc *) 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_STATIC {
+    loc {generic/tcl.h 994 994}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {((Tcl_FreeProc *) 0)}
+    expansion {((Tcl_FreeProc *) 0)}
+    redefined 0
+    undefined 0
+}
+macro TCL_DYNAMIC {
+    loc {generic/tcl.h 995 995}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {((Tcl_FreeProc *) 3)}
+    expansion {((Tcl_FreeProc *) 3)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOBAL_ONLY {
+    loc {generic/tcl.h 1003 1003}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_NAMESPACE_ONLY {
+    loc {generic/tcl.h 1004 1004}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 2
+    expansion 2
+    redefined 0
+    undefined 0
+}
+macro TCL_APPEND_VALUE {
+    loc {generic/tcl.h 1005 1005}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 4
+    expansion 4
+    redefined 0
+    undefined 0
+}
+macro TCL_LIST_ELEMENT {
+    loc {generic/tcl.h 1006 1006}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 8
+    expansion 8
+    redefined 0
+    undefined 0
+}
+macro TCL_TRACE_READS {
+    loc {generic/tcl.h 1007 1007}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x10
+    expansion 0x10
+    redefined 0
+    undefined 0
+}
+macro TCL_TRACE_WRITES {
+    loc {generic/tcl.h 1008 1008}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x20
+    expansion 0x20
+    redefined 0
+    undefined 0
+}
+macro TCL_TRACE_UNSETS {
+    loc {generic/tcl.h 1009 1009}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x40
+    expansion 0x40
+    redefined 0
+    undefined 0
+}
+macro TCL_TRACE_DESTROYED {
+    loc {generic/tcl.h 1010 1010}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x80
+    expansion 0x80
+    redefined 0
+    undefined 0
+}
+macro TCL_LEAVE_ERR_MSG {
+    loc {generic/tcl.h 1012 1012}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x200
+    expansion 0x200
+    redefined 0
+    undefined 0
+}
+macro TCL_TRACE_ARRAY {
+    loc {generic/tcl.h 1013 1013}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x800
+    expansion 0x800
+    redefined 0
+    undefined 0
+}
+macro TCL_TRACE_RESULT_DYNAMIC {
+    loc {generic/tcl.h 1015 1015}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x8000
+    expansion 0x8000
+    redefined 0
+    undefined 0
+}
+macro TCL_TRACE_RESULT_OBJECT {
+    loc {generic/tcl.h 1016 1016}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x10000
+    expansion 0x10000
+    redefined 0
+    undefined 0
+}
+macro TCL_ENSEMBLE_PREFIX {
+    loc {generic/tcl.h 1022 1022}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x02
+    expansion 0x02
+    redefined 0
+    undefined 0
+}
+macro TCL_TRACE_RENAME {
+    loc {generic/tcl.h 1030 1030}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x2000
+    expansion 0x2000
+    redefined 0
+    undefined 0
+}
+macro TCL_TRACE_DELETE {
+    loc {generic/tcl.h 1031 1031}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x4000
+    expansion 0x4000
+    redefined 0
+    undefined 0
+}
+macro TCL_ALLOW_INLINE_COMPILATION {
+    loc {generic/tcl.h 1033 1033}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x20000
+    expansion 0x20000
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_INT {
+    loc {generic/tcl.h 1039 1039}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_DOUBLE {
+    loc {generic/tcl.h 1040 1040}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 2
+    expansion 2
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_BOOLEAN {
+    loc {generic/tcl.h 1041 1041}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 3
+    expansion 3
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_STRING {
+    loc {generic/tcl.h 1042 1042}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 4
+    expansion 4
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_WIDE_INT {
+    loc {generic/tcl.h 1043 1043}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 5
+    expansion 5
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_CHAR {
+    loc {generic/tcl.h 1044 1044}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 6
+    expansion 6
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_UCHAR {
+    loc {generic/tcl.h 1045 1045}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 7
+    expansion 7
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_SHORT {
+    loc {generic/tcl.h 1046 1046}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 8
+    expansion 8
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_USHORT {
+    loc {generic/tcl.h 1047 1047}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 9
+    expansion 9
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_UINT {
+    loc {generic/tcl.h 1048 1048}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 10
+    expansion 10
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_LONG {
+    loc {generic/tcl.h 1049 1049}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {((sizeof(long) != sizeof(int)) ? TCL_LINK_WIDE_INT : TCL_LINK_INT)}
+    expansion {((sizeof (long) != sizeof (int)) ? 5 : 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_ULONG {
+    loc {generic/tcl.h 1050 1050}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {((sizeof(long) != sizeof(int)) ? TCL_LINK_WIDE_UINT : TCL_LINK_UINT)}
+    expansion {((sizeof (long) != sizeof (int)) ? 14 : 10)}
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_FLOAT {
+    loc {generic/tcl.h 1051 1051}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 13
+    expansion 13
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_WIDE_UINT {
+    loc {generic/tcl.h 1052 1052}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 14
+    expansion 14
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_CHARS {
+    loc {generic/tcl.h 1053 1053}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 15
+    expansion 15
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_BINARY {
+    loc {generic/tcl.h 1054 1054}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 16
+    expansion 16
+    redefined 0
+    undefined 0
+}
+macro TCL_LINK_READ_ONLY {
+    loc {generic/tcl.h 1055 1055}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x80
+    expansion 0x80
+    redefined 0
+    undefined 0
+}
+macro TCL_HASH_TYPE {
+    loc {generic/tcl.h 1064 1064}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body size_t
+    expansion size_t
+    redefined 0
+    undefined 0
+}
+macro TCL_HASH_KEY_RANDOMIZE_HASH {
+    loc {generic/tcl.h 1125 1125}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x1
+    expansion 0x1
+    redefined 0
+    undefined 0
+}
+macro TCL_HASH_KEY_SYSTEM_HASH {
+    loc {generic/tcl.h 1126 1126}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x2
+    expansion 0x2
+    redefined 0
+    undefined 0
+}
+macro TCL_HASH_KEY_DIRECT_COMPARE {
+    loc {generic/tcl.h 1127 1127}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x4
+    expansion 0x4
+    redefined 0
+    undefined 0
+}
+macro TCL_HASH_KEY_TYPE_VERSION {
+    loc {generic/tcl.h 1133 1133}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_SMALL_HASH_TABLE {
+    loc {generic/tcl.h 1178 1178}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 4
+    expansion 4
+    redefined 0
+    undefined 0
+}
+macro TCL_STRING_KEYS {
+    loc {generic/tcl.h 1248 1248}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (0)
+    expansion (0)
+    redefined 0
+    undefined 0
+}
+macro TCL_ONE_WORD_KEYS {
+    loc {generic/tcl.h 1249 1249}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1)
+    expansion (1)
+    redefined 0
+    undefined 0
+}
+macro TCL_CUSTOM_TYPE_KEYS {
+    loc {generic/tcl.h 1250 1250}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (-2)
+    expansion {(- 2)}
+    redefined 0
+    undefined 0
+}
+macro TCL_CUSTOM_PTR_KEYS {
+    loc {generic/tcl.h 1251 1251}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (-1)
+    expansion {(- 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_DONT_WAIT {
+    loc {generic/tcl.h 1273 1273}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<1)
+    expansion {(1 << 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_WINDOW_EVENTS {
+    loc {generic/tcl.h 1274 1274}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<2)
+    expansion {(1 << 2)}
+    redefined 0
+    undefined 0
+}
+macro TCL_FILE_EVENTS {
+    loc {generic/tcl.h 1275 1275}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<3)
+    expansion {(1 << 3)}
+    redefined 0
+    undefined 0
+}
+macro TCL_TIMER_EVENTS {
+    loc {generic/tcl.h 1276 1276}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<4)
+    expansion {(1 << 4)}
+    redefined 0
+    undefined 0
+}
+macro TCL_IDLE_EVENTS {
+    loc {generic/tcl.h 1277 1277}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<5)
+    expansion {(1 << 5)}
+    redefined 0
+    undefined 0
+}
+macro TCL_ALL_EVENTS {
+    loc {generic/tcl.h 1278 1278}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (~TCL_DONT_WAIT)
+    expansion {(~ (1 << 1))}
+    redefined 0
+    undefined 0
+}
+macro TCL_SERVICE_NONE {
+    loc {generic/tcl.h 1308 1308}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro TCL_SERVICE_ALL {
+    loc {generic/tcl.h 1309 1309}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_READABLE {
+    loc {generic/tcl.h 1346 1346}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<1)
+    expansion {(1 << 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_WRITABLE {
+    loc {generic/tcl.h 1347 1347}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<2)
+    expansion {(1 << 2)}
+    redefined 0
+    undefined 0
+}
+macro TCL_EXCEPTION {
+    loc {generic/tcl.h 1348 1348}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<3)
+    expansion {(1 << 3)}
+    redefined 0
+    undefined 0
+}
+macro TCL_STDIN {
+    loc {generic/tcl.h 1356 1356}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<1)
+    expansion {(1 << 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_STDOUT {
+    loc {generic/tcl.h 1357 1357}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<2)
+    expansion {(1 << 2)}
+    redefined 0
+    undefined 0
+}
+macro TCL_STDERR {
+    loc {generic/tcl.h 1358 1358}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<3)
+    expansion {(1 << 3)}
+    redefined 0
+    undefined 0
+}
+macro TCL_ENFORCE_MODE {
+    loc {generic/tcl.h 1359 1359}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<4)
+    expansion {(1 << 4)}
+    redefined 0
+    undefined 0
+}
+macro TCL_CLOSE_READ {
+    loc {generic/tcl.h 1366 1366}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<1)
+    expansion {(1 << 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_CLOSE_WRITE {
+    loc {generic/tcl.h 1367 1367}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<2)
+    expansion {(1 << 2)}
+    redefined 0
+    undefined 0
+}
+macro TCL_CLOSE2PROC {
+    loc {generic/tcl.h 1375 1375}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body NULL
+    expansion {((void *) 0)}
+    redefined 0
+    undefined 0
+}
+macro TCL_CHANNEL_VERSION_5 {
+    loc {generic/tcl.h 1384 1384}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {((Tcl_ChannelTypeVersion) 0x5)}
+    expansion {((Tcl_ChannelTypeVersion) 0x5)}
+    redefined 0
+    undefined 0
+}
+macro TCL_CHANNEL_THREAD_INSERT {
+    loc {generic/tcl.h 1390 1390}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (0)
+    expansion (0)
+    redefined 0
+    undefined 0
+}
+macro TCL_CHANNEL_THREAD_REMOVE {
+    loc {generic/tcl.h 1391 1391}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1)
+    expansion (1)
+    redefined 0
+    undefined 0
+}
+macro TCL_MODE_BLOCKING {
+    loc {generic/tcl.h 1499 1499}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro TCL_MODE_NONBLOCKING {
+    loc {generic/tcl.h 1500 1500}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_TYPE_BLOCK {
+    loc {generic/tcl.h 1530 1530}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<0)
+    expansion {(1 << 0)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_TYPE_CHAR {
+    loc {generic/tcl.h 1531 1531}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<1)
+    expansion {(1 << 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_TYPE_DIR {
+    loc {generic/tcl.h 1532 1532}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<2)
+    expansion {(1 << 2)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_TYPE_PIPE {
+    loc {generic/tcl.h 1533 1533}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<3)
+    expansion {(1 << 3)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_TYPE_FILE {
+    loc {generic/tcl.h 1534 1534}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<4)
+    expansion {(1 << 4)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_TYPE_LINK {
+    loc {generic/tcl.h 1535 1535}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<5)
+    expansion {(1 << 5)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_TYPE_SOCK {
+    loc {generic/tcl.h 1536 1536}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<6)
+    expansion {(1 << 6)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_TYPE_MOUNT {
+    loc {generic/tcl.h 1537 1537}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<7)
+    expansion {(1 << 7)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_PERM_RONLY {
+    loc {generic/tcl.h 1539 1539}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<0)
+    expansion {(1 << 0)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_PERM_HIDDEN {
+    loc {generic/tcl.h 1540 1540}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<1)
+    expansion {(1 << 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_PERM_R {
+    loc {generic/tcl.h 1541 1541}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<2)
+    expansion {(1 << 2)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_PERM_W {
+    loc {generic/tcl.h 1542 1542}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<3)
+    expansion {(1 << 3)}
+    redefined 0
+    undefined 0
+}
+macro TCL_GLOB_PERM_X {
+    loc {generic/tcl.h 1543 1543}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<4)
+    expansion {(1 << 4)}
+    redefined 0
+    undefined 0
+}
+macro TCL_UNLOAD_DETACH_FROM_INTERPRETER {
+    loc {generic/tcl.h 1549 1549}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<0)
+    expansion {(1 << 0)}
+    redefined 0
+    undefined 0
+}
+macro TCL_UNLOAD_DETACH_FROM_PROCESS {
+    loc {generic/tcl.h 1550 1550}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<1)
+    expansion {(1 << 1)}
+    redefined 0
+    undefined 0
+}
+macro Tcl_FSFreeInternalRepProc {
+    loc {generic/tcl.h 1594 1594}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_FreeProc
+    expansion Tcl_FreeProc
+    redefined 0
+    undefined 0
+}
+macro TCL_FILESYSTEM_VERSION_1 {
+    loc {generic/tcl.h 1610 1610}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {((Tcl_FSVersion) 0x1)}
+    expansion {((Tcl_FSVersion) 0x1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_CREATE_SYMBOLIC_LINK {
+    loc {generic/tcl.h 1756 1756}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x01
+    expansion 0x01
+    redefined 0
+    undefined 0
+}
+macro TCL_CREATE_HARD_LINK {
+    loc {generic/tcl.h 1757 1757}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x02
+    expansion 0x02
+    redefined 0
+    undefined 0
+}
+macro TCL_TOKEN_WORD {
+    loc {generic/tcl.h 1868 1868}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_TOKEN_SIMPLE_WORD {
+    loc {generic/tcl.h 1869 1869}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 2
+    expansion 2
+    redefined 0
+    undefined 0
+}
+macro TCL_TOKEN_TEXT {
+    loc {generic/tcl.h 1870 1870}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 4
+    expansion 4
+    redefined 0
+    undefined 0
+}
+macro TCL_TOKEN_BS {
+    loc {generic/tcl.h 1871 1871}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 8
+    expansion 8
+    redefined 0
+    undefined 0
+}
+macro TCL_TOKEN_COMMAND {
+    loc {generic/tcl.h 1872 1872}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 16
+    expansion 16
+    redefined 0
+    undefined 0
+}
+macro TCL_TOKEN_VARIABLE {
+    loc {generic/tcl.h 1873 1873}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 32
+    expansion 32
+    redefined 0
+    undefined 0
+}
+macro TCL_TOKEN_SUB_EXPR {
+    loc {generic/tcl.h 1874 1874}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 64
+    expansion 64
+    redefined 0
+    undefined 0
+}
+macro TCL_TOKEN_OPERATOR {
+    loc {generic/tcl.h 1875 1875}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 128
+    expansion 128
+    redefined 0
+    undefined 0
+}
+macro TCL_TOKEN_EXPAND_WORD {
+    loc {generic/tcl.h 1876 1876}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 256
+    expansion 256
+    redefined 0
+    undefined 0
+}
+macro TCL_PARSE_SUCCESS {
+    loc {generic/tcl.h 1883 1883}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro TCL_PARSE_QUOTE_EXTRA {
+    loc {generic/tcl.h 1884 1884}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_PARSE_BRACE_EXTRA {
+    loc {generic/tcl.h 1885 1885}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 2
+    expansion 2
+    redefined 0
+    undefined 0
+}
+macro TCL_PARSE_MISSING_BRACE {
+    loc {generic/tcl.h 1886 1886}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 3
+    expansion 3
+    redefined 0
+    undefined 0
+}
+macro TCL_PARSE_MISSING_BRACKET {
+    loc {generic/tcl.h 1887 1887}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 4
+    expansion 4
+    redefined 0
+    undefined 0
+}
+macro TCL_PARSE_MISSING_PAREN {
+    loc {generic/tcl.h 1888 1888}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 5
+    expansion 5
+    redefined 0
+    undefined 0
+}
+macro TCL_PARSE_MISSING_QUOTE {
+    loc {generic/tcl.h 1889 1889}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 6
+    expansion 6
+    redefined 0
+    undefined 0
+}
+macro TCL_PARSE_MISSING_VAR_BRACE {
+    loc {generic/tcl.h 1890 1890}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 7
+    expansion 7
+    redefined 0
+    undefined 0
+}
+macro TCL_PARSE_SYNTAX {
+    loc {generic/tcl.h 1891 1891}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 8
+    expansion 8
+    redefined 0
+    undefined 0
+}
+macro TCL_PARSE_BAD_NUMBER {
+    loc {generic/tcl.h 1892 1892}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 9
+    expansion 9
+    redefined 0
+    undefined 0
+}
+macro NUM_STATIC_TOKENS {
+    loc {generic/tcl.h 1899 1899}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 20
+    expansion 20
+    redefined 0
+    undefined 0
+}
+macro TCL_ENCODING_START {
+    loc {generic/tcl.h 2031 2031}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x01
+    expansion 0x01
+    redefined 0
+    undefined 0
+}
+macro TCL_ENCODING_END {
+    loc {generic/tcl.h 2032 2032}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x02
+    expansion 0x02
+    redefined 0
+    undefined 0
+}
+macro TCL_ENCODING_STOPONERROR {
+    loc {generic/tcl.h 2034 2034}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x0
+    expansion 0x0
+    redefined 0
+    undefined 0
+}
+macro TCL_ENCODING_NO_TERMINATE {
+    loc {generic/tcl.h 2038 2038}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x08
+    expansion 0x08
+    redefined 0
+    undefined 0
+}
+macro TCL_ENCODING_CHAR_LIMIT {
+    loc {generic/tcl.h 2039 2039}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x10
+    expansion 0x10
+    redefined 0
+    undefined 0
+}
+macro TCL_ENCODING_INTERNAL_USE_MASK {
+    loc {generic/tcl.h 2041 2041}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0xFF00
+    expansion 0xFF00
+    redefined 0
+    undefined 0
+}
+macro TCL_ENCODING_PROFILE_STRICT {
+    loc {generic/tcl.h 2047 2047}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TCL_ENCODING_STOPONERROR
+    expansion 0x0
+    redefined 0
+    undefined 0
+}
+macro TCL_ENCODING_PROFILE_TCL8 {
+    loc {generic/tcl.h 2048 2048}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x01000000
+    expansion 0x01000000
+    redefined 0
+    undefined 0
+}
+macro TCL_ENCODING_PROFILE_REPLACE {
+    loc {generic/tcl.h 2049 2049}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x02000000
+    expansion 0x02000000
+    redefined 0
+    undefined 0
+}
+macro TCL_CONVERT_MULTIBYTE {
+    loc {generic/tcl.h 2076 2076}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (-1)
+    expansion {(- 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_CONVERT_SYNTAX {
+    loc {generic/tcl.h 2077 2077}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (-2)
+    expansion {(- 2)}
+    redefined 0
+    undefined 0
+}
+macro TCL_CONVERT_UNKNOWN {
+    loc {generic/tcl.h 2078 2078}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (-3)
+    expansion {(- 3)}
+    redefined 0
+    undefined 0
+}
+macro TCL_CONVERT_NOSPACE {
+    loc {generic/tcl.h 2079 2079}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (-4)
+    expansion {(- 4)}
+    redefined 0
+    undefined 0
+}
+macro TCL_UTF_MAX {
+    loc {generic/tcl.h 2091 2091}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 4
+    expansion 4
+    redefined 0
+    undefined 0
+}
+macro TCL_LIMIT_COMMANDS {
+    loc {generic/tcl.h 2134 2134}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x01
+    expansion 0x01
+    redefined 0
+    undefined 0
+}
+macro TCL_LIMIT_TIME {
+    loc {generic/tcl.h 2135 2135}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0x02
+    expansion 0x02
+    redefined 0
+    undefined 0
+}
+macro Tcl_LimitHandlerDeleteProc {
+    loc {generic/tcl.h 2144 2144}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_FreeProc
+    expansion Tcl_FreeProc
+    redefined 0
+    undefined 0
+}
+macro TCL_ARGV_CONSTANT {
+    loc {generic/tcl.h 2193 2193}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 15
+    expansion 15
+    redefined 0
+    undefined 0
+}
+macro TCL_ARGV_INT {
+    loc {generic/tcl.h 2194 2194}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 16
+    expansion 16
+    redefined 0
+    undefined 0
+}
+macro TCL_ARGV_STRING {
+    loc {generic/tcl.h 2195 2195}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 17
+    expansion 17
+    redefined 0
+    undefined 0
+}
+macro TCL_ARGV_REST {
+    loc {generic/tcl.h 2196 2196}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 18
+    expansion 18
+    redefined 0
+    undefined 0
+}
+macro TCL_ARGV_FLOAT {
+    loc {generic/tcl.h 2197 2197}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 19
+    expansion 19
+    redefined 0
+    undefined 0
+}
+macro TCL_ARGV_FUNC {
+    loc {generic/tcl.h 2198 2198}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 20
+    expansion 20
+    redefined 0
+    undefined 0
+}
+macro TCL_ARGV_GENFUNC {
+    loc {generic/tcl.h 2199 2199}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 21
+    expansion 21
+    redefined 0
+    undefined 0
+}
+macro TCL_ARGV_HELP {
+    loc {generic/tcl.h 2200 2200}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 22
+    expansion 22
+    redefined 0
+    undefined 0
+}
+macro TCL_ARGV_END {
+    loc {generic/tcl.h 2201 2201}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 23
+    expansion 23
+    redefined 0
+    undefined 0
+}
+macro TCL_ARGV_AUTO_HELP {
+    loc {generic/tcl.h 2217 2217}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {{TCL_ARGV_HELP, "-help", NULL, NULL, "Print summary of command-line options and abort", NULL}}
+    expansion {{ 22, "-help", ((void *) 0), ((void *) 0), "Print summary of command-line options and abort", ((void *) 0) }}
+    redefined 0
+    undefined 0
+}
+macro TCL_ARGV_AUTO_REST {
+    loc {generic/tcl.h 2220 2220}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {{TCL_ARGV_REST, "--", NULL, NULL, "Marks the end of the options", NULL}}
+    expansion {{ 18, "--", ((void *) 0), ((void *) 0), "Marks the end of the options", ((void *) 0) }}
+    redefined 0
+    undefined 0
+}
+macro TCL_ARGV_TABLE_END {
+    loc {generic/tcl.h 2223 2223}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {{TCL_ARGV_END, NULL, NULL, NULL, NULL, NULL}}
+    expansion {{ 23, ((void *) 0), ((void *) 0), ((void *) 0), ((void *) 0), ((void *) 0) }}
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_FORMAT_RAW {
+    loc {generic/tcl.h 2235 2235}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_FORMAT_ZLIB {
+    loc {generic/tcl.h 2236 2236}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 2
+    expansion 2
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_FORMAT_GZIP {
+    loc {generic/tcl.h 2237 2237}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 4
+    expansion 4
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_FORMAT_AUTO {
+    loc {generic/tcl.h 2238 2238}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 8
+    expansion 8
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_STREAM_DEFLATE {
+    loc {generic/tcl.h 2245 2245}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 16
+    expansion 16
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_STREAM_INFLATE {
+    loc {generic/tcl.h 2246 2246}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 32
+    expansion 32
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_COMPRESS_NONE {
+    loc {generic/tcl.h 2253 2253}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_COMPRESS_FAST {
+    loc {generic/tcl.h 2254 2254}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_COMPRESS_BEST {
+    loc {generic/tcl.h 2255 2255}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 9
+    expansion 9
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_COMPRESS_DEFAULT {
+    loc {generic/tcl.h 2256 2256}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (-1)
+    expansion {(- 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_NO_FLUSH {
+    loc {generic/tcl.h 2262 2262}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_FLUSH {
+    loc {generic/tcl.h 2263 2263}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 2
+    expansion 2
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_FULLFLUSH {
+    loc {generic/tcl.h 2264 2264}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 3
+    expansion 3
+    redefined 0
+    undefined 0
+}
+macro TCL_ZLIB_FINALIZE {
+    loc {generic/tcl.h 2265 2265}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 4
+    expansion 4
+    redefined 0
+    undefined 0
+}
+macro TCL_LOAD_GLOBAL {
+    loc {generic/tcl.h 2272 2272}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro TCL_LOAD_LAZY {
+    loc {generic/tcl.h 2273 2273}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 2
+    expansion 2
+    redefined 0
+    undefined 0
+}
+macro TCL_TCPSERVER_REUSEADDR {
+    loc {generic/tcl.h 2279 2279}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<0)
+    expansion {(1 << 0)}
+    redefined 0
+    undefined 0
+}
+macro TCL_TCPSERVER_REUSEPORT {
+    loc {generic/tcl.h 2280 2280}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body (1<<1)
+    expansion {(1 << 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_IO_FAILURE {
+    loc {generic/tcl.h 2286 2286}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body ((Tcl_Size)-1)
+    expansion {((Tcl_Size) - 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_AUTO_LENGTH {
+    loc {generic/tcl.h 2287 2287}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body ((Tcl_Size)-1)
+    expansion {((Tcl_Size) - 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_INDEX_NONE {
+    loc {generic/tcl.h 2288 2288}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body ((Tcl_Size)-1)
+    expansion {((Tcl_Size) - 1)}
+    redefined 0
+    undefined 0
+}
+macro TCL_STUB_MAGIC {
+    loc {generic/tcl.h 2305 2305}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {((int) 0xFCA3BACB + (int) sizeof(void *))}
+    expansion {((int) 0xFCA3BACB + (int) sizeof (void *))}
+    redefined 0
+    undefined 0
+}
+macro Tcl_ConsolePanic {
+    loc {generic/tcl.h 2326 2326}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {((Tcl_PanicProc *)NULL)}
+    expansion {((Tcl_PanicProc *) ((void *) 0))}
+    redefined 0
+    undefined 0
+}
+macro Tcl_InitStubs {
+    loc {generic/tcl.h 2359 2359}
+    origin public
+    form function
+    params {interp version exact}
+    variadic 0
+    body {Tcl_PkgInitStubsCheck(interp, version, (exact)|(TCL_MAJOR_VERSION<<8)|(TCL_MINOR_VERSION<<16))}
+    expansion {Tcl_PkgInitStubsCheck(interp, version, (exact) | (9 << 8) | (0 << 16))}
+    arguses {{interp 1 0 0} {version 1 0 0} {exact 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_Main {
+    loc {generic/tcl.h 2374 2374}
+    origin public
+    form function
+    params {argc argv proc}
+    variadic 0
+    body {Tcl_MainEx(argc, argv, proc, ((Tcl_SetPanicProc(Tcl_ConsolePanic), Tcl_CreateInterp())))}
+    expansion {Tcl_MainEx(argc, argv, proc, ((Tcl_SetPanicProc(((Tcl_PanicProc *) ((void *) 0))), Tcl_CreateInterp())))}
+    arguses {{argc 1 0 0} {argv 1 0 0} {proc 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_StaticPackage {
+    loc {generic/tcl.h 2392 2392}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_StaticLibrary
+    expansion Tcl_StaticLibrary
+    redefined 0
+    undefined 0
+}
+macro _TCLDECLS {
+    loc {generic/tclDecls.h 13 13}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro TCL_DEPRECATED {
+    loc {generic/tclDecls.h 29 29}
+    origin public
+    form function
+    params msg
+    variadic 0
+    body {EXTERN TCL_DEPRECATED_API(msg)}
+    expansion {extern __attribute__((__deprecated__(msg)))}
+    arguses {{msg 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_PkgPresent {
+    loc {generic/tclDecls.h 3930 3930}
+    origin public
+    form function
+    params {interp name version exact}
+    variadic 0
+    body {Tcl_PkgPresentEx(interp, name, version, exact, NULL)}
+    expansion {Tcl_PkgPresentEx(interp, name, version, exact, ((void *) 0))}
+    arguses {{interp 1 0 0} {name 1 0 0} {version 1 0 0} {exact 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_PkgProvide {
+    loc {generic/tclDecls.h 3932 3932}
+    origin public
+    form function
+    params {interp name version}
+    variadic 0
+    body {Tcl_PkgProvideEx(interp, name, version, NULL)}
+    expansion {Tcl_PkgProvideEx(interp, name, version, ((void *) 0))}
+    arguses {{interp 1 0 0} {name 1 0 0} {version 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_PkgRequire {
+    loc {generic/tclDecls.h 3934 3934}
+    origin public
+    form function
+    params {interp name version exact}
+    variadic 0
+    body {Tcl_PkgRequireEx(interp, name, version, exact, NULL)}
+    expansion {Tcl_PkgRequireEx(interp, name, version, exact, ((void *) 0))}
+    arguses {{interp 1 0 0} {name 1 0 0} {version 1 0 0} {exact 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetIndexFromObj {
+    loc {generic/tclDecls.h 3936 3936}
+    origin public
+    form function
+    params {interp objPtr tablePtr msg flags indexPtr}
+    variadic 0
+    body {Tcl_GetIndexFromObjStruct(interp, objPtr, tablePtr, sizeof(char *), msg, flags, indexPtr)}
+    expansion {((Tcl_GetIndexFromObjStruct) ((interp), (objPtr), (tablePtr), (sizeof (char *)), (msg), (flags) | (int) (sizeof (* (indexPtr)) << 1), (indexPtr)))}
+    arguses {{interp 1 0 0} {objPtr 1 0 0} {tablePtr 1 0 0} {msg 1 0 0} {flags 1 0 0} {indexPtr 2 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_NewBooleanObj {
+    loc {generic/tclDecls.h 3939 3939}
+    origin public
+    form function
+    params intValue
+    variadic 0
+    body Tcl_NewWideIntObj((intValue)!=0)
+    expansion {Tcl_NewWideIntObj((intValue) != 0)}
+    arguses {{intValue 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_DbNewBooleanObj {
+    loc {generic/tclDecls.h 3941 3941}
+    origin public
+    form function
+    params {intValue file line}
+    variadic 0
+    body {Tcl_DbNewWideIntObj((intValue)!=0, file, line)}
+    expansion {Tcl_DbNewWideIntObj((intValue) != 0, file, line)}
+    arguses {{intValue 1 0 0} {file 1 0 0} {line 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_SetBooleanObj {
+    loc {generic/tclDecls.h 3943 3943}
+    origin public
+    form function
+    params {objPtr intValue}
+    variadic 0
+    body {Tcl_SetWideIntObj(objPtr, (intValue)!=0)}
+    expansion {Tcl_SetWideIntObj(objPtr, (intValue) != 0)}
+    arguses {{objPtr 1 0 0} {intValue 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_SetVar {
+    loc {generic/tclDecls.h 3945 3945}
+    origin public
+    form function
+    params {interp varName newValue flags}
+    variadic 0
+    body {Tcl_SetVar2(interp, varName, NULL, newValue, flags)}
+    expansion {Tcl_SetVar2(interp, varName, ((void *) 0), newValue, flags)}
+    arguses {{interp 1 0 0} {varName 1 0 0} {newValue 1 0 0} {flags 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_UnsetVar {
+    loc {generic/tclDecls.h 3947 3947}
+    origin public
+    form function
+    params {interp varName flags}
+    variadic 0
+    body {Tcl_UnsetVar2(interp, varName, NULL, flags)}
+    expansion {Tcl_UnsetVar2(interp, varName, ((void *) 0), flags)}
+    arguses {{interp 1 0 0} {varName 1 0 0} {flags 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetVar {
+    loc {generic/tclDecls.h 3949 3949}
+    origin public
+    form function
+    params {interp varName flags}
+    variadic 0
+    body {Tcl_GetVar2(interp, varName, NULL, flags)}
+    expansion {Tcl_GetVar2(interp, varName, ((void *) 0), flags)}
+    arguses {{interp 1 0 0} {varName 1 0 0} {flags 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_TraceVar {
+    loc {generic/tclDecls.h 3951 3951}
+    origin public
+    form function
+    params {interp varName flags proc clientData}
+    variadic 0
+    body {Tcl_TraceVar2(interp, varName, NULL, flags, proc, clientData)}
+    expansion {Tcl_TraceVar2(interp, varName, ((void *) 0), flags, proc, clientData)}
+    arguses {{interp 1 0 0} {varName 1 0 0} {flags 1 0 0} {proc 1 0 0} {clientData 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_UntraceVar {
+    loc {generic/tclDecls.h 3953 3953}
+    origin public
+    form function
+    params {interp varName flags proc clientData}
+    variadic 0
+    body {Tcl_UntraceVar2(interp, varName, NULL, flags, proc, clientData)}
+    expansion {Tcl_UntraceVar2(interp, varName, ((void *) 0), flags, proc, clientData)}
+    arguses {{interp 1 0 0} {varName 1 0 0} {flags 1 0 0} {proc 1 0 0} {clientData 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_VarTraceInfo {
+    loc {generic/tclDecls.h 3955 3955}
+    origin public
+    form function
+    params {interp varName flags proc prevClientData}
+    variadic 0
+    body {Tcl_VarTraceInfo2(interp, varName, NULL, flags, proc, prevClientData)}
+    expansion {Tcl_VarTraceInfo2(interp, varName, ((void *) 0), flags, proc, prevClientData)}
+    arguses {{interp 1 0 0} {varName 1 0 0} {flags 1 0 0} {proc 1 0 0} {prevClientData 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_UpVar {
+    loc {generic/tclDecls.h 3957 3957}
+    origin public
+    form function
+    params {interp frameName varName localName flags}
+    variadic 0
+    body {Tcl_UpVar2(interp, frameName, varName, NULL, localName, flags)}
+    expansion {Tcl_UpVar2(interp, frameName, varName, ((void *) 0), localName, flags)}
+    arguses {{interp 1 0 0} {frameName 1 0 0} {varName 1 0 0} {localName 1 0 0} {flags 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_AddErrorInfo {
+    loc {generic/tclDecls.h 3959 3959}
+    origin public
+    form function
+    params {interp message}
+    variadic 0
+    body {Tcl_AppendObjToErrorInfo(interp, Tcl_NewStringObj(message, -1))}
+    expansion {Tcl_AppendObjToErrorInfo(interp, Tcl_NewStringObj(message, - 1))}
+    arguses {{interp 1 0 0} {message 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_AddObjErrorInfo {
+    loc {generic/tclDecls.h 3961 3961}
+    origin public
+    form function
+    params {interp message length}
+    variadic 0
+    body {Tcl_AppendObjToErrorInfo(interp, Tcl_NewStringObj(message, length))}
+    expansion {Tcl_AppendObjToErrorInfo(interp, Tcl_NewStringObj(message, length))}
+    arguses {{interp 1 0 0} {message 1 0 0} {length 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_Eval {
+    loc {generic/tclDecls.h 3963 3963}
+    origin public
+    form function
+    params {interp objPtr}
+    variadic 0
+    body {Tcl_EvalEx(interp, objPtr, TCL_INDEX_NONE, 0)}
+    expansion {Tcl_EvalEx(interp, objPtr, ((Tcl_Size) - 1), 0)}
+    arguses {{interp 1 0 0} {objPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_GlobalEval {
+    loc {generic/tclDecls.h 3965 3965}
+    origin public
+    form function
+    params {interp objPtr}
+    variadic 0
+    body {Tcl_EvalEx(interp, objPtr, TCL_INDEX_NONE, TCL_EVAL_GLOBAL)}
+    expansion {Tcl_EvalEx(interp, objPtr, ((Tcl_Size) - 1), 0x020000)}
+    arguses {{interp 1 0 0} {objPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetStringResult {
+    loc {generic/tclDecls.h 3967 3967}
+    origin public
+    form function
+    params interp
+    variadic 0
+    body Tcl_GetString(Tcl_GetObjResult(interp))
+    expansion {Tcl_GetStringFromObj(Tcl_GetObjResult(interp), (Tcl_Size *) ((void *) 0))}
+    arguses {{interp 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_SetResult {
+    loc {generic/tclDecls.h 3968 3968}
+    origin public
+    form function
+    params {interp result freeProc}
+    variadic 0
+    body {do { const char *__result = result; Tcl_FreeProc *__freeProc = freeProc; Tcl_SetObjResult(interp, Tcl_NewStringObj(__result, -1)); if (__result != NULL && __freeProc != NULL && __freeProc != TCL_VOLATILE) { if (__freeProc == TCL_DYNAMIC) { Tcl_Free((void *)__result); } else { (*__freeProc)((void *)__result); } } } while(0)}
+    expansion {do { const char *__result = result; Tcl_FreeProc *__freeProc = freeProc; Tcl_SetObjResult(interp, Tcl_NewStringObj(__result, - 1)); if(__result != ((void *) 0) && __freeProc != ((void *) 0) && __freeProc != ((Tcl_FreeProc *) 1)) { if(__freeProc == ((Tcl_FreeProc *) 3)) { Tcl_Free((void *) __result); } else { (*__freeProc) ((void *) __result); } } } while(0)}
+    arguses {{interp 1 0 0} {result 1 0 0} {freeProc 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetString {
+    loc {generic/tclDecls.h 4031 4031}
+    origin public
+    form function
+    params objPtr
+    variadic 0
+    body {Tcl_GetStringFromObj(objPtr, (Tcl_Size *)NULL)}
+    expansion {Tcl_GetStringFromObj(objPtr, (Tcl_Size *) ((void *) 0))}
+    arguses {{objPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetUnicode {
+    loc {generic/tclDecls.h 4033 4033}
+    origin public
+    form function
+    params objPtr
+    variadic 0
+    body {Tcl_GetUnicodeFromObj(objPtr, (Tcl_Size *)NULL)}
+    expansion {Tcl_GetUnicodeFromObj(objPtr, (Tcl_Size *) ((void *) 0))}
+    arguses {{objPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TCLBOOLWARNING {
+    loc {generic/tclDecls.h 4040 4040}
+    origin public
+    form function
+    params boolPtr
+    variadic 0
+    body {(void)(sizeof(struct {_Static_assert(sizeof(*(boolPtr)) <= sizeof(int), "sizeof(boolPtr) too large");int dummy;})),}
+    expansion {(void) (sizeof (struct { _Static_assert (sizeof (* (boolPtr)) <= sizeof (int), "sizeof(boolPtr) too large"); int dummy; })),}
+    arguses {{boolPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetIndexFromObjStruct {
+    loc {generic/tclDecls.h 4061 4061}
+    origin public
+    form function
+    params {interp objPtr tablePtr offset msg flags indexPtr}
+    variadic 0
+    body {((Tcl_GetIndexFromObjStruct)((interp), (objPtr), (tablePtr), (offset), (msg), (flags)|(int)(sizeof(*(indexPtr))<<1), (indexPtr)))}
+    expansion {((Tcl_GetIndexFromObjStruct) ((interp), (objPtr), (tablePtr), (offset), (msg), (flags) | (int) (sizeof (* (indexPtr)) << 1), (indexPtr)))}
+    arguses {{interp 1 0 0} {objPtr 1 0 0} {tablePtr 1 0 0} {offset 1 0 0} {msg 1 0 0} {flags 1 0 0} {indexPtr 2 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetBooleanFromObj {
+    loc {generic/tclDecls.h 4064 4064}
+    origin public
+    form function
+    params {interp objPtr boolPtr}
+    variadic 0
+    body {((sizeof(*(boolPtr)) == sizeof(int) && (TCL_MAJOR_VERSION == 8)) ? Tcl_GetBooleanFromObj(interp, objPtr, (int *)(boolPtr)) : ((sizeof(*(boolPtr)) <= sizeof(int)) ? Tcl_GetBoolFromObj(interp, objPtr, (TCL_NULL_OK-2)&(int)sizeof((*(boolPtr))), (char *)(boolPtr)) : (TCLBOOLWARNING(boolPtr)Tcl_Panic("sizeof(%s) must be <= sizeof(int)", & #boolPtr [1]),TCL_ERROR)))}
+    expansion {((sizeof (* (boolPtr)) == sizeof (int) && (9 == 8)) ? Tcl_GetBooleanFromObj(interp, objPtr, (int *) (boolPtr)) : ((sizeof (* (boolPtr)) <= sizeof (int)) ? Tcl_GetBoolFromObj(interp, objPtr, (32 - 2) & (int) sizeof ((* (boolPtr))), (char *) (boolPtr)) : ((void) (sizeof (struct { _Static_assert (sizeof (* (boolPtr)) <= sizeof (int), "sizeof(boolPtr) too large"); int dummy; })), Tcl_Panic("sizeof(%s) must be <= sizeof(int)", & "boolPtr"[1]), 1)))}
+    arguses {{interp 2 0 0} {objPtr 2 0 0} {boolPtr 7 1 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetBoolean {
+    loc {generic/tclDecls.h 4068 4068}
+    origin public
+    form function
+    params {interp src boolPtr}
+    variadic 0
+    body {((sizeof(*(boolPtr)) == sizeof(int) && (TCL_MAJOR_VERSION == 8)) ? Tcl_GetBoolean(interp, src, (int *)(boolPtr)) : ((sizeof(*(boolPtr)) <= sizeof(int)) ? Tcl_GetBool(interp, src, (TCL_NULL_OK-2)&(int)sizeof((*(boolPtr))), (char *)(boolPtr)) : (TCLBOOLWARNING(boolPtr)Tcl_Panic("sizeof(%s) must be <= sizeof(int)", & #boolPtr [1]),TCL_ERROR)))}
+    expansion {((sizeof (* (boolPtr)) == sizeof (int) && (9 == 8)) ? Tcl_GetBoolean(interp, src, (int *) (boolPtr)) : ((sizeof (* (boolPtr)) <= sizeof (int)) ? Tcl_GetBool(interp, src, (32 - 2) & (int) sizeof ((* (boolPtr))), (char *) (boolPtr)) : ((void) (sizeof (struct { _Static_assert (sizeof (* (boolPtr)) <= sizeof (int), "sizeof(boolPtr) too large"); int dummy; })), Tcl_Panic("sizeof(%s) must be <= sizeof(int)", & "boolPtr"[1]), 1)))}
+    arguses {{interp 2 0 0} {src 2 0 0} {boolPtr 7 1 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_NewLongObj {
+    loc {generic/tclDecls.h 4092 4092}
+    origin public
+    form function
+    params value
+    variadic 0
+    body Tcl_NewWideIntObj((long)(value))
+    expansion {Tcl_NewWideIntObj((long) (value))}
+    arguses {{value 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_NewIntObj {
+    loc {generic/tclDecls.h 4093 4093}
+    origin public
+    form function
+    params value
+    variadic 0
+    body Tcl_NewWideIntObj((int)(value))
+    expansion {Tcl_NewWideIntObj((int) (value))}
+    arguses {{value 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_DbNewLongObj {
+    loc {generic/tclDecls.h 4094 4094}
+    origin public
+    form function
+    params {value file line}
+    variadic 0
+    body {Tcl_DbNewWideIntObj((long)(value), file, line)}
+    expansion {Tcl_DbNewWideIntObj((long) (value), file, line)}
+    arguses {{value 1 0 0} {file 1 0 0} {line 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_SetIntObj {
+    loc {generic/tclDecls.h 4095 4095}
+    origin public
+    form function
+    params {objPtr value}
+    variadic 0
+    body {Tcl_SetWideIntObj((objPtr), (int)(value))}
+    expansion {Tcl_SetWideIntObj((objPtr), (int) (value))}
+    arguses {{objPtr 1 0 0} {value 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_SetLongObj {
+    loc {generic/tclDecls.h 4096 4096}
+    origin public
+    form function
+    params {objPtr value}
+    variadic 0
+    body {Tcl_SetWideIntObj((objPtr), (long)(value))}
+    expansion {Tcl_SetWideIntObj((objPtr), (long) (value))}
+    arguses {{objPtr 1 0 0} {value 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_BackgroundError {
+    loc {generic/tclDecls.h 4097 4097}
+    origin public
+    form function
+    params interp
+    variadic 0
+    body {Tcl_BackgroundException((interp), TCL_ERROR)}
+    expansion {Tcl_BackgroundException((interp), 1)}
+    arguses {{interp 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_StringMatch {
+    loc {generic/tclDecls.h 4098 4098}
+    origin public
+    form function
+    params {str pattern}
+    variadic 0
+    body {Tcl_StringCaseMatch((str), (pattern), 0)}
+    expansion {Tcl_StringCaseMatch((str), (pattern), 0)}
+    arguses {{str 1 0 0} {pattern 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_WCharToUtfDString {
+    loc {generic/tclDecls.h 4146 4146}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {(sizeof(wchar_t) != sizeof(short) ? (char *(*)(const wchar_t *, Tcl_Size, Tcl_DString *))Tcl_UniCharToUtfDString : (char *(*)(const wchar_t *, Tcl_Size, Tcl_DString *))Tcl_Char16ToUtfDString)}
+    expansion {(sizeof (wchar_t) != sizeof (short) ? (char * (*) (const wchar_t *, Tcl_Size, Tcl_DString *)) Tcl_UniCharToUtfDString : (char * (*) (const wchar_t *, Tcl_Size, Tcl_DString *)) Tcl_Char16ToUtfDString)}
+    redefined 0
+    undefined 0
+}
+macro Tcl_UtfToWCharDString {
+    loc {generic/tclDecls.h 4149 4149}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {(sizeof(wchar_t) != sizeof(short) ? (wchar_t *(*)(const char *, Tcl_Size, Tcl_DString *))Tcl_UtfToUniCharDString : (wchar_t *(*)(const char *, Tcl_Size, Tcl_DString *))Tcl_UtfToChar16DString)}
+    expansion {(sizeof (wchar_t) != sizeof (short) ? (wchar_t * (*) (const char *, Tcl_Size, Tcl_DString *)) Tcl_UtfToUniCharDString : (wchar_t * (*) (const char *, Tcl_Size, Tcl_DString *)) Tcl_UtfToChar16DString)}
+    redefined 0
+    undefined 0
+}
+macro Tcl_UtfToWChar {
+    loc {generic/tclDecls.h 4152 4152}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {(sizeof(wchar_t) != sizeof(short) ? (Tcl_Size (*)(const char *, wchar_t *))Tcl_UtfToUniChar : (Tcl_Size (*)(const char *, wchar_t *))Tcl_UtfToChar16)}
+    expansion {(sizeof (wchar_t) != sizeof (short) ? (Tcl_Size(*) (const char *, wchar_t *)) Tcl_UtfToUniChar : (Tcl_Size(*) (const char *, wchar_t *)) Tcl_UtfToChar16)}
+    redefined 0
+    undefined 0
+}
+macro Tcl_WCharLen {
+    loc {generic/tclDecls.h 4155 4155}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {(sizeof(wchar_t) != sizeof(short) ? (Tcl_Size (*)(wchar_t *))Tcl_UniCharLen : (Tcl_Size (*)(wchar_t *))Tcl_Char16Len)}
+    expansion {(sizeof (wchar_t) != sizeof (short) ? (Tcl_Size(*) (wchar_t *)) Tcl_UniCharLen : (Tcl_Size(*) (wchar_t *)) Tcl_Char16Len)}
+    redefined 0
+    undefined 0
+}
+macro Tcl_EvalObj {
+    loc {generic/tclDecls.h 4164 4164}
+    origin public
+    form function
+    params {interp objPtr}
+    variadic 0
+    body {Tcl_EvalObjEx(interp, objPtr, 0)}
+    expansion {Tcl_EvalObjEx(interp, objPtr, 0)}
+    arguses {{interp 1 0 0} {objPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_GlobalEvalObj {
+    loc {generic/tclDecls.h 4166 4166}
+    origin public
+    form function
+    params {interp objPtr}
+    variadic 0
+    body {Tcl_EvalObjEx(interp, objPtr, TCL_EVAL_GLOBAL)}
+    expansion {Tcl_EvalObjEx(interp, objPtr, 0x020000)}
+    arguses {{interp 1 0 0} {objPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_Close {
+    loc {generic/tclDecls.h 4171 4171}
+    origin public
+    form function
+    params {interp chan}
+    variadic 0
+    body {Tcl_CloseEx(interp, chan, 0)}
+    expansion {Tcl_CloseEx(interp, chan, 0)}
+    arguses {{interp 1 0 0} {chan 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_CreateSlave {
+    loc {generic/tclDecls.h 4178 4178}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_CreateChild
+    expansion Tcl_CreateChild
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetSlave {
+    loc {generic/tclDecls.h 4179 4179}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_GetChild
+    expansion Tcl_GetChild
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetMaster {
+    loc {generic/tclDecls.h 4180 4180}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_GetParent
+    expansion Tcl_GetParent
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetByteArrayFromObj {
+    loc {generic/tclDecls.h 4333 4333}
+    origin public
+    form function
+    params {objPtr sizePtr}
+    variadic 0
+    body {Tcl_GetBytesFromObj(NULL, (objPtr), (sizePtr))}
+    expansion {Tcl_GetBytesFromObj(((void *) 0), (objPtr), (sizePtr))}
+    arguses {{objPtr 1 0 0} {sizePtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro _TCLPLATDECLS {
+    loc {generic/tclPlatDecls.h 11 11}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro MODULE_SCOPE {
+    loc {generic/tclPlatDecls.h 47 47}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body extern
+    expansion extern
+    redefined 0
+    undefined 0
+}
+macro ckalloc {
+    loc {generic/tcl.h 2464 2464}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_Alloc
+    expansion Tcl_Alloc
+    redefined 0
+    undefined 0
+}
+macro attemptckalloc {
+    loc {generic/tcl.h 2465 2465}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_AttemptAlloc
+    expansion Tcl_AttemptAlloc
+    redefined 0
+    undefined 0
+}
+macro ckfree {
+    loc {generic/tcl.h 2472 2472}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_Free
+    expansion Tcl_Free
+    redefined 0
+    undefined 0
+}
+macro ckrealloc {
+    loc {generic/tcl.h 2473 2473}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_Realloc
+    expansion Tcl_Realloc
+    redefined 0
+    undefined 0
+}
+macro attemptckrealloc {
+    loc {generic/tcl.h 2474 2474}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body Tcl_AttemptRealloc
+    expansion Tcl_AttemptRealloc
+    redefined 0
+    undefined 0
+}
+macro Tcl_InitMemory {
+    loc {generic/tcl.h 2487 2487}
+    origin public
+    form function
+    params x
+    variadic 0
+    body {}
+    expansion {}
+    arguses {{x 0 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_DumpActiveMemory {
+    loc {generic/tcl.h 2489 2489}
+    origin public
+    form function
+    params x
+    variadic 0
+    body {}
+    expansion {}
+    arguses {{x 0 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_ValidateAllMemory {
+    loc {generic/tcl.h 2491 2491}
+    origin public
+    form function
+    params {x y}
+    variadic 0
+    body {}
+    expansion {}
+    arguses {{x 0 0 0} {y 0 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_IncrRefCount {
+    loc {generic/tcl.h 2530 2530}
+    origin public
+    form function
+    params objPtr
+    variadic 0
+    body ((void)++(objPtr)->refCount)
+    expansion {((void) ++ (objPtr) -> refCount)}
+    arguses {{objPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_DecrRefCount {
+    loc {generic/tcl.h 2537 2537}
+    origin public
+    form function
+    params objPtr
+    variadic 0
+    body {do { Tcl_Obj *_objPtr = (objPtr); if (_objPtr->refCount-- <= 1) { TclFreeObj(_objPtr); } } while(0)}
+    expansion {do { Tcl_Obj *_objPtr = (objPtr); if(_objPtr -> refCount -- <= 1) { TclFreeObj(_objPtr); } } while(0)}
+    arguses {{objPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_IsShared {
+    loc {generic/tcl.h 2545 2545}
+    origin public
+    form function
+    params objPtr
+    variadic 0
+    body {((objPtr)->refCount > 1)}
+    expansion {((objPtr) -> refCount > 1)}
+    arguses {{objPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_BounceRefCount {
+    loc {generic/tcl.h 2552 2552}
+    origin public
+    form function
+    params objPtr
+    variadic 0
+    body {TclBounceRefCount(objPtr);}
+    expansion {TclBounceRefCount(objPtr);}
+    arguses {{objPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetHashValue {
+    loc {generic/tcl.h 2606 2606}
+    origin public
+    form function
+    params h
+    variadic 0
+    body ((h)->clientData)
+    expansion {((h) -> clientData)}
+    arguses {{h 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_SetHashValue {
+    loc {generic/tcl.h 2607 2607}
+    origin public
+    form function
+    params {h value}
+    variadic 0
+    body {((h)->clientData = (void *)(value))}
+    expansion {((h) -> clientData = (void *) (value))}
+    arguses {{h 1 0 0} {value 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_GetHashKey {
+    loc {generic/tcl.h 2608 2608}
+    origin public
+    form function
+    params {tablePtr h}
+    variadic 0
+    body {((void *) (((tablePtr)->keyType == TCL_ONE_WORD_KEYS || (tablePtr)->keyType == TCL_CUSTOM_PTR_KEYS) ? (h)->key.oneWordValue : (h)->key.string))}
+    expansion {((void *) (((tablePtr) -> keyType == (1) || (tablePtr) -> keyType == (- 1)) ? (h) -> key . oneWordValue : (h) -> key . string))}
+    arguses {{tablePtr 2 0 0} {h 2 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_FindHashEntry {
+    loc {generic/tcl.h 2620 2620}
+    origin public
+    form function
+    params {tablePtr key}
+    variadic 0
+    body {(*((tablePtr)->findProc))(tablePtr, (const char *)(key))}
+    expansion {(* ((tablePtr) -> findProc)) (tablePtr, (const char *) (key))}
+    arguses {{tablePtr 2 0 0} {key 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro Tcl_CreateHashEntry {
+    loc {generic/tcl.h 2623 2623}
+    origin public
+    form function
+    params {tablePtr key newPtr}
+    variadic 0
+    body {(*((tablePtr)->createProc))(tablePtr, (const char *)(key), newPtr)}
+    expansion {(* ((tablePtr) -> createProc)) (tablePtr, (const char *) (key), newPtr)}
+    arguses {{tablePtr 2 0 0} {key 1 0 0} {newPtr 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TCLOO_H_INCLUDED {
+    loc {generic/tclOO.h 14 14}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro TCLOO_VERSION {
+    loc {generic/tclOO.h 27 27}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {"1.3"}
+    expansion {"1.3"}
+    redefined 0
+    undefined 0
+}
+macro TCLOO_PATCHLEVEL {
+    loc {generic/tclOO.h 28 28}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {TCLOO_VERSION ".0"}
+    expansion {"1.3" ".0"}
+    redefined 0
+    undefined 0
+}
+macro Tcl_OOInitStubs {
+    loc {generic/tclOO.h 42 42}
+    origin public
+    form function
+    params interp
+    variadic 0
+    body {TclOOInitializeStubs((interp), TCLOO_PATCHLEVEL)}
+    expansion {("1.3" ".0")}
+    arguses {{interp 0 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TclOOInitializeStubs {
+    loc {generic/tclOO.h 45 45}
+    origin public
+    form function
+    params {interp version}
+    variadic 0
+    body (TCLOO_PATCHLEVEL)
+    expansion {("1.3" ".0")}
+    arguses {{interp 0 0 0} {version 0 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TCL_OO_METHOD_VERSION_CURRENT {
+    loc {generic/tclOO.h 131 131}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TCL_OO_METHOD_VERSION_1
+    expansion TCL_OO_METHOD_VERSION_1
+    redefined 0
+    undefined 0
+}
+macro TCL_OO_METADATA_VERSION_CURRENT {
+    loc {generic/tclOO.h 171 171}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TCL_OO_METADATA_VERSION_1
+    expansion TCL_OO_METADATA_VERSION_1
+    redefined 0
+    undefined 0
+}
+macro _TCLOODECLS {
+    loc {generic/tclOODecls.h 6 6}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro TCLAPI {
+    loc {generic/tclOODecls.h 12 12}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {extern DLLIMPORT}
+    expansion extern
+    redefined 0
+    undefined 0
+}
+macro BN_TCL_H_ {
+    loc {generic/tclTomMath.h 2 2}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro BN_H_ {
+    loc {libtommath/tommath.h 5 5}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro MP_64BIT {
+    loc {libtommath/tommath.h 47 47}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro MP_DIGIT_BIT {
+    loc {libtommath/tommath.h 82 82}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 60
+    expansion 60
+    redefined 0
+    undefined 0
+}
+macro mp_word {
+    loc {libtommath/tommath.h 102 102}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {MP_DEPRECATED_PRAGMA("mp_word has been made private") private_mp_word}
+    expansion private_mp_word
+    redefined 0
+    undefined 0
+}
+macro MP_SIZEOF_MP_DIGIT {
+    loc {libtommath/tommath.h 104 104}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("MP_SIZEOF_MP_DIGIT has been deprecated, use sizeof (mp_digit)") sizeof (mp_digit))}
+    expansion {(sizeof (mp_digit))}
+    redefined 0
+    undefined 0
+}
+macro MP_MASK {
+    loc {libtommath/tommath.h 106 106}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body ((((mp_digit)1)<<((mp_digit)MP_DIGIT_BIT))-((mp_digit)1))
+    expansion {((((mp_digit) 1) << ((mp_digit) 60)) - ((mp_digit) 1))}
+    redefined 0
+    undefined 0
+}
+macro MP_DIGIT_MAX {
+    loc {libtommath/tommath.h 107 107}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body MP_MASK
+    expansion {((((mp_digit) 1) << ((mp_digit) 60)) - ((mp_digit) 1))}
+    redefined 0
+    undefined 0
+}
+macro MP_PRIME_BBS {
+    loc {libtommath/tommath.h 110 110}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 0x0001
+    expansion 0x0001
+    redefined 0
+    undefined 0
+}
+macro MP_PRIME_SAFE {
+    loc {libtommath/tommath.h 111 111}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 0x0002
+    expansion 0x0002
+    redefined 0
+    undefined 0
+}
+macro MP_PRIME_2MSB_ON {
+    loc {libtommath/tommath.h 112 112}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 0x0008
+    expansion 0x0008
+    redefined 0
+    undefined 0
+}
+macro LTM_PRIME_BBS {
+    loc {libtommath/tommath.h 114 114}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("LTM_PRIME_BBS has been deprecated, use MP_PRIME_BBS") MP_PRIME_BBS)}
+    expansion (0x0001)
+    redefined 0
+    undefined 0
+}
+macro LTM_PRIME_SAFE {
+    loc {libtommath/tommath.h 115 115}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("LTM_PRIME_SAFE has been deprecated, use MP_PRIME_SAFE") MP_PRIME_SAFE)}
+    expansion (0x0002)
+    redefined 0
+    undefined 0
+}
+macro LTM_PRIME_2MSB_ON {
+    loc {libtommath/tommath.h 116 116}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("LTM_PRIME_2MSB_ON has been deprecated, use MP_PRIME_2MSB_ON") MP_PRIME_2MSB_ON)}
+    expansion (0x0008)
+    redefined 0
+    undefined 0
+}
+macro MP_ZPOS {
+    loc {libtommath/tommath.h 151 151}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro MP_NEG {
+    loc {libtommath/tommath.h 152 152}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro MP_LT {
+    loc {libtommath/tommath.h 154 154}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body -1
+    expansion {- 1}
+    redefined 0
+    undefined 0
+}
+macro MP_EQ {
+    loc {libtommath/tommath.h 155 155}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro MP_GT {
+    loc {libtommath/tommath.h 156 156}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro MP_YES {
+    loc {libtommath/tommath.h 158 158}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro MP_NO {
+    loc {libtommath/tommath.h 159 159}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro MP_OKAY {
+    loc {libtommath/tommath.h 161 161}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro MP_ERR {
+    loc {libtommath/tommath.h 162 162}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body -1
+    expansion {- 1}
+    redefined 0
+    undefined 0
+}
+macro MP_MEM {
+    loc {libtommath/tommath.h 163 163}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body -2
+    expansion {- 2}
+    redefined 0
+    undefined 0
+}
+macro MP_VAL {
+    loc {libtommath/tommath.h 164 164}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body -3
+    expansion {- 3}
+    redefined 0
+    undefined 0
+}
+macro MP_RANGE {
+    loc {libtommath/tommath.h 165 165}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("MP_RANGE has been deprecated in favor of MP_VAL") MP_VAL)}
+    expansion {(- 3)}
+    redefined 0
+    undefined 0
+}
+macro MP_ITER {
+    loc {libtommath/tommath.h 166 166}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body -4
+    expansion {- 4}
+    redefined 0
+    undefined 0
+}
+macro MP_BUF {
+    loc {libtommath/tommath.h 167 167}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body -5
+    expansion {- 5}
+    redefined 0
+    undefined 0
+}
+macro MP_LSB_FIRST {
+    loc {libtommath/tommath.h 169 169}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body -1
+    expansion {- 1}
+    redefined 0
+    undefined 0
+}
+macro MP_MSB_FIRST {
+    loc {libtommath/tommath.h 170 170}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro MP_LITTLE_ENDIAN {
+    loc {libtommath/tommath.h 172 172}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body -1
+    expansion {- 1}
+    redefined 0
+    undefined 0
+}
+macro MP_NATIVE_ENDIAN {
+    loc {libtommath/tommath.h 173 173}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro MP_BIG_ENDIAN {
+    loc {libtommath/tommath.h 174 174}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 1
+    expansion 1
+    redefined 0
+    undefined 0
+}
+macro PRIVATE_MP_PREC {
+    loc {libtommath/tommath.h 193 193}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 32
+    expansion 32
+    redefined 0
+    undefined 0
+}
+macro MP_PREC {
+    loc {libtommath/tommath.h 199 199}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("MP_PREC is an internal macro") PRIVATE_MP_PREC)}
+    expansion (32)
+    redefined 0
+    undefined 0
+}
+macro PRIVATE_MP_WARRAY {
+    loc {libtommath/tommath.h 203 203}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {(int)(1 << (((CHAR_BIT * (int)sizeof(private_mp_word)) - (2 * MP_DIGIT_BIT)) + 1))}
+    expansion {(int) (1 << (((8 * (int) sizeof (private_mp_word)) - (2 *60)) + 1))}
+    redefined 0
+    undefined 0
+}
+macro MP_WARRAY {
+    loc {libtommath/tommath.h 204 204}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("MP_WARRAY is an internal macro") PRIVATE_MP_WARRAY)}
+    expansion {((int) (1 << (((8 * (int) sizeof (private_mp_word)) - (2 *60)) + 1)))}
+    redefined 0
+    undefined 0
+}
+macro MP_NULL_TERMINATED {
+    loc {libtommath/tommath.h 207 207}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body __attribute__((sentinel))
+    expansion __attribute__((sentinel))
+    redefined 0
+    undefined 0
+}
+macro MP_WUR {
+    loc {libtommath/tommath.h 229 229}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body __attribute__((warn_unused_result))
+    expansion __attribute__((warn_unused_result))
+    redefined 0
+    undefined 0
+}
+macro MP_DEPRECATED {
+    loc {libtommath/tommath.h 236 236}
+    origin bundled
+    form function
+    params x
+    variadic 0
+    body {__attribute__((deprecated("replaced by " #x)))}
+    expansion {__attribute__((deprecated("replaced by " "x")))}
+    arguses {{x 1 1 0}}
+    redefined 0
+    undefined 0
+}
+macro PRIVATE_MP_DEPRECATED_PRAGMA {
+    loc {libtommath/tommath.h 237 237}
+    origin bundled
+    form function
+    params s
+    variadic 0
+    body _Pragma(#s)
+    expansion {}
+    arguses {{s 0 0 0}}
+    redefined 0
+    undefined 0
+}
+macro MP_DEPRECATED_PRAGMA {
+    loc {libtommath/tommath.h 238 238}
+    origin bundled
+    form function
+    params s
+    variadic 0
+    body {PRIVATE_MP_DEPRECATED_PRAGMA(GCC warning s)}
+    probe {rejected {invalid "#pragma GCC warning" directive}}
+    redefined 0
+    undefined 0
+}
+macro DIGIT_BIT {
+    loc {libtommath/tommath.h 247 247}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("DIGIT_BIT macro is deprecated, MP_DIGIT_BIT instead") MP_DIGIT_BIT)}
+    expansion (60)
+    redefined 0
+    undefined 0
+}
+macro USED {
+    loc {libtommath/tommath.h 248 248}
+    origin bundled
+    form function
+    params m
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("USED macro is deprecated, use z->used instead") (m)->used)}
+    expansion {((m) -> used)}
+    arguses {{m 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro DIGIT {
+    loc {libtommath/tommath.h 249 249}
+    origin bundled
+    form function
+    params {m k}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("DIGIT macro is deprecated, use z->dp instead") (m)->dp[(k)])}
+    expansion {((m) -> dp[(k)])}
+    arguses {{m 1 0 0} {k 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro SIGN {
+    loc {libtommath/tommath.h 250 250}
+    origin bundled
+    form function
+    params m
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("SIGN macro is deprecated, use z->sign instead") (m)->sign)}
+    expansion {((m) -> sign)}
+    arguses {{m 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro MP_INT_DECLARED {
+    loc {libtommath/tommath.h 254 254}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro mp_iszero {
+    loc {libtommath/tommath.h 296 296}
+    origin bundled
+    form function
+    params a
+    variadic 0
+    body {(((a)->used == 0) ? MP_YES : MP_NO)}
+    expansion {(((a) -> used == 0) ? 1 : 0)}
+    arguses {{a 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_isneg {
+    loc {libtommath/tommath.h 299 299}
+    origin bundled
+    form function
+    params a
+    variadic 0
+    body {(((a)->sign != MP_ZPOS) ? MP_YES : MP_NO)}
+    expansion {(((a) -> sign != 0) ? 1 : 0)}
+    arguses {{a 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_get_u32 {
+    loc {libtommath/tommath.h 314 314}
+    origin bundled
+    form function
+    params a
+    variadic 0
+    body ((uint32_t)mp_get_i32(a))
+    expansion {((uint32_t) mp_get_i32(a))}
+    arguses {{a 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_get_u64 {
+    loc {libtommath/tommath.h 324 324}
+    origin bundled
+    form function
+    params a
+    variadic 0
+    body ((uint64_t)mp_get_i64(a))
+    expansion {((uint64_t) mp_get_i64(a))}
+    arguses {{a 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_get_ul {
+    loc {libtommath/tommath.h 340 340}
+    origin bundled
+    form function
+    params a
+    variadic 0
+    body {((unsigned long)mp_get_l(a))}
+    expansion {((unsigned long) mp_get_l(a))}
+    arguses {{a 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_get_ull {
+    loc {generic/tclTomMathDecls.h 612 612}
+    origin public
+    form function
+    params a
+    variadic 0
+    body {((unsigned long long)mp_get_i64(a))}
+    expansion {((unsigned long long) mp_get_i64(a))}
+    arguses {{a 1 0 0}}
+    redefined 1
+    undefined 0
+}
+macro PRIVATE_MP_PRIME_TAB_SIZE {
+    loc {libtommath/tommath.h 648 648}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body 256
+    expansion 256
+    redefined 0
+    undefined 0
+}
+macro PRIME_SIZE {
+    loc {libtommath/tommath.h 650 650}
+    origin bundled
+    form object
+    params {}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("PRIME_SIZE has been made internal") PRIVATE_MP_PRIME_TAB_SIZE)}
+    expansion (256)
+    redefined 0
+    undefined 0
+}
+macro mp_prime_random {
+    loc {libtommath/tommath.h 715 715}
+    origin bundled
+    form function
+    params {a t size bbs cb dat}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("mp_prime_random has been deprecated, use mp_prime_rand instead") mp_prime_random_ex(a, t, ((size) * 8) + 1, (bbs==1)?MP_PRIME_BBS:0, cb, dat))}
+    expansion {(mp_prime_random_ex(a, t, ((size) *8) + 1, (bbs == 1) ? 0x0001 : 0, cb, dat))}
+    arguses {{a 1 0 0} {t 1 0 0} {size 1 0 0} {bbs 1 0 0} {cb 1 0 0} {dat 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_read_raw {
+    loc {libtommath/tommath.h 767 767}
+    origin bundled
+    form function
+    params {mp str len}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("replaced by mp_read_signed_bin") mp_read_signed_bin((mp), (str), (len)))}
+    expansion {(mp_read_signed_bin((mp), (str), (len)))}
+    arguses {{mp 1 0 0} {str 1 0 0} {len 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_raw_size {
+    loc {libtommath/tommath.h 768 768}
+    origin bundled
+    form function
+    params mp
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("replaced by mp_signed_bin_size") mp_signed_bin_size(mp))}
+    expansion (mp_signed_bin_size(mp))
+    arguses {{mp 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_toraw {
+    loc {libtommath/tommath.h 769 769}
+    origin bundled
+    form function
+    params {mp str}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("replaced by mp_to_signed_bin") mp_to_signed_bin((mp), (str)))}
+    expansion {(mp_to_signed_bin((mp), (str)))}
+    arguses {{mp 1 0 0} {str 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_read_mag {
+    loc {libtommath/tommath.h 770 770}
+    origin bundled
+    form function
+    params {mp str len}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("replaced by mp_read_unsigned_bin") mp_read_unsigned_bin((mp), (str), (len))}
+    expansion {(mp_read_unsigned_bin((mp), (str), (len))}
+    arguses {{mp 1 0 0} {str 1 0 0} {len 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_mag_size {
+    loc {libtommath/tommath.h 771 771}
+    origin bundled
+    form function
+    params mp
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("replaced by mp_unsigned_bin_size") mp_unsigned_bin_size(mp))}
+    expansion (mp_unsigned_bin_size(mp))
+    arguses {{mp 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_tomag {
+    loc {libtommath/tommath.h 772 772}
+    origin bundled
+    form function
+    params {mp str}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("replaced by mp_to_unsigned_bin") mp_to_unsigned_bin((mp), (str)))}
+    expansion {(TclBN_mp_to_unsigned_bin((mp), (str)))}
+    arguses {{mp 1 0 0} {str 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_tobinary {
+    loc {libtommath/tommath.h 774 774}
+    origin bundled
+    form function
+    params {M S}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("replaced by mp_to_binary") mp_toradix((M), (S), 2))}
+    expansion {(mp_toradix((M), (S), 2))}
+    arguses {{M 1 0 0} {S 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_tooctal {
+    loc {libtommath/tommath.h 775 775}
+    origin bundled
+    form function
+    params {M S}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("replaced by mp_to_octal") mp_toradix((M), (S), 8))}
+    expansion {(mp_toradix((M), (S), 8))}
+    arguses {{M 1 0 0} {S 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_todecimal {
+    loc {libtommath/tommath.h 776 776}
+    origin bundled
+    form function
+    params {M S}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("replaced by mp_to_decimal") mp_toradix((M), (S), 10))}
+    expansion {(mp_toradix((M), (S), 10))}
+    arguses {{M 1 0 0} {S 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_tohex {
+    loc {libtommath/tommath.h 777 777}
+    origin bundled
+    form function
+    params {M S}
+    variadic 0
+    body {(MP_DEPRECATED_PRAGMA("replaced by mp_to_hex") mp_toradix((M), (S), 16))}
+    expansion {(mp_toradix((M), (S), 16))}
+    arguses {{M 1 0 0} {S 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_to_binary {
+    loc {libtommath/tommath.h 779 779}
+    origin bundled
+    form function
+    params {M S N}
+    variadic 0
+    body {mp_to_radix((M), (S), (N), NULL, 2)}
+    expansion {TclBN_mp_to_radix((M), (S), (N), ((void *) 0), 2)}
+    arguses {{M 1 0 0} {S 1 0 0} {N 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_to_octal {
+    loc {libtommath/tommath.h 780 780}
+    origin bundled
+    form function
+    params {M S N}
+    variadic 0
+    body {mp_to_radix((M), (S), (N), NULL, 8)}
+    expansion {TclBN_mp_to_radix((M), (S), (N), ((void *) 0), 8)}
+    arguses {{M 1 0 0} {S 1 0 0} {N 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_to_decimal {
+    loc {libtommath/tommath.h 781 781}
+    origin bundled
+    form function
+    params {M S N}
+    variadic 0
+    body {mp_to_radix((M), (S), (N), NULL, 10)}
+    expansion {TclBN_mp_to_radix((M), (S), (N), ((void *) 0), 10)}
+    arguses {{M 1 0 0} {S 1 0 0} {N 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_to_hex {
+    loc {libtommath/tommath.h 782 782}
+    origin bundled
+    form function
+    params {M S N}
+    variadic 0
+    body {mp_to_radix((M), (S), (N), NULL, 16)}
+    expansion {TclBN_mp_to_radix((M), (S), (N), ((void *) 0), 16)}
+    arguses {{M 1 0 0} {S 1 0 0} {N 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro _TCLTOMMATHDECLS {
+    loc {generic/tclTomMathDecls.h 16 16}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body {}
+    expansion {}
+    redefined 0
+    undefined 0
+}
+macro TCLTOMMATH_EPOCH {
+    loc {generic/tclTomMathDecls.h 28 28}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro TCLTOMMATH_REVISION {
+    loc {generic/tclTomMathDecls.h 29 29}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body 0
+    expansion 0
+    redefined 0
+    undefined 0
+}
+macro Tcl_TomMath_InitStubs {
+    loc {generic/tclTomMathDecls.h 31 31}
+    origin public
+    form function
+    params {interp version}
+    variadic 0
+    body {(TclTomMathInitializeStubs((interp),(version), TCLTOMMATH_EPOCH,TCLTOMMATH_REVISION))}
+    expansion {(TclTomMathInitializeStubs((interp), (version), 0, 0))}
+    arguses {{interp 1 0 0} {version 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TclBNAlloc {
+    loc {generic/tclTomMathDecls.h 38 38}
+    origin public
+    form function
+    params s
+    variadic 0
+    body Tcl_AttemptAlloc((size_t)(s))
+    expansion {Tcl_AttemptAlloc((size_t) (s))}
+    arguses {{s 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TclBNCalloc {
+    loc {generic/tclTomMathDecls.h 40 40}
+    origin public
+    form function
+    params {m s}
+    variadic 0
+    body memset(Tcl_AttemptAlloc((size_t)(m)*(size_t)(s)),0,(size_t)(m)*(size_t)(s))
+    expansion {memset(Tcl_AttemptAlloc((size_t) (m) * (size_t) (s)), 0, (size_t) (m) * (size_t) (s))}
+    arguses {{m 2 0 0} {s 2 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TclBNRealloc {
+    loc {generic/tclTomMathDecls.h 42 42}
+    origin public
+    form function
+    params {x s}
+    variadic 0
+    body Tcl_AttemptRealloc((x),(size_t)(s))
+    expansion {Tcl_AttemptRealloc((x), (size_t) (s))}
+    arguses {{x 1 0 0} {s 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro TclBNFree {
+    loc {generic/tclTomMathDecls.h 44 44}
+    origin public
+    form function
+    params x
+    variadic 0
+    body Tcl_Free(x)
+    expansion Tcl_Free(x)
+    arguses {{x 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro MP_MALLOC {
+    loc {generic/tclTomMathDecls.h 50 50}
+    origin public
+    form function
+    params size
+    variadic 0
+    body TclBNAlloc(size)
+    expansion {Tcl_AttemptAlloc((size_t) (size))}
+    arguses {{size 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro MP_CALLOC {
+    loc {generic/tclTomMathDecls.h 51 51}
+    origin public
+    form function
+    params {nmemb size}
+    variadic 0
+    body {TclBNCalloc((nmemb), (size))}
+    expansion {memset(Tcl_AttemptAlloc((size_t) ((nmemb)) * (size_t) ((size))), 0, (size_t) ((nmemb)) * (size_t) ((size)))}
+    arguses {{nmemb 2 0 0} {size 2 0 0}}
+    redefined 0
+    undefined 0
+}
+macro MP_REALLOC {
+    loc {generic/tclTomMathDecls.h 52 52}
+    origin public
+    form function
+    params {mem oldsize newsize}
+    variadic 0
+    body {TclBNRealloc((mem), ((void)(oldsize), (newsize)))}
+    expansion {Tcl_AttemptRealloc(((mem)), (size_t) (((void) (oldsize), (newsize))))}
+    arguses {{mem 1 0 0} {oldsize 1 0 0} {newsize 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro MP_FREE {
+    loc {generic/tclTomMathDecls.h 53 53}
+    origin public
+    form function
+    params {mem size}
+    variadic 0
+    body {TclBNFree(((void)(size), (mem)))}
+    expansion {Tcl_Free(((void) (size), (mem)))}
+    arguses {{mem 1 0 0} {size 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro bn_reverse {
+    loc {generic/tclTomMathDecls.h 91 91}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_reverse
+    expansion TclBN_reverse
+    redefined 0
+    undefined 0
+}
+macro mp_add {
+    loc {generic/tclTomMathDecls.h 92 92}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_add
+    expansion TclBN_mp_add
+    redefined 0
+    undefined 0
+}
+macro mp_add_d {
+    loc {generic/tclTomMathDecls.h 93 93}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_add_d
+    expansion TclBN_mp_add_d
+    redefined 0
+    undefined 0
+}
+macro mp_and {
+    loc {generic/tclTomMathDecls.h 94 94}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_and
+    expansion TclBN_mp_and
+    redefined 0
+    undefined 0
+}
+macro mp_clamp {
+    loc {generic/tclTomMathDecls.h 95 95}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_clamp
+    expansion TclBN_mp_clamp
+    redefined 0
+    undefined 0
+}
+macro mp_clear {
+    loc {generic/tclTomMathDecls.h 96 96}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_clear
+    expansion TclBN_mp_clear
+    redefined 0
+    undefined 0
+}
+macro mp_clear_multi {
+    loc {generic/tclTomMathDecls.h 97 97}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_clear_multi
+    expansion TclBN_mp_clear_multi
+    redefined 0
+    undefined 0
+}
+macro mp_cmp {
+    loc {generic/tclTomMathDecls.h 98 98}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_cmp
+    expansion TclBN_mp_cmp
+    redefined 0
+    undefined 0
+}
+macro mp_cmp_d {
+    loc {generic/tclTomMathDecls.h 99 99}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_cmp_d
+    expansion TclBN_mp_cmp_d
+    redefined 0
+    undefined 0
+}
+macro mp_cmp_mag {
+    loc {generic/tclTomMathDecls.h 100 100}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_cmp_mag
+    expansion TclBN_mp_cmp_mag
+    redefined 0
+    undefined 0
+}
+macro mp_cnt_lsb {
+    loc {generic/tclTomMathDecls.h 101 101}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_cnt_lsb
+    expansion TclBN_mp_cnt_lsb
+    redefined 0
+    undefined 0
+}
+macro mp_copy {
+    loc {generic/tclTomMathDecls.h 102 102}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_copy
+    expansion TclBN_mp_copy
+    redefined 0
+    undefined 0
+}
+macro mp_count_bits {
+    loc {generic/tclTomMathDecls.h 103 103}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_count_bits
+    expansion TclBN_mp_count_bits
+    redefined 0
+    undefined 0
+}
+macro mp_div {
+    loc {generic/tclTomMathDecls.h 104 104}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_div
+    expansion TclBN_mp_div
+    redefined 0
+    undefined 0
+}
+macro mp_div_d {
+    loc {generic/tclTomMathDecls.h 105 105}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_div_d
+    expansion TclBN_mp_div_d
+    redefined 0
+    undefined 0
+}
+macro mp_div_2 {
+    loc {generic/tclTomMathDecls.h 106 106}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_div_2
+    expansion TclBN_mp_div_2
+    redefined 0
+    undefined 0
+}
+macro mp_div_2d {
+    loc {generic/tclTomMathDecls.h 107 107}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_div_2d
+    expansion TclBN_mp_div_2d
+    redefined 0
+    undefined 0
+}
+macro mp_exch {
+    loc {generic/tclTomMathDecls.h 108 108}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_exch
+    expansion TclBN_mp_exch
+    redefined 0
+    undefined 0
+}
+macro mp_expt_d {
+    loc {generic/tclTomMathDecls.h 109 109}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_expt_n
+    expansion TclBN_mp_expt_n
+    redefined 0
+    undefined 0
+}
+macro mp_expt_n {
+    loc {generic/tclTomMathDecls.h 110 110}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_expt_n
+    expansion TclBN_mp_expt_n
+    redefined 0
+    undefined 0
+}
+macro mp_get_mag_u64 {
+    loc {generic/tclTomMathDecls.h 111 111}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_get_mag_u64
+    expansion TclBN_mp_get_mag_u64
+    redefined 0
+    undefined 0
+}
+macro mp_grow {
+    loc {generic/tclTomMathDecls.h 112 112}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_grow
+    expansion TclBN_mp_grow
+    redefined 0
+    undefined 0
+}
+macro mp_init {
+    loc {generic/tclTomMathDecls.h 113 113}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_init
+    expansion TclBN_mp_init
+    redefined 0
+    undefined 0
+}
+macro mp_init_copy {
+    loc {generic/tclTomMathDecls.h 114 114}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_init_copy
+    expansion TclBN_mp_init_copy
+    redefined 0
+    undefined 0
+}
+macro mp_init_i64 {
+    loc {generic/tclTomMathDecls.h 115 115}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_init_i64
+    expansion TclBN_mp_init_i64
+    redefined 0
+    undefined 0
+}
+macro mp_init_multi {
+    loc {generic/tclTomMathDecls.h 116 116}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_init_multi
+    expansion TclBN_mp_init_multi
+    redefined 0
+    undefined 0
+}
+macro mp_init_set {
+    loc {generic/tclTomMathDecls.h 117 117}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_init_set
+    expansion TclBN_mp_init_set
+    redefined 0
+    undefined 0
+}
+macro mp_init_size {
+    loc {generic/tclTomMathDecls.h 118 118}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_init_size
+    expansion TclBN_mp_init_size
+    redefined 0
+    undefined 0
+}
+macro mp_init_u64 {
+    loc {generic/tclTomMathDecls.h 119 119}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_init_u64
+    expansion TclBN_mp_init_u64
+    redefined 0
+    undefined 0
+}
+macro mp_lshd {
+    loc {generic/tclTomMathDecls.h 120 120}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_lshd
+    expansion TclBN_mp_lshd
+    redefined 0
+    undefined 0
+}
+macro mp_mod {
+    loc {generic/tclTomMathDecls.h 121 121}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_mod
+    expansion TclBN_mp_mod
+    redefined 0
+    undefined 0
+}
+macro mp_mod_2d {
+    loc {generic/tclTomMathDecls.h 122 122}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_mod_2d
+    expansion TclBN_mp_mod_2d
+    redefined 0
+    undefined 0
+}
+macro mp_mul {
+    loc {generic/tclTomMathDecls.h 123 123}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_mul
+    expansion TclBN_mp_mul
+    redefined 0
+    undefined 0
+}
+macro mp_mul_d {
+    loc {generic/tclTomMathDecls.h 124 124}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_mul_d
+    expansion TclBN_mp_mul_d
+    redefined 0
+    undefined 0
+}
+macro mp_mul_2 {
+    loc {generic/tclTomMathDecls.h 125 125}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_mul_2
+    expansion TclBN_mp_mul_2
+    redefined 0
+    undefined 0
+}
+macro mp_mul_2d {
+    loc {generic/tclTomMathDecls.h 126 126}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_mul_2d
+    expansion TclBN_mp_mul_2d
+    redefined 0
+    undefined 0
+}
+macro mp_neg {
+    loc {generic/tclTomMathDecls.h 127 127}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_neg
+    expansion TclBN_mp_neg
+    redefined 0
+    undefined 0
+}
+macro mp_or {
+    loc {generic/tclTomMathDecls.h 128 128}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_or
+    expansion TclBN_mp_or
+    redefined 0
+    undefined 0
+}
+macro mp_pack {
+    loc {generic/tclTomMathDecls.h 129 129}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_pack
+    expansion TclBN_mp_pack
+    redefined 0
+    undefined 0
+}
+macro mp_pack_count {
+    loc {generic/tclTomMathDecls.h 130 130}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_pack_count
+    expansion TclBN_mp_pack_count
+    redefined 0
+    undefined 0
+}
+macro mp_radix_size {
+    loc {generic/tclTomMathDecls.h 131 131}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_radix_size
+    expansion TclBN_mp_radix_size
+    redefined 0
+    undefined 0
+}
+macro mp_read_radix {
+    loc {generic/tclTomMathDecls.h 132 132}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_read_radix
+    expansion TclBN_mp_read_radix
+    redefined 0
+    undefined 0
+}
+macro mp_rshd {
+    loc {generic/tclTomMathDecls.h 133 133}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_rshd
+    expansion TclBN_mp_rshd
+    redefined 0
+    undefined 0
+}
+macro mp_s_rmap {
+    loc {generic/tclTomMathDecls.h 134 134}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_s_rmap
+    expansion TclBN_mp_s_rmap
+    redefined 0
+    undefined 0
+}
+macro mp_s_rmap_reverse {
+    loc {generic/tclTomMathDecls.h 135 135}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_s_rmap_reverse
+    expansion TclBN_mp_s_rmap_reverse
+    redefined 0
+    undefined 0
+}
+macro mp_s_rmap_reverse_sz {
+    loc {generic/tclTomMathDecls.h 136 136}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_s_rmap_reverse_sz
+    expansion TclBN_mp_s_rmap_reverse_sz
+    redefined 0
+    undefined 0
+}
+macro mp_set {
+    loc {generic/tclTomMathDecls.h 618 618}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body mp_set_i64((a),(int32_t)(b))
+    expansion {TclBN_mp_set_i64((a), (int32_t) (b))}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 1
+    undefined 0
+}
+macro mp_set_i64 {
+    loc {generic/tclTomMathDecls.h 138 138}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_set_i64
+    expansion TclBN_mp_set_i64
+    redefined 0
+    undefined 0
+}
+macro mp_set_u64 {
+    loc {generic/tclTomMathDecls.h 139 139}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_set_u64
+    expansion TclBN_mp_set_u64
+    redefined 0
+    undefined 0
+}
+macro mp_shrink {
+    loc {generic/tclTomMathDecls.h 140 140}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_shrink
+    expansion TclBN_mp_shrink
+    redefined 0
+    undefined 0
+}
+macro mp_sqr {
+    loc {generic/tclTomMathDecls.h 632 632}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body mp_mul(a,a,b)
+    expansion {TclBN_mp_mul(a, a, b)}
+    arguses {{a 2 0 0} {b 1 0 0}}
+    redefined 1
+    undefined 0
+}
+macro mp_sqrt {
+    loc {generic/tclTomMathDecls.h 142 142}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_sqrt
+    expansion TclBN_mp_sqrt
+    redefined 0
+    undefined 0
+}
+macro mp_sub {
+    loc {generic/tclTomMathDecls.h 143 143}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_sub
+    expansion TclBN_mp_sub
+    redefined 0
+    undefined 0
+}
+macro mp_sub_d {
+    loc {generic/tclTomMathDecls.h 144 144}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_sub_d
+    expansion TclBN_mp_sub_d
+    redefined 0
+    undefined 0
+}
+macro mp_signed_rsh {
+    loc {generic/tclTomMathDecls.h 145 145}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_signed_rsh
+    expansion TclBN_mp_signed_rsh
+    redefined 0
+    undefined 0
+}
+macro mp_tc_and {
+    loc {generic/tclTomMathDecls.h 146 146}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_and
+    expansion TclBN_mp_and
+    redefined 0
+    undefined 0
+}
+macro mp_tc_div_2d {
+    loc {generic/tclTomMathDecls.h 147 147}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_signed_rsh
+    expansion TclBN_mp_signed_rsh
+    redefined 0
+    undefined 0
+}
+macro mp_tc_or {
+    loc {generic/tclTomMathDecls.h 148 148}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_or
+    expansion TclBN_mp_or
+    redefined 0
+    undefined 0
+}
+macro mp_tc_xor {
+    loc {generic/tclTomMathDecls.h 149 149}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_xor
+    expansion TclBN_mp_xor
+    redefined 0
+    undefined 0
+}
+macro mp_to_unsigned_bin {
+    loc {generic/tclTomMathDecls.h 150 150}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_to_unsigned_bin
+    expansion TclBN_mp_to_unsigned_bin
+    redefined 0
+    undefined 0
+}
+macro mp_to_unsigned_bin_n {
+    loc {generic/tclTomMathDecls.h 151 151}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_to_unsigned_bin_n
+    expansion TclBN_mp_to_unsigned_bin_n
+    redefined 0
+    undefined 0
+}
+macro mp_toradix_n {
+    loc {generic/tclTomMathDecls.h 152 152}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_toradix_n
+    expansion TclBN_mp_toradix_n
+    redefined 0
+    undefined 0
+}
+macro mp_to_radix {
+    loc {generic/tclTomMathDecls.h 153 153}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_to_radix
+    expansion TclBN_mp_to_radix
+    redefined 0
+    undefined 0
+}
+macro mp_to_ubin {
+    loc {generic/tclTomMathDecls.h 154 154}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_to_ubin
+    expansion TclBN_mp_to_ubin
+    redefined 0
+    undefined 0
+}
+macro mp_ubin_size {
+    loc {generic/tclTomMathDecls.h 155 155}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_ubin_size
+    expansion TclBN_mp_ubin_size
+    redefined 0
+    undefined 0
+}
+macro mp_unpack {
+    loc {generic/tclTomMathDecls.h 156 156}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_unpack
+    expansion TclBN_mp_unpack
+    redefined 0
+    undefined 0
+}
+macro mp_xor {
+    loc {generic/tclTomMathDecls.h 157 157}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_xor
+    expansion TclBN_mp_xor
+    redefined 0
+    undefined 0
+}
+macro mp_zero {
+    loc {generic/tclTomMathDecls.h 158 158}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_zero
+    expansion TclBN_mp_zero
+    redefined 0
+    undefined 0
+}
+macro s_mp_add {
+    loc {generic/tclTomMathDecls.h 159 159}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_s_mp_add
+    expansion TclBN_s_mp_add
+    redefined 0
+    undefined 0
+}
+macro s_mp_balance_mul {
+    loc {generic/tclTomMathDecls.h 160 160}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_balance_mul
+    expansion TclBN_mp_balance_mul
+    redefined 0
+    undefined 0
+}
+macro s_mp_div_3 {
+    loc {generic/tclTomMathDecls.h 161 161}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_div_3
+    expansion TclBN_mp_div_3
+    redefined 0
+    undefined 0
+}
+macro s_mp_karatsuba_mul {
+    loc {generic/tclTomMathDecls.h 162 162}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_karatsuba_mul
+    expansion TclBN_mp_karatsuba_mul
+    redefined 0
+    undefined 0
+}
+macro s_mp_karatsuba_sqr {
+    loc {generic/tclTomMathDecls.h 163 163}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_karatsuba_sqr
+    expansion TclBN_mp_karatsuba_sqr
+    redefined 0
+    undefined 0
+}
+macro s_mp_mul_digs {
+    loc {generic/tclTomMathDecls.h 164 164}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_mul_digs
+    expansion TclBN_mp_mul_digs
+    redefined 0
+    undefined 0
+}
+macro s_mp_mul_digs_fast {
+    loc {generic/tclTomMathDecls.h 165 165}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_mul_digs_fast
+    expansion TclBN_mp_mul_digs_fast
+    redefined 0
+    undefined 0
+}
+macro s_mp_reverse {
+    loc {generic/tclTomMathDecls.h 166 166}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_reverse
+    expansion TclBN_mp_reverse
+    redefined 0
+    undefined 0
+}
+macro s_mp_sqr {
+    loc {generic/tclTomMathDecls.h 167 167}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_s_mp_sqr
+    expansion TclBN_s_mp_sqr
+    redefined 0
+    undefined 0
+}
+macro s_mp_sqr_fast {
+    loc {generic/tclTomMathDecls.h 168 168}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_sqr_fast
+    expansion TclBN_mp_sqr_fast
+    redefined 0
+    undefined 0
+}
+macro s_mp_sub {
+    loc {generic/tclTomMathDecls.h 169 169}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_s_mp_sub
+    expansion TclBN_s_mp_sub
+    redefined 0
+    undefined 0
+}
+macro s_mp_toom_mul {
+    loc {generic/tclTomMathDecls.h 170 170}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_toom_mul
+    expansion TclBN_mp_toom_mul
+    redefined 0
+    undefined 0
+}
+macro s_mp_toom_sqr {
+    loc {generic/tclTomMathDecls.h 171 171}
+    origin public
+    form object
+    params {}
+    variadic 0
+    body TclBN_mp_toom_sqr
+    expansion TclBN_mp_toom_sqr
+    redefined 0
+    undefined 0
+}
+macro mp_get_ll {
+    loc {generic/tclTomMathDecls.h 606 606}
+    origin public
+    form function
+    params a
+    variadic 0
+    body {((long long)mp_get_i64(a))}
+    expansion {((long long) mp_get_i64(a))}
+    arguses {{a 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_set_ll {
+    loc {generic/tclTomMathDecls.h 608 608}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body mp_set_i64(a,b)
+    expansion {TclBN_mp_set_i64(a, b)}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_init_ll {
+    loc {generic/tclTomMathDecls.h 610 610}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body mp_init_i64(a,b)
+    expansion {TclBN_mp_init_i64(a, b)}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_set_ull {
+    loc {generic/tclTomMathDecls.h 614 614}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body mp_set_u64(a,b)
+    expansion {TclBN_mp_set_u64(a, b)}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_init_ull {
+    loc {generic/tclTomMathDecls.h 616 616}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body mp_init_u64(a,b)
+    expansion {TclBN_mp_init_u64(a, b)}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_set_i32 {
+    loc {generic/tclTomMathDecls.h 619 619}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body mp_set_i64((a),(int32_t)(b))
+    expansion {TclBN_mp_set_i64((a), (int32_t) (b))}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_set_l {
+    loc {generic/tclTomMathDecls.h 620 620}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body mp_set_i64((a),(long)(b))
+    expansion {TclBN_mp_set_i64((a), (long) (b))}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_set_u32 {
+    loc {generic/tclTomMathDecls.h 621 621}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body mp_set_u64((a),(uint32_t)(b))
+    expansion {TclBN_mp_set_u64((a), (uint32_t) (b))}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_set_ul {
+    loc {generic/tclTomMathDecls.h 622 622}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body {mp_set_u64((a),(unsigned long)(b))}
+    expansion {TclBN_mp_set_u64((a), (unsigned long) (b))}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_init_i32 {
+    loc {generic/tclTomMathDecls.h 623 623}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body mp_init_i64((a),(int32_t)(b))
+    expansion {TclBN_mp_init_i64((a), (int32_t) (b))}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_init_l {
+    loc {generic/tclTomMathDecls.h 624 624}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body mp_init_i64((a),(long)(b))
+    expansion {TclBN_mp_init_i64((a), (long) (b))}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_init_u32 {
+    loc {generic/tclTomMathDecls.h 625 625}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body mp_init_u64((a),(uint32_t)(b))
+    expansion {TclBN_mp_init_u64((a), (uint32_t) (b))}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_init_ul {
+    loc {generic/tclTomMathDecls.h 626 626}
+    origin public
+    form function
+    params {a b}
+    variadic 0
+    body {mp_init_u64((a),(unsigned long)(b))}
+    expansion {TclBN_mp_init_u64((a), (unsigned long) (b))}
+    arguses {{a 1 0 0} {b 1 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_iseven {
+    loc {generic/tclTomMathDecls.h 629 629}
+    origin public
+    form function
+    params a
+    variadic 0
+    body (!mp_isodd(a))
+    expansion {(! (((a) -> used != 0) && (((a) -> dp[0] & 1) != 0)))}
+    arguses {{a 2 0 0}}
+    redefined 0
+    undefined 0
+}
+macro mp_isodd {
+    loc {generic/tclTomMathDecls.h 630 630}
+    origin public
+    form function
+    params a
+    variadic 0
+    body {(((a)->used != 0) && (((a)->dp[0] & 1) != 0))}
+    expansion {(((a) -> used != 0) && (((a) -> dp[0] & 1) != 0))}
+    arguses {{a 2 0 0}}
+    redefined 0
+    undefined 0
+}

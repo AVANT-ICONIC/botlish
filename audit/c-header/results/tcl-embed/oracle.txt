@@ -1,0 +1,25 @@
+profile tcl-embed
+toolchain {cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0}
+checks typedef 193
+checks field 1026
+checks enumerator 13
+checks function 920
+checks variable 12
+skipped {field with an unnamed anonymous tag} 4
+skipped {fields of an unnamed anonymous struct} 4
+undefined {function named like a function-like macro (#undef before the check)} 31
+undefined {function named like a object-like macro (#undef before the check)} 62
+unattributed-errors 0
+explained {field TclStubs.tcl_Panic} {noreturn is part of a function (pointer) type} {_Static_assert(_Generic(&(((struct TclStubs *)0)->tcl_Panic), void (**)(const char *format, ...): 1, default: 0), "TclStubs.tcl_Panic");} {static assertion failed: "TclStubs.tcl_Panic"}
+explained {field TclStubs.tcl_Exit} {noreturn is part of a function (pointer) type} {_Static_assert(_Generic(&(((struct TclStubs *)0)->tcl_Exit), void (**)(int status): 1, default: 0), "TclStubs.tcl_Exit");} {static assertion failed: "TclStubs.tcl_Exit"}
+explained {field TclStubs.tcl_ExitThread} {noreturn is part of a function (pointer) type} {_Static_assert(_Generic(&(((struct TclStubs *)0)->tcl_ExitThread), void (**)(int status): 1, default: 0), "TclStubs.tcl_ExitThread");} {static assertion failed: "TclStubs.tcl_ExitThread"}
+explained {typedef private_mp_word} {mode(TI) changes the declared type} {typedef unsigned long private_mp_word;} {conflicting types for 'private_mp_word'; have 'long unsigned int'}
+flagged {function Tcl_MainEx} {noreturn is part of a function (pointer) type}
+flagged {function Tcl_Panic} {noreturn is part of a function (pointer) type}
+flagged {function Tcl_Exit} {noreturn is part of a function (pointer) type}
+flagged {function Tcl_ExitThread} {noreturn is part of a function (pointer) type}
+flagged {field TclStubs.tcl_Panic} {noreturn is part of a function (pointer) type}
+flagged {field TclStubs.tcl_Exit} {noreturn is part of a function (pointer) type}
+flagged {field TclStubs.tcl_ExitThread} {noreturn is part of a function (pointer) type}
+flagged {typedef private_mp_word} {mode(TI) changes the declared type}
+checks 2164 rejected 0 explained 4 unattributed 0 planted-caught 5/5

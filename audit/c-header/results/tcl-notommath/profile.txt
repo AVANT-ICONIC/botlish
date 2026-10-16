@@ -1,0 +1,21 @@
+profile tcl-notommath
+description {installed-header consumer of tclTomMath.h without libtommath: TCL_NO_TOMMATH_H, no libtommath include directory}
+library tcl
+source {url https://github.com/tcltk/tcl tag core-9-0-1 commit 6230a12b3bf6f7d8128f6ef14b0a3650a9d479e0}
+revision 6230a12b3bf6f7d8128f6ef14b0a3650a9d479e0
+entry {tcl.h tclOO.h tclTomMath.h}
+include {generic unix}
+defines TCL_NO_TOMMATH_H
+undefines {}
+flags {}
+toolchain_cc cc
+toolchain_path /usr/bin/cc
+toolchain_family gcc
+toolchain_version {cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0}
+toolchain_style gnu
+toolchain_target native
+toolchain_host {Linux 6.18.44-fc-v139 x86_64}
+environment {}
+command {cc -E -x c -I$SRC/generic -I$SRC/unix -DTCL_NO_TOMMATH_H $TU/entry.c}
+predefined_count 402
+predefined {_LP64=1 __GNUC__=13 __LP64__=1 __PRAGMA_REDEFINE_EXTNAME=1 __SIZEOF_DOUBLE__=8 __SIZEOF_FLOAT__=4 __SIZEOF_INT__=4 __SIZEOF_LONG_DOUBLE__=16 __SIZEOF_LONG_LONG__=8 __SIZEOF_LONG__=8 __SIZEOF_POINTER__=8 __SIZEOF_PTRDIFF_T__=8 __SIZEOF_SHORT__=2 __SIZEOF_SIZE_T__=8 __SIZEOF_WCHAR_T__=4 __SIZEOF_WINT_T__=4 __STDC_VERSION__=201710L __USER_LABEL_PREFIX__= __linux__=1 __x86_64__=1}

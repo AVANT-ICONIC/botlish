@@ -1,0 +1,371 @@
+######## boringssl-static -> boringssl-shared (gcc)
+IR difference boringssl-static -> boringssl-shared
+== ir.txt
+  records: 4479 -> 4479
+== macros.txt
+  records: 6668 -> 6668
+== system.txt
+  records: 30 -> 30
+
+######## boringssl-static -> boringssl-prefix (gcc)
+IR difference boringssl-static -> boringssl-prefix
+== ir.txt
+  records: 4479 -> 7628
+  added pragma: 3149
+    + pragma {redefine_extname ACCESS_DESCRIPTION_free bssl_ACCESS_DESCRIPTION_free}
+    + pragma {redefine_extname ACCESS_DESCRIPTION_new bssl_ACCESS_DESCRIPTION_new}
+    + pragma {redefine_extname AES_CMAC bssl_AES_CMAC}
+== macros.txt
+  records: 6668 -> 6673
+  added macro: 5
+  changed body: 2
+  changed expansion: 7
+    + macro BORINGSSL_USER_LABEL_PREFIX
+    + macro BORINGSSL_CONCAT_INNER
+    + macro BORINGSSL_CONCAT
+    ~ body macro BSSL_NAMESPACE_BEGIN
+        namespace bssl {
+     -> namespace bssl { inline namespace BORINGSSL_PREFIX {
+    ~ body macro BSSL_NAMESPACE_END
+        }
+     -> } }
+    ~ expansion macro BSSL_NAMESPACE_BEGIN
+        namespace bssl {
+     -> namespace bssl { inline namespace bssl {
+    ~ expansion macro BSSL_NAMESPACE_END
+        }
+     -> } }
+    ~ expansion macro OPENSSL_PUT_ERROR
+        ERR_put_error(ERR_LIB_library, 0, reason, "botlish-macro-probe", 146)
+     -> ERR_put_error(ERR_LIB_library, 0, reason, "botlish-macro-probe", 152)
+== system.txt
+  records: 30 -> 30
+
+######## tcl-embed -> tcl-stubs (gcc)
+IR difference tcl-embed -> tcl-stubs
+== ir.txt
+  records: 1171 -> 1171
+== macros.txt
+  records: 508 -> 1229
+  added macro: 722
+  removed macro: 1
+  changed body: 8
+  changed expansion: 137
+    + macro Tcl_SetPanicProc
+    + macro Tcl_InitSubsystems
+    + macro Tcl_FindExecutable
+    - macro TclOOInitializeStubs
+    ~ body macro Tcl_InitStubs
+        Tcl_PkgInitStubsCheck(interp, version, (exact)|(TCL_MAJOR_VERSION<<8)|(TCL_MINOR_VERSION<<16))
+     -> (Tcl_InitStubs)(interp, version, (exact)|(TCL_MAJOR_VERSION<<8)|(TCL_MINOR_VERSION<<16), TCL_STUB_MAGIC)
+    ~ body macro Tcl_GetBoolean
+        ((sizeof(*(boolPtr)) == sizeof(int) && (TCL_MAJOR_VERSION == 8)) ? Tcl_GetBoolean(interp, src, (int *)(boolPtr)) : ((sizeof(*(boolPtr)) <= sizeof(int)) ? Tcl_GetBool(interp, src, (TCL_NULL_OK-2)&(int)sizeof((*(boolPtr))), (char *)(boolPtr)) : (TCLBOOLWARNING(boolPtr)Tcl_Panic("sizeof(%s) must be <= s
+     -> ((sizeof(*(boolPtr)) == sizeof(int) && (TCL_MAJOR_VERSION == 8)) ? tclStubsPtr->tcl_GetBoolean(interp, src, (int *)(boolPtr)) : ((sizeof(*(boolPtr)) <= sizeof(int)) ? Tcl_GetBool(interp, src, (TCL_NULL_OK-2)&(int)sizeof((*(boolPtr))), (char *)(boolPtr)) : (TCLBOOLWARNING(boolPtr)Tcl_Panic("sizeof(%s)
+    ~ body macro Tcl_GetBooleanFromObj
+        ((sizeof(*(boolPtr)) == sizeof(int) && (TCL_MAJOR_VERSION == 8)) ? Tcl_GetBooleanFromObj(interp, objPtr, (int *)(boolPtr)) : ((sizeof(*(boolPtr)) <= sizeof(int)) ? Tcl_GetBoolFromObj(interp, objPtr, (TCL_NULL_OK-2)&(int)sizeof((*(boolPtr))), (char *)(boolPtr)) : (TCLBOOLWARNING(boolPtr)Tcl_Panic("siz
+     -> ((sizeof(*(boolPtr)) == sizeof(int) && (TCL_MAJOR_VERSION == 8)) ? tclStubsPtr->tcl_GetBooleanFromObj(interp, objPtr, (int *)(boolPtr)) : ((sizeof(*(boolPtr)) <= sizeof(int)) ? Tcl_GetBoolFromObj(interp, objPtr, (TCL_NULL_OK-2)&(int)sizeof((*(boolPtr))), (char *)(boolPtr)) : (TCLBOOLWARNING(boolPtr)T
+    ~ expansion macro Tcl_InitStubs
+        Tcl_PkgInitStubsCheck(interp, version, (exact) | (9 << 8) | (0 << 16))
+     -> (Tcl_InitStubs) (interp, version, (exact) | (9 << 8) | (0 << 16), ((int) 0xFCA3BACB + (int) sizeof (void *)))
+    ~ expansion macro Tcl_Main
+        Tcl_MainEx(argc, argv, proc, ((Tcl_SetPanicProc(((Tcl_PanicProc *) ((void *) 0))), Tcl_CreateInterp())))
+     -> (void) ((const char * (*) (Tcl_Size, const void *, Tcl_AppInitProc *, Tcl_Interp *)) TclStubCall((void *) 5)) (argc, argv, proc, ((TclInitStubTable(((const char * (*) (Tcl_PanicProc *)) TclStubCall((void *) ((Tcl_PanicProc *) ((void *) 0)))) (((Tcl_PanicProc *) ((void *) 0)))), (tclStubsPtr -> tcl_Cr
+    ~ expansion macro Tcl_GetBoolean
+        ((sizeof (* (boolPtr)) == sizeof (int) && (9 == 8)) ? Tcl_GetBoolean(interp, src, (int *) (boolPtr)) : ((sizeof (* (boolPtr)) <= sizeof (int)) ? Tcl_GetBool(interp, src, (32 - 2) & (int) sizeof ((* (boolPtr))), (char *) (boolPtr)) : ((void) (sizeof (struct { _Static_assert (sizeof (* (boolPtr)) <= si
+     -> ((sizeof (* (boolPtr)) == sizeof (int) && (9 == 8)) ? tclStubsPtr -> tcl_GetBoolean(interp, src, (int *) (boolPtr)) : ((sizeof (* (boolPtr)) <= sizeof (int)) ? (tclStubsPtr -> tcl_GetBool) (interp, src, (32 - 2) & (int) sizeof ((* (boolPtr))), (char *) (boolPtr)) : ((void) (sizeof (struct { _Static_a
+== system.txt
+  records: 21 -> 21
+
+######## tcl-embed -> tcl-notommath (gcc)
+IR difference tcl-embed -> tcl-notommath
+== ir.txt
+  records: 1171 -> 996
+  removed function: 166
+  removed typedef: 4
+  removed variable: 5
+  changed attrs: 48
+  changed fields: 1
+  changed type: 1
+    - typedef private_mp_word
+    - typedef mp_bool
+    - variable KARATSUBA_MUL_CUTOFF
+    ~ type typedef mp_digit
+        typedef uint64_t
+     -> typedef size_t
+    ~ attrs function TclBN_epoch
+        {gnu decl warn_unused_result {}}
+     -> 
+    ~ attrs function TclBN_revision
+        {gnu decl warn_unused_result {}}
+     -> 
+    ~ attrs function TclBN_mp_add
+        {gnu decl warn_unused_result {}}
+     -> 
+    ~ fields struct TclTomMathStubs
+        
+        {magic {int int} {} {}}
+        {hooks {ptr void} {} {}}
+        {tclBN_epoch {ptr {fn {int int} {} {}}} {} {{gnu decl warn_unused_result {}}}}
+        {tclBN_revision {ptr {fn {int int} {} {}}} {} {{gnu decl warn_unused_result {}}}}
+        {tclBN_mp_add {ptr {fn {typedef mp_err} {{a {ptr {
+     -> 
+        {magic {int int} {} {}}
+        {hooks {ptr void} {} {}}
+        {tclBN_epoch {ptr {fn {int int} {} {}}} {} {}}
+        {tclBN_revision {ptr {fn {int int} {} {}}} {} {}}
+        {tclBN_mp_add {ptr {fn {typedef mp_err} {{a {ptr {q const {typedef mp_int}}} {}} {b {ptr {q const {typedef mp_int}
+== macros.txt
+  records: 508 -> 461
+  removed macro: 47
+  changed body: 4
+  changed expansion: 3
+    - macro BN_H_
+    - macro MP_64BIT
+    - macro MP_DIGIT_BIT
+    ~ body macro MP_DEPRECATED_PRAGMA
+        PRIVATE_MP_DEPRECATED_PRAGMA(GCC warning s)
+     -> 
+    ~ body macro MP_WUR
+        __attribute__((warn_unused_result))
+     -> 
+    ~ body macro mp_iszero
+        (((a)->used == 0) ? MP_YES : MP_NO)
+     -> ((a)->used == 0)
+    ~ expansion macro MP_WUR
+        __attribute__((warn_unused_result))
+     -> 
+    ~ expansion macro mp_iszero
+        (((a) -> used == 0) ? 1 : 0)
+     -> ((a) -> used == 0)
+    ~ expansion macro mp_isneg
+        (((a) -> sign != 0) ? 1 : 0)
+     -> ((a) -> sign != 0)
+== system.txt
+  records: 21 -> 8
+  removed struct: 5
+  removed typedef: 8
+    - typedef __int32_t
+    - typedef __uint32_t
+    - typedef __off_t
+
+######## boringssl-static: gcc -> clang
+IR difference boringssl-static -> boringssl-static
+== ir.txt
+  records: 4479 -> 4481
+  added pragma: 2
+    + pragma {clang diagnostic ignored "-Wunknown-warning-option"}
+    + pragma {clang diagnostic ignored "-Wcast-function-type-strict"}
+== macros.txt
+  records: 6668 -> 6668
+  changed body: 34
+    ~ body macro OPENSSL_CLANG_PRAGMA
+        
+     -> _Pragma(arg)
+    ~ body macro OPENSSL_PUT_ERROR
+        ERR_put_error(ERR_LIB_ ##library, 0, reason, __FILE__, __LINE__)
+     -> ERR_put_error(ERR_LIB_##library, 0, reason, __FILE__, __LINE__)
+    ~ body macro STACK_OF
+        struct stack_st_ ##type
+     -> struct stack_st_##type
+== system.txt
+  records: 30 -> 30
+
+######## boringssl-prefix: gcc -> clang
+IR difference boringssl-prefix -> boringssl-prefix
+== ir.txt
+  records: 7628 -> 7630
+  added pragma: 3151
+  removed pragma: 3149
+    + pragma {redefine_extname ACCESS_DESCRIPTION_free BORINGSSL_ADD_USER_LABEL_AND_PREFIX(ACCESS_DESCRIPTION_free)}
+    + pragma {redefine_extname ACCESS_DESCRIPTION_new BORINGSSL_ADD_USER_LABEL_AND_PREFIX(ACCESS_DESCRIPTION_new)}
+    + pragma {redefine_extname AES_CMAC BORINGSSL_ADD_USER_LABEL_AND_PREFIX(AES_CMAC)}
+    - pragma {redefine_extname ACCESS_DESCRIPTION_free bssl_ACCESS_DESCRIPTION_free}
+    - pragma {redefine_extname ACCESS_DESCRIPTION_new bssl_ACCESS_DESCRIPTION_new}
+    - pragma {redefine_extname AES_CMAC bssl_AES_CMAC}
+== macros.txt
+  records: 6673 -> 6673
+  changed body: 35
+    ~ body macro BORINGSSL_CONCAT_INNER
+        a ##b
+     -> a##b
+    ~ body macro OPENSSL_CLANG_PRAGMA
+        
+     -> _Pragma(arg)
+    ~ body macro OPENSSL_PUT_ERROR
+        ERR_put_error(ERR_LIB_ ##library, 0, reason, __FILE__, __LINE__)
+     -> ERR_put_error(ERR_LIB_##library, 0, reason, __FILE__, __LINE__)
+== system.txt
+  records: 30 -> 30
+
+######## tcl-embed: gcc -> clang
+IR difference tcl-embed -> tcl-embed
+== ir.txt
+  records: 1171 -> 1171
+  changed attrs: 44
+    ~ attrs typedef ltm_prime_callback
+        {gnu spec deprecated {"replaced by " "mp_rand_source"}}
+     -> 
+    ~ attrs function mp_get_mag_ull
+        {gnu spec deprecated {"replaced by " "mp_get_mag_u64"}} {gnu decl warn_unused_result {}}
+     -> {gnu decl warn_unused_result {}}
+    ~ attrs function mp_get_ll
+        {gnu spec deprecated {"replaced by " "mp_get_i64"}} {gnu decl warn_unused_result {}}
+     -> {gnu decl warn_unused_result {}}
+== macros.txt
+  records: 508 -> 507
+  removed macro: 1
+  changed body: 3
+  changed expansion: 3
+  changed params: 1
+    - macro PRIVATE_MP_DEPRECATED_PRAGMA
+    ~ body macro TCL_DEPRECATED_API
+        __attribute__ ((__deprecated__ (msg)))
+     -> __attribute__ ((__deprecated__))
+    ~ body macro MP_DEPRECATED
+        __attribute__((deprecated("replaced by " #x)))
+     -> 
+    ~ body macro MP_DEPRECATED_PRAGMA
+        PRIVATE_MP_DEPRECATED_PRAGMA(GCC warning s)
+     -> 
+    ~ expansion macro TCL_DEPRECATED_API
+        __attribute__((__deprecated__(msg)))
+     -> __attribute__((__deprecated__))
+    ~ expansion macro TCL_DEPRECATED
+        extern __attribute__((__deprecated__(msg)))
+     -> extern __attribute__((__deprecated__))
+    ~ expansion macro MP_DEPRECATED
+        __attribute__((deprecated("replaced by " "x")))
+     -> 
+    ~ params macro MP_DEPRECATED
+        x
+     -> s
+== system.txt
+  records: 21 -> 21
+
+######## tcl-stubs: gcc -> clang
+IR difference tcl-stubs -> tcl-stubs
+== ir.txt
+  records: 1171 -> 1171
+  changed attrs: 44
+    ~ attrs typedef ltm_prime_callback
+        {gnu spec deprecated {"replaced by " "mp_rand_source"}}
+     -> 
+    ~ attrs function mp_get_mag_ull
+        {gnu spec deprecated {"replaced by " "mp_get_mag_u64"}} {gnu decl warn_unused_result {}}
+     -> {gnu decl warn_unused_result {}}
+    ~ attrs function mp_get_ll
+        {gnu spec deprecated {"replaced by " "mp_get_i64"}} {gnu decl warn_unused_result {}}
+     -> {gnu decl warn_unused_result {}}
+== macros.txt
+  records: 1229 -> 1228
+  removed macro: 1
+  changed body: 3
+  changed expansion: 3
+  changed params: 1
+    - macro PRIVATE_MP_DEPRECATED_PRAGMA
+    ~ body macro TCL_DEPRECATED_API
+        __attribute__ ((__deprecated__ (msg)))
+     -> __attribute__ ((__deprecated__))
+    ~ body macro MP_DEPRECATED
+        __attribute__((deprecated("replaced by " #x)))
+     -> 
+    ~ body macro MP_DEPRECATED_PRAGMA
+        PRIVATE_MP_DEPRECATED_PRAGMA(GCC warning s)
+     -> 
+    ~ expansion macro TCL_DEPRECATED_API
+        __attribute__((__deprecated__(msg)))
+     -> __attribute__((__deprecated__))
+    ~ expansion macro TCL_DEPRECATED
+        extern __attribute__((__deprecated__(msg)))
+     -> extern __attribute__((__deprecated__))
+    ~ expansion macro MP_DEPRECATED
+        __attribute__((deprecated("replaced by " "x")))
+     -> 
+    ~ params macro MP_DEPRECATED
+        x
+     -> s
+== system.txt
+  records: 21 -> 21
+
+######## boringssl-static: default standard -> -std=c11
+IR difference boringssl-static -> boringssl-static
+== ir.txt
+  records: 4479 -> 4479
+== macros.txt
+  records: 6668 -> 6668
+== system.txt
+  records: 30 -> 30
+  changed fields: 1
+    ~ fields struct tm
+        
+        {tm_sec {int int} {} {}}
+        {tm_min {int int} {} {}}
+        {tm_hour {int int} {} {}}
+        {tm_mday {int int} {} {}}
+        {tm_mon {int int} {} {}}
+        {tm_year {int int} {} {}}
+        {tm_wday {int int} {} {}}
+        {tm_yday {int int} {} {}}
+        {tm_isdst {int int} {} 
+     -> 
+        {tm_sec {int int} {} {}}
+        {tm_min {int int} {} {}}
+        {tm_hour {int int} {} {}}
+        {tm_mday {int int} {} {}}
+        {tm_mon {int int} {} {}}
+        {tm_year {int int} {} {}}
+        {tm_wday {int int} {} {}}
+        {tm_yday {int int} {} {}}
+        {tm_isdst {int int} {} 
+
+######## tcl-embed: default standard -> -std=c11
+IR difference tcl-embed -> tcl-embed
+== ir.txt
+  records: 1171 -> 1171
+== macros.txt
+  records: 508 -> 508
+== system.txt
+  records: 21 -> 21
+
+######## boringssl-static -> boringssl-prefix without #pragma redefine_extname (simulated)
+IR difference boringssl-static -> boringssl-prefix
+== ir.txt
+  records: 4479 -> 4479
+  added function: 3109
+  added variable: 36
+  removed function: 3109
+  removed variable: 36
+    + function bssl_EVP_aead_aes_128_gcm
+    + function bssl_EVP_aead_aes_192_gcm
+    + function bssl_EVP_aead_aes_256_gcm
+    - function EVP_aead_aes_128_gcm
+    - function EVP_aead_aes_192_gcm
+    - function EVP_aead_aes_256_gcm
+== macros.txt
+  records: 6668 -> 9751
+  added macro: 3083
+  changed body: 73
+  changed expansion: 177
+    + macro BORINGSSL_USER_LABEL_PREFIX
+    + macro BORINGSSL_CONCAT_INNER
+    + macro BORINGSSL_CONCAT
+    ~ body macro DTLSv1_get_timeout
+        DTLSv1_get_timeout
+     -> BORINGSSL_ADD_PREFIX(DTLSv1_get_timeout)
+    ~ body macro DTLSv1_handle_timeout
+        DTLSv1_handle_timeout
+     -> BORINGSSL_ADD_PREFIX(DTLSv1_handle_timeout)
+    ~ body macro EVP_PKEY_CTX_set0_rsa_oaep_label
+        EVP_PKEY_CTX_set0_rsa_oaep_label
+     -> BORINGSSL_ADD_PREFIX(EVP_PKEY_CTX_set0_rsa_oaep_label)
+    ~ expansion macro DTLSv1_get_timeout
+        DTLSv1_get_timeout
+     -> bssl_DTLSv1_get_timeout
+    ~ expansion macro DTLSv1_handle_timeout
+        DTLSv1_handle_timeout
+     -> bssl_DTLSv1_handle_timeout
+    ~ expansion macro EVP_PKEY_CTX_set0_rsa_oaep_label
+        EVP_PKEY_CTX_set0_rsa_oaep_label
+     -> bssl_EVP_PKEY_CTX_set0_rsa_oaep_label
+== system.txt
+  records: 30 -> 30
