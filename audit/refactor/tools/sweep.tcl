@@ -50,7 +50,7 @@ proc refactor::sweep::writeText {path text} {
 proc refactor::sweep::programs {root} {
     set programs {}
     foreach dir {examples/stdlib examples/surface examples/refinement examples/io
-            examples/abi examples/linux bench lib} {
+            examples/abi examples/binary examples/linux bench lib} {
         foreach path [lsort [glob -nocomplain -directory [file join $root $dir] *.bot]] {
             lappend programs [Rel $root $path]
         }

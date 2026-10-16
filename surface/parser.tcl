@@ -803,11 +803,11 @@ proc surface::parser::LayoutDecl {pVar} {
     }
     foreach required {size align} {
         if {![dict exists $items $required]} {
-            Fail [dict get $name span] "layout \"$layoutName\" has no \"$required N\" line: a layout states its byte size and its alignment explicitly"
+            Fail $name "layout \"$layoutName\" has no \"$required N\" line: a layout states its byte size and its alignment explicitly"
         }
     }
     if {$fields eq ""} {
-        Fail [dict get $name span] "layout \"$layoutName\" declares no field: a layout needs at least one \"field NAME: TYPE at OFFSET\" line"
+        Fail $name "layout \"$layoutName\" declares no field: a layout needs at least one \"field NAME: TYPE at OFFSET\" line"
     }
     return [surface::ast::node layoutdecl [SpanFrom p $start] \
         name $layoutName nameSpan [dict get $name span] \

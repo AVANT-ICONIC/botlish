@@ -1,0 +1,188 @@
+# c-structs.bot -- C structs as fixed binary layouts (BINARY-LAYOUT.md, "C
+# readiness"). No C is called and no header is parsed: the layouts below are
+# what a C-header plugin would emit for one target (Windows x86-64, LLP64),
+# written by hand. The plugin asks its C front end for each struct's resolved
+# size, alignment and field offsets, maps each C scalar type to an integer
+# domain of that target's width, and prints `layout` declarations; Botlish
+# knows none of the C rules that produced the numbers.
+#
+#   bytes --binary::parse--> LayoutStruct[RAWINPUTDEVICE] --ordinary code--> RawInputDevice
+#   RawInputDevice --ordinary code--> LayoutStruct[RAWINPUTDEVICE] --binary::emit--> bytes
+#
+# expect: [RawInputDevice {usage_page: 1, usage: 6, sink: true, no_legacy: false, target: WindowHandle {bits: 4660}}, true, LayoutStruct[POINTS] {first: LayoutStruct[POINT] {x: -5, y: 7}, second: LayoutStruct[POINT] {x: 2147483647, y: -2147483648}}, [16, 8, 12, 4, 16, 4, 7, 1, 32, 32], "UnknownDeviceFlags"]
+import abi::bytes
+import binary
+import byte
+
+# ---------------------------------------------------------------------------
+# The target's C scalar types, resolved to fixed-width domains (what the
+# plugin emits once per target: on Linux x86-64 `unsigned long` would be
+# Int in 0..2^64-1 instead). The encoding of a layout field follows from its
+# domain's interval alone.
+
+type CUShort = Int in 0..65535
+type CULong = Int in 0..4294967295
+type CLong = Int in -2147483648..2147483647
+type CUChar = Int in 0..255
+type CUInt = Int in 0..4294967295
+type CInt = Int in -2147483648..2147483647
+
+# HWND is a pointer. Botlish has no foreign pointer type yet (the FFI
+# milestone's), and a pointer is not a number: this stand-in only gives the
+# field its width (the plugin would emit an opaque pointer-width scalar).
+type HandleBits = Int in 0..18446744073709551615
+
+# ---------------------------------------------------------------------------
+# What the plugin emits (sizes, alignments and offsets as the C compiler
+# resolved them).
+
+# typedef struct tagRAWINPUTDEVICE {
+#     USHORT usUsagePage; USHORT usUsage; DWORD dwFlags; HWND hwndTarget;
+# } RAWINPUTDEVICE;                       -- naturally aligned, no padding
+layout RAWINPUTDEVICE:
+    size 16
+    align 8
+    field usUsagePage: CUShort at 0
+    field usUsage: CUShort at 2
+    field dwFlags: CULong at 4
+    field hwndTarget: HandleBits at 8
+
+# struct SAMPLE { unsigned char tag; int value; unsigned char flag; };
+#                                         -- 3 bytes of padding after each char
+layout SAMPLE:
+    size 12
+    align 4
+    field tag: CUChar at 0
+    field value: CInt at 4
+    field flag: CUChar at 8
+
+# typedef struct tagPOINT { LONG x; LONG y; } POINT;
+# struct POINTS { POINT first; POINT second; };   -- nested by value
+layout POINT:
+    size 8
+    align 4
+    field x: CLong at 0
+    field y: CLong at 4
+
+layout POINTS:
+    size 16
+    align 4
+    field first: POINT at 0
+    field second: POINT at 8
+
+# #pragma pack(push, 1)
+# struct PACKED_HEADER { unsigned char kind; unsigned int length; unsigned short crc; };
+# #pragma pack(pop)                       -- a field at an unaligned offset
+layout PACKED_HEADER:
+    size 7
+    align 1
+    field kind: CUChar at 0
+    field length: CUInt at 1
+    field crc: CUShort at 5
+
+# struct __declspec(align(32)) ALIGNED { int a; };
+#                                         -- over-aligned, 28 bytes of trailing padding
+layout ALIGNED:
+    size 32
+    align 32
+    field a: CInt at 0
+
+# ---------------------------------------------------------------------------
+# The application's own types: domain names and meanings, no offsets.
+
+struct WindowHandle:
+    bits: HandleBits
+
+struct RawInputDevice:
+    usage_page: int
+    usage: int
+    sink: bool
+    no_legacy: bool
+    target: WindowHandle
+
+error UnknownDeviceFlags:
+    flags: int
+
+error UsageOutOfRange
+
+# RIDEV_INPUTSINK and RIDEV_NOLEGACY, the two flags this application uses.
+fn input_sink() -> int:
+    256
+
+fn no_legacy() -> int:
+    48
+
+# LayoutStruct[RAWINPUTDEVICE] -> RawInputDevice: field renames, a flag word
+# split into Booleans (failing on a flag the application does not know), a
+# handle wrapped in its own type.
+fn raw_input_device(raw: LayoutStruct[RAWINPUTDEVICE]) -> RawInputDevice errors UnknownDeviceFlags:
+    known = input_sink() + no_legacy()
+    if bit_and(raw.dwFlags, known) != raw.dwFlags:
+        fail UnknownDeviceFlags {flags: raw.dwFlags}
+    RawInputDevice {
+        usage_page: raw.usUsagePage,
+        usage: raw.usUsage,
+        sink: bit_and(raw.dwFlags, input_sink()) != 0,
+        no_legacy: bit_and(raw.dwFlags, no_legacy()) == no_legacy(),
+        target: WindowHandle {bits: raw.hwndTarget},
+    }
+
+# RawInputDevice -> LayoutStruct[RAWINPUTDEVICE]: the reverse renames, the
+# Booleans packed into the flag word (each range proven, so no conversion can
+# fail), the usage values converted back into their C domains.
+fn to_raw(d: RawInputDevice) -> LayoutStruct[RAWINPUTDEVICE] errors UsageOutOfRange:
+    page = d.usage_page
+    usage = d.usage
+    if page < 0 or page > 65535 or usage < 0 or usage > 65535:
+        fail UsageOutOfRange
+    # (Literal flag values: the range proof of the packed word needs them.)
+    sink = if d.sink:
+        256
+    else:
+        0
+    legacy = if d.no_legacy:
+        48
+    else:
+        0
+    flags = sink + legacy
+    LayoutStruct[RAWINPUTDEVICE] {usUsagePage: page, usUsage: usage, dwFlags: flags, hwndTarget: d.target.bits}
+
+fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+    bs = loop v in values:
+        b = byte::from_int(v):
+            on byte::BelowRange:
+                0
+            on byte::AboveRange:
+                255
+        b
+    abi::bytes::from_list(bs)
+
+# Bytes as the C side would have written them.
+fn device_bytes() -> abi::bytes::Bytes:
+    bytes_of([1, 0, 6, 0, 0, 1, 0, 0, 52, 18, 0, 0, 0, 0, 0, 0])
+
+fn demo() -> List[any] errors LayoutLengthMismatch, UnknownDeviceFlags, UsageOutOfRange:
+    raw = binary::parse(RAWINPUTDEVICE, device_bytes())
+    device = raw_input_device(raw)
+    back = binary::emit(to_raw(device))
+    points = binary::parse(POINTS, bytes_of([251, 255, 255, 255, 7, 0, 0, 0, 255, 255, 255, 127, 0, 0, 0, 128]))
+    sizes = [
+        binary::layout_length(RAWINPUTDEVICE), binary::layout_alignment(RAWINPUTDEVICE),
+        binary::layout_length(SAMPLE), binary::layout_alignment(SAMPLE),
+        binary::layout_length(POINTS), binary::layout_alignment(POINTS),
+        binary::layout_length(PACKED_HEADER), binary::layout_alignment(PACKED_HEADER),
+        binary::layout_length(ALIGNED), binary::layout_alignment(ALIGNED),
+    ]
+    unknown = raw_input_device(LayoutStruct[RAWINPUTDEVICE] {usUsagePage: 1, usUsage: 2, dwFlags: 1, hwndTarget: 0}):
+        on UnknownDeviceFlags:
+            return [device, back == device_bytes(), points, sizes, "UnknownDeviceFlags"]
+    [device, back == device_bytes(), points, sizes, unknown]
+
+result = demo():
+    on LayoutLengthMismatch:
+        ["LayoutLengthMismatch"]
+    on UnknownDeviceFlags:
+        ["UnknownDeviceFlags"]
+    on UsageOutOfRange:
+        ["OutOfRange"]
+result

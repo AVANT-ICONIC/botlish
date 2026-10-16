@@ -4792,6 +4792,24 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
                 # `structget`.
                 lassign $local - fields shape - - cut
                 set leaves [ContextLeafRegs fn $e $shape $cut $fields]
+            } elseif {[hir::kind $hir $arg] eq "struct" && [hir::get $hir $arg named]
+                    && [hir::get $hir $arg structId] eq [lindex $descriptor 0]} {
+                # The construction written as the argument (`binary::emit(
+                # LayoutStruct[L] {...})`): its fields, evaluated in written
+                # order, are the leaves; the object is never built (a nested
+                # literal is, and is read with `structget`).
+                set ordered [StructFields fn $arg [hir::node $hir $arg]]
+                if {$ordered eq "never"} {
+                    return {never tagged}
+                }
+                set leaves {}
+                foreach r $ordered field [lindex $descriptor 3] {
+                    if {[lindex $field 2] eq "layout"} {
+                        lappend leaves {*}[ContextObjectLeaves fn $e [lindex $field 3 0] $r]
+                    } else {
+                        lappend leaves $r
+                    }
+                }
             } else {
                 set value [Expr fn $arg]
                 if {$value eq "never"} {
