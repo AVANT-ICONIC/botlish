@@ -462,7 +462,7 @@ and `hir/range.tcl` and the evaluator call nothing in `hir::condition`
 | run | result |
 |---|---|
 | `tests/local.tcl` (176 Tcl files on interp and compile, 90 golden suites on 4 backends) | interp 5,395 passed, compile 5,391 passed; golden: 90 suites, interp 4,634/4,634, compile 4,634/4,634, cranelift-generic 4,541/4,541, cranelift 4,643/4,643. One failure, of this milestone's own test: `bf-large-chain` measured the generated Tcl's length, whose variable numbers count across compilations, so their digits depended on the tests run before it; it now measures the code with them normalized and passes in both modes |
-| native coverage (the Tcl suite on cranelift and cranelift-generic) | TBD |
+| native coverage (`tests/native-coverage.tcl -log`, the whole Tcl suite on each native backend: `tests/local.tcl -backends B -parts tcl -all 1` with `NATIVE_COVERAGE`) | cranelift: 7,564 tests, 3,003 native, 4,432 independent, 69 passed-partial, 60 unsupported, **0 failed**; cranelift-generic: 3,002 native, 61 unsupported, **0 failed**. Every unsupported test needs a test-only native (`test-log`, `test-tick`, ...), sequence mode or a value the backend cannot represent, as before. The one generic-only entry is bench/test-selection.bot's `struct-shape`, the same before (the corpus differential) |
 | `tests/branch-form-boolean.test` | 37/37, and 37/37 under `BOTLISH_NATIVE_GC_STRESS=1` |
 | `tests/affine.test`, `tests/coroutines.test` under `BOTLISH_NATIVE_GC_STRESS=1` | 48/48, 79/79 |
 | `audit/affine/tools/fuzz.tcl` (seeds 1-3, 30 programs each) | 0 disagreements |
