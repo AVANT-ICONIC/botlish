@@ -8845,7 +8845,7 @@ proc native::lower::ListLoop {fnVar e node} {
         set elemReg [Assign fn "op listget $iterReg $idxReg" $e]
     }
     dict set fn locals [dict get $node elementBinding] [list reg $elemReg]
-    set bodyValue [Sequence fn [dict get $node body]]
+    set bodyValue [IterationBody fn $e [dict get $node body]]
     set usedContinue [dict exists $fn continued $e]
     if {$bodyValue ne "never"} {
         if {$retained} {
@@ -8875,6 +8875,22 @@ proc native::lower::ListLoop {fnVar e node} {
     Emit fn "jump $exit" $e
     EmitLabel fn $exit
     return $resultReg
+}
+
+# The value of the body BODY of an iterating loop E (ListLoop, LockLoop),
+# lowered where an iteration runs it: a body HIR left unreachable (an empty
+# domain, a List[never], never runs it: hir::types' listloop and lockloop
+# cases) is not lowered, exactly as a decided `if`'s dead arm is not (If):
+# HIR's analyses (the specialization's calls, the ownership releases) never
+# saw it as code that runs.
+proc native::lower::IterationBody {fnVar e body} {
+    upvar 1 $fnVar fn
+    variable hir
+    if {$body ne "" && ![hir::get $hir [lindex $body 0] reachable]} {
+        Emit fn unreachable $e
+        return never
+    }
+    return [Sequence fn $body]
 }
 
 # 1 if the numeric loop domain START..END of instance ID gets a raw
@@ -9207,7 +9223,7 @@ proc native::lower::LockLoop {fnVar e node} {
                 [list [expr {[dict get $state raw] ? "rawreg" : "reg"}] [dict get $state idx]]
         }
     }
-    set bodyValue [Sequence fn [dict get $node body]]
+    set bodyValue [IterationBody fn $e [dict get $node body]]
     set usedContinue [dict exists $fn continued $e]
     if {$bodyValue ne "never"} {
         if {$retained} {

@@ -336,4 +336,101 @@ fn first(xs: List[S]) -> int:
 first([])}]
 } -result {{value 5} {value 3}}
 
+# ---------------------------------------------------------------------------
+# Collecting loops over a List[never]. Its domain is empty, so the body never
+# runs: hir::types walks it as unreachable code (like a decided `if`'s dead
+# arm) and types the loop as exactly the empty List, List[never], whatever
+# the body's own type. That type describes an iteration whose element would
+# be a `never`: a handled byte::from_int of it is typed by its handlers' join
+# (an Int, not a Byte), and the instance of an empty caller used to collect
+# a List[int] and reject its own call of a List[Byte] parameter ("call to
+# bytes_of with values : List[never] is invalid"). An instance's verification
+# skips what the call never runs (hir::semantic::verify).
+
+set ::handledByte {        b = byte::from_int(v):
+            on byte::BelowRange:
+                0
+            on byte::AboveRange:
+                255
+}
+set ::countBytes {fn count_bytes(bs: List[byte::Byte]) -> int:
+    list::length(bs)
+}
+
+test empty-caller-collecting-loop-typed-consumer {the empty caller of a function that collects a handled byte::from_int over its List[int] parameter and passes the List to abi::bytes::from_list's List[Byte] parameter is accepted, and agrees on every backend} -body {
+    sourceAgree [format {import abi::bytes
+import byte
+
+fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+    bs = loop v in values:
+%s        b
+    abi::bytes::from_list(bs)
+
+[abi::bytes::length(bytes_of([])).value, abi::bytes::length(bytes_of([1, 300, -4])).value]} $::handledByte]
+} -result {value {[0, 3]}}
+
+test empty-caller-collecting-loop-is-empty-list {in the empty caller's instance the collecting loop is List[never], never the body's join; the contract's own analysis still collects List[Byte]} -body {
+    set program [format {import byte
+
+fn collect(values: List[int]):
+    loop v in values:
+%s        b
+} $::handledByte]
+    lmap call {{collect([])} {collect([1])}} {
+        set hir [sourceHir "$program$call"]
+        hir::types::show [hir::typeOf $hir [lindex [hir::roots $hir] end]]
+    }
+} -result {{List[never]} {List[int[byte::Byte]]}}
+
+test empty-caller-lockstep-loop-typed-consumer {the same collection through a lockstep loop (an empty list domain: every domain has the one proven cardinality) is accepted and agrees on every backend} -body {
+    sourceAgree [format {import byte
+import list
+
+%s
+fn bytes_of(values: List[int]) -> int:
+    bs = loop v in values and i from 0 to list::length(values):
+%s        b
+    count_bytes(bs)
+
+[bytes_of([]), bytes_of([1, 2])]} $::countBytes $::handledByte]
+} -result {value {[0, 2]}}
+
+test empty-caller-loop-body-typed-call {a typed call inside the loop body of the empty caller's instance (each element's handled Byte passed on as a List[Byte]) is code that instance never runs: accepted, and agrees on every backend} -body {
+    sourceAgree [format {import byte
+import list
+
+%s
+fn each(values: List[int]) -> list:
+    loop v in values:
+%s        count_bytes([b])
+
+[each([]), each([1, 300])]} $::countBytes $::handledByte]
+} -result {value {[[], [1, 1]]}}
+
+test empty-literal-collecting-loop-typed-consumer {a loop over the literal [] in an ordinary function body (no instance) is the empty List too: passed to a List[Byte] parameter it is accepted} -body {
+    sourceAgree [format {import byte
+import list
+
+%s
+fn none() -> int:
+    bs = loop v in []:
+%s        b
+    count_bytes(bs)
+
+none()} $::countBytes $::handledByte]
+} -result {value 0}
+
+test empty-caller-collected-ints-still-rejected {an empty caller does not rescue a definition invalid for its contract: a loop collecting the Int elements themselves is a List[int], rejected at the List[Byte] parameter whatever calls the function (the negative control)} -body {
+    rejects [format {import byte
+import list
+
+%s
+fn ints_of(values: List[int]) -> int:
+    bs = loop v in values:
+        v
+    count_bytes(bs)
+
+ints_of([])} $::countBytes]
+} -result {{CORE SEMANTIC TYPE} 1}
+
 ::tcltest::cleanupTests

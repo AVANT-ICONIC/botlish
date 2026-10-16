@@ -1028,14 +1028,20 @@ tests/emailish-predicate.test emailish-predicate-set-retained-once pass
 tests/emailish-predicate.test emailish-predicate-signature pass
 tests/emailish-predicate.test emailish-predicate-user-block pass
 tests/empty-collection-admissibility.test checked-domain-negative-control-still-checked pass
+tests/empty-collection-admissibility.test empty-caller-collected-ints-still-rejected pass
+tests/empty-collection-admissibility.test empty-caller-collecting-loop-is-empty-list pass
+tests/empty-collection-admissibility.test empty-caller-collecting-loop-typed-consumer pass
 tests/empty-collection-admissibility.test empty-caller-element-read-handled pass
 tests/empty-collection-admissibility.test empty-caller-element-read-propagated pass
 tests/empty-collection-admissibility.test empty-caller-instance-loop-body-statically-dead pass
+tests/empty-collection-admissibility.test empty-caller-lockstep-loop-typed-consumer pass
+tests/empty-collection-admissibility.test empty-caller-loop-body-typed-call pass
 tests/empty-collection-admissibility.test empty-list-satisfies-declared-result pass
 tests/empty-collection-admissibility.test empty-list-satisfies-source-defined-domain pass
 tests/empty-collection-admissibility.test empty-list-satisfies-string pass
 tests/empty-collection-admissibility.test empty-listloop-nonempty-caller-still-correct pass
 tests/empty-collection-admissibility.test empty-listloop-runtime-zero-iterations pass
+tests/empty-collection-admissibility.test empty-literal-collecting-loop-typed-consumer pass
 tests/empty-collection-admissibility.test empty-set-satisfies-byte pass
 tests/empty-collection-admissibility.test empty-set-satisfies-declared-result pass
 tests/empty-collection-admissibility.test empty-set-satisfies-string pass
@@ -3753,6 +3759,8 @@ tests/native-listloop.test native-listloop-discarded-allocates-no-output-list pa
 tests/native-listloop.test native-listloop-discarded-break-no-output-list pass
 tests/native-listloop.test native-listloop-discarded-no-list pass
 tests/native-listloop.test native-listloop-discarded-still-traverses pass
+tests/native-listloop.test native-listloop-empty-domain-bodies-run pass
+tests/native-listloop.test native-listloop-empty-domain-body-not-lowered pass
 tests/native-listloop.test native-listloop-find-no-output-list-failing pass
 tests/native-listloop.test native-listloop-find-no-output-list-matching pass
 tests/native-listloop.test native-listloop-never-element-neighbours pass
@@ -5188,6 +5196,7 @@ tests/semantic-instances.test si-list-1 pass
 tests/semantic-instances.test si-list-2 pass
 tests/semantic-instances.test si-list-3 pass
 tests/semantic-instances.test si-list-4 pass
+tests/semantic-instances.test si-list-5 pass
 tests/semantic-instances.test si-nogen-1 pass
 tests/semantic-instances.test si-nogen-2 pass
 tests/semantic-instances.test si-nogen-3 pass

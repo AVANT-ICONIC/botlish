@@ -1249,6 +1249,74 @@ fn register_empty_collection_tests():
             first([])
     test::value("empty-caller-element-read-propagated/get-default", 3, b_read_default)
 
+    # Collecting loops over a List[never]: the domain is empty, so the loop is
+    # the empty List whatever its body's type (a handled byte::from_int of an
+    # element that cannot exist is typed by its handlers' join, an Int).
+    # empty-caller-lockstep-loop-typed-consumer: through a lockstep loop.
+    fn b_lockstep_collect() errors compiler::CompilerError:
+        static compile:
+            fn count_bytes(bs: List[byte::Byte]) -> int:
+                list::length(bs)
+            fn bytes_of(values: List[int]) -> int:
+                bs = loop v in values and i from 0 to list::length(values):
+                    b = byte::from_int(v):
+                        on byte::BelowRange:
+                            0
+                        on byte::AboveRange:
+                            255
+                    b
+                count_bytes(bs)
+            [bytes_of([]), bytes_of([1, 2])]
+    test::value("empty-caller-lockstep-loop-typed-consumer", [0, 2], b_lockstep_collect)
+
+    # empty-caller-loop-body-typed-call: a typed call inside the body, code
+    # the empty caller's instance never runs.
+    fn b_body_typed_call() errors compiler::CompilerError:
+        static compile:
+            fn count_bytes(bs: List[byte::Byte]) -> int:
+                list::length(bs)
+            fn each(values: List[int]) -> list:
+                loop v in values:
+                    b = byte::from_int(v):
+                        on byte::BelowRange:
+                            0
+                        on byte::AboveRange:
+                            255
+                    count_bytes([b])
+            [each([]), each([1, 300])]
+    test::value("empty-caller-loop-body-typed-call", [[], [1, 1]], b_body_typed_call)
+
+    # empty-literal-collecting-loop-typed-consumer: a loop over the literal []
+    # in an ordinary function body.
+    fn b_literal_collect() errors compiler::CompilerError:
+        static compile:
+            fn count_bytes(bs: List[byte::Byte]) -> int:
+                list::length(bs)
+            fn none() -> int:
+                bs = loop v in []:
+                    b = byte::from_int(v):
+                        on byte::BelowRange:
+                            0
+                        on byte::AboveRange:
+                            255
+                    b
+                count_bytes(bs)
+            none()
+    test::value("empty-literal-collecting-loop-typed-consumer", 0, b_literal_collect)
+
+    # empty-caller-collected-ints-still-rejected: collecting the Int elements
+    # themselves is a List[int], whatever calls the function.
+    fn b_collected_ints() errors compiler::CompilerError:
+        static compile:
+            fn count_bytes(bs: List[byte::Byte]) -> int:
+                list::length(bs)
+            fn ints_of(values: List[int]) -> int:
+                bs = loop v in values:
+                    v
+                count_bytes(bs)
+            ints_of([])
+    test::rejects_containing("empty-caller-collected-ints-still-rejected", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", b_collected_ints)
+
 # ---------------------------------------------------------------------------
 # The suite
 

@@ -2385,10 +2385,24 @@ proc hir::types::Expr {hirVar ctxVar e} {
             # empty iterable, exactly as a bare `[]` literal is List[never],
             # not never itself.
             dict set ctx breakTypes $e never
+            set entry [dict get $ctx reachable]
+            if {$elemType eq "never"} {
+                # The iterable is a List[never], which only an empty List
+                # ever is (M7AA-EMPTY-COLLECTION-AND-APPLIED-TYPE-
+                # SEMANTICS.md): the body never runs. It is walked like a
+                # decided `if`'s dead arm (If, below), unreachable, and the
+                # loop is exactly the empty List, whatever the body's type:
+                # that type describes an iteration whose element would be a
+                # `never`, a value that cannot exist (a handled call of it is
+                # typed by its handlers' join, Handle: `b = byte::from_int(v):
+                # on ...: 0` an Int, so `[b]` a List[int], not a List[Byte]).
+                dict set ctx reachable 0
+            }
             set bodyType [Sequence hir ctx [dict get $node body]]
+            dict set ctx reachable $entry
             dict unset ctx breakTypes $e
             dict set ctx facts $saved
-            return [SetType hir $e [MakeList $bodyType]]
+            return [SetType hir $e [MakeList [expr {$elemType eq "never" ? "never" : $bodyType}]]]
         }
         countloop {
             Expr hir ctx [dict get $node start]
@@ -2423,11 +2437,15 @@ proc hir::types::Expr {hirVar ctxVar e} {
             # The result is the same collected List[R] as any collecting
             # loop's.
             set facts {}
+            set empty 0
             foreach domain [dict get $node domains] {
                 if {[dict get $domain kind] eq "list"} {
                     Expr hir ctx [dict get $domain iterable]
                     set elemType [IterationElementOf [hir::typeOf $hir [dict get $domain iterable]]]
                     lappend facts [dict get $domain binding] [expr {$elemType eq "" ? "any" : $elemType}]
+                    # An empty domain (listloop's case): every domain has
+                    # the one proven cardinality, so the body never runs.
+                    set empty [expr {$empty || $elemType eq "never"}]
                 } else {
                     Expr hir ctx [dict get $domain start]
                     Expr hir ctx [dict get $domain end]
@@ -2439,10 +2457,15 @@ proc hir::types::Expr {hirVar ctxVar e} {
                 dict set ctx facts $binding $type
             }
             dict set ctx breakTypes $e never
+            set entry [dict get $ctx reachable]
+            if {$empty} {
+                dict set ctx reachable 0
+            }
             set bodyType [Sequence hir ctx [dict get $node body]]
+            dict set ctx reachable $entry
             dict unset ctx breakTypes $e
             dict set ctx facts $saved
-            return [SetType hir $e [MakeList $bodyType]]
+            return [SetType hir $e [MakeList [expr {$empty ? "never" : $bodyType}]]]
         }
         return {
             set value [Expr hir ctx [dict get $node value]]

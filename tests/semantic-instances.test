@@ -272,6 +272,10 @@ test si-list-4 {a recursive accumulator recovers its element type} -body {
     list [siLast "${def}[format $run {["a", "b"]} {["z"]}]"] [siLast "${def}[format $run {[1]} {[0]}]"]
 } -result {{List[str]} {List[int]}}
 
+test si-list-5 {an empty caller's instance collects nothing: its loop is List[never] whatever the body's (handled) type, so it and the List[Byte] consumer's instance it requests are valid} -body {
+    siInstances "import abi::bytes\nimport byte\nfn bytes_of(values: List\[int\]) -> abi::bytes::Bytes:\n    bs = loop v in values:\n        b = byte::from_int(v):\n            on byte::BelowRange:\n                0\n            on byte::AboveRange:\n                255\n        b\n    abi::bytes::from_list(bs)\nx = bytes_of(\[\])\nunit"
+} -result {{abi::bytes::from_list<List[never]> -> abi::bytes::Bytes [valid]} {bytes_of<List[never]> -> abi::bytes::Bytes [valid]}}
+
 # ---------------------------------------------------------------------------
 # higher-order helpers: list::find / any? / all? / none?
 
