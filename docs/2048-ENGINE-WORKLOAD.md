@@ -60,7 +60,7 @@ P1-P3, D1-D6): each entry was written when it happened.
 | test tooling | `audit/golden/tools/perturb.tcl`: `-lib DIR` (perturb a suite against a library directory that holds a non-stdlib module); census rows for the new Tcl tests (`audit/golden/migration/census/workload-2048.tsv`, `native-root-liveness.tsv`) and the regenerated `tests/golden/manifest.tsv` |
 | compiler correctness | `native/src/codegen/roots.rs`: a definition interferes with every managed register live after it; Rust test `definition_does_not_overwrite_a_live_root`; `tests/native-root-liveness.test` `root-def-interference-1`. `native/lower.tcl`: the internal scalar companion (`internalcompanion`: `InternalCompanionRef`, `InternalCompanionFunction`, `FlattenedVirtualScalarCall`) and `Call`'s flattened dispatch for a call whose result is wanted as fields; `tests/native-block-escape.test` `blockescape-scalar-companion-1..3` |
 | compiler precision / optimization | none (findings only: S5, S7, S8, S9, S18) |
-| CLI / docs | this report and its line in INDEX.md; NATIVE-AUDIT.md's root-interference definition marked corrected; no CLI change (findings S4, S15, S22) |
+| CLI / docs / agent instructions | this report and its line in INDEX.md; NATIVE-AUDIT.md's root-interference definition marked corrected; an AGENTS.md section on the workload (where it lives, how it runs, what to re-run); no CLI change (findings S4, S15, S22). CI's scalar-asm-audit job will regenerate `audit/native-scalar-asm/` after the merge (the roots fix adds slots to `csv_records` and `hashtable`) |
 
 ## 1. Implementation
 
@@ -714,6 +714,9 @@ experiment with a tooling failure rather than ordinary unfamiliarity):
    printing program reimplement it).
 6. S12: either exclude bindings whose static type is not callable from
    method candidates, or make the diagnostic name the reason.
+7. S16: the stdlib's own warnings should not reach a program that imports
+   it -- today `-warnings error` rejects every program that imports `io`
+   for two literals in `lib/io.bot`.
 
 S24 is fixed already: it would have stopped the restricted agent's first
 single-file native build with an internal error.

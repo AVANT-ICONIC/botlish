@@ -1213,6 +1213,25 @@ must still apply and be killed, the economic ones -- a build too many -- as
 much as the semantic ones). `bench/static-decisions.tcl` regenerates the
 economics report.
 
+## Workloads (examples/games/2048)
+
+`examples/games/2048/` is the first workload of the post-golden stress-test
+series (2048-ENGINE-WORKLOAD.md): a 2048 engine as an ordinary module
+(`game2048.bot`), its demo, its golden suite and its benchmark program. The
+engine is not standard library and must not move into `lib/` (it would ship
+in the single executable): its programs are compiled against a private
+library directory, a temporary copy of `lib/` plus the engine, that
+`examples/games/2048/run.tcl` builds (`-suite`, `-hirx OUT FILE.bot` for
+main.tcl's options, `-backend B FILE.bot`). `tests/workload-2048.test` runs
+the suite, the warning check, the benchmark checksum and the demo executable
+(also under GC stress) in the ordinary suite; `bench/2048.tcl` is the
+performance report. If you change the engine or the suite, also run
+`audit/2048/mutate.tcl` (every mutant in `audit/2048/mutants.txt` must
+still apply and be killed) and `audit/golden/tools/perturb.tcl -lib DIR`
+on `golden.bot` (DIR: a copy of `lib/` with the engine added). The
+workload's golden suite is not in `tests/golden/`: its tests port no Tcl
+test, so they have no manifest rows.
+
 ## Golden tests (Botlish-native test framework)
 
 `lib/test.bot` (GOLDEN-TEST-FRAMEWORK.md) is an ordinary Botlish library:
