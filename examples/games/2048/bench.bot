@@ -1,0 +1,85 @@
+# bench.bot -- a deterministic workload for the 2048 engine (game2048.bot):
+# bench/2048.tcl runs it on every backend.
+#
+# `benchmark(moves, seed)` makes exactly MOVES moves. A game starts from two
+# spawned tiles; each move's direction and each spawn come from a linear
+# congruential generator, so neither the boards nor the move sequence is
+# known before the program runs; a game that is over is scored and a new
+# one starts. The result is a checksum of everything the engine computed:
+# every finished game's score, every move's gain and every move that
+# changed the board. The seed mixes in the length of the process's argument
+# vector, which no compiler can know.
+import game2048
+import list
+
+fn next_seed(seed: int) -> int:
+    (seed * 1103515245 + 12345).mod(2147483648)
+
+fn direction(roll: int) -> game2048::Direction:
+    turn = roll.mod(4)
+    if turn == 0:
+        game2048::Direction::Left
+    elif turn == 1:
+        game2048::Direction::Up
+    elif turn == 2:
+        game2048::Direction::Right
+    else:
+        game2048::Direction::Down
+
+struct Turn:
+    game: game2048::Game
+    seed: int
+
+# GAME with one tile spawned where SEED says.
+fn spawned(game: game2048::Game, seed: int) -> Turn:
+    roll = next_seed(seed)
+    empties = game.board.empty_positions()
+    count = list::length(empties)
+    if count == 0:
+        return Turn {game: game, seed: roll}
+    at = empties.get(roll.mod(count), game2048::Position {row: 0, column: 0})
+    tile = if roll.mod(10) == 0:
+        game2048::SpawnTile::Four
+    else:
+        game2048::SpawnTile::Two
+    placed = game.spawn(at, tile):
+        on game2048::CellOccupied:
+            game
+    Turn {game: placed, seed: roll}
+
+fn opening(seed: int) -> Turn:
+    first = game2048::new_game().spawned(seed)
+    first.game.spawned(first.seed)
+
+struct Tally:
+    turn: Turn
+    checksum: int
+
+# TALLY after LEFT more moves.
+fn played(tally: Tally, left: int) -> Tally:
+    if left == 0:
+        return tally
+    game = tally.turn.game
+    if game.game_over?():
+        fresh = Tally {turn: opening(tally.turn.seed), checksum: tally.checksum + game.score + 1000003}
+        return fresh.played(left)
+    roll = next_seed(tally.turn.seed)
+    m = game.move(direction(roll))
+    if m.changed:
+        next = m.game.spawned(roll)
+        Tally {turn: next, checksum: tally.checksum + m.gained + 1}.played(left - 1)
+    else:
+        Tally {turn: Turn {game: m.game, seed: roll}, checksum: tally.checksum}.played(left - 1)
+
+# (nomethod: MOVES is a count, not a receiver.)
+nomethod fn benchmark(moves: int, seed: int) -> int:
+    final = Tally {turn: opening(seed), checksum: 0}.played(moves)
+    final.checksum + final.turn.game.score
+
+fn entropy() -> int:
+    arguments = argv():
+        on InvalidArgumentEncoding:
+            []
+    list::length(arguments)
+
+benchmark(200, 2048 + entropy())

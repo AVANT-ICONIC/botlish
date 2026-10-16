@@ -1,0 +1,190 @@
+# Mutants of the 2048 engine (audit/2048/mutate.tcl; 2048-ENGINE-WORKLOAD.md,
+# "Mutation evidence"): each a plausible bug in examples/games/2048/
+# game2048.bot -- the workload brief's item 35 list first, then ones the
+# engine's own decomposition suggests. Format (as
+# audit/golden/tools/mutants.txt):
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# Every mutant must still apply and be killed by examples/games/2048/
+# golden.bot: a failed test, or a suite that no longer compiles.
+
+@@ merge-produced-again a tile a merge produced merges again in the same move (the merge pass runs twice)
+## examples/games/2048/game2048.bot
+<<<<
+    merge = tiles.merged()
+====
+    once = tiles.merged()
+    twice = once.cells.merged()
+    merge = Slide {cells: twice.cells, score: once.score + twice.score}
+>>>>
+
+@@ merge-reuses-source the second tile of a merged pair also takes part in the next comparison
+## examples/games/2048/game2048.bot
+<<<<
+            from(i + 2, Slide {cells: done.cells.append(tile * 2), score: done.score + tile * 2})
+====
+            from(i + 1, Slide {cells: done.cells.append(tile * 2), score: done.score + tile * 2})
+>>>>
+
+@@ no-compact-before-merge the line's empty cells are kept when merging
+## examples/games/2048/game2048.bot
+<<<<
+    tiles = loop cell in cells:
+        if cell == empty:
+            continue
+        cell
+====
+    tiles = loop cell in cells:
+        cell
+>>>>
+
+@@ no-compact-after-merge a merge leaves an empty cell where its second tile was
+## examples/games/2048/game2048.bot
+<<<<
+            from(i + 2, Slide {cells: done.cells.append(tile * 2), score: done.score + tile * 2})
+====
+            from(i + 2, Slide {cells: done.cells.append(tile * 2).append(empty), score: done.score + tile * 2})
+>>>>
+
+@@ score-by-source a merge scores the tile it consumed, not the tile it produced
+## examples/games/2048/game2048.bot
+<<<<
+            from(i + 2, Slide {cells: done.cells.append(tile * 2), score: done.score + tile * 2})
+====
+            from(i + 2, Slide {cells: done.cells.append(tile * 2), score: done.score + tile})
+>>>>
+
+@@ right-in-left-order right slides each row toward its start, as left does
+## examples/games/2048/game2048.bot
+<<<<
+    elif direction == Direction::Right:
+        rows.each_reversed()
+====
+    elif direction == Direction::Right:
+        rows
+>>>>
+
+@@ transpose-mirrored the transpose reads each row from the right: an anti-transpose
+## examples/games/2048/game2048.bot
+<<<<
+        loop row in rows:
+            row.get(column, empty)
+====
+        loop row in rows:
+            row.get(3 - column, empty)
+>>>>
+
+@@ down-inverse-misordered down's way back reverses after transposing instead of before
+## examples/games/2048/game2048.bot
+<<<<
+        lines.each_reversed().transposed()
+====
+        lines.transposed().each_reversed()
+>>>>
+
+@@ spawn-into-occupied spawn places a tile whatever the cell holds
+## examples/games/2048/game2048.bot
+<<<<
+    if game.board.cell(at) != empty:
+        fail CellOccupied
+====
+    if game.board.cell(at) < empty:
+        fail CellOccupied
+>>>>
+
+@@ spawn-four-is-eight a Four spawn places an 8
+## examples/games/2048/game2048.bot
+<<<<
+    else:
+        4
+====
+    else:
+        8
+>>>>
+
+@@ game-over-ignores-vertical game over does not look for equal vertical neighbours
+## examples/games/2048/game2048.bot
+<<<<
+    not rows.has_empty?() and not rows.equal_neighbours?() and not rows.transposed().equal_neighbours?()
+====
+    not rows.has_empty?() and not rows.equal_neighbours?()
+>>>>
+
+@@ game-over-ignores-horizontal game over does not look for equal horizontal neighbours
+## examples/games/2048/game2048.bot
+<<<<
+    not rows.has_empty?() and not rows.equal_neighbours?() and not rows.transposed().equal_neighbours?()
+====
+    not rows.has_empty?() and not rows.transposed().equal_neighbours?()
+>>>>
+
+@@ game-over-ignores-empty game over does not look for an empty cell
+## examples/games/2048/game2048.bot
+<<<<
+    not rows.has_empty?() and not rows.equal_neighbours?() and not rows.transposed().equal_neighbours?()
+====
+    not rows.equal_neighbours?() and not rows.transposed().equal_neighbours?()
+>>>>
+
+@@ changed-always-true every move reports that it changed the board
+## examples/games/2048/game2048.bot
+<<<<
+changed: moved != rows}
+====
+changed: true}
+>>>>
+
+@@ score-not-accumulated the game's score becomes the last move's gain
+## examples/games/2048/game2048.bot
+<<<<
+score: game.score + gained}
+====
+score: gained}
+>>>>
+
+@@ gain-first-line-only a move's gain counts only its first line
+## examples/games/2048/game2048.bot
+<<<<
+    gained = scores.total()
+====
+    gained = scores.get(0, 0)
+>>>>
+
+@@ tile-accepts-one 1 counts as a tile
+## examples/games/2048/game2048.bot
+<<<<
+    reached?(2)
+====
+    reached?(1)
+>>>>
+
+@@ board-accepts-short-rows a board's rows may have any length
+## examples/games/2048/game2048.bot
+<<<<
+    list::length(row) == 4 and row.all?(cell?)
+====
+    row.all?(cell?)
+>>>>
+
+@@ reached-strict a board reaches a tile only with a larger one
+## examples/games/2048/game2048.bot
+<<<<
+            if cell >= tile:
+====
+            if cell > tile:
+>>>>
+
+@@ empty-positions-by-column the empty positions are listed column by column
+## examples/games/2048/game2048.bot
+<<<<
+            at = Position {row: r, column: c}
+====
+            at = Position {row: c, column: r}
+>>>>

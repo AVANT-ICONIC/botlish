@@ -3,7 +3,7 @@
 # its verdict or its expectation is deliberately wrong.
 #
 #   tclsh9.0 audit/golden/tools/perturb.tcl ?-mode invert|alter|both?
-#       ?-backends LIST? ?-timeout SECONDS? FILE.bot ...
+#       ?-backends LIST? ?-timeout SECONDS? ?-lib DIR? FILE.bot ...
 #
 # Two independent perturbations, each one compilation of each suite:
 #
@@ -29,6 +29,11 @@
 #           registration helpers have no textual expectation to alter here;
 #           invert covers them.
 #
+# -lib DIR perturbs against a copy of the library directory DIR instead of
+# lib/: a suite that imports a module of its own (not standard library, so
+# not in lib/) runs against lib/ with that module added
+# (examples/games/2048/, 2048-ENGINE-WORKLOAD.md).
+#
 # The real checkout is never modified: the private library and suite copies
 # live in a `file tempdir` directory. The suite copy keeps its file name and
 # line numbers (alterations never add or remove lines), so located
@@ -44,7 +49,7 @@ set here [file dirname [file normalize [info script]]]
 set root [file dirname [file dirname [file dirname $here]]]
 source [file join $here tree.tcl]
 
-set options [dict create -mode both -backends interp -timeout 3600]
+set options [dict create -mode both -backends interp -timeout 3600 -lib [file join $root lib]]
 set files {}
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
@@ -283,9 +288,9 @@ try {
     # The private library copies: the real one (for alter) and the inverted
     # one (for invert).
     set plainLib [file join $work lib]
-    file copy [file join $root lib] $plainLib
+    file copy [file normalize [dict get $options -lib]] $plainLib
     set invertedLib [file join $work lib-inverted]
-    file copy [file join $root lib] $invertedLib
+    file copy [file normalize [dict get $options -lib]] $invertedLib
     set testBot [file join $invertedLib test.bot]
     set text [goldentools::readFile $testBot]
     set edits {

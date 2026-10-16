@@ -1,0 +1,598 @@
+# golden.bot -- golden tests of the 2048 engine (game2048.bot,
+# 2048-ENGINE-WORKLOAD.md), through its public API, as a program using
+# the engine would.
+#
+# Run with `tclsh9.0 examples/games/2048/run.tcl -suite`
+# (tests/workload-2048.test runs it on every backend): `import game2048`
+# needs the engine on the library path, which run.tcl provides.
+#
+# Expected values are written out. The property tests compare the engine
+# with structural relations the tests compute themselves (mirroring and
+# transposing a board, summing its tiles), never with a second engine; the
+# long scenario's final state comes from an independent implementation,
+# audit/2048/oracle.py.
+import compiler
+import game2048
+import list
+import test
+
+# ---------------------------------------------------------------------------
+# Helpers
+
+# The board with ROWS, or the empty board when ROWS are not a board (a
+# mistyped expectation then fails visibly instead of stopping the suite).
+fn board_of(rows: List[List[int]]) -> game2048::Board:
+    board = game2048::board(rows):
+        on game2048::InvalidBoard:
+            game2048::empty_board()
+    board
+
+fn game_of(rows: List[List[int]]) -> game2048::Game:
+    game2048::Game {board: board_of(rows), score: 0}
+
+# What a move toward DIRECTION does to the board with rows BEFORE: the
+# rows after it, the score it gained and whether it changed the board.
+fn moved(before: List[List[int]], direction: game2048::Direction) -> list:
+    m = game_of(before).move(direction)
+    [m.game.board.rows(), m.gained, m.changed]
+
+# What sliding the line CELLS does: the line after it and its score.
+fn slid(cells: List[int]) -> list:
+    s = game2048::slide(cells)
+    [s.cells, s.score]
+
+fn at(row: game2048::Coordinate, column: game2048::Coordinate) -> game2048::Position:
+    game2048::Position {row: row, column: column}
+
+# ROWS with every row reversed: the board seen in a mirror.
+fn mirrored(rows: List[List[int]]) -> List[List[int]]:
+    loop row in rows:
+        loop i from 0 to 4:
+            row.get(3 - i, 0)
+
+# ROWS with rows and columns exchanged.
+fn flipped(rows: List[List[int]]) -> List[List[int]]:
+    loop column from 0 to 4:
+        loop row in rows:
+            row.get(column, 0)
+
+fn sum(values: List[int]) -> int:
+    fn from(i: int) -> int:
+        if i >= list::length(values):
+            return 0
+        values.get(i, 0) + from(i + 1)
+    from(0)
+
+# The sum of the tiles of the board with ROWS.
+fn tile_sum(rows: List[List[int]]) -> int:
+    sums = loop row in rows:
+        row.sum()
+    sums.sum()
+
+# How many tiles the board with ROWS holds.
+fn tile_count(rows: List[List[int]]) -> int:
+    counts = loop row in rows:
+        tiles = loop cell in row:
+            if cell == 0:
+                continue
+            cell
+        list::length(tiles)
+    counts.sum()
+
+# Boards the property tests run every direction on: sparse, crowded,
+# merge-heavy, stuck and in-between.
+fn samples() -> List[List[List[int]]]:
+    [
+        [[2, 0, 2, 4], [0, 4, 4, 0], [8, 0, 0, 8], [2, 2, 2, 2]],
+        [[0, 0, 0, 0], [0, 2, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]],
+        [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]],
+        [[4, 4, 4, 4], [8, 8, 8, 8], [2, 2, 4, 4], [16, 0, 16, 0]],
+        [[2, 0, 0, 2], [2, 0, 0, 2], [4, 8, 8, 4], [4, 8, 8, 4]],
+        [[0, 2, 4, 8], [2, 4, 8, 16], [4, 8, 16, 32], [8, 16, 32, 64]],
+        [[128, 64, 0, 64], [0, 0, 32, 32], [2, 0, 0, 0], [2048, 1024, 1024, 0]],
+    ]
+
+fn directions() -> List[game2048::Direction]:
+    [game2048::Direction::Left, game2048::Direction::Right, game2048::Direction::Up, game2048::Direction::Down]
+
+# ---------------------------------------------------------------------------
+# Sliding one line
+
+fn register_line_tests():
+    fn compaction() -> list:
+        slid([0, 2, 0, 4])
+    test::value("2048-line-compaction", [[2, 4, 0, 0], 0], compaction)
+
+    fn empty_line() -> list:
+        slid([0, 0, 0, 0])
+    test::value("2048-line-empty", [[0, 0, 0, 0], 0], empty_line)
+
+    fn single_merge() -> list:
+        slid([2, 2, 0, 0])
+    test::value("2048-line-single-merge", [[4, 0, 0, 0], 4], single_merge)
+
+    fn merge_across_gap() -> list:
+        slid([2, 0, 0, 2])
+    test::value("2048-line-merge-across-gap", [[4, 0, 0, 0], 4], merge_across_gap)
+
+    fn compact_then_merge() -> list:
+        slid([2, 0, 2, 4])
+    test::value("2048-line-compact-then-merge", [[4, 4, 0, 0], 4], compact_then_merge)
+
+    fn three_equal() -> list:
+        slid([2, 2, 2, 0])
+    test::value("2048-line-three-equal-merges-first-pair", [[4, 2, 0, 0], 4], three_equal)
+
+    fn three_equal_at_end() -> list:
+        slid([0, 2, 2, 2])
+    test::value("2048-line-three-equal-at-end", [[4, 2, 0, 0], 4], three_equal_at_end)
+
+    fn four_equal() -> list:
+        slid([2, 2, 2, 2])
+    test::value("2048-line-four-equal-two-merges", [[4, 4, 0, 0], 8], four_equal)
+
+    fn four_fours() -> list:
+        slid([4, 4, 4, 4])
+    test::value("2048-line-four-fours", [[8, 8, 0, 0], 16], four_fours)
+
+    fn two_pairs() -> list:
+        slid([4, 4, 8, 8])
+    test::value("2048-line-two-pairs", [[8, 16, 0, 0], 24], two_pairs)
+
+    fn growing_pairs() -> list:
+        slid([2, 2, 4, 4])
+    test::value("2048-line-produced-tile-does-not-merge-again", [[4, 8, 0, 0], 12], growing_pairs)
+
+    fn pair_then_singles() -> list:
+        slid([2, 2, 4, 2])
+    test::value("2048-line-pair-then-singles", [[4, 4, 2, 0], 4], pair_then_singles)
+
+    fn produced_meets_equal() -> list:
+        slid([8, 4, 2, 2])
+    test::value("2048-line-produced-tile-meets-equal-neighbour", [[8, 4, 4, 0], 4], produced_meets_equal)
+
+    fn full_no_merge() -> list:
+        slid([2, 4, 8, 16])
+    test::value("2048-line-full-without-merge", [[2, 4, 8, 16], 0], full_no_merge)
+
+    fn already_slid() -> list:
+        slid([4, 2, 0, 0])
+    test::value("2048-line-already-slid", [[4, 2, 0, 0], 0], already_slid)
+
+    fn large_tiles() -> list:
+        slid([1024, 1024, 0, 2048])
+    test::value("2048-line-large-tiles", [[2048, 2048, 0, 0], 2048], large_tiles)
+
+# ---------------------------------------------------------------------------
+# Moving a board
+
+fn start() -> List[List[int]]:
+    [[2, 0, 2, 4], [0, 4, 4, 0], [8, 0, 0, 8], [2, 2, 2, 2]]
+
+fn register_move_tests():
+    fn left() -> list:
+        moved(start(), game2048::Direction::Left)
+    test::value("2048-move-left", [[[4, 4, 0, 0], [8, 0, 0, 0], [16, 0, 0, 0], [4, 4, 0, 0]], 36, true], left)
+
+    fn right() -> list:
+        moved(start(), game2048::Direction::Right)
+    test::value("2048-move-right", [[[0, 0, 4, 4], [0, 0, 0, 8], [0, 0, 0, 16], [0, 0, 4, 4]], 36, true], right)
+
+    fn up() -> list:
+        moved(start(), game2048::Direction::Up)
+    test::value("2048-move-up", [[[2, 4, 2, 4], [8, 2, 4, 8], [2, 0, 2, 2], [0, 0, 0, 0]], 0, true], up)
+
+    fn down() -> list:
+        moved(start(), game2048::Direction::Down)
+    test::value("2048-move-down", [[[0, 0, 0, 0], [2, 0, 2, 4], [8, 4, 4, 8], [2, 2, 2, 2]], 0, true], down)
+
+    # start() has no vertical pair, so up and down only slide it; here two
+    # vertical pairs merge.
+    fn up_merges_columns() -> list:
+        moved([[2, 0, 0, 0], [2, 0, 0, 0], [4, 0, 0, 0], [4, 0, 0, 0]], game2048::Direction::Up)
+    test::value("2048-move-up-merges-columns", [[[4, 0, 0, 0], [8, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 12, true], up_merges_columns)
+
+    fn down_merges_from_bottom() -> list:
+        moved([[0, 2, 0, 0], [0, 2, 0, 0], [0, 2, 0, 0], [0, 0, 0, 0]], game2048::Direction::Down)
+    test::value("2048-move-down-merges-from-bottom", [[[0, 0, 0, 0], [0, 0, 0, 0], [0, 2, 0, 0], [0, 4, 0, 0]], 4, true], down_merges_from_bottom)
+
+    fn right_merges_from_right() -> list:
+        moved([[2, 2, 2, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], game2048::Direction::Right)
+    test::value("2048-move-right-merges-from-right", [[[0, 0, 2, 4], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 4, true], right_merges_from_right)
+
+    fn stable_left() -> list:
+        moved([[4, 2, 0, 0], [8, 0, 0, 0], [2, 4, 8, 16], [0, 0, 0, 0]], game2048::Direction::Left)
+    test::value("2048-move-unchanged", [[[4, 2, 0, 0], [8, 0, 0, 0], [2, 4, 8, 16], [0, 0, 0, 0]], 0, false], stable_left)
+
+    fn stable_empty() -> list:
+        moved([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], game2048::Direction::Down)
+    test::value("2048-move-unchanged-empty-board", [[[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 0, false], stable_empty)
+
+    fn slide_without_merge() -> list:
+        moved([[0, 0, 0, 2], [0, 0, 4, 0], [0, 0, 0, 0], [0, 0, 0, 0]], game2048::Direction::Left)
+    test::value("2048-move-changed-without-merge", [[[2, 0, 0, 0], [4, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 0, true], slide_without_merge)
+
+    # The game's score grows by exactly what the move gained.
+    fn score_accumulates() -> list:
+        m = game2048::Game {board: board_of(start()), score: 100}.move(game2048::Direction::Left)
+        [m.game.score, m.gained]
+    test::value("2048-move-score-accumulates", [136, 36], score_accumulates)
+
+    fn unchanged_keeps_score() -> int:
+        stable = game2048::Game {board: board_of([[2, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]), score: 52}
+        stable.move(game2048::Direction::Up).game.score
+    test::value("2048-move-unchanged-keeps-score", 52, unchanged_keeps_score)
+
+    # A tile a move produced merges in the next move: moving twice is not
+    # moving once.
+    fn again() -> list:
+        first = game_of([[2, 2, 2, 2], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]).move(game2048::Direction::Left)
+        second = first.game.move(game2048::Direction::Left)
+        [first.game.board.rows(), second.game.board.rows(), second.gained, second.game.score]
+    test::value("2048-move-again-merges-produced-tiles", [[[4, 4, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[8, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 8, 16], again)
+
+# ---------------------------------------------------------------------------
+# Spawning a tile
+
+fn register_spawn_tests():
+    fn two() -> List[List[int]]:
+        placed = game2048::new_game().spawn(at(1, 2), game2048::SpawnTile::Two):
+            on game2048::CellOccupied:
+                return []
+        placed.board.rows()
+    test::value("2048-spawn-two", [[0, 0, 0, 0], [0, 0, 2, 0], [0, 0, 0, 0], [0, 0, 0, 0]], two)
+
+    fn four() -> List[List[int]]:
+        placed = game_of(start()).spawn(at(2, 1), game2048::SpawnTile::Four):
+            on game2048::CellOccupied:
+                return []
+        placed.board.rows()
+    test::value("2048-spawn-four", [[2, 0, 2, 4], [0, 4, 4, 0], [8, 4, 0, 8], [2, 2, 2, 2]], four)
+
+    fn corners() -> List[List[int]]:
+        g = game2048::new_game()
+        a = g.spawn(at(0, 0), game2048::SpawnTile::Two):
+            on game2048::CellOccupied:
+                return []
+        b = a.spawn(at(3, 3), game2048::SpawnTile::Four):
+            on game2048::CellOccupied:
+                return []
+        b.board.rows()
+    test::value("2048-spawn-corners", [[2, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 4]], corners)
+
+    fn occupied() -> str:
+        placed = game_of(start()).spawn(at(0, 0), game2048::SpawnTile::Two):
+            on game2048::CellOccupied:
+                return "CellOccupied"
+        "placed"
+    test::value("2048-spawn-occupied", "CellOccupied", occupied)
+
+    fn keeps_score() -> int:
+        g = game2048::Game {board: board_of(start()), score: 40}
+        placed = g.spawn(at(1, 0), game2048::SpawnTile::Four):
+            on game2048::CellOccupied:
+                return 0
+        placed.score
+    test::value("2048-spawn-keeps-score", 40, keeps_score)
+
+    fn adds_tile() -> list:
+        before = start()
+        placed = game_of(before).spawn(at(1, 3), game2048::SpawnTile::Two):
+            on game2048::CellOccupied:
+                return []
+        after = placed.board.rows()
+        [tile_sum(after) - tile_sum(before), tile_count(after) - tile_count(before)]
+    test::value("2048-spawn-sum-grows-by-tile", [2, 1], adds_tile)
+
+    fn empties() -> List[game2048::Position]:
+        board_of(start()).empty_positions()
+    test::value("2048-empty-positions", [at(0, 1), at(1, 0), at(1, 3), at(2, 1), at(2, 2)], empties)
+
+    fn empties_after_spawn() -> List[game2048::Position]:
+        placed = game_of(start()).spawn(at(1, 3), game2048::SpawnTile::Two):
+            on game2048::CellOccupied:
+                return []
+        placed.board.empty_positions()
+    test::value("2048-empty-positions-after-spawn", [at(0, 1), at(1, 0), at(2, 1), at(2, 2)], empties_after_spawn)
+
+    fn none_empty() -> List[game2048::Position]:
+        board_of([[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]).empty_positions()
+    test::value("2048-empty-positions-full-board", [], none_empty)
+
+    # A position outside the board and a tile other than 2 or 4 are not
+    # run-time errors: they do not compile.
+    fn outside() errors compiler::CompilerError:
+        static compile:
+            game2048::new_game().spawn(game2048::Position {row: 4, column: 0}, game2048::SpawnTile::Two):
+                on game2048::CellOccupied:
+                    game2048::new_game()
+    test::rejects("2048-spawn-outside-board-rejected", compiler::DiagnosticCode::Type, outside)
+
+    fn odd_tile() errors compiler::CompilerError:
+        static compile:
+            game2048::new_game().spawn(at(0, 0), 8):
+                on game2048::CellOccupied:
+                    game2048::new_game()
+    test::rejects("2048-spawn-int-tile-rejected", compiler::DiagnosticCode::Type, odd_tile)
+
+# ---------------------------------------------------------------------------
+# Boards
+
+fn register_board_tests():
+    fn round_trip() -> List[List[int]]:
+        board_of(start()).rows()
+    test::value("2048-board-rows", start(), round_trip)
+
+    fn validity(rows: List[List[int]]) -> str:
+        board = game2048::board(rows):
+            on game2048::InvalidBoard:
+                return "InvalidBoard"
+        "valid"
+
+    fn invalid_tile() -> str:
+        validity([[2, 0, 0, 0], [0, 3, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
+    test::value("2048-board-rejects-non-tile", "InvalidBoard", invalid_tile)
+
+    fn one() -> str:
+        validity([[1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
+    test::value("2048-board-rejects-one", "InvalidBoard", one)
+
+    fn negative() -> str:
+        validity([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, -2, 0], [0, 0, 0, 0]])
+    test::value("2048-board-rejects-negative", "InvalidBoard", negative)
+
+    fn short_row() -> str:
+        validity([[2, 0, 0, 0], [0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
+    test::value("2048-board-rejects-short-row", "InvalidBoard", short_row)
+
+    fn three_rows() -> str:
+        validity([[2, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
+    test::value("2048-board-rejects-three-rows", "InvalidBoard", three_rows)
+
+    fn big_tiles() -> str:
+        validity([[131072, 65536, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 2]])
+    test::value("2048-board-accepts-large-tiles", "valid", big_tiles)
+
+    fn construct() errors compiler::CompilerError:
+        static compile:
+            game2048::Board {rows: [[2, 0, 0, 0]]}
+    test::rejects("2048-board-construction-is-the-engines", compiler::DiagnosticCode::OpaqueConstruction, construct)
+
+    fn inspect() errors compiler::CompilerError:
+        static compile:
+            game2048::empty_board().rows
+    test::rejects("2048-board-fields-are-the-engines", compiler::DiagnosticCode::OpaqueRepresentation, inspect)
+
+    fn cell() -> List[int]:
+        b = board_of(start())
+        [b.cell(at(0, 0)), b.cell(at(0, 1)), b.cell(at(2, 3)), b.cell(at(3, 3))]
+    test::value("2048-board-cell", [2, 0, 8, 2], cell)
+
+    fn reached() -> List[bool]:
+        g = game_of([[2, 0, 0, 0], [1024, 0, 0, 0], [1024, 0, 0, 0], [0, 0, 0, 0]])
+        won = g.move(game2048::Direction::Up).game.board
+        [g.board.reached?(2048), won.reached?(2048), won.reached?(4096)]
+    test::value("2048-reached-2048", [false, true, false], reached)
+
+# ---------------------------------------------------------------------------
+# Game over
+
+fn register_game_over_tests():
+    fn full() -> bool:
+        game_of([[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]).game_over?()
+    test::value("2048-game-over-full-without-merge", true, full)
+
+    fn one_empty() -> bool:
+        game_of([[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 0, 4], [4, 2, 4, 2]]).game_over?()
+    test::value("2048-not-over-with-empty-cell", false, one_empty)
+
+    fn horizontal() -> bool:
+        game_of([[2, 4, 2, 4], [4, 2, 4, 2], [2, 8, 8, 4], [4, 2, 4, 2]]).game_over?()
+    test::value("2048-not-over-with-horizontal-merge", false, horizontal)
+
+    fn vertical() -> bool:
+        game_of([[2, 4, 2, 4], [4, 2, 4, 2], [2, 8, 2, 4], [4, 8, 4, 2]]).game_over?()
+    test::value("2048-not-over-with-vertical-merge", false, vertical)
+
+    fn vertical_at_edge() -> bool:
+        game_of([[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 8], [4, 2, 4, 8]]).game_over?()
+    test::value("2048-not-over-with-vertical-merge-at-edge", false, vertical_at_edge)
+
+    fn new_game() -> bool:
+        game2048::new_game().game_over?()
+    test::value("2048-not-over-new-game", false, new_game)
+
+    # Game over is about the board, not the score or a 2048 tile.
+    fn over_after_2048() -> bool:
+        game2048::Game {board: board_of([[2048, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]), score: 20000}.game_over?()
+    test::value("2048-game-over-with-2048", true, over_after_2048)
+
+    # On a game-over board no move changes anything.
+    fn stuck() -> List[bool]:
+        g = game_of([[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]])
+        loop d in directions():
+            g.move(d).changed
+    test::value("2048-game-over-no-move-changes", [false, false, false, false], stuck)
+
+# ---------------------------------------------------------------------------
+# Properties over the sample boards
+
+# Whether every Bool of every List of TABLE is true.
+fn all_true?(table) -> bool:
+    loop row in table:
+        loop value in row:
+            if not value:
+                return false
+    true
+
+fn register_property_tests():
+    # Right is left in a mirror.
+    fn expected_right() -> List[List[List[int]]]:
+        loop sample in samples():
+            game_of(sample.mirrored()).move(game2048::Direction::Left).game.board.rows().mirrored()
+    fn right() -> List[List[List[int]]]:
+        loop sample in samples():
+            game_of(sample).move(game2048::Direction::Right).game.board.rows()
+    test::value("2048-property-right-is-mirrored-left", expected_right(), right)
+
+    # Up is left with rows and columns exchanged, and down is right.
+    fn expected_up() -> List[List[List[int]]]:
+        loop sample in samples():
+            game_of(sample.flipped()).move(game2048::Direction::Left).game.board.rows().flipped()
+    fn up() -> List[List[List[int]]]:
+        loop sample in samples():
+            game_of(sample).move(game2048::Direction::Up).game.board.rows()
+    test::value("2048-property-up-is-flipped-left", expected_up(), up)
+
+    fn expected_down() -> List[List[List[int]]]:
+        loop sample in samples():
+            game_of(sample.flipped()).move(game2048::Direction::Right).game.board.rows().flipped()
+    fn down() -> List[List[List[int]]]:
+        loop sample in samples():
+            game_of(sample).move(game2048::Direction::Down).game.board.rows()
+    test::value("2048-property-down-is-flipped-right", expected_down(), down)
+
+    # A move neither creates nor destroys tile value: merging two tiles of
+    # value v makes one of 2v.
+    fn sums() -> List[List[int]]:
+        loop sample in samples():
+            loop d in directions():
+                game_of(sample).move(d).game.board.rows().tile_sum() - sample.tile_sum()
+    test::value("2048-property-move-conserves-tile-sum", [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], sums)
+
+    # A move scores exactly when it merges, and each merge removes one
+    # tile and scores at least 4.
+    fn scoring() -> List[List[bool]]:
+        loop sample in samples():
+            loop d in directions():
+                m = game_of(sample).move(d)
+                merges = sample.tile_count() - m.game.board.rows().tile_count()
+                (m.gained == 0) == (merges == 0) and m.gained >= 4 * merges
+    test::holds("2048-property-score-iff-merge", "every move scores exactly when it merges", all_true?, scoring)
+
+    # A move that scores nothing merged nothing, so repeating it changes
+    # nothing.
+    fn idempotent() -> List[List[bool]]:
+        loop sample in samples():
+            loop d in directions():
+                m = game_of(sample).move(d)
+                if m.gained == 0:
+                    not m.game.move(d).changed
+                else:
+                    true
+    test::holds("2048-property-scoreless-move-is-idempotent", "repeating a move that scored nothing changes nothing", all_true?, idempotent)
+
+    # A move changed the board exactly when it is not the board it moved.
+    fn changed() -> List[List[bool]]:
+        loop sample in samples():
+            loop d in directions():
+                m = game_of(sample).move(d)
+                m.changed == (m.game.board.rows() != sample)
+    test::holds("2048-property-changed-iff-different", "changed is true exactly when the board differs", all_true?, changed)
+
+# ---------------------------------------------------------------------------
+# Games: a short trace written out, and a long one played to the end
+
+struct Played:
+    game: game2048::Game
+    tried: int
+    changed: int
+
+fn cycle(tried: int) -> game2048::Direction:
+    turn = tried.mod(4)
+    if turn == 0:
+        game2048::Direction::Left
+    elif turn == 1:
+        game2048::Direction::Down
+    elif turn == 2:
+        game2048::Direction::Right
+    else:
+        game2048::Direction::Up
+
+# GAME after the scenario's spawn number K.
+fn spawned(game: game2048::Game, k: int) -> game2048::Game:
+    empties = game.board.empty_positions()
+    count = list::length(empties)
+    if count == 0:
+        return game
+    position = empties.get((7 * k).mod(count), at(0, 0))
+    tile = if k.mod(5) == 4:
+        game2048::SpawnTile::Four
+    else:
+        game2048::SpawnTile::Two
+    placed = game.spawn(position, tile):
+        on game2048::CellOccupied:
+            game
+    placed
+
+fn play(game: game2048::Game, tried: int, changed: int) -> Played:
+    if game.game_over?() or tried == 400:
+        return Played {game: game, tried: tried, changed: changed}
+    m = game.move(cycle(tried))
+    if m.changed:
+        play(m.game.spawned(changed), tried + 1, changed + 1)
+    else:
+        play(m.game, tried + 1, changed)
+
+fn scenario() -> Played:
+    g = game2048::new_game()
+    first = g.spawn(at(0, 0), game2048::SpawnTile::Two):
+        on game2048::CellOccupied:
+            g
+    second = first.spawn(at(3, 3), game2048::SpawnTile::Two):
+        on game2048::CellOccupied:
+            first
+    play(second, 0, 0)
+
+fn register_scenario_tests():
+    # Two spawns, then up, a spawn, left, a spawn, up.
+    fn trace() -> list:
+        g0 = game2048::new_game()
+        g1 = g0.spawn(at(0, 1), game2048::SpawnTile::Two):
+            on game2048::CellOccupied:
+                return []
+        g2 = g1.spawn(at(2, 1), game2048::SpawnTile::Two):
+            on game2048::CellOccupied:
+                return []
+        m1 = g2.move(game2048::Direction::Up)
+        g3 = m1.game.spawn(at(3, 3), game2048::SpawnTile::Four):
+            on game2048::CellOccupied:
+                return []
+        m2 = g3.move(game2048::Direction::Left)
+        g4 = m2.game.spawn(at(1, 0), game2048::SpawnTile::Four):
+            on game2048::CellOccupied:
+                return []
+        m3 = g4.move(game2048::Direction::Up)
+        [m1.game.board.rows(), m2.game.board.rows(), m3.game.board.rows(), m3.game.score, m3.changed]
+    test::value("2048-scenario-short-trace", [
+        [[0, 4, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]],
+        [[4, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [4, 0, 0, 0]],
+        [[8, 0, 0, 0], [4, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]],
+        12,
+        true,
+    ], trace)
+
+    # The scenario of audit/2048/oracle.py: spawn a Two at the first and
+    # last empty cell, then cycle Left, Down, Right, Up; after every
+    # changed move k (from 0) spawn at empty position (7 * k) mod E, a Four
+    # when k mod 5 == 4, else a Two; stop at game over or 400 moves.
+    fn until_over() -> list:
+        played = scenario()
+        [played.game.board.rows(), played.game.score, played.tried, played.changed, played.game.game_over?()]
+    test::value("2048-scenario-until-game-over", [
+        [[2, 4, 8, 4], [64, 32, 64, 2], [2, 8, 16, 4], [4, 2, 4, 2]],
+        796,
+        91,
+        91,
+        true,
+    ], until_over)
+
+with context test::suite()
+register_line_tests()
+register_move_tests()
+register_spawn_tests()
+register_board_tests()
+register_game_over_tests()
+register_property_tests()
+register_scenario_tests()
+test::report()
