@@ -415,6 +415,17 @@ pub enum OpCode {
     /// like RIAdd/RISub/RIMul do for `+`/`-`/`*`.
     RIShr,
     RIShl,
+    /// Raw (untagged) bitwise AND/OR/XOR, native/lower.tcl's
+    /// RawEligibleCall: emitted only when range analysis proves both
+    /// operands small. The result of a bitwise operation on two small Ints
+    /// is small again (bits 62 and 63 of each operand are equal, and AND, OR
+    /// and XOR keep them equal), so codegen lowers these directly to the
+    /// host instruction, with no BigInt case: unlike IAnd/IOr/IXor, which
+    /// test both operands' tags at run time and fall to a helper for a
+    /// BigInt.
+    RIAnd,
+    RIOr,
+    RIXor,
     /// ShortString1 (SHORT-STRING.md): a String the compiler proved has at
     /// most one character, carried as one signed i64 -- `-1` is the empty
     /// String, `0..=0x10FFFF` (never a surrogate) is the one Unicode scalar
@@ -647,6 +658,9 @@ op_spellings! {
     "rieq" => RIEq,
     "rishr" => RIShr,
     "rishl" => RIShl,
+    "riand" => RIAnd,
+    "rior" => RIOr,
+    "rixor" => RIXor,
     "strtoshort" => StrToShort,
     "shorttostr" => ShortToStr,
     "shortlen" => ShortLen,
@@ -687,13 +701,15 @@ impl OpCode {
     /// 1 if OP's result is a raw (untagged) machine integer, not a Value.
     pub fn raw_result(self) -> bool {
         matches!(self, OpCode::RUnbox | OpCode::RIAdd | OpCode::RISub | OpCode::RIMul
-            | OpCode::RIShr | OpCode::RIShl | OpCode::ShortLen | OpCode::AsciiLen)
+            | OpCode::RIShr | OpCode::RIShl | OpCode::RIAnd | OpCode::RIOr | OpCode::RIXor
+            | OpCode::ShortLen | OpCode::AsciiLen)
     }
 
     /// 1 if OP's operands are raw (untagged) machine integers, not Values.
     pub fn raw_operands(self) -> bool {
         use OpCode::*;
-        matches!(self, RBox | RIAdd | RISub | RIMul | RILt | RILe | RIGt | RIGe | RIEq | RIShr | RIShl)
+        matches!(self, RBox | RIAdd | RISub | RIMul | RILt | RILe | RIGt | RIGe | RIEq | RIShr | RIShl
+            | RIAnd | RIOr | RIXor)
     }
 
     /// The physical kind the operand at position I of OP must have.
@@ -2963,6 +2979,26 @@ mod raw_abi_tests {
 
     fn program(effects: u32, rest: &str) -> String {
         format!("nir 1 call-effects={effects}\n\n{PROGRAM}{rest}")
+    }
+
+    #[test]
+    fn raw_bitwise_ops_take_and_produce_raw_registers() {
+        // ((n & 240) | 1) ^ 3 on a raw parameter, returned raw
+        let text = program(
+            1,
+            "func 1 \"bits\" params=1 env=0 regs=7 pnames=\"n\" captures=0 rawregs=\"0 1 2 3 4 5 6\" rawparams=\"0\" rawresult=1\n    %1 = rawint 240\n    %2 = op riand %0 %1\n    %3 = rawint 1\n    %4 = op rior %2 %3\n    %5 = rawint 3\n    %6 = op rixor %4 %5\n    ret %6\nend\n",
+        );
+        parse(&text).unwrap_or_else(|e| panic!("{}", e.message));
+        for op in [OpCode::RIAnd, OpCode::RIOr, OpCode::RIXor] {
+            assert!(op.raw_operands() && op.raw_result() && op.arity() == Some(2), "{op:?}");
+        }
+        // a tagged operand is a bug
+        let text = program(
+            1,
+            "func 1 \"bits\" params=1 env=0 regs=3 pnames=\"n\" captures=0 rawregs=\"1 2\"\n    %1 = rawint 240\n    %2 = op riand %0 %1\n    %3 = op rbox %2\n    ret %3\nend\n",
+        );
+        let m = message(parse(&text));
+        assert!(m.contains("RIAnd") && m.contains("%0 is tagged, must be raw"), "{m}");
     }
 
     #[test]

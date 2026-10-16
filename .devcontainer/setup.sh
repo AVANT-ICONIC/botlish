@@ -20,12 +20,19 @@ if ! command -v tclsh9.0 >/dev/null 2>&1; then
     ca-certificates \
     curl
 
+  # The same three packages for either architecture: amd64 from the main
+  # archive, arm64 (the arm64 CI runners) from Ubuntu's ports archive.
   cd /tmp
-  base=http://archive.ubuntu.com/ubuntu/pool/universe
-  curl -fsSLO "$base/libt/libtommath/libtommath1_1.3.0-1_amd64.deb"
-  curl -fsSLO "$base/t/tcl9.0/libtcl9.0_9.0.1+dfsg-1_amd64.deb"
-  curl -fsSLO "$base/t/tcl9.0/tcl9.0_9.0.1+dfsg-1_amd64.deb"
-  $SUDO dpkg -i libtommath1_1.3.0-1_amd64.deb libtcl9.0_9.0.1+dfsg-1_amd64.deb tcl9.0_9.0.1+dfsg-1_amd64.deb
+  arch=$(dpkg --print-architecture)
+  case $arch in
+    amd64) base=http://archive.ubuntu.com/ubuntu/pool/universe ;;
+    arm64) base=http://ports.ubuntu.com/ubuntu-ports/pool/universe ;;
+    *) echo "no Tcl 9 packages configured for architecture $arch" >&2; exit 1 ;;
+  esac
+  curl -fsSLO "$base/libt/libtommath/libtommath1_1.3.0-1_${arch}.deb"
+  curl -fsSLO "$base/t/tcl9.0/libtcl9.0_9.0.1+dfsg-1_${arch}.deb"
+  curl -fsSLO "$base/t/tcl9.0/tcl9.0_9.0.1+dfsg-1_${arch}.deb"
+  $SUDO dpkg -i "libtommath1_1.3.0-1_${arch}.deb" "libtcl9.0_9.0.1+dfsg-1_${arch}.deb" "tcl9.0_9.0.1+dfsg-1_${arch}.deb"
 fi
 
 export PATH="$HOME/.cargo/bin:$PATH"

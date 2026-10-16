@@ -40,7 +40,7 @@ fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
 
 }
 
-# The representative layouts (BINARY-LAYOUT.md, "Representative layouts").
+# The representative layouts (tests/golden/binary-layout.bot declares the same).
 set blLayouts {layout Single:
     size 4
     align 4
@@ -403,7 +403,7 @@ test bl-consumer-containers {a LayoutStruct[L] is held like any immutable value:
 
 # ---------------------------------------------------------------------------
 # Binary semantics: explicit bytes in both directions (BINARY-LAYOUT.md,
-# "Semantics"). Every byte order is little-endian, the target's.
+# "Binary semantics"). Every byte order is little-endian, the target's.
 
 test bl-parse-explicit-bytes {known byte sequences imprint the expected fields: a single scalar, adjacent fields, padding, explicit offsets, signed fields (two's complement), zero, every bit set, the minimum and maximum of every width} -body {
     blRun "fn p(data: abi::bytes::Bytes) -> List\[any\] errors LayoutLengthMismatch:\n    s = binary::parse(Single, data)\n    \[s.value\]\nfn a(data: abi::bytes::Bytes) -> List\[any\] errors LayoutLengthMismatch:\n    v = binary::parse(Adjacent, data)\n    \[v.a, v.b, v.c\]\nfn pd(data: abi::bytes::Bytes) -> List\[any\] errors LayoutLengthMismatch:\n    v = binary::parse(Padded, data)\n    \[v.tag, v.value, v.flag\]\nfn w(data: abi::bytes::Bytes) -> List\[any\] errors LayoutLengthMismatch:\n    v = binary::parse(Wide, data)\n    \[v.u, v.i\]\nfn all() -> List\[any\] errors LayoutLengthMismatch:\n    \[p(bytes_of(\[1, 2, 3, 4\])), p(bytes_of(\[0, 0, 0, 0\])), p(bytes_of(\[255, 255, 255, 255\])), a(bytes_of(\[255, 128, 52, 18\])), a(bytes_of(\[0, 127, 255, 255\])), pd(bytes_of(\[7, 9, 9, 9, 254, 255, 255, 255, 1, 9, 9, 9\])), pd(bytes_of(\[0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0\])), w(bytes_of(\[255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 128\])), w(bytes_of(\[0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 127\])), w(bytes_of(\[0, 0, 0, 0, 0, 0, 0, 128, 255, 255, 255, 255, 255, 255, 255, 255\]))\]\nr = all():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
@@ -474,7 +474,7 @@ test bl-c-structs-example {examples/binary/c-structs.bot -- a naturally aligned 
 } -cleanup {unset -nocomplain path source expected hir outcomes} -result {1 1}
 
 # ---------------------------------------------------------------------------
-# Representation: HIR, generated Tcl, NIR (BINARY-LAYOUT.md, "Lowering")
+# Representation: HIR, generated Tcl, NIR (BINARY-LAYOUT.md, "Implementation")
 
 test bl-hir-static-layout {the layout is static evidence in HIR: binary::parse's operand is the layout's descriptor constant (resolved from the name), binary::emit(v) is elaborated to binary#emit(v, DESCRIPTOR) from v's static type, and both descriptors describe the same layout} -body {
     set hir [surface::compile "$::blPrelude${::blLayouts}fn f(d: abi::bytes::Bytes) -> abi::bytes::Bytes errors LayoutLengthMismatch:\n    binary::emit(binary::parse(Inner, d))\n0\n" layout.bot -warnings off]

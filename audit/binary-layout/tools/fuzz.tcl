@@ -1,5 +1,5 @@
 # fuzz.tcl -- random fixed layouts against an independent byte model
-# (BINARY-LAYOUT.md, "Audit").
+# (BINARY-LAYOUT.md, report item 48).
 #
 #   tclsh9.0 audit/binary-layout/tools/fuzz.tcl ?-n N? ?-seed S? ?-backends LIST?
 #                                               ?-verbose 0|1? ?-gc-stress 0|1?

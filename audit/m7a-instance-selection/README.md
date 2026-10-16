@@ -1,7 +1,7 @@
 # M7.a instance-selection / theorem audit tooling
 
 Non-production observation tools and their outputs for
-[M7A-INSTANCE-SELECTION-THEOREM-AUDIT.md](../../M7A-INSTANCE-SELECTION-THEOREM-AUDIT.md).
+[M7A-INSTANCE-SELECTION-THEOREM-AUDIT.md](../../docs/M7A-INSTANCE-SELECTION-THEOREM-AUDIT.md).
 Nothing here is a test or a compiler contract. Every output is "what the
 current compiler does", recorded so M7.b can decide what to pin.
 

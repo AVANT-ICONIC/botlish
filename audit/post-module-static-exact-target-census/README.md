@@ -1,7 +1,7 @@
 # Post-module-static exact-target counterfactual census: artifacts
 
 Raw data for
-[POST-MODULE-STATIC-EXACT-TARGET-CENSUS.md](../../POST-MODULE-STATIC-EXACT-TARGET-CENSUS.md).
+[POST-MODULE-STATIC-EXACT-TARGET-CENSUS.md](../../docs/POST-MODULE-STATIC-EXACT-TARGET-CENSUS.md).
 Nothing here is a build product or a production change. Every tool only
 observes:
 * The audit instrumentation (the post-R2.a census's unchanged

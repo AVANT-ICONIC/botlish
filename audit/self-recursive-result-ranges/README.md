@@ -1,6 +1,6 @@
 # Self-recursive result Ranges: audit tools and artifacts
 
-Report: `/SELF-RECURSIVE-RESULT-RANGES.md`. Observation only; nothing here
+Report: `/docs/SELF-RECURSIVE-RESULT-RANGES.md`. Observation only; nothing here
 changes the compiler. Run from the repository root with Tcl 9.0.1 and the
 release native backend built (`cargo build --release --manifest-path
 native/Cargo.toml`); `LANG=C.utf8 LC_ALL=C.utf8`.

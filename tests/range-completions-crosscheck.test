@@ -251,14 +251,14 @@ test xcheck-loop-interval-is-body-scoped {the interval exists only in the body: 
 # ---------------------------------------------------------------------------
 # Intentional independent reasoning: completions may only be narrower
 
-test xcheck-intentional-completions-rules {mod's bounded divisor and char::scalar_value are completions-only facts (kept out of code generation on purpose): completions is inside range's interval, never different from it in any other way} -body {
-    set hir [xHir "fn probe(a, c):\n    m = mod(a, 16)\n    s = char::scalar_value(c)\n    m"]
+test xcheck-intentional-completions-rules {a native's bound is one rule both analyses read (mod's bounded divisor: hir::range::Mod; char::scalar_value's and hash's -result-range intervals): equal. Completions' own rule on top of it, the exact codepoint of a known character, is only ever narrower} -body {
+    set hir [xHir "fn probe(a, c):\n    m = mod(a, 16)\n    s = char::scalar_value(c)\n    h = hash(a)\n    p = char::scalar_value('a')\n    m"]
     lassign [bothOf $hir [list [iv -inf +inf] [hir::range::unknown]]] rx cx
-    lmap name {m s} {
+    lmap name {m s h p} {
         set e [bindValue $hir $name]
         list $name [relation [dict get $cx $e] [dict get $rx $e]]
     }
-} -result {{m within} {s within}}
+} -result {{m equal} {s equal} {h equal} {p within}}
 
 test xcheck-and-or-conjunct-narrowing {range and completions both decompose `and`/`or` conditions (hir::range::Paths; census G11, closed by ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md): they agree} -body {
     set src "fn probe(i, n):\n    if i < 0 or i >= n:\n        0\n    else:\n        t = i\n        t\n    i"

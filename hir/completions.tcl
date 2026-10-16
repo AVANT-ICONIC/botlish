@@ -2119,22 +2119,18 @@ proc hir::completions::LiteralElements {fact} {
     return [lrange $fact 1 end]
 }
 
-# A native call's own result Range, for the small set of natives this
-# analysis needs a fact for. `+ - * bit_and bit_or bit_xor shift_left
-# shift_right` reuse hir::range's own pure interval/exact-set arithmetic
-# directly (identical to hir::range::Call's own native case). Any other
-# native consults its own -result-range metadata (nonneg/collection-length,
-# core/native.tcl) the same generic way hir::range.tcl's SeedRange/Call
-# already do, PLUS one further, local fact this pass alone needs (never
-# registered on the native itself, so it can never influence native
-# lowering/codegen -- item 60-61): `mod` with a divisor of bounded
-# magnitude is below it, and `char::scalar_value` (the root native
-# core/unicodechar.tcl registers under that qualified name) is a Unicode
-# scalar value, therefore always in
-# [0, 0x10FFFF] (item 22), and when its own argument is provably an exact
-# UnicodeChar constant (a literal, or ctx.exact propagation through an
-# immutable binding -- e.g. a small-literal-list element, EvalListloop
-# above), the exact codepoint itself, not merely the interval.
+# A native call's own result Range. Its bound is the one hir/range.tcl
+# computes (so the two analyses never disagree about a native): `+ - *`,
+# `bit_and bit_or bit_xor shift_left shift_right` and `mod` reuse
+# hir::range's own transfer functions (identical to hir::range::Call's own
+# native case), and any other native its -result-range metadata
+# (hir::range::RegisteredRange: char::scalar_value's [0, 0x10FFFF], a
+# length's collection-length, ...). On top of that bound this pass adds the
+# exact value of a native whose arguments its walk knows exactly (ctx.exact
+# reaches call-specific facts hir/range.tcl never sees): the length of a
+# known String or List, and the codepoint of a known UnicodeChar (a literal,
+# or ctx.exact propagation through an immutable binding -- e.g. a
+# small-literal-list element, EvalListloop above; item 22).
 proc hir::completions::NativeResultRange {hir ctx name argExprs argRanges} {
     if {$name in {+ - *} && [llength $argRanges] == 2} {
         lassign $argRanges x y
@@ -2149,18 +2145,7 @@ proc hir::completions::NativeResultRange {hir ctx name argExprs argRanges} {
         return [hir::range::BitOp $name $x $y]
     }
     if {$name eq {mod} && [llength $argRanges] == 2} {
-        # Euclidean modulo (core/primitives.tcl): every result r of
-        # mod(a, b) has 0 <= r < abs(b), so a divisor of bounded magnitude
-        # bounds the result (`mod(b, 16)` is 0..15) -- the general fact,
-        # local to this pass like char::scalar_value's below.
-        set d [lindex $argRanges 1]
-        if {$d ne {never} && [dict get $d min] ne "-inf" && [dict get $d max] ne "+inf"} {
-            set m [expr {max(abs([dict get $d min]), abs([dict get $d max]))}]
-            if {$m > 0} {
-                return [dict create min 0 max [expr {$m - 1}]]
-            }
-        }
-        return [hir::range::nonneg]
+        return [hir::range::Mod {*}$argRanges]
     }
     if {$name in {str::length list::length} && [llength $argExprs] == 1} {
         # The length of a String or List this walk knows exactly (a literal,
@@ -2181,22 +2166,16 @@ proc hir::completions::NativeResultRange {hir ctx name argExprs argRanges} {
         }
     }
     if {$name eq {char::scalar_value} && [llength $argExprs] == 1} {
-        set arg [lindex $argExprs 0]
-        set v [ExactValueOf $hir $ctx $arg]
+        set v [ExactValueOf $hir $ctx [lindex $argExprs 0]]
         if {$v ne {} && [core::value::kind $v] eq {UnicodeChar}} {
             return [hir::range::point [core::value::charOf $v]]
         }
-        return [dict create min 0 max 0x10FFFF]
     }
     set exact [hir::exact::NativeRange $hir $name $argExprs $argRanges [dict get $ctx exprs]]
     if {$exact ne {}} {
         return $exact
     }
-    switch -- [dict get [core::native::metadata $name] resultRange] {
-        nonneg            { return [hir::range::nonneg] }
-        collection-length { return [hir::range::collectionLength] }
-    }
-    return [hir::range::unknown]
+    return [hir::range::RegisteredRange $name]
 }
 
 # The exact core value of EXPR, if it is a literal `const` or a `ref` to a

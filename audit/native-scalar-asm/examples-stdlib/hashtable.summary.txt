@@ -2,7 +2,7 @@ source:  examples/stdlib/hashtable.bot
 backend: Cranelift (specialize=1)
 asm:     hashtable.asm
 vcode:   hashtable.vcode
-machine-code bytes: 10804 (per function: 45 427 385 70 69 69 46 182 228 604 984 341 261 388 407 616 654 801 673 920 700 925 862 147)
+machine-code bytes: 10826 (per function: 45 427 385 70 69 69 46 182 178 628 1032 341 261 388 407 616 654 801 673 920 700 925 862 147)
 
 functions:
   0 <program entry>: nir-regs=1
@@ -13,9 +13,9 @@ functions:
   5 ht_tombstones<HashTable>: nir-regs=5
   6 ht_capacity<HashTable>: nir-regs=3
   7 ht_probe_start<HashTable, str>: nir-regs=5
-  8 ht_probe_next<HashTable, int>: nir-regs=7
-  9 ht_find_get<HashTable, str, int>: nir-regs=25
-  10 ht_find_insert<HashTable, str, int, int>: nir-regs=32
+  8 ht_probe_next<HashTable, int>: nir-regs=9
+  9 ht_find_get<HashTable, str, int>: nir-regs=26
+  10 ht_find_insert<HashTable, str, int, int>: nir-regs=33
   11 ht_get<HashTable, str>: nir-regs=12
   12 ht_contains<HashTable, str>: nir-regs=7
   13 ht_rehash_probe<mutarray, int, int>: nir-regs=13
@@ -136,40 +136,40 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 8 "ht_probe_next"
-    NIR regs: 7
-    raw regs: 1
-    managed-capable regs: 6
+    NIR regs: 9
+    raw regs: 4
+    managed-capable regs: 5
     effects: may_error=true may_gc=true
-    safepoints: 2
-    root candidates: 5
-    max live roots: 3
-    shadow slots: 3
+    safepoints: 1
+    root candidates: 2
+    max live roots: 2
+    shadow slots: 2
     entry zero slots: 0
     depth reservation: no
     storage: native frame
   
   function 9 "ht_find_get"
-    NIR regs: 25
-    raw regs: 5
-    managed-capable regs: 20
+    NIR regs: 26
+    raw regs: 7
+    managed-capable regs: 19
     effects: may_error=true may_gc=true
     safepoints: 1
-    root candidates: 3
-    max live roots: 3
-    shadow slots: 3
+    root candidates: 2
+    max live roots: 2
+    shadow slots: 2
     entry zero slots: 0
     depth reservation: no
     storage: native frame
   
   function 10 "ht_find_insert"
-    NIR regs: 32
-    raw regs: 5
-    managed-capable regs: 27
+    NIR regs: 33
+    raw regs: 8
+    managed-capable regs: 25
     effects: may_error=true may_gc=true
     safepoints: 2
     root candidates: 4
-    max live roots: 4
-    shadow slots: 4
+    max live roots: 3
+    shadow slots: 3
     entry zero slots: 0
     depth reservation: no
     storage: native frame
@@ -344,7 +344,7 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
 
 mechanical pattern counts (triage only; see report for interpretation):
-  6 x calls to rt_int_add
+  5 x calls to rt_int_add
   2 x calls to rt_int_sub
   3 x calls to rt_int_mul
   14 x calls to rt_int_cmp

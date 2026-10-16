@@ -151,11 +151,10 @@ fn position_high(n) -> HighNibble:
 fn from_int(value: int) -> Byte errors BelowRange, AboveRange:
     if value < 0:
         fail BelowRange
+    elif value > 255:
+        fail AboveRange
     else:
-        if value > 255:
-            fail AboveRange
-        else:
-            value
+        value
 
 # List[UnicodeChar] -> ImmutableSet[Byte]: each char's own Unicode scalar
 # value (char::scalar_value), converted via from_int above. Never UTF-8: a

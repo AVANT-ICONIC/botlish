@@ -1,7 +1,7 @@
 #!/usr/bin/env tclsh9.0
 # generate-scalar-audit.tcl -- regenerates the committed scalar-machine-code
 # audit corpus under audit/native-scalar-asm/ (see that directory's
-# README.md and the top-level SCALAR-ASM-AUDIT.md for what this is for).
+# README.md and docs/SCALAR-ASM-AUDIT.md for what this is for).
 #
 #   tclsh9.0 native/generate-scalar-audit.tcl [-outdir DIR]
 #
@@ -352,7 +352,7 @@ set index "# Native scalar machine-code audit corpus\n\n"
 append index "**Temporary diagnostic snapshot.** Regenerate with:\n\n"
 append index "```sh\ntclsh9.0 native/generate-scalar-audit.tcl\n```\n\n"
 append index "This directory is not a canonical build product. It may be removed once the\n"
-append index "scalar audit (see /SCALAR-ASM-AUDIT.md) and any follow-up fixes it leads to\n"
+append index "scalar audit (see /docs/SCALAR-ASM-AUDIT.md) and any follow-up fixes it leads to\n"
 append index "are complete.\n\n"
 append index "## Compiler revision\n\n"
 append index "- git commit: [GitCommit]\n"
@@ -386,7 +386,7 @@ foreach r $results {
         append index "| $src | [dict get $r kind] | \[$group/$base.status.txt\]($group/$base.status.txt) | $detail |\n"
     }
 }
-append index "\nSee /SCALAR-ASM-AUDIT.md at the repository root for the analysis of this\n"
+append index "\nSee /docs/SCALAR-ASM-AUDIT.md for the analysis of this\n"
 append index "corpus (per-function classification, findings, severity, and the milestone\n"
 append index "recommendation).\n"
 

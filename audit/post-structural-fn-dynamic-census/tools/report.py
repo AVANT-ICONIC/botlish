@@ -120,8 +120,8 @@ add('''\nEnumeration is exactly sorted `bench/*.bot`, `examples/stdlib/*.bot`, a
 synthetic workload enters these totals. The NIR files below are *outputs* of
 today's ordinary frontend, never corpus inputs. `10-duplicate-binding.bot`
 produces its declared `CORE SEMANTIC DUPLICATE` error before compilation.
-Full filenames and Git blob IDs: [corpus.txt](audit/post-structural-fn-dynamic-census/out/corpus.txt)
-and [static.jsonl](audit/post-structural-fn-dynamic-census/out/static.jsonl).''')
+Full filenames and Git blob IDs: [corpus.txt](../audit/post-structural-fn-dynamic-census/out/corpus.txt)
+and [static.jsonl](../audit/post-structural-fn-dynamic-census/out/static.jsonl).''')
 heading('Tooling and provenance')
 add('''Frozen compiler commit: `a8a306f986809c0a8b54f4763013070f209c248c`.
 Tcl 9.0.1; rustc 1.98.1 (48a229cea, 2026-09-01); Cranelift 0.135.2;
@@ -146,8 +146,8 @@ Wall-clock corroboration: five sessions, one warmup plus twenty whole-program
 runs each; median of session medians, compilation excluded. It is not used to
 rank sites. Full host/toolchain, source SHA-256s, blob/tree IDs, executable hashes,
 NIR hashes and mode details are in
-[provenance.json](audit/post-structural-fn-dynamic-census/out/provenance.json).
-[README](audit/post-structural-fn-dynamic-census/README.md) gives reproduction commands.''')
+[provenance.json](../audit/post-structural-fn-dynamic-census/out/provenance.json).
+[README](../audit/post-structural-fn-dynamic-census/README.md) gives reproduction commands.''')
 heading('Static callable census and per-program dynamic totals')
 table(['Program','Used instances','call','callenv','callvalue','closure','capture','fnvalue','native','Dynamic callvalue','Dominant site'],[
 [p,int(t['instances']),*[int(t[k]) for k in ['call','callenv','callvalue','closure','capture','fnvalue','native']],sum(s['calls'] for s in sites if s['program']==p),next((s['sid'] for s in sorted(sites,key=lambda s:-s['calls']) if s['program']==p and s['calls']), 'none')]
@@ -178,7 +178,7 @@ sets equal to their independently recovered static sets. S9's two-element
 static set strictly contains the empty observed set. There are no unknown static
 sets after this audit's explicit source-provenance tracing. An observed
 singleton alone is never treated as proof. Full caller witnesses and intermediate
-unions: [proof-witnesses.txt](audit/post-structural-fn-dynamic-census/out/proof-witnesses.txt).
+unions: [proof-witnesses.txt](../audit/post-structural-fn-dynamic-census/out/proof-witnesses.txt).
 The trace follows immutable aliases, exact factory result types, compatible
 branches/List elements, and known callers, including captured outer parameters.
 It is a deliberately limited offline witness extractor, not a production pass
@@ -370,7 +370,7 @@ interpretation and compared exclusive per-function work: all differences are
 in libc malloc/free/realloc bookkeeping, unlink/consolidation, or memcpy paths.
 Every generated-code and callable-runtime instruction count repeats exactly.
 Thus whole totals are intervals, not claimed deterministic integers. Details:
-[repeatability.txt](audit/post-structural-fn-dynamic-census/out/repeatability.txt).
+[repeatability.txt](../audit/post-structural-fn-dynamic-census/out/repeatability.txt).
 The current reducer also sums recursive Callgrind contexts (`rt_call_value'2`)
 and counts each machine call instruction once; the historical text reducer's
 unmerged source-checks arcs must not be mistaken for separate static sites.''')
@@ -526,9 +526,9 @@ Each run sourced 93 test files, including native checks with the native backend
 built. `tclsh9.0 bench/bench.tcl -runs 1` passed all 8 canonical programs with
 interp/compile/Cranelift agreement and no unsupported rows. Separate native
 instrumentation preservation checks pass for all 30 executable corpus sources.
-Logs: [tests.txt](audit/post-structural-fn-dynamic-census/out/tests.txt),
-[parity.txt](audit/post-structural-fn-dynamic-census/out/parity.txt),
-[preservation.json](audit/post-structural-fn-dynamic-census/out/preservation.json).
+Logs: [tests.txt](../audit/post-structural-fn-dynamic-census/out/tests.txt),
+[parity.txt](../audit/post-structural-fn-dynamic-census/out/parity.txt),
+[preservation.json](../audit/post-structural-fn-dynamic-census/out/preservation.json).
 No production native stack/root/allocation implementation was edited.''')
 heading('Recommended next implementation scope')
 add('''The evidence supports a small correctness step around singleton caller
@@ -576,5 +576,5 @@ Measured optimization ceiling:
 # Keep the summary's exact derived numbers honest if allocator profiles change.
 text='\n'.join(L)
 text=text.replace('1,439,963 mean',f'{saving:,.0f} mean').replace('(17.4572%)',f'({pct(saving,statistics.mean(baseline))})')
-(root/'POST-STRUCTURAL-FN-DYNAMIC-CENSUS.md').write_text(text)
+(root/'docs/POST-STRUCTURAL-FN-DYNAMIC-CENSUS.md').write_text(text)
 print('Rendered report:',len(text),'bytes')

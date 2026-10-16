@@ -36,4 +36,4 @@ echo "== 7. triage";        bash fuzz/scripts/triage.sh
 echo "== 8. stats archive"; bash fuzz/scripts/archive-stats.sh
 echo "== 9. known-failure suite self-test"
 tclsh9.0 fuzz/scripts/replay-known-failures.tcl --selftest
-echo "== done. Report: FUZZING-EXAMPLES-AOT.md"
+echo "== done. Report: docs/FUZZING-EXAMPLES-AOT.md"

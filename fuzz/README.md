@@ -1,7 +1,7 @@
 # fuzz/ -- the AFL++ fuzzing campaign over the AOT example executables
 
 Status, decisions, inventory, per-target statistics and findings live in
-`FUZZING-EXAMPLES-AOT.md` at the repository root. This file is the
+`docs/FUZZING-EXAMPLES-AOT.md`. This file is the
 operator's map: layout, and how to rebuild, rerun, and triage.
 
 ## Layout

@@ -2,7 +2,7 @@ name: scalar-asm-audit
 
 # Regenerates the committed disassembly corpus under
 # audit/native-scalar-asm/ (see that directory's README.md and
-# /SCALAR-ASM-AUDIT.md) whenever something that could change it lands on
+# /docs/SCALAR-ASM-AUDIT.md) whenever something that could change it lands on
 # main, and pushes the result straight back -- this repo has no
 # feature-branch-plus-PR review cycle (AGENTS.md), and the corpus is
 # explicitly a "temporary diagnostic snapshot", not something to let drift.

@@ -1832,6 +1832,12 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             // that reaches here.
             RIShr => self.b.ins().sshr(a[0], a[1]),
             RIShl => self.b.ins().ishl(a[0], a[1]),
+            // native/lower.tcl's RawEligibleCall proved both raw operands
+            // small, so the logical integers' own two's-complement bits are
+            // the whole value: the host instruction is the operation.
+            RIAnd => self.b.ins().band(a[0], a[1]),
+            RIOr => self.b.ins().bor(a[0], a[1]),
+            RIXor => self.b.ins().bxor(a[0], a[1]),
             RILt | RILe | RIGt | RIGe | RIEq => {
                 let cc = match op {
                     RILt => IntCC::SignedLessThan,
@@ -2188,9 +2194,9 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
     /// operands already had, so a *proven-small* operand pair's tagged-word
     /// result is always itself proven small too -- no overflow check, no
     /// slow branch, ever. Both operands here are ordinary tagged Values
-    /// (`2n+1`), not necessarily proven small by hir/range.tcl (that
-    /// analysis is consulted only for the separate raw/unboxed
-    /// representation tier -- see native/lower.tcl's "Representation"
+    /// (`2n+1`), not proven small by hir/range.tcl (operands it proves
+    /// small are lowered to the raw RIAnd/RIOr/RIXor instead, with no
+    /// tag test and no helper -- see native/lower.tcl's "Representation"
     /// section); this still works for two arbitrary tagged small Ints
     /// because the tag bit (bit 0) is 1 on both, so:
     ///   AND: (2x+1) & (2y+1) = 2(x&y) + 1 -- tag bit survives automatically

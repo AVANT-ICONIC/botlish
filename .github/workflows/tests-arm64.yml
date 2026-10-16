@@ -1,0 +1,152 @@
+name: tests (linux arm64)
+
+# The test suite on Linux AArch64 (GitHub's ubuntu-24.04-arm runners): the
+# same jobs as tests.yml that exercise the native backend, on the second
+# architecture its Cranelift code generator and runtime target. The Tcl
+# backends are architecture-independent, but the Tcl test files run every
+# corpus program on the Cranelift backend too, so the interp and compile jobs
+# are native coverage as well. Run it on another branch with "Run workflow"
+# (workflow_dispatch).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: arm64 tests (${{ matrix.backend }})
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [interp, compile]
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Run test suite
+        env:
+          CORE_BACKEND: ${{ matrix.backend }}
+        run: tclsh9.0 tests/all.tcl
+
+      - name: Run examples
+        run: tclsh9.0 main.tcl -backend ${{ matrix.backend }}
+
+  native:
+    name: arm64 tests (${{ matrix.backend }} coverage)
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [cranelift, cranelift-generic]
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      # As in tests.yml: fails only if a test fails for a reason other than a
+      # reported unsupported construct; pipefail through `shell: bash`.
+      - name: Native coverage
+        shell: bash
+        run: tclsh9.0 tests/native-coverage.tcl -backend ${{ matrix.backend }} | tee coverage.txt
+
+      - name: Run examples
+        if: matrix.backend == 'cranelift'
+        run: tclsh9.0 main.tcl -backend cranelift examples/stdlib/*.bot examples/surface/0[1-8]*.bot examples/surface/1[1-3]*.bot examples/hir/0[1-3]*.hir
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## arm64 ${{ matrix.backend }} backend coverage"
+            echo
+            echo '```'
+            cat coverage.txt 2>/dev/null || echo "No results."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  rust:
+    name: arm64 tests (native Rust unit tests)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Run native Rust unit tests
+        run: cargo test --release --manifest-path native/Cargo.toml
+
+      # Cheap (the tests run in about a second) and the most direct check of
+      # the GC root walk on this architecture.
+      - name: Run native Rust unit tests under GC stress
+        env:
+          BOTLISH_NATIVE_GC_STRESS: "1"
+        run: cargo test --release --manifest-path native/Cargo.toml
+
+  golden:
+    name: arm64 golden suites (shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Golden suites and their Tcl originals, side by side
+        run: tclsh9.0 audit/golden/tools/check.tcl -shard ${{ matrix.shard }}/4 -jobs 2
+
+  gc-stress:
+    name: arm64 tests (native GC-stress)
+    # As in tests.yml, not on pull requests (it is the slowest job); a manual
+    # run includes it, since that is how a branch gets its arm64 check.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+      BOTLISH_NATIVE_GC_STRESS: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Run test suite under GC stress
+        run: tclsh9.0 tests/all.tcl

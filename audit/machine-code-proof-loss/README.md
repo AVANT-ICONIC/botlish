@@ -1,7 +1,7 @@
 # Machine-code proof-loss investigation: artifacts
 
 Raw evidence for
-[MACHINE-CODE-PROOF-LOSS-INVESTIGATION.md](../../MACHINE-CODE-PROOF-LOSS-INVESTIGATION.md).
+[MACHINE-CODE-PROOF-LOSS-INVESTIGATION.md](../../docs/MACHINE-CODE-PROOF-LOSS-INVESTIGATION.md).
 Investigation only. Nothing here is a build product, and no compiler, runtime,
 library or canonical `.bot` file was changed.
 

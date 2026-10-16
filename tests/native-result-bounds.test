@@ -1,0 +1,168 @@
+# native-result-bounds.test -- NATIVE-RESULT-BOUNDS.md: a native's Int result
+# bound is one fact both range analyses read (core/native.tcl's -result-range,
+# read by hir::range::RegisteredRange; mod's divisor bound, hir::range::Mod),
+# and native lowering computes bit_and/bit_or/bit_xor of operands proven small
+# raw (riand/rior/rixor: no tag test, no BigInt helper call).
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+interp recursionlimit {} 100000
+
+proc nrbImpl {x} {
+    return $x
+}
+
+# The NIR of source TEXT, with every function compiled standalone (no tiny
+# leaf inlined into its caller), so a function's own body can be read.
+proc nirOf {text} {
+    return [native::nir [surface::compile $text t.bot -strict 0] -tiny-leaf-inline-opt 0]
+}
+
+# The substring of NIR or CLIF TEXT holding function NAME's body: from its
+# quoted name to MARKER ("\nend" for NIR, "\n; function " for CLIF).
+proc FunctionBody {text name marker} {
+    set idx [string first "\"$name\"" $text]
+    if {$idx < 0} {
+        error "function \"$name\" not found"
+    }
+    set endIdx [string first $marker $text $idx]
+    if {$endIdx < 0} {
+        set endIdx [string length $text]
+    }
+    return [string range $text $idx $endIdx]
+}
+
+# How many raw (riand/rior/rixor) and tagged (iand/ior/ixor) bitwise ops TEXT
+# holds.
+proc bitwiseOps {text} {
+    return [list [regexp -all {op ri(?:and|or|xor) } $text] [regexp -all {op i(?:and|or|xor) } $text]]
+}
+
+set opsSource {fn ops(a, b):
+    [bit_and(a, b), bit_or(a, b), bit_xor(a, b)]
+
+[ops(171, 12), ops(-5, 3), ops(4611686018427387903, -4611686018427387904), ops(-1, -4611686018427387904)]
+}
+
+# ---------------------------------------------------------------------------
+# -result-range interval
+
+test nrb-interval-registration {-result-range {interval LO HI} is stored with decimal bounds, and RegisteredRange reads it as that Range} -body {
+    try {
+        core::native::register nrb_probe -arity 1 -impl nrbImpl -param-types {int} -result-type int \
+            -result-range {interval -0x10 0x10}
+        list [dict get [core::native::metadata nrb_probe] resultRange] \
+            [hir::range::show [hir::range::RegisteredRange nrb_probe]]
+    } finally {
+        core::native::unregister nrb_probe
+    }
+} -result {{interval -16 16} {[-16, 16]}}
+
+test nrb-interval-rejected {an interval needs exactly two integer bounds, LO <= HI; any other -result-range word is rejected} -body {
+    lmap range {{interval 5 1} {interval a 1} {interval 0} {interval 0 1 2} {bounded 0 1} positive} {
+        list [catch {
+            core::native::register nrb_bad -arity 1 -impl nrbImpl -result-type int -result-range $range
+        } message] [string match {*bad -result-range*} $message] [core::native::exists nrb_bad]
+    }
+} -result {{1 1 0} {1 1 0} {1 1 0} {1 1 0} {1 1 0} {1 1 0}}
+
+test nrb-registered-bounds {the bounds the registrations promise: char::scalar_value a Unicode scalar value, hash its 61-bit mask, a length collection-length, mod alone only nonnegative, + nothing} -body {
+    lmap name {char::scalar_value hash str::length mod +} {
+        list $name [hir::range::show [hir::range::RegisteredRange $name]]
+    }
+} -result {{char::scalar_value {[0, 1114111]}} {hash {[0, 2305843009213693951]}} {str::length {[0, 4611686018427387903]}} {mod {[0, +∞]}} {+ {[-∞, +∞]}}}
+
+# ---------------------------------------------------------------------------
+# mod's divisor bound
+
+test nrb-mod-transfer {mod is Euclidean: a divisor of bounded magnitude M > 0 bounds the result to [0, M-1], whatever its sign; otherwise the result is only nonnegative} -body {
+    set u [hir::range::unknown]
+    lmap d [list [hir::range::point 16] {min -16 max 4} {min -3 max -3} {min 1 max +inf} [hir::range::point 0] never] {
+        hir::range::show [hir::range::Mod $u $d]
+    }
+} -result {{[0, 15]} {[0, 15]} {[0, 2]} {[0, +∞]} {[0, +∞]} never}
+
+test nrb-mod-in-range-analysis {hir/range.tcl applies the divisor bound to a call: the result of x.mod(16) is [0, 15] for any x} -body {
+    set hir [surface::compile "fn m(x):\n    x.mod(16)\n\n\[m(3), m(1000000000000000000000)\]\n" t.bot -strict 0]
+    set spec [hir::specialize::analyze $hir]
+    set ranges [hir::range::analyze $hir $spec]
+    set out {}
+    foreach id [dict get $spec used] {
+        if {[hir::specialize::label $spec $id] eq "m<int>"} {
+            lappend out [hir::range::show [dict get [dict get $ranges instances $id] result]]
+        }
+    }
+    set out
+} -result {{[0, 15]}}
+
+# ---------------------------------------------------------------------------
+# The real case: bench/refined-checks.bot's uri_escape_text
+
+test nrb-refined-checks-entry-facts {uri_escape_text's 4-byte lead byte bit_or(240, v.shift_right(18)) is bounded by char::scalar_value's range, so pct, hex_pair and high_nibble enter with [0, 244] (0xF4, UTF-8's largest lead byte) and esc_scalar with [128, 0x10FFFF]} -body {
+    set hir [refinedChecksSourceHir]
+    set spec [hir::specialize::analyze $hir]
+    set ranges [hir::range::analyze $hir $spec]
+    set out {}
+    foreach id [dict get $spec used] {
+        set label [hir::specialize::label $spec $id]
+        if {$label in {esc_scalar<int> pct<int> hex_pair<int> high_nibble<int>}} {
+            lappend out [list $label [lmap r [dict get [dict get $ranges instances $id] params] {hir::range::show $r}]]
+        }
+    }
+    lsort -index 0 $out
+} -result {{esc_scalar<int> {{[128, 1114111]}}} {hex_pair<int> {{[0, 244]}}} {high_nibble<int> {{[0, 244]}}} {pct<int> {{[0, 244]}}}}
+
+test nrb-refined-checks-high-nibble-raw {high_nibble<int> (byte::nibble(byte::high_nibble(b)), both inlined) lowers its bit_and raw: no tagged bitwise op in its NIR and no rt_int_and call in its Cranelift IR} -body {
+    set hir [refinedChecksSourceHir]
+    set body [FunctionBody [native::nir $hir] high_nibble "\nend"]
+    set clif [FunctionBody [native::clif $hir] high_nibble "\n; function "]
+    list [bitwiseOps $body] [string match *rt_int_and* $clif] [string match *rt_int_* $clif]
+} -result {{1 0} 0 0}
+
+# ---------------------------------------------------------------------------
+# Raw bitwise lowering
+
+test nrb-raw-bitwise-proven-small {bit_and, bit_or and bit_xor of two operands proven small lower raw, negative and boundary operands included} -body {
+    bitwiseOps [FunctionBody [nirOf $opsSource] ops "\nend"]
+} -result {3 0}
+
+test nrb-raw-bitwise-values {the raw forms compute what the tagged ones and the Tcl backends do, at the small-Int boundaries and for negative operands} -body {
+    sourceAgree $opsSource
+} -result {value {[[8, 175, 167], [3, -5, -8], [0, -1, -1], [-4611686018427387904, -1, 4611686018427387903]]}}
+
+test nrb-tagged-bitwise-bigint {an operand that may be a BigInt keeps the tagged ops (and their helper), with the same values on every backend} -body {
+    set source {fn ops(a, b):
+    [bit_and(a, b), bit_or(a, b), bit_xor(a, b)]
+
+[ops(4611686018427387904, -3), ops(-5, 3)]
+}
+    list [bitwiseOps [FunctionBody [nirOf $source] ops "\nend"]] [sourceAgree $source]
+} -result {{0 3} {value {[[4611686018427387904, -3, -4611686018427387907], [3, -5, -8]]}}}
+
+test nrb-tagged-bitwise-unbounded {an operand the analysis cannot bound keeps the tagged op} -body {
+    set source {fn mask(x):
+    bit_and(x, 240)
+
+fn count(n, acc):
+    if n <= 0:
+        mask(acc)
+    else:
+        count(n - 1, acc + 171)
+
+count(3, 0)
+}
+    list [bitwiseOps [FunctionBody [nirOf $source] mask "\nend"]] [sourceAgree $source]
+} -result {{0 1} {value 0}}
+
+test nrb-raw-bitwise-fold {a fold of a raw-eligible bitwise op (a constant result, or an identity returning an operand) keeps the operand's raw representation: byte::nibble's formula on high-positioned values} -body {
+    set source {fn fold(x):
+    bit_and(bit_or(bit_and(x, 15), shift_right(x, 4)), 15)
+
+[fold(16), fold(240), fold(32)]
+}
+    set body [FunctionBody [nirOf $source] fold "\nend"]
+    list [bitwiseOps $body] [regexp -all {op rishr } $body] [sourceAgree $source]
+} -result {{0 0} 1 {value {[1, 15, 2]}}}
+
+cleanupTests

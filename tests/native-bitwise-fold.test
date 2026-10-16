@@ -9,8 +9,9 @@
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 source [file join $::projectRoot surface surface.tcl]
 
-# Whether function NAME's NIR (first NIR function of that name) still has an
-# `op iand`.
+# Whether function NAME's NIR (first NIR function of that name) still has its
+# AND: an `op iand`, or the raw `op riand` of small operands
+# (NATIVE-RESULT-BOUNDS.md).
 proc keepsIand {src name} {
     set inside 0
     foreach line [split [native::nir [surface::compile $src t.bot -strict 0]] \n] {
@@ -19,7 +20,7 @@ proc keepsIand {src name} {
             set inside [expr {$fname eq $name}]
             continue
         }
-        if {$inside && [string match "*op iand*" $line]} {
+        if {$inside && [regexp {op r?iand } $line]} {
             return 1
         }
     }

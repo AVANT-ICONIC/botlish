@@ -1,6 +1,6 @@
 # Exact callable identity / closed-caller theorem: artifacts
 
-Raw evidence for [EXACT-CALLABLE-CLOSED-CALLER.md](../../EXACT-CALLABLE-CLOSED-CALLER.md).
+Raw evidence for [EXACT-CALLABLE-CLOSED-CALLER.md](../../docs/EXACT-CALLABLE-CLOSED-CALLER.md).
 Observation only: nothing here is a build product. "Before" is the parent fence
 `64af2fe` (the tree before this milestone, `native/src` identical); "after" is
 the milestone's tree. Every tool runs unchanged on both trees (it uses only
