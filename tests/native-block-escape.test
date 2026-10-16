@@ -854,4 +854,87 @@ fs = [f]
     }
 } -result {[31, 36]}
 
+# ---------------------------------------------------------------------------
+# The internal scalar companion (2048-ENGINE-WORKLOAD.md, S24): a
+# de-closure-converted callee whose struct result its caller wants as
+# fields. Call's flattened dispatch used to skip such a call (it handled
+# ordinary and region results only), so the call took the closure-taking
+# companion path and asked for a closure value the caller's flattened
+# capture list does not have: "native lowering: e12 does not capture b2
+# (NATIVE BUG)", or, at the top level, "binding b2 is not reachable from
+# program". The shape is any single-file program whose top-level
+# functions read a program-level value (which makes them closures, not
+# module statics) and return a struct a caller only takes fields of.
+
+test blockescape-scalar-companion-1 {a converted closure's struct result wanted as fields: the internal scalar companion, no Block, no struct} -body {
+    set text {empty = 0
+
+struct Turn:
+    game: int
+    seed: int
+
+fn spawned(game: int, seed: int) -> Turn:
+    Turn {game: game + empty, seed: seed}
+
+fn main() -> int:
+    first = spawned(1, 2)
+    first.game + first.seed
+
+main()}
+    set hir [sourceHir $text]
+    set nirText [dict get [native::lower::program $hir] text]
+    list [assertParity $text] [blockAllocs $text 1] \
+        [regexp {"spawned" params=3 env=0 [^\n]*results=2} $nirText] \
+        [regexp {callmulti} $nirText] [regexp {structnew|closure |callenv} $nirText]
+} -result {{int 3} 0 1 1 0}
+
+test blockescape-scalar-companion-2 {the same call at the program's top level, and under GC stress} -body {
+    set text {empty = 0
+
+struct Turn:
+    game: int
+    seed: int
+
+fn spawned(game: int, seed: int) -> Turn:
+    Turn {game: game + empty, seed: seed}
+
+first = spawned(1, 2)
+second = spawned(first.game, first.seed)
+second.game * 10 + second.seed}
+    set ::env(BOTLISH_NATIVE_GC_STRESS) 1
+    try {
+        set stressed [native::evalHir [sourceHir $text]]
+    } finally {
+        unset ::env(BOTLISH_NATIVE_GC_STRESS)
+    }
+    list [assertParity $text] $stressed
+} -result {{int 12} {int 12}}
+
+test blockescape-scalar-companion-3 {a converted closure reached through a helper, its struct result consumed field by field in a loop, agrees on every backend} -body {
+    backendParity {
+import list
+
+base = [0, 0]
+
+struct Pair:
+    left: int
+    right: int
+
+fn offset(x: int) -> int:
+    x + list::length(base)
+
+fn pair(n: int) -> Pair:
+    Pair {left: offset(n), right: n * 2}
+
+fn total(k: int) -> int:
+    sums = loop i from 0 to k:
+        p = pair(i)
+        p.left + p.right
+    loop s in sums:
+        s
+
+total(4)
+    }
+} -result {[2, 5, 8, 11]}
+
 cleanupTests

@@ -640,3 +640,131 @@ MutableVector as a one-cell accumulator (lib/test.bot's `joined`); the
 engine uses a MutableVector only to flatten (empty_positions). Natively
 self tail calls are loops; on interp they are Tcl recursion (S22).
 LANGUAGE (or STDLIB: a sum/fold), recurring, MODERATE.
+
+### S24 COMPILER-CORRECTNESS: a valid single-file program is rejected by specialized native lowering ("does not capture", NATIVE BUG)
+
+* Context: the single-executable smoke test. A single-exe user cannot
+  import a module (S4), so the smoke test concatenated the engine and the
+  demo into one entry program. `-emit-native-executable` (and `-backend
+  cranelift` in the checkout) fail: `native lowering: e1692 does not
+  capture b325 (NATIVE BUG)`; cranelift-generic and the Tcl backends run
+  it. The same code with the engine as a module works.
+* Reduction (q2.tcl prints a HIR node/binding by id): e1692 is `main`'s
+  block, b325 the top-level function `spawned`. Four `main` bodies (v1-v4),
+  then synthetic programs c1-c7. Minimal (c5, 11 lines):
+
+      empty = 0
+      struct Turn:
+          game: int
+          seed: int
+      fn spawned(game: int, seed: int) -> Turn:
+          Turn {game: game + empty, seed: seed}
+      fn main() -> int:
+          first = spawned(1, 2)
+          first.game
+      main()
+
+  Needs: a program-level value read by a top-level function (so the
+  function is a closure in an entry program, not a module static), a
+  struct result, a caller that only projects a field. Returning the struct
+  whole, or no struct, works; at top level the message is "binding b2 is
+  not reachable from program". Hidden by STRUCT_OPT=0, ESCAPE_OPT=0,
+  CALL_FACTS_OPT=0 or BLOCK_ESCAPE_OPT=0.
+* Cause (native/lower.tcl `Access`, the capture-list setup, `Call`'s
+  dispatch): `main` is de-closure-converted (hir/blockescape.tcl), so its
+  capture list is the flattened one, in which `spawned` (also converted)
+  is replaced by `spawned`'s own captures (`empty`). Every call of
+  `spawned` must then go through FlattenedVirtualCall. But Call's
+  flattened dispatch is guarded by `$wantVirtual eq ""`: when the caller
+  wants the struct result virtual (fields in registers), the call takes
+  the scalar-replacement path, which evaluates `spawned` as a closure
+  value -- not in the flattened list. There is a capture-explicit
+  *region* companion for flattened calls, none for a virtual struct
+  result.
+* Classification: COMPILER-CORRECTNESS (a valid program rejected with an
+  internal error), BLOCKER for single-file programs -- which is what S4
+  leaves a single-executable user.
+* Fix (F3): native/lower.tcl gains an *internal scalar companion*
+  (`internalcompanion`: InternalCompanionRef, InternalCompanionFunction,
+  FlattenedVirtualScalarCall): CompanionFunction's `retmulti` exits with
+  InternalFunction's capture-explicit parameters, the composition the
+  internal region companion already is for String regions. Call's
+  flattened dispatch no longer skips a call whose result is wanted as
+  fields; it routes it there. Only calls that used to throw take the new
+  path (a converted binding has no closure value, so the old path always
+  failed). c2, c3, c5, c6 and the single-file demo now run, the demo
+  executable byte-identical with and without GC stress; NIR of c5:
+  `main`'s internal variant calls `spawned`'s internal scalar companion
+  through `callmulti`, no struct, no closure. Tried first in a scratch
+  copy of the tree (native/target symlinked, nothing rebuilt) while the
+  GC-stress run used the checkout: native-block-escape (54),
+  blockescape-called-generic (5), blockescape-nested-capturers (13),
+  native-escape (22), struct-scalar-replacement (84),
+  native-param-aggregate (37), closed-closure-entry-facts (33) pass.
+
+### S25 What a single-file program loses (the S4 workaround, measured)
+
+Concatenating the engine and the golden suite into one entry program
+(what a single-executable user must do) cost, beyond S24:
+* two name clashes, both silent shadowing rather than errors: the suite's
+  nested test functions `cell` and `new_game` shadow the engine's
+  top-level functions of the same names, so `b.cell(at(0, 0))` and
+  `new_game().game_over?()` resolve to the nested test functions. The
+  diagnostics were `function result does not prove declared type
+  List[int]` and `argument for parameter "game" cannot be proven to
+  satisfy Game (argument type: bool)` -- the second hints at the cause,
+  neither names the shadowing;
+* encapsulation: an entry program owns its own opaque structs, so the two
+  tests that `Board` construction and fields are the engine's alone
+  (OpaqueConstruction, OpaqueRepresentation) fail -- correctly, the
+  property does not exist in one file. 66 of 68 tests pass on all four
+  backends.
+LANGUAGE (S4), DIAGNOSTIC (shadowing not named). MODERATE for the paired
+run: its agent can only write single files.
+
+### S16 addendum `-warnings error` cannot compile any program that imports io
+
+The stdlib's own ONE-CHAR-STRING-LITERAL findings in lib/io.bot are the
+first warning of every program that imports io, so `-warnings error`
+rejects such a program for code its author did not write (found
+rebuilding the demo with `run.tcl -warnings error`: `the String literal
+"\n" is one character long ...`). The warning gate avoids this only
+because it compares against a manifest. DIAGNOSTIC/STDLIB; raises S16 to
+a CLI problem for anyone using strict warnings in CI.
+* S24 is not single-file only: the same shape with nested functions
+  (`fn outer(n): base = n - 5 / fn spawned(...) -> Turn: ... base ... /
+  fn main(): first = spawned(1, 2) / first.game + first.seed`) fails the
+  same way, so any closure that captures a local and returns a struct a
+  sibling caller takes apart is affected. That nested shape is the golden
+  port (closure-escape.bot `local-closure/struct-result-fields`): the
+  suite aborted on cranelift before the fix, and passes 50/50 on four
+  backends after it; audit/golden/tools/check.tcl agrees on all 51 of its
+  rows.
+
+### Single-executable smoke test
+
+Built with single/build.sh (static Tcl 9.0.1 base kit from the pinned
+source tarball, checksum verified), copied to an empty directory outside
+the repository, run with `env -i` (no PATH):
+* A: the checkout-built demo `.hirx` through `botlish
+  -emit-native-executable`: the stub-linked executable's output is
+  byte-identical to the pinned one, also under GC stress; `-backend
+  cranelift` shows only `value: unit` (S15).
+* B: the engine and the demo concatenated into one file, compiled from
+  source by the single executable: identical output, also under GC
+  stress (after F3; before it, S24). The engine and the suite in one
+  file: 66 passed, 2 failed on all four backends (the two opacity tests,
+  S25).
+* C: `botlish demo.bot` with game2048.bot beside it: `unknown namespace
+  "game2048": no such module file //zipfs:/app/botlish/lib/game2048.bot
+  and no intrinsics of that namespace (SURFACE MODULE
+  UNKNOWN-NAMESPACE)` -- accurate, and it names the only place modules
+  can live: inside the executable (S4).
+
+### Final validation
+
+* The whole suite under GC stress with the roots fix (before F3):
+  `BOTLISH_NATIVE_GC_STRESS=1 tclsh9.0 tests/local.tcl -all 1`: Tcl
+  tests on interp 7522 passed, on compile 7518 passed (4 skipped), 91
+  golden suites with 0 failures (interp 4690, compile 4690,
+  cranelift-generic 4597, cranelift 4699), 2080 s with 4 jobs.

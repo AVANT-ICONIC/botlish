@@ -8,9 +8,14 @@
 # empty position and whether the tile is a 4 (one time in ten) or a 2.
 #
 # It prints the first moves' boards, then the final board, the score and
-# the largest tile. Output goes through io::print_line, so it runs natively
-# (tclsh9.0 examples/games/2048/run.tcl -backend cranelift
-# examples/games/2048/demo.bot, or as an executable).
+# the largest tile. Output goes through io::print_line, which needs the
+# native backend; build it as an executable to see it:
+#
+#   tclsh9.0 examples/games/2048/run.tcl -hirx /tmp/demo.hirx examples/games/2048/demo.bot
+#   tclsh9.0 main.tcl -emit-native-executable /tmp/demo.hirx && /tmp/demo
+#
+# (Under `-backend cranelift` it runs, but main.tcl shows only its value:
+# 2048-ENGINE-WORKLOAD.md, S15.)
 import game2048
 import io
 import linux::io
@@ -45,11 +50,9 @@ fn digits(n: int, p: int) -> str:
     else:
         n.digits(next).concat(n.mod(next).fits(p).digit())
 
+# N >= 0 in decimal.
 fn decimal(n: int) -> str:
-    if n < 10:
-        digit(n)
-    else:
-        n.digits(1)
+    n.digits(1)
 
 # TEXT right-aligned in a field of six characters.
 fn field(text: str) -> str:

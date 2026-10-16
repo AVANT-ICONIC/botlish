@@ -3639,6 +3639,9 @@ tests/native-block-escape.test blockescape-region-companion-refined-checks-3 pas
 tests/native-block-escape.test blockescape-region-companion-refined-checks-4 pass
 tests/native-block-escape.test blockescape-region-companion-refined-checks-5 pass
 tests/native-block-escape.test blockescape-region-companion-unicode-1 pass
+tests/native-block-escape.test blockescape-scalar-companion-1 pass
+tests/native-block-escape.test blockescape-scalar-companion-2 pass
+tests/native-block-escape.test blockescape-scalar-companion-3 pass
 tests/native-block-escape.test blockescape-shadow-1 pass
 tests/native-block-escape.test blockescape-sibling-1 pass
 tests/native-block-escape.test blockescape-sibling-2 pass
@@ -3939,6 +3942,7 @@ tests/native-result-bounds.test nrb-tagged-bitwise-unbounded pass
 tests/native-root-liveness.test root-block-capture-1 pass
 tests/native-root-liveness.test root-branch-1 pass
 tests/native-root-liveness.test root-dead-before-safepoint-1 pass
+tests/native-root-liveness.test root-def-interference-1 pass
 tests/native-root-liveness.test root-deterministic-1 pass
 tests/native-root-liveness.test root-error-path-1 pass
 tests/native-root-liveness.test root-error-path-2 pass
@@ -7426,3 +7430,7 @@ tests/web-unreserved.test web-unreserved-result-type pass
 tests/web-unreserved.test web-unreserved-set-built-once pass
 tests/web-unreserved.test web-unreserved-set-exact-members pass
 tests/web-unreserved.test web-unreserved-user-fn-wraps-module-closure pass
+tests/workload-2048.test workload-2048-bench-checksum pass
+tests/workload-2048.test workload-2048-demo-executable pass
+tests/workload-2048.test workload-2048-golden-suite pass
+tests/workload-2048.test workload-2048-warning-clean pass

@@ -1513,6 +1513,7 @@ proc native::lower::Program {hirProgram args} {
             region          { set lowered [RegionCompanionFunction $id] }
             internal        { set lowered [InternalFunction $id] }
             internalregion  { set lowered [InternalRegionCompanionFunction $id] }
+            internalcompanion { set lowered [InternalCompanionFunction $id] }
             fields          { set lowered [FieldsFunction $id] }
             fieldscompanion { set lowered [FieldsCompanionFunction $id] }
         }
@@ -1529,7 +1530,7 @@ proc native::lower::Program {hirProgram args} {
         set block [dict get $spec instances $id block]
         list [expr {$block eq "program" ? 0 : [dict get $context positions $block]}] \
             [string range $id 1 end] \
-            [dict get {canonical 0 companion 1 region 1 internal 1 internalregion 1 fields 1 fieldscompanion 1} $mode] $key
+            [dict get {canonical 0 companion 1 region 1 internal 1 internalregion 1 internalcompanion 1 fields 1 fieldscompanion 1} $mode] $key
     }]
     set order [lmap entry [lsort -integer -index 0 [lsort -integer -index 1 [lsort -integer -index 2 $order]]] {
         lindex $entry 3
@@ -1886,6 +1887,22 @@ proc native::lower::InternalRegionCompanionRef {id} {
     variable pending
     lappend pending [list $id internalregion]
     return [Placeholder $id internalregion]
+}
+
+# Like InternalRef, for instance ID's *internal scalar companion*: a
+# capture-explicit calling convention together with a scalar-replaced
+# (multi-value) struct or List result -- the composition of the "Block
+# virtualization" and "Scalar replacement" sections, as the internal region
+# companion is of "Block virtualization" and "String regions". Callers must
+# already know, from hir::blockescape::virtual (ID is some binding's
+# flattened-capture target) AND hir::escape::arity (some caller wants ID's
+# result as fields), that this variant is needed (2048-ENGINE-WORKLOAD.md,
+# S24: without it such a call fell back to the closure-taking companion and
+# asked for a closure the flattened capture list does not have).
+proc native::lower::InternalCompanionRef {id} {
+    variable pending
+    lappend pending [list $id internalcompanion]
+    return [Placeholder $id internalcompanion]
 }
 
 # Like FunctionRef, for instance ID's `fields` variant (see the "Parameter
@@ -2749,6 +2766,110 @@ proc native::lower::InternalRegionCompanionFunction {id} {
     }]]
     set info [dict create id [Placeholder $id internalregion] name $name block $region instance $id \
         label "[hir::specialize::label $spec $id] (internal region)" generic [dict get $instance generic] \
+        envless 1 selfTailCalls $tails calls [dict get $fn calls] \
+        blockers [expr {$blockers + [dict get $fn inlinedBlockers] - [dict get $fn skippedGuards]}] \
+        guards [dict get $fn guards] knownErrorGuards [dict get $fn knownErrorGuards] \
+        rawUnboxes [dict get $fn rawUnboxes] rawBoxes [dict get $fn rawBoxes] \
+        rawArith [dict get $fn rawArith] rawCompare [dict get $fn rawCompare] \
+        short [ShortCounters fn]]
+    return [list $text $info]
+}
+
+# Lowers the internal *scalar companion* of instance ID (InternalCompanionRef):
+# the same instance and body as CompanionFunction -- every reachable exit
+# ends in `retmulti` of its recognized construction's fields
+# (hir::escape::classify, arity hir::escape::arity, cut
+# hir::escape::resultCut) -- except env=0: its capture bindings
+# (native::lower::captureLists, the flattened list hir::blockescape
+# ::captures computed, exactly the one InternalFunction and
+# InternalRegionCompanionFunction use) are ordinary trailing parameters
+# instead of an environment record. Its declared parameters are received as
+# CompanionFunction receives them (tagged; RawParams for a self-tail loop's
+# own representation), since its callers (FlattenedVirtualScalarCall)
+# evaluate them as Call evaluates a companion call's; the capture parameters
+# stay tagged. Returns {TEXT INFO}, in the same shape as CompanionFunction.
+proc native::lower::InternalCompanionFunction {id} {
+    variable hir
+    variable baseHir
+    variable spec
+    variable context
+    variable envless
+    variable captureLists
+    variable currentInstance
+    variable escape
+    set currentInstance $id
+    set instance [hir::specialize::instance $spec $id]
+    set region [dict get $instance block]
+    set arity [hir::escape::arity $escape $id]
+    if {$region eq "program" || $region in $envless || $arity eq ""} {
+        throw {NATIVE BUG} "native lowering: instance $id has no internal scalar companion"
+    }
+    set hir [hir::specialize::view $baseHir $spec $id]
+    set analysis [hir::aot::analyzeRegion $hir $region $context]
+    CollectChecks $analysis
+    set blockers [llength [lmap b [dict get $analysis blockers] {
+        if {[dict get $b class] ne "representation"} continue
+        set b
+    }]]
+    set fn [dict create region $region instance $id targets [dict get $instance calls] \
+        lines {} nreg 0 nlabel 0 guards 0 knownErrorGuards 0 skippedGuards 0 inlinedBlockers 0 \
+        rawCache [dict create] rawRegs [dict create] rawUnboxes 0 rawBoxes 0 rawArith 0 rawCompare 0 \
+        locals [dict create] loops [dict create] broken [dict create] continued [dict create] calls {} companion $arity regionCompanion 0 \
+        traversal "" traversalByteReg ""]
+    set name [hir::aot::BlockName $hir $region]
+    set params [hir::get $hir $region params]
+    set body [hir::get $hir $region body]
+    set rawParams [RawParams $id $instance $params]
+    set k 0
+    foreach b $params raw $rawParams {
+        set r [NewReg fn]
+        if {$raw} {
+            MarkRaw fn $r
+            dict set fn locals $b [list rawreg $r]
+        } else {
+            ParamLocal fn $id $k $b $r
+        }
+        incr k
+    }
+    set captureBindings [dict get $captureLists $region]
+    foreach b $captureBindings {
+        dict set fn locals $b [list reg [NewReg fn]]
+    }
+    if {$body eq ""} {
+        throw {NATIVE BUG} "native lowering: internal scalar companion of instance $id has an empty body"
+    }
+    set ok 1
+    foreach e [lrange $body 0 end-1] {
+        if {[Expr fn $e] eq "never"} {
+            set ok 0
+            break
+        }
+    }
+    if {$ok} {
+        set fields [VirtualValue fn [lindex $body end] $arity [hir::escape::resultCut $escape $id]]
+        if {$fields ne "never"} {
+            Emit fn "retmulti [join $fields { }]"
+        }
+    }
+    set pnames [concat [lmap b $params {dict get [hir::binding $hir $b] name}] \
+        [lmap b $captureBindings {dict get [hir::binding $hir $b] name}]]
+    set key [expr {[dict get $instance generic] ? "generic"
+        : [join [lmap t [dict get $instance args] {hir::specialize::ShowKey $t}] {, }]}]
+    set head "func [Placeholder $id internalcompanion] [Quote $name] params=[expr {[llength $params] + [llength $captureBindings]}] env=0 regs=[dict get $fn nreg] pnames=[Quote [join $pnames { }]] captures=0 instance=[Quote $key] results=$arity"
+    set rawRegs [lsort -integer [lmap r [dict keys [dict get $fn rawRegs]] {string range $r 1 end}]]
+    if {$rawRegs ne ""} {
+        append head " rawregs=[Quote [join $rawRegs { }]]"
+    }
+    append head [ShortRegsHeader fn]
+    append head [PlanHeader fn]
+    append head " @$region"
+    set text "$head\n[join [dict get $fn lines] \n]\nend"
+    set tails [llength [lmap line [dict get $fn lines] {
+        if {![regexp {^\s+tail(env)? } $line]} continue
+        set line
+    }]]
+    set info [dict create id [Placeholder $id internalcompanion] name $name block $region instance $id \
+        label "[hir::specialize::label $spec $id] (internal scalar)" generic [dict get $instance generic] \
         envless 1 selfTailCalls $tails calls [dict get $fn calls] \
         blockers [expr {$blockers + [dict get $fn inlinedBlockers] - [dict get $fn skippedGuards]}] \
         guards [dict get $fn guards] knownErrorGuards [dict get $fn knownErrorGuards] \
@@ -5866,6 +5987,50 @@ proc native::lower::FlattenedVirtualCall {fnVar e node target targetInstance cap
     return [list $result tagged]
 }
 
+# Like FlattenedVirtualCall, but for a call E whose result is wanted as
+# ARITY scalar-replaced fields (Call's wantVirtual): the call goes straight
+# to TARGETINSTANCE's internal scalar companion (InternalCompanionRef), its
+# arguments evaluated as Call evaluates a companion call's (tagged, plan
+# slots), with the same flattened CAPTUREBINDINGS FlattenedVirtualCall
+# appends. CALLEEEXPR is never evaluated (there is no Block value).
+proc native::lower::FlattenedVirtualScalarCall {fnVar e node target targetInstance captureBindings arity} {
+    upvar 1 $fnVar fn
+    variable hir
+    variable selfTail
+    variable currentInstance
+    variable escape
+    set params [hir::get $hir $target params]
+    set argExprs [dict get $node args]
+    if {[hir::escape::arity $escape $targetInstance] ne $arity} {
+        throw {NATIVE BUG} "native lowering: instance $targetInstance has no $arity-arity scalar companion for $e"
+    }
+    set self [expr {$targetInstance eq $currentInstance && [dict exists $selfTail $e]}]
+    set rawSlots {}
+    if {$self} {
+        set rawSlots [lmap p $params {SlotKind fn $p}]
+    }
+    set argRegs [CallArgs fn $argExprs {} $rawSlots [PlanSlots $targetInstance [llength $argExprs]]]
+    if {$argRegs eq "never"} {
+        return {never tagged}
+    }
+    if {[llength $params] != [llength $argRegs]} {
+        set pnames [lmap p $params {dict get [hir::binding $hir $p] name}]
+        Emit fn "raise ARITY [Quote "block ([join $pnames { }]) expects [llength $params] argument(s), got [llength $argRegs]"]" $e
+        return {never tagged}
+    }
+    set captureRegs [CaptureRegsOf fn $captureBindings]
+    if {$self} {
+        dict lappend fn calls [list direct [Placeholder $targetInstance internalcompanion] 1]
+        Emit fn [string trimright "tail [join [concat $argRegs $captureRegs] { }]"] $e
+        return {never tagged}
+    }
+    set id [InternalCompanionRef $targetInstance]
+    dict lappend fn calls [list direct $id 0]
+    set dsts [NewRegs fn $arity]
+    Emit fn [string trimright "[join $dsts { }] = callmulti $id [join [concat $argRegs $captureRegs] { }]"] $e
+    return [list $dsts virtual]
+}
+
 # Like FlattenedVirtualCall, but for a call E whose result is wanted as a
 # StringRegion (Call's wantRegion): hir::stringregion.tcl already proved
 # TARGETINSTANCE's own result is fully region-producing and some caller --
@@ -6194,8 +6359,7 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
         }
     }
 
-    if {$wantVirtual eq "" && $targetKind eq "block"
-            && [hir::kind $hir $calleeExpr] eq "ref"} {
+    if {$targetKind eq "block" && [hir::kind $hir $calleeExpr] eq "ref"} {
         set calleeBinding [hir::get $hir $calleeExpr binding]
         set flattenedTarget [expr {$calleeBinding ne "" ? [hir::blockescape::virtual $blockescape $currentInstance $calleeBinding] : ""}]
         if {$flattenedTarget ne ""} {
@@ -6231,6 +6395,13 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
             # result (see hir/blockescape.tcl's own header and the "Block
             # virtualization"/"String regions" sections above).
             set captureBindings [hir::blockescape::captures $blockescape $flattenedTarget]
+            if {$wantVirtual ne ""} {
+                # Its result wanted as scalar-replaced fields: the internal
+                # scalar companion (S24 of 2048-ENGINE-WORKLOAD.md; this
+                # dispatch used to skip such a call, which then asked for a
+                # closure value the flattened capture list does not have).
+                return [FlattenedVirtualScalarCall fn $e $node $target $flattenedTarget $captureBindings $wantVirtual]
+            }
             if {$wantRegion} {
                 if {![hir::stringregion::wants $stringregion $flattenedTarget]} {
                     throw {NATIVE BUG} "native lowering: instance $flattenedTarget has no region companion for virtualized call $e"

@@ -94,6 +94,11 @@ struct Record:
     f: int
     t: Detail
 
+# local-closure/struct-result-fields: the Tcl program's Pair.
+struct Pair:
+    left: int
+    right: int
+
 # ---------------------------------------------------------------------------
 # Local closures that are only ever called (native-block-escape.test)
 
@@ -222,6 +227,26 @@ fn register_local_closure_tests():
                 str::concat(step("a"), step("b"))
             f()
     test::value("local-closure/call-result-capture", "ax1bx1", call_result_capture)
+
+    # blockescape-scalar-companion-3: a closure (it reads a local of its
+    # enclosing function) whose struct result its caller takes apart field
+    # by field. Natively that is a call of a de-closure-converted closure
+    # whose result is wanted as fields, which specialized lowering rejected
+    # with "does not capture" (NATIVE BUG) before it had a capture-explicit
+    # scalar companion (2048-ENGINE-WORKLOAD.md, S24).
+    fn struct_result_fields() errors compiler::CompilerError:
+        static compile:
+            fn f(k):
+                base = [0, 0]
+                fn offset(x: int) -> int:
+                    x + list::length(base)
+                fn pair(n: int) -> Pair:
+                    Pair {left: offset(n), right: n * 2}
+                loop i from 0 to k:
+                    p = pair(i)
+                    p.left + p.right
+            f(4)
+    test::value("local-closure/struct-result-fields", [2, 5, 8, 11], struct_result_fields)
 
 # ---------------------------------------------------------------------------
 # Recursive closures (native-block-escape.test)
