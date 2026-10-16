@@ -9,8 +9,8 @@ about your program: which errors a call can actually raise, which Strings
 have passed a validation, who owns a coroutine, whether two lists have the
 same length. What it proves, it takes off your hands: a handler for an error
 that cannot happen is not needed, a check that cannot fail is not emitted,
-and an abstraction leaves nothing behind in the machine code. What it cannot
-prove, it asks you to say.
+and many high-level abstractions leave no trace in the machine code. What it
+cannot prove, it asks you to say.
 
 Botlish is **value-oriented**, in the spirit of Erlang, SQL and Tcl: a
 program computes with values that are what they contain (compared, hashed
@@ -61,18 +61,19 @@ signature, abstractions that cost nothing at run time. It aims at different
 work. Rust is a systems language: it gives you exact control over memory
 layout, allocation, sharing and threads, and its borrow checker makes that
 control safe, at the price of lifetimes and ownership in nearly every
-signature. Botlish is for building applications, and trades that control
-for simplicity: values instead of references, memory managed by the
-runtime, representation left to the compiler, and no borrow checker or
-lifetimes (its one ownership rule, affinity, applies only to resources such
-as coroutine handles). Concurrency follows the same trade. Rust offers a
-flexible kit of threads, locks, channels and async runtimes; Botlish is
-heading for one opinionated, actor-like model of isolated computations that
-exchange values, which keeps data races out of the language and leaves out
-the designs that need shared mutable state. (Today Botlish has coroutines;
-the actor model is planned.) If you need a custom allocator, a hand-tuned
-memory layout or a lock-free data structure, use Rust. If you would rather
-the compiler made those decisions, Botlish is meant for you.
+signature. Botlish is for building applications, and trades that control for
+simplicity: values instead of references, memory managed by the runtime,
+representation left to the compiler, and no borrow checker or lifetimes (its
+one ownership rule, affinity, applies only to resources such as coroutine
+handles). Concurrency follows the same trade. Rust offers a flexible kit of
+threads, locks, channels and async runtimes; Botlish is heading for one
+opinionated, actor-like model. By default, actors are isolated computations
+that share nothing and exchange values; a value is shared only where the
+program explicitly declares it shared, so sharing is always visible in the
+code. (Today Botlish has coroutines; the actor model is planned.) If you
+need a custom allocator, a hand-tuned memory layout or a lock-free data
+structure, use Rust. If you would rather the compiler made those decisions,
+Botlish is meant for you.
 
 Botlish also builds the development tooling into the compiler instead of
 leaving it to separate tools. Its warnings are an integrated linter (think
@@ -340,14 +341,15 @@ describe(Person {value: "Alice"})   # "Alice", through describe<Person>
 ```
 
 At run time there is no trait object, vtable, dictionary, tag or hidden
-argument. In the committed evidence ([audit/traits/principal/](audit/traits/principal/)),
-`describe<Person>` is the same 31 bytes of machine code as a hand-written
-`describe_person(value: Person)`, and calling it allocates nothing. The rest of the
-language follows the same rule: a refined `web::Emailish` is exactly its
-`str`, a `byte::Byte` is exactly an `Int`, an installed context is a fixed
+argument. In the committed evidence
+([audit/traits/principal/](audit/traits/principal/)), `describe<Person>` is
+the same 31 bytes of machine code as a hand-written
+`describe_person(value: Person)`, and calling it allocates nothing. Not
+every abstraction is free yet, but many follow the same rule: a refined
+`web::Emailish` is exactly its `str`, a `byte::Byte` is exactly an `Int`, an installed context is a fixed
 slot the compiler reads directly rather than an argument threaded through
-every call, and a context trait such as `io::IO` becomes direct calls of
-the installed implementation. ([TRAITS.md](docs/TRAITS.md),
+every call, and a context trait such as `io::IO` becomes direct calls of the
+installed implementation. ([TRAITS.md](docs/TRAITS.md),
 [CONTEXTS.md](docs/CONTEXTS.md))
 
 ### Tests are Botlish programs
