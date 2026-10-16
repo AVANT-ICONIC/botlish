@@ -512,6 +512,11 @@ Standard intrinsics (qualified root natives):
 | `binary::emit` | `LayoutStruct[L]` → `abi::bytes::Bytes` of L's size, L from the value's static type, padding zero, infallible (elaborated to the internal `binary#emit(v, DESCRIPTOR)`; BINARY-LAYOUT.md); callable only directly |
 | `binary::layout_length` `binary::layout_alignment` | layout L → int: L's size or alignment, folded to a constant at resolution (BINARY-LAYOUT.md) |
 | `linux::abi::syscall` | `{rax: R, rdi: R, …, r9: R}` → `abi::x86_64::Register64` (R a Register64): the raw Linux x86-64 kernel transition, raw rax back; omitted argument registers are zero; native backend only (Tcl backends: `NATIVE-ONLY`); callable only directly (LINUX-X86-64-SYSCALL.md) |
+| `ffi::c::null[T]()` | → `ffi::c::Ptr[T]`: the null C pointer, T supplied by the call's explicit imprint (C-ABI-TYPES.md); an imprinted callable is only called |
+| `ffi::c::null?` | any C pointer (data or function) → bool: whether it is null; observes its argument |
+| `ffi::c::clone` | a C pointer → the same type: a second alias of the same address (no pointee copy, no reference count); observes its argument |
+| `ffi::c::erase` | `ffi::c::Ptr[T]` → `ffi::c::Ptr[ffi::c::Void]`, the same address; moves its argument; never a function pointer |
+| `ffi::c::retype[T]` | `ffi::c::Ptr[ffi::c::Void]` → `ffi::c::Ptr[T]`, the same address; moves its argument; proves nothing about the pointee |
 
 Ordinary Botlish members of the same namespaces (library modules, not
 natives): `list::get`, `list::any?`, `list::all?`, `list::none?`,
@@ -710,6 +715,7 @@ result until `web::uri_query_value?` proves it one.
 | `core/linuxabi.tcl` | `linux::abi::syscall`, the raw Linux x86-64 kernel transition (native only; LINUX-X86-64-SYSCALL.md) |
 | `core/contexts.tcl` | the two internal context operations `context#install` / `context#load` and the Tcl backends' per-run context environment (CONTEXTS.md); `context#unreachable`, the placeholder of code no installed context reaches (CONTEXT-TRAITS.md) |
 | `core/coroutines.tcl` | the coroutine operations `coroutine#create` / `#start` / `#resume` / `#yield` and `coroutine::done?`, and the Tcl backends' coroutine store: one Tcl coroutine per Botlish coroutine (COROUTINES.md) |
+| `core/cabi.tcl` | the C ABI targets and data models, the C integer scalars' metadata, the `cptr` value kind and the `ffi::c` pointer operations, and the C pointer test fixture (C-ABI-TYPES.md) |
 | `core/binary.tcl` | fixed binary layouts' operations `binary::parse` / `binary::emit` / the layout queries, the reference implementation the interpreter runs over a layout's static descriptor (BINARY-LAYOUT.md) |
 | `core/bytestore.tcl` | the byte-storage value kinds' natives (immutable `bytestore`, writable `mutbytes`) and the raw address bridges `abi::x86_64::from_bytes` / `from_mutable_bytes` (ABI-BYTES.md, MUTABLE-BYTES.md) |
 | `hir/hir.tcl` | HIR data model, ids, `hir::build`, queries |

@@ -1843,6 +1843,12 @@ proc hir::affine::temporaries {hir} {
 # Releases are unobservable, so the order changes no value; it is fixed so
 # runtime behavior is reproducible (AFFINE-VALUES.md, "Drop glue").
 proc hir::affine::Descriptor {hir type {exclude {}}} {
+    if {[hir::types::IsCAddress $type]} {
+        # A C pointer (C-ABI-TYPES.md) is affine but owns nothing: its owner's
+        # death releases nothing, so it has no descriptor (and an aggregate
+        # that owns only pointers has none either).
+        return ""
+    }
     if {[hir::types::AffineRoot $type]} {
         return c
     }

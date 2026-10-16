@@ -1,0 +1,43 @@
+# c.bot -- the "ffi::c" namespace: the C ABI value universe (C-ABI-TYPES.md).
+#
+# These are the values a C boundary carries, modeled as C's ABI sees them,
+# not as C's source language spells them. Nothing here calls C yet: there
+# is no `extern c fn`, no linking and no callback (C-ABI-TYPES.md, "What is
+# not here").
+#
+# C integer scalars (intrinsic types of this namespace):
+#
+#   ffi::c::Char ffi::c::SChar ffi::c::UChar ffi::c::Short ffi::c::UShort
+#   ffi::c::Int ffi::c::UInt ffi::c::Long ffi::c::ULong
+#   ffi::c::LongLong ffi::c::ULongLong
+#
+# Each is an integer domain: its values are ordinary Ints in exactly the
+# compilation's C target's range of that C type (`-target`, the host's by
+# default: ffi::c::Long is Int in -2^63..2^63-1 on linux-x86_64 and
+# -2^31..2^31-1 on windows-x86_64; ffi::c::Char is signed or unsigned as the
+# target's plain char is). Arithmetic on them is Botlish arithmetic (no C
+# promotion, no wrapping); an Int becomes one only where its range proves it
+# fits. ffi::c::Int and ffi::c::Long stay two types where their ranges agree.
+#
+# Pointers (intrinsic types and operations of this namespace):
+#
+#   ffi::c::Void              the C void: an incomplete pointee, no values
+#   ffi::c::Ptr[T]            a C data pointer whose pointee identity is T:
+#                             ffi::c::Void, a C integer scalar, an opaque
+#                             struct (an incomplete C tag's identity), or
+#                             another pointer
+#   ffi::c::FnPtr[Fn{args: [A, ...], return: R}]
+#                             a C function pointer (A and R C ABI types, R
+#                             unit for a void result)
+#
+#   ffi::c::null[T]()         Ptr[T]      a null pointer
+#   ffi::c::null?(p)          bool        whether p is null (p.null?())
+#   ffi::c::clone(p)          p's type    a second alias of p (p.clone())
+#   ffi::c::erase(p)          Ptr[Void]   the same address as void *
+#   ffi::c::retype[T](p)      Ptr[T]      the same address of a Ptr[Void]
+#
+# A pointer is affine: binding, passing, returning or storing it moves it,
+# and `p.clone()` is the one way to have two aliases. Affinity is not
+# ownership: a pointer owns, frees and retains nothing, and is never
+# dereferenced here. It is not an Int: no arithmetic, ordering, equality or
+# integer conversion exists, in either direction.

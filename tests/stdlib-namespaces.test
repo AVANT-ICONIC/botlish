@@ -126,14 +126,15 @@ test ns-root-inventory {the unqualified root natives are exactly the language pr
 } -result {{* + - < <= == > >= argv bit_and bit_or bit_xor error? hash integer? list list? mod mutarray? ok? result-error result-value shift_left shift_right string?} {affine#drop binary#emit context#install context#load context#unreachable coroutine#create coroutine#release coroutine#resume coroutine#start coroutine#yield mutable_array#consume mutable_array#generate_drop mutable_array#set_drop mutable_array#swap_drop mutable_array#take_front mutable_array#to_list mutable_vector#clear_drop mutable_vector#consume mutable_vector#share mutable_vector#swap_drop mutable_vector#take_front mutable_vector#to_list}}
 
 test ns-qualified-inventory {every standard intrinsic lives in its value family's flat namespace} -body {
-    lmap ns {list str char mutable_array mutable_vector immutable_set byte_store mutable_byte_store linux::abi abi::x86_64} {
+    lmap ns {list str char mutable_array mutable_vector immutable_set byte_store mutable_byte_store linux::abi abi::x86_64 ffi::c} {
         list $ns [core::native::qualifiedMembers $ns]
     }
-} -result {{list {append at length}} {str {char_at concat encode_utf8 is_tcl_alnum is_tcl_alpha length lowercase substring}} {char scalar_value} {mutable_array {allocate at capacity copy create freeze from_list generate set swap}} {mutable_vector {at clear empty? from_list length pop push swap take}} {immutable_set {contains from_list}} {byte_store {byte_count from_list}} {mutable_byte_store {count detach freeze freeze_prefix from_storage replace zeroed}} {linux::abi syscall} {abi::x86_64 {from_bytes from_mutable_bytes}}}
+} -result {{list {append at length}} {str {char_at concat encode_utf8 is_tcl_alnum is_tcl_alpha length lowercase substring}} {char scalar_value} {mutable_array {allocate at capacity copy create freeze from_list generate set swap}} {mutable_vector {at clear empty? from_list length pop push swap take}} {immutable_set {contains from_list}} {byte_store {byte_count from_list}} {mutable_byte_store {count detach freeze freeze_prefix from_storage replace zeroed}} {linux::abi syscall} {abi::x86_64 {from_bytes from_mutable_bytes}} {ffi::c {clone erase null null? retype}}}
 
-test ns-no-nested-stdlib {no std::/stdlib::/core:: hierarchy: every qualified intrinsic but the platform's (linux::abi::syscall, abi::x86_64::from_bytes) is NAMESPACE::MEMBER, one level} -body {
+test ns-no-nested-stdlib {no std::/stdlib::/core:: hierarchy: every qualified intrinsic but the platform's (linux::abi::syscall, abi::x86_64::from_bytes) and the C ABI's (ffi::c::null ..., C-ABI-TYPES.md) is NAMESPACE::MEMBER, one level} -body {
     lsort [lmap name [core::native::names] {
-        if {[string first :: $name] < 0 || [string match linux::abi::* $name] || [string match abi::x86_64::* $name]} continue
+        if {[string first :: $name] < 0 || [string match linux::abi::* $name] || [string match abi::x86_64::* $name]
+                || [string match ffi::c::* $name]} continue
         if {[llength [split [string map {:: \x00} $name] \x00]] == 2} continue
         set name
     }]

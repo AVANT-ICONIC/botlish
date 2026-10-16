@@ -165,7 +165,14 @@ proc hir::format::TypeDecl {entry} {
     } else {
         set domainText "exact [lindex $domain 1]"
     }
-    return "type [dict get $entry name] parent [dict get $entry parent] domain $domainText"
+    set cabi ""
+    if {[dict exists $entry cabi]} {
+        # A C integer scalar (C-ABI-TYPES.md): its C type and target, read
+        # back (and its range checked against them) by hir::read::
+        # TypeDeclLine.
+        set cabi " cabi {[dict get $entry cabi c]} [dict get $entry cabi target]"
+    }
+    return "type [dict get $entry name] parent [dict get $entry parent] domain $domainText$cabi"
 }
 
 # One line for error declaration NAME: "error NAME", or for an error with a
@@ -443,6 +450,11 @@ proc hir::format::Expr {hir e indent origins linesVar} {
             set installs [hir::contexts::installId $hir $e]
             if {$installs ne ""} {
                 append text " installs $installs"
+            }
+            if {[dict exists $node imprint]} {
+                # A call's explicit imprints (hir/imprint.tcl), as resolved:
+                # types, or the pointee ffi::c::Void.
+                append text " imprint \[[join [lmap t [dict get $node imprint] {hir::cabi::ShowPointee $t}] {, }]\]"
             }
             if {[dict exists $node traitImpl]} {
                 # A trait operation resolved to its witness's implementation

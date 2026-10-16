@@ -1,0 +1,317 @@
+# Mutants of the C ABI type universe and callable imprinting
+# (audit/c-abi-types/tools/mutate.tcl; C-ABI-TYPES.md): each a deliberate bug
+# in the target table (core/cabi.tcl), the scalar registration
+# (hir/sourcetypes.tcl), pointee and signature validation (hir/cabi.tcl), the
+# type lattice and affinity (hir/types.tcl, hir/affine.tcl), the operations'
+# registrations and implementations (core/cabi.tcl), argument admission
+# (hir/range.tcl), imprinting (hir/imprint.tcl, hir/types.tcl) or the native
+# C address word and its code (native/src/). The brief's mutants come first,
+# then further ones.
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant editing native/src/ is a native mutant: mutate.tcl rebuilds the
+# native backend for it. Lines starting with # outside an edit are comments.
+
+# --- the brief's mutants -----------------------------------------------------
+
+@@ ulong-64-on-llp64 C long is 64 bits on LLP64 too (the LP64 assumption baked into Windows)
+## core/cabi.tcl
+<<<<
+        LLP64 {char 8 short 16 int 32 long 32 longlong 64 pointer 64}]
+====
+        LLP64 {char 8 short 16 int 32 long 64 longlong 64 pointer 64}]
+>>>>
+
+@@ char-always-signed plain char is signed on every target (Linux AArch64's unsigned char forgotten)
+## core/cabi.tcl
+<<<<
+    if {$signed eq "char"} {
+        set signed [dict get $t charSigned]
+    }
+====
+    if {$signed eq "char"} {
+        set signed 1
+    }
+>>>>
+
+@@ ptr-as-int a pointer given where an Int is required is no longer diagnosed as one
+## hir/cabi.tcl
+<<<<
+            if {![hir::types::IsCAddress $argType] || $paramType in {"" any}
+====
+            if {1 || $paramType in {"" any}
+>>>>
+
+@@ implicit-ptr-conversion Ptr[A] is admitted where Ptr[B] is declared (pointee identity not invariant)
+## hir/range.tcl
+<<<<
+    if {[hir::types::subtype $argType $declared]} {
+        return 1
+    }
+    set held {}
+====
+    if {[hir::types::subtype $argType $declared] || ([hir::types::IsCPtr $argType] && [hir::types::IsCPtr $declared])} {
+        return 1
+    }
+    set held {}
+>>>>
+## hir/range.tcl
+<<<<
+            || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]} {
+====
+            || [hir::types::IsEnum $declared] || [hir::types::IsImprint $declared]} {
+>>>>
+
+@@ null-loses-pointee null[T]() returns Ptr[Void] whatever T is imprinted
+## core/cabi.tcl
+<<<<
+    -result-type cptr -imprint {vars {T} params {} result {cptr {imprint T}}}
+====
+    -result-type cptr -imprint {vars {T} params {} result {cptr void}}
+>>>>
+
+@@ clone-loses-pointee clone's result is a pointer of no single pointee instead of its argument's type
+## core/cabi.tcl
+<<<<
+    -param-types {cptr} -result-type cptr -result-shape {same 0} -ownership {observe}
+====
+    -param-types {cptr} -result-type cptr -ownership {observe}
+>>>>
+
+@@ clone-consumes clone moves its argument (both aliases cannot be kept)
+## core/cabi.tcl
+<<<<
+    -param-types {cptr} -result-type cptr -result-shape {same 0} -ownership {observe}
+====
+    -param-types {cptr} -result-type cptr -result-shape {same 0} -ownership {move}
+>>>>
+
+@@ erase-changes-bits-interp the interpreter's erase returns a null pointer
+## core/cabi.tcl
+<<<<
+core::native::register ffi::c::erase -arity 1 -impl core::cabi::sameImpl \
+====
+core::native::register ffi::c::erase -arity 1 -impl core::cabi::nullOfImpl \
+>>>>
+## core/cabi.tcl
+<<<<
+proc core::cabi::nullImpl {} {
+====
+proc core::cabi::nullOfImpl {p} {
+    return [address 0]
+}
+
+proc core::cabi::nullImpl {} {
+>>>>
+
+@@ erase-changes-bits-native native erase is the null op on the address word
+## native/lower.tcl
+<<<<
+        ffi::c::erase     {op cptrsame} \
+====
+        ffi::c::erase     {op cptrfixture} \
+>>>>
+
+@@ retype-accepts-function-pointers retype's argument is not held to Ptr[Void] (a function pointer is retyped to a data pointer)
+## hir/range.tcl
+<<<<
+    if {$sig eq "" || [hir::imprint::Unbound $hir $e]} {
+        return
+    }
+    set params [hir::imprint::Parameters $hir $e [dict get $sig params]]
+====
+    if {1 || $sig eq "" || [hir::imprint::Unbound $hir $e]} {
+        return
+    }
+    set params [hir::imprint::Parameters $hir $e [dict get $sig params]]
+>>>>
+
+@@ void-constructible ffi::c::Void is an ordinary type of values (a parameter, a field, a List element of it)
+## hir/types.tcl
+<<<<
+    if {$name eq [hir::cabi::VoidName]} {
+        # The C void (C-ABI-TYPES.md): a pointee identity, never the type of
+        # a value.
+        return -code error -errorcode {BOTLISH TYPE} [hir::cabi::VoidMessage]
+    }
+====
+    if {$name eq [hir::cabi::VoidName]} {
+        return unit
+    }
+>>>>
+
+@@ arbitrary-pointee Ptr accepts every Botlish type as its pointee
+## hir/cabi.tcl
+<<<<
+proc hir::cabi::PointeeProblem {pointee} {
+====
+proc hir::cabi::PointeeProblem {pointee} {
+    return ""
+>>>>
+
+@@ imprint-only-intrinsics explicit imprints work only for intrinsics (a Botlish function has no imprint signature)
+## hir/imprint.tcl
+<<<<
+    if {[hir::types::IsExactBlock $calleeType]} {
+        return [BlockSignature $hir [lindex $calleeType 1]]
+    }
+====
+    if {0} {
+        return [BlockSignature $hir [lindex $calleeType 1]]
+    }
+>>>>
+
+@@ bare-variable-accepted a bare unestablished input variable is accepted at its declaration
+## hir/imprint.tcl
+<<<<
+            if {!$establishing && $name ni $established
+====
+            if {0 && !$establishing && $name ni $established
+>>>>
+
+# --- further mutants -----------------------------------------------------------
+
+@@ scalar-metadata-dropped the scalars register without their C ABI metadata (width and signedness recovered from nothing)
+## hir/sourcetypes.tcl
+<<<<
+    core::type::register $id -base int -parents $parents -integer-domain $domain -source 1 -c-abi $cabi
+====
+    core::type::register $id -base int -parents $parents -integer-domain $domain -source 1
+>>>>
+
+@@ hir-text-trusts-range HIR text's scalar ranges are not checked against their C type and target
+## hir/sourcetypes.tcl
+<<<<
+    if {$cabi ne "" && ($parents ne {} || $domain ne [core::cabi::scalarDomain $cabi])} {
+====
+    if {0 && $cabi ne "" && ($parents ne {} || $domain ne [core::cabi::scalarDomain $cabi])} {
+>>>>
+## core/type.tcl
+<<<<
+    if {$cabi ne {} && (![core::cabi::validScalarInfo $cabi] || $parents ne {}
+            || $integerDomain ne [core::cabi::scalarDomain $cabi])} {
+====
+    if {0} {
+>>>>
+
+@@ pointer-not-affine a C pointer is unrestricted (copied by every binding)
+## hir/types.tcl
+<<<<
+    return [expr {[IsCoroutine $type] || $type eq "coroutine" || [IsCAddress $type]}]
+====
+    return [expr {[IsCoroutine $type] || $type eq "coroutine"}]
+>>>>
+## hir/types.tcl
+<<<<
+        coroutine - cptr - cfnptr {
+            return 1
+        }
+====
+        coroutine {
+            return 1
+        }
+>>>>
+
+@@ pointer-released-as-coroutine a pointer's owner dying releases it as a coroutine handle
+## hir/affine.tcl
+<<<<
+    if {[hir::types::IsCAddress $type]} {
+        # A C pointer (C-ABI-TYPES.md) is affine but owns nothing: its owner's
+        # death releases nothing, so it has no descriptor (and an aggregate
+        # that owns only pointers has none either).
+        return ""
+    }
+====
+>>>>
+
+@@ fnptr-erasable erase accepts a function pointer (data and function pointers confused)
+## hir/imprint.tcl
+<<<<
+            if {![hir::types::IsCPtr $arg]} {
+                return [FormMismatch $param $arg $index]
+            }
+            return [MatchInner [lindex $param 1] [lindex $arg 1] binding $index]
+====
+            if {![hir::types::IsCPtr $arg] && ![hir::types::IsCFnPtr $arg]} {
+                return [FormMismatch $param $arg $index]
+            }
+            return [MatchInner [lindex $param 1] [lindex $arg 1] binding $index]
+>>>>
+
+@@ imprint-variable-not-rigid an imprint variable admits every type in its function's body
+## hir/types.tcl
+<<<<
+proc hir::types::subtype {a b} {
+    if {$a eq "never" || $b eq "any" || $a eq $b} {
+        return 1
+    }
+====
+proc hir::types::subtype {a b} {
+    if {$a eq "never" || $b eq "any" || $a eq $b || [IsImprint $b]} {
+        return 1
+    }
+>>>>
+
+@@ imprint-affine-binding a variable with values in the body may be imprinted with an affine type
+## hir/imprint.tcl
+<<<<
+        if {[hir::types::IsAffine $type]} {
+====
+        if {0 && [hir::types::IsAffine $type]} {
+>>>>
+
+@@ imprint-explicit-ignored an explicit imprint never constrains the arguments (they are held to the declared, unimprinted types)
+## hir/range.tcl
+<<<<
+    set declaredTypes [hir::imprint::Parameters $hir $e [hir::signatures::entryTypes $hir $targetBlock]]
+====
+    set declaredTypes [hir::signatures::entryTypes $hir $targetBlock]
+    if {[hir::imprint::BindingOf $hir $e] ne ""} { return }
+>>>>
+
+@@ imprinted-callable-as-value an imprinted callable may be used as a value
+## hir/imprint.tcl
+<<<<
+        if {[Signature $hir $type] eq ""} {
+            continue
+        }
+====
+        if {1 || [Signature $hir $type] eq ""} {
+            continue
+        }
+>>>>
+
+@@ null-test-native-wrong-constant native null? compares the address word with 0 instead of the null word
+## native/src/codegen/clif.rs
+<<<<
+                let eq = self.b.ins().icmp_imm_s(IntCC::Equal, a[0], CPTR_NULL as i64);
+====
+                let eq = self.b.ins().icmp_imm_s(IntCC::Equal, a[0], 0);
+>>>>
+
+@@ address-word-truncated the native address word keeps only 32 bits of the address
+## native/src/runtime/value.rs
+<<<<
+    ((address as u64) << 4) | CPTR_TAG
+====
+    (((address as u64) & 0xffff_ffff) << 4) | CPTR_TAG
+>>>>
+
+@@ target-not-isolated a HIR's declarations leave out the C scalars, so a later compilation's target leaks into it
+## hir/declarations.tcl
+<<<<
+        if {[dict exists $::core::type::registry $name]} {
+            lappend types $name [dict get $::core::type::registry $name]
+        }
+====
+        if {[dict exists $::core::type::registry $name] && [dict get $::core::type::registry $name cabi] eq ""} {
+            lappend types $name [dict get $::core::type::registry $name]
+        }
+>>>>

@@ -29,6 +29,18 @@
 //!                 cases have equal words, so equality is word equality), never
 //!                 a value a program can observe -- printing and hashing go
 //!                 through the declared names.
+//!   aaa...aaa1110 a raw C address (C-ABI-TYPES.md: a data or a function
+//!                 pointer), stored as (address << 4) | 0b1110: an immediate
+//!                 (never heap-allocated, never a GC root) whose payload is
+//!                 the address as a sign-extended 60-bit number, so every
+//!                 canonical x86-64 address (user or kernel, 4- or 5-level
+//!                 paging) and every untagged AArch64 one round-trips; the
+//!                 null pointer is the bare tag, 14. Low four bits `0b1110`
+//!                 are disjoint from a small Int's `0b...1`, a UnicodeChar's
+//!                 `0b100`, an enum case's `0b10010`, a pointer's `0b000`
+//!                 and the fixed constants 2/6/10. The static pointee type is
+//!                 not in the word: Ptr[A] and Ptr[B] values are the same
+//!                 bits.
 //!   pppp...p000   pointer to a heap object (non-null, 8-byte aligned)
 //!   0             no value: an error is pending (never a program value)
 //! ```
@@ -63,6 +75,12 @@ pub const ENUM_TAG: u64 = 0b10010;
 pub const ENUM_TAG_MASK: u64 = 0b11111;
 /// The largest case number an enum word carries (27 bits).
 pub const MAX_ENUM_CASE: u32 = (1 << 27) - 1;
+
+/// Low-bits tag of an immediate C address word (see this module's header).
+pub const CPTR_TAG: u64 = 0b1110;
+pub const CPTR_TAG_MASK: u64 = 0b1111;
+/// The null C pointer: address 0.
+pub const CPTR_NULL: Value = CPTR_TAG;
 
 pub const MAX_SCALAR: u32 = 0x10FFFF;
 pub const SURROGATE_LO: u32 = 0xD800;
@@ -407,6 +425,32 @@ pub fn enum_parts(v: Value) -> (u32, u32) {
     ((v >> 32) as u32, ((v >> 5) as u32) & MAX_ENUM_CASE)
 }
 
+/// 1 if V is a C address word (C-ABI-TYPES.md).
+#[inline]
+pub fn is_cptr(v: Value) -> bool {
+    v & CPTR_TAG_MASK == CPTR_TAG
+}
+
+/// 1 if ADDRESS is representable in a C address word (sign-extended 60 bits).
+#[inline]
+pub fn cptr_fits(address: i64) -> bool {
+    (address << 4) >> 4 == address
+}
+
+/// The C address word of ADDRESS (which must fit: `cptr_fits`).
+#[inline]
+pub fn make_cptr(address: i64) -> Value {
+    debug_assert!(cptr_fits(address));
+    ((address as u64) << 4) | CPTR_TAG
+}
+
+/// The address a C address word V holds.
+#[inline]
+pub fn cptr_address(v: Value) -> i64 {
+    debug_assert!(is_cptr(v));
+    (v as i64) >> 4
+}
+
 #[inline]
 pub fn bool_value(b: bool) -> Value {
     if b { TRUE } else { FALSE }
@@ -459,6 +503,10 @@ pub enum Kind {
     /// An enum case (ENUMS.md): an immediate word, distinct from every other
     /// kind. Named as core/value.tcl's `enum` kind.
     Enum,
+    /// A raw C address (C-ABI-TYPES.md): an immediate word, a data or a
+    /// function pointer. No equality, no hash. Named as core/value.tcl's
+    /// `cptr` kind.
+    CPtr,
 }
 
 impl Kind {
@@ -481,6 +529,7 @@ impl Kind {
             "coroutine" => Kind::Coroutine,
             "mutvec" => Kind::MutVec,
             "enum" => Kind::Enum,
+            "cptr" => Kind::CPtr,
             _ => return None,
         })
     }
@@ -504,6 +553,7 @@ impl Kind {
             Kind::Coroutine => "coroutine",
             Kind::MutVec => "mutvec",
             Kind::Enum => "enum",
+            Kind::CPtr => "cptr",
         }
     }
 
@@ -515,7 +565,7 @@ impl Kind {
         [
             Kind::Int, Kind::Str, Kind::Bool, Kind::Unit, Kind::List, Kind::Result, Kind::Block, Kind::Native,
             Kind::MutArray, Kind::UnicodeChar, Kind::ImmutableSet, Kind::Struct, Kind::ByteStore, Kind::MutByteStore,
-            Kind::Coroutine, Kind::MutVec, Kind::Enum,
+            Kind::Coroutine, Kind::MutVec, Kind::Enum, Kind::CPtr,
         ][code as usize]
     }
 }
@@ -535,6 +585,9 @@ pub fn kind_of(v: Value) -> Kind {
     }
     if is_enum(v) {
         return Kind::Enum;
+    }
+    if is_cptr(v) {
+        return Kind::CPtr;
     }
     match heap_kind(v) {
         KIND_BIGINT => Kind::Int,

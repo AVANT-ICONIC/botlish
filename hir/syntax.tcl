@@ -240,6 +240,18 @@ proc hir::syntax::methodCallNode {origin receiver name nameOrigin args} {
     return $call
 }
 
+# CALL (a `call` node) with explicit imprints TYPES (surface type
+# expressions, as written; C-ABI-TYPES.md, "Imprinting") located at ORIGINS:
+# `f[T, U](...)`. Resolved by hir/resolve.tcl into the call's `imprint`.
+proc hir::syntax::withImprint {call types origins} {
+    if {[llength $types] == 0 || [llength $types] != [llength $origins]} {
+        core::malformed "a call's imprints are one or more types, each with an origin" [list call $types]
+    }
+    dict set call imprint $types
+    dict set call imprintOrigins $origins
+    return $call
+}
+
 # CALL (a `call` node) marked as written in spelling FORM (function | method
 # | list | operator, see this file's header).
 proc hir::syntax::withWritten {call form} {

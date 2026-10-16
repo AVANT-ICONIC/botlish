@@ -86,10 +86,23 @@ namespace eval core::type {
     # ID} refines `struct`. It is never source-spellable: an enum type is a
     # named declaration, and the bare kind would be an anonymous one
     # (hir::types::resolveNamed rejects it).
-    variable primitives {int str bool unit list result block native mutarray UnicodeChar immutableSet struct coroutine mutvec enum}
+    #
+    # cptr is the kind of a raw C address (C-ABI-TYPES.md): a data pointer
+    # ffi::c::Ptr[T] ({cptr T}) or a function pointer ffi::c::FnPtr[F]
+    # ({cfnptr F}), hir/types.tcl. Never source-spellable bare: there is no
+    # pointer without a pointee identity.
+    variable primitives {int str bool unit list result block native mutarray UnicodeChar immutableSet struct coroutine mutvec enum cptr}
     # NAME -> {name NAME base KIND validator CMD parents {NAME...}
     # integerDomain DOMAIN source 0|1 refinement {} | {carrier TYPE owner NS
-    # span SPAN}}
+    # span SPAN} cabi {} | {c SPELLING target TARGET bits N signed 0|1}}
+    #
+    # cabi (-c-abi) marks a C integer scalar of namespace ffi::c
+    # (C-ABI-TYPES.md, core/cabi.tcl): an integer domain like any other --
+    # its domain is the target's exact range for the C type -- that also
+    # records which C type it is on which target, the width and the
+    # signedness a C call lowering needs, so that nothing ever recovers them
+    # from the type's name. Two scalars of equal range (int and long on
+    # LLP64) stay two types: identity is the registry name.
     variable registry [dict create]
 }
 
@@ -112,7 +125,7 @@ proc core::type::register {name args} {
     if {[llength $args] % 2} {
         error "core::type::register: options must be -option value pairs"
     }
-    set options [dict create -base "" -validator "" -source 0]
+    set options [dict create -base "" -validator "" -source 0 -c-abi {}]
     dict set options -parents {}
     dict set options -integer-domain {}
     dict set options -refinement {}
@@ -156,6 +169,11 @@ proc core::type::register {name args} {
         set integerDomain [NormalizeIntegerDomain $integerDomain]
         set validator [list core::type::IntegerDomainValidator $integerDomain]
     }
+    set cabi [dict get $options -c-abi]
+    if {$cabi ne {} && (![core::cabi::validScalarInfo $cabi] || $parents ne {}
+            || $integerDomain ne [core::cabi::scalarDomain $cabi])} {
+        error "core::type::register: -c-abi of \"$name\" must be a C scalar's metadata (core::cabi::scalarInfo) with exactly its domain and no parent"
+    }
     if {($refinement eq {}) == ($validator eq "")} {
         error "core::type::register: \"$name\" needs exactly one of -validator or -refinement"
     }
@@ -164,8 +182,29 @@ proc core::type::register {name args} {
         if {[dict get $registry $parent base] ne $base} { error [format {core::type::register: parent %s has a different base} $parent] }
     }
     dict set registry $name [dict create name $name base $base validator $validator \
-        parents $parents integerDomain $integerDomain source $source refinement $refinement]
+        parents $parents integerDomain $integerDomain source $source refinement $refinement \
+        cabi $cabi]
     return $name
+}
+
+# The C ABI metadata of type NAME (a registered name): {c SPELLING target
+# TARGET bits N signed 0|1} for a C integer scalar (-c-abi), else "".
+proc core::type::cabiOf {name} {
+    variable registry
+    if {![dict exists $registry $name] || ![dict exists $registry $name cabi]} {
+        return ""
+    }
+    return [dict get $registry $name cabi]
+}
+
+# The C ABI metadata of TYPE (a canonical type) when it is exactly one C
+# integer scalar -- {refined int {NAME}} with NAME a -c-abi type -- else "".
+proc core::type::cabiScalar {type} {
+    if {[llength $type] != 3 || [lindex $type 0] ne "refined" || [lindex $type 1] ne "int"
+            || [llength [lindex $type 2]] != 1} {
+        return ""
+    }
+    return [cabiOf [lindex $type 2 0]]
 }
 
 # 1 if NAME is a nominal refinement type (REFINEMENT-VALUES.md): declared

@@ -390,6 +390,11 @@ proc hir::mutvec::Elaborate {hirVar} {
         set collection [hir::typeOf $hir [expr {$at eq "result" ? $e : [lindex [dict get $node args] $at]}]]
         if {[Kind $collection] eq "" || [llength $collection] != 2 || ![hir::types::IsAffine $collection]} continue
         set d [hir::affine::Descriptor $hir [lindex $collection 1]]
+        if {$d eq ""} {
+            # Affine elements that own nothing (C pointers, C-ABI-TYPES.md):
+            # nothing to drop, so the ordinary form is the operation.
+            continue
+        }
         Retarget hir $e $form
         dict set hir exprs $e args [concat [dict get $hir exprs $e args] [list [NewConst hir $d $e]]]
     }

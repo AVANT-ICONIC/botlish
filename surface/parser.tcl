@@ -2658,6 +2658,31 @@ proc surface::parser::Unary {pVar} {
     return [Postfix p]
 }
 
+# "[" TYPE { "," TYPE } [","] "]" after the name WHAT: a call's explicit
+# imprints (C-ABI-TYPES.md, "Imprinting"), or an applied type construction's
+# one argument. Returns {TYPES SPANS}.
+proc surface::parser::Imprints {pVar what} {
+    upvar 1 $pVar p
+    Advance p
+    set types {}
+    set spans {}
+    while 1 {
+        set start [dict get [Peek p] span]
+        lappend types [TypeExpr p "a type after \"$what\[\""]
+        lappend spans [SpanFrom p $start]
+        if {[Kind p] eq ","} {
+            Advance p
+            if {[Kind p] eq "\]"} {
+                break
+            }
+            continue
+        }
+        break
+    }
+    Expect p \] "\",\" or \"\]\" after a type in $what\[...\]"
+    return [list $types $spans]
+}
+
 proc surface::parser::Postfix {pVar} {
     upvar 1 $pVar p
     set expr [Primary p]
@@ -2666,8 +2691,16 @@ proc surface::parser::Postfix {pVar} {
             ( {
                 Advance p
                 lassign [CallArguments p] args flags
+                set imprints {}
+                if {[dict exists $expr imprints]} {
+                    # NAME[TYPE, ...](args): the call's explicit imprints
+                    # (C-ABI-TYPES.md, "Imprinting"), written on its callee.
+                    set imprints [list imprints [dict get $expr imprints] imprintSpans [dict get $expr imprintSpans]]
+                    dict unset expr imprints
+                    dict unset expr imprintSpans
+                }
                 set expr [surface::ast::node call [SpanFrom p [dict get $expr span]] \
-                    callee $expr args $args flags $flags]
+                    callee $expr args $args flags $flags {*}$imprints]
             }
             . {
                 # Field projection (STRUCTS.md): "receiver.name", the name
@@ -2678,6 +2711,16 @@ proc surface::parser::Postfix {pVar} {
                     Fail $token "expected a field name after \".\", found [Describe $token]"
                 }
                 Advance p
+                set imprints {}
+                if {[Kind p] eq "\["} {
+                    # receiver.name[TYPE, ...](args): a method call with
+                    # explicit imprints (C-ABI-TYPES.md, "Imprinting").
+                    lassign [Imprints p [dict get $token value]] types spans
+                    set imprints [list imprints $types imprintSpans $spans]
+                    if {[Kind p] ne "("} {
+                        Fail [Peek p] "explicit imprints [dict get $token value]\[...\] are written only before a call's argument list, found [Describe [Peek p]] after them"
+                    }
+                }
                 if {[Kind p] eq "("} {
                     # Method call (METHOD-SUGAR.md): same argument grammar
                     # as an ordinary call.
@@ -2685,7 +2728,7 @@ proc surface::parser::Postfix {pVar} {
                     lassign [CallArguments p] args flags
                     set expr [surface::ast::node methodcall [SpanFrom p [dict get $expr span]] \
                         receiver $expr name [dict get $token value] nameSpan [dict get $token span] \
-                        args $args flags $flags]
+                        args $args flags $flags {*}$imprints]
                     continue
                 }
                 set expr [surface::ast::node project [SpanFrom p [dict get $expr span]] \
@@ -2803,9 +2846,20 @@ proc surface::parser::Primary {pVar} {
                         namespace $namespaceName \
                         name [dict get $member value] nameSpan $nameSpan init $init]
                 }
+                set imprints {}
+                if {[Kind p] eq "\["} {
+                    # NAMESPACE::name[TYPE, ...](args): a call with explicit
+                    # imprints (C-ABI-TYPES.md: `ffi::c::null[SSL]()`).
+                    set spelled "${namespaceName}::[dict get $member value]"
+                    lassign [Imprints p $spelled] types spans
+                    if {[Kind p] ne "("} {
+                        Fail [Peek p] "explicit imprints $spelled\[...\] are written only before a call's argument list, found [Describe [Peek p]] after them"
+                    }
+                    set imprints [list imprints $types imprintSpans $spans]
+                }
                 return [surface::ast::node qualname [SpanFrom p $span] \
                     namespace $namespaceName namespaceSpan $namespaceSpan \
-                    name [dict get $member value] nameSpan [dict get $member span]]
+                    name [dict get $member value] nameSpan [dict get $member span] {*}$imprints]
             }
             if {[Kind p] eq "\{" && [dict get $token value] eq "enum"} {
                 # `enum {A, B}` (ENUMS.md): there are no anonymous enums.
@@ -2819,22 +2873,27 @@ proc surface::parser::Primary {pVar} {
             }
             if {[Kind p] eq "\["} {
                 # NAME[TYPE] { ... }: an applied type's construction
-                # (BINARY-LAYOUT.md: `LayoutStruct[Pair] {...}`). An
-                # identifier is never otherwise followed by "[" in an
-                # expression, so this is the only reading.
-                Advance p
-                set argStart [dict get [Peek p] span]
-                set arg [TypeExpr p "a type argument after \"\[\""]
-                set argSpan [SpanFrom p $argStart]
-                Expect p \] "\"\]\" after the type argument"
+                # (BINARY-LAYOUT.md: `LayoutStruct[Pair] {...}`), or
+                # NAME[TYPE, ...](args): a call with explicit imprints
+                # (C-ABI-TYPES.md, "Imprinting"). The token after "]"
+                # decides; an identifier is never otherwise followed by "["
+                # in an expression.
+                lassign [Imprints p [dict get $token value]] types spans
                 set nameSpan [SpanFrom p $span]
+                if {[Kind p] eq "("} {
+                    return [surface::ast::node name $span name [dict get $token value] \
+                        imprints $types imprintSpans $spans]
+                }
                 if {[Kind p] ne "\{"} {
-                    Fail [Peek p] "an applied type [dict get $token value]\[...\] is not a value: in an expression it only heads a construction, [dict get $token value]\[...\] \{field: value, ...\} (found [Describe [Peek p]] after it)"
+                    Fail [Peek p] "an applied type [dict get $token value]\[...\] is not a value: in an expression it heads a construction, [dict get $token value]\[...\] \{field: value, ...\}, or [dict get $token value]\[TYPE, ...\](...) is a call with explicit imprints (found [Describe [Peek p]] after it)"
+                }
+                if {[llength $types] != 1} {
+                    Fail [Peek p] "an applied type's construction [dict get $token value]\[...\] \{...\} has one type argument, found [llength $types]"
                 }
                 set init [FieldInits p]
                 return [surface::ast::node namedstruct [SpanFrom p $span] \
                     namespace "" name [dict get $token value] nameSpan $nameSpan \
-                    typeArg $arg typeArgSpan $argSpan init $init]
+                    typeArg [lindex $types 0] typeArgSpan [lindex $spans 0] init $init]
             }
             return [surface::ast::node name $span name [dict get $token value]]
         }

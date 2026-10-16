@@ -189,6 +189,13 @@ proc surface::modules::QualifiedRefs {ast} {
 
 proc surface::modules::QualifiedRefsWalk {node foundVar} {
     upvar 1 $foundVar found
+    if {[dict exists $node imprints]} {
+        # A call's explicit imprints (C-ABI-TYPES.md) name types like any
+        # annotation.
+        foreach type [dict get $node imprints] span [dict get $node imprintSpans] {
+            TypeRefs $type $span found
+        }
+    }
     switch -- [dict get $node kind] {
         qualname {
             lappend found [list [dict get $node namespace] [dict get $node name] [dict get $node span] value]
@@ -325,6 +332,9 @@ proc surface::modules::TypeRefs {type span foundVar} {
         foreach error [dict get $arg errors] { ErrorRef $error $span found }
         return
     }
+    # A qualified type constructor (`ffi::c::Ptr[...]`, C-ABI-TYPES.md) is a
+    # reference to its namespace too.
+    TypeRefs $head $span found
     TypeRefs $arg $span found
 }
 
@@ -394,6 +404,9 @@ proc surface::modules::RemapFile {node fileId} {
             dict set node flags [RemapFlags [expr {[dict exists $node flags] ? [dict get $node flags] : {}}] $fileId]
             dict set node callee [RemapFile [dict get $node callee] $fileId]
             dict set node args [lmap child [dict get $node args] {RemapFile $child $fileId}]
+            if {[dict exists $node imprintOrigins]} {
+                dict set node imprintOrigins [lmap o [dict get $node imprintOrigins] {RemapOrigin $o $fileId}]
+            }
         }
         if {
             dict set node condition [RemapFile [dict get $node condition] $fileId]
@@ -577,6 +590,17 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan} {
         dict get $statement name
     }]
     lassign [surface::lower::SplitTypeDecls [dict get $ast body] $name] executable decls errorDecls structDecls traitDecls
+    # The namespace's intrinsic types (C-ABI-TYPES.md): ffi::c's C integer
+    # scalars, declared for the compilation's C target as if the module
+    # declared them itself.
+    set intrinsic [hir::cabi::NamespaceTypeDecls $name [dict get $state target] [dict get $ast span]]
+    if {$intrinsic ne ""} {
+        if {[dict get $state target] eq ""} {
+            Error UNKNOWN-TARGET $usedAtSpan "namespace \"$name\" needs a C ABI target, and this host ($::tcl_platform(os) $::tcl_platform(machine)) is none of the known ones; compile with -target ([join [core::cabi::targetNames] {, }])"
+        }
+        set decls [concat $intrinsic $decls]
+        dict set state loadedTypes $name [concat [lmap d $intrinsic {dict get $d name}] [dict get $state loadedTypes $name]]
+    }
     dict set state typeDecls [concat [dict get $state typeDecls] $decls]
     dict set state errorDecls [concat [dict get $state errorDecls] $errorDecls]
     dict set state structDecls [concat [dict get $state structDecls] $structDecls]
@@ -728,6 +752,9 @@ proc surface::modules::CheckImports {stateVar ast own} {
             set functions [expr {$hasFile ? [dict get $state loaded $ns] : {}}]
             set structs [expr {$hasFile ? [dict get $state loadedStructs $ns] : {}}]
             set errors [expr {$hasFile ? [dict get $state loadedErrors $ns] : {}}]
+            if {$name in [hir::cabi::IntrinsicTypeNames $ns]} {
+                Error NOT-A-TYPE $nameSpan "\"$canonical\" is an intrinsic type of namespace \"$ns\", not a source-defined `type`: spell it $canonical after `import $ns`"
+            }
             if {$name in $functions || $name in [IntrinsicMembers $ns]} {
                 Error NOT-A-TYPE $nameSpan "\"$canonical\" exists, but is not a type (it is a function or value of namespace \"$ns\"): `import type` imports source-defined types only; use it as $canonical after `import $ns`"
             }
@@ -911,6 +938,21 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
         }
         return
     }
+    if {$symbolName in [hir::cabi::IntrinsicTypeNames $namespaceName]} {
+        # ffi::c::Void, ffi::c::Ptr, ffi::c::FnPtr (C-ABI-TYPES.md): intrinsic
+        # types of the namespace, resolved by hir/cabi.tcl -- and nothing
+        # else: no value, function or construction is named so.
+        if {$refKind eq "type"} {
+            return
+        }
+        if {$refKind eq "struct" && $symbolName eq "Void"} {
+            Error TYPE $span [hir::cabi::VoidMessage]
+        }
+        if {$refKind in {value struct}} {
+            Error UNKNOWN-SYMBOL $span \
+                "${namespaceName}::$symbolName is a type, not a value or a function: no pointer is made from an Int or constructed from fields (pointers come from ${namespaceName}::null\[T\](), and later from C itself)"
+        }
+    }
     if {$refKind in {struct type}} {
         set structNames [dict get $state loadedStructs $namespaceName]
         set typeNames [expr {$refKind eq "type" ? [concat [dict get $state loadedTypes $namespaceName] [dict get $state loadedTraits $namespaceName] [dict get $state loadedEnums $namespaceName] [dict get $state loadedLayouts $namespaceName]] : {}}]
@@ -1088,7 +1130,8 @@ proc surface::modules::NewState {files nextFile} {
         loaded [dict create] loadedStructs [dict create] loadedTypes [dict create] \
         loadedErrors [dict create] loadedTraits [dict create] loadedEnums [dict create] \
         loadedLayouts [dict create] imports [dict create] stack {} sections {} \
-        typeDecls {} errorDecls {} structDecls {} traitDecls {} staticDeferred [dict create]]
+        typeDecls {} errorDecls {} structDecls {} traitDecls {} staticDeferred [dict create] \
+        target ""]
 }
 
 # {sections SECTIONS files FILES functions NAMESPACE->{FUNCTION-NAME ...}
@@ -1102,7 +1145,7 @@ proc surface::modules::NewState {files nextFile} {
 # -start-file 2 (as surface::modules::compileProgramFile does); the default,
 # 1, suits a caller with no file of its own.
 proc surface::modules::LoadNamespaces {namespaces args} {
-    set options [dict create -start-file 1]
+    set options [dict create -start-file 1 -target ""]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "surface::modules::LoadNamespaces: unknown option \"$option\""
@@ -1110,6 +1153,7 @@ proc surface::modules::LoadNamespaces {namespaces args} {
         dict set options $option $value
     }
     set state [NewState [dict create] [dict get $options -start-file]]
+    dict set state target [hir::cabi::ResolveTarget [dict get $options -target]]
     foreach name $namespaces {
         LoadNamespace state $name ""
     }
@@ -1125,8 +1169,11 @@ proc surface::modules::LoadNamespaces {namespaces args} {
 # callers that compile source text instead of a file (examples/stdlib/
 # corpus.tcl). Returns HIR before the frontend's finishing steps
 # (surface::lower::Finish).
-proc surface::modules::BuildProgram {ast strict} {
+proc surface::modules::BuildProgram {ast strict {target ""}} {
     set state [NewState [dict create f1 [dict get $ast span file]] 2]
+    # The C ABI target (C-ABI-TYPES.md): the host's unless given. Only a
+    # file importing ffi::c reads it.
+    dict set state target [hir::cabi::ResolveTarget $target]
     CollectAndLoad state $ast ""
     lassign [surface::lower::SplitTypeDecls [dict get $ast body]] executable ownDecls ownErrorDecls ownStructDecls ownTraitDecls
     set decls [concat [dict get $state typeDecls] $ownDecls]
@@ -1143,13 +1190,15 @@ proc surface::modules::BuildProgram {ast strict} {
 
 # The HIR of the .bot program file PATH, after loading (and compiling once,
 # alongside it) every module its imports name, transitively.
-# -strict as surface::lowerToHir's. -cache DIR reads the HIR from the
+# -strict as surface::lowerToHir's. -target NAME is the C ABI target whose
+# data model ffi::c's integer scalars follow (C-ABI-TYPES.md; core/cabi.tcl:
+# the host's when "", the default). -cache DIR reads the HIR from the
 # front-end cache in DIR when it holds this compilation's, and keeps it there
 # otherwise (surface/cache.tcl; "" for none, the default
 # surface::cache::directory).
 proc surface::modules::compileProgramFile {path args} {
     set options [dict create -strict 1 -warnings [hir::warnings::defaultMode] -warning-channel stderr \
-        -cache [surface::cache::directory]]
+        -cache [surface::cache::directory] -target ""]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "surface::modules::compileProgramFile: unknown option \"$option\""
@@ -1165,14 +1214,15 @@ proc surface::modules::compileProgramFile {path args} {
     set mode [hir::warnings::Mode $mode]
     set channel [dict get $options -warning-channel]
     set cache [dict get $options -cache]
-    set hir [surface::cache::lookup $cache $path $source $mode $strict]
+    set target [hir::cabi::ResolveTarget [dict get $options -target]]
+    set hir [surface::cache::lookup $cache $path $source $mode $strict $target]
     if {$hir ne ""} {
         return [surface::cache::Replay $hir $mode $channel]
     }
     variable reads
     set reads [dict create]
     set ast [surface::parse $source $path]
-    set hir [surface::lower::Finish [BuildProgram $ast $strict] $strict $mode $channel]
-    surface::cache::store $cache $path $source $mode $strict $hir $reads
+    set hir [surface::lower::Finish [BuildProgram $ast $strict $target] $strict $mode $channel]
+    surface::cache::store $cache $path $source $mode $strict $hir $reads $target
     return $hir
 }

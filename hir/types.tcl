@@ -121,6 +121,34 @@
 #                                   so neither is a subtype of the other.
 #                                   Affine (Affinity, below): ordinary
 #                                   operations never duplicate one.
+#   {cptr POINTEE}                  a C data pointer ffi::c::Ptr[T] (C-ABI-
+#                                   TYPES.md, hir/cabi.tcl): a raw C address
+#                                   whose static pointee identity is
+#                                   POINTEE -- `void` (ffi::c::Void), a C
+#                                   integer scalar, an opaque struct
+#                                   {nstruct ID}, another pointer, or an
+#                                   imprint variable. Invariant: Ptr[A] is a
+#                                   Ptr[B] only when A is B (erase/retype
+#                                   are the explicit bridges). Not an Int.
+#                                   Affine (an AffineRoot that drops
+#                                   nothing): moved, cloned explicitly.
+#   {cfnptr FN}                     a C function pointer ffi::c::FnPtr[F]:
+#                                   FN the canonical {fn {args .. return ..
+#                                   errors {}}} signature, every argument
+#                                   and the result C ABI types. Of the same
+#                                   runtime kind as a data pointer (cptr),
+#                                   never a subtype of one, nor of Fn: no
+#                                   Botlish call reaches it. Affine like a
+#                                   data pointer.
+#   cptr                            the runtime kind of both (a pointer of
+#                                   unknown pointee, e.g. the join of two
+#                                   different pointer types); affine
+#   {imprint T}                     an imprint variable (hir/imprint.tcl):
+#                                   in a function's declared signature, the
+#                                   type a call imprints as T. Rigid in the
+#                                   body (only T itself, never, and any
+#                                   relate to it); substituted at every
+#                                   call. Unrestricted.
 #
 # The list and immutableSet forms are *aggregate facts*. Semantic inference
 # (infer) never produces a *shaped* (positional) one: a program's HIR types
@@ -199,7 +227,12 @@ namespace eval hir::types {
     # named so); its one argument is a layout, not a type, so
     # hir::resolve::ResolveTypeExpr resolves it (hir::layouts::
     # ResolveLayoutStruct) before any argument is resolved as a type.
-    variable constructors [dict create List 1 ImmutableSet 1 MutableArray 1 MutableVector 1 LayoutStruct 1]
+    #
+    # ffi::c::Ptr and ffi::c::FnPtr (C-ABI-TYPES.md) are registered for their
+    # names and arity the same way: their argument is a pointee or a C
+    # signature, resolved by hir::cabi (hir::resolve::ResolveTypeExpr).
+    variable constructors [dict create List 1 ImmutableSet 1 MutableArray 1 MutableVector 1 LayoutStruct 1 \
+        ffi::c::Ptr 1 ffi::c::FnPtr 1]
 }
 
 # The canonical resolved type for a bare (unapplied) type name NAME -- an
@@ -229,6 +262,15 @@ proc hir::types::resolveNamed {name {ns ""}} {
     set id [hir::enums::lookup $name $ns]
     if {$id ne ""} {
         return [list enum $id]
+    }
+    if {$name eq [hir::cabi::VoidName]} {
+        # The C void (C-ABI-TYPES.md): a pointee identity, never the type of
+        # a value.
+        return -code error -errorcode {BOTLISH TYPE} [hir::cabi::VoidMessage]
+    }
+    if {$name eq "cptr"} {
+        return -code error -errorcode {BOTLISH TYPE} \
+            "\"cptr\" is not a type: a C pointer always has a pointee identity (ffi::c::Ptr\[ffi::c::Void\] is C's void *)"
     }
     if {$name eq "enum"} {
         # The broad kind of every enum value would be an anonymous enum
@@ -330,6 +372,11 @@ proc hir::types::resolveApplication {ctor argTypes} {
         }
     }
     switch -- $ctor {
+        ffi::c::Ptr - ffi::c::FnPtr {
+            # Only from a pointee or a signature (hir::cabi::ResolvePtr,
+            # ResolveFnPtr), never from a resolved argument type.
+            error "internal compiler error: $ctor is resolved by hir::cabi"
+        }
         LayoutStruct {
             # Only from a resolved argument type (never a layout): see
             # hir::layouts::ResolveLayoutStruct.
@@ -345,7 +392,23 @@ proc hir::types::resolveApplication {ctor argTypes} {
 
 proc hir::types::IsSpecific {type} {
     return [expr {$type eq "never"
-                  || ([llength $type] > 1 && [lindex $type 0] in {native block list immutableSet mutarray mutvec fn struct nstruct enum trait coroutine})}]
+                  || ([llength $type] > 1 && [lindex $type 0] in {native block list immutableSet mutarray mutvec fn struct nstruct enum trait coroutine cptr cfnptr imprint})}]
+}
+
+# C ABI pointer forms (C-ABI-TYPES.md; the header's {cptr ...}/{cfnptr ...}).
+proc hir::types::IsCPtr {type} {
+    return [expr {[llength $type] == 2 && [lindex $type 0] eq "cptr"}]
+}
+proc hir::types::IsCFnPtr {type} {
+    return [expr {[llength $type] == 2 && [lindex $type 0] eq "cfnptr"}]
+}
+# 1 for any raw C address type: a data or function pointer, or the bare kind.
+proc hir::types::IsCAddress {type} {
+    return [expr {$type eq "cptr" || [IsCPtr $type] || [IsCFnPtr $type]}]
+}
+# An imprint variable (hir/imprint.tcl).
+proc hir::types::IsImprint {type} {
+    return [expr {[llength $type] == 2 && [lindex $type 0] eq "imprint"}]
 }
 
 # ---------------------------------------------------------------------------
@@ -457,7 +520,10 @@ proc hir::types::Affinity {type} {
 
 # 1 if TYPE is an intrinsically affine root type (no component makes it so).
 proc hir::types::AffineRoot {type} {
-    return [expr {[IsCoroutine $type] || $type eq "coroutine"}]
+    # A C address (C-ABI-TYPES.md) is affine by the same rule as a handle:
+    # one usable owner, an explicit clone for a second alias. It owns
+    # nothing (hir::affine::Descriptor drops nothing for it).
+    return [expr {[IsCoroutine $type] || $type eq "coroutine" || [IsCAddress $type]}]
 }
 
 # 1 if any of TYPES is affine.
@@ -476,8 +542,13 @@ proc hir::types::IsAffine {type {seen {}}} {
         return [AffineRoot $type]
     }
     switch -- [lindex $type 0] {
-        coroutine {
+        coroutine - cptr - cfnptr {
             return 1
+        }
+        imprint {
+            # A variable is bound to an unrestricted type only
+            # (hir::imprint::Bind): its function's body may copy it.
+            return 0
         }
         list {
             if {[IsAffine [lindex $type 1] $seen]} {
@@ -1604,7 +1675,10 @@ proc hir::types::lub {a b} {
 # nothing sound to combine and falls through to the callable/kind rule
 # below, unchanged from before this milestone.
 proc hir::types::narrow {current fact} {
-    if {$fact eq "any" || $current eq "never"} {
+    if {$fact eq "any" || $current eq "never" || [IsImprint $fact]} {
+        # (An imprint variable as a fact -- a declared List[T] parameter of
+        # an instance -- says nothing a value's own type does not: T is
+        # whatever each call imprints, hir/imprint.tcl.)
         return $current
     }
     if {[IsTrait $current]} {
@@ -1647,7 +1721,8 @@ proc hir::types::narrow {current fact} {
         }
         return $fact
     }
-    if {[IsFn $fact] || [IsStructLike $fact] || [IsCoroutine $fact] || [IsEnum $fact]} {
+    if {[IsFn $fact] || [IsStructLike $fact] || [IsCoroutine $fact] || [IsEnum $fact]
+            || [IsCPtr $fact] || [IsCFnPtr $fact]} {
         # A structural contract fact (a function contract, a struct type, a
         # coroutine handle's contract): a value already known to satisfy it
         # (a narrower contract, the same struct) says more.
@@ -1704,7 +1779,10 @@ proc hir::types::IsEqualityTotal {type} {
 
 # The runtime value kind every value of TYPE has, or "" if not fixed.
 proc hir::types::kindOf {type} {
-    if {$type eq "never" || [IsFn $type] || [IsTrait $type]} {
+    if {[IsCFnPtr $type]} {
+        return cptr
+    }
+    if {$type eq "never" || [IsFn $type] || [IsTrait $type] || [IsImprint $type]} {
         # A structural function type's value is a Block or a native: no
         # one runtime kind.
         return ""
@@ -1720,7 +1798,10 @@ proc hir::types::kindOf {type} {
 
 # The core type (core/type.tcl) a static type implies.
 proc hir::types::semantic {type} {
-    if {$type eq "never" || [IsFn $type] || [IsTrait $type]} {
+    if {[IsCFnPtr $type]} {
+        return cptr
+    }
+    if {$type eq "never" || [IsFn $type] || [IsTrait $type] || [IsImprint $type]} {
         return any
     }
     if {[IsStructLike $type]} {
@@ -1830,7 +1911,26 @@ proc hir::types::show {type} {
                 # never has a positional shape to special-case).
                 return "ImmutableSet\[[show [lindex $type 1]]\]"
             }
+            cptr {
+                # A C data pointer, by its source spelling (C-ABI-TYPES.md):
+                # ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[ffi::c::Int],
+                # ffi::c::Ptr[ssl::SSL].
+                return "[hir::cabi::PtrName]\[[hir::cabi::ShowPointee [lindex $type 1]]\]"
+            }
+            cfnptr {
+                return "[hir::cabi::FnPtrName]\[[hir::cabi::ShowSignature [lindex $type 1]]\]"
+            }
+            imprint {
+                # An imprint variable, by its name (hir/imprint.tcl).
+                return [lindex $type 1]
+            }
         }
+    }
+    set cabi [core::type::cabiScalar $type]
+    if {$cabi ne ""} {
+        # A C integer scalar, by its own name (C-ABI-TYPES.md): ffi::c::ULong,
+        # not int[ffi::c::ULong]. It reads back as that registered name.
+        return [lindex $type 2 0]
     }
     return [core::type::show $type]
 }
@@ -2938,6 +3038,14 @@ proc hir::types::Call {hirVar ctxVar e} {
                     set result [Unshaped $result]
                 }
             }
+            if {[dict get $meta imprint] ne ""} {
+                # An intrinsic's imprint signature (hir/imprint.tcl): its
+                # result imprinted for this call (ffi::c::null[T]()).
+                set result [hir::imprint::Call hir $e $calleeType $argTypes \
+                    [dict get $meta imprint result] $result]
+            } elseif {[dict exists $node imprint]} {
+                hir::imprint::Call hir $e $calleeType $argTypes $result $result
+            }
             if {!$dead} {
                 # The call returned, so every argument had its parameter type.
                 foreach arg $argExprs paramType [dict get $meta paramTypes] {
@@ -2992,6 +3100,10 @@ proc hir::types::Call {hirVar ctxVar e} {
                     set result [hir::semantic::Call $hir $ctx $e $block $argTypes $result]
                 }
             }
+            # A function with imprint variables (hir/imprint.tcl): the
+            # result imprinted for this call (its body's own type for them is
+            # rigid).
+            set result [hir::imprint::Call hir $e $calleeType $argTypes $result any]
         } elseif {$spec} {
             set dead 1
         }
@@ -3027,6 +3139,10 @@ proc hir::types::Call {hirVar ctxVar e} {
     } elseif {$spec && [kindOf $calleeType] ni {"" block native coroutine}} {
         # Not callable: the call always raises NOT-CALLABLE.
         set dead 1
+    }
+    if {$target eq "" && [dict exists $node imprint]} {
+        # Explicit imprints on a callee that is not statically known.
+        hir::imprint::Call hir $e $calleeType $argTypes $result $result
     }
     dict set hir exprs $e target $target
     dict set hir exprs $e known $known

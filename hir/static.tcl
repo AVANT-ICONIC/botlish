@@ -249,6 +249,7 @@ namespace eval hir::static {
         FLAG-BINDING-COLLISION                   FlagBindingCollision
         FLAG-CALLEE-UNKNOWN                      FlagCalleeUnknown
         FLAG-FUNCTION-VALUE                      FlagFunctionValue
+        IMPRINT                                  Imprint
         KNOWN-ERROR                              KnownError
         LAYOUT-NOT-A-TYPE                        LayoutNotAType
         LAYOUT-NOT-A-VALUE                       LayoutNotAValue

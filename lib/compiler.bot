@@ -82,6 +82,7 @@ enum DiagnosticCode:
     FlagBindingCollision,
     FlagCalleeUnknown,
     FlagFunctionValue,
+    Imprint,
     KnownError,
     LayoutNotAType,
     LayoutNotAValue,

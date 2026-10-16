@@ -154,6 +154,18 @@
 #                                     (hir::range::ProvesType) -- never merely
 #                                     because NAME resolves at all
 #                                     (SYMBOLIC-TYPE-IDENTITY.md)
+#   imprint         "" or the native's imprint signature (hir/imprint.tcl,
+#                   C-ABI-TYPES.md "Imprinting"): {vars {T...} params {P...}
+#                   result R}, P and R static HIR types (hir/types.tcl) in
+#                   which {imprint T} stands for a variable. The one
+#                   description of the signature for typing: what an
+#                   argument establishes, what a call-site imprint
+#                   `name[TYPE](...)` supplies, the precise parameter types
+#                   an argument is held to and the result type. A Botlish
+#                   function's imprint signature is its declared types;
+#                   both are bound and checked by the same code.
+#                   -param-types/-result-type stay the run-time kind
+#                   contract.
 #   resultRange     "" (nothing known) or a fact about every Int result, for
 #                   hir/range.tcl's representation analysis and
 #                   hir/completions.tcl's completion proofs, which both read
@@ -287,7 +299,7 @@ proc core::native::register {name args} {
     set options [dict create -impl "" -arity "" -refines-true {} -refines-false {} \
         -param-types "" -result-type any -tests-type "" -runtime {} -result-shape {} -result-range {} \
         -context-free 0 -errors {} -bounds {} -nomethod 0 -completion 0 -ownership {} -errors-from {} \
-        -result-length {} -drop-form {} -layout {}]
+        -result-length {} -drop-form {} -layout {} -imprint {}]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "core::native::register: unknown option \"$option\""
@@ -414,6 +426,12 @@ proc core::native::register {name args} {
     if {$layout ne "" && ![ValidLayoutRole $layout $arity]} {
         error "core::native::register: bad -layout \"$layout\" for \"$name\""
     }
+    set imprint [dict get $options -imprint]
+    if {$imprint ne "" && ([catch {dict size $imprint}] || [lsort [dict keys $imprint]] ne {params result vars}
+            || [llength [dict get $imprint vars]] == 0 || $arity eq "*"
+            || [llength [dict get $imprint params]] != $arity)} {
+        error "core::native::register: bad -imprint \"$imprint\" for \"$name\""
+    }
     set bounds [dict get $options -bounds]
     if {$bounds ne "" && ![ValidBounds $bounds $arity $errors]} {
         error "core::native::register: bad -bounds \"$bounds\" for \"$name\" (with -errors {$errors})"
@@ -432,7 +450,7 @@ proc core::native::register {name args} {
         contextFree [dict get $options -context-free] errors $errors bounds $bounds \
         nomethod [dict get $options -nomethod] completion [dict get $options -completion] \
         ownership $ownership errorsFrom $errorsFrom resultLength $length dropForm $dropForm \
-        layout $layout]
+        layout $layout imprint $imprint]
     return [core::value::native $name]
 }
 

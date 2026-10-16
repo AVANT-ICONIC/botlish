@@ -1414,7 +1414,12 @@ proc hir::range::ProvesValueAcceptedBy {argType argRange declared} {
         return [AggregateAdmits [hir::types::Unshaped $argType] $declared]
     }
     if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
-            || [hir::types::IsEnum $declared]} {
+            || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]} {
+        # A C pointer (C-ABI-TYPES.md) only by its identical pointer type
+        # (pointee identity is invariant; no Range fact is one of a
+        # pointer), and an imprint variable (hir/imprint.tcl) only by
+        # itself in the body that declares it.
+        #
         # An enum type (ENUMS.md) likewise, by its declaration only.
         #
         # A struct type (STRUCTS.md) is admitted by hir::types::subtype
@@ -1690,17 +1695,27 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
     if {$targetKind eq {native}} {
         # A native's parameter types are run-time-checked kind requirements,
         # but the natives that write a MutableArray also owe its static
-        # element contract (hir/containers.tcl).
-        hir::containers::VerifyNative hir $ranges $e $node [dict get [hir::symbol $hir $targetBlock] name]
+        # element contract (hir/containers.tcl), and an imprinted intrinsic
+        # its imprinted parameter types (hir/imprint.tcl).
+        set name [dict get [hir::symbol $hir $targetBlock] name]
+        hir::containers::VerifyNative hir $ranges $e $node $name
+        VerifyImprintedNative hir $ranges $e $node $name
         return
     }
     if {$targetKind ne {block}} { return }
+    if {[hir::imprint::Unbound $hir $e]} {
+        # Imprints that did not bind (hir/imprint.tcl, diagnosed there): no
+        # parameter type to hold an argument to.
+        return
+    }
     set targetNode [dict get $hir exprs $targetBlock]
     # The target's intrinsic signature (hir::signatures): each parameter's
     # entry contract -- declared, or trusted-inferred from its own body,
     # held to the identical proof -- plus any checked-only inferred
     # requirement (INTRINSIC-FUNCTION-CONTRACT-INFERENCE.md).
-    set declaredTypes [hir::signatures::entryTypes $hir $targetBlock]
+    # A function with imprint variables is held to its signature as this
+    # call imprints it.
+    set declaredTypes [hir::imprint::Parameters $hir $e [hir::signatures::entryTypes $hir $targetBlock]]
     set checkedTypes [hir::signatures::checkedTypes $hir $targetBlock]
     set params [dict get $targetNode params]
     set args [dict get $node args]
@@ -1790,6 +1805,37 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
             [hir::semantic::SourceName $hir $paramBinding] [hir::types::show $checkedType] \
             [hir::semantic::ShowType $hir $argType] [FactsClause $argType $checkedType $argRange] \
             [hir::signatures::because $hir $targetBlock $i]] $arg
+    }
+}
+
+# Checks call E of the imprinted intrinsic NAME (hir/imprint.tcl;
+# core/native.tcl's -imprint): each argument against its parameter type as
+# this call imprints it -- ffi::c::retype's Ptr[Void], ffi::c::erase's
+# Ptr[T] -- by the one admissibility proof (ProvesValueAcceptedBy).
+proc hir::range::VerifyImprintedNative {hirVar ranges e node name} {
+    upvar 1 $hirVar hir
+    set sig [dict get [core::native::metadata $name] imprint]
+    if {$sig eq "" || [hir::imprint::Unbound $hir $e]} {
+        return
+    }
+    set params [hir::imprint::Parameters $hir $e [dict get $sig params]]
+    set index 0
+    foreach arg [dict get $node args] declared $params {
+        incr index
+        if {$arg eq "" || $declared eq ""} { continue }
+        set argType [hir::typeOf $hir $arg]
+        set argRange [expr {[dict exists $ranges $arg] ? [dict get $ranges $arg] : [unknown]}]
+        if {[ProvesValueAcceptedBy $argType $argRange $declared]} {
+            continue
+        }
+        set hint ""
+        if {[hir::types::IsCPtr $declared] && [hir::types::IsCPtr $argType]} {
+            set hint ": a pointer's pointee identity is never converted implicitly (ffi::c::erase makes a Ptr\[ffi::c::Void\], ffi::c::retype\[T\] one back)"
+        } elseif {[hir::types::IsCPtr $declared] && [hir::types::IsCFnPtr $argType]} {
+            set hint ": data and function pointers are distinct, and nothing converts one into the other"
+        }
+        hir::Diagnose hir TYPE [format {argument %d of %s cannot be proven to satisfy %s (argument type: %s)%s} \
+            $index $name [hir::types::show $declared] [hir::semantic::ShowType $hir $argType] $hint] $arg
     }
 }
 

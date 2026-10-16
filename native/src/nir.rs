@@ -300,6 +300,23 @@ pub enum OpCode {
     CoYield,
     CoDone,
     CoRelease,
+    /// C addresses (C-ABI-TYPES.md; runtime/value.rs's immediate C address
+    /// word). `cptrnull`: the null pointer (a constant word). `cptrisnull
+    /// %p`: Bool, %p is null (a word comparison; no memory is read).
+    /// `cptrsame %p`: %p itself -- ffi::c::clone, erase and retype, which
+    /// change only the static type (no machine operation). `cptrfixture
+    /// %n`: the address of the small Int %n (0 <= %n < 2^59, else RANGE) --
+    /// only the C pointer test fixture lowers to it (core/cabi.tcl's
+    /// installTestFixture); no native a program can name does.
+    /// `cptrfixtureaddress %p`: the address of %p as an Int -- the fixture's
+    /// address_of, likewise reachable from no other native. None allocates
+    /// (an address beyond the small-Int range is a BigInt: a fixture address
+    /// never is).
+    CPtrNull,
+    CPtrIsNull,
+    CPtrSame,
+    CPtrFixture,
+    CPtrFixtureAddress,
     /// `affinedrop %v %d`: the owner of the affine aggregate %v is dead from
     /// here (AFFINE-VALUES.md; native/lower.tcl emits it where the affine
     /// analysis put a release): releases every affine value %v owns, by the
@@ -617,6 +634,11 @@ op_spellings! {
     "coresume0" => CoResume0,
     "coyield" => CoYield,
     "codone" => CoDone,
+    "cptrnull" => CPtrNull,
+    "cptrisnull" => CPtrIsNull,
+    "cptrsame" => CPtrSame,
+    "cptrfixture" => CPtrFixture,
+    "cptrfixtureaddress" => CPtrFixtureAddress,
     "corelease" => CoRelease,
     "affinedrop" => AffineDrop,
     "mvfromlist" => MvFromList,
@@ -680,7 +702,7 @@ impl OpCode {
         use OpCode::*;
         match self {
             ListNew => None,
-            Argv => Some(0),
+            Argv | CPtrNull => Some(0),
             SyscallLinuxX86_64 => Some(7),
             StrLen | StrLower | ListLen | MutArrayAllocate | MutArrayCapacity | IsInt | IsStr | IsList | IsMutArray
             | IsOk | IsError | ResultValue | ResultError | MkOk | MkError | Hash | RBox | RUnbox
@@ -688,7 +710,7 @@ impl OpCode {
             | SetFromListTotal | StrToShort | ShortToStr | ShortLen | StrToAscii | AsciiToStr | AsciiLen
             | AsciiToShort | BytesFromList | BytesLen | BytesAddr | KeepAlive | BytesZeroed | MBytesNew | MBytesFrom | MBytesLen
             | MBytesClone | MBytesFreeze | MBytesAddr | CoCreate | CoStart | CoResume0 | CoYield | CoDone
-            | CoRelease | MvFromList | MvLen | MvEmpty | MvPop | MvClear | MvToList | MvTakeFront | CtxRoot
+            | CoRelease | CPtrIsNull | CPtrSame | CPtrFixture | CPtrFixtureAddress | MvFromList | MvLen | MvEmpty | MvPop | MvClear | MvToList | MvTakeFront | CtxRoot
             | MutArrayFromList | MutArrayToList | MutArrayEmpty | MutArrayTakeFront => Some(1),
             Substr | SubstrProven | MutArraySet | MutArraySetProven | MBytesSet | BinLoad | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum | StrSliceShort
             | MvSwap | MutArraySwap | MutArrayGenerateDrop => Some(3),

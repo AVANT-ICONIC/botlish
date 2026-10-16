@@ -159,6 +159,14 @@ namespace eval native::lower {
         coroutine#yield  {op coyield} \
         coroutine::done? {op codone} \
         coroutine#release {op corelease} \
+        ffi::c::null      {op cptrnull} \
+        ffi::c::null?     {op cptrisnull} \
+        ffi::c::clone     {op cptrsame} \
+        ffi::c::erase     {op cptrsame} \
+        ffi::c::retype    {op cptrsame} \
+        ffi_fixture::address          {op cptrfixture} \
+        ffi_fixture::function_address {op cptrfixture} \
+        ffi_fixture::address_of       {op cptrfixtureaddress} \
         affine#drop {op affinedrop} \
         mutable_vector::from_list {op mvfromlist} \
         mutable_vector::length    {op mvlen} \
@@ -3338,8 +3346,9 @@ proc native::lower::ReleaseHandles {fnVar items e {result ""}} {
                 || ($item eq $e && [hir::affine::NativeName $hir $e] eq "list")} {
             # A discarded construction (not built): its components.
             foreach {component type} [hir::affine::Components $hir $e] {
-                if {[dict exists $fn temps $component]} {
-                    DropAccess fn [dict get $fn temps $component] [hir::affine::Descriptor $hir $type] $e
+                set d [hir::affine::Descriptor $hir $type]
+                if {$d ne "" && [dict exists $fn temps $component]} {
+                    DropAccess fn [dict get $fn temps $component] $d $e
                 }
             }
             continue

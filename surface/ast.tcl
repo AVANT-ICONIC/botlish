@@ -51,8 +51,11 @@
 #   project    receiver, name, nameSpan   receiver.name: a field projection
 #   call       callee, args, flags ({name NAME span SPAN} dicts, the call's
 #              supplied flags in written order -- `f(x, :quiet)`; SPAN covers
-#              ":quiet"; empty if none -- FLAGS.md)
-#   methodcall receiver, name, nameSpan, args, flags   receiver.name(args): method-call
+#              ":quiet"; empty if none -- FLAGS.md); optionally imprints,
+#              imprintSpans: the explicit imprints `f[T, ...](...)`, type
+#              expressions in written order (C-ABI-TYPES.md, "Imprinting")
+#   methodcall receiver, name, nameSpan, args, flags, ?imprints, imprintSpans?
+#              receiver.name(args): method-call
 #              sugar (METHOD-SUGAR.md), the surface spelling of the ordinary
 #              call name(receiver, args). Only the parser and the printer
 #              know it by this name: lowering turns it into an ordinary call
@@ -654,7 +657,7 @@ proc surface::ast::Expr {node show} {
             return "([::join [concat list [lmap item [dict get $node items] {Expr $item $show}]] { }])$at"
         }
         call {
-            set parts [list call [Expr [dict get $node callee] $show]]
+            set parts [list call [Expr [dict get $node callee] $show][ImprintsText $node]]
             foreach arg [dict get $node args] {
                 lappend parts [Expr $arg $show]
             }
@@ -664,7 +667,7 @@ proc surface::ast::Expr {node show} {
             return "([::join $parts { }])$at"
         }
         methodcall {
-            set parts [list methodcall [Expr [dict get $node receiver] $show] [dict get $node name]]
+            set parts [list methodcall [Expr [dict get $node receiver] $show] [dict get $node name][ImprintsText $node]]
             foreach arg [dict get $node args] {
                 lappend parts [Expr $arg $show]
             }
@@ -775,6 +778,14 @@ proc surface::ast::DomainText {domain} {
 # TYPES.md), but over the raw, possibly-unresolvable surface syntax --
 # surface/ast.tcl has no dependency on hir/*.tcl, so this is its own tiny
 # formatter, not a call into hir::types::show.
+# The explicit imprints of call NODE as written ("[T, U]"), or "".
+proc surface::ast::ImprintsText {node} {
+    if {![dict exists $node imprints]} {
+        return ""
+    }
+    return "\[[::join [lmap t [dict get $node imprints] {showType $t}] {, }]\]"
+}
+
 proc surface::ast::showType {type} {
     if {[llength $type] == 1} {
         return $type

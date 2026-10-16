@@ -96,25 +96,33 @@
 @@ key-ignores-libraries the cache key leaves out the Tcl libraries loaded
 ## surface/cache.tcl
 <<<<
-        libraries $::core::loadedLibraries strict $strict warnings $mode \
+        libraries $::core::loadedLibraries strict $strict warnings $mode target $target \
 ====
-        libraries {} strict $strict warnings $mode \
+        libraries {} strict $strict warnings $mode target $target \
 >>>>
 
 @@ key-ignores-strict the cache key leaves out -strict
 ## surface/cache.tcl
 <<<<
-        libraries $::core::loadedLibraries strict $strict warnings $mode \
+        libraries $::core::loadedLibraries strict $strict warnings $mode target $target \
 ====
-        libraries $::core::loadedLibraries strict {} warnings $mode \
+        libraries $::core::loadedLibraries strict {} warnings $mode target $target \
 >>>>
 
 @@ key-ignores-warnings the cache key leaves out the warning mode: a HIR built with warnings off answers a compilation that prints them
 ## surface/cache.tcl
 <<<<
-        libraries $::core::loadedLibraries strict $strict warnings $mode \
+        libraries $::core::loadedLibraries strict $strict warnings $mode target $target \
 ====
-        libraries $::core::loadedLibraries strict $strict warnings {} \
+        libraries $::core::loadedLibraries strict $strict warnings {} target $target \
+>>>>
+
+@@ key-ignores-target the cache key leaves out the C ABI target: a HIR built for one target's C scalar widths answers a compilation for another (C-ABI-TYPES.md)
+## surface/cache.tcl
+<<<<
+        libraries $::core::loadedLibraries strict $strict warnings $mode target $target \
+====
+        libraries $::core::loadedLibraries strict $strict warnings $mode target {} \
 >>>>
 
 @@ key-ignores-scheduler the cache key leaves out the static scheduler

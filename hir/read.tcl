@@ -306,7 +306,18 @@ proc hir::read::TypeDeclLine {content number} {
         return [dict create kind refined resolved 1 name $name namespace [expr {$owner eq "-" ? "" : $owner}] \
             nameSpan $span carrier $carrier carrierSpan $span span $span line $number]
     }
-    if {[regexp {^type (\S+) parent (\S+) domain interval (-?[0-9]+) (-?[0-9]+)$} $content \
+    set cabi ""
+    if {[regexp {^type (\S+) parent (\S+) domain interval (-?[0-9]+) (-?[0-9]+) cabi \{([a-z ]+)\} (\S+)$} $content \
+            -> name parent lo hi spelling target]} {
+        # A C integer scalar (C-ABI-TYPES.md): its metadata is re-derived from
+        # the C type and the target, never taken from the text, and
+        # hir::sourcetypes::RegisterOne holds the domain to it.
+        set cabi [core::cabi::scalarInfoOf $spelling $target]
+        if {$cabi eq ""} {
+            Fail $number "unknown C integer scalar \"$spelling\" on target \"$target\""
+        }
+        set domain [dict create kind interval lo $lo loSpan $span hi $hi hiSpan $span span $span]
+    } elseif {[regexp {^type (\S+) parent (\S+) domain interval (-?[0-9]+) (-?[0-9]+)$} $content \
             -> name parent lo hi]} {
         set domain [dict create kind interval lo $lo loSpan $span hi $hi hiSpan $span span $span]
     } elseif {[regexp {^type (\S+) parent (\S+) domain exact (.+)$} $content -> name parent valuesText]} {
@@ -318,8 +329,12 @@ proc hir::read::TypeDeclLine {content number} {
     }
     # NAME is the type's identity as printed (`abi::U8Value` for a module's
     # type), so the declaration reads back with no namespace of its own.
-    return [dict create name $name namespace "" nameSpan $span parent $parent parentSpan $span \
+    set decl [dict create name $name namespace "" nameSpan $span parent $parent parentSpan $span \
         domain $domain domainSpan $span]
+    if {$cabi ne ""} {
+        dict set decl cabi $cabi
+    }
+    return $decl
 }
 
 # Consumes LINES' own leading "error NAME" lines (hir::format's own text),
@@ -638,6 +653,21 @@ proc hir::read::ParseType {text number} {
         # PARAMETERIZED-MUTABLEARRAY.md: hir::types::show's own notation.
         return [list mutarray [ParseType $inner $number]]
     }
+    if {[regexp {^ffi::c::Ptr\[(.+)\]$} $text -> inner]} {
+        # A C data pointer (C-ABI-TYPES.md): its pointee identity, as
+        # hir::cabi::ShowPointee wrote it.
+        return [list cptr [hir::cabi::ParsePointee $inner $number]]
+    }
+    if {[regexp {^ffi::c::FnPtr\[Fn\{args: \[(.*)\], return: (.+)\}\]$} $text -> argsText returnText]} {
+        # A C function pointer: hir::cabi::ShowSignature's notation (no
+        # errors: a C signature has none).
+        set argTypes [expr {$argsText eq "" ? {} : [lmap t [SplitTop $argsText ", "] {ParseType $t $number}]}]
+        return [list cfnptr [hir::types::MakeFn $argTypes [ParseType $returnText $number] {}]]
+    }
+    if {[regexp {^ffi::c::FnPtr\[(\S+)\]$} $text -> inner] && [hir::imprint::IsVariableName $inner]} {
+        # A C function pointer whose whole signature is an imprint variable.
+        return [list cfnptr [list imprint $inner]]
+    }
     if {[regexp {^struct\{(.*)\}$} $text -> inner]} {
         # hir::types::show's anonymous struct notation (STRUCTS.md): the
         # fields in canonical order.
@@ -671,6 +701,11 @@ proc hir::read::ParseType {text number} {
         return never
     }
     if {[catch {core::type::normalize $text} type]} {
+        if {[hir::imprint::IsVariableName $text]} {
+            # An imprint variable (hir/imprint.tcl): a variable name that
+            # names no type, as in the source signature it came from.
+            return [list imprint $text]
+        }
         Fail $number "bad type \"$text\": $type"
     }
     return $type
@@ -987,8 +1022,15 @@ proc hir::read::Expr {hirVar level s path block} {
             SetField hir $e body $ids
         }
         call {
-            if {![regexp {^(?:native\((.+?)\)|block\((e[0-9]+)\)|(generic))(?: = (true|false))?(?: installs (\S+))?(?: (trait|contexttrait) (\S+)\.(\S+) witness (.+))?$} $head -> native target generic known installs traitWord traitId requirement witnessText]} {
-                Fail $number "expected \"call native(NAME)|block(EXPR)|generic ?= true|false? ?installs ID? ?trait|contexttrait TRAIT.OP witness TYPE?\""
+            if {![regexp {^(?:native\((.+?)\)|block\((e[0-9]+)\)|(generic))(?: = (true|false))?(?: installs (\S+))?(?: imprint \[(.+?)\])?(?: (trait|contexttrait) (\S+)\.(\S+) witness (.+))?$} $head -> native target generic known installs imprintText traitWord traitId requirement witnessText]} {
+                Fail $number "expected \"call native(NAME)|block(EXPR)|generic ?= true|false? ?installs ID? ?imprint \[TYPE, ...\]? ?trait|contexttrait TRAIT.OP witness TYPE?\""
+            }
+            if {$imprintText ne ""} {
+                # Explicit imprints (hir/imprint.tcl), as hir::format wrote
+                # them.
+                SetField hir $e imprint [lmap t [SplitTop $imprintText ", "] {
+                    hir::cabi::ParsePointee $t $number
+                }]
             }
             if {$traitId ne ""} {
                 # A trait operation resolved to its implementation

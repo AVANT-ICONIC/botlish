@@ -1106,6 +1106,45 @@ native/Cargo.toml --lib bin_`. The registry is a declaration registry
 kind is classified in `tests/static-compile.test`'s census.
 `bench/binary-layout.tcl` regenerates the performance report.
 
+## C ABI types and imprinting
+
+`ffi::c` (C-ABI-TYPES.md) is the C ABI value universe: the C integer scalars
+`ffi::c::Char` ... `ffi::c::ULongLong` (integer domains whose ranges are the
+compilation's C target's -- `-target`, the host's by default; core/cabi.tcl
+is the one target table), `ffi::c::Void` (a pointee only), the affine
+`ffi::c::Ptr[T]` and `ffi::c::FnPtr[Fn{...}]`, and `null[T]()`, `null?`,
+`clone`, `erase`, `retype[T]`. It calls no C. Keep it a model of C's ABI,
+not of C: no width or signedness read from a name (the registry entry's
+`cabi` metadata, `core::type::cabiOf`), no C integer promotion, no implicit
+pointer conversion or covariance, no integer-to-pointer conversion or
+pointer arithmetic, no dereference, no ownership operation on `Ptr`, no
+nullable wrapper, no pointer layout field, no runtime pointee descriptor,
+and no C compiler in ordinary compilation. A non-null pointer in a test comes
+only from `core::cabi::installTestFixture`, which nothing but a test process
+calls; never add a public way to make one.
+
+The scalars are per-compilation source types the loader declares for the
+target when a file imports ffi::c (`hir::cabi::NamespaceTypeDecls`): the
+target is a front-end input, in `surface::cache::Key`. Imprinting
+(hir/imprint.tcl) is general, not generics: one binding path for Botlish
+functions (their declared types) and intrinsics (`-imprint`), variables
+established by applied types left to right, explicit imprints all or
+nothing in first-occurrence order. Never add declared type parameters
+(`fn f[T]`), constraints, or specialization keyed by a variable.
+
+If you change core/cabi.tcl, hir/cabi.tcl, hir/imprint.tcl, the `cptr`,
+`cfnptr` or `imprint` cases of hir/types.tcl, how the scalars are declared,
+printed or read, the call imprint syntax, or the C address word and its ops
+(native/src/runtime/value.rs, ops.rs, show.rs, nir.rs, codegen/clif.rs,
+native/lower.tcl), run `tests/c-abi-types.test`,
+`audit/c-abi-types/tools/fuzz.tcl` (several seeds) and
+`audit/c-abi-types/tools/mutate.tcl` (every mutant in its `mutants.txt` must
+still apply and be killed: update a mutant's text when you change the code
+it mutates, keeping it a mutant of the same rule), plus the affine
+harnesses for a change to affinity and the isolation and interchange audits
+for a change to the scalars' declarations. `bench/c-abi-types.tcl`
+regenerates the compile-cost table.
+
 ## C header archaeology (a research instrument)
 
 `audit/c-header/` (C-HEADER-ARCHAEOLOGY.md) preprocesses BoringSSL's and
