@@ -385,7 +385,7 @@ Regression runs, all on this branch:
 | `audit/structural-contracts/tools/fuzz.tcl` (seeds 1-3; `-fault carrier/unknown/drop`) | 0 disagreements |
 | `audit/error-payloads/tools/fuzz.tcl` (seeds 1-2; `-fault unhandled`) | 0 disagreements |
 | `audit/static-decisions/tools/fuzz.tcl` (seeds 1, 17, 41) | 0 failures |
-| `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` (batched against sequential) | 88 of 89 suites agree, no misprediction; `mutable-array.bot` did not finish under the sequential scheduler within the 2-hour run limit |
+| `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` (batched against sequential) | 88 of 89 suites agree, no misprediction; `mutable-array.bot` did not finish under the sequential scheduler: not within the 2-hour run limit, and, after merging main's front-end reuses (method-call decisions, the demotion re-check), not in 2 h 37 min either (233 static blocks; the sequential order is one build per typed rejection, and the reuses make a build cheaper, not fewer) |
 | `audit/compilation-isolation/tools/interleave.tcl` | 72 artifacts and outcomes, 0 differ |
 | `audit/hir-interchange/tools/roundtrip.tcl -via interchange` / `-via cache` | 81 / 90 compared, 0 differ |
 | mutation: type-predicates / compilation-isolation / hir-interchange / structural-contracts / error-payloads / static-decisions | 14/14, 14/14, 24/24, 18/18, 44/44, 66/66 killed |
