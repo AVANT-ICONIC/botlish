@@ -103,6 +103,21 @@ fn f ()
 fn g (a b)
     (name a)}
 
+test parse-function-result-types {a declared result type prints after the parameters, before a proof clause and errors, as written} -body {
+    ast "fn f(x: int) -> int:\n    x\nfn g(xs) -> List\[List\[int\]\]:\n    xs\nfn h(f) -> Fn\{args: \[int\], return: int\}:\n    f\nfn ok?(s: str) -> bool proves s: M errors E:\n    true\nnomethod fn v(s: str) -> unit proves s: M:\n    unit\nfn k(x) errors E:\n    x"
+} -result {fn f (x:int) -> int
+    (name x)
+fn g (xs) -> List[List[int]]
+    (name xs)
+fn h (f) -> Fn{args: [int], return: int, errors: []}
+    (name f)
+fn ok? (s:str) -> bool proves s: M errors E
+    (bool true)
+nomethod fn v (s:str) -> unit proves s: M
+    (unit)
+fn k (x) errors E
+    (name x)}
+
 test parse-nested-functions {nested functions} -body {
     ast "fn make_adder(x):\n    fn add(y):\n        x + y\n\n    add"
 } -result {fn make_adder (x)

@@ -11,6 +11,7 @@ tests/surface-parser.test	parse-lists	parser	KEEP-PARSER	high	ast(): surface::fo
 tests/surface-parser.test	parse-multiline-arguments	parser	KEEP-PARSER	high	ast(): surface::formatAst text of surface::parse: list items and call arguments across lines	-	none	AST text	-	-
 tests/surface-parser.test	parse-bindings	parser	KEEP-PARSER	high	ast(): surface::formatAst text of surface::parse: x = 10, y = x + 1	-	none	AST text	-	-
 tests/surface-parser.test	parse-function	parser	KEEP-PARSER	high	ast(): surface::formatAst text of surface::parse: fn declarations, trailing comma, multi-line parameters	-	none	AST text	-	-
+tests/surface-parser.test	parse-function-result-types	parser	KEEP-PARSER	high	ast(): surface::formatAst text of surface::parse: -> int, applied List[List[int]], Fn{...}, -> bool with proves and errors, nomethod -> unit validator, errors without a result type	-	none	AST text (function result type)	-	-
 tests/surface-parser.test	parse-nested-functions	parser	KEEP-PARSER	high	ast(): surface::formatAst text of surface::parse: fn inside fn	-	none	AST text	-	-
 tests/surface-parser.test	parse-if-else	parser	KEEP-PARSER	high	ast(): surface::formatAst text of surface::parse: if/else	-	none	AST text	-	-
 tests/surface-parser.test	parse-if-without-else	parser	KEEP-PARSER	high	ast(): surface::formatAst text of surface::parse: else optional; statement after the if is outside it	-	none	AST text	-	-

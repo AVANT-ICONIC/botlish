@@ -6729,6 +6729,7 @@ tests/surface-parser.test parse-error-unterminated-string pass
 tests/surface-parser.test parse-field-forms-unchanged pass
 tests/surface-parser.test parse-find-node pass
 tests/surface-parser.test parse-function pass
+tests/surface-parser.test parse-function-result-types pass
 tests/surface-parser.test parse-function-spans pass
 tests/surface-parser.test parse-ids pass
 tests/surface-parser.test parse-ids-stable pass

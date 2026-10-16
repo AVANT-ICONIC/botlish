@@ -79,7 +79,9 @@
 #              context parameters in written order -- `fn f(x, context io:
 #              LinuxIO)`; empty if none; the last section -- CONTEXTS.md),
 #              paramsSpan (from "(" to the end of the body: the function
-#              literal), errors ({NAME SPAN} pairs, from the function's own
+#              literal), resultType (the "-> TYPE" result annotation as
+#              surface::parser::TypeExpr returns it, "" if none) and
+#              resultTypeSpan, errors ({NAME SPAN} pairs, from the function's own
 #              "errors E1, E2" clause, empty if none), proves (the proof
 #              clauses, REFINEMENT-VALUES.md: a list of {outcome true|normal
 #              param NAME paramSpan SPAN type TYPE typeSpan SPAN span SPAN}
@@ -891,6 +893,9 @@ proc surface::ast::Statement {node indent show linesVar} {
             }
             set modifier [expr {[dict exists $node nomethod] && [dict get $node nomethod] ? "nomethod " : ""}]
             set line "${pad}${modifier}fn [dict get $node name] ([join $params { }])"
+            if {[dict exists $node resultType] && [dict get $node resultType] ne ""} {
+                append line " -> [showType [dict get $node resultType]]"
+            }
             if {[dict exists $node proves]} {
                 foreach clause [dict get $node proves] {
                     append line " proves [dict get $clause param]: [showType [dict get $clause type]]"
