@@ -1,8 +1,10 @@
 # Mutants of the static decision schedulers (audit/static-decisions/tools/
 # mutate.tcl; STATIC-COMPILE.md, "Decision economics"): deliberate bugs in
 # the batched scheduler (hir/static.tcl), its dependency analysis
-# (hir/staticdeps.tcl) and the reuse of method-call decisions
-# (hir/static.tcl's MethodSeeds, hir/hir.tcl), and in what a diagnostic
+# (hir/staticdeps.tcl), the reuse of method-call decisions
+# (hir/static.tcl's MethodSeeds, hir/hir.tcl) and the demotion re-check's
+# reuse of the check before it (hir::check, hir::signatures::infer's
+# rounds; COMPILER-BOTTLENECKS.md 3.9), and in what a diagnostic
 # prints that differs between builds (hir/semantic.tcl's SourceName and
 # RefName, and every message naming a binding, a reference or a function by
 # them). The first group changes what is decided (semantic); the second only
@@ -145,16 +147,28 @@
     }
 >>>>
 
-@@ same-choices-unchecked a method-call decision build is taken to be the build it started from whatever the choices: the final program keeps the stand-in candidates
+@@ same-choices-unchecked a method-call decision build is taken to be the build it started from whatever the choices (hir::MethodConfig ignores them): every trial reads that build, and the final program keeps the stand-in candidates
 ## hir/hir.tcl
 <<<<
-        if {$want ne [dict get $info chosen]} {
-            return 0
-        }
+        if {$key ne [dict get $info expr] && [dict exists $choices $key] && [dict get $choices $key] in $candidates} {
 ====
         if {0} {
-            return 0
-        }
+>>>>
+
+@@ method-memo-by-index a method-call trial is read from an earlier build of the same trial index, not of the same configuration: the next pass reads the trials in which the calls it has since decided were still varied
+## hir/hir.tcl
+<<<<
+            set config [MethodConfig $calls $choices]
+====
+            set config $t
+>>>>
+
+@@ method-final-any-build the method-call decisions' final program is the last build they made, whatever its configuration: it keeps the last trial's candidates
+## hir/hir.tcl
+<<<<
+    if {$methodBuildReuse && [MethodConfig $calls $choices] eq [lindex $last 0]} {
+====
+    if {$methodBuildReuse} {
 >>>>
 
 @@ verdict-consumers-ignored a site whose path-release diagnostic the ownership verdict withholds does not depend on it: it is judged as if no rejection could reveal that diagnostic
@@ -496,6 +510,26 @@ proc hir::static::Waits {key status deps} {
         if {0} {
 >>>>
 
+@@ recheck-round-by-number the check after a demotion reuses the first check's signature rounds by their number, not by their seeds: its second round is the first check's, seeded with the contract it demotes
+## hir/signatures.tcl
+<<<<
+        set key [lsort -stride 2 $seeds]
+====
+        set key $round
+>>>>
+
+@@ recheck-rounds-across-checks the signature rounds are remembered across checks instead of per checked HIR: a later build's or program's check takes an earlier one's unseeded typing for its own
+## hir/hir.tcl
+<<<<
+        set rounds [dict create]
+====
+        global hirRecheckRounds
+        if {![info exists hirRecheckRounds]} {
+            set hirRecheckRounds [dict create]
+        }
+        upvar #0 hirRecheckRounds rounds
+>>>>
+
 # ---------------------------------------------------------------------------
 # Economic
 
@@ -523,6 +557,14 @@ proc hir::static::Waits {key status deps} {
     if {[dict exists $state erasedConsumers $q]} {
 ====
     if {1} {
+>>>>
+
+@@ method-memo-initial-only a method-call trial is read only from the build the decision started from, never from an earlier trial of the same configuration: each pass of a chain builds the trial the pass before already built
+## hir/hir.tcl
+<<<<
+            if {$methodBuildReuse && ([dict exists $records $config] || $config eq $initial)} {
+====
+            if {$methodBuildReuse && $config eq $initial} {
 >>>>
 
 @@ never-reuse-methods no method-call decision is reused across rounds
@@ -686,4 +728,23 @@ proc hir::static::Waits {key status deps} {
                 if {[Unplanned $hir $regionOf $e]} {
 ====
                 if {1} {
+>>>>
+
+@@ recheck-rounds-not-shared the check after a demotion types every signature round again, the unseeded first one included (COMPILER-BOTTLENECKS.md 3.9)
+## hir/hir.tcl
+<<<<
+                CheckOnce hir $demote rounds
+====
+                CheckOnce hir $demote
+>>>>
+
+@@ recheck-analysis-repeated the check after a demotion infers the coroutine protocols again
+## hir/hir.tcl
+<<<<
+                set hir $pre
+                CheckOnce hir $demote rounds
+====
+                set hir $input
+                hir::coroutines::analyze hir
+                CheckOnce hir $demote rounds
 >>>>

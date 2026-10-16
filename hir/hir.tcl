@@ -240,8 +240,28 @@ namespace eval hir {
     # by an analysis.
     variable buildStats [dict create builds 0 methodTrials 0 methodFinals 0 methodReused 0]
     # 0 makes DecideMethodCalls build every trial and final build again even
-    # when it is the build it started from (measurement and audits only).
+    # when a build of the same configuration was already made (measurement
+    # and audits only).
     variable methodBuildReuse 1
+    # 1 makes DecideMethodCalls build again every build it reuses and fail
+    # unless the decision reads the same of both (the audit of the reuse:
+    # tests and audit tools only). BOTLISH_METHOD_BUILD_AUDIT=1 sets it for a
+    # whole process, so the existing suites and fuzzers run under it.
+    variable methodBuildAudit 0
+    if {[info exists ::env(BOTLISH_METHOD_BUILD_AUDIT)] && $::env(BOTLISH_METHOD_BUILD_AUDIT) ni {"" 0}} {
+        set methodBuildAudit 1
+    }
+    # 0 makes hir::check redo the check after a demotion from the start,
+    # sharing nothing with the check before it (measurement and audits only).
+    variable recheckReuse 1
+    # 1 makes hir::check redo that check from the start as well and fail
+    # unless both give the same HIR; recheckAudits counts the checks it
+    # compared (audit/demotion-recheck). Kept when this file is sourced again,
+    # so an audit can set it and then run a tool that loads the compiler.
+    if {![info exists ::hir::recheckAudit]} {
+        variable recheckAudit 0
+        variable recheckAudits 0
+    }
     # The Tcl recursion limit the front end runs under at least (hir::Deep):
     # what most test files and audit tools already set for themselves.
     variable recursionFloor 100000
@@ -672,14 +692,27 @@ proc hir::MethodCallProblems {hir expr} {
 # be another undecided call's result. Only calls with several candidates ever
 # cost a build; a program without one is built once. Returns the final HIR.
 #
-# A build whose choices resolve every call to the candidate HIR (the build
-# this procedure starts from) already resolved it to is HIR itself
-# (SameChoices): it is not made again -- a trial of the stand-in candidates,
-# and the final build when nothing else was built since (so the
-# per-compilation registries are still that build's).
+# A build is a pure function of its *configuration* (MethodConfig: the
+# candidate every call resolves to), so no configuration is built twice. A
+# trial whose configuration an earlier build of this decision had -- HIR (the
+# build this procedure starts from), or a trial of an earlier pass -- is read
+# from what the decision recorded of that build (MethodTrialRecord): a chain
+# of calls on one receiver decides one link per pass, and a pass whose newly
+# decided calls all chose the t-th candidate leaves the next pass's trial t
+# the configuration it already built. The final build is not made when the
+# last build made has its configuration (HIR when no trial was built since):
+# that build is the final program, and the process state it left behind --
+# the per-compilation registries, the analyses' namespace state -- is the
+# final build's. (An older build of the final configuration is not reused:
+# a later trial's state would be left behind it, and what runs after the
+# decision -- BuildFull's elaborations, hir/static.tcl's attribution and
+# dependency analysis, the warnings -- is not audited for reading it.)
+# hir::methodBuildAudit builds every reused build again and fails unless the
+# decision reads the same of both.
 proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
     variable buildStats
     variable methodBuildReuse
+    variable methodBuildAudit
     set calls [dict get $hir methodCalls]
     set decided [dict create]
     # Calls decided before this build (BuildFull's SEEDS) are decided -- a
@@ -689,8 +722,14 @@ proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
             dict set decided $key $choice
         }
     }
-    # Whether the last build made is HIR (no trial was built since).
-    set lastIsInitial 1
+    # The configuration of HIR: what its build resolved every call to.
+    set initial [lmap {key info} $calls {dict get $info chosen}]
+    # Configuration -> what the decision read of the build of it
+    # (MethodTrialRecord), for every build this decision has read.
+    set records [dict create]
+    # The configuration and the HIR of the last build made (HIR, until a
+    # trial is built).
+    set last [list $initial $hir]
     set validity [dict create]
     set problemsOf [dict create]
     # A method-style call on a trait view is an operation of the trait
@@ -720,31 +759,51 @@ proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
                 set candidates [dict get $calls $key candidates]
                 dict set choices $key [lindex $candidates [expr {min($t, [llength $candidates] - 1)}]]
             }
-            if {$methodBuildReuse && [SameChoices $hir $choices]} {
-                set trial $hir
-                set checked 1
+            set config [MethodConfig $calls $choices]
+            if {$methodBuildReuse && ([dict exists $records $config] || $config eq $initial)} {
+                if {[dict exists $records $config]} {
+                    set record [dict get $records $config]
+                } else {
+                    # HIR itself, asked about for the first time: recorded
+                    # for the calls undecided now, which include every call
+                    # a later pass asks about.
+                    set record [MethodTrialRecord $hir $calls $undecided 1]
+                    dict set records $config $record
+                }
                 dict incr buildStats methodReused
+                if {$methodBuildAudit} {
+                    set trial [BuildOnce $nodes $options $given $choices 0 checked]
+                    set last [list $config $trial]
+                    MethodBuildAudit "trial $t" [MethodRecordFor $record $undecided] \
+                        [MethodTrialRecord $trial $calls $undecided $checked] $choices
+                }
             } else {
                 set trial [BuildOnce $nodes $options $given $choices 0 checked]
                 dict incr buildStats methodTrials
-                set lastIsInitial 0
+                set record [MethodTrialRecord $trial $calls $undecided $checked]
+                dict set records $config $record
+                set last [list $config $trial]
             }
-            if {!$checked} {
+            if {![dict get $record checked]} {
                 # Not typeable: no call can be decided on types.
                 set undecided {}
                 break
             }
             foreach key $undecided {
                 set candidates [dict get $calls $key candidates]
-                if {$t >= [llength $candidates] || ![dict exists $trial methodCalls $key]} continue
-                set callExpr [dict get $trial methodCalls $key expr]
-                dict set problemsOf $key [lindex $candidates $t] [MethodCallProblems $trial $callExpr]
-                set callArgs [dict get $trial exprs $callExpr args]
-                if {$callArgs ne ""} {
-                    dict lappend receivers $key [hir::typeOf $trial [lindex $callArgs 0]]
+                if {$t >= [llength $candidates] || ![dict exists $record calls $key]} continue
+                set entry [dict get $record calls $key]
+                dict set problemsOf $key [lindex $candidates $t] [dict get $entry problems]
+                if {[dict exists $entry receiver]} {
+                    dict lappend receivers $key [dict get $entry receiver]
                 }
             }
-            TraitCallsDecided $trial $calls decided
+            # (TraitCallsDecided, as the build of the record reads.)
+            dict for {key chosen} [dict get $record traits] {
+                if {![dict exists $decided $key]} {
+                    dict set decided $key $chosen
+                }
+            }
         }
         if {$undecided eq ""} break
         # A problem every candidate shares says nothing about which fits.
@@ -810,10 +869,17 @@ proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
         }
         lappend rejected $key $valid
     }
-    if {$methodBuildReuse && $lastIsInitial && [SameChoices $hir $choices]} {
-        set final $hir
+    if {$methodBuildReuse && [MethodConfig $calls $choices] eq [lindex $last 0]} {
+        set final [lindex $last 1]
         dict set final methodChoices $choices
         dict incr buildStats methodReused
+        if {$methodBuildAudit} {
+            set fresh [BuildOnce $nodes $options $given $choices 0 checked]
+            if {[list $fresh] ne [list $final]} {
+                error "hir::DecideMethodCalls: the reused final build differs from building it again (choices: $choices)"
+            }
+            set final $fresh
+        }
     } else {
         set final [BuildOnce $nodes $options $given $choices 0 checked]
         dict incr buildStats methodFinals
@@ -862,25 +928,85 @@ proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
     return $final
 }
 
-# 1 if a build given the method-call choices CHOICES (key -> candidate
-# display) resolves every multi-candidate method call of HIR (a typed build:
-# its `methodCalls`) to the candidate HIR resolved it to -- a call CHOICES
-# does not name, or names with a display that is not one of its candidates,
-# stands in with its first candidate (hir::resolve::MethodChoice). Such a
-# build is HIR itself: hir::BuildOnce is a pure function of its inputs, and
-# the choices are the only one that differs.
-proc hir::SameChoices {hir choices} {
-    dict for {key info} [dict get $hir methodCalls] {
+# The configuration of a build given the method-call choices CHOICES (key ->
+# candidate display): the candidate it resolves each multi-candidate method
+# call of CALLS (a typed build's `methodCalls`) to, in CALLS' order -- as
+# hir::resolve::MethodChoice picks it: the call's choice when that is one of
+# its candidates, else its first, which is also the candidate of a call with
+# no source identity (keyed by its expression, which no choice names). Builds
+# of one configuration are one build: hir::BuildOnce is a pure function of
+# its inputs, and the choices are the only one that differs between the
+# builds of one decision (DecideMethodCalls).
+proc hir::MethodConfig {calls choices} {
+    set config {}
+    dict for {key info} $calls {
         set candidates [dict get $info candidates]
         set want [lindex $candidates 0]
-        if {[dict exists $choices $key] && [dict get $choices $key] in $candidates} {
+        if {$key ne [dict get $info expr] && [dict exists $choices $key] && [dict get $choices $key] in $candidates} {
             set want [dict get $choices $key]
         }
-        if {$want ne [dict get $info chosen]} {
-            return 0
+        lappend config $want
+    }
+    return $config
+}
+
+# What DecideMethodCalls reads of TRIAL, one build of the program (CHECKED:
+# whether its static checks ran), while the calls UNDECIDED (keys of CALLS)
+# are undecided: a dict
+#
+#   checked  CHECKED
+#   calls    KEY -> {problems P ?receiver T?} for each of UNDECIDED the build
+#            has: the problems of the call with the candidate the build
+#            resolved it to (MethodCallProblems) and its receiver's type
+#            (absent for a call without arguments)
+#   traits   KEY -> the candidate the call stood in with, for every call of
+#            CALLS the build has that it types as a trait operation (what
+#            TraitCallsDecided reads), in CALLS' order
+#
+# Calls are only ever decided, never undecided again, so whenever the
+# decision reads the record again (a later trial of the same configuration)
+# it asks about some of UNDECIDED.
+proc hir::MethodTrialRecord {trial calls undecided checked} {
+    set record [dict create checked $checked calls [dict create] traits [dict create]]
+    if {!$checked} {
+        return $record
+    }
+    foreach key $undecided {
+        if {![dict exists $trial methodCalls $key]} continue
+        set callExpr [dict get $trial methodCalls $key expr]
+        set entry [dict create problems [MethodCallProblems $trial $callExpr]]
+        set callArgs [dict get $trial exprs $callExpr args]
+        if {$callArgs ne ""} {
+            dict set entry receiver [hir::typeOf $trial [lindex $callArgs 0]]
+        }
+        dict set record calls $key $entry
+    }
+    set decided [dict create]
+    TraitCallsDecided $trial $calls decided
+    dict set record traits $decided
+    return $record
+}
+
+# RECORD (MethodTrialRecord) as it reads while the calls UNDECIDED are
+# undecided: its entries of the other calls dropped.
+proc hir::MethodRecordFor {record undecided} {
+    set entries [dict create]
+    foreach key $undecided {
+        if {[dict exists $record calls $key]} {
+            dict set entries $key [dict get $record calls $key]
         }
     }
-    return 1
+    dict set record calls $entries
+    return $record
+}
+
+# hir::methodBuildAudit's check of one reused build (WHAT, made with the
+# choices CHOICES): REUSED, the record the decision read, must be FRESH, the
+# record of the same build made again.
+proc hir::MethodBuildAudit {what reused fresh choices} {
+    if {$reused ne $fresh} {
+        error "hir::DecideMethodCalls: the reused build of $what differs from building it again (choices: $choices)"
+    }
 }
 
 # 1 if every candidate's problems (PERCANDIDATE, as MethodCallProblems gives
@@ -935,19 +1061,51 @@ proc hir::TraitCallsDecided {hir calls decidedVar} {
 # the violation is recorded as `violatedDeclared` (parameter BindingId -> the
 # offending argument) so that a consumer that must not compile a body on the
 # assumption of a broken contract can recover: native::prepareHir does.
+#
+# The check after the demotion computes again only what the demotion can
+# change (COMPILER-BOTTLENECKS.md, 3.9). The coroutine protocols are a
+# function of the HIR alone, so both checks start from one inference of
+# them. The signature fixpoint's rounds are a function of the HIR and their
+# seeds alone, and the demotion only filters the seeds a round hands the
+# next (hir::signatures::infer), so the second check reuses every round of
+# the first whose seeds it reaches again -- always the first round, which
+# has none. Everything from the first seeded typing on reads the demoted
+# contracts and runs again. recheckReuse 0 redoes the second check from the
+# start instead; recheckAudit 1 does that as well and fails unless both give
+# the same HIR.
 proc hir::check {hirVar} {
     upvar 1 $hirVar hir
+    variable recheckReuse
+    variable recheckAudit
     # (Under the front end's recursion floor even when not entered through
     # hir::buildSyntax: native::prepareHir re-checks a HIR itself.)
     Deep {
+        set input $hir
+        # The coroutine protocols (hir/coroutines.tcl) type every yield, so
+        # they are inferred before the types are.
+        hir::coroutines::analyze hir
         set pre $hir
-        CheckOnce hir {}
+        set rounds [dict create]
+        CheckOnce hir {} rounds
         if {[dict exists $hir violatedContracts]} {
             set diagnostics [dict get $hir diagnostics]
             set before [dict get $hir beforeCompletions]
             set demote [lsort -unique [dict keys [dict get $hir violatedContracts]]]
-            set hir $pre
-            CheckOnce hir $demote
+            if {$recheckAudit || !$recheckReuse} {
+                # The second check from the start, sharing nothing.
+                set full $input
+                hir::coroutines::analyze full
+                CheckOnce full $demote
+            }
+            if {$recheckReuse} {
+                set hir $pre
+                CheckOnce hir $demote rounds
+                if {$recheckAudit} {
+                    AuditRecheck $full $hir
+                }
+            } else {
+                set hir $full
+            }
             dict unset hir violatedContracts
             dict set hir diagnostics $diagnostics
             dict set hir beforeCompletions $before
@@ -957,12 +1115,48 @@ proc hir::check {hirVar} {
     return
 }
 
-proc hir::CheckOnce {hirVar demote} {
+# Fails unless SHARED, the second check hir::check made reusing the first's
+# work, is FULL, the same check made from the start (recheckAudit).
+proc hir::AuditRecheck {full shared} {
+    variable recheckAudits
+    if {$full eq $shared} {
+        incr recheckAudits
+        return
+    }
+    set where {}
+    foreach key [lsort -unique [concat [dict keys $full] [dict keys $shared]]] {
+        if {![dict exists $full $key] || ![dict exists $shared $key]} {
+            lappend where "$key (present in one only)"
+        } elseif {[dict get $full $key] ne [dict get $shared $key]} {
+            set detail ""
+            if {$key in {exprs bindings types scopes}} {
+                set a [dict get $full $key]
+                set b [dict get $shared $key]
+                set ids [lmap id [lsort -unique [concat [dict keys $a] [dict keys $b]]] {
+                    if {[dict exists $a $id] && [dict exists $b $id]
+                            && [dict get $a $id] eq [dict get $b $id]} continue
+                    set id
+                }]
+                set detail " [lrange $ids 0 9]"
+            }
+            lappend where $key$detail
+        }
+    }
+    error "hir::check: the demotion re-check that reuses the first check differs from the one made from the start in: [join $where {; }]"
+}
+
+# The checks of hir::check, one pass: HIR is the program with its coroutine
+# protocols inferred; DEMOTE as for hir::signatures::infer; ROUNDSVAR, if
+# given, names hir::check's memo of the signature fixpoint's rounds over
+# this same HIR (hir::signatures::infer).
+proc hir::CheckOnce {hirVar demote {roundsVar ""}} {
     upvar 1 $hirVar hir
-    # The coroutine protocols (hir/coroutines.tcl) type every yield, so they
-    # are inferred before the types are.
-    hir::coroutines::analyze hir
-    hir::signatures::infer hir $demote
+    if {$roundsVar ne ""} {
+        upvar 1 $roundsVar rounds
+        hir::signatures::infer hir $demote rounds
+    } else {
+        hir::signatures::infer hir $demote
+    }
     hir::range::verifyDeclaredResults hir
     hir::range::verifyDeclaredParams hir
     hir::callables::verify hir

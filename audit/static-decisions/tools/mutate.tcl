@@ -6,9 +6,11 @@
 #                                         ?-timeout SECONDS?
 #
 # Each mutant is a deliberate bug in the scheduler (hir/static.tcl), its
-# dependency analysis (hir/staticdeps.tcl) or the method-call decisions'
-# reuse (hir/hir.tcl), written in mutants.txt beside this script in the
-# format of audit/static-compile/tools/mutants.txt. Two kinds:
+# dependency analysis (hir/staticdeps.tcl), the method-call decisions'
+# reuse (hir/hir.tcl) or the demotion re-check's reuse of the check before
+# it (hir::check, hir::signatures::infer), written in mutants.txt beside
+# this script in the format of audit/static-compile/tools/mutants.txt. Two
+# kinds:
 #
 #   semantic     the batched scheduler decides another program than the
 #                sequential one (a dependency missed, a decision reused
