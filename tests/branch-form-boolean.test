@@ -1,0 +1,587 @@
+# branch-form-boolean.test -- Boolean conditions are lowered as branches
+# (BRANCH-FORM-BOOLEAN-LOWERING.md).
+#
+# An expression demanded as a value is lowered to a value; an expression
+# demanded as a branch -- the condition of an `if` -- is lowered directly to
+# control flow wherever its meaning allows. `and`, `or`, `not` and `!=` are
+# `if` expressions over the root Booleans in HIR (surface/lower.tcl), and
+# hir/condition.tcl states their branch form once: the Tcl compiler
+# (CompileCondition) composes a condition's test from Tcl's short-circuit
+# operators, native lowering (Condition) branches to the `if`'s two arms. No
+# Bool exists for a condition consumed only as a branch; one used as a value
+# is still built.
+#
+# These tests pin what a golden suite cannot observe -- the generated Tcl,
+# NIR and Cranelift IR, the shared rule, the linearity of the lowering -- and
+# the source behavior on every backend (evaluation order and counts through
+# coroutine logs, skipped failures, proofs). The source-level behavior is
+# also ported to tests/golden/branch-form-boolean.bot.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+
+# The HIR of SOURCE (no warnings).
+proc bfHir {source} {
+    return [surface::compile $source -warnings off]
+}
+
+# The body of the Tcl proc the compiler generates for top-level function
+# NAME of HIR (compiled, so defined, by core::compiler::compileHir).
+proc bfTclBody {hir name} {
+    set code [dict get [core::compiler::compileHir $hir] code]
+    foreach {- temp proc defined use} [regexp -all -inline \
+            {set (t[0-9]+) \[core::value::block [^\n]* ::core::compiler::code::(block[0-9]+)\]\n[ \t]*core::env::define \$base (\S+) \$(t[0-9]+)\n} $code] {
+        if {$defined eq $name && $use eq $temp} {
+            return [info body ::core::compiler::code::$proc]
+        }
+    }
+    error "bfTclBody: no function $name in the generated code"
+}
+
+# The test of the first Tcl `if` of BODY (the expression in its braces), if
+# it is on one line, its variables renamed $v and $t (their numbers are the
+# compilation's).
+proc bfTclTest {body} {
+    foreach line [split $body \n] {
+        if {[regexp {^\s*if \{(.*)\} \{$} $line -> test]} {
+            return [regsub -all {\$([vt])[0-9]+} $test {$\1}]
+        }
+    }
+    return ""
+}
+
+# The body lines of NIR function NAME in NIR text, registers kept, origins
+# dropped.
+proc bfNirBody {nir name} {
+    set lines {}
+    set inside 0
+    foreach line [split $nir \n] {
+        if {[string match "func *" $line]} {
+            set inside [string match "func * \"$name\" *" $line]
+            continue
+        }
+        if {$line eq "end"} {
+            set inside 0
+            continue
+        }
+        if {$inside} {
+            lappend lines [regsub -all { ?@e[0-9]+} [string trim $line] ""]
+        }
+    }
+    return $lines
+}
+
+# The NIR body of function NAME of SOURCE, specialized (1) or generic (0).
+proc bfNir {source name {specialize 1}} {
+    return [bfNirBody [native::nir [bfHir $source] -specialize $specialize] $name]
+}
+
+# What NIR BODY materializes for Booleans: its Bool constants and the `move`s
+# of registers holding one (a join of Bools), as {CONSTANTS MOVES}.
+proc bfBools {body} {
+    set bools {}
+    foreach line $body {
+        if {[regexp {^(%[0-9]+) = bool (true|false)$} $line -> r]} {
+            lappend bools $r
+        }
+    }
+    set moves 0
+    foreach line $body {
+        if {[regexp {^%[0-9]+ = move (%[0-9]+)$} $line -> r] && $r in $bools} {
+            incr moves
+        }
+    }
+    return [list [llength $bools] $moves]
+}
+
+# The `br` lines of NIR BODY, as {REG THEN ELSE} triples.
+proc bfBranches {body} {
+    set result {}
+    foreach line $body {
+        if {[regexp {^br (%[0-9]+) (L[0-9]+) (L[0-9]+)$} $line -> r t f]} {
+            lappend result [list $r $t $f]
+        }
+    }
+    return $result
+}
+
+# The integer constant the code after `label LABEL` in NIR BODY starts with
+# (an `if` arm whose value is a literal), following a `jump` there.
+proc bfArm {body label} {
+    for {set guard 0} {$guard < 8} {incr guard} {
+        set i [lsearch -exact $body "label $label"]
+        if {$i < 0} {
+            return ""
+        }
+        set next [lindex $body [expr {$i + 1}]]
+        if {[regexp {^%[0-9]+ = int (-?[0-9]+)$} $next -> n]} {
+            return $n
+        }
+        if {![regexp {^jump (L[0-9]+)$} $next -> label]} {
+            return ""
+        }
+    }
+    return ""
+}
+
+# A program whose function f(PARAMS) chooses 1 or 2 by condition COND,
+# called over a counted range (x in -15..14: a small raw Int whose
+# comparisons none of the instance's Ranges decide) and then as CALL.
+proc bfProgram {cond {params "x: int"} {call "\[f(3), f(12), f(-4)\]"}} {
+    return "fn f($params) -> int:\n    if $cond:\n        1\n    else:\n        2\n\nys = loop i from 0 to 30:\n    f(i - 15)\n\[ys, $call\]\n"
+}
+
+# The value of the source program SOURCE on every backend (sourceAgree).
+proc bfValue {source} {
+    lassign [sourceAgree $source] kind value
+    if {$kind ne "value"} {
+        error "bfValue: $kind $value"
+    }
+    return $value
+}
+
+# ---------------------------------------------------------------------------
+# The shared rule (hir/condition.tcl)
+
+test bf-form-shapes {hir::condition::form: the root Booleans are true/false, the `if`s `and`, `or`, `not` and `!=` lower to are `if`, and a comparison, a call or a binding is `value`; hir::condition::constant: a branch that is one Boolean constant} -body {
+    set hir [bfHir "fn p(x: int) -> bool:\n    x > 0\n\nfn f(a: bool, b: bool, x: int) -> List\[int\]:\n    c = a and b\n    r1 = if a and b:\n        1\n    else:\n        0\n    r2 = if a or b:\n        1\n    else:\n        0\n    r3 = if not a:\n        1\n    else:\n        0\n    r4 = if x != 3:\n        1\n    else:\n        0\n    r5 = if x < 3:\n        1\n    else:\n        0\n    r6 = if p(x):\n        1\n    else:\n        0\n    r7 = if c:\n        1\n    else:\n        0\n    \[r1, r2, r3, r4, r5, r6, r7\]\n\nf(true, false, 3)\n"]
+    set forms {}
+    set constants {}
+    foreach e [hirFind $hir if] {
+        set c [hir::get $hir $e condition]
+        set o [hir::node $hir $e]
+        lappend forms [hir::condition::form $hir $c]
+        lappend constants [list [hir::condition::constant $hir [dict get $o thenBody]] [hir::condition::constant $hir [dict get $o elseBody]]]
+    }
+    set roots [lmap name {true false} {
+        set e [lindex [hirFind $hir ref $name] 0]
+        expr {$e eq "" ? "" : [hir::condition::form $hir $e]}
+    }]
+    list [lsort -unique $forms] [lsearch -all -inline $forms if] [llength [lsearch -all $constants {1 0}]] \
+        [llength [lsearch -all $constants {0 1}]] $roots
+} -result {{if value} {if if if if} 3 2 {true false}}
+
+test bf-form-not-value {an `if` with an empty branch, or one that cannot complete (type never), has no branch form: its value is tested} -body {
+    set hir [hirOf {if {ref true} {block {} {const 1}} {block {}}} {if {call {ref <} {const 1} {const 2}} {block {} {fail Boom}} {block {} {fail Boom}}}]
+    set ifs [hirFind $hir if]
+    lmap e $ifs {hir::condition::form $hir $e}
+} -result {value value}
+
+# ---------------------------------------------------------------------------
+# The Tcl compiler: the condition is the test of the Tcl `if`
+
+test bf-tcl-and {`if 0 <= x and x <= 9:` compiles to one Tcl `if` whose test is the two comparisons joined by `&&`: no Bool, boxed or bare, no temporary, no join} -body {
+    set body [bfTclBody [bfHir [bfProgram "0 <= x and x <= 9"]] f]
+    list [bfTclTest $body] [regexp {bool (true|false)} $body] [regexp {string equal} $body] [regexp -all {if \{} $body]
+} -result {{(0 <= [lindex $v 1])&&([lindex $v 1] <= 9)} 0 0 1}
+
+test bf-tcl-or {`if x < 0 or x > 9:` is one test joined by `||`} -body {
+    set body [bfTclBody [bfHir [bfProgram "x < 0 or x > 9"]] f]
+    list [bfTclTest $body] [regexp {bool (true|false)} $body] [regexp -all {if \{} $body]
+} -result {{([lindex $v 1] < 0)||([lindex $v 1] > 9)} 0 1}
+
+test bf-tcl-not {`not` and `!=` negate the test (`!`): the branches are not swapped by a Bool, and stay in written order} -body {
+    set a [bfTclTest [bfTclBody [bfHir [bfProgram "not (x < 0)"]] f]]
+    set b [bfTclTest [bfTclBody [bfHir [bfProgram "x != 3"]] f]]
+    set c [bfTclTest [bfTclBody [bfHir [bfProgram "not (x > 0 and x < 9)"]] f]]
+    list $a $b $c
+} -result {{!([lindex $v 1] < 0)} {!([lindex $v 1] == 3)} {!(([lindex $v 1] > 0)&&([lindex $v 1] < 9))}}
+
+test bf-tcl-nested {`a and (b or c)` composes: each operand once, in written order} -body {
+    bfTclTest [bfTclBody [bfHir [bfProgram "x > 0 and (x < 5 or x == 12)"]] f]
+} -result {([lindex $v 1] > 0)&&(([lindex $v 1] < 5)||([lindex $v 1] == 12))}
+
+test bf-tcl-operand-code {an operand that needs code (a call) runs inside its side of the operator, a command substitution, never before the `if`: the right operand's call is only made when the left operand allows it} -body {
+    set body [bfTclBody [bfHir "fn p(x: int) -> bool:\n    x > 5\n\n[bfProgram {x > 0 and p(x)}]"] f]
+    set test [string range $body [string first "if \{" $body] end]
+    list [regexp {^if \{\(\[lindex \$v[0-9]+ 1\] > 0\)&&\(\[set t[0-9]+ \[::core::compiler::code::block[0-9]+ } $test] \
+        [regexp -all {::core::compiler::code::block} $body] \
+        [regexp {::core::compiler::code::block} [string range $body 0 [string first "if \{" $body]]]
+} -result {1 1 0}
+
+test bf-tcl-value-context {a Boolean expression used as a value is still a Bool: `x = a and b` builds {bool true}/{bool false} through a join, and `if x:` then tests that value (no fusion across the binding)} -body {
+    set body [bfTclBody [bfHir [string map {"    if x:" "    c = x > 0 and x < 9\n    if c:"} [bfProgram x]]] f]
+    list [regexp -all {\{bool true\}} $body] [regexp -all {\{bool false\}} $body] \
+        [bfTclTest [string range $body [string last "\n    if \{" $body] end]]
+} -result {1 2 {[string equal [lindex $t 1] true]}}
+
+test bf-tcl-value-positions {argument, return, collection element, struct field and binding positions keep their Bool values: the same code as before branch lowering} -body {
+    set hir [bfHir "struct S:\n    v: bool\n\nfn id(b: bool) -> bool:\n    b\n\nfn f(x: int):\n    a = x > 0 and x < 9\n    s = S {v: x < 0 or x > 9}\n    \[a, id(x > 1 and x < 3), \[not (x == 2)\], s.v\]\n\nfn g(x: int) -> bool:\n    return x > 0 and x < 9\n\n\[f(2), g(2)\]\n"]
+    list [regexp -all {\{bool (true|false)\}} [bfTclBody $hir f]] [regexp -all {\{bool (true|false)\}} [bfTclBody $hir g]] \
+        [lrange [outcomeUnderHir compile $hir] 0 1]
+} -result {11 3 {value {[[true, true, [false], false], true]}}}
+
+test bf-tcl-call-bool {a Bool-returning call is a value, branched on: no special call form} -body {
+    set body [bfTclBody [bfHir "fn p(x: int) -> bool:\n    x > 5\n\n[bfProgram {p(x)}]"] f]
+    bfTclTest $body
+} -result {[string equal [lindex $t 1] true]}
+
+# ---------------------------------------------------------------------------
+# Native lowering: the condition branches to the `if`'s arms
+
+test bf-nir-and {`if x >= 0 and x <= 9:`: compare, branch to the else arm or on; compare, branch to the arms. No Bool constant, no move of one, no join block for the conjunction} -body {
+    set body [bfNir [bfProgram "x >= 0 and x <= 9"] f]
+    lassign [bfBranches $body] first second
+    list [bfBools $body] [llength [bfBranches $body]] \
+        [expr {[lindex $first 2] eq [lindex $second 2]}] \
+        [bfArm $body [lindex $second 1]] [bfArm $body [lindex $second 2]] \
+        [llength [lsearch -all -regexp $body {^%[0-9]+ = op r?i(ge|le) }]]
+} -result {{0 0} 2 1 1 2 2}
+
+test bf-nir-or {`if x < 0 or x > 9:`: the first comparison's true edge goes straight to the then arm} -body {
+    set body [bfNir [bfProgram "x < 0 or x > 9"] f]
+    lassign [bfBranches $body] first second
+    list [bfBools $body] [llength [bfBranches $body]] [expr {[lindex $first 1] eq [lindex $second 1]}] \
+        [bfArm $body [lindex $first 1]] [bfArm $body [lindex $second 2]]
+} -result {{0 0} 2 1 1 2}
+
+test bf-nir-not {`not` swaps the destinations: `if not (x < 0):` is one `br` on the comparison whose true edge is the else arm} -body {
+    set body [bfNir [bfProgram "not (x < 0)"] f]
+    lassign [bfBranches $body] only
+    list [bfBools $body] [llength [bfBranches $body]] [bfArm $body [lindex $only 1]] [bfArm $body [lindex $only 2]]
+} -result {{0 0} 1 2 1}
+
+test bf-nir-not-structured {`not (a and b)` inverts through the tree: no negated Bool} -body {
+    set body [bfNir [bfProgram "not (x >= 0 and x <= 9)"] f]
+    lassign [bfBranches $body] first second
+    list [bfBools $body] [llength [bfBranches $body]] [bfArm $body [lindex $first 2]] \
+        [bfArm $body [lindex $second 1]] [bfArm $body [lindex $second 2]]
+} -result {{0 0} 2 1 2 1}
+
+test bf-nir-nested {`a and (b or c)`: a false goes to the else arm, b true to the then arm, c decides; three branches, no Bool} -body {
+    set body [bfNir [bfProgram "x > 0 and (x < 5 or x == 12)"] f]
+    lassign [bfBranches $body] a b c
+    list [bfBools $body] [llength [bfBranches $body]] [bfArm $body [lindex $a 2]] [bfArm $body [lindex $b 1]] \
+        [bfArm $body [lindex $c 1]] [bfArm $body [lindex $c 2]]
+} -result {{0 0} 3 2 1 1 2}
+
+test bf-nir-ne {`!=` is `==` with the destinations swapped} -body {
+    set body [bfNir [bfProgram "x != 3"] f]
+    lassign [bfBranches $body] only
+    list [bfBools $body] [bfArm $body [lindex $only 1]] [bfArm $body [lindex $only 2]]
+} -result {{0 0} 2 1}
+
+test bf-nir-generic {the generic (unspecialized) lowering has the same shape} -body {
+    lmap cond {{x >= 0 and x <= 9} {x < 0 or x > 9} {not (x < 0)} {x > 0 and (x < 5 or x == 12)}} {
+        set body [bfNir [bfProgram $cond] f 0]
+        list [bfBools $body] [llength [bfBranches $body]]
+    }
+} -result {{{0 0} 2} {{0 0} 2} {{0 0} 1} {{0 0} 3}}
+
+test bf-nir-value-context {value positions keep their Bools: `x = a and b` joins true/false, and `if x:` then branches on that register (no fusion across the binding)} -body {
+    set body [bfNir [string map {"    if x:" "    c = x >= 0 and x <= 9\n    if c:"} [bfProgram x]] f]
+    # c's `if` joins true (its inner test's), false (the inner test's) and
+    # false (its own else); `if c` branches on c's join register.
+    list [bfBools $body] \
+        [expr {[lindex [bfBranches $body] end 0] in [lmap l [lsearch -all -inline -regexp $body {^%[0-9]+ = move %}] {lindex $l 0}]}]
+} -result {{3 3} 1}
+
+test bf-nir-value-positions {an argument, a returned value, List elements and a struct field built from and/or/not are real Bools} -body {
+    set source "struct S:\n    v: bool\n\nfn id(b: bool) -> bool:\n    b\n\nfn f(x: int):\n    s = S {v: x < 0 or x > 9}\n    \[id(x > 1 and x < 3), \[not (x == 2), x > 0 and x < 9\], s.v\]\n\nfn g(x: int) -> bool:\n    return x > 0 and x < 9\n\nxs = \[2, 30\]\nys = loop v in xs:\n    \[f(v), g(v)\]\nys\n"
+    set hir [bfHir $source]
+    set nir [native::nir $hir]
+    # Each `and`/`or` used as a value joins three Bool constants, a `not`
+    # two: f builds 3 + 3 + 2 + 3, g 3.
+    list [lindex [bfBools [bfNirBody $nir f]] 0] [lindex [bfBools [bfNirBody $nir g]] 0] [bfValue $source]
+} -result {11 3 {[[[true, [false, true], false], true], [[false, [true, false], true], false]]}}
+
+test bf-nir-call-bool {a Bool-returning call is a value, branched on: `call`, then `br` on its register} -body {
+    set body [bfNir "fn p(x: int) -> bool:\n    x > 5\n\nfn q(x: int) -> bool:\n    x < 0 or x > 5\n\n[bfProgram {q(x)}]" f]
+    list [bfBools $body] [regexp {^(%[0-9]+) = call [0-9]+ } [lindex $body 0]] \
+        [expr {[lindex [bfBranches $body] 0 0] eq [lindex [lindex $body 0] 0]}]
+} -result {{0 0} 1 1}
+
+test bf-nir-range-decided-operand {an operand the instance's Ranges decide is not evaluated and needs no block: `x >= 0 and x <= 9` with x known nonnegative is one comparison and one branch (M6's rule, applied to the operand)} -body {
+    set body [bfNir "fn f(x: int) -> int:\n    if x >= 0 and x <= 9:\n        1\n    else:\n        2\n\n\[f(3), f(12)\]\n" f]
+    list [bfBools $body] [llength [bfBranches $body]] [lsearch -all -inline -regexp $body {^jump L[0-9]+$}]
+} -result {{0 0} 1 {{jump L2} {jump L2}}}
+
+test bf-nir-affine-rhs {a right operand that moves an affine value moves it only where it runs: the other path releases it, then jumps to its target} -body {
+    set source "import coroutine\n\nfn ticker() -> int:\n    loop i from 0 to 1000:\n        yield i\n    return -1\n\nfn take(c: Coroutine{args: \[\], return: int}) -> bool:\n    c() > 0\n\nfn f(flag: bool) -> int:\n    coroutine {step: h} = ticker()\n    if flag and take(h):\n        1\n    else:\n        2\n\nfn g(flag: bool) -> int:\n    coroutine {step: h} = ticker()\n    if flag or take(h):\n        3\n    else:\n        4\n\n\[f(true), f(false), g(true), g(false)\]\n"
+    set nir [native::nir [bfHir $source]]
+    set f [bfNirBody $nir f]
+    set i [lsearch -regexp $f {= op corelease }]
+    list [bfBools $f] [regexp {^jump L[0-9]+$} [lindex $f [expr {$i + 1}]]] \
+        [llength [lsearch -all -regexp $f {corelease}]] [bfValue $source]
+} -result {{0 0} 1 1 {[1, 2, 3, 3]}}
+
+test bf-nir-region-consumer {an inlined region-consumer predicate used as a condition branches straight to the arms: its `or` chain is one `br` per character test, no Bool, no join} -body {
+    set source "import str\n\nfn peek(text, index):\n    if index < 0 or index >= str::length(text):\n        return \"\"\n\n    str::substring(text, index, index + 1)\n\nfn is_local_char(c):\n    str::is_tcl_alnum(c) or c == \".\" or c == \"_\" or c == \"-\"\n\nfn scan(text, index, count):\n    if index >= str::length(text):\n        return count\n    if is_local_char(peek(text, index)):\n        return scan(text, index + 1, count + 1)\n    scan(text, index + 1, count)\n\nfn f():\n    scan(\"ab.c_d-e@f\", 0, 0)\nf()\n"
+    set body [bfNirBody [native::nir [bfHir $source]] scan]
+    list [bfBools $body] [llength [lsearch -all -regexp $body {= op (strregiontclalnum|regioneq) }]] \
+        [llength [bfBranches $body]] [lsearch -all -inline -regexp $body {= call }] [bfValue $source]
+} -result {{0 0} 4 5 {} 9}
+
+test bf-clif-and {Cranelift IR: the conjunction's blocks carry no Bool parameter -- one block parameter joins the `if`'s value, and two `brif` test the comparisons} -body {
+    set clif [native::clif [bfHir [bfProgram "x >= 0 and x <= 9"]]]
+    set f [lindex [regexp -inline {; function [0-9]+ "f":[^\n]*\n(.*?)\n\}} $clif] 1]
+    list [regexp -all {\nblock[0-9]+\(v[0-9]+: i64\):} $f] [regexp -all {brif} $f]
+} -result {1 2}
+
+# ---------------------------------------------------------------------------
+# Semantics on every backend: evaluation order and counts, short circuits
+
+# log(n, v) yields [n] and returns v: a coroutine's segments are the log.
+set bfOrderSource {import coroutine
+
+fn log(n: int, v: bool) -> bool:
+    yield [n]
+    v
+
+fn run(k: int) -> List[int]:
+    r1 = if log(1, false) and log(2, true):
+        10
+    else:
+        11
+    r2 = if log(3, true) or log(4, true):
+        12
+    else:
+        13
+    r3 = if log(5, true) and log(6, false):
+        14
+    else:
+        15
+    r4 = if log(7, false) or log(8, false):
+        16
+    else:
+        17
+    r5 = if not (log(9, true) and log(10, true)):
+        18
+    else:
+        19
+    r6 = if log(11, k > 0) and (log(12, false) or log(13, true)):
+        20
+    else:
+        21
+    r7 = if not log(14, false):
+        22
+    else:
+        23
+    r8 = if log(15, true) != log(16, true):
+        24
+    else:
+        25
+    r9 = if log(17, k > 1) and log(18, true) or log(19, false):
+        26
+    else:
+        27
+    x = log(20, true) and log(21, false)
+    r10 = if x:
+        28
+    else:
+        29
+    [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10]
+
+fn drive(k: int):
+    coroutine {step, first} = run(k)
+    rest = loop i from 0 to 100:
+        if coroutine::done?(step):
+            break
+        step()
+    [first, rest]
+
+[drive(1), drive(5)]
+}
+
+test bf-order {left to right, each operand at most once, the right operand only when the left one does not decide: `false and _`, `true or _` skip it, `true and _`, `false or _` run it once; nested trees, not, != and a value-position `and` alike, with yields inside the operands} -body {
+    bfValue $::bfOrderSource
+} -result {[[[1], [[3], [5], [6], [7], [8], [9], [10], [11], [12], [13], [14], [15], [16], [17], [19], [20], [21], [11, 12, 15, 17, 19, 20, 22, 25, 27, 29]]], [[1], [[3], [5], [6], [7], [8], [9], [10], [11], [12], [13], [14], [15], [16], [17], [18], [20], [21], [11, 12, 15, 17, 19, 20, 22, 25, 26, 29]]]]}
+
+set bfErrorsSource {error Boom
+
+fn risky(k: int) -> bool errors Boom:
+    if k > 7:
+        fail Boom
+    true
+
+fn guarded_and(k: int) -> int errors Boom:
+    if k > 3 and risky(k):
+        1
+    else:
+        0
+
+fn guarded_or(k: int) -> int errors Boom:
+    if k <= 3 or risky(k):
+        1
+    else:
+        0
+
+fn constant_guards() -> List[int]:
+    a = if false and risky(9):
+        1
+    else:
+        0
+    b = if true or risky(9):
+        1
+    else:
+        0
+    [a, b]
+
+fn try_guards(k: int) -> List[int]:
+    a = guarded_and(k):
+        on Boom:
+            -1
+    b = guarded_or(k):
+        on Boom:
+            -2
+    [a, b]
+
+[try_guards(1), try_guards(5), try_guards(9), constant_guards()]
+}
+
+test bf-errors {a right operand that may fail runs only where the left one lets it: its error is raised exactly there; a constant left operand that skips a right operand known to fail is no KNOWN-ERROR} -body {
+    bfValue $::bfErrorsSource
+} -result {[[0, 1], [1, 1], [-1, -2], [0, 1]]}
+
+test bf-errors-order {when both operands may fail, only the one that runs can: the left operand's error first, the right one's only past it} -body {
+    bfValue "error Left\nerror Right\n\nfn left(k: int) -> bool errors Left:\n    if k == 1:\n        fail Left\n    k > 2\n\nfn right(k: int) -> bool errors Right:\n    if k == 3:\n        fail Right\n    k > 4\n\nfn both(k: int) -> int errors Left, Right:\n    if left(k) and right(k):\n        1\n    else:\n        0\n\nfn probe(k: int) -> str:\n    r = both(k):\n        on Left:\n            return \"Left\"\n        on Right:\n            return \"Right\"\n    if r == 1:\n        \"yes\"\n    else:\n        \"no\"\n\n\[probe(1), probe(2), probe(3), probe(4), probe(5)\]\n"
+} -result {["Left", "no", "Right", "no", "yes"]}
+
+test bf-methods {conditions of method calls behave as the free calls do} -body {
+    bfValue "struct Job:\n    n: int\n\nfn ready?(j: Job) -> bool:\n    j.n > 0\n\nfn valid?(j: Job) -> bool:\n    j.n < 10\n\nfn check(x: Job, y: Job) -> int:\n    if x.ready?() and y.valid?():\n        1\n    elif not x.ready?() or y.valid?():\n        2\n    else:\n        3\n\n\[check(Job {n: 1}, Job {n: 3}), check(Job {n: 0}, Job {n: 30}), check(Job {n: 5}, Job {n: 30})\]\n"
+} -result {[1, 2, 3]}
+
+# ---------------------------------------------------------------------------
+# Proofs are the analyses', unchanged
+
+set bfConverter {import list
+type Small = Int in 0..9
+error OutOfRange
+
+fn small(x: int) -> Small errors OutOfRange:
+    if x < 0 or x > 9:
+        fail OutOfRange
+    x
+
+fn use_small(s: Small) -> int:
+    s + 100
+}
+
+test bf-proofs {the converter's `or` guard proves its result; `0 <= x and x <= 9` admits x into the domain; small(3) needs no handler; small(12) is KNOWN-ERROR; and both run on every backend} -body {
+    set accepted [bfValue "$::bfConverter\nfn g(x: int) -> int:\n    if 0 <= x and x <= 9:\n        use_small(x)\n    else:\n        0\n\nfn h(x: int) -> int:\n    s = small(x):\n        on OutOfRange:\n            return -1\n    use_small(s)\n\nxs = \[3, 12, -1\]\nys = loop v in xs:\n    \[g(v), h(v)\]\n\[ys, use_small(small(3))\]\n"]
+    catch {surface::compile "$::bfConverter\nfn k() -> int:\n    s = small(12):\n        on OutOfRange:\n            return -1\n    use_small(s)\n\nk()\n" -warnings off} message options
+    list $accepted [lindex [dict get $options -errorcode] end]
+} -result {{[[[103, 103], [0, -1], [0, -1]], 103]} KNOWN-ERROR}
+
+test bf-converter-nir {the canonical converter's guard lowers to two comparisons and their branches, into the failure or the value: no Bool} -body {
+    set hir [bfHir "$::bfConverter\nfn g(x: int) -> int:\n    s = small(x):\n        on OutOfRange:\n            return -1\n    s + 0\n\nxs = \[3, 12\]\nys = loop v in xs:\n    g(v)\nys\n"]
+    set body [bfNirBody [native::nir $hir] small]
+    list [bfBools $body] [llength [bfBranches $body]] [llength [lsearch -all -regexp $body {^faildeclared }]]
+} -result {{0 0} 2 1}
+
+# ---------------------------------------------------------------------------
+# Size: linear lowering, any depth, beyond the proof budget
+
+# An `and` chain of N comparisons of x, all true for x = 0 but the last
+# (x != N) when x = N.
+proc bfChain {n} {
+    set ops {}
+    for {set i 1} {$i <= $n} {incr i} {
+        lappend ops "x != $i"
+    }
+    return [join $ops { and }]
+}
+
+test bf-large-chain {a 400-operand conjunction compiles and runs exactly on every backend (the Tcl compiler stopped below 400 before: TCL LIMIT STACK), past the proof budget (hir::range::Paths decomposes it only so far), and its lowering is linear: each further 100 operands add the same NIR and Tcl to the function} -body {
+    set sizes {}
+    foreach n {100 200 300} {
+        set hir [bfHir [bfProgram [bfChain $n] "x: int" "\[f(0), f($n), f([expr {$n + 1}])\]"]]
+        lappend sizes [list [llength [bfNirBody [native::nir $hir] f]] [string length [bfTclBody $hir f]]]
+    }
+    lassign $sizes a b c
+    set value [bfValue [bfProgram [bfChain 400] "x: int" "\[f(0), f(400), f(401)\]"]]
+    # x = -15..14 over the range: x != 1, ..., x != N fails for 1..14.
+    set ys "\[[join [concat [lrepeat 16 1] [lrepeat 14 2]] {, }]\]"
+    list [expr {$value eq "\[$ys, \[1, 2, 1\]\]"}] \
+        [expr {[lindex $c 0] - [lindex $b 0] == [lindex $b 0] - [lindex $a 0]}] \
+        [expr {abs(([lindex $c 1] - [lindex $b 1]) / double([lindex $b 1] - [lindex $a 1]) - 1) < 0.02}] \
+        [lindex [bfBools [bfNirBody [native::nir [bfHir [bfProgram [bfChain 50]]]] f]] 0]
+} -result {1 1 1 0}
+
+test bf-lowering-work-linear {the work of lowering a conjunction grows linearly with it: CompileCondition visits each node once, and native lowering's StaticOutcome evaluates each query once (remembered per condition: re-asked level by level, it was quadratic)} -body {
+    set counts {}
+    set ::bfCalls 0
+    set count {apply {args {incr ::bfCalls}}}
+    trace add execution core::compiler::CompileCondition enter $count
+    trace add execution native::lower::StaticOutcomeOf enter $count
+    try {
+        foreach n {60 120 180} {
+            set hir [bfHir [bfProgram [bfChain $n] "x: int" "\[f(0)\]"]]
+            set ::bfCalls 0
+            core::compiler::compileHir $hir
+            set tcl $::bfCalls
+            set ::bfCalls 0
+            native::nir $hir
+            lappend counts [list $tcl $::bfCalls]
+        }
+    } finally {
+        trace remove execution core::compiler::CompileCondition enter $count
+        trace remove execution native::lower::StaticOutcomeOf enter $count
+    }
+    lassign $counts a b c
+    list [expr {[lindex $c 0] - [lindex $b 0] == [lindex $b 0] - [lindex $a 0]}] \
+        [expr {[lindex $c 1] - [lindex $b 1] == [lindex $b 1] - [lindex $a 1]}] \
+        [expr {([lindex $b 1] - [lindex $a 1]) / 60 <= 8}]
+} -result {1 1 1}
+
+test bf-beyond-proof-budget {a condition far past the proof's node budget still evaluates exactly, each operand once and in order (log yields), and short-circuits at the first false operand} -body {
+    set ops {}
+    for {set i 1} {$i <= 120} {incr i} {
+        lappend ops "log($i, $i != k)"
+    }
+    bfValue "import coroutine\nimport list\n\nfn log(n: int, v: bool) -> int:\n    yield n\n    if v:\n        1\n    else:\n        0\n\nfn run(k: int) -> int:\n    if [join [lmap op $ops {string cat $op " == 1"}] { and }]:\n        -1\n    else:\n        -2\n\nfn drive(k: int):\n    coroutine {step, first} = run(k)\n    rest = loop i from 0 to 200:\n        if coroutine::done?(step):\n            break\n        step()\n    last = list::at(rest, list::length(rest) - 1):\n        on IndexNotFound:\n            return \[first, -9\]\n    \[first, list::length(rest), last\]\n\n\[drive(7), drive(500)\]\n"
+} -result {[[1, 7, -2], [1, 120, -1]]}
+
+# A tree of depth D alternating and/or/not over comparisons of x.
+proc bfTree {d} {
+    if {$d == 0} {
+        return "x > 3"
+    }
+    set op [expr {$d % 2 ? "and" : "or"}]
+    set inner [bfTree [expr {$d - 1}]]
+    if {$d % 3 == 0} {
+        return "not ($inner $op x == $d)"
+    }
+    return "($inner $op x < [expr {$d * 7}])"
+}
+
+# The value of Botlish condition COND at x = X, by Tcl's own expr: the
+# oracle of bf-deep-nesting.
+proc bfOracle {cond x} {
+    set tcl [string map {" and " " && " " or " " || " "not " "!"} $cond]
+    return [expr [string map [list x $x] $tcl]]
+}
+
+test bf-deep-nesting {an alternating and/or/not tree 60 levels deep (the parser stops near 120) lowers deterministically (the same NIR and Tcl twice) and computes what Tcl's own expr computes, on every backend} -body {
+    set cond [bfTree 60]
+    set inputs {0 3 4 5 30 59 60 61 300 419 420 421}
+    set source "fn f(x: int) -> int:\n    if $cond:\n        1\n    else:\n        2\n\nxs = \[[join $inputs {, }]\]\nloop x in xs:\n    f(x)\n"
+    # (The Tcl compiler numbers its variables and procs across compilations.)
+    set first [list [native::nir [bfHir $source]] [regsub -all {\m([vt]|block)[0-9]+\M} [bfTclBody [bfHir $source] f] {\1}]]
+    set second [list [native::nir [bfHir $source]] [regsub -all {\m([vt]|block)[0-9]+\M} [bfTclBody [bfHir $source] f] {\1}]]
+    set expected "\[[join [lmap x $inputs {expr {[bfOracle $cond $x] ? 1 : 2}}] {, }]\]"
+    list [expr {$first eq $second}] [expr {[bfValue $source] eq $expected}] \
+        [lsort -unique [lmap x $inputs {bfOracle $cond $x}]] [lindex [bfBools [bfNirBody [lindex $first 0] f]] 0]
+} -result {1 1 {0 1} 0}
+
+# ---------------------------------------------------------------------------
+# What stays where it is
+
+test bf-source-audit {one rule, two emitters: both compilers read hir::condition and neither knows `and`/`or`/`not` (HIR has no such node); hir::range::Paths, the proof decomposition, is not the lowering's; the interpreter evaluates conditions as values (its tree walk has no branch form)} -body {
+    set read {{path} {
+        set f [open $path r]
+        fconfigure $f -encoding utf-8
+        set text [read $f]
+        close $f
+        return $text
+    }}
+    set compiler [apply $read [file join $::projectRoot compiler compiler.tcl]]
+    set lower [apply $read [file join $::projectRoot native lower.tcl]]
+    set condition [apply $read [file join $::projectRoot hir condition.tcl]]
+    set evaluator [apply $read [file join $::projectRoot core evaluator.tcl]]
+    list [regexp -all {hir::condition::form} $compiler] [regexp {hir::condition::form} $lower] \
+        [regexp {"(and|or|not)"} $compiler] [regexp {"(and|or|not)"} $lower] \
+        [regexp -line {^[^#]*hir::range::} $condition] [regexp {hir::condition::} $evaluator] \
+        [regexp {hir::condition::} [apply $read [file join $::projectRoot hir range.tcl]]]
+} -result {1 1 0 0 0 0 0}
+
+cleanupTests

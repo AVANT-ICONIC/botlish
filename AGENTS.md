@@ -601,6 +601,39 @@ analysis's `BranchOutcome`, run `tests/type-predicates.test`,
 `mutants.txt` must still apply and be killed: update a mutant's text when
 you change the code it mutates, keeping it a mutant of the same rule).
 
+## Branch-form Boolean conditions
+
+An `if` condition is lowered as a branch, not as a Bool to branch on
+(BRANCH-FORM-BOOLEAN-LOWERING.md). `hir/condition.tcl` states, once, which
+expressions have a branch form -- the root Booleans and the `if`s `and`,
+`or`, `not` and `!=` lower to (surface/lower.tcl) -- and the two compilers
+emit it: the Tcl compiler's `CompileCondition` as one Tcl test built from
+`&&`, `||`, `!` and `?:` (an operand's code inside its side, a command
+substitution), native lowering's `Condition` as branches to the `if`'s two
+arms (`StaticOutcome` applies M6's range-decided rule through the Boolean
+structure; `BranchDemand` lets an inlined region consumer branch itself).
+It changes representation only: every operand runs where, and only where,
+its value form runs it, once, in order. HIR is unchanged (no branch node,
+flag or side table), the interpreter evaluates conditions as values, and a
+Bool used as a value is still built. Never add backend-specific Boolean
+semantics, a Boolean node to HIR or Core IR, a peephole over materialized
+Bools, or proof reasoning to the lowering (`hir::range::Paths` stays the
+analyses', with its own budget; the lowering has none).
+
+If you change `hir/condition.tcl`, the compilers' condition lowering
+(compiler/compiler.tcl's `CompileIf`, `CompileCondition`, `ConditionIf`,
+`ConditionBranch`, `BoolResult`; native/lower.tcl's `If`, `Condition`,
+`ConditionIf`, `ConditionBody`, `BodyTarget`, `StaticOutcome`,
+`BranchDemand`, `EmitRegionConsumerCondition`), how `and`/`or`/`not`/`!=`
+lower, the releases after a branch's statements, or region-consumer
+inlining, run `tests/branch-form-boolean.test`, its golden suite
+(`tclsh9.0 tests/local.tcl tests/golden/branch-form-boolean.bot`) and
+`audit/branch-form-boolean/tools/mutate.tcl` (every mutant in its
+`mutants.txt` must still apply and be killed: update a mutant's text when
+you change the code it mutates, keeping it a mutant of the same rule).
+`bench/branch-form-boolean.tcl` regenerates the performance report
+(`-root DIR` measures another checkout; `-programs FILES` real programs).
+
 ## Traits
 
 Traits (TRAITS.md) are eager, one-way, entirely static views: a trait-typed

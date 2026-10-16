@@ -205,7 +205,10 @@ proc core::compiler::Define {unit} {
 # trusted: it may come from hir::parse rather than a front end.
 proc core::compiler::compileHir {hir} {
     hir::activate $hir
-    return [Define [GenerateUnit [hir::mode $hir] $hir]]
+    # Compiling recurses as deep as the program nests (a left-deep `and`
+    # chain: BRANCH-FORM-BOOLEAN-LOWERING.md), under the front end's
+    # recursion floor (hir::Deep); the unit then runs under the caller's.
+    return [Define [hir::Deep {GenerateUnit [hir::mode $hir] $hir}]]
 }
 
 # Runs the program-mode UNIT (compileHir's) in the existing environment ENV,
@@ -1326,17 +1329,24 @@ proc core::compiler::CompileNativeCall {ctxVar e callee name argOps} {
         # counts, never a handler or an `errors` clause.
         return [GenericCall ctx $callee $argOps]
     }
+    # Demanded as a branch (CompileCondition): a Boolean intrinsic answers
+    # with its test instead of a temporary holding it (BoolResult).
+    dict set ctx branch [expr {[dict exists $ctx condition] && [dict get $ctx condition] eq $e}]
     if {[dict exists $intrinsics $name]} {
         set result [{*}[dict get $intrinsics $name] ctx $name $argOps]
         if {$result ne ""} {
+            dict set ctx branch 0
             return $result
         }
     }
     set testsType [dict get $meta testsType]
     if {$testsType ne ""} {
         set param [lindex [dict get $meta paramTypes] 0]
-        return [InlineTypeTest ctx $name [lindex $argOps 0] $testsType $param]
+        set result [InlineTypeTest ctx $name [lindex $argOps 0] $testsType $param]
+        dict set ctx branch 0
+        return $result
     }
+    dict set ctx branch 0
     if {$arity ne "*"} {
         return [DirectNativeCall ctx $name $meta $argOps]
     }
@@ -1432,7 +1442,21 @@ proc core::compiler::IntrinsicCompare {operator ctxVar name argOps} {
         return ""
     }
     set t [NewTemp]
-    Emit ctx "set $t \[expr {[lindex $words 0] $operator [lindex $words 1]}\]"
+    set test "[lindex $words 0] $operator [lindex $words 1]"
+    return [BoolResult ctx $t "\[expr {$test}\]" $test]
+}
+
+# The operand of a Boolean intrinsic computed by the Tcl command substitution
+# VALUE, which is the Tcl expression TEST: demanded as a branch (ctx
+# `branch`, set by CompileNativeCall for the call CompileCondition lowers),
+# TEST itself, a `cond` operand only CompileCondition receives; otherwise
+# temporary T set to VALUE (BRANCH-FORM-BOOLEAN-LOWERING.md).
+proc core::compiler::BoolResult {ctxVar t value test} {
+    upvar 1 $ctxVar ctx
+    if {[dict exists $ctx branch] && [dict get $ctx branch]} {
+        return [Op cond $test bool]
+    }
+    Emit ctx "set $t $value"
     return [Op bool "\$$t" bool]
 }
 
@@ -1450,13 +1474,16 @@ proc core::compiler::IntrinsicValueEqual {ctxVar name argOps} {
     }
     switch -- $ka {
         int {
-            Emit ctx "set $t \[expr {[IntWord $a] == [IntWord $b]}\]"
+            set test "[IntWord $a] == [IntWord $b]"
+            return [BoolResult ctx $t "\[expr {$test}\]" $test]
         }
         bool {
-            Emit ctx "set $t \[expr {[BoolWord $a] == [BoolWord $b]}\]"
+            set test "[BoolWord $a] == [BoolWord $b]"
+            return [BoolResult ctx $t "\[expr {$test}\]" $test]
         }
         str {
-            Emit ctx "set $t \[string equal \[lindex [BoxWord $a] 1\] \[lindex [BoxWord $b] 1\]\]"
+            set test "\[string equal \[lindex [BoxWord $a] 1\] \[lindex [BoxWord $b] 1\]\]"
+            return [BoolResult ctx $t $test $test]
         }
         unit {
             return [Op bool 1 bool]
@@ -1465,7 +1492,6 @@ proc core::compiler::IntrinsicValueEqual {ctxVar name argOps} {
             return ""
         }
     }
-    return [Op bool "\$$t" bool]
 }
 
 proc core::compiler::IntrinsicList {ctxVar name argOps} {
@@ -1484,8 +1510,8 @@ proc core::compiler::IntrinsicResultIs {tag ctxVar name argOps} {
     }
     set word [BoxWord $arg]
     set t [NewTemp]
-    Emit ctx "set $t \[expr {\[lindex $word 0\] eq {result} && \[lindex $word 1\] eq {$tag}}\]"
-    return [Op bool "\$$t" bool]
+    set test "\[lindex $word 0\] eq {result} && \[lindex $word 1\] eq {$tag}"
+    return [BoolResult ctx $t "\[expr {$test}\]" $test]
 }
 
 # A native declared with -tests-type T (see core/native.tcl) returns exactly
@@ -1504,11 +1530,11 @@ proc core::compiler::InlineTypeTest {ctxVar name arg testsType param} {
     }
     set t [NewTemp]
     if {[llength $testsType] == 1} {
-        Emit ctx "set $t \[string equal \[lindex $word 0\] $testsType\]"
+        set test "\[string equal \[lindex $word 0\] $testsType\]"
     } else {
-        Emit ctx "set $t \[core::type::acceptsCanonical [Word $testsType] $word\]"
+        set test "\[core::type::acceptsCanonical [Word $testsType] $word\]"
     }
-    return [Op bool "\$$t" bool]
+    return [BoolResult ctx $t $test $test]
 }
 
 # ---------------------------------------------------------------------------
@@ -1517,28 +1543,36 @@ proc core::compiler::InlineTypeTest {ctxVar name arg testsType param} {
 proc core::compiler::CompileIf {ctxVar e} {
     upvar 1 $ctxVar ctx
     set condition [N $e condition]
-    set refining [expr {[Kind $condition] eq "call" && [Kind [N $condition callee]] eq "ref"}]
+    # A materialized branch installs the refinements the runtime rule proves
+    # for the callee value actually called (below): that condition is the
+    # callee's value. Every other condition is lowered as a branch.
+    set refining [expr {[InstallsRefinements $condition] && [Kind [N $condition callee]] eq "ref"}]
     if {$refining} {
         set test [ReleasingOnError ctx $condition {CompileCall ctx $condition callee argOps}]
-        if {[OpType $test] ne "never"} {
-            set test [lreplace $test 2 2 [Type $condition]]
+        if {[OpType $test] eq "never"} {
+            return $test
         }
+        set test [lreplace $test 2 2 [Type $condition]]
+        if {[OpType $test] eq "bool"} {
+            set outcome [BoolWord $test]
+        } else {
+            set outcome [NewTemp]
+            Emit ctx "set $outcome \[core::runtime::conditionOutcome [BoxWord $test]\]"
+            set outcome "\$$outcome"
+        }
+        set decided [IsLiteral $outcome]
     } else {
-        set test [CompileExpr ctx $condition]
-    }
-    if {[OpType $test] eq "never"} {
-        return $test
-    }
-    if {[OpType $test] eq "bool"} {
-        set outcome [BoolWord $test]
-    } else {
-        set outcome [NewTemp]
-        Emit ctx "set $outcome \[core::runtime::conditionOutcome [BoxWord $test]\]"
-        set outcome "\$$outcome"
+        set out {}
+        set status [CompileCondition ctx $condition out]
+        if {$status eq "never"} {
+            return [Never]
+        }
+        set decided [expr {[lindex $status 0] eq "literal"}]
+        set outcome [expr {$decided ? [lindex $status 1] : [join $out {}]}]
     }
 
     set outcomes {1 0}
-    if {[IsLiteral $outcome]} {
+    if {$decided} {
         set outcomes [list $outcome]
     }
     set parentFrame [CurrentFrameExpr $ctx]
@@ -1612,6 +1646,222 @@ proc core::compiler::CompileIf {ctxVar e} {
         return [Never]
     }
     return [Op $repr "\$$result" any]
+}
+
+# ---------------------------------------------------------------------------
+# Conditions (BRANCH-FORM-BOOLEAN-LOWERING.md)
+#
+# An `if` condition is demanded as a branch, not as a value: CompileCondition
+# lowers it to a Tcl expression that is true exactly when the condition is,
+# which CompileIf tests directly (`if {TEST} {...}`). Its branch form is
+# hir::condition's: a Boolean constant is 1 or 0, and an `if` -- what `and`,
+# `or`, `not` and `!=` lower to -- composes its condition's test with its
+# branches' through Tcl's short-circuit operators, each operand evaluated
+# where and only where the value form would evaluate it:
+#
+#   if C {T} {false}     (C)&&(T)          a and b
+#   if C {true} {E}      (C)||(E)          a or b
+#   if C {false} {true}  !(C)              not a, a != b
+#   if C {true} {false}  C
+#   if C {T} {E}         (C)?(T):(E)       any other Boolean-valued if
+#
+# so `if 0 <= x and x <= 9:` becomes `if {(0 <= X)&&(X <= 9)} {`: no Bool,
+# boxed or bare, is made for the branch. A branch's statements, and the code
+# an operand needs before its test, run inside its operand: `[CODE\nexpr
+# {TEST}]`, a command substitution Tcl compiles inline (a `break`,
+# `continue`, `return` or error in it completes the enclosing command as
+# anywhere else). Anything else is its value, tested: a Boolean intrinsic
+# (< <= > >= ==, ok?/error?, a type test) answers a branch demand with its
+# test instead of a temporary (BoolResult), another Bool its 1/0 word, and a
+# value not statically a Bool core::runtime::conditionOutcome's (which raises
+# NOT-BOOLEAN). The text is built once, in order, into one list of pieces
+# (OUT): no operand's text is copied into another's.
+
+# Lowers condition E as a branch, appending the pieces of its test to the
+# caller's list OUTVAR and emitting into ctx the code that runs before the
+# test. Returns `test` (the pieces are E's test), `literal 1`/`literal 0`
+# (E's outcome is decided, nothing was appended) or `never` (E does not
+# complete normally).
+proc core::compiler::CompileCondition {ctxVar e outVar} {
+    upvar 1 $ctxVar ctx $outVar out
+    variable hir
+    switch -- [hir::condition::form $hir $e] {
+        true {
+            return {literal 1}
+        }
+        false {
+            return {literal 0}
+        }
+        if {
+            if {![InstallsRefinements [N $e condition]]} {
+                return [ConditionIf ctx $e out]
+            }
+        }
+    }
+    # Its value, tested. A Boolean intrinsic call answers the demand with
+    # its test (CompileNativeCall, BoolResult), except where the call's code
+    # runs inside a catch releasing on its error (ReleasingOnError keeps a
+    # value).
+    set demanded [expr {[dict exists $ctx condition] ? [dict get $ctx condition] : ""}]
+    if {[Kind $e] eq "call" && [hir::affine::releasesOnError $hir $e] eq ""} {
+        dict set ctx condition $e
+    }
+    set op [CompileExpr ctx $e]
+    dict set ctx condition $demanded
+    if {[OpType $op] eq "never"} {
+        return never
+    }
+    return [ConditionOperand $op out]
+}
+
+# The test of operand OP, a condition's value (CompileCondition's status).
+proc core::compiler::ConditionOperand {op outVar} {
+    upvar 1 $outVar out
+    lassign $op repr word type
+    if {$repr eq "cond"} {
+        lappend out $word
+        return test
+    }
+    if {$type eq "bool"} {
+        set test [BoolWord $op]
+        if {[IsLiteral $test]} {
+            return [list literal $test]
+        }
+        lappend out $test
+        return test
+    }
+    lappend out "\[core::runtime::conditionOutcome [BoxWord $op]\]"
+    return test
+}
+
+# An `if` E lowered as a branch (CompileCondition): its condition's test
+# composed with its branches' (above). A branch that is one Boolean constant
+# (hir::condition::constant) is that constant's side of the operator.
+proc core::compiler::ConditionIf {ctxVar e outVar} {
+    upvar 1 $ctxVar ctx $outVar out
+    variable hir
+    set constants [list [hir::condition::constant $hir [N $e thenBody]] \
+        [hir::condition::constant $hir [N $e elseBody]]]
+    # The text before, between and after the condition C and the branches
+    # T and E that are lowered.
+    switch -- [join $constants ,] {
+        1,0 { set shape {{} {} {} {} {}} }
+        0,1 { set shape {!( ) {} {} {}} }
+        ,0  { set shape {( )&&( then {} {}} }
+        ,1  { set shape {!( )||( then {} {}} }
+        1,  { set shape {( )||( {} {} else} }
+        0,  { set shape {!( )&&( {} {} else} }
+        1,1 { set shape {( )||1 {} {} {}} }
+        0,0 { set shape {( )&&0 {} {} {}} }
+        ,   { set shape {( )?( then ):( else} }
+    }
+    lassign $shape before afterTest then between else
+    set first [llength $out]
+    lappend out $before
+    set status [CompileCondition ctx [N $e condition] out]
+    if {$status eq "never"} {
+        return never
+    }
+    if {[lindex $status 0] eq "literal"} {
+        # Decided: only the branch that runs is lowered, inline.
+        lset out $first {}
+        set outcome [lindex $status 1]
+        set constant [lindex $constants [expr {!$outcome}]]
+        if {$constant ne ""} {
+            return [list literal $constant]
+        }
+        return [ConditionBranch ctx $e [expr {$outcome ? "then" : "else"}] out 0]
+    }
+    lappend out $afterTest
+    set reached [expr {"1" in $constants || "0" in $constants}]
+    if {$then ne ""} {
+        if {[ConditionBranch ctx $e then out 1] ne "never"} {
+            set reached 1
+        }
+    }
+    lappend out $between
+    if {$else ne ""} {
+        if {[ConditionBranch ctx $e else out 1] ne "never"} {
+            set reached 1
+        }
+    }
+    lappend out [expr {$then ne "" || $else ne "" ? ")" : ""}]
+    if {!$reached} {
+        # Neither branch completes: the test runs for its effects only.
+        Emit ctx "expr {[join [lrange $out $first end] {}]}"
+        return never
+    }
+    return test
+}
+
+# Branch ROLE (then/else) of `if` E lowered as a branch (ConditionIf): its
+# statements, then its last expression's test, appended to OUTVAR. SUBSTITUTE
+# 1: the branch runs only when its side of the condition is taken, so its
+# code goes inside its test (a command substitution, above); 0: the branch
+# is the one a decided condition always runs, emitted in place. Returns the
+# branch's status (CompileCondition's).
+proc core::compiler::ConditionBranch {ctxVar e role outVar substitute} {
+    upvar 1 $ctxVar ctx $outVar out
+    variable hir
+    set parentFrame [CurrentFrameExpr $ctx]
+    if {$substitute} {
+        set savedLines [dict get $ctx lines]
+        dict set ctx lines {}
+        set first [llength $out]
+        lappend out {}
+    }
+    set id [N $e ${role}Scope]
+    OpenScope ctx $id $parentFrame
+    DeclareScope ctx $id
+    set body [N $e ${role}Body]
+    set status never
+    foreach statement [lrange $body 0 end-1] {
+        set op [CompileExpr ctx $statement]
+        if {[OpType $op] eq "never"} {
+            break
+        }
+        foreach item [hir::affine::releasesAfter $hir $statement] {
+            CompileRelease ctx $item [expr {$item eq $statement ? $op : ""}]
+        }
+    }
+    if {![info exists op] || [OpType $op] ne "never"} {
+        set last [lindex $body end]
+        if {[hir::condition::releasing $hir $last]} {
+            # Values released after the last expression: its value, the
+            # releases, then its test (CompileSequence's order).
+            set op [CompileExpr ctx $last]
+            if {[OpType $op] ne "never"} {
+                foreach item [hir::affine::releasesAfter $hir $last] {
+                    CompileRelease ctx $item [expr {$item eq $last ? $op : ""}]
+                }
+                set status [ConditionOperand $op out]
+            }
+        } else {
+            set status [CompileCondition ctx $last out]
+        }
+    }
+    PopScope ctx
+    if {!$substitute} {
+        return $status
+    }
+    # (The branch's own indentation is dropped inside its operand.)
+    set lines [lmap line [dict get $ctx lines] {string trimleft $line}]
+    dict set ctx lines $savedLines
+    if {$status eq "never"} {
+        # The branch does not complete: its code alone (whatever its
+        # unfinished test appended is dropped).
+        set out [lreplace $out[set out {}] $first end]
+        lappend out [expr {$lines eq {} ? 0 : "\[[join $lines \n]\]"}]
+        return never
+    }
+    if {[lindex $status 0] eq "literal"} {
+        lappend out [lindex $status 1]
+    }
+    if {$lines ne {}} {
+        lset out $first "\[[join $lines \n]\nexpr \{"
+        lappend out "\}\]"
+    }
+    return test
 }
 
 proc core::compiler::CompileLoop {ctxVar e} {

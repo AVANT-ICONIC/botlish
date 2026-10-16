@@ -126,7 +126,10 @@
 #
 # `not`, `and`, `or` and `!=` are conditions, not calls: `and` and `or`
 # evaluate their right operand only when needed, and every operand must be a
-# Boolean (NOT-BOOLEAN otherwise), so their value is always a Boolean.
+# Boolean (NOT-BOOLEAN otherwise), so their value is always a Boolean. As the
+# condition of an `if`, the compilers lower these `if`s straight to branches
+# (hir/condition.tcl, BRANCH-FORM-BOOLEAN-LOWERING.md); HIR keeps no other
+# form of them.
 #
 # Origins: every syntax node gets {file f1 node ID start .. end .. line ..
 # column .. endLine .. endColumn ..} from the AST node it comes from (ID is

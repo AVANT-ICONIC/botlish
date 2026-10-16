@@ -182,10 +182,10 @@ test types-2 {program-level binding types} -body {
     }] {hir::types::show $type}
 } -result {n int s str b bool r result l {List[int]} p {native +} u any}
 
-test types-3 {typed arithmetic compiles to inline code without generic calls} -body {
+test types-3 {typed arithmetic compiles to inline code without generic calls: the three arithmetic operations as expressions, and the comparison as the test of its `if` (BRANCH-FORM-BOOLEAN-LOWERING.md)} -body {
     set code [core::compiler::generatedCode [core::readProgramFile [file join $::projectRoot bench fib.ir]]]
-    list [regexp -all {callValue} $code] [regexp -all {expr \{} $code]
-} -result {0 4}
+    list [regexp -all {callValue} $code] [regexp -all {expr \{} $code] [regexp -all {if \{\[lindex \$v[0-9]+ 1\] < 2\} \{} $code]
+} -result {0 3 1}
 
 test types-4 {a known-kind check folds away the untaken branch} -body {
     set code [core::compiler::generatedCode {

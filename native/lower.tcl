@@ -6167,7 +6167,7 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
             foreach k [hir::stringregion::consumingParamsOf $stringregion $consumerInstance] {
                 set argExpr [lindex $argExprs $k]
                 if {$argExpr ne "" && [RegionEligible $argExpr]} {
-                    return [InlineRegionConsumerCall fn $argExpr $consumerInstance $k]
+                    return [InlineRegionConsumerCall fn $e $argExpr $consumerInstance $k]
                 }
             }
         }
@@ -6832,15 +6832,23 @@ proc native::lower::EmitRegionConsumerBody {fnVar calleeView e b region} {
         }
         if {
             set node [hir::node $calleeView $e]
-            set test [EmitRegionConsumerBody fn $calleeView [dict get $node condition] $b $region]
-            if {$test eq "never"} {
-                return never
+            set condition [dict get $node condition]
+            set branch [expr {[hir::condition::form $calleeView $condition] ne "value"}]
+            if {!$branch} {
+                set test [EmitRegionConsumerBody fn $calleeView $condition $b $region]
+                if {$test eq "never"} {
+                    return never
+                }
             }
             set then [NewLabel fn]
             set else [NewLabel fn]
             set join [NewLabel fn]
             set result [NewReg fn]
-            Emit fn "br $test $then $else" $e
+            if {!$branch} {
+                Emit fn "br $test $then $else" $e
+            } elseif {[EmitRegionConsumerCondition fn $calleeView $condition $b $region $then $else] eq "never"} {
+                return never
+            }
             set joined 0
             foreach {label bodyKey} [list $then thenBody $else elseBody] {
                 EmitLabel fn $label
@@ -6884,12 +6892,64 @@ proc native::lower::EmitRegionConsumerBody {fnVar calleeView e b region} {
     throw {NATIVE BUG} "native lowering: unexpected region-consumer body shape at $e"
 }
 
+# Lowers region-consumer expression E (as EmitRegionConsumerBody does) as a
+# branch to labels T/F: Condition's rule (BRANCH-FORM-BOOLEAN-LOWERING.md,
+# hir/condition.tcl) over the consumer body's shapes, which have no guards,
+# Ranges or statements of their own. Returns never if no path reaches T or
+# F.
+proc native::lower::EmitRegionConsumerCondition {fnVar calleeView e b region t f} {
+    upvar 1 $fnVar fn
+    switch -- [hir::condition::form $calleeView $e] {
+        true {
+            Emit fn "jump $t" $e
+            return ""
+        }
+        false {
+            Emit fn "jump $f" $e
+            return ""
+        }
+        if {
+            set node [hir::node $calleeView $e]
+            set targets {}
+            set blocks {}
+            foreach role {then else} {
+                set constant [hir::condition::constant $calleeView [dict get $node ${role}Body]]
+                if {$constant ne ""} {
+                    lappend targets [expr {$constant ? $t : $f}]
+                } else {
+                    set label [NewLabel fn]
+                    lappend targets $label
+                    lappend blocks $label $role
+                }
+            }
+            if {[EmitRegionConsumerCondition fn $calleeView [dict get $node condition] $b $region {*}$targets] eq "never"} {
+                return never
+            }
+            set reached [expr {[llength $blocks] < 4}]
+            foreach {label role} $blocks {
+                EmitLabel fn $label
+                set body [dict get $node ${role}Body]
+                if {[EmitRegionConsumerCondition fn $calleeView [lindex $body 0] $b $region $t $f] ne "never"} {
+                    set reached 1
+                }
+            }
+            return [expr {$reached ? "" : "never"}]
+        }
+    }
+    set test [EmitRegionConsumerBody fn $calleeView $e $b $region]
+    if {$test eq "never"} {
+        return never
+    }
+    Emit fn "br $test $t $f" $e
+    return ""
+}
+
 # Lowers a direct call to CALLEEID (view BASEHIR/SPEC), given a region-
 # eligible argument expression ARGEXPR at its consuming parameter index
 # PARAMINDEX (hir::stringregion::consumingParamsOf), by inlining CALLEEID's
 # own body against that region (EmitRegionConsumerBody) instead of an actual
 # call. Returns {RESULT tagged}, exactly like Call's other dispatch cases.
-proc native::lower::InlineRegionConsumerCall {fnVar argExpr calleeId paramIndex} {
+proc native::lower::InlineRegionConsumerCall {fnVar e argExpr calleeId paramIndex} {
     upvar 1 $fnVar fn
     variable baseHir
     variable spec
@@ -6906,6 +6966,21 @@ proc native::lower::InlineRegionConsumerCall {fnVar argExpr calleeId paramIndex}
         if {[EmitRegionConsumerBody fn $calleeView $stmt $b $region] eq "never"} {
             return {never tagged}
         }
+    }
+    if {[dict exists $fn branch] && [lindex [dict get $fn branch] 0] eq $e} {
+        # The call is a condition demanded as a branch (BranchDemand): the
+        # inlined body's value goes straight to the demand's targets, and
+        # the call has no value register.
+        lassign [dict get $fn branch] - t f
+        if {$t eq ""} {
+            set t [NewLabel fn]
+            set f [NewLabel fn]
+        }
+        dict set fn branch [list taken $t $f]
+        if {[EmitRegionConsumerCondition fn $calleeView [lindex $body end] $b $region $t $f] eq "never"} {
+            return {never tagged}
+        }
+        return {{} tagged}
     }
     set result [EmitRegionConsumerBody fn $calleeView [lindex $body end] $b $region]
     if {$result eq "never"} {
@@ -8124,21 +8199,34 @@ proc native::lower::If {fnVar e node {family ""} {virtualN ""} {virtualCut ""} {
     # registers (PureDecidedCondition, M6's "condition-expression purity"
     # theorem in its narrowest form, LINUX-X86-64-SYSCALL.md), which a
     # decided outcome makes dead code. Only the runtime branch this decided
-    # outcome would make redundant is skipped otherwise.
-    set outcome [hir::range::ConditionOutcome $hir $ranges $currentInstance $condition]
-    if {$outcome ne "" && ![dict exists $guards $key] && ![dict exists $knownErrors $key]
-            && [PureDecidedCondition fn $condition]} {
+    # outcome would make redundant is skipped otherwise. StaticOutcome
+    # composes that purity through `and`, `or`, `not` and `!=`
+    # (BRANCH-FORM-BOOLEAN-LOWERING.md).
+    set checked [expr {[dict exists $guards $key] || [dict exists $knownErrors $key]}]
+    dict set fn staticOutcomes {}
+    set static [StaticOutcome fn $e $condition]
+    set outcome [expr {$static ne "" ? $static
+        : [hir::range::ConditionOutcome $hir $ranges $currentInstance $condition]}]
+    # An undecided condition with a branch form of its own (`and`, `or`,
+    # `not`, `!=`, a Boolean-valued `if`; hir/condition.tcl) is lowered as a
+    # branch to the two arms below (Condition), not as a Bool to branch on.
+    set branch [expr {$outcome eq "" && !$checked && [hir::condition::form $hir $condition] ne "value"}]
+    set taken ""
+    if {$static ne ""} {
         dict incr fn skippedGuards [SkippedBlockers [list $condition]]
-    } else {
-        set test [Expr fn $condition]
+    } elseif {!$branch} {
+        if {$outcome eq "" && !$checked} {
+            # A call may still take its condition as a branch (BranchDemand),
+            # to the two arms, whose labels it then makes.
+            lassign [BranchDemand fn $condition "" ""] test taken
+        } else {
+            set test [Expr fn $condition]
+        }
         if {$test eq "never"} {
             return never
         }
-        if {[dict exists $guards $key] || [dict exists $knownErrors $key]} {
-            Emit fn "guardbool $test" $e
-            dict incr fn [expr {[dict exists $guards $key] ? "guards" : "knownErrorGuards"}]
-        } elseif {[hir::types::kindOf [hir::typeOf $hir $condition]] ne "bool"} {
-            throw {NATIVE BUG} "native lowering: hir::aot reports no Boolean check for $condition ($e)"
+        if {$taken eq ""} {
+            CheckCondition fn $e $condition $test
         }
     }
     if {$outcome ne ""} {
@@ -8164,8 +8252,12 @@ proc native::lower::If {fnVar e node {family ""} {virtualN ""} {virtualCut ""} {
         dict set fn rawCache $savedRaw
         return $value
     }
-    set then [NewLabel fn]
-    set else [NewLabel fn]
+    if {$taken ne ""} {
+        lassign $taken then else
+    } else {
+        set then [NewLabel fn]
+        set else [NewLabel fn]
+    }
     set join [NewLabel fn]
     # A virtual struct join (branch merging): one result register per field.
     set result [expr {$virtualN ne "" ? [NewRegs fn $virtualN] : [NewReg fn]}]
@@ -8186,7 +8278,13 @@ proc native::lower::If {fnVar e node {family ""} {virtualN ""} {virtualCut ""} {
         # branch's value is moved in as a plan or flat value alike.
         MarkPlan fn $result
     }
-    Emit fn "br $test $then $else" $e
+    if {$branch} {
+        if {[Condition fn $condition $then $else] eq "never"} {
+            return never
+        }
+    } elseif {$taken eq ""} {
+        Emit fn "br $test $then $else" $e
+    }
     set joined 0
     foreach {label role} [list $then then $else else] {
         EmitLabel fn $label
@@ -8227,6 +8325,321 @@ proc native::lower::If {fnVar e node {family ""} {virtualN ""} {virtualCut ""} {
     }
     EmitLabel fn $join
     return $result
+}
+
+# The check of TEST, the value of the condition CONDITION of `if` E: a
+# Boolean guard where hir::aot reports one (a condition not statically a
+# Bool), and otherwise none, the condition's type being Bool.
+proc native::lower::CheckCondition {fnVar e condition test} {
+    upvar 1 $fnVar fn
+    variable hir
+    variable guards
+    variable knownErrors
+    set key [list $e $condition]
+    if {[dict exists $guards $key] || [dict exists $knownErrors $key]} {
+        Emit fn "guardbool $test" $e
+        dict incr fn [expr {[dict exists $guards $key] ? "guards" : "knownErrorGuards"}]
+    } elseif {[hir::types::kindOf [hir::typeOf $hir $condition]] ne "bool"} {
+        throw {NATIVE BUG} "native lowering: hir::aot reports no Boolean check for $condition ($e)"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Conditions (BRANCH-FORM-BOOLEAN-LOWERING.md)
+#
+# An `if` condition is demanded as a branch: Condition lowers it straight to
+# control flow, to the `if`'s two arms, in the branch form hir/condition.tcl
+# states. A Boolean constant is a `jump`; an `if` -- what `and`, `or`, `not`
+# and `!=` lower to -- is its condition lowered as a branch to its two
+# branches, each of which is its statements and then its last expression
+# lowered as a branch to the same two targets (a branch that is one Boolean
+# constant is no block at all: its side goes to that target directly);
+# anything else is its value and a `br` on it. So
+#
+#   if x >= 0 and x <= 9: A else: B
+#
+# is `%c1 = op rige x 0; br %c1 MID ELSE; MID: %c2 = op rile x 9; br %c2
+# THEN ELSE`: no `bool` constant, no `move` and no join block exists for the
+# conjunction. A nested `if` keeps every rule If has for its own condition --
+# the instance's range-decided outcome (only the decided branch is lowered,
+# and a pure condition is not evaluated: M6-RANGE-DECIDED-BRANCH-LOWERING.md),
+# the Boolean guard hir::aot asks for, the branches HIR left unreachable --
+# and an affine value released after a branch's last expression keeps its
+# order: the value, the release, then the `br` (ConditionBody). Each operand
+# is lowered once, where it runs.
+
+# Lowers condition E as a branch: control goes on at label T when E is true
+# and at label F when it is false. Returns never if no path does (as Expr
+# does), "" otherwise.
+proc native::lower::Condition {fnVar e t f} {
+    upvar 1 $fnVar fn
+    variable hir
+    switch -- [hir::condition::form $hir $e] {
+        true {
+            Emit fn "jump $t" $e
+            return ""
+        }
+        false {
+            Emit fn "jump $f" $e
+            return ""
+        }
+        if {
+            if {[ConditionIf fn $e [hir::node $hir $e] $t $f] eq "never"} {
+                return [Never fn $e]
+            }
+            return ""
+        }
+    }
+    # Its value, and a `br` on it -- unless the call's lowering takes the
+    # branch demand (BranchDemand).
+    lassign [BranchDemand fn $e $t $f] test taken
+    if {$test eq "never"} {
+        return never
+    }
+    if {$taken eq ""} {
+        ConditionTest fn $e $test $t $f
+    }
+    return ""
+}
+
+# {TEST TAKEN}: condition E lowered by Expr, with E demanded as a branch to
+# labels T/F when it is a call. The one lowering that produces a call's Bool
+# as control flow itself -- the inlined body of a region consumer
+# (InlineRegionConsumerCall) -- takes the demand: it branches to T/F (with
+# T and F "", to two labels it makes) and returns no register. TAKEN is
+# then {T F}, and "" when the demand was not taken (TEST is the value).
+# Every other lowering ignores the demand; a call whose error edge releases
+# (Call's pad expects a value) is not demanded. Expr may lower other
+# conditions meanwhile: each keeps its own demand (fn `branch`).
+proc native::lower::BranchDemand {fnVar e t f} {
+    upvar 1 $fnVar fn
+    variable hir
+    if {[hir::kind $hir $e] ne "call" || [hir::affine::releasesOnError $hir $e] ne ""} {
+        return [list [Expr fn $e] ""]
+    }
+    set outer [expr {[dict exists $fn branch] ? [dict get $fn branch] : ""}]
+    dict set fn branch [list $e $t $f]
+    set test [Expr fn $e]
+    set taken ""
+    if {[lindex [dict get $fn branch] 0] eq "taken"} {
+        set taken [lrange [dict get $fn branch] 1 2]
+    }
+    dict set fn branch $outer
+    return [list $test $taken]
+}
+
+# The `br` to T/F on TEST, the value of condition E lowered as a branch: E
+# is the condition of an `if` with no Boolean guard (Condition is only asked
+# for one: CheckCondition) or the last expression of a branch of one whose
+# type is Bool, so E's type is Bool.
+proc native::lower::ConditionTest {fnVar e test t f} {
+    upvar 1 $fnVar fn
+    variable hir
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] ne "bool"} {
+        throw {NATIVE BUG} "native lowering: a condition lowered as a branch is not a Bool ($e)"
+    }
+    Emit fn "br $test $t $f" $e
+}
+
+# `if` E (NODE) lowered as a branch to T/F (Condition): its condition decided
+# by the instance's Ranges, as If decides it, or lowered as a branch (or,
+# with a Boolean guard, as a value) to its branches, each of them lowered as
+# a branch to T/F (ConditionBody). Returns never if no path reaches T or F.
+proc native::lower::ConditionIf {fnVar e node t f} {
+    upvar 1 $fnVar fn
+    variable hir
+    variable guards
+    variable knownErrors
+    variable ranges
+    variable currentInstance
+    set condition [dict get $node condition]
+    set key [list $e $condition]
+    set checked [expr {[dict exists $guards $key] || [dict exists $knownErrors $key]}]
+    set static [StaticOutcome fn $e $condition]
+    set outcome [expr {$static ne "" ? $static
+        : [hir::range::ConditionOutcome $hir $ranges $currentInstance $condition]}]
+    if {$outcome ne ""} {
+        # Decided (If): only the branch it decides is lowered.
+        if {$static ne ""} {
+            dict incr fn skippedGuards [SkippedBlockers [list $condition]]
+        } else {
+            set test [Expr fn $condition]
+            if {$test eq "never"} {
+                return never
+            }
+            CheckCondition fn $e $condition $test
+        }
+        set role [expr {$outcome ? "then" : "else"}]
+        dict incr fn skippedGuards \
+            [SkippedBlockers [dict get $node [expr {$outcome ? "else" : "then"}]Body]]
+        set saved [dict get $fn locals]
+        set savedRaw [dict get $fn rawCache]
+        set result [ConditionBody fn [dict get $node ${role}Body] $t $f]
+        dict set fn locals $saved
+        dict set fn rawCache $savedRaw
+        return $result
+    }
+    # A branch that needs no code is its target (BodyTarget); any other
+    # gets a block of its own.
+    set targets {}
+    set blocks {}
+    set skipped {}
+    foreach role {then else} {
+        set target [BodyTarget fn [dict get $node ${role}Body] $t $f skipped]
+        if {$target eq ""} {
+            set target [NewLabel fn]
+            lappend blocks $target $role
+        }
+        lappend targets $target
+    }
+    lassign $targets then else
+    if {$checked} {
+        set test [Expr fn $condition]
+        if {$test eq "never"} {
+            return never
+        }
+        CheckCondition fn $e $condition $test
+        Emit fn "br $test $then $else" $e
+    } elseif {[Condition fn $condition $then $else] eq "never"} {
+        return never
+    }
+    foreach exprs $skipped {
+        dict incr fn skippedGuards [SkippedBlockers $exprs]
+    }
+    set reached [expr {[llength $blocks] < 4}]
+    foreach {label role} $blocks {
+        EmitLabel fn $label
+        set saved [dict get $fn locals]
+        set savedRaw [dict get $fn rawCache]
+        set body [dict get $node ${role}Body]
+        if {![hir::get $hir [lindex $body 0] reachable]} {
+            # HIR decided the condition: this branch never runs.
+            Emit fn unreachable $e
+        } elseif {[ConditionBody fn $body $t $f] ne "never"} {
+            set reached 1
+        }
+        dict set fn locals $saved
+        dict set fn rawCache $savedRaw
+    }
+    return [expr {$reached ? "" : "never"}]
+}
+
+# The target branch BODY of an `if` lowered as a branch to T/F
+# (ConditionIf) goes to with no code of its own, or "" if it needs a block:
+# T or F for one expression whose outcome is known without code
+# (StaticOutcome) and after which nothing is released. The code it skips is
+# appended to SKIPPEDVAR (lists of expressions), for the caller to count as
+# If counts a decided condition, once the branch is known to be lowered.
+proc native::lower::BodyTarget {fnVar body t f skippedVar} {
+    upvar 1 $fnVar fn $skippedVar skipped
+    variable hir
+    set e [lindex $body 0]
+    if {[llength $body] != 1 || [hir::condition::releasing $hir $e]} {
+        return ""
+    }
+    set outcome [StaticOutcome fn "" $e]
+    if {$outcome eq ""} {
+        return ""
+    }
+    lappend skipped [list $e]
+    return [expr {$outcome ? $t : $f}]
+}
+
+# The outcome (1 or 0) condition E has with no code at all, or "": a Boolean
+# constant (hir::condition::form); a condition the instance's Ranges decide
+# whose evaluation has no effect (If's rule: hir::range::ConditionOutcome
+# and PureDecidedCondition, M6-RANGE-DECIDED-BRANCH-LOWERING.md), with no
+# Boolean guard where it is the condition of `if` PARENT; or an `if` whose
+# condition has such an outcome and whose branch for it is one such
+# expression, nothing released after it -- so `x != K`, `not (x < K)` and
+# `a and b` of decided comparisons are decided too. Remembered for the
+# condition If is lowering (fn `staticOutcomes`, which If starts afresh):
+# ConditionIf asks again, level by level, what If's question already
+# answered, so a long chain is walked once, not once per level.
+proc native::lower::StaticOutcome {fnVar parent e} {
+    upvar 1 $fnVar fn
+    set key [list $parent $e]
+    if {[dict exists $fn staticOutcomes $key]} {
+        return [dict get $fn staticOutcomes $key]
+    }
+    set outcome [StaticOutcomeOf fn $parent $e]
+    if {[dict exists $fn staticOutcomes]} {
+        dict set fn staticOutcomes $key $outcome
+    }
+    return $outcome
+}
+
+proc native::lower::StaticOutcomeOf {fnVar parent e} {
+    upvar 1 $fnVar fn
+    variable hir
+    variable guards
+    variable knownErrors
+    variable ranges
+    variable currentInstance
+    set key [list $parent $e]
+    if {[dict exists $guards $key] || [dict exists $knownErrors $key]} {
+        return ""
+    }
+    switch -- [hir::condition::form $hir $e] {
+        true {
+            return 1
+        }
+        false {
+            return 0
+        }
+        value {
+            set outcome [hir::range::ConditionOutcome $hir $ranges $currentInstance $e]
+            if {$outcome ne "" && [PureDecidedCondition fn $e]} {
+                return $outcome
+            }
+            return ""
+        }
+    }
+    set node [hir::node $hir $e]
+    set outcome [StaticOutcome fn $e [dict get $node condition]]
+    if {$outcome eq ""} {
+        return ""
+    }
+    set body [dict get $node [expr {$outcome ? "then" : "else"}]Body]
+    if {[llength $body] != 1 || [hir::condition::releasing $hir [lindex $body 0]]} {
+        return ""
+    }
+    return [StaticOutcome fn "" [lindex $body 0]]
+}
+
+# Branch BODY of an `if` lowered as a branch to T/F (ConditionIf): its
+# statements, as Sequence runs them, then its last expression lowered as a
+# branch -- or, when values are released right after it, its value, the
+# releases (Sequence's order) and a `br` on the value (a Boolean constant's
+# releases and a `jump`: an affine value used on the other side only, say).
+proc native::lower::ConditionBody {fnVar body t f} {
+    upvar 1 $fnVar fn
+    variable hir
+    foreach e [lrange $body 0 end-1] {
+        set result [Expr fn $e]
+        if {$result eq "never"} {
+            return never
+        }
+        ReleaseHandles fn [hir::affine::releasesAfter $hir $e] $e $result
+    }
+    set last [lindex $body end]
+    if {[hir::condition::releasing $hir $last]} {
+        set form [hir::condition::form $hir $last]
+        if {$form in {true false}} {
+            # A Boolean constant has no effect: the releases, then the jump.
+            ReleaseHandles fn [hir::affine::releasesAfter $hir $last] $last
+            Emit fn "jump [expr {$form ? $t : $f}]" $last
+            return ""
+        }
+        set test [Expr fn $last]
+        if {$test eq "never"} {
+            return never
+        }
+        ReleaseHandles fn [hir::affine::releasesAfter $hir $last] $last $test
+        ConditionTest fn $last $test $t $f
+        return ""
+    }
+    return [Condition fn $last $t $f]
 }
 
 # The raw-address provenance (KeepAddrFlow) of a branch's value V moved into

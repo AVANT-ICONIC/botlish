@@ -1,0 +1,209 @@
+# Mutants of BRANCH-FORM-BOOLEAN-LOWERING.md (audit/branch-form-boolean/
+# tools/mutate.tcl): the milestone's kill list, each a deliberate bug in the
+# branch form of Boolean conditions -- an operand evaluated where its
+# operator skips it, twice, or out of order, a `not` that does not swap, a
+# condition lowered as a value after all, a value lowered as a condition, a
+# release skipped -- in the shared rule (hir/condition.tcl), the Tcl
+# compiler (compiler/compiler.tcl) or native lowering (native/lower.tcl).
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. Lines starting with # outside an edit
+# are comments. Update a mutant's text when the code it mutates changes,
+# keeping it a mutant of the same rule.
+
+@@ tcl-and-evaluates-rhs-when-lhs-false the Tcl test of `a and b` joins its sides with the eager `&`: b runs even when a is false
+## compiler/compiler.tcl
+<<<<
+        ,0  { set shape {( )&&( then {} {}} }
+====
+        ,0  { set shape {( )&( then {} {}} }
+>>>>
+
+@@ tcl-or-evaluates-rhs-when-lhs-true the Tcl test of `a or b` joins its sides with the eager `|`: b runs even when a is true
+## compiler/compiler.tcl
+<<<<
+        1,  { set shape {( )||( {} {} else} }
+====
+        1,  { set shape {( )|( {} {} else} }
+>>>>
+
+@@ tcl-not-forgets-negation the Tcl test of `not a` (and `a != b`) is a's own: the branches are not swapped
+## compiler/compiler.tcl
+<<<<
+        0,1 { set shape {!( ) {} {} {}} }
+====
+        0,1 { set shape {( ) {} {} {}} }
+>>>>
+
+@@ tcl-rhs-code-unconditional a right operand's code is emitted before the `if` instead of inside its side of the operator: it runs whatever the left operand is
+## compiler/compiler.tcl
+<<<<
+        if {[ConditionBranch ctx $e then out 1] ne "never"} {
+====
+        if {[ConditionBranch ctx $e then out 0] ne "never"} {
+>>>>
+
+@@ tcl-rhs-duplicated the then side of a condition is lowered twice: its operand runs twice
+## compiler/compiler.tcl
+<<<<
+        if {[ConditionBranch ctx $e then out 1] ne "never"} {
+            set reached 1
+        }
+====
+        if {[ConditionBranch ctx $e then out 1] ne "never"} {
+            set reached 1
+        }
+        lappend out ")&&("
+        ConditionBranch ctx $e then out 1
+>>>>
+
+@@ tcl-condition-always-value the Tcl compiler lowers every condition as a value and tests it (the branch form is never used)
+## compiler/compiler.tcl
+<<<<
+            if {![InstallsRefinements [N $e condition]]} {
+                return [ConditionIf ctx $e out]
+            }
+====
+>>>>
+
+@@ tcl-value-lowered-as-condition a Boolean intrinsic answers every demand with its test, not only a branch's: a comparison used as a value yields a Tcl expression where a Bool is wanted
+## compiler/compiler.tcl
+<<<<
+    if {[dict exists $ctx branch] && [dict get $ctx branch]} {
+====
+    if {1} {
+>>>>
+
+@@ nir-and-evaluates-rhs-when-lhs-false the false edge of `a`'s branch in `a and b` goes to b's block instead of the else arm: b runs (and decides) when a is false
+## native/lower.tcl
+<<<<
+    lassign $targets then else
+    if {$checked} {
+====
+    lassign $targets then else
+    if {$else eq $f && [llength $blocks] == 2} {
+        set else $then
+    }
+    if {$checked} {
+>>>>
+
+@@ nir-or-evaluates-rhs-when-lhs-true the true edge of `a`'s branch in `a or b` goes to b's block instead of the then arm: b runs (and decides) when a is true
+## native/lower.tcl
+<<<<
+    lassign $targets then else
+    if {$checked} {
+====
+    lassign $targets then else
+    if {$then eq $t && [llength $blocks] == 2} {
+        set then $else
+    }
+    if {$checked} {
+>>>>
+
+@@ nir-not-forgets-swap a branch whose sides are both Boolean constants keeps the targets in order: `not a` branches as `a`
+## native/lower.tcl
+<<<<
+    lassign $targets then else
+    if {$checked} {
+====
+    lassign $targets then else
+    if {$blocks eq ""} {
+        lassign [list $t $f] then else
+    }
+    if {$checked} {
+>>>>
+
+@@ nir-rhs-before-lhs the branches' blocks are emitted before the condition: control falls into the right operand's code first, ahead of the left operand
+## native/lower.tcl
+<<<<
+    } elseif {[Condition fn $condition $then $else] eq "never"} {
+        return never
+    }
+    foreach exprs $skipped {
+====
+    } else {
+        set mutantBlocks $blocks
+        set blocks {}
+        foreach {label role} $mutantBlocks {
+            EmitLabel fn $label
+            ConditionBody fn [dict get $node ${role}Body] $t $f
+        }
+        if {[Condition fn $condition $then $else] eq "never"} {
+            return never
+        }
+        set reached 1
+    }
+    foreach exprs $skipped {
+>>>>
+
+@@ nir-rhs-duplicated a branch's last expression is evaluated once more before it is lowered as a branch: its operand runs twice
+## native/lower.tcl
+<<<<
+        } elseif {[ConditionBody fn $body $t $f] ne "never"} {
+            set reached 1
+        }
+====
+        } elseif {[Expr fn [lindex $body end]] ne "never" && [ConditionBody fn $body $t $f] ne "never"} {
+            set reached 1
+        }
+>>>>
+
+@@ nir-condition-always-value native lowering lowers every condition as a value and branches on it (the branch form is never used)
+## native/lower.tcl
+<<<<
+    set branch [expr {$outcome eq "" && !$checked && [hir::condition::form $hir $condition] ne "value"}]
+====
+    set branch 0
+>>>>
+
+@@ nir-region-demand-ignored the inlined region consumer ignores a branch demand: its value is joined, then branched on
+## native/lower.tcl
+<<<<
+    if {[dict exists $fn branch] && [lindex [dict get $fn branch] 0] eq $e} {
+====
+    if {0} {
+>>>>
+
+@@ nir-release-skipped a Boolean constant branch with values released after it jumps first: the release never runs
+## native/lower.tcl
+<<<<
+            ReleaseHandles fn [hir::affine::releasesAfter $hir $last] $last
+            Emit fn "jump [expr {$form ? $t : $f}]" $last
+====
+            Emit fn "jump [expr {$form ? $t : $f}]" $last
+            ReleaseHandles fn [hir::affine::releasesAfter $hir $last] $last
+>>>>
+
+@@ shared-constant-ignores-releases hir::condition::constant takes a Boolean constant branch with values released after it for a bare target: the release is skipped
+## hir/condition.tcl
+<<<<
+    if {[releasing $hir $e]} {
+        return ""
+    }
+====
+>>>>
+
+@@ shared-never-if-has-form hir::condition::form gives a branch form to an `if` whose branches cannot complete
+## hir/condition.tcl
+<<<<
+            if {[dict get $node thenBody] ne {} && [dict get $node elseBody] ne {}
+                    && [hir::typeOf $hir $e] ne "never"} {
+====
+            if {[dict get $node thenBody] ne {} && [dict get $node elseBody] ne {}} {
+>>>>
+
+@@ nir-static-outcome-unmemoized StaticOutcome forgets what it answered: each level of a long chain walks the rest of it again (quadratic)
+## native/lower.tcl
+<<<<
+    if {[dict exists $fn staticOutcomes $key]} {
+        return [dict get $fn staticOutcomes $key]
+    }
+====
+>>>>
