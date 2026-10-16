@@ -3,7 +3,9 @@
 # UnicodeChar is a builtin semantic scalar (core/value.tcl, core/type.tcl),
 # distinct from Int and String; see UNICODE-CHAR-LITERALS.md. The only
 # operation that observes a UnicodeChar's numeric scalar value is total,
-# never fails, and returns a plain Int: char::scalar_value, a root native
+# never fails, and returns a plain Int in the Unicode scalar range
+# 0..0x10FFFF (its -result-range, which the range and completion analyses
+# read): char::scalar_value, a root native
 # registered under its qualified `char` name (core::native::isQualifiedNative;
 # STDLIB-NAMESPACES.md -- before that milestone the root name
 # `char_codepoint`, wrapped by a lib/char.bot `char::codepoint`; the one
@@ -25,4 +27,4 @@ proc core::unicodechar::scalar_value {c} {
 }
 
 core::native::register char::scalar_value -arity 1 -impl core::unicodechar::scalar_value \
-    -param-types {UnicodeChar} -result-type int -result-range nonneg -context-free 1
+    -param-types {UnicodeChar} -result-type int -result-range {interval 0 0x10FFFF} -context-free 1

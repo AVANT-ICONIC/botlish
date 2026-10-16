@@ -133,9 +133,9 @@ test bitshift-real-byte-nibble-clif-no-helper-call {byte::nibble's own Cranelift
     list [expr {[string first "call " $body] < 0}] [expr {[string first "sshr" $body] >= 0}]
 } -result {1 1}
 
-test bitshift-real-byte-high-nibble-unchanged {byte::high_nibble (AND/OR/XOR deliberately left on their existing tagged-word fast path, spec \167 32) still lowers to op iand, not raw} -body {
+test bitshift-real-byte-high-nibble-unchanged {byte::high_nibble has no shift for this milestone to lower; its mask, of a byte proven at most 244, is the raw op riand (NATIVE-RESULT-BOUNDS.md: AND/OR/XOR of small operands left the tagged-word path), not the tagged op iand} -body {
     set body [FunctionBody [native::nir [refinedChecksHir] -tiny-leaf-inline-opt 0] byte::high_nibble "\nend"]
-    list [expr {[string first "op iand" $body] >= 0}] [expr {[string first "rishr" $body] < 0}]
+    list [expr {[string first "op riand" $body] >= 0 && [string first "op iand" $body] < 0}] [expr {[string first "rishr" $body] < 0}]
 } -result {1 1}
 
 # ---------------------------------------------------------------------------

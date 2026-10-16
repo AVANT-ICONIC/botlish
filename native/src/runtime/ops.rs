@@ -2397,7 +2397,7 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         CoRelease => rt_co_release(p, a[0]),
         AffineDrop => rt_affine_drop(p, a[0], a[1]),
         RegionCheck | RegionEq | RBox | RUnbox | RIAdd | RISub | RIMul | RILt | RILe | RIGt | RIGe | RIEq
-        | RIShr | RIShl | StrToShort | ShortToStr | ShortLen | ShortEq | StrSliceShort | StrToAscii | AsciiToStr
+        | RIShr | RIShl | RIAnd | RIOr | RIXor | StrToShort | ShortToStr | ShortLen | ShortEq | StrSliceShort | StrToAscii | AsciiToStr
         | AsciiLen | AsciiEq | AsciiToShort | AsciiShortEq
         | DecodeCharAt | StrByteLen | StrRegionIsTclAlpha | StrRegionIsTclAlnum
         // linux::abi::syscall and the raw address bridge are never values

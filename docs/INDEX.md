@@ -151,6 +151,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [RAW-RESULT-REGISTER-COST.md](RAW-RESULT-REGISTER-COST.md) -- the cost of a raw result of a fallible function
 - [BRANCH-FORM-BOOLEAN-LOWERING.md](BRANCH-FORM-BOOLEAN-LOWERING.md) -- `if` conditions lowered as branches
 - [BOUNDED-BIT-SHIFT-LOWERING.md](BOUNDED-BIT-SHIFT-LOWERING.md) -- bounded bit-shift lowering
+- [NATIVE-RESULT-BOUNDS.md](NATIVE-RESULT-BOUNDS.md) -- native result bounds shared by both range analyses; raw bitwise ops of small operands
 - [M6-RANGE-DECIDED-BRANCH-LOWERING.md](M6-RANGE-DECIDED-BRANCH-LOWERING.md) -- range-decided branch lowering
 - [NATIVE-BLOCK-ESCAPE.md](NATIVE-BLOCK-ESCAPE.md) -- block escape analysis and virtualization
 - [NESTED-CLOSURE-ALLOCATIONS.md](NESTED-CLOSURE-ALLOCATIONS.md) -- de-closure conversion

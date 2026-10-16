@@ -168,11 +168,14 @@ fn f(x):
 fn a(b):
     f(narrow(b))
 
-fn wide(n):
-    f(mod(n, 1000000))
+fn wide(n, acc):
+    if n <= 0:
+        f(acc)
+    else:
+        wide(n - 1, acc + 1)
 
 a(171)
-wide(55)
+wide(55, 0)
 }] hir spec analysis
     paramRanges $analysis [instanceNamed $spec f]
 } -result {{[0, +∞]}}

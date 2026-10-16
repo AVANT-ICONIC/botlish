@@ -155,11 +155,18 @@
 #                                     because NAME resolves at all
 #                                     (SYMBOLIC-TYPE-IDENTITY.md)
 #   resultRange     "" (nothing known) or a fact about every Int result, for
-#                   hir/range.tcl's representation analysis. Pure metadata,
+#                   hir/range.tcl's representation analysis and
+#                   hir/completions.tcl's completion proofs, which both read
+#                   it through hir::range::RegisteredRange. Pure metadata,
 #                   like runtime and resultShape: a guarantee the
 #                   implementation actually upholds, never a guess from the
 #                   native's name.
 #                     nonneg          the result is always >= 0
+#                     interval LO HI  the result is always in LO..HI (two
+#                                     integers, LO <= HI; stored in decimal):
+#                                     a bound of the operation itself, e.g.
+#                                     char::scalar_value's Unicode scalar
+#                                     values or hash's 61-bit mask
 #                     collection-length   the result is always a String or
 #                                     List length: >= 0 and, by the runtime's
 #                                     own enforced construction limit
@@ -367,9 +374,9 @@ proc core::native::register {name args} {
     if {![ValidShape $shape $count]} {
         error "core::native::register: bad -result-shape \"$shape\" for \"$name\""
     }
-    set range [dict get $options -result-range]
-    if {$range ni {{} nonneg collection-length}} {
-        error "core::native::register: bad -result-range \"$range\" for \"$name\""
+    set range [ValidResultRange [dict get $options -result-range]]
+    if {$range eq "bad"} {
+        error "core::native::register: bad -result-range \"[dict get $options -result-range]\" for \"$name\""
     }
     variable builtinErrors
     set errors [lsort -unique [dict get $options -errors]]
@@ -422,6 +429,22 @@ proc core::native::register {name args} {
         nomethod [dict get $options -nomethod] completion [dict get $options -completion] \
         ownership $ownership errorsFrom $errorsFrom resultLength $length dropForm $dropForm]
     return [core::value::native $name]
+}
+
+# RANGE as the registry stores it (an interval's bounds in decimal), or
+# "bad" if it is not a -result-range value.
+proc core::native::ValidResultRange {range} {
+    if {$range in {{} nonneg collection-length}} {
+        return $range
+    }
+    if {[catch {llength $range} n] || $n != 3 || [lindex $range 0] ne "interval"} {
+        return bad
+    }
+    lassign $range -> lo hi
+    if {![string is entier -strict $lo] || ![string is entier -strict $hi] || $lo > $hi} {
+        return bad
+    }
+    return [list interval [expr {$lo + 0}] [expr {$hi + 0}]]
 }
 
 # 1 if BOUNDS is a valid -bounds for a native of ARITY declaring exactly

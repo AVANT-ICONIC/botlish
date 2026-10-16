@@ -308,6 +308,39 @@ proc hir::range::collectionLength {} {
     return [dict create min 0 max $smallMax]
 }
 
+# The Range native NAME's -result-range metadata (core/native.tcl) promises
+# for every Int it returns, unknown when it promises nothing. The one reading
+# of that metadata: this analysis and hir/completions.tcl both use it, so the
+# two never disagree about a native's result.
+proc hir::range::RegisteredRange {name} {
+    set range [dict get [core::native::metadata $name] resultRange]
+    switch -- [lindex $range 0] {
+        nonneg            { return [nonneg] }
+        collection-length { return [collectionLength] }
+        interval          { return [dict create min [lindex $range 1] max [lindex $range 2]] }
+    }
+    return [unknown]
+}
+
+# The Range of `mod(x, d)` for X, D the operands' Ranges. mod is Euclidean
+# (core/primitives.tcl): every result r has 0 <= r < abs(d), so a divisor of
+# bounded magnitude M > 0 bounds the result to [0, M-1] (`mod(b, 16)` is
+# 0..15); otherwise the result is only nonnegative.
+proc hir::range::Mod {x d} {
+    if {$x eq "never" || $d eq "never"} {
+        return never
+    }
+    set dmn [dict get $d min]
+    set dmx [dict get $d max]
+    if {$dmn ne "-inf" && $dmx ne "+inf"} {
+        set m [expr {max(abs($dmn), abs($dmx))}]
+        if {$m > 0} {
+            return [dict create min 0 max [expr {$m - 1}]]
+        }
+    }
+    return [nonneg]
+}
+
 proc hir::range::isUnknown {r} {
     return [expr {[dict get $r min] eq "-inf" && [dict get $r max] eq "+inf"}]
 }
@@ -771,12 +804,7 @@ proc hir::range::SeedRange {hir e} {
             if {$targetKind ne "native"} {
                 return [unknown]
             }
-            set name [dict get [hir::symbol $hir $target] name]
-            switch -- [dict get [core::native::metadata $name] resultRange] {
-                nonneg            { return [nonneg] }
-                collection-length { return [collectionLength] }
-            }
-            return [unknown]
+            return [RegisteredRange [dict get [hir::symbol $hir $target] name]]
         }
     }
     return [unknown]
@@ -1215,12 +1243,10 @@ proc hir::range::Call {hirVar ctxVar e node} {
         } elseif {$name in {bit_and bit_or bit_xor shift_right shift_left} && [llength $argRanges] == 2} {
             lassign $argRanges x y
             set result [BitOp $name $x $y]
+        } elseif {$name eq "mod" && [llength $argRanges] == 2} {
+            set result [Mod {*}$argRanges]
         } else {
-            set meta [core::native::metadata $name]
-            switch -- [dict get $meta resultRange] {
-                nonneg            { set result [nonneg] }
-                collection-length { set result [collectionLength] }
-            }
+            set result [RegisteredRange $name]
             # Exact value facts about a known immutable List
             # (EXACT-VALUE-FACTS.md, hir/exactvalue.tcl): its exact length,
             # and the Range of the element(s) an exact/ranged index can

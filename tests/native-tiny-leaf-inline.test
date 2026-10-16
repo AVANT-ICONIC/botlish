@@ -90,7 +90,7 @@ test tiny-leaf-real-high-nibble-no-calls-off {with the flag off, the same wrappe
 test tiny-leaf-real-high-nibble-has-mask-and-shift {the wrapper's own body now contains the two helpers' own operations directly (a mask and a shift), not just "no call"} -body {
     set nirText [native::nir [refinedChecksHir] -tiny-leaf-inline-opt 1]
     set body [FunctionBody $nirText high_nibble]
-    list [expr {[string first "op iand" $body] >= 0}] \
+    list [regexp {op r?iand } $body] \
         [expr {[string first "rishr" $body] >= 0 || [string first "op ishr" $body] >= 0}]
 } -result {1 1}
 
