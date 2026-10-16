@@ -773,6 +773,10 @@ test native-aot-1 {the same lowering emits an object file} -body {
 } -result {object 1 1 1}
 
 testConstraint readelf [expr {[auto_execok readelf] ne ""}]
+# The relocation types below are the x86-64 psABI's: on AArch64 the AOT
+# object reaches runtime helpers through the GOT (codegen::clif's
+# `direct_helpers` is x86-64 only).
+testConstraint x86_64Host [expr {$::tcl_platform(machine) in {x86_64 amd64}}]
 
 # codegen/clif.rs's Symbols::direct_helpers: a call to a statically known
 # runtime helper is relocated exactly like a recursive/direct Botlish call
@@ -781,7 +785,7 @@ testConstraint readelf [expr {[auto_execok readelf] ne ""}]
 # R_X86_64_GOTPCREL) a `Linkage::Import` callee gets by default. Checked on
 # the relocation table itself, not on exact bytes/addresses, so register
 # allocation or instruction scheduling changes cannot make this brittle.
-test native-aot-2 {the AOT object calls runtime helpers directly, not through the GOT} -constraints readelf -body {
+test native-aot-2 {the AOT object calls runtime helpers directly, not through the GOT} -constraints {readelf x86_64Host} -body {
     set path [file join [temporaryDirectory] botlish-aot-reloc-test.obj]
     file delete $path
     native::object [sourceHir "${countdown}count(5, 0)"] $path
