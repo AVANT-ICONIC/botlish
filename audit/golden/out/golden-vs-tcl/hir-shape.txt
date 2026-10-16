@@ -1,0 +1,18 @@
+--- struct-representation
+(a) built                  temporaries    13 ms (5x     66)  hir::lower  24833 ms  compileHir  45616 ms  native::nir  14261 ms
+    same value: 1
+(b) decoded, same process  temporaries    48 ms (5x     66)  hir::lower  22267 ms  compileHir  42335 ms  native::nir  15508 ms
+(a) built, again           temporaries    14 ms (5x     64)  hir::lower  23278 ms  compileHir  45091 ms  native::nir  15287 ms
+(c) decoded, fresh         temporaries    35 ms (5x     45)  hir::lower  16076 ms  compileHir  31861 ms  native::nir  14630 ms
+--- callables
+(a) built                  temporaries    15 ms (5x     71)  hir::lower  11645 ms  compileHir  21915 ms  native::nir  10533 ms
+    same value: 1
+(b) decoded, same process  temporaries    71 ms (5x     58)  hir::lower  10378 ms  compileHir  19367 ms  native::nir  13845 ms
+(a) built, again           temporaries    11 ms (5x     46)  hir::lower  10835 ms  compileHir  22531 ms  native::nir  11157 ms
+(c) decoded, fresh         temporaries    26 ms (5x     35)  hir::lower   7926 ms  compileHir  14920 ms  native::nir   9643 ms
+--- compiled-values
+(a) built                  temporaries    18 ms (5x     82)  hir::lower  24083 ms  compileHir  47655 ms  native::nir  18645 ms
+    same value: 1
+(b) decoded, same process  temporaries   118 ms (5x     65)  hir::lower  19803 ms  compileHir  40660 ms  native::nir  21934 ms
+(a) built, again           temporaries    17 ms (5x     82)  hir::lower  24557 ms  compileHir  50165 ms  native::nir  21641 ms
+(c) decoded, fresh         temporaries    34 ms (5x     46)  hir::lower  14193 ms  compileHir  28317 ms  native::nir  15287 ms

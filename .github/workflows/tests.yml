@@ -47,8 +47,14 @@ jobs:
         run: tclsh9.0 main.tcl -backend ${{ matrix.backend }}
 
   native:
-    name: tests (cranelift coverage)
+    # The whole suite with each native backend as CORE_BACKEND: specialized
+    # (cranelift) and unspecialized (cranelift-generic, -specialize 0).
+    name: tests (${{ matrix.backend }} coverage)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [cranelift, cranelift-generic]
     env:
       LANG: C.utf8
       LC_ALL: C.utf8
@@ -67,25 +73,50 @@ jobs:
       # (bash -e) takes tee's exit status, which hid a failing test here.
       - name: Native coverage
         shell: bash
-        run: tclsh9.0 tests/native-coverage.tcl | tee coverage.txt
+        run: tclsh9.0 tests/native-coverage.tcl -backend ${{ matrix.backend }} | tee coverage.txt
 
       # The corpus, the source samples and the HIR fixtures (native compiles
       # HIR, never core IR text: the examples/*.ir programs run on the Tcl
       # backends above); surface samples 09 and 10 expect an error (09 became a
-      # rejection example with strict reference determinism).
+      # rejection example with strict reference determinism). Specialized
+      # only: unspecialized native code has no slot for a projection only a
+      # semantic instance proves (STRUCTS.md, "Known limitations"), so
+      # csv_records.bot and hashtable.bot are NATIVE UNSUPPORTED struct-shape
+      # on cranelift-generic; the corpus tests run every program there, with
+      # the specialized outcome standing in (tests/helpers.tcl,
+      # GenericBaselineUndefined).
       - name: Run examples
+        if: matrix.backend == 'cranelift'
         run: tclsh9.0 main.tcl -backend cranelift examples/stdlib/*.bot examples/surface/0[1-8]*.bot examples/surface/1[1-3]*.bot examples/hir/0[1-3]*.hir
 
       - name: Publish summary
         if: always()
         run: |
           {
-            echo "## Cranelift backend coverage"
+            echo "## ${{ matrix.backend }} backend coverage"
             echo
             echo '```'
             cat coverage.txt 2>/dev/null || echo "No results."
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  rust:
+    name: tests (native Rust unit tests)
+    # The native runtime's and code generator's own Rust tests, unstressed,
+    # on every push and pull request (the gc-stress job below runs them again
+    # under GC stress, on pushes).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Run native Rust unit tests
+        run: cargo test --release --manifest-path native/Cargo.toml
 
   stub-linker:
     name: tests (stub-linked executables)

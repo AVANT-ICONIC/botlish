@@ -27,7 +27,7 @@
 #
 # What this file decides
 # ----------------------
-# analyze (before type inference; hir::CheckOnce):
+# analyze (before type inference; hir::check, once for both checks of a demotion):
 #
 #   call graph    the exact, syntactic call edges of every function region
 #                 (hir::contexts::Callee: a block literal, a binding denoting

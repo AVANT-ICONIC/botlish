@@ -62,7 +62,10 @@ and the two golden tests written around it are back in their natural form.
 * [The waiting rule](#the-waiting-rule) -- a change of the definition made
   after this milestone: a consumer of a program-wide channel waits for its
   failing contributors
-* [Method-call decisions](#method-call-decisions)
+* [Method-call decisions](#method-call-decisions) -- and, added later,
+  [within one decision](#within-one-decision-no-configuration-built-twice):
+  no configuration built twice, and why the trial rule allows no fewer
+  whole builds
 * [Instrumentation](#instrumentation)
 * [Measurements](#measurements)
 * [Validation](#validation)
@@ -1371,17 +1374,152 @@ builds (METHOD-SUGAR.md). Now:
   and syntax node, the same in every build of one compilation), never its
   name, and is applied only to a call still present with that candidate
   among its candidates.
-* **No duplicate build** (`hir::SameChoices`): a trial or final build whose
-  choices resolve every call to the candidate the initial build already
-  chose *is* that build (deterministic, and the per-compilation registries
-  are still its own) and is not made again. A round with nothing to decide
+* **No configuration built twice** (`hir::MethodConfig`,
+  `hir::MethodTrialRecord`): a build is a pure function of its
+  *configuration* -- the candidate every multi-candidate call resolves to --
+  so one decision builds each configuration once. A trial whose
+  configuration an earlier build of the decision had (the initial build, or
+  a trial of an earlier pass) is read from what the decision recorded of
+  that build: per undecided call its problems and its receiver's type, and
+  the calls it types as trait operations. The final build is not made when
+  the last build made has its configuration (the initial build, when no
+  trial was built since): that build is the final program, and the process
+  state it left behind is the final build's. A round with nothing to decide
   costs one build, not two -- for every program, with or without static
-  blocks.
-* **Lifetime**: the seeds live in `decide`'s loop for one round; nothing
-  persists across compilations. `hir::static::methodAudit 1` builds every
-  seeded round again unseeded and fails unless the programs are identical;
-  `hir::methodBuildReuse 0` rebuilds every repeated build
-  (`se-method-reuse`, `se-method-invalidated`, `se-build-reuse-identical`).
+  blocks ([below](#within-one-decision-no-configuration-built-twice)).
+* **Lifetime**: the seeds live in `decide`'s loop for one round, a
+  decision's records in the decision; nothing persists across compilations.
+  `hir::static::methodAudit 1` builds every seeded round again unseeded and
+  fails unless the programs are identical; `hir::methodBuildReuse 0`
+  rebuilds every repeated build; `hir::methodBuildAudit 1` (or
+  `BOTLISH_METHOD_BUILD_AUDIT=1` in the environment) builds every reused
+  build again and fails unless the decision reads the same of both
+  (`se-method-reuse`, `se-method-invalidated`, `se-build-reuse-identical`,
+  `se-method-memo`).
+
+### Within one decision: no configuration built twice
+
+*Added after the milestone; it changes no decision, only the builds.*
+
+**What one decision reads.** `hir::DecideMethodCalls` decides in passes. In
+pass p it reads the build of every configuration C(p, t), t = 0 up to the
+longest candidate list less one: the calls decided so far at their
+decisions, every undecided call at its t-th candidate (its last, when it
+has fewer). A call is decided in a pass only if exactly one candidate is
+valid *and* its receiver had one type in every trial of the pass -- and a
+candidate narrows its receiver's binding for the statements after the call
+(`list::at(arr, i)` leaves `arr` a List afterwards: `never`, for a
+MutableArray). So consecutive calls on one binding, or on one another's
+results, are a chain decided one link per pass. mutable-array.bot's first
+checked round decides its 76 calls in five passes (49, 17, 7, 2 and 1
+calls); line 542's `[arr.at(0).length(), arr.at(1).length(),
+arr.at(2).length(), x.length(), a.at(0)]` is still being decided in pass 5
+-- passes 4 and 5 decide nothing else -- because `arr.at(1)` on line 539
+narrows `arr` for its first link.
+
+**Each configuration once.** A build is a pure function of its
+configuration (`hir::MethodConfig`: the candidate each call resolves to, as
+`hir::resolve::MethodChoice` picks it; the choices are the only input that
+differs between a decision's builds -- the premise on which the reuse of the
+initial build already rested). A decision now builds each configuration once
+and keeps, per build, what it reads of it (`hir::MethodTrialRecord`: each
+undecided call's problems and receiver type, and the calls the build types
+as trait operations -- kilobytes, where a build is megabytes). A trial whose
+configuration an earlier build had is read from that record; the record is
+read in the same order, and gives the same values, as the build it was made
+from. A pass whose newly decided calls all chose their t-th candidate leaves
+the next pass's trial t the configuration the pass already built. Every
+link of a chain of `at` calls on an array chooses `mutable_array::at`, the
+second of `list::at`, `mutable_array::at`, `mutable_vector::at`: in
+mutable-array.bot, passes 4 and 5 read their trial 1 from pass 3's build.
+
+**The final build** is not made when the last build made has its
+configuration (the initial build, when no trial was built since -- the rule
+as it was): that build is the final program, and so is the process state it
+left behind. An older build of the final configuration is not reused: a
+build leaves state in namespace variables besides the registries
+`hir::activate` restores (the analyses' caches, e.g. the completion
+walk's in `hir::completions`, kept until the next walk), a later trial's
+would be left behind it, and what runs after the decision -- `BuildFull`'s
+elaborations, hir/static.tcl's attribution and dependency analysis, the
+warnings -- has not been audited for reading any of it; the rule as it was
+guaranteed it by construction, and so does this one. In mutable-array.bot
+the final configuration is pass 3's trial 1, built again at the end: one
+build per decision at most (15 final builds in the corpus after).
+
+**Measured** (front end, `surface::readProgramFile` with warnings off, one
+fresh process per program, two at a time beside two other jobs on a 4-CPU
+container; the tree before first, then the tree after):
+
+| program | decision builds before (trials + finals) | after | all builds before | after |
+|---|---|---|---|---|
+| mutable-array.bot (one decision, 76 calls) | 14 + 1 | 12 + 1 | 20 | 18 |
+| imports.bot | 11 + 1 | 7 + 0 | 16 | 11 |
+| mutable-vector.bot | 7 + 1 | 4 + 1 | 13 | 10 |
+| refinements.bot | 5 + 1 | 3 + 0 | 10 | 7 |
+| ownership.bot | 5 + 1 | 3 + 1 | 10 | 8 |
+| stdlib-namespaces.bot | 5 + 1 | 4 + 1 | 9 | 8 |
+| structs-and-enums.bot | 11 + 1 | 11 + 0 | 17 | 16 |
+| callable-contracts.bot | 2 + 1 | 2 + 0 | 8 | 7 |
+| recursive-types.bot | 1 + 1 | 1 + 0 | 3 | 2 |
+| the 129 programs | 81 + 20 | 67 + 15 | 371 | 352 |
+
+The other ten programs with method trials (collections, declared-errors,
+destructuring, diagnostics, framework-semantics, method-equivalence-imported,
+methods, opaque, static-compile -- two decisions -- and traits) repeat no
+configuration. The front end of the 127 programs that compile: 1,479 s
+before, 1,293 s after (indicative: the two runs had other jobs beside them);
+mutable-array.bot 333 s before and 279 s after in those runs, 292 s and 264 s
+compiled side by side (-10%: two builds of about 15 s each).
+
+Every program's final HIR (the whole dict but `staticStats`), its
+diagnostics, its static sites and decisions are identical before and after
+(129 programs: the 88 golden suites, the examples and benchmarks). The 19
+programs with method trials compile to the same under `hir::methodBuildAudit
+1` too, which made every reused build again (initial, repeated trial and
+final alike: 58 builds) and found no difference.
+
+**Why not fewer.** Without knowing which calls a call's trial can depend on,
+a build is the only way to learn what a configuration reads; a decision
+that reads every configuration its rule reads therefore needs one build per
+distinct configuration, which is what it now makes. (It could skip a trial
+none of whose readings can decide anything -- every call it serves already
+known unstable while another call is certain to be decided -- but that
+needs the 3-candidate calls of a pass all blocked, which a chain's head
+never is.) Fewer builds need a *locality theorem*: that a call's problems
+and receiver type depend only on the candidates of some calls, so that two
+configurations equal on those read alike for it, or so that a trial could
+re-check only the function a choice changes. The checker makes that false
+in general -- a candidate swap can change facts the whole program reads:
+
+* the demotion: `hir::check` checks the whole program again when a trusted
+  inferred contract is violated, so a candidate that creates or removes a
+  violation (by passing a different value on) changes the types every
+  demoted parameter reaches, anywhere (every trial of mutable-array.bot's
+  first checked round demotes two contracts);
+* the ownership verdict: candidates differ in ownership roles (an affine
+  element's `at` is `AFFINE-ELEMENT-COPY-OUT`), and any ownership diagnostic
+  withholds every release scope, and so `AFFINE-PATH-RELEASE-UNSUPPORTED`,
+  everywhere;
+* the erased-callable contract, which every uncontracted call is charged,
+  depends on the types a candidate gives the callables it is passed;
+* the semantic-instance budget: which call gets an instance depends on every
+  request;
+* inferred parameter contracts: a call on an untyped parameter infers its
+  contract from the candidate, against which every caller is checked.
+
+The dependency analysis models the last four for *rejections* (C:verdict,
+C:erased, C:budget, the backward channels), with witnesses that rely on a
+rejection being monotone -- a type becomes `never`, a contribution
+disappears; a candidate swap replaces a callee's type, errors and roles
+with another's, and the demotion is no channel there at all (it changes no
+diagnostic, only types). And even an exact locality theorem would save
+little more on whole builds: a chain link with n candidates needs n - 1
+configurations the pass before did not have (the link's own candidates
+with the link before decided), so mutable-array.bot's five passes need at
+least 2 + 2 + 2 + 2 + 2 trials, against the 12 it makes. The lever that
+remains is the cost of a trial (15-19 s there): re-checking only what a
+choice changes, which needs the same theorem.
 
 ## Instrumentation
 
@@ -2036,7 +2174,8 @@ is the coroutine case of the natural layout (4 rounds, 11 builds).
 
 [Method-call decisions](#method-call-decisions): seeds from the previous
 round minus the retry closure; build reuse when choices equal the initial
-build's.
+build's -- since generalized to every configuration a decision has built
+([within one decision](#within-one-decision-no-configuration-built-twice)).
 
 ### 19. Method cache validity key / certificate
 
@@ -2072,7 +2211,8 @@ diagnostics only for blocks whose inputs equal the sequential order's.
 Remains: the final program is the `hir::BuildFull` of the round in which no
 block fails, with its own diagnostics and warnings. The one build it no
 longer repeats is the method decisions' duplicate of the initial build when
-the choices are the same (`hir::SameChoices`), which is the same value
+the choices are the same (`hir::SameChoices` then; `hir::MethodConfig`
+since, which also skips a trial repeating an earlier trial), which is the same value
 (`se-build-reuse-identical`; the before/after differential of 41 example
 and benchmark programs without static blocks: identical HIR, Core IR and NIR).
 
@@ -2454,7 +2594,7 @@ strongly-connected-components pass (`depMs`, [Measurements](#measurements)).
 |---|---|
 | `hir/static.tcl` | the schedulers (`decide`: batched, sequential, legacy), `Simulate`, `Components`, `MethodSeeds`, `Deferral`, the trace (`FormatTrace`), the legacy `Rejectable`/`Independent`/`Units`/`GlobalChannels` |
 | `hir/staticdeps.tcl` | the dependency analysis (`Deps`, `Explain`, `Prepare`, the successors of every node kind) |
-| `hir/hir.tcl` | `BuildStats`, `BuildFull`'s method-call seeds, `DecideMethodCalls`' seeds and build reuse, `SameChoices` |
+| `hir/hir.tcl` | `BuildStats`, `BuildFull`'s method-call seeds, `DecideMethodCalls`' seeds and build reuse (`MethodConfig`, `MethodTrialRecord`, the audit `methodBuildAudit`) |
 | `surface/modules.tcl` | `RemapFile`: a module's context parameters, proof contracts and resume clauses keep their own file's origins (found by the analysis: they pointed at the entry file) |
 | `tests/static-economics.test` | the schedulers' equality, the build-count bounds, method-call reuse and build reuse, the batched run on synthetic relations, the trace, determinism, the compiler properties the analysis relies on |
 | `tests/golden.test` | `golden-static-economics`: the golden suites' builds bounded |

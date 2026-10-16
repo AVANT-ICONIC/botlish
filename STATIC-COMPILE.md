@@ -552,9 +552,10 @@ candidates may differ), and every call such a call reaches (the trials
 pair a call's candidates with those of the calls it depends on). A seed is
 keyed by the call's identity (`methodCalls`: its file and syntax node, the
 same in every build of the compilation), never by its name, and is used only
-when the call still exists with that candidate among its candidates. A build whose choices are those the initial build
-already made is that build (`hir::SameChoices`): not made again, so a round
-with nothing to decide costs one build, not two. The seeds live in
+when the call still exists with that candidate among its candidates. A build whose choices resolve every call as an
+earlier build of the decision did is that build (`hir::MethodConfig`): not
+made again, so a round with nothing to decide costs one build, not two
+(STATIC-DECISION-ECONOMICS.md, "Within one decision"). The seeds live in
 `decide`'s loop, for one round: nothing persists across compilations
 (`se-deterministic`). `hir::static::methodAudit` builds every seeded round
 a second time unseeded and fails unless the two programs are identical
@@ -1327,7 +1328,7 @@ Reading it:
 | `hir/syntax.tcl` | `staticNode` |
 | `hir/static.tcl` | sites, expansion, reification, decisions (the schedulers, `Simulate`, `MethodSeeds`, the trace), the code table |
 | `hir/staticdeps.tcl` | the dependency analysis of a build (`Deps`, `Explain`) |
-| `hir/hir.tcl` | `hir::buildSyntax` / `hir::BuildFull` (method-call seeds, `SameChoices`, `BuildStats`), `hir::Diagnose`'s `related` |
+| `hir/hir.tcl` | `hir::buildSyntax` / `hir::BuildFull` (method-call seeds, `MethodConfig`, `BuildStats`), `hir::Diagnose`'s `related` |
 | `hir/resolve.tcl` | the mark on a reified `fail`, its UNHANDLED-ERROR wording |
 | `hir/completions.tcl` | KNOWN-ERROR's `intended` |
 | `hir/warnings.tcl` | SAME-FAILURE skips reified failures |

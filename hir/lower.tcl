@@ -35,12 +35,50 @@
 # forms, e.g. a resolved `users::save` call to a call of the binding or
 # symbol it denotes.
 
-namespace eval hir::lower {}
+namespace eval hir::lower {
+    # The pending temporaries (hir::affine::temporaries) of the HIR being
+    # lowered, as {TEMPORARIES}, while a lowering runs (withTemporaries); {}
+    # when none does. The set is a walk of the whole program, so it is
+    # computed once per lowering, not once per construction (Pending): that
+    # made lowering quadratic in the program's size
+    # (GOLDEN-VS-TCL-BENCHMARK.md).
+    variable temporaries {}
+}
 
 # The core IR program of HIR: a list of expressions.
 proc hir::lower {hir} {
     hir::activate $hir
-    return [hir::lower::Seq $hir [dict get $hir roots]]
+    return [hir::lower::withTemporaries [hir::affine::temporaries $hir] {
+        hir::lower::Seq $hir [dict get $hir roots]
+    }]
+}
+
+# Runs SCRIPT in the caller's frame, which lowers one HIR whose pending
+# temporaries (hir::affine::temporaries) are TEMPS, and returns its result:
+# the expressions it lowers read TEMPS (Temporaries) instead of walking the
+# program again. Restored afterwards, however SCRIPT ends, so a lowering
+# nested in another -- of another HIR -- reads its own, and nothing outlives
+# the lowering (COMPILATION-ISOLATION.md). The Tcl compiler runs its whole
+# unit's generation under it (core::compiler::GenerateUnit).
+proc hir::lower::withTemporaries {temps script} {
+    variable temporaries
+    set saved $temporaries
+    set temporaries [list $temps]
+    try {
+        return [uplevel 1 $script]
+    } finally {
+        set temporaries $saved
+    }
+}
+
+# The pending temporaries of HIR, being lowered: withTemporaries's, or, for
+# a lowering procedure called on its own, computed.
+proc hir::lower::Temporaries {hir} {
+    variable temporaries
+    if {$temporaries ne {}} {
+        return [lindex $temporaries 0]
+    }
+    return [hir::affine::temporaries $hir]
 }
 
 # The core IR node of expression E.
@@ -99,7 +137,7 @@ proc hir::lower::expr {hir e} {
                 set mark [hir::mutvec::ConsumeNativeOf $consumed]
                 set marked [list call [list ref $mark] $domain]
             }
-            if {[dict exists [hir::affine::temporaries $hir] $iterable]} {
+            if {[dict exists [Temporaries $hir] $iterable]} {
                 # A consuming loop whose remaining elements an early exit
                 # releases by the domain's own name (hir::affine::LoopDomain).
                 set temp [TempName $iterable]
@@ -355,7 +393,7 @@ proc hir::lower::ReleasingOnError {hir e lowered} {
 # operand list) builds the call or struct of those names. Evaluation order and
 # meaning are unchanged; only the names exist.
 proc hir::lower::Pending {hir e operands build} {
-    set temps [hir::affine::temporaries $hir]
+    set temps [Temporaries $hir]
     set named 0
     foreach o $operands {
         if {[dict exists $temps $o]} {

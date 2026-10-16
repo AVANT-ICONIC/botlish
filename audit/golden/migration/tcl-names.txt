@@ -1635,6 +1635,10 @@ tests/flags.test flags-value-in-struct pass
 tests/flags.test flags-value-plain-functions-unchanged pass
 tests/flags.test flags-value-returned pass
 tests/flags.test flags-warnings-none pass
+tests/golden-duplicates.test gd-set-is-the-freeze-class pass
+tests/golden-duplicates.test gd-every-skipped-test-has-golden-replacements pass
+tests/golden-duplicates.test gd-skips-only-duplicates pass
+tests/golden-duplicates.test gd-ci-never-skips pass
 tests/golden-framework.test gf-affine-capture-in-a-case pass
 tests/golden-framework.test gf-affine-capture-rejected pass
 tests/golden-framework.test gf-application-context pass

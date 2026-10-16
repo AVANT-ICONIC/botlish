@@ -1,0 +1,445 @@
+local run: 174 Tcl test files on interp, compile (golden duplicates skipped), 88 golden suites on interp, compile, cranelift-generic, cranelift (front-end cache /tmp/claude-0/-home-user-botlish/7b4e0ee9-4058-5da4-b271-46d4344024a1/scratchpad/cache-local), 4 at a time
+ok     golden values.bot                                9.4 s  front end 4.39 s; interp 32/32, compile 32/32, cranelift-generic 32/32, cranelift 32/32
+ok     golden declared-errors.bot                      49.3 s  front end 34.09 s; interp 115/115, compile 115/115, cranelift-generic 115/115, cranelift 115/115
+ok     golden methods.bot                              80.7 s  front end 56.24 s; interp 195/195, compile 195/195, cranelift-generic 195/195, cranelift 195/195
+ok     golden callables.bot                            41.4 s  front end 20.45 s; interp 113/113, compile 113/113, cranelift-generic 113/113, cranelift 113/113
+ok     golden validators-and-proofs.bot                34.1 s  front end 17.57 s; interp 153/153, compile 153/153, cranelift-generic 153/153, cranelift 153/153
+ok     golden callable-contracts.bot                   71.3 s  front end 53.45 s; interp 92/92, compile 92/92, cranelift-generic 92/92, cranelift 92/92
+ok     golden destructuring.bot                       180.8 s  front end 99.23 s; interp 378/378, compile 378/378, cranelift-generic 378/378, cranelift 378/378
+ok     golden core-semantics.bot                       28.5 s  front end 12.96 s; interp 141/141, compile 141/141, cranelift-generic 141/141, cranelift 141/141
+ok     golden struct-representation.bot                34.3 s  front end 10.82 s; interp 110/110, compile 110/110, cranelift-generic 110/110, cranelift 110/110
+ok     golden compiled-values.bot                     105.5 s  front end 50.83 s; interp 118/118, compile 118/118, cranelift-generic 118/118, cranelift 118/118
+ok     golden static-compile.bot                       75.3 s  front end 59.82 s; interp 81/81, compile 81/81, cranelift-generic 81/81, cranelift 81/81
+ok     golden coroutines.bot                           37.1 s  front end 19.47 s; interp 62/62, compile 62/62, cranelift-generic 62/62, cranelift 62/62
+ok     golden structs-and-enums.bot                    71.5 s  front end 59.93 s; interp 111/111, compile 111/111, cranelift-generic 111/111, cranelift 111/111
+ok     golden loop-collecting.bot                      24.7 s  front end 10.75 s; interp 110/110, compile 110/110, cranelift-generic 110/110, cranelift 110/110
+ok     golden types.bot                                24.0 s  front end 12.76 s; interp 96/96, compile 96/96, cranelift-generic 96/96, cranelift 96/96
+ok     golden flags.bot                                25.2 s  front end 7.99 s; interp 100/100, compile 100/100, cranelift-generic 100/100, cranelift 100/100
+ok     golden contexts.bot                             34.4 s  front end 22.31 s; interp 88/88, compile 88/88, cranelift-generic 88/88, cranelift 88/88
+ok     golden abi-bytes.bot                            26.8 s  front end 13.43 s; interp 103/103, compile 103/103, cranelift-generic 103/103, cranelift 103/103
+ok     golden mutable-array.bot                       359.2 s  front end 316.95 s; interp 233/233, compile 233/233, cranelift-generic 233/233, cranelift 233/233
+ok     golden stdlib-namespaces.bot                    58.8 s  front end 46.80 s; interp 114/114, compile 114/114, cranelift-generic 114/114, cranelift 114/114
+ok     golden opaque.bot                               80.6 s  front end 60.04 s; interp 91/91, compile 91/91, cranelift-generic 91/91, cranelift 91/91
+ok     golden string-natives.bot                       14.4 s  front end 4.74 s; interp 82/82, compile 82/82, cranelift-generic 82/82, cranelift 82/82
+ok     golden native-aggregates.bot                    17.5 s  front end 5.04 s; interp 70/70, compile 70/70, cranelift-generic 70/70, cranelift 70/70
+ok     golden mutable-vector.bot                       50.0 s  front end 37.57 s; interp 74/74, compile 74/74, cranelift-generic 74/74, cranelift 74/74
+ok     golden abi-numeric.bot                          18.0 s  front end 8.09 s; interp 87/87, compile 87/87, cranelift-generic 87/87, cranelift 87/87
+ok     golden affinity.bot                             22.5 s  front end 13.27 s; interp 67/67, compile 67/67, cranelift-generic 67/67, cranelift 67/67
+ok     golden range-and-contract-values.bot            53.9 s  front end 24.62 s; interp 78/78, compile 78/78, cranelift-generic 78/78, cranelift 78/78
+ok     golden native-values.bot                        15.8 s  front end 4.00 s; interp 89/89, compile 89/89, cranelift-generic 89/89, cranelift 89/89
+ok     golden strings.bot                              20.8 s  front end 8.33 s; interp 94/94, compile 94/94, cranelift-generic 94/94, cranelift 94/94
+ok     golden string-representations.bot                9.2 s  front end 3.78 s; interp 48/48, compile 48/48, cranelift-generic 48/48, cranelift 48/48
+ok     golden lists-and-sets.bot                       12.0 s  front end 6.40 s; interp 86/86, compile 86/86, cranelift-generic 86/86, cranelift 86/86
+ok     golden names-and-scoping.bot                     7.1 s  front end 2.88 s; interp 58/58, compile 58/58, cranelift-generic 58/58, cranelift 58/58
+ok     golden closure-escape.bot                       11.1 s  front end 3.50 s; interp 49/49, compile 49/49, cranelift-generic 49/49, cranelift 49/49
+ok     golden traits.bot                               41.5 s  front end 30.34 s; interp 71/71, compile 71/71, cranelift-generic 71/71, cranelift 71/71
+ok     golden loops.bot                                 7.2 s  front end 2.99 s; interp 55/55, compile 55/55, cranelift-generic 55/55, cranelift 55/55
+ok     golden raw-int-abi.bot                          22.4 s  front end 3.21 s; interp 52/52, compile 52/52, cranelift-generic 52/52, cranelift 52/52
+ok     golden refinements.bot                          52.9 s  front end 42.89 s; interp 66/66, compile 66/66, cranelift-generic 66/66, cranelift 66/66
+ok     golden warning-programs.bot                      8.3 s  front end 5.33 s; interp 42/42, compile 42/42, cranelift-generic 42/42, cranelift 42/42
+ok     golden framework-semantics.bot                  25.6 s  front end 20.38 s; interp 29/29, compile 29/29, cranelift-generic 29/29, cranelift 29/29
+ok     golden ownership.bot                            25.2 s  front end 20.30 s; interp 38/38, compile 38/38, cranelift-generic 38/38, cranelift 38/38
+ok     golden destructuring-instances.bot               5.4 s  front end 2.67 s; interp 55/55, compile 55/55, cranelift 55/55, cranelift-generic excluded
+ok     golden collections.bot                          17.0 s  front end 12.74 s; interp 44/44, compile 44/44, cranelift-generic 44/44, cranelift 44/44
+ok     golden errors.bot                                6.8 s  front end 4.15 s; interp 24/24, compile 24/24, cranelift-generic 24/24, cranelift 24/24
+ok     golden linux-io.bot                              8.7 s  front end 5.13 s; interp 55/55, compile 55/55, cranelift-generic 55/55, cranelift 55/55
+ok     golden bits-bytes-hashing.bot                    8.0 s  front end 2.86 s; interp 47/47, compile 47/47, cranelift-generic 47/47, cranelift 47/47
+ok     golden method-equivalence.bot                    9.5 s  front end 5.06 s; interp 45/45, compile 45/45, cranelift-generic 45/45, cranelift 45/45
+ok     golden gc-sensitive-values.bot                   6.5 s  front end 2.14 s; interp 22/22, compile 22/22, cranelift-generic 22/22, cranelift 22/22
+ok     golden diagnostics.bot                          11.3 s  front end 8.03 s; interp 27/27, compile 27/27, cranelift-generic 27/27, cranelift 27/27
+ok     golden representation.bot                        5.0 s  front end 2.79 s; interp 13/13, compile 13/13, cranelift-generic 13/13, cranelift 13/13
+ok     golden compiled-values-struct-transport.bot      6.0 s  front end 2.90 s; interp 18/18, compile 18/18, cranelift 18/18, cranelift-generic excluded
+ok     golden harness.bot                               4.1 s  front end 1.71 s; interp 13/13, compile 13/13, cranelift-generic 13/13, cranelift 13/13
+ok     golden completion-regressions.bot                5.0 s  front end 2.97 s; interp 23/23, compile 23/23, cranelift-generic 23/23, cranelift 23/23
+ok     golden modules.bot                              15.1 s  front end 10.40 s; interp 31/31, compile 31/31, cranelift-generic 31/31, cranelift 31/31
+ok     golden hir-values.bot                            3.4 s  front end 1.38 s; interp 14/14, compile 14/14, cranelift-generic 14/14, cranelift 14/14
+ok     golden unicode-strings.bot                       4.2 s  front end 1.77 s; interp 56/56, compile 56/56, cranelift-generic 56/56, cranelift 56/56
+ok     golden recursive-types.bot                       3.9 s  front end 2.48 s; interp 9/9, compile 9/9, cranelift-generic 9/9, cranelift 9/9
+ok     golden struct-representation-instances.bot       2.7 s  front end 1.46 s; interp 15/15, compile 15/15, cranelift 15/15, cranelift-generic excluded
+ok     golden imports-abi-child.bot                     4.6 s  front end 2.57 s; interp 17/17, compile 17/17, cranelift-generic 17/17, cranelift 17/17
+ok     golden method-equivalence-imported.bot           9.1 s  front end 6.52 s; interp 13/13, compile 13/13, cranelift-generic 13/13, cranelift 13/13
+ok     golden imports-unimported.bot                    3.7 s  front end 1.81 s; interp 16/16, compile 16/16, cranelift-generic 16/16, cranelift 16/16
+ok     golden imports-library-modules.bot               7.4 s  front end 4.51 s; interp 12/12, compile 12/12, cranelift-generic 12/12, cranelift 12/12
+ok     golden declared-errors-imports.bot               3.4 s  front end 1.69 s; interp 10/10, compile 10/10, cranelift-generic 10/10, cranelift 10/10
+ok     golden linux-io-native.bot                       2.6 s  front end 1.38 s; cranelift-generic 5/5, cranelift 5/5, interp excluded, compile excluded
+ok     golden methods-struct-instances.bot              1.9 s  front end 1.06 s; interp 8/8, compile 8/8, cranelift 8/8, cranelift-generic excluded
+ok     golden imports.bot                              41.1 s  front end 37.17 s; interp 59/59, compile 59/59, cranelift-generic 59/59, cranelift 59/59
+ok     golden callable-contracts-returned.bot           3.1 s  front end 1.96 s; interp 4/4, compile 4/4, cranelift-generic 4/4, cranelift 4/4
+ok     golden callable-contracts-contravariant.bot      2.9 s  front end 1.65 s; interp 4/4, compile 4/4, cranelift-generic 4/4, cranelift 4/4
+ok     golden abi-bytes-native.bot                      2.7 s  front end 1.37 s; cranelift-generic 3/3, cranelift 3/3, interp excluded, compile excluded
+ok     golden imports-abi-family.bot                    2.4 s  front end 1.22 s; interp 6/6, compile 6/6, cranelift-generic 6/6, cranelift 6/6
+ok     golden callable-contracts-fallback.bot           2.8 s  front end 1.71 s; interp 4/4, compile 4/4, cranelift-generic 4/4, cranelift 4/4
+ok     golden structs-and-enums-instances.bot           1.8 s  front end 1.07 s; interp 4/4, compile 4/4, cranelift 4/4, cranelift-generic excluded
+ok     golden stdlib-namespaces-entry-members.bot       1.9 s  front end 0.90 s; interp 4/4, compile 4/4, cranelift-generic 4/4, cranelift 4/4
+ok     golden methods-byte-without-list.bot             3.3 s  front end 1.60 s; interp 3/3, compile 3/3, cranelift-generic 3/3, cranelift 3/3
+ok     golden traits-path.bot                           2.8 s  front end 1.64 s; interp 2/2, compile 2/2, cranelift-generic 2/2, cranelift 2/2
+ok     golden callable-contracts-contravariant-rejected.bot     2.6 s  front end 1.57 s; interp 2/2, compile 2/2, cranelift-generic 2/2, cranelift 2/2
+ok     golden callable-contracts-handle.bot             1.9 s  front end 0.92 s; interp 1/1, compile 1/1, cranelift-generic 1/1, cranelift 1/1
+ok     golden abi-numeric-native.bot                    2.3 s  front end 1.28 s; cranelift-generic 1/1, cranelift 1/1, interp excluded, compile excluded
+ok     golden structs-and-enums-qualifiers.bot          1.8 s  front end 0.90 s; interp 2/2, compile 2/2, cranelift-generic 2/2, cranelift 2/2
+ok     golden methods-list-without-str.bot              3.2 s  front end 1.56 s; interp 3/3, compile 3/3, cranelift-generic 3/3, cranelift 3/3
+ok     golden closure-escape-instances.bot              1.6 s  front end 1.01 s; interp 1/1, compile 1/1, cranelift 1/1, cranelift-generic excluded
+ok     golden opaque-instances.bot                      1.8 s  front end 1.04 s; interp 1/1, compile 1/1, cranelift 1/1, cranelift-generic excluded
+ok     golden static-compile-erased-consumer.bot        2.7 s  front end 1.73 s; interp 2/2, compile 2/2, cranelift-generic 2/2, cranelift 2/2
+ok     golden mutable-vector-str.bot                    1.9 s  front end 1.02 s; interp 1/1, compile 1/1, cranelift-generic 1/1, cranelift 1/1
+ok     golden stdlib-namespaces-unimported.bot          2.3 s  front end 1.42 s; interp 2/2, compile 2/2, cranelift-generic 2/2, cranelift 2/2
+ok     golden callable-contracts-unerased.bot           1.7 s  front end 0.89 s; interp 1/1, compile 1/1, cranelift-generic 1/1, cranelift 1/1
+ok     golden methods-type-import-only.bot              2.5 s  front end 1.48 s; interp 1/1, compile 1/1, cranelift-generic 1/1, cranelift 1/1
+ok     golden stdlib-namespaces-str-only.bot            2.1 s  front end 1.32 s; interp 1/1, compile 1/1, cranelift-generic 1/1, cranelift 1/1
+ok     golden loop-collecting-refined-checks.bot       17.9 s  front end 1.75 s; interp 1/1, compile 1/1, cranelift-generic 1/1, cranelift 1/1
+ok     tcl interp struct-destructuring.test            19.9 s  94 passed, 0 failed, 169 skipped (169 golden duplicates)
+ok     tcl compile struct-destructuring.test           19.9 s  94 passed, 0 failed, 169 skipped (169 golden duplicates)
+ok     tcl interp opaque-struct.test                   12.2 s  85 passed, 0 failed, 56 skipped (56 golden duplicates)
+ok     tcl interp mutable-array-type.test               3.1 s  69 passed, 0 failed, 49 skipped (49 golden duplicates)
+ok     tcl compile mutable-array-type.test              3.3 s  69 passed, 0 failed, 49 skipped (49 golden duplicates)
+ok     tcl compile opaque-struct.test                  13.3 s  85 passed, 0 failed, 56 skipped (56 golden duplicates)
+ok     tcl interp abi-mutable-bytes.test               37.5 s  45 passed, 0 failed, 31 skipped (31 golden duplicates)
+ok     tcl compile abi-mutable-bytes.test              38.1 s  45 passed, 0 failed, 31 skipped (31 golden duplicates)
+ok     tcl interp coroutines.test                       8.9 s  35 passed, 0 failed, 44 skipped (44 golden duplicates)
+ok     tcl compile coroutines.test                      8.9 s  35 passed, 0 failed, 44 skipped (44 golden duplicates)
+ok     tcl interp static-economics.test               123.6 s  79 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp abi-bytes.test                       37.8 s  52 passed, 0 failed, 21 skipped (21 golden duplicates)
+ok     tcl compile static-economics.test              127.2 s  79 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl compile abi-bytes.test                      37.8 s  52 passed, 0 failed, 21 skipped (21 golden duplicates)
+ok     tcl interp native.test                          21.6 s  74 passed, 0 failed, 16 skipped (16 golden duplicates)
+ok     tcl compile native.test                         21.1 s  74 passed, 0 failed, 16 skipped (16 golden duplicates)
+ok     tcl interp static-compile.test                   5.5 s  55 passed, 0 failed, 28 skipped (28 golden duplicates)
+ok     tcl compile static-compile.test                  5.3 s  55 passed, 0 failed, 28 skipped (28 golden duplicates)
+ok     tcl interp contexts.test                        18.5 s  62 passed, 0 failed, 12 skipped (12 golden duplicates)
+ok     tcl compile contexts.test                       18.4 s  62 passed, 0 failed, 12 skipped (12 golden duplicates)
+ok     tcl interp traits.test                           3.3 s  46 passed, 0 failed, 32 skipped (32 golden duplicates)
+ok     tcl compile traits.test                          3.3 s  46 passed, 0 failed, 32 skipped (32 golden duplicates)
+ok     tcl interp method-eligible.test                 71.8 s  141 passed, 0 failed, 10 skipped (10 golden duplicates)
+ok     tcl compile method-eligible.test                70.5 s  141 passed, 0 failed, 10 skipped (10 golden duplicates)
+ok     tcl compile fixed-arity-list-return.test        35.2 s  144 passed, 0 failed, 5 skipped (5 golden duplicates)
+ok     tcl interp fixed-arity-list-return.test         35.7 s  144 passed, 0 failed, 5 skipped (5 golden duplicates)
+ok     tcl interp mutable-vector.test                  15.4 s  35 passed, 0 failed, 21 skipped (21 golden duplicates)
+ok     tcl compile mutable-vector.test                 16.8 s  35 passed, 0 failed, 21 skipped (21 golden duplicates)
+ok     tcl interp error-payloads.test                   6.4 s  34 passed, 0 failed, 27 skipped (27 golden duplicates)
+ok     tcl compile error-payloads.test                  6.2 s  34 passed, 0 failed, 27 skipped (27 golden duplicates)
+ok     tcl interp many-boolean-arguments.test          55.6 s  89 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile many-boolean-arguments.test         55.6 s  89 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl interp one-char-string-literal.test         46.3 s  84 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile one-char-string-literal.test        46.2 s  84 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl interp affine.test                          11.4 s  28 passed, 0 failed, 20 skipped (20 golden duplicates)
+ok     tcl compile affine.test                         11.0 s  28 passed, 0 failed, 20 skipped (20 golden duplicates)
+ok     tcl interp refinement-values.test                9.2 s  53 passed, 0 failed, 35 skipped (35 golden duplicates)
+ok     tcl compile refinement-values.test               9.2 s  53 passed, 0 failed, 35 skipped (35 golden duplicates)
+ok     tcl interp method-sugar.test                    38.2 s  26 passed, 0 failed, 100 skipped (100 golden duplicates)
+ok     tcl compile method-sugar.test                   38.6 s  26 passed, 0 failed, 100 skipped (100 golden duplicates)
+ok     tcl interp same-failure.test                    38.6 s  100 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile same-failure.test                   38.4 s  100 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile proves-naming.test                  47.6 s  82 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp proves-naming.test                   49.1 s  82 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp raw-int-abi.test                     70.9 s  69 passed, 0 failed, 0 skipped
+ok     tcl compile raw-int-abi.test                    70.5 s  69 passed, 0 failed, 0 skipped
+ok     tcl interp enums.test                            3.1 s  45 passed, 0 failed, 21 skipped (21 golden duplicates)
+ok     tcl compile enums.test                           3.2 s  45 passed, 0 failed, 21 skipped (21 golden duplicates)
+ok     tcl interp stdlib-namespaces.test                7.0 s  52 passed, 0 failed, 22 skipped (22 golden duplicates)
+ok     tcl compile stdlib-namespaces.test               6.3 s  52 passed, 0 failed, 22 skipped (22 golden duplicates)
+ok     tcl interp golden-framework.test               108.6 s  34 passed, 0 failed, 8 skipped (8 golden duplicates)
+ok     tcl compile golden-framework.test              107.3 s  34 passed, 0 failed, 8 skipped (8 golden duplicates)
+ok     tcl compile native-block-escape.test             8.9 s  51 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl interp native-block-escape.test              9.1 s  51 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl interp imports.test                          2.0 s  61 passed, 0 failed, 43 skipped (43 golden duplicates)
+ok     tcl compile imports.test                         2.1 s  61 passed, 0 failed, 43 skipped (43 golden duplicates)
+ok     tcl interp context-traits.test                   3.9 s  31 passed, 0 failed, 8 skipped (8 golden duplicates)
+ok     tcl compile context-traits.test                  3.8 s  31 passed, 0 failed, 8 skipped (8 golden duplicates)
+ok     tcl compile short-string.test                   13.6 s  59 passed, 0 failed, 0 skipped
+ok     tcl interp argv.test                            23.6 s  59 passed, 0 failed, 6 skipped (6 golden duplicates)
+ok     tcl interp short-string.test                    14.2 s  59 passed, 0 failed, 0 skipped
+ok     tcl compile argv.test                           23.3 s  59 passed, 0 failed, 6 skipped (6 golden duplicates)
+ok     tcl interp structural-fn-types.test              1.9 s  56 passed, 0 failed, 29 skipped (29 golden duplicates)
+ok     tcl compile structural-fn-types.test             2.0 s  56 passed, 0 failed, 29 skipped (29 golden duplicates)
+ok     tcl interp structs.test                          3.1 s  56 passed, 0 failed, 33 skipped (33 golden duplicates)
+ok     tcl interp hir-range.test                        1.8 s  57 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl compile structs.test                         2.9 s  56 passed, 0 failed, 33 skipped (33 golden duplicates)
+ok     tcl compile hir-range.test                       1.6 s  57 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl compile flags.test                           7.5 s  77 passed, 0 failed, 78 skipped (78 golden duplicates)
+ok     tcl interp flags.test                            8.1 s  77 passed, 0 failed, 78 skipped (78 golden duplicates)
+ok     tcl interp linux-syscall.test                    7.0 s  23 passed, 0 failed, 14 skipped (14 golden duplicates)
+ok     tcl compile linux-syscall.test                   6.9 s  23 passed, 0 failed, 14 skipped (14 golden duplicates)
+ok     tcl interp immutable-set.test                    0.9 s  37 passed, 0 failed, 31 skipped (31 golden duplicates)
+ok     tcl compile immutable-set.test                   0.9 s  37 passed, 0 failed, 31 skipped (31 golden duplicates)
+ok     tcl interp struct-scalar-replacement.test       22.7 s  84 passed, 0 failed, 0 skipped
+ok     tcl compile struct-scalar-replacement.test      22.8 s  84 passed, 0 failed, 0 skipped
+ok     tcl compile exact-callable-key.test             13.0 s  58 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp exact-callable-key.test              13.6 s  58 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl compile mutable-array.test                   9.3 s  17 passed, 0 failed, 15 skipped (15 golden duplicates)
+ok     tcl interp mutable-array.test                    9.5 s  17 passed, 0 failed, 15 skipped (15 golden duplicates)
+ok     tcl compile loop-collecting.test                 3.1 s  35 passed, 0 failed, 105 skipped (105 golden duplicates)
+ok     tcl interp loop-collecting.test                  3.2 s  35 passed, 0 failed, 105 skipped (105 golden duplicates)
+ok     tcl compile abi-numeric.test                     9.3 s  17 passed, 0 failed, 24 skipped (24 golden duplicates)
+ok     tcl interp abi-numeric.test                      9.7 s  17 passed, 0 failed, 24 skipped (24 golden duplicates)
+ok     tcl interp errors.test                           1.6 s  14 passed, 0 failed, 37 skipped (37 golden duplicates)
+ok     tcl compile errors.test                          1.8 s  14 passed, 0 failed, 37 skipped (37 golden duplicates)
+ok     tcl interp intrinsic-contracts.test              2.6 s  42 passed, 0 failed, 20 skipped (20 golden duplicates)
+ok     tcl compile intrinsic-contracts.test             2.6 s  42 passed, 0 failed, 20 skipped (20 golden duplicates)
+ok     tcl compile virtual-construction.test           15.1 s  51 passed, 0 failed, 0 skipped
+ok     tcl interp virtual-construction.test            15.3 s  51 passed, 0 failed, 0 skipped
+ok     tcl compile semantic-instances.test              1.3 s  49 passed, 0 failed, 30 skipped (30 golden duplicates)
+ok     tcl interp semantic-instances.test               1.5 s  49 passed, 0 failed, 30 skipped (30 golden duplicates)
+ok     tcl interp packed-ascii.test                    13.5 s  47 passed, 0 failed, 0 skipped
+ok     tcl compile packed-ascii.test                   14.0 s  47 passed, 0 failed, 0 skipped
+ok     tcl interp structural-contract-completions.test    12.1 s  22 passed, 0 failed, 23 skipped (23 golden duplicates)
+ok     tcl compile structural-contract-completions.test    12.2 s  22 passed, 0 failed, 23 skipped (23 golden duplicates)
+ok     tcl interp mutarray-construction.test            2.7 s  57 passed, 0 failed, 19 skipped (19 golden duplicates)
+ok     tcl compile mutarray-construction.test           3.0 s  57 passed, 0 failed, 19 skipped (19 golden duplicates)
+ok     tcl interp warnings.test                         9.6 s  81 passed, 0 failed, 0 skipped
+ok     tcl interp surface-parser.test                   0.4 s  135 passed, 0 failed, 0 skipped
+ok     tcl compile warnings.test                        9.6 s  81 passed, 0 failed, 0 skipped
+ok     tcl compile surface-parser.test                  0.5 s  135 passed, 0 failed, 0 skipped
+ok     tcl interp refinement-validators.test            6.0 s  13 passed, 0 failed, 35 skipped (35 golden duplicates)
+ok     tcl compile refinement-validators.test           5.8 s  13 passed, 0 failed, 35 skipped (35 golden duplicates)
+ok     tcl interp surface-lowering.test                 1.1 s  93 passed, 0 failed, 5 skipped (5 golden duplicates)
+ok     tcl compile surface-lowering.test                1.1 s  93 passed, 0 failed, 5 skipped (5 golden duplicates)
+ok     tcl interp namespaced-errors.test                3.2 s  25 passed, 0 failed, 6 skipped (6 golden duplicates)
+ok     tcl compile namespaced-errors.test               3.1 s  25 passed, 0 failed, 6 skipped (6 golden duplicates)
+ok     tcl compile surface-modules.test                 2.7 s  28 passed, 0 failed, 9 skipped (9 golden duplicates)
+ok     tcl interp surface-modules.test                  3.1 s  28 passed, 0 failed, 9 skipped (9 golden duplicates)
+ok     tcl interp source-types.test                     0.8 s  45 passed, 0 failed, 6 skipped (6 golden duplicates)
+ok     tcl compile source-types.test                    0.7 s  45 passed, 0 failed, 6 skipped (6 golden duplicates)
+ok     tcl interp value-transport.test                 39.5 s  64 passed, 0 failed, 0 skipped
+ok     tcl compile value-transport.test                39.6 s  64 passed, 0 failed, 0 skipped
+ok     tcl interp elif.test                            31.7 s  13 passed, 0 failed, 32 skipped (32 golden duplicates)
+ok     tcl compile elif.test                           31.9 s  13 passed, 0 failed, 32 skipped (32 golden duplicates)
+ok     tcl compile direct-hir-native.test              29.2 s  27 passed, 0 failed, 10 skipped (10 golden duplicates)
+ok     tcl interp exact-value-facts.test                3.7 s  69 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl compile exact-value-facts.test               3.6 s  69 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp checked-domain-proof-provenance.test     0.7 s  15 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl compile checked-domain-proof-provenance.test     0.9 s  15 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl interp hir-specialize.test                  15.2 s  30 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile hir-specialize.test                 15.3 s  30 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl interp strict-references.test                4.4 s  31 passed, 0 failed, 32 skipped (32 golden duplicates)
+ok     tcl compile strict-references.test               4.2 s  31 passed, 0 failed, 32 skipped (32 golden duplicates)
+ok     tcl interp conjunctive-entry-facts.test          0.7 s  25 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl compile conjunctive-entry-facts.test         0.6 s  25 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl interp unicode-char.test                     0.5 s  42 passed, 0 failed, 33 skipped (33 golden duplicates)
+ok     tcl compile unicode-char.test                    0.5 s  42 passed, 0 failed, 33 skipped (33 golden duplicates)
+ok     tcl interp applied-types.test                    0.5 s  27 passed, 0 failed, 24 skipped (24 golden duplicates)
+ok     tcl compile applied-types.test                   0.5 s  27 passed, 0 failed, 24 skipped (24 golden duplicates)
+ok     tcl interp direct-hir-native.test               88.1 s  27 passed, 0 failed, 10 skipped (10 golden duplicates)
+ok     tcl compile typed-mutarray-builder.test        172.8 s  64 passed, 0 failed, 0 skipped
+ok     tcl interp typed-mutarray-builder.test         173.0 s  64 passed, 0 failed, 0 skipped
+ok     tcl interp native-csv-records.test             210.8 s  20 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl interp closed-closure-entry-facts.test       0.7 s  27 passed, 0 failed, 6 skipped (6 golden duplicates)
+ok     tcl compile closed-closure-entry-facts.test      0.8 s  27 passed, 0 failed, 6 skipped (6 golden duplicates)
+ok     tcl interp instance-entry-range-facts.test       1.0 s  28 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile instance-entry-range-facts.test      0.9 s  28 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl interp loop-counted.test                     0.4 s  19 passed, 0 failed, 41 skipped (41 golden duplicates)
+ok     tcl compile loop-counted.test                    0.4 s  19 passed, 0 failed, 41 skipped (41 golden duplicates)
+ok     tcl compile native-csv-records.test            208.5 s  20 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl interp native-param-aggregate.test           9.9 s  37 passed, 0 failed, 0 skipped
+ok     tcl compile native-param-aggregate.test          9.4 s  37 passed, 0 failed, 0 skipped
+ok     tcl interp native-tiny-leaf-inline.test         11.9 s  32 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl compile native-tiny-leaf-inline.test        12.1 s  32 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp native-hashtable.test                68.0 s  40 passed, 0 failed, 0 skipped
+ok     tcl interp native-mutarray.test                  1.8 s  25 passed, 0 failed, 24 skipped (24 golden duplicates)
+ok     tcl compile native-mutarray.test                 1.8 s  25 passed, 0 failed, 24 skipped (24 golden duplicates)
+ok     tcl compile native-hashtable.test               66.2 s  40 passed, 0 failed, 0 skipped
+ok     tcl interp higher-order-completions.test         2.8 s  20 passed, 0 failed, 42 skipped (42 golden duplicates)
+ok     tcl interp close-callers-convergence.test        0.9 s  24 passed, 0 failed, 0 skipped
+ok     tcl compile close-callers-convergence.test       0.8 s  24 passed, 0 failed, 0 skipped
+ok     tcl interp typed-callable-escape.test            0.3 s  6 passed, 0 failed, 31 skipped (31 golden duplicates)
+ok     tcl compile typed-callable-escape.test           0.3 s  6 passed, 0 failed, 31 skipped (31 golden duplicates)
+ok     tcl compile higher-order-completions.test        3.0 s  20 passed, 0 failed, 42 skipped (42 golden duplicates)
+ok     tcl interp string-allocation.test                7.9 s  23 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile string-allocation.test               7.8 s  23 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile native-root-liveness.test            0.9 s  23 passed, 0 failed, 0 skipped
+ok     tcl interp native-root-liveness.test             1.0 s  23 passed, 0 failed, 0 skipped
+ok     tcl interp hir-aot.test                          7.9 s  32 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl interp typed-parameters.test                 0.4 s  24 passed, 0 failed, 26 skipped (26 golden duplicates)
+ok     tcl compile hir-aot.test                         8.4 s  32 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile typed-parameters.test                0.4 s  24 passed, 0 failed, 26 skipped (26 golden duplicates)
+ok     tcl interp proven-bounds.test                    2.7 s  22 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl compile proven-bounds.test                   2.6 s  22 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp setcontains-equality-total.test       3.4 s  16 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile setcontains-equality-total.test      3.4 s  16 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl interp native-string-region.test             3.7 s  31 passed, 0 failed, 0 skipped
+ok     tcl compile native-string-region.test            3.6 s  31 passed, 0 failed, 0 skipped
+ok     tcl interp self-recursive-result-ranges.test    36.9 s  37 passed, 0 failed, 0 skipped
+ok     tcl compile self-recursive-result-ranges.test    37.9 s  37 passed, 0 failed, 0 skipped
+ok     tcl interp native-bitshift.test                  5.7 s  19 passed, 0 failed, 9 skipped (9 golden duplicates)
+ok     tcl compile native-bitshift.test                 6.1 s  19 passed, 0 failed, 9 skipped (9 golden duplicates)
+ok     tcl interp dormant-instances.test                8.2 s  20 passed, 0 failed, 0 skipped
+ok     tcl compile dormant-instances.test               7.5 s  20 passed, 0 failed, 0 skipped
+ok     tcl compile stdlib.test                        283.6 s  144 passed, 0 failed, 0 skipped
+ok     tcl interp setfromlist-equality-total.test       2.2 s  13 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp stdlib.test                         287.7 s  144 passed, 0 failed, 0 skipped
+ok     tcl compile setfromlist-equality-total.test      2.2 s  13 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp compilation-isolation.test           28.3 s  19 passed, 0 failed, 0 skipped
+ok     tcl compile compilation-isolation.test          28.3 s  19 passed, 0 failed, 0 skipped
+ok     tcl interp linux-path.test                       4.3 s  10 passed, 0 failed, 9 skipped (9 golden duplicates)
+ok     tcl interp web-unreserved.test                   2.3 s  4 passed, 0 failed, 8 skipped (8 golden duplicates)
+ok     tcl compile linux-path.test                      4.2 s  10 passed, 0 failed, 9 skipped (9 golden duplicates)
+ok     tcl interp empty-collection-admissibility.test     0.3 s  4 passed, 0 failed, 22 skipped (22 golden duplicates)
+ok     tcl interp hir-cache.test                        0.9 s  15 passed, 0 failed, 0 skipped
+ok     tcl compile empty-collection-admissibility.test     0.3 s  4 passed, 0 failed, 22 skipped (22 golden duplicates)
+ok     tcl compile hir-cache.test                       0.8 s  15 passed, 0 failed, 0 skipped
+ok     tcl compile web-unreserved.test                  2.8 s  4 passed, 0 failed, 8 skipped (8 golden duplicates)
+ok     tcl interp module-static-values.test             5.7 s  18 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile module-static-values.test            5.7 s  18 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile range-completions-crosscheck.test     8.3 s  17 passed, 0 failed, 0 skipped
+ok     tcl interp range-completions-crosscheck.test     8.5 s  17 passed, 0 failed, 0 skipped
+ok     tcl interp native-string-view.test               4.2 s  17 passed, 0 failed, 0 skipped
+ok     tcl compile native-string-view.test              4.1 s  17 passed, 0 failed, 0 skipped
+ok     tcl interp hir-closed-call-params.test           2.9 s  16 passed, 0 failed, 0 skipped
+ok     tcl compile hir-closed-call-params.test          2.9 s  16 passed, 0 failed, 0 skipped
+ok     tcl interp byte-set.test                         1.4 s  14 passed, 0 failed, 7 skipped (7 golden duplicates)
+ok     tcl interp loop-in.test                          0.3 s  13 passed, 0 failed, 21 skipped (21 golden duplicates)
+ok     tcl compile byte-set.test                        1.6 s  14 passed, 0 failed, 7 skipped (7 golden duplicates)
+ok     tcl compile loop-in.test                         0.3 s  13 passed, 0 failed, 21 skipped (21 golden duplicates)
+ok     tcl interp portable-io.test                      8.1 s  12 passed, 0 failed, 0 skipped
+ok     tcl compile portable-io.test                     8.1 s  12 passed, 0 failed, 0 skipped
+ok     tcl interp raw-count-loops.test                  9.4 s  13 passed, 0 failed, 0 skipped
+ok     tcl compile raw-count-loops.test                 9.3 s  13 passed, 0 failed, 0 skipped
+ok     tcl interp short-demand.test                     4.7 s  17 passed, 0 failed, 0 skipped
+ok     tcl compile short-demand.test                    4.8 s  17 passed, 0 failed, 0 skipped
+ok     tcl interp ascii.test                            0.4 s  2 passed, 0 failed, 31 skipped (31 golden duplicates)
+ok     tcl compile ascii.test                           0.4 s  2 passed, 0 failed, 31 skipped (31 golden duplicates)
+ok     tcl interp hir-interchange.test                  3.7 s  11 passed, 0 failed, 0 skipped
+ok     tcl compile hir-interchange.test                 3.7 s  11 passed, 0 failed, 0 skipped
+ok     tcl compile native-escape.test                   5.0 s  22 passed, 0 failed, 0 skipped
+ok     tcl interp native-escape.test                    5.1 s  22 passed, 0 failed, 0 skipped
+ok     tcl interp native-string-traversal.test          1.5 s  19 passed, 0 failed, 0 skipped
+ok     tcl compile native-string-traversal.test         1.5 s  19 passed, 0 failed, 0 skipped
+ok     tcl interp surface-lexer.test                    0.2 s  44 passed, 0 failed, 0 skipped
+ok     tcl compile surface-lexer.test                   0.2 s  44 passed, 0 failed, 0 skipped
+ok     tcl interp result-range-narrowing.test           1.9 s  7 passed, 0 failed, 5 skipped (5 golden duplicates)
+ok     tcl compile result-range-narrowing.test          2.0 s  7 passed, 0 failed, 5 skipped (5 golden duplicates)
+ok     tcl interp hir-resolution.test                   0.3 s  27 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl compile hir-resolution.test                  0.3 s  27 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp native-tcl-unicode.test              17.4 s  27 passed, 0 failed, 41 skipped (41 golden duplicates)
+ok     tcl compile native-tcl-unicode.test             17.5 s  27 passed, 0 failed, 41 skipped (41 golden duplicates)
+ok     tcl interp native-byte.test                      2.5 s  6 passed, 0 failed, 7 skipped (7 golden duplicates)
+ok     tcl compile native-byte.test                     2.6 s  6 passed, 0 failed, 7 skipped (7 golden duplicates)
+ok     tcl interp symbolic-type-identity.test           0.5 s  11 passed, 0 failed, 4 skipped (4 golden duplicates)
+ok     tcl compile symbolic-type-identity.test          0.4 s  11 passed, 0 failed, 4 skipped (4 golden duplicates)
+ok     tcl compile structs-syntax.test                 12.7 s  30 passed, 0 failed, 0 skipped
+ok     tcl interp structs-syntax.test                  13.0 s  30 passed, 0 failed, 0 skipped
+ok     tcl interp native-stack-map.test                 0.6 s  9 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl compile native-stack-map.test                0.8 s  9 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp hir-callable-target.test              1.0 s  9 passed, 0 failed, 0 skipped
+ok     tcl compile hir-callable-target.test             1.2 s  9 passed, 0 failed, 0 skipped
+ok     tcl compile aot-stub-linker.test                12.0 s  6 passed, 0 failed, 0 skipped
+ok     tcl interp aot-stub-linker.test                 12.3 s  6 passed, 0 failed, 0 skipped
+ok     tcl interp proof-loop-intervals.test             0.4 s  3 passed, 0 failed, 10 skipped (10 golden duplicates)
+ok     tcl compile proof-loop-intervals.test            0.4 s  3 passed, 0 failed, 10 skipped (10 golden duplicates)
+ok     tcl compile closure-int-keys.test                5.7 s  11 passed, 0 failed, 0 skipped
+ok     tcl interp closure-int-keys.test                 5.9 s  11 passed, 0 failed, 0 skipped
+ok     tcl interp native-listloop.test                  0.6 s  13 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl compile native-listloop.test                 0.6 s  13 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp hir-range-bitop.test                  0.1 s  29 passed, 0 failed, 0 skipped
+ok     tcl compile hir-range-bitop.test                 0.1 s  29 passed, 0 failed, 0 skipped
+ok     tcl interp refined-signatures.test               0.7 s  13 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl compile refined-signatures.test              0.7 s  13 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl interp native-alloc.test                     0.7 s  17 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile native-alloc.test                    0.7 s  17 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl interp compiler-opt.test                    21.9 s  20 passed, 0 failed, 5 skipped (5 golden duplicates)
+ok     tcl compile compiler-opt.test                   21.5 s  20 passed, 0 failed, 5 skipped (5 golden duplicates)
+ok     tcl interp native-executable.test               13.0 s  14 passed, 0 failed, 0 skipped
+ok     tcl compile native-executable.test              13.4 s  14 passed, 0 failed, 0 skipped
+ok     tcl interp raw-internal-abi.test                 8.5 s  8 passed, 0 failed, 0 skipped
+ok     tcl compile raw-internal-abi.test                8.5 s  8 passed, 0 failed, 0 skipped
+ok     tcl interp emailish-predicate.test               6.1 s  8 passed, 0 failed, 12 skipped (12 golden duplicates)
+ok     tcl interp native-root-storage.test              0.4 s  10 passed, 0 failed, 0 skipped
+ok     tcl compile emailish-predicate.test              6.1 s  8 passed, 0 failed, 12 skipped (12 golden duplicates)
+ok     tcl compile native-root-storage.test             0.4 s  10 passed, 0 failed, 0 skipped
+ok     tcl interp native-uri-escape.test                4.1 s  6 passed, 0 failed, 32 skipped (32 golden duplicates)
+ok     tcl compile native-uri-escape.test               3.9 s  6 passed, 0 failed, 32 skipped (32 golden duplicates)
+ok     tcl interp refined.test                          0.3 s  20 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl compile refined.test                         0.3 s  20 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp hir-syntax.test                       0.3 s  12 passed, 0 failed, 0 skipped
+ok     tcl compile hir-syntax.test                      0.3 s  12 passed, 0 failed, 0 skipped
+ok     tcl interp hir-types.test                        0.3 s  20 passed, 0 failed, 0 skipped
+ok     tcl compile hir-types.test                       0.3 s  20 passed, 0 failed, 0 skipped
+ok     tcl compile range-fixpoint-scaling.test          6.8 s  7 passed, 0 failed, 0 skipped
+ok     tcl interp types.test                            0.1 s  16 passed, 0 failed, 0 skipped
+ok     tcl interp range-fixpoint-scaling.test           7.1 s  7 passed, 0 failed, 0 skipped
+ok     tcl compile types.test                           0.1 s  16 passed, 0 failed, 0 skipped
+ok     tcl compile golden.test                         89.7 s  9 passed, 0 failed, 0 skipped
+ok     tcl interp list-stdlib.test                      0.4 s  3 passed, 0 failed, 21 skipped (21 golden duplicates)
+ok     tcl compile list-stdlib.test                     0.4 s  3 passed, 0 failed, 21 skipped (21 golden duplicates)
+ok     tcl interp hir-range-exact.test                  0.3 s  18 passed, 0 failed, 0 skipped
+ok     tcl compile hir-range-exact.test                 0.3 s  18 passed, 0 failed, 0 skipped
+ok     tcl interp inference.test                        0.3 s  21 passed, 0 failed, 9 skipped (9 golden duplicates)
+ok     tcl compile inference.test                       0.3 s  21 passed, 0 failed, 9 skipped (9 golden duplicates)
+ok     tcl interp native-report-skipped-code.test       1.0 s  10 passed, 0 failed, 0 skipped
+ok     tcl compile native-report-skipped-code.test      1.1 s  10 passed, 0 failed, 0 skipped
+ok     tcl interp value-display.test                    2.1 s  8 passed, 0 failed, 0 skipped
+ok     tcl compile value-display.test                   2.1 s  8 passed, 0 failed, 0 skipped
+ok     tcl interp bindings.test                         0.2 s  22 passed, 0 failed, 9 skipped (9 golden duplicates)
+ok     tcl compile bindings.test                        0.3 s  18 passed, 0 failed, 13 skipped (9 golden duplicates)
+ok     tcl interp golden.test                         110.6 s  9 passed, 0 failed, 0 skipped
+ok     tcl interp exact-callable-executable.test       22.6 s  6 passed, 0 failed, 0 skipped
+ok     tcl interp hir-refinement.test                   0.2 s  12 passed, 0 failed, 0 skipped
+ok     tcl compile hir-refinement.test                  0.3 s  12 passed, 0 failed, 0 skipped
+ok     tcl interp native-hashing.test                   0.5 s  11 passed, 0 failed, 26 skipped (26 golden duplicates)
+ok     tcl compile native-hashing.test                  0.5 s  11 passed, 0 failed, 26 skipped (26 golden duplicates)
+ok     tcl interp hir-lowering.test                     0.6 s  45 passed, 0 failed, 0 skipped
+ok     tcl compile hir-lowering.test                    0.6 s  45 passed, 0 failed, 0 skipped
+ok     tcl interp hir-samples.test                      0.4 s  42 passed, 0 failed, 0 skipped
+ok     tcl compile hir-samples.test                     0.4 s  42 passed, 0 failed, 0 skipped
+ok     tcl interp surface-samples.test                  0.6 s  28 passed, 0 failed, 37 skipped (37 golden duplicates)
+ok     tcl compile surface-samples.test                 0.6 s  28 passed, 0 failed, 37 skipped (37 golden duplicates)
+ok     tcl interp str-char-at.test                      0.4 s  4 passed, 0 failed, 10 skipped (10 golden duplicates)
+ok     tcl compile str-char-at.test                     0.4 s  4 passed, 0 failed, 10 skipped (10 golden duplicates)
+ok     tcl interp native-report-inlined-leaf.test       5.0 s  5 passed, 0 failed, 0 skipped
+ok     tcl compile exact-callable-executable.test      22.0 s  6 passed, 0 failed, 0 skipped
+ok     tcl interp hir-call-facts.test                   0.6 s  8 passed, 0 failed, 0 skipped
+ok     tcl compile hir-call-facts.test                  0.6 s  8 passed, 0 failed, 0 skipped
+ok     tcl interp refinements.test                      0.1 s  11 passed, 0 failed, 0 skipped
+ok     tcl compile refinements.test                     0.2 s  11 passed, 0 failed, 0 skipped
+ok     tcl interp scalarbits.test                       0.3 s  3 passed, 0 failed, 8 skipped (8 golden duplicates)
+ok     tcl compile scalarbits.test                      0.3 s  3 passed, 0 failed, 8 skipped (8 golden duplicates)
+ok     tcl compile native-report-inlined-leaf.test      4.8 s  5 passed, 0 failed, 0 skipped
+ok     tcl interp native-refinement-propagation.test     5.8 s  7 passed, 0 failed, 0 skipped
+ok     tcl interp lists.test                            0.2 s  8 passed, 0 failed, 4 skipped (4 golden duplicates)
+ok     tcl compile lists.test                           0.3 s  8 passed, 0 failed, 4 skipped (4 golden duplicates)
+ok     tcl compile native-refinement-propagation.test     5.7 s  7 passed, 0 failed, 0 skipped
+ok     tcl interp warning-gate.test                   102.7 s  6 passed, 0 failed, 0 skipped
+ok     tcl compile warning-gate.test                  101.7 s  6 passed, 0 failed, 0 skipped
+ok     tcl compile golden-duplicates.test               1.2 s  4 passed, 0 failed, 0 skipped
+ok     tcl interp golden-duplicates.test                1.3 s  4 passed, 0 failed, 0 skipped
+ok     tcl interp calls.test                            0.2 s  9 passed, 0 failed, 10 skipped (10 golden duplicates)
+ok     tcl compile calls.test                           0.2 s  9 passed, 0 failed, 10 skipped (10 golden duplicates)
+ok     tcl interp blockescape-nested-capturers.test     1.5 s  10 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl compile blockescape-nested-capturers.test     1.4 s  10 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl interp control.test                          0.2 s  7 passed, 0 failed, 10 skipped (10 golden duplicates)
+ok     tcl compile control.test                         0.3 s  7 passed, 0 failed, 10 skipped (10 golden duplicates)
+ok     tcl interp loops.test                            0.1 s  8 passed, 0 failed, 7 skipped (7 golden duplicates)
+ok     tcl compile loops.test                           0.2 s  8 passed, 0 failed, 7 skipped (7 golden duplicates)
+ok     tcl interp blockescape-called-generic.test       0.6 s  5 passed, 0 failed, 0 skipped
+ok     tcl compile blockescape-called-generic.test      0.6 s  5 passed, 0 failed, 0 skipped
+ok     tcl interp native-lockstep-rejected.test         0.4 s  4 passed, 0 failed, 0 skipped
+ok     tcl compile native-lockstep-rejected.test        0.4 s  4 passed, 0 failed, 0 skipped
+ok     tcl interp native-bitwise-fold.test              0.5 s  5 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl interp regex.test                            0.1 s  20 passed, 0 failed, 0 skipped
+ok     tcl compile native-bitwise-fold.test             0.6 s  5 passed, 0 failed, 1 skipped (1 golden duplicates)
+ok     tcl compile regex.test                           0.2 s  20 passed, 0 failed, 0 skipped
+ok     tcl interp backends.test                         0.2 s  11 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl compile backends.test                        0.2 s  11 passed, 0 failed, 3 skipped (3 golden duplicates)
+ok     tcl interp blocks.test                           0.1 s  7 passed, 0 failed, 8 skipped (8 golden duplicates)
+ok     tcl compile blocks.test                          0.2 s  7 passed, 0 failed, 8 skipped (8 golden duplicates)
+ok     tcl interp hir-cardinality.test                  0.2 s  7 passed, 0 failed, 0 skipped
+ok     tcl compile hir-cardinality.test                 0.2 s  7 passed, 0 failed, 0 skipped
+ok     tcl interp results.test                          0.1 s  9 passed, 0 failed, 0 skipped
+ok     tcl interp bench-backends.test                   0.1 s  4 passed, 0 failed, 0 skipped
+ok     tcl compile results.test                         0.2 s  9 passed, 0 failed, 0 skipped
+ok     tcl compile bench-backends.test                  0.1 s  4 passed, 0 failed, 0 skipped
+ok     tcl interp native-stack-overflow.test            0.3 s  4 passed, 0 failed, 0 skipped
+ok     tcl compile native-stack-overflow.test           0.3 s  4 passed, 0 failed, 0 skipped
+ok     tcl compile bench-corpus.test                    1.5 s  4 passed, 0 failed, 0 skipped
+ok     tcl interp acceptance.test                       0.2 s  2 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl compile acceptance.test                      0.2 s  2 passed, 0 failed, 2 skipped (2 golden duplicates)
+ok     tcl interp bench-corpus.test                    26.4 s  4 passed, 0 failed, 0 skipped
+ok     tcl compile native-tiny-leaf-pressure.test     336.6 s  10 passed, 0 failed, 0 skipped
+ok     tcl interp native-tiny-leaf-pressure.test      338.1 s  10 passed, 0 failed, 0 skipped
+
+Tcl tests on interp    5344 passed, 0 failed, 0 skipped, 2043 golden duplicates skipped
+Tcl tests on compile   5340 passed, 0 failed, 4 skipped, 2043 golden duplicates skipped
+Golden suites: 88 run, 0 failed; tests passed: interp 4567/4567, compile 4567/4567, cranelift-generic 4474/4474, cranelift 4576/4576
+Front-end cache /tmp/claude-0/-home-user-botlish/7b4e0ee9-4058-5da4-b271-46d4344024a1/scratchpad/cache-local: 88 entries, 185 MB
+Wall time 1998.6 s with 4 jobs.
+@@TIME real 1998.698 user 7570.487 sys 141.750
+@@EXIT 0

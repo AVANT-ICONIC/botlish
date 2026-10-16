@@ -134,6 +134,67 @@ if {[info exists ::env(NATIVE_COVERAGE)] && [info commands ::CoverageTest] eq ""
     interp alias {} ::test {} ::CoverageTest
 }
 
+# Local runs (tests/local.tcl; AGENTS.md, "Running the tests locally"):
+# BOTLISH_SKIP_GOLDEN_DUPLICATES=1 skips every Tcl test whose whole theorem a
+# golden test carries -- the manifest's freeze class FROZEN-DUPLICATE-ORACLE
+# (tests/golden/manifest.tsv; LARGE-SCALE-GOLDEN-MIGRATION.md, "Freeze
+# classification") -- because the golden suites run in its place. Such a
+# test is reported skipped, by the constraint goldenDuplicate. A test is
+# skipped only when every manifest row of it (its file and name) is in that
+# class. CI never sets the variable: every Tcl test runs there
+# (tests/golden-duplicates.test pins both).
+
+# The skipped tests: a dict {FILE NAME} -> 1, FILE a test file's tail.
+proc ::GoldenDuplicates {} {
+    set channel [open [file join $::projectRoot tests golden manifest.tsv] r]
+    fconfigure $channel -encoding utf-8
+    set header [split [gets $channel] \t]
+    set text [read $channel]
+    close $channel
+    set fileColumn [lsearch -exact $header old_file]
+    set nameColumn [lsearch -exact $header old_test]
+    set freezeColumn [lsearch -exact $header freeze]
+    set duplicated [dict create]
+    set active [dict create]
+    foreach line [split $text \n] {
+        if {$line eq ""} continue
+        set row [split $line \t]
+        set key [list [file tail [lindex $row $fileColumn]] [lindex $row $nameColumn]]
+        if {[lindex $row $freezeColumn] eq "FROZEN-DUPLICATE-ORACLE"} {
+            dict set duplicated $key 1
+        } else {
+            dict set active $key 1
+        }
+    }
+    foreach key [dict keys $active] {
+        dict unset duplicated $key
+    }
+    return $duplicated
+}
+if {[info exists ::env(BOTLISH_SKIP_GOLDEN_DUPLICATES)]
+        && $::env(BOTLISH_SKIP_GOLDEN_DUPLICATES) ni {"" 0}
+        && [info commands ::GoldenDuplicateTest] eq ""} {
+    testConstraint goldenDuplicate 0
+    # (Read at the first test.)
+    unset -nocomplain ::goldenDuplicates
+    # The test command the others go to (the coverage wrapper's, when on).
+    set ::goldenDuplicateNext [expr {[info commands ::CoverageTest] ne ""
+        ? "::CoverageTest" : "::tcltest::test"}]
+    proc ::GoldenDuplicateTest {name args} {
+        if {![info exists ::goldenDuplicates]} {
+            set ::goldenDuplicates [::GoldenDuplicates]
+        }
+        # (info script: the test file being run, standalone or sourced.)
+        if {[dict exists $::goldenDuplicates [list [file tail [info script]] $name]]} {
+            return [uplevel 1 [list ::tcltest::test $name "ported to a golden test" \
+                -constraints goldenDuplicate -body {}]]
+        }
+        return [uplevel 1 [list $::goldenDuplicateNext $name {*}$args]]
+    }
+    rename ::test {}
+    interp alias {} ::test {} ::GoldenDuplicateTest
+}
+
 # Evaluates a program given as expressions; returns the formatted value.
 proc run {args} {
     return [core::formatValue [core::evalProgram $args]]

@@ -1,0 +1,6 @@
+plain   native::nir 13.39 s
+encode  native::nir 16.76 s
+store   native::nir 17.92 s
+plain   native::nir 15.53 s
+encode  native::nir 18.53 s
+store   native::nir 19.03 s

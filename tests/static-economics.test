@@ -1295,7 +1295,7 @@ test se-method-invalidated {a call whose receiver a rejected block changes is de
     list [sdDiff $a $b] [seSame $text 0] [lsort -unique [lmap d [dict get $a diagnostics] {lindex $d 0}]]
 } -result {{} {} AMBIGUOUS-METHOD-CALL}
 
-test se-build-reuse-identical {a method-call decision build that would repeat the build it started from is not made again (hir::SameChoices) -- with or without static blocks, the program is the one building it again gives} -body {
+test se-build-reuse-identical {a method-call decision build that would repeat the build it started from is not made again (hir::MethodConfig) -- with or without static blocks, the program is the one building it again gives} -body {
     set programs [list \
         [seSuite 10 type 1] \
         "$::seErased[seSite a $::seContributor][seSite b $::seConsumer][seSite c [seTypeFail 0]]0\n" \
@@ -1316,6 +1316,41 @@ test se-build-reuse-identical {a method-call decision build that would repeat th
     }
     set results
 } -result {{} {} {} {} {} {}}
+
+# A chain of method-style calls on one receiver: each `arr.at(i)` narrows
+# `arr` for the statements after it, so the receiver of the next is stable
+# only once the call before is decided -- one link per pass. Every link
+# chooses its second candidate (mutable_array::at), so each pass's trial 1
+# has the configuration the pass before built (hir::MethodConfig). And a
+# chain whose links choose different candidates (swap's first, at's
+# second): its second pass's trial 0 is the build the decision started
+# from, its third pass's trial 1 the second pass's.
+set ::seMethodChain "import list\nimport mutable_array\nimport mutable_vector\n\nfn f() -> List\[int\] errors IndexNotFound:\n    arr = mutable_array::create(3, 0)\n    x = arr.at(0)\n    y = arr.at(1)\n    z = arr.at(2)\n    \[x, y, z\]\n\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
+set ::seMethodMixed "import list\nimport mutable_array\nimport mutable_vector\n\nfn f() -> List\[int\] errors IndexNotFound:\n    arr = mutable_array::create(3, 0)\n    old = arr.swap(0, 5)\n    x = arr.at(0)\n    y = arr.at(1)\n    \[old, x, y\]\n\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
+
+test se-method-memo {a method-call decision builds no configuration twice: a trial whose configuration an earlier build of the decision had is read from what was recorded of that build (hir::MethodConfig, hir::MethodTrialRecord) -- the decided program is the one building every trial gives, and the audit (every reused build made again) finds the same} -body {
+    set results {}
+    foreach text [list $::seMethodChain $::seMethodMixed] {
+        set counts {}
+        set records {}
+        foreach {reuse audit} {1 0 0 0 1 1} {
+            set saved [list $hir::methodBuildReuse $hir::methodBuildAudit]
+            set hir::methodBuildReuse $reuse
+            set hir::methodBuildAudit $audit
+            try {
+                set before [hir::BuildStats]
+                lappend records [sdCompile batched $text]
+                set after [hir::BuildStats]
+            } finally {
+                lassign $saved hir::methodBuildReuse hir::methodBuildAudit
+            }
+            lappend counts [expr {[dict get $after methodTrials] - [dict get $before methodTrials]}]
+        }
+        lappend results $counts [sdDiff [lindex $records 0] [lindex $records 1]] \
+            [sdDiff [lindex $records 0] [lindex $records 2]] [dict get [lindex $records 0] diagnostics]
+    }
+    set results
+} -result {{6 9 6} {} {} {} {6 9 6} {} {} {}}
 
 # The batched run itself (hir::static::Simulate), on a synthetic dependency
 # relation: sites a, u, f in post-order; u depends on a and on f, f on
@@ -1464,5 +1499,94 @@ test se-property-plan-gate {the trait monomorphization's plan runs only on a che
 test se-property-demotion-keeps-diagnostics {a demoted trusted contract changes no diagnostic: hir::check keeps the diagnostics of the check before the demotion -- why demotion is not a channel} -body {
     regexp {set diagnostics \[dict get \$hir diagnostics\].*CheckOnce hir \$demote.*dict set hir diagnostics \$diagnostics} [info body hir::check]
 } -result 1
+
+# Programs whose check demotes a trusted inferred contract (hir::check), by
+# the shape of the signature fixpoint (hir::signatures::infer): the demoted
+# parameter seeded in the first check's second round (one forwarder; two,
+# one of them kept, over three rounds) or only in its third (a callable
+# contract its body's seeded types make inferable), a coroutine, and a
+# static block whose build demotes.
+set ::seDemoting [dict create \
+    forward "import mutable_array\nfn first(xs: MutableArray\[str\]) -> str errors IndexNotFound:\n    mutable_array::at(xs, 0)\nfn fwd(xs) errors IndexNotFound:\n    first(xs)\nr = fwd(mutable_array::create(1, 5)):\n    on IndexNotFound:\n        \"\"\nr\n" \
+    kept "fn take_int(b: int) -> int:\n    b\nfn f(p, g):\n    take_int(p)\n    g(p)\nfn keep(y):\n    take_int(y)\nfn h(n):\n    n + 1\nkeep(3) + f(\"a\", h)\n" \
+    later "import str\nfn take_int(b: int) -> int:\n    b\nfn f(p, g):\n    take_int(p)\n    g(p)\nfn h(s: str) -> int:\n    str::length(s)\nf(5, h)\n" \
+    coroutine "fn take_int(b: int) -> int:\n    b\nfn fwd(x):\n    take_int(x)\nfn producer(v):\n    yield fwd(v)\n    2\ncoroutine \{step\} = producer(\"a\")\nstep()\n" \
+    static "import compiler\nimport mutable_array\nfn wrong() errors compiler::CompilerError:\n    static compile:\n        fn first(xs: MutableArray\[str\]) -> str errors IndexNotFound:\n            mutable_array::at(xs, 0)\n        fn fwd(xs) errors IndexNotFound:\n            first(xs)\n        r = fwd(mutable_array::create(1, 5)):\n            on IndexNotFound:\n                \"\"\n        r\nfn right() errors compiler::CompilerError:\n    static compile:\n        1 + 1\nright()\n"]
+
+# SOURCE's HIR (-strict 0, warnings off) and, per hir::check it ran that
+# demoted, {COROUTINE-ANALYSES TYPINGS DEMOTED}; the decisions' timing zeroed.
+proc seDemotionCheck {source} {
+    set ::seChecks {}
+    set counting {
+        hir::coroutines::analyze {apply {{args} {incr ::seAnalyses}}}
+        hir::types::infer {apply {{args} {incr ::seTypings}}}
+    }
+    set enter {apply {{args} {set ::seAnalyses 0; set ::seTypings 0}}}
+    set leave {apply {{command code result op} {
+        upvar 1 [lindex $command 1] h
+        if {[dict exists $h demotedContracts]} {
+            lappend ::seChecks [list $::seAnalyses $::seTypings [llength [dict get $h demotedContracts]]]
+        }
+    }}}
+    dict for {command script} $counting { trace add execution $command enter $script }
+    trace add execution hir::check enter $enter
+    trace add execution hir::check leave $leave
+    try {
+        set hir [surface::compile $source -strict 0 -warnings off]
+    } finally {
+        dict for {command script} $counting { trace remove execution $command enter $script }
+        trace remove execution hir::check enter $enter
+        trace remove execution hir::check leave $leave
+    }
+    if {[dict exists $hir staticStats depMs]} {
+        dict set hir staticStats depMs 0
+    }
+    return [list $hir $::seChecks]
+}
+
+test se-demotion-recheck-identical {the check after a demotion reuses the first check's coroutine protocols and every signature round whose seeds it reaches again (COMPILER-BOTTLENECKS.md 3.9), and its HIR is the one redoing it from the start gives -- whether it reuses the first round only, the first two, or the first and then types a round of its own} -body {
+    set results {}
+    dict for {name text} $::seDemoting {
+        lassign [seDemotionCheck $text] shared sharedChecks
+        set hir::recheckReuse 0
+        try {
+            lassign [seDemotionCheck $text] full fullChecks
+        } finally {
+            set hir::recheckReuse 1
+        }
+        lappend results $name [expr {$shared eq $full}] [expr {$sharedChecks ne {}}]
+    }
+    set results
+} -result {forward 1 1 kept 1 1 later 1 1 coroutine 1 1 static 1 1}
+
+test se-demotion-recheck-economics {per demoting check {coroutine analyses, typings, demoted}: the coroutine protocols once, and the second check types only the rounds whose seeds the first never reached -- none when every round it needs was the first's (forward: the unseeded round converges; later: it reaches the first's second round), one when a kept contract seeds a round of its own (kept); redone from the start, twice and every round again} -body {
+    set results {}
+    dict for {name text} $::seDemoting {
+        set shared [lindex [seDemotionCheck $text] 1]
+        set hir::recheckReuse 0
+        try {
+            set full [lindex [seDemotionCheck $text] 1]
+        } finally {
+            set hir::recheckReuse 1
+        }
+        lappend results $name $shared $full
+    }
+    set results
+} -result {forward {{1 2 1}} {{2 3 1}} kept {{1 4 1}} {{2 5 1}} later {{1 3 1}} {{2 5 1}} coroutine {{1 3 1}} {{2 4 1}} static {{1 2 1}} {{2 3 1}}}
+
+test se-demotion-recheck-audit {the audit switch redoes every demoting check from the start beside the reusing one and fails on any difference: it compares one check per demoting build, and a reuse that changed the result would raise} -body {
+    set hir::recheckAudit 1
+    set before $hir::recheckAudits
+    try {
+        dict for {name text} $::seDemoting {
+            seDemotionCheck $text
+        }
+    } finally {
+        set hir::recheckAudit 0
+    }
+    set audited [expr {$hir::recheckAudits - $before}]
+    set caught [catch {hir::AuditRecheck {exprs {e1 {kind const}} types {}} {exprs {e1 {kind ref}} types {}}} message]
+    list $audited $caught $message
+} -result {5 1 {hir::check: the demotion re-check that reuses the first check differs from the one made from the start in: exprs e1}}
 
 cleanupTests

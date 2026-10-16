@@ -1,0 +1,111 @@
+# golden-duplicates.test -- the local runs' skip of the Tcl tests the golden
+# suites duplicate (tests/helpers.tcl's BOTLISH_SKIP_GOLDEN_DUPLICATES,
+# tests/local.tcl; AGENTS.md, "Running the tests locally"). The skipped set
+# is exactly the manifest's freeze class FROZEN-DUPLICATE-ORACLE, every
+# skipped test has golden tests that replace it, only those tests are
+# skipped, and CI never skips any: every Tcl test still runs there.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+
+# The manifest's rows as dicts.
+proc gdManifestRows {} {
+    set channel [open [file join $::projectRoot tests golden manifest.tsv] r]
+    fconfigure $channel -encoding utf-8
+    set header [split [gets $channel] \t]
+    set rows {}
+    while {[gets $channel line] >= 0} {
+        if {$line eq ""} continue
+        set row [dict create]
+        foreach column $header value [split $line \t] {
+            dict set row $column $value
+        }
+        lappend rows $row
+    }
+    close $channel
+    return $rows
+}
+
+# The passed, failed and goldenDuplicate-skipped counts of test file FILE,
+# run with tcltest -match MATCH (its other tests count as skipped too), in a
+# child with BOTLISH_SKIP_GOLDEN_DUPLICATES set to SKIP.
+proc gdRun {file match skip} {
+    set tmp [makeDirectory gd-run]
+    set saved [expr {[info exists ::env(BOTLISH_SKIP_GOLDEN_DUPLICATES)] ? [list $::env(BOTLISH_SKIP_GOLDEN_DUPLICATES)] : {}}]
+    set ::env(BOTLISH_SKIP_GOLDEN_DUPLICATES) $skip
+    try {
+        set output [exec [info nameofexecutable] [file join $::projectRoot tests $file] \
+            -tmpdir $tmp -match $match 2>@1]
+    } finally {
+        if {$saved eq {}} {
+            unset ::env(BOTLISH_SKIP_GOLDEN_DUPLICATES)
+        } else {
+            set ::env(BOTLISH_SKIP_GOLDEN_DUPLICATES) [lindex $saved 0]
+        }
+        removeDirectory gd-run
+    }
+    set duplicates 0
+    regexp -line {^\s+(\d+)\s+goldenDuplicate$} $output -> duplicates
+    regexp {Total\s+(\d+)\s+Passed\s+(\d+)\s+Skipped\s+(\d+)\s+Failed\s+(\d+)} $output -> total passed skipped failed
+    return [list passed $passed failed $failed duplicates $duplicates]
+}
+
+test gd-set-is-the-freeze-class {the skipped tests are exactly those every manifest row classifies FROZEN-DUPLICATE-ORACLE} -body {
+    set frozen [dict create]
+    set active [dict create]
+    foreach row [gdManifestRows] {
+        set key [list [file tail [dict get $row old_file]] [dict get $row old_test]]
+        if {[dict get $row freeze] eq "FROZEN-DUPLICATE-ORACLE"} {
+            dict set frozen $key 1
+        } else {
+            dict set active $key 1
+        }
+    }
+    foreach key [dict keys $active] {
+        dict unset frozen $key
+    }
+    set skipped [GoldenDuplicates]
+    list [expr {[dict size $skipped] > 1000}] \
+        [expr {[lsort [dict keys $skipped]] eq [lsort [dict keys $frozen]]}]
+} -result {1 1}
+
+test gd-every-skipped-test-has-golden-replacements {every skipped Tcl test is MIGRATED, its file exists, and each of its rows names a golden test in an existing suite} -body {
+    set skipped [GoldenDuplicates]
+    set problems {}
+    foreach row [gdManifestRows] {
+        set key [list [file tail [dict get $row old_file]] [dict get $row old_test]]
+        if {![dict exists $skipped $key]} continue
+        if {[dict get $row status] ne "MIGRATED"
+                || ![file exists [file join $::projectRoot [dict get $row old_file]]]
+                || [dict get $row suite] eq "-" || [dict get $row new_test] eq "-"
+                || ![file exists [file join $::projectRoot tests golden [dict get $row suite]]]} {
+            lappend problems $key
+        }
+    }
+    lrange $problems 0 9
+} -result {}
+
+test gd-skips-only-duplicates {with the variable set, a duplicated test is skipped by goldenDuplicate and an active one in the same file still runs; without it, both run} -body {
+    # enums-test: enum-calls-returns is FROZEN-DUPLICATE-ORACLE,
+    # enum-branch-join is ACTIVE-TCL-INTERNAL (asserted first).
+    set skipped [GoldenDuplicates]
+    list [dict exists $skipped {enums.test enum-calls-returns}] \
+        [dict exists $skipped {enums.test enum-branch-join}] \
+        [gdRun enums.test {enum-calls-returns enum-branch-join} 1] \
+        [gdRun enums.test {enum-calls-returns enum-branch-join} 0]
+} -result {1 0 {passed 1 failed 0 duplicates 1} {passed 2 failed 0 duplicates 0}}
+
+test gd-ci-never-skips {no CI workflow sets BOTLISH_SKIP_GOLDEN_DUPLICATES or runs tests/local.tcl: every Tcl test runs in CI} -body {
+    set found {}
+    foreach path [glob -directory [file join $::projectRoot .github workflows] *.yml] {
+        set channel [open $path r]
+        set text [read $channel]
+        close $channel
+        if {[string first BOTLISH_SKIP_GOLDEN_DUPLICATES $text] >= 0
+                || [string first tests/local.tcl $text] >= 0} {
+            lappend found [file tail $path]
+        }
+    }
+    set found
+} -result {}
+
+cleanupTests

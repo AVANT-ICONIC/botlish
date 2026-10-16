@@ -1,7 +1,14 @@
-# native-coverage.tcl -- runs the whole test suite on the Cranelift backend
+# native-coverage.tcl -- runs the whole test suite on a Cranelift backend
 # and classifies every test.
 #
-#   tclsh9.0 tests/native-coverage.tcl [-verbose]
+#   tclsh9.0 tests/native-coverage.tcl [-verbose] [-backend cranelift|cranelift-generic]
+#                                      [-log FILE]
+#
+# -backend is the suite's CORE_BACKEND (default cranelift, specialized;
+# cranelift-generic compiles every function once, -specialize 0). -log FILE
+# classifies the coverage log of a run made elsewhere (NATIVE_COVERAGE=FILE,
+# tests/helpers.tcl: for instance a parallel run of every test file with
+# CORE_BACKEND set) instead of running the suite.
 #
 # Every test is exactly one of:
 #
@@ -19,22 +26,43 @@
 
 set testDir [file dirname [file normalize [info script]]]
 set verbose [expr {"-verbose" in $argv}]
+set backend cranelift
+set given ""
+foreach {option value} [lsearch -all -inline -not -exact $argv -verbose] {
+    switch -- $option {
+        -backend {
+            if {$value ni {cranelift cranelift-generic}} {
+                error "native-coverage.tcl: -backend is cranelift or cranelift-generic"
+            }
+            set backend $value
+        }
+        -log { set given $value }
+        default { error "native-coverage.tcl: unknown option $option" }
+    }
+}
 
-# The coverage log and the suite's tcltest temporary files live in a fresh
-# system temporary directory, removed when the run ends (never in the working
-# directory, which concurrent runs share).
-set scratch [file tempdir native-coverage]
-set log [file join $scratch native-coverage.log]
-set env(CORE_BACKEND) cranelift
-set env(NATIVE_COVERAGE) $log
-catch {exec [info nameofexecutable] [file join $testDir all.tcl] -tmpdir [file join $scratch tmp] 2>@1} output
-unset env(NATIVE_COVERAGE)
+set output ""
+if {$given ne ""} {
+    set log $given
+} else {
+    # The coverage log and the suite's tcltest temporary files live in a
+    # fresh system temporary directory, removed when the run ends (never in
+    # the working directory, which concurrent runs share).
+    set scratch [file tempdir native-coverage]
+    set log [file join $scratch native-coverage.log]
+    set env(CORE_BACKEND) $backend
+    set env(NATIVE_COVERAGE) $log
+    catch {exec [info nameofexecutable] [file join $testDir all.tcl] -tmpdir [file join $scratch tmp] 2>@1} output
+    unset env(NATIVE_COVERAGE)
+}
 
 set channel [open $log r]
 fconfigure $channel -encoding utf-8
 set records [split [string trimright [read $channel] \n] \n]
 close $channel
-file delete -force $scratch
+if {$given eq ""} {
+    file delete -force $scratch
+}
 
 set counts [dict create native 0 independent 0 passed-partial 0 unsupported 0 failed 0]
 set needs [dict create]
@@ -56,7 +84,7 @@ foreach record $records {
     lappend lines [format "  %-16s %-40s %s" $class $name [join $whats {, }]]
 }
 
-puts "Cranelift backend coverage of the test suite ([llength $records] tests)"
+puts "$backend backend coverage of the test suite ([llength $records] tests)"
 puts ""
 dict for {class count} $counts {
     puts [format "  %-16s %4d" $class $count]

@@ -235,6 +235,100 @@ the test suite, still install the `.deb`s.
   `.github/workflows/tests.yml` has the command. Run them once more under
   `BOTLISH_NATIVE_GC_STRESS=1`.
 
+## Running the tests locally
+
+Run the tests locally with `tclsh9.0 tests/local.tcl`, not `tests/all.tcl`.
+It runs, in parallel (`-jobs N`, default the processor count; one process
+per test file or suite, each with a private `-tmpdir`):
+
+* **every Tcl test file on interp and compile** (`-backends`; CORE_BACKEND
+  when set), minus the Tcl tests a golden test duplicates: the ones the
+  manifest classifies FROZEN-DUPLICATE-ORACLE (`tests/golden/manifest.tsv`'s
+  `freeze` column; LARGE-SCALE-GOLDEN-MIGRATION.md, "Freeze
+  classification"), whose whole theorem golden tests carry on every backend.
+  They are reported skipped, by the constraint `goldenDuplicate`
+  (`BOTLISH_SKIP_GOLDEN_DUPLICATES=1`, tests/helpers.tcl). Everything Botlish
+  source cannot express keeps running in Tcl: compiler and runtime internals,
+  the parser, warnings, several programs, `main.tcl`, executables and the
+  process boundary, run-time-only failures, the internal half of every SPLIT
+  test, and every Tcl test whose golden port is weaker;
+* **every golden suite on all four backends**, in their place, **through the
+  front-end cache** (`.hirx` entries; HIR-INTERCHANGE.md).
+
+It prints a line per file and suite, then every failure with the command
+that reruns it, and exits 1 on any.
+
+What it costs, measured on a 4-core container (2026-10-15):
+
+| run | wall | CPU |
+|---|---:|---:|
+| `tests/local.tcl`, warm cache | 26 min | 6,060 s |
+| `tests/local.tcl`, empty cache | 33 min | 7,710 s |
+| `tests/all.tcl` (every Tcl test, one file at a time) | 93 min | 5,590 s |
+| every Tcl test at the same parallelism (`tests/local.tcl -all 1 -parts tcl`) | 26 min | 6,100 s |
+
+* **The speed-up over `tests/all.tcl` (93 minutes to 26-33) is the
+  parallelism.**
+* **The golden layer is free once the cache is warm.** The 2,043 duplicated
+  Tcl tests cost about 600 s of process time per run (both passes). The
+  golden corpus on four backends costs 630 s with a warm cache and 2,160 s
+  with an empty one.
+
+* **Narrow it to what an edit touches.** `tclsh9.0 tests/local.tcl
+  tests/affine.test tests/coroutines.test` runs those files minus their
+  duplicated tests, plus the golden suites that hold those tests'
+  replacements, so the run still covers what the files covered. A `X.bot`
+  argument runs that suite; `-parts tcl` or `-parts golden` runs one layer.
+  - With an empty cache the golden front ends are most of a narrow run's
+    cost: those two files took 35 s this way, against 14 s run directly on
+    interp.
+  - So, while iterating on one area, `tclsh9.0 tests/X.test` (every test of
+    the file) is the quickest check. Run `tests/local.tcl` (narrowed, or
+    whole) before pushing.
+  - The test files, fuzzers and mutation harnesses the sections below name
+    for an area are run as named.
+* **Run the golden suites with the front-end cache.** `tests/local.tcl`
+  always does, unless told not to.
+  - **Which directory:** `BOTLISH_HIR_CACHE` when set; otherwise this
+    checkout's own directory under the user's cache directory
+    (`~/.cache/botlish/hir/`, or `$XDG_CACHE_HOME`, or `%LOCALAPPDATA%`). The
+    run then removes the entries another front end wrote, so the directory
+    stays at one front end's worth (about 190 MB).
+  - **Why it pays:** a suite whose text, imported modules and front end
+    (`core/`, `hir/`, `surface/`, lib's Tcl libraries) are unchanged is read
+    from its entry, not compiled again. The key leaves out `compiler/` and
+    `native/`, so after an edit there the golden corpus costs only the
+    backends' runs, a fraction of the Tcl tests it replaces
+    (GOLDEN-VS-TCL-BENCHMARK.md). A hit equals the build exactly (the cache
+    is audited for it).
+  - **One suite:** run a single golden suite the same way with
+    `tclsh9.0 tests/local.tcl SUITE.bot`, not a bare
+    `tests/golden/run.tcl`, which uses no cache unless `BOTLISH_HIR_CACHE`
+    is set.
+  - **Opting out:** `-hir-cache ""` turns the cache off, for timing the
+    front end.
+  - **The Tcl tests never use it,** and neither does CI: every CI run
+    compiles from scratch.
+* **When a golden test fails,** its Tcl originals are its manifest rows
+  (`old_file`, `old_test`). `tclsh9.0 tests/X.test` runs every test of a
+  file, and `tests/local.tcl -all 1` runs every Tcl test, duplicates
+  included, as CI does.
+* **CI runs every test, every time:**
+  - the whole Tcl suite, duplicates included, on interp and compile;
+  - its coverage on cranelift and cranelift-generic;
+  - every golden suite on every backend beside its Tcl originals
+    (`audit/golden/tools/check.tcl`);
+  - the native Rust unit tests;
+  - the stub-linked executables;
+  - the warning gate;
+  - on pushes to main, the GC-stress run.
+
+  Never set `BOTLISH_SKIP_GOLDEN_DUPLICATES` or run `tests/local.tcl` in a
+  workflow: `tests/golden-duplicates.test` fails if one does.
+* **The skipped set is the manifest's, never a list kept by hand.** A Tcl
+  test leaves it when its port is reclassified, through the census and the
+  fragments (Golden tests, below).
+
 ## Running Linux tests from Windows with WSL
 
 The Windows development machine has an Ubuntu 24.04 WSL distribution with
@@ -242,7 +336,7 @@ the repository toolchain already installed. Run Linux-native validation from
 PowerShell through that distribution, using the mounted Windows checkout:
 
 ```powershell
-wsl.exe -d Ubuntu-24.04 -- bash -lc 'cd /mnt/c/Users/MarkusWagner/dev/botlish && export LANG=C.utf8 LC_ALL=C.utf8 && tclsh9.0 tests/all.tcl'
+wsl.exe -d Ubuntu-24.04 -- bash -lc 'cd /mnt/c/Users/MarkusWagner/dev/botlish && export LANG=C.utf8 LC_ALL=C.utf8 && tclsh9.0 tests/local.tcl'
 ```
 
 The WSL checkout is the same working tree as the Windows checkout, not a
@@ -1020,7 +1114,9 @@ A new golden test must be able to fail: run `audit/golden/tools/perturb.tcl` on
 its suite. By default `tests/golden.test` runs the eight validation-sample
 suites (`BOTLISH_GOLDEN_SUITES=all` or a list of files runs others); CI's
 `golden` shards run every suite on every backend beside its Tcl originals
-(`check.tcl -shard I/4`). A suite that cannot run on a backend declares
+(`check.tcl -shard I/4`). Locally, `tests/local.tcl` runs every suite on
+every backend, through the front-end cache (Running the tests locally,
+above). A suite that cannot run on a backend declares
 `# golden-exclude: BACKEND -- REASON` in its leading comments; keep such tests
 in a companion suite so the main suite keeps all four backends.
 
