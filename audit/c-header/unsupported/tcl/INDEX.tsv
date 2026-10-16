@@ -1,0 +1,6 @@
+ABI-INFORMATION-REQUIRED--enum-result.c	tcl-embed 2, tcl-stubs 2, tcl-notommath 2
+ABI-INFORMATION-REQUIRED--union-embedded-by-value.c	tcl-embed 2, tcl-stubs 2, tcl-notommath 2
+ATTRIBUTE-UNSUPPORTED--attribute-mode.c	tcl-embed 1, tcl-stubs 1
+POSSIBLE-THUNK-REQUIRED--inline-definition-written-directly-in-the-header.c	tcl-embed 1, tcl-stubs 1, tcl-notommath 1
+TYPE-SHAPE-UNSUPPORTED--variadic-callback-param.c	tcl-embed 1, tcl-stubs 1, tcl-notommath 1
+TYPE-SHAPE-UNSUPPORTED--variadic-function.c	tcl-embed 11, tcl-stubs 11, tcl-notommath 9

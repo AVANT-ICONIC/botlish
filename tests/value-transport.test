@@ -23,7 +23,7 @@ source [file join $::projectRoot tests transport-shapes.tcl]
 
 interp recursionlimit {} 100000
 
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
+testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 set vtFiles {}
 proc vtWrite {name content} {

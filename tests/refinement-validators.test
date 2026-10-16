@@ -175,7 +175,7 @@ test validator-ast-outcome {a proof clause after "-> unit" is a validator clause
     set program [surface::parse "fn validate_m(s: str) -> unit proves s: M:\n    unit\nfn m?(s: str) -> bool proves s: M:\n    true\n"]
     list [lmap node [dict get $program body] {dict get [lindex [dict get $node proves] 0] outcome}] \
          [surface::formatAst $program]
-} -match glob -result {{normal true} {*fn validate_m (s:str) proves s: M*fn m? (s:str) proves s: M*}}
+} -match glob -result {{normal true} {*fn validate_m (s:str) -> unit proves s: M*fn m? (s:str) -> bool proves s: M*}}
 
 # ===========================================================================
 # Validation of the proof clause: both shapes, the same rules

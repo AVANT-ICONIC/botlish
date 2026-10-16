@@ -1319,6 +1319,14 @@ proc core::compiler::CompileNativeCall {ctxVar e callee name argOps} {
         # code's Tcl completion code 5.
         return [GenericCall ctx $callee $argOps]
     }
+    if {[dict get $meta layout] ne ""} {
+        # A binary operation of a fixed layout (BINARY-LAYOUT.md): straight-
+        # line code over the one layout its descriptor constant describes.
+        set result [CompileLayoutOperation ctx $e $name [dict get $meta layout] $argOps]
+        if {$result ne ""} {
+            return $result
+        }
+    }
     if {[dict get $meta errors] ne "" && ![hir::completions::BoundsProven $hir $e]} {
         # A native with declared errors (`argv`, `list::at`) completes with
         # propagate-error: only the generic call turns its completion into
@@ -1351,6 +1359,113 @@ proc core::compiler::CompileNativeCall {ctxVar e callee name argOps} {
         return [DirectNativeCall ctx $name $meta $argOps]
     }
     return [GenericCall ctx $callee $argOps]
+}
+
+# ---------------------------------------------------------------------------
+# Fixed binary layouts (BINARY-LAYOUT.md)
+#
+# binary::parse(L, data) and binary#emit(value, L) carry L's descriptor
+# (hir::layouts::descriptor) as a constant argument, read here at compile
+# time: the call becomes one `binary scan` (parse, after one length check) or
+# one `binary format` (emit) whose format string holds every scalar field's
+# absolute offset and encoding, and the value is built in place -- the same
+# straight-line shape native lowering gives it, never core/binary.tcl's
+# run-time walk of the descriptor (which the interpreter runs).
+
+# {PATH OFFSET SIGN WIDTH ENDIAN} for every scalar field of DESCRIPTOR at
+# byte BASE, depth-first in declared order; PATH the slots leading to it.
+proc core::compiler::LayoutLeaves {descriptor base path} {
+    set leaves {}
+    set slot 0
+    foreach field [lindex $descriptor 3] {
+        lassign $field name offset kind
+        if {$kind eq "layout"} {
+            lappend leaves {*}[LayoutLeaves [lindex $field 3] [expr {$base + $offset}] [linsert $path end $slot]]
+        } else {
+            lassign $field name offset sign width endian
+            lappend leaves [list [linsert $path end $slot] [expr {$base + $offset}] $sign $width $endian]
+        }
+        incr slot
+    }
+    return $leaves
+}
+
+# The Tcl expression building the LayoutStruct DESCRIPTOR describes from the
+# scanned variables VARS (consumed in LayoutLeaves order).
+proc core::compiler::LayoutValueText {descriptor varsVar} {
+    upvar 1 $varsVar vars
+    set names {}
+    set values {}
+    foreach field [lindex $descriptor 3] {
+        lassign $field name offset kind
+        lappend names $name
+        if {$kind eq "layout"} {
+            lappend values [LayoutValueText [lindex $field 3] vars]
+        } else {
+            set var [lindex $vars 0]
+            set vars [lrange $vars 1 end]
+            lappend values "\[list int \$$var\]"
+        }
+    }
+    return "\[list struct [Word [linsert $names 0 [lindex $descriptor 0]]] \[list [join $values { }]\]\]"
+}
+
+# A call E of the binary operation NAME (ROLE its -layout role) on ARGOPS,
+# or "" for the generic call (a descriptor that is not a constant).
+proc core::compiler::CompileLayoutOperation {ctxVar e name role argOps} {
+    upvar 1 $ctxVar ctx
+    variable hir
+    set operand [lindex [N $e args] [hir::layouts::RoleOf $role operand]]
+    if {[hir::kind $hir $operand] ne "const"} {
+        return ""
+    }
+    set descriptor [lindex [hir::get $hir $operand literal] end]
+    if {[hir::layouts::DescriptorLayout $descriptor] eq ""} {
+        return ""
+    }
+    set size [lindex $descriptor 1]
+    set leaves [LayoutLeaves $descriptor 0 {}]
+    switch -- [hir::layouts::RoleOf $role op] {
+        parse {
+            # (hir::layouts::verify proved the bytes an abi::bytes::Bytes:
+            # its one field holds the {bytestore HEX} storage.)
+            set data [lindex $argOps [hir::layouts::RoleOf $role input]]
+            set raw [NewTemp]
+            Emit ctx "set $raw \[binary decode hex \[lindex [BoxWord $data] 2 0 1\]\]"
+            Emit ctx "if \{\[string length \$$raw\] != $size\} \{return -level 0 -code 5 [Word [core::value::errorId LayoutLengthMismatch]]\}"
+            set format ""
+            set vars {}
+            foreach leaf $leaves {
+                lassign $leaf path offset sign width endian
+                append format @$offset[core::binary::Letter $width $sign $endian]
+                lappend vars [NewTemp]
+            }
+            Emit ctx "binary scan \$$raw [Word $format] [join $vars { }]"
+            set t [NewTemp]
+            Emit ctx "set $t [LayoutValueText $descriptor vars]"
+            return [Op box "\$$t" any]
+        }
+        emit {
+            set value [BoxWord [lindex $argOps 0]]
+            set format ""
+            set words {}
+            foreach leaf [lsort -integer -index 1 $leaves] {
+                lassign $leaf path offset sign width endian
+                append format @$offset[core::binary::Letter $width $sign $endian 0]
+                set index {}
+                foreach slot $path {
+                    append index " 2 $slot"
+                }
+                lappend words "\[lindex $value$index 1\]"
+            }
+            append format @$size
+            set t [NewTemp]
+            set bytesHead [list [core::bytestore::bytesType] [core::bytestore::storageField]]
+            Emit ctx "set $t \[list struct [Word $bytesHead] \[list \[list bytestore \[binary encode hex \[binary format [Word $format] [join $words { }]\]\]\]\]\]"
+            return [Op box "\$$t" any]
+        }
+    }
+    return ""
 }
 
 # A call of the native NAME (resolved by HIR, arity matching) without the

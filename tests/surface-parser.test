@@ -103,6 +103,21 @@ fn f ()
 fn g (a b)
     (name a)}
 
+test parse-function-result-types {a declared result type prints after the parameters, before a proof clause and errors, as written} -body {
+    ast "fn f(x: int) -> int:\n    x\nfn g(xs) -> List\[List\[int\]\]:\n    xs\nfn h(f) -> Fn\{args: \[int\], return: int\}:\n    f\nfn ok?(s: str) -> bool proves s: M errors E:\n    true\nnomethod fn v(s: str) -> unit proves s: M:\n    unit\nfn k(x) errors E:\n    x"
+} -result {fn f (x:int) -> int
+    (name x)
+fn g (xs) -> List[List[int]]
+    (name xs)
+fn h (f) -> Fn{args: [int], return: int, errors: []}
+    (name f)
+fn ok? (s:str) -> bool proves s: M errors E
+    (bool true)
+nomethod fn v (s:str) -> unit proves s: M
+    (unit)
+fn k (x) errors E
+    (name x)}
+
 test parse-nested-functions {nested functions} -body {
     ast "fn make_adder(x):\n    fn add(y):\n        x + y\n\n    add"
 } -result {fn make_adder (x)
@@ -450,6 +465,71 @@ test parse-break-if-value-error {"break if c: ...:" is a break-with-a-value erro
 test parse-if-value-errors {an if is not an operand} -body {
     list [parseError "x = 1 + if a:\n    1"] [parseError "f(if a:\n    1)"] [parseError "x = if a: 1 else: 2"]
 } -result {{1:9 an "if" value must be the whole right side of "=" or "return"} {1:3 an "if" value must be the whole right side of "=" or "return"} {1:11 expected a new line and an indented block after ":", found integer 1}}
+
+# ---------------------------------------------------------------------------
+# loop as a value (COLLECTING-LOOPS.md): a value where an if is, printed as
+# its statement form after the binding's, return's or destructuring's prefix
+
+test parse-loop-values {a loop as the value of a binding, return or destructuring prints as its statement form does} -body {
+    ast "xs = loop v in \[1, 2\]:\n    v\nxs\nfn f(n):\n    return loop i from 0 to n and j down from n through 1:\n        i\n\{a\} = loop:\n    break"
+} -result {bind xs = loop v in (list (int 1) (int 2))
+    (name v)
+(name xs)
+fn f (n)
+    return loop i from (int 0) to (name n) and j down from (name n) through (int 1)
+        (name i)
+destructure {a} = loop
+    (break)}
+
+test parse-loop-value-spans-and-ids {a loop value's span and id follow its header, as an if value's do; a one-clause loop's operands carry the ids of the fields mirroring its clause} -body {
+    set source "xs = loop v in ys:\n    v\nloop i from 0 to 3:\n    i"
+    set tree [surface::parse $source t.bot]
+    list [ast $source -spans 1 -ids 1] \
+        [lmap id {xs=/value/iterable loop/start loop/end} {surface::formatAst [surface::findNode $tree $id]}]
+} -result {{bind xs @1:1-2:6 <xs=> = loop v in (name ys) @1:16-1:18 <xs=/value/iterable> @1:6-2:6 <xs=/value>
+    (name v) @2:5-2:6 <xs=/value/name>
+loop i from (int 0) @3:13-3:14 <loop/start> to (int 3) @3:18-3:19 <loop/end> @3:1-4:6 <loop>
+    (name i) @4:5-4:6 <loop/name>} {{(name ys)} {(int 0)} {(int 3)}}}
+
+# Every value form the parser accepts on the right of "=", "return", a
+# destructuring and a coroutine binding formats in each of those positions:
+# the printer has a case for every kind a value can be.
+test parse-value-forms-format {every value form formats in every value position, with and without spans and ids} -body {
+    set suiteForms {
+        if          "if c:\n        1\n    else:\n        2"
+        elif        "if c:\n        1\n    elif d:\n        2"
+        loop        "loop:\n        break"
+        loop-in     "loop v in xs:\n        v"
+        loop-to     "loop i from 0 to n:\n        i"
+        loop-thru   "loop i from 0 through n:\n        i"
+        loop-down   "loop i down from n to 0:\n        i"
+        loop-downth "loop i down from n through 0:\n        i"
+        lockstep    "loop x in xs and i from 0 to n:\n        x"
+    }
+    set callForms {
+        handled     "g(1):\n        on Boom:\n            0"
+        method      "x.g(1):\n        on Boom d:\n            0"
+        static      "static compile:\n        g(1)"
+        call        "g(1, :quiet)"
+        yield       "yield 1"
+    }
+    set failures {}
+    foreach {position template forms} [list \
+            bind "fn f():\n    x = %s" [concat $suiteForms $callForms] \
+            return "fn f():\n    return %s" [concat $suiteForms $callForms] \
+            destructure "fn f():\n    \{a, b: c\} = %s" [concat $suiteForms $callForms] \
+            coroutine "fn f():\n    coroutine \{step\} = %s" $callForms] {
+        foreach {form value} $forms {
+            set tree [surface::parse [format $template $value] t.bot]
+            foreach options {{} {-spans 1 -ids 1}} {
+                if {[catch {surface::formatAst $tree {*}$options} message]} {
+                    lappend failures "$position $form $options: $message"
+                }
+            }
+        }
+    }
+    set failures
+} -result {}
 
 # ---------------------------------------------------------------------------
 # Recovery

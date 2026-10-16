@@ -1,0 +1,14 @@
+profile boringssl-prefix
+toolchain {cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0}
+checks typedef 344
+checks function 3926
+checks field 309
+checks enumerator 95
+checks variable 36
+skipped {anonymous member} 2
+skipped bitfield 3
+skipped {field with an unnamed anonymous tag} 20
+skipped {fields of an unnamed anonymous struct} 23
+undefined {function named like a object-like macro (#undef before the check)} 71
+unattributed-errors 0
+checks 4710 rejected 0 explained 0 unattributed 0 planted-caught 5/5

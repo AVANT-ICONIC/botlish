@@ -19,7 +19,7 @@ source [file join $::projectRoot surface surface.tcl]
 interp recursionlimit {} 100000
 
 testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64}}]
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 set ::allBackends {interp compile cranelift-generic cranelift}
 

@@ -1,0 +1,300 @@
+# parser.test -- the declaration parser of the C header experiment
+# (C-HEADER-ARCHAEOLOGY.md, "Parser tests").
+#
+#   tclsh9.0 audit/c-header/tests/parser.test
+#
+# Self-contained: preprocessed C snippets in, IR out; no C toolchain and no
+# library sources needed. Most snippets are real declarations of the corpus
+# (BoringSSL 0.20260929.0, Tcl 9.0.1, glibc 2.39 as the preprocessor wrote
+# them), shortened; the rest isolate one declarator rule each. Not part of
+# the compiler's test suite (tests/): the parser is a research instrument.
+
+package require tcltest 2.5
+namespace import ::tcltest::*
+set here [file dirname [file normalize [info script]]]
+source [file join $here .. tools cdecl.tcl]
+source [file join $here .. tools ir.tcl]
+
+# The records of TEXT as {KIND NAME} pairs, or with a key of each body.
+proc recs {text} {
+    set out {}
+    foreach r [::cdecl::parse $text] { lappend out [lrange $r 0 1] }
+    return $out
+}
+proc body {text kind name} {
+    foreach r [::cdecl::parse $text] {
+        if {[lindex $r 0] eq $kind && [lindex $r 1] eq $name} { return [dict remove [lindex $r 2] pos] }
+    }
+    error "no $kind $name in [recs $text]"
+}
+proc typeOf {text name} {
+    foreach r [::cdecl::parse $text] {
+        if {[lindex $r 1] eq $name && [dict exists [lindex $r 2] type]} { return [dict get [lindex $r 2] type] }
+    }
+    error "no $name"
+}
+proc fields {text tag} {
+    set out {}
+    foreach f [dict get [body $text struct $tag] fields] { lappend out [lrange $f 0 2] }
+    return $out
+}
+
+# --- declarators -----------------------------------------------------------
+
+test cd-basic-function {a prototype} -body {
+    typeOf {int f(void);} f
+} -result {fn {int int} {} {}}
+
+test cd-noproto {an empty parameter list is no prototype} -body {
+    typeOf {int f();} f
+} -result {fn {int int} {} noproto}
+
+test cd-function-returning-pointer {int *f(void)} -body {
+    typeOf {int *f(void);} f
+} -result {fn {ptr {int int}} {} {}}
+
+test cd-pointer-to-function {int (*f)(void) is a variable} -body {
+    list [recs {int (*f)(void);}] [typeOf {int (*f)(void);} f]
+} -result {{{variable f}} {ptr {fn {int int} {} {}}}}
+
+test cd-array-of-function-pointers {int (*a[4])(const char *)} -body {
+    typeOf {int (*a[4])(const char *);} a
+} -result {array {ptr {fn {int int} {{{} {ptr {q const {int char}}} {}}} {}}} {lit 4}}
+
+test cd-const-pointer-chain {const unsigned long * const *x} -body {
+    typeOf {const unsigned long * const *x;} x
+} -result {ptr {q const {ptr {q const {int {unsigned long}}}}}}
+
+test cd-function-returning-function-pointer {BIO_meth_get_write (bio.h)} -body {
+    typeOf {typedef struct bio_method_st BIO_METHOD; typedef struct bio_st BIO;
+        int (*BIO_meth_get_write(const BIO_METHOD *method)) (BIO *, const char *, int);} BIO_meth_get_write
+} -result {fn {ptr {fn {int int} {{{} {ptr {typedef BIO}} {}} {{} {ptr {q const {int char}}} {}} {{} {int int} {}}} {}}} {{method {ptr {q const {typedef BIO_METHOD}}} {}}} {}}
+
+test cd-typedef-function-type {Tcl_CmdProc: a typedef of a function type, not a pointer (tcl.h)} -body {
+    typeOf {typedef struct Tcl_Interp Tcl_Interp;
+        typedef int (Tcl_CmdProc) (void *clientData, Tcl_Interp *interp, int argc, const char *argv[]);} Tcl_CmdProc
+} -result {fn {int int} {{clientData {ptr void} {}} {interp {ptr {typedef Tcl_Interp}} {}} {argc {int int} {}} {argv {array {ptr {q const {int char}}} {}} {}}} {}}
+
+test cd-typedef-function-pointer {sk_X509_cmp_func: a typedef of a function pointer (x509.h)} -body {
+    typeOf {typedef struct x509_st X509;
+        typedef int (*sk_X509_cmp_func)(const X509 * const *, const X509 * const *);} sk_X509_cmp_func
+} -result {ptr {fn {int int} {{{} {ptr {q const {ptr {q const {typedef X509}}}}} {}} {{} {ptr {q const {ptr {q const {typedef X509}}}}} {}}} {}}}
+
+test cd-callback-parameter {SSL_CTX_set_info_callback (ssl.h)} -body {
+    typeOf {typedef struct ssl_ctx_st SSL_CTX; typedef struct ssl_st SSL;
+        void SSL_CTX_set_info_callback(SSL_CTX *ctx, void (*cb)(const SSL *ssl, int type, int value));} SSL_CTX_set_info_callback
+} -result {fn void {{ctx {ptr {typedef SSL_CTX}} {}} {cb {ptr {fn void {{ssl {ptr {q const {typedef SSL}}} {}} {type {int int} {}} {value {int int} {}}} {}}} {}}} {}}
+
+test cd-array-parameter {X25519: array parameter spelling kept, not adjusted (curve25519.h)} -body {
+    typeOf {typedef unsigned char uint8_t;
+        int X25519(uint8_t out_shared_key[32], const uint8_t private_key[32], const uint8_t peer_public_value[32]);} X25519
+} -result {fn {int int} {{out_shared_key {array {typedef uint8_t} {lit 32}} {}} {private_key {array {q const {typedef uint8_t}} {lit 32}} {}} {peer_public_value {array {q const {typedef uint8_t}} {lit 32}} {}}} {}}
+
+test cd-array-parameter-static {[static N] and qualified array parameters} -body {
+    typeOf {void f(int a[static 4], char b[const]);} f
+} -result {fn void {{a {array {int int} {lit 4} static} {}} {b {array {int char} {} const} {}}} {}}
+
+test cd-multidimensional {DES key schedule: uint32_t subkeys[16][2] (des.h)} -body {
+    fields {typedef unsigned int uint32_t; typedef struct DES_ks { uint32_t subkeys[16][2]; } DES_key_schedule;} DES_ks
+} -result {{subkeys {array {array {typedef uint32_t} {lit 2}} {lit 16}} {}}}
+
+test cd-variadic {Tcl_AppendResult (tclDecls.h)} -body {
+    typeOf {typedef struct Tcl_Interp Tcl_Interp; extern void Tcl_AppendResult(Tcl_Interp *interp, ...);} Tcl_AppendResult
+} -result {fn void {{interp {ptr {typedef Tcl_Interp}} {}}} variadic}
+
+test cd-abstract-nested {an abstract pointer-to-function parameter} -body {
+    typeOf {void f(int (*)(void), int (*[3])(int));} f
+} -result {fn void {{{} {ptr {fn {int int} {} {}}} {}} {{} {array {ptr {fn {int int} {{{} {int int} {}}} {}}} {lit 3}} {}}} {}}
+
+test cd-parenthesized-name {a parenthesized declarator name: int (x)} -body {
+    typeOf {int (x);} x
+} -result {int int}
+
+test cd-typedef-name-as-parameter-type {(T) after a typedef name is a parameter list} -body {
+    typeOf {typedef int T; void f(int (T));} f
+} -result {fn void {{{} {fn {int int} {{{} {typedef T} {}}} {}} {}}} {}}
+
+test cd-typedef-name-as-declarator {a declarator may reuse a typedef's name} -body {
+    recs {typedef struct Tcl_Interp Tcl_Interp; typedef struct Tcl_Interp Tcl_Interp;}
+} -result {{typedef Tcl_Interp} {typedef Tcl_Interp}}
+
+test cd-parameter-named-like-typedef {int size_t: a parameter named like a typedef} -body {
+    typeOf {typedef unsigned long size_t; void f(int size_t);} f
+} -result {fn void {{size_t {int int} {}}} {}}
+
+test cd-specifier-order {long unsigned int == unsigned long; short int == short} -body {
+    list [typeOf {long unsigned int a;} a] [typeOf {short int b;} b] [typeOf {signed c;} c] [typeOf {char signed d;} d] [typeOf {long double e;} e]
+} -result {{int {unsigned long}} {int short} {int int} {int {signed char}} {float {long double}}}
+
+test cd-qualifier-spellings {__restrict, __const and _Atomic} -body {
+    list [typeOf {char *__restrict p;} p] [typeOf {__const char *q;} q] [typeOf {_Atomic int r;} r] [typeOf {_Atomic(int) s;} s]
+} -result {{q restrict {ptr {int char}}} {ptr {q const {int char}}} {q _Atomic {int int}} {atomic {int int}}}
+
+# --- typedefs --------------------------------------------------------------
+
+test cd-typedef-chain {a chain is kept, and resolved on request} -body {
+    set text {typedef unsigned long size_t; typedef size_t A; typedef A B; B x;}
+    set ix [::cir::index [::cdecl::parse $text]]
+    list [typeOf $text x] [::cir::resolve $ix {typedef B}]
+} -result {{typedef B} {{B A size_t} {int {unsigned long}}}}
+
+test cd-opaque-handle-typedef {typedef struct ssl_st SSL: the tag is never completed} -body {
+    set r [::cdecl::parse {typedef struct ssl_st SSL; SSL *SSL_new(SSL_CTX *ctx);}]
+    lmap x $r {lrange $x 0 1}
+} -result {{typedef SSL} {function SSL_new}}
+
+test cd-pointer-handle-typedef {typedef struct Tcl_Channel_ *Tcl_Channel (tcl.h)} -body {
+    typeOf {typedef struct Tcl_Channel_ *Tcl_Channel;} Tcl_Channel
+} -result {ptr {struct Tcl_Channel_}}
+
+test cd-forward-declaration {struct ssl_st; is an incomplete struct record} -body {
+    body {struct ssl_st;} struct ssl_st
+} -result {loc {<unknown> 1 1} origin unknown kind struct complete 0 fields {} attrs {} text {struct ssl_st;}}
+
+# --- structs, unions, enums ------------------------------------------------
+
+test cd-struct-fields {Tcl_HashTable's first fields (tcl.h)} -body {
+    fields {typedef struct Tcl_HashEntry Tcl_HashEntry; typedef long Tcl_Size;
+        typedef struct Tcl_HashTable { Tcl_HashEntry **buckets; Tcl_HashEntry *staticBuckets[4]; Tcl_Size numBuckets; } Tcl_HashTable;} Tcl_HashTable
+} -result {{buckets {ptr {ptr {typedef Tcl_HashEntry}}} {}} {staticBuckets {array {ptr {typedef Tcl_HashEntry}} {lit 4}} {}} {numBuckets {typedef Tcl_Size} {}}}
+
+test cd-bitfields {cbb_buffer_st (bytestring.h)} -body {
+    fields {typedef unsigned char uint8_t; typedef unsigned long size_t;
+        struct cbb_buffer_st { uint8_t *buf; size_t len; unsigned can_resize : 1; unsigned error : 1; int : 0; };} cbb_buffer_st
+} -result {{buf {ptr {typedef uint8_t}} {}} {len {typedef size_t} {}} {can_resize {int {unsigned int}} {lit 1}} {error {int {unsigned int}} {lit 1}} {{} {int int} {lit 0}}}
+
+test cd-union-member {GENERAL_NAME_st: a union field, its definition a record of its own (x509.h)} -body {
+    set r [::cdecl::parse {struct GENERAL_NAME_st { int type; union { char *ptr; int *other; } d; };}]
+    list [lmap x $r {lrange $x 0 1}] [dict get [lindex $r 0 2] kind] [dict get [lindex $r 0 2] parent] \
+        [lmap f [dict get [lindex $r 1 2] fields] {lrange $f 0 1}]
+} -result {{{struct anon@<unknown>:1} {struct GENERAL_NAME_st}} union GENERAL_NAME_st {{type {int int}} {d {union anon@<unknown>:1}}}}
+
+test cd-anonymous-member {glibc's __mbstate_t: an anonymous union member, C11} -body {
+    fields {typedef struct { int __count; union { unsigned int __wch; char __wchb[4]; }; } m;} anon@<unknown>:1
+} -result {{__count {int int} {}} {{} {union anon@<unknown>:1#2} {}}}
+
+test cd-flexible-array {a flexible array member} -body {
+    fields {struct s { int n; char data[]; };} s
+} -result {{n {int int} {}} {data {array {int char} {}} {}}}
+
+test cd-enum-values {enum value forms: implicit, literal, negated, char, previous} -body {
+    lmap e [dict get [body {enum e { A, B = 5, C, D = -1, E = 'x', F = B, G = (1 << 3), H };} enum e] enumerators] { lrange $e 0 2 }
+} -result {{A implicit 0} {B literal 5} {C implicit 6} {D negated-literal -1} {E char 120} {F ref 5} {G expr {}} {H implicit {}}}
+
+test cd-enum-hex-and-suffix {0x10u and 017L} -body {
+    lmap e [dict get [body {enum { A = 0x10u, B = 017L, C = 0b11 };} enum anon@<unknown>:1] enumerators] { lrange $e 0 2 }
+} -result {{A literal 16} {B literal 15} {C literal 3}}
+
+test cd-struct-attribute {max_align_t: attributes on fields (stddef.h)} -body {
+    lindex [dict get [body {typedef struct {
+  long long __max_align_ll __attribute__((__aligned__(__alignof__(long long))));
+} max_align_t;} struct anon@<unknown>:1] fields] 0
+} -result {__max_align_ll {int {long long}} {} {{gnu decl aligned {__alignof__ (long long)}}}}
+
+# --- attributes, asm labels and extensions ---------------------------------
+
+test cd-asm-label {glibc's fscanf: an asm label is the link name} -body {
+    set b [body {typedef struct _IO_FILE FILE;
+extern int fscanf (FILE *__restrict __stream, const char *__restrict __format, ...) __asm__ ("" "__isoc99_fscanf") __attribute__ ((__nothrow__ , __leaf__));} function fscanf]
+    list [dict get $b link] [dict get $b attrs] [dict get $b type]
+} -result {__isoc99_fscanf {{asm decl __isoc99_fscanf} {gnu decl nothrow {}} {gnu decl leaf {}}} {fn {int int} {{__stream {q restrict {ptr {typedef FILE}}} {}} {__format {q restrict {ptr {q const {int char}}}} {}}} variadic}}
+
+test cd-mode-attribute {tommath's private_mp_word: the attribute stays beside the spelled type} -body {
+    set b [body {typedef unsigned long private_mp_word __attribute__((mode(TI)));} typedef private_mp_word]
+    list [dict get $b type] [dict get $b attrs]
+} -result {{int {unsigned long}} {{gnu decl mode TI}}}
+
+test cd-static-inline {ERR_GET_LIB: a static inline definition, no link symbol (err.h)} -body {
+    set b [body {typedef unsigned int uint32_t;
+static inline __attribute__((unused)) int ERR_GET_LIB(uint32_t packed_error) { return (int)((packed_error >> 24) & 0xff); }} function ERR_GET_LIB]
+    list [dict get $b storage] [dict get $b inline] [dict get $b definition] [dict get $b attrs] [dict get $b text]
+} -result {static 1 1 {{gnu spec unused {}}} {static inline __attribute__((unused)) int ERR_GET_LIB(uint32_t packed_error) { ... }}}
+
+test cd-extension {__extension__ typedef struct (stdlib.h)} -body {
+    recs {__extension__ typedef struct { long long int quot; long long int rem; } lldiv_t;}
+} -result {{struct anon@<unknown>:1} {typedef lldiv_t}}
+
+test cd-soft-float-keyword {_Float32: a keyword for GCC, a typedef glibc writes for clang} -body {
+    list [typeOf {_Float32 f(void);} f] [typeOf {typedef float _Float32; _Float32 g(void);} g]
+} -result {{fn {float _Float32} {} {}} {fn {typedef _Float32} {} {}}}
+
+test cd-builtin-va-list {__builtin_va_list} -body {
+    typeOf {typedef __builtin_va_list __gnuc_va_list;} __gnuc_va_list
+} -result {builtin __builtin_va_list}
+
+test cd-calling-convention {an MSVC calling-convention keyword is kept as an attribute} -body {
+    dict get [body {int __stdcall f(int); } function f] attrs
+} -result {{cc spec __stdcall}}
+
+# --- directives and locations ----------------------------------------------
+
+test cd-line-markers {line markers locate declarations; flag 3 is a system header} -body {
+    set text "# 1 \"a.h\"\nint a;\n# 7 \"/usr/include/b.h\" 1 3 4\nint b;\n# 3 \"a.h\" 2\n\nint c;\n"
+    set r [::cdecl::parse $text]
+    list [lmap x $r {dict get [lindex $x 2] loc}] $::cdecl::fileSystem
+} -result {{{a.h 1 1} {/usr/include/b.h 7 7} {a.h 4 4}} {0 0 1}}
+
+test cd-pragma {a pragma the preprocessor passed through is a record in place} -body {
+    set text "int a;\n#pragma redefine_extname SSL_new bssl_SSL_new\nint SSL_new(void);\n"
+    lmap x [::cdecl::parse $text] {list [lindex $x 0] [lindex $x 1] [dict get [lindex $x 2] text]}
+} -result {{variable a {int a;}} {pragma - {redefine_extname SSL_new bssl_SSL_new}} {function SSL_new {int SSL_new(void);}}}
+
+# --- recovery --------------------------------------------------------------
+
+test cd-recovery {one bad declaration does not stop the parse} -body {
+    set r [::cdecl::parse {int a; int @ b; int c; void f(void) { if (x) { } } int d;}]
+    lmap x $r {list [lindex $x 0] [lindex $x 1] [expr {[lindex $x 0] eq "unsupported" ? [dict get [lindex $x 2] category] : ""}]}
+} -result {{variable a {}} {unsupported - DECLARATION-PARSE-FAILURE} {variable c {}} {function f {}} {variable d {}}}
+
+test cd-recovery-body {a failed function definition is skipped to its closing brace} -body {
+    set r [::cdecl::parse {int f(int @) { return 1; } int g(void);}]
+    lmap x $r {lrange $x 0 1}
+} -result {{unsupported -} {function g}}
+
+test cd-unknown-type-name {an unknown type name is taken as a typedef, and flagged} -body {
+    dict get [body {foo_t *p;} variable p] unknowntypes
+} -result {foo_t}
+
+# --- perturbations: neighbors that must not be confused --------------------
+
+test cd-perturb-function-vs-pointer {f(void) vs (*f)(void) vs *f(void)} -body {
+    list [lindex [recs {int f(void);}] 0 0] [lindex [recs {int (*f)(void);}] 0 0] [lindex [recs {int *f(void);}] 0 0]
+} -result {function variable function}
+
+test cd-perturb-pointer-qualifiers {const int *p, int *const p, int const *p} -body {
+    list [typeOf {const int *p;} p] [typeOf {int *const p;} p] [typeOf {int const *p;} p]
+} -result {{ptr {q const {int int}}} {q const {ptr {int int}}} {ptr {q const {int int}}}}
+
+test cd-perturb-array-vs-pointer {int *a[3] vs int (*a)[3]} -body {
+    list [typeOf {int *a[3];} a] [typeOf {int (*a)[3];} a]
+} -result {{array {ptr {int int}} {lit 3}} {ptr {array {int int} {lit 3}}}}
+
+test cd-perturb-nested-parentheses {int ((*f))(void) == int (*f)(void)} -body {
+    expr {[typeOf {int ((*f))(void);} f] eq [typeOf {int (*f)(void);} f]}
+} -result 1
+
+# --- rendering back to C ---------------------------------------------------
+
+test cd-render-roundtrip {every fixture type renders to C that parses back to itself} -body {
+    set problems {}
+    foreach text {
+        {int (*a[4])(const char *);}
+        {const unsigned long * const *x;}
+        {int (*BIO_meth_get_write(const void *method)) (void *, const char *, int);}
+        {void f(int (*)(void), int (*[3])(int));}
+        {int (*p)[3];}
+        {char *const *volatile q;}
+        {void g(int a[static 4], char b[const]);}
+    } {
+        foreach r [::cdecl::parse $text] {
+            lassign $r kind name b
+            if {![dict exists $b type]} continue
+            set c "[::cir::render [dict get $b type] $name];"
+            set back [typeOf $c $name]
+            if {$back ne [dict get $b type]} { lappend problems [list $text $c $back] }
+        }
+    }
+    set problems
+} -result {}
+
+cleanupTests

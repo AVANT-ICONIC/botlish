@@ -1,0 +1,216 @@
+# toolchain.tcl -- the C toolchain adapter of the header experiment
+# (C-HEADER-ARCHAEOLOGY.md, "The toolchain adapter").
+#
+# The one place that knows how to run an installed C toolchain. The rest of
+# the instrument asks it to
+#
+#   preprocess ENTRY      the preprocessed C of a translation unit
+#   macros ENTRY          the same with every #define kept (macro census)
+#   predefined            the compiler's predefined macros
+#   compile SOURCE        does generated C compile? (thunk and oracle probes)
+#   run SOURCE            compile, link and run a native probe (ABI probe)
+#
+# and never sees a command line. Configuration comes from the environment
+# (and the profile adds its include directories and defines):
+#
+#   BOTLISH_C_CC          the C compiler command (default: the first of cc,
+#                         gcc, clang on PATH)
+#   BOTLISH_C_CPP         a distinct preprocessor command (default: CC -E)
+#   BOTLISH_C_TARGET      a target triple (clang family only: --target=)
+#   BOTLISH_C_INCLUDE     extra include directories (the platform's path
+#                         separator)
+#   BOTLISH_C_DEFINES     extra NAME or NAME=VALUE words
+#   BOTLISH_C_UNDEFINES   extra NAME words
+#   BOTLISH_C_FLAGS       extra flags, verbatim words
+#
+# Only the GCC/Clang command shape ("gnu" style below) is implemented. Every
+# flag it spells is in the style table, so a second style (MSVC's cl /E /I
+# /D, no -dD equivalent) is one table entry plus whatever capability it
+# lacks, not edits throughout the instrument.
+
+namespace eval ::chdr::toolchain {
+    variable styles {
+        gnu {
+            preprocess {-E}
+            language {-x c}
+            include -I
+            define -D
+            undefine -U
+            macros {-dD}
+            predefined {-dM -E}
+            compile {-c}
+            output -o
+            target --target=
+            version --version
+        }
+    }
+}
+
+proc ::chdr::toolchain::Words {name} {
+    if {![info exists ::env($name)] || [string trim $::env($name)] eq ""} { return {} }
+    return [regexp -all -inline {\S+} $::env($name)]
+}
+
+# The configuration: a dict of cc, cpp, style, family, version, target,
+# include, defines, undefines, flags.
+proc ::chdr::toolchain::config {} {
+    set cc [Words BOTLISH_C_CC]
+    if {$cc eq ""} {
+        foreach candidate {cc gcc clang} {
+            if {[auto_execok $candidate] ne ""} { set cc [list $candidate]; break }
+        }
+    }
+    if {$cc eq ""} { error "toolchain: no C compiler (set BOTLISH_C_CC)" }
+    set cpp [Words BOTLISH_C_CPP]
+    set separator [expr {$::tcl_platform(platform) eq "windows" ? ";" : ":"}]
+    set include {}
+    if {[info exists ::env(BOTLISH_C_INCLUDE)] && $::env(BOTLISH_C_INCLUDE) ne ""} {
+        set include [split $::env(BOTLISH_C_INCLUDE) $separator]
+    }
+    set config [dict create cc $cc cpp $cpp style gnu target [lindex [Words BOTLISH_C_TARGET] 0] \
+        include $include defines [Words BOTLISH_C_DEFINES] undefines [Words BOTLISH_C_UNDEFINES] \
+        flags [Words BOTLISH_C_FLAGS]]
+    lassign [Identify $cc] family version path
+    dict set config family $family
+    dict set config version $version
+    dict set config path $path
+    if {$family eq "msvc"} {
+        error "toolchain: $cc looks like MSVC cl; this adapter implements only the GCC/Clang command shape"
+    }
+    if {[dict get $config target] ne "" && $family ne "clang"} {
+        error "toolchain: BOTLISH_C_TARGET needs a clang-family compiler (a GCC cross compiler is its own BOTLISH_C_CC)"
+    }
+    return $config
+}
+
+# {FAMILY VERSION PATH} from `CC --version`: clang, gcc, msvc or unknown.
+proc ::chdr::toolchain::Identify {cc} {
+    set path [auto_execok [lindex $cc 0]]
+    if {[catch {exec {*}$cc --version 2>@1} out]} {
+        if {[regexp {Microsoft} $out]} { return [list msvc [lindex [split $out \n] 0] $path] }
+        return [list unknown [lindex [split $out \n] 0] $path]
+    }
+    set first [lindex [split $out \n] 0]
+    if {[regexp -nocase {clang} $out]} { return [list clang $first $path] }
+    if {[regexp {Free Software Foundation|\mgcc\M|GCC} $out]} { return [list gcc $first $path] }
+    return [list unknown $first $path]
+}
+
+proc ::chdr::toolchain::Flag {config name} {
+    variable styles
+    return [dict get $styles [dict get $config style] $name]
+}
+
+# The words every command shares: target, include directories, defines,
+# undefines and extra flags, the profile's first.
+proc ::chdr::toolchain::CommonWords {config profile} {
+    set words {}
+    if {[dict get $config target] ne ""} {
+        lappend words "[Flag $config target][dict get $config target]"
+    }
+    foreach f [concat [dict get $profile flags] [dict get $config flags]] { lappend words $f }
+    foreach d [concat [dict get $profile includeDirs] [dict get $config include]] {
+        lappend words "[Flag $config include]$d"
+    }
+    foreach d [concat [dict get $profile defines] [dict get $config defines]] {
+        lappend words "[Flag $config define]$d"
+    }
+    foreach d [concat [dict get $profile undefines] [dict get $config undefines]] {
+        lappend words "[Flag $config undefine]$d"
+    }
+    return $words
+}
+
+proc ::chdr::toolchain::PreprocessCommand {config profile} {
+    if {[dict get $config cpp] ne ""} {
+        set cmd [dict get $config cpp]
+    } else {
+        set cmd [concat [dict get $config cc] [Flag $config preprocess]]
+    }
+    return [concat $cmd [Flag $config language] [CommonWords $config $profile]]
+}
+
+# Run a command; {OK STDOUT STDERR SECONDS}.
+proc ::chdr::toolchain::Exec {command} {
+    set err [file tempfile errPath]
+    close $err
+    set t0 [clock microseconds]
+    set ok [expr {![catch {exec {*}$command 2> $errPath} out]}]
+    set seconds [expr {([clock microseconds] - $t0) / 1e6}]
+    set f [open $errPath]
+    set stderr [read $f]
+    close $f
+    file delete $errPath
+    if {!$ok && $stderr eq ""} { set stderr $out; set out "" }
+    return [list $ok $out $stderr $seconds]
+}
+
+# Preprocess ENTRY (a C file): {OK TEXT STDERR SECONDS COMMAND}.
+proc ::chdr::toolchain::preprocess {config profile entry} {
+    set command [concat [PreprocessCommand $config $profile] [list $entry]]
+    return [concat [Exec $command] [list $command]]
+}
+
+# The same with every #define and #undef kept in place.
+proc ::chdr::toolchain::macros {config profile entry} {
+    set command [concat [PreprocessCommand $config $profile] [Flag $config macros] [list $entry]]
+    return [concat [Exec $command] [list $command]]
+}
+
+# The predefined macros of the configuration (an empty translation unit).
+proc ::chdr::toolchain::predefined {config profile} {
+    set dir [file tempfile path .c]
+    close $dir
+    set command [concat [dict get $config cc] [Flag $config predefined] [Flag $config language] \
+        [CommonWords $config $profile] [list $path]]
+    set result [Exec $command]
+    file delete $path
+    return [concat $result [list $command]]
+}
+
+# Compile SOURCE (C text) to an object; {OK STDERR COMMAND}.
+proc ::chdr::toolchain::compile {config profile source {extra {}}} {
+    set dir [file tempdir]
+    set c [file join $dir probe.c]
+    set f [open $c w]
+    puts $f $source
+    close $f
+    set command [concat [dict get $config cc] [Flag $config language] [CommonWords $config $profile] \
+        $extra [Flag $config compile] [list $c] [Flag $config output] [list [file join $dir probe.o]]]
+    lassign [Exec $command] ok out stderr
+    file delete -force $dir
+    return [list $ok $stderr $command]
+}
+
+# Compile, link and run SOURCE on the host; {OK STDOUT STDERR COMMAND}.
+# Native only: refuses a configuration with a target.
+proc ::chdr::toolchain::run {config profile source} {
+    if {[dict get $config target] ne ""} {
+        return [list 0 "" "toolchain: a probe runs only natively (BOTLISH_C_TARGET is set)" {}]
+    }
+    set dir [file tempdir]
+    set c [file join $dir probe.c]
+    set exe [file join $dir probe]
+    set f [open $c w]
+    puts $f $source
+    close $f
+    set command [concat [dict get $config cc] [Flag $config language] [CommonWords $config $profile] \
+        [list $c] [Flag $config output] [list $exe]]
+    lassign [Exec $command] ok out stderr
+    if {!$ok} {
+        file delete -force $dir
+        return [list 0 "" $stderr $command]
+    }
+    lassign [Exec [list $exe]] ok out stderr2
+    file delete -force $dir
+    return [list $ok $out "$stderr$stderr2" $command]
+}
+
+# A description of the configuration for the import profile record.
+proc ::chdr::toolchain::describe {config} {
+    set host "$::tcl_platform(os) $::tcl_platform(osVersion) $::tcl_platform(machine)"
+    return [dict create cc [dict get $config cc] path [dict get $config path] \
+        family [dict get $config family] version [dict get $config version] \
+        style [dict get $config style] target [expr {[dict get $config target] eq "" ? "native" : [dict get $config target]}] \
+        host $host]
+}

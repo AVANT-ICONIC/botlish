@@ -55,6 +55,17 @@
 //! stack's chain) and calls `co_body`: the thunk's generic entry, then the
 //! terminal state, then a final switch back that never returns.
 //!
+//! # AArch64 Linux
+//!
+//! The same design with the AAPCS64 callee-saved state: `bl_co_switch` opens
+//! a frame record (`stp x29, x30, [sp, #-16]!; mov x29, sp`), saves x19-x28,
+//! d8-d15 (the low halves of v8-v15, all AAPCS64 preserves) and FPCR, so a
+//! suspended stack's chain starts at `saved_sp + 160`. x18 is never touched.
+//! A fresh stack's first switch restores x19 = P, x20 = CO, x29 = 0 and
+//! x30 = `bl_co_trampoline`, whose `ret` therefore enters the trampoline; it
+//! opens a record with a zero frame pointer (the end of the chain) and calls
+//! `co_body`.
+//!
 //! # GC
 //!
 //! Running coroutines form a chain (`Vm::co_current` and each one's
@@ -83,7 +94,12 @@ pub const CO_RELEASED: u8 = 5;
 /// The bytes between a suspended stack's saved stack pointer and the frame
 /// record `bl_co_switch` opened: the control words (8) and five callee-saved
 /// registers (40).
+#[cfg(not(target_arch = "aarch64"))]
 pub const SWITCH_FRAME_OFFSET: usize = 48;
+
+/// AArch64: FPCR (one 16-byte slot), d8-d15 (64) and x19-x28 (80).
+#[cfg(target_arch = "aarch64")]
+pub const SWITCH_FRAME_OFFSET: usize = 160;
 
 #[repr(C)]
 pub struct CoroutineObj {
@@ -176,7 +192,7 @@ impl CoStack {
 
     /// A stack, and whether it came from the pool (rather than a fresh
     /// mapping).
-    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+    #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
     fn new() -> Result<(CoStack, bool), RtError> {
         let usable = stack_bytes();
         if let Some(stack) = POOL.with(|pool| {
@@ -211,7 +227,7 @@ impl CoStack {
         }
     }
 
-    #[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
+    #[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
     fn new() -> Result<(CoStack, bool), RtError> {
         Err(RtError::Unsupported(
             "native coroutines need stack switching, implemented for x86-64 Linux only (COROUTINES.md)".to_string(),
@@ -231,7 +247,7 @@ impl Drop for CoStack {
             }
         });
         if returned != Ok(true) {
-            #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+            #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
             // SAFETY: the mapping this stack owns; no frame on it is live.
             unsafe {
                 libc::munmap(self.base as *mut libc::c_void, self.size);
@@ -295,7 +311,60 @@ std::arch::global_asm!(
     body = sym co_body,
 );
 
-#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+#[cfg(all(target_arch = "aarch64", target_os = "linux"))]
+std::arch::global_asm!(
+    ".text",
+    ".p2align 4",
+    ".globl bl_co_switch",
+    ".type bl_co_switch,%function",
+    "bl_co_switch:",
+    "stp x29, x30, [sp, #-16]!",
+    "mov x29, sp",
+    "stp x19, x20, [sp, #-16]!",
+    "stp x21, x22, [sp, #-16]!",
+    "stp x23, x24, [sp, #-16]!",
+    "stp x25, x26, [sp, #-16]!",
+    "stp x27, x28, [sp, #-16]!",
+    "stp d8, d9, [sp, #-16]!",
+    "stp d10, d11, [sp, #-16]!",
+    "stp d12, d13, [sp, #-16]!",
+    "stp d14, d15, [sp, #-16]!",
+    "mrs x9, fpcr",
+    "str x9, [sp, #-16]!",
+    "mov x9, sp",
+    "str x9, [x0]",
+    "mov sp, x1",
+    "ldr x9, [sp], #16",
+    "msr fpcr, x9",
+    "ldp d14, d15, [sp], #16",
+    "ldp d12, d13, [sp], #16",
+    "ldp d10, d11, [sp], #16",
+    "ldp d8, d9, [sp], #16",
+    "ldp x27, x28, [sp], #16",
+    "ldp x25, x26, [sp], #16",
+    "ldp x23, x24, [sp], #16",
+    "ldp x21, x22, [sp], #16",
+    "ldp x19, x20, [sp], #16",
+    "ldp x29, x30, [sp], #16",
+    "mov x0, x2",
+    "ret",
+    ".size bl_co_switch, .-bl_co_switch",
+    ".p2align 4",
+    ".globl bl_co_trampoline",
+    ".type bl_co_trampoline,%function",
+    "bl_co_trampoline:",
+    "mov x30, xzr",
+    "stp x29, x30, [sp, #-16]!",
+    "mov x29, sp",
+    "mov x0, x19",
+    "mov x1, x20",
+    "bl {body}",
+    "brk #1",
+    ".size bl_co_trampoline, .-bl_co_trampoline",
+    body = sym co_body,
+);
+
+#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 unsafe extern "C" {
     /// Saves the current context, storing its stack pointer through SAVE,
     /// and continues the context whose stack pointer is LOAD, which sees
@@ -304,7 +373,7 @@ unsafe extern "C" {
     fn bl_co_trampoline();
 }
 
-#[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
+#[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
 unsafe fn bl_co_switch(_save: *mut usize, _load: usize, _transfer: usize) -> usize {
     unreachable!("no coroutine stack exists on this host")
 }
@@ -424,7 +493,29 @@ unsafe fn prepare(stack: &CoStack, p: *mut Vm, co: *mut CoroutineObj) -> usize {
     sp
 }
 
-#[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
+/// AArch64: the same contract; the first switch restores x19 = P, x20 = CO,
+/// x29 = 0 (the end of the chain) and returns to x30 = bl_co_trampoline.
+#[cfg(all(target_arch = "aarch64", target_os = "linux"))]
+unsafe fn prepare(stack: &CoStack, p: *mut Vm, co: *mut CoroutineObj) -> usize {
+    let top = stack.top() & !15;
+    // In bl_co_switch's restore order, lowest address first: FPCR (0: the
+    // Linux default, round to nearest, no traps) and its pad, d14/d15 ...
+    // d8/d9 (zero), x27/x28 ... x21/x22 (zero), x19/x20, then the frame
+    // record x29/x30.
+    let mut words = [0usize; 22];
+    words[18] = p as usize; // x19
+    words[19] = co as usize; // x20
+    words[20] = 0; // x29: the end of the chain
+    words[21] = bl_co_trampoline as *const () as usize; // x30
+    let sp = top - 8 * words.len();
+    for (i, word) in words.iter().enumerate() {
+        // SAFETY: within the usable range of a stack nothing else uses.
+        unsafe { *((sp + 8 * i) as *mut usize) = *word };
+    }
+    sp
+}
+
+#[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
 unsafe fn prepare(_stack: &CoStack, _p: *mut Vm, _co: *mut CoroutineObj) -> usize {
     0
 }
@@ -574,7 +665,7 @@ pub fn suspended_rbp(saved_sp: usize) -> usize {
     saved_sp + SWITCH_FRAME_OFFSET
 }
 
-#[cfg(all(test, target_arch = "x86_64", target_os = "linux"))]
+#[cfg(all(test, target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 mod tests {
     use super::*;
     use crate::runtime::metrics::{AllocMode, GcReason};

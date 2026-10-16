@@ -23,13 +23,15 @@ impl NativeStack {
         self.state == StackState::Active && address >= self.guard_low && address < self.low_bound
     }
 
-    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
-    pub fn current() -> std::io::Result<Self> { super::platform::x86_64_linux::current_stack() }
+    #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+    pub fn current() -> std::io::Result<Self> { super::platform::linux::current_stack() }
 }
 
-/// The primary target has a pthread guard and an alternate signal stack.
+/// Linux x86-64 and AArch64: a pthread guard, an alternate signal stack and
+/// the native-frame GC walk (runtime::framewalk) together replace the shadow
+/// stack's depth check (codegen::roots's `depth_reservation` needs both).
 pub const fn native_stack_overflow_supported() -> bool {
-    cfg!(all(target_arch = "x86_64", target_os = "linux"))
+    cfg!(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))
 }
 
 #[cfg(test)]

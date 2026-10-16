@@ -187,10 +187,13 @@ proc hir::structs::identity {name namespace} {
     return [expr {$namespace eq "" ? $name : "${namespace}::${name}"}]
 }
 
-# 1 if ID is a registered struct declaration identity.
+# 1 if ID is a registered struct declaration identity, or the identity of
+# the struct view of a registered layout ("LayoutStruct[L]", BINARY-LAYOUT.md:
+# its schema is the layout's, answered from hir/layouts.tcl's registry by the
+# accessors below and never registered here).
 proc hir::structs::declared {id} {
     variable registry
-    return [dict exists $registry $id]
+    return [expr {[dict exists $registry $id] || [hir::layouts::OfStructId $id] ne ""}]
 }
 
 # The identity the struct type spelled NAME (as written: "Person", or
@@ -208,6 +211,12 @@ proc hir::structs::lookup {name {ns ""}} {
 
 proc hir::structs::names {id} {
     variable registry
+    if {![dict exists $registry $id]} {
+        set layout [hir::layouts::OfStructId $id]
+        if {$layout ne ""} {
+            return [hir::layouts::StructNames $layout]
+        }
+    }
     return [dict get $registry $id names]
 }
 
@@ -216,7 +225,12 @@ proc hir::structs::names {id} {
 proc hir::structs::fieldType {id name} {
     variable registry
     if {![dict exists $registry $id]} {
-        return ""
+        set layout [hir::layouts::OfStructId $id]
+        if {$layout eq ""} {
+            return ""
+        }
+        set types [hir::layouts::StructFieldTypes $layout]
+        return [expr {[dict exists $types $name] ? [dict get $types $name] : ""}]
     }
     set types [dict get $registry $id types]
     return [expr {[dict exists $types $name] ? [dict get $types $name] : ""}]
@@ -225,6 +239,12 @@ proc hir::structs::fieldType {id name} {
 # {FIELD TYPE ...} in declared order.
 proc hir::structs::fieldTypes {id} {
     variable registry
+    if {![dict exists $registry $id]} {
+        set layout [hir::layouts::OfStructId $id]
+        if {$layout ne ""} {
+            return [hir::layouts::StructFieldTypes $layout]
+        }
+    }
     return [dict get $registry $id types]
 }
 
@@ -251,6 +271,12 @@ proc hir::structs::isContext {id} {
 # struct ID: the module that declares it.
 proc hir::structs::owner {id} {
     variable registry
+    if {![dict exists $registry $id]} {
+        set layout [hir::layouts::OfStructId $id]
+        if {$layout ne ""} {
+            return [dict get [hir::layouts::entry $layout] namespace]
+        }
+    }
     return [dict get $registry $id namespace]
 }
 
@@ -351,6 +377,10 @@ proc hir::structs::apply {decls} {
         if {[hir::enums::declared $id]} {
             # One type namespace (ENUMS.md): an enum of that name exists.
             Fail [dict get $decl nameSpan] "type \"$name\" is already declared (as an enum)"
+        }
+        if {[hir::layouts::declared $id]} {
+            # Layouts share the type namespace (BINARY-LAYOUT.md).
+            Fail [dict get $decl nameSpan] "type \"$name\" is already declared (as a layout)"
         }
         if {[dict exists $byId $id]} {
             Fail [dict get $decl nameSpan] "type \"$name\" is already declared"

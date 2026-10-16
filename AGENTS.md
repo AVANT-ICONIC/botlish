@@ -53,8 +53,8 @@ outside `docs/` starts with `../`.
 A compilation registers its declarations in process-wide registries that the
 analyses and the backends read by bare name: the source-defined entries of
 `core::type` (a domain or a refinement; a type registers no native),
-`hir::structs`, `hir::enums`, `hir::errordecls`, `hir::traits` and
-`hir::imports`. Every HIR records the state its build left behind (its
+`hir::structs`, `hir::enums`, `hir::errordecls`, `hir::traits`,
+`hir::imports` and `hir::layouts`. Every HIR records the state its build left behind (its
 `declarations` side table, `hir/declarations.tcl`), and every entry point that
 reads the registries for a HIR it is given calls `hir::activate` first, so
 compiling another program never changes an earlier HIR's lowering or run
@@ -773,9 +773,27 @@ checkout's). A change to native stack switching or its GC walk also needs a
 `cargo test --release --manifest-path native/Cargo.toml --lib coroutine`.
 `bench/coroutines.tcl` regenerates the performance report.
 
-Native coroutines switch stacks with hand-written x86-64 assembly and exist
-on x86-64 Linux only; elsewhere the native backend reports them unsupported
-(the Tcl backends run them everywhere).
+Native coroutines switch stacks with hand-written x86-64 and AArch64
+assembly and exist on Linux x86-64 and AArch64 only; elsewhere the native
+backend reports them unsupported (the Tcl backends run them everywhere).
+
+## Linux AArch64
+
+The native backend runs on Linux AArch64 (the `tests-arm64.yml` CI jobs) with
+the x86-64 feature set except what is tied to the x86-64 instruction set:
+the JIT, native-frame stack maps (runtime/framewalk.rs; on AArch64 a stack
+map entry is a root's distance below its own frame's FP, codegen::clif's
+`define`), the pthread overflow guard (runtime/platform/linux.rs), coroutines
+and rustc-linked executables. `linux::abi::syscall` (and so `linux::io`) and
+the `stub` linker remain x86-64 only: the Tcl tests that need them carry
+`linuxX86_64` or `stubLinker`, golden suites that make live syscalls
+`# golden-host: linux-x86_64 -- REASON` (tests/golden/run.tcl). A Tcl test
+that needs the native runtime on Linux (coroutines, stack maps, GC-stress
+evidence) but no syscall carries `nativeLinux`; one that only needs a
+standalone executable, `executableAot`. Never gate a test on
+`linuxX86_64` for anything but the x86-64 instruction set or syscall ABI. A change to
+the walker, the switch or root lowering needs a GC-stress run on both
+architectures; CI's arm64 workflow has one.
 
 ## Affine values
 
@@ -1050,6 +1068,64 @@ any change they name. A change to native tracing or drops also needs a
 `BOTLISH_NATIVE_GC_STRESS=1` run of `tests/mutable-array.test`.
 `bench/mutable-array.tcl` regenerates the performance report.
 
+## Fixed binary layouts
+
+A `layout` (BINARY-LAYOUT.md) is a compile-time schema of a fixed number of
+bytes -- explicit size, alignment and per-field offsets, scalar fields whose
+integer domain is exactly one fixed-width encoding's, nested layouts by value
+-- and `LayoutStruct[L]` the immutable struct its imprinting
+(`binary::parse(L, data)`) produces and its emission (`binary::emit(v)`)
+consumes. `hir/layouts.tcl`'s registry is the one representation of a
+resolved layout: `LayoutStruct[L]` is the named struct `{nstruct
+LayoutStruct[L]}`, whose schema `hir/structs.tcl` reads from it, never a
+second registration. Never add a generic struct declaration (`struct
+Foo[T]:`, `LayoutStruct Foo:`), a runtime layout object or value, a layout
+read at run time by a compiled backend (the Tcl compiler and native lowering
+read the descriptor constant statically: one `binary scan`/`binary format`,
+one `binload`/`binstore` per scalar field), structural compatibility between
+two layouts, a prefix parse, a cursor, a retained input buffer, an implied
+overlay, an alignment rule a resolved layout must satisfy, or a check keyed
+on a binary operation's name (register a `-layout` role). A layout knows no
+C: a C layer emits resolved layouts.
+
+If you change the layout grammar, `hir/layouts.tcl`, the `LayoutStruct`
+cases of `hir/types.tcl` and `hir/resolve.tcl`, the registration order in
+`hir/sourcetypes.tcl`, the layout cases of `hir/escape.tcl`, the HIR text of
+layouts, the binary operations' registrations (`core/binary.tcl`,
+`core/native.tcl`'s `-layout`), the Tcl compiler's `CompileLayoutOperation`,
+native lowering's `LayoutCall`/`LayoutDecode`/`LayoutEncode` or the native
+ops (`binload`, `binstore`, `byteszeroed`), run `tests/binary-layout.test`,
+its golden suite (`tclsh9.0 tests/local.tcl tests/golden/binary-layout.bot`),
+`audit/binary-layout/tools/fuzz.tcl` (several seeds, once with `-gc-stress
+1`), `audit/binary-layout/tools/mutate.tcl` (every mutant in
+`audit/binary-layout/tools/mutants.txt` must still apply and be killed:
+update a mutant's text when you change the code it mutates, keeping it a
+mutant of the same rule) and `cargo test --release --manifest-path
+native/Cargo.toml --lib bin_`. The registry is a declaration registry
+(compilation isolation and HIR interchange, above), and a new diagnostic
+kind is classified in `tests/static-compile.test`'s census.
+`bench/binary-layout.tcl` regenerates the performance report.
+
+## C header archaeology (a research instrument)
+
+`audit/c-header/` (C-HEADER-ARCHAEOLOGY.md) preprocesses BoringSSL's and
+Tcl's public headers with the installed C toolchain, parses the output into
+an exploratory FFI IR and counts what a first C FFI would need. It is
+research tooling, not the FFI: nothing in `core/`, `hir/`, `surface/`,
+`compiler/` or `native/` may load it, `tests/local.tcl` and CI do not run
+it, and ordinary Botlish compilation must never depend on a C preprocessor
+or compiler. Only `tools/toolchain.tcl` builds command lines (the
+`BOTLISH_C_*` variables). Keep it that way: a new tool asks the adapter,
+never `exec`s a compiler itself.
+
+If you change `tools/cdecl.tcl`, `tools/ir.tcl`, `tools/run.tcl` or the
+census, run `tclsh9.0 audit/c-header/tests/parser.test` and
+`tests/corpus.test` (no toolchain needed), then `tools/fetch.tcl` once and
+`tools/all.tcl`: the oracle must stay at 0 rejected with every planted
+check caught, every thunk sample as predicted on gcc and clang. Commit the
+regenerated `results/` and `unsupported/` (they are deterministic; only
+`timing.txt` changes run to run).
+
 ## Static intrinsics
 
 `static compile:` (STATIC-COMPILE.md) is a recoverable semantic-compilation
@@ -1174,7 +1250,12 @@ suites (`BOTLISH_GOLDEN_SUITES=all` or a list of files runs others); CI's
 every backend, through the front-end cache (Running the tests locally,
 above). A suite that cannot run on a backend declares
 `# golden-exclude: BACKEND -- REASON` in its leading comments; keep such tests
-in a companion suite so the main suite keeps all four backends.
+in a companion suite so the main suite keeps all four backends. A suite that
+runs on one host only (live Linux x86-64 syscalls) declares
+`# golden-host: linux-x86_64 -- REASON`: elsewhere it compiles but does not
+run. On such a host check.tcl accepts a row whose Tcl original a host
+constraint skipped (`host-skip`) with its golden test passing or
+host-excluded; every other row must still be "old pass, new pass".
 
 If you change `lib/test.bot`, run `tests/golden-framework.test`,
 `tests/golden.test`, `tclsh9.0 tests/golden/run.tcl`,

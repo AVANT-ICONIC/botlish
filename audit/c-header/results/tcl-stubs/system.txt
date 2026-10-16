@@ -1,0 +1,226 @@
+# C header experiment IR (C-HEADER-ARCHAEOLOGY.md): profile tcl-stubs
+# revision 6230a12b3bf6f7d8128f6ef14b0a3650a9d479e0
+# toolchain cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# the system declarations the library's declarations refer to (transitively)
+typedef size_t {
+    loc {/usr/lib/gcc/x86_64-linux-gnu/13/include/stddef.h 214 214}
+    origin system
+    storage typedef
+    type {int {unsigned long}}
+    attrs {}
+    text {typedef long unsigned int size_t;}
+}
+typedef __uint8_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/types.h 38 38}
+    origin system
+    storage typedef
+    type {int {unsigned char}}
+    attrs {}
+    text {typedef unsigned char __uint8_t;}
+}
+typedef __int32_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/types.h 41 41}
+    origin system
+    storage typedef
+    type {int int}
+    attrs {}
+    text {typedef signed int __int32_t;}
+}
+typedef __uint32_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/types.h 42 42}
+    origin system
+    storage typedef
+    type {int {unsigned int}}
+    attrs {}
+    text {typedef unsigned int __uint32_t;}
+}
+typedef __int64_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/types.h 44 44}
+    origin system
+    storage typedef
+    type {int long}
+    attrs {}
+    text {typedef signed long int __int64_t;}
+}
+typedef __uint64_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/types.h 45 45}
+    origin system
+    storage typedef
+    type {int {unsigned long}}
+    attrs {}
+    text {typedef unsigned long int __uint64_t;}
+}
+typedef __off_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/types.h 152 152}
+    origin system
+    storage typedef
+    type {int long}
+    attrs {}
+    text {typedef long int __off_t;}
+}
+typedef __off64_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/types.h 153 153}
+    origin system
+    storage typedef
+    type {int long}
+    attrs {}
+    text {typedef long int __off64_t;}
+}
+struct _IO_FILE {
+    loc {/usr/include/x86_64-linux-gnu/bits/types/__FILE.h 4 4}
+    origin system
+    kind struct
+    complete 0
+    fields {}
+    attrs {}
+    text {struct _IO_FILE;}
+}
+struct _IO_FILE {
+    loc {/usr/include/x86_64-linux-gnu/bits/types/FILE.h 4 4}
+    origin system
+    kind struct
+    complete 0
+    fields {}
+    attrs {}
+    text {struct _IO_FILE;}
+}
+typedef FILE {
+    loc {/usr/include/x86_64-linux-gnu/bits/types/FILE.h 7 7}
+    origin system
+    storage typedef
+    type {struct _IO_FILE}
+    attrs {}
+    text {typedef struct _IO_FILE FILE;}
+}
+struct _IO_FILE {
+    loc {/usr/include/x86_64-linux-gnu/bits/types/struct_FILE.h 35 35}
+    origin system
+    kind struct
+    complete 0
+    fields {}
+    attrs {}
+    text {struct _IO_FILE;}
+}
+struct _IO_marker {
+    loc {/usr/include/x86_64-linux-gnu/bits/types/struct_FILE.h 36 36}
+    origin system
+    kind struct
+    complete 0
+    fields {}
+    attrs {}
+    text {struct _IO_marker;}
+}
+struct _IO_codecvt {
+    loc {/usr/include/x86_64-linux-gnu/bits/types/struct_FILE.h 37 37}
+    origin system
+    kind struct
+    complete 0
+    fields {}
+    attrs {}
+    text {struct _IO_codecvt;}
+}
+struct _IO_wide_data {
+    loc {/usr/include/x86_64-linux-gnu/bits/types/struct_FILE.h 38 38}
+    origin system
+    kind struct
+    complete 0
+    fields {}
+    attrs {}
+    text {struct _IO_wide_data;}
+}
+typedef _IO_lock_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/types/struct_FILE.h 43 43}
+    origin system
+    storage typedef
+    type void
+    attrs {}
+    text {typedef void _IO_lock_t;}
+}
+struct _IO_FILE {
+    loc {/usr/include/x86_64-linux-gnu/bits/types/struct_FILE.h 49 99}
+    origin system
+    kind struct
+    complete 1
+    anonymous 0
+    fields {
+        {_flags {int int} {} {}}
+        {_IO_read_ptr {ptr {int char}} {} {}}
+        {_IO_read_end {ptr {int char}} {} {}}
+        {_IO_read_base {ptr {int char}} {} {}}
+        {_IO_write_base {ptr {int char}} {} {}}
+        {_IO_write_ptr {ptr {int char}} {} {}}
+        {_IO_write_end {ptr {int char}} {} {}}
+        {_IO_buf_base {ptr {int char}} {} {}}
+        {_IO_buf_end {ptr {int char}} {} {}}
+        {_IO_save_base {ptr {int char}} {} {}}
+        {_IO_backup_base {ptr {int char}} {} {}}
+        {_IO_save_end {ptr {int char}} {} {}}
+        {_markers {ptr {struct _IO_marker}} {} {}}
+        {_chain {ptr {struct _IO_FILE}} {} {}}
+        {_fileno {int int} {} {}}
+        {_flags2 {int int} {} {}}
+        {_old_offset {typedef __off_t} {} {}}
+        {_cur_column {int {unsigned short}} {} {}}
+        {_vtable_offset {int {signed char}} {} {}}
+        {_shortbuf {array {int char} {lit 1}} {} {}}
+        {_lock {ptr {typedef _IO_lock_t}} {} {}}
+        {_offset {typedef __off64_t} {} {}}
+        {_codecvt {ptr {struct _IO_codecvt}} {} {}}
+        {_wide_data {ptr {struct _IO_wide_data}} {} {}}
+        {_freeres_list {ptr {struct _IO_FILE}} {} {}}
+        {_freeres_buf {ptr void} {} {}}
+        {__pad5 {typedef size_t} {} {}}
+        {_mode {int int} {} {}}
+        {_unused2 {array {int char} {expr {15 *sizeof (int) - 4 *sizeof (void *) - sizeof (size_t)}}} {} {}}
+    }
+    attrs {}
+    text {struct _IO_FILE { int _flags; char *_IO_read_ptr; char *_IO_read_end; char *_IO_read_base; char *_IO_write_base; char *_IO_write_ptr; char *_IO_write_end; char *_IO_buf_base; char *_IO_buf_end; char *_IO_save_base; char *_IO_backup_base; char *_IO_save_end; struct _IO_marker *_markers; struct _IO_FILE *_chain; int _fileno; int _flags2; __off_t _old_offset; unsigned short _cur_column; signed char _vtable_offset; char _shortbuf[1]; _IO_lock_t *_lock; __off64_t _offset; struct _IO_codecvt *_codecvt; struct _IO_wide_data *_wide_data; struct _IO_FILE *_freeres_list; void *_freeres_buf; size_t __pad5; int _mode; char _unused2[15 *sizeof (int) - 4 *sizeof (void *) - sizeof (size_t)]; }}
+}
+typedef ptrdiff_t {
+    loc {/usr/lib/gcc/x86_64-linux-gnu/13/include/stddef.h 145 145}
+    origin system
+    storage typedef
+    type {int long}
+    attrs {}
+    text {typedef long int ptrdiff_t;}
+}
+typedef int32_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/stdint-intn.h 26 26}
+    origin system
+    storage typedef
+    type {typedef __int32_t}
+    attrs {}
+    text {typedef __int32_t int32_t;}
+}
+typedef int64_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/stdint-intn.h 27 27}
+    origin system
+    storage typedef
+    type {typedef __int64_t}
+    attrs {}
+    text {typedef __int64_t int64_t;}
+}
+typedef uint8_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/stdint-uintn.h 24 24}
+    origin system
+    storage typedef
+    type {typedef __uint8_t}
+    attrs {}
+    text {typedef __uint8_t uint8_t;}
+}
+typedef uint32_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/stdint-uintn.h 26 26}
+    origin system
+    storage typedef
+    type {typedef __uint32_t}
+    attrs {}
+    text {typedef __uint32_t uint32_t;}
+}
+typedef uint64_t {
+    loc {/usr/include/x86_64-linux-gnu/bits/stdint-uintn.h 27 27}
+    origin system
+    storage typedef
+    type {typedef __uint64_t}
+    attrs {}
+    text {typedef __uint64_t uint64_t;}
+}

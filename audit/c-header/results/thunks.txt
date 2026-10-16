@@ -1,0 +1,64 @@
+# compiler gcc: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+gcc	tcl-embed	Tcl_IncrRefCount	ok	predicted ok	expression with side effects	void botlish_thunk(Tcl_Obj *objPtr) { Tcl_IncrRefCount(objPtr); }	
+gcc	tcl-embed	Tcl_DecrRefCount	ok	predicted ok	statement (do-while with a local declaration)	void botlish_thunk(Tcl_Obj *objPtr) { Tcl_DecrRefCount(objPtr); }	
+gcc	tcl-embed	Tcl_IsShared	ok	predicted ok	member access	int botlish_thunk(Tcl_Obj *objPtr) { return Tcl_IsShared(objPtr); }	
+gcc	tcl-embed	Tcl_GetHashValue	ok	predicted ok	member access (an lvalue: the read)	void *botlish_thunk(Tcl_HashEntry *h) { return Tcl_GetHashValue(h); }	
+gcc	tcl-embed	Tcl_SetHashValue	ok	predicted ok	assignment through a member	void botlish_thunk(Tcl_HashEntry *h, void *v) { Tcl_SetHashValue(h, v); }	
+gcc	tcl-embed	Tcl_FindHashEntry	ok	predicted ok	call through a function pointer in a struct, argument evaluated twice	Tcl_HashEntry *botlish_thunk(Tcl_HashTable *t, const void *key) { return Tcl_FindHashEntry(t, key); }	
+gcc	tcl-embed	Tcl_DStringValue	ok	predicted ok	member access	char *botlish_thunk(Tcl_DString *d) { return Tcl_DStringValue(d); }	
+gcc	tcl-embed	Tcl_Main	ok	predicted ok	call wrapper, computed arguments	void botlish_thunk(Tcl_Size argc, char **argv, Tcl_AppInitProc *p) { Tcl_Main(argc, argv, p); }	
+gcc	tcl-embed	Tcl_GetBooleanFromObj	ok	predicted ok	type-generic (sizeof dispatch), signature int *	int botlish_thunk(Tcl_Interp *i, Tcl_Obj *o, int *b) { return Tcl_GetBooleanFromObj(i, o, b); }	
+gcc	tcl-embed	Tcl_GetBooleanFromObj	ok	predicted ok	type-generic (sizeof dispatch), signature char * (another callee)	int botlish_thunk(Tcl_Interp *i, Tcl_Obj *o, char *b) { return Tcl_GetBooleanFromObj(i, o, b); }	
+gcc	tcl-embed	Tcl_GetBooleanFromObj	rejected	predicted rejected	type-generic (sizeof dispatch), signature long long * (refused by its static assertion)	int botlish_thunk(Tcl_Interp *i, Tcl_Obj *o, long long *b) { return Tcl_GetBooleanFromObj(i, o, b); }	error: static assertion failed: "sizeof(boolPtr) too large"
+gcc	tcl-embed	Tcl_GetIndexFromObjStruct	ok	predicted ok	type-generic (sizeof of the result pointer's target)	int botlish_thunk(Tcl_Interp *i, Tcl_Obj *o, const void *t, Tcl_Size off, const char *msg, int flags, int *idx) { return Tcl_GetIndexFromObjStruct(i, o, t, off, msg, flags, idx); }	
+gcc	tcl-embed	mp_iszero	ok	predicted ok	member access (bundled libtommath)	int botlish_thunk(const mp_int *a) { return mp_iszero(a); }	
+gcc	tcl-embed	TCL_DECLARE_MUTEX	ok	predicted ok	declaration-generating: as a wrapper body it declares, it does not act	void botlish_thunk(void) { TCL_DECLARE_MUTEX(m) (void)m; }	
+gcc	tcl-stubs	Tcl_CreateObjCommand	ok	predicted ok	stubs: an object-like macro naming a stub-table member	Tcl_Command botlish_thunk(Tcl_Interp *i, const char *n, Tcl_ObjCmdProc *p, void *cd, Tcl_CmdDeleteProc *d) { return Tcl_CreateObjCommand(i, n, p, cd, d); }	
+gcc	tcl-stubs	Tcl_InitStubs	ok	predicted ok	stubs: call wrapper with the version and magic baked in	const char *botlish_thunk(Tcl_Interp *i, const char *v, int exact) { return Tcl_InitStubs(i, v, exact); }	
+gcc	boringssl-static	OPENSSL_PUT_ERROR	rejected	predicted rejected	pasted argument, given a value parameter	void botlish_thunk(int library, int reason) { OPENSSL_PUT_ERROR(library, reason); }	error: 'ERR_LIB_library' undeclared (first use in this function)
+gcc	boringssl-static	OPENSSL_PUT_ERROR	ok	predicted ok	pasted argument, one wrapper per library name (__FILE__/__LINE__ become the wrapper's)	void botlish_thunk(int reason) { OPENSSL_PUT_ERROR(SSL, reason); }	
+gcc	boringssl-static	ASN1_ITEM_ref	ok	predicted ok	pasted argument, one wrapper per item name	const ASN1_ITEM *botlish_thunk(void) { return ASN1_ITEM_ref(ASN1_INTEGER); }	
+gcc	boringssl-static	BIO_get_app_data	ok	predicted ok	call wrapper, computed arguments	void *botlish_thunk(BIO *b) { return BIO_get_app_data(b); }	
+gcc	boringssl-static	BN_mod	ok	predicted ok	call wrapper, computed arguments (NULL supplied)	int botlish_thunk(BIGNUM *rem, const BIGNUM *a, const BIGNUM *m, BN_CTX *ctx) { return BN_mod(rem, a, m, ctx); }	
+gcc	boringssl-static	ERR_PACK	ok	predicted ok	expression over its arguments	uint32_t botlish_thunk(int lib, int reason) { return ERR_PACK(lib, reason); }	
+gcc	boringssl-static	BSSL_CHECK	ok	predicted ok	statement	void botlish_thunk(int condition) { BSSL_CHECK(condition); }	
+gcc	boringssl-static	CHECKED_CAST	ok	predicted ok	type-generic (a type argument): one wrapper per type pair	X509 *botlish_thunk(void *p) { return CHECKED_CAST(X509 *, void *, p); }	
+gcc	boringssl-static	sk_X509_num	ok	predicted ok	a static inline function DEFINE_STACK_OF generated (STACK_OF in the signature)	size_t botlish_thunk(const STACK_OF(X509) *sk) { return sk_X509_num(sk); }	
+gcc	boringssl-static	sk_X509_pop_free	ok	predicted ok	a static inline function taking a callback	void botlish_thunk(STACK_OF(X509) *sk, sk_X509_free_func f) { sk_X509_pop_free(sk, f); }	
+gcc	boringssl-static	ERR_GET_LIB	ok	predicted ok	a static inline function written in the header	int botlish_thunk(uint32_t e) { return ERR_GET_LIB(e); }	
+gcc	boringssl-static	DEFINE_STACK_OF	rejected	predicted rejected	declaration-generating: as a wrapper body	void botlish_thunk(void) { DEFINE_STACK_OF(X509_NAME_ENTRY) }	error: invalid storage class for function 'sk_X509_NAME_ENTRY_call_free_func'
+gcc	boringssl-static	ASN1_SIMPLE	rejected	predicted rejected	initializer fragment: as an expression	int botlish_thunk(void) { return (int)sizeof(ASN1_SIMPLE(X509_ALGOR, algorithm, ASN1_OBJECT)); }	error: expected ';' before '}' token
+gcc	boringssl-static	OBJ_rsadsi	ok-with-warnings	predicted wrong	comma list (OID arcs): as an expression it compiles to the comma operator, the last arc	long botlish_thunk(void) { return OBJ_rsadsi; }	warning: left-hand operand of comma expression has no effect [-Wunused-value]
+# compiler clang: Ubuntu clang version 18.1.3 (1ubuntu1)
+clang	tcl-embed	Tcl_IncrRefCount	ok	predicted ok	expression with side effects	void botlish_thunk(Tcl_Obj *objPtr) { Tcl_IncrRefCount(objPtr); }	
+clang	tcl-embed	Tcl_DecrRefCount	ok	predicted ok	statement (do-while with a local declaration)	void botlish_thunk(Tcl_Obj *objPtr) { Tcl_DecrRefCount(objPtr); }	
+clang	tcl-embed	Tcl_IsShared	ok	predicted ok	member access	int botlish_thunk(Tcl_Obj *objPtr) { return Tcl_IsShared(objPtr); }	
+clang	tcl-embed	Tcl_GetHashValue	ok	predicted ok	member access (an lvalue: the read)	void *botlish_thunk(Tcl_HashEntry *h) { return Tcl_GetHashValue(h); }	
+clang	tcl-embed	Tcl_SetHashValue	ok	predicted ok	assignment through a member	void botlish_thunk(Tcl_HashEntry *h, void *v) { Tcl_SetHashValue(h, v); }	
+clang	tcl-embed	Tcl_FindHashEntry	ok	predicted ok	call through a function pointer in a struct, argument evaluated twice	Tcl_HashEntry *botlish_thunk(Tcl_HashTable *t, const void *key) { return Tcl_FindHashEntry(t, key); }	
+clang	tcl-embed	Tcl_DStringValue	ok	predicted ok	member access	char *botlish_thunk(Tcl_DString *d) { return Tcl_DStringValue(d); }	
+clang	tcl-embed	Tcl_Main	ok	predicted ok	call wrapper, computed arguments	void botlish_thunk(Tcl_Size argc, char **argv, Tcl_AppInitProc *p) { Tcl_Main(argc, argv, p); }	
+clang	tcl-embed	Tcl_GetBooleanFromObj	ok	predicted ok	type-generic (sizeof dispatch), signature int *	int botlish_thunk(Tcl_Interp *i, Tcl_Obj *o, int *b) { return Tcl_GetBooleanFromObj(i, o, b); }	
+clang	tcl-embed	Tcl_GetBooleanFromObj	ok	predicted ok	type-generic (sizeof dispatch), signature char * (another callee)	int botlish_thunk(Tcl_Interp *i, Tcl_Obj *o, char *b) { return Tcl_GetBooleanFromObj(i, o, b); }	
+clang	tcl-embed	Tcl_GetBooleanFromObj	rejected	predicted rejected	type-generic (sizeof dispatch), signature long long * (refused by its static assertion)	int botlish_thunk(Tcl_Interp *i, Tcl_Obj *o, long long *b) { return Tcl_GetBooleanFromObj(i, o, b); }	error: static assertion failed due to requirement 'sizeof (*(b)) <= sizeof(int)': sizeof(boolPtr) too large
+clang	tcl-embed	Tcl_GetIndexFromObjStruct	ok	predicted ok	type-generic (sizeof of the result pointer's target)	int botlish_thunk(Tcl_Interp *i, Tcl_Obj *o, const void *t, Tcl_Size off, const char *msg, int flags, int *idx) { return Tcl_GetIndexFromObjStruct(i, o, t, off, msg, flags, idx); }	
+clang	tcl-embed	mp_iszero	ok	predicted ok	member access (bundled libtommath)	int botlish_thunk(const mp_int *a) { return mp_iszero(a); }	
+clang	tcl-embed	TCL_DECLARE_MUTEX	ok	predicted ok	declaration-generating: as a wrapper body it declares, it does not act	void botlish_thunk(void) { TCL_DECLARE_MUTEX(m) (void)m; }	
+clang	tcl-stubs	Tcl_CreateObjCommand	ok	predicted ok	stubs: an object-like macro naming a stub-table member	Tcl_Command botlish_thunk(Tcl_Interp *i, const char *n, Tcl_ObjCmdProc *p, void *cd, Tcl_CmdDeleteProc *d) { return Tcl_CreateObjCommand(i, n, p, cd, d); }	
+clang	tcl-stubs	Tcl_InitStubs	ok	predicted ok	stubs: call wrapper with the version and magic baked in	const char *botlish_thunk(Tcl_Interp *i, const char *v, int exact) { return Tcl_InitStubs(i, v, exact); }	
+clang	boringssl-static	OPENSSL_PUT_ERROR	rejected	predicted rejected	pasted argument, given a value parameter	void botlish_thunk(int library, int reason) { OPENSSL_PUT_ERROR(library, reason); }	error: use of undeclared identifier 'ERR_LIB_library'
+clang	boringssl-static	OPENSSL_PUT_ERROR	ok	predicted ok	pasted argument, one wrapper per library name (__FILE__/__LINE__ become the wrapper's)	void botlish_thunk(int reason) { OPENSSL_PUT_ERROR(SSL, reason); }	
+clang	boringssl-static	ASN1_ITEM_ref	ok	predicted ok	pasted argument, one wrapper per item name	const ASN1_ITEM *botlish_thunk(void) { return ASN1_ITEM_ref(ASN1_INTEGER); }	
+clang	boringssl-static	BIO_get_app_data	ok	predicted ok	call wrapper, computed arguments	void *botlish_thunk(BIO *b) { return BIO_get_app_data(b); }	
+clang	boringssl-static	BN_mod	ok	predicted ok	call wrapper, computed arguments (NULL supplied)	int botlish_thunk(BIGNUM *rem, const BIGNUM *a, const BIGNUM *m, BN_CTX *ctx) { return BN_mod(rem, a, m, ctx); }	
+clang	boringssl-static	ERR_PACK	ok	predicted ok	expression over its arguments	uint32_t botlish_thunk(int lib, int reason) { return ERR_PACK(lib, reason); }	
+clang	boringssl-static	BSSL_CHECK	ok	predicted ok	statement	void botlish_thunk(int condition) { BSSL_CHECK(condition); }	
+clang	boringssl-static	CHECKED_CAST	ok	predicted ok	type-generic (a type argument): one wrapper per type pair	X509 *botlish_thunk(void *p) { return CHECKED_CAST(X509 *, void *, p); }	
+clang	boringssl-static	sk_X509_num	ok	predicted ok	a static inline function DEFINE_STACK_OF generated (STACK_OF in the signature)	size_t botlish_thunk(const STACK_OF(X509) *sk) { return sk_X509_num(sk); }	
+clang	boringssl-static	sk_X509_pop_free	ok	predicted ok	a static inline function taking a callback	void botlish_thunk(STACK_OF(X509) *sk, sk_X509_free_func f) { sk_X509_pop_free(sk, f); }	
+clang	boringssl-static	ERR_GET_LIB	ok	predicted ok	a static inline function written in the header	int botlish_thunk(uint32_t e) { return ERR_GET_LIB(e); }	
+clang	boringssl-static	DEFINE_STACK_OF	rejected	predicted rejected	declaration-generating: as a wrapper body	void botlish_thunk(void) { DEFINE_STACK_OF(X509_NAME_ENTRY) }	error: function definition is not allowed here
+clang	boringssl-static	ASN1_SIMPLE	rejected	predicted rejected	initializer fragment: as an expression	int botlish_thunk(void) { return (int)sizeof(ASN1_SIMPLE(X509_ALGOR, algorithm, ASN1_OBJECT)); }	error: expected ';' after expression
+clang	boringssl-static	OBJ_rsadsi	ok	predicted wrong	comma list (OID arcs): as an expression it compiles to the comma operator, the last arc	long botlish_thunk(void) { return OBJ_rsadsi; }	
+# gcc as predicted: 30
+# clang as predicted: 30

@@ -1,0 +1,435 @@
+toplevel	public functions	3926
+toplevel	public pragmas	3239
+toplevel	public functions-declared	3109
+toplevel	public functions-inline-definitions	817
+toplevel	public typedefs	344
+toplevel	public struct-declarations	137
+toplevel	public struct-definitions	100
+toplevel	public extern-objects-and-variables	36
+toplevel	public union-declarations	23
+toplevel	public union-definitions	23
+toplevel	public enum-declarations	14
+toplevel	public enum-definitions	14
+toplevel	api struct tags, defined in: none	103
+toplevel	api struct tags, defined in: public	100
+toplevel	api union tags, defined in: public	23
+toplevel	api enum tags, defined in: public	14
+toplevel	api struct tags, defined in: system	2
+functions	extern total	3109
+functions	extern pointers	3012
+functions	extern pointer-param	2705
+functions	extern params=2	938
+functions	extern pointer-result	922
+functions	extern params=1	870
+functions	inline total	817
+functions	inline pointers	813
+functions	inline pointer-param	753
+functions	extern params=3	504
+functions	extern void-result	462
+functions	inline pointer-result	391
+functions	extern pointer-to-pointer	367
+functions	extern params=0	318
+functions	inline params=1	305
+functions	inline function-pointer-param	300
+functions	inline params=2	270
+functions	inline params=3	212
+functions	inline void-result	211
+functions	extern params=4	209
+functions	extern function-pointer-param	151
+functions	extern params=5	114
+functions	extern array-param-spelling	98
+functions	extern no-pointers	97
+functions	extern params=>6	97
+functions	extern params=6	59
+functions	inline function-pointer-result	30
+functions	inline params=0	30
+functions	extern function-pointer-result	22
+functions	extern enum	21
+functions	extern variadic	5
+functions	inline no-pointers	4
+functions	extern builtin-__builtin_va_list	2
+functions	extern floating	1
+types	pointer	8936
+types	typedef-reference (library)	5443
+types	function	4181
+types	qualified	3394
+types	typedef-reference (system)	2501
+types	integer int	2461
+types	void	1356
+types	struct-reference	1122
+types	integer char	361
+types	array	197
+types	integer long	143
+types	integer unsigned int	90
+types	integer unsigned long	44
+types	integer unsigned char	29
+types	enum-reference	27
+types	union-reference	23
+types	floating double	2
+types	max pointer depth (as spelled)	2
+types	max pointer depth (typedefs resolved)	2
+pointers	param depth=1	6128
+pointers	param pointee spelled through a typedef	4227
+pointers	param depth=1 pointee=opaque-struct	2827
+pointers	result depth=1	1313
+pointers	param depth=1 pointee=complete-struct	1277
+pointers	result pointee spelled through a typedef	947
+pointers	param depth=1 pointee=char	786
+pointers	result depth=1 pointee=opaque-struct	783
+pointers	param depth=1 pointee=function	504
+pointers	param depth=2	478
+pointers	param depth=1 pointee=void	421
+pointers	param depth hidden by a typedef (0 as spelled, 1 resolved)	355
+pointers	param depth=1 pointee=scalar	309
+pointers	result depth=1 pointee=complete-struct	299
+pointers	param depth=2 pointee=char	236
+pointers	field depth=1	208
+pointers	param depth=2 pointee=opaque-struct	155
+pointers	typedef depth=1	147
+pointers	typedef depth=1 pointee=function	145
+pointers	field pointee spelled through a typedef	132
+pointers	result depth=1 pointee=char	94
+pointers	result depth=1 pointee=void	85
+pointers	param depth=2 pointee=complete-struct	82
+pointers	field depth=1 pointee=complete-struct	75
+pointers	result depth=1 pointee=function	52
+pointers	field depth=1 pointee=opaque-struct	50
+pointers	field depth=1 pointee=function	38
+pointers	result depth hidden by a typedef (0 as spelled, 1 resolved)	34
+pointers	field depth=1 pointee=char	32
+pointers	field depth=1 pointee=void	12
+pointers	field depth hidden by a typedef (0 as spelled, 1 resolved)	10
+pointers	param depth=1 pointee=array	3
+pointers	param depth=2 pointee=void	3
+pointers	param depth=2 pointee=scalar	2
+pointers	field depth=1 pointee=scalar	1
+pointers	param depth=1 pointee=enum	1
+pointers	typedef depth=1 pointee=char	1
+pointers	typedef depth=1 pointee=void	1
+qualifiers	any const	3394
+qualifiers	param pointee(level 1) const	2549
+qualifiers	result pointee(level 1) const	305
+qualifiers	param pointee(level 2) const	157
+qualifiers	field pointee(level 1) const	38
+qualifiers	variable top-level const	36
+qualifiers	param top-level const	5
+qualifiers	field top-level const	1
+qualifiers	typedef top-level const	1
+typedefs	category function pointer	145
+typedefs	category struct (complete)	95
+typedefs	category struct (opaque)	79
+typedefs	category function type	7
+typedefs	category void	5
+typedefs	category alias-of-typedef -> integer	3
+typedefs	category integer	3
+typedefs	category alias-of-typedef -> function type	1
+typedefs	category alias-of-typedef -> struct (complete)	1
+typedefs	category alias-of-typedef -> struct (opaque)	1
+typedefs	category array	1
+typedefs	category enum	1
+typedefs	category pointer to char	1
+typedefs	category pointer to void	1
+typedefs	chain length 1	338
+typedefs	chain length 2	4
+typedefs	chain length 3	2
+typedefs	distinct typedef names used in function signatures (library)	310
+typedefs	distinct typedef names used in function signatures (system)	10
+typedefs	integer typedefs over int	3
+typedefs	integer typedefs over long	1
+typedefs	integer typedefs over unsigned int	1
+typedefs	integer typedefs over unsigned long	1
+structs	complete structs	100
+structs	complete unions	23
+structs	complete, anonymous (no tag)	28
+structs	complete, defined inside another struct	23
+structs	opaque structs (declared or referenced, defined nowhere in the TU)	103
+structs	opaque unions	0
+structs	complete, no keep-out comment: heuristic	79
+structs	complete, its comments say keep out (private/opaque/internal/do not): heuristic	21
+structs	complete, used by value somewhere (param/result/field/variable)	32
+structs	complete, used only behind pointers	87
+structs	complete, not used by any declaration (or only via typedef)	4
+fields	struct field: pointer	123
+fields	struct field: typedef scalar	57
+fields	struct field: integer scalar	53
+fields	union field: pointer	47
+fields	struct field: function pointer	38
+fields	struct field: fixed array	32
+fields	struct field: union by value	21
+fields	union field: fixed array	17
+fields	union field: typedef scalar	17
+fields	struct field: nested struct by value	8
+fields	struct field: bitfield	3
+fields	struct field: anonymous union member	2
+fields	union field: nested struct by value	2
+fields	union field: anonymous struct member	1
+layout	complete structs and unions (top-level or named)	100
+layout	REPRESENTABLE-NOW	1
+layout	NEEDS-POINTER-SCALAR	68
+layout	NEEDS-FIXED-ARRAY	39
+layout	NEEDS-FLOAT	0
+layout	NEEDS-UNION	26
+layout	NEEDS-BITFIELD	3
+layout	NEEDS-OTHER	0
+layout	(abi fact) ABI-CHAR-SIGNEDNESS	6
+layout	combination NEEDS-POINTER-SCALAR	52
+layout	combination NEEDS-FIXED-ARRAY+NEEDS-UNION	16
+layout	combination NEEDS-FIXED-ARRAY	15
+layout	combination NEEDS-POINTER-SCALAR+NEEDS-UNION	5
+layout	combination NEEDS-FIXED-ARRAY+NEEDS-POINTER-SCALAR	4
+layout	combination NEEDS-FIXED-ARRAY+NEEDS-POINTER-SCALAR+NEEDS-UNION	4
+layout	combination NEEDS-BITFIELD+NEEDS-POINTER-SCALAR	2
+layout	combination NEEDS-BITFIELD+NEEDS-POINTER-SCALAR+NEEDS-UNION	1
+layout	combination REPRESENTABLE-NOW	1
+layout	unlocked by pointer scalar + fixed array + union	96
+layout	unlocked by NEEDS-POINTER-SCALAR alone	52
+layout	unlocked by NEEDS-FIXED-ARRAY alone	15
+layout	unlocked by pointer scalar + fixed array together	4
+layout	storage-only structs (every field an opaque-storage union: size + alignment suffice)	14
+layout	storage-only structs whose fields as written need NEEDS-FIXED-ARRAY+NEEDS-UNION	14
+arrays	param bound lit	142
+arrays	param element byte	142
+arrays	field element byte	36
+arrays	field bound lit	33
+arrays	field element scalar	13
+arrays	field bound expr:muldiv+addsub	12
+arrays	param element scalar	4
+arrays	field bound expr:sizeof+muldiv+addsub+cast+identifier	3
+arrays	param bound expr:addsub	2
+arrays	param bound expr:muldiv	2
+arrays	field bound expr:addsub	1
+arrays	field bound expr:muldiv	1
+arrays	field element multidimensional	1
+arrays	typedef bound lit	1
+arrays	typedef element byte	1
+unions	field union by value	23
+unions	union definitions inside a struct	22
+unions	union definitions, anonymous	22
+unions	union definitions: opaque storage (a byte array and an alignment scalar)	16
+unions	union definitions, tagged	1
+bitfields	bitfields	3
+bitfields	struct cbb_buffer_st.can_resize	unsigned int : 1
+bitfields	struct cbb_buffer_st.error	unsigned int : 1
+bitfields	struct cbb_child_st.pending_is_asn1	unsigned int : 1
+enums	enumerators	95
+enums	enumerator value form: implicit	62
+enums	enumerator value form: literal	30
+enums	enum-typed param	15
+enums	enum definitions, tagged	12
+enums	enum types used in function signatures	8
+enums	enum-typed result	6
+enums	enum definitions, anonymous (constants only)	2
+enums	enumerator value form: negated-literal	2
+enums	enum definitions with a typedef	1
+enums	enum pointer params/results	1
+enums	enum-typed typedef	1
+enums	enumerator value form: ref	1
+enums	enums whose every value the parser computes (literal, negated literal, char, previous enumerator, implicit)	14 of 14
+constants	macro constant: integer literal	2867
+constants	macro constant: string literal	1404
+constants	macro constant: integer expression	123
+constants	enum member	95
+constants	extern const object	36
+constants	macro constant: enumerator alias	33
+constants	macro constant: expression with sizeof (needs ABI)	2
+callbacks	functions accepting callbacks: inline definitions	300
+callbacks	callback params (inline functions): no void* userdata	176
+callbacks	callback typedefs naming a function pointer	145
+callbacks	callback params (inline functions): void* userdata beside and inside	120
+callbacks	callback params (extern functions): void* userdata beside and inside	106
+callbacks	callback params (extern functions): no void* userdata	45
+callbacks	callback fields (function pointers in structs)	38
+callbacks	callback fields outside stub tables	38
+callbacks	callback params (inline functions): void* beside the callback only	30
+callbacks	callback params (extern functions): void* inside the callback only	20
+callbacks	callback typedefs naming a function type	7
+callbacks	callback params (inline functions): void* inside the callback only	4
+callbacks	callback params (extern functions): void* beside the callback only	3
+callbacks	API functions accepting callbacks	451
+callbacks	API functions returning a function pointer	52
+callbacks	distinct callback signature shapes (params and fields)	89
+callbacks	shape (*char, int, int, *void) -> int	64
+callbacks	shape (*complete-struct) -> void	45
+callbacks	shape (*opaque-struct) -> void	39
+callbacks	shape (*void) -> void	39
+callbacks	shape (**void, **void) -> int	34
+callbacks	shape (*void) -> *void	32
+callbacks	shape (*void, *void) -> int	32
+callbacks	shape (**complete-struct, **complete-struct) -> int	30
+callbacks	shape (**opaque-struct, **opaque-struct) -> int	26
+callbacks	shape (*opaque-struct, *void) -> int	17
+callbacks	shape (*complete-struct) -> *complete-struct	15
+callbacks	shape (*complete-struct, *void) -> int	15
+callbacks	shape (*opaque-struct) -> *opaque-struct	13
+callbacks	shape (*opaque-struct, *opaque-struct, **void, int, int, *void) -> int	10
+callbacks	shape (*void, *void, *opaque-struct, int, int, *void) -> void	10
+opaque	typedef names an opaque tag (typedef struct X X)	79
+opaque	declared functions with an opaque handle (T * to an incomplete tag) in their signature	2098 of 3109
+opaque	declared functions whose every type is an opaque handle, an integer, an enum, void, or a char/void/integer pointer	1506 of 3109
+strings	params: char-like pointer followed by an integer (pointer + length)	508
+strings	params: const uint8_t *	412
+strings	params: const char *	172
+strings	params: uint8_t *	166
+strings	params: char-like pointer followed by an integer pointer (pointer + output length)	78
+strings	results: const char *	47
+strings	params: char *	20
+strings	results: char *	17
+strings	results: uint8_t *	11
+strings	results: const uint8_t *	9
+strings	params: const unsigned char *	7
+strings	params: unsigned char *	3
+strings	results: const unsigned char *	1
+strings	results: unsigned char *	1
+outparams	params named like an output (out*, *Ptr, *result)	818
+outparams	T** params (non-const outer pointee: possible out-pointer)	472
+outparams	pointer to non-const integer (possible out-scalar)	252
+outparams	T** params (const outer pointee)	6
+attributes	api gnu unused (diagnostic) at spec	817
+attributes	system gnu nothrow (optimization) at decl	176
+attributes	system gnu leaf (optimization) at decl	169
+attributes	system gnu nonnull (nullability) at decl	120
+attributes	system gnu malloc (optimization) at decl	22
+attributes	system gnu format (diagnostic) at decl	13
+attributes	system extension extension (none) at spec	12
+attributes	api gnu deprecated (diagnostic) at spec	10
+attributes	system gnu const (optimization) at decl	10
+attributes	api gnu format (diagnostic) at decl	6
+attributes	system asm asm (link) at decl	6
+attributes	system gnu alloc_size (optimization) at decl	6
+attributes	system gnu access (diagnostic) at decl	5
+attributes	system gnu pure (optimization) at decl	5
+attributes	system gnu noreturn (optimization) at decl	4
+attributes	system gnu aligned (abi) at decl	2
+attributes	system gnu warn_unused_result (diagnostic) at decl	2
+attributes	system gnu alloc_align (optimization) at decl	1
+attributes	system gnu cold (optimization) at decl	1
+attributes	system gnu mode (abi) at decl	1
+variadic	variadic functions	5
+variadic	va_list (builtin) parameters	2
+variadic	ERR_add_error_data	void ERR_add_error_data(unsigned count, ...);
+variadic	ERR_add_error_dataf	void ERR_add_error_dataf(const char *format, ...) __attribute__((__format__(__printf__, 1, 2)));
+variadic	BIO_printf	int BIO_printf(BIO *bio, const char *format, ...) __attribute__((__format__(__printf__, 2, 3)));
+variadic	BIO_snprintf	int BIO_snprintf(char *buf, size_t n, const char *format, ...) __attribute__((__format__(__printf__, 3, 4)));
+variadic	OPENSSL_asprintf	int OPENSSL_asprintf(char **str, const char *format, ...) __attribute__((__format__(__printf__, 2, 3)));
+inline	inline definitions (no link symbol)	817
+inline	storage static, fnspec inline	817
+inline	generated by DEFINE_STACK_OF	729
+inline	generated by DEFINE_CONST_STACK_OF	54
+inline	generated by DEFINE_NAMED_STACK_OF	27
+inline	written directly	7
+links	#pragma redefine_extname	3149
+links	pragma redefine_extname	3149
+links	pragma GCC	90
+subset	functions (declared + inline definitions)	3926
+subset	declared (have a link symbol)	3109
+subset	simple subset: callable	2929
+subset	simple subset: of which use an enum type (needs its ABI width)	21
+subset	simple subset: excluded by inline definition (no symbol)	817
+subset	simple subset: excluded by callback	472
+subset	simple subset: excluded by variadic	5
+subset	simple subset: excluded by builtin __builtin_va_list	2
+subset	simple subset: excluded by floating	1
+subset	callbacks subset: callable	3092
+subset	callbacks subset: of which use an enum type (needs its ABI width)	21
+subset	callbacks subset: excluded by inline definition (no symbol)	817
+subset	callbacks subset: excluded by callback taking a callback	9
+subset	callbacks subset: excluded by variadic	5
+subset	callbacks subset: excluded by builtin __builtin_va_list	2
+subset	callbacks subset: excluded by floating	1
+subset	floats subset: callable	3093
+subset	floats subset: of which use an enum type (needs its ABI width)	21
+subset	floats subset: excluded by inline definition (no symbol)	817
+subset	floats subset: excluded by callback taking a callback	9
+subset	floats subset: excluded by variadic	5
+subset	floats subset: excluded by builtin __builtin_va_list	2
+unsupported	library records parsed	4480
+unsupported	library unsupported	0
+unsupported	system records parsed	485
+unsupported	system unsupported	0
+macros	library macros (final definitions)	6673
+macros	function: call wrapper: computed arguments	21
+macros	function: call wrapper: rename	55
+macros	function: call wrapper: undeclared callee	1
+macros	function: declaration-generating	29
+macros	function: decoration: attribute	1
+macros	function: empty	8
+macros	function: expression	19
+macros	function: expression: calls a function	2
+macros	function: expression: member access	2
+macros	function: initializer fragment	24
+macros	function: statement	21
+macros	function: syntax-sensitive: rejected with identifier arguments	1
+macros	function: type-producing	1
+macros	object: alias: function	78
+macros	object: alias: undeclared identifier	57
+macros	object: comma list (an initializer or argument fragment)	1778
+macros	object: constant: enumerator alias	33
+macros	object: constant: expression with sizeof (needs ABI)	2
+macros	object: constant: integer expression	123
+macros	object: constant: integer literal	2867
+macros	object: constant: string literal	1404
+macros	object: decoration: attribute	3
+macros	object: empty: flag (tested by #if, or unused)	58
+macros	object: empty: include guard	80
+macros	object: empty: used on declaration lines	2
+macros	object: initializer (braced)	1
+macros	object: other	1
+macros	object: statement or declaration	1
+macros	function flag: assignment	25
+macros	function flag: calls-through-pointer	5
+macros	function flag: location-sensitive	4
+macros	function flag: member-access	2
+macros	function flag: multiple-evaluation	31
+macros	function flag: paste	84
+macros	function flag: stringify	37
+macros	function flag: type-generic	29
+macros	function flag: unused-argument	14
+macros	function thunk: n/a (a type, resolved at each use)	1
+macros	function thunk: n/a (erased by preprocessing)	9
+macros	function thunk: n/a (import the callee)	55
+macros	function thunk: no (a fragment of an initializer or argument list, not an expression)	24
+macros	function thunk: no (import the declarations it generates)	29
+macros	function thunk: no (syntax-sensitive: needs literal or identifier arguments)	1
+macros	function thunk: per identifier argument (an argument pasted or stringified is a name, not a value)	31
+macros	function thunk: per signature (type-generic)	2
+macros	function thunk: yes	27
+macros	function thunk: yes (a read; the expansion is an lvalue too: writing needs a second wrapper)	2
+macros	function thunk: yes (a void wrapper)	1
+macros	function thunk: yes, but __FILE__/__LINE__ become the wrapper's	3
+macros	object thunk: constant (value import, or a thunk returning it)	4429
+macros	object thunk: n/a (erased by preprocessing)	143
+macros	object thunk: n/a (import the function under the alias)	78
+macros	object thunk: n/a (names nothing declared in this profile)	57
+macros	object thunk: no (a fragment, not an expression)	1780
+macros	object thunk: unclear	1
+macros	function-like macros with the name of a declared function (shadowing it)	0
+declmacros	function: declaration-generating (declaration uses)	1000
+declmacros	function: declaration-generating (macros)	5
+declmacros	function: decoration: attribute (declaration uses)	6
+declmacros	function: decoration: attribute (macros)	1
+declmacros	function: expression (declaration uses)	1
+declmacros	function: expression (macros)	1
+declmacros	function: type-producing (declaration uses)	110
+declmacros	function: type-producing (macros)	1
+declmacros	object: constant: integer expression (declaration uses)	4
+declmacros	object: constant: integer expression (macros)	3
+declmacros	object: constant: integer literal (declaration uses)	122
+declmacros	object: constant: integer literal (macros)	57
+declmacros	object: decoration: attribute (declaration uses)	17
+declmacros	object: decoration: attribute (macros)	2
+declmacros	object: empty (declaration uses)	3110
+declmacros	object: empty (macros)	2
+declmacros	declarations whose source span contains a preprocessor conditional	2
+systemrefs	system typedef size_t	1062
+systemrefs	system typedef uint8_t	1045
+systemrefs	system typedef uint32_t	151
+systemrefs	system typedef FILE	94
+systemrefs	system typedef uint16_t	64
+systemrefs	system typedef uint64_t	51
+systemrefs	system typedef int64_t	22
+systemrefs	system typedef time_t	8
+systemrefs	system struct tm	5
+systemrefs	system struct timeval	2
+systemrefs	system typedef va_list	2
+systemrefs	system typedef int32_t	1
+systemrefs	system typedef ptrdiff_t	1

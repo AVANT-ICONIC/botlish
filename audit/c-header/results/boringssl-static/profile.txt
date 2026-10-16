@@ -1,0 +1,48 @@
+profile boringssl-static
+description {static-library consumer: no defines (the default build)}
+library boringssl
+source {url https://github.com/google/boringssl tag 0.20260929.0 commit 427ec40cc8edc545253289232e885708c409e5ea}
+revision 427ec40cc8edc545253289232e885708c409e5ea
+entry {
+    openssl/aead.h openssl/aes.h openssl/arm_arch.h openssl/asm_base.h
+    openssl/asn1.h openssl/asn1_mac.h openssl/asn1t.h openssl/base.h
+    openssl/base64.h openssl/bio.h openssl/blake2.h openssl/blowfish.h
+    openssl/bn.h openssl/buf.h openssl/buffer.h openssl/bytestring.h
+    openssl/cast.h openssl/chacha.h openssl/cipher.h openssl/cmac.h
+    openssl/cms.h openssl/conf.h openssl/configuration.h openssl/cpu.h
+    openssl/crypto.h openssl/ctrdrbg.h openssl/curve25519.h openssl/des.h
+    openssl/dh.h openssl/digest.h openssl/dsa.h openssl/e_os2.h
+    openssl/ec.h openssl/ec_key.h openssl/ecdh.h openssl/ecdsa.h
+    openssl/engine.h openssl/err.h openssl/evp.h openssl/evp_errors.h
+    openssl/ex_data.h openssl/hkdf.h openssl/hmac.h openssl/hpke.h
+    openssl/hrss.h openssl/is_boringssl.h openssl/kdf.h openssl/lhash.h
+    openssl/md4.h openssl/md5.h openssl/mem.h openssl/mldsa.h
+    openssl/mlkem.h openssl/nid.h openssl/obj.h openssl/obj_mac.h
+    openssl/objects.h openssl/opensslconf.h openssl/opensslv.h
+    openssl/ossl_typ.h openssl/params.h openssl/pem.h openssl/pkcs12.h
+    openssl/pkcs7.h openssl/pkcs8.h openssl/poly1305.h openssl/pool.h
+    openssl/posix_time.h openssl/prefix_symbols.h openssl/rand.h
+    openssl/rc4.h openssl/ripemd.h openssl/rsa.h openssl/safestack.h
+    openssl/service_indicator.h openssl/sha.h openssl/sha2.h
+    openssl/siphash.h openssl/slhdsa.h openssl/span.h openssl/stack.h
+    openssl/target.h openssl/thread.h openssl/time.h openssl/tls_prf.h
+    openssl/trust_token.h openssl/type_check.h openssl/types.h
+    openssl/x509.h openssl/x509_vfy.h openssl/x509v3.h
+    openssl/x509v3_errors.h openssl/xwing.h openssl/dtls1.h openssl/srtp.h
+    openssl/ssl.h openssl/ssl3.h openssl/tls1.h
+    }
+include include
+defines {}
+undefines {}
+flags {}
+toolchain_cc cc
+toolchain_path /usr/bin/cc
+toolchain_family gcc
+toolchain_version {cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0}
+toolchain_style gnu
+toolchain_target native
+toolchain_host {Linux 6.18.44-fc-v139 x86_64}
+environment {}
+command {cc -E -x c -I$SRC/include $TU/entry.c}
+predefined_count 401
+predefined {_LP64=1 __GNUC__=13 __LP64__=1 __PRAGMA_REDEFINE_EXTNAME=1 __SIZEOF_DOUBLE__=8 __SIZEOF_FLOAT__=4 __SIZEOF_INT__=4 __SIZEOF_LONG_DOUBLE__=16 __SIZEOF_LONG_LONG__=8 __SIZEOF_LONG__=8 __SIZEOF_POINTER__=8 __SIZEOF_PTRDIFF_T__=8 __SIZEOF_SHORT__=2 __SIZEOF_SIZE_T__=8 __SIZEOF_WCHAR_T__=4 __SIZEOF_WINT_T__=4 __STDC_VERSION__=201710L __USER_LABEL_PREFIX__= __linux__=1 __x86_64__=1}

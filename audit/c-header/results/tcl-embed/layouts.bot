@@ -1,0 +1,21 @@
+# layouts.bot -- Botlish layouts generated from the ABI probe of profile tcl-embed
+# (C-HEADER-ARCHAEOLOGY.md, "The ABI probe"): the census's REPRESENTABLE-NOW
+# structs, sizes and offsets as the C compiler resolved them on this host.
+# expect: [16, 16]
+import binary
+
+# struct Tcl_RegExpIndices { Tcl_Size start; Tcl_Size end; }
+layout TCL_REGEXPINDICES:
+    size 16
+    align 8
+    field start: binary::I64 at 0
+    field end: binary::I64 at 8
+
+# struct Tcl_Time { long long sec; long usec; }
+layout TCL_TIME:
+    size 16
+    align 8
+    field sec: binary::I64 at 0
+    field usec: binary::I64 at 8
+
+[binary::layout_length(TCL_REGEXPINDICES), binary::layout_length(TCL_TIME)]

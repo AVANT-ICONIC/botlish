@@ -224,6 +224,7 @@ namespace eval hir::static {
         AMBIGUOUS-METHOD-CALL                    AmbiguousMethodCall
         AMBIGUOUS-QUALIFIER                      AmbiguousQualifier
         ARITY                                    Arity
+        BINARY-OPERAND                           BinaryOperand
         BREAK-OUTSIDE-LOOP                       BreakOutsideLoop
         CONTEXT-BINDING-COLLISION                ContextBindingCollision
         CONTEXT-FUNCTION-VALUE                   ContextFunctionValue
@@ -249,6 +250,10 @@ namespace eval hir::static {
         FLAG-CALLEE-UNKNOWN                      FlagCalleeUnknown
         FLAG-FUNCTION-VALUE                      FlagFunctionValue
         KNOWN-ERROR                              KnownError
+        LAYOUT-NOT-A-TYPE                        LayoutNotAType
+        LAYOUT-NOT-A-VALUE                       LayoutNotAValue
+        LAYOUT-OPERAND                           LayoutOperand
+        LAYOUT-STRUCT-PARAMETER                  LayoutStructParameter
         LOCKSTEP-UNEQUAL                         LockstepUnequal
         LOCKSTEP-UNPROVEN                        LockstepUnproven
         MISSING-CONTEXT                          MissingContext
@@ -287,6 +292,7 @@ namespace eval hir::static {
         UNKNOWN-ENUM-CASE                        UnknownEnumCase
         UNKNOWN-FIELD                            UnknownField
         UNKNOWN-FLAG                             UnknownFlag
+        UNKNOWN-LAYOUT                           UnknownLayout
         UNKNOWN-NAMESPACE                        UnknownNamespace
         UNKNOWN-STRUCT                           UnknownStruct
         UNKNOWN-SYMBOL                           UnknownSymbol

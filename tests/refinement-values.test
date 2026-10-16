@@ -126,7 +126,7 @@ proves = 2
 
 test refinement-proves-in-ast {the proof clause is part of the function node} -body {
     surface::formatAst [surface::parse "fn mail?(s: str) -> bool proves s: Mail:\n    true\n"]
-} -match glob -result {*fn mail? (s:str) proves s: Mail*}
+} -match glob -result {*fn mail? (s:str) -> bool proves s: Mail*}
 
 test refinement-one-carrier {a refinement has exactly one carrier: no intersections, unions or extra carriers} -body {
     list [rejectionKind "refined type A = str, int\n1\n"] \

@@ -7,6 +7,7 @@
 # held in Lists keep their lengths, equality and hashes around the writes.
 #
 # golden-exclude: interp, compile -- CORE SEMANTIC NATIVE-ONLY: linux::write takes its payload's machine address (abi::x86_64::from_bytes) for the write(2) syscall, which the Tcl backends refuse at run time by design (tests/abi-bytes.test abi-bytes-tcl-backends-refuse-the-address pins the refusal); a refusal aborts a suite, so these tests run on cranelift-generic and cranelift only
+# golden-host: linux-x86_64 -- linux::write is one live write(2) through linux::abi::syscall, which the native backend compiles for Linux x86-64 only (tests/abi-bytes.test's live tests carry the linuxX86_64 constraint)
 #
 # Every write goes to descriptor 1000, which is invalid in the runner's
 # process as in the Tcl tests' standalone executables: nothing is ever

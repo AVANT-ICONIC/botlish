@@ -26,6 +26,12 @@ source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux"
     && $::tcl_platform(machine) in {x86_64 amd64}}]
 
+# Linux on x86-64 or AArch64: the native backend's whole runtime (native
+# stack maps, the stack guard, coroutines) without the x86-64 syscall that
+# linuxX86_64 tests need.
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
+
 # ---------------------------------------------------------------------------
 # Helpers
 
@@ -584,7 +590,7 @@ test sc-codes-one-to-one {items 20, 22: every DiagnosticCode case is the code of
             if {$case eq [join [lmap word [split $kind -] {string totitle $word}] ""]} continue
             list $kind $case
         }] [llength $cases]
-} -cleanup {unset -nocomplain codes cases kinds values} -result {1 1 1 {} 87}
+} -cleanup {unset -nocomplain codes cases kinds values} -result {1 1 1 {} 93}
 
 # The census (STATIC-COMPILE.md, "Diagnostic-code census"): every diagnostic
 # kind the compiler's front end (hir/*.tcl, surface/modules.tcl) can name, by
@@ -595,7 +601,8 @@ test sc-codes-one-to-one {items 20, 22: every DiagnosticCode case is the code of
 set scCensus {
     internal {CONTEXT-TRAIT-INTERNAL TRAIT-INTERNAL}
     declaration {CYCLIC-REFINEMENT REFINEMENT-CARRIER TRAIT-DUPLICATE-REQUIREMENT TRAIT-NAME-COLLISION
-        TRAIT-OTHER-TRAIT TRAIT-REQUIREMENT-RECEIVER TRAIT-SELF-POSITION ENUM-EMPTY}
+        TRAIT-OTHER-TRAIT TRAIT-REQUIREMENT-RECEIVER TRAIT-SELF-POSITION ENUM-EMPTY
+        LAYOUT-SIZE LAYOUT-ALIGNMENT LAYOUT-FIELD-TYPE LAYOUT-FIELD-BOUNDS LAYOUT-FIELD-OVERLAP LAYOUT-CYCLE}
     top-level-install {CONTEXT-TYPE-NOT-EXACT DUPLICATE-CONTEXT}
     not-from-source {LISTLOOP-BREAK-VALUE}
     header {CYCLE DUPLICATE-IMPORT DUPLICATE-NATIVE INVALID-TOPLEVEL NOT-A-TYPE SELF-IMPORT TYPE-IMPORT-COLLISION}
@@ -831,7 +838,7 @@ test sc-core-ir {items 42, 75, 76: the Core IR of an accepted block is the unwra
         [regexp {static|compile[^r]} $c]
 } -cleanup {unset -nocomplain a b c} -result {1 1 1 0}
 
-test sc-nir-accepted-identical {items 15, 48, 77, 86: an accepted block's NIR is byte-identical to the unwrapped body's (one that binds nothing), and to the `if true:` block's (one that does): no branch, wrapper, check or allocation} -constraints linuxX86_64 -body {
+test sc-nir-accepted-identical {items 15, 48, 77, 86: an accepted block's NIR is byte-identical to the unwrapped body's (one that binds nothing), and to the `if true:` block's (one that does): no branch, wrapper, check or allocation} -constraints nativeLinux -body {
     set a [scFunc [scHir "fn f(x: int) -> int:\n    static compile:\n        x * 3 + 1\n\nfn g(n: int):\n    f(n) + f(n + 1)\n\ng(1)\n"] g]
     set b [scFunc [scHir "fn f(x: int) -> int:\n    x * 3 + 1\n\nfn g(n: int):\n    f(n) + f(n + 1)\n\ng(1)\n"] g]
     set c [scFunc [scHir "fn f(x: int) -> int:\n    static compile:\n        y = x * 3\n        y + 1\n\nf(2)\n"] f]
@@ -839,19 +846,19 @@ test sc-nir-accepted-identical {items 15, 48, 77, 86: an accepted block's NIR is
     list [expr {$a eq $b}] [expr {$c eq $d}] [lsearch -all -inline -regexp [concat $c] {\m(br|bool true)\M}]
 } -cleanup {unset -nocomplain a b c d} -result {1 1 {}}
 
-test sc-nir-rejected-payload-slots {items 49, 77: a rejected block's NIR is the ordinary payload failure: `faildeclared` with the payload's fields in the payload slots, no static instruction} -constraints linuxX86_64 -body {
+test sc-nir-rejected-payload-slots {items 49, 77: a rejected block's NIR is the ordinary payload failure: `faildeclared` with the payload's fields in the payload slots, no static instruction} -constraints nativeLinux -body {
     set lines [scFunc [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nr = f():\n    on compiler::CompilerError:\n        0\nr\n"] f]
     list [llength [lsearch -all -inline -glob $lines {faildeclared * "compiler::CompilerError" *}]] \
         [lsearch -all -inline -glob $lines {*static*}]
 } -cleanup {unset -nocomplain lines} -result {1 {}}
 
-test sc-alloc-accepted-zero {item 48: an accepted block adds no allocation: the same managed-heap report as the unwrapped body} -constraints linuxX86_64 -body {
+test sc-alloc-accepted-zero {item 48: an accepted block adds no allocation: the same managed-heap report as the unwrapped body} -constraints nativeLinux -body {
     set a [native::allocationReport [scHir "fn f(x: int) -> int:\n    static compile:\n        x * 3 + 1\n\nf(5)\n"] summary]
     set b [native::allocationReport [scHir "fn f(x: int) -> int:\n    x * 3 + 1\n\nf(5)\n"] summary]
     list [dict get $a total allocations] [expr {[dict get $a total] eq [dict get $b total]}]
 } -cleanup {unset -nocomplain a b} -result {0 1}
 
-test sc-alloc-rejected {item 47: a rejected block's failure allocates what its payload's fields hold -- the primary SourceLocation struct and the related List; the message is a String constant, never allocated per failure -- and a handler that binds the payload whole materializes one struct more} -constraints linuxX86_64 -body {
+test sc-alloc-rejected {item 47: a rejected block's failure allocates what its payload's fields hold -- the primary SourceLocation struct and the related List; the message is a String constant, never allocated per failure -- and a handler that binds the payload whole materializes one struct more} -constraints nativeLinux -body {
     set whole [native::allocationReport [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nr = f():\n    on compiler::CompilerError details:\n        details\nr.code == compiler::DiagnosticCode::Unbound\n"] summary]
     set code [native::allocationReport [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nr = f():\n    on compiler::CompilerError \{code\}:\n        code == compiler::DiagnosticCode::Unbound\nr\n"] summary]
     list [dict get $whole total allocations] [dict get $code total allocations]
@@ -862,7 +869,7 @@ test sc-uncaught-rendering {item 95: an uncaught CompilerError (reachable only w
     lsort -unique [lmap b {interp compile cranelift} {lrange [outcomeUnderHir $b $hir] 0 2}]
 } -cleanup {unset -nocomplain hir} -result {{error {CORE SEMANTIC UNCAUGHT-ERROR} {uncaught propagated error: <error compiler::CompilerError {code: compiler::DiagnosticCode::Unbound, message: "unbound name \"missing\"", primary: compiler::SourceLocation {line: 4, column: 9}, related: []}>}}}
 
-test sc-gc-stress {item 84: a rejected block's payload (message String, related List, location structs) and an accepted body's runtime error and affine values survive a GC attempt at every allocation} -constraints linuxX86_64 -body {
+test sc-gc-stress {item 84: a rejected block's payload (message String, related List, location structs) and an accepted body's runtime error and affine values survive a GC attempt at every allocation} -constraints nativeLinux -body {
     set saved [expr {[info exists ::env(BOTLISH_NATIVE_GC_STRESS)] ? $::env(BOTLISH_NATIVE_GC_STRESS) : ""}]
     set ::env(BOTLISH_NATIVE_GC_STRESS) 1
     try {

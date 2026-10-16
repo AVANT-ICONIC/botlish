@@ -21,7 +21,7 @@ source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 source [file join $::projectRoot surface surface.tcl]
 
 testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64}}]
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 set ::allBackends {interp compile cranelift-generic cranelift}
 
@@ -1221,7 +1221,7 @@ test me-nomethod-lowers-to-a-marked-block {the lowered syntax marks the block, n
 
 # The builtin registry carries the flag too.
 
-test me-nomethod-native-default-off {exactly the five natives the warning-driven refactor marked are nomethod (REFACTOR-WARNINGS-CLEAN.md, P1); every other shipped native takes method syntax} -body {
+test me-nomethod-native-default-off {exactly the five natives the warning-driven refactor marked are nomethod (REFACTOR-WARNINGS-CLEAN.md, P1), and the four binary-layout operations whose first argument is a static layout operand, never a receiver value, or that are internal (binary::parse, the layout queries, binary#emit: BINARY-LAYOUT.md); every other shipped native takes method syntax} -body {
     set marked {}
     foreach name [core::native::names] {
         if {[dict get [core::native::metadata $name] nomethod]} {
@@ -1229,7 +1229,7 @@ test me-nomethod-native-default-off {exactly the five natives the warning-driven
         }
     }
     lsort $marked
-} -result {bit_and bit_or bit_xor mutable_array::copy mutable_array::create}
+} -result {binary#emit binary::layout_alignment binary::layout_length binary::parse bit_and bit_or bit_xor mutable_array::copy mutable_array::create}
 
 # The shipped markings (REFACTOR-WARNINGS-CLEAN.md, P1), one test per marked
 # function: the receiver form is NOMETHOD-CALL with the pinned message, the

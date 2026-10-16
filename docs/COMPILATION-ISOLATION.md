@@ -69,6 +69,7 @@ re-registers the declarations printed in HIR text.
 | `hir::errordecls::payloads` | payload layouts | `hir::lower` (`ReleasingOnError`), native lowering |
 | `hir::traits::registry`, `impls`, `unitNames` | trait requirements and candidates | — |
 | `hir::imports::table` | import environments | — |
+| `hir::layouts::registry` | resolved binary layouts: size, alignment, fields with offsets, widths and types (BINARY-LAYOUT.md) | through `hir::structs` (a `LayoutStruct[L]`'s field names and types), as a struct's are; the binary operations carry their descriptor instead |
 
 * **Derived caches.** `hir::structs::affinity`, `hir::traits::cache` and
   `hir::contexts::traitCache` are reset when a state is installed.
@@ -163,7 +164,8 @@ covered.
   suites, a standalone executable (stub linker), a failed compilation, and the
   activation counter.
 * **`audit/compilation-isolation/tools/interleave.tcl`** works in one process.
-  It checksums each of nine golden suites' backend artifacts and outcomes
+  It checksums each of its golden suites' backend artifacts and outcomes (ten
+  by default since BINARY-LAYOUT.md added `binary-layout.bot`)
   right after the suite's own compilation. Then, once every suite is compiled,
   it checksums them again in reverse order, and every checksum must be equal.
   - The artifacts are core IR, the Tcl compiler's code, and specialized and

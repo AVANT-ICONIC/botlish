@@ -30,6 +30,12 @@ set nativeBackends {cranelift-generic cranelift}
 
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
+
+# Linux on x86-64 or AArch64: the native backend's whole runtime (native
+# stack maps, the stack guard, coroutines) without the x86-64 syscall that
+# linuxX86_64 tests need.
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint objdump [expr {[auto_execok objdump] ne ""}]
 testConstraint posixShell [expr {[auto_execok sh] ne ""}]
 # strace is optional evidence: it needs the binary and permission to ptrace.
@@ -936,7 +942,7 @@ rs"
     list [expr {$normal eq $stressed}] [expr {[lindex $stressed 1] eq $input}] [string match {\[16, 16, *} [lindex $stressed 0]]
 } -result {1 1 1}
 
-test abi-mutable-bytes-gc-stress-pure-values {the in-process native runs (specialized and unspecialized) under GC stress give the same results as without: updates, freezes, prefixes, equality and hashes of MutableBytes held in Lists and structs} -constraints linuxX86_64 -body {
+test abi-mutable-bytes-gc-stress-pure-values {the in-process native runs (specialized and unspecialized) under GC stress give the same results as without: updates, freezes, prefixes, equality and hashes of MutableBytes held in Lists and structs} -constraints nativeLinux -body {
     set text "${::pure}struct Holder:\n    data: abi::bytes::MutableBytes\na = mb(\"alias\")\nxs = \[a, put(a, 0, [X]), a, abi::bytes::from_bytes(abi::bytes::from_list(pattern(100)))\]\nh = Holder {data: put(a, 4, [Z])}\n\[abi::bytes::freeze(a) == abi::bytes::from_list(str::encode_utf8(\"alias\")), xs == \[a, put(a, 0, [X]), a, abi::bytes::from_bytes(abi::bytes::from_list(pattern(100)))\], hash(a) == hash(mb(\"alias\")), is(h.data, \"aliaZ\"), is(a, \"alias\"), list::length(xs)\]"
     set plain [outcomesOf $text $::nativeBackends]
     withEnv BOTLISH_NATIVE_GC_STRESS 1 {set stressed [outcomesOf $text $::nativeBackends]}

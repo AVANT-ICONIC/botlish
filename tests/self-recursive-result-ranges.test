@@ -569,7 +569,7 @@ foreach {name program expected} {
 # BOTLISH_NATIVE_GC_STRESS=1 (spec #81: eliminating generic Int/error paths can
 # change safepoints and liveness even though the representation is unchanged).
 
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
+testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 proc executableParity {text} {
     set dir [makeDirectory {self recursive executable}]

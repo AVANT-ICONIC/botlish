@@ -1,0 +1,22 @@
+profile tcl-notommath
+toolchain {cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0}
+checks typedef 189
+checks field 1026
+checks enumerator 13
+checks function 754
+checks variable 7
+skipped {field with an unnamed anonymous tag} 4
+skipped {fields of an unnamed anonymous struct} 4
+undefined {function named like a function-like macro (#undef before the check)} 14
+unattributed-errors 0
+explained {field TclStubs.tcl_Panic} {noreturn is part of a function (pointer) type} {_Static_assert(_Generic(&(((struct TclStubs *)0)->tcl_Panic), void (**)(const char *format, ...): 1, default: 0), "TclStubs.tcl_Panic");} {static assertion failed: "TclStubs.tcl_Panic"}
+explained {field TclStubs.tcl_Exit} {noreturn is part of a function (pointer) type} {_Static_assert(_Generic(&(((struct TclStubs *)0)->tcl_Exit), void (**)(int status): 1, default: 0), "TclStubs.tcl_Exit");} {static assertion failed: "TclStubs.tcl_Exit"}
+explained {field TclStubs.tcl_ExitThread} {noreturn is part of a function (pointer) type} {_Static_assert(_Generic(&(((struct TclStubs *)0)->tcl_ExitThread), void (**)(int status): 1, default: 0), "TclStubs.tcl_ExitThread");} {static assertion failed: "TclStubs.tcl_ExitThread"}
+flagged {function Tcl_MainEx} {noreturn is part of a function (pointer) type}
+flagged {function Tcl_Panic} {noreturn is part of a function (pointer) type}
+flagged {function Tcl_Exit} {noreturn is part of a function (pointer) type}
+flagged {function Tcl_ExitThread} {noreturn is part of a function (pointer) type}
+flagged {field TclStubs.tcl_Panic} {noreturn is part of a function (pointer) type}
+flagged {field TclStubs.tcl_Exit} {noreturn is part of a function (pointer) type}
+flagged {field TclStubs.tcl_ExitThread} {noreturn is part of a function (pointer) type}
+checks 1989 rejected 0 explained 3 unattributed 0 planted-caught 5/5

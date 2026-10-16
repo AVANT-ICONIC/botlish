@@ -933,7 +933,7 @@ test mat-run-10 {a typed program and the same program over raw arrays agree on e
 } -result {same {[0, 1, 4]} {[0, 1, 4]} {[0, 1, 4]}}
 
 testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64}}]
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 # The value of program TEXT under every in-process backend and as a standalone
 # AOT executable (also under GC stress); errors unless they all agree.

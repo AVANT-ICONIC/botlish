@@ -1,0 +1,452 @@
+# Mutants of fixed binary layouts (audit/binary-layout/tools/mutate.tcl;
+# BINARY-LAYOUT.md): each a deliberate bug in the declaration checks
+# (hir/layouts.tcl), the type lattice (hir/types.tcl), resolution
+# (hir/resolve.tcl), the HIR pipeline (hir/hir.tcl), scalar replacement
+# (hir/escape.tcl), the interpreter's reference implementation
+# (core/binary.tcl, whose Letter the Tcl compiler shares), the Tcl compiler
+# (compiler/compiler.tcl), native lowering (native/lower.tcl) or the native
+# runtime (native/src/runtime/ops.rs). The brief's mutants come first, one per
+# layer where a layer implements the rule separately, then further ones.
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. A mutant editing native/src/ or the
+# native crate's manifest is a native mutant: mutate.tcl rebuilds the native
+# backend for it. Lines starting with # outside an edit are comments.
+#
+# Brief mutants with no separate non-equivalent mutant in this
+# representation:
+#
+#   * "emit truncates a value too wide for its field" on the Tcl backends:
+#     a field's value is in its domain by its type (construction is checked
+#     like any struct's, statically), so no checked program reaches
+#     core/binary.tcl's RANGE check -- removing it is an equivalent mutant
+#     there. The native store's own check is exercised directly by the Rust
+#     runtime tests (store-truncates-rust).
+
+# --- ignore field offset ------------------------------------------------
+
+@@ offset-ignored-interp the interpreter reads every scalar field at its layout's base, ignoring its offset
+## core/binary.tcl
+<<<<
+        binary scan $bytes @[expr {$base + $offset}][Letter $width $sign $endian] n
+====
+        binary scan $bytes @$base[Letter $width $sign $endian] n
+>>>>
+
+@@ offset-ignored-native native parse loads every scalar field at its layout's base, ignoring its offset
+## native/lower.tcl
+<<<<
+        set at [Assign fn "int [expr {$base + $offset}]" $e]
+====
+        set at [Assign fn "int $base" $e]
+>>>>
+
+@@ nested-offset-ignored-native native emit writes a nested layout's fields at its parent's base, ignoring the nested field's offset
+## native/lower.tcl
+<<<<
+            lappend leaves {*}[LayoutLeaves [lindex $field 3] [expr {$base + $offset}]]
+====
+            lappend leaves {*}[LayoutLeaves [lindex $field 3] $base]
+>>>>
+
+# --- ignore aggregate size -----------------------------------------------
+
+@@ prefix-parse-interp the interpreter's parse accepts an input longer than the layout (a prefix parse)
+## core/binary.tcl
+<<<<
+    if {[string length $bytes] != $size} {
+====
+    if {[string length $bytes] < $size} {
+>>>>
+
+@@ prefix-parse-compile the Tcl compiler's parse accepts an input longer than the layout (a prefix parse)
+## compiler/compiler.tcl
+<<<<
+\[string length \$$raw\] != $size\}
+====
+\[string length \$$raw\] < $size\}
+>>>>
+
+@@ length-unchecked-native native parse never compares the input's length with the layout's size
+## native/lower.tcl
+<<<<
+            set fits [Assign fn "op ieq $length $size" $e]
+====
+            set fits [Assign fn "op ieq $size $size" $e]
+>>>>
+
+@@ emit-short-interp the interpreter's emit starts from one byte fewer than the layout's size
+## core/binary.tcl
+<<<<
+    return [BytesValue [Encode $descriptor $value [binary format x$size] 0]]
+====
+    return [BytesValue [Encode $descriptor $value [binary format x[expr {$size - 1}]] 0]]
+>>>>
+
+@@ trailing-padding-dropped-compile the Tcl compiler's emit stops after the last field (no trailing padding up to the size)
+## compiler/compiler.tcl
+<<<<
+            append format @$size
+            set t [NewTemp]
+====
+            set t [NewTemp]
+>>>>
+
+@@ emit-sized-by-fields-native native emit allocates up to the end of the last field instead of the layout's size
+## native/lower.tcl
+<<<<
+            set storage [Assign fn "op byteszeroed $size" $e]
+====
+            set end 1
+            foreach leaf [LayoutLeaves $descriptor 0] {
+                set end [expr {max($end, [lindex $leaf 0] + [lindex $leaf 2])}]
+            }
+            set storage [Assign fn "op byteszeroed [Assign fn "int $end" $e]" $e]
+>>>>
+
+# --- write fields sequentially despite gaps ----------------------------
+
+@@ sequential-emit-interp the interpreter's emit writes fields one after another from the base, ignoring gaps
+## core/binary.tcl
+<<<<
+proc core::binary::Encode {descriptor value bytes base} {
+    lassign $descriptor structId size align fields
+====
+proc core::binary::Encode {descriptor value bytes base} {
+    lassign $descriptor structId size align fields
+    set cursor $base
+>>>>
+<<<<
+        set at [expr {$base + $offset}]
+        if {$kind eq "layout"} {
+            set bytes [Encode [lindex $field 3] $fieldValue $bytes $at]
+====
+        set at $cursor
+        if {$kind eq "layout"} {
+            set cursor [expr {$cursor + [lindex $field 3 1]}]
+            set bytes [Encode [lindex $field 3] $fieldValue $bytes $at]
+>>>>
+<<<<
+        set n [core::value::intOf $fieldValue]
+====
+        set n [core::value::intOf $fieldValue]
+        set cursor [expr {$cursor + $width}]
+>>>>
+
+@@ sequential-emit-compile the Tcl compiler's emit packs the fields one after another (no positioning), padding only at the end
+## compiler/compiler.tcl
+<<<<
+                append format @$offset[core::binary::Letter $width $sign $endian 0]
+====
+                append format [core::binary::Letter $width $sign $endian 0]
+>>>>
+
+@@ sequential-emit-native native emit stores the leaves one after another from offset 0, ignoring gaps
+## native/lower.tcl
+<<<<
+    foreach leaf $scalars r $leaves {
+        lassign $leaf offset sign width endian
+        set at [Assign fn "int $offset" $e]
+====
+    set next 0
+    foreach leaf $scalars r $leaves {
+        lassign $leaf offset sign width endian
+        set offset $next
+        incr next $width
+        set at [Assign fn "int $offset" $e]
+>>>>
+
+# --- read the wrong scalar width -----------------------------------------
+
+@@ width-tcl the Tcl backends read and write an 8-byte field as 4 bytes (core::binary::Letter, which the Tcl compiler shares)
+## core/binary.tcl
+<<<<
+    variable letters {1 c 2 s 4 i 8 w}
+====
+    variable letters {1 c 2 s 4 i 8 i}
+>>>>
+
+@@ width-native-lower native lowering encodes an 8-byte field as a 4-byte one
+## native/lower.tcl
+<<<<
+    return [expr {$width + ($sign eq "i" ? 16 : 0) + ($endian eq "big" ? 32 : 0)}]
+====
+    return [expr {min($width, 4) + ($sign eq "i" ? 16 : 0) + ($endian eq "big" ? 32 : 0)}]
+>>>>
+
+@@ width-rust the native load reads one byte of a 2-byte field
+## native/src/runtime/ops.rs
+<<<<
+    let mut word = [0u8; 8];
+    word[..width].copy_from_slice(&bytes_of(storage)[at..at + width]);
+====
+    let mut word = [0u8; 8];
+    let width = if width == 2 { 1 } else { width };
+    word[..width].copy_from_slice(&bytes_of(storage)[at..at + width]);
+>>>>
+
+@@ width-subrange-hir a narrower integer domain (Int in 0..100) is accepted as the fixed-width encoding containing it, so parse can imprint a value outside the field's type
+## hir/layouts.tcl
+<<<<
+        if {[dict get $facts min] == [lindex $range 0] && [dict get $facts max] == [lindex $range 1]} {
+====
+        if {[dict get $facts min] >= [lindex $range 0] && [dict get $facts max] <= [lindex $range 1]} {
+>>>>
+
+# --- emit the wrong byte order -------------------------------------------
+
+@@ byte-order-tcl the Tcl backends use big-endian for little-endian fields (core::binary::Letter)
+## core/binary.tcl
+<<<<
+    if {$endian eq "big" && $width > 1} {
+====
+    if {$endian ne "big" && $width > 1} {
+>>>>
+
+@@ byte-order-native-lower native lowering marks every little-endian field big-endian
+## native/lower.tcl
+<<<<
+($endian eq "big" ? 32 : 0)
+====
+($endian eq "big" ? 0 : 32)
+>>>>
+
+@@ byte-order-rust-store the native store writes a little-endian field big-endian
+## native/src/runtime/ops.rs
+<<<<
+    if big {
+        field.reverse();
+    }
+====
+    if !big {
+        field.reverse();
+    }
+>>>>
+
+@@ byte-order-rust-load the native load reads a little-endian field big-endian
+## native/src/runtime/ops.rs
+<<<<
+    if big {
+        word[..width].reverse();
+    }
+====
+    if !big {
+        word[..width].reverse();
+    }
+>>>>
+
+# --- leave padding non-deterministic -------------------------------------
+
+@@ padding-interp the interpreter's emit starts from bytes that vary by time, not zeros
+## core/binary.tcl
+<<<<
+[binary format x$size]
+====
+[string repeat [format %c [expr {1 + [clock microseconds] % 255}]] $size]
+>>>>
+
+@@ padding-compile the Tcl compiler's emit fills the bytes no field covers with 0x55
+## compiler/compiler.tcl
+<<<<
+            append format @$size
+            set t [NewTemp]
+====
+            append format @$size
+            set format "a$size@0$format"
+            set words [linsert $words 0 [string repeat U $size]]
+            set t [NewTemp]
+>>>>
+
+@@ padding-rust byteszeroed fills the fresh storage with a byte that varies by time, not zeros
+## native/src/runtime/ops.rs
+<<<<
+    vm(p).new_bytes_with(count, |init| init.push_zeros(count))
+====
+    let noise = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(7) as u8) | 1;
+    vm(p).new_bytes_with(count, |init| {
+        for _ in 0..count {
+            init.push(noise)
+        }
+    })
+>>>>
+
+# --- accept overlapping fields / out-of-bounds fields --------------------
+
+@@ overlap-by-one-accepted two fields sharing exactly one byte are accepted
+## hir/layouts.tcl
+<<<<
+            if {$lo < $ehi && $elo < $hi} {
+====
+            if {$lo + 1 < $ehi && $elo < $hi} {
+>>>>
+
+@@ bounds-by-one-accepted a field ending one byte past the layout's size is accepted
+## hir/layouts.tcl
+<<<<
+        if {$end > $size} {
+====
+        if {$end > $size + 1} {
+>>>>
+
+# --- treat LayoutStruct[A] as LayoutStruct[B] ----------------------------
+
+@@ structural-layout-compat LayoutStruct[A] is a subtype of LayoutStruct[B] when the two layouts have the same field names and types
+## hir/types.tcl
+<<<<
+proc hir::types::subtype {a b} {
+    if {$a eq "never" || $b eq "any" || $a eq $b} {
+        return 1
+    }
+====
+proc hir::types::subtype {a b} {
+    if {$a eq "never" || $b eq "any" || $a eq $b} {
+        return 1
+    }
+    if {[hir::layouts::OfType $a] ne "" && [hir::layouts::OfType $b] ne ""
+            && [hir::layouts::StructFieldTypes [hir::layouts::OfType $a]] eq [hir::layouts::StructFieldTypes [hir::layouts::OfType $b]]} {
+        return 1
+    }
+>>>>
+
+# --- skip nested emission ------------------------------------------------
+
+@@ nested-emit-skipped-interp the interpreter's emit writes nothing for a nested layout field
+## core/binary.tcl
+<<<<
+            set bytes [Encode [lindex $field 3] $fieldValue $bytes $at]
+            continue
+====
+            continue
+>>>>
+
+@@ nested-emit-skipped-compile the Tcl compiler's emit writes nothing for a nested layout's fields
+## compiler/compiler.tcl
+<<<<
+            foreach leaf [lsort -integer -index 1 $leaves] {
+====
+            foreach leaf [lsort -integer -index 1 [lmap leaf $leaves {if {[llength [lindex $leaf 0]] > 1} continue; set leaf}]] {
+>>>>
+
+@@ nested-emit-skipped-native native emit stores nothing for a nested layout's leaves
+## native/lower.tcl
+<<<<
+            lappend leaves {*}[LayoutLeaves [lindex $field 3] [expr {$base + $offset}]]
+====
+            lappend leaves {*}[lmap leaf [LayoutLeaves [lindex $field 3] [expr {$base + $offset}]] {linsert $leaf end nested}]
+>>>>
+<<<<
+    foreach leaf $scalars r $leaves {
+        lassign $leaf offset sign width endian
+====
+    foreach leaf $scalars r $leaves {
+        lassign $leaf offset sign width endian nested
+        if {$nested ne ""} continue
+>>>>
+
+# --- allow arbitrary T in LayoutStruct[T] --------------------------------
+
+@@ arbitrary-layout-struct-argument LayoutStruct[T] of any type T that is not a layout denotes T itself
+## hir/layouts.tcl
+<<<<
+    set spelled [ShowTypeExpr $arg]
+    set what [ArgumentKind $arg $ns]
+    if {$what eq ""} {
+====
+    set spelled [ShowTypeExpr $arg]
+    set what [ArgumentKind $arg $ns]
+    if {$what ne "" && ![catch {hir::resolve::ResolveTypeExpr $arg $ns} type]} {
+        return $type
+    }
+    if {$what eq ""} {
+>>>>
+
+# --- further mutants -----------------------------------------------------
+
+@@ signedness-tcl the Tcl backends read a signed field as unsigned (core::binary::Letter's scan flag)
+## core/binary.tcl
+<<<<
+    if {$scan && $sign eq "u"} {
+====
+    if {$scan} {
+>>>>
+
+@@ signedness-native-lower native lowering encodes every field unsigned
+## native/lower.tcl
+<<<<
+($sign eq "i" ? 16 : 0)
+====
+0
+>>>>
+
+@@ signedness-rust-load the native load sign-extends only 8-byte fields
+## native/src/runtime/ops.rs
+<<<<
+    if signed {
+        let shift = 64 - 8 * width as u32;
+====
+    if signed && width == 8 {
+        let shift = 64 - 8 * width as u32;
+>>>>
+
+@@ store-truncates-rust the native store keeps the low bytes of a value outside the field's encoding instead of failing
+## native/src/runtime/ops.rs
+<<<<
+    if n < lo || n > hi {
+        let message = format!("binary::emit: {} is outside
+====
+    if n < lo && n > hi {
+        let message = format!("binary::emit: {} is outside
+>>>>
+
+@@ elaboration-skipped binary::emit is never elaborated to binary#emit with its value's static layout
+## hir/hir.tcl
+<<<<
+        hir::layouts::Elaborate hir
+====
+        # (layout elaboration skipped)
+>>>>
+
+@@ operand-check-skipped the binary operations' operand rules (BINARY-OPERAND: a binary operation as a function value) are never checked
+## hir/hir.tcl
+<<<<
+    hir::layouts::verify hir
+====
+    # (layout operand check skipped)
+>>>>
+
+@@ layout-value-unbound a layout named as a value is reported as an unbound name, not LAYOUT-NOT-A-VALUE
+## hir/resolve.tcl
+<<<<
+        if {!$root && [hir::layouts::lookup $name [CtxNamespace $ctx]] ne ""} {
+====
+        if {0 && !$root && [hir::layouts::lookup $name [CtxNamespace $ctx]] ne ""} {
+>>>>
+
+@@ parse-result-boxed-escape a parse result is never held as fields: every binary::parse builds its object
+## hir/escape.tcl
+<<<<
+    if {[hir::layouts::OfType $type] eq ""} {
+        return ""
+    }
+    set layout [hir::types::StructLayout $type]
+====
+    if {1} {
+        return ""
+    }
+    set layout [hir::types::StructLayout $type]
+>>>>
+
+@@ emitted-value-escapes-escape a LayoutStruct bound and then emitted is counted as escaping (built as an object before its fields are stored)
+## hir/escape.tcl
+<<<<
+                        dict set leafUse [lindex $args 0] 1
+====
+                        # (not a leaf use)
+>>>>

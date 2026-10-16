@@ -18,7 +18,8 @@
 #                     keyword: it starts an import only when immediately
 #                     followed by a name or by "type", which no other
 #                     construct allows, so `import` stays an ordinary name.
-#   topStatement = typeDecl | structDecl | enumDecl | errorDecl | traitDecl | statement
+#   topStatement = typeDecl | structDecl | enumDecl | layoutDecl | errorDecl
+#                | traitDecl | statement
 #   statement    = simple NEWLINE | valued | function | if | loop
 #                | withDecl NEWLINE
 #   withDecl     = "with" "context" expression    -- CONTEXTS.md: installs
@@ -171,6 +172,21 @@
 #                  no value, alias, payload or parameter list (each is a
 #                  located error), and there is no anonymous `enum {...}`
 #                  (ANONYMOUS-ENUM) and no empty enum (ENUM-EMPTY)
+#   layoutDecl   = "layout" IDENT ":" NEWLINE INDENT layoutItem { layoutItem } DEDENT
+#   layoutItem   = "size" INT NEWLINE
+#                | "align" INT NEWLINE
+#                | "field" IDENT ":" typeExpr "at" INT NEWLINE
+#                  -- BINARY-LAYOUT.md: a fixed binary layout, a compile-time
+#                  schema of physical bytes (never a struct, a type or a
+#                  value). `size` and `align` are each written exactly once;
+#                  a field names its explicit byte offset. "layout" is
+#                  contextual, like "enum": a declaration only as the first
+#                  word of a top-level statement directly followed by a name;
+#                  "size", "align", "field" and "at" are contextual words of
+#                  the layout body only, so every one of them stays an
+#                  ordinary name everywhere else (a field may be called
+#                  `size`). What the items mean -- widths, bounds, overlap --
+#                  is hir/layouts.tcl's
 #   structDecl   = { structModifier } "struct" IDENT ":" NEWLINE INDENT structField { structField } DEDENT
 #   structModifier = "opaque"       -- OPAQUE-STRUCTS.md; contextual (below)
 #                  | "context"      -- CONTEXTS.md; contextual (below). The
@@ -264,6 +280,13 @@
 #                | IDENT { "::" IDENT } [ fieldInits ]
 #                  -- "a::b::c": member c of namespace a::b (every segment
 #                     but the last is the namespace path)
+#                | IDENT "[" typeExpr "]" fieldInits
+#                  -- an applied type's construction (BINARY-LAYOUT.md):
+#                     `LayoutStruct[Pair] { ... }`, the explicit type the
+#                     imprinting design writes on an expression
+#                     (NATIVE-BOTLISH-LOWERING-IMPL.md, 6.3). The applied
+#                     type is the one TypeExpr grammar; which applied types
+#                     have a construction is HIR's (only LayoutStruct)
 #                | fieldInits
 #                | "[" [ arguments ] "]" | "(" expression ")"
 #   fieldInits   = "{" [ fieldInit { "," fieldInit } [ "," ] ] "}"
@@ -689,6 +712,109 @@ proc surface::parser::EnumDecl {pVar} {
         name [dict get $name value] nameSpan [dict get $name span] cases $cases]
 }
 
+# 1 if the next tokens start a layout declaration (BINARY-LAYOUT.md): the
+# contextual word "layout" directly followed by a name. Two names in a row are
+# never a valid expression, so an ordinary variable called `layout`
+# (`layout = 3`, `layout(x)`, `x.layout`) is unaffected.
+proc surface::parser::AtLayoutDecl {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "layout"
+        && [Kind p 1] eq "IDENT"}]
+}
+
+# "layout" IDENT ":" NEWLINE INDENT { layoutItem } DEDENT -- a top-level
+# layout declaration (BINARY-LAYOUT.md): a `layoutdecl` node {name nameSpan
+# size sizeSpan align alignSpan fields}, SIZE and ALIGN the decimal text of
+# the one `size` and the one `align` line, FIELDS a list of {name nameSpan
+# type typeSpan offset offsetSpan} dicts in written order. The grammar is
+# deliberately rigid -- one item per line, each written once, every field
+# with its explicit offset -- so a generator (a C-header plugin) emits it
+# mechanically and two spellings of one layout never differ. What the numbers
+# and types mean (widths, bounds, overlap, alignment) is hir/layouts.tcl's.
+proc surface::parser::LayoutDecl {pVar} {
+    upvar 1 $pVar p
+    set start [dict get [Advance p] span]
+    set name [Advance p]
+    set layoutName [dict get $name value]
+    set token [Peek p]
+    if {[dict get $token kind] ne ":"} {
+        Fail $token "expected \":\" after the layout name \"$layoutName\", found [Describe $token]"
+    }
+    Advance p
+    set token [Peek p]
+    if {[dict get $token kind] ne "NEWLINE"} {
+        Fail $token "expected a new line and an indented block of \"size\", \"align\" and \"field\" lines after \":\", found [Describe $token]"
+    }
+    Advance p
+    if {[Kind p] ne "INDENT"} {
+        Fail [Peek p] "layout \"$layoutName\" needs an indented block: one \"size N\" line, one \"align N\" line and at least one \"field NAME: TYPE at OFFSET\" line"
+    }
+    Advance p
+    set items [dict create]
+    set fields {}
+    while {[Kind p] ni {DEDENT EOF}} {
+        if {[Kind p] eq "NEWLINE"} {
+            Advance p
+            continue
+        }
+        set word [Peek p]
+        set text [dict get $word text]
+        if {[dict get $word kind] ne "IDENT" || $text ni {size align field}} {
+            Fail $word "expected \"size N\", \"align N\" or \"field NAME: TYPE at OFFSET\" in layout \"$layoutName\", found [Describe $word]"
+        }
+        Advance p
+        if {$text in {size align}} {
+            if {[dict exists $items $text]} {
+                Fail $word "layout \"$layoutName\" already has a \"$text\" line (at [surface::ast::location [dict get $items ${text}Span]]): each is written exactly once"
+            }
+            set number [Expect p INT "an integer after \"$text\" (a byte count)"]
+            dict set items $text [dict get $number value]
+            dict set items ${text}Span [dict get $number span]
+        } else {
+            set fieldToken [Expect p IDENT "a field name after \"field\""]
+            set fieldName [dict get $fieldToken value]
+            if {[Kind p] ne ":"} {
+                Fail [Peek p] "expected \":\" and a type after the layout field name \"$fieldName\", found [Describe [Peek p]]"
+            }
+            Advance p
+            set typeStart [dict get [Peek p] span]
+            set type [TypeExpr p "a field type after \":\""]
+            set typeSpan [SpanFrom p $typeStart]
+            set at [Peek p]
+            if {[dict get $at kind] ne "IDENT" || [dict get $at text] ne "at"} {
+                Fail $at "expected \"at OFFSET\" after the type of layout field \"$fieldName\" (every field states its byte offset), found [Describe $at]"
+            }
+            Advance p
+            set offset [Expect p INT "a byte offset after \"at\""]
+            lappend fields [dict create name $fieldName nameSpan [dict get $fieldToken span] \
+                type $type typeSpan $typeSpan offset [dict get $offset value] offsetSpan [dict get $offset span]]
+        }
+        set next [Peek p]
+        if {[dict get $next kind] ni {NEWLINE DEDENT EOF}} {
+            Fail $next "expected end of line after the \"$text\" line of layout \"$layoutName\", found [Describe $next]"
+        }
+        if {[dict get $next kind] eq "NEWLINE"} {
+            Advance p
+        }
+    }
+    if {[Kind p] eq "DEDENT"} {
+        Advance p
+    }
+    foreach required {size align} {
+        if {![dict exists $items $required]} {
+            Fail $name "layout \"$layoutName\" has no \"$required N\" line: a layout states its byte size and its alignment explicitly"
+        }
+    }
+    if {$fields eq ""} {
+        Fail $name "layout \"$layoutName\" declares no field: a layout needs at least one \"field NAME: TYPE at OFFSET\" line"
+    }
+    return [surface::ast::node layoutdecl [SpanFrom p $start] \
+        name $layoutName nameSpan [dict get $name span] \
+        size [dict get $items size] sizeSpan [dict get $items sizeSpan] \
+        align [dict get $items align] alignSpan [dict get $items alignSpan] fields $fields]
+}
+
 # 1 if the next tokens start a trait declaration (TRAITS.md): the contextual
 # word "trait" directly followed by a name, optionally after struct-style
 # modifier words (`context trait IO:`, CONTEXT-TRAITS.md; TraitDecl decides
@@ -1088,6 +1214,14 @@ proc surface::parser::Statement {pVar} {
     }
     if {[AtAnonymousEnum p]} {
         AnonymousEnumError $token
+    }
+    if {[AtLayoutDecl p]} {
+        # `layout NAME:` (BINARY-LAYOUT.md): a contextual top-level
+        # declaration.
+        if {![dict get $p topLevel]} {
+            Fail $token "a layout declaration is only allowed at the top level of a module, not nested in a function/if/loop"
+        }
+        return [LayoutDecl p]
     }
     if {[AtTraitDecl p]} {
         # `trait NAME:` (TRAITS.md): a contextual top-level declaration.
@@ -2682,6 +2816,25 @@ proc surface::parser::Primary {pVar} {
                 set init [FieldInits p]
                 return [surface::ast::node namedstruct [SpanFrom p $span] \
                     namespace "" name [dict get $token value] nameSpan $span init $init]
+            }
+            if {[Kind p] eq "\["} {
+                # NAME[TYPE] { ... }: an applied type's construction
+                # (BINARY-LAYOUT.md: `LayoutStruct[Pair] {...}`). An
+                # identifier is never otherwise followed by "[" in an
+                # expression, so this is the only reading.
+                Advance p
+                set argStart [dict get [Peek p] span]
+                set arg [TypeExpr p "a type argument after \"\[\""]
+                set argSpan [SpanFrom p $argStart]
+                Expect p \] "\"\]\" after the type argument"
+                set nameSpan [SpanFrom p $span]
+                if {[Kind p] ne "\{"} {
+                    Fail [Peek p] "an applied type [dict get $token value]\[...\] is not a value: in an expression it only heads a construction, [dict get $token value]\[...\] \{field: value, ...\} (found [Describe [Peek p]] after it)"
+                }
+                set init [FieldInits p]
+                return [surface::ast::node namedstruct [SpanFrom p $span] \
+                    namespace "" name [dict get $token value] nameSpan $nameSpan \
+                    typeArg $arg typeArgSpan $argSpan init $init]
             }
             return [surface::ast::node name $span name [dict get $token value]]
         }

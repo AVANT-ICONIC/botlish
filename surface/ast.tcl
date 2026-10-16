@@ -40,7 +40,11 @@
 #              value (STRUCTS.md)
 #   namedstruct namespace ("" or the module namespace), name, nameSpan
 #              (covers "NAMESPACE::NAME"), init (a fieldinits node)
-#              Name { x: a, y: b }: a named struct construction
+#              Name { x: a, y: b }: a named struct construction; with
+#              typeArg (a surface::parser::TypeExpr result) and typeArgSpan,
+#              the construction of an applied type: NAME[TYPE] { ... }
+#              (BINARY-LAYOUT.md, `LayoutStruct[Pair] {...}`; NAME is then
+#              the bare constructor name)
 #   fieldinits fields ({name nameSpan value} dicts in written order) -- the
 #              one shared field-initializer payload of anonstruct and
 #              namedstruct
@@ -56,7 +60,7 @@
 #   not        opSpan, operand
 #   binary     op (+ - * == != < <= > >=), opSpan, left, right
 #   logical    op (and | or), opSpan, left, right
-#   bind       name, nameSpan, value (an expression or an if)
+#   bind       name, nameSpan, value (an expression, an if or a loop)
 #   destructure  pattern, value (like a bind's) -- "{a, b: c} = value"
 #              (STRUCT-DESTRUCTURING.md). pattern is {span SPAN fields
 #              {FIELD...}}, a FIELD {name nameSpan span local localSpan nested
@@ -75,7 +79,9 @@
 #              context parameters in written order -- `fn f(x, context io:
 #              LinuxIO)`; empty if none; the last section -- CONTEXTS.md),
 #              paramsSpan (from "(" to the end of the body: the function
-#              literal), errors ({NAME SPAN} pairs, from the function's own
+#              literal), resultType (the "-> TYPE" result annotation as
+#              surface::parser::TypeExpr returns it, "" if none) and
+#              resultTypeSpan, errors ({NAME SPAN} pairs, from the function's own
 #              "errors E1, E2" clause, empty if none), proves (the proof
 #              clauses, REFINEMENT-VALUES.md: a list of {outcome true|normal
 #              param NAME paramSpan SPAN type TYPE typeSpan SPAN span SPAN}
@@ -117,7 +123,7 @@
 #              begins at: core/ir.tcl's `countloop`, R2A3-COUNTED-LOOPS-
 #              FINAL-SOURCE.md, COLLECTING-LOOPS.md); plain "loop:" (no
 #              clause) repeats until break
-#   return     value (an expression, an if, or "")
+#   return     value (an expression, an if, a loop, or "")
 #   break      value (an expression, an if, or "")
 #   continue
 #   typedecl   name, nameSpan, form, and then, for form `domain`: parent,
@@ -144,6 +150,14 @@
 #              owner is not in the AST (the cached AST is importer- and
 #              path-neutral): the loader supplies the module's namespace when
 #              it lowers the declaration (surface/lower.tcl's StructDeclOf).
+#   layoutdecl name, nameSpan, size, sizeSpan, align, alignSpan, fields
+#              ({name nameSpan type typeSpan offset offsetSpan} dicts in
+#              written order; TYPE as surface::parser::TypeExpr returns it,
+#              SIZE/ALIGN/OFFSET decimal text) -- a top-level fixed binary
+#              layout ("layout NAME:" with its indented `size`, `align` and
+#              `field NAME: TYPE at OFFSET` lines; BINARY-LAYOUT.md). A
+#              declaration like structdecl: no runtime meaning, no binding;
+#              the owner (the declaring module) is supplied by the loader.
 #   enumdecl   name, nameSpan, cases ({name nameSpan} dicts in declaration
 #              order) -- a top-level enum declaration ("enum NAME:" followed
 #              by its indented, comma-separated payload-free cases; ENUMS.md).
@@ -423,6 +437,16 @@ proc surface::ast::Ids {node id} {
                     incr index
                 }
                 dict set node clauses $clauses
+            } elseif {[llength [dict get $node clauses]] == 1} {
+                # The one clause the per-form fields mirror: the same operand
+                # nodes, ids included.
+                set clause [lindex [dict get $node clauses] 0]
+                foreach {field mirror} {iterable iterable start countStart end countEnd} {
+                    if {[dict get $clause $field] ne ""} {
+                        dict set clause $field [dict get $node $mirror]
+                    }
+                }
+                dict set node clauses [list $clause]
             }
             dict set node body [Suite [dict get $node body] $id]
         }
@@ -657,6 +681,9 @@ proc surface::ast::Expr {node show} {
             if {[dict get $node namespace] ne ""} {
                 set name "[dict get $node namespace]::$name"
             }
+            if {[dict exists $node typeArg]} {
+                append name "\[[showType [dict get $node typeArg]]\]"
+            }
             return "([::join [concat struct $name [FieldsText $node $show]] { }])$at"
         }
         project {
@@ -795,6 +822,15 @@ proc surface::ast::Statement {node indent show linesVar} {
             }
             return
         }
+        layoutdecl {
+            lappend lines "${pad}layout [dict get $node name]$at"
+            lappend lines "${pad}    size [dict get $node size]"
+            lappend lines "${pad}    align [dict get $node align]"
+            foreach field [dict get $node fields] {
+                lappend lines "${pad}    field [dict get $field name]: [showType [dict get $field type]] at [dict get $field offset]"
+            }
+            return
+        }
         traitdecl {
             set modifier [expr {[dict exists $node context] && [dict get $node context] ? "context " : ""}]
             lappend lines "${pad}${modifier}trait [dict get $node name]$at"
@@ -857,6 +893,9 @@ proc surface::ast::Statement {node indent show linesVar} {
             }
             set modifier [expr {[dict exists $node nomethod] && [dict get $node nomethod] ? "nomethod " : ""}]
             set line "${pad}${modifier}fn [dict get $node name] ([join $params { }])"
+            if {[dict exists $node resultType] && [dict get $node resultType] ne ""} {
+                append line " -> [showType [dict get $node resultType]]"
+            }
             if {[dict exists $node proves]} {
                 foreach clause [dict get $node proves] {
                     append line " proves [dict get $clause param]: [showType [dict get $clause type]]"
@@ -878,12 +917,7 @@ proc surface::ast::Statement {node indent show linesVar} {
             return
         }
         loop {
-            if {[llength [dict get $node clauses]] > 0} {
-                lappend lines "${pad}loop [join [lmap clause [dict get $node clauses] {Clause $clause $show}] { and }]$at"
-            } else {
-                lappend lines "${pad}loop$at"
-            }
-            Body [dict get $node body] [expr {$indent + 1}] $show lines
+            Loop $node "" $indent $show lines
             return
         }
         with {
@@ -904,6 +938,10 @@ proc surface::ast::Statement {node indent show linesVar} {
             }]
             if {$value ne "" && [dict get $value kind] eq "if"} {
                 If $value $prefix $indent $show lines
+                return
+            }
+            if {$value ne "" && [dict get $value kind] eq "loop"} {
+                Loop $value $prefix $indent $show lines
                 return
             }
             if {$value ne "" && [dict get $value kind] eq "handledcall"} {
@@ -943,6 +981,21 @@ proc surface::ast::PatternText {pattern show} {
         lappend parts "$text[At $field $show]"
     }
     return "\{[::join $parts {, }]\}"
+}
+
+# Lines of the loop NODE, its first line starting with PREFIX (mirrors If's
+# own PREFIX convention): a collecting loop is a value where an if is, the
+# right side of "=", "return" or a destructuring (COLLECTING-LOOPS.md), and
+# prints as its statement form does after the prefix.
+proc surface::ast::Loop {node prefix indent show linesVar} {
+    upvar 1 $linesVar lines
+    set pad [string repeat {    } $indent]
+    set header loop
+    if {[llength [dict get $node clauses]] > 0} {
+        append header " [join [lmap clause [dict get $node clauses] {Clause $clause $show}] { and }]"
+    }
+    lappend lines "$pad$prefix$header[At $node $show]"
+    Body [dict get $node body] [expr {$indent + 1}] $show lines
 }
 
 # Source text of one loop iteration CLAUSE (see the `loop` node above).

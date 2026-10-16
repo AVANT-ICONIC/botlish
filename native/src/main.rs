@@ -390,10 +390,10 @@ fn execute(command: &str, program: &nir::Program, runs: usize, alloc_mode: Alloc
     }
     compiled.install_constants(&mut vm);
     vm.set_framemap(compiled.framemap.clone());
-    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+    #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
     let _overflow_guard = {
         let stack = runtime::native_stack::NativeStack::current().expect("pthread stack bounds");
-        runtime::platform::x86_64_linux::OverflowGuard::install(&stack).expect("pthread stack guard")
+        runtime::platform::linux::OverflowGuard::install(&stack).expect("pthread stack guard")
     };
 
     let mut best = u128::MAX;

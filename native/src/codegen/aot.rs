@@ -1,6 +1,7 @@
-//! Linux x86-64/glibc executable linking. Cranelift emits the program object;
-//! a linker turns it and the runtime into an executable. The executable needs
-//! neither Tcl, rustc, the source nor this checkout.
+//! Linux glibc executable linking (x86-64; AArch64 with the `rustc` linker).
+//! Cranelift emits the program object; a linker turns it and the runtime into
+//! an executable. The executable needs neither Tcl, rustc, the source nor this
+//! checkout.
 //!
 //! Two linkers, chosen by `BOTLISH_NATIVE_LINKER` (SINGLE-EXECUTABLE.md):
 //!
@@ -170,8 +171,8 @@ fn startup(program: &Program, object: &ObjectProgram) -> String {
 }
 
 pub fn emit_executable(program: &Program, destination: &Path) -> Result<(), String> {
-    if !cfg!(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu")) {
-        return Err("executable emission requires Linux x86_64 glibc".into());
+    if !cfg!(all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64"))) {
+        return Err("executable emission requires Linux glibc on x86_64 or aarch64".into());
     }
     let destination = std::path::absolute(destination).map_err(|e| e.to_string())?;
     match std::env::var("BOTLISH_NATIVE_LINKER").as_deref() {
@@ -239,6 +240,12 @@ fn link_rustc(program: &Program, destination: &Path) -> Result<(), String> {
 /// The `stub` linker: the prebuilt `botlish-aot-stub` with the program's
 /// image appended (runtime/aotimage.rs).
 fn link_stub(program: &Program, destination: &Path) -> Result<(), String> {
+    // `image` lays out and relocates an ELF x86-64 object (its relocation
+    // types and call trampolines are x86-64's), and the stub's loader is
+    // built for x86-64 Linux only (runtime/aotimage.rs).
+    if !cfg!(target_arch = "x86_64") {
+        return Err("the stub linker supports x86_64 only: use BOTLISH_NATIVE_LINKER=rustc".into());
+    }
     let stub = match std::env::var_os("BOTLISH_NATIVE_AOT_STUB") {
         Some(path) => PathBuf::from(path),
         None => {

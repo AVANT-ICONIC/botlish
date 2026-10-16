@@ -1,0 +1,455 @@
+== toplevel
+  public functions                                                                 754
+  public functions-declared                                                        753
+  public typedefs                                                                  189
+  public struct-declarations                                                       39
+  public struct-definitions                                                        37
+  public extern-objects-and-variables                                              7
+  public enum-declarations                                                         5
+  public enum-definitions                                                          5
+  public union-declarations                                                        2
+  public union-definitions                                                         2
+  public functions-inline-definitions                                              1
+  api struct tags, defined in: public                                              37
+  api struct tags, defined in: none                                                30
+  api enum tags, defined in: public                                                5
+  api union tags, defined in: public                                               2
+
+== functions
+  extern total                                                                     753
+  extern pointers                                                                  719
+  extern pointer-param                                                             691
+  extern params=1                                                                  230
+  extern pointer-result                                                            218
+  extern params=2                                                                  184
+  extern void-result                                                               171
+  extern params=3                                                                  170
+  extern params=4                                                                  74
+  extern pointer-to-pointer                                                        68
+  extern function-pointer-param                                                    50
+  extern params=5                                                                  35
+  extern no-pointers                                                               34
+  extern params=6                                                                  26
+  extern params=0                                                                  24
+  extern array-param-spelling                                                      17
+  extern function-pointer-result                                                   15
+  extern params=>6                                                                 10
+  extern variadic                                                                  9
+  extern floating                                                                  5
+  extern enum                                                                      2
+  inline params=1                                                                  1
+  inline pointer-param                                                             1
+  inline pointers                                                                  1
+  inline total                                                                     1
+  inline void-result                                                               1
+
+== types
+  pointer                                                                          4302
+  typedef-reference (library)                                                      2958
+  function                                                                         1678
+  integer int                                                                      1100
+  qualified                                                                        951
+  void                                                                             823
+  integer char                                                                     666
+  struct-reference                                                                 101
+  typedef-reference (system)                                                       80
+  array                                                                            45
+  integer unsigned char                                                            21
+  integer unsigned int                                                             20
+  floating double                                                                  19
+  integer long long                                                                19
+  integer long                                                                     8
+  integer unsigned short                                                           8
+  integer unsigned long long                                                       5
+  enum-reference                                                                   2
+  integer unsigned long                                                            2
+  union-reference                                                                  2
+  max pointer depth (as spelled)                                                   3
+  max pointer depth (typedefs resolved)                                            3
+
+== pointers
+  param depth=1                                                                    1357
+  field depth=1                                                                    972
+  field depth=1 pointee=function                                                   895
+  param pointee spelled through a typedef                                          835
+  param depth=1 pointee=opaque-struct                                              447
+  param depth=1 pointee=complete-struct                                            422
+  param depth=1 pointee=char                                                       253
+  result depth=1                                                                   216
+  param depth hidden by a typedef (0 as spelled, 1 resolved)                       141
+  param depth=1 pointee=void                                                       101
+  field pointee spelled through a typedef                                          99
+  result pointee spelled through a typedef                                         86
+  param depth=2                                                                    72
+  param depth=1 pointee=scalar                                                     65
+  param depth=1 pointee=function                                                   64
+  result depth=1 pointee=complete-struct                                           62
+  result depth=1 pointee=opaque-struct                                             57
+  result depth=1 pointee=char                                                      56
+  result depth hidden by a typedef (0 as spelled, 1 resolved)                      52
+  field depth=1 pointee=void                                                       29
+  typedef depth=1                                                                  27
+  typedef depth=1 pointee=opaque-struct                                            26
+  param depth=2 pointee=complete-struct                                            25
+  field depth=1 pointee=char                                                       22
+  result depth=1 pointee=void                                                      21
+  param depth=2 pointee=opaque-struct                                              20
+  field depth=1 pointee=complete-struct                                            18
+  param depth hidden by a typedef (1 as spelled, 2 resolved)                       18
+  result depth=1 pointee=function                                                  15
+  param depth=2 pointee=char                                                       14
+  param depth=3                                                                    11
+  field depth=1 pointee=opaque-struct                                              7
+  param depth=2 pointee=void                                                       7
+  param depth=2 pointee=fn                                                         6
+  param depth=3 pointee=complete-struct                                            6
+  param depth=3 pointee=char                                                       5
+  variable depth=1                                                                 5
+  param depth=1 pointee=float                                                      4
+  result depth=1 pointee=scalar                                                    4
+  variable depth=1 pointee=complete-struct                                         4
+  variable pointee spelled through a typedef                                       4
+  field depth hidden by a typedef (0 as spelled, 1 resolved)                       3
+  result depth=2                                                                   2
+  field depth=1 pointee=scalar                                                     1
+  field depth=2                                                                    1
+  field depth=2 pointee=complete-struct                                            1
+  param depth=1 pointee=union                                                      1
+  result depth hidden by a typedef (1 as spelled, 2 resolved)                      1
+  result depth=1 pointee=union                                                     1
+  result depth=2 pointee=char                                                      1
+  result depth=2 pointee=opaque-struct                                             1
+  typedef depth=1 pointee=void                                                     1
+  typedef pointee spelled through a typedef                                        1
+  variable depth=1 pointee=char                                                    1
+
+== qualifiers
+  any const                                                                        951
+  param pointee(level 1) const                                                     386
+  result pointee(level 1) const                                                    41
+  field pointee(level 1) const                                                     25
+  param pointee(level 2) const                                                     13
+  variable pointee(level 1) const                                                  5
+  param pointee(level 3) const                                                     4
+  variable top-level const                                                         2
+  result pointee(level 2) const                                                    1
+
+== typedefs
+  category function type                                                           111
+  category struct (complete)                                                       34
+  category pointer to opaque struct                                                26
+  category integer                                                                 8
+  category alias-of-typedef -> integer                                             2
+  category enum                                                                    2
+  category struct (opaque)                                                         2
+  category void                                                                    2
+  category pointer to void                                                         1
+  category union (complete)                                                        1
+  chain length 1                                                                   187
+  chain length 2                                                                   2
+  distinct typedef names used in function signatures (library)                     107
+  distinct typedef names used in function signatures (system)                      3   {int64_t size_t uint64_t}
+  integer typedefs over int                                                        6   {Tcl_UniChar mp_endian mp_err mp_ord mp_order mp_sign}
+  integer typedefs over long                                                       1   Tcl_Size
+  integer typedefs over long long                                                  1   Tcl_WideInt
+  integer typedefs over unsigned long                                              1   mp_digit
+  integer typedefs over unsigned long long                                         1   Tcl_WideUInt
+
+== structs
+  complete structs                                                                 37
+  complete unions                                                                  2
+  complete, anonymous (no tag)                                                     9
+  complete, defined inside another struct                                          4
+  opaque structs (declared or referenced, defined nowhere in the TU)               30
+  opaque unions                                                                    0
+  complete, no keep-out comment: heuristic                                         28
+  complete, its comments say keep out (private/opaque/internal/do not): heuristic  7
+  complete, used by value somewhere (param/result/field/variable)                  5
+  complete, used only behind pointers                                              33
+  complete, not used by any declaration (or only via typedef)                      1
+
+== fields
+  struct field: function pointer                                                   895
+  struct field: pointer                                                            75
+  struct field: typedef scalar                                                     30
+  struct field: integer scalar                                                     24
+  struct field: fixed array                                                        3
+  union field: nested struct by value                                              3
+  union field: pointer                                                             3
+  struct field: union by value                                                     2
+  union field: fixed array                                                         2
+  union field: float                                                               1
+  union field: integer scalar                                                      1
+  union field: typedef scalar                                                      1
+
+== layout
+  complete structs and unions (top-level or named)                                 35
+  REPRESENTABLE-NOW                                                                2   {{struct Tcl_RegExpIndices} {struct Tcl_Time}}
+  NEEDS-POINTER-SCALAR                                                             33   {{struct TclOOStubs} {struct TclPlatStubs} {struct TclStubs} {struct TclTomMathStubs} {struct Tcl_CallFrame} {struct Tcl_ChannelType}}
+  NEEDS-FIXED-ARRAY                                                                4   {{struct Tcl_DString} {struct Tcl_HashEntry} {struct Tcl_HashTable} {struct Tcl_Parse}}
+  NEEDS-FLOAT                                                                      2   {{struct Tcl_Obj} {union Tcl_ObjInternalRep}}
+  NEEDS-UNION                                                                      3   {{struct Tcl_HashEntry} {struct Tcl_Obj} {union Tcl_ObjInternalRep}}
+  NEEDS-BITFIELD                                                                   0
+  NEEDS-OTHER                                                                      0
+  (abi fact) ABI-CHAR-SIGNEDNESS                                                   2
+  combination NEEDS-POINTER-SCALAR                                                 27
+  combination NEEDS-FIXED-ARRAY+NEEDS-POINTER-SCALAR                               3
+  combination NEEDS-FLOAT+NEEDS-POINTER-SCALAR+NEEDS-UNION                         2
+  combination REPRESENTABLE-NOW                                                    2
+  combination NEEDS-FIXED-ARRAY+NEEDS-POINTER-SCALAR+NEEDS-UNION                   1
+  unlocked by pointer scalar + fixed array + union                                 31
+  unlocked by NEEDS-POINTER-SCALAR alone                                           27
+  unlocked by pointer scalar + fixed array together                                3
+  storage-only structs (every field an opaque-storage union: size + alignment suffice) 0
+
+== arrays
+  field (inside a function type) bound unknown-length                              17
+  field (inside a function type) element pointer                                   17
+  param bound unknown-length                                                       17
+  param element pointer                                                            17
+  field bound lit                                                                  5
+  typedef (inside a function type) bound unknown-length                            5
+  typedef (inside a function type) element pointer                                 5
+  field element char                                                               2
+  field element pointer                                                            1
+  field element scalar                                                             1
+  field element struct                                                             1
+  variable bound unknown-length                                                    1
+  variable element byte                                                            1
+
+== unions
+  field union by value                                                             2
+  param pointer to union                                                           1
+  result pointer to union                                                          1
+  typedef union by value                                                           1
+  union definitions inside a struct                                                1
+  union definitions, anonymous                                                     1
+  union definitions, tagged                                                        1
+
+== bitfields
+  bitfields                                                                        0
+
+== enums
+  enumerators                                                                      13
+  enumerator value form: literal                                                   7
+  enumerator value form: implicit                                                  6
+  enum definitions, tagged                                                         4
+  enum definitions with a typedef                                                  2
+  enum-typed result                                                                2
+  enum-typed typedef                                                               2
+  enum definitions, anonymous (constants only)                                     1
+  enum types used in function signatures                                           1
+  enums whose every value the parser computes (literal, negated literal, char, previous enumerator, implicit) 5 of 5
+
+== constants
+  macro constant: integer literal                                                  180
+  macro constant: integer expression                                               35
+  enum member                                                                      13
+  macro constant: expression with casts                                            11
+  macro constant: string literal                                                   7
+  extern object (not const)                                                        5
+  macro constant: expression with sizeof (needs ABI)                               4
+  extern const object                                                              2
+  macro constant: enumerator alias                                                 2
+
+== callbacks
+  callback fields (function pointers in structs)                                   895
+  callback fields in stub tables (struct *Stubs: one per exported function)        811
+  callback typedefs naming a function type                                         111
+  callback fields outside stub tables                                              84
+  callback params (extern functions): void* userdata beside and inside             56
+  callback params (extern functions): no void* userdata                            6
+  callback params (extern functions): void* beside the callback only               1
+  callback params (extern functions): void* inside the callback only               1
+  variadic callback params                                                         1
+  API functions accepting callbacks                                                50
+  API functions returning a function pointer                                       15
+  distinct callback signature shapes (params and fields)                           327
+  shape () -> void                                                                 93
+  shape (*opaque-struct) -> int                                                    48
+  shape (*void) -> void                                                            36
+  shape (*complete-struct) -> void                                                 28
+  shape (*complete-struct) -> int                                                  21
+  shape (int) -> int                                                               17
+  shape (*opaque-struct) -> void                                                   15
+  shape (*complete-struct) -> fnptr                                                13
+  shape (*complete-struct, *complete-struct) -> int                                13
+  shape (*complete-struct, int) -> int                                             13
+  shape (*opaque-struct) -> *opaque-struct                                         12
+  shape (*opaque-struct, *complete-struct) -> void                                 11
+  shape (*opaque-struct, *complete-struct) -> int                                  10
+  shape (*opaque-struct, *complete-struct, *scalar) -> int                         10
+  shape (*void, *opaque-struct, int, **complete-struct) -> int                     10
+
+== opaque
+  typedef names a pointer to an opaque tag (typedef struct X_ *X)                  25
+  typedef names an opaque tag (typedef struct X X)                                 2
+  declared functions with an opaque handle (T * to an incomplete tag) in their signature 405 of 753
+  declared functions whose every type is an opaque handle, an integer, an enum, void, or a char/void/integer pointer 187 of 753
+
+== strings
+  params: const char *                                                             230
+  params: char-like pointer followed by an integer (pointer + length)              111
+  results: const char *                                                            36
+  params: char *                                                                   16
+  results: char *                                                                  16
+  params: char-like pointer followed by an integer pointer (pointer + output length) 11
+  params: const unsigned char *                                                    5
+  results: unsigned char *                                                         4
+  params: unsigned char *                                                          2
+
+== outparams
+  params named like an output (out*, *Ptr, *result)                                406
+  T** params (non-const outer pointee: possible out-pointer)                       72
+  pointer to non-const integer (possible out-scalar)                               58
+  T** params (const outer pointee)                                                 11
+
+== attributes
+  system gnu nonnull (nullability) at decl                                         104
+  system gnu nothrow (optimization) at decl                                        96
+  system gnu leaf (optimization) at decl                                           89
+  system gnu pure (optimization) at decl                                           25
+  system gnu malloc (optimization) at decl                                         18
+  system gnu format (diagnostic) at decl                                           13
+  system gnu access (diagnostic) at decl                                           11
+  api gnu noreturn (optimization) at spec                                          7
+  system asm asm (link) at decl                                                    7
+  api gnu format (diagnostic) at decl                                              6
+  system gnu const (optimization) at decl                                          3
+  system gnu aligned (abi) at decl                                                 2
+  system extension extension (none) at spec                                        1
+  system gnu cold (optimization) at decl                                           1
+
+== variadic
+  variadic functions                                                               9
+  va_list (builtin) parameters                                                     0
+  Tcl_Panic                                                                        extern __attribute__((noreturn)) void Tcl_Panic(const char *format, ...) __attribute__((__format__(__printf__, 1, 2)));
+  Tcl_AppendStringsToObj                                                           extern void Tcl_AppendStringsToObj(Tcl_Obj *objPtr, ...);
+  Tcl_AppendResult                                                                 extern void Tcl_AppendResult(Tcl_Interp *interp, ...);
+  Tcl_SetErrorCode                                                                 extern void Tcl_SetErrorCode(Tcl_Interp *interp, ...);
+  Tcl_VarEval                                                                      extern int Tcl_VarEval(Tcl_Interp *interp, ...);
+  Tcl_ObjPrintf                                                                    extern Tcl_Obj *Tcl_ObjPrintf(const char *format, ...) __attribute__((__format__(__printf__, 1, 2)));
+  Tcl_AppendPrintfToObj                                                            extern void Tcl_AppendPrintfToObj(Tcl_Obj *objPtr, const char *format, ...) __attribute__((__format__(__printf__, 2, 3)));
+  TclBN_mp_clear_multi                                                             extern void TclBN_mp_clear_multi(mp_int *a, ...);
+  TclBN_mp_init_multi                                                              extern mp_err TclBN_mp_init_multi(mp_int *a, ...);
+
+== byvalue
+
+== inline
+  inline definitions (no link symbol)                                              1
+  storage static, fnspec inline                                                    1
+  written directly                                                                 1
+
+== links
+
+== subset
+  functions (declared + inline definitions)                                        754
+  declared (have a link symbol)                                                    753
+  simple subset: callable                                                          675
+  simple subset: of which use an enum type (needs its ABI width)                   2
+  simple subset: excluded by callback                                              64
+  simple subset: excluded by variadic                                              9
+  simple subset: excluded by floating                                              5
+  simple subset: excluded by inline definition (no symbol)                         1
+  callbacks subset: callable                                                       737
+  callbacks subset: of which use an enum type (needs its ABI width)                2
+  callbacks subset: excluded by variadic                                           9
+  callbacks subset: excluded by floating                                           5
+  callbacks subset: excluded by callback taking a callback                         1
+  callbacks subset: excluded by inline definition (no symbol)                      1
+  callbacks subset: excluded by variadic callback                                  1
+  floats subset: callable                                                          742
+  floats subset: of which use an enum type (needs its ABI width)                   2
+  floats subset: excluded by variadic                                              9
+  floats subset: excluded by callback taking a callback                            1
+  floats subset: excluded by inline definition (no symbol)                         1
+  floats subset: excluded by variadic callback                                     1
+
+== unsupported
+  library records parsed                                                           996
+  library unsupported                                                              0
+  system records parsed                                                            284
+  system unsupported                                                               0
+
+== macros
+  library macros (final definitions)                                               461
+  function: call wrapper: computed arguments                                       51   {Tcl_InitStubs Tcl_Main Tcl_PkgPresent Tcl_PkgProvide}
+  function: call wrapper: rename                                                   5   {TclBNFree mp_set_ll mp_init_ll mp_set_ull}
+  function: comma list (an argument or initializer fragment)                       3   {TCL_OBJTYPE_V1 TCL_OBJTYPE_V2 TCLBOOLWARNING}
+  function: declaration-generating                                                 1   TCL_DECLARE_MUTEX
+  function: decoration: attribute                                                  3   {TCL_FORMAT_PRINTF TCL_DEPRECATED_API TCL_DEPRECATED}
+  function: empty                                                                  4   {Tcl_InitMemory Tcl_DumpActiveMemory Tcl_ValidateAllMemory MP_DEPRECATED_PRAGMA}
+  function: expression                                                             10   {Tcl_WideAsLong Tcl_LongAsWide Tcl_WideAsDouble Tcl_DoubleAsWide}
+  function: expression: calls a function                                           4   {Tcl_GetIndexFromObj Tcl_GetIndexFromObjStruct Tcl_GetBooleanFromObj Tcl_GetBoolean}
+  function: expression: member access                                              11   {Tcl_DStringLength Tcl_DStringValue Tcl_IsShared Tcl_GetHashValue}
+  function: statement                                                              3   {Tcl_SetResult Tcl_DecrRefCount Tcl_BounceRefCount}
+  object: alias: function                                                          81   {Tcl_StaticPackage Tcl_CreateSlave Tcl_GetSlave Tcl_GetMaster}
+  object: alias: object                                                            3   {mp_s_rmap mp_s_rmap_reverse mp_s_rmap_reverse_sz}
+  object: alias: undeclared identifier                                             4   {bn_reverse mp_to_unsigned_bin mp_to_unsigned_bin_n mp_toradix_n}
+  object: comma list (an initializer or argument fragment)                         1   TCL_OBJTYPE_V0
+  object: constant: enumerator alias                                               2   {TCL_OO_METHOD_VERSION_CURRENT TCL_OO_METADATA_VERSION_CURRENT}
+  object: constant: expression with casts                                          11   {TCL_SIZE_MAX TCL_VOLATILE TCL_STATIC TCL_DYNAMIC}
+  object: constant: expression with sizeof (needs ABI)                             4   {TCL_INTEGER_SPACE TCL_LINK_LONG TCL_LINK_ULONG TCL_STUB_MAGIC}
+  object: constant: integer expression                                             35   {TCL_MATCH_NOCASE TCL_DOUBLE_SPACE TCL_DONT_WAIT TCL_WINDOW_EVENTS}
+  object: constant: integer literal                                                180   {TCL_ALPHA_RELEASE TCL_BETA_RELEASE TCL_FINAL_RELEASE TCL_MAJOR_VERSION}
+  object: constant: string literal                                                 7   {TCL_VERSION TCL_PATCH_LEVEL TCL_LL_MODIFIER TCL_Z_MODIFIER}
+  object: decoration: attribute                                                    4   {TCL_NORETURN TCL_NOINLINE TCL_NORETURN1 DLLEXPORT}
+  object: decoration: storage or qualifier                                         3   {EXTERN MODULE_SCOPE TCLAPI}
+  object: empty: flag (tested by #if, or unused)                                   10   {_TCL DLLIMPORT CRTIMPORT TCL_STORAGE_CLASS}
+  object: empty: include guard                                                     2   {TCLOO_H_INCLUDED BN_TCL_H_}
+  object: empty: used on declaration lines                                         1   MP_WUR
+  object: expression: selects a function or object at compile time                 4   {Tcl_WCharToUtfDString Tcl_UtfToWCharDString Tcl_UtfToWChar Tcl_WCharLen}
+  object: initializer (braced)                                                     3   {TCL_ARGV_AUTO_HELP TCL_ARGV_AUTO_REST TCL_ARGV_TABLE_END}
+  object: type spelling                                                            11   {CONST86 TCL_WIDE_INT_TYPE Tcl_ThreadCreateType Tcl_ExitProc}
+  function flag: assignment                                                        4
+  function flag: calls-through-pointer                                             8
+  function flag: compile-time-assertion                                            3
+  function flag: member-access                                                     14
+  function flag: multiple-evaluation                                               12
+  function flag: stringify                                                         2
+  function flag: type-generic                                                      5
+  function flag: unused-argument                                                   6
+  function thunk: n/a (erased by preprocessing)                                    7   {TCL_FORMAT_PRINTF TCL_DEPRECATED_API TCL_DEPRECATED Tcl_InitMemory}
+  function thunk: n/a (import the callee)                                          5   {TclBNFree mp_set_ll mp_init_ll mp_set_ull}
+  function thunk: no (a fragment of an initializer or argument list, not an expression) 3   {TCL_OBJTYPE_V1 TCL_OBJTYPE_V2 TCLBOOLWARNING}
+  function thunk: no (import the declarations it generates)                        1   TCL_DECLARE_MUTEX
+  function thunk: per identifier argument (an argument pasted or stringified is a name, not a value) 2   {Tcl_GetBooleanFromObj Tcl_GetBoolean}
+  function thunk: per signature (type-generic)                                     2   {Tcl_GetIndexFromObj Tcl_GetIndexFromObjStruct}
+  function thunk: yes                                                              59   {Tcl_WideAsLong Tcl_LongAsWide Tcl_WideAsDouble Tcl_DoubleAsWide}
+  function thunk: yes (a read; the expansion is an lvalue too: writing needs a second wrapper) 11   {Tcl_DStringLength Tcl_DStringValue Tcl_IsShared Tcl_GetHashValue}
+  function thunk: yes (a void wrapper)                                             3   {Tcl_SetResult Tcl_DecrRefCount Tcl_BounceRefCount}
+  function thunk: yes (side effects on its arguments)                              2   {Tcl_IncrRefCount Tcl_SetHashValue}
+  object thunk: constant (value import, or a thunk returning it)                   239   {TCL_ALPHA_RELEASE TCL_BETA_RELEASE TCL_FINAL_RELEASE TCL_MAJOR_VERSION}
+  object thunk: n/a (a type)                                                       11   {CONST86 TCL_WIDE_INT_TYPE Tcl_ThreadCreateType Tcl_ExitProc}
+  object thunk: n/a (erased by preprocessing)                                      20   {_TCL TCL_NORETURN TCL_NOINLINE TCL_NORETURN1}
+  object thunk: n/a (import the function under the alias)                          81   {Tcl_StaticPackage Tcl_CreateSlave Tcl_GetSlave Tcl_GetMaster}
+  object thunk: n/a (import the object under the alias)                            3   {mp_s_rmap mp_s_rmap_reverse mp_s_rmap_reverse_sz}
+  object thunk: n/a (names nothing declared in this profile)                       4   {bn_reverse mp_to_unsigned_bin mp_to_unsigned_bin_n mp_toradix_n}
+  object thunk: no (a fragment, not an expression)                                 4   {TCL_OBJTYPE_V0 TCL_ARGV_AUTO_HELP TCL_ARGV_AUTO_REST TCL_ARGV_TABLE_END}
+  object thunk: yes (with a declared signature)                                    4   {Tcl_WCharToUtfDString Tcl_UtfToWCharDString Tcl_UtfToWChar Tcl_WCharLen}
+  function-like macros with the name of a declared function (shadowing it)         14   {Tcl_InitStubs Tcl_GetString Tcl_GetIndexFromObjStruct Tcl_GetBooleanFromObj Tcl_GetBoolean Tcl_Close}
+
+== declmacros
+  function: decoration: attribute (declaration uses)                               5
+  function: decoration: attribute (macros)                                         1   {{TCL_FORMAT_PRINTF 5}}
+  function: statement (declaration uses)                                           1
+  function: statement (macros)                                                     1   {{Tcl_DecrRefCount 1}}
+  object: constant: integer literal (declaration uses)                             5
+  object: constant: integer literal (macros)                                       3   {{TCL_DSTRING_STATIC_SIZE 2} {NUM_STATIC_TOKENS 2} {TCL_SMALL_HASH_TABLE 1}}
+  object: decoration: attribute (declaration uses)                                 6
+  object: decoration: attribute (macros)                                           2   {{TCL_NORETURN 4} {TCL_NORETURN1 2}}
+  object: decoration: storage or qualifier (declaration uses)                      751
+  object: decoration: storage or qualifier (macros)                                3   {{EXTERN 698} {TCLAPI 35} {MODULE_SCOPE 18}}
+  object: empty (declaration uses)                                                 50
+  object: empty (macros)                                                           1   {{MP_WUR 50}}
+  object: type spelling (declaration uses)                                         29
+  object: type spelling (macros)                                                   5   {{TCL_HASH_TYPE 15} {Tcl_ExitProc 7} {Tcl_LimitHandlerDeleteProc 3} {TCL_WIDE_INT_TYPE 2} {Tcl_FSFreeInternalRepProc 2}}
+  declarations whose source span contains a preprocessor conditional               11   {{struct Tcl_RegExpIndices} {typedef Tcl_RegExpIndices} {struct Tcl_RegExpInfo} {typedef Tcl_RegExpInfo} {struct Tcl_ObjType} {typedef Tcl_ObjType} {struct Tcl_HashTable} {struct Tcl_Time} {typedef Tcl_Time} {struct Tcl_Parse}}
+
+== systemrefs
+  system typedef size_t                                                            68
+  system typedef uint64_t                                                          6
+  system typedef int64_t                                                           4
+  system typedef ptrdiff_t                                                         1
+  system typedef uint8_t                                                           1
+
