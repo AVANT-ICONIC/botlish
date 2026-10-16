@@ -378,11 +378,14 @@ bridge: it knows no syscall number, interprets no result, and is
 
 ### Target gating
 
-The native backend targets Linux x86-64 only today, and the assumption is
-explicit at every layer of this operation rather than inherited: the
-boundary is `cfg`-gated; code generation (`codegen/clif.rs`) refuses
-`syscall_linux_x86_64` with `NATIVE CODEGEN` when the backend is built for any
-other target; the NIR op, the helper and the register set are named for
+The operation exists for Linux x86-64 only (the native backend also runs on
+Linux AArch64), and the assumption is explicit at every layer of this
+operation rather than inherited: the boundary is `cfg`-gated; on any other
+target `syscall_linux_x86_64` still compiles, but running it fails with
+`NATIVE UNSUPPORTED`, so a program that only
+defines a syscall compiles and runs there as on the Tcl backends (it used to
+be refused at code generation, `NATIVE CODEGEN`, which rejected such programs
+outright); the NIR op, the helper and the register set are named for
 Linux x86-64; and the register struct's names and Register64 type come from
 one place (`core::linuxabi::registers`/`registerType`). No x32, i386, ARM or
 AArch64 convention exists; another architecture would add its own transport

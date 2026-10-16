@@ -1473,25 +1473,13 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 self.def(*dst, v);
             }
             Inst::Op { dst, op, args } => {
-                if *op == OpCode::SyscallLinuxX86_64 && !cfg!(all(target_arch = "x86_64", target_os = "linux")) {
-                    // The x86-64 Linux syscall transport is the only one
-                    // Botlish has: never compiled for another target, where
-                    // its register convention would mean something else.
-                    return Err(BackendError::Codegen(
-                        "linux::abi::syscall is the Linux x86-64 syscall transport: this target is not Linux x86-64"
-                            .to_string(),
-                    ));
-                }
-                if matches!(*op, OpCode::BytesAddr | OpCode::MBytesAddr) && !cfg!(all(target_arch = "x86_64", target_os = "linux")) {
-                    // The payload address is only ever consumed by the Linux
-                    // x86-64 syscall transport, and the small-Int
-                    // representation of an address is argued for its 47-bit
-                    // user space: never compiled for another target.
-                    return Err(BackendError::Codegen(
-                        "abi::x86_64::from_bytes is the Linux x86-64 address bridge: this target is not Linux x86-64"
-                            .to_string(),
-                    ));
-                }
+                // linux::abi::syscall compiles on every target: off Linux
+                // x86-64 its helper fails at run time (NATIVE UNSUPPORTED,
+                // runtime/syscall.rs), as the Tcl backends refuse it at run
+                // time, so a program that only defines a write still compiles
+                // and runs everywhere. The address bridges compute a payload
+                // address on every target (range-checked into a small Int,
+                // runtime/ops.rs; a 48-bit AArch64 Linux user address fits).
                 let v = self.op(*op, args);
                 if op.result_kind() != nir::RegKind::Tagged {
                     self.def_raw(*dst, v);
