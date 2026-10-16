@@ -163,7 +163,8 @@ covered.
   suites, a standalone executable (stub linker), a failed compilation, and the
   activation counter.
 * **`audit/compilation-isolation/tools/interleave.tcl`** works in one process.
-  It checksums each of nine golden suites' backend artifacts and outcomes
+  It checksums each of its golden suites' backend artifacts and outcomes (ten
+  by default since BINARY-LAYOUT.md added `binary-layout.bot`)
   right after the suite's own compilation. Then, once every suite is compiled,
   it checksums them again in reverse order, and every checksum must be equal.
   - The artifacts are core IR, the Tcl compiler's code, and specialized and
