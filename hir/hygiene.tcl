@@ -80,8 +80,25 @@ proc hir::hygiene::apply {hirVar} {
         }
         dict unset hir rootRefs
     }
+    qualifyExterns hir
     ProtectEarlierRefs hir
     qualifyModules hir
+}
+
+# Renames the binding of every extern c fn (hir/foreign.tcl: a root-kind
+# binding of its unit's scope, `extern` its key) to the internal name of the
+# native it denotes, extern#KEY, keeping the written name in `spelling`: then
+# a name-based consumer (core IR, the Tcl compiler) finds the native under
+# the one name it is registered by, like any root native's, and a reference
+# from another file (`sha::SHA256`) and the module's own (`SHA256`) are one
+# name too.
+proc hir::hygiene::qualifyExterns {hirVar} {
+    upvar 1 $hirVar hir
+    dict for {b binding} [dict get $hir bindings] {
+        if {[dict exists $binding extern]} {
+            RenameTo hir $b [hir::foreign::nativeName [dict get $binding extern]] 1
+        }
+    }
 }
 
 # For every ordinary reference E to binding B, renames every other binding a
@@ -161,6 +178,11 @@ proc hir::hygiene::qualifyModules {hirVar} {
     }
     dict for {ns bodyScope} [dict get $hir modules] {
         foreach b [dict get $hir scopes $bodyScope bindings] {
+            if {[dict exists $hir bindings $b extern]} {
+                # An extern c fn's name (qualifyExterns) already is its one
+                # collision-free name.
+                continue
+            }
             if {[dict exists $hir bindings $b traitClone]} {
                 # A trait clone (TRAITS.md) already has its one qualified,
                 # collision-free name: its source function's.

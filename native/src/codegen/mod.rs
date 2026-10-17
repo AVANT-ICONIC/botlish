@@ -172,6 +172,13 @@ impl CraneliftJit {
         for (name, _, address) in helpers() {
             builder.symbol(name, address);
         }
+        // A program that calls C (C-FFI.md) runs as a linked executable,
+        // never in this JIT (main.rs): compiled here only for its code (clif,
+        // size), its foreign symbols resolve to a stub that never runs --
+        // never to whatever a library loaded into this process defines.
+        for decl in &program.foreigns {
+            builder.symbol(&decl.symbol, crate::runtime::ffi::rt_ffi_unlinked as *const u8);
+        }
         let mut module = JITModule::new(builder);
         let symbols = clif::declare(&mut module, program, false)?;
         let mut pool = ConstPool::default();

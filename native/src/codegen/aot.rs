@@ -18,6 +18,15 @@
 //! Both link the same machine code (`emit_object`) and start it the same way
 //! (`runtime::aot::run`); `tests/aot-stub-linker.test` runs programs linked
 //! both ways side by side.
+//!
+//! A program that calls C (C-FFI.md: `foreign` functions, `link` libraries)
+//! needs the system linker to resolve its foreign symbols: the `rustc`
+//! linker passes the program's link plan to it -- `-lNAME` for every
+//! library, inside one `--start-group`/`--end-group`, so the order of the
+//! declarations never decides a static link, and `-LDIR` for every
+//! `--link-dir` search directory -- after the program object. The `stub`
+//! linker links no native library and refuses such a program. An ordinary
+//! program's link is unchanged.
 use super::{Const, ObjectProgram, emit_object};
 use crate::nir::Program;
 use botlish_native::runtime::aotimage::{self, Fixup, FunctionCode, Image, Target};
@@ -170,13 +179,23 @@ fn startup(program: &Program, object: &ObjectProgram) -> String {
     s
 }
 
-pub fn emit_executable(program: &Program, destination: &Path) -> Result<(), String> {
+/// Whether PROGRAM calls C or names a native library (C-FFI.md): it is then
+/// linked by the system linker, and run as an executable.
+pub fn calls_c(program: &Program) -> bool {
+    !program.foreigns.is_empty() || !program.links.is_empty()
+}
+
+pub fn emit_executable(program: &Program, destination: &Path, link_dirs: &[String]) -> Result<(), String> {
     if !cfg!(all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64"))) {
         return Err("executable emission requires Linux glibc on x86_64 or aarch64".into());
     }
     let destination = std::path::absolute(destination).map_err(|e| e.to_string())?;
     match std::env::var("BOTLISH_NATIVE_LINKER").as_deref() {
-        Err(std::env::VarError::NotPresent) | Ok("" | "rustc") => link_rustc(program, &destination),
+        Err(std::env::VarError::NotPresent) | Ok("" | "rustc") => link_rustc(program, &destination, link_dirs),
+        Ok("stub") if calls_c(program) => Err(format!(
+            "native link failed: this program calls C ({}), whose symbols and libraries only the system linker resolves, and the stub linker (BOTLISH_NATIVE_LINKER=stub) links no native library: link it with BOTLISH_NATIVE_LINKER=rustc (C-FFI.md)",
+            describe_link_plan(program)
+        )),
         Ok("stub") => link_stub(program, &destination),
         Ok(other) => Err(format!("unknown BOTLISH_NATIVE_LINKER {other:?} (known: rustc stub)")),
         Err(e) => Err(format!("BOTLISH_NATIVE_LINKER: {e}")),
@@ -185,7 +204,41 @@ pub fn emit_executable(program: &Program, destination: &Path) -> Result<(), Stri
 
 /// The `rustc` linker: a generated startup crate, compiled and linked
 /// against this build's runtime library.
-fn link_rustc(program: &Program, destination: &Path) -> Result<(), String> {
+/// The C functions and libraries PROGRAM names, for messages.
+fn describe_link_plan(program: &Program) -> String {
+    let mut parts = Vec::new();
+    if !program.foreigns.is_empty() {
+        let names: Vec<&str> = program.foreigns.iter().map(|f| f.symbol.as_str()).collect();
+        parts.push(format!("symbols {}", names.join(", ")));
+    }
+    if !program.links.is_empty() {
+        let libraries: Vec<String> = program.links.iter().map(|l| format!("-l{l}")).collect();
+        parts.push(format!("libraries {}", libraries.join(" ")));
+    }
+    parts.join("; ")
+}
+
+/// The linker's own account of a failed link of a program that calls C:
+/// the lines of rustc's STDERR the system linker wrote (its diagnostics,
+/// never rustc's echo of the whole command line), else all of it.
+fn linker_diagnostics(stderr: &str) -> String {
+    let lines: Vec<&str> = stderr
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            line.contains("undefined reference")
+                || line.contains("cannot find")
+                || line.contains("ld:")
+                || line.contains("ld.lld:")
+                || line.starts_with("collect2")
+                || line.contains("error: linking with")
+        })
+        .filter(|line| !line.starts_with("= note: \"") && line.len() < 2000)
+        .collect();
+    if lines.is_empty() { stderr.to_string() } else { lines.join("\n") }
+}
+
+fn link_rustc(program: &Program, destination: &Path, link_dirs: &[String]) -> Result<(), String> {
     let driver = std::env::current_exe().map_err(|e| e.to_string())?;
     let release = driver.parent().ok_or("cannot locate native runtime")?;
     let library = release.join("libbotlish_native.rlib");
@@ -219,22 +272,49 @@ fn link_rustc(program: &Program, destination: &Path) -> Result<(), String> {
         .arg(format!("dependency={}", release.join("deps").display()))
         .arg("-C")
         .arg(format!("link-arg={}", object_path.display()))
+        .args(link_plan_args(program, link_dirs))
         .arg(&source_path)
         .arg("-o")
         .arg(&executable)
         .output()
         .map_err(|e| format!("cannot launch rustc to link executable: {e}"))?;
     if !output.status.success() {
-        return Err(format!(
-            "executable link failed ({}):\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        ));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if calls_c(program) {
+            return Err(format!(
+                "native link failed: the system linker could not link this program with the C functions and libraries it declares ({}):\n{}",
+                describe_link_plan(program),
+                linker_diagnostics(&stderr)
+            ));
+        }
+        return Err(format!("executable link failed ({}):\n{}", output.status, stderr));
     }
     // Publish only a successfully linked file, on the same filesystem. A
     // failed build leaves any previous executable intact.
     std::fs::rename(&executable, &destination).map_err(|e| format!("{}: {e}", destination.display()))?;
     Ok(())
+}
+
+/// rustc's arguments passing PROGRAM's link plan to the system linker: the
+/// search directories LINK_DIRS (`-LDIR`), then every library `-lNAME`, in
+/// the plan's order, inside one linker group. Nothing for a program that
+/// names none.
+fn link_plan_args(program: &Program, link_dirs: &[String]) -> Vec<String> {
+    let mut args = Vec::new();
+    if !calls_c(program) {
+        return args;
+    }
+    for dir in link_dirs {
+        args.extend(["-C".to_string(), format!("link-arg=-L{dir}")]);
+    }
+    if !program.links.is_empty() {
+        args.extend(["-C".to_string(), "link-arg=-Wl,--start-group".to_string()]);
+        for library in &program.links {
+            args.extend(["-C".to_string(), format!("link-arg=-l{library}")]);
+        }
+        args.extend(["-C".to_string(), "link-arg=-Wl,--end-group".to_string()]);
+    }
+    args
 }
 
 /// The `stub` linker: the prebuilt `botlish-aot-stub` with the program's

@@ -199,10 +199,31 @@ proc hir::borrow::Type {hirVar e meta argTypes} {
     if {[hir::imprint::Mentions $result]} {
         return any
     }
+    # A result that is exactly an exposed argument's pointer (provenance
+    # {alias NAME}: SHA256's `out`) is that exposure's address, which no
+    # Botlish value may hold: the call yields unit in its place, and records
+    # which argument it is (`resultAlias`), the one fact a backend's
+    # development check of the contract compares the returned address with
+    # (C-FFI.md, "Pointer results").
+    set alias [core::cabi::AliasIndex $contract]
+    if {$alias >= 0 && [lsearch -exact -index 0 $borrows $alias] >= 0} {
+        set result unit
+        dict set hir exprs $e resultAlias $alias
+    } elseif {[dict exists $hir exprs $e resultAlias]} {
+        dict unset hir exprs $e resultAlias
+    }
     if {[dict size $writes] == 0} {
         return $result
     }
     return [hir::types::MakeStruct [dict merge $writes [dict create result $result]] 0]
+}
+
+# The argument whose exposure call E's result aliases (its contract's
+# provenance {alias NAME}, that argument exposed: the call yields unit), or
+# -1.
+proc hir::borrow::resultAlias {hir e} {
+    set node [dict get $hir exprs $e]
+    return [expr {[dict exists $node resultAlias] ? [dict get $node resultAlias] : -1}]
 }
 
 # The exposures call E records ({INDEX ACCESS NAME} per exposed argument),
@@ -225,6 +246,7 @@ proc hir::borrow::transports {hir e} {
 # ever exposes storage to a parameter that did not admit it.
 proc hir::borrow::VerifyCall {hirVar ranges e node name} {
     upvar 1 $hirVar hir
+    set name [core::native::displayName $name]
     set problems [Problems $hir $ranges $e $node $name]
     set refused ""
     foreach problem $problems {
@@ -284,6 +306,23 @@ proc hir::borrow::Problems {hir ranges e node name} {
             $index $name [hir::types::show $declared] [hir::semantic::ShowType $hir $argType] \
             [hir::range::MismatchClause $argType $declared]] $arg]
     }
+    # A data pointer result of a call that exposes Botlish storage may point
+    # into that storage (memchr's result is inside its argument) unless the
+    # contract says where it comes from: `independent`, or `alias NAME` (the
+    # call then yields unit, Type). Unknown provenance is refused, as an
+    # unknown escape is: no pointer into Botlish storage outlives the call.
+    if {[hir::types::IsCPtr [dict get $contract result]] && [dict get $contract provenance] eq "unknown"} {
+        set index 0
+        foreach arg [dict get $node args] param $params {
+            if {$arg ne "" && $param ne "" && [lindex [Decide $param [hir::typeOf $hir $arg]] 0] eq "borrow"} {
+                lappend problems [list FOREIGN-BORROW [format \
+                    {argument %d of %s: byte storage (%s) is exposed to a call whose pointer result (%s) may point into it: the contract does not say where the result comes from, and a pointer into Botlish storage never outlives the call -- a result independent of every argument is declared `independent`, exactly the pointer of a parameter `alias PARAM`} \
+                    [expr {$index + 1}] $name [hir::types::show [hir::typeOf $hir $arg]] [hir::types::show [dict get $contract result]]] $arg]
+                break
+            }
+            incr index
+        }
+    }
     return $problems
 }
 
@@ -310,6 +349,11 @@ proc hir::borrow::verify {hirVar} {
         set name [dict get $binding name]
         if {[dict get [core::native::metadata $name] foreign] eq ""} continue
         if {[dict get [core::native::metadata $name] imprint] ne ""} continue
+        if {[core::native::isExtern $name]} {
+            hir::Diagnose hir TYPE \
+                "[core::native::displayName $name] can only be called directly: it is a C function (extern c fn), and a call through a function value would have no C signature, no contract and no link symbol -- it is not a value (a C function pointer value is ffi::c::FnPtr, which Botlish does not call)" $e
+            continue
+        }
         hir::Diagnose hir TYPE \
             "$name can only be called directly: it is a foreign operation, whose byte exposures exist only as the arguments of one call, not a function value" $e
     }

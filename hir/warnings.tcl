@@ -600,6 +600,12 @@ proc hir::warnings::NamedCallee {hir node} {
             if {![string is digit -strict $arity]} {
                 return ""
             }
+            if {[dict exists $binding extern]} {
+                # An extern c fn (hir/foreign.tcl): looked up under its
+                # written name, shown by its Botlish qualified name.
+                return [dict create identity native:$native target [list native $native] params $arity \
+                    method [dict get $binding spelling] shown [dict get $binding extern]]
+            }
             return [dict create identity native:$native target [list native $native] params $arity \
                 method [MemberName $native] shown $name]
         }
@@ -639,6 +645,15 @@ proc hir::warnings::MemberName {name} {
 # of later, shadowing bindings stay: a later binding is invisible to the call
 # anyway, and its renamed key keeps it out of the lookup of the plain name.)
 proc hir::warnings::ResolutionView {hir} {
+    # An extern c fn's name (hir/foreign.tcl) was resolved as written too:
+    # hygiene named it extern#KEY afterwards.
+    dict for {b binding} [dict get $hir bindings] {
+        if {[dict exists $binding extern]} {
+            set s [dict get $binding scope]
+            dict unset hir scopes $s names [dict get $binding name]
+            dict set hir scopes $s names [dict get $binding spelling] $b
+        }
+    }
     if {![dict exists $hir modules]} {
         return $hir
     }

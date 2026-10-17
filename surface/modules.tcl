@@ -436,6 +436,14 @@ proc surface::modules::QualifiedRefsWalk {node foundVar} {
                 TypeRefs [dict get $field type] [dict get $field typeSpan] found
             }
         }
+        externfn {
+            # An extern declaration's C types (C-FFI.md): `ffi::c::Ptr[...]`
+            # and every qualified pointee name their namespaces.
+            foreach param [dict get $node params] {
+                TypeRefs [dict get $param type] [dict get $param typeSpan] found
+            }
+            TypeRefs [dict get $node resultType] [dict get $node resultTypeSpan] found
+        }
         traitdecl {
             # A requirement's parameter and result types (TRAITS.md).
             foreach r [dict get $node requirements] {
@@ -533,6 +541,12 @@ proc surface::modules::RemapOrigin {origin fileId} {
     }
     dict set origin file $fileId
     return $origin
+}
+
+# DECLS (surface/lower.tcl's ExternDeclOf or LinkDeclOf dicts) with their
+# origins repointed at FILEID.
+proc surface::modules::RemapDecls {decls fileId} {
+    return [lmap decl $decls {dict set decl origin [RemapOrigin [dict get $decl origin] $fileId]}]
 }
 
 # FLAGS ({NAME ORIGIN} pairs, FLAGS.md) with every origin repointed at FILEID.
@@ -722,9 +736,9 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan {path ""}} {
             Error CONTEXT-INSTALLATION-UNSUPPORTED [dict get $statement span] \
                 "context installation is currently supported only in the entry program's top-level scope, as a statement (this one is inside a module: \"$name\", $path)"
         }
-        if {[dict get $statement kind] ni {function bind typedecl errordecl structdecl enumdecl traitdecl layoutdecl}} {
+        if {[dict get $statement kind] ni {function bind typedecl errordecl structdecl enumdecl traitdecl layoutdecl externfn externlib}} {
             Error INVALID-TOPLEVEL [dict get $statement span] \
-                "module \"$name\" ($path): only function definitions, immutable bindings, type declarations, struct declarations, enum declarations, layout declarations, trait declarations and error declarations are allowed at module top level, found a \"[dict get $statement kind]\" statement"
+                "module \"$name\" ($path): only function definitions, immutable bindings, type declarations, struct declarations, enum declarations, layout declarations, trait declarations, error declarations and extern declarations are allowed at module top level, found a \"[dict get $statement kind]\" statement"
         }
     }
     CheckNativeMembers $ast $name "module \"$name\" ($path)"
@@ -734,7 +748,7 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan {path ""}} {
     dict incr state nextFile
     CollectAndLoad state $ast $name
     set functionNames [lmap statement [dict get $ast body] {
-        if {[dict get $statement kind] in {typedecl errordecl structdecl enumdecl traitdecl layoutdecl}} continue
+        if {[dict get $statement kind] in {typedecl errordecl structdecl enumdecl traitdecl layoutdecl externlib}} continue
         dict get $statement name
     }]
     dict set state loaded $name $functionNames
@@ -779,7 +793,8 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan {path ""}} {
         if {[dict get $statement kind] ne "traitdecl"} continue
         dict get $statement name
     }]
-    lassign [surface::lower::SplitTypeDecls [dict get $ast body] $name] executable decls errorDecls structDecls traitDecls
+    lassign [surface::lower::SplitTypeDecls [dict get $ast body] $name] executable decls errorDecls structDecls traitDecls \
+        externDecls linkDecls
     # The namespace's intrinsic types (C-ABI-TYPES.md): ffi::c's C integer
     # scalars, declared for the compilation's C target as if the module
     # declared them itself.
@@ -795,6 +810,8 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan {path ""}} {
     dict set state errorDecls [concat [dict get $state errorDecls] $errorDecls]
     dict set state structDecls [concat [dict get $state structDecls] $structDecls]
     dict set state traitDecls [concat [dict get $state traitDecls] $traitDecls]
+    dict set state externDecls [concat [dict get $state externDecls] [RemapDecls $externDecls $fileId]]
+    dict set state linkDecls [concat [dict get $state linkDecls] [RemapDecls $linkDecls $fileId]]
     set statements [lmap node [LowerStatements $state $name $executable] {RemapFile $node $fileId}]
     set origin [RemapOrigin [surface::lower::Origin [dict get $ast span] "namespace"] $fileId]
     set section [dict create namespace $name nodes $statements origin $origin \
@@ -836,7 +853,7 @@ proc surface::modules::CheckNativeMembers {ast name who} {
         return
     }
     foreach statement [dict get $ast body] {
-        if {[dict get $statement kind] in {function bind}
+        if {[dict get $statement kind] in {function bind externfn}
                 && [core::native::isQualifiedNative "${name}::[dict get $statement name]"]} {
             set member [dict get $statement name]
             Error DUPLICATE-NATIVE [dict get $statement span] \
@@ -1338,7 +1355,8 @@ proc surface::modules::NewState {files nextFile} {
         loaded [dict create] loadedStructs [dict create] loadedTypes [dict create] \
         loadedErrors [dict create] loadedTraits [dict create] loadedEnums [dict create] \
         loadedLayouts [dict create] imports [dict create] stack {} sections {} \
-        typeDecls {} errorDecls {} structDecls {} traitDecls {} staticDeferred [dict create] \
+        typeDecls {} errorDecls {} structDecls {} traitDecls {} externDecls {} linkDecls {} \
+        staticDeferred [dict create] \
         target "" root "" entry "" application [dict create] moduleDecls [dict create]]
 }
 
@@ -1369,7 +1387,8 @@ proc surface::modules::LoadNamespaces {namespaces args} {
         functions [dict get $state loaded] typeDecls [dict get $state typeDecls] \
         errorDecls [dict get $state errorDecls] structDecls [dict get $state structDecls] \
         traitDecls [dict get $state traitDecls] imports [dict get $state imports] \
-        moduleDecls [dict get $state moduleDecls]]
+        moduleDecls [dict get $state moduleDecls] externDecls [dict get $state externDecls] \
+        linkDecls [dict get $state linkDecls]]
 }
 
 # The HIR of the entry program AST (a `program` node whose file is FILE ... in
@@ -1390,7 +1409,8 @@ proc surface::modules::BuildProgram {ast strict {target ""} {root ""}} {
         dict set state entry [file normalize [dict get $ast span file]]
     }
     CollectAndLoad state $ast ""
-    lassign [surface::lower::SplitTypeDecls [dict get $ast body]] executable ownDecls ownErrorDecls ownStructDecls ownTraitDecls
+    lassign [surface::lower::SplitTypeDecls [dict get $ast body]] executable ownDecls ownErrorDecls ownStructDecls ownTraitDecls \
+        ownExternDecls ownLinkDecls
     set decls [concat [dict get $state typeDecls] $ownDecls]
     set errorDecls [concat [dict get $state errorDecls] $ownErrorDecls]
     set structDecls [concat [dict get $state structDecls] $ownStructDecls]
@@ -1405,7 +1425,9 @@ proc surface::modules::BuildProgram {ast strict {target ""} {root ""}} {
         -origin [surface::lower::Origin [dict get $ast span] ""] \
         -files [dict get $state files] -modules [dict get $state sections] \
         -imports [dict get $state imports] -module-decls $moduleDecls \
-        -type-decls $decls -error-decls $errorDecls -struct-decls $structDecls -trait-decls $traitDecls]
+        -type-decls $decls -error-decls $errorDecls -struct-decls $structDecls -trait-decls $traitDecls \
+        -foreign-decls [concat [dict get $state externDecls] $ownExternDecls] \
+        -link-decls [concat [dict get $state linkDecls] $ownLinkDecls]]
 }
 
 # The HIR of the .bot program file PATH, after loading (and compiling once,

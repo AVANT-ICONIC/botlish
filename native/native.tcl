@@ -110,6 +110,25 @@ namespace eval native {
     # the number of native runs (for coverage reports, tests/native-coverage.tcl).
     variable unsupported {}
     variable runs 0
+    # The system linker's extra library search directories (C-FFI.md): every
+    # link of a program that calls C passes them as -LDIR (botlish-native's
+    # --link-dir; main.tcl's -L DIR). A build option, never part of a
+    # program: the libraries themselves are its `extern c library`
+    # declarations.
+    variable linkDirs {}
+}
+
+# Evaluates SCRIPT in the caller's scope with DIRS the linker search
+# directories (native::linkDirs), restored afterwards.
+proc native::withLinkDirs {dirs script} {
+    variable linkDirs
+    set saved $linkDirs
+    set linkDirs [lmap dir $dirs {file normalize $dir}]
+    try {
+        return [uplevel 1 $script]
+    } finally {
+        set linkDirs $saved
+    }
 }
 
 proc native::binary {} {
@@ -167,7 +186,11 @@ proc native::Driver {command nirText args} {
 # back through a file instead (botlish-native's --result). Returns them.
 proc native::RunDriver {output command nirText arguments} {
     variable runs
+    variable linkDirs
     set args $arguments
+    foreach dir $linkDirs {
+        lappend args --link-dir $dir
+    }
     set binary [binary]
     incr runs
     lassign [file tempfile path botlish.nir] channel

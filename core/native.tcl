@@ -179,6 +179,18 @@
 #                   call (hir/borrow.tcl). The implementation is entered
 #                   through core::cabi::ForeignBoundary, which models the
 #                   exposures on the Tcl backends.
+#   extern          "" or, for an `extern c fn` declaration (C-FFI.md), the
+#                   declaration's identity: {key KEY namespace NS name NAME
+#                   symbol SYMBOL abi {params {KIND...} result KIND}} -- KEY
+#                   its Botlish qualified name (the entry program's bare),
+#                   SYMBOL the native link symbol, every KIND the C ABI
+#                   transport class of a parameter or the result (i8 u8 i16
+#                   u16 i32 u32 i64 u64 ptr, void for the result). Such a
+#                   native is registered per compilation by hir/foreign.tcl
+#                   under the internal name extern#KEY (`#` no source spells),
+#                   with a -foreign contract and an implementation that
+#                   refuses to run (NATIVE-ONLY): only the native backend
+#                   makes the C call.
 #   resultRange     "" (nothing known) or a fact about every Int result, for
 #                   hir/range.tcl's representation analysis and
 #                   hir/completions.tcl's completion proofs, which both read
@@ -343,6 +355,11 @@ proc core::native::directNamespaces {} {
 # registered name before the last "::": linux::abi::x86_64::syscall is a
 # member of linux::abi::x86_64, qualifiedMembers' membership), "" for a native in no namespace.
 proc core::native::namespaceOf {name} {
+    if {[string match extern#* $name]} {
+        # An extern c fn's native (C-FFI.md) is a member of the module that
+        # declares it.
+        set name [string range $name 7 end]
+    }
     set cut [string last :: $name]
     if {$cut <= 0} {
         return ""
@@ -364,7 +381,7 @@ proc core::native::register {name args} {
     set options [dict create -impl "" -arity "" -refines-true {} -refines-false {} \
         -param-types "" -result-type any -tests-type "" -runtime {} -result-shape {} -result-range {} \
         -context-free 0 -errors {} -bounds {} -nomethod 0 -completion 0 -ownership {} -errors-from {} \
-        -result-length {} -drop-form {} -layout {} -imprint {} -foreign {}]
+        -result-length {} -drop-form {} -layout {} -imprint {} -foreign {} -extern {}]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "core::native::register: unknown option \"$option\""
@@ -531,7 +548,7 @@ proc core::native::register {name args} {
         contextFree [dict get $options -context-free] errors $errors bounds $bounds \
         nomethod [dict get $options -nomethod] completion [dict get $options -completion] \
         ownership $ownership errorsFrom $errorsFrom resultLength $length dropForm $dropForm \
-        layout $layout imprint $imprint foreign $foreign]
+        layout $layout imprint $imprint foreign $foreign extern [dict get $options -extern]]
     return [core::value::native $name]
 }
 
@@ -819,6 +836,22 @@ proc core::native::checkSlice {native start end n} {
 proc core::native::exists {name} {
     variable registry
     return [dict exists $registry $name]
+}
+
+# 1 if NAME is the internal native of an `extern c fn` declaration
+# (C-FFI.md): extern#KEY, registered per compilation by hir/foreign.tcl. The
+# prefix is reserved for them.
+proc core::native::isExtern {name} {
+    return [string match extern#* $name]
+}
+
+# The name diagnostics print for native NAME: an extern c fn's Botlish
+# qualified name (its KEY), else NAME.
+proc core::native::displayName {name} {
+    if {[string match extern#* $name]} {
+        return [string range $name 7 end]
+    }
+    return $name
 }
 
 proc core::native::names {} {

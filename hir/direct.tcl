@@ -195,6 +195,22 @@ proc hir::direct::Targets {hir c node unit memoVar sections} {
         return {}
     }
     set name [dict get [hir::symbol $hir $y] name]
+    if {[core::native::isExtern $name] && [core::native::exists $name]} {
+        # A C function whose contract lets it keep a pointer past the call
+        # (an escape captures or unknown: hir::borrow::retaining) is itself
+        # an authority source, called from any unit, its declaring one
+        # included (C-FFI.md, "direct"). A noescape one is an ordinary call:
+        # foreign is not direct.
+        set retains [core::cabi::RetainingParameters [dict get [core::native::metadata $name] foreign]]
+        if {$retains ne {}} {
+            set reasons [lmap r $retains {
+                lassign $r index pname escape
+                format {parameter "%s": escape %s} $pname $escape
+            }]
+            return [list [list [core::native::namespaceOf $name] \
+                [list text "[core::native::displayName $name], a C function whose contract lets it retain pointer authority past the call ([join $reasons {; }])"] foreign]]
+        }
+    }
     set d [core::native::namespaceOf $name]
     if {$d eq "" || $d eq $unit || ![Designated $hir $d]} {
         return {}
@@ -371,9 +387,11 @@ proc hir::direct::UnacknowledgedMessage {unit edge more} {
     set who [UnitPhrase $unit]
     set owner [expr {$unit eq "" ? "the entry program" : "\"$unit\""}]
     set d [dict get $edge target]
-    set via [expr {[dict get $edge via] eq "trait"
-        ? "a trait operation that may run [dict get $edge callee], a callable of the direct module \"$d\""
-        : "[dict get $edge callee], a callable of the direct module \"$d\""}]
+    switch -- [dict get $edge via] {
+        trait { set via "a trait operation that may run [dict get $edge callee], a callable of the direct module \"$d\"" }
+        foreign { set via [dict get $edge callee] }
+        default { set via "[dict get $edge callee], a callable of the direct module \"$d\"" }
+    }
     if {[dict get $edge function] eq ""} {
         set message "$who uses direct authority in its top-level code: it calls $via, and top-level code has no context, so the call is never mediated; move it into a function that requires a context defined by $owner, or declare the module direct with `direct module` as its first line"
     } else {
@@ -479,7 +497,8 @@ proc hir::direct::explain {hir ns} {
     foreach edge [dict get $u edges] {
         set fn [expr {[dict get $edge function] eq "" ? "top-level code" : [dict get $edge function]}]
         set how [expr {[dict get $edge discharged] ne "" ? "mediated by [dict get $edge discharged]" : "undischarged"}]
-        lappend lines "    $fn -> [dict get $edge callee] (direct module [dict get $edge target], [hir::originLocation $hir [dict get $edge origin]]): $how"
+        set what [expr {[dict get $edge via] eq "foreign" ? "a retaining C call" : "direct module [dict get $edge target]"}]
+        lappend lines "    $fn -> [dict get $edge callee] ($what, [hir::originLocation $hir [dict get $edge origin]]): $how"
     }
     return [join $lines \n]
 }

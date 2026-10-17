@@ -33,6 +33,16 @@
 //! one synthetic argument `botlish-runner` (runtime/vm.rs's DEFAULT_ARGV),
 //! never this driver's own arguments.
 //!
+//! `--link-dir DIR` (anywhere on the line, repeatable; main.tcl's `-L DIR`)
+//! adds DIR to the system linker's library search path (-LDIR) when a
+//! program that calls C (C-FFI.md) is linked. Such a program -- one with
+//! `foreign` functions or `link` libraries -- is never JIT-run: `run` and
+//! `bench` link it as an executable (codegen/aot.rs, the same link
+//! `executable` makes) into a private directory and run that, in the driver
+//! protocol (runtime/aot.rs): its result lines come back through a file, and
+//! its standard output and error are this driver's own. `batch` and
+//! `--alloc` do not run one.
+//!
 //! `--result PATH` (anywhere on the line, any command) writes the output
 //! lines below to PATH instead of standard output, which `run` then leaves
 //! to the program alone: what it writes there (io::print_line, raw
@@ -220,12 +230,31 @@ fn extract_argv(args: &[String]) -> Option<(Vec<String>, Option<Vec<Vec<u8>>>)> 
     Some((out, snapshot))
 }
 
+/// Pulls every "--link-dir DIR" out of ARGS (anywhere): the remaining
+/// arguments in order, and the directories. None if one has no value.
+fn extract_link_dirs(args: &[String]) -> Option<(Vec<String>, Vec<String>)> {
+    let mut dirs = Vec::new();
+    let mut out = Vec::with_capacity(args.len());
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--link-dir" {
+            dirs.push(args.get(i + 1)?.clone());
+            i += 2;
+            continue;
+        }
+        out.push(args[i].clone());
+        i += 1;
+    }
+    Some((out, dirs))
+}
+
 fn cli(args: &[String]) -> i32 {
     let usage = || {
         eprintln!("usage: botlish-native run|clif|vcode|size|roots|calls|check FILE.nir [--alloc off|summary|sites] [--argv ARGS|--argv-file PATH] | bench RUNS FILE.nir [--alloc ...] | batch CALLS FILE.nir | object|executable OUT FILE.nir (each also [--result PATH])");
         2
     };
-    let Some((args, snapshot)) = extract_argv(args) else { return usage() };
+    let Some((args, link_dirs)) = extract_link_dirs(args) else { return usage() };
+    let Some((args, snapshot)) = extract_argv(&args) else { return usage() };
     let Some((args, alloc_mode)) = extract_alloc_mode(&args) else { return usage() };
     let args = &args[..];
     let (command, rest) = match args.split_first() {
@@ -273,10 +302,11 @@ fn cli(args: &[String]) -> i32 {
             0
         }
         "executable" => {
-            match codegen::aot::emit_executable(&program, std::path::Path::new(&rest[0])) {
+            match codegen::aot::emit_executable(&program, std::path::Path::new(&rest[0]), &link_dirs) {
                 Ok(()) => emit(&tcl_list(&["executable".to_string(), rest[0].clone()])),
                 Err(e) => {
-                    emit_error(&["NATIVE", "AOT"], &e);
+                    let code = if codegen::aot::calls_c(&program) { "LINK" } else { "AOT" };
+                    emit_error(&["NATIVE", code], &e);
                     return 1;
                 }
             }
@@ -305,8 +335,100 @@ fn cli(args: &[String]) -> i32 {
                 }
             }
         }
+        "run" | "bench" | "batch" if codegen::aot::calls_c(&program) => {
+            run_linked(command, &program, runs, alloc_mode, snapshot, &link_dirs)
+        }
         _ => execute(command, &program, runs, alloc_mode, snapshot),
     }
+}
+
+/// `run`/`bench` of a program that calls C (C-FFI.md): linked as an
+/// executable into a private directory, by the same link `executable`
+/// makes, then run there in the driver protocol (runtime/aot.rs), its
+/// result lines copied to this driver's. The program's standard input,
+/// output and error are this driver's, and its argument vector is the
+/// run's snapshot (`--argv`, else the default one). Returns the driver's
+/// exit status.
+fn run_linked(
+    command: &str,
+    program: &nir::Program,
+    runs: usize,
+    alloc_mode: AllocMode,
+    snapshot: Option<Vec<Vec<u8>>>,
+    link_dirs: &[String],
+) -> i32 {
+    if command == "batch" || alloc_mode.enabled() {
+        emit_error(
+            &["NATIVE", "UNSUPPORTED", "foreign"],
+            "a program that calls C runs as a linked executable: batch timing and allocation reports (--alloc) measure in-process JIT runs only",
+        );
+        return 0;
+    }
+    let started = Instant::now();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let work = std::env::temp_dir().join(format!("botlish-run-{}-{nonce}", std::process::id()));
+    if let Err(e) = std::fs::create_dir(&work) {
+        emit_error(&["NATIVE", "IO"], &format!("{}: {e}", work.display()));
+        return 2;
+    }
+    struct Cleanup(std::path::PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            // A directory this run created for itself alone.
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(work.clone());
+    let executable = work.join("program");
+    if let Err(e) = codegen::aot::emit_executable(program, &executable, link_dirs) {
+        emit_error(&["NATIVE", "LINK"], &e);
+        return 0;
+    }
+    let argv: Vec<Vec<u8>> = snapshot
+        .unwrap_or_else(|| runtime::vm::DEFAULT_ARGV.iter().map(|a| a.as_bytes().to_vec()).collect());
+    let Some((first, rest)) = argv.split_first() else {
+        emit_error(
+            &["NATIVE", "UNSUPPORTED", "foreign"],
+            "a program that calls C runs as a process, which has at least one argument: an empty argument vector cannot be given to it",
+        );
+        return 0;
+    };
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::process::CommandExt;
+    let result = work.join("result");
+    let mut child = std::process::Command::new(&executable);
+    child
+        .arg0(std::ffi::OsStr::from_bytes(first))
+        .args(rest.iter().map(|a| std::ffi::OsStr::from_bytes(a)))
+        .env("BOTLISH_NATIVE_RESULT", &result)
+        .env("BOTLISH_NATIVE_COMPILE_US", started.elapsed().as_micros().to_string());
+    if command == "bench" {
+        child.env("BOTLISH_NATIVE_RUNS", runs.to_string());
+    } else {
+        child.env_remove("BOTLISH_NATIVE_RUNS");
+    }
+    let status = match child.status() {
+        Ok(status) => status,
+        Err(e) => {
+            emit_error(&["NATIVE", "IO"], &format!("cannot run the linked program: {e}"));
+            return 2;
+        }
+    };
+    let lines = std::fs::read_to_string(&result).unwrap_or_default();
+    if lines.is_empty() {
+        emit_error(
+            &["NATIVE", "BUG"],
+            &format!("the linked program reported no result ({status})"),
+        );
+        return 3;
+    }
+    for line in lines.lines() {
+        emit(line);
+    }
+    0
 }
 
 fn call_effect_report(program: &nir::Program) -> String {

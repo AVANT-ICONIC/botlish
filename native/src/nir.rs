@@ -878,6 +878,23 @@ pub enum Inst {
     Call { dst: Reg, func: FuncId, args: Vec<Reg>, may_error: bool, may_gc: bool },
     CallEnv { dst: Reg, func: FuncId, closure: Reg, args: Vec<Reg>, may_error: bool, may_gc: bool },
     CallValue { dst: Reg, callee: Reg, args: Vec<Reg> },
+    /// `%d = foreigncall F %a... [exposed=I,J] [discard]`: a C call
+    /// (C-FFI.md) of the program's foreign function F. Every operand is
+    /// tagged: a C integer argument an Int, a raw pointer a C address word,
+    /// and an operand EXPOSED a byte exposure's payload address (a small
+    /// Int: native/lower.tcl's ExposeStorage, kept alive by its keepalive
+    /// after this call). codegen::clif converts each to its C ABI class,
+    /// calls the linked symbol directly with the platform C calling
+    /// convention (no helper, no symbol lookup, no Tcl), and converts the
+    /// result back: an Int of its class, a C address word (a raw address
+    /// the word cannot hold is a NATIVE error), unit for void. A result the
+    /// contract declares an alias of argument I (the declaration's
+    /// `alias=I`) is compared with that argument's address first (a
+    /// CONTRACT-VIOLATION when it differs); DISCARD then yields unit in its
+    /// place (the alias is an exposure). Always a safepoint: foreign code
+    /// may reach the runtime (later, callbacks), so this frame's roots are
+    /// in its stack map.
+    ForeignCall { dst: Reg, foreign: u32, args: Vec<Reg>, exposed: Vec<bool>, discard: bool },
     /// A direct call of a scalar-replacement companion function (a function
     /// with `results` > 1: see Function::results): like Call, but the
     /// callee returns several tagged Values at once -- the fields of a
@@ -1248,11 +1265,86 @@ pub struct EnumDecl {
     pub cases: Vec<String>,
 }
 
+/// The C ABI transport class of a C function's parameter or result
+/// (C-FFI.md; hir/foreign.tcl's AbiClass): an integer of its exact width and
+/// signedness, a data or function pointer, or void (a result only).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CAbi {
+    I8,
+    U8,
+    I16,
+    U16,
+    I32,
+    U32,
+    I64,
+    U64,
+    Ptr,
+    Void,
+}
+
+impl CAbi {
+    pub fn parse(word: &str) -> Option<CAbi> {
+        Some(match word {
+            "i8" => CAbi::I8,
+            "u8" => CAbi::U8,
+            "i16" => CAbi::I16,
+            "u16" => CAbi::U16,
+            "i32" => CAbi::I32,
+            "u32" => CAbi::U32,
+            "i64" => CAbi::I64,
+            "u64" => CAbi::U64,
+            "ptr" => CAbi::Ptr,
+            "void" => CAbi::Void,
+            _ => return None,
+        })
+    }
+
+    /// The width in bits of an integer class (64 for a pointer), 0 for void.
+    pub fn bits(self) -> u32 {
+        match self {
+            CAbi::I8 | CAbi::U8 => 8,
+            CAbi::I16 | CAbi::U16 => 16,
+            CAbi::I32 | CAbi::U32 => 32,
+            CAbi::I64 | CAbi::U64 | CAbi::Ptr => 64,
+            CAbi::Void => 0,
+        }
+    }
+
+    pub fn signed(self) -> bool {
+        matches!(self, CAbi::I8 | CAbi::I16 | CAbi::I32 | CAbi::I64)
+    }
+}
+
+/// A C function the program calls (`foreign N "SYMBOL" params="..."
+/// result=K [alias=I] name="KEY"`, C-FFI.md): the native link symbol the
+/// system linker resolves (never looked up at run time), the transport class
+/// of every parameter and of the result, and, when the contract says the
+/// result is exactly the pointer argument I, that index -- every call checks
+/// it (the development assertion of the binding's contract,
+/// `rt_ffi_contract_violation`). NAME is the declaration's Botlish name, for
+/// messages.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ForeignDecl {
+    pub symbol: String,
+    pub name: String,
+    pub params: Vec<CAbi>,
+    pub result: CAbi,
+    pub alias: Option<u32>,
+}
+
 pub struct Program {
     pub natives: Vec<NativeDecl>,
     pub shapes: Vec<ShapeDecl>,
     pub enums: Vec<EnumDecl>,
     pub functions: Vec<Function>,
+    /// The C functions the program calls (`foreign` declarations, dense, in
+    /// order; C-FFI.md).
+    pub foreigns: Vec<ForeignDecl>,
+    /// The program's link plan (`link "NAME"` declarations, in order): the
+    /// native libraries the system linker links it with (-lNAME). A program
+    /// with a foreign function or a library is linked as an executable to
+    /// run (main.rs), never JIT-run.
+    pub links: Vec<String>,
     /// The size in bytes of the program's context area (the header's
     /// `contexts=N`, CONTEXTS.md): one zero-initialized, 8-byte-aligned,
     /// writable, linker-local data object holding every context slot. Zero
@@ -1413,6 +1505,8 @@ pub fn parse(text: &str) -> Result<Program, NirError> {
         shapes: Vec::new(),
         enums: Vec::new(),
         functions: Vec::new(),
+        foreigns: Vec::new(),
+        links: Vec::new(),
         statics: 0,
         context_bytes: 0,
         contexts: Vec::new(),
@@ -1476,6 +1570,19 @@ pub fn parse(text: &str) -> Result<Program, NirError> {
                     }
                     program.contexts.push(decl.1);
                 }
+                "link" => match tokens.get(1) {
+                    Some(Token::Quoted(name)) if !name.is_empty() && tokens.len() == 2 => {
+                        program.links.push(name.clone())
+                    }
+                    _ => return p.err("link needs exactly one quoted library name"),
+                },
+                "foreign" => {
+                    let decl = parse_foreign(&p, &tokens)?;
+                    if decl.0 as usize != program.foreigns.len() {
+                        return p.err(format!("foreign numbers must be dense and in order, got {}", decl.0));
+                    }
+                    program.foreigns.push(decl.1);
+                }
                 "func" => current = Some(parse_func_header(&p, &tokens)?),
                 _ => return p.err(format!("expected native or func, got {raw:?}")),
             }
@@ -1514,6 +1621,13 @@ fn summarize_call_effects(program: &mut Program, enabled: bool) {
                 Inst::StructNew { .. } => local[i].1 = true,
                 Inst::Construct { .. } => local[i] = (true, true),
                 Inst::CallValue { .. } => local[i] = (true, true),
+                // A C call (C-FFI.md) is a safepoint; it fails only on a
+                // result it cannot represent or a violated alias contract.
+                Inst::ForeignCall { foreign, .. } => {
+                    let decl = &program.foreigns[*foreign as usize];
+                    local[i].0 |= decl.result == CAbi::Ptr || decl.alias.is_some();
+                    local[i].1 = true;
+                }
                 _ => {}
             }
         }
@@ -1617,6 +1731,37 @@ fn parse_context(p: &Parser, tokens: &[Token]) -> Result<(u32, ContextDecl), Nir
 }
 
 /// `enum N "ID" cases="A B ..."` (ENUMS.md).
+fn parse_foreign(p: &Parser, tokens: &[Token]) -> Result<(u32, ForeignDecl), NirError> {
+    let Some(index) = tokens.get(1).and_then(word).and_then(|w| w.parse::<u32>().ok()) else {
+        return p.err("foreign needs a number");
+    };
+    let symbol = match tokens.get(2) {
+        Some(Token::Quoted(symbol)) if !symbol.is_empty() => symbol.clone(),
+        _ => return p.err("foreign needs a quoted link symbol"),
+    };
+    let kv = pairs(tokens);
+    let params = match kv.get("params") {
+        Some(text) => text
+            .split_whitespace()
+            .map(|w| CAbi::parse(w).filter(|c| *c != CAbi::Void))
+            .collect::<Option<Vec<CAbi>>>(),
+        None => None,
+    };
+    let Some(params) = params else { return p.err("foreign needs params= of C ABI classes") };
+    let Some(result) = kv.get("result").and_then(|w| CAbi::parse(w)) else {
+        return p.err("foreign needs result= (a C ABI class or void)");
+    };
+    let alias = match kv.get("alias") {
+        Some(w) => match w.parse::<u32>() {
+            Ok(i) if (i as usize) < params.len() && params[i as usize] == CAbi::Ptr && result == CAbi::Ptr => Some(i),
+            _ => return p.err("foreign alias= must name a pointer parameter of a pointer result"),
+        },
+        None => None,
+    };
+    let name = kv.get("name").cloned().unwrap_or_else(|| symbol.clone());
+    Ok((index, ForeignDecl { symbol, name, params, result, alias }))
+}
+
 fn parse_enum(p: &Parser, tokens: &[Token]) -> Result<(u32, EnumDecl), NirError> {
     let Some(index) = tokens.get(1).and_then(word).and_then(|w| w.parse::<u32>().ok()) else {
         return p.err("enum needs a number");
@@ -1963,6 +2108,44 @@ fn parse_inst(p: &Parser, tokens: &[Token], program: &Program) -> Result<Inst, N
             "call" => Inst::Call { dst, func: num(3)?, args: regs_from(4)?, may_error: true, may_gc: true },
             "callenv" => Inst::CallEnv { dst, func: num(3)?, closure: reg(4)?, args: regs_from(5)?, may_error: true, may_gc: true },
             "callvalue" => Inst::CallValue { dst, callee: reg(3)?, args: regs_from(4)? },
+            "foreigncall" => {
+                let foreign = num(3)?;
+                let mut args = Vec::new();
+                let mut j = 4;
+                while let Some(Token::Reg(r)) = tokens.get(j) {
+                    args.push(*r);
+                    j += 1;
+                }
+                let mut exposed = vec![false; args.len()];
+                let mut discard = false;
+                for t in &tokens[j..] {
+                    match t {
+                        Token::Pair(k, v) if k == "exposed" => {
+                            for w in v.split(',') {
+                                match w.parse::<usize>() {
+                                    Ok(i) if i < args.len() && !exposed[i] => exposed[i] = true,
+                                    _ => return p.err("foreigncall exposed= must list distinct operand indices"),
+                                }
+                            }
+                        }
+                        Token::Word(w) if w == "discard" => discard = true,
+                        other => return p.err(format!("unexpected foreigncall operand {other:?}")),
+                    }
+                }
+                let Some(decl) = program.foreigns.get(foreign as usize) else {
+                    return p.err(format!("foreigncall of undeclared foreign {foreign}"));
+                };
+                if decl.params.len() != args.len() {
+                    return p.err(format!("foreigncall of {} takes {} operand(s), got {}", decl.name, decl.params.len(), args.len()));
+                }
+                if let Some(i) = exposed.iter().zip(&decl.params).position(|(e, c)| *e && *c != CAbi::Ptr) {
+                    return p.err(format!("foreigncall of {}: operand {i} is exposed at a non-pointer parameter", decl.name));
+                }
+                if discard && !decl.alias.is_some_and(|a| exposed[a as usize]) {
+                    return p.err(format!("foreigncall of {}: discard needs a result aliasing an exposed operand", decl.name));
+                }
+                Inst::ForeignCall { dst, foreign, args, exposed, discard }
+            }
             "callmulti" => Inst::CallMulti { dsts, func: num(i)?, args: regs_from(i + 1)?, may_error: true, may_gc: true },
             "callenvmulti" => {
                 Inst::CallEnvMulti { dsts, func: num(i)?, closure: reg(i + 1)?, args: regs_from(i + 2)?, may_error: true, may_gc: true }
@@ -2277,6 +2460,10 @@ fn validate(program: &Program) -> Result<(), NirError> {
                 }
                 Inst::CallValue { dst, callee, args } => {
                     used.extend([*dst, *callee]);
+                    used.extend(args);
+                }
+                Inst::ForeignCall { dst, args, .. } => {
+                    used.push(*dst);
                     used.extend(args);
                 }
                 Inst::CallMulti { dsts, func: g, args, .. } => {
@@ -2599,6 +2786,7 @@ fn validate_plans(program: &Program) -> Result<(), NirError> {
                     used.push(*callee);
                     used.extend(args);
                 }
+                Inst::ForeignCall { args, .. } => used.extend(args),
                 Inst::CallMulti { dsts, func: g, args, .. } | Inst::CallEnvMulti { dsts, func: g, args, .. } => {
                     // A companion's own fields are never plans; its
                     // parameters may be (the same plan parameters as every
@@ -2763,6 +2951,7 @@ fn def_of(inst: &Inst) -> Option<Reg> {
         | Inst::SelfClosure { dst } | Inst::Capture { dst, .. } | Inst::Move { dst, .. }
         | Inst::Closure { dst, .. }
         | Inst::Op { dst, .. } | Inst::Call { dst, .. } | Inst::CallEnv { dst, .. } | Inst::CallValue { dst, .. }
+        | Inst::ForeignCall { dst, .. }
         | Inst::DeclaredErrorEq { dst, .. } | Inst::DeclaredPayload { dst, .. } | Inst::Construct { dst, .. } => Some(*dst),
         _ => None,
     }

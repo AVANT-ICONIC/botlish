@@ -223,6 +223,13 @@ namespace eval native::lower {
     # check -- printing and hashing read the declared names from the table.
     variable enumIds [dict create]
     variable enumList {}
+    # The C functions the program calls (C-FFI.md), per program: an extern c
+    # fn's key -> dense foreign number, assigned on first use in
+    # deterministic lowering order, and the ordered keys, emitted as the NIR
+    # `foreign` declarations (symbol and ABI classes, from the HIR's
+    # `foreign` side table).
+    variable foreignIds [dict create]
+    variable foreignList {}
     # Module-static storage (MODULE-STATIC-RETAINED-VALUES.md): BindingId ->
     # its slot index in the Vm's own `statics` table (runtime::vm::Vm),
     # assigned once per program, in first-reference order (StaticSlot),
@@ -1275,6 +1282,10 @@ proc native::lower::Program {hirProgram args} {
     variable enumList
     set enumIds [dict create]
     set enumList {}
+    variable foreignIds
+    variable foreignList
+    set foreignIds [dict create]
+    set foreignList {}
 
     set default [expr {[info exists ::env(BOTLISH_NATIVE_SPECIALIZE)]
         && $::env(BOTLISH_NATIVE_SPECIALIZE) eq "0" ? 0 : 1}]
@@ -1593,6 +1604,18 @@ proc native::lower::Program {hirProgram args} {
     variable enumList
     foreach id $enumList {
         lappend header "enum [EnumIndex $id] [Quote $id] cases=[Quote [join [hir::enums::cases $id] { }]]"
+    }
+    # The link plan and the C functions called (C-FFI.md): what the native
+    # link step needs, from the HIR alone.
+    foreach library [hir::foreign::links $hir] {
+        lappend header "link [Quote $library]"
+    }
+    variable foreignList
+    set declarations [hir::foreign::declarations $hir]
+    foreach key $foreignList {
+        set record [dict get $declarations $key]
+        set alias [core::cabi::AliasIndex [dict get $record contract]]
+        lappend header "foreign [ForeignIndex $key] [Quote [dict get $record symbol]] params=[Quote [join [dict get $record abi params] { }]] result=[dict get $record abi result][expr {$alias >= 0 ? " alias=$alias" : ""}] name=[Quote $key]"
     }
     set text "[join $header \n]\n\n[join $texts \n\n]\n"
     return [dict create text $text functions $infos statistics [Statistics $infos] \
@@ -3838,6 +3861,22 @@ proc native::lower::Expr {fnVar e {want tagged}} {
 # known is refused here -- native code never looks a field up by name.
 
 # The dense number of enum ID (see enumIds), assigned on first use.
+# The foreign number of the extern c fn whose key is KEY (C-FFI.md),
+# assigned on first use.
+proc native::lower::ForeignIndex {key} {
+    variable hir
+    variable foreignIds
+    variable foreignList
+    if {![dict exists $foreignIds $key]} {
+        if {![dict exists [hir::foreign::declarations $hir] $key]} {
+            throw {NATIVE INVALID-HIR} "native lowering: extern c fn \"$key\" is not declared in this program"
+        }
+        dict set foreignIds $key [dict size $foreignIds]
+        lappend foreignList $key
+    }
+    return [dict get $foreignIds $key]
+}
+
 proc native::lower::EnumIndex {id} {
     variable enumIds
     variable enumList
@@ -4937,7 +4976,8 @@ proc native::lower::BorrowCall {fnVar e node} {
         Emit fn "raise TYPE [Quote $refused]" $e
         return {never tagged}
     }
-    if {![dict exists $natives $name]} {
+    set extern [core::native::isExtern $name]
+    if {!$extern && ![dict exists $natives $name]} {
         Unsupported $e "native $name" "the foreign operation \"$name\" has no native implementation"
     }
     set access [dict create]
@@ -4976,7 +5016,25 @@ proc native::lower::BorrowCall {fnVar e node} {
         set owner [hir::typeOf $hir [lindex [dict get $node args] $i]]
         lset operands $i [ExposeStorage fn [lindex $operands $i] [hir::borrow::IsMutableOwner $owner] $e]
     }
-    set result [Assign fn "[dict get $natives $name] [join $operands { }]" $e]
+    if {$extern} {
+        # A C call (C-FFI.md): the operation is the foreign function itself,
+        # called with the platform C ABI (codegen/clif.rs). `exposed=` marks
+        # the operands that are exposure addresses (small Ints), the others
+        # being C scalars (Ints) and raw pointers (C address words);
+        # `discard` a pointer result that aliases an exposure (the call
+        # yields unit: hir::borrow::Type), still checked against it.
+        set key [core::native::displayName $name]
+        set text "foreigncall [ForeignIndex $key] [join $operands { }]"
+        if {[dict size $access]} {
+            append text " exposed=[join [lsort -integer [dict keys $access]] ,]"
+        }
+        if {[hir::borrow::resultAlias $hir $e] >= 0} {
+            append text " discard"
+        }
+        set result [Assign fn $text $e]
+    } else {
+        set result [Assign fn "[dict get $natives $name] [join $operands { }]" $e]
+    }
     KeepExposedAlive fn $operands $e
     if {[dict size $written] == 0} {
         return [list $result tagged]

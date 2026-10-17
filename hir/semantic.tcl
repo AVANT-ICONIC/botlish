@@ -881,6 +881,10 @@ proc hir::semantic::Environment {hir id} {
 # definition: the qualified name, which hir/hygiene.tcl's qualifyModules
 # made of a hygiene rename too -- NS::NAME#N is written NS::NAME).
 proc hir::semantic::SourceName {hir b} {
+    if {[dict exists $hir bindings $b extern]} {
+        # An extern c fn (hir/foreign.tcl): its Botlish qualified name.
+        return [dict get $hir bindings $b extern]
+    }
     if {[dict exists $hir bindings $b spelling] && ![hir::isModuleBinding $hir $b]} {
         return [dict get $hir bindings $b spelling]
     }

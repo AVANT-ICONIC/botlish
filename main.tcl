@@ -4,7 +4,7 @@
 #                    [-aot] [-aot-data] [-aot-spec] [-contexts] [-direct] [-traits] [-emit-nir] [-emit-clif]
 #                    [-emit-native-executable] [-emit-hir-interchange]
 #                    [-argv TEXT]... [-argv-hex HEX]...
-#                    [-argv-none] [-warnings default|off|error] [-target NAME]
+#                    [-argv-none] [-warnings default|off|error] [-target NAME] [-L DIR]...
 #                    [FILE.bot|FILE.hir|FILE.hirx|FILE.ir ...]
 #
 # -warnings sets the one global compiler-warning policy of a .bot compilation
@@ -70,6 +70,13 @@
 # the environment, a .bot input's analyzed HIR is kept in DIR and read back,
 # with no front end, while the program, its modules and the front end are
 # unchanged (the front-end cache, surface/cache.tcl).
+#
+# -L DIR adds DIR to the system linker's library search path (-LDIR) for a
+# program that calls C (C-FFI.md: `extern c library` and `extern c fn`), which
+# the native backends and -emit-native-executable link with the libraries it
+# declares; the toolchain's own search path comes first otherwise. Such a
+# program needs the host's system linker and its libraries; one that calls no
+# C needs neither.
 #
 # A .hir file (HIR text, e.g. examples/hir/*.hir) is read with hir::readFile;
 # a .hirx file (HIR interchange) with hir::interchange::readFile;
@@ -359,6 +366,13 @@ for {set i 0} {$i < [llength $argv]} {incr i} {
             }
         }
         -argv-none { set injectedArgv {}; set injectedArgvGiven 1 }
+        -L {
+            if {$i + 1 >= [llength $argv]} {
+                puts stderr "-L needs a directory"
+                exit 2
+            }
+            lappend native::linkDirs [file normalize [lindex $argv [incr i]]]
+        }
         default  {
             if {[string match -* $arg]} {
                 puts stderr "unknown option \"$arg\""
