@@ -299,11 +299,22 @@ fn link_rustc(program: &Program, destination: &Path, link_dirs: &[String]) -> Re
 /// search directories LINK_DIRS (`-LDIR`), then every library `-lNAME`, in
 /// the plan's order, inside one linker group. Nothing for a program that
 /// names none.
+///
+/// A program that calls C is also linked with the C compiler driver's
+/// default libraries (`-C default-linker-libraries=yes`: rustc passes no
+/// `-nodefaultlibs`), which the driver appends after every argument, so the
+/// libraries are followed by libc, its as-needed dynamic loader and libgcc
+/// exactly as in a C program's link. rustc's own system libraries come before
+/// its link arguments, and GNU ld drops an as-needed library nothing has
+/// referenced yet: a static archive needing a symbol only the loader defines
+/// (AArch64 glibc's `__stack_chk_guard`, which BoringSSL's stack protector
+/// reads) or a libgcc helper would otherwise fail to link.
 fn link_plan_args(program: &Program, link_dirs: &[String]) -> Vec<String> {
     let mut args = Vec::new();
     if !calls_c(program) {
         return args;
     }
+    args.extend(["-C".to_string(), "default-linker-libraries=yes".to_string()]);
     for dir in link_dirs {
         args.extend(["-C".to_string(), format!("link-arg=-L{dir}")]);
     }
@@ -684,7 +695,14 @@ mod tests {
         let links: Vec<&str> = args.iter().filter(|a| *a != "-C").map(String::as_str).collect();
         assert_eq!(
             links,
-            vec!["link-arg=-L/opt/lib", "link-arg=-Wl,--start-group", "link-arg=-lfirst", "link-arg=-lsecond", "link-arg=-Wl,--end-group"]
+            vec![
+                "default-linker-libraries=yes",
+                "link-arg=-L/opt/lib",
+                "link-arg=-Wl,--start-group",
+                "link-arg=-lfirst",
+                "link-arg=-lsecond",
+                "link-arg=-Wl,--end-group"
+            ]
         );
         assert_eq!(describe_link_plan(&program), "symbols c_add; libraries -lfirst -lsecond");
     }

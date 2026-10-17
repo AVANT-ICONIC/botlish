@@ -465,12 +465,24 @@ passes the link plan to the system linker it drives (`cc`):
 ```
 rustc ... --extern botlish_native=.../libbotlish_native.rlib
       -C link-arg=.../program.o
+      -C default-linker-libraries=yes                 cc's own default libraries, last
       -C link-arg=-L/DIR ...                          one per -L
       -C link-arg=-Wl,--start-group
       -C link-arg=-lcrypto -C link-arg=-lstdc++       the plan, in order
       -C link-arg=-Wl,--end-group
       startup.rs -o EXECUTABLE
 ```
+
+`default-linker-libraries=yes` (only for a program that calls C) makes rustc
+drop its `-nodefaultlibs`, so the C compiler driver appends its default
+libraries -- libgcc, libc and the dynamic loader libc names as needed --
+after the plan, as in any C program's link. Without it the plan follows
+rustc's own system libraries, and GNU ld has already dropped an as-needed
+library nothing had referenced yet: on Linux AArch64, BoringSSL's stack
+protector reads `__stack_chk_guard`, which only the dynamic loader defines,
+and the link failed ("DSO missing from command line"; found by the arm64 CI
+run; on x86-64 the canary is thread-local and the Rust runtime already
+references the loader, so it cannot show there).
 
 The libraries are one linker group, so their order never decides a static
 link: an archive declared before the archive that needs it still resolves
@@ -555,7 +567,13 @@ argument registers, the rest on the stack).
 **Linux AArch64**: the same code path -- Cranelift's platform convention is
 AAPCS64 there, plain `char` is unsigned by the target table, the fixture's
 dirty-register functions have AArch64 versions, and rustc-linked
-executables are supported -- run by `tests-arm64.yml`'s jobs (section 23).
+executables are supported. The arm64 CI run (`tests-arm64.yml`, dispatched
+on the branch) passed every fixture call -- scalars at both bounds and
+their extension from dirty registers, ten-argument calls, pointers,
+function pointers, borrowing, the contract check, direct, interchange,
+cache, isolation -- the Tcl acceptance and GC stress; it failed the
+BoringSSL link (the as-needed loader, section 11, fixed since) and two tests
+that had assumed x86-64's signed plain `char` (now the target's).
 
 Elsewhere the native backends already refuse executables (Linux glibc
 only), so they refuse a program that calls C the same way. A `-target`
