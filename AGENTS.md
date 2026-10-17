@@ -494,11 +494,12 @@ lowers, run `tests/fixed-arity-list-return.test` and
 do not add another opt-out (MULTI-VALUE-RESULTS.md). Library
 modules' own findings print for every program that loads them, so tests that
 import `lib/*.bot` and assert on a complete warning set filter by code or file.
-Since the warning-driven refactor (next section) only three modules carry any,
+Since the warning-driven refactor (next section) only two modules carry any,
 all `ONE-CHAR-STRING-LITERAL` and all listed in `audit/refactor/manifest.txt`:
 `lib/web.bot` 23 (its hex-digit table, `"%"`, and the local-part and label
-classes), `lib/io.bot` 2 (`"\n"`) and `lib/linux/path.bot` 2 (`"/"`). Every
-other module is warning-clean.
+classes) and `lib/linux/path.bot` 2 (`"/"`). Every other module is
+warning-clean, `lib/io.bot` included (its line operations append the newline
+as a character, `str::append_char`).
 
 `SAME-FAILURE` (WARNINGS-SAME-FAILURE.md) reads the `fail` sites of a function's
 own body (milestone 1's `BodyExprs`, which never enters a nested function), each

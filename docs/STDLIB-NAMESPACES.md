@@ -86,6 +86,7 @@ and `ns-qualified-inventory` pin the after-state in a fresh process):
 | (added later, ABI-BYTES.md) `abi::x86_64::from_bytes` | platform-ABI raw address bridge, already qualified | `abi::x86_64::from_bytes` |
 | (added later, MUTABLE-BYTES.md) `mutable_byte_store::zeroed/_from/_count/_set/_copy`, `mutable_byte_store::freeze`, `mutable_byte_store::freeze_prefix` | standard type ops of the writable byte-storage value kind behind `abi::bytes::MutableBytes` | `byte_store::*` |
 | (added later, MUTABLE-BYTES.md) `abi::x86_64::from_mutable_bytes` | platform-ABI writable raw address bridge, already qualified | `abi::x86_64::from_mutable_bytes` |
+| (added later, S16 of 2048-ENGINE-WORKLOAD.md) `str::append_char` | standard type op (String): a String followed by one UnicodeChar, the append of a character to text REFACTOR-WARNINGS-CLEAN.md's design finding 1 asks for | `str::append_char` |
 | (added later, BINARY-LAYOUT.md) `binary::parse`, `binary::emit`, `binary::layout_length`, `binary::layout_alignment`, and the internal `binary#emit` | the binary operations of fixed layouts, members of `lib/binary.bot`'s namespace (static layout operands, so never function values) | `binary::*` |
 
 Source-declared types register no natives at all: a type declaration
@@ -110,7 +111,7 @@ hierarchy (`ns-no-nested-stdlib`):
 
 | Namespace | Intrinsics (qualified root natives) | Library members (`lib/*.bot`) |
 |-----------|-------------------------------------|-------------------------------|
-| `str` | `length substring lowercase concat encode_utf8 char_at is_tcl_alpha is_tcl_alnum` | none (no module file) |
+| `str` | `length substring lowercase concat append_char encode_utf8 char_at is_tcl_alpha is_tcl_alnum` | none (no module file) |
 | `list` | `length at append` | `get` (new), `find any? all? none?` ... (existing `lib/list.bot`) |
 | `mutable_array` | `allocate capacity at set copy freeze` | `from_list create` (moved from the old `mutarray` module), `get` (new) |
 | `immutable_set` | `from_list contains` | none |

@@ -2008,6 +2008,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         // MAX_COLLECTION_LENGTH (Vm::reject_oversized_collection).
                         StrLower => ("rt_str_lower", None, true, Some(("strlower", KIND_STR))),
                         StrCat => ("rt_str_cat", None, true, Some(("strcat", KIND_STR))),
+                        StrAppendChar => ("rt_str_append_char", None, true, Some(("strappendchar", KIND_STR))),
                         StrUtf8Bytes => {
                             ("rt_str_utf8_bytes", None, true, Some(("strutf8bytes", KIND_LIST)))
                         }

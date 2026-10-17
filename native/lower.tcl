@@ -109,6 +109,7 @@ namespace eval native::lower {
         str::substring    {op substr} \
         str::lowercase    {op strlower} \
         str::concat       {op strcat} \
+        str::append_char  {op strappendchar} \
         str::encode_utf8  {op strutf8bytes} \
         str::char_at      {op strcharat} \
         str::is_tcl_alpha {op strtclalpha} \

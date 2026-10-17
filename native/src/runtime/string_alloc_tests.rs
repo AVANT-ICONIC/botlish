@@ -181,6 +181,30 @@ fn concat_substring_lower_and_decode_are_one_allocation_each() {
 }
 
 #[test]
+fn append_char_is_one_allocation_of_the_final_size() {
+    // str::append_char (core/strings.tcl's appendChar): S's bytes and the
+    // character's UTF-8 encoding (one to four bytes) in one block; the
+    // character count and ASCII flag follow from the operands.
+    let mut vm = counting_vm();
+    for (text, c, expect) in [
+        ("ab", '\n' as u32, "ab\n"),
+        ("", 'x' as u32, "x"),
+        ("h\u{e9}llo", 0xE9, "h\u{e9}llo\u{e9}"),
+        ("a", 0x2026, "a\u{2026}"),
+        ("\u{2026}", 0x1F600, "\u{2026}\u{1f600}"),
+        ("\u{1f600}", '!' as u32, "\u{1f600}!"),
+    ] {
+        let s = vm.new_str(text);
+        let (v, a, _, b) = measure(|| rt_str_append_char(&mut *vm, s, make_char(c)));
+        one_block(a, b, expect.len(), &format!("append_char({text:?}, U+{c:04X})"));
+        assert_eq!(str_of(v).as_str(), expect);
+        assert_eq!((str_of(v).chars, str_of(v).ascii), (expect.chars().count(), expect.is_ascii()));
+        // The operand is unchanged.
+        assert_eq!(str_of(s).as_str(), text);
+    }
+}
+
+#[test]
 fn flat_construct_is_one_allocation_whatever_the_piece_count() {
     use super::construct::{TAG_REGION, TAG_SPAN, rt_construct};
     let mut vm = counting_vm();

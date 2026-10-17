@@ -14,6 +14,13 @@
 #     when nothing handles it), and a read under a guard that proves
 #     0 <= i < str::length(s) needs no handler;
 #   * str::char_at is a first-class value that reads and fails like a call.
+# Appending a character (str::append_char):
+#   * str::append_char(s, c) is s followed by the one character c:
+#     str::length(s) + 1 scalars, c the last one, for every UTF-8 width of c
+#     (the astral plane included) and for s = "" alike; it equals s
+#     concatenated with the one-character String of c, leaves s unchanged,
+#     is a first-class value, and its method name `.append_char` stands
+#     beside list::append's `.append` (each has one candidate).
 # UnicodeChar (UNICODE-CHAR-LITERALS.md):
 #   * a single-quoted literal is exactly one Unicode scalar value ('A', 'é',
 #     '😀'); char::scalar_value is its explicit, total code point;
@@ -45,9 +52,9 @@
 #   "", "@"); its true result refines its argument to web::Emailish in the
 #   true branch only, and it is an ordinary bool function otherwise.
 #
-# Ported from tests/str-char-at.test, tests/unicode-char.test,
-# tests/ascii.test, tests/web-unreserved.test and
-# tests/emailish-predicate.test (audit/golden/migration/fragments/strings.tsv
+# Ported from tests/str-char-at.test, tests/str-append-char.test (its value
+# tests), tests/unicode-char.test, tests/ascii.test, tests/web-unreserved.test
+# and tests/emailish-predicate.test (audit/golden/migration/fragments/strings.tsv
 # maps every Tcl test to its golden test). collections.bot already holds
 # str-char-at-values and char-typed-callable-escape-rejected. Many of the
 # Tcl programs were compiled -strict 0 or checked only that a strict
@@ -64,7 +71,8 @@
 #
 # Imports: compiler and test are the framework's (bodies declare
 # compiler::CompilerError; DiagnosticCode cases); str and char for
-# str::char_at, str::substring, str::length and char::scalar_value; list for
+# str::char_at, str::append_char, str::substring, str::length and
+# char::scalar_value; list for
 # list::at and list::length; ascii, byte and web for the libraries under
 # test (byte::from_int, the byte::BelowRange / byte::AboveRange errors);
 # immutable_set for membership in web::additional_unreserved_chars;
@@ -164,7 +172,7 @@ fn register_char_at_tests(empty: str):
             fn at(s, i):
                 str::char_at(s, i)
             at("a", 0)
-    rejects_saying("str-char-at-unhandled-error", compiler::DiagnosticCode::UnhandledError, 166, 13, ["may produce the declared error \"IndexNotFound\""], b_unhandled)
+    rejects_saying("str-char-at-unhandled-error", compiler::DiagnosticCode::UnhandledError, 174, 13, ["may produce the declared error \"IndexNotFound\""], b_unhandled)
 
     # str-char-at-as-a-value: str::char_at stored in a List and called
     # through an untyped parameter reads, and fails with IndexNotFound,
@@ -261,7 +269,7 @@ fn register_char_type_tests():
             fn identity(c: UnicodeChar) -> UnicodeChar:
                 c
             identity(65)
-    rejects_saying("char-identity-rejects-int", compiler::DiagnosticCode::Type, 263, 22, ["cannot be proven to satisfy"], b_identity_int)
+    rejects_saying("char-identity-rejects-int", compiler::DiagnosticCode::Type, 271, 22, ["cannot be proven to satisfy"], b_identity_int)
 
     # char-identity-rejects-string: nor is a one-character String.
     fn b_identity_string() errors compiler::CompilerError:
@@ -269,7 +277,7 @@ fn register_char_type_tests():
             fn identity(c: UnicodeChar) -> UnicodeChar:
                 c
             identity("A")
-    rejects_saying("char-identity-rejects-string", compiler::DiagnosticCode::Type, 271, 22, ["cannot be proven to satisfy"], b_identity_string)
+    rejects_saying("char-identity-rejects-string", compiler::DiagnosticCode::Type, 279, 22, ["cannot be proven to satisfy"], b_identity_string)
 
     # char-take-int-rejects-char: an int parameter rejects a UnicodeChar (no
     # implicit conversion to its code point).
@@ -278,7 +286,7 @@ fn register_char_type_tests():
             fn take_int(x: int):
                 unit
             take_int('A')
-    rejects_saying("char-take-int-rejects-char", compiler::DiagnosticCode::Type, 280, 22, ["cannot be proven to satisfy"], b_take_int_char)
+    rejects_saying("char-take-int-rejects-char", compiler::DiagnosticCode::Type, 288, 22, ["cannot be proven to satisfy"], b_take_int_char)
 
     # char-take-int-accepts-codepoint: char::scalar_value is the legal
     # spelling.
@@ -364,14 +372,14 @@ fn register_char_literal_tests():
             fn f(c: UnicodeChar) -> int:
                 char::scalar_value(c)
             f(65)
-    rejects_saying("char-scalar-value-static-contract/typed", compiler::DiagnosticCode::Type, 366, 15, ["cannot be proven to satisfy UnicodeChar"], b_scalar_value_typed)
+    rejects_saying("char-scalar-value-static-contract/typed", compiler::DiagnosticCode::Type, 374, 15, ["cannot be proven to satisfy UnicodeChar"], b_scalar_value_typed)
 
     fn b_scalar_value_untyped() errors compiler::CompilerError:
         static compile:
             fn f(c):
                 char::scalar_value(c)
             f(65)
-    rejects_saying("char-scalar-value-static-contract/untyped", compiler::DiagnosticCode::Type, 373, 15, ["statically incompatible with UnicodeChar", "native char::scalar_value requires UnicodeChar"], b_scalar_value_untyped)
+    rejects_saying("char-scalar-value-static-contract/untyped", compiler::DiagnosticCode::Type, 381, 15, ["statically incompatible with UnicodeChar", "native char::scalar_value requires UnicodeChar"], b_scalar_value_untyped)
 
 fn register_char_list_tests():
     # char-parity-list-construction / char-parity-list-get.
@@ -400,14 +408,14 @@ fn register_char_list_tests():
             fn consume(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
                 list::at(chars, 0)
             consume(["-", ".", "_", "~"])
-    rejects_saying("char-consume-rejects-string-list", compiler::DiagnosticCode::Type, 402, 21, ["cannot be proven to satisfy"], b_consume_strings)
+    rejects_saying("char-consume-rejects-string-list", compiler::DiagnosticCode::Type, 410, 21, ["cannot be proven to satisfy"], b_consume_strings)
 
     fn b_consume_ints() errors compiler::CompilerError:
         static compile:
             fn consume(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
                 list::at(chars, 0)
             consume([45, 46, 95, 126])
-    rejects_saying("char-consume-rejects-int-list", compiler::DiagnosticCode::Type, 409, 21, ["cannot be proven to satisfy"], b_consume_ints)
+    rejects_saying("char-consume-rejects-int-list", compiler::DiagnosticCode::Type, 417, 21, ["cannot be proven to satisfy"], b_consume_ints)
 
     # char-alias-propagation: an alias keeps List[UnicodeChar].
     fn b_alias_propagation() errors compiler::CompilerError:
@@ -459,7 +467,7 @@ fn register_char_list_tests():
                 c
             f = consume
             f(65)
-    rejects_saying("char-typed-callable-alias-still-works/rejected", compiler::DiagnosticCode::Type, 461, 15, ["cannot be proven to satisfy"], b_alias_rejected)
+    rejects_saying("char-typed-callable-alias-still-works/rejected", compiler::DiagnosticCode::Type, 469, 15, ["cannot be proven to satisfy"], b_alias_rejected)
 
     # char-container-erasure-ordinary: a declared broad `-> list` result
     # erases List[UnicodeChar] like any container's (/erased); an untyped
@@ -476,7 +484,7 @@ fn register_char_list_tests():
                 on IndexNotFound:
                     'B'
             c
-    rejects_saying("char-container-erasure-ordinary/erased", compiler::DiagnosticCode::Type, 475, 25, ["cannot be proven to satisfy"], b_erasure_erased)
+    rejects_saying("char-container-erasure-ordinary/erased", compiler::DiagnosticCode::Type, 483, 25, ["cannot be proven to satisfy"], b_erasure_erased)
 
     fn b_erasure_kept() errors compiler::CompilerError:
         static compile:
@@ -517,7 +525,7 @@ fn register_ascii_contract_tests():
     fn b_out_of_range() errors compiler::CompilerError:
         static compile:
             ascii::is_digit(999)
-    test::rejects_at("ascii-rejects-out-of-range-int", compiler::DiagnosticCode::Type, 519, 29, b_out_of_range)
+    test::rejects_at("ascii-rejects-out-of-range-int", compiler::DiagnosticCode::Type, 527, 29, b_out_of_range)
 
     # ascii-accepts-provably-in-range-literal: the literal 48 is provably a
     # Byte (no conversion).
@@ -531,18 +539,18 @@ fn register_ascii_contract_tests():
     fn b_codepoint_int() errors compiler::CompilerError:
         static compile:
             ascii::is_digit(char::scalar_value('7'))
-    test::rejects_at("ascii-rejects-codepoint-int", compiler::DiagnosticCode::Type, 533, 29, b_codepoint_int)
+    test::rejects_at("ascii-rejects-codepoint-int", compiler::DiagnosticCode::Type, 541, 29, b_codepoint_int)
 
     # ascii-rejects-unicode-char / ascii-rejects-string.
     fn b_unicode_char() errors compiler::CompilerError:
         static compile:
             ascii::is_digit('7')
-    test::rejects_at("ascii-rejects-unicode-char", compiler::DiagnosticCode::Type, 539, 29, b_unicode_char)
+    test::rejects_at("ascii-rejects-unicode-char", compiler::DiagnosticCode::Type, 547, 29, b_unicode_char)
 
     fn b_string() errors compiler::CompilerError:
         static compile:
             ascii::is_digit("7")
-    test::rejects_at("ascii-rejects-string", compiler::DiagnosticCode::Type, 544, 29, b_string)
+    test::rejects_at("ascii-rejects-string", compiler::DiagnosticCode::Type, 552, 29, b_string)
 
     # ascii-accepts-byte: a Byte established by byte::from_int.
     fn b_established_byte() errors compiler::CompilerError:
@@ -713,12 +721,12 @@ fn register_unreserved_tests():
     fn b_unicode_char() errors compiler::CompilerError:
         static compile:
             web::is_unreserved('-')
-    test::rejects_at("web-unreserved-rejects-unicode-char", compiler::DiagnosticCode::Type, 715, 32, b_unicode_char)
+    test::rejects_at("web-unreserved-rejects-unicode-char", compiler::DiagnosticCode::Type, 723, 32, b_unicode_char)
 
     fn b_unproven_int() errors compiler::CompilerError:
         static compile:
             web::is_unreserved(char::scalar_value('-'))
-    test::rejects_at("web-unreserved-rejects-unproven-int", compiler::DiagnosticCode::Type, 720, 32, b_unproven_int)
+    test::rejects_at("web-unreserved-rejects-unproven-int", compiler::DiagnosticCode::Type, 728, 32, b_unproven_int)
 
     # web-unreserved-user-fn-wraps-module-closure: a user function calling
     # web::is_unreserved (a closure over the module's retained set).
@@ -882,7 +890,7 @@ fn register_emailish_tests():
                 else:
                     need(s)
             f("a@b.io")
-    test::rejects_at("emailish-predicate-refines/else-branch", compiler::DiagnosticCode::Type, 883, 26, b_refines_else)
+    test::rejects_at("emailish-predicate-refines/else-branch", compiler::DiagnosticCode::Type, 891, 26, b_refines_else)
 
     # emailish-predicate-ordinary-bool: the result is an ordinary bool.
     fn b_ordinary_bool() errors compiler::CompilerError:
@@ -923,10 +931,136 @@ fn register_emailish_tests():
 
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# str-append-char.test
+
+# str-append-char-values: one character of every UTF-8 width (one to four
+# bytes, the astral one as one unit) and a newline appended, read back by
+# index.
+fn b_append_char_values() errors compiler::CompilerError:
+    static compile:
+        s = "".append_char('a').append_char('\n').append_char('é').append_char('世').append_char('😀').append_char('z')
+        codes = loop i from 0 to str::length(s):
+            char::scalar_value(str::char_at(s, i))
+        [s, str::length(s), codes]
+
+# str-append-char-reads-back: the appended character is the last one, and
+# the length grows by exactly one.
+fn b_append_char_reads_back() errors compiler::CompilerError:
+    static compile:
+        fn last_is(s, c) -> bool:
+            t = s.append_char(c)
+            n = str::length(s)
+            if str::length(t) != n + 1:
+                return false
+            r = t.char_at(n):
+                on IndexNotFound:
+                    return false
+            r == c
+
+        [last_is("ab", '\n'), last_is("é", '😀'), last_is("😀", 'x'), last_is("", '世'), last_is("x\n", '\n')]
+
+# str-append-char-empty: "" followed by a character is that character's
+# one-character String.
+fn b_append_char_empty() errors compiler::CompilerError:
+    static compile:
+        ["".append_char('😀') == "😀", str::length("".append_char('😀')), "".append_char('\n') == "\n", "".append_char('\n')]
+
+# str-append-char-agrees-with-concat: appending each character builds the
+# text concatenating its one-character slices builds.
+fn b_append_char_agrees_with_concat() errors compiler::CompilerError:
+    static compile:
+        s = "a é\n世😀~"
+        fn same_from(i, by_char, by_text) -> bool:
+            if i < 0 or i >= str::length(s):
+                return by_char == by_text and by_char == s
+            c = s.char_at(i)
+            same_from(i + 1, by_char.append_char(c), by_text.concat(s.substring(i, i + 1)))
+
+        same_from(0, "", "")
+
+# str-append-char-operand-unchanged: a new String each time; the operand
+# keeps its value.
+fn b_append_char_operand_unchanged() errors compiler::CompilerError:
+    static compile:
+        a = "ab"
+        b = a.append_char('c')
+        c = a.append_char('😀')
+        [a, b, c, b.append_char('\n'), b]
+
+# str-append-char-as-a-value: called as a first-class value.
+fn b_append_char_as_a_value() errors compiler::CompilerError:
+    static compile:
+        fs = [str::append_char]
+
+        fn apply(f, s, c):
+            f(s, c)
+
+        [apply(list::at(fs, 0), "x", 'y'), apply(list::at(fs, 0), "é", '😀'), apply(str::append_char, "", '\n')]
+
+# str-append-char-name-beside-list-append: with list and str both imported
+# (this suite imports both), .append and .append_char each have one
+# candidate.
+fn b_append_char_beside_list_append() errors compiler::CompilerError:
+    static compile:
+        fn add(acc, x):
+            acc.append(x)
+
+        fn line(acc, c):
+            acc.append_char(c)
+
+        [add([1], 2), line("ab", '\n')]
+
+# str-append-char-representations: the operand as a one-character slice, a
+# slice consumed in place, a concat construction and a self-recursive
+# accumulator (whatever each is natively, the same text).
+fn b_append_char_representations() errors compiler::CompilerError:
+    static compile:
+        fn first(t: str) -> str errors LowerUnderrun, UpperOverrun:
+            if str::length(t) == 0:
+                return ""
+            t.substring(0, 1)
+
+        fn tag(t: str) -> str errors LowerUnderrun, UpperOverrun:
+            h = first(t)
+            h.append_char('!')
+
+        fn slice_then(t: str) -> str errors LowerUnderrun, UpperOverrun:
+            t.substring(1, 3).append_char('😀')
+
+        fn scan(t: str, i: int, acc: str) -> str:
+            if i < 0 or i >= str::length(t):
+                return acc
+            scan(t, i + 1, acc.append_char(t.char_at(i)).append_char('.'))
+
+        fn chain(t: str) -> str:
+            t.concat("x").append_char('y').concat("z")
+
+        fn all() -> List[str] errors LowerUnderrun, UpperOverrun:
+            [tag("é😀"), tag(""), slice_then("aé世b"), scan("a😀é", 0, ""), chain("ab")]
+
+        r = all():
+            on LowerUnderrun:
+                ["LowerUnderrun"]
+            on UpperOverrun:
+                ["UpperOverrun"]
+        r
+
+fn register_str_append_char_tests():
+    test::value("str-append-char-values", ["a\né世😀z", 6, [97, 10, 233, 19990, 128512, 122]], b_append_char_values)
+    test::value("str-append-char-reads-back", [true, true, true, true, true], b_append_char_reads_back)
+    test::value("str-append-char-empty", [true, 1, true, "\n"], b_append_char_empty)
+    test::value("str-append-char-agrees-with-concat", true, b_append_char_agrees_with_concat)
+    test::value("str-append-char-operand-unchanged", ["ab", "abc", "ab😀", "abc\n", "abc"], b_append_char_operand_unchanged)
+    test::value("str-append-char-as-a-value", ["xy", "é😀", "\n"], b_append_char_as_a_value)
+    test::value("str-append-char-name-beside-list-append", [[1, 2], "ab\n"], b_append_char_beside_list_append)
+    test::value("str-append-char-representations", ["é!", "!", "é世😀", "a.😀.é.", "abxyz"], b_append_char_representations)
+
 with context test::suite()
 register_str_char_at_tests()
 register_unicode_char_tests()
 register_ascii_tests()
 register_web_unreserved_tests()
 register_emailish_tests()
+register_str_append_char_tests()
 test::report()

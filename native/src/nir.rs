@@ -47,6 +47,11 @@ pub enum OpCode {
     Substr,
     StrLower,
     StrCat,
+    /// `str::append_char(S, C)` (core/strings.tcl): a new String of S's
+    /// characters followed by the UnicodeChar C -- rt_str_cat's one
+    /// allocation, with C's UTF-8 encoding as the second piece. Fallible
+    /// exactly as StrCat is (the collection-length ceiling).
+    StrAppendChar,
     ListLen,
     ListGet,
     ListAppend,
@@ -571,6 +576,7 @@ op_spellings! {
     "substr" => Substr,
     "strlower" => StrLower,
     "strcat" => StrCat,
+    "strappendchar" => StrAppendChar,
     "listlen" => ListLen,
     "listget" => ListGet,
     "listappend" => ListAppend,

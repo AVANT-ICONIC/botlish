@@ -106,6 +106,18 @@ test workload-2048-warning-clean {the engine, the demo, the suite and the benchm
     join $found \n
 } -result {}
 
+test workload-2048-strict-warnings {S16: the engine, the demo, the suite and the benchmark compile under -warnings error -- the stdlib modules they load (io, linux::io, test, ...) carry no warning either, so nothing their authors did not write rejects them} -body {
+    with2048 {
+        set rejected {}
+        foreach name {game2048.bot demo.bot golden.bot bench.bot} {
+            if {[catch {surface::readProgramFile [file join $gameDir $name] -warnings error -warning-channel ""} message]} {
+                lappend rejected "$name: [lindex [split $message \n] 0]"
+            }
+        }
+    }
+    join $rejected \n
+} -result {}
+
 test workload-2048-bench-checksum "bench.bot's 200-move checksum is the same on [join $workloadBackends {, }] (and equals the independent Python oracle's, audit/2048/oracle.py)" -body {
     with2048 {
         set hir [benchHir 200]
