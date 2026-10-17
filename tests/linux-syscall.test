@@ -24,6 +24,8 @@ interp recursionlimit {} 100000
 set allBackends {interp compile cranelift-generic cranelift}
 set nativeBackends {cranelift-generic cranelift}
 
+# Linux x86-64: a test that runs the transport or reads its machine code. One
+# that only compiles it (NIR, CLIF, a diagnostic, a refusal) needs no host.
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
 testConstraint objdump [expr {[auto_execok objdump] ne ""}]
@@ -234,7 +236,7 @@ abi::x86_64::Register64 {word: 9223372036854775808}"] \
 abi::x86_64::Register64 {word: 0 - 9223372036854775807 - 1}"]
 } -result {TYPE TYPE {}}
 
-test linux-syscall-conversions-allocate-nothing {natively, the conversions are no runtime work at all for a proven constant: register64(39)'s instance is one register move (no comparison, no fail path, no BigInt), and nothing is allocated} -constraints linuxX86_64 -body {
+test linux-syscall-conversions-allocate-nothing {natively, the conversions are no runtime work at all for a proven constant: register64(39)'s instance is one register move (no comparison, no fail path, no BigInt), and nothing is allocated} -body {
     set text "import abi::x86_64\nfn conv(n: int) -> int:\n    abi::x86_64::to_int(abi::x86_64::register64(39)) + n\nloop i from 0 to 1000:\n    conv(i)\nconv(1)"
     set hir [syscallHir $text]
     set nir [native::nir $hir]
@@ -244,7 +246,7 @@ test linux-syscall-conversions-allocate-nothing {natively, the conversions are n
         [regexp -all {\n} $body] [dict get $report total allocations]
 } -result {0 0 2 0}
 
-test linux-syscall-dynamic-bounds-are-static-constants {for a dynamic Int, the -2^63 bound is a static BigInt constant, not a run-time negation that allocates on every call} -constraints linuxX86_64 -body {
+test linux-syscall-dynamic-bounds-are-static-constants {for a dynamic Int, the -2^63 bound is a static BigInt constant, not a run-time negation that allocates on every call} -body {
     set hir [syscallHir "import abi::x86_64\nfn conv(n: int) -> int errors abi::x86_64::Register64BelowRange, abi::x86_64::Register64AboveRange:\n    abi::x86_64::to_int(abi::x86_64::register64(n))\nxs = \[1, 2, 3\]\nloop x in xs:\n    conv(x):\n        on abi::x86_64::Register64BelowRange:\n            0\n        on abi::x86_64::Register64AboveRange:\n            0"]
     set body [nirFunction [native::nir $hir] abi::x86_64::register64]
     list [regexp {int -9223372036854775808} $body] [regexp -all {op isub} $body] \
@@ -302,7 +304,7 @@ test linux-syscall-diverging-field-hides-nothing {a literal field that cannot co
     list [lmap d [hir::diagnostics [syscallHir $text 0]] {dict get $d kind}] [lrange [strictError $text] 0 1]
 } -result {{UNKNOWN-FIELD UNKNOWN-FIELD} {UNKNOWN-FIELD 10:88}}
 
-test linux-syscall-unchecked-program-replays-the-contract {a -strict 0 program (diagnostics kept, not raised) still never runs a call that broke the contract natively: the problem is replayed as a run-time error before anything is evaluated -- no syscall with a defaulted rax, no register read from an unproven value} -constraints linuxX86_64 -body {
+test linux-syscall-unchecked-program-replays-the-contract {a -strict 0 program (diagnostics kept, not raised) still never runs a call that broke the contract natively: the problem is replayed as a run-time error before anything is evaluated -- no syscall with a defaulted rax, no register read from an unproven value} -body {
     set results {}
     foreach text [list \
             "import abi::x86_64\nimport linux::abi::x86_64\nfn f() -> int:\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rdi: abi::x86_64::register64(140), rbp: abi::x86_64::register64(7)}))\nf()" \
@@ -482,7 +484,7 @@ s = list::at(\[linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})\]
 # ---------------------------------------------------------------------------
 # Backend evidence: a raw syscall, not libc's getpid
 
-test linux-syscall-nir-generic-op {NIR: one generic op over seven register words in the syscall convention's order (rax rdi rsi rdx r10 r8 r9), an omitted register the Int 0; 39 is only the source literal's own constant; no getpid anywhere} -constraints linuxX86_64 -body {
+test linux-syscall-nir-generic-op {NIR: one generic op over seven register words in the syscall convention's order (rax rdi rsi rdx r10 r8 r9), an omitted register the Int 0; 39 is only the source literal's own constant; no getpid anywhere} -body {
     set nir [native::nir [syscallHir "import abi::x86_64\nimport linux::abi::x86_64\nfn f():\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({r8: abi::x86_64::register64(8), rdi: abi::x86_64::register64(1), rax: abi::x86_64::register64(39)}))\nf()"]]
     set body [nirFunction $nir f]
     regexp {(%[0-9]+) = op syscall_linux_x86_64 ((?:%[0-9]+ ?){7})} $body -> result operands
@@ -500,7 +502,7 @@ test linux-syscall-nir-generic-op {NIR: one generic op over seven register words
         [regexp -nocase {getpid} $nir] [llength [regexp -all -inline {= int 39\M} $nir]]
 } -result {{w39 w1 0 0 0 w8 0} {8 1 39} 0 1}
 
-test linux-syscall-clif-is-a-helper-call {CLIF: the op is a real call of the runtime helper rt_linux_x86_64_syscall (a GC safepoint with its result checked) -- never inline code Cranelift could merge, hoist or delete; two calls stay two calls, a discarded one stays} -constraints linuxX86_64 -body {
+test linux-syscall-clif-is-a-helper-call {CLIF: the op is a real call of the runtime helper rt_linux_x86_64_syscall (a GC safepoint with its result checked) -- never inline code Cranelift could merge, hoist or delete; two calls stay two calls, a discarded one stays} -body {
     set clif [native::clif [syscallHir "import abi::x86_64\nimport linux::abi::x86_64\nfn f():\n    linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})\n    linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})\n    1\nf()"]]
     regexp {; (u0:[0-9]+) = rt_linux_x86_64_syscall} $clif -> helper
     regexp {; function [0-9]+ "f": botlish_fn_[0-9]+} $clif header

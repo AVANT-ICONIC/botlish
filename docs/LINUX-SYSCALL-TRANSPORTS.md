@@ -235,7 +235,7 @@ discipline: both architectures' bridges and transports go through
 
 ## Tests
 
-* **tests/linux-syscall-transports.test** (21 tests): the table; the
+* **tests/linux-syscall-transports.test** (22 tests): the table; the
   AArch64 native's registration and bridges; the conversions on every
   backend; the AArch64 contract (UNKNOWN-FIELD for rax, x6, x30, sp with the
   register list; MISSING-FIELD for x8; never mixed; not a value); the Tcl
@@ -249,7 +249,9 @@ discipline: both architectures' bridges and transports go through
   a program compiled for the other architecture's target; the loader rule
   in a private library (a demo module's value per target; AMBIGUOUS-MODULE,
   UNSUPPORTED-ARCHITECTURE, UNKNOWN-TARGET, UNKNOWN-NAMESPACE); the cache's
-  dependencies. Its source-observable tests are ported to
+  dependencies; an application module named like linux::sys
+  (MODULE-COLLISION naming both architecture files) and one importing linux
+  (the target's linux::sys from the standard library). Its source-observable tests are ported to
   tests/golden/linux-transports.bot (13 golden tests, all four backends;
   perturb.tcl: every test fails inverted and altered) and one to
   abi-bytes-native.bot.
@@ -261,10 +263,17 @@ discipline: both architectures' bridges and transports go through
   wrappers (`linux::write`, `linux::read`, `linux::io`, the examples) now
   carries `nativeLinux` and runs on both architectures (53 tests moved: the live writes and reads of abi-bytes and abi-mutable-bytes, the
   standalone hello worlds of contexts, portable-io and linux-path, the 2048
-  demo, ...); `linuxX86_64` stays on tests that spell the x86-64 transport
+  demo, ...); `linuxX86_64` stays on tests that run the x86-64 transport
   or read x86-64 machine code (objdump, strace's stack frames, R_X86_64
   relocations), and `linuxAarch64` is new for the AArch64 transport's live
-  and machine-code tests. tests/golden/run.tcl knows `linux-aarch64` as a
+  and machine-code tests. A test that only compiles a transport (NIR, CLIF,
+  a contract diagnostic) carries no host constraint and names its target
+  (`-target linux-x86_64`) when it compiles through linux::sys; so do the
+  native tests of no syscall at all that once carried `linuxX86_64` (NIR of
+  error identities and static blocks, ABI-value allocations), and native
+  code that needs Linux but no x86-64 (the golden runner's coroutines, the
+  fuzzers' native and GC-stress checks, printing programs under main.tcl)
+  carries `nativeLinux`. tests/golden/run.tcl knows `linux-aarch64` as a
   `golden-host`, and abi-bytes-native.bot, whose writes go through
   linux::write, declares no host any more.
 * **Rust unit tests** (native/src/runtime/syscall.rs): the

@@ -794,13 +794,15 @@ transport (next section). The `stub` linker remains x86-64 only: the Tcl
 tests that need it carry `stubLinker`. A Tcl test that needs the native
 runtime on Linux (coroutines, stack maps, GC-stress evidence), or makes
 syscalls only through the portable wrappers (`linux::write`, `linux::read`,
-`linux::io`), carries `nativeLinux`; one that spells the x86-64 transport or
+`linux::io`), carries `nativeLinux`; one that runs the x86-64 transport or
 reads x86-64 machine code carries `linuxX86_64`, the AArch64 transport's
 `linuxAarch64`; one that only needs a standalone executable,
-`executableAot`. Golden suites that make live syscalls through one
+`executableAot`. A test that only compiles a transport (its NIR, CLIF, a
+diagnostic) needs no host, like any NIR or CLIF test: it names `-target`
+when it compiles through `linux::sys`. Golden suites that make live syscalls through one
 transport declare `# golden-host: linux-x86_64 -- REASON` (or
 `linux-aarch64`; tests/golden/run.tcl). Never gate a test on `linuxX86_64`
-for anything but the x86-64 instruction set or syscall ABI. A change to the
+for anything but running the x86-64 instruction set or syscall ABI. A change to the
 walker, the switch or root lowering needs a GC-stress run on both
 architectures; CI's arm64 workflow has one.
 

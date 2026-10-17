@@ -172,14 +172,10 @@ proc withGcStress {script} {
     }
 }
 
-testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux"
-    && $::tcl_platform(machine) in {x86_64 amd64}}]
-
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
 # stack maps, the stack guard, coroutines), and syscalls through the portable
 # wrappers (linux::write, linux::read, linux::io: each architecture's own
-# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
-# spells the x86-64 transport or reads its machine code.
+# transport, LINUX-SYSCALL-TRANSPORTS.md).
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 

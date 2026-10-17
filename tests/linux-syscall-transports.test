@@ -21,8 +21,6 @@ interp recursionlimit {} 100000
 set allBackends {interp compile cranelift-generic cranelift}
 set nativeBackends {cranelift-generic cranelift}
 
-testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64}}]
 # Linux AArch64: a test that spells the AArch64 transport and runs it, or
 # reads its machine code.
 testConstraint linuxAarch64 [expr {$::tcl_platform(os) eq "Linux" &&

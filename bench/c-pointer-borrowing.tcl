@@ -20,7 +20,7 @@
 #             copy's wrapper)
 #   linux     linux::read(-1, m) of an S-byte MutableBytes (EBADF: the
 #             kernel returns at once): the syscall path's own detach and
-#             exposure, for comparison (Linux x86-64 only)
+#             exposure, for comparison (Linux x86-64 and AArch64)
 #
 # and the allocation counts of one call (Bytes, MutableBytes, Struct,
 # List). Every number is best of RUNS in-process executions (cranelift,
@@ -46,7 +46,9 @@ foreach {option value} $args {
         default { error "unknown option $option" }
     }
 }
-set linux [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
+# linux::read's syscall: Linux x86-64 and AArch64 (each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md).
+set linux [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 set prelude "import abi\nimport abi::bytes\nimport ffi::c\nimport byte\nimport list\nimport ffi_fixture\n[expr {$linux ? "import linux\n" : ""}]
 fn pattern(n: int):

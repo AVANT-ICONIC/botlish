@@ -29,22 +29,17 @@ if {![info exists ::env(CORE_BACKEND)]} {
 } else {
     set workloadBackends [list $::env(CORE_BACKEND)]
 }
-# lib/test.bot's runner is a coroutine: natively, x86-64 Linux only
-# (COROUTINES.md), as tests/golden.test.
-set nativeSuite [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
+# lib/test.bot's runner is a coroutine: natively, Linux x86-64 and AArch64
+# only (COROUTINES.md), as tests/golden.test.
+set nativeSuite [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 set suiteBackends [expr {$nativeSuite ? $workloadBackends : [lsearch -all -inline -not -glob $workloadBackends cranelift*]}]
 testConstraint suiteBackends [expr {[llength $suiteBackends] > 0}]
 testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
-# linux::io's syscalls (the demo's output) exist on Linux x86-64 only.
-testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64}}]
-
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
 # stack maps, the stack guard, coroutines), and syscalls through the portable
 # wrappers (linux::write, linux::read, linux::io: each architecture's own
-# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
-# spells the x86-64 transport or reads its machine code.
+# transport, LINUX-SYSCALL-TRANSPORTS.md).
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
@@ -191,7 +186,7 @@ test workload-2048-demo-executable {the demo as a standalone executable prints t
 # private library to compile, and then showed only `value: unit`. Now it
 # compiles the demo as it is and shows the game the executable prints, then
 # the value.
-test workload-2048-demo-main-native {main.tcl -backend cranelift (and cranelift-generic) runs demo.bot as it is and prints its whole game before its value} -constraints {linuxX86_64 nativeBuilt} -body {
+test workload-2048-demo-main-native {main.tcl -backend cranelift (and cranelift-generic) runs demo.bot as it is and prints its whole game before its value} -constraints {nativeLinux nativeBuilt} -body {
     set game [string range $demoOutput 0 end-[string length unit]]
     lmap backend {cranelift cranelift-generic} {
         string equal [exec [info nameofexecutable] [file join $::projectRoot main.tcl] -warnings off \

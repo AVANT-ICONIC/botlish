@@ -165,14 +165,10 @@ proc withGcStress {script} {
     }
 }
 
-testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux"
-    && $::tcl_platform(machine) in {x86_64 amd64}}]
-
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
 # stack maps, the stack guard, coroutines), and syscalls through the portable
 # wrappers (linux::write, linux::read, linux::io: each architecture's own
-# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
-# spells the x86-64 transport or reads its machine code.
+# transport, LINUX-SYSCALL-TRANSPORTS.md).
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
@@ -672,7 +668,7 @@ test mv-affine-gc-stress {items 66, 94: under a collection at every allocation, 
 # ---------------------------------------------------------------------------
 # Native evidence (items 89, 90)
 
-test mv-native-evidence {item 89: push/pop/take/swap/clear/drop of affine elements are single runtime operations on the header register; affine moves produce no ownership object and no clone (no mvshare); an unrestricted shared push is one mvshare then mvpush} -constraints nativeLinux -body {
+test mv-native-evidence {item 89: push/pop/take/swap/clear/drop of affine elements are single runtime operations on the header register; affine moves produce no ownership object and no clone (no mvshare); an unrestricted shared push is one mvshare then mvpush} -body {
     set text "${mvDecls}fn affine() -> int errors IndexNotFound:\n    q = mutable_vector::from_list(\[make(1)\])\n    q.push(make(2))\n    a = q.pop()\n    b = q.take(0)\n    q.push(b)\n    old = q.swap(0, a)\n    q.clear()\n    q.push(old)\n    1\nfn ints() -> int:\n    v = mutable_vector::from_list(\[1\])\n    w = v\n    w.push(2)\n    v.push(3)\n    w.length()\na = affine():\n    on IndexNotFound:\n        0\n\[a, ints()\]\n"
     set nir [mvNir $text]
     set a [mvOps [mvFunc $nir affine]]

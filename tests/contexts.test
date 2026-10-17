@@ -36,7 +36,8 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
 # stack maps, the stack guard, coroutines), and syscalls through the portable
 # wrappers (linux::write, linux::read, linux::io: each architecture's own
 # transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
-# spells the x86-64 transport or reads its machine code.
+# runs the x86-64 transport or reads x86-64 machine code; one that only
+# compiles it (NIR, CLIF) needs no host.
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint objdump [expr {[auto_execok objdump] ne ""}]
@@ -697,7 +698,7 @@ test contexts-fresh-per-run {the Tcl backends' context environment is per run: a
 
 set helloText [readFile [file join $::projectRoot examples linux context-hello.bot]]
 
-test contexts-native-nir-hello {NIR of the Hello World: one 24-byte context area with one LinuxIO slot of three words; the program stores the three descriptors (no LinuxIO object); hello calls linux::io::write with its one ordinary argument; linux::io::write loads stdout's word (offset 8) and passes it to linux::write's fields variant: no context operand anywhere} -constraints nativeLinux -body {
+test contexts-native-nir-hello {NIR of the Hello World: one 24-byte context area with one LinuxIO slot of three words; the program stores the three descriptors (no LinuxIO object); hello calls linux::io::write with its one ordinary argument; linux::io::write loads stdout's word (offset 8) and passes it to linux::write's fields variant: no context operand anywhere} -body {
     set nir [native::nir [ctxHir $::helloText]]
     set header [lrange [split $nir \n] 0 1]
     set write [nirFunction $nir linux::io::write]
@@ -706,7 +707,7 @@ test contexts-native-nir-hello {NIR of the Hello World: one 24-byte context area
         [lindex [split $write \n] 0] [nirBody $write] [nirBody $hello]
 } -result {{{nir 1 call-effects=1 statics=0 contexts=24} {context 0 "linux::io::LinuxIO" offset=0 words=3 fields="stdin.raw.value stdout.raw.value stderr.raw.value"}} 3 1 {func 10 "linux::io::write" params=1 env=0 regs=3 pnames="data.0" captures=0 instance="abi::bytes::Bytes" @e584} {{%1 = contextload 8} {%2 = call 8 %1 %0} {ret %2}} {{%0 = bytes "48656c6c6f2c20776f726c64210a"} {%1 = call 10 %0} {ret %1}}}
 
-test contexts-native-no-hidden-argument {the three-level chain compiles to the calling convention it would have without any context: every function has params=0 env=0, every call passes no operand, and only the consumer does anything about the context -- its own fixed-slot load} -constraints nativeLinux -body {
+test contexts-native-no-hidden-argument {the three-level chain compiles to the calling convention it would have without any context: every function has params=0 env=0, every call passes no operand, and only the consumer does anything about the context -- its own fixed-slot load} -body {
     set nir [native::nir [ctxHir "${::synthetic}fn middle():\n    read_value()\nfn top():\n    middle()\nwith context Counter {value: 3, enabled: true}\ntop()\n"]]
     list [lmap name {top middle read_value} {lindex [regexp -inline {params=[0-9]+ env=[0-9]+} [nirFunction $nir $name]] 0}] \
         [lmap name {top middle} {regsub -all {call [0-9]+} [nirBody [nirFunction $nir $name]] {call F}}] \

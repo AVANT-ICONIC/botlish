@@ -588,7 +588,7 @@ proc Run {} {
                     break
                 }
             }
-            set nativeOk [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
+            set nativeOk [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
             if {$problem eq "" && [dict get $options -gc-stress] && $nativeOk && [lindex $expect 0] eq "value"} {
                 set ::env(BOTLISH_NATIVE_GC_STRESS) 1
                 try {

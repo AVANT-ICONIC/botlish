@@ -31,7 +31,8 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
 # stack maps, the stack guard, coroutines), and syscalls through the portable
 # wrappers (linux::write, linux::read, linux::io: each architecture's own
 # transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
-# spells the x86-64 transport or reads its machine code.
+# runs the x86-64 transport or reads x86-64 machine code; one that only
+# compiles it (NIR, CLIF) needs no host.
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint posixShell [expr {[auto_execok sh] ne ""}]

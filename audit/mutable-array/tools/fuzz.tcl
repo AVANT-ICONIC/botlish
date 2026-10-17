@@ -1322,7 +1322,7 @@ proc Run {} {
                 }
                 incr identitiesChecked $identities
             }
-            set nativeOk [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
+            set nativeOk [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
             if {$problem eq "" && $family eq "affine" && $identities > 0 && [dict get $options -native] && $nativeOk} {
                 set report [native::allocationReport $hir summary]
                 set counters [expr {[dict exists $report coroutines] ? [dict get $report coroutines] : {}}]

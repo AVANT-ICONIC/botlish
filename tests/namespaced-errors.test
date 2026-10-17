@@ -16,9 +16,6 @@
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 
-testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux"
-    && $::tcl_platform(machine) in {x86_64 amd64}}]
-
 # Two modules declaring the same short names with the same payload shapes, a
 # nested module of the first, and a module of a coroutine and an affine
 # payload.
@@ -403,7 +400,7 @@ test nerr-tcl-errorid {B18: the Tcl runtime's errorId carries the canonical iden
     }
 } -result {1 1 -2 a::Failed}
 
-test nerr-native-ids {B19: natively each canonical identity has its own compact id -- a::Failed and b::Failed, same short name and shape, never share one -- and dispatch compares ids} -constraints linuxX86_64 -body {
+test nerr-native-ids {B19: natively each canonical identity has its own compact id -- a::Failed and b::Failed, same short name and shape, never share one -- and dispatch compares ids} -body {
     nsWith $nsLib {
         # Propagating wrappers keep each fail an error edge (a fail whose
         # handler is in the same function after inlining is a branch).

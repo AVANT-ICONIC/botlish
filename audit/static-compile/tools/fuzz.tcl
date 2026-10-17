@@ -375,7 +375,7 @@ proc OrdinaryFirst {text from to} {
 proc Run {} {
     global options
     set backends [dict get $options -backends]
-    set nativeOk [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
+    set nativeOk [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
     set stats [dict create programs 0 sites 0 accepted 0 rejected 0 nested 0 differential 0 transparent 0 rounds 0]
     set kinds [dict create]
     set disagreements 0

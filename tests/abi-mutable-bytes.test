@@ -35,7 +35,8 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
 # stack maps, the stack guard, coroutines), and syscalls through the portable
 # wrappers (linux::write, linux::read, linux::io: each architecture's own
 # transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
-# spells the x86-64 transport or reads its machine code.
+# runs the x86-64 transport or reads x86-64 machine code; one that only
+# compiles it (NIR, CLIF) needs no host.
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint objdump [expr {[auto_execok objdump] ne ""}]
@@ -46,13 +47,13 @@ testConstraint strace [expr {[auto_execok strace] ne "" && ![catch {exec strace 
 set scratch [makeDirectory abi-mutable-bytes-scratch]
 set programCounter 0
 
-proc bytesHir {text {strict 1}} {
+proc bytesHir {text {strict 1} {target ""}} {
     set path [file join $::scratch p[incr ::programCounter].bot]
     set channel [open $path w]
     fconfigure $channel -encoding utf-8
     puts -nonewline $channel $text
     close $channel
-    return [surface::readProgramFile $path -strict $strict]
+    return [surface::readProgramFile $path -strict $strict -target $target]
 }
 
 proc diagKinds {text} {
@@ -494,7 +495,7 @@ test abi-mutable-bytes-bridge-result-is-a-register {the writable bridge returns 
     set types
 } -result abi::x86_64::Register64
 
-test abi-mutable-bytes-unchecked-bridge-replays-the-contract {a -strict 0 program that breaks the writable bridge's contract (a Bytes where a MutableBytes is required) never takes an address natively: the problem is replayed as a run-time TYPE error before anything is evaluated} -constraints linuxX86_64 -body {
+test abi-mutable-bytes-unchecked-bridge-replays-the-contract {a -strict 0 program that breaks the writable bridge's contract (a Bytes where a MutableBytes is required) never takes an address natively: the problem is replayed as a run-time TYPE error before anything is evaluated} -body {
     set hir [bytesHir "import abi\nimport abi::bytes\nimport abi::x86_64\nabi::x86_64::from_mutable_bytes(abi::bytes::from_list(\[\]))" 0]
     lrange [outcomeUnderHir cranelift $hir] 0 1
 } -result {error {CORE SEMANTIC TYPE}}
@@ -735,8 +736,8 @@ r4 = bump(r2)
     list $stdout $f3
 } -result {{[6, 6, 6, 6, 6, true, true, false, 2]} abcdefabcdefZbcdefZbcdef}
 
-test abi-mutable-bytes-read-is-exactly-one-syscall {the wrapper makes ONE read(2) (the program as a whole has two syscall ops: this one and linux::write's) and returns exactly the kernel's result: linux::read's NIR has exactly one syscall op and no branch, jump, label or tail call, so there is no loop or retry to fill the buffer or repeat a short read; and its register mapping is rax = 0 (SYS_read), r10 = r8 = r9 = 0} -constraints linuxX86_64 -body {
-    set nir [native::nir [bytesHir [readProgram 8]]]
+test abi-mutable-bytes-read-is-exactly-one-syscall {the wrapper makes ONE read(2) (the program as a whole has two syscall ops: this one and linux::write's) and returns exactly the kernel's result: linux::read's NIR has exactly one syscall op and no branch, jump, label or tail call, so there is no loop or retry to fill the buffer or repeat a short read; and its register mapping is rax = 0 (SYS_read), r10 = r8 = r9 = 0} -body {
+    set nir [native::nir [bytesHir [readProgram 8] 1 linux-x86_64]]
     set body [nirFunction $nir linux::sys::read]
     list [regexp -all {op syscall_linux_x86_64} $body] [regexp -all {\mjump\M|\mbr\M|\mtail\M|\mlabel\M} $body] \
         [regexp -all {op syscall_linux_x86_64} $nir]
@@ -745,8 +746,8 @@ test abi-mutable-bytes-read-is-exactly-one-syscall {the wrapper makes ONE read(2
 # ---------------------------------------------------------------------------
 # NIR, CLIF and machine-code evidence
 
-test abi-mutable-bytes-nir-read-path {NIR of linux::read, in order: the detached local storage (abi::bytes::detach), register64(0), from_i32(fd), the writable address op over THAT storage, mutable_bytes_length of THAT storage and its from_usize encoding, ONE syscall, a keepalive of the same storage after it, the signed conversion, and the ReadResult constructed from the SAME storage -- no loop, no retry, and not the readable bridge's op} -constraints linuxX86_64 -body {
-    set nir [native::nir [bytesHir [readProgram 8]]]
+test abi-mutable-bytes-nir-read-path {NIR of linux::read, in order: the detached local storage (abi::bytes::detach), register64(0), from_i32(fd), the writable address op over THAT storage, mutable_bytes_length of THAT storage and its from_usize encoding, ONE syscall, a keepalive of the same storage after it, the signed conversion, and the ReadResult constructed from the SAME storage -- no loop, no retry, and not the readable bridge's op} -body {
+    set nir [native::nir [bytesHir [readProgram 8] 1 linux-x86_64]]
     set names [dict create]
     foreach {- id name} [regexp -all -inline -line {^func ([0-9]+) "([^"]+)"} $nir] { dict set names $id $name }
     set read [nirFunction $nir linux::sys::read]
@@ -766,8 +767,8 @@ test abi-mutable-bytes-nir-read-path {NIR of linux::read, in order: the detached
         [regexp -all {op bytesaddr} $read]
 } -result {{abi::bytes::detach abi::x86_64::register64 abi::x86_64::from_i32 mbytesaddr abi::bytes::mutable_length abi::x86_64::from_usize syscall_linux_x86_64 keepalive abi::x86_64::to_int structnew} 1 1 1 0}
 
-test abi-mutable-bytes-nir-operands {the syscall's operands are, in register order, rax = the register64(0) word, rdi = the fd word, rsi = THE ADDRESS (the mbytesaddr result), rdx = the length word, then ONE zero constant for r10 r8 r9 -- and the address op's operand, the length call's operand, the keepalive's operand, the ReadResult's data and the detach call's result are ONE register: the buffer the kernel writes is the buffer returned} -constraints linuxX86_64 -body {
-    set nir [native::nir [bytesHir [readProgram 8]]]
+test abi-mutable-bytes-nir-operands {the syscall's operands are, in register order, rax = the register64(0) word, rdi = the fd word, rsi = THE ADDRESS (the mbytesaddr result), rdx = the length word, then ONE zero constant for r10 r8 r9 -- and the address op's operand, the length call's operand, the keepalive's operand, the ReadResult's data and the detach call's result are ONE register: the buffer the kernel writes is the buffer returned} -body {
+    set nir [native::nir [bytesHir [readProgram 8] 1 linux-x86_64]]
     set read [nirFunction $nir linux::sys::read]
     regexp {(%[0-9]+) = op mbytesaddr (%[0-9]+)} $read -> address storage
     regexp {op syscall_linux_x86_64 (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+)} $read -> rax rdi rsi rdx r10 r8 r9
@@ -791,15 +792,15 @@ test abi-mutable-bytes-nir-operands {the syscall's operands are, in register ord
         [expr {$rsi ne $rdx && $rsi ne $rdi && $rsi ne $rax}]
 } -result {abi::x86_64::register64 abi::x86_64::from_i32 1 abi::x86_64::from_usize 1 {int 0} 1 1 1 1 1}
 
-test abi-mutable-bytes-nir-update-and-freeze {NIR of the pure operations: set is one allocating op over its operand (a fresh object, the operand never written), copy is one op, freeze and freeze_prefix are one op each producing the immutable kind, length one read; the constructor is one op} -constraints linuxX86_64 -body {
+test abi-mutable-bytes-nir-update-and-freeze {NIR of the pure operations: set is one allocating op over its operand (a fresh object, the operand never written), copy is one op, freeze and freeze_prefix are one op each producing the immutable kind, length one read; the constructor is one op} -body {
     set nir [native::nir [bytesHir "${::linuxPrelude}\nm = mb(\"hello\")\nn = put(m, 0, byte::from_int(88))\nf = abi::bytes::freeze(n)\np = abi::bytes::freeze_prefix(n, abi::usize(2)):\n    on UpperOverrun:\n        f\n\[abi::bytes::mutable_length(abi::bytes::zeroed(abi::usize(3))).value, out(1000, p)\]"]]
     lmap {fn op} {abi::bytes::zeroed mbytesnew abi::bytes::from_bytes mbytesfrom abi::bytes::replace mbytesset abi::bytes::detach mbytesclone abi::bytes::freeze mbytesfreeze abi::bytes::mutable_length mbyteslen} {
         if {[nirFunctionId $nir $fn] < 0} { list $fn missing } else { list $fn [regexp -all "op $op " [nirFunction $nir $fn]] }
     }
 } -match glob -result {{abi::bytes::zeroed 1} {abi::bytes::from_bytes 1} {abi::bytes::replace 1} {abi::bytes::detach missing} {abi::bytes::freeze 1} {abi::bytes::mutable_length 1}}
 
-test abi-mutable-bytes-clif-keepalive-and-stack-map {CLIF of linux::read: the writable address helper, then the syscall helper, then the keepalive helper, in that order, the keepalive's operand being the very value the address helper took (the detached storage), and the syscall call's stack map naming the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint} -constraints linuxX86_64 -body {
-    set clif [native::clif [bytesHir [readProgram 8]]]
+test abi-mutable-bytes-clif-keepalive-and-stack-map {CLIF of linux::read: the writable address helper, then the syscall helper, then the keepalive helper, in that order, the keepalive's operand being the very value the address helper took (the detached storage), and the syscall call's stack map naming the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint} -body {
+    set clif [native::clif [bytesHir [readProgram 8] 1 linux-x86_64]]
     set helperOf [dict create]
     foreach {- ref name} [regexp -all -inline -line {^; (u0:[0-9]+) = (rt_[a-z0-9_]+)} $clif] { dict set helperOf $ref $name }
     regexp {; function [0-9]+ "linux::sys::read": botlish_fn_[0-9]+} $clif header

@@ -34,7 +34,8 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
 # stack maps, the stack guard, coroutines), and syscalls through the portable
 # wrappers (linux::write, linux::read, linux::io: each architecture's own
 # transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
-# spells the x86-64 transport or reads its machine code.
+# runs the x86-64 transport or reads x86-64 machine code; one that only
+# compiles it (NIR, CLIF) needs no host.
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint objdump [expr {[auto_execok objdump] ne ""}]
@@ -45,13 +46,13 @@ testConstraint strace [expr {[auto_execok strace] ne "" && ![catch {exec strace 
 set scratch [makeDirectory abi-bytes-scratch]
 set programCounter 0
 
-proc bytesHir {text {strict 1}} {
+proc bytesHir {text {strict 1} {target ""}} {
     set path [file join $::scratch p[incr ::programCounter].bot]
     set channel [open $path w]
     fconfigure $channel -encoding utf-8
     puts -nonewline $channel $text
     close $channel
-    return [surface::readProgramFile $path -strict $strict]
+    return [surface::readProgramFile $path -strict $strict -target $target]
 }
 
 proc diagKinds {text} {
@@ -349,7 +350,7 @@ test abi-bytes-bridge-result-is-a-register-not-an-integer {the bridge returns th
     set types
 } -result abi::x86_64::Register64
 
-test abi-bytes-unchecked-bridge-replays-the-contract {a -strict 0 program that breaks the bridge's contract still never takes an address natively: the problem is replayed as a run-time error before anything is evaluated} -constraints linuxX86_64 -body {
+test abi-bytes-unchecked-bridge-replays-the-contract {a -strict 0 program that breaks the bridge's contract still never takes an address natively: the problem is replayed as a run-time error before anything is evaluated} -body {
     set hir [bytesHir "import abi::x86_64\nabi::x86_64::from_bytes(\"not bytes\")" 0]
     lrange [outcomeUnderHir cranelift $hir] 0 1
 } -result {error {CORE SEMANTIC TYPE}}
@@ -584,8 +585,8 @@ r3 = out(3, b)
         [expr {[string length $data] == 40960 + $short}]
 } -result {1 -11 1 1}
 
-test abi-bytes-write-is-exactly-one-syscall {the wrapper performs ONE write(2) and returns exactly the kernel's result: a short write (a pipe, a signal) is reported as the short count and never completed or retried by the wrapper. Verified structurally here -- linux::write's x86-64 transport, linux::sys::write, has exactly one syscall op in its NIR and no branch, jump, label or tail call, so there is no loop or retry to complete a partial write -- and observed in the preceding test, which provokes a real short write on a non-blocking pipe} -constraints {linuxX86_64} -body {
-    set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, mk(\"x\"))"]]
+test abi-bytes-write-is-exactly-one-syscall {the wrapper performs ONE write(2) and returns exactly the kernel's result: a short write (a pipe, a signal) is reported as the short count and never completed or retried by the wrapper. Verified structurally here -- linux::write's x86-64 transport, linux::sys::write, has exactly one syscall op in its NIR and no branch, jump, label or tail call, so there is no loop or retry to complete a partial write -- and observed in the preceding test, which provokes a real short write on a non-blocking pipe} -body {
+    set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, mk(\"x\"))" 1 linux-x86_64]]
     set body [nirFunction $nir linux::sys::write]
     list [regexp -all {op syscall_linux_x86_64} $body] [regexp -all {\mjump\M|\mbr\M|\mtail\M|\mlabel\M} $body]
 } -result {1 0}
@@ -729,8 +730,8 @@ test abi-bytes-liveness-mutant-without-keepalive-is-detected {the inline program
 # ---------------------------------------------------------------------------
 # NIR evidence
 
-test abi-bytes-nir-write-path {NIR of the canonical write path, dynamic input: the Bytes' construction is one op over its List (abi::bytes::from_list' instance), the length is one field read, the address is one op over the storage, the fd and the length are encoded by their ordinary from_i32/from_usize instances, ONE syscall op takes the four words in register order, a keepalive of the same storage follows it, and the signed result is converted by to_int} -constraints linuxX86_64 -body {
-    set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, mk(\"hi\"))"]]
+test abi-bytes-nir-write-path {NIR of the canonical write path, dynamic input: the Bytes' construction is one op over its List (abi::bytes::from_list' instance), the length is one field read, the address is one op over the storage, the fd and the length are encoded by their ordinary from_i32/from_usize instances, ONE syscall op takes the four words in register order, a keepalive of the same storage follows it, and the signed result is converted by to_int} -body {
+    set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, mk(\"hi\"))" 1 linux-x86_64]]
     set names [dict create]
     foreach {- id name} [regexp -all -inline -line {^func ([0-9]+) "([^"]+)"} $nir] { dict set names $id $name }
     set write [nirFunction $nir linux::sys::write]
@@ -748,8 +749,8 @@ test abi-bytes-nir-write-path {NIR of the canonical write path, dynamic input: t
         [regexp -all {op syscall_linux_x86_64} $nir]
 } -result {{abi::x86_64::register64 abi::x86_64::from_i32 bytesaddr abi::bytes::length abi::x86_64::from_usize syscall_linux_x86_64 keepalive abi::x86_64::to_int} 1 1 1}
 
-test abi-bytes-nir-register-order-and-keepalive-operand {the syscall's operands are, in register order, rax = the register64(1) word, rdi = the fd word, rsi = THE ADDRESS (the bytesaddr result, never any other register), rdx = the length word, then the zero constant for r10 r8 r9 -- and the keepalive's operand is exactly bytesaddr's operand} -constraints linuxX86_64 -body {
-    set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, mk(\"hi\"))"]]
+test abi-bytes-nir-register-order-and-keepalive-operand {the syscall's operands are, in register order, rax = the register64(1) word, rdi = the fd word, rsi = THE ADDRESS (the bytesaddr result, never any other register), rdx = the length word, then the zero constant for r10 r8 r9 -- and the keepalive's operand is exactly bytesaddr's operand} -body {
+    set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, mk(\"hi\"))" 1 linux-x86_64]]
     set write [nirFunction $nir linux::sys::write]
     regexp {(%[0-9]+) = op bytesaddr (%[0-9]+)} $write -> address storage
     regexp {op syscall_linux_x86_64 (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+)} $write -> rax rdi rsi rdx r10 r8 r9
@@ -768,7 +769,7 @@ test abi-bytes-nir-register-order-and-keepalive-operand {the syscall's operands 
         [expr {$rsi ne $rdx && $rsi ne $rdi && $rsi ne $rax}]
 } -result {abi::x86_64::register64 abi::x86_64::from_i32 1 abi::x86_64::from_usize 1 1 1}
 
-test abi-bytes-nir-dynamic-payload-precedes-the-syscall {a payload built dynamically immediately before the syscall is fully initialized first: in a function that builds the Bytes from its argument and writes it, the conversion (strutf8bytes, then abi::bytes::from_list' bytesfromlist instance) is emitted and completed before the call that takes the address and executes the one syscall -- the data dependency (the storage register) forces the order, and nothing is hoisted past the syscall's all-memory barrier} -constraints linuxX86_64 -body {
+test abi-bytes-nir-dynamic-payload-precedes-the-syscall {a payload built dynamically immediately before the syscall is fully initialized first: in a function that builds the Bytes from its argument and writes it, the conversion (strutf8bytes, then abi::bytes::from_list' bytesfromlist instance) is emitted and completed before the call that takes the address and executes the one syscall -- the data dependency (the storage register) forces the order, and nothing is hoisted past the syscall's all-memory barrier} -body {
     set text "${::linuxPrelude}\nfn emit(s: str) -> int:\n    out(3, mk(s))\nemit(\"x\")"
     set nir [native::nir [bytesHir $text]]
     set names [dict create]
@@ -788,8 +789,8 @@ test abi-bytes-nir-dynamic-payload-precedes-the-syscall {a payload built dynamic
         [orderOf $names [nirFunction $nir out]] [regexp -all {op bytesfromlist} [nirFunction $nir abi::bytes::from_list]]
 } -result {{mk out} {strutf8bytes abi::bytes::from_list} {abi::i32 linux::write} 1}
 
-test abi-bytes-clif-keepalive-and-stack-map {CLIF of linux::sys::write (linux::write's x86-64 transport): rt_bytes_addr, then the syscall helper, then rt_keepalive, in that order, with the keepalive's operand the very value rt_bytes_addr took (the storage), and the syscall call's stack map names the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint} -constraints linuxX86_64 -body {
-    set clif [native::clif [bytesHir "${::linuxPrelude}\nout(3, mk(\"hi\"))"]]
+test abi-bytes-clif-keepalive-and-stack-map {CLIF of linux::sys::write (linux::write's x86-64 transport): rt_bytes_addr, then the syscall helper, then rt_keepalive, in that order, with the keepalive's operand the very value rt_bytes_addr took (the storage), and the syscall call's stack map names the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint} -body {
+    set clif [native::clif [bytesHir "${::linuxPrelude}\nout(3, mk(\"hi\"))" 1 linux-x86_64]]
     set helperOf [dict create]
     foreach {- ref name} [regexp -all -inline -line {^; (u0:[0-9]+) = (rt_[a-z0-9_]+)} $clif] { dict set helperOf $ref $name }
     regexp {; function [0-9]+ "linux::sys::write": botlish_fn_[0-9]+} $clif header
@@ -823,15 +824,15 @@ test abi-bytes-clif-keepalive-and-stack-map {CLIF of linux::sys::write (linux::w
         [regexp "ss0\\+$offset\[,\\]\]" [lindex $syscall 2]]
 } -result {{rt_bytes_addr rt_linux_x86_64_syscall rt_keepalive} 1 1}
 
-test abi-bytes-nir-static-constant {NIR of a small constant: abi::bytes::from_list(str::encode_utf8("hello\n")) is one static byte-storage constant (`bytes "HEX"`): no abi::bytes::from_list call, no op bytesfromlist, no List, no String -- and it goes through the very same linux::write (whose transport linux::sys::write has one bytesaddr, one syscall, one keepalive), so there are not two source semantics for the two physical forms} -constraints linuxX86_64 -body {
-    set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, abi::bytes::from_list(str::encode_utf8(\"hello\\n\")))"]]
+test abi-bytes-nir-static-constant {NIR of a small constant: abi::bytes::from_list(str::encode_utf8("hello\n")) is one static byte-storage constant (`bytes "HEX"`): no abi::bytes::from_list call, no op bytesfromlist, no List, no String -- and it goes through the very same linux::write (whose transport linux::sys::write has one bytesaddr, one syscall, one keepalive), so there are not two source semantics for the two physical forms} -body {
+    set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, abi::bytes::from_list(str::encode_utf8(\"hello\\n\")))" 1 linux-x86_64]]
     set write [nirFunction $nir linux::sys::write]
     list [regexp -all {= bytes "([0-9a-f]*)"} $nir] [lindex [regexp -inline {= bytes "([0-9a-f]*)"} $nir] 1] \
         [regexp -all {op bytesfromlist|op strutf8bytes|op listnew} [nirFunction $nir <program>]] \
         [regexp -all {op bytesaddr} $write] [regexp -all {op syscall_linux_x86_64} $write] [regexp -all {op keepalive} $write]
 } -result {1 68656c6c6f0a 0 1 1 1}
 
-test abi-bytes-nir-static-forms {every statically known byte sequence is a constant: an exactly known literal List of bytes, the empty List, an encode_utf8 of a known (even empty or non-ASCII) String -- and a dynamic argument is never one} -constraints linuxX86_64 -body {
+test abi-bytes-nir-static-forms {every statically known byte sequence is a constant: an exactly known literal List of bytes, the empty List, an encode_utf8 of a known (even empty or non-ASCII) String -- and a dynamic argument is never one} -body {
     set forms [list \
         "abi::bytes::from_list(\[byte::from_int(1), byte::from_int(2)\])" \
         "abi::bytes::from_list(\[\])" \
@@ -969,7 +970,7 @@ test abi-bytes-kernel-sees-the-write {strace of the standalone example: the kern
         [regexp {__write} [join [lrange $runner 1 end] \n]] [llength $records]
 } -result {{write(1, "Hello from Botlish!\n", 20) = 20} 1 1 1 0 1 2}
 
-test abi-bytes-kernel-sees-the-nul-payload {strace of a write of 41 00 42: the kernel receives three bytes "A\0B" (NUL included, count 3), not a C string cut at the NUL -- the registers carry exactly the payload's address and count} -constraints {linuxX86_64 strace posixShell} -body {
+test abi-bytes-kernel-sees-the-nul-payload {strace of a write of 41 00 42: the kernel receives three bytes "A\0B" (NUL included, count 3), not a C string cut at the NUL -- the registers carry exactly the payload's address and count} -constraints {nativeLinux strace posixShell} -body {
     set exe [buildExecutable nulstrace "${::linuxPrelude}\nfn nul3(m: Byte):\n    abi::bytes::from_list(\[byte::from_int(65), m, byte::from_int(66)\])\nout(3, nul3(byte::from_int(0)))"]
     set log [file join $::outputDir strace.nul]
     exec strace -f -qq -e trace=write -o $log sh -c {exec "$0" 3>"$1"} $exe [file join $::outputDir strace.fd3] >/dev/null 2>@1
@@ -979,7 +980,7 @@ test abi-bytes-kernel-sees-the-nul-payload {strace of a write of 41 00 42: the k
     list [llength $lines] $first
 } -result {1 {write(3, "A\0B", 3) = 3}}
 
-test abi-bytes-kernel-sees-the-count-not-the-scalars {strace of a UTF-8 write: the count rdx the kernel receives is the encoded byte count, never the Unicode scalar count} -constraints {linuxX86_64 strace posixShell} -body {
+test abi-bytes-kernel-sees-the-count-not-the-scalars {strace of a UTF-8 write: the count the kernel receives is the encoded byte count, never the Unicode scalar count} -constraints {nativeLinux strace posixShell} -body {
     set exe [buildExecutable utf8strace "${::linuxPrelude}\nout(3, mk(\"é☃\"))"]
     set log [file join $::outputDir strace.utf8]
     exec strace -f -qq -x -e trace=write -o $log sh -c {exec "$0" 3>"$1"} $exe [file join $::outputDir strace.fd3] >/dev/null 2>@1
