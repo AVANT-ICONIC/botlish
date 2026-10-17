@@ -494,7 +494,7 @@ strings a C call can touch are the Botlish name in its two failure messages.
 no library defines, compiles through the whole front end and fails at the
 native link as `{NATIVE LINK}`: "native link failed: the system linker could
 not link this program with the C functions and libraries it declares
-(libraries -lcrypto -lstdc++; functions botlish_bssl_SHA256):" followed by
+(symbols botlish_bssl_SHA256; libraries -lcrypto -lstdc++):" followed by
 the linker's own lines (`cf-missing-library`, `cf-undefined-symbol`). Never a
 front-end error: a missing library is not an `UNKNOWN-NAMESPACE`, an
 undefined symbol not a `TYPE`. A declaration no call reaches needs no
@@ -525,14 +525,19 @@ and the linker that can (`cf-stub-linker`).
 
 ## 12. Backends
 
-| backend | a program that declares C | a program that calls C |
-|---|---|---|
-| interp | runs | `NATIVE-ONLY` at the call, after its exposures were modeled |
-| compile | runs | `NATIVE-ONLY` at the call |
-| cranelift | runs | linked with the plan, run as a process |
-| cranelift-generic | runs | linked with the plan, run as a process |
-| executable (rustc linker) | links | links the plan; needs only the libraries it linked dynamically |
-| executable (stub linker) | links | `NATIVE LINK`: refused (section 11) |
+| backend | declares C functions only | declares a library | calls C |
+|---|---|---|---|
+| interp | runs | runs | `NATIVE-ONLY` at the call, after its exposures were modeled |
+| compile | runs | runs | `NATIVE-ONLY` at the call |
+| cranelift, cranelift-generic | runs (JIT, as ever) | linked with the plan, run as a process | linked with the plan, run as a process |
+| executable (rustc linker) | links | links the plan | links the plan; needs at run time only the libraries it linked dynamically |
+| executable (stub linker) | links | `NATIVE LINK`: refused | `NATIVE LINK`: refused (section 11) |
+
+A library is linked whether or not a function of it is called: the plan is
+the program's (section 2), so a declared library that does not exist fails
+the native link even of a program that calls nothing (`cf-missing-library`),
+as it would for a C program linked with `-lNAME`; a declaration no call
+reaches adds nothing to the link.
 
 The Tcl backends have no machine to call C on, and there is no Tcl-side
 FFI to keep the matrix symmetric: "bcf::add is a C function (extern c fn):
@@ -593,9 +598,13 @@ programs. Native FFI programs additionally depend on the host native linker
 and the libraries they explicitly declare.
 
 Concretely: the single executable (SINGLE-EXECUTABLE.md) links standalone
-executables with the stub linker and carries no Rust runtime library, so it
-compiles a program that declares C, but the native link of one that calls C
-is refused with the stub linker's message (section 11). Linking one needs
+executables with the stub linker and carries no Rust runtime library. It
+compiles a program that calls C and runs it on the Tcl backends (to its
+first C call: `NATIVE-ONLY`), but the native link of one that calls C or
+declares a library -- `-backend cranelift` as much as
+`-emit-native-executable` -- is refused with the stub linker's message
+(section 11; checked with `single/build.sh`'s executable: `NATIVE LINK`, the
+program's symbols and libraries named). Linking one needs
 the rustc linker of a Botlish checkout with its native backend built --
 rustc, the runtime library and the system `cc`/`ld` -- and the declared
 libraries. A system-linker mode for the single executable would need it to
