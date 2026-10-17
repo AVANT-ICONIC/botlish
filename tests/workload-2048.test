@@ -34,6 +34,9 @@ set suiteBackends [expr {$nativeSuite ? $workloadBackends : [lsearch -all -inlin
 testConstraint suiteBackends [expr {[llength $suiteBackends] > 0}]
 testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
+# linux::io's syscalls (the demo's output) exist on Linux x86-64 only.
+testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64}}]
 
 set gameDir [file join $::projectRoot examples games 2048]
 
@@ -169,8 +172,10 @@ unit}
 # 2048-ENGINE-WORKLOAD.md, S19: under GC stress this executable crashed
 # (native/src/codegen/roots.rs shared a root slot between a call's result
 # and a List live across the call; tests/native-root-liveness.test's
-# root-def-interference-1 is the reduced case).
-test workload-2048-demo-executable {the demo as a standalone executable prints the whole game, identically under GC stress} -constraints executableAot -body {
+# root-def-interference-1 is the reduced case). It prints through
+# linux::io, whose syscalls exist on Linux x86-64 only (AGENTS.md, "Linux
+# AArch64"), hence linuxX86_64.
+test workload-2048-demo-executable {the demo as a standalone executable prints the whole game, identically under GC stress} -constraints {executableAot linuxX86_64} -body {
     set dir [makeDirectory workload-2048-demo]
     try {
         with2048 {
