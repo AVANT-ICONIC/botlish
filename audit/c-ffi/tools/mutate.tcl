@@ -19,7 +19,11 @@
 #     complete;
 #   * for a native mutant (one that edits native/src/), first a release
 #     build of the copy's native backend (a mutant that does not build is
-#     reported NOT-BUILT, never counted as killed).
+#     reported NOT-BUILT, never counted as killed), then the FFI's Rust unit
+#     tests in it (`cargo test --release ffi_`): killed if one fails. (The
+#     linker-group mutant needs them on a host whose rustc links with lld,
+#     which resolves archives in any order; cf-link-order kills it where the
+#     linker is GNU ld or gold.)
 #
 # Mutants that edit only Tcl run first, against the copy's unmodified native
 # build; native mutants follow, each rebuilding the copy. A mutant every
@@ -209,8 +213,16 @@ try {
                 }
                 continue
             }
+            # The FFI's Rust unit tests (`ffi_`: the link plan's arguments,
+            # the slow paths), in the copy.
+            lassign [run [dict get $options -timeout] cargo test --release --manifest-path $manifest ffi_] status output
             cd $here
-            set rust built
+            if {$status != 0} {
+                set failed [lmap {- n} [regexp -all -inline -line {^test (\S+) \.\.\. FAILED$} $output] {set n}]
+                set rust "killed ([expr {$failed eq {} ? "did not complete: [lastLine $output]" : "[llength $failed] failed: [join $failed {, }]"}])"
+            } else {
+                set rust survived
+            }
         }
         set failedTests {}
         set incomplete ""
@@ -244,10 +256,13 @@ try {
         } else {
             set fuzz "killed (did not complete: [lastLine $output])"
         }
-        set verdict [expr {[string match killed* $tests] || [string match killed* $fuzz] ? "KILLED" : "SURVIVED"}]
+        set verdict [expr {[string match killed* $tests] || [string match killed* $fuzz] || [string match killed* $rust] ? "KILLED" : "SURVIVED"}]
         lappend results [list $name $description $verdict $tests $golden $fuzz $rust]
         puts "$verdict $name -- $description\n    tests:  $tests"
         puts "    fuzz:   $fuzz"
+        if {$rust ne ""} {
+            puts "    rust:   $rust"
+        }
         flush stdout
         dict for {file text} $touched {
             writeFile [file join $tree $file] $text

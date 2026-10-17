@@ -193,7 +193,7 @@ pub fn emit_executable(program: &Program, destination: &Path, link_dirs: &[Strin
     match std::env::var("BOTLISH_NATIVE_LINKER").as_deref() {
         Err(std::env::VarError::NotPresent) | Ok("" | "rustc") => link_rustc(program, &destination, link_dirs),
         Ok("stub") if calls_c(program) => Err(format!(
-            "native link failed: this program calls C ({}), whose symbols and libraries only the system linker resolves, and the stub linker (BOTLISH_NATIVE_LINKER=stub) links no native library: link it with BOTLISH_NATIVE_LINKER=rustc (C-FFI.md)",
+            "native link failed: this program calls C or declares a C library ({}), which only the system linker resolves, and the stub linker (BOTLISH_NATIVE_LINKER=stub, the single executable's) links no native library: link it with the rustc linker of a Botlish checkout whose native backend is built (BOTLISH_NATIVE_LINKER=rustc; C-FFI.md)",
             describe_link_plan(program)
         )),
         Ok("stub") => link_stub(program, &destination),
@@ -653,4 +653,50 @@ fn image(program: &Program, object: &ObjectProgram) -> Result<Image, String> {
         fixups,
         functions,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A program that calls one C function and declares two libraries.
+    const FFI_PROGRAM: &str = concat!(
+        "nir 1 call-effects=1 statics=0\n",
+        "link \"first\"\n",
+        "link \"second\"\n",
+        "foreign 0 \"c_add\" params=\"i32 i32\" result=i32 name=\"m::add\"\n\n",
+        "func 0 \"<program>\" params=0 env=0 regs=3 pnames=\"\" captures=0\n",
+        "    %0 = int 40\n    %1 = int 2\n    %2 = foreigncall 0 %0 %1\n    ret %2\nend\n",
+    );
+
+    /// The link plan reaches the system linker as one group, in the plan's
+    /// order, after the search directories: GNU ld and gold resolve a static
+    /// archive only against what precedes it, so without the group an
+    /// archive declared before the archive that needs it would leave its
+    /// symbols undefined (lld, rustc's own x86-64 linker, does not care:
+    /// tests/c-ffi.test's cf-link-order shows the group's effect where the
+    /// linker is GNU ld).
+    #[test]
+    fn ffi_link_plan_is_one_linker_group() {
+        let program = crate::nir::parse(FFI_PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
+        assert!(calls_c(&program));
+        let args = link_plan_args(&program, &["/opt/lib".to_string()]);
+        let links: Vec<&str> = args.iter().filter(|a| *a != "-C").map(String::as_str).collect();
+        assert_eq!(
+            links,
+            vec!["link-arg=-L/opt/lib", "link-arg=-Wl,--start-group", "link-arg=-lfirst", "link-arg=-lsecond", "link-arg=-Wl,--end-group"]
+        );
+        assert_eq!(describe_link_plan(&program), "symbols c_add; libraries -lfirst -lsecond");
+    }
+
+    /// An ordinary program passes the linker nothing.
+    #[test]
+    fn ffi_link_plan_is_empty_without_c() {
+        let text = FFI_PROGRAM.replace("link \"first\"\n", "").replace("link \"second\"\n", "")
+            .replace("foreign 0 \"c_add\" params=\"i32 i32\" result=i32 name=\"m::add\"\n", "")
+            .replace("%2 = foreigncall 0 %0 %1", "%2 = int 42");
+        let program = crate::nir::parse(&text).unwrap_or_else(|e| panic!("{}", e.message));
+        assert!(!calls_c(&program));
+        assert!(link_plan_args(&program, &["/opt/lib".to_string()]).is_empty());
+    }
 }

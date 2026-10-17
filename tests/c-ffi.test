@@ -510,17 +510,20 @@ test cf-executable {a program that calls C links as a standalone executable with
     string trim [exec $exe]
 } -cleanup removeApps -result {[42, true]}
 
-test cf-stub-linker {the stub linker links no native library: it refuses a program that calls C, naming what it calls and the linker that can} -constraints {cfFixture} -body {
-    set dir [bcfApp "import ffi::c\nimport bcf\n\nbcf::add(40, 2)\n"]
+test cf-stub-linker {the stub linker links no native library: it refuses a program that calls C or declares a library, naming what it calls and links and the linker that can} -constraints {cfFixture} -body {
+    set calls [bcfApp "import ffi::c\nimport bcf\n\nbcf::add(40, 2)\n"]
+    set declares [app [list main.bot "extern c library \"botlish_cffi_fixture\"\n1 + 1\n"]]
     set saved [expr {[info exists ::env(BOTLISH_NATIVE_LINKER)] ? $::env(BOTLISH_NATIVE_LINKER) : ""}]
     set ::env(BOTLISH_NATIVE_LINKER) stub
     try {
-        catch {native::withLinkDirs [list $::fixtureDir] {native::executable [appHir $dir] [file join $dir program]}} message options
+        lmap dir [list $calls $declares] {
+            catch {native::withLinkDirs [list $::fixtureDir] {native::executable [appHir $dir] [file join $dir program]}} message options
+            list [dict get $options -errorcode] $message
+        }
     } finally {
         if {$saved eq ""} { unset ::env(BOTLISH_NATIVE_LINKER) } else { set ::env(BOTLISH_NATIVE_LINKER) $saved }
     }
-    list [dict get $options -errorcode] $message
-} -cleanup removeApps -result {{NATIVE LINK} {native link failed: this program calls C (symbols bcf_add; libraries -lbotlish_cffi_fixture), whose symbols and libraries only the system linker resolves, and the stub linker (BOTLISH_NATIVE_LINKER=stub) links no native library: link it with BOTLISH_NATIVE_LINKER=rustc (C-FFI.md)}}
+} -cleanup removeApps -result {{{NATIVE LINK} {native link failed: this program calls C or declares a C library (symbols bcf_add; libraries -lbotlish_cffi_fixture), which only the system linker resolves, and the stub linker (BOTLISH_NATIVE_LINKER=stub, the single executable's) links no native library: link it with the rustc linker of a Botlish checkout whose native backend is built (BOTLISH_NATIVE_LINKER=rustc; C-FFI.md)}} {{NATIVE LINK} {native link failed: this program calls C or declares a C library (libraries -lbotlish_cffi_fixture), which only the system linker resolves, and the stub linker (BOTLISH_NATIVE_LINKER=stub, the single executable's) links no native library: link it with the rustc linker of a Botlish checkout whose native backend is built (BOTLISH_NATIVE_LINKER=rustc; C-FFI.md)}}}
 
 test cf-main-tcl {main.tcl -backend cranelift -L DIR compiles, links with the declared libraries, runs and reports the value, the program's own output in its place (native program output is main.tcl's own)} -constraints cfFixture -body {
     set dir [bcfApp "import ffi::c\nimport bcf\n\nbcf::add(40, 2)\n"]
