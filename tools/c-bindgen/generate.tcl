@@ -257,3 +257,84 @@ proc ::cbind::generate::FirstDifference {old new} {
     }
     return [join $shown "\n    "]
 }
+
+# The coverage change between the committed report.tsv in DIR and the
+# generated RESULT's: one line per name whose status or reason changed
+# (~), that appeared (+) or disappeared (-).
+proc ::cbind::generate::coverageChange {dir result} {
+    set path [file join $dir report.tsv]
+    if {![file exists $path]} { return {} }
+    set old [readTsv [::chdr::readFile $path]]
+    set new [readTsv [dict get $result files report.tsv]]
+    set lines {}
+    dict for {key row} $new {
+        if {![dict exists $old $key]} {
+            lappend lines "+ $key: [lindex $row 2] [lindex $row 4]"
+        } elseif {[lrange [dict get $old $key] 2 end] ne [lrange $row 2 end]} {
+            lappend lines "~ $key: [lindex [dict get $old $key] 2] [lindex [dict get $old $key] 4] -> [lindex $row 2] [lindex $row 4]"
+        }
+    }
+    dict for {key row} $old {
+        if {![dict exists $new $key]} { lappend lines "- $key: was [lindex $row 2] [lindex $row 4]" }
+    }
+    return $lines
+}
+
+# The rows of a report.tsv TEXT: "KIND NAME" -> row.
+proc ::cbind::generate::readTsv {text} {
+    set out [dict create]
+    foreach line [lrange [split [string trimright $text \n] \n] 1 end] {
+        set row [split $line \t]
+        dict set out "[lindex $row 0] [lindex $row 1]" $row
+    }
+    return $out
+}
+
+# Compiles the shim.c of the generated binding in DIR (PROFILE/TARGET's
+# committed one by default) into its static library lib<shim_library>.a in
+# OUT, with the target's toolchain; returns OUT, or "" when the binding has
+# no shim.
+proc ::cbind::generate::buildShim {profile target out {dir ""}} {
+    if {$dir eq ""} { set dir [::cbind::profile::outputDir $profile $target] }
+    set shimPath [file join $dir shim.c]
+    if {![file exists $shimPath]} { return "" }
+    if {$out eq ""} { error "c-bindgen build: -out DIR is required" }
+    set manifest [::chdr::readFile [file join $dir manifest.txt]]
+    if {![regexp -line {^shim_library (\S+)$} $manifest -> name]} {
+        error "c-bindgen build: no shim_library in [file join $dir manifest.txt]"
+    }
+    set sourceRoot [::cbind::profile::sourceRoot $profile 0]
+    set hprofile [::cbind::profile::headersFor $profile $target]
+    set tool [ToolProfile $hprofile $sourceRoot]
+    set config [::chdr::toolchain::configFor $target]
+    file mkdir $out
+    set obj [file join $out $name.o]
+    lassign [::chdr::toolchain::object $config $tool $shimPath $obj {-O2 -fPIC -w}] ok stderr
+    if {!$ok} { error "c-bindgen build: the shim does not compile:\n$stderr" }
+    set archive [file join $out lib$name.a]
+    lassign [::chdr::toolchain::archive $config [list $obj] $archive] ok stderr
+    if {!$ok} { error "c-bindgen build: ar failed: $stderr" }
+    file delete $obj
+    return $out
+}
+
+# Copies the files of application APP (a directory, or a program file and
+# the application modules beside it) and the generated binding in DIR
+# (PROFILE/TARGET's committed one by default) into INTO: one application
+# root, which the ordinary compiler compiles.
+proc ::cbind::generate::stage {profile target app into {dir ""}} {
+    if {$dir eq ""} { set dir [::cbind::profile::outputDir $profile $target] }
+    if {![file isdirectory [file join $dir [dict get $profile name]]]} {
+        error "c-bindgen stage: no generated binding in $dir (run generate)"
+    }
+    file mkdir $into
+    if {$app ne ""} {
+        set appDir [expr {[file isdirectory $app] ? $app : [file dirname $app]}]
+        foreach f [glob -nocomplain -directory $appDir *] {
+            file copy -force $f $into
+        }
+    }
+    set ns [dict get $profile name]
+    file delete -force [file join $into $ns]
+    file copy -force [file join $dir $ns] [file join $into $ns]
+}

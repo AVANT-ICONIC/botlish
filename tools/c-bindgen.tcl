@@ -26,15 +26,8 @@
 # binding, builds the shim and runs main.tcl on it -- the program is
 # compiled by the ordinary compiler, from ordinary modules.
 
-set here [file dirname [file normalize [info script]]]
-set repo [file dirname $here]
-foreach f {common.tcl toolchain.tcl cdecl.tcl ir.tcl macros.tcl macrocat.tcl pipeline.tcl} {
-    source [file join $here cheader $f]
-}
-source [file join $repo surface surface.tcl]
-foreach f {profile.tcl probe.tcl model.tcl emit.tcl report.tcl generate.tcl} {
-    source [file join $here c-bindgen $f]
-}
+source [file join [file dirname [file normalize [info script]]] c-bindgen lib.tcl]
+set repo $::cbind::repo
 
 proc Usage {} {
     puts stderr "usage: tclsh9.0 tools/c-bindgen.tcl profiles|fetch|generate|check|report|build|stage|run|diff PROFILE ?options? (C-BINDGEN.md)"
@@ -114,44 +107,17 @@ proc Check {name args} {
             puts "  $status $path"
             if {$detail ne ""} { puts "    $detail" }
         }
-        CoverageChange $dir $result
+        set lines [::cbind::generate::coverageChange $dir $result]
+        if {[llength $lines]} {
+            puts "  coverage change ([llength $lines] name(s)):"
+            foreach l [lrange $lines 0 60] { puts "    $l" }
+            if {[llength $lines] > 61} { puts "    ... [expr {[llength $lines] - 61}] more" }
+        }
     }
     exit $failed
 }
 
-# The coverage change between the committed report.tsv in DIR and RESULT's:
-# names whose status changed, appeared or disappeared.
-proc CoverageChange {dir result} {
-    set path [file join $dir report.tsv]
-    if {![file exists $path]} return
-    set old [ReadTsv [::chdr::readFile $path]]
-    set new [ReadTsv [dict get $result files report.tsv]]
-    set lines {}
-    dict for {key row} $new {
-        if {![dict exists $old $key]} {
-            lappend lines "  + $key: [lindex $row 2] [lindex $row 4]"
-        } elseif {[lindex [dict get $old $key] 2] ne [lindex $row 2] || [lindex [dict get $old $key] 4] ne [lindex $row 4]} {
-            lappend lines "  ~ $key: [lindex [dict get $old $key] 2] [lindex [dict get $old $key] 4] -> [lindex $row 2] [lindex $row 4]"
-        }
-    }
-    dict for {key row} $old {
-        if {![dict exists $new $key]} { lappend lines "  - $key: was [lindex $row 2] [lindex $row 4]" }
-    }
-    if {[llength $lines]} {
-        puts "  coverage change ([llength $lines] name(s)):"
-        puts [join [lrange $lines 0 60] \n]
-        if {[llength $lines] > 61} { puts "  ... [expr {[llength $lines] - 61}] more" }
-    }
-}
 
-proc ReadTsv {text} {
-    set out [dict create]
-    foreach line [lrange [split [string trimright $text \n] \n] 1 end] {
-        set row [split $line \t]
-        dict set out "[lindex $row 0] [lindex $row 1]" $row
-    }
-    return $out
-}
 
 proc Report {name args} {
     lassign [Options $args {-target "" -why "" -status "" -reason "" -dir ""}] o rest
@@ -160,7 +126,7 @@ proc Report {name args} {
     set dir [expr {[dict get $o -dir] ne "" ? [file join [dict get $o -dir] $target] : [::cbind::profile::outputDir $profile $target]}]
     set path [file join $dir report.tsv]
     if {![file exists $path]} { error "c-bindgen report: no $path (run generate)" }
-    set rows [ReadTsv [::chdr::readFile $path]]
+    set rows [::cbind::generate::readTsv [::chdr::readFile $path]]
     if {[dict get $o -why] ne ""} {
         set found 0
         dict for {key row} $rows {
@@ -198,33 +164,10 @@ proc Build {name args} {
     lassign [Options $args {-target "" -out "" -dir ""}] o rest
     set profile [::cbind::profile::load $name]
     set target [lindex [Targets $profile [dict get $o -target]] 0]
-    set lib [BuildShim $profile $target [dict get $o -out] [dict get $o -dir]]
+    set lib [::cbind::generate::buildShim $profile $target [dict get $o -out] [dict get $o -dir]]
     puts $lib
 }
 
-proc BuildShim {profile target out {dir ""}} {
-    if {$dir eq ""} { set dir [::cbind::profile::outputDir $profile $target] }
-    set shimPath [file join $dir shim.c]
-    if {![file exists $shimPath]} { return "" }
-    if {$out eq ""} { error "c-bindgen build: -out DIR is required" }
-    set manifest [::chdr::readFile [file join $dir manifest.txt]]
-    if {![regexp -line {^shim_library (\S+)$} $manifest -> name]} {
-        error "c-bindgen build: no shim_library in [file join $dir manifest.txt]"
-    }
-    set sourceRoot [::cbind::profile::sourceRoot $profile 0]
-    set hprofile [::cbind::profile::headersFor $profile $target]
-    set tool [::cbind::generate::ToolProfile $hprofile $sourceRoot]
-    set config [::chdr::toolchain::configFor $target]
-    file mkdir $out
-    set obj [file join $out $name.o]
-    lassign [::chdr::toolchain::object $config $tool $shimPath $obj {-O2 -fPIC -w}] ok stderr
-    if {!$ok} { error "c-bindgen build: the shim does not compile:\n$stderr" }
-    set archive [file join $out lib$name.a]
-    lassign [::chdr::toolchain::archive $config [list $obj] $archive] ok stderr
-    if {!$ok} { error "c-bindgen build: ar failed: $stderr" }
-    file delete $obj
-    return $out
-}
 
 # Copies the files of application APP (a directory, or a program file and
 # the application modules beside it) and the binding of PROFILE/TARGET into
@@ -233,26 +176,10 @@ proc Stage {name args} {
     lassign [Options $args {-target "" -app "" -into "" -dir ""}] o rest
     set profile [::cbind::profile::load $name]
     set target [lindex [Targets $profile [dict get $o -target]] 0]
-    StageInto $profile $target [dict get $o -app] [dict get $o -into] [dict get $o -dir]
+    ::cbind::generate::stage $profile $target [dict get $o -app] [dict get $o -into] [dict get $o -dir]
     puts [dict get $o -into]
 }
 
-proc StageInto {profile target app into {dir ""}} {
-    if {$dir eq ""} { set dir [::cbind::profile::outputDir $profile $target] }
-    if {![file isdirectory [file join $dir [dict get $profile name]]]} {
-        error "c-bindgen stage: no generated binding in $dir (run generate)"
-    }
-    file mkdir $into
-    if {$app ne ""} {
-        set appDir [expr {[file isdirectory $app] ? $app : [file dirname $app]}]
-        foreach f [glob -nocomplain -directory $appDir *] {
-            file copy -force $f $into
-        }
-    }
-    set ns [dict get $profile name]
-    file delete -force [file join $into $ns]
-    file copy -force [file join $dir $ns] [file join $into $ns]
-}
 
 # Runs PROGRAM against the generated binding of PROFILE/TARGET: stages
 # PROGRAM's directory and the binding in a private application root, builds
@@ -266,8 +193,8 @@ proc Run {name args} {
     if {$program eq ""} { error "c-bindgen run: no program" }
     set root [file tempdir]
     try {
-        StageInto $profile $target $program $root [dict get $o -dir]
-        set lib [BuildShim $profile $target [file join $root .shim] [dict get $o -dir]]
+        ::cbind::generate::stage $profile $target $program $root [dict get $o -dir]
+        set lib [::cbind::generate::buildShim $profile $target [file join $root .shim] [dict get $o -dir]]
         set extra {}
         if {$lib ne ""} { lappend extra -L $lib }
         set status [catch {exec [info nameofexecutable] [file join $::repo main.tcl] {*}$extra {*}$mainArgs \
@@ -293,10 +220,10 @@ proc Diff {name args} {
     if {$targets eq ""} { set targets [dict get $profile targets] }
     set base [lindex $targets 0]
     set baseDir [expr {[dict get $o -dir] ne "" ? [file join [dict get $o -dir] $base] : [::cbind::profile::outputDir $profile $base]}]
-    set baseRows [ReadTsv [::chdr::readFile [file join $baseDir report.tsv]]]
+    set baseRows [::cbind::generate::readTsv [::chdr::readFile [file join $baseDir report.tsv]]]
     foreach other [lrange $targets 1 end] {
         set dir [expr {[dict get $o -dir] ne "" ? [file join [dict get $o -dir] $other] : [::cbind::profile::outputDir $profile $other]}]
-        set rows [ReadTsv [::chdr::readFile [file join $dir report.tsv]]]
+        set rows [::cbind::generate::readTsv [::chdr::readFile [file join $dir report.tsv]]]
         set lines {}
         dict for {key row} $baseRows {
             if {![dict exists $rows $key]} {
