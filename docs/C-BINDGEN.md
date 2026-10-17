@@ -102,7 +102,8 @@ extern c fn SDL_CreateWindow(
 | C `_Bool` | `ffi::c::Bool`, the only new primitive, with differential fixtures (section 16) |
 | Tcl, BoringSSL, SDL3 acceptance | Linux x86-64: all three run on both native backends from generated bindings (sections 23 to 25) |
 | macOS AArch64 | the fixture is generated and pinned for `macos-aarch64` (freestanding); the Tcl, BoringSSL and SDL3 macOS bindings, and every macOS run, were **not** done: this tree has no macOS port of the native backend and this environment no macOS SDK (section 34) |
-| fixture, fuzzer, mutants, CI | sections 22, 30, 31, 32 |
+| fixture, fuzzer, mutants, CI | a fixture pinned for three targets; the fuzzer clean over its seeds; 34 of 34 mutants killed, each by a test of behavior; the `c-bindgen` workflow (sections 22, 30, 31, 32) |
+| timing, sizes, compile cost | generation 0.4 to 6 s per profile and target; compiling a generated binding exposed a quadratic cost in the front end's hygiene pass, fixed with the HIR unchanged (importing all of BoringSSL: 116 s before, 21 s after; section 28) |
 
 ## 2. Pipeline
 
@@ -905,9 +906,28 @@ function from Botlish on both native backends. Everything is checked
 against the fuzzer's own model of LP64 Linux C, never the generator's or the
 compiler's: every report row and blocker, every bound function's foreign ABI
 classes, link symbol and contract, every constant's type and value, every
-result and what C saw of every argument.
+result and what C saw of every argument. Byte pointers get a `read
+noescape` contract in the fuzzer's profile, so their calls expose Botlish
+`Bytes` (and the C side checks the bytes it read); handles go through
+`direct module` programs (their parameters stay unknown).
 
-*(Pending: measured at the end of the milestone.)*
+With the final generator, on linux-x86_64:
+
+| seed | programs | declarations | GC stress | disagreements |
+|---:|---:|---:|---|---:|
+| 5 | 10 | 171 | no | 0 |
+| 17 | 10 | 176 | no | 0 |
+| 41 | 6 | 104 | yes | 0 |
+
+(Seeds 1, 2 and 4, 24 programs and 331 declarations, ran clean on the
+generator before its last changes; every mutation run fuzzes 3 more
+programs of seed 11 against the unmutated parts.) What the fuzzer does not
+reach: targets other than the host (its model is LP64 Linux's; the
+fixture's pinned outputs and `cb-fixture-targets` cover the other targets),
+compiler evidence (its profile says `evidence none`; the fixture's
+`bgf_point_x` and the acceptance profiles have it), stub tables, macro
+shadowing and policy errors -- the mutation table below shows which tests
+stand for those.
 
 ## 31. Mutation testing
 
@@ -989,7 +1009,31 @@ pinned sources and libraries are not).
 
 ## 33. Regressions
 
-*(Pending: measured at the end of the milestone.)*
+Run on this branch's final code (linux-x86_64; a 4-core container):
+
+| what | result |
+|---|---|
+| `tests/local.tcl` (every Tcl test file on interp and compile, every golden suite on all four backends, through the front-end cache; empty cache after the hygiene change) | interp 5,814 and compile 5,810 tests passed, 1 failed on each: `cb-policy-stale`'s expected text, edited during the run (fixed; it passes, under GC stress too); 92 golden suites, 0 failed: interp 4,721, compile 4,721, cranelift-generic 4,629, cranelift 4,731 tests passed |
+| the golden suites' HIR before and after the hygiene index | 92 of 92 front-end cache entries identical (but the scheduler's measured milliseconds) |
+| `tests/c-bindgen.test`, `tests/c-ffi.test` under `BOTLISH_NATIVE_GC_STRESS=1` | 36 of 36, 61 of 61 |
+| `tests/c-abi-types.test`, `tests/c-pointer-borrowing.test` | 73 of 73, 61 of 61 |
+| `tests/proves-naming.test`, `audit/proves-naming/tools/fuzz.tcl` (hygiene) | 84 of 84; 300 seeds, 398 renames, 0 law failures |
+| `tests/compilation-isolation.test`, `audit/compilation-isolation/tools/interleave.tcl`, its `mutate.tcl` | 19 of 19; 80 artifacts and outcomes, 0 differ; 14 mutants, 14 killed |
+| `tests/hir-interchange.test`, `tests/hir-cache.test`, `roundtrip.tcl -via interchange`, `-via cache`, its `mutate.tcl` | 11 of 11, 17 of 17; 90 and 100 artifacts and outcomes, 0 differ; 27 mutants, 27 killed |
+| `audit/c-ffi/tools/fuzz.tcl` (seeds 3, 9; 13 under GC stress) | 26 programs, 312 functions, 0 disagreements |
+| `audit/c-ffi/tools/mutate.tcl` (its native mutants rebuilt) | 27 mutants, 27 killed |
+| `audit/c-abi-types/tools/fuzz.tcl` (seeds 1, 2), its `mutate.tcl` | 80 programs, 0 disagreements; 26 mutants, 26 killed |
+| `audit/c-pointer-borrowing/tools/fuzz.tcl` (seed 1) | 10 programs, 80 cases, 0 disagreements |
+| every mutant of every `audit/*/mutants.txt` still applies | 661 of 661 |
+| `audit/refactor/tools/gate.tcl` (the warning gate) | passed: the observed warnings are exactly the manifest |
+| `cargo test --release --lib` (native) | 237 passed |
+| every committed binding is current (`check -target committed`, five profiles) | 10 of 10 targets current |
+
+Not run here: the static decisions' batched-against-sequential comparison
+(it runs in CI on main for a front-end change, never locally: AGENTS.md;
+the hygiene change leaves every HIR identical), the arm64 workflow (no arm64
+host; CI runs it), the stub-linker executable job (no image-format or
+relocation change), and anything on macOS (section 34).
 
 ## 34. Not here, and what remains
 
