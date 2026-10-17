@@ -810,6 +810,8 @@ On the final tree, Linux x86-64, Tcl 9.0.1, rustc 1.97, a 4-core container:
 | `tests/c-pointer-borrowing.test` | 61/61 normally, 61/61 under `BOTLISH_NATIVE_GC_STRESS=1`, 61/61 under `CORE_BACKEND=compile` |
 | `cargo test --release --manifest-path native/Cargo.toml` | 232 + 32 passed, 0 failed (seven new: the fixture's reads and writes through a real storage address, a null pointer with no bytes never dereferenced, the declared failure after a partial write, a rooted exposure surviving the reentrant collection, `mixed`, a non-address operand) |
 | `-emit-nir` of `examples/linux/{write,read-stdin,context-hello}.bot` | byte-identical to the tree before this milestone |
+| `audit/hir-interchange/tools/roundtrip.tcl -via interchange` and `-via cache` | 10 suites, 90 and 100 artifacts and outcomes compared, 0 differ |
+| `audit/hir-interchange/tools/mutate.tcl` | 25 mutants, 25 killed |
 
 Tests outside this milestone's file that changed: `tests/static-compile.test`
 and `tests/golden-framework.test` (the `DiagnosticCode` case count, 94 to
