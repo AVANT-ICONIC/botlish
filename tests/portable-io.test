@@ -249,6 +249,69 @@ test io-substitute-context {a test context implementing io::IO is selected like 
 } -result {{value {["ok"]}} {value {["failed"]}}}
 
 # ---------------------------------------------------------------------------
+# The line operations' newline (S16, 2048-ENGINE-WORKLOAD.md): print_line and
+# write_error_line append it as a character, text.append_char('\n'), so
+# lib/io.bot carries no warning -- its two one-character String literals
+# "\n" were ONE-CHAR-STRING-LITERAL findings every program importing io
+# printed, and a program importing io could not compile under -warnings
+# error.
+
+test io-warning-clean {a program importing io and linux::io (the S16 reproduction) collects no warning from lib/io.bot under the default policy, and compiles under -warnings error} -body {
+    set text "import io\nimport linux::io\nwith context linux::io::create()\nio::print_line(\"hi\"):\n    on io::WriteFailed:\n        unit\n"
+    set hir [surface::compile $text t.bot -warnings default -warning-channel ""]
+    set strict [catch {surface::compile $text t.bot -warnings error -warning-channel ""} message]
+    list [lmap w [hir::warnings::of $hir] {
+        list [dict get $w code] [hir::originLocation $hir [dict get $w primary]]
+    }] $strict
+} -result {{} 0}
+
+# A substitute io::IO context declared by the program itself, holding only an
+# Int (a native context slot holds no String): its write_text and
+# write_error_text succeed exactly when they receive OUT and ERR, and fail
+# with io::WriteFailed otherwise.
+proc expectingContext {out err} {
+    return [string map [list @OUT@ $out @ERR@ $err] {import io
+import str
+type Tag = Int in 0..0
+context struct Expect:
+    tag: Tag
+fn write_text(text: str, context c: Expect) -> unit errors io::WriteFailed:
+    if text == @OUT@:
+        return unit
+    fail io::WriteFailed
+fn write_error_text(text: str, context c: Expect) -> unit errors io::WriteFailed:
+    if text == @ERR@:
+        return unit
+    fail io::WriteFailed
+}]
+}
+
+test io-line-text-exact {print_line and write_error_line write exactly TEXT followed by one newline, as one write, on their own stream, on every backend: the empty text, a two-byte and a four-byte scalar, a text already ending in a newline; TEXT alone, or the other stream, is not what they write} -body {
+    lmap {call out err} {
+        {io::print_line("é😀")}        {"é😀\n"}  {""}
+        {io::print_line("é😀")}        {"é😀"}    {""}
+        {io::print_line("")}           {"\n"}     {""}
+        {io::print_line("x\n")}        {"x\n\n"}  {""}
+        {io::write_error_line("é😀")}  {""}       {"é😀\n"}
+        {io::write_error_line("é😀")}  {"é😀\n"}  {"é😀"}
+        {io::write_error_line("")}     {""}       {"\n"}
+        {io::print("é😀")}             {"é😀"}    {""}
+    } {
+        sourceAgree "[expectingContext $out $err]fn run() -> str errors io::WriteFailed:\n    $call\n    \"written\"\nwith context Expect {tag: 0}\nr = run():\n    on io::WriteFailed:\n        \"not written\"\nr\n"
+    }
+} -result [list {value {"written"}} {value {"not written"}} {value {"written"}} {value {"written"}} \
+    {value {"written"}} {value {"not written"}} {value {"written"}} {value {"written"}}]
+
+test io-line-newline-is-a-character {NIR: print_line's and write_error_line's clones append the newline with one strappendchar of the immediate char 10 -- no strcat and no String constant} -body {
+    set nir [native::nir [ioHir $::routingText]]
+    lmap name {io::print_line<io::IO=linux::io::LinuxIO> io::write_error_line<io::IO=linux::io::LinuxIO>} {
+        set body [join [nirBody $nir $name] \n]
+        list [regexp -all {op strappendchar } $body] [regexp -all -line {= char 10$} $body] \
+            [regexp -all {op strcat } $body] [regexp -all { = str } $body]
+    }
+} -result {{1 1 0 0} {1 1 0 0}}
+
+# ---------------------------------------------------------------------------
 # Real output (standalone executables)
 
 test io-hello-executable {examples/io/hello.bot as a standalone executable: descriptor 1 receives exactly "Hello, world!\n" (then the runner's own result line); nothing on descriptor 2; the same under GC stress} -constraints {linuxX86_64 posixShell} -body {
@@ -329,9 +392,9 @@ test io-write-failed {a negative write result (the kernel's -errno, here an inje
 }} {2 {"failed"
 }}}
 
-test io-allocations {allocation evidence: the context-trait path adds nothing -- io::print_line(text) allocates exactly what the direct linux::io::write_text(str::concat(text, "\n")) does: the line String, the UTF-8 byte List and the Bytes (the operation's own), plus linux::io::create's 7 structs and the one struct linux::write builds} -constraints {linuxX86_64} -body {
+test io-allocations {allocation evidence: the context-trait path adds nothing -- io::print_line(text) allocates exactly what the direct linux::io::write_text(str::append_char(text, '\n')) does: the line String, the UTF-8 byte List and the Bytes (the operation's own), plus linux::io::create's 7 structs and the one struct linux::write builds} -constraints {linuxX86_64} -body {
     set pre "import io\nimport linux::io\nimport str\nwith context linux::io::create()\n"
-    lmap call {{io::print_line("Hello, world!")} {linux::io::write_text(str::concat("Hello, world!", "\n"))}} {
+    lmap call {{io::print_line("Hello, world!")} {linux::io::write_text(str::append_char("Hello, world!", '\n'))}} {
         set report [native::allocationReport [ioHir "${pre}r = $call:\n    on io::WriteFailed:\n        unit\nr\n"] summary]
         list [dict get $report total allocations] [dict get $report total allocatedBytes] \
             [lmap {k v} [dict get $report byKind] {expr {[dict get $v allocations] ? "$k=[dict get $v allocations]" : [continue]}}]

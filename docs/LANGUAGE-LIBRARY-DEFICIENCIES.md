@@ -206,6 +206,13 @@ character type stops one step short of the output. **Direction**: append a
 character to text (what the corpus asks for, 21 of 24); `str::of_char` would
 be a longer spelling of a literal.
 
+**Partly addressed** (S16, 2048-ENGINE-WORKLOAD.md): `str::append_char(text,
+c)` appends a character to text as a new flat String, and closed
+`lib/io.bot`'s two newlines. The other 22 need it as a piece of a virtual
+construction (`hir/construction.tcl`): spelled with today's flat append, a
+`linux::path::concat` join costs one more String (7 -> 8) and
+`web::uri_escape_text` of an 11-character text 28 Strings instead of 1.
+
 ### 4. Strings are not iterable
 
 `loop c in text` is a type error (`statically incompatible with list`): only

@@ -500,6 +500,19 @@ every program that loads them, so the demand is concrete: **an append of a
 UnicodeChar to a String would make `io` -- and with it every portable I/O
 program -- strict-clean, and close 21 findings in 6 functions.**
 
+*Successor note (S16, 2048-ENGINE-WORKLOAD.md).* The append exists:
+`str::append_char(text, c)`, TEXT followed by the character C as a new flat
+String (`tests/str-append-char.test`). It closed `io::print_line`'s and
+`io::write_error_line`'s newlines (`text.append_char('\n')`, probed by
+`audit/refactor/tools/probes/io.tcl`), so `io` and every portable I/O program
+is strict-clean. The other 22 stay manifested: the append is no piece of a
+virtual construction (`hir/construction.tcl`), so the joins and escapes
+`str::concat` builds as one construction would each cost Strings spelled
+with it -- measured on cranelift, a `linux::path::concat` join 7 -> 8
+Strings, `examples/io/child-path.bot` 4 -> 7, `web::uri_escape_text` of an
+11-character text 1 -> 28 -- and `clean_char`'s results stay text by role
+(`audit/refactor/manifest.txt`'s `char->text`).
+
 ### The classifier coupling: 10 manifested
 
 Ten consumption-side findings did not convert, for one reason: the character
@@ -754,7 +767,9 @@ what each one forces on code, in one place.
 1. **Append a character to text** -- 21 findings in 6 functions (section 8):
    a `str::concat` (or builder) that takes a UnicodeChar. This, more than
    `str::of_char`, is what the production side asks for; `str::of_char('\n')`
-   would be a longer spelling of `"\n"`.
+   would be a longer spelling of `"\n"`. (Since built as `str::append_char`;
+   it closed `io`'s two, and the rest wait for it to join virtual
+   construction: section 8's successor note.)
 2. **Character classifiers** -- 10 findings: `str::is_tcl_alnum`/`alpha`
    over a UnicodeChar would let `emailish?`'s classes, `lex-strategy`'s and
    `source-checks`' uniform classifier contracts be character-typed.

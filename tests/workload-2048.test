@@ -34,6 +34,9 @@ set suiteBackends [expr {$nativeSuite ? $workloadBackends : [lsearch -all -inlin
 testConstraint suiteBackends [expr {[llength $suiteBackends] > 0}]
 testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
+# linux::io's syscalls (the demo's output) exist on Linux x86-64 only.
+testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64}}]
 
 set gameDir [file join $::projectRoot examples games 2048]
 
@@ -106,6 +109,18 @@ test workload-2048-warning-clean {the engine, the demo, the suite and the benchm
     join $found \n
 } -result {}
 
+test workload-2048-strict-warnings {S16: the engine, the demo, the suite and the benchmark compile under -warnings error -- the stdlib modules they load (io, linux::io, test, ...) carry no warning either, so nothing their authors did not write rejects them} -body {
+    with2048 {
+        set rejected {}
+        foreach name {game2048.bot demo.bot golden.bot bench.bot} {
+            if {[catch {surface::readProgramFile [file join $gameDir $name] -warnings error -warning-channel ""} message]} {
+                lappend rejected "$name: [lindex [split $message \n] 0]"
+            }
+        }
+    }
+    join $rejected \n
+} -result {}
+
 test workload-2048-bench-checksum "bench.bot's 200-move checksum is the same on [join $workloadBackends {, }] (and equals the independent Python oracle's, audit/2048/oracle.py)" -body {
     with2048 {
         set hir [benchHir 200]
@@ -157,8 +172,10 @@ unit}
 # 2048-ENGINE-WORKLOAD.md, S19: under GC stress this executable crashed
 # (native/src/codegen/roots.rs shared a root slot between a call's result
 # and a List live across the call; tests/native-root-liveness.test's
-# root-def-interference-1 is the reduced case).
-test workload-2048-demo-executable {the demo as a standalone executable prints the whole game, identically under GC stress} -constraints executableAot -body {
+# root-def-interference-1 is the reduced case). It prints through
+# linux::io, whose syscalls exist on Linux x86-64 only (AGENTS.md, "Linux
+# AArch64"), hence linuxX86_64.
+test workload-2048-demo-executable {the demo as a standalone executable prints the whole game, identically under GC stress} -constraints {executableAot linuxX86_64} -body {
     set dir [makeDirectory workload-2048-demo]
     try {
         with2048 {

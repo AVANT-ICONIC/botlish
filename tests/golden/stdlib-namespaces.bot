@@ -287,7 +287,7 @@ fn register_qualified_intrinsic_tests():
     fn b_unknown_str_member() errors compiler::CompilerError:
         static compile:
             str::nope("a")
-    test::rejects_message("ns-unknown-member-of-intrinsic-namespace", compiler::DiagnosticCode::UnknownSymbol, "namespace \"str\" has no definition \"nope\" (its members are the intrinsics: char_at, concat, encode_utf8, is_tcl_alnum, is_tcl_alpha, length, lowercase, substring)", b_unknown_str_member)
+    test::rejects_message("ns-unknown-member-of-intrinsic-namespace", compiler::DiagnosticCode::UnknownSymbol, "namespace \"str\" has no definition \"nope\" (its members are the intrinsics: append_char, char_at, concat, encode_utf8, is_tcl_alnum, is_tcl_alpha, length, lowercase, substring)", b_unknown_str_member)
 
     # ns-unknown-member-lists-intrinsics-too: a namespace with a module lists
     # the module's definitions and the intrinsics together.

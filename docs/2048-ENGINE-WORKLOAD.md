@@ -293,10 +293,11 @@ code, S10). The front end proves:
   handlers; an Int tile or a row 4 is a `Type` error at the call.
 
 It does not prove: a descending loop's index (S5), anything from a named
-constant (S8), anything about a List's length through a parameter or a
-struct field (S7), or lockstep over a field projection (S9). The engine
-therefore reads cells with `list::get` and a default that never happens
-(10 calls), and spells the board size as the literal 4.
+constant (S8; resolved since, `0db2443`), anything about a List's length
+through a parameter or a struct field (S7), or lockstep over a field
+projection (S9). The engine therefore reads cells with `list::get` and a
+default that never happens (10 calls), and spelled the board size as the
+literal 4 (until S8's fix).
 
 **Generic NIR (cranelift-generic) vs specialized NIR (cranelift).** Nearly
 identical. Specialization's one visible win: `move` returns its `Move`
@@ -512,9 +513,9 @@ Its findings, ranked:
 | S3 | golden tooling assumes ported Tcl tests | TEST-FRAMEWORK, DOCUMENTATION | MODERATE | worked around (D5) |
 | S6 | an empty MutableVector needs a typed helper function | LANGUAGE, DIAGNOSTIC | MODERATE | no |
 | S7 | a List's length is no fact through a parameter or field | LANGUAGE, COMPILER-PRECISION | MODERATE | no |
-| S8 | a named Int constant is no fact inside functions | COMPILER-PRECISION | MODERATE | no |
+| S8 | a named Int constant is no fact inside functions | COMPILER-PRECISION | MODERATE | yes (`0db2443`) |
 | S12 | a local or parameter named like an imported function makes method calls to it ambiguous | LANGUAGE, DIAGNOSTIC | MODERATE | no |
-| S16 | every importer of io gets the stdlib's own two warnings | DIAGNOSTIC, STDLIB | MODERATE | no |
+| S16 | every importer of io gets the stdlib's own two warnings | DIAGNOSTIC, STDLIB | MODERATE | yes |
 | S21 | no private module members | LANGUAGE | MODERATE | no |
 | S23 | loop-carried state needs recursion or a mutable place | LANGUAGE, STDLIB | MODERATE | no |
 | S25 | a single-file program loses encapsulation and gets silent shadowing | LANGUAGE, DIAGNOSTIC | MODERATE | no |
@@ -531,6 +532,12 @@ By category (a finding may have several): COMPILER-CORRECTNESS 2,
 COMPILER-PRECISION 4, COMPILER-PERFORMANCE 1, LANGUAGE 8, STDLIB 5, CLI 3,
 DIAGNOSTIC 8, DOCUMENTATION 4, TEST-FRAMEWORK 3, USER-ERROR 1. By severity:
 BLOCKER 2, MAJOR 4, MODERATE 11, MINOR 5, ONE-TIME-NOVELTY 3.
+
+**Found with S8's fix** (`0db2443`; not counted above, not fixed, both
+COMPILER-PRECISION, MINOR): S26, a collecting loop's elements' Ranges
+never admit it as a declared `List[Coordinate]` (with a literal bound
+too: S8's entry-program example); S27, a character bound to a name is
+no exact element for `byte::set`'s literal-List proof.
 
 **Wrong hypotheses** (S8, S12, S19): "module bindings are opaque to the
 analyses" (it is any program-level binding); "a declared List parameter is
@@ -713,14 +720,25 @@ experiment with a tooling failure rather than ordinary unfamiliarity):
    say so in the prompt and the reference.
 4. S8: a named program-level Int constant as an exact fact inside
    functions (`hir/range.tcl`'s `ref` case can consult
-   `hir::exact::IntOf`).
+   `hir::exact::IntOf`). Resolved in `0db2443`: `hir::range::BindingRange`,
+   shared by the range analysis and the completion walk, reads a
+   binding no walk of the function binds as the exact Int it is bound
+   to; the engine names its size again; tests in
+   tests/exact-value-facts.test (`ev-outer-*`),
+   range-and-contract-values.bot and tests/static-economics.test
+   (`se-equal-outer-constant`).
 5. S1: an Int-to-String in the stdlib (the test framework and every
    printing program reimplement it).
 6. S12: either exclude bindings whose static type is not callable from
    method candidates, or make the diagnostic name the reason.
 7. S16: the stdlib's own warnings should not reach a program that imports
    it -- today `-warnings error` rejects every program that imports `io`
-   for two literals in `lib/io.bot`.
+   for two literals in `lib/io.bot`. **Resolved** (b94e3d0): `lib/io.bot`
+   appends the newline as a character, `text.append_char('\n')`, with the
+   new `str::append_char`; regressions in `tests/portable-io.test`,
+   `tests/workload-2048.test` (`workload-2048-strict-warnings`: the
+   engine, demo, suite and benchmark compile under `-warnings error`) and
+   `tests/str-append-char.test`.
 
 S24 is fixed already: it would have stopped the restricted agent's first
 single-file native build with an internal error.

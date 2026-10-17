@@ -29,6 +29,7 @@
 //! | rt_str_byte_len        | Str                 | Int (UTF-8 byte length)      | no        |
 //! | rt_str_lower           | Str                 | Str                          | yes       |
 //! | rt_str_cat             | Str, Str            | Str                          | yes       |
+//! | rt_str_append_char     | Str, UnicodeChar    | Str (S followed by C)        | yes       |
 //! | rt_str_utf8_bytes      | Str                 | List of Int (0..255); RANGE  | yes       |
 //! | rt_str_char_at         | Str, Int            | UnicodeChar; declared        | no        |
 //! |                        |                     | IndexNotFound (str::char_at) |           |
@@ -109,7 +110,7 @@ pub fn op_may_allocate(op: OpCode) -> bool {
     use OpCode::*;
     matches!(
         op,
-        IAdd | ISub | IMul | IMod | IAnd | IOr | IXor | IShl | IShr | Substr | DecodeCharAt | ShortToStr | AsciiToStr | StrLower | StrCat
+        IAdd | ISub | IMul | IMod | IAnd | IOr | IXor | IShl | IShr | Substr | DecodeCharAt | ShortToStr | AsciiToStr | StrLower | StrCat | StrAppendChar
             | StrUtf8Bytes | Argv | ListNew | ListAppend | MutArrayAllocate | MutArrayFreeze | MkOk
             // The owned byte storage is one allocation (a collection may run
             // first); the empty storage is a shared static (no allocation).
@@ -162,7 +163,7 @@ pub fn op_may_allocate(op: OpCode) -> bool {
 /// Whether OP can report a Botlish semantic error by returning NO_VALUE.
 pub fn op_may_error(op: OpCode) -> bool {
     use OpCode::*;
-    matches!(op, IMod | IShl | IShr | VEq | Hash | Substr | StrCat | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
+    matches!(op, IMod | IShl | IShr | VEq | Hash | Substr | StrCat | StrAppendChar | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
         // The C pointer test fixture's out-of-range address (RANGE).
         | CPtrFixture
         // The borrow test fixture: an operand that is no address or count
@@ -1559,6 +1560,25 @@ pub extern "C" fn rt_str_cat(p: *mut Vm, a: Value, b: Value) -> Value {
     r
 }
 
+/// `str::append_char(S, C)` (core/strings.tcl's `appendChar`): a new String
+/// of S's characters followed by the character C. The construction
+/// rt_str_cat makes, with C's UTF-8 encoding (1 to 4 bytes) as the second
+/// piece: one allocation of exactly the final size, S's bytes and C's
+/// encoding copied once, straight into place; the character count is S's
+/// plus one and the String is ASCII when S is and C is. A UnicodeChar is
+/// always a Unicode scalar value, so C always encodes. Fallible exactly as
+/// rt_str_cat is: a result past MAX_COLLECTION_LENGTH is RANGE.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_str_append_char(p: *mut Vm, s: Value, c: Value) -> Value {
+    let x = str_of(s);
+    let ch = char::from_u32(char_of(c)).expect("a UnicodeChar is a Unicode scalar value");
+    let mut buf = [0u8; 4];
+    let tail: &str = ch.encode_utf8(&mut buf);
+    let r = vm(p).new_str_pieces(&[x.as_str(), tail], x.chars + 1, x.ascii && ch.is_ascii());
+    vm(p).metrics.record_string_copy(x.len_bytes() + tail.len());
+    r
+}
+
 // ---------------------------------------------------------------------------
 // Tcl-compatible Unicode character classification (core/tclcompat.tcl):
 // TEMPORARY compatibility primitives, not Botlish's eventual public
@@ -2470,6 +2490,7 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         Substr => rt_substr(p, a[0], a[1], a[2]),
         StrLower => rt_str_lower(p, a[0]),
         StrCat => rt_str_cat(p, a[0], a[1]),
+        StrAppendChar => rt_str_append_char(p, a[0], a[1]),
         StrUtf8Bytes => rt_str_utf8_bytes(p, a[0]),
         StrCharAt => rt_str_char_at(p, a[0], a[1]),
         StrCharAtProven => rt_str_char_at_proven(p, a[0], a[1]),
@@ -2644,6 +2665,7 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_str_slice_short, 4),
         h!(rt_str_lower, 2),
         h!(rt_str_cat, 3),
+        h!(rt_str_append_char, 3),
         h!(rt_str_utf8_bytes, 2),
         h!(rt_str_char_at, 3),
         h!(rt_str_char_at_proven, 3),
@@ -3368,6 +3390,42 @@ mod tests {
             vm.error = None;
             vm.declared_error = 0;
         }
+    }
+
+    // append_char (core/strings.tcl's appendChar): S followed by the
+    // character C, for every UTF-8 width of C after ASCII and non-ASCII
+    // text (the empty String included), through the helper and through
+    // apply_op (a str::append_char function value's dispatch).
+    #[test]
+    fn append_char_every_width() {
+        let mut vm = vm();
+        for (text, c, expect) in [
+            ("ab", '\n' as u32, "ab\n"),
+            ("", '\n' as u32, "\n"),
+            ("a", 0xE9, "a\u{e9}"),
+            ("\u{e9}", 0x4E16, "\u{e9}\u{4e16}"),
+            ("x", 0x1F600, "x\u{1f600}"),
+            ("\u{1f600}", '!' as u32, "\u{1f600}!"),
+        ] {
+            let s = rooted!(vm, str_val(&mut vm, text));
+            let direct = rooted!(vm, rt_str_append_char(&mut *vm, s, make_char(c)));
+            let applied = apply_op(&mut *vm, OpCode::StrAppendChar, &[s, make_char(c)]);
+            for r in [direct, applied] {
+                assert_eq!(heap_kind(r), KIND_STR);
+                assert_eq!(str_of(r).as_str(), expect);
+                assert_eq!(str_of(r).chars, expect.chars().count());
+                assert_eq!(str_of(r).ascii, expect.is_ascii());
+            }
+            assert_eq!(str_of(s).as_str(), text);
+            vm.temp_roots.clear();
+        }
+    }
+
+    #[test]
+    fn append_char_allocates_and_may_fail_like_concat() {
+        assert!(op_may_allocate(OpCode::StrAppendChar));
+        assert!(op_may_error(OpCode::StrAppendChar));
+        assert_eq!(OpCode::StrAppendChar.arity(), Some(2));
     }
 
     // -----------------------------------------------------------------------

@@ -18,6 +18,9 @@ import mutable_vector
 # The value of an empty cell.
 empty = 0
 
+# The number of rows of a board, and of cells of a row.
+size = 4
+
 # A row or column index.
 type Coordinate = Int in 0..3
 
@@ -125,7 +128,7 @@ fn each_reversed(lines: List[List[int]]) -> List[List[int]]:
 
 # The columns of ROWS, as rows.
 fn transposed(rows: List[List[int]]) -> List[List[int]]:
-    loop column from 0 to 4:
+    loop column from 0 to size:
         loop row in rows:
             row.get(column, empty)
 
@@ -173,8 +176,8 @@ fn total(scores: List[int]) -> int:
 # Boards
 
 fn empty_board() -> Board:
-    rows = loop r from 0 to 4:
-        loop c from 0 to 4:
+    rows = loop r from 0 to size:
+        loop c from 0 to size:
             empty
     Board {rows: rows}
 
@@ -182,11 +185,11 @@ fn cell?(value: int) -> bool:
     value == empty or value.tile?()
 
 fn board_row?(row: List[int]) -> bool:
-    list::length(row) == 4 and row.all?(cell?)
+    list::length(row) == size and row.all?(cell?)
 
 # Whether ROWS are four rows of four cells, each empty or a tile.
 fn board_rows?(rows: List[List[int]]) -> bool:
-    list::length(rows) == 4 and rows.all?(board_row?)
+    list::length(rows) == size and rows.all?(board_row?)
 
 # The board whose rows are ROWS, top to bottom, each left to right.
 fn board(rows: List[List[int]]) -> Board errors InvalidBoard:
@@ -208,8 +211,8 @@ fn no_positions() -> MutableVector[Position]:
 # The positions of BOARD's empty cells, row by row.
 fn empty_positions(board: Board) -> List[Position]:
     found = no_positions()
-    loop r from 0 to 4:
-        loop c from 0 to 4:
+    loop r from 0 to size:
+        loop c from 0 to size:
             at = Position {row: r, column: c}
             if board.cell(at) == empty:
                 found.push(at)

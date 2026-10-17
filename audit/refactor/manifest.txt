@@ -22,11 +22,21 @@
 #
 #   char->text   the value is a single character that must become text
 #                (an operand of str::concat, a String result, a table of
-#                text): Botlish has no character-to-text construction
-#                (no str::of_char, no append of a UnicodeChar to a String),
-#                and the only literal-free spelling slices it out of a longer
-#                literal, which keeps the one-character String at run time
-#                and only hides it from a literals-only check.
+#                text). Botlish's one character-to-text construction is
+#                str::append_char, the append of a UnicodeChar to a String
+#                as a new flat String (it closed lib/io.bot's two newlines),
+#                and it does not reach these: it is no piece of a virtual
+#                construction (hir/construction.tcl), so a join or an
+#                escape spelled with it materializes Strings that
+#                str::concat's construction plan never does (measured on
+#                cranelift: a linux::path::concat join 7 -> 8 Strings,
+#                examples/io/child-path.bot 4 -> 7, web::uri_escape_text of
+#                an 11-character text 1 -> 28), a character that begins text
+#                (pct's "%") has no seed but "", and a one-character String
+#                result (clean_char's) stays one. There is no str::of_char,
+#                and the only literal-free spelling slices the character out
+#                of a longer literal, which keeps the one-character String
+#                at run time and only hides it from a literals-only check.
 #   classifier   the character is also consumed by a String-taking
 #                classifier (str::is_tcl_alnum / str::is_tcl_alpha) in the
 #                same predicate or uniform predicate contract
@@ -124,8 +134,6 @@ program lib/binary.bot
 program lib/byte.bot
 program lib/compiler.bot
 fails lib/io.bot CORE SEMANTIC CONTEXT-FUNCTION-VALUE -- entry-program value: compiled as an entry program, a module's last declaration is the program's value, and io's last function requires a context, so it cannot be a value; no module member could end the file without adding to its API (verified through `import io`)
-  ONE-CHAR-STRING-LITERAL 59:31 none -- char->text: print_line appends the newline to TEXT as text, so its one write request carries it
-  ONE-CHAR-STRING-LITERAL 67:37 none -- char->text: write_error_line's newline, as above
 program lib/linux.bot
 fails lib/list.bot SURFACE MODULE MISSING-IMPORT -- own-namespace intrinsics: list.bot calls its namespace's intrinsic list::at, which needs no import as module `list` and may not be imported there (SELF-IMPORT), while an entry program needs `import list`; xs.at(i) compiles both ways but is a field projection when instantiated (verified through `import list`)
 program lib/mathish.bot

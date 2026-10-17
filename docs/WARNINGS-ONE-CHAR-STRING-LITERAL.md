@@ -979,6 +979,11 @@ the new file (`git diff e7f715c -- tests/`), so the kickoff base `e7f715c` had
   more closed). Library findings still print for every program that loads
   the module, now only for `lib/web.bot` (23), `lib/io.bot` (2) and
   `lib/linux/path.bot` (2); a gate fails on any new one.
+* **Second successor note (S16, 2048-ENGINE-WORKLOAD.md).** `str::append_char`
+  (a String followed by one UnicodeChar) is the append of a character to
+  text the catalog's `str::concat` row asked for; `lib/io.bot`'s two findings
+  closed with it (`text.append_char('\n')`), so only `lib/web.bot` (23) and
+  `lib/linux/path.bot` (2) still print for their importers.
 
 ## Future warning candidates
 

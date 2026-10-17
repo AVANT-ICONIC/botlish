@@ -170,10 +170,15 @@ API. The corpus's scanners are written this way: the CSV programs of
 `str::length` bound and compare it with `','`, `'\n'` and `'"'`;
 `ai_text_clean.bot`'s `clean_char` reads the character its one-character text
 holds; `lib/web.bot`'s `emailish?` tests `'.'` and `'@'` at a position
-(REFACTOR-WARNINGS-CLEAN.md). What still needs a one-character String --
-appending a character to text, a table of characters as text, a character
-handed to a String-taking classifier such as `str::is_tcl_alnum` -- is listed,
-with its reason, in the warning manifest (§23).
+(REFACTOR-WARNINGS-CLEAN.md). A character becomes text by being appended to
+a String: `str::append_char(text, c)` is TEXT followed by C (`lib/io.bot`'s
+`print_line` writes `text.append_char('\n')`), so a character the code holds
+never has to be a one-character String first. What still uses a
+one-character String -- a join or an escape that `str::concat` builds as one
+virtual construction, where a flat append would cost an allocation; a table
+of characters as text; a character handed to a String-taking classifier such
+as `str::is_tcl_alnum` -- is listed, with its reason, in the warning manifest
+(§23).
 
 **Equality (`==`)** compares structure. Values of different kinds are never
 equal. Integers compare numerically, strings compare exact characters, lists
@@ -491,6 +496,7 @@ Standard intrinsics (qualified root natives):
 | `str::substring` | str, int, int → str, errors `LowerUnderrun` `UpperOverrun`: the characters `start <= i < end` of a valid slice (below) |
 | `str::lowercase` | str → str (Unicode 16 simple one-to-one case mapping; see §"Strings") |
 | `str::concat` | str, str → str |
+| `str::append_char` | str, UnicodeChar → str: the String followed by the one character (`str::length` + 1 characters; the argument is unchanged), as `list::append` is to a List: the way a character becomes text, with no one-character String of its own |
 | `str::encode_utf8` | str → `List[Byte]` (the UTF-8 bytes) |
 | `str::char_at` | str, int → UnicodeChar, errors `IndexNotFound`: the scalar at character index `0 <= i < length` (the index space of `length`/`substring`); any other Int index fails with `IndexNotFound`; never allocates. With char literals (`c == '%'`) and `char::scalar_value` it classifies a String's characters without a one-character String or an `encode_utf8` List (ENCODE-UTF8-ALLOCATION-RESEARCH.md) |
 | `str::is_tcl_alpha` `str::is_tcl_alnum` | one-scalar str → bool (temporary Tcl-compatibility classes, core/tclcompat.tcl) |
@@ -3180,13 +3186,14 @@ observed warnings are exactly the manifest -- a new warning anywhere, an entry
 that no longer fires, or a drifted location fails it -- and compiles every
 program and loader without a manifest entry under `-warnings error`. A
 library's findings print for every program that loads it (there is no "system
-header" notion); since the refactor only three modules carry any, all
+header" notion); since the refactor only two modules carry any, all
 `ONE-CHAR-STRING-LITERAL`: `lib/web.bot` (23: its hexadecimal digit table,
-`"%"`, and the local-part and label classes beside `str::is_tcl_alnum`),
-`lib/io.bot` (2: the newline `print_line` and `write_error_line` append) and `lib/linux/path.bot` (2:
-the joining `"/"`, and an index the completion proof does not cover). A program
-that loads none of them compiles under `-warnings error` whenever its own code
-is clean.
+`"%"`, and the local-part and label classes beside `str::is_tcl_alnum`) and
+`lib/linux/path.bot` (2: the joining `"/"`, and an index the completion proof
+does not cover). `lib/io.bot`'s line operations append their newline as a
+character (`str::append_char`), so every program that prints through `io`
+or `linux::io` is free of library findings. A program that loads neither
+module compiles under `-warnings error` whenever its own code is clean.
 
 **Botlish does not currently provide GCC/Clang-style `-Wfoo` controls** (no
 `-Wno-foo`, `-Werror=foo`, `-Wall`, warning groups or levels), and no source

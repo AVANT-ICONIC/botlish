@@ -267,6 +267,23 @@ try on all four backends.
   later (F1).
 * CLI wish: "what Range does the compiler know for `size` at line N,
   and why?"
+* Resolved (0db2443): `hir::range::BindingRange` reads a binding the walk
+  of a function neither binds nor seeds as the exact Int it is bound to
+  (`hir::exact::BindingIntOf`: its one `bind`), in the range analysis's
+  `ref` case (and its capture transport) and the completion walk's
+  `ref` case alike -- a program-level constant a function captures and
+  a module constant read through `ns::name` or by the module's own
+  functions. No new static-decision edge: a function already depends on
+  every binding it mentions and a binding on its definition. The engine
+  names its size again (`size = 4`). Regression tests:
+  tests/exact-value-facts.test `ev-outer-*`, their golden ports in
+  tests/golden/range-and-contract-values.bot, and
+  tests/static-economics.test `se-equal-outer-constant`. The
+  entry-program example above stays rejected -- with the literal 4 as
+  well: S26. The native code is unchanged: bench.bot's NIR (the engine
+  before the rename) is identical before and after the fix, so S18's
+  `staticget` and tagged `ieq` for `empty` stay (the cell compared with
+  it has no Range).
 
 ### S9 Lockstep over a field projection is unproven; the message says "(expression)"
 
@@ -431,6 +448,15 @@ the demo with warnings on. They are manifested in the warning gate
 loads them"), but a user cannot act on them and they appear in their
 build output (here with a temporary path, because of D5).
 DIAGNOSTIC/STDLIB. MODERATE (noise that trains users to ignore warnings).
+
+**Resolved** (b94e3d0): `lib/io.bot`'s `print_line` and `write_error_line`
+append the newline as a character, `text.append_char('\n')`, through the
+new intrinsic `str::append_char` (a String followed by one UnicodeChar,
+the append of a character to text the warning manifest's `char->text`
+obstruction lacked), so `lib/io.bot` carries no warning. Regressions:
+`tests/portable-io.test` (`io-warning-clean`, `io-line-text-exact`,
+`io-line-newline-is-a-character`), `tests/workload-2048.test`
+(`workload-2048-strict-warnings`) and `tests/str-append-char.test`.
 
 ### S17 METHOD-ELIGIBLE fires 12 times on the demo's ordinary calls
 
@@ -731,6 +757,9 @@ rebuilding the demo with `run.tcl -warnings error`: `the String literal
 "\n" is one character long ...`). The warning gate avoids this only
 because it compares against a manifest. DIAGNOSTIC/STDLIB; raises S16 to
 a CLI problem for anyone using strict warnings in CI.
+**Resolved** with S16 (b94e3d0): `run.tcl -warnings error -backend cranelift
+demo.bot` compiles and runs, and the engine, the suite and the benchmark
+compile under `-warnings error` too (`workload-2048-strict-warnings`).
 * S24 is not single-file only: the same shape with nested functions
   (`fn outer(n): base = n - 5 / fn spawned(...) -> Turn: ... base ... /
   fn main(): first = spawned(1, 2) / first.game + first.seed`) fails the
@@ -774,3 +803,35 @@ the repository, run with `env -i` (no PATH):
   suites with 0 failures (interp 4691, compile 4691, cranelift-generic
   4598, cranelift 4700), 1591 s with 4 jobs. Not run here: AArch64
   (CI's tests-arm64.yml).
+
+### S26 A collecting loop's elements' Ranges do not reach a declared List result
+
+* Context: checking S8's fix (0db2443) on S8's own entry-program example,
+  `fn coords() -> List[Coordinate]: loop r from 0 to size: r`.
+* Expected: r is 0..3 in the body, so the loop's List is a
+  List[Coordinate].
+* Actual: `function result does not prove declared type
+  List[int[Coordinate]]`, with `size` and with the literal 4 alike: the
+  loop's static type is List[int], and a declared List result is
+  admitted by its type alone (`hir::range::AggregateAdmits`), never by
+  its elements' Ranges. Each element through a `Coordinate` parameter
+  (`coordinate(r)`), or the struct the engine builds (`Position {row:
+  r, ...}`), is proven.
+* Classification: COMPILER-PRECISION, MINOR (the engine's own shape is
+  the workaround). Not fixed: what a List type may carry, not where a
+  fact is read. Pinned as is by tests/exact-value-facts.test
+  `ev-outer-constant-like-literal`.
+
+### S27 A named character constant is no exact element where its literal is
+
+* Context: the non-Int side of S8's fix (0db2443), probed.
+* Actual: `byte::set(['-', '.'])` needs no handler, but with `d = '-'`
+  -- in the same function, or a program-level constant read inside
+  one -- `byte::set([d, '.'])` may raise `byte::AboveRange`
+  (UNHANDLED-ERROR): the completion walk's literal-List proof
+  (`hir::completions::ExactValueOf`) reads a `ref`'s exact non-Int
+  value only from what its own walk binds (a literal List's loop
+  element, an exact call's argument), never from the binding's one
+  `bind`.
+* Classification: COMPILER-PRECISION, MINOR. Not fixed: S8's fix covers
+  exact Ints.

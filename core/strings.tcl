@@ -1,6 +1,6 @@
 # strings.tcl -- native string operations: the `str` namespace's
 # intrinsics (str::length, str::substring, str::lowercase, str::concat,
-# str::encode_utf8, str::char_at; core/tclcompat.tcl adds
+# str::append_char, str::encode_utf8, str::char_at; core/tclcompat.tcl adds
 # str::is_tcl_alpha/alnum).
 # Each is a root native registered under its qualified name
 # (core::native::isQualifiedNative): there is no lib/str.bot module, and a
@@ -57,6 +57,22 @@ proc core::strings::concat {a b} {
     return [core::value::str "[Text $a str::concat][Text $b str::concat]"]
 }
 
+# (str::append_char S C): a new String of S's characters followed by the
+# character C -- str::length(S) + 1 characters, S unchanged, as list::append
+# is to a List. The one construction that turns a character into text: a
+# character the code holds (a char literal, a str::char_at result) is
+# appended where it is, never first made a one-character String of its own
+# (README.md, "Strings and characters"; REFACTOR-WARNINGS-CLEAN.md, design
+# finding 1: what the corpus's character-to-text findings asked for is an
+# append, not a str::of_char). Total over its domain: C is a UnicodeChar,
+# so always one Unicode scalar value (astral included), never a surrogate.
+# Mirrors native/src/runtime/ops.rs's rt_str_append_char.
+proc core::strings::appendChar {s c} {
+    set text [Text $s str::append_char]
+    set c [core::value::expect UnicodeChar $c str::append_char]
+    return [core::value::str $text[format %c [core::value::charOf $c]]]
+}
+
 # S's UTF-8 encoding as a List of Ints, one per byte (each 0..255), in
 # order: the general byte-level access String otherwise never exposes
 # (String counts and indexes only by Unicode scalar -- length, substring).
@@ -105,6 +121,8 @@ core::native::register str::lowercase -arity 1 -impl core::strings::lowercase \
     -param-types {str} -result-type str -runtime string-alloc -context-free 1
 core::native::register str::concat    -arity 2 -impl core::strings::concat \
     -param-types {str str} -result-type str -runtime string-alloc -context-free 1
+core::native::register str::append_char -arity 2 -impl core::strings::appendChar \
+    -param-types {str UnicodeChar} -result-type str -runtime string-alloc -context-free 1
 core::native::register str::encode_utf8 -arity 1 -impl core::strings::encodeUtf8 \
     -param-types {str} -result-type list -runtime list-alloc -context-free 1 \
     -result-shape {typed byte::Byte 0 255}
