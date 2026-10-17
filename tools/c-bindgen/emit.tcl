@@ -29,15 +29,15 @@ namespace eval ::cbind::emit {
     variable ns ""
 }
 
-# The Botlish text of a type TEXT with its pointee identities (@KEY@)
+# The Botlish text of a type TEXT with its pointee identities (\x01KEY\x02)
 # spelled as their owner module's members, NS::ctypes::NAME (`import type`
 # names `type` declarations only, not structs).
 proc ::cbind::emit::Type {text} {
     variable model
     variable ns
     set ids [dict get $model identities]
-    while {[regexp {@([^@]+)@} $text -> key]} {
-        set text [string map [list @$key@ "${ns}::ctypes::[dict get $ids $key name]"] $text]
+    while {[regexp {\x01([^\x02]+)\x02} $text -> key]} {
+        set text [string map [list \x01$key\x02 "${ns}::ctypes::[dict get $ids $key name]"] $text]
     }
     return $text
 }
@@ -45,7 +45,7 @@ proc ::cbind::emit::Type {text} {
 # The identity keys TEXT mentions.
 proc ::cbind::emit::Keys {text} {
     set out {}
-    foreach {_ key} [regexp -all -inline {@([^@]+)@} $text] { lappend out $key }
+    foreach {_ key} [regexp -all -inline {\x01([^\x02]+)\x02} $text] { lappend out $key }
     return $out
 }
 
@@ -84,6 +84,7 @@ proc ::cbind::emit::CText {entry} {
             inline { set text "static inline $text" }
             stub { set text "$text (called through [::cmacro::meaning [dict get $model macros $name]])" }
             macro { set text "macro $name, as $text" }
+            macro-shadow { set text "$text, shadowed by a function-like macro of its name" }
         }
     }
     return [regsub -all {\s+} $text " "]
@@ -179,13 +180,10 @@ proc ::cbind::emit::files {theModel} {
     foreach key [concat $plain $thunked] {
         set g [dict get $groups $key]
         set keys {}
-        set names {}
         foreach e [dict get $g externs] {
-            lappend names [dict get $e botlish]
             foreach q [dict get $e params] { lappend keys {*}[Keys [dict get $q type]] }
             lappend keys {*}[Keys [dict get $e result type]]
         }
-        foreach c [dict get $g constants] { lappend names [::cbind::model::Ident [dict get $c name]] }
         set keys [lsort -unique $keys]
         set text [Banner "${ns}::[string map {:: ::} $key]" [ModuleWhat $key [dict get $headerOf $key]]]
         set imports {}
@@ -233,7 +231,9 @@ proc ::cbind::emit::files {theModel} {
         if {[llength $converters]} { append text "import ffi::c\n" }
         foreach k [IdentityOrder $allKeys] {
             set id [dict get $ids $k]
-            set where [expr {[dict get $id loc] eq "" ? "" : " ([lindex [dict get $id loc] 0])"}]
+            # A system header is named by its origin only: its path is the
+            # host's, never generated source.
+            set where [expr {[dict get $id loc] eq "" ? "" : ([dict get $id origin] in {public bundled internal} ? " ([lindex [dict get $id loc] 0])" : " (a system header)")}]
             set note [expr {[dict get $id complete] ? ", a complete C type seen through pointers only" : ""}]
             append text "\n# $k$where$note\nopaque struct [dict get $id name]:\n    tag: unit\n"
         }

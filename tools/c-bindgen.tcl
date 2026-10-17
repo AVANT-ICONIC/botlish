@@ -72,10 +72,18 @@ proc Generate {name args} {
     lassign [Options $args {-target "" -out "" -bool 1 -evidence "" -timing 0 -fetch 0}] o rest
     if {$rest ne ""} { error "c-bindgen generate: unexpected [join $rest { }]" }
     set profile [::cbind::profile::load $name]
+    set failed 0
     foreach target [Targets $profile [dict get $o -target]] {
         set t0 [clock milliseconds]
-        set result [::cbind::generate::run $profile $target [dict create bool [dict get $o -bool] \
-            evidence [dict get $o -evidence] fetch [dict get $o -fetch]]]
+        if {[catch {::cbind::generate::run $profile $target [dict create bool [dict get $o -bool] \
+                evidence [dict get $o -evidence] fetch [dict get $o -fetch]]} result options]} {
+            # One target that cannot be generated here (no target sysroot)
+            # does not stop the others.
+            puts stderr "[dict get $profile name] $target: FAILED: [lindex [split $result \n] 0]"
+            if {[llength [split $result \n]] > 1} { puts stderr [join [lrange [split $result \n] 1 12] \n] }
+            set failed 1
+            continue
+        }
         set dir [expr {[dict get $o -out] ne "" ? [file join [dict get $o -out] $target] : [::cbind::profile::outputDir $profile $target]}]
         ::cbind::generate::write [dict get $result files] $dir [dict get $profile name]
         set c [::cbind::report::counts [dict get $result model]]
@@ -84,6 +92,7 @@ proc Generate {name args} {
             dict for {k v} [dict get $result timing] { puts "  $k $v s" }
         }
     }
+    if {$failed} { exit 1 }
 }
 
 proc Check {name args} {
@@ -279,7 +288,8 @@ proc Fetch {name args} {
 proc Diff {name args} {
     lassign [Options $args {-targets "" -dir ""}] o rest
     set profile [::cbind::profile::load $name]
-    set targets [dict get $o -targets]
+    set targets [split [string map {, " "} [dict get $o -targets]]]
+    set targets [lsearch -all -inline -not -exact $targets ""]
     if {$targets eq ""} { set targets [dict get $profile targets] }
     set base [lindex $targets 0]
     set baseDir [expr {[dict get $o -dir] ne "" ? [file join [dict get $o -dir] $base] : [::cbind::profile::outputDir $profile $base]}]
@@ -301,14 +311,18 @@ proc Diff {name args} {
         }
         puts "[dict get $profile name]: $base vs $other: [llength $lines] difference(s)"
         foreach l $lines { puts "  $l" }
-        set fileDiff 0
-        foreach f [::cbind::generate::Existing $baseDir [dict get $profile name]] {
+        # Files compared with each one's own target name spelled away (it is
+        # in every banner).
+        set fileDiff {}
+        set files [lsort -unique [concat [::cbind::generate::Existing $baseDir [dict get $profile name]] \
+            [::cbind::generate::Existing $dir [dict get $profile name]]]]
+        foreach f $files {
             if {$f in {manifest.txt report.txt report.tsv}} continue
-            if {![file exists [file join $dir $f]] || [::chdr::readFile [file join $dir $f]] ne [::chdr::readFile [file join $baseDir $f]]} {
-                incr fileDiff
-            }
+            set a [expr {[file exists [file join $baseDir $f]] ? [string map [list $base TARGET] [::chdr::readFile [file join $baseDir $f]]] : ""}]
+            set b [expr {[file exists [file join $dir $f]] ? [string map [list $other TARGET] [::chdr::readFile [file join $dir $f]]] : ""}]
+            if {$a ne $b} { lappend fileDiff $f }
         }
-        puts "  generated files differing: $fileDiff"
+        puts "  generated files differing beyond their target name: [llength $fileDiff][expr {[llength $fileDiff] ? " ([join $fileDiff {, }])" : ""}]"
     }
 }
 

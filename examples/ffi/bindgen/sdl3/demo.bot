@@ -1,0 +1,69 @@
+# demo.bot -- one ordinary Botlish program over many GENERATED SDL3
+# declarations, constants, typedef mappings and opaque handles together
+# (C-BINDGEN.md, "SDL3"): initialize video, create a window and a renderer,
+# draw and present a frame, wait briefly, destroy everything, quit. No
+# callback and no event inspection: a bounded, deterministic run inside the
+# one-way C FFI.
+#
+#   tclsh9.0 tests/cffi/sdl3.tcl          (once: builds libSDL3.so)
+#   LD_LIBRARY_PATH=DIR tclsh9.0 tools/c-bindgen.tcl run sdl3 examples/ffi/bindgen/sdl3/demo.bot \
+#       -backend cranelift -L DIR
+#
+# DIR is what sdl3.tcl prints. Headless, SDL_VIDEO_DRIVER=dummy (SDL's
+# dummy video driver, with its software renderer); on a desktop the window
+# shows for the delay. The value is a List of true.
+#
+# A direct module: the window and renderer handles go to functions whose
+# pointer parameters carry no contract (unknown escape, which retains), so
+# those calls are direct authority, acknowledged here -- the generated
+# modules themselves stay ordinary. The title is explicit NUL-terminated
+# bytes, exposed for SDL_CreateWindow by its profile contract (read
+# noescape); the flags and the bit helpers' arguments are generated
+# constants of their C types.
+direct module
+
+import abi
+import abi::bytes
+import byte
+import ffi::c
+import list
+import str
+import sdl3::init
+import sdl3::render
+import sdl3::thunks::bits
+import sdl3::timer
+import sdl3::version
+import sdl3::video
+
+fn nul() -> byte::Byte:
+    0
+
+# The bytes of TEXT and the NUL the C API needs.
+fn cstring(text: str) -> abi::bytes::Bytes:
+    abi::bytes::from_list(str::encode_utf8(text).append(nul()))
+
+started = sdl3::init::SDL_Init(sdl3::init::SDL_INIT_VIDEO)
+window = cstring("Botlish over generated SDL3").SDL_CreateWindow(320, 240, sdl3::video::SDL_WINDOW_RESIZABLE)
+no_name = ffi::c::null[ffi::c::Char]()
+renderer = window.SDL_CreateRenderer(no_name)
+driver = sdl3::video::SDL_GetCurrentVideoDriver()
+colored = renderer.SDL_SetRenderDrawColor(32, 96, 160, 255)
+cleared = sdl3::render::SDL_RenderClear(renderer)
+presented = sdl3::render::SDL_RenderPresent(renderer)
+before = sdl3::timer::SDL_GetTicks()
+sdl3::timer::SDL_Delay(50)
+after = sdl3::timer::SDL_GetTicks()
+id = sdl3::video::SDL_GetWindowID(window)
+sdl3::render::SDL_DestroyRenderer(renderer)
+sdl3::video::SDL_DestroyWindow(window)
+sdl3::init::SDL_Quit()
+[started,
+ not driver.null?(),
+ colored,
+ cleared,
+ presented,
+ after - before >= 50,
+ id > 0,
+ sdl3::version::SDL_GetVersion() == sdl3::version::SDL_VERSION,
+ sdl3::thunks::bits::SDL_HasExactlyOneBitSet32(sdl3::init::SDL_INIT_VIDEO),
+ sdl3::thunks::bits::SDL_MostSignificantBitIndex32(sdl3::init::SDL_INIT_VIDEO) == 5]

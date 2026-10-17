@@ -27,22 +27,26 @@ proc ::cbind::report::rows {model} {
     set ns [dict get $model profile name]
     set rows {}
     foreach e [dict get $model apis] {
-        set kind [expr {[dict exists $e macro] && ![dict exists $e decl] || [dict exists $e macro] && [dict get $e kind] ne "thunk" ? "macro" : "function"}]
-        if {[dict exists $e macro] && [dict get $e kind] in {alias thunk unsupported excluded} && ![dict exists $e line]} { set kind macro }
         set k [dict get $e kind]
         set module [expr {$k in {direct alias} ? "${ns}::[dict get $e module]" : ($k eq "thunk" ? "${ns}::thunks::[dict get $e module]" : "")}]
+        set ids [dict get $model identities]
+        set sig ""
+        if {$k in {direct alias thunk}} {
+            set types [lmap q [dict get $e params] {ReportType $ids [dict get $q type]}]
+            set sig "; ([join $types {, }]) -> [ReportType $ids [dict get $e result type]]"
+        }
         switch -- $k {
             direct {
-                set reason [expr {[dict exists $e shadowedBy] ? "direct (shadowed by a function-like macro: [dict get $e shadowedBy])" : "direct"}]
-                set detail "symbol [dict get $e symbol]"
+                set reason direct
+                set detail "symbol [dict get $e symbol]$sig"
             }
             alias {
                 set reason "alias of [dict get $e targetName]"
-                set detail "symbol [dict get $e symbol]"
+                set detail "symbol [dict get $e symbol]$sig"
             }
             thunk {
-                set reason "thunk ([dict get $e via])"
-                set detail "symbol [dict get $e symbol]"
+                set reason "thunk ([dict get $e via][expr {[dict exists $e shadowedBy] ? ": [dict get $e shadowedBy]" : ""}])"
+                set detail "symbol [dict get $e symbol]$sig"
             }
             excluded {
                 set reason excluded
@@ -75,16 +79,14 @@ proc ::cbind::report::rows {model} {
         if {[dict get $body origin] ne "public"} continue
         if {$kind eq "typedef"} {
             lappend rows [TypedefRow $model $ix $ids $name $body]
-        } elseif {$kind eq "struct"} {
-            set key "[dict get $body kind] $name"
-            if {[string match anon@* $name]} continue
-            if {[lsearch -exact -index 1 $rows $key] >= 0} continue
-            set complete [dict get [dict get $ix tag $key] complete]
-            if {[dict exists $ids $key]} {
-                lappend rows [list tag $key opaque "${ns}::ctypes" [expr {$complete ? "complete, behind pointers" : "incomplete"}] "identity [dict get $ids $key name]"]
-            } else {
-                lappend rows [list tag $key unused "" [expr {$complete ? "complete" : "incomplete"}] "no bound signature points to it"]
-            }
+        }
+    }
+    foreach key [PublicTags $model $ix] {
+        set complete [expr {[dict exists $ix tag $key] && [dict get $ix tag $key complete]}]
+        if {[dict exists $ids $key]} {
+            lappend rows [list tag $key opaque "${ns}::ctypes" [expr {$complete ? "complete, behind pointers" : "incomplete"}] "identity [dict get $ids $key name]"]
+        } else {
+            lappend rows [list tag $key unused "" [expr {$complete ? "complete" : "incomplete"}] "no bound signature points to it"]
         }
     }
     return $rows
@@ -119,7 +121,7 @@ proc ::cbind::report::TypedefRow {model ix ids name body} {
             set callback [expr {[lindex $final 0] eq "fn" || [lindex [::cir::unq [lindex $final 1]] 0] eq "fn"}]
             if {[lindex $m 0] eq "ok"} {
                 set what [expr {$callback ? "callback" : "pointer"}]
-                return [list typedef $name $what "" [::cbind::emit::Type [lindex $m 1]] [::cbind::model::Spell $final]]
+                return [list typedef $name $what "" [ReportType $ids [lindex $m 1]] [::cbind::model::Spell $final]]
             }
             set reasons [lsort -unique [lmap b [lindex $m 1] {lindex $b 0}]]
             return [list typedef $name unsupported "" [join $reasons ,] [join [lmap b [lindex $m 1] {lindex $b 1}] "; "]]
@@ -127,12 +129,43 @@ proc ::cbind::report::TypedefRow {model ix ids name body} {
         default {
             set m [::cbind::model::Value $final param]
             if {[lindex $m 0] eq "ok"} {
-                return [list typedef $name other "" [lindex $m 1] [::cbind::model::Spell $final]]
+                return [list typedef $name other "" [ReportType $ids [lindex $m 1]] [::cbind::model::Spell $final]]
             }
             set reasons [lsort -unique [lmap b [lindex $m 1] {lindex $b 0}]]
             return [list typedef $name unsupported "" [join $reasons ,] [join [lmap b [lindex $m 1] {lindex $b 1}] "; "]]
         }
     }
+}
+
+# TEXT with its pointee identities spelled for the report: a generated
+# identity by its Botlish name, a tag no bound signature uses by its C tag.
+proc ::cbind::report::ReportType {ids text} {
+    while {[regexp {\x01([^\x02]+)\x02} $text -> key]} {
+        set spelled [expr {[dict exists $ids $key] ? "[dict get $ids $key name]" : "<$key>"}]
+        set text [string map [list \x01$key\x02 $spelled] $text]
+    }
+    return $text
+}
+
+# The struct and union tags of the public API: declared in a public header
+# or named by a public typedef (through pointers), anonymous ones left out.
+proc ::cbind::report::PublicTags {model ix} {
+    set tags {}
+    dict for {key tag} [dict get $ix tag] {
+        if {[dict get $tag origin] eq "public" && [lindex $key 0] ne "enum" && ![string match anon@* [lindex $key 1]]} {
+            lappend tags $key
+        }
+    }
+    foreach r [dict get $model records] {
+        lassign $r kind name body
+        if {$kind ne "typedef" || [dict get $body origin] ne "public"} continue
+        set t [::cir::unq [dict get $body type]]
+        while {[lindex $t 0] eq "ptr"} { set t [::cir::unq [lindex $t 1]] }
+        if {[lindex $t 0] in {struct union} && ![string match anon@* [lindex $t 1]]} {
+            lappend tags "[lindex $t 0] [lindex $t 1]"
+        }
+    }
+    return [lsort -unique $tags]
 }
 
 proc ::cbind::report::tsv {model} {
@@ -149,7 +182,7 @@ proc ::cbind::report::Percent {n total} {
 }
 
 proc ::cbind::report::Line {label n {total ""} {note ""}} {
-    set s [format "  %-58s %7s" $label $n]
+    set s [format "  %-70s %7s" $label $n]
     if {$total ne ""} { append s [format " %8s" [Percent $n $total]] }
     if {$note ne ""} { append s "  $note" }
     return $s
@@ -176,9 +209,9 @@ proc ::cbind::report::counts {model} {
         }
     }
     set ix [::cir::index [dict get $model records]]
-    dict for {key tag} [dict get $ix tag] {
-        if {[dict get $tag origin] ne "public" || [lindex $key 0] eq "enum" || [string match anon@* [lindex $key 1]]} continue
-        dict incr c [expr {[dict get $tag complete] ? "complete" : "opaque"}]
+    foreach key [PublicTags $model $ix] {
+        set complete [expr {[dict exists $ix tag $key] && [dict get $ix tag $key complete]}]
+        dict incr c [expr {$complete ? "complete" : "opaque"}]
     }
     foreach e [dict get $model apis] {
         set k [dict get $e kind]
@@ -337,6 +370,34 @@ proc ::cbind::report::text {model} {
     lappend out [Line "bound, taking a callback (no Botlish function can be one yet)" [dict get $c callbacks] $apis]
     lappend out [Line "bound, pointing to a complete C struct (needs memory views)" [dict get $c views] $apis]
     lappend out [Line "bound, a pointer parameter that may be retained (direct)" [dict get $c unknownRetention] $apis]
+    lappend out ""
+    lappend out "Macro APIs (apparent callables that are macros, and what each became)"
+    set m [dict create shadowedDirect 0 selfAlias 0 objectAlias 0 rename 0 stubThunk 0 stubUnsupported 0 macroThunk 0 noSignature 0 otherMacro 0]
+    foreach e [dict get $model apis] {
+        if {[dict exists $e shadowedBy]} { dict incr m shadowedDirect }
+        if {[dict exists $e via] && [dict get $e via] eq "self-alias"} { dict incr m selfAlias }
+        if {[dict get $e kind] eq "alias"} {
+            dict incr m [expr {[dict exists $e rename] ? "rename" : "objectAlias"}]
+        }
+        if {[dict exists $e via] && [dict get $e via] eq "stub"} {
+            dict incr m [expr {[dict get $e kind] eq "thunk" ? "stubThunk" : "stubUnsupported"}]
+        }
+        if {[dict exists $e via] && [dict get $e via] eq "macro" && [dict get $e kind] eq "thunk"} { dict incr m macroThunk }
+        if {[dict exists $e blockers]} {
+            set rs [lmap b [dict get $e blockers] {lindex $b 0}]
+            if {"macro-needs-signature" in $rs} { dict incr m noSignature }
+            if {"unsupported-macro" in $rs} { dict incr m otherMacro }
+        }
+    }
+    lappend out [Line "declared functions a function-like macro shadows (thunked: the macro)" [dict get $m shadowedDirect]]
+    lappend out [Line "declared functions with a self-naming macro (bound as declared)" [dict get $m selfAlias]]
+    lappend out [Line "object-like aliases of a function (bound: its symbol, named)" [dict get $m objectAlias]]
+    lappend out [Line "function-like renames of a function (bound: its symbol, named)" [dict get $m rename]]
+    lappend out [Line "stub-table redirections (thunked: the C call goes through the table)" [dict get $m stubThunk]]
+    lappend out [Line "stub-table redirections not bound (a blocker, or no stub policy)" [dict get $m stubUnsupported]]
+    lappend out [Line "function-like macros thunked by a profile signature" [dict get $m macroThunk]]
+    lappend out [Line "function-like macros needing a signature (not bound)" [dict get $m noSignature]]
+    lappend out [Line "other macros no thunk can stand for (not bound)" [dict get $m otherMacro]]
     lappend out ""
     lappend out "Macros"
     set cats [dict create]

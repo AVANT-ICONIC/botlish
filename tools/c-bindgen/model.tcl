@@ -335,7 +335,7 @@ proc ::cbind::model::Pointer {pointee} {
             set name [Identity $key]
             set features {pointer opaque}
             if {[dict get $::cbind::model::identities $key complete]} { lappend features view }
-            return [list ok "ffi::c::Ptr\[@$key@\]" $features]
+            return [list ok "ffi::c::Ptr\[\x01$key\x02\]" $features]
         }
         ptr {
             set inner [Pointer [lindex $t 1]]
@@ -606,11 +606,19 @@ proc ::cbind::model::candidates {theProfile theTarget run theOptions} {
         } elseif {[dict get $body definition] || [dict get $body storage] eq "static"} {
             dict set entry kind thunk
             dict set entry via inline
+        } elseif {[dict exists $macros $name] && [dict get $macros $name form] eq "function"
+                && [MacroCallee [dict get $macros $name]] ne $name} {
+            # Declared, and shadowed by a function-like macro: a C caller of
+            # the name gets the macro (an inline expansion, another
+            # function's call, a stub table's member), so the binding calls
+            # the macro too, from a thunk with the declaration's signature.
+            # Only a macro that renames the name to itself is the
+            # declaration.
+            dict set entry kind thunk
+            dict set entry via macro-shadow
+            dict set entry shadowedBy [lindex [::cmacro::functionCategory $name [dict get $macros $name]] 0]
         } else {
             dict set entry kind direct
-            if {[dict exists $macros $name] && [dict get $macros $name form] eq "function"} {
-                dict set entry shadowedBy [lindex [::cmacro::functionCategory $name [dict get $macros $name]] 0]
-            }
         }
         lappend apis $entry
     }
@@ -652,10 +660,14 @@ proc ::cbind::model::candidates {theProfile theTarget run theOptions} {
         lappend apis $entry
     }
 
-    # The profile's macro signatures must each name a macro API.
+    # The profile's macro signatures must each name a macro API that has no
+    # declaration of its own (a declared function is bound as itself).
     foreach name [dict keys [dict get $profile thunks]] {
         if {![dict exists $macros $name]} {
             error "c-bindgen: the profile's thunk signature of \"$name\" names no public macro of this target's headers (a stale policy)"
+        }
+        if {[dict exists $seen $name]} {
+            error "c-bindgen: the profile's thunk signature of \"$name\" names a declared function, which is bound by its own declaration: remove the policy"
         }
     }
 
@@ -1166,7 +1178,11 @@ proc ::cbind::model::Constants {model} {
                 lassign $data code word
                 set ctype [::cbind::probe::typeOfCode $code]
                 set scalar [ScalarOf $ctype]
-                if {$ctype eq "_Bool"} {
+                if {[string match address:* $word] || [string match address:* $code]} {
+                    dict set c status unsupported
+                    dict set c reason not-integer-constant
+                    dict set c detail "its value is an address (a string or an object the linker places), no integer known before linking"
+                } elseif {$ctype eq "_Bool"} {
                     if {[dict get $options bool]} {
                         dict set c status constant
                         dict set c type ffi::c::Bool

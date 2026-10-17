@@ -1,7 +1,7 @@
 c-bindgen manifest (C-BINDGEN.md, "Manifest")
 generator_version 1
 profile bgf
-profile_file tools/c-bindgen/profiles/fixture.tcl a8ed4192
+profile_file tools/c-bindgen/profiles/fixture.tcl 71c59d34
 target macos-aarch64
 library bgf
 source {local tools/c-bindgen/fixture}
@@ -10,8 +10,8 @@ entry bgf/bgf.h
 include include
 defines {}
 undefines {}
-flags -ffreestanding
-command {clang -E -x c --target=arm64-apple-macos11 -ffreestanding -I$SRC/include $TU/entry.c}
+flags {-ffreestanding -nostdlibinc}
+command {clang -E -x c --target=arm64-apple-macos11 -ffreestanding -nostdlibinc -I$SRC/include $TU/entry.c}
 toolchain_family clang
 toolchain_version {Ubuntu clang version 18.1.3 (1ubuntu1)}
 toolchain_target arm64-apple-macos11
@@ -25,8 +25,8 @@ shim_library botlish_shim_bgf_35d49587
 file bgf/bgf.bot 141 d5104c1d
 file bgf/ctypes.bot 35 83edfd22
 file bgf/thunks/bgf.bot 24 8e9212e1
-file report.tsv 81 6b4e3109
-file report.txt 80 ae017fd5
+file report.tsv 83 0ecd0949
+file report.txt 91 0604f0d6
 file shim.c 22 35d49587
 libraries bgf/bgf.bot bgf
 libraries bgf/thunks/bgf.bot {botlish_shim_bgf_35d49587 bgf}
@@ -46,7 +46,7 @@ count fnmacros 3
 count fnptrTypedefs 3
 count inline 3
 count manual 8
-count opaque 0
+count opaque 2
 count proven 1
 count ptrParams 14
 count ptrResults 4

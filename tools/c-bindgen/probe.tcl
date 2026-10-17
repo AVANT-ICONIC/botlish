@@ -149,8 +149,9 @@ proc ::cbind::probe::ValueSource {prelude entries live} {
 }
 
 # The 64-bit data words of every label PREFIX<N> of ASM: a dict N -> words
-# (unsigned decimal). Data directives: .quad, .xword, .8byte, .dword, and
-# .zero/.space runs of zero bytes.
+# (unsigned decimal, or address:SYMBOL for a relocated word). Data
+# directives: .quad, .xword, .8byte, .dword, and .zero/.space runs of zero
+# bytes.
 proc ::cbind::probe::DataWords {asm prefix} {
     set out [dict create]
     set current ""
@@ -162,8 +163,12 @@ proc ::cbind::probe::DataWords {asm prefix} {
             continue
         }
         if {$current eq ""} continue
-        if {[regexp {^\.(quad|xword|8byte|dword)\s+(-?(?:0x[0-9a-fA-F]+|[0-9]+))} $t -> _ v]} {
+        if {[regexp {^\.(quad|xword|8byte|dword)\s+(-?(?:0x[0-9a-fA-F]+|[0-9]+))\s*(?:$|[#/;@])} $t -> _ v]} {
             dict lappend out $current [expr {$v & 0xFFFFFFFFFFFFFFFF}]
+        } elseif {[regexp {^\.(quad|xword|8byte|dword)\s+(\S+)} $t -> _ v]} {
+            # A relocation (an address: a pointer-valued expression), no
+            # integer the compiler computed.
+            dict lappend out $current address:$v
         } elseif {[regexp {^\.(zero|space)\s+([0-9]+)} $t -> _ n]} {
             for {set k 0} {$k < $n / 8} {incr k} { dict lappend out $current 0 }
         } elseif {[regexp {^[A-Za-z_.$][A-Za-z0-9_.$]*:} $t] || [regexp {^\.size\M} $t]} {

@@ -1,0 +1,99 @@
+c-bindgen report: profile sdl3, target linux-x86_64
+SDL 3.4.18's public C API (SDL3/SDL.h and every header it includes)
+(report.tsv has one row per name; `tclsh9.0 tools/c-bindgen.tcl report sdl3 -target linux-x86_64 -why NAME` explains one)
+
+Inventory (public headers, as this target's preprocessor sees them)
+  public declared functions                                                 1233
+  static inline callable APIs                                                 15
+  function-like macros                                                       157
+  object-like macros naming a function (aliases)                               0
+  API names in all                                                          1405
+  opaque (incomplete) struct types                                            43
+  complete struct and union types                                            122
+  function-pointer typedefs                                                   35
+  object-like constant macros                                               1071
+  enumerators                                                               1166
+
+Bound (of the API names)
+  directly linked externs                                                   1086    77.3%
+  aliases (externs of the symbol a macro names)                                3     0.2%
+  thunks (C wrappers in the shim)                                             13     0.9%
+    of them table-redirected names (stubs)                                     0
+  bound in all                                                              1102    78.4%
+  unsupported                                                                303    21.6%
+  excluded by the profile                                                      0     0.0%
+  constants generated                                                       1656    74.0%
+
+Unsupported API names by blocker (an API may have several)
+  macro-needs-signature                                                      113     8.0%
+  float                                                                       87     6.2%
+  unsupported-macro                                                           44     3.1%
+  double                                                                      27     1.9%
+  variadic                                                                    16     1.1%
+  by-value-aggregate                                                           8     0.6%
+  va-list                                                                      7     0.5%
+  unsupported-callback-signature                                               2     0.1%
+
+Pointer contracts (bound APIs)
+  pointer parameters                                                        1368
+    with a favorable manual fact (the profile)                                 2     0.1%
+    with a compiler-proven fact                                               16     1.2%
+    unknown (no fact: no exposure, retains)                                 1350    98.7%
+  pointer results                                                            261
+    independent                                                                1     0.4%
+    alias of a parameter                                                       0     0.0%
+    unknown                                                                  260    99.6%
+
+Capability pressure (API names a missing FFI capability blocks or limits)
+  C _Bool in the signature (blocked without ffi::c::Bool)                    506    36.0%
+    of them bound now, bool their only blocker                               456    32.5%
+  float/double                                                               114     8.1%
+  aggregates by value (struct, union)                                          8     0.6%
+  varargs (..., va_list)                                                      23     1.6%
+  callback signature outside the ABI universe                                  2     0.1%
+  explicit calling convention                                                  0     0.0%
+  macro without a signature                                                  157    11.2%
+  bound, taking a callback (no Botlish function can be one yet)               36     2.6%
+  bound, pointing to a complete C struct (needs memory views)                225    16.0%
+  bound, a pointer parameter that may be retained (direct)                   834    59.4%
+
+Macro APIs (apparent callables that are macros, and what each became)
+  declared functions a function-like macro shadows (thunked: the macro)        0
+  declared functions with a self-naming macro (bound as declared)              0
+  object-like aliases of a function (bound: its symbol, named)                 3
+  function-like renames of a function (bound: its symbol, named)               0
+  stub-table redirections (thunked: the C call goes through the table)         0
+  stub-table redirections not bound (a blocker, or no stub policy)             0
+  function-like macros thunked by a profile signature                          0
+  function-like macros needing a signature (not bound)                       113
+  other macros no thunk can stand for (not bound)                             44
+
+Macros
+  object: alias: undeclared identifier                                       599
+  object: constant: string literal                                           565
+  object: constant: integer literal                                          393
+  function: expression                                                        84
+  object: constant: integer expression                                        83
+  object: empty                                                               64
+  function: empty                                                             27
+  object: constant: expression with casts                                     24
+  function: call wrapper: undeclared callee                                   12
+  function: call wrapper: computed arguments                                  10
+  object: decoration: attribute                                                9
+  function: declaration-generating                                             8
+  function: decoration: attribute                                              7
+  object: constant: floating literal                                           6
+  function: call wrapper: rename                                               3
+  function: expression: calls a function                                       3
+  object: alias: function                                                      3
+  function: expression: member access                                          2
+  function: statement                                                          2
+  function: initializer fragment                                               1
+
+Generated source
+  Botlish files                                                               58
+  lines                                                                     8453
+  extern c fn declarations                                                  1102
+  opaque types                                                                96
+  constants                                                                 1656
+  shim thunks                                                                 13

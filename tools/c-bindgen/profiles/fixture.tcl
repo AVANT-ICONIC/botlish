@@ -1,6 +1,7 @@
 # fixture.tcl -- the binding generator's synthetic fixture profile
 # (C-BINDGEN.md, "The synthetic fixture"): include/bgf/bgf.h of
-# tools/c-bindgen/fixture, freestanding, for three targets. Its generated
+# tools/c-bindgen/fixture, freestanding (clang's own headers only, never a
+# host's: -nostdlibinc), for three targets. Its generated
 # output is pinned in tools/c-bindgen/fixture/expected/TARGET and checked by
 # tools/c-bindgen/tests/bindgen.test.
 dict create \
@@ -10,7 +11,7 @@ dict create \
         library bgf
         source {local tools/c-bindgen/fixture}
         includeDirs {include}
-        flags {-ffreestanding}
+        flags {-ffreestanding -nostdlibinc}
         public {include/bgf/*}
         entry {bgf/bgf.h}
     } \

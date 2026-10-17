@@ -1,26 +1,26 @@
 kind	name	status	module	reason	detail
-function	bgf_add	direct	bgf::bgf	direct	symbol bgf_add
-function	bgf_length	direct	bgf::bgf	direct	symbol bgf_length
-function	bgf_mix	direct	bgf::bgf	direct	symbol bgf_mix
-function	bgf_open	direct	bgf::bgf	direct	symbol bgf_open
-function	bgf_close	direct	bgf::bgf	direct	symbol bgf_close
-function	bgf_window_of	direct	bgf::bgf	direct	symbol bgf_window_of
-function	bgf_count	direct	bgf::bgf	direct	symbol bgf_count
-function	bgf_plain_char	direct	bgf::bgf	direct	symbol bgf_plain_char
-function	bgf_is_even	direct	bgf::bgf	direct	symbol bgf_is_even
-function	bgf_flip	direct	bgf::bgf	direct	symbol bgf_flip
-function	bgf_next_color	direct	bgf::bgf	direct	symbol bgf_next_color
-function	bgf_walk	direct	bgf::bgf	direct	symbol bgf_walk
-function	bgf_set_free	direct	bgf::bgf	direct	symbol bgf_set_free
-function	bgf_point_sum	direct	bgf::bgf	direct	symbol bgf_point_sum
-function	bgf_fill	direct	bgf::bgf	direct	symbol bgf_fill
-function	bgf_keywords	direct	bgf::bgf	direct	symbol bgf_keywords
-function	bgf_unnamed	direct	bgf::bgf	direct	symbol bgf_unnamed
-function	bgf_handles	direct	bgf::bgf	direct	symbol bgf_handles
-function	bgf_digest	direct	bgf::bgf	direct	symbol bgf_digest
-function	bgf_labeled	direct	bgf::bgf	direct	symbol bgf_labeled_v2
-function	bgf_renamed	direct	bgf::bgf	direct	symbol bgf_renamed_impl
-function	bgf_current	direct	bgf::bgf	direct	symbol bgf_current
+function	bgf_add	direct	bgf::bgf	direct	symbol bgf_add; (ffi::c::Int, ffi::c::Int) -> ffi::c::Int
+function	bgf_length	direct	bgf::bgf	direct	symbol bgf_length; (ffi::c::Ptr[ffi::c::Char]) -> ffi::c::Long
+function	bgf_mix	direct	bgf::bgf	direct	symbol bgf_mix; (ffi::c::UChar, ffi::c::Short, ffi::c::UInt, ffi::c::ULong, ffi::c::Long, ffi::c::ULongLong) -> ffi::c::UInt
+function	bgf_open	direct	bgf::bgf	direct	symbol bgf_open; (ffi::c::Ptr[ffi::c::Char], ffi::c::UInt) -> ffi::c::Ptr[bgf_handle]
+function	bgf_close	direct	bgf::bgf	direct	symbol bgf_close; (ffi::c::Ptr[bgf_handle]) -> unit
+function	bgf_window_of	direct	bgf::bgf	direct	symbol bgf_window_of; (ffi::c::Ptr[bgf_handle]) -> ffi::c::Ptr[bgf_window]
+function	bgf_count	direct	bgf::bgf	direct	symbol bgf_count; () -> ffi::c::Int
+function	bgf_plain_char	direct	bgf::bgf	direct	symbol bgf_plain_char; (ffi::c::Char) -> ffi::c::Char
+function	bgf_is_even	direct	bgf::bgf	direct	symbol bgf_is_even; (ffi::c::Int) -> ffi::c::Bool
+function	bgf_flip	direct	bgf::bgf	direct	symbol bgf_flip; (ffi::c::Bool) -> ffi::c::Bool
+function	bgf_next_color	direct	bgf::bgf	direct	symbol bgf_next_color; (ffi::c::UInt) -> ffi::c::UInt
+function	bgf_walk	direct	bgf::bgf	direct	symbol bgf_walk; (ffi::c::Ptr[bgf_handle], ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[bgf_handle], ffi::c::Int], return: ffi::c::Int}], ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Int
+function	bgf_set_free	direct	bgf::bgf	direct	symbol bgf_set_free; (ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]) -> unit
+function	bgf_point_sum	direct	bgf::bgf	direct	symbol bgf_point_sum; (ffi::c::Ptr[bgf_point]) -> ffi::c::Int
+function	bgf_fill	direct	bgf::bgf	direct	symbol bgf_fill; (ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong, ffi::c::UChar) -> ffi::c::Int
+function	bgf_keywords	direct	bgf::bgf	direct	symbol bgf_keywords; (ffi::c::Int, ffi::c::Int, ffi::c::Int, ffi::c::Int, ffi::c::Int) -> ffi::c::Int
+function	bgf_unnamed	direct	bgf::bgf	direct	symbol bgf_unnamed; (ffi::c::Int, ffi::c::Ptr[ffi::c::Char]) -> ffi::c::Int
+function	bgf_handles	direct	bgf::bgf	direct	symbol bgf_handles; () -> ffi::c::Ptr[ffi::c::Ptr[bgf_handle]]
+function	bgf_digest	direct	bgf::bgf	direct	symbol bgf_digest; (ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong, ffi::c::Ptr[ffi::c::UChar]) -> ffi::c::Ptr[ffi::c::UChar]
+function	bgf_labeled	direct	bgf::bgf	direct	symbol bgf_labeled_v2; (ffi::c::Int) -> ffi::c::Int
+function	bgf_renamed	direct	bgf::bgf	direct	symbol bgf_renamed_impl; (ffi::c::Int) -> ffi::c::Int
+function	bgf_current	direct	bgf::bgf	direct	symbol bgf_current; (ffi::c::Int) -> ffi::c::Int
 function	bgf_scale	unsupported		double,float	parameter 1 (x): double; parameter 2 (y): float; result: double
 function	bgf_swap	unsupported		by-value-aggregate	parameter 1 (p): struct bgf_pair by value; result: struct bgf_pair by value
 function	bgf_printf	unsupported		variadic	a variadic function (...)
@@ -30,15 +30,15 @@ function	bgf_ms	unsupported		unsupported-calling-convention	an explicit calling 
 function	bgf_wide_set	unsupported		typedef-abi-mismatch	parameter 1 (w): typedef bgf_wide is unsigned long by its declaration, but the compiler gives it no C integer type of the table (16 bytes): an attribute or extension changes it
 function	bgf_noproto	unsupported		no-prototype	declared without a prototype: ()
 function	bgf_float_out	unsupported		float	parameter 1 (out): a pointer to float
-function	bgf_square	thunk	bgf::thunks::bgf	thunk (inline)	symbol botlish_bgf_bgf_square
-function	bgf_point_x	thunk	bgf::thunks::bgf	thunk (inline)	symbol botlish_bgf_bgf_point_x
+function	bgf_square	thunk	bgf::thunks::bgf	thunk (inline)	symbol botlish_bgf_bgf_square; (ffi::c::Int) -> ffi::c::Int
+function	bgf_point_x	thunk	bgf::thunks::bgf	thunk (inline)	symbol botlish_bgf_bgf_point_x; (ffi::c::Ptr[bgf_point]) -> ffi::c::Int
 function	bgf_half	unsupported		double	parameter 1 (x): double; result: double
-macro	bgf_get	thunk	bgf::thunks::bgf	thunk (stub)	symbol botlish_bgf_bgf_get
-function	bgf_linux_only	direct	bgf::bgf	direct	symbol bgf_linux_only
+macro	bgf_get	thunk	bgf::thunks::bgf	thunk (stub)	symbol botlish_bgf_bgf_get; (ffi::c::Int) -> ffi::c::Int
+function	bgf_linux_only	direct	bgf::bgf	direct	symbol bgf_linux_only; () -> ffi::c::Int
 macro	BGF_UINT64_C	unsupported		macro-needs-signature	a function-like macro (expression; paste): no signature of its own
-macro	BGF_TWICE	thunk	bgf::thunks::bgf	thunk (macro)	symbol botlish_bgf_BGF_TWICE
-macro	bgf_legacy	alias	bgf::bgf	alias of bgf_current	symbol bgf_current
-macro	bgf_call_add	alias	bgf::bgf	alias of bgf_add	symbol bgf_add
+macro	BGF_TWICE	thunk	bgf::thunks::bgf	thunk (macro)	symbol botlish_bgf_BGF_TWICE; (ffi::c::Int) -> ffi::c::Int
+macro	bgf_legacy	alias	bgf::bgf	alias of bgf_current	symbol bgf_current; (ffi::c::Int) -> ffi::c::Int
+macro	bgf_call_add	alias	bgf::bgf	alias of bgf_add	symbol bgf_add; (ffi::c::Int, ffi::c::Int) -> ffi::c::Int
 enumerator	BGF_RED	constant	bgf::bgf	ffi::c::UInt	unsigned int 0
 enumerator	BGF_GREEN	constant	bgf::bgf	ffi::c::UInt	unsigned int 5
 enumerator	BGF_BLUE	constant	bgf::bgf	ffi::c::UInt	unsigned int 6
@@ -66,16 +66,18 @@ typedef	bgf_u64	scalar		ffi::c::ULong	an ABI alias of C unsigned long
 typedef	bgf_size	scalar		ffi::c::Long	an ABI alias of C long
 typedef	bgf_flags	scalar		ffi::c::UInt	an ABI alias of C unsigned int
 typedef	bgf_handle	opaque	bgf::ctypes	identity bgf_handle	struct bgf_handle
-typedef	bgf_window_ref	pointer		ffi::c::Ptr[bgf::ctypes::bgf_window]	struct bgf_window_ *
+typedef	bgf_window_ref	pointer		ffi::c::Ptr[bgf_window]	struct bgf_window_ *
 typedef	bgf_window	opaque	bgf::ctypes	identity bgf_window	struct bgf_window_
 typedef	bgf_color	scalar		ffi::c::UInt	enum bgf_color, C unsigned int on this target
-typedef	bgf_visit	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[bgf::ctypes::bgf_handle], ffi::c::Int], return: ffi::c::Int}]	int (*)(void *userdata, bgf_handle *handle, int depth)
+typedef	bgf_visit	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[bgf_handle], ffi::c::Int], return: ffi::c::Int}]	int (*)(void *userdata, bgf_handle *handle, int depth)
 typedef	bgf_free_fn	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]	void (void *pointer)
 typedef	bgf_measure	unsupported		unsupported-callback-signature	callback argument 1: double (double); callback result: double (double)
-tag	struct bgf_point	opaque	bgf::ctypes	complete, behind pointers	identity bgf_point
 typedef	bgf_point	opaque	bgf::ctypes	identity bgf_point	struct bgf_point
-tag	struct bgf_pair	unused		complete	no bound signature points to it
 typedef	bgf_pair	unused		struct bgf_pair	no bound signature points to it
 typedef	bgf_wide	unsupported		typedef-abi-mismatch	typedef bgf_wide is unsigned long by its declaration, but the compiler gives it no C integer type of the table (16 bytes): an attribute or extension changes it
-tag	struct bgf_table	unused		complete	no bound signature points to it
 typedef	bgf_table	unused		struct bgf_table	no bound signature points to it
+tag	struct bgf_handle	opaque	bgf::ctypes	incomplete	identity bgf_handle
+tag	struct bgf_pair	unused		complete	no bound signature points to it
+tag	struct bgf_point	opaque	bgf::ctypes	complete, behind pointers	identity bgf_point
+tag	struct bgf_table	unused		complete	no bound signature points to it
+tag	struct bgf_window_	opaque	bgf::ctypes	incomplete	identity bgf_window

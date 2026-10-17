@@ -53,6 +53,13 @@ proc ::cbind::generate::run {profile target {options {}}} {
     set sourceRoot [::cbind::profile::sourceRoot $profile [dict get $options fetch]]
     set config [::chdr::toolchain::configFor $target]
     set tool [ToolProfile $hprofile $sourceRoot]
+    # A target's own system headers, or none: never the host's. Off a Mac,
+    # clang for an Apple target would fall back to the host's /usr/include
+    # and preprocess Linux's headers as if they were the SDK's.
+    if {[string match macos-* $target] && $::tcl_platform(os) ne "Darwin"
+            && [dict get $config sysroot] eq "" && "-nostdlibinc" ni [dict get $hprofile flags]} {
+        error "c-bindgen: $target needs the macOS SDK's headers: generate on a Mac, or set BOTLISH_C_SYSROOT_[string map {- _} $target] (or BOTLISH_C_SYSROOT) to an SDK directory; the host's own headers are never a target's"
+    }
 
     set t0 [clock microseconds]
     set run [::chdr::pipeline::run $hprofile $sourceRoot $config [dict get $profile name]]
