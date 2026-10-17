@@ -487,14 +487,13 @@ coroutines, opaque structs and destructuring; the mutation harnesses of
 diagnostic recovery (25 of 25 killed), error payloads (44), traits (20),
 static compile (21), structural contracts (18), context traits (23),
 compilation isolation (14), HIR interchange (27), affine values (29),
-SAME-FAILURE (15) and coroutines (52), all killed. The static decisions'
-harness (73 mutants, each rerunning the static-economics suites) did not
-finish in this session: its first 61 were all killed. Every one of the
-repository's 625 mutants still applies. The batched-against-sequential
-static-decisions comparison runs in CI only (AGENTS.md); its first run on
+SAME-FAILURE (15), coroutines (52) and static decisions (73), all killed;
+every one of the repository's 625 mutants still applies. The batched-against-sequential
+static-decisions comparison runs in CI only (AGENTS.md). Its first run on
 this branch found the scheduler disagreement section 1 describes (two uses
-of one missing import merged into one diagnostic), fixed since, and it is
-the `static-decisions` workflow's verdict on the fix.
+of one missing import merged into one diagnostic); on the fix, every suite
+agrees under both schedulers (all six jobs of the `static-decisions`
+workflow pass).
 
 ## 10. Tests that changed, and why
 
