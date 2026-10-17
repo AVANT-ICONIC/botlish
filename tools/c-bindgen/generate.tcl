@@ -112,6 +112,7 @@ proc ::cbind::generate::run {profile target {options {}}} {
 # shim's -O2 LLVM IR gives each thunk's parameter attributes, which become
 # proven contract facts (ApplyContracts again, beside the manual ones).
 proc ::cbind::generate::Thunks {model config tool} {
+    dict set model evidenceProducer ""
     for {set round 0} {$round < 20} {incr round} {
         set thunks [ThunkEntries $model]
         if {![llength $thunks]} { return $model }
