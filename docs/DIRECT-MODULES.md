@@ -623,6 +623,12 @@ hir/direct.tcl:
   an edge even within its own module -- one more case in `Targets` (a
   target that is itself an authority source).
 
+> Filled by C-FFI.md (section 9) with the second option alone: a call of a
+> retaining extern c fn is an edge of the calling unit in `Targets` (a
+> target that is itself an authority source, its own module included), and
+> no declaration designates its module: declaring a retaining function is
+> not using it.
+
 The rest -- edges, discharge by module-owned contexts, the marker
 reconciliation, DIRECT-CALLABLE-VALUE, the diagnostics, static intrinsics,
 the summary -- works unchanged. A synchronous foreign call whose pointer

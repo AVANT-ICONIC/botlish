@@ -8,7 +8,7 @@
 #
 # An extern c fn is a truthful C ABI declaration with no body:
 #
-#   extern c fn SHA256 named "BOTLISH_BSSL_SHA256"(
+#   extern c fn SHA256 named "botlish_bssl_SHA256"(
 #       data: ffi::c::Ptr[ffi::c::UChar] read noescape,
 #       len: ffi::c::ULong,
 #       out: ffi::c::Ptr[ffi::c::UChar] write noescape

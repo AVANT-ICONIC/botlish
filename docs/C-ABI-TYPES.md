@@ -28,6 +28,9 @@ fn add(a: ffi::c::UChar, b: ffi::c::UChar) -> int:
     a + b                        # Botlish arithmetic: add(255, 255) is 510
 ```
 
+> Continued by C-FFI.md: `extern c fn` calls C with exactly these types
+> (linkage, the calling convention and the transport are there).
+
 This milestone builds the value and type substrate that `extern c fn` and
 `exported c fn` will use. It does not call C: there is no linkage, no symbol
 lookup, no calling-convention lowering, no callback and no header import.

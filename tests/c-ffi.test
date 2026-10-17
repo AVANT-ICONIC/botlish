@@ -37,6 +37,12 @@ if {[testConstraint cCompiler] && [testConstraint linuxNative]} {
     if {[catch {
         exec cc -c -O2 -fPIC [file join $::projectRoot tests cffi fixture.c] -o [file join $::fixtureDir fixture.o]
         exec ar rcs [file join $::fixtureDir libbotlish_cffi_fixture.a] [file join $::fixtureDir fixture.o]
+        # A second archive that depends on the first (cf-link-order).
+        set channel [open [file join $::fixtureDir dependent.c] w]
+        puts $channel "int bcf_add(int a, int b);\nint bcf_add_twice(int a, int b) { return 2 * bcf_add(a, b); }"
+        close $channel
+        exec cc -c -O2 -fPIC [file join $::fixtureDir dependent.c] -o [file join $::fixtureDir dependent.o]
+        exec ar rcs [file join $::fixtureDir libbotlish_cffi_dependent.a] [file join $::fixtureDir dependent.o]
     } message]} {
         puts stderr "c-ffi.test: the fixture library did not build: $message"
         set ::fixtureDir ""
@@ -253,7 +259,7 @@ test cf-parse-messages {the messages name what is wrong and the remedy} -body {
         catch {surface::parse $src t.bot} message
         set message
     }
-} -result {{t.bot:1:8: EXTERN-SYNTAX: an extern declaration names its foreign ABI: write "extern c fn NAME(...) -> T" (the only foreign ABI is c)} {t.bot:1:24: EXTERN-SYNTAX: an extern c fn is a declaration with no body: it has no trailing ":" (write "extern c fn f(...) -> T" on its own)} {t.bot:1:23: EXTERN-SYNTAX: variadic C functions are not supported: extern c fn "f" must have a fixed signature (bind a fixed-argument sibling, such as a v-prefixed function's caller, instead)} {t.bot:1:22: EXTERN-SYNTAX: expected "->" and the C result type after the parameter list of extern c fn "f", found end of line (a C function returning void is "-> unit")}}
+} -result {{t.bot:1:8: EXTERN-SYNTAX: an extern declaration names its foreign ABI: write "extern c fn NAME(...) -> T" (the only foreign ABI is c)} {t.bot:1:24: EXTERN-SYNTAX: an extern c fn is a declaration with no body: it has no trailing ":" (write "extern c fn f(...) -> T" on its own)} {t.bot:1:23: EXTERN-SYNTAX: variadic C functions are not supported: extern c fn "f" must have a fixed signature (there is no variadic C ABI here: bind a function of fixed parameters instead)} {t.bot:1:22: EXTERN-SYNTAX: expected "->" and the C result type after the parameter list of extern c fn "f", found end of line (a C function returning void is "-> unit")}}
 
 test cf-parse-recover {a recovering parse reports each malformed declaration once and keeps the valid ones: no cascade} -body {
     set ast [surface::parse "extern fn f()\nextern c fn g() -> unit\nextern c fn h(x: int, ...) -> unit\nextern c library \"m\"\nx = 1\n" t.bot -recover 1]
@@ -491,6 +497,11 @@ test cf-named-symbol {`named` changes exactly the link symbol: the Botlish name 
     set unrenamed [bcfApp "import ffi::c\nimport m\n\nm::plus(40, 2)\n" [list m.bot "import ffi::c\n\n${lib}extern c fn plus(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int\n"]]
     list [appValues $renamed {cranelift}] [appValues $plain {cranelift}] [lindex [lindex [appValues $unrenamed {cranelift}] 0] 0]
 } -cleanup removeApps -result {42 42 {NATIVE LINK}}
+
+test cf-link-order {the declared libraries link as one group, so their order never decides a static link: an archive declared before the archive that needs it still resolves it} -constraints cfFixture -body {
+    set dir [app [list main.bot "import ffi::c\nimport m\n\nm::add_twice(20, 1)\n" m.bot "import ffi::c\n\nextern c library \"botlish_cffi_fixture\"\nextern c library \"botlish_cffi_dependent\"\n\nextern c fn add_twice named \"bcf_add_twice\"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int\n"]]
+    appValues $dir {cranelift cranelift-generic}
+} -cleanup removeApps -result {42 42}
 
 test cf-executable {a program that calls C links as a standalone executable with the libraries it declares and runs with no Tcl, no rustc and no source} -constraints cfFixture -body {
     set dir [bcfApp "${::bytesPrelude}src = text(\"hello\")\nr = bcf::reverse(src, len(src), abi::bytes::zeroed(abi::usize(5)))\n\[bcf::add(40, 2), abi::bytes::freeze(r.out) == text(\"olleh\")\]\n"]

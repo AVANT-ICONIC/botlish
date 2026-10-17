@@ -30,8 +30,13 @@
 # provides, so it is an edge into D when D may provide it: when D declares a
 # top-level function of the requirement's name (conformance looks only in a
 # witness's owner namespace, so only then can D's implementation run -- a
-# context trait's implementation too, CONTEXT-TRAITS.md). Calls in
-# unreachable code count: they still name the authority.
+# context trait's implementation too, CONTEXT-TRAITS.md). A call of an
+# extern c fn whose contract may retain a pointer (an escape captures or
+# unknown: core::cabi::RetainingParameters) is itself an authority source, a
+# direct edge of U whatever unit declares the function, U included (C-FFI.md,
+# "direct"); declaring one designates nothing, and a noescape C call is an
+# ordinary call. Calls in unreachable code count: they still name the
+# authority.
 #
 # Discharge. A direct edge is *mediated* when the function containing the
 # call requires a context declared by U itself: a context struct

@@ -1347,7 +1347,7 @@ proc surface::parser::ExternParam {pVar fn} {
     set token [Peek p]
     if {[dict get $token kind] in {.. .}} {
         FailCode [dict get $token span] EXTERN-SYNTAX \
-            "variadic C functions are not supported: extern c fn \"$fn\" must have a fixed signature (bind a fixed-argument sibling, such as a v-prefixed function's caller, instead)"
+            "variadic C functions are not supported: extern c fn \"$fn\" must have a fixed signature (there is no variadic C ABI here: bind a function of fixed parameters instead)"
     }
     set param [Expect p IDENT "a parameter name in the parameter list of extern c fn \"$fn\""]
     set pname [dict get $param value]

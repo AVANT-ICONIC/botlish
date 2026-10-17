@@ -1282,6 +1282,47 @@ change the code it mutates, keeping it a mutant of the same rule), plus
 for a change to the shared exposure mechanism. `bench/c-pointer-borrowing.tcl`
 regenerates the performance table.
 
+## C calls (extern c fn, extern c library)
+
+`extern c fn NAME [named "SYMBOL"](PARAMS) -> TYPE [FACT]` and `extern c
+library "NAME"` (C-FFI.md) are a truthful C ABI declaration with no body and
+a link-plan entry. A declaration is registered as the compilation-local
+root native `extern#KEY` with exactly the foreign call contract a
+`-foreign` native has (hir/foreign.tcl), so its calls are typed, admitted,
+exposed, judged direct and lowered by the one foreign-call machinery
+(hir/borrow.tcl, hir/direct.tcl, native/lower.tcl's `BorrowCall`). Keep it
+so:
+
+* Never add a second contract representation, a body, a wrapper or a Tcl-side
+  FFI: the Tcl backends refuse a C call (`NATIVE-ONLY`, `core::cabi::
+  ExternImpl`). No fact comes from a name, a C type or a header: an absent
+  fact is `unknown`, which never admits an exposure and always retains.
+* A library is the linker's `-lNAME`, associated with no function; symbols
+  are resolved by the system linker at link time, never at run time (no
+  `dlopen`, `dlsym` or symbol string on the call path). The native backends
+  run a program that calls C as an executable linked with the same plan
+  as `-emit-native-executable` (native/src/main.rs's `run_linked`); the stub
+  linker refuses one. Ordinary programs link and run exactly as before.
+* A pointer result is truthful and its provenance (`independent`, `alias
+  P`, unknown) is the contract's; a returned address the C pointer word
+  cannot hold fails (`NATIVE ADDRESS`), never truncated. Retaining calls
+  (escape captures or unknown) are direct edges of the calling unit; a
+  declaration designates nothing.
+* The registry is a declaration registry (`hir::foreign::capture`/`Install`):
+  compilation isolation and HIR interchange carry it.
+
+If you change any of that (C-FFI.md, "What to run when changing this", lists
+the files), run `tests/c-ffi.test` (also under `BOTLISH_NATIVE_GC_STRESS=1`),
+`audit/c-ffi/tools/fuzz.tcl` (several seeds, once with `-gc-stress 1`) and
+`audit/c-ffi/tools/mutate.tcl` (every mutant in its `mutants.txt` must still
+apply and be killed: update a mutant's text when you change the code it
+mutates, keeping it a mutant of the same rule), plus the borrowing,
+direct-module, isolation and interchange harnesses above for a change to
+what they cover. The BoringSSL acceptance tests need the package-owned
+static BoringSSL: `tclsh9.0 tests/cffi/boringssl.tcl` builds it once into
+Botlish's cache (never the repository); without it they are skipped.
+`bench/c-ffi.tcl` regenerates the performance report.
+
 ## C header archaeology (a research instrument)
 
 `audit/c-header/` (C-HEADER-ARCHAEOLOGY.md) preprocesses BoringSSL's and
