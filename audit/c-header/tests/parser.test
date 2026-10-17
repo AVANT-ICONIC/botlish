@@ -12,8 +12,8 @@
 package require tcltest 2.5
 namespace import ::tcltest::*
 set here [file dirname [file normalize [info script]]]
-source [file join $here .. tools cdecl.tcl]
-source [file join $here .. tools ir.tcl]
+source [file join $here .. .. .. tools cheader cdecl.tcl]
+source [file join $here .. .. .. tools cheader ir.tcl]
 
 # The records of TEXT as {KIND NAME} pairs, or with a key of each body.
 proc recs {text} {

@@ -18,7 +18,7 @@
 
 set here [file dirname [file normalize [info script]]]
 source [file join $here common.tcl]
-source [file join $here toolchain.tcl]
+::chdr::use toolchain.tcl
 
 # {PROFILE MACRO CATEGORY EXPECT CODE}: EXPECT is ok, rejected, or wrong
 # (compiles, but does not mean what the macro means).

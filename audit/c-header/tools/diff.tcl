@@ -12,7 +12,7 @@
 
 set here [file dirname [file normalize [info script]]]
 source [file join $here common.tcl]
-source [file join $here ir.tcl]
+::chdr::use ir.tcl
 
 proc keyed {records} {
     set d [dict create]
