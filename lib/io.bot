@@ -54,9 +54,10 @@ fn print(text: str, context io: IO) -> unit errors WriteFailed:
     io.write_text(text)
 
 # TEXT followed by a newline on the standard output: one string, one write
-# request (never a second visible write for the newline).
+# request (never a second visible write for the newline). The newline is a
+# character, appended to TEXT as one (str::append_char).
 fn print_line(text: str, context io: IO) -> unit errors WriteFailed:
-    io.write_text(text.concat("\n"))
+    io.write_text(text.append_char('\n'))
 
 # TEXT on the error output.
 fn write_error(text: str, context io: IO) -> unit errors WriteFailed:
@@ -64,4 +65,4 @@ fn write_error(text: str, context io: IO) -> unit errors WriteFailed:
 
 # TEXT followed by a newline on the error output, as one write request.
 fn write_error_line(text: str, context io: IO) -> unit errors WriteFailed:
-    io.write_error_text(text.concat("\n"))
+    io.write_error_text(text.append_char('\n'))

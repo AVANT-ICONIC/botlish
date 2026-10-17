@@ -515,7 +515,7 @@ Its findings, ranked:
 | S7 | a List's length is no fact through a parameter or field | LANGUAGE, COMPILER-PRECISION | MODERATE | no |
 | S8 | a named Int constant is no fact inside functions | COMPILER-PRECISION | MODERATE | yes (`0db2443`) |
 | S12 | a local or parameter named like an imported function makes method calls to it ambiguous | LANGUAGE, DIAGNOSTIC | MODERATE | no |
-| S16 | every importer of io gets the stdlib's own two warnings | DIAGNOSTIC, STDLIB | MODERATE | no |
+| S16 | every importer of io gets the stdlib's own two warnings | DIAGNOSTIC, STDLIB | MODERATE | yes |
 | S21 | no private module members | LANGUAGE | MODERATE | no |
 | S23 | loop-carried state needs recursion or a mutable place | LANGUAGE, STDLIB | MODERATE | no |
 | S25 | a single-file program loses encapsulation and gets silent shadowing | LANGUAGE, DIAGNOSTIC | MODERATE | no |
@@ -733,7 +733,12 @@ experiment with a tooling failure rather than ordinary unfamiliarity):
    method candidates, or make the diagnostic name the reason.
 7. S16: the stdlib's own warnings should not reach a program that imports
    it -- today `-warnings error` rejects every program that imports `io`
-   for two literals in `lib/io.bot`.
+   for two literals in `lib/io.bot`. **Resolved** (b94e3d0): `lib/io.bot`
+   appends the newline as a character, `text.append_char('\n')`, with the
+   new `str::append_char`; regressions in `tests/portable-io.test`,
+   `tests/workload-2048.test` (`workload-2048-strict-warnings`: the
+   engine, demo, suite and benchmark compile under `-warnings error`) and
+   `tests/str-append-char.test`.
 
 S24 is fixed already: it would have stopped the restricted agent's first
 single-file native build with an internal error.

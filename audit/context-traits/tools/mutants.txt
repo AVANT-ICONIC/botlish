@@ -209,7 +209,7 @@ fn valid?(value: str) -> bool proves value: LinuxPath:
 ## lib/io.bot
 <<<<
 fn print_line(text: str, context io: IO) -> unit errors WriteFailed:
-    io.write_text(text.concat("\n"))
+    io.write_text(text.append_char('\n'))
 ====
 fn print_line(text: str, context io: IO) -> unit errors WriteFailed:
     io.write_text(text)

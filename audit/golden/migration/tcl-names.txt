@@ -4657,6 +4657,8 @@ tests/packed-ascii.test pa-toplevel-literal-is-passed-as-the-constant pass
 tests/packed-ascii.test pa-unicode-model-is-untouched pass
 tests/portable-io.test io-allocations pass
 tests/portable-io.test io-hello-executable pass
+tests/portable-io.test io-line-newline-is-a-character pass
+tests/portable-io.test io-line-text-exact pass
 tests/portable-io.test io-linux-implements pass
 tests/portable-io.test io-nir-direct pass
 tests/portable-io.test io-portable-surface pass
@@ -4666,6 +4668,7 @@ tests/portable-io.test io-strace pass
 tests/portable-io.test io-substitute-context pass
 tests/portable-io.test io-tcl-backends pass
 tests/portable-io.test io-transitive pass
+tests/portable-io.test io-warning-clean pass
 tests/portable-io.test io-write-failed pass
 tests/proof-loop-intervals.test loop-interval-abi-conversion pass
 tests/proof-loop-intervals.test loop-interval-bound-by-bindings pass
@@ -5857,6 +5860,22 @@ tests/stdlib.test stdlib-string_reverse-not-a-string-static pass
 tests/stdlib.test stdlib-string_reverse-odd pass
 tests/stdlib.test stdlib-string_reverse-one pass
 tests/stdlib.test stdlib-string_reverse-repeated pass
+tests/str-append-char.test str-append-char-agrees-with-concat pass
+tests/str-append-char.test str-append-char-as-a-value pass
+tests/str-append-char.test str-append-char-empty pass
+tests/str-append-char.test str-append-char-method-is-the-intrinsic pass
+tests/str-append-char.test str-append-char-name-beside-list-append pass
+tests/str-append-char.test str-append-char-nir pass
+tests/str-append-char.test str-append-char-one-allocation pass
+tests/str-append-char.test str-append-char-operand-unchanged pass
+tests/str-append-char.test str-append-char-reads-back pass
+tests/str-append-char.test str-append-char-registration pass
+tests/str-append-char.test str-append-char-representations pass
+tests/str-append-char.test str-append-char-type-char-for-string pass
+tests/str-append-char.test str-append-char-type-dynamic pass
+tests/str-append-char.test str-append-char-type-int-for-char pass
+tests/str-append-char.test str-append-char-type-string-for-char pass
+tests/str-append-char.test str-append-char-values pass
 tests/str-char-at.test str-char-at-agrees-with-substring pass
 tests/str-char-at.test str-char-at-allocates-nothing pass
 tests/str-char-at.test str-char-at-as-a-value pass
@@ -7522,4 +7541,5 @@ tests/web-unreserved.test web-unreserved-user-fn-wraps-module-closure pass
 tests/workload-2048.test workload-2048-bench-checksum pass
 tests/workload-2048.test workload-2048-demo-executable pass
 tests/workload-2048.test workload-2048-golden-suite pass
+tests/workload-2048.test workload-2048-strict-warnings pass
 tests/workload-2048.test workload-2048-warning-clean pass

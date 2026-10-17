@@ -119,7 +119,7 @@ fn register_authorization_tests():
 
     # imports-unknown-member-names-the-intrinsics: the diagnostic lists an
     # intrinsic namespace's members.
-    test::rejects_message("imports-unknown-member-names-the-intrinsics", compiler::DiagnosticCode::UnknownSymbol, "namespace \"str\" has no definition \"reverse\" (its members are the intrinsics: char_at, concat, encode_utf8, is_tcl_alnum, is_tcl_alpha, length, lowercase, substring)", b_unknown_intrinsic_member)
+    test::rejects_message("imports-unknown-member-names-the-intrinsics", compiler::DiagnosticCode::UnknownSymbol, "namespace \"str\" has no definition \"reverse\" (its members are the intrinsics: append_char, char_at, concat, encode_utf8, is_tcl_alnum, is_tcl_alpha, length, lowercase, substring)", b_unknown_intrinsic_member)
 
     # imports-struct-and-type-references-are-authorized: with `import abi`,
     # a qualified struct construction and a qualified struct annotation

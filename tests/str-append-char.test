@@ -1,0 +1,235 @@
+# str-append-char.test -- str::append_char (core/strings.tcl): a new String
+# of a String's characters followed by one UnicodeChar, the language's one
+# character-to-text construction (README.md, "Strings and characters";
+# REFACTOR-WARNINGS-CLEAN.md, design finding 1: what the corpus's
+# character-to-text findings asked for is an append of a character to text,
+# not a str::of_char).
+#
+# Its contract, checked four-way (interp, compile, cranelift-generic,
+# cranelift) through one HIR: str::append_char(S, C) is S followed by C --
+# str::length(S) + 1 characters, C read back by str::char_at at index
+# str::length(S), S itself unchanged -- for every UTF-8 width of C, the
+# astral plane included, and the empty S. It equals S concatenated with the
+# one-character String of the same scalar, so a text.concat("X") that
+# appends a single character is text.append_char('X'), with no
+# one-character String. Its parameters are checked like every native's, when
+# the call runs (a String where the character goes is the TYPE error, called
+# directly or through an untyped callable); it never fails otherwise below
+# the collection-length ceiling; it is a context-free value operation.
+# Natively it is one `strappendchar` (runtime/ops.rs's rt_str_append_char):
+# one allocation of the final size, the character an immediate operand.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+set ::allBackends {interp compile cranelift-generic cranelift}
+
+# The body of NIR function NAME (its first instance) in TEXT, line by line:
+# from its `func N "NAME"` header to the next `end`.
+proc nirBody {text name} {
+    set body {}
+    set on 0
+    foreach line [split $text \n] {
+        if {!$on} {
+            set on [expr {[string first "\"$name\" " $line] > 0 && [string match {func *} $line]}]
+        } elseif {$line eq "end"} {
+            break
+        } else {
+            lappend body $line
+        }
+    }
+    return [join $body \n]
+}
+
+# {KIND CODE} of SOURCE's outcome on each backend (a run-time error's
+# message is the backend's own wording; its code is the contract).
+proc outcomeCodes {source} {
+    set hir [surface::compile $source -warnings off]
+    return [lmap b $::allBackends {lrange [outcomeUnderHir $b $hir] 0 1}]
+}
+
+# ---------------------------------------------------------------------------
+# Values: every UTF-8 width, the astral plane, a newline, the empty String.
+
+test str-append-char-values {str::append_char appends one character of every UTF-8 width (one to four bytes, the astral plane included) and a newline, on every backend} -body {
+    sourceAgree {import char
+import str
+
+s = "".append_char('a').append_char('\n').append_char('é').append_char('世').append_char('😀').append_char('z')
+codes = loop i from 0 to str::length(s):
+    char::scalar_value(str::char_at(s, i))
+[s, str::length(s), codes]
+}
+} -result {value {["a\né世😀z", 6, [97, 10, 233, 19990, 128512, 122]]}}
+
+test str-append-char-reads-back {the appended character is the result's last character: str::char_at at index str::length(S) is C, and the length grows by exactly one, for an ASCII, a non-ASCII and an astral S} -body {
+    sourceAgree {import str
+
+fn last_is(s, c) -> bool:
+    t = s.append_char(c)
+    n = str::length(s)
+    if str::length(t) != n + 1:
+        return false
+    r = t.char_at(n):
+        on IndexNotFound:
+            return false
+    r == c
+
+[last_is("ab", '\n'), last_is("é", '😀'), last_is("😀", 'x'), last_is("", '世'), last_is("x\n", '\n')]
+}
+} -result {value {[true, true, true, true, true]}}
+
+test str-append-char-empty {the empty String followed by a character is the one-character String of that character, astral included} -body {
+    sourceAgree {import str
+
+["".append_char('😀') == "😀", str::length("".append_char('😀')), "".append_char('\n') == "\n", "".append_char('\n')]
+}
+} -result {value {[true, 1, true, "\n"]}}
+
+test str-append-char-agrees-with-concat {appending each character of a String, read with str::char_at, builds the same text as concatenating its one-character slices: append_char(T, C) == concat(T, the one-character String of C)} -body {
+    sourceAgree {import str
+
+s = "a é\n世😀~"
+fn same_from(i, by_char, by_text) -> bool:
+    if i < 0 or i >= str::length(s):
+        return by_char == by_text and by_char == s
+    c = s.char_at(i)
+    same_from(i + 1, by_char.append_char(c), by_text.concat(s.substring(i, i + 1)))
+
+same_from(0, "", "")
+}
+} -result {value true}
+
+test str-append-char-operand-unchanged {str::append_char builds a new String: its operand is unchanged and every append is independent (a String is a value)} -body {
+    sourceAgree {import str
+
+a = "ab"
+b = a.append_char('c')
+c = a.append_char('😀')
+[a, b, c, b.append_char('\n'), b]
+}
+} -result {value {["ab", "abc", "ab😀", "abc\n", "abc"]}}
+
+test str-append-char-as-a-value {str::append_char called as a first-class value appends exactly like a direct call} -body {
+    sourceAgree {import list
+import str
+
+fs = [str::append_char]
+
+fn apply(f, s, c):
+    f(s, c)
+
+[apply(list::at(fs, 0), "x", 'y'), apply(list::at(fs, 0), "é", '😀'), apply(str::append_char, "", '\n')]
+}
+} -result {value {["xy", "é😀", "\n"]}}
+
+test str-append-char-representations {the String operand in each native representation -- a one-character slice (ShortString), a slice consumed in place (a region), a concat construction plan, a self-recursive accumulator -- appends the same characters on every backend} -body {
+    sourceAgree {import str
+
+fn first(t: str) -> str errors LowerUnderrun, UpperOverrun:
+    if str::length(t) == 0:
+        return ""
+    t.substring(0, 1)
+
+fn tag(t: str) -> str errors LowerUnderrun, UpperOverrun:
+    h = first(t)
+    h.append_char('!')
+
+fn slice_then(t: str) -> str errors LowerUnderrun, UpperOverrun:
+    t.substring(1, 3).append_char('😀')
+
+fn scan(t: str, i: int, acc: str) -> str:
+    if i < 0 or i >= str::length(t):
+        return acc
+    scan(t, i + 1, acc.append_char(t.char_at(i)).append_char('.'))
+
+fn chain(t: str) -> str:
+    t.concat("x").append_char('y').concat("z")
+
+fn all() -> List[str] errors LowerUnderrun, UpperOverrun:
+    [tag("é😀"), tag(""), slice_then("aé世b"), scan("a😀é", 0, ""), chain("ab")]
+
+r = all():
+    on LowerUnderrun:
+        ["LowerUnderrun"]
+    on UpperOverrun:
+        ["UpperOverrun"]
+r
+}
+} -result {value {["é!", "!", "é世😀", "a.😀.é.", "abxyz"]}}
+
+# ---------------------------------------------------------------------------
+# Kinds: like every native's parameter types, str::append_char's are checked
+# when the call runs -- a String or an Int where the character goes, a
+# character where the String goes -- the TYPE error on every backend, called
+# directly or through an untyped callable.
+
+foreach {name call} {
+    string-for-char {str::append_char("a", "b")}
+    int-for-char    {str::append_char("a", 98)}
+    char-for-string {str::append_char('a', 'b')}
+    dynamic         {list::at([str::append_char], 0)("a", list::at(["b"], 0))}
+} {
+    test str-append-char-type-$name "$call is the TYPE error on every backend" -body {
+        outcomeCodes "import list\nimport str\n$call\n"
+    } -result [lrepeat 4 {error {CORE SEMANTIC TYPE}}]
+}
+
+# ---------------------------------------------------------------------------
+# Registration and method syntax.
+
+test str-append-char-registration {a context-free str intrinsic: (str, UnicodeChar) -> str, no declared error, no bounds, a String allocation its only runtime need} -body {
+    set m [core::native::metadata str::append_char]
+    list [core::native::isQualifiedNative str::append_char] [dict get $m arity] [dict get $m paramTypes] \
+        [dict get $m resultType] [dict get $m errors] [dict get $m bounds] [dict get $m runtime] \
+        [dict get $m contextFree] [dict get $m nomethod]
+} -result {1 2 {str UnicodeChar} str {} {} string-alloc 1 0}
+
+test str-append-char-method-is-the-intrinsic {text.append_char(c) is the very call str::append_char(text, c): the same native call target} -body {
+    set hir [surface::compile "import str\nfn f(t: str) -> str:\n    t.append_char('x')\nfn g(t: str) -> str:\n    str::append_char(t, 'x')\n\[f(\"a\"), g(\"a\")\]\n" -warnings off]
+    lsort -unique [lmap e [hirFind $hir call] {
+        set target [hir::get $hir $e target]
+        if {[lindex $target 0] ne "native"} continue
+        dict get [hir::symbol $hir [lindex $target 1]] name
+    }]
+} -result {list str::append_char}
+
+test str-append-char-name-beside-list-append {the name is not list::append's: with list and str both imported, an untyped receiver's .append(x) still has the one candidate list::append, and .append_char(c) the one candidate str::append_char} -body {
+    sourceAgree {import list
+import str
+
+fn add(acc, x):
+    acc.append(x)
+
+fn line(acc, c):
+    acc.append_char(c)
+
+[add([1], 2), line("ab", '\n')]
+}
+} -result {value {[[1, 2], "ab\n"]}}
+
+# ---------------------------------------------------------------------------
+# Lowering: one strappendchar with the character an immediate; one String.
+
+test str-append-char-nir {natively the call is one strappendchar whose character operand is an immediate char constant (no one-character String constant)} -body {
+    set hir [surface::compile {import str
+
+fn line(t: str) -> str:
+    t.append_char('\n')
+
+line("ab")
+} -warnings off]
+    set body [nirBody [native::nir $hir] line]
+    list [lindex [outcomeUnderHir cranelift $hir] 1] [regexp -all {op strappendchar } $body] \
+        [regexp {= char 10\M} $body] [regexp {= str } $body] [regexp {op strcat } $body]
+} -result {{"ab\n"} 1 1 0 0}
+
+test str-append-char-one-allocation {each append allocates exactly one String (the result), whatever the character's width} -body {
+    lmap c {{'\n'} {'é'} {'😀'}} {
+        set hir [surface::compile "import str\nfn line(t: str) -> str:\n    t.append_char($c)\nline(\"abc\")\n" -warnings off]
+        set report [native::allocationReport $hir summary]
+        list [dict get $report total allocations] [dict get $report byKind String allocations]
+    }
+} -result {{1 1} {1 1} {1 1}}
+
+::tcltest::cleanupTests
