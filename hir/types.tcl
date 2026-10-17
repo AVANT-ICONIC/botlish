@@ -1991,6 +1991,9 @@ proc hir::types::intern {hirVar type} {
 
 proc hir::types::infer {hirVar} {
     upvar 1 $hirVar hir
+    # Poison is a fact of one walk (a later round of the signature fixpoint
+    # may type a receiver differently): every walk starts without any.
+    dict unset hir poisoned
     if {![hir::semantic::Enabled]} {
         set ctx [NewContext]
         Sequence hir ctx [dict get $hir roots]
@@ -2070,6 +2073,64 @@ proc hir::types::inferRegion {hirVar region types handler} {
 
 proc hir::types::NewContext {} {
     return [dict create types {} facts {} implies {} returnType never breakTypes {} reachable 1]
+}
+
+# ---------------------------------------------------------------------------
+# Poison (DIAGNOSTIC-RECOVERY.md)
+#
+# An expression whose meaning the analysis has already proven cannot exist --
+# a projection that is definitionally invalid (NOT-A-STRUCT, UNKNOWN-FIELD,
+# OPAQUE-REPRESENTATION: hir/structs.tcl reports it, in every context), which
+# is also what a method-style call with no function of its name visible
+# becomes -- is *poison*: typed `never`, the bottom type, so no later check
+# restates the failure as a mismatch, an unproven field or an unproven range
+# (a value of type never is admissible everywhere and carries nothing), and
+# recorded in HIR's `poisoned` side table so that it is not a *divergence*:
+# code after it, and its siblings, stay reachable and keep every check of
+# their own. Poison spreads through what consumes the value -- a call with a
+# poisoned callee or argument, a bind (its binding: every reference to it), a
+# construction, a projection, a sequence ending in it, a block whose result
+# it is (`poisoned` holds the block's ExprId: its calls are poison) -- and
+# never through control flow: a poisoned `if` condition leaves both branches
+# reachable and undecided. Semantic inference makes poison -- the generic
+# walk, and a semantic instance's walk, whose call is then poison too
+# (hir::semantic::PoisonedCall: an instance's definitional failure is
+# reported at that call, hir::semantic::verify) -- region inference never (an
+# invalid projection there always raises: never). It exists only in a
+# program with a diagnostic, never in a valid program's HIR, and no backend
+# compiles it: a lenient HIR, which runs with its diagnostics, is checked
+# again without poison first (hir::recovery::runnable, `unpoisoned`).
+# Recovery state, never a type: hir::types::show never prints it.
+
+# 1 if E (an ExprId or a BindingId; for a block, its result) is poison.
+proc hir::types::Poisoned {hir e} {
+    return [dict exists $hir poisoned $e]
+}
+
+# Records E (an ExprId or a BindingId) as poison; returns its type, never.
+proc hir::types::Poison {hirVar e} {
+    upvar 1 $hirVar hir
+    dict set hir poisoned $e 1
+    return never
+}
+
+# 1 if E, of static type TYPE, never completes normally: a `never` that is not
+# poison.
+proc hir::types::Halts {hir e type} {
+    return [expr {$type eq "never" && ![dict exists $hir poisoned $e]}]
+}
+
+# 1 if semantic inference is typing (CTX) a source program (HIR): the generic
+# walk or a semantic instance's (hir/semantic.tcl, whose call is poison when
+# its result is), never region inference (hir/specialize.tcl), where these
+# failures always raise. A program read from core IR text is past the source
+# boundary: it has lost its declarations (a coroutine's resume type, ...), so
+# a failure its weaker types show is no definitional one -- its lenient
+# builds run such code (hir::build -strict 0) -- and nothing there is poison.
+# Nor in a HIR checked again for a backend (hir::recovery::runnable).
+proc hir::types::MakesPoison {hir ctx} {
+    return [expr {![dict exists $ctx spec] && ![dict exists $hir unpoisoned]
+        && [lindex [dict get $hir scopes [dict get $hir top] origin] 0] eq "file"}]
 }
 
 # The static type of constant V under aggregate facts.
@@ -2434,21 +2495,31 @@ proc hir::types::ValueBinding {hir e} {
 }
 
 # Types EXPRS in order. Returns the type of the sequence: unit if empty,
-# never if some expression never completes normally, else the last type.
+# never if some expression never completes normally, else the last type. A
+# poisoned expression (Poison, above) is no divergence: what follows it stays
+# reachable, and the sequence is poison when it ends in one -- recorded in
+# CTX's `poisonResult` (1 or 0) for the caller that needs to tell (Block, If,
+# the loops).
 proc hir::types::Sequence {hirVar ctxVar exprs} {
     upvar 1 $hirVar hir $ctxVar ctx
     set entry [dict get $ctx reachable]
     set result unit
+    set halted 0
+    set poison 0
     foreach e $exprs {
         set type [Expr hir ctx $e]
-        if {$result ne "never"} {
+        if {!$halted} {
             set result $type
+            set poison [expr {$type eq "never"}]
         }
-        if {$type eq "never"} {
+        if {$type eq "never" && [Halts $hir $e $type]} {
+            set halted 1
+            set poison 0
             dict set ctx reachable 0
         }
     }
     dict set ctx reachable $entry
+    dict set ctx poisonResult $poison
     return $result
 }
 
@@ -2468,7 +2539,12 @@ proc hir::types::Expr {hirVar ctxVar e} {
             if {[dict get $node binding] eq ""} {
                 return [SetType hir $e never]
             }
-            return [SetType hir $e [BindingType $hir $ctx [dict get $node binding]]]
+            set type [BindingType $hir $ctx [dict get $node binding]]
+            if {$type eq "never" && [Poisoned $hir [dict get $node binding]]} {
+                # A poisoned binding's value (Bind).
+                Poison hir $e
+            }
+            return [SetType hir $e $type]
         }
         bind {
             return [SetType hir $e [Bind hir ctx $e]]
@@ -2494,7 +2570,13 @@ proc hir::types::Expr {hirVar ctxVar e} {
         listloop {
             Expr hir ctx [dict get $node iterable]
             set elemType [IterationElementOf [hir::typeOf $hir [dict get $node iterable]]]
-            if {$elemType eq ""} {
+            set poison [Poisoned $hir [dict get $node iterable]]
+            if {$poison} {
+                # A poisoned iterable: its element is poison too, and the
+                # body is walked as reachable code (it may still run).
+                set elemType never
+                Poison hir [dict get $node elementBinding]
+            } elseif {$elemType eq ""} {
                 set elemType any
             }
             set saved [dict get $ctx facts]
@@ -2517,7 +2599,7 @@ proc hir::types::Expr {hirVar ctxVar e} {
             # not never itself.
             dict set ctx breakTypes $e never
             set entry [dict get $ctx reachable]
-            if {$elemType eq "never"} {
+            if {$elemType eq "never" && !$poison} {
                 # The iterable is a List[never], which only an empty List
                 # ever is (M7AA-EMPTY-COLLECTION-AND-APPLIED-TYPE-
                 # SEMANTICS.md): the body never runs. It is walked like a
@@ -2533,6 +2615,9 @@ proc hir::types::Expr {hirVar ctxVar e} {
             dict set ctx reachable $entry
             dict unset ctx breakTypes $e
             dict set ctx facts $saved
+            if {$poison} {
+                return [SetType hir $e [Poison hir $e]]
+            }
             return [SetType hir $e [MakeList [expr {$elemType eq "never" ? "never" : $bodyType}]]]
         }
         countloop {
@@ -2569,10 +2654,18 @@ proc hir::types::Expr {hirVar ctxVar e} {
             # loop's.
             set facts {}
             set empty 0
+            set poison 0
             foreach domain [dict get $node domains] {
                 if {[dict get $domain kind] eq "list"} {
                     Expr hir ctx [dict get $domain iterable]
                     set elemType [IterationElementOf [hir::typeOf $hir [dict get $domain iterable]]]
+                    if {[Poisoned $hir [dict get $domain iterable]]} {
+                        # (listloop's poisoned iterable.)
+                        set poison 1
+                        lappend facts [dict get $domain binding] never
+                        Poison hir [dict get $domain binding]
+                        continue
+                    }
                     lappend facts [dict get $domain binding] [expr {$elemType eq "" ? "any" : $elemType}]
                     # An empty domain (listloop's case): every domain has
                     # the one proven cardinality, so the body never runs.
@@ -2596,6 +2689,9 @@ proc hir::types::Expr {hirVar ctxVar e} {
             dict set ctx reachable $entry
             dict unset ctx breakTypes $e
             dict set ctx facts $saved
+            if {$poison} {
+                return [SetType hir $e [Poison hir $e]]
+            }
             return [SetType hir $e [MakeList [expr {$empty ? "never" : $bodyType}]]]
         }
         return {
@@ -2627,6 +2723,9 @@ proc hir::types::Expr {hirVar ctxVar e} {
         }
         ok - error {
             set value [Expr hir ctx [dict get $node value]]
+            if {$value eq "never" && [Poisoned $hir [dict get $node value]]} {
+                return [SetType hir $e [Poison hir $e]]
+            }
             return [SetType hir $e [expr {$value eq "never" ? "never" : "result"}]]
         }
         fail {
@@ -2655,12 +2754,15 @@ proc hir::types::Struct {hirVar ctxVar e} {
     set node [dict get $hir exprs $e]
     set entry [dict get $ctx reachable]
     set dead 0
+    set poison 0
     set fieldTypes [dict create]
     foreach name [dict get $node names] child [dict get $node fields] {
         set type [Expr hir ctx $child]
-        if {$type eq "never"} {
+        if {$type eq "never" && [Halts $hir $child $type]} {
             set dead 1
             dict set ctx reachable 0
+        } elseif {$type eq "never"} {
+            set poison 1
         }
         if {![dict exists $fieldTypes $name]} {
             dict set fieldTypes $name $type
@@ -2671,6 +2773,8 @@ proc hir::types::Struct {hirVar ctxVar e} {
         return never
     }
     if {[dict get $node named]} {
+        # (A poisoned field value leaves a named construction its declared
+        # type: the declaration is the contract.)
         set id [dict get $node structId]
         return [expr {$id eq "" ? "any" : [list nstruct $id]}]
     }
@@ -2680,6 +2784,10 @@ proc hir::types::Struct {hirVar ctxVar e} {
         # named construction's (hir::range::VerifyStruct proves each value
         # admissible) -- the anonymous struct type of the declared fields.
         return [hir::errordecls::payloadType [dict get $node payloadOf]]
+    }
+    if {$poison} {
+        # An anonymous struct's type is its fields': one of them is poison.
+        return [Poison hir $e]
     }
     return [MakeStruct $fieldTypes 0]
 }
@@ -2697,26 +2805,51 @@ proc hir::types::Project {hirVar ctxVar e} {
     set node [dict get $hir exprs $e]
     set receiver [Expr hir ctx [dict get $node receiver]]
     if {$receiver eq "never"} {
+        if {[Poisoned $hir [dict get $node receiver]]} {
+            return [Poison hir $e]
+        }
         return never
     }
     set name [dict get $node name]
+    # A projection hir::structs::ProjectionProblem rejects in every context
+    # (NOT-A-STRUCT, UNKNOWN-FIELD, OPAQUE-REPRESENTATION; a method-style
+    # call with no function of its name visible is one) has no value to
+    # type: in region inference it always raises (never); in the generic
+    # walk and a semantic instance's it is poison (above), so no later check
+    # restates it -- never the `any` that made a missing import surface as a
+    # type error elsewhere. Unreachable code keeps `any`: nothing is reported
+    # there, and poison exists only where its diagnostic does.
     if {[hir::structs::projectionDenied $receiver $node]} {
         # No authority over an opaque receiver's representation
         # (OPAQUE-STRUCTS.md; hir::structs::ProjectionProblem rejects it): the
         # access is typed as if no such field were known, never with the
         # hidden field's declared type, so the representation cannot leak
         # through the types of the program's later diagnostics.
-        return [expr {[dict exists $ctx spec] ? "never" : "any"}]
+        return [ProjectionFailed hir $ctx $e]
     }
     if {[IsStructLike $receiver]} {
         set t [StructField $receiver $name]
         if {$t ne ""} {
             return $t
         }
-        return [expr {[dict exists $ctx spec] ? "never" : "any"}]
+        return [ProjectionFailed hir $ctx $e]
     }
-    if {[dict exists $ctx spec] && [kindOf $receiver] ni {"" struct}} {
+    if {[kindOf $receiver] ni {"" struct}} {
+        return [ProjectionFailed hir $ctx $e]
+    }
+    return any
+}
+
+# The type of the projection E that hir::structs::ProjectionProblem rejects
+# in every context (Project): never in region inference, poison in reachable
+# code of semantic inference, else `any`.
+proc hir::types::ProjectionFailed {hirVar ctx e} {
+    upvar 1 $hirVar hir
+    if {[dict exists $ctx spec]} {
         return never
+    }
+    if {[MakesPoison $hir $ctx] && [dict get $ctx reachable]} {
+        return [Poison hir $e]
     }
     return any
 }
@@ -2777,7 +2910,10 @@ proc hir::types::Handle {hirVar ctxVar e} {
     }
 
     set handlerTypes {}
-    set ends [expr {$callType ne "never" ? [list $completed] : {}}]
+    # A poisoned handled call: its handlers are walked as ever (each may
+    # still run), and the construct is poison.
+    set poison [expr {$callType eq "never" && [Poisoned $hir [dict get $node call]]}]
+    set ends [expr {$callType ne "never" || $poison ? [list $completed] : {}}]
     set payloads [expr {[dict exists $node handlerPayloads] ? [dict get $node handlerPayloads] : {}}]
     set index 0
     foreach body [dict get $node handlerBodies] name [dict get $node handlerNames] {
@@ -2813,6 +2949,9 @@ proc hir::types::Handle {hirVar ctxVar e} {
     # CALLTYPE -- item 11: no implicit union widening of a handled-result
     # binding, so CALLTYPE alone is T, never a lub of the handlers' types.
     dict set hir exprs $e handlerTypes $handlerTypes
+    if {$poison} {
+        return [Poison hir $e]
+    }
     if {$callType ne "never"} {
         # hir/completions.tcl's admissibility check holds every live
         # handler to CALLTYPE in the generic analysis, which is what makes
@@ -2836,6 +2975,14 @@ proc hir::types::Handle {hirVar ctxVar e} {
             }
             set result [lub $result $t]
         }
+        if {$result eq "any" && $callType ne "any" && [MakesPoison $hir $ctx] && ![dict exists $ctx inst] && $entry} {
+            # A handler with no type in common with the call: inadmissible,
+            # which hir/completions.tcl reports. The generic walk makes the
+            # construct poison (above), never the `any` that would restate
+            # the handler's error wherever the value is used
+            # (DIAGNOSTIC-RECOVERY.md).
+            return [Poison hir $e]
+        }
         return $result
     }
     set result never
@@ -2857,6 +3004,16 @@ proc hir::types::Bind {hirVar ctxVar e} {
         set value [SetType hir $valueExpr [Block hir ctx $valueExpr $b]]
     } else {
         set value [Expr hir ctx $valueExpr]
+    }
+    if {$value eq "never" && [Poisoned $hir $valueExpr]} {
+        # A poisoned value: so is its binding, whose every reference is
+        # poison, and so is the bind (no divergence).
+        if {$typed} {
+            dict set ctx types $b never
+            dict set hir bindings $b type [intern hir never]
+            Poison hir $b
+        }
+        return [Poison hir $e]
     }
     if {$value eq "never" || [dict get $node duplicate]} {
         return never
@@ -2962,11 +3119,19 @@ proc hir::types::Block {hirVar outerVar e self} {
             incr index
         }
         set body [Sequence hir ctx [dict get $node body]]
+        set poison [dict get $ctx poisonResult]
         set result [lub $body [dict get $ctx returnType]]
         if {$self eq "" || $result eq $assumed || $assumed eq "any"} {
             break
         }
         set assumed $result
+    }
+    if {$result eq "never" && $poison} {
+        # Its every normal completion is poison (no `return` contributes):
+        # so is every call's result (Call), never a divergence.
+        Poison hir $e
+    } elseif {[dict exists $hir poisoned $e]} {
+        dict unset hir poisoned $e
     }
     dict set hir exprs $e inferredResultType [intern hir $result]
     if {$declared ne {}} { set result [hir::traits::ViewResult $declared $result] }
@@ -2978,14 +3143,22 @@ proc hir::types::Call {hirVar ctxVar e} {
     upvar 1 $hirVar hir $ctxVar ctx
     set node [dict get $hir exprs $e]
     set entry [dict get $ctx reachable]
+    # DEAD: no result to type (a callee or argument never completes, or is
+    # poison); HALTS: the call never completes normally. A poisoned callee
+    # or argument makes the call poison and leaves its later arguments
+    # reachable, each typed and checked on its own.
     set dead 0
+    set halts 0
     set types {}
     foreach child [concat [list [dict get $node callee]] [dict get $node args]] {
         set type [Expr hir ctx $child]
         lappend types $type
+        if {$type eq "never" && [Halts $hir $child $type]} {
+            set halts 1
+            dict set ctx reachable 0
+        }
         if {$type eq "never"} {
             set dead 1
-            dict set ctx reachable 0
         }
     }
     dict set ctx reachable $entry
@@ -3007,7 +3180,16 @@ proc hir::types::Call {hirVar ctxVar e} {
             dict set hir exprs $e target ""
             dict set hir exprs $e known ""
             dict set hir exprs $e calleeErrors $calleeErrors
-            return [expr {$dead ? "never" : $result}]
+            if {[dict exists $hir exprs $e traitCall unknown] && [MakesPoison $hir $ctx] && [dict get $ctx reachable]} {
+                # An operation the receiver's trait does not declare
+                # (TRAIT-UNKNOWN-OPERATION, hir/traits.tcl): no value to type,
+                # poison like a failed method call -- never its `any` stand-in.
+                set dead 1
+            }
+            if {$dead} {
+                return [CallResult hir $e [expr {$halts || $spec}]]
+            }
+            return $result
         }
     }
     if {[lindex $calleeType 0] eq "native" && [llength $calleeType] == 2} {
@@ -3131,6 +3313,10 @@ proc hir::types::Call {hirVar ctxVar e} {
                     # typed with what that analysis proves; the callee's own
                     # contract and generic result are untouched.
                     set result [hir::semantic::Call $hir $ctx $e $block $argTypes $result]
+                    if {$result eq "never" && [hir::semantic::PoisonedCall $ctx $e]} {
+                        # The instance's every normal completion is poison.
+                        set dead 1
+                    }
                 }
             }
             # A function with imprint variables (hir/imprint.tcl): the
@@ -3242,7 +3428,26 @@ proc hir::types::Call {hirVar ctxVar e} {
             }
         }
     }
-    return [expr {$dead ? "never" : $result}]
+    if {!$dead && $result eq "never" && [lindex $target 0] eq "block"
+            && [Poisoned $hir [lindex $target 1]]} {
+        # The callee's every normal completion is poison (Block).
+        set dead 1
+    }
+    # (Region inference's own dead calls -- a wrong arity or argument kind --
+    # always raise.)
+    if {$dead} {
+        return [CallResult hir $e [expr {$halts || $spec}]]
+    }
+    return $result
+}
+
+# The type of call E when it is dead (Call): never -- poison unless HALTS.
+proc hir::types::CallResult {hirVar e halts} {
+    upvar 1 $hirVar hir
+    if {$halts} {
+        return never
+    }
+    return [Poison hir $e]
 }
 
 # The Boolean (1/0) CONDITION is statically known to evaluate to, or "":
@@ -3295,7 +3500,10 @@ proc hir::types::If {hirVar ctxVar e} {
         # the if always raises NOT-BOOLEAN.
         set test never
     }
-    set live [expr {$entry && $test ne "never"}]
+    # A poisoned condition decides nothing: both branches are reachable,
+    # neither refined.
+    set poisonTest [expr {$test eq "never" && [Poisoned $hir $condition]}]
+    set live [expr {$entry && ($test ne "never" || $poisonTest)}]
     if {$test ne "never"} {
         set known [KnownOutcome $hir $condition]
         if {$test ne "bool"} {
@@ -3310,6 +3518,7 @@ proc hir::types::If {hirVar ctxVar e} {
     set branchTypes [dict create]
     set saved [dict get $ctx facts]
     set ends {}
+    set poison 0
     foreach {outcome role} {1 then 0 else} {
         set reachable [expr {$live && ($known eq "" || $known == $outcome)}]
         dict set ctx reachable $reachable
@@ -3327,7 +3536,9 @@ proc hir::types::If {hirVar ctxVar e} {
             }
         }
         dict set branchTypes $outcome [Sequence hir ctx [dict get $node ${role}Body]]
-        if {$reachable && [dict get $branchTypes $outcome] ne "never"} {
+        set branchPoison [expr {$reachable && [dict get $ctx poisonResult]}]
+        set poison [expr {$poison || $branchPoison}]
+        if {$reachable && ([dict get $branchTypes $outcome] ne "never" || $branchPoison)} {
             lappend ends [dict get $ctx facts]
         }
         dict set ctx facts $saved
@@ -3346,11 +3557,17 @@ proc hir::types::If {hirVar ctxVar e} {
         }
         dict set ctx facts $joined
     }
-    if {$test eq "never"} {
+    if {$test eq "never" && !$poisonTest} {
         return never
     }
     if {$known ne ""} {
-        return [dict get $branchTypes $known]
+        set result [dict get $branchTypes $known]
+    } else {
+        set result [lub [dict get $branchTypes 1] [dict get $branchTypes 0]]
     }
-    return [lub [dict get $branchTypes 1] [dict get $branchTypes 0]]
+    if {$result eq "never" && $poison} {
+        # Every branch that may complete does so with poison.
+        return [Poison hir $e]
+    }
+    return $result
 }

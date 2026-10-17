@@ -750,19 +750,20 @@ test opaque-instance-ordinary-struct-still-works {the same generic function on a
     }
 } -result 5
 
-test opaque-no-fallout-types {a rejected projection is typed as an unknown field is: the hidden field's type does not leak into the program's later diagnostics} -body {
+test opaque-no-fallout-types {a rejected projection is poison: the hidden field's type does not leak into the program's later diagnostics, and nothing restates the rejection} -body {
     withScratchLibrary {
         writeFixtures $dir
         # `x.value` is an int in the owner. Passed to a bool parameter, an
         # ordinary struct's int field is a TYPE error that names int. Here the
-        # access is typed as unknown (`any`): the consequence names `any`, and
+        # access is poison (DIAGNOSTIC-RECOVERY.md): it has no consequence at
+        # all (it used to be typed `any`, and the consequence named `any`), and
         # no diagnostic of the program names the hidden type.
         set source "${::consume}fn f(b: bool):\n    b\nf(x.value)\n"
         set diagnostics [hir::diagnostics [hirOfSource $source 0]]
         list [lsort -unique [lmap d $diagnostics {dict get $d kind}]] \
             [lsearch -regexp [lmap d $diagnostics {dict get $d message}] {\yint\y}]
     }
-} -result {{OPAQUE-REPRESENTATION TYPE} -1}
+} -result {OPAQUE-REPRESENTATION -1}
 
 test opaque-no-fallout-twin {the same program on an ordinary struct is the TYPE error that names the field's type: the control for the test above} -body {
     withScratchLibrary {

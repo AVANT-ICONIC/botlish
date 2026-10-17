@@ -306,21 +306,18 @@ proc surface::lower::ErrorDeclOf {node {namespace ""}} {
 }
 
 # The tail both surface::lowerToHir and surface::modules::compileProgramFile
-# (surface/modules.tcl) share: with STRICT 1, raise the first HIR diagnostic
-# as a semantic error (with its source location); otherwise return HIR as
-# built, diagnostics and all. A program with no diagnostics then gets the
+# (surface/modules.tcl) share: with STRICT 1, raise every diagnostic the
+# compilation reports (hir/recovery.tcl: the independent ones, not what
+# depends on a resolution failure) as one semantic error, each with its source
+# location and the first one's kind; otherwise return HIR as built,
+# diagnostics and all. A program with no diagnostics then gets the
 # compilation's warning policy applied (hir::warnings::run: WARNINGS is
 # default, off or error, or "" for the environment's default mode; CHANNEL
 # receives emitted warnings): the last thing
 # the frontend does, before any backend sees the HIR.
 proc surface::lower::Finish {hir strict {warnings ""} {channel stderr}} {
-    if {$strict} {
-        foreach diagnostic [hir::diagnostics $hir] {
-            set origin [expr {[dict exists $diagnostic origin] ? [dict get $diagnostic origin]
-                : [hir::get $hir [dict get $diagnostic expr] origin]}]
-            core::semanticError [dict get $diagnostic kind] \
-                "[surface::originLocation $hir $origin]: [dict get $diagnostic message]"
-        }
+    if {$strict && [hir::diagnostics $hir] ne ""} {
+        hir::recovery::raise $hir [hir::recovery::reported $hir] 1
     }
     return [hir::warnings::run $hir $warnings $channel]
 }

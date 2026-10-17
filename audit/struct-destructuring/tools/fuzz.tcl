@@ -66,7 +66,11 @@
 #
 # A negative program that is accepted, or that is rejected differently from its
 # explicit spelling (the first five have one), or by something other than the
-# diagnostic the defect names (the rest), is a "negative escape".
+# diagnostic the defect names (the rest), is a "negative escape". "Rejected
+# differently" compares the primary diagnostic, the first one reported: one
+# written pattern whose source is no struct is one error, while the explicit
+# spelling writes one projection per field, each a site of its own
+# (DIAGNOSTIC-RECOVERY.md).
 #
 # Every program is seeded individually, so any failure replays with
 # `-seed S -n 1 -dump 1`. The run ends with a summary line
@@ -416,7 +420,7 @@ proc genCase {} {
 # Running
 
 proc stripLocations {message} {
-    set message [regsub -all {[^ ]*\.bot:[0-9]+:[0-9]+} $message {t.bot:L:C}]
+    set message [regsub -all {[^ \n]*\.bot:[0-9]+:[0-9]+} $message {t.bot:L:C}]
     set message [regsub -all {at [0-9]+:[0-9]+\)} $message {at L:C)}]
     return [regsub -all {\(at [0-9]+:[0-9]+\)} $message {(at L:C)}]
 }
@@ -450,6 +454,17 @@ proc outcomeOf {backend source} {
         lset outcome 2 [stripLocations [lindex $outcome 2]]
     }
     return $outcome
+}
+
+# OUTCOMES (outcomesOf) with every rejection's message cut to its first
+# diagnostic, the primary.
+proc primaries {outcomes} {
+    return [lmap outcome $outcomes {
+        if {[lindex $outcome 0] eq "error"} {
+            lset outcome 2 [lindex [split [lindex $outcome 2] \n] 0]
+        }
+        set outcome
+    }]
 }
 
 proc outcomesOf {source} {
@@ -732,7 +747,7 @@ for {set k 0} {$k < $n} {incr k} {
         }
     } elseif {$explicitSource ne ""} {
         set negB [outcomesOf $explicitSource]
-        if {$negA ne $negB} {
+        if {[primaries $negA] ne [primaries $negB]} {
             set escape "$kind: the destructured spelling is rejected differently from the explicit spelling: [string range [lindex $negA 0] 0 250] / [string range [lindex $negB 0] 0 250]"
         }
     } else {

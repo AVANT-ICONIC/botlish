@@ -1,0 +1,6 @@
+#import str
+
+fn f(s: str) -> str:
+    s.concat("ab")
+
+f("q")

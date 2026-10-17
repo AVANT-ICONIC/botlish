@@ -1483,6 +1483,53 @@ Three product rules (POST-2048-PRODUCT-FIXES.md):
   and the compiler raise nothing themselves (tests/compiler-opt.test's
   opt-tail-2 checks a compiled tail call under 1000). `tests/main-recursion.test`.
 
+## Diagnostic recovery
+
+A rejected compilation reports every independent diagnostic it finds and
+nothing that only restates an earlier one (DIAGNOSTIC-RECOVERY.md): the
+strict boundaries (`surface::lower::Finish`, `hir::BuildSyntax`,
+`surface::parse` without `-recover`, the loader's `RaiseReferenceErrors`)
+raise them as one error through `core::raiseDiagnostics` (the first one's
+code and text, a line per further one, the list as `-diagnostics`), in the
+build's order. Keep it so:
+
+* Never suppress a diagnostic by comparing message text, and never merge
+  two at distinct written sites -- except a missing import, which is one
+  fact about a file (its absent `import NS`), reported once per file and
+  namespace, at its first use. A dependency is semantic: poison, a
+  resolution failure's taint (`hir/recovery.tcl`), a construct the parser
+  skipped (`surface::parser::Independent`), one written construct the front
+  end expanded.
+* A value an analysis proved invalid in every context is poison
+  (hir/types.tcl, "Poison"), never `any`: a new check of that kind makes its
+  expression poison, and a composite that propagates a child's `never` asks
+  `hir::types::Halts`, never `eq never`, for divergence. Poison exists only
+  where its diagnostic does (reachable code of a source program), never in a
+  valid program's HIR, and no backend compiles it: a lenient HIR runs with
+  its diagnostics, so a new backend entry point compiles
+  `hir::recovery::runnable` of its HIR (checked again without poison). A
+  check that holds a value to a declared boundary skips a poisoned one.
+* The source frontend checks a program whose resolution failed. A new way
+  for one top-level unit to depend on another, beyond referring to a binding
+  it declares, goes into `hir::recovery::Tainted`.
+* A rejected `static compile:` block's CompilerError stays its first
+  diagnostic: only that one is scheduler-independent.
+* A strict front end's message for one diagnostic is exactly what it always
+  was; a test that pins one diagnostic of a program that has several reads
+  the first entry of `-diagnostics`, never the first line of the message (a
+  message may span lines).
+
+If you change poison, the missing-import diagnosis of method syntax
+(`hir::structs::ProjectionProblem`, `UnimportedCandidates`), a call's
+grouped unhandled set (`hir::completions::Unhandled`), `hir/recovery.tcl`,
+the strict boundaries, the loader's accumulation or the parser's and the
+lexer's recovery, run `tests/diagnostic-recovery.test`,
+`audit/diagnostic-recovery/tools/mutate.tcl` (every mutant in its
+`mutants.txt` must still apply and be killed: update a mutant's text when
+you change the code it mutates, keeping it a mutant of the same rule) and
+`audit/diagnostic-recovery/tools/efficiency.tcl` (the corpus: every known
+primary in the first compilation, no cascade, every case clean once fixed).
+
 ## Golden tests (Botlish-native test framework)
 
 `lib/test.bot` (GOLDEN-TEST-FRAMEWORK.md) is an ordinary Botlish library:

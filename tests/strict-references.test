@@ -301,17 +301,17 @@ test sr-error-locality {the diagnostic is at the illegal reference, not at the d
     lindex [diagnosticsOf "a = 1\nb = later\nfn f():\n    b\n\nlater = 3\n"] 0
 } -result {UNBOUND 2:5}
 
-test sr-strict-stops-before-typing {a strict build that fails to resolve never runs type inference or semantic analysis} -body {
+test sr-strict-stops-before-typing {a strict build that fails to resolve still checks the program (DIAGNOSTIC-RECOVERY.md), but reports nothing the checks find in code that depends on the failure: the unresolved reference alone, though the function holding it is typed and analyzed} -body {
     set ::sr_reached {}
-    foreach command {hir::check hir::types::infer hir::semantic::Begin hir::signatures::infer} {
+    foreach command {hir::check hir::types::infer} {
         trace add execution $command enter {apply {{args} {lappend ::sr_reached [lindex $args 0]}}}
     }
-    catch {surface::compile "fn caller():\n    helper()\n\nfn helper():\n    1\n" t.bot}
-    foreach command {hir::check hir::types::infer hir::semantic::Begin hir::signatures::infer} {
+    catch {surface::compile "fn caller() -> str:\n    helper()\n    5\n\nfn helper():\n    1\n" t.bot} message options
+    foreach command {hir::check hir::types::infer} {
         trace remove execution $command enter {apply {{args} {lappend ::sr_reached [lindex $args 0]}}}
     }
-    set ::sr_reached
-} -result {}
+    list [lsort -unique [lmap call $::sr_reached {lindex $call 0}]] [lmap d [dict get $options -diagnostics] {dict get $d errorcode}]
+} -cleanup {unset -nocomplain message options} -result {{hir::check hir::types::infer} {{CORE SEMANTIC UNBOUND}}}
 
 test sr-legal-program-is-typed {control: the same probe sees inference on a legal program} -body {
     set ::sr_reached {}

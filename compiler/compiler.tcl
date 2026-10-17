@@ -205,6 +205,7 @@ proc core::compiler::Define {unit} {
 # trusted: it may come from hir::parse rather than a front end.
 proc core::compiler::compileHir {hir} {
     hir::activate $hir
+    set hir [hir::recovery::runnable $hir]
     # Compiling recurses as deep as the program nests (a left-deep `and`
     # chain: BRANCH-FORM-BOOLEAN-LOWERING.md), under the front end's
     # recursion floor (hir::Deep); the unit then runs under the caller's.

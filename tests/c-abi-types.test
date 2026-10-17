@@ -41,6 +41,10 @@ proc caError {source args} {
     }
     set code [dict get $options -errorcode]
     set kind [expr {[lrange $code 0 1] eq {SURFACE SYNTAX} ? "SYNTAX" : [lindex $code 2]}]
+    if {[dict exists $options -diagnostics]} {
+        # The first diagnostic (a program may have others, DIAGNOSTIC-RECOVERY.md).
+        set message [dict get [lindex [dict get $options -diagnostics] 0] message]
+    }
     regsub {^[^:]*:[0-9]+:[0-9]+: } $message {} message
     return [list $kind $message]
 }

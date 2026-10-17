@@ -9,6 +9,8 @@
 # interpreter (this is hir::check's recovery for inferred contracts, applied
 # to declared ones for native only; the relift used to hide the case because
 # core IR has no declared types). A strict HIR never has such a violation.
+# Before that, a lenient HIR with poison is checked again without it, as for
+# every backend (hir::recovery::runnable, DIAGNOSTIC-RECOVERY.md).
 #
 # Input: program-mode HIR as a front end built it (analyzed). Output: the same
 # HIR when nothing needs preparing (no work, no re-analysis); otherwise HIR
@@ -26,7 +28,7 @@
 # and both mechanisms are gone.
 proc native::prepareHir {hir} {
     hir::activate $hir
-    return [RecoverDeclaredContracts $hir]
+    return [RecoverDeclaredContracts [hir::recovery::runnable $hir]]
 }
 
 # native::prepareHir's second step: see its header.

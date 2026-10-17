@@ -1,0 +1,5 @@
+# An unknown result type, a function that depends on it, and an independent error.
+primary 1:9
+fix 1 fn parse(text: str) -> str:
+primary 7:9
+fix 7 fn score(n: int) -> int:

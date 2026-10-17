@@ -1,0 +1,10 @@
+#import str
+#import list
+
+fn place(name: str, cells: int, n: int) -> int:
+    cells + n
+
+fn build(label: str, xs: List[int]) -> int:
+    place(label.trim_all(), xs.length(), "three")
+
+build("b", [1])

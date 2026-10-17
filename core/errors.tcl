@@ -50,3 +50,25 @@ proc core::malformed {message node} {
 proc core::semanticError {kind message} {
     throw [list CORE SEMANTIC $kind] $message
 }
+
+# Raises the compiler diagnostics DIAGNOSTICS -- a non-empty list of
+# {errorcode CODE message TEXT ?shown SHOWN?} dicts, in the order they are
+# reported -- as one error (DIAGNOSTIC-RECOVERY.md): the first one's error
+# code and text, then a line "TEXT (SHOWN)" for each further one (SHOWN: how
+# its code is shown, CODE itself by default), and the list itself as the
+# return option -diagnostics, for a caller that presents them one by one
+# (main.tcl). A single diagnostic raises exactly what core::semanticError (or
+# the parser's or the loader's own error) would.
+proc core::raiseDiagnostics {diagnostics} {
+    set first [lindex $diagnostics 0]
+    set message [dict get $first message]
+    foreach diagnostic [lrange $diagnostics 1 end] {
+        append message "\n[dict get $diagnostic message] ([core::ShownCode $diagnostic])"
+    }
+    return -code error -errorcode [dict get $first errorcode] -diagnostics $diagnostics $message
+}
+
+# How the code of one entry of core::raiseDiagnostics is shown.
+proc core::ShownCode {diagnostic} {
+    return [expr {[dict exists $diagnostic shown] ? [dict get $diagnostic shown] : [dict get $diagnostic errorcode]}]
+}

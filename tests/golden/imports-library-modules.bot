@@ -69,12 +69,13 @@ fn register_non_transitive_tests():
     test::rejects_message("imports-non-transitive-namespace/dependency-not-imported", compiler::DiagnosticCode::MissingImport, "namespace \"ascii\" is not imported; add `import ascii` to use `ascii::is_alphanumeric`", b_dependency_qualified)
 
     # imports-non-transitive-methods: ascii's functions are no method
-    # candidates here merely because web imports ascii.
+    # candidates here merely because web imports ascii: the call is the
+    # missing import of ascii (DIAGNOSTIC-RECOVERY.md).
     fn b_dependency_method() errors compiler::CompilerError:
         static compile:
             x = 65
             x.is_alphanumeric()
-    test::rejects("imports-non-transitive-methods/dependency-not-imported", compiler::DiagnosticCode::NotAStruct, b_dependency_method)
+    test::rejects("imports-non-transitive-methods/dependency-not-imported", compiler::DiagnosticCode::MissingImport, b_dependency_method)
 
     # imports-type-non-transitive: web's `import type byte::Byte` serves web
     # (is_unreserved takes a Byte) and binds no short Byte here.

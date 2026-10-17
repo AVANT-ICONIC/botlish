@@ -316,9 +316,10 @@ proc hir::structs::RepresentationMessage {id} {
 # Moves the representation-authority diagnostics (OPAQUE-CONSTRUCTION,
 # OPAQUE-REPRESENTATION) ahead of the others, keeping every relative order:
 # they are the root cause of whatever follows from a rejected access (the
-# rejected access is typed as an unknown field is, so a later check may report
-# a consequence of that), and the first diagnostic is the one a strict compile
-# raises. A HIR without one is left exactly as it is.
+# rejected access is poison, hir/types.tcl, so no later check reports a
+# consequence of it; a semantic instance's types it as an unknown field is),
+# and the first diagnostic is the one a strict compile raises first. A HIR
+# without one is left exactly as it is.
 proc hir::structs::promoteOpacity {hirVar} {
     upvar 1 $hirVar hir
     set opaque {}
@@ -553,25 +554,53 @@ proc hir::structs::ProjectionProblem {hir e} {
     if {$type eq "never" || ![dict get $node reachable]} {
         return ""
     }
-    set hint [expr {[dict exists $node methodCallee] ? [MethodHint $name] : ""}]
+    set kind [hir::types::kindOf $type]
     if {[projectionDenied $type $node]} {
-        # The receiver is an opaque struct and this code is not its owner
-        # (OPAQUE-STRUCTS.md): whatever the field is called, the access needs
-        # the representation. The same message for a field that exists and
-        # for one that does not, and no field named or listed.
-        return [list OPAQUE-REPRESENTATION "[RepresentationMessage [lindex $type 1]]$hint"]
-    }
-    if {[hir::types::IsStructLike $type]} {
+        set problem OPAQUE-REPRESENTATION
+    } elseif {[hir::types::IsStructLike $type]} {
         if {[hir::types::StructField $type $name] ne ""} {
             return ""
         }
-        return [list UNKNOWN-FIELD [format {struct type %s has no field "%s" (known fields: %s)%s} \
-            [hir::types::show $type] $name [join [hir::types::StructLayout $type] {, }] $hint]]
+        set problem UNKNOWN-FIELD
+    } elseif {$kind ni {"" struct}} {
+        set problem NOT-A-STRUCT
+    } else {
+        set problem UNPROVEN-FIELD
     }
-    set kind [hir::types::kindOf $type]
-    if {$kind ni {"" struct}} {
-        return [list NOT-A-STRUCT [format {cannot project field "%s" from a value of type %s: only a struct has fields%s} \
-            $name [hir::types::show $type] $hint]]
+    set hint ""
+    if {[dict exists $node methodCallee] && $problem eq "UNPROVEN-FIELD"} {
+        # The receiver's type is not known here: every intrinsic of that
+        # name may be meant.
+        set hint [MethodHint $name [IntrinsicsNamed $name]]
+    } elseif {[dict exists $node methodCallee]} {
+        set candidates [UnimportedCandidates $hir $e $type]
+        if {$candidates ne ""} {
+            # A method-style call `receiver.NAME(args)` with no function NAME
+            # visible, whose field call is rejected in every context, and a
+            # function NAME the call would apply exists in a namespace this
+            # code does not import: the import is what is missing, exactly as
+            # for the explicit spelling NS::NAME(receiver, args)
+            # (DIAGNOSTIC-RECOVERY.md).
+            return [list MISSING-IMPORT [MissingImportMessage $name $candidates]]
+        }
+        set hint [MethodHint $name {}]
+    }
+    switch -- $problem {
+        OPAQUE-REPRESENTATION {
+            # The receiver is an opaque struct and this code is not its owner
+            # (OPAQUE-STRUCTS.md): whatever the field is called, the access
+            # needs the representation. The same message for a field that
+            # exists and for one that does not, and no field named or listed.
+            return [list OPAQUE-REPRESENTATION "[RepresentationMessage [lindex $type 1]]$hint"]
+        }
+        UNKNOWN-FIELD {
+            return [list UNKNOWN-FIELD [format {struct type %s has no field "%s" (known fields: %s)%s} \
+                [hir::types::show $type] $name [join [hir::types::StructLayout $type] {, }] $hint]]
+        }
+        NOT-A-STRUCT {
+            return [list NOT-A-STRUCT [format {cannot project field "%s" from a value of type %s: only a struct has fields%s} \
+                $name [hir::types::show $type] $hint]]
+        }
     }
     return [list UNPROVEN-FIELD [format {cannot project field "%s": the receiver's struct type is not known here (its type is %s), and a field projection is resolved statically, never looked up at run time%s} \
         $name [hir::types::show $type] $hint]]
@@ -584,11 +613,26 @@ proc hir::structs::ProjectionProblem {hir e} {
 # visible under that name here: one defined or bound in this file, or a member
 # of a namespace this file directly imports (`import list` makes `list::at`
 # a candidate for `xs.at(i)`; there is no search by receiver type).
-proc hir::structs::MethodHint {name} {
+# CANDIDATES (UnimportedCandidates) are the functions of that name the call
+# would apply once their namespace is imported; a projection the receiver
+# rejects in every context reports them as MISSING-IMPORT instead, so here
+# they are only the ones a receiver whose type is not known may be meant for.
+proc hir::structs::MethodHint {name candidates} {
     set hint [::format {; as a method-style call, no function named "%s" is visible here either: method syntax only applies a function that is already visible by that name (define it here, or import the namespace that defines it with `import NAMESPACE`)} \
         $name]
-    # Cheap and deterministic: the intrinsics of that name (never a search of
-    # modules, which are only known once imported).
+    if {$candidates ne ""} {
+        append hint [::format { -- `%s` exist%s: add %s} \
+            [join $candidates {`, `}] \
+            [expr {[llength $candidates] == 1 ? "s" : ""}] \
+            [join [lmap c $candidates {string cat "`import " [Owner $c] "`"}] { or }]]
+    }
+    return $hint
+}
+
+# The intrinsics named NAME in any namespace (`str::concat`), by namespace:
+# cheap and deterministic (never a search of modules, which are only known
+# once imported).
+proc hir::structs::IntrinsicsNamed {name} {
     set owners {}
     foreach native [core::native::names] {
         if {![core::native::isQualifiedNative $native]} continue
@@ -597,13 +641,94 @@ proc hir::structs::MethodHint {name} {
             lappend owners [string range $native 0 [expr {$i - 1}]]
         }
     }
-    if {$owners ne ""} {
-        append hint [::format { -- `%s` exist%s: add %s} \
-            [join [lmap o [lsort $owners] {string cat $o :: $name}] {`, `}] \
-            [expr {[llength $owners] == 1 ? "s" : ""}] \
-            [join [lmap o [lsort $owners] {string cat "`import " $o "`"}] { or }]]
+    return [lmap o [lsort $owners] {string cat $o :: $name}]
+}
+
+# The namespace of the qualified function name QUALIFIED.
+proc hir::structs::Owner {qualified} {
+    return [string range $qualified 0 [expr {[string last :: $qualified] - 1}]]
+}
+
+# The MISSING-IMPORT message of a method-style call `receiver.NAME(...)` whose
+# applicable functions CANDIDATES (qualified names, sorted) are all in
+# namespaces its code does not import -- the loader's message for the explicit
+# spelling (surface/modules.tcl's CheckRef), naming the method form.
+proc hir::structs::MissingImportMessage {name candidates} {
+    set owners [lmap c $candidates {Owner $c}]
+    if {[llength $candidates] == 1} {
+        return [::format {namespace "%s" is not imported; add `import %s` to use `%s` (the method-style call ".%s(...)" applies only a function visible by that name)} \
+            [lindex $owners 0] [lindex $owners 0] [lindex $candidates 0] $name]
     }
-    return $hint
+    return [::format {namespaces %s are not imported; add %s to use %s (the method-style call ".%s(...)" applies only a function visible by that name)} \
+        [join [lmap o $owners {string cat \" $o \"}] { and }] \
+        [join [lmap o $owners {string cat "`import " $o "`"}] { or }] \
+        [join [lmap c $candidates {string cat ` $c `}] { or }] $name]
+}
+
+# The functions NAME that the method-style call whose callee is the
+# projection E (`receiver.NAME`, receiver of static type TYPE) would apply if
+# the code it is written in imported their namespace: by method resolution's
+# own rules (hir/resolve.tcl's MethodCandidates, hir::MethodCallProblems),
+# the member NAME of a namespace the code does not import -- an intrinsic
+# (`str::concat`), or a function of a module this compilation loaded -- not
+# declared nomethod, accepting the call's number of arguments (the receiver
+# first) and, for an intrinsic, a first argument of the receiver's kind. The
+# qualified names, sorted. No search of modules this compilation does not
+# load (they are known only once imported), and no import is ever implied:
+# the call is still rejected.
+proc hir::structs::UnimportedCandidates {hir e type} {
+    set node [dict get $hir exprs $e]
+    set name [dict get $node name]
+    set own [expr {[dict exists $node ns] ? [dict get $node ns] : ""}]
+    set imported [hir::imports::namespaces $own]
+    set argCount [MethodArgCount $hir $e]
+    set kind [hir::types::kindOf $type]
+    set found {}
+    foreach native [core::native::names] {
+        if {![core::native::isQualifiedNative $native]} continue
+        set i [string last :: $native]
+        if {[string range $native [expr {$i + 2}] end] ne $name} continue
+        set ns [string range $native 0 [expr {$i - 1}]]
+        if {$ns in $imported || $ns eq $own} continue
+        set meta [core::native::metadata $native]
+        if {[dict get $meta nomethod]} continue
+        set arity [dict get $meta arity]
+        if {$arity ne "*" && $argCount ne "" && $arity != $argCount} continue
+        set paramTypes [dict get $meta paramTypes]
+        set wanted [expr {$paramTypes eq "" ? "" : [core::type::base [lindex $paramTypes 0]]}]
+        if {$kind ne "" && $wanted ni {"" any} && $kind ne $wanted} continue
+        lappend found $native
+    }
+    if {[dict exists $hir modules]} {
+        dict for {ns scope} [dict get $hir modules] {
+            if {$ns in $imported || $ns eq $own || "${ns}::$name" in $found} continue
+            # (After hygiene a module's own names are qualified,
+            # hir::hygiene::qualifyModules.)
+            set b ""
+            foreach spelling [list ${ns}::$name $name] {
+                if {[dict exists $hir scopes $scope names $spelling]} {
+                    set b [dict get $hir scopes $scope names $spelling]
+                    break
+                }
+            }
+            if {$b eq ""} continue
+            if {[dict exists $hir bindings $b nomethod]} continue
+            if {[dict get $hir bindings $b kind] ne "local"} continue
+            lappend found "${ns}::$name"
+        }
+    }
+    return [lsort -unique $found]
+}
+
+# The number of arguments, the receiver included, of the method-style call
+# whose callee is the projection E, or "" if no call has it as its callee.
+proc hir::structs::MethodArgCount {hir e} {
+    dict for {c node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "call" && [dict get $node callee] eq $e} {
+            return [expr {[llength [dict get $node args]] + 1}]
+        }
+    }
+    return ""
 }
 
 # Diagnoses the projection problems among the expressions EXPRS (an instance's
@@ -638,6 +763,9 @@ proc hir::structs::verifyExprs {hirVar exprs} {
 proc hir::structs::verify {hirVar} {
     upvar 1 $hirVar hir
     set live ""
+    # Receiver bindings and missing imports already reported (below).
+    set receivers [dict create]
+    set missing [dict create]
     dict for {e node} [dict get $hir exprs] {
         if {[dict get $node kind] eq "call" && [dict exists $node method]} {
             set problem [AmbiguousMethodCall $hir $e]
@@ -657,8 +785,42 @@ proc hir::structs::verify {hirVar} {
             set owner [OwnerBlock $hir $e]
             if {$owner ne "program" && $owner ni $live} continue
         }
+        if {$kind eq "MISSING-IMPORT"} {
+            # One missing import is one error, however many method-style
+            # calls need it: reported at the code's first (the loader's rule
+            # for qualified references, surface/modules.tcl).
+            set key [list [expr {[dict exists $node ns] ? [dict get $node ns] : ""}] \
+                [lmap c [UnimportedCandidates $hir $e [hir::typeOf $hir [dict get $node receiver]]] {Owner $c}]]
+            if {[dict exists $missing $key]} continue
+            dict set missing $key 1
+        }
+        if {$kind in {NOT-A-STRUCT OPAQUE-REPRESENTATION}} {
+            # A failure of the receiver's type, whatever the field: one
+            # written destructuring (`{a, b} = x`, an `on E {a, b}:` handler)
+            # is the projections of one binding the front end synthesized,
+            # and is one error, its first field's (DIAGNOSTIC-RECOVERY.md).
+            set b [SynthesizedReceiver $hir $node]
+            if {$b ne ""} {
+                if {[dict exists $receivers $b]} continue
+                dict set receivers $b 1
+            }
+        }
         hir::DiagnoseAt hir $kind $message $e [dict get $node nameOrigin]
     }
+}
+
+# The binding the receiver of projection NODE refers to when it is one the
+# front end synthesized (a destructuring's hygienic temporary: no source
+# spelling can name it, `#` is no identifier character), else "".
+proc hir::structs::SynthesizedReceiver {hir node} {
+    set receiver [dict get $hir exprs [dict get $node receiver]]
+    if {[dict get $receiver kind] ne "ref" || [dict get $receiver binding] eq ""} {
+        return ""
+    }
+    set b [dict get $receiver binding]
+    set binding [dict get $hir bindings $b]
+    set written [expr {[dict exists $binding spelling] ? [dict get $binding spelling] : [dict get $binding name]}]
+    return [expr {[string first # $written] >= 0 ? $b : ""}]
 }
 
 # "": the method-style call E (a call carrying `method`, i.e. written

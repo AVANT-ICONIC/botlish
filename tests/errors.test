@@ -28,6 +28,16 @@ proc diagKinds {hir} {
     return [lsort [lmap d [hir::diagnostics $hir] {dict get $d kind}]]
 }
 
+# The errors each UNHANDLED-ERROR of HIR names, a sorted list per diagnostic:
+# a call's whole unhandled set is one diagnostic (DIAGNOSTIC-RECOVERY.md).
+proc unhandledSets {hir} {
+    return [lmap d [hir::diagnostics $hir] {
+        if {[dict get $d kind] ne "UNHANDLED-ERROR"} continue
+        regexp {may produce the declared errors? (.*), which} [dict get $d message] -> named
+        lsort [lmap {- e} [regexp -all -inline {"([^"]*)"} $named] {set e}]
+    }]
+}
+
 proc parity {text} {
     set exprs [sourceIR $text]
     set outcomes [lmap backend $::parityBackends {outcomeUnder $backend $exprs}]
@@ -159,7 +169,7 @@ fn middle(n) -> int errors TooSmall:
 } -result {UNHANDLED-ERROR}
 
 test errors-rejects-unhandled-at-top-level {top level declares no errors: an unhandled fallible call of a genuinely dynamic value is a static UNHANDLED-ERROR, not a runtime completion} -body {
-    diagKinds [sourceHir {error TooSmall
+    set hir [sourceHir {error TooSmall
 error TooBig
 fn check(n) -> int errors TooSmall, TooBig:
     if n < 0:
@@ -171,7 +181,8 @@ fn check(n) -> int errors TooSmall, TooBig:
             n
 fn g(m: int):
     check(m)}]
-} -result {UNHANDLED-ERROR UNHANDLED-ERROR}
+    list [diagKinds $hir] [unhandledSets $hir]
+} -cleanup {unset -nocomplain hir} -result {UNHANDLED-ERROR {{TooBig TooSmall}}}
 
 test errors-rejects-fail-of-undeclared-name {"fail" of a name with no "error" declaration is a static UNDECLARED-ERROR -- once for the signature's own "errors Whatever" reference, once for the "fail Whatever" production} -body {
     diagKinds [sourceHir {fn f() -> int errors Whatever:
@@ -609,17 +620,18 @@ r} errors-byte-from-int-above.bot]
     }
 } -result {same -2}
 
-test errors-byte-from-int-unhandled-rejected {an unhandled byte::from_int call of a genuinely dynamic (unconstrained) value at top level is a static UNHANDLED-ERROR for both of its declared errors} -body {
+test errors-byte-from-int-unhandled-rejected {an unhandled byte::from_int call of a genuinely dynamic (unconstrained) value at top level is a static UNHANDLED-ERROR for both of its declared errors, one diagnostic naming both (DIAGNOSTIC-RECOVERY.md)} -body {
     set path [makeFile {import byte
 byte::high_nibble(0)
 fn g(m: int):
     byte::from_int(m)} errors-byte-from-int-unhandled.bot]
     try {
-        diagKinds [surface::readProgramFile $path -strict 0]
+        set hir [surface::readProgramFile $path -strict 0]
+        list [diagKinds $hir] [llength [lindex [unhandledSets $hir] 0]]
     } finally {
         removeFile errors-byte-from-int-unhandled.bot
     }
-} -result {UNHANDLED-ERROR UNHANDLED-ERROR}
+} -cleanup {unset -nocomplain hir} -result {UNHANDLED-ERROR 2}
 
 test errors-byte-from-int-known-safe-literal-no-handler {byte::from_int(5) at top level, a statically provable in-range literal, needs no handler at all -- STATIC-COMPLETION-PROOFS.md item 20} -body {
     set path [makeFile {import byte
@@ -695,9 +707,10 @@ fn bounded(x: int) -> int errors TooSmall, TooLarge:
     set safe [diagKinds [sourceHir "[boundedSrc]bounded(15)"]]
     set tooSmall [diagKinds [sourceHir "[boundedSrc]bounded(5)"]]
     set tooLarge [diagKinds [sourceHir "[boundedSrc]bounded(25)"]]
-    set dynamic [diagKinds [sourceHir "[boundedSrc]fn g(m: int):\n    bounded(m)"]]
+    set dynamicHir [sourceHir "[boundedSrc]fn g(m: int):\n    bounded(m)"]
+    set dynamic [list [diagKinds $dynamicHir] [unhandledSets $dynamicHir]]
     list $safe $tooSmall $tooLarge $dynamic
-} -result {{} KNOWN-ERROR KNOWN-ERROR {UNHANDLED-ERROR UNHANDLED-ERROR}}
+} -result {{} KNOWN-ERROR KNOWN-ERROR {UNHANDLED-ERROR {{TooLarge TooSmall}}}}
 
 # ---------------------------------------------------------------------------
 # An empty literal List never runs a loop body (STATIC-COMPLETION-PROOFS.md,

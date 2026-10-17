@@ -1,0 +1,10 @@
+#import str
+#import list
+
+fn size(s: str) -> int:
+    str::length(s)
+
+fn count(xs: List[int]) -> int:
+    list::length(xs)
+
+size("ab")

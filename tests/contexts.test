@@ -71,6 +71,10 @@ proc strictError {text} {
     if {![catch {ctxHir $text} message options]} {
         return "no error"
     }
+    # (The first diagnostic: a program may have others, DIAGNOSTIC-RECOVERY.md.)
+    if {[dict exists $options -diagnostics]} {
+        set message [dict get [lindex [dict get $options -diagnostics] 0] message]
+    }
     regexp {^[^ ]*:([0-9]+:[0-9]+): (.*)$} $message -> location text
     return [list [lindex [dict get $options -errorcode] end] $location $text]
 }

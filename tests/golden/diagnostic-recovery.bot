@@ -1,0 +1,84 @@
+# diagnostic-recovery.bot -- what a `static compile:` block reifies when
+# its body fails for a reason DIAGNOSTIC-RECOVERY.md changed the diagnosis
+# of, and that a callable field called with method syntax is still the
+# field's call.
+#
+#   * a method call whose function is in a namespace the file does not
+#     import is the missing import, MissingImport -- the explicit spelling's
+#     code and message, never the projection of a field from a non-struct;
+#   * a call that may raise several declared errors nobody handles is one
+#     UnhandledError naming the whole set, sorted;
+#   * with no function of the method's name visible, a callable struct
+#     field is called.
+#
+# Ported from tests/diagnostic-recovery.test, which stays authoritative
+# (audit/golden/migration/fragments/diagnostic-recovery.tsv). The rest of
+# that file observes the whole set of diagnostics a rejected compilation
+# reports, its order, poison in the HIR, syntax recovery or several
+# programs, none of which a block holds: a block reifies one diagnostic, its
+# first (STATIC-COMPILE.md item 27).
+#
+# Imports: compiler and test only (the framework). The absence of
+# `import str` is the property of the first two tests; lib/test.bot imports
+# str for itself, which is not this file's import.
+import compiler
+import test
+
+error A
+error B
+
+fn validate(n: int) -> int errors A, B:
+    if n < 1:
+        fail A
+    if n == 1:
+        fail B
+    n
+
+struct Op:
+    apply: Fn{args: [int], return: int}
+
+fn twice(x: int) -> int:
+    x * 2
+
+fn register_method_tests():
+    # dr-static-method-missing-import: s.concat("ab") without `import str`
+    # is rejected for the import it needs (S13).
+    fn b_method() errors compiler::CompilerError:
+        static compile:
+            fn f(s: str) -> str:
+                s.concat("ab")
+            f("q")
+    test::rejects_message("dr-static-method-missing-import/method", compiler::DiagnosticCode::MissingImport, "namespace \"str\" is not imported; add `import str` to use `str::concat` (the method-style call \".concat(...)\" applies only a function visible by that name)", b_method)
+
+    # dr-static-explicit-agrees: the explicit spelling's block has the same
+    # code and names the same import.
+    fn b_explicit() errors compiler::CompilerError:
+        static compile:
+            fn f(s: str) -> str:
+                str::concat(s, "ab")
+            f("q")
+    test::rejects_message("dr-static-explicit-agrees/explicit", compiler::DiagnosticCode::MissingImport, "namespace \"str\" is not imported; add `import str` to use `str::concat`", b_explicit)
+
+    # dr-callable-field-unchanged: no function named apply is visible, so
+    # o.apply(4) calls the field.
+    fn b_field_call() -> int:
+        o = Op {apply: twice}
+        o.apply(4)
+    test::value("dr-callable-field-unchanged/field-call", 8, b_field_call)
+
+fn register_unhandled_tests():
+    # dr-static-unhandled-set: a call that may raise A and B, neither
+    # handled nor declared, is one diagnostic naming both. (g is not
+    # called: a call g(3) would be the block's first diagnostic, with what
+    # g(3) may raise.)
+    fn b_unhandled() errors compiler::CompilerError:
+        static compile:
+            fn g(n: int) -> int:
+                validate(n)
+            0
+    test::rejects_message("dr-static-unhandled-set/set", compiler::DiagnosticCode::UnhandledError, "this call may produce the declared errors \"A\" and \"B\", which are neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_unhandled)
+
+with context test::suite()
+register_method_tests()
+register_unhandled_tests()
+test::report()

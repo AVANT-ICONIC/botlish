@@ -1,0 +1,237 @@
+# Mutants of diagnostic recovery (audit/diagnostic-recovery/tools/mutate.tcl,
+# DIAGNOSTIC-RECOVERY.md). Each is a deliberate bug in one rule of the
+# milestone; tests/diagnostic-recovery.test must kill every one.
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# Lines starting with # outside an edit are comments.
+
+@@ method-any a failed method-style call falls back to `any`: the type error at the function result comes back, and the missing import with it
+## hir/types.tcl
+<<<<
+    if {[MakesPoison $hir $ctx] && [dict get $ctx reachable]} {
+        return [Poison hir $e]
+    }
+====
+>>>>
+
+@@ missing-import-unknown a method call whose function's namespace is not imported is treated as an unknown method: NOT-A-STRUCT instead of the explicit spelling's MISSING-IMPORT
+## hir/structs.tcl
+<<<<
+        if {$candidates ne ""} {
+            # A method-style call `receiver.NAME(args)` with no function NAME
+====
+        if {0} {
+            # A method-style call `receiver.NAME(args)` with no function NAME
+>>>>
+
+@@ missing-import-type-blind the unimported candidates ignore the receiver's kind: a str receiver is told to import mutable_vector
+## hir/structs.tcl
+<<<<
+        if {$kind ne "" && $wanted ni {"" any} && $kind ne $wanted} continue
+====
+>>>>
+
+@@ instance-poison-ignored an instance whose result is poison makes its call an ordinary never-typed call: the caller's code after it is unreachable, or its result checked
+## hir/semantic.tcl
+<<<<
+    return [expr {[dict exists $state instances $id poisoned]
+        && [dict get $state instances $id result] eq "never"}]
+====
+    return 0
+>>>>
+
+@@ poison-is-divergence poison is an ordinary never: code after it and its siblings become unreachable, and their independent errors are hidden
+## hir/types.tcl
+<<<<
+    return [expr {$type eq "never" && ![dict exists $hir poisoned $e]}]
+====
+    return [expr {$type eq "never"}]
+>>>>
+
+@@ poison-unreachable poison is made in unreachable code too, where nothing is reported: a valid program carries poison
+## hir/types.tcl
+<<<<
+    if {[MakesPoison $hir $ctx] && [dict get $ctx reachable]} {
+====
+    if {[MakesPoison $hir $ctx]} {
+>>>>
+
+@@ poisoned-condition-decides a poisoned if condition is a divergence: both branches unreachable, their own diagnostics hidden
+## hir/types.tcl
+<<<<
+    set live [expr {$entry && ($test ne "never" || $poisonTest)}]
+====
+    set live [expr {$entry && $test ne "never"}]
+>>>>
+
+@@ binding-poison-lost a bind of a poisoned value leaves its binding an ordinary never: every reference to it diverges
+## hir/types.tcl
+<<<<
+            dict set hir bindings $b type [intern hir never]
+            Poison hir $b
+====
+            dict set hir bindings $b type [intern hir never]
+>>>>
+
+@@ poison-return-check a poisoned function result is still held to the declared result type
+## hir/range.tcl
+<<<<
+        if {[hir::types::Poisoned $hir $e]} {
+            # Every normal completion is a value an earlier diagnostic
+====
+        if {0} {
+            # Every normal completion is a value an earlier diagnostic
+>>>>
+
+@@ module-abort a strict compilation stops after the first resolution failure: no check of any other function runs
+## surface/modules.tcl
+<<<<
+    return [hir::buildSyntax [LowerStatements $state "" $executable] -strict 0 \
+        -origin [surface::lower::Origin [dict get $ast span] ""] \
+====
+    return [hir::buildSyntax [LowerStatements $state "" $executable] -strict 0 \
+        -halt-on-resolution-errors $strict \
+        -origin [surface::lower::Origin [dict get $ast span] ""] \
+>>>>
+
+@@ taint-off no unit is tainted by a resolution failure: checks of code that depends on one are reported
+## hir/recovery.tcl
+<<<<
+        dict set units [dict get $unitOf $e] 1
+    }
+====
+    }
+>>>>
+
+@@ taint-not-transitive a unit is tainted only by its own resolution failure, never by referring to a tainted one
+## hir/recovery.tcl
+<<<<
+    set changed 1
+    while {$changed} {
+====
+    set changed 0
+    while {$changed} {
+>>>>
+
+@@ first-diagnostic-only a rejected compilation raises its first diagnostic only (what every strict compilation did)
+## hir/recovery.tcl
+<<<<
+    set entries {}
+    foreach diagnostic $reported {
+====
+    set entries {}
+    foreach diagnostic [lrange $reported 0 0] {
+>>>>
+
+@@ order-by-message the reported diagnostics are raised in the order of their text (an order unrelated to the source), not the build's
+## hir/recovery.tcl
+<<<<
+    set entries {}
+    foreach diagnostic $reported {
+====
+    set entries {}
+    foreach diagnostic [lsort -command {apply {{a b} {string compare [dict get $a message] [dict get $b message]}}} $reported] {
+>>>>
+
+@@ unhandled-first-only a call's unhandled error set is reported by its first member only
+## hir/completions.tcl
+<<<<
+    return [lsort -unique [lmap name $errors {
+        expr {$name ni $handled && $name ni $enclosing ? $name : [continue]}
+    }]]
+====
+    return [lrange [lsort -unique [lmap name $errors {
+        expr {$name ni $handled && $name ni $enclosing ? $name : [continue]}
+    }]] 0 0]
+>>>>
+
+@@ loader-first-only the loader raises its first rejected qualified reference only
+## surface/modules.tcl
+<<<<
+        core::raiseDiagnostics [dict get $state referenceErrors]
+====
+        core::raiseDiagnostics [lrange [dict get $state referenceErrors] 0 0]
+>>>>
+
+@@ syntax-dependents-kept every syntax diagnostic is reported: no malformed construct decides its lexer's bracket guesses
+## surface/parser.tcl
+<<<<
+            foreach index $structural {
+                set start [dict get [lindex $lexical $index] start]
+                if {$start >= $from && $start < $to && $index ne $atLexical} {
+                    dict set dropLexical $index 1
+                }
+            }
+====
+>>>>
+
+@@ syntax-dangling-else an elif or else after a malformed statement is an error of its own ("else" without a matching "if")
+## surface/parser.tcl
+<<<<
+        while {[Kind p] in {elif else}} {
+            Synchronize p
+        }
+====
+>>>>
+
+@@ synthetic-closer-reported the parser's error at a closer the lexer inserted is reported beside the bracket's own diagnostic
+## surface/parser.tcl
+<<<<
+            if {[dict get $primary end] == $at && $at in $synthetic} {
+====
+            if {0} {
+>>>>
+
+@@ skipped-text-kept the parser's error at what follows a skipped character is reported beside the skip
+## surface/parser.tcl
+<<<<
+                if {$start >= $from && $start <= $at} {
+                    dict set dropParsed $primary 1
+                }
+====
+>>>>
+
+@@ orphan-closer-reported the closer of a parenthesis already reported as never closed is reported again, as unmatched
+## surface/lexer.tcl
+<<<<
+                            if {[lindex $orphans end] eq $found} {
+====
+                            if {0} {
+>>>>
+
+@@ declaration-not-a-boundary a declaration line does not end a bracket left open: the rest of the file is inside it, its errors unreported
+## surface/lexer.tcl
+<<<<
+            || [regexp {^(?:(?:opaque[ \t]+)?(?:context[ \t]+)?(?:struct|trait)|enum|error|(?:refined[ \t]+)?type|layout|import)[ \t]+[A-Za-z_]} $rest])}]
+====
+            || 0)}]
+>>>>
+
+@@ declaration-body-unskipped a statement that fails inside its own block is resynchronized inside it: a stray "end of block" error follows
+## surface/parser.tcl
+<<<<
+        while {$open > 0 && [Kind p] ne "EOF"} {
+====
+        while {0} {
+>>>>
+
+@@ runnable-off a backend compiles a lenient HIR with its poison: a poisoned expression is a divergence to it, and code after an inadmissible handler or an opaque access is dropped
+## hir/recovery.tcl
+<<<<
+    if {![dict exists $hir poisoned]} {
+        return $hir
+    }
+    set diagnostics [dict get $hir diagnostics]
+====
+    if {1} {
+        return $hir
+    }
+    set diagnostics [dict get $hir diagnostics]
+>>>>

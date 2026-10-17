@@ -15,14 +15,19 @@
 # Imports: compiler and test (the framework); list (the Tcl programs' own
 # import). The absence of `import str` and `import byte` is the property:
 # str::concat and byte::complement must not be candidates. (The framework's
-# own imports add no member named concat or complement.)
+# own imports add no member named concat or complement.) A method call whose
+# function exists in a namespace the file does not import is that missing
+# import (MissingImport, DIAGNOSTIC-RECOVERY.md): str::concat, an intrinsic,
+# is known to every compilation; byte, a module nothing here loads, is not
+# searched.
 import compiler
 import list
 import test
 
 fn register_visibility_tests():
     # method-not-visible-other-namespace-import: with only list imported,
-    # "abc".concat("d") finds no function `concat`, bound list member or not.
+    # "abc".concat("d") finds no function `concat`, bound list member or not:
+    # str is what is missing.
     fn b_bound_list_member() errors compiler::CompilerError:
         static compile:
             at = list::at
@@ -30,8 +35,8 @@ fn register_visibility_tests():
     fn b_list_imported() errors compiler::CompilerError:
         static compile:
             "abc".concat("d")
-    test::rejects_containing("method-not-visible-other-namespace-import/bound-list-member", compiler::DiagnosticCode::NotAStruct, "cannot project field \"concat\" from a value of type str: only a struct has fields; as a method-style call, no function named \"concat\" is visible here either", b_bound_list_member)
-    test::rejects_containing("method-not-visible-other-namespace-import/list-imported", compiler::DiagnosticCode::NotAStruct, "cannot project field \"concat\" from a value of type str: only a struct has fields; as a method-style call, no function named \"concat\" is visible here either", b_list_imported)
+    test::rejects_containing("method-not-visible-other-namespace-import/bound-list-member", compiler::DiagnosticCode::MissingImport, "namespace \"str\" is not imported; add `import str` to use `str::concat`", b_bound_list_member)
+    test::rejects_containing("method-not-visible-other-namespace-import/list-imported", compiler::DiagnosticCode::MissingImport, "namespace \"str\" is not imported; add `import str` to use `str::concat`", b_list_imported)
 
     # method-not-visible-no-type-import-needed-or-used: byte::complement
     # takes a Byte, but with nothing of byte imported 200.complement() has
