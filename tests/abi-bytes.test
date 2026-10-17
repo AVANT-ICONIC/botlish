@@ -351,7 +351,7 @@ test abi-bytes-unchecked-bridge-replays-the-contract {a -strict 0 program that b
 # The Tcl backends refuse the machine-only operations
 
 test abi-bytes-tcl-backends-refuse-the-address {interp and compile refuse abi::x86_64::from_bytes and linux::write with NATIVE-ONLY (they do not imitate an address or a write with a Tcl channel); a program that defines but never calls them runs everywhere, and the pure Bytes operations run on both} -body {
-    set write "import abi\nimport abi::bytes\nimport linux\n"
+    set write "direct module\nimport abi\nimport abi::bytes\nimport linux\n"
     list [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "${write}linux::write(abi::i32(1), abi::bytes::from_list(\[\]))"]] 0 1}] \
         [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "import abi\nimport abi::bytes\nimport abi::x86_64\nabi::x86_64::to_int(abi::x86_64::from_bytes(abi::bytes::from_list(\[\])))"]] 0 1}] \
         [agree "${write}fn emit():\n    linux::write(abi::i32(1), abi::bytes::from_list(\[\]))\n7" {interp compile}]
@@ -402,8 +402,11 @@ proc readBinary {path} {
 }
 
 # The lines of a program that writes to descriptor 3 (and the prelude): every
-# program below starts with this.
-set linuxPrelude {import abi
+# program below starts with this. Its `out` calls linux::write, a callable of
+# the direct module linux, from a context-free function, so every such
+# program is a direct module (DIRECT-MODULES.md) and says so first.
+set linuxPrelude {direct module
+import abi
 import abi::bytes
 import abi::x86_64
 import byte
@@ -615,7 +618,8 @@ rs"
 } -result {1 1 1}
 
 test abi-bytes-gc-stress-in-process {the in-process native runs (specialized and unspecialized) under GC stress give the same results as without stress: lengths, equality and hashes of Bytes held in Lists, and write results} -constraints {linuxX86_64} -body {
-    set text "import list\n${::linuxPrelude}
+    # The prelude with `import list` first (after the marker, which must lead).
+    set text "[string map [list "direct module\n" "direct module\nimport list\n"] $::linuxPrelude]
 a = mk(\"alias\\n\")
 xs = \[a, mk(\"other\\n\"), a, abi::bytes::from_list(pattern(100))\]
 sizes = loop x in xs:
@@ -634,8 +638,11 @@ sizes = loop x in xs:
 # reach the syscall within one function (native/lower.tcl's KeepAddrFlow):
 # written inline in the register literal, bound to a local, held in a register
 # struct bound to a local, returned by a helper function, merged across an
-# `if`, or passed to a callee that makes the syscall.
-set livenessHeader {import abi
+# `if`, or passed to a callee that makes the syscall. Every such program calls
+# linux::abi::syscall from a context-free function (raw_write, and w by most
+# routes), so it is a direct module (DIRECT-MODULES.md).
+set livenessHeader {direct module
+import abi
 import abi::bytes
 import abi::x86_64
 import byte

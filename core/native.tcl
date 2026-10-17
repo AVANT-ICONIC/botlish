@@ -296,6 +296,56 @@ namespace eval core::native {
     # declarations (hir/errordecls.tcl). Only a native's -errors may name one;
     # native/lower.tcl's ErrorId gives each a fixed NIR id from its index.
     variable builtinErrors [dict create]
+    # NS -> 1: the intrinsic namespaces the compiler provides as direct
+    # modules (DIRECT-MODULES.md): their members expose raw, ambient
+    # authority, so a call into one is a direct edge of the calling module.
+    # The trusted provider's equivalent of a source file's `direct module`;
+    # declared by declareDirectNamespace beside the namespace's natives,
+    # never derived from a name.
+    variable directNamespaces [dict create]
+}
+
+# Declares the intrinsic namespace NS (one with qualified root natives,
+# qualifiedMembers) a direct module: a module whose callables expose raw,
+# ambient authority (DIRECT-MODULES.md). Module granular, like a source
+# file's `direct module`: every member of NS is direct, none is exempt.
+proc core::native::declareDirectNamespace {ns} {
+    variable directNamespaces
+    if {[qualifiedMembers $ns] eq {}} {
+        error "core::native::declareDirectNamespace: \"$ns\" has no intrinsic members (register its natives first)"
+    }
+    dict set directNamespaces $ns 1
+}
+
+# Removes NS's direct declaration again: tests that declare a probe
+# namespace direct (tests/direct-modules.test) undo it, as they unregister
+# their probe natives. Nothing in the compiler undeclares one.
+proc core::native::undeclareDirectNamespace {ns} {
+    variable directNamespaces
+    dict unset directNamespaces $ns
+}
+
+# 1 if the intrinsic namespace NS is declared direct (declareDirectNamespace).
+proc core::native::isDirectNamespace {ns} {
+    variable directNamespaces
+    return [dict exists $directNamespaces $ns]
+}
+
+# The intrinsic namespaces declared direct, sorted.
+proc core::native::directNamespaces {} {
+    variable directNamespaces
+    return [lsort [dict keys $directNamespaces]]
+}
+
+# The intrinsic namespace of the qualified root native NAME (the part of its
+# registered name before the last "::": linux::abi::syscall is a member of
+# linux::abi, qualifiedMembers' membership), "" for a native in no namespace.
+proc core::native::namespaceOf {name} {
+    set cut [string last :: $name]
+    if {$cut <= 0} {
+        return ""
+    }
+    return [string range $name 0 [expr {$cut - 1}]]
 }
 
 proc core::native::register {name args} {

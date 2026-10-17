@@ -1,7 +1,7 @@
 # main.tcl -- example runner.
 #
 #   tclsh9.0 main.tcl [-backend interp|compile|cranelift|cranelift-generic] [-code] [-hir] [-ast]
-#                    [-aot] [-aot-data] [-aot-spec] [-contexts] [-traits] [-emit-nir] [-emit-clif]
+#                    [-aot] [-aot-data] [-aot-spec] [-contexts] [-direct] [-traits] [-emit-nir] [-emit-clif]
 #                    [-emit-native-executable] [-emit-hir-interchange]
 #                    [-argv TEXT]... [-argv-hex HEX]...
 #                    [-argv-none] [-warnings default|off|error] [-target NAME]
@@ -39,6 +39,11 @@
 # order, every function's context parameters, and the direct and transitive
 # context requirements of every function that has one, each with the chain
 # that explains it.
+# -direct prints the program's module directness (DIRECT-MODULES.md,
+# hir::direct::summary): for every module and the entry program, whether it
+# is declared and inferred direct and its status (ordinary, contextualized,
+# direct, provided), and every call into a direct module with the
+# module-owned context that mediates it, if one does.
 # -traits prints the program's traits (TRAITS.md, hir::traits::report): each
 # trait and its requirements, every conformance the program relies on (which
 # concrete witness satisfies which trait, through which implementation of
@@ -109,7 +114,7 @@ proc probeValues {value} {
 }
 
 proc runFile {path showCode showHir showAst showAot showNative} {
-    global backend nativeBackends warnings target showContexts showTraits
+    global backend nativeBackends warnings target showContexts showDirect showTraits
     puts "== [file tail $path] ($backend)"
     set hir ""
     set extension [file extension $path]
@@ -162,7 +167,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         set program [core::loadProgramFile $path]
         set run {core::evalProgram $program}
     }
-    if {$showHir || $showAot ne "" || $showNative ne "" || $showContexts || $showTraits} {
+    if {$showHir || $showAot ne "" || $showNative ne "" || $showContexts || $showDirect || $showTraits} {
         set shownHir [expr {$hir ne "" ? $hir : [hir::build $program -strict 0]}]
     }
     if {$showHir} {
@@ -170,6 +175,9 @@ proc runFile {path showCode showHir showAst showAot showNative} {
     }
     if {$showTraits} {
         puts [hir::traits::report $shownHir]
+    }
+    if {$showDirect} {
+        puts [hir::direct::summary $shownHir]
     }
     if {$showContexts} {
         puts [hir::contexts::summary $shownHir]
@@ -288,6 +296,7 @@ set target ""
 set showCode 0
 set showHir 0
 set showContexts 0
+set showDirect 0
 set showTraits 0
 set showAst 0
 set showAot ""
@@ -326,6 +335,7 @@ for {set i 0} {$i < [llength $argv]} {incr i} {
         -code    { set showCode 1 }
         -hir     { set showHir 1 }
         -contexts { set showContexts 1 }
+        -direct  { set showDirect 1 }
         -traits  { set showTraits 1 }
         -ast     { set showAst 1 }
         -aot     { set showAot text }

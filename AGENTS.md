@@ -723,6 +723,41 @@ text when you change the code it mutates, keeping it a mutant of the same
 rule). Changing `hir::traits::Plan` also means re-checking the trait mutants
 (`audit/traits/tools/mutants.txt`).
 
+## Direct modules
+
+Raw, ambient authority is acknowledged at the module boundary
+(DIRECT-MODULES.md): a module is designated direct by its file's first line,
+`direct module`, or -- an intrinsic namespace -- by
+`core::native::declareDirectNamespace` (linux::abi; lib/linux.bot is a
+declared one). A call in module U of a callable of another designated module
+is a direct edge of U, mediated only when the function making it requires a
+context (struct or context trait) U declares itself; an unmediated edge makes
+U inferred direct, and the marker must agree (DIRECT without it,
+STALE-DIRECT-MODULE with one nothing needs); a non-direct module may not take
+a direct callable as a value (DIRECT-CALLABLE-VALUE). The entry program is a
+module like any other. Keep it so:
+
+* Never add a call-, function- or block-level form (`direct fn`, `direct
+  f()`, `unsafe`), a suppression, a per-function exception inside a direct
+  module, or a runtime direct bit; never read directness from a module's
+  name, path or library, and never let a context of another module (or a
+  caller's context) mediate.
+* A caller reads a module's designation, never its inference, and directness
+  lives in the HIR (`moduleDecls`, `direct`), never in a registry: keep both
+  (no channel in hir/staticdeps.tcl depends on them, and compilation
+  isolation holds by construction).
+* A program that calls `linux` or `linux::abi` itself (an example, a golden
+  suite, a test program) is low-level: it starts with `direct module`, or
+  mediates the calls through a context of its own.
+
+If you change hir/direct.tcl, the marker's grammar or loading
+(surface/parser.tcl, surface/modules.tcl), the intrinsic metadata, what a
+call's target or a context's owner is, or context parameters, run
+`tests/direct-modules.test`, `audit/direct-modules/tools/fuzz.tcl` (several
+seeds) and `audit/direct-modules/tools/mutate.tcl` (every mutant in its
+`mutants.txt` must still apply and be killed: update a mutant's text when you
+change the code it mutates, keeping it a mutant of the same rule).
+
 ## Coroutines
 
 Coroutines (COROUTINES.md) are eagerly started, affine resumable

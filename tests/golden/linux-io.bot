@@ -57,6 +57,12 @@
 # (list::length). Every call is written qualified, so the imports change no
 # call's meaning; no test is about a missing import, and no declaration of
 # the suite is named InvalidArgumentEncoding.
+#
+# A direct module (DIRECT-MODULES.md): its programs call
+# linux::abi::syscall with no context of their own -- the raw layer under
+# test.
+direct module
+
 import abi::x86_64
 import compiler
 import linux::abi
@@ -210,7 +216,7 @@ fn register_syscall_contract_tests():
     fn names_rbp() errors compiler::CompilerError:
         static compile:
             linux::abi::syscall({rax: abi::x86_64::register64(39), rbp: abi::x86_64::register64(1)})
-    test::rejects_at("linux-syscall-unknown-register-rejected/rbp", compiler::DiagnosticCode::UnknownField, 212, 68, names_rbp)
+    test::rejects_at("linux-syscall-unknown-register-rejected/rbp", compiler::DiagnosticCode::UnknownField, 218, 68, names_rbp)
     test::rejects_containing("linux-syscall-unknown-register-rejected/rbp-message", compiler::DiagnosticCode::UnknownField, "\"rbp\" is not a syscall register: linux::abi::syscall's argument may name only rax, rdi, rsi, rdx, r10, r8, r9", names_rbp)
 
     fn names_rcx() errors compiler::CompilerError:
@@ -232,14 +238,14 @@ fn register_syscall_contract_tests():
     fn omits_rax() errors compiler::CompilerError:
         static compile:
             linux::abi::syscall({rdi: abi::x86_64::register64(39)})
-    test::rejects_at("linux-syscall-rax-required/at-the-literal", compiler::DiagnosticCode::MissingField, 234, 33, omits_rax)
+    test::rejects_at("linux-syscall-rax-required/at-the-literal", compiler::DiagnosticCode::MissingField, 240, 33, omits_rax)
     test::rejects_containing("linux-syscall-rax-required/message", compiler::DiagnosticCode::MissingField, "linux::abi::syscall's argument has no field \"rax\"", omits_rax)
 
     # Every register field must statically be a Register64: an Int ...
     fn int_register() errors compiler::CompilerError:
         static compile:
             linux::abi::syscall({rax: 39})
-    test::rejects_at("linux-syscall-registers-must-be-register64/int", compiler::DiagnosticCode::Type, 241, 34, int_register)
+    test::rejects_at("linux-syscall-registers-must-be-register64/int", compiler::DiagnosticCode::Type, 247, 34, int_register)
     test::rejects_containing("linux-syscall-registers-must-be-register64/int-message-register", compiler::DiagnosticCode::Type, "syscall register \"rax\" must be an abi::x86_64::Register64", int_register)
     test::rejects_containing("linux-syscall-registers-must-be-register64/int-message-type", compiler::DiagnosticCode::Type, "its type here is int", int_register)
 
@@ -309,7 +315,7 @@ fn register_syscall_contract_tests():
                 on DivergingRegisterFailure:
                     0 - 1
             v
-    test::rejects_at("linux-syscall-diverging-field-hides-nothing", compiler::DiagnosticCode::UnknownField, 307, 92, diverging_field)
+    test::rejects_at("linux-syscall-diverging-field-hides-nothing", compiler::DiagnosticCode::UnknownField, 313, 92, diverging_field)
 
     # linux::abi::syscall can only be called directly: it has no function
     # value, bound ...
@@ -317,7 +323,7 @@ fn register_syscall_contract_tests():
         static compile:
             f = linux::abi::syscall
             f
-    test::rejects_at("linux-syscall-not-a-value/bound", compiler::DiagnosticCode::Type, 318, 17, bound_native)
+    test::rejects_at("linux-syscall-not-a-value/bound", compiler::DiagnosticCode::Type, 324, 17, bound_native)
     test::rejects_containing("linux-syscall-not-a-value/bound-message", compiler::DiagnosticCode::Type, "linux::abi::syscall can only be called directly", bound_native)
 
     # ... or passed.

@@ -80,6 +80,7 @@ path          = IDENT { "::" IDENT }
 ### Canonical header order
 
 ```
+direct module (optional, at most once: DIRECT-MODULES.md)
 imports (namespace imports and type imports, any order among themselves)
 everything else
 ```

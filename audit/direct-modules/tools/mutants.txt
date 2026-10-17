@@ -1,0 +1,183 @@
+# Mutants of the direct-modules milestone (audit/direct-modules/tools/
+# mutate.tcl; DIRECT-MODULES.md): the mutants item 67 of the milestone brief
+# names, in the analysis (hir/direct.tcl), its wiring (hir/hir.tcl), the
+# loader (surface/modules.tcl) and the parser (surface/parser.tcl).
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. Lines starting with # outside an edit are
+# comments. No mutant edits native/: directness has no runtime.
+
+@@ direct-call-no-taint a call of a function of a direct source module is no edge
+## hir/direct.tcl
+<<<<
+        return [list [list $d [list block $target] call]]
+====
+        return {}
+>>>>
+
+@@ intrinsic-metadata-ignored the compiler's direct namespaces (linux::abi) are not designated
+## hir/direct.tcl
+<<<<
+    if {[core::native::isDirectNamespace $ns]} {
+        return 1
+    }
+====
+>>>>
+
+@@ foreign-context-discharges a context of another module mediates a direct call
+## hir/direct.tcl
+<<<<
+        if {$owner ne $unit} {
+            lappend foreign [list $id $owner]
+        } elseif {$discharged eq ""} {
+====
+        if {$discharged eq ""} {
+>>>>
+
+@@ caller-context-launders-helper one mediated edge of a module launders its context-free ones (the contextual caller of a context-free helper)
+## hir/direct.tcl
+<<<<
+        set undischarged [lmap edge $list {expr {[dict get $edge discharged] eq "" ? $edge : [continue]}}]
+====
+        set undischarged [lmap edge $list {expr {[dict get $edge discharged] eq "" ? $edge : [continue]}}]
+        if {[llength $undischarged] < [llength $list]} { set undischarged {} }
+>>>>
+
+@@ marker-disables-analysis a module declared direct has its edges skipped (the marker as a permission bit)
+## hir/direct.tcl
+<<<<
+        if {![dict exists $decls $unit]} continue
+        set targets [Targets $hir $c $node $unit memo $sections]
+====
+        if {![dict exists $decls $unit] || [dict get $decls $unit direct]} continue
+        set targets [Targets $hir $c $node $unit memo $sections]
+>>>>
+
+@@ stale-marker-accepted a `direct module` nothing needs is accepted
+## hir/direct.tcl
+<<<<
+        set inferred [expr {$undischarged ne {} || $provided}]
+====
+        set inferred [expr {$undischarged ne {} || $provided || $marker}]
+>>>>
+
+@@ ordinary-call-treated-direct a call into any source module is a direct edge
+## hir/direct.tcl
+<<<<
+    return [expr {[dict exists $hir moduleDecls $ns direct] && [dict get $hir moduleDecls $ns direct]}]
+====
+    return [dict exists $hir moduleDecls $ns]
+>>>>
+
+@@ taint-propagates-beyond-wrapper a module importing a direct module is direct itself, contextualized or not
+## hir/direct.tcl
+<<<<
+    return [expr {[dict exists $hir moduleDecls $ns direct] && [dict get $hir moduleDecls $ns direct]}]
+====
+    foreach i [hir::imports::namespaces $ns] {
+        if {$i ne $ns && [Designated $hir $i]} { return 1 }
+    }
+    return [expr {[dict exists $hir moduleDecls $ns direct] && [dict get $hir moduleDecls $ns direct]}]
+>>>>
+
+@@ root-treated-specially the entry program is never judged
+## hir/direct.tcl
+<<<<
+        if {![dict exists $decls $unit]} continue
+        set targets [Targets $hir $c $node $unit memo $sections]
+====
+        if {![dict exists $decls $unit] || $unit eq ""} continue
+        set targets [Targets $hir $c $node $unit memo $sections]
+>>>>
+
+@@ callable-value-unchecked a direct callable escapes as an unrestricted value
+## hir/direct.tcl
+<<<<
+    CheckValues hir $callees $sections memo
+====
+    # (mutated: callable values unchecked)
+>>>>
+
+@@ module-name-heuristic a module named like raw authority is direct by its name
+## hir/direct.tcl
+<<<<
+    if {[core::native::isDirectNamespace $ns]} {
+====
+    if {[core::native::isDirectNamespace $ns] || [string match *raw* $ns]} {
+>>>>
+
+@@ nested-function-inherits-context a nested function's direct call is mediated by the enclosing function's context
+## hir/direct.tcl
+<<<<
+    while {$o ne "" && [dict exists $thunks $o]} {
+        set o [Owner $hir [dict get $thunks $o]]
+    }
+====
+    while {$o ne "" && [Owner $hir $o] ne ""} {
+        set o [Owner $hir $o]
+    }
+>>>>
+
+@@ coroutine-thunk-opaque a coroutine construction's thunk is a function of its own (its direct call never mediated)
+## hir/direct.tcl
+<<<<
+    while {$o ne "" && [dict exists $thunks $o]} {
+====
+    while {0} {
+>>>>
+
+@@ trait-operations-ignored a trait operation is never an edge
+## hir/direct.tcl
+<<<<
+    if {[dict exists $node traitCall]} {
+        set record [dict get $node traitCall]
+====
+    if {[dict exists $node traitCall]} {
+        return {}
+        set record [dict get $node traitCall]
+>>>>
+
+@@ context-trait-never-discharges a context trait of the module itself does not mediate
+## hir/direct.tcl
+<<<<
+        set owner [expr {[dict exists $record trait] ? [hir::traits::owner $id] : [hir::structs::owner $id]}]
+====
+        set owner [expr {[dict exists $record trait] ? "-" : [hir::structs::owner $id]}]
+>>>>
+
+@@ method-obligation-dropped a direct call through method syntax makes its candidate unfit
+## hir/hir.tcl
+<<<<
+    return {UNHANDLED-ERROR KNOWN-ERROR UNDECLARED-ERROR AMBIGUOUS-METHOD-CALL MISSING-CONTEXT DIRECT}
+====
+    return {UNHANDLED-ERROR KNOWN-ERROR UNDECLARED-ERROR AMBIGUOUS-METHOD-CALL MISSING-CONTEXT}
+>>>>
+
+@@ marker-not-loaded a module file's `direct module` never reaches the analysis
+## surface/modules.tcl
+<<<<
+    dict set state moduleDecls $name [ModuleDecl $ast $fileId]
+====
+    dict set state moduleDecls $name [dict create direct 0 origin ""]
+>>>>
+
+@@ marker-anywhere `direct module` is accepted after the imports
+## surface/parser.tcl
+<<<<
+    if {[AtDirectModule p]} {
+        MisplacedDirectModule p $token
+    }
+====
+    if {[AtDirectModule p]} {
+        Advance p
+        Advance p
+        return [surface::ast::node unit [dict get $token span]]
+    }
+>>>>

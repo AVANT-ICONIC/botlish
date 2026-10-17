@@ -16,6 +16,11 @@
 #
 # expect (native): [PID > 0, the same PID twice] -> [true, true]
 
+# A direct module (DIRECT-MODULES.md): raw_getpid calls the raw syscall
+# transition with no context of the program's own in between -- a
+# deliberately low-level program, which says so.
+direct module
+
 import abi::x86_64
 import linux::abi
 

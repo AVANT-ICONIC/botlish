@@ -73,6 +73,8 @@ enum DiagnosticCode:
     CoroutineResumeType,
     CoroutineResumeUnderconstrained,
     CoroutineRhsNotYielding,
+    Direct,
+    DirectCallableValue,
     Duplicate,
     DuplicateContextParameter,
     DuplicateField,

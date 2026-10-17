@@ -25,6 +25,11 @@
 #   hello from stdin
 #   17                      <- the bytes written (the runner prints the result)
 
+# A direct module (DIRECT-MODULES.md): the program calls linux::read, a
+# callable of the direct module linux, at its top level -- a deliberately
+# low-level program, which says so.
+direct module
+
 import abi
 import abi::bytes
 import linux

@@ -74,3 +74,12 @@ proc core::linuxabi::syscallImpl {registers} {
 core::native::register linux::abi::syscall -arity 1 -impl core::linuxabi::syscallImpl \
     -param-types {struct} -result-type struct -runtime {raw-syscall} \
     -result-shape [list named-struct [core::linuxabi::registerType]]
+
+# linux::abi is a direct module (DIRECT-MODULES.md): the raw kernel
+# transition is ambient process authority, not yet a capability. A call into
+# it is a direct edge of the calling module, which either mediates it through
+# a context it defines itself or is declared `direct module` (lib/linux.bot
+# is). The namespace is the smallest module boundary of raw syscall authority:
+# abi::x86_64's register and address conversions take no authority by
+# themselves.
+core::native::declareDirectNamespace linux::abi

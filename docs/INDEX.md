@@ -65,6 +65,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [CONTEXTS.md](CONTEXTS.md) -- contexts: static execution-environment dependencies
 - [CONTEXT-TRAITS.md](CONTEXT-TRAITS.md) -- context traits: portable I/O and textual paths
 - [IMPORTS.md](IMPORTS.md) -- imports: explicit namespace dependencies
+- [DIRECT-MODULES.md](DIRECT-MODULES.md) -- direct modules: raw authority acknowledged at the module boundary (`direct module`), mediated by module-owned contexts
 - [STDLIB-NAMESPACES.md](STDLIB-NAMESPACES.md) -- standard namespaces, intrinsics, `at` and `get`
 - [MODULE-BINDINGS.md](MODULE-BINDINGS.md) -- immutable module bindings
 - [MODULE-STATIC-RETAINED-VALUES.md](MODULE-STATIC-RETAINED-VALUES.md) -- module-static retained values

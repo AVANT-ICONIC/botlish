@@ -14,6 +14,13 @@
 # requires LinuxIO -- and a call made before `with context linux::io::create()`
 # is rejected at compile time (MISSING-CONTEXT, with the call chain).
 #
+# Capability boundary (DIRECT-MODULES.md). `linux` is a direct module: its
+# write and read take any descriptor, raw process authority. This module is
+# not: every function here that calls into `linux` requires LinuxIO, the
+# context it defines itself, so the raw authority reaches its callers only as
+# that explicit capability -- and nothing above linux::io is direct for using
+# it.
+#
 # This module is one level above `linux` (lib/linux.bot): every operation here
 # is the existing raw-thin wrapper applied to a descriptor taken from the
 # context, and every external effect still flows
@@ -108,7 +115,12 @@ fn read(data: abi::bytes::MutableBytes, context io: LinuxIO) -> linux::ReadResul
 # by writing the rest, again and again, so the caller only ever sees all or
 # io::WriteFailed. A negative result (the kernel's -errno) and a write that makes
 # no progress are io::WriteFailed; no count or errno escapes.
-fn write_all(fd: FileDescriptor, bytes: List[Byte]) -> unit errors io::WriteFailed:
+#
+# It requires LinuxIO although it reads only FD: it makes the direct call
+# (linux::write, a callable of the direct module linux), and a direct call is
+# mediated by a context of this module in the function that makes it
+# (DIRECT-MODULES.md), never by its callers' contexts. Its callers have it.
+fn write_all(fd: FileDescriptor, bytes: List[Byte], context io: LinuxIO) -> unit errors io::WriteFailed:
     n = list::length(bytes)
     if n == 0:
         return unit

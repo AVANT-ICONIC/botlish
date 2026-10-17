@@ -52,6 +52,15 @@
 #   modules      NAMESPACE -> ScopeId of that namespace's own module
 #                section scope (surface/modules.tcl, hir/resolve.tcl's
 #                ResolveQualifiedRef); absent for a program with no modules
+#   moduleDecls  NAMESPACE ("" for the entry program) -> {direct 0|1 origin
+#                ORIGIN}: each source unit's module declaration (`direct
+#                module`, DIRECT-MODULES.md); absent past the source boundary
+#                (core IR text, HIR text)
+#   direct       the module directness summary hir::direct::verify computed
+#                from moduleDecls (hir/direct.tcl): declared, inferred and
+#                final status per unit, and every direct edge with the context
+#                that mediates it, if one does. Compile-time architecture: no
+#                lowering or backend reads it
 #   diagnostics  list of {kind KIND message TEXT expr ExprId}, optionally
 #                with `origin` (the primary location, when not EXPR's) and
 #                `related` (further locations the diagnostic names, as
@@ -429,6 +438,15 @@ proc hir::build {exprs args} {
 #                   `errorDecls` field (hir/format.tcl, hir/read.tcl's
 #                   round-trip). Empty by default, like -type-decls.
 #
+#   -module-decls D the module declarations of a source program
+#                   (DIRECT-MODULES.md): NAMESPACE ("" for the entry program)
+#                   -> {direct 0|1 origin ORIGIN}, one per unit of the
+#                   compilation, ORIGIN the `direct module` marker's. Given
+#                   (even empty), the program is a source program whose
+#                   modules hir::direct::verify judges, and it is kept as
+#                   HIR's `moduleDecls`; omitted (core IR text, HIR text), the
+#                   program is past the source boundary: no module is judged.
+#
 # This is how frontends construct HIR: they state what was written and where;
 # resolution, hygiene (hygiene.tcl), types and refinements happen here.
 proc hir::buildSyntax {nodes args} {
@@ -439,7 +457,8 @@ proc hir::buildSyntax {nodes args} {
 proc hir::BuildSyntax {nodes args} {
     set options [Options hir::buildSyntax \
         {-mode program -strict 1 -origin "" -files {} -modules {} \
-            -type-decls {} -error-decls {} -struct-decls {} -trait-decls {} -imports {} -halt-on-resolution-errors 0} $args]
+            -type-decls {} -error-decls {} -struct-decls {} -trait-decls {} -imports {} -module-decls {} \
+            -halt-on-resolution-errors 0} $args]
     set mode [dict get $options -mode]
     if {$mode ni {program sequence}} {
         error "hir::build: -mode must be program or sequence"
@@ -500,6 +519,11 @@ proc hir::BuildFull {nodes options given halt checkedVar {seeds {}}} {
         # Checked as written, with trait views; now the program every
         # backend compiles: the same syntax built again, monomorphized.
         set hir [hir::traits::monomorphize $nodes $options $given $hir $syntax]
+        if {[dict exists $hir traitSource direct]} {
+            # Module directness is the program's as written (hir/direct.tcl):
+            # the checked build's verdict, not re-derived from the clones.
+            dict set hir direct [dict get $hir traitSource direct]
+        }
     }
     if {$checked} {
         # Calls of coroutine handles typed as resumes, written out as the
@@ -582,6 +606,9 @@ proc hir::BuildOnce {nodes options given choices halt checkedVar} {
     }
     set hir [hir::resolve::program $nodes [dict get $options -mode] [dict get $options -origin] \
         [dict get $options -modules] $choices]
+    if {[dict exists $given -module-decls]} {
+        dict set hir moduleDecls [dict get $options -module-decls]
+    }
     dict set hir sourceTypes $sourceTypes
     dict set hir errorDecls $errorDecls
     set payloads [hir::errordecls::entries]
@@ -627,7 +654,10 @@ proc hir::MethodObligationKinds {} {
     # MISSING-CONTEXT: a context the selected function needs is an obligation
     # of the call (CONTEXTS.md), never evidence that the candidate does not
     # fit -- exactly like a declared error nobody handled yet.
-    return {UNHANDLED-ERROR KNOWN-ERROR UNDECLARED-ERROR AMBIGUOUS-METHOD-CALL MISSING-CONTEXT}
+    # DIRECT likewise: the selected function's module is direct, which the
+    # calling function must mediate (DIRECT-MODULES.md) -- an obligation of
+    # the call, never a reason another candidate fits better.
+    return {UNHANDLED-ERROR KNOWN-ERROR UNDECLARED-ERROR AMBIGUOUS-METHOD-CALL MISSING-CONTEXT DIRECT}
 }
 
 # The diagnostics of HIR (a trial build) located in the call EXPR or anything
@@ -1169,6 +1199,7 @@ proc hir::CheckOnce {hirVar demote {roundsVar ""}} {
     hir::lockstep::verify hir
     hir::structs::verify hir
     hir::contexts::verify hir
+    hir::direct::verify hir
     hir::coroutines::verify hir
     hir::affine::verify hir
     hir::mutvec::verify hir
@@ -1488,7 +1519,7 @@ proc hir::exprsAt {hir origin} {
 }
 
 apply {{dir} {
-    foreach file {syntax static staticdeps imports resolve flags contexts coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings declarations interchange} {
+    foreach file {syntax static staticdeps imports resolve flags contexts direct coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings declarations interchange} {
         uplevel #0 [list source [file join $dir $file.tcl]]
     }
 }} $hir::home

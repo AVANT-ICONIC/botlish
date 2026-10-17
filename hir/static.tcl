@@ -240,6 +240,8 @@ namespace eval hir::static {
         COROUTINE-RESUME-TYPE                    CoroutineResumeType
         COROUTINE-RESUME-UNDERCONSTRAINED        CoroutineResumeUnderconstrained
         COROUTINE-RHS-NOT-YIELDING               CoroutineRhsNotYielding
+        DIRECT                                   Direct
+        DIRECT-CALLABLE-VALUE                    DirectCallableValue
         DUPLICATE                                Duplicate
         DUPLICATE-CONTEXT-PARAMETER              DuplicateContextParameter
         DUPLICATE-FIELD                          DuplicateField

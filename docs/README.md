@@ -1906,6 +1906,15 @@ implementation. Deliberately not built: namespace aliasing, import aliases
 or wildcards, re-exports, a search path beyond the two roots, or anything
 package-manager-shaped (manifests, dependencies, versions).
 
+A file may start with `direct module` (DIRECT-MODULES.md): the module
+deliberately exposes raw, ambient authority -- it calls a direct module
+(`linux::abi`, whose syscall the compiler declares direct, or another file
+declared so) from a function that requires no context of its own. The
+compiler infers that from the calls and requires the declaration to agree
+both ways (DIRECT without it, STALE-DIRECT-MODULE when nothing needs it); a
+module that makes every such call from functions requiring a context it
+declares itself is ordinary, and so is everything above it.
+
 ### Lowering
 
 `^name` is a root reference: it denotes the root binding whatever the

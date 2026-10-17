@@ -473,6 +473,10 @@ C (mutant `c-borrowing-uses-syscall-namespace`).
 
 ## 12. direct
 
+(Since DIRECT-MODULES.md, `direct` exists, module-granular: `direct
+module`, the intrinsic metadata of linux::abi and mediation by module-owned
+contexts. Its section 9 names where the retaining facts below attach.)
+
 `direct` does not exist yet (section 1), so there was no machinery to
 reuse, and none was invented: no second unsafety concept, no C-specific
 effect. What the next milestone needs from this one is the fact it will

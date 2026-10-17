@@ -478,10 +478,75 @@ proc surface::parser::Program {pVar} {
     while {[Kind p] eq "NEWLINE"} {
         Advance p
     }
+    set direct ""
+    if {[catch {DirectModule p} direct options]} {
+        if {![dict get $p recover] || [lrange [dict get $options -errorcode] 0 1] ne {SURFACE SYNTAX}} {
+            return -options $options $direct
+        }
+        dict lappend p diagnostics [lindex [dict get $options -errorcode] 2]
+        set direct [expr {[dict exists $p directSpan] ? [dict get $p directSpan] : ""}]
+        Synchronize p
+    }
     set imports [Imports p]
     set body [Statements p {EOF}]
     set end [dict get [Peek p] span]
-    return [surface::ast::node program [surface::ast::cover $start $end] body $body imports $imports]
+    return [surface::ast::node program [surface::ast::cover $start $end] body $body imports $imports \
+        direct $direct]
+}
+
+# 1 if the next tokens are the module modifier `direct module`
+# (DIRECT-MODULES.md): the contextual words "direct" and "module", in that
+# order. Never a valid statement otherwise (two names side by side), so an
+# ordinary variable called `direct` or `module` is unaffected.
+proc surface::parser::AtDirectModule {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    set next [Peek p 1]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "direct"
+        && [dict get $next kind] eq "IDENT" && [dict get $next text] eq "module"}]
+}
+
+# The file's `direct module` declaration, if it is the file's first
+# construct (DIRECT-MODULES.md): "direct" "module" NEWLINE. Returns its span,
+# or "" when the file does not start with one. It modifies the module the
+# file *is* -- its identity is still the file's path -- so it takes no name,
+# and it is written before the imports: comments and blank lines are the only
+# things before it. Anywhere else it is a located syntax error
+# (MisplacedDirectModule).
+proc surface::parser::DirectModule {pVar} {
+    upvar 1 $pVar p
+    if {![AtDirectModule p]} {
+        return ""
+    }
+    set start [dict get [Advance p] span]
+    set span [surface::ast::cover $start [dict get [Advance p] span]]
+    dict set p directSpan $span
+    set token [Peek p]
+    if {[dict get $token kind] eq "IDENT" || [dict get $token kind] eq "::"} {
+        FailCode [dict get $token span] DIRECT-MODULE-FORM \
+            "`direct module` takes no name: a module's identity is its file path (lib/linux.bot is the module linux), so the declaration is the two words alone"
+    }
+    if {[dict get $token kind] ni {NEWLINE EOF}} {
+        FailCode [dict get $token span] DIRECT-MODULE-FORM \
+            "expected end of line after `direct module`, found [Describe $token]"
+    }
+    return $span
+}
+
+# A `direct module` declaration at TOKEN where none may be: after the file's
+# first construct, or inside a function, loop, branch or static block.
+proc surface::parser::MisplacedDirectModule {pVar token} {
+    upvar 1 $pVar p
+    if {![dict get $p topLevel]} {
+        FailCode [dict get $token span] DIRECT-MODULE-POSITION \
+            "`direct module` declares the whole file's module direct (DIRECT-MODULES.md): it is written once, as the file's first declaration, never inside a function, loop, branch, handler or static block -- there is no function-, block- or call-level form"
+    }
+    if {[dict exists $p directSpan]} {
+        FailCode [dict get $token span] DUPLICATE-DIRECT-MODULE \
+            "duplicate `direct module`: the file already declared it (at [surface::ast::location [dict get $p directSpan]]); a module is declared direct once, as the file's first declaration"
+    }
+    FailCode [dict get $token span] DIRECT-MODULE-POSITION \
+        "`direct module` must be the file's first declaration, before its imports and every other declaration or statement (only comments and blank lines may precede it), and is written at most once"
 }
 
 # 1 if the next tokens start an import declaration: the contextual word
@@ -1266,6 +1331,9 @@ proc surface::parser::Statement {pVar} {
     }
     if {[AtImport p]} {
         Fail $token "an import must be in the file header: after the \"namespace\" declaration, before any other declaration or statement, and never inside a function, loop or branch"
+    }
+    if {[AtDirectModule p]} {
+        MisplacedDirectModule p $token
     }
     if {[AtWith p]} {
         set statement [WithDecl p]

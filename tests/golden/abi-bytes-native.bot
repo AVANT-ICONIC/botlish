@@ -22,6 +22,12 @@
 # byte, linux and str are the Tcl programs' linuxPrelude (less linux::abi and
 # `type byte::Byte`, which no ported program uses); list for the GC-stress
 # program's list::at. Every call is written qualified.
+#
+# A direct module (DIRECT-MODULES.md): its programs call linux::write, a
+# callable of the direct module linux, with no context of their own -- the
+# raw layer under test.
+direct module
+
 import abi
 import abi::bytes
 import abi::x86_64

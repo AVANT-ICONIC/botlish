@@ -30,6 +30,11 @@
 # imported); `import type abi::x86_64::Register64Word` (a nested
 # namespace's type). linux::abi::syscall is only compiled here, never
 # called.
+#
+# A direct module (DIRECT-MODULES.md): the program compiles a call of
+# linux::abi::syscall with no context of its own.
+direct module
+
 import abi::x86_64
 import compiler
 import linux::abi

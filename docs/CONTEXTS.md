@@ -564,7 +564,8 @@ fn read(data: abi::bytes::MutableBytes, context io: LinuxIO) -> linux::ReadResul
   unchanged, the detached updated buffer in the result.
 * Not here: `resource`, close/ownership, RAII, buffering, short-write
   completion, mutable contexts, substitutable (trait) contexts, `direct`
-  policy.
+  policy. (Since DIRECT-MODULES.md: `linux` is a direct module, and
+  linux::io is the ordinary module that contextualizes it through LinuxIO.)
 
 ## 7. Evidence: the Hello World
 

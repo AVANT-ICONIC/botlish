@@ -710,8 +710,24 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan {path ""}} {
     set origin [RemapOrigin [surface::lower::Origin [dict get $ast span] "namespace"] $fileId]
     set section [dict create namespace $name nodes $statements origin $origin \
         imports [dict get $state imports $name]]
+    # The module's declaration (DIRECT-MODULES.md): `direct module`, if the
+    # file is declared direct -- {direct 0|1 origin ORIGIN-OF-THE-MARKER}.
+    dict set state moduleDecls $name [ModuleDecl $ast $fileId]
     dict set state sections [concat [dict get $state sections] [list $section]]
     dict set state stack [lrange [dict get $state stack] 0 end-1]
+}
+
+# The declaration record of the file AST (FileId FILEID) for hir::buildSyntax's
+# -module-decls (DIRECT-MODULES.md): {direct 1 origin ORIGIN} when the file
+# starts with `direct module` (ORIGIN the marker's), {direct 0 origin ""}
+# otherwise. A namespace's directness is its declaration's: never its name,
+# path or library.
+proc surface::modules::ModuleDecl {ast fileId} {
+    set span [expr {[dict exists $ast direct] ? [dict get $ast direct] : ""}]
+    if {$span eq ""} {
+        return [dict create direct 0 origin ""]
+    }
+    return [dict create direct 1 origin [RemapOrigin [surface::lower::Origin $span "direct-module"] $fileId]]
 }
 
 # Raises DUPLICATE-NATIVE if the module AST (the file of namespace NAME) defines
@@ -1234,7 +1250,7 @@ proc surface::modules::NewState {files nextFile} {
         loadedErrors [dict create] loadedTraits [dict create] loadedEnums [dict create] \
         loadedLayouts [dict create] imports [dict create] stack {} sections {} \
         typeDecls {} errorDecls {} structDecls {} traitDecls {} staticDeferred [dict create] \
-        target "" root "" entry "" application [dict create]]
+        target "" root "" entry "" application [dict create] moduleDecls [dict create]]
 }
 
 # {sections SECTIONS files FILES functions NAMESPACE->{FUNCTION-NAME ...}
@@ -1263,7 +1279,8 @@ proc surface::modules::LoadNamespaces {namespaces args} {
     return [dict create sections [dict get $state sections] files [dict get $state files] \
         functions [dict get $state loaded] typeDecls [dict get $state typeDecls] \
         errorDecls [dict get $state errorDecls] structDecls [dict get $state structDecls] \
-        traitDecls [dict get $state traitDecls] imports [dict get $state imports]]
+        traitDecls [dict get $state traitDecls] imports [dict get $state imports] \
+        moduleDecls [dict get $state moduleDecls]]
 }
 
 # The HIR of the entry program AST (a `program` node whose file is FILE ... in
@@ -1288,11 +1305,16 @@ proc surface::modules::BuildProgram {ast strict {target ""} {root ""}} {
     set errorDecls [concat [dict get $state errorDecls] $ownErrorDecls]
     set structDecls [concat [dict get $state structDecls] $ownStructDecls]
     set traitDecls [concat [dict get $state traitDecls] $ownTraitDecls]
+    # Every unit's declaration, the entry program's ("") included: the entry
+    # program is a module like any other (DIRECT-MODULES.md, "No root-module
+    # special case").
+    set moduleDecls [dict get $state moduleDecls]
+    dict set moduleDecls "" [ModuleDecl $ast f1]
     return [hir::buildSyntax [LowerStatements $state "" $executable] -strict 0 \
         -halt-on-resolution-errors $strict \
         -origin [surface::lower::Origin [dict get $ast span] ""] \
         -files [dict get $state files] -modules [dict get $state sections] \
-        -imports [dict get $state imports] \
+        -imports [dict get $state imports] -module-decls $moduleDecls \
         -type-decls $decls -error-decls $errorDecls -struct-decls $structDecls -trait-decls $traitDecls]
 }
 

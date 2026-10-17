@@ -590,7 +590,7 @@ test sc-codes-one-to-one {items 20, 22: every DiagnosticCode case is the code of
             if {$case eq [join [lmap word [split $kind -] {string totitle $word}] ""]} continue
             list $kind $case
         }] [llength $cases]
-} -cleanup {unset -nocomplain codes cases kinds values} -result {1 1 1 {} 95}
+} -cleanup {unset -nocomplain codes cases kinds values} -result {1 1 1 {} 97}
 
 # The census (STATIC-COMPILE.md, "Diagnostic-code census"): every diagnostic
 # kind the compiler's front end (hir/*.tcl, surface/modules.tcl) can name, by
@@ -606,7 +606,7 @@ set scCensus {
     top-level-install {CONTEXT-TYPE-NOT-EXACT DUPLICATE-CONTEXT}
     not-from-source {LISTLOOP-BREAK-VALUE}
     header {CYCLE DUPLICATE-IMPORT DUPLICATE-NATIVE INVALID-TOPLEVEL MODULE-COLLISION NOT-A-TYPE SELF-IMPORT
-        TYPE-IMPORT-COLLISION UNKNOWN-TARGET}
+        TYPE-IMPORT-COLLISION UNKNOWN-TARGET STALE-DIRECT-MODULE}
     warning {SAME-RETURN-VALUE METHOD-ELIGIBLE FIXED-ARITY-LIST-RETURN SAME-FAILURE PROVES-NAMING
         ONE-CHAR-STRING-LITERAL MANY-BOOLEAN-ARGUMENTS}
     parser {STATIC-INTRINSIC-FORM STATIC-UNKNOWN-OPERATION COROUTINE-BINDING-FIELD MALFORMED-CONTEXT-SECTION
@@ -614,7 +614,7 @@ set scCensus {
         ANONYMOUS-ENUM TRAIT-EMPTY TRAIT-REQUIREMENT-FLAGS TRAIT-CONTEXT-REQUIREMENT TRAIT-REQUIREMENT-BODY
         TRAIT-NESTED}
     runtime {NOT-CALLABLE NOT-BOOLEAN}
-    other {MODULE-BINDINGS C-ABI-TYPES A-Z A-Z0-9}
+    other {MODULE-BINDINGS C-ABI-TYPES DIRECT-MODULES A-Z A-Z0-9}
 }
 
 test sc-census-exhaustive {item 22: every diagnostic kind the front end names is classified -- a code of the table, or never a block's rejection for a stated reason -- and every code of the table is a kind the front end names; a new kind fails here until it is classified} -body {
@@ -637,7 +637,7 @@ test sc-census-exhaustive {item 22: every diagnostic kind the front end names is
         }
     }
     # The one-word kinds (the token pattern above needs a dash).
-    foreach kind {TYPE UNBOUND DUPLICATE ARITY IMPRINT} {
+    foreach kind {TYPE UNBOUND DUPLICATE ARITY IMPRINT DIRECT} {
         dict set seen $kind 1
     }
     set unclassified [lmap token [lsort [dict keys $seen]] {

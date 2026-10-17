@@ -59,6 +59,12 @@
 # never-called syscall programs import. Every call is written qualified (no
 # method syntax), so the suite-wide imports change no call's meaning, and no
 # test is about a missing import.
+#
+# A direct module (DIRECT-MODULES.md): two of its programs define functions
+# calling linux::write and linux::read, callables of the direct module linux,
+# with no context of their own (and never call them).
+direct module
+
 import abi
 import abi::bytes
 import abi::x86_64

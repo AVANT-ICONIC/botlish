@@ -26,6 +26,12 @@
 # stdout (native): Hello from Botlish!
 # value  (native): 20, the 20 bytes written
 
+# A direct module (DIRECT-MODULES.md): the program calls linux::write, a
+# callable of the direct module linux, at its top level -- a deliberately
+# low-level program, which says so (examples/linux/context-hello.bot is the
+# same output through linux::io's LinuxIO context, and is no direct module).
+direct module
+
 import abi
 import abi::bytes
 import linux

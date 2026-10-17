@@ -18,7 +18,9 @@
 #
 #   program    body (statements), diagnostics (syntax errors, see below),
 #              imports (the file header's import and typeimport nodes in written
-#              order; never statements of `body`, never walked by Children)
+#              order; never statements of `body`, never walked by Children),
+#              direct (the span of the file's `direct module` declaration,
+#              its first construct, or "": DIRECT-MODULES.md)
 #   import     namespace (the imported namespace's whole path, "abi::x86_64"),
 #              namespaceSpan -- `import NAMESPACE` (IMPORTS.md): a direct
 #              dependency on exactly that namespace
@@ -601,6 +603,10 @@ proc surface::formatAst {ast args} {
     }
     set show [list [dict get $options -spans] [dict get $options -ids]]
     set lines {}
+    if {[dict get $ast kind] eq "program" && [dict exists $ast direct] && [dict get $ast direct] ne ""} {
+        # The module modifier (DIRECT-MODULES.md), first like in the file.
+        lappend lines "(direct-module)[surface::ast::At [dict create span [dict get $ast direct]] $show]"
+    }
     if {[dict get $ast kind] eq "program" && [dict exists $ast imports]} {
         foreach import [dict get $ast imports] {
             if {[dict get $import kind] eq "import"} {

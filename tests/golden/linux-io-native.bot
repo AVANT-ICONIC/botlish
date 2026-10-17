@@ -23,6 +23,12 @@
 # Imports: compiler and test (the framework); abi::x86_64, linux::abi and
 # list are the Tcl programs' own (the rawGetpid prelude). Every call is
 # written qualified.
+#
+# A direct module (DIRECT-MODULES.md): its programs call
+# linux::abi::syscall with no context of their own -- the raw layer under
+# test.
+direct module
+
 import abi::x86_64
 import compiler
 import linux::abi

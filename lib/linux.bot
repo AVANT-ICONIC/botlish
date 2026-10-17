@@ -47,6 +47,15 @@
 # * Native only (Linux x86-64): the Tcl backends refuse the syscall
 #   (NATIVE-ONLY) exactly as they refuse getpid; nothing imitates a write
 #   with puts or a Tcl channel.
+#
+# A direct module (DIRECT-MODULES.md). write and read take any descriptor and
+# call the raw syscall transition with no context: they expose raw process
+# authority, which is this module's point -- the explicit low-level layer.
+# Code that calls them is calling into a direct module and either mediates
+# them through a context of its own (linux::io's LinuxIO does) or is declared
+# direct itself.
+direct module
+
 import abi
 import abi::bytes
 import abi::x86_64

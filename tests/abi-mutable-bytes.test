@@ -499,9 +499,9 @@ test abi-mutable-bytes-unchecked-bridge-replays-the-contract {a -strict 0 progra
 
 test abi-mutable-bytes-tcl-backends-refuse-the-address {interp and compile refuse the writable bridge and linux::read with NATIVE-ONLY (no imitation of an address or of a read with a Tcl channel); a program that defines but never calls them runs everywhere, and the pure operations run on both} -body {
     set pre "import abi\nimport abi::bytes\nimport linux\nimport abi::x86_64\n"
-    list [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "${pre}linux::read(abi::i32(0), abi::bytes::zeroed(abi::usize(1)))"]] 0 1}] \
+    list [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "direct module\n${pre}linux::read(abi::i32(0), abi::bytes::zeroed(abi::usize(1)))"]] 0 1}] \
         [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "${pre}abi::x86_64::to_int(abi::x86_64::from_mutable_bytes(abi::bytes::zeroed(abi::usize(1))))"]] 0 1}] \
-        [agree "${pre}fn emit():\n    linux::read(abi::i32(0), abi::bytes::zeroed(abi::usize(1)))\n7" {interp compile}]
+        [agree "direct module\n${pre}fn emit():\n    linux::read(abi::i32(0), abi::bytes::zeroed(abi::usize(1)))\n7" {interp compile}]
 } -result {{{error {CORE SEMANTIC NATIVE-ONLY}} {error {CORE SEMANTIC NATIVE-ONLY}}} {{error {CORE SEMANTIC NATIVE-ONLY}} {error {CORE SEMANTIC NATIVE-ONLY}}} 7}
 
 test abi-mutable-bytes-no-fake-read-on-tcl-backends {nothing in core or lib (other than core/programfile.tcl, which reads the program's own source file) routes reads through gets, read, a Tcl channel or stdin helpers} -body {
@@ -555,7 +555,8 @@ proc writeBinary {path data} {
     close $channel
 }
 
-set linuxPrelude {import abi
+set linuxPrelude {direct module
+import abi
 import abi::bytes
 import abi::x86_64
 import byte
@@ -957,7 +958,8 @@ test abi-mutable-bytes-gc-stress-pure-values {the in-process native runs (specia
 # can reach the syscall within one function. The kernel READS the buffer here
 # (write(2) with a writable address), so the bytes it receives show whether the
 # storage survived.
-set livenessHeader {import abi
+set livenessHeader {direct module
+import abi
 import abi::bytes
 import abi::x86_64
 import byte
