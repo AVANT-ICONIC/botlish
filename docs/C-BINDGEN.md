@@ -807,20 +807,69 @@ discipline as ordinary application modules:
 
 ## 28. Performance
 
-Generation, measured on this 4-core container (clang 18.1.3), wall seconds
-per stage (`generate -timing 1`):
+Generation, measured on this 4-core container (clang 18.1.3, an otherwise
+idle machine), linux-x86_64, seconds per stage (`generate -timing 1`; the
+second of two runs) and the whole command's wall time:
 
-*(Pending: measured at the end of the milestone.)*
+| profile | preprocess | parse | macros | model | probes | mapping | shim | emit | wall |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| fixture | 0.03 | 0.02 | 0.07 | 0.01 | 0.09 | 0.01 | 0.07 | 0.01 | 0.44 |
+| tcl | 0.03 | 0.36 | 0.12 | 0.09 | 0.16 | 0.10 | 0.19 | 0.19 | 1.83 |
+| tclstubs | 0.04 | 0.30 | 0.15 | 0.18 | 0.16 | 0.12 | 1.26 | 0.29 | 2.58 |
+| boringssl | 0.08 | 0.82 | 0.53 | 0.49 | 0.68 | 0.61 | 1.14 | 0.92 | 6.00 |
+| sdl3 | 0.05 | 0.40 | 0.21 | 0.17 | 0.35 | 0.17 | 0.15 | 0.29 | 2.52 |
 
-Sizes of the committed bindings (all files of one target):
+`macros` is the `-dD` preprocessing and the preprocessor's expansion of
+every macro; `probes` the ABI and symbol probes (two compilations to
+assembly); `shim` compiling the shim to check every thunk and, with
+evidence, to LLVM IR (tclstubs' 696 thunks and BoringSSL's 817 are most of
+their shim time). The rest of the wall time is Tcl's start and loading the
+library. linux-aarch64 is the same within noise (BoringSSL: parse 0.93,
+shim 0.96). A whole profile, every committed target, is under 15 seconds;
+CI's check of all five profiles regenerates 10 bindings.
 
-*(Pending: measured at the end of the milestone.)*
+Sizes of the committed bindings (linux-x86_64, all files of one target):
 
-Compiling a program that imports every generated module of a binding (the
-ordinary front end, no cache):
+| profile | files | Botlish files | Botlish lines | Botlish bytes | shim.c lines | report.tsv bytes | all bytes |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| fixture | 8 | 4 | 229 | 7,851 | 26 | 8,587 | 27,037 |
+| tcl | 14 | 10 | 5,486 | 219,634 | 72 | 198,307 | 432,149 |
+| tclstubs | 15 | 11 | 5,324 | 275,752 | 2,795 | 219,997 | 631,665 |
+| boringssl | 86 | 82 | 29,079 | 1,388,799 | 3,374 | 1,373,237 | 2,948,174 |
+| sdl3 | 62 | 58 | 8,453 | 352,055 | 58 | 505,748 | 876,644 |
 
-*(Pending: measured at the end of the milestone.)*
+Compiling a program over a generated binding is the ordinary front end's
+cost of its modules. Measured with no cache, front end then NIR, a program
+importing every module of a binding (and calling nothing: no extern reaches
+the foreign table) and the acceptance programs:
 
+| program | modules | externs declared | front end before | front end after | NIR |
+|---|---:|---:|---:|---:|---:|
+| every fixture module | 4 | 32 | 0.12 s | 0.14 s | 0.05 s |
+| every Tcl module | 10 | 820 | 2.68 s | 2.44 s | 0.17 s |
+| every SDL3 module | 58 | 1,102 | 18.75 s | 4.62 s | 1.36 s |
+| every BoringSSL module | 82 | 3,977 | 116.49 s | 21.03 s | 2.54 s |
+| the Tcl acceptance | 3 of 10 | | 2.90 s | 2.07 s | |
+| the SHA-256 acceptance | 1 of 82 | | 0.44 s | 0.41 s | |
+| the SDL3 acceptance | 6 of 58 | | 1.03 s | 0.88 s | |
+| the fixture demo | 4 | | 0.43 s | 0.35 s | |
+
+"Before" is the front end as this milestone found it: the generated
+bindings exposed a quadratic cost in it. `hir::hygiene::RenameTo` renamed a
+binding (a module's own definition to its qualified spelling, an extern to
+its native name) by scanning every expression of the program, once per
+binding, so a module of N definitions cost O(N x expressions): one synthetic
+module of 1,000, 2,000 and 4,000 bindings `K = 1` took 2.25, 8.39 and 34.93
+s, and 2,000 typed constants (`K = ns::ctypes::c_uint(1)`, a generated
+constant's shape) 19.0 s. The hygiene pass now indexes the ref and bind
+expressions of every binding once (renames never change which binding an
+expression denotes): 0.51, 0.97 and 1.97 s, and 3.11 s. The HIR is
+unchanged -- every golden suite's front-end cache entry rebuilt after the
+change is identical to the one before it, but the static scheduler's
+measured milliseconds. What remains grows linearly with the binding's
+size (profiled for the SDL3 import, lexing its 350 KB of declarations is the
+largest single part); a program importing the modules it uses pays for
+those.
 ## 29. Manual policy
 
 What a person wrote, per profile, beside the headers:
