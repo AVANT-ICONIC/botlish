@@ -661,7 +661,7 @@ Regression and audit runs (Linux x86-64, Tcl 9.0.1):
 | `audit/hir-interchange/tools/roundtrip.tcl -via interchange` / `-via cache`, the same 12 suites | 108 / 120 artifacts and outcomes, 0 differ |
 | `audit/hir-interchange/tools/mutate.tcl` | 27 mutants, 27 killed |
 | `audit/contexts/tools/fuzz.tcl -n 100 -seed 20261017` | 100 programs, 0 disagreements |
-| `audit/contexts/tools/mutate.tcl -n 30` | CONTEXTS-MUTATE-RESULT |
+| `audit/contexts/tools/mutate.tcl -n 30` | 26 mutants, 26 killed (one, `stdout-stderr-swapped`, no longer applied before this milestone -- lib/linux/io.bot's write had become `io.stdout.raw.write(data)` -- and its text was updated; it is killed) |
 | `audit/refactor/tools/gate.tcl` (the warning gate: lib, examples, bench) | passed: the observed warnings are exactly the manifest |
 | `single/build.sh`, then `single/smoke-test.sh` and `dm-single-executable` with the built executable | smoke test passed; the test passes |
 | NIR of examples/io/hello.bot and examples/linux/context-hello.bot, before and after | identical but for expression ids (`write_all`'s new context parameter loads nothing) |
