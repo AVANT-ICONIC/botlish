@@ -738,7 +738,7 @@ proc Run {} {
     set observations 0
     set faultPaths [dict create]
     set namespaced 0
-    set nativeOk [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
+    set nativeOk [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
     for {set p 0} {$p < [dict get $options -n]} {incr p} {
         set number [expr {[dict get $options -seed] + $p}]
         set ::seedState [expr {$number * 7919 + 17}]

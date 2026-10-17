@@ -142,7 +142,11 @@ An import loads the namespace's module file if it has one (`import list` loads
 `lib/list.bot`, `import abi::x86_64` loads `lib/abi/x86_64.bot`, `import game`
 in an application loads the `game.bot` beside its entry file, each at most
 once per program), and nothing if the namespace is intrinsics-only
-(`import str`). That is the whole of module loading: a module that is not
+(`import str`). An architecture-specific namespace has no `lib/NAME.bot` but
+one `lib/NAME.ARCH.bot` per architecture, and the import loads the one of the
+compilation target's architecture (`import linux::sys` loads
+`lib/linux/sys.x86_64.bot` or `lib/linux/sys.aarch64.bot`;
+LINUX-SYSCALL-TRANSPORTS.md). That is the whole of module loading: a module that is not
 imported, directly or by another module's own header, is never loaded. One
 visible consequence while `error` declarations stay global: `import list`
 brings `error NotFound` (declared by `lib/list.bot`) into the program, so a
@@ -172,8 +176,9 @@ A namespace *exists* if there is a source module file for it
 (`lib/NAME.bot`, one directory per leading segment, or for an application
 file an application module `ROOT/NAME.bot`) **or** it has compiler
 intrinsics (qualified root natives): `import str` is valid with no
-`lib/str.bot`; `import linux::abi` is valid for `linux::abi::syscall`. A bare
-prefix of either (`import linux`) is not a namespace. The intrinsic
+`lib/str.bot`; `import linux::abi::x86_64` is valid for
+`linux::abi::x86_64::syscall`. A bare prefix of either (`import linux::abi`)
+is not a namespace. The intrinsic
 machinery (`core::native::qualifiedMembers`, `isQualifiedNative`) is the
 existing one; source-declared type predicates registered for one compilation
 are marked source natives and are not intrinsics (they do not make a
@@ -330,8 +335,9 @@ program, or an application module -- namespace `NAME` is, in this order and
 with no search beyond it:
 
 1. a standard namespace: `$::core::libraryDir/NAME.bot` (`lib/` in a
-   checkout, the packed `lib/` in the single executable) or compiler
-   intrinsics, exactly as before;
+   checkout, the packed `lib/` in the single executable), the target
+   architecture's `NAME.ARCH.bot` there for an architecture-specific one
+   (`linux::sys`), or compiler intrinsics, exactly as before;
 2. else the application module `ROOT/NAME.bot` (`ROOT/a/b.bot` for `a::b`);
 3. else nothing: `UNKNOWN-NAMESPACE`, naming `ROOT/NAME.bot` and then the
    standard library's path.
@@ -351,7 +357,8 @@ edited benchmark text).
 silently preferred to, and never replaces, a standard namespace: when an
 application file imports `NAME` and the application also has a file
 `ROOT/NAME.bot` for a standard `NAME` (`list.bot`, `str.bot`,
-`linux/io.bot`), the import is `MODULE-COLLISION`, which names both files;
+`linux/io.bot`, or `linux/sys.bot` for the architecture-specific
+`linux::sys`), the import is `MODULE-COLLISION`, which names both files;
 rename the application's. That is the one ambiguity the two roots can
 produce, and it is never resolved by precedence. An application file that is
 never imported collides with nothing, and an entry file named like a

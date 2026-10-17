@@ -43,7 +43,7 @@
 # (the framework only), imports-abi-family.bot (abi, abi::x86_64 and a type
 # import), imports-abi-child.bot (abi::x86_64 and type imports without abi)
 # and imports-library-modules.bot (web without ascii, linux without
-# linux::abi, mathish).
+# linux::abi::x86_64, mathish).
 import abi
 import ascii
 import char

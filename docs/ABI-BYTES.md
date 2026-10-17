@@ -1,5 +1,12 @@
 # `abi::bytes::Bytes`: the first owned ABI memory value, and `linux::write`
 
+> **Since LINUX-SYSCALL-TRANSPORTS.md** `linux::write` (lib/linux.bot) calls
+> `linux::sys::write`, the write(2) transport of the compilation target's
+> architecture (`lib/linux/sys.x86_64.bot`, whose body is the one shown
+> below, or `lib/linux/sys.aarch64.bot`); the x86-64 transport is spelled
+> `linux::abi::x86_64::syscall`. Semantics, layout and evidence are
+> unchanged.
+
 ## Outcome
 
 Botlish can build an immutable, owned, contiguous byte value, hand its machine
@@ -24,7 +31,7 @@ String
   --linux::write---------------> address + abi::Usize length    (both from THE SAME Bytes)
   --abi::x86_64::from_bytes----> Register64 (rsi)               (raw bridge: address bits)
   --abi::x86_64::from_usize----> Register64 (rdx)
-  --linux::abi::syscall--------> the x86-64 `syscall` instruction, rax = 1
+  --linux::abi::x86_64::syscall--------> the x86-64 `syscall` instruction, rax = 1
   --> kernel write(2) --> descriptor 1
 ```
 
@@ -111,7 +118,7 @@ not know which syscall argument it will become, and is not a pointer type:
 `abi::bytes::Bytes` itself exposes no address, and the result is the same transport
 value as every other register word (`Register64`: no arithmetic, no ordering).
 It is a **root native** registered under its qualified name (like
-`linux::abi::syscall`), because only module `abi::bytes` may project the storage out
+`linux::abi::x86_64::syscall`), because only module `abi::bytes` may project the storage out
 of a `Bytes`; the native's static contract (`hir::syscall::BytesProblems`) is
 that it takes exactly one argument whose static type is `abi::bytes::Bytes` (ARITY /
 TYPE otherwise, no run-time check ever inserted) and that it is only ever
@@ -121,7 +128,7 @@ compile-time TYPE error.
 
 Native only: the address of a machine object exists only on the native
 backend. The Tcl backends raise `NATIVE-ONLY` exactly as they do for
-`linux::abi::syscall`, and nothing imitates an address.
+`linux::abi::x86_64::syscall`, and nothing imitates an address.
 
 ### `byte_store::from_list` / `byte_store::byte_count` (core/bytestore.tcl)
 
@@ -139,11 +146,11 @@ suggest `import byte_store`.)
 ```botlish
 import abi
 import abi::x86_64
-import linux::abi
+import linux::abi::x86_64
 
 fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
     abi::x86_64::to_int(
-        linux::abi::syscall({
+        linux::abi::x86_64::syscall({
             rax: abi::x86_64::register64(1),
             rdi: abi::x86_64::from_i32(fd),
             rsi: abi::x86_64::from_bytes(data),
@@ -319,7 +326,7 @@ Allocation counts (`native::allocationReport`, in-process, specialized backend;
 
 ## The raw address bridge and liveness across the syscall
 
-When the raw address of a payload is passed to `linux::abi::syscall`, the
+When the raw address of a payload is passed to `linux::abi::x86_64::syscall`, the
 backing storage must stay valid and unmoved until the syscall returns, under GC
 stress, allocation immediately before the syscall, specialization, generic
 lowering, inlining and scalar replacement. This is **explicit in the lowering
@@ -387,7 +394,7 @@ func 7 "linux::write" params=2 ...                  ; data is the virtual field 
 
 ### Effects (unchanged)
 
-`linux::abi::syscall` stays generic: seven registers in, the `syscall`
+`linux::abi::x86_64::syscall` stays generic: seven registers in, the `syscall`
 instruction, raw rax out; the compiler still knows no syscall number
 (`write` is `rax: register64(1)`, ordinary data in `lib/linux.bot`). Its strong
 memory/effect barrier is preserved and matters more now that the kernel reads

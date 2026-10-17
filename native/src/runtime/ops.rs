@@ -40,6 +40,8 @@
 //! | rt_linux_x86_64_syscall| 7 Ints (i64 words)  | Int: raw rax, signed (see    | big Ints  |
 //! |                        | rax rdi rsi rdx r10 | runtime/syscall.rs); TYPE if |           |
 //! |                        | r8 r9               | an operand is no i64 word    |           |
+//! | rt_linux_aarch64_syscall| 7 Ints (i64 words) | Int: raw x0, signed; TYPE if | big Ints  |
+//! |                        | x8 x0 x1 x2 x3 x4 x5| an operand is no i64 word    |           |
 //! | rt_is_tcl_alpha        | Str (1 scalar)      | Bool; RANGE if not 1 scalar  | no        |
 //! | rt_is_tcl_alnum        | Str (1 scalar)      | Bool; RANGE if not 1 scalar  | no        |
 //! | rt_str_region_is_tcl_alpha | Str,Int,Int (region, 1 scalar) | Bool; RANGE | no    |
@@ -86,7 +88,7 @@ use super::ffifixture::{
     rt_ffi_fixture_copy, rt_ffi_fixture_fill, rt_ffi_fixture_fill_checked, rt_ffi_fixture_mixed, rt_ffi_fixture_read,
     rt_ffi_fixture_read_reentrant,
 };
-use super::syscall::rt_linux_x86_64_syscall;
+use super::syscall::{rt_linux_aarch64_syscall, rt_linux_x86_64_syscall};
 use super::value::*;
 use super::vm::{current_program, Vm, NativeInfo};
 use crate::nir::OpCode;
@@ -126,9 +128,9 @@ pub fn op_may_allocate(op: OpCode) -> bool {
             // their op_may_error classification differs.
             | SubstrProven | MutArrayFreezeProven | MkError
             | SetFromList
-            // The raw rax result is boxed as a BigInt when it is outside the
-            // small-Int range (runtime/syscall.rs).
-            | SyscallLinuxX86_64
+            // The raw result register is boxed as a BigInt when it is outside
+            // the small-Int range (runtime/syscall.rs).
+            | SyscallLinuxX86_64 | SyscallLinuxAarch64
             // The borrow test fixture's foreign operations
             // (runtime/ffifixture.rs): a foreign call may run Botlish code
             // (read_reentrant collects and allocates on purpose), and read
@@ -190,8 +192,10 @@ pub fn op_may_error(op: OpCode) -> bool {
         | BinLoad | BinStore | BytesZeroed
         // Only on an operand that is not a 64-bit register word (TYPE, never
         // a truncation: runtime/syscall.rs), which a checked program cannot
-        // produce. The kernel's own result is never an error here.
-        | SyscallLinuxX86_64
+        // produce. The kernel's own result is never an error here. (On
+        // another architecture's target the transport is NATIVE
+        // UNSUPPORTED, also through NO_VALUE.)
+        | SyscallLinuxX86_64 | SyscallLinuxAarch64
         | ListNew | ListGet | ListAppend | MutArrayAllocate | MutArrayGet | MutArraySet | MutArrayCopy | MutArrayFreeze
         // MutableVector: the declared IndexNotFound (runtime/mutvec.rs).
         | MvAt | MvPop | MvTake | MvSwap | MvSwapDrop
@@ -2591,10 +2595,11 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         | RIShr | RIShl | RIAnd | RIOr | RIXor | StrToShort | ShortToStr | ShortLen | ShortEq | StrSliceShort | StrToAscii | AsciiToStr
         | AsciiLen | AsciiEq | AsciiToShort | AsciiShortEq
         | DecodeCharAt | StrByteLen | StrRegionIsTclAlpha | StrRegionIsTclAlnum
-        // linux::abi::syscall and the raw address bridge are never values
-        // (hir/syscall.tcl rejects any use but a direct call), so no Native
-        // value ever dispatches to them; keepalive is a lowering-internal op.
-        | SyscallLinuxX86_64 | BytesAddr | MBytesAddr | KeepAlive
+        // The syscall transports and the raw address bridges are never
+        // values (hir/syscall.tcl rejects any use but a direct call), so no
+        // Native value ever dispatches to them; keepalive is a
+        // lowering-internal op.
+        | SyscallLinuxX86_64 | SyscallLinuxAarch64 | BytesAddr | MBytesAddr | KeepAlive
         // A foreign operation is only called (hir/borrow.tcl): its byte
         // exposures exist only as one call's arguments.
         | FfiFixtureRead | FfiFixtureReadReentrant | FfiFixtureFill | FfiFixtureFillChecked | FfiFixtureCopy
@@ -2671,6 +2676,7 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_str_char_at_proven, 3),
         h!(rt_argv, 1),
         h!(rt_linux_x86_64_syscall, 8),
+        h!(rt_linux_aarch64_syscall, 8),
         h!(rt_bytes_from_list, 2),
         h!(rt_bytes_len, 2),
         h!(rt_bytes_addr, 2),

@@ -3,9 +3,11 @@
 # specification of
 #
 #   * a module's imports are its own: web imports ascii (and `import type
-#     byte::Byte`) and linux imports linux::abi; an importer of web or linux
-#     gets web's and linux's members and nothing of their imports -- no
-#     qualified ascii:: or linux::abi:: name (MissingImport, naming the
+#     byte::Byte`) and linux imports linux::sys (which imports the
+#     target's transport, linux::abi::x86_64 or linux::abi::aarch64); an
+#     importer of web or linux gets web's and linux's members and nothing of
+#     their imports -- no qualified ascii:: or linux::abi::x86_64:: name
+#     (MissingImport, naming the
 #     import to add), no ascii function as a method candidate, no short
 #     type name Byte -- while their dependencies are loaded transitively
 #     and serve them;
@@ -21,12 +23,14 @@
 # authoritative (audit/golden/migration/fragments/imports-library-modules.tsv
 # maps every test). The Tcl tests' private modules (leafc and midb, base and
 # mid, user2, constants, counter, a) are the standard modules here: web and
-# ascii (a module and its dependency), linux and linux::abi (a module and
-# its intrinsic dependency), mathish (lib/mathish.bot, one function inc).
+# ascii (a module and its dependency), linux and linux::abi::x86_64 (a
+# module and an intrinsic namespace of its dependency linux::sys), mathish
+# (lib/mathish.bot, one function inc).
 #
 # Imports: compiler and test (the framework); immutable_set and list (to
-# read web's module values); linux (whose import linux::abi is not this
-# file's; linux is only loaded here, no syscall runs); mathish; web (whose
+# read web's module values); linux (whose import linux::sys, and linux::sys's
+# import linux::abi::x86_64 or linux::abi::aarch64, are not this file's;
+# linux is only loaded here, no syscall runs); mathish; web (whose
 # imports ascii and `type byte::Byte` are not this file's).
 import compiler
 import immutable_set
@@ -87,13 +91,13 @@ fn register_non_transitive_tests():
 
     # imports-linux-abi-intrinsic-namespace: `import linux` is an import of
     # the module lib/linux.bot (this suite compiles), which does not import
-    # linux::abi (the half with linux::abi imported is
+    # linux::abi::x86_64 (the half with linux::abi::x86_64 imported is
     # imports-abi-child.bot's).
     fn b_intrinsic_child_not_imported() errors compiler::CompilerError:
         static compile:
-            x = linux::abi::syscall({})
+            x = linux::abi::x86_64::syscall({})
             1
-    test::rejects_message("imports-linux-abi-intrinsic-namespace/child-not-imported", compiler::DiagnosticCode::MissingImport, "namespace \"linux::abi\" is not imported; add `import linux::abi` to use `linux::abi::syscall` (imports are exact: `import linux` does not import \"linux::abi\")", b_intrinsic_child_not_imported)
+    test::rejects_message("imports-linux-abi-intrinsic-namespace/child-not-imported", compiler::DiagnosticCode::MissingImport, "namespace \"linux::abi::x86_64\" is not imported; add `import linux::abi::x86_64` to use `linux::abi::x86_64::syscall` (imports are exact: `import linux` does not import \"linux::abi::x86_64\")", b_intrinsic_child_not_imported)
 
 fn register_module_tests():
     # surface-modules-transitive-dependency: web's own qualified references

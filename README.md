@@ -94,8 +94,9 @@ built for rich debugging.
 * **Native-capable.** One semantics, several backends. The native one
   lowers the analyzed program to its own IR and then to machine code with
   Cranelift. Standalone executables are self-contained, and Botlish code
-  reaches the Linux kernel directly (`linux::abi::syscall`): the I/O library
-  above is ordinary Botlish source.
+  reaches the Linux kernel directly (`linux::abi::x86_64::syscall`,
+  `linux::abi::aarch64::syscall`): the I/O library above is ordinary Botlish
+  source, the same on both architectures.
 * **Safe.** Every error a function can raise is in its signature, and every
   call that might raise it handles it or declares it. A refinement type such
   as `web::Emailish` carries a proof only its owning module can produce, and

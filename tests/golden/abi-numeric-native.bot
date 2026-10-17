@@ -1,13 +1,13 @@
 # abi-numeric-native.bot -- ABI numeric values crossing into a live Linux
 # syscall (ABI-NUMERIC-DOMAINS.md), as a source-level specification: the
 # words abi::x86_64's encoders make are ordinary syscall arguments
-# (linux::abi::syscall's rdi, rsi, rdx and r10), and a getpid made with
+# (linux::abi::x86_64::syscall's rdi, rsi, rdx and r10), and a getpid made with
 # encoded argument words -- U64 2^64-1, I8 -1, U32 2^32-1 and Usize 3, all
 # ignored by the kernel -- returns the same positive pid as the raw getpid
 # with none, however many times it runs.
 #
-# golden-exclude: interp, compile -- CORE SEMANTIC NATIVE-ONLY: linux::abi::syscall executes the x86-64 syscall instruction and the Tcl backends refuse it at run time by design (tests/linux-syscall.test linux-syscall-tcl-backends-refuse pins the refusal); a refusal aborts a suite, so this test runs on cranelift-generic and cranelift only
-# golden-host: linux-x86_64 -- a live getpid through linux::abi::syscall, which the native backend compiles for Linux x86-64 only (tests/abi-numeric.test's live test carries the linuxX86_64 constraint)
+# golden-exclude: interp, compile -- CORE SEMANTIC NATIVE-ONLY: linux::abi::x86_64::syscall executes the x86-64 syscall instruction and the Tcl backends refuse it at run time by design (tests/linux-syscall.test linux-syscall-tcl-backends-refuse pins the refusal); a refusal aborts a suite, so this test runs on cranelift-generic and cranelift only
+# golden-host: linux-x86_64 -- a live getpid through linux::abi::x86_64::syscall, the x86-64 transport, which runs on Linux x86-64 only (tests/abi-numeric.test's live test carries the linuxX86_64 constraint)
 #
 # The getpid is a live syscall in the runner's process, harmless. Ported
 # from tests/abi-numeric.test, which stays authoritative and unchanged: it
@@ -16,27 +16,27 @@
 # program observes. The pure ABI numeric semantics are abi-numeric.bot's.
 #
 # Imports: compiler and test (the framework); abi, abi::x86_64 and
-# linux::abi are the Tcl program's own imports. Every call is written
+# linux::abi::x86_64 are the Tcl program's own imports. Every call is written
 # qualified.
 #
 # A direct module (DIRECT-MODULES.md): its programs call
-# linux::abi::syscall with no context of their own -- the raw layer under
-# test.
+# linux::abi::x86_64::syscall with no context of their own -- the raw layer
+# under test.
 direct module
 
 import abi
 import abi::x86_64
 import compiler
-import linux::abi
+import linux::abi::x86_64
 import test
 
 fn register_syscall_operand_tests():
     fn encoded_words_are_syscall_arguments() errors compiler::CompilerError:
         static compile:
             fn raw_getpid():
-                abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(39)}))
+                abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}))
             fn with_args():
-                abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(39), rdi: abi::x86_64::from_u64(abi::u64(18446744073709551615)), rsi: abi::x86_64::from_i8(abi::i8(0 - 1)), rdx: abi::x86_64::from_u32(abi::u32(4294967295)), r10: abi::x86_64::from_usize(abi::usize(3))}))
+                abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rdi: abi::x86_64::from_u64(abi::u64(18446744073709551615)), rsi: abi::x86_64::from_i8(abi::i8(0 - 1)), rdx: abi::x86_64::from_u32(abi::u32(4294967295)), r10: abi::x86_64::from_usize(abi::usize(3))}))
             loop i from 0 to 1000:
                 with_args()
             [raw_getpid() == with_args(), with_args() > 0]

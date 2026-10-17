@@ -24,12 +24,10 @@ source [file join $::projectRoot surface surface.tcl]
 
 interp recursionlimit {} 100000
 
-testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64}}]
-
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines) without the x86-64 syscall that
-# linuxX86_64 tests need.
+# stack maps, the stack guard, coroutines), and syscalls through the portable
+# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md).
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
@@ -838,7 +836,7 @@ test co-context-portable-io {io::print_line deep inside a coroutine, through the
     }
 } -cleanup {unset -nocomplain program driver} -result {{value {[10, 10, 2]}} {value {[10, -2, -3]}}}
 
-test co-executable-linux-io {a standalone executable printing through io::print_line and linux::io::LinuxIO before and after a yield: descriptor 1 receives both lines in segment order, then the result; the same under GC stress} -constraints linuxX86_64 -body {
+test co-executable-linux-io {a standalone executable printing through io::print_line and linux::io::LinuxIO before and after a yield: descriptor 1 receives both lines in segment order, then the result; the same under GC stress} -constraints nativeLinux -body {
     set exe [file join [temporaryDirectory] co-io-[pid]]
     native::executable [surface::compile "import str\nimport io\nimport linux::io\nstruct Ev:\n    n: int\nfn report(label: str) -> unit errors io::WriteFailed:\n    io::print_line(str::concat(\"report \", label))\nfn worker(n: int) -> Ev errors io::WriteFailed:\n    report(\"before\")\n    yield Ev {n: n}\n    report(\"after\")\n    return Ev {n: n + 2}\nwith context linux::io::create()\ncoroutine {step, first} = worker(1):\n    on io::WriteFailed:\n        Ev {n: -1}\nlast = step():\n    on io::WriteFailed:\n        Ev {n: -2}\n\[first.n, last.n\]\n" -warnings off] $exe
     set plain [exec $exe]
@@ -854,7 +852,7 @@ test co-executable-linux-io {a standalone executable printing through io::print_
 report after
 [1, 3]} 1}
 
-test co-context-trait-native {native evidence: the yielding clone of deep takes no context argument and calls the selected implementation directly; the thunk calls the clone of worker} -constraints nativeLinux -body {
+test co-context-trait-native {native evidence: the yielding clone of deep takes no context argument and calls the selected implementation directly; the thunk calls the clone of worker} -body {
     set nir [coNir $contextProgram]
     set deep [lsearch -inline -regexp [split $nir \n] {^func [0-9]+ "deep<}]
     list [regexp {params=1 } $deep] [regexp {op coyield} $nir] [expr {[regexp -all {op cocreate} $nir] == 1}] \
@@ -898,7 +896,7 @@ test co-hir-text {checked HIR states each yielding function's effect, the handle
         [expr {[hir::format [hir::parse $text]] eq $text}]
 } -cleanup {unset -nocomplain hir text} -result {2 1 1 1}
 
-test co-nir-operations {construction is cocreate then costart (eager); a resume is coresume of the one handle register; a move copies no state; done? is codone; the handle's last use is followed by corelease of that register; a yield is coyield in the deep function, reached by an ordinary direct call} -constraints nativeLinux -body {
+test co-nir-operations {construction is cocreate then costart (eager); a resume is coresume of the one handle register; a move copies no state; done? is codone; the handle's last use is followed by corelease of that register; a yield is coyield in the deep function, reached by an ordinary direct call} -body {
     set nir [coNir "import coroutine\n${principal}other = step\nx = other(Message {value: 1})\ny = coroutine::done?(other)\nx.value\n"]
     set ops {}
     set handle ""
@@ -1334,7 +1332,7 @@ test co-source-no-context-dispatch {suspension adds no trait or context machiner
 # ---------------------------------------------------------------------------
 # The fuzzer (item 61)
 
-test co-fuzz-bounded {a bounded run of the coroutine fuzzer (audit/coroutines/tools/fuzz.tcl): every backend agrees with the independent oracle on every accepted program, and every rejected one has the predicted diagnostic} -constraints linuxX86_64 -body {
+test co-fuzz-bounded {a bounded run of the coroutine fuzzer (audit/coroutines/tools/fuzz.tcl): every backend agrees with the independent oracle on every accepted program, and every rejected one has the predicted diagnostic} -constraints nativeLinux -body {
     set here [pwd]
     cd [temporaryDirectory]
     try {

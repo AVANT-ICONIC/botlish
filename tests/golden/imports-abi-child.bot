@@ -3,8 +3,8 @@
 #
 #   * exact nested imports: `import abi::x86_64` authorizes abi::x86_64's
 #     members and nothing of abi (MissingImport, saying that imports are
-#     exact); `import linux::abi` authorizes the intrinsic namespace's
-#     linux::abi::syscall;
+#     exact); `import linux::abi::x86_64` authorizes the intrinsic namespace's
+#     linux::abi::x86_64::syscall;
 #   * a nested namespace's members: an unknown one is UnknownSymbol, naming
 #     the nested namespace; its type is importable (`import type
 #     abi::x86_64::Register64Word`) and spelled qualified after the
@@ -24,20 +24,20 @@
 # Index, foo::bar with Baz, outer::ok) are abi (U8Value, U16Value) and
 # abi::x86_64 (Register64Word) here.
 #
-# Imports: compiler and test (the framework); abi::x86_64 and linux::abi
-# (two child namespaces whose parents, abi and linux, are not imported);
+# Imports: compiler and test (the framework); abi::x86_64 and linux::abi::x86_64
+# (two child namespaces whose parents, abi and linux::abi, are not imported);
 # `import type abi::U8Value` (a type import whose namespace is not
 # imported); `import type abi::x86_64::Register64Word` (a nested
-# namespace's type). linux::abi::syscall is only compiled here, never
+# namespace's type). linux::abi::x86_64::syscall is only compiled here, never
 # called.
 #
 # A direct module (DIRECT-MODULES.md): the program compiles a call of
-# linux::abi::syscall with no context of its own.
+# linux::abi::x86_64::syscall with no context of its own.
 direct module
 
 import abi::x86_64
 import compiler
-import linux::abi
+import linux::abi::x86_64
 import test
 import type abi::U8Value
 import type abi::x86_64::Register64Word
@@ -66,13 +66,13 @@ fn register_child_namespace_tests():
             abi::u8(1).value
     test::rejects("imports-nested-import-is-exact/parent-not-imported", compiler::DiagnosticCode::MissingImport, b_parent_not_imported)
 
-    # imports-linux-abi-intrinsic-namespace: `import linux::abi` authorizes
-    # the intrinsic linux::abi::syscall (g is compiled, never called; the
+    # imports-linux-abi-intrinsic-namespace: `import linux::abi::x86_64` authorizes
+    # the intrinsic linux::abi::x86_64::syscall (g is compiled, never called; the
     # half where only linux is imported is imports-library-modules.bot's).
     fn b_syscall_authorized() errors compiler::CompilerError:
         static compile:
             fn g():
-                linux::abi::syscall({rax: abi::x86_64::register64(39)})
+                linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})
             1
     test::value("imports-linux-abi-intrinsic-namespace/child-imported", 1, b_syscall_authorized)
 

@@ -2129,7 +2129,7 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
         }
         named-struct {
             # A struct of one named declaration (core/native.tcl's
-            # {named-struct ID}: linux::abi::syscall's abi::x86_64::
+            # {named-struct ID}: linux::abi::x86_64::syscall's abi::x86_64::
             # Register64), when the compiling program declares it; the
             # native's declared result (the bare `struct` kind) otherwise.
             set id [lindex $shape 1]

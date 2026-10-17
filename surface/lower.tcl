@@ -146,7 +146,9 @@ namespace eval surface::lower {
 }
 
 proc surface::lowerToHir {ast args} {
-    # -target NAME: the C ABI target (C-ABI-TYPES.md), the host's when "".
+    # -target NAME: the C ABI target (C-ABI-TYPES.md), the host's when "";
+    # its architecture also picks architecture-specific modules
+    # (surface/modules.tcl's ModuleFile).
     # -root DIR: the application root its imports may name modules of
     # (surface/modules.tcl, "Application modules"; a program file's is its
     # directory), "" for none: program text has no file of its own.
@@ -633,7 +635,7 @@ proc surface::lower::Node {node} {
             set qualifiedName "[dict get $node namespace]::[dict get $node name]"
             if {[core::native::isQualifiedNative $qualifiedName]} {
                 # A root native whose registered name is itself qualified
-                # (linux::abi::syscall, core/linuxabi.tcl): a root
+                # (linux::abi::x86_64::syscall, core/linuxabi.tcl): a root
                 # reference, exactly like a bare `argv` -- there is no
                 # module file behind it (surface/modules.tcl's
                 # CollectAndLoad skips it the same way), and since no local

@@ -517,7 +517,8 @@ Standard intrinsics (qualified root natives):
 | `binary::parse` | layout L (a static operand: a layout name), `abi::bytes::Bytes` → `LayoutStruct[L]`, errors `LayoutLengthMismatch` unless the bytes have exactly L's size: imprinting (BINARY-LAYOUT.md); callable only directly |
 | `binary::emit` | `LayoutStruct[L]` → `abi::bytes::Bytes` of L's size, L from the value's static type, padding zero, infallible (elaborated to the internal `binary#emit(v, DESCRIPTOR)`; BINARY-LAYOUT.md); callable only directly |
 | `binary::layout_length` `binary::layout_alignment` | layout L → int: L's size or alignment, folded to a constant at resolution (BINARY-LAYOUT.md) |
-| `linux::abi::syscall` | `{rax: R, rdi: R, …, r9: R}` → `abi::x86_64::Register64` (R a Register64): the raw Linux x86-64 kernel transition, raw rax back; omitted argument registers are zero; native backend only (Tcl backends: `NATIVE-ONLY`); callable only directly (LINUX-X86-64-SYSCALL.md) |
+| `linux::abi::x86_64::syscall` | `{rax: R, rdi: R, …, r9: R}` → `abi::x86_64::Register64` (R a Register64): the raw Linux x86-64 kernel transition, raw rax back; omitted argument registers are zero; native backend only (Tcl backends: `NATIVE-ONLY`); callable only directly (LINUX-X86-64-SYSCALL.md) |
+| `linux::abi::aarch64::syscall` | `{x8: R, x0: R, …, x5: R}` → `abi::aarch64::Register64` (R an `abi::aarch64::Register64`): the raw Linux AArch64 kernel transition (`svc #0`), raw x0 back; otherwise exactly the x86-64 transport's contract, one row of the same table (LINUX-SYSCALL-TRANSPORTS.md) |
 | `ffi::c::null[T]()` | → `ffi::c::Ptr[T]`: the null C pointer, T supplied by the call's explicit imprint (C-ABI-TYPES.md); an imprinted callable is only called |
 | `ffi::c::null?` | any C pointer (data or function) → bool: whether it is null; observes its argument |
 | `ffi::c::clone` | a C pointer → the same type: a second alias of the same address (no pointee copy, no reference count); observes its argument |
@@ -718,7 +719,7 @@ result until `web::uri_query_value?` proves it one.
 | `core/regex.tcl` | engine-independent regex IR, lowered to Tcl ARE |
 | `core/primitives.tcl`, `core/predicates.tcl`, `core/strings.tcl`, `core/lists.tcl` | builtin natives |
 | `core/process.tcl` | the process boundary: `argv()`, its builtin error, argv injection (ARGV.md) |
-| `core/linuxabi.tcl` | `linux::abi::syscall`, the raw Linux x86-64 kernel transition (native only; LINUX-X86-64-SYSCALL.md) |
+| `core/linuxabi.tcl` | the Linux syscall transports, one table row per architecture: `linux::abi::x86_64::syscall` and `linux::abi::aarch64::syscall` (native only; LINUX-X86-64-SYSCALL.md, LINUX-SYSCALL-TRANSPORTS.md) |
 | `core/contexts.tcl` | the two internal context operations `context#install` / `context#load` and the Tcl backends' per-run context environment (CONTEXTS.md); `context#unreachable`, the placeholder of code no installed context reaches (CONTEXT-TRAITS.md) |
 | `core/coroutines.tcl` | the coroutine operations `coroutine#create` / `#start` / `#resume` / `#yield` and `coroutine::done?`, and the Tcl backends' coroutine store: one Tcl coroutine per Botlish coroutine (COROUTINES.md) |
 | `core/cabi.tcl` | the C ABI targets and data models, the C integer scalars' metadata, the `cptr` value kind and the `ffi::c` pointer operations, and the C pointer test fixture (C-ABI-TYPES.md); the foreign call contract vocabulary (a pointer parameter's access and escape), the Tcl backends' model of temporary byte exposure (`ForeignBoundary`) and the borrow test fixture (C-POINTER-BORROWING.md) |
@@ -742,7 +743,7 @@ result until `web::uri_query_value?` proves it one.
 | `hir/coroutines.tcl` | coroutines: thunks and call graph, the resume-protocol fixed point, yield and handle typing, the transitive yield effect, `UNWRAPPED-YIELD` chains, the affine handle discipline and storage frontier (COROUTINES.md) |
 | `hir/contexts.tcl` | execution-environment contexts: context parameters, direct and transitive requirements, installation order, `MISSING-CONTEXT` chains, function-value frontier (CONTEXTS.md); context traits: structural satisfaction (`satisfiesTrait`/`explainTrait`), the one-way binding check, exactly-one provider selection (CONTEXT-TRAITS.md) |
 | `hir/layouts.tcl` | fixed binary layouts: the one registry of resolved layouts and its validation, the struct view `LayoutStruct[L]` (`hir/structs.tcl` delegates to it), descriptors, the binary operations' roles, `verify` and `Elaborate` (BINARY-LAYOUT.md) |
-| `hir/syscall.tcl` | the static contract of `linux::abi::syscall`'s register-struct argument (LINUX-X86-64-SYSCALL.md) and of `abi::x86_64::from_bytes`'s `abi::bytes::Bytes` argument (ABI-BYTES.md) |
+| `hir/syscall.tcl` | the static contract of each syscall transport's register-struct argument (LINUX-X86-64-SYSCALL.md, LINUX-SYSCALL-TRANSPORTS.md) and of the address bridges' `abi::bytes::Bytes` / `MutableBytes` argument (ABI-BYTES.md) |
 | `compiler/compiler.tcl` | HIR → Tcl compiler backend |
 | `native/lower.tcl` | HIR → NIR native lowering (§20) |
 | `native/native.tcl` | the native entry points, all taking HIR: `native::lowered` (the one HIR → NIR entry), `evalHir` (JIT), NIR, CLIF, object, executable, code size and guard report; runs the native driver |
@@ -753,12 +754,14 @@ result until `web::uri_query_value?` proves it one.
 | `lib/abi/bytes.bot` | the ABI memory values, both owned by this one module (the single-owner rule of OPAQUE-STRUCTS.md, so they convert into each other without a public accessor): `abi::bytes::Bytes`, immutable, opaque over contiguous byte storage (`from_list`, `length`; ABI-BYTES.md), and `abi::bytes::MutableBytes`, its writable counterpart, a *value* whose copies are independent (`zeroed`, `from_bytes`, `mutable_length`, `replace`, `detach`, `freeze`, `freeze_prefix`; MUTABLE-BYTES.md) |
 | `hir/imports.tcl` | the import environments of a compilation: which namespaces and short type names each file's header imported (IMPORTS.md) |
 | `lib/binary.bot` | the `binary` namespace of fixed binary layouts: the scalar field domains `binary::U8` ... `U64`, `binary::I8` ... `I64` beside the intrinsics `parse`, `emit`, `layout_length`, `layout_alignment` (BINARY-LAYOUT.md) |
-| `lib/linux.bot` | `linux::write(fd, data)`: one `write(2)` syscall over an `abi::bytes::Bytes`, the kernel's raw signed result as an Int (ABI-BYTES.md); `linux::read(fd, data)`: one `read(2)` into the caller's `abi::bytes::MutableBytes` (copied: the caller's value is never changed), returning a `linux::ReadResult` of the raw `ssize_t` and the updated buffer (MUTABLE-BYTES.md) |
+| `lib/linux.bot` | `linux::write(fd, data)`: one `write(2)` syscall over an `abi::bytes::Bytes`, the kernel's raw signed result as an Int (ABI-BYTES.md); `linux::read(fd, data)`: one `read(2)` into the caller's `abi::bytes::MutableBytes` (copied: the caller's value is never changed), returning a `linux::ReadResult` of the raw `ssize_t` and the updated buffer (MUTABLE-BYTES.md); one source on every architecture, over `linux::sys` |
+| `lib/linux/sys.x86_64.bot`, `lib/linux/sys.aarch64.bot` | `linux::sys`, an architecture-specific module (the compilation target's architecture picks the file): `write` and `read` as one syscall each through that architecture's transport, with its syscall numbers and registers (LINUX-SYSCALL-TRANSPORTS.md) |
 | `lib/linux/io.bot` | `linux::io::LinuxIO`, the process's standard I/O as one opaque context over three opaque `FileDescriptor` tokens; `create()`, and the contextual `write`, `write_error`, `read` over `linux::write` / `linux::read` (CONTEXTS.md); `write_text`/`write_error_text`, LinuxIO's implementation of `io::IO`, completing short writes (CONTEXT-TRAITS.md) |
 | `lib/io.bot` | the portable text output: the context trait `io::IO`, `WriteFailed`, `io::print`, `print_line`, `write_error`, `write_error_line` (CONTEXT-TRAITS.md) |
 | `lib/io/path.bot` | the portable textual path trait `io::path::Path` (`concat`, `text`) and `NotAPath` (CONTEXT-TRAITS.md) |
 | `lib/linux/path.bot` | `linux::path::LinuxPath`, a refinement of str (non-empty, no U+0000): `valid?`, `validate`, `concat`, `text` (CONTEXT-TRAITS.md) |
 | `lib/abi/x86_64.bot` | `abi::x86_64::Register64`, the x86-64 register word as a transport value, and its two Int conversions (LINUX-X86-64-SYSCALL.md); `from_i8` ... `from_usize` encode ABI numeric values as register words, sign- or zero-extended (ABI-NUMERIC-DOMAINS.md) |
+| `lib/abi/aarch64.bot` | `abi::aarch64::Register64` and its conversions: the same layer for AArch64, bit for bit the same encoding (LINUX-SYSCALL-TRANSPORTS.md) |
 | `native/src/codegen/` | the `Backend` interface; NIR → Cranelift IR for JIT and object files |
 | `surface/lexer.tcl` | source → tokens, indentation → `INDENT`/`DEDENT` |
 | `surface/parser.tcl` | tokens → surface AST (recursive descent) |
@@ -1891,7 +1894,7 @@ nested namespace `a::b` (used as `a::b::symbol`) is the file
 `lib/a/b.bot` (an application's `ROOT/a/b.bot`), one directory per leading
 segment; `a` and `a::b` are unrelated
 modules (LINUX-X86-64-SYSCALL.md). A root native may itself carry a qualified
-name (`linux::abi::syscall`): it is spelled like a module definition but
+name (`linux::abi::x86_64::syscall`): it is spelled like a module definition but
 resolves to the root native, and no module may define that member.
 Another file uses a module definition as `NAME::symbol`: an ordinary,
 non-aliasable qualified reference, allowed only after an exact `import NAME`
@@ -1908,8 +1911,8 @@ package-manager-shaped (manifests, dependencies, versions).
 
 A file may start with `direct module` (DIRECT-MODULES.md): the module
 deliberately exposes raw, ambient authority -- it calls a direct module
-(`linux::abi`, whose syscall the compiler declares direct, or another file
-declared so) from a function that requires no context of its own. The
+(a syscall transport such as `linux::abi::x86_64`, which the compiler
+declares direct, or another file declared so) from a function that requires no context of its own. The
 compiler infers that from the calls and requires the declaration to agree
 both ways (DIRECT without it, STALE-DIRECT-MODULE when nothing needs it); a
 module that makes every such call from functions requiring a context it

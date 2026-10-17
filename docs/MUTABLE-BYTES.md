@@ -1,5 +1,13 @@
 # `abi::bytes::MutableBytes`: a writable value, and `linux::read`
 
+> **Since LINUX-SYSCALL-TRANSPORTS.md** `linux::read` (lib/linux.bot) calls
+> `linux::sys::read`, the read(2) transport of the compilation target's
+> architecture (`lib/linux/sys.x86_64.bot`, whose body is the one shown
+> below -- returning `{result, data}` for `linux::read` to wrap in its
+> `ReadResult` -- or `lib/linux/sys.aarch64.bot`); the x86-64 transport is
+> spelled `linux::abi::x86_64::syscall`. Semantics and evidence are
+> unchanged.
+
 ## Outcome
 
 Botlish has a writable, owned, contiguous byte value, hands the machine address
@@ -193,7 +201,7 @@ and different static types: nothing compares equal across them and nothing conve
 fn read(fd: abi::I32, data: abi::bytes::MutableBytes) -> ReadResult:
     local = abi::bytes::detach(data)
     result = abi::x86_64::to_int(
-        linux::abi::syscall({
+        linux::abi::x86_64::syscall({
             rax: abi::x86_64::register64(0),
             rdi: abi::x86_64::from_i32(fd),
             rsi: abi::x86_64::from_mutable_bytes(local),
@@ -280,7 +288,7 @@ libc. It does **not** copy.
   contents may change across the foreign call -- already holds, because every read of a
   storage is a runtime helper call that Cranelift treats as reading and writing all
   memory and can neither cache nor reorder across the syscall.
-* **Mutation barrier unchanged.** `linux::abi::syscall` stays generic (it does not know
+* **Mutation barrier unchanged.** `linux::abi::x86_64::syscall` stays generic (it does not know
   syscall 0 writes memory); its strong memory/effect barrier is the one that matters.
 * **Verified.** Six routes by which a writable address reaches a syscall (inline,
   locals, register struct, helper, `if` merge, callee) run under GC stress with a second

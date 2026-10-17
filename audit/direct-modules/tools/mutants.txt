@@ -22,7 +22,7 @@
         return {}
 >>>>
 
-@@ intrinsic-metadata-ignored the compiler's direct namespaces (linux::abi) are not designated
+@@ intrinsic-metadata-ignored the compiler's direct namespaces (the syscall transports) are not designated
 ## hir/direct.tcl
 <<<<
     if {[core::native::isDirectNamespace $ns]} {

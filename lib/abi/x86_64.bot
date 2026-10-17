@@ -3,11 +3,12 @@
 #
 # Register64 is one 64-bit x86-64 register's contents, and nothing else: a
 # bit pattern carried across an architecture boundary (today, only
-# linux::abi::syscall's register inputs and its rax result). It is ordinary
-# Botlish: a nominal struct whose one field holds the register's contents
-# under the signed (two's-complement) reading, typed with the source-defined
-# domain Register64Word below. That field type is what keeps the value sound
-# with no privileged code at all: a construction `Register64 {word: x}`
+# linux::abi::x86_64::syscall's register inputs and its rax result). It is
+# ordinary Botlish: a nominal struct whose one field holds the register's
+# contents under the signed (two's-complement) reading, typed with the
+# source-defined domain Register64Word below. That field type is what keeps
+# the value sound with no privileged code at all: a construction
+# `Register64 {word: x}`
 # anywhere must statically prove x in the domain (STRUCTS.md, "Named struct
 # construction": no implicit runtime cast, no guard), so no Register64 can
 # hold anything but exactly one of the 2^64 register bit patterns.
@@ -54,9 +55,10 @@
 #
 # The x86-64-specific *semantics* (that a register is 64 bits, read signed)
 # are all here, in source. The only privileged operation is the kernel
-# transition itself, linux::abi::syscall (core/linuxabi.tcl, the native
-# backend's helper in native/src/runtime/syscall.rs), which takes and
-# returns Register64 values and nothing else.
+# transition itself, linux::abi::x86_64::syscall (core/linuxabi.tcl, the
+# native backend's helper in native/src/runtime/syscall.rs), which takes and
+# returns Register64 values and nothing else. lib/abi/aarch64.bot is the
+# same layer for AArch64 (LINUX-SYSCALL-TRANSPORTS.md).
 import abi
 
 # The two declared errors of the Int -> Register64 conversion, named after

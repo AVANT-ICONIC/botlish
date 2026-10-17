@@ -197,9 +197,13 @@ passing except the 10 that read rustc-linked symbols, which now skip.
 
 ## Limits
 
-* x86-64 Linux with glibc, like the native backend's executables. The
-  compiler needs the glibc it was built against or newer. CI builds on
-  ubuntu-24.04 (glibc 2.39). The executables it emits need glibc 2.34.
+* x86-64 Linux with glibc. The compiler needs the glibc it was built
+  against or newer. CI builds on ubuntu-24.04 (glibc 2.39). The executables
+  it emits need glibc 2.34. On AArch64 everything it packs runs, the
+  programs that print included (LINUX-SYSCALL-TRANSPORTS.md), except
+  `-emit-native-executable`: the `stub` linker it relies on is x86-64 only.
+  LINUX-SYSCALL-TRANSPORTS.md, "Single-file compiler on AArch64", lists what
+  an AArch64 stub linker and build need.
 * The single executable runs the checkout's code as of its build. It reports
   library diagnostics at `//zipfs:/app/...` paths, and it has no tests or
   tools. Its standard library is the packed one: an application adds modules

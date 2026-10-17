@@ -138,7 +138,7 @@ proc hir::borrow::Decide {param argType} {
     set type [dict get $param type]
 ====
 proc hir::borrow::Decide {param argType} {
-    if {![hir::structs::declared [core::linuxabi::registerType]]} {
+    if {![hir::structs::declared [core::linuxabi::transport x86_64 registerType]]} {
         return ""
     }
     set type [dict get $param type]

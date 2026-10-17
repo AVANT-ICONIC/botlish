@@ -556,7 +556,7 @@ fn read(data: abi::bytes::MutableBytes, context io: LinuxIO) -> linux::ReadResul
   design; not now.
 * The consumers project `io.stdout.raw` directly -- they are in the owning
   module -- and every external effect still flows `linux::io::write ->
-  linux::write -> linux::abi::syscall -> syscall`. No libc, no errno mapping
+  linux::write -> linux::abi::x86_64::syscall -> syscall`. No libc, no errno mapping
   (results are the kernel's raw signed values), no compiler knowledge of
   write(2) or read(2), no new syscall code. `linux::write(fd, data)` and
   `linux::read(fd, data)` are unchanged: the explicit low-level layer.
@@ -941,4 +941,4 @@ context area, no header line and no different instruction.
     `openat`/`socket` as resources.
 59. **Before `direct` restrictions.** A policy layer that lets application
     code prefer contextual APIs (`linux::io`) and restricts raw operations
-    (`linux::write`, `linux::abi::syscall`) to designated modules.
+    (`linux::write`, `linux::abi::x86_64::syscall`) to designated modules.

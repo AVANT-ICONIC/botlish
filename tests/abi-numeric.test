@@ -9,7 +9,7 @@
 # Every ABI numeric value is an ordinary mathematical Int plus the static
 # proof that it lies in its domain; nothing here is fixed-width arithmetic.
 # The types, creators and encoders are ordinary Botlish and run on every
-# backend; only linux::abi::syscall itself (getpid, the one live syscall any
+# backend; only linux::abi::x86_64::syscall itself (getpid, the one live syscall any
 # test makes, as in linux-syscall.test) is native-only.
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
@@ -24,8 +24,11 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
 
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines) without the x86-64 syscall that
-# linuxX86_64 tests need.
+# stack maps, the stack guard, coroutines), and syscalls through the portable
+# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
+# runs the x86-64 transport or reads x86-64 machine code; one that only
+# compiles it (NIR, CLIF) needs no host.
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
@@ -256,7 +259,7 @@ test abi-numeric-no-compiler-knowledge {the compiler knows no ABI numeric type: 
     # mentions abi but the raw transport's own.
     set natives [lsearch -all -inline -regexp [core::native::names] {(?i)abi}]
     list [expr {[llength $files] > 60}] $hits $natives
-} -result {1 {} {linux::abi::syscall abi::x86_64::from_bytes abi::x86_64::from_mutable_bytes}}
+} -result {1 {} {linux::abi::x86_64::syscall linux::abi::aarch64::syscall abi::x86_64::from_bytes abi::x86_64::from_mutable_bytes abi::aarch64::from_bytes abi::aarch64::from_mutable_bytes}}
 
 test abi-numeric-namespaced-types {abi::x86_64 loads lib/abi.bot, whose domain types are members of namespace abi (abi::U8Value): a program's own U8Value or I32Value beside the raw transport -- and beside abi::U8Value -- compiles, and a program may even declare a type named like the module's (AbiU8Value) -- or an error named like the module's (AbiIntegerAboveRange, beside abi::AbiIntegerAboveRange: errors are module-qualified too); a real collision is one module or program declaring a name twice} -body {
     list [agree "import abi::x86_64\ntype U8Value = Int in 0..255\ntype I32Value = Int in 0..9\nfn f(x: U8Value) -> int:\n    x\nabi::x86_64::to_int(abi::x86_64::register64(f(39)))"] \
@@ -484,7 +487,7 @@ proc nativeEvidence {text} {
         [dict get $report byKind Struct allocations] [dict get $report byKind BigInt allocations]]
 }
 
-test abi-numeric-constant-creators-are-free {natively, a proven-valid constant creation is no run-time work: each creator instance is one register move (no comparison, no fail path, no struct), and 1001 creations allocate nothing (i32 42, u32 42, i64 -1, u64 42)} -constraints linuxX86_64 -body {
+test abi-numeric-constant-creators-are-free {natively, a proven-valid constant creation is no run-time work: each creator instance is one register move (no comparison, no fail path, no struct), and 1001 creations allocate nothing (i32 42, u32 42, i64 -1, u64 42)} -body {
     set rows {}
     foreach {ctor arg} {i32 42 u32 42 i64 {0 - 1} u64 42} {
         lassign [nativeEvidence "import abi\nimport abi::x86_64\nfn probe(n: int) -> int:\n    abi::${ctor}($arg).value + n\nloop i from 0 to 1000:\n    probe(i)\nprobe(1)"] nir total structs bigints
@@ -495,20 +498,20 @@ test abi-numeric-constant-creators-are-free {natively, a proven-valid constant c
     set rows
 } -result {{i32 2 1 0 0 0} {u32 2 1 0 0 0} {i64 2 1 0 0 0} {u64 2 1 0 0 0}}
 
-test abi-numeric-dynamic-creator-checks {a dynamic creation keeps exactly its two bound checks and two declared-error paths; U64's upper bound 2^64-1 is a static constant (no run-time arithmetic), and a valid U64 is passed on without allocating} -constraints linuxX86_64 -body {
+test abi-numeric-dynamic-creator-checks {a dynamic creation keeps exactly its two bound checks and two declared-error paths; U64's upper bound 2^64-1 is a static constant (no run-time arithmetic), and a valid U64 is passed on without allocating} -body {
     lassign [nativeEvidence "import abi\nfn conv(n: int) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:\n    abi::u64(n).value\nxs = \[1, 2, 9223372036854775807\]\nloop x in xs:\n    conv(x):\n        on abi::AbiIntegerBelowRange:\n            0\n        on abi::AbiIntegerAboveRange:\n            0"] nir total structs bigints
     set body [nirFunction $nir abi::u64]
     list [regexp -all {op i(lt|gt)} $body] [regexp -all {faildeclared} $body] \
         [regexp {int 18446744073709551615} $body] [regexp -all {op isub} $body] $structs $bigints
 } -result {2 2 1 0 0 0}
 
-test abi-numeric-typed-parameter-is-raw {a function taking an abi::U8 receives its one field in a register (no struct), and x.value + 1 is raw machine arithmetic because 0..255 survived into native lowering} -constraints linuxX86_64 -body {
+test abi-numeric-typed-parameter-is-raw {a function taking an abi::U8 receives its one field in a register (no struct), and x.value + 1 is raw machine arithmetic because 0..255 survived into native lowering} -body {
     lassign [nativeEvidence "import abi\nfn bump(x: abi::U8) -> int:\n    x.value + 1\nfn conv(n: int) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:\n    bump(abi::u8(n))\nloop i from 0 to 256:\n    conv(i):\n        on abi::AbiIntegerBelowRange:\n            0\n        on abi::AbiIntegerAboveRange:\n            0\nbump(abi::u8(255))"] nir total structs bigints
     set body [nirFunction $nir bump]
     list [regexp {pnames="x\.0"} $body] [regexp -all {op riadd} $body] [regexp -all {op iadd} $body] $structs
 } -result {1 1 0 0}
 
-test abi-numeric-constant-encodings-are-free {natively, from_i32(i32(42)) and from_u32(u32(2^32-1)) are register moves end to end: every creator and encoder instance is a single retmulti, no struct exists, and 1001 encodings allocate nothing} -constraints linuxX86_64 -body {
+test abi-numeric-constant-encodings-are-free {natively, from_i32(i32(42)) and from_u32(u32(2^32-1)) are register moves end to end: every creator and encoder instance is a single retmulti, no struct exists, and 1001 encodings allocate nothing} -body {
     set rows {}
     foreach {ctor enc arg} {i32 from_i32 42 u32 from_u32 4294967295 i8 from_i8 {0 - 128} isize from_isize {0 - 1}} {
         lassign [nativeEvidence "import abi\nimport abi::x86_64\nfn probe(n: int) -> int:\n    abi::x86_64::to_int(abi::x86_64::${enc}(abi::${ctor}($arg))) + n\nloop i from 0 to 1000:\n    probe(i)\nprobe(1)"] nir total structs bigints
@@ -519,7 +522,7 @@ test abi-numeric-constant-encodings-are-free {natively, from_i32(i32(42)) and fr
     set rows
 } -result {{from_i32 1 1 0 0} {from_u32 1 1 0 0} {from_i8 1 1 0 0} {from_isize 1 1 0 0}}
 
-test abi-numeric-upper-u64-frontier {the documented optimization frontier, pinned: a struct parameter's field facts do not reach a closed instance, so from_u64/from_usize keep one comparison (and, on the upper-half path, one BigInt subtraction) at run time even for a constant; U64 2^64-1 (word -1, a small Int) allocates nothing, U64 2^63 (word -2^63, outside the 63-bit small Ints) allocates one BigInt per encoding, a lower-half Usize nothing; the values are exact either way} -constraints linuxX86_64 -body {
+test abi-numeric-upper-u64-frontier {the documented optimization frontier, pinned: a struct parameter's field facts do not reach a closed instance, so from_u64/from_usize keep one comparison (and, on the upper-half path, one BigInt subtraction) at run time even for a constant; U64 2^64-1 (word -1, a small Int) allocates nothing, U64 2^63 (word -2^63, outside the 63-bit small Ints) allocates one BigInt per encoding, a lower-half Usize nothing; the values are exact either way} -body {
     set rows {}
     foreach {ctor enc arg} {u64 from_u64 18446744073709551615 u64 from_u64 9223372036854775808 usize from_usize 7} {
         lassign [nativeEvidence "import abi\nimport abi::x86_64\nfn probe(n: int) -> int:\n    w = abi::x86_64::to_int(abi::x86_64::${enc}(abi::${ctor}($arg)))\n    if w < 0:\n        n\n    else:\n        0\nloop i from 0 to 1000:\n    probe(i)\nprobe(1)"] nir total structs bigints
@@ -530,8 +533,8 @@ test abi-numeric-upper-u64-frontier {the documented optimization frontier, pinne
     set rows
 } -result {{1 1 0 0 0} {1 1 0 0 1001} {1 1 0 0 0}}
 
-test abi-numeric-syscall-operands-are-the-encoded-words {natively, an ABI value crosses into linux::abi::syscall as its encoder's result register, with nothing in between: each argument operand of the op is the from_* call's own result (getpid: the encoded arguments are ignored by the kernel, and the pid is the same); the canonical path allocates nothing} -constraints linuxX86_64 -body {
-    set text "direct module\nimport abi\nimport abi::x86_64\nimport linux::abi\nfn raw_getpid():\n    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(39)}))\nfn with_args():\n    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(39), rdi: abi::x86_64::from_u64(abi::u64(18446744073709551615)), rsi: abi::x86_64::from_i8(abi::i8(0 - 1)), rdx: abi::x86_64::from_u32(abi::u32(4294967295)), r10: abi::x86_64::from_usize(abi::usize(3))}))\nloop i from 0 to 1000:\n    with_args()\n\[raw_getpid() == with_args(), with_args() > 0\]"
+test abi-numeric-syscall-operands-are-the-encoded-words {natively, an ABI value crosses into linux::abi::x86_64::syscall as its encoder's result register, with nothing in between: each argument operand of the op is the from_* call's own result (getpid: the encoded arguments are ignored by the kernel, and the pid is the same); the canonical path allocates nothing} -constraints linuxX86_64 -body {
+    set text "direct module\nimport abi\nimport abi::x86_64\nimport linux::abi::x86_64\nfn raw_getpid():\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}))\nfn with_args():\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rdi: abi::x86_64::from_u64(abi::u64(18446744073709551615)), rsi: abi::x86_64::from_i8(abi::i8(0 - 1)), rdx: abi::x86_64::from_u32(abi::u32(4294967295)), r10: abi::x86_64::from_usize(abi::usize(3))}))\nloop i from 0 to 1000:\n    with_args()\n\[raw_getpid() == with_args(), with_args() > 0\]"
     lassign [nativeEvidence $text] nir total structs bigints
     set body [nirFunction $nir with_args]
     regexp {= op syscall_linux_x86_64 ((?:%[0-9]+ ?){7})} $body -> operands
@@ -621,7 +624,7 @@ test abi-numeric-fuzz {seeded fuzz of every creator and encoder: for all ten dom
         if {$got ne $want} {
             lappend failures [list seed $seed got $got expected $want]
         }
-        if {$seed == 31337 && [testConstraint linuxX86_64]} {
+        if {$seed == 31337 && [testConstraint nativeLinux]} {
             underGcStress {set stressed [agree $text $::nativeBackends]}
             if {$stressed ne $want} {
                 lappend failures [list seed $seed gc-stress $stressed]

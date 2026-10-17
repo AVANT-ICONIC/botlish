@@ -22,8 +22,9 @@
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 
-testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux"
-    && $::tcl_platform(machine) in {x86_64 amd64}}]
+# Native coroutines exist on Linux x86-64 and AArch64 only (COROUTINES.md).
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux"
+    && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 # Three errors (E3 payload-bearing), one raising function each, an untyped
 # helper, and `poison`: a function that erases raise2 through the helper and
@@ -254,7 +255,7 @@ test::report()
 }
 
 test scc-golden-runner {the runner's (c.run)() through Fn{args: [], return: Match} is not charged an error an unrelated test erases: the suite compiles and runs on every backend} -constraints {
-    linuxX86_64
+    nativeLinux
 } -body {
     list [hir::completions::erasedErrorsOf [surface::compile $sccRunner -warnings off]] [sourceAgree $sccRunner]
 } -result {E {value {["PASS poison", "PASS plain", "2 passed, 0 failed"]}}}
@@ -653,7 +654,7 @@ test scc-affine-runs {and every backend releases the coroutine on the contract's
 } -result {value {[-2, 17, 17, -1, -2]}}
 
 test scc-affine-native {natively: every coroutine released, none swept} -constraints {
-    linuxX86_64
+    nativeLinux
 } -body {
     dict get [native::allocationReport [surface::compile $sccAffine -warnings off] summary] coroutines
 } -result {stacksMapped 1 stacksReused 3 released 4 releasedSuspended 2 sweptSuspended 0}
@@ -719,7 +720,7 @@ test scc-affine-payload {a contract admitting an affine-payload error: an edge f
 } -result {Carry {handle Carry call {}} {value {[-2, 11, 7, -1, 108]}}}
 
 test scc-affine-payload-native {natively: every coroutine released, none swept} -constraints {
-    linuxX86_64
+    nativeLinux
 } -body {
     set c [dict get [native::allocationReport [surface::compile $sccAffinePayload -warnings off] summary] coroutines]
     list [expr {[dict get $c released] == [dict get $c stacksMapped] + [dict get $c stacksReused]}] [dict get $c sweptSuspended]

@@ -163,6 +163,7 @@ program lib/web.bot
   ONE-CHAR-STRING-LITERAL 219:85 none -- char->text: the digit "E", as above
   ONE-CHAR-STRING-LITERAL 219:90 none -- char->text: the digit "F", as above
   ONE-CHAR-STRING-LITERAL 275:9 none -- char->text: pct's "%" begins every escape it writes as text
+program lib/abi/aarch64.bot
 program lib/abi/bytes.bot
 program lib/abi/x86_64.bot
 program lib/ffi/c.bot
@@ -171,3 +172,5 @@ fails lib/linux/io.bot CORE SEMANTIC CONTEXT-FUNCTION-VALUE -- entry-program val
 program lib/linux/path.bot
   ONE-CHAR-STRING-LITERAL 81:55 none -- index-proof: the natural path.char_at(n - 1) == '/' is not proven in range (the index proof relates only a guarded name to the length, not n - 1 to n; the slice proof does), and concat's errors are fixed by io::path::Path; the provable path.substring(n - 1, n).char_at(0) decodes a slice made only to be decoded (two allocations a call)
   ONE-CHAR-STRING-LITERAL 84:39 none -- char->text: the "/" joining PATH and COMPONENT is a single character appended as text
+program lib/linux/sys.aarch64.bot
+program lib/linux/sys.x86_64.bot

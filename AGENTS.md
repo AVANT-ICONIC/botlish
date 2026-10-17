@@ -728,8 +728,9 @@ rule). Changing `hir::traits::Plan` also means re-checking the trait mutants
 Raw, ambient authority is acknowledged at the module boundary
 (DIRECT-MODULES.md): a module is designated direct by its file's first line,
 `direct module`, or -- an intrinsic namespace -- by
-`core::native::declareDirectNamespace` (linux::abi; lib/linux.bot is a
-declared one). A call in module U of a callable of another designated module
+`core::native::declareDirectNamespace` (the syscall transports
+linux::abi::x86_64 and linux::abi::aarch64; lib/linux/sys.*.bot and
+lib/linux.bot are declared ones). A call in module U of a callable of another designated module
 is a direct edge of U, mediated only when the function making it requires a
 context (struct or context trait) U declares itself; an unmediated edge makes
 U inferred direct, and the marker must agree (DIRECT without it,
@@ -741,13 +742,16 @@ module like any other. Keep it so:
   f()`, `unsafe`), a suppression, a per-function exception inside a direct
   module, or a runtime direct bit; never read directness from a module's
   name, path or library, and never let a context of another module (or a
-  caller's context) mediate.
+  caller's context) mediate. A context constructor gets no exemption (it is
+  callable anywhere): a construction that needs authority requires an
+  earlier context of its module (DIRECT-MODULES.md, "Context
+  construction").
 * A caller reads a module's designation, never its inference, and directness
   lives in the HIR (`moduleDecls`, `direct`), never in a registry: keep both
   (no channel in hir/staticdeps.tcl depends on them, and compilation
   isolation holds by construction).
-* A program that calls `linux` or `linux::abi` itself (an example, a golden
-  suite, a test program) is low-level: it starts with `direct module`, or
+* A program that calls `linux`, `linux::sys` or a transport itself (an
+  example, a golden suite, a test program) is low-level: it starts with `direct module`, or
   mediates the calls through a context of its own.
 
 If you change hir/direct.tcl, the marker's grammar or loading
@@ -824,16 +828,66 @@ the x86-64 feature set except what is tied to the x86-64 instruction set:
 the JIT, native-frame stack maps (runtime/framewalk.rs; on AArch64 a stack
 map entry is a root's distance below its own frame's FP, codegen::clif's
 `define`), the pthread overflow guard (runtime/platform/linux.rs), coroutines
-and rustc-linked executables. `linux::abi::syscall` (and so `linux::io`) and
-the `stub` linker remain x86-64 only: the Tcl tests that need them carry
-`linuxX86_64` or `stubLinker`, golden suites that make live syscalls
-`# golden-host: linux-x86_64 -- REASON` (tests/golden/run.tcl). A Tcl test
-that needs the native runtime on Linux (coroutines, stack maps, GC-stress
-evidence) but no syscall carries `nativeLinux`; one that only needs a
-standalone executable, `executableAot`. Never gate a test on
-`linuxX86_64` for anything but the x86-64 instruction set or syscall ABI. A change to
-the walker, the switch or root lowering needs a GC-stress run on both
+and rustc-linked executables, and Linux syscalls through the AArch64
+transport (next section). The `stub` linker remains x86-64 only: the Tcl
+tests that need it carry `stubLinker`. A Tcl test that needs the native
+runtime on Linux (coroutines, stack maps, GC-stress evidence), or makes
+syscalls only through the portable wrappers (`linux::write`, `linux::read`,
+`linux::io`), carries `nativeLinux`; one that runs the x86-64 transport or
+reads x86-64 machine code carries `linuxX86_64`, the AArch64 transport's
+`linuxAarch64`; one that only needs a standalone executable,
+`executableAot`. A test that only compiles a transport (its NIR, CLIF, a
+diagnostic) needs no host, like any NIR or CLIF test: it names `-target`
+when it compiles through `linux::sys`. Golden suites that make live syscalls through one
+transport declare `# golden-host: linux-x86_64 -- REASON` (or
+`linux-aarch64`; tests/golden/run.tcl). Never gate a test on `linuxX86_64`
+for anything but running the x86-64 instruction set or syscall ABI. A change to the
+walker, the switch or root lowering needs a GC-stress run on both
 architectures; CI's arm64 workflow has one.
+
+## Linux syscall transports
+
+A raw Linux syscall is one architecture's transport
+(LINUX-SYSCALL-TRANSPORTS.md, LINUX-X86-64-SYSCALL.md):
+`linux::abi::x86_64::syscall` ({rax, rdi, rsi, rdx, r10, r8, r9}, `syscall`)
+and `linux::abi::aarch64::syscall` ({x8, x0..x5}, `svc #0`), each over its
+own `abi::ARCH::Register64`, with its own address bridges. They are rows of
+one table, `core::linuxabi`'s `transports`: the contract (hir/syscall.tcl),
+escape analysis (hir/escape.tcl), lowering (native/lower.tcl) and the Tcl
+refusal read the row of the native a call names. Never name a transport, its
+register type or its op outside the table, never let one architecture's
+register word reach the other's transport, and never give a transport
+knowledge of a syscall (numbers are source data). A third architecture is a
+row, a Rust boundary (native/src/runtime/syscall.rs) and an `abi::ARCH`
+module.
+
+Everything above the transports is one source: `linux` (lib/linux.bot),
+`linux::io` and `io` name no register, number or transport. What differs by
+architecture is `linux::sys`, an architecture-specific module
+(`lib/linux/sys.x86_64.bot`, `lib/linux/sys.aarch64.bot`): the loader
+(surface/modules.tcl's `ModuleFile`) picks `lib/P.ARCH.bot` by the
+compilation target's architecture (`-target`, the host's by default) when
+there is no `lib/P.bot`. Keep both files' surfaces identical
+(`lst-linux-sys-same-surface`). The front-end cache records both candidate
+paths of every imported namespace (`surface::cache::Dependencies`); a new
+input that selects a file must go there too.
+
+If you change the transports, the table, the bridges, `linux::sys` or the
+loader rule, run `tests/linux-syscall.test`,
+`tests/linux-syscall-transports.test`, `tests/abi-bytes.test`,
+`tests/abi-mutable-bytes.test`, the golden suites `linux-io.bot`,
+`linux-transports.bot` and `abi-bytes-native.bot`,
+`audit/linux-x86-64-syscall/tools/fuzz.tcl`, the abi-bytes and mutable-bytes
+mutation tools and `cargo test --release --manifest-path native/Cargo.toml
+--lib syscall`; for a change to the loader rule or the cache, also
+`tests/hir-cache.test` and `audit/hir-interchange/tools/roundtrip.tcl -via
+cache`. Without an arm64 machine, the AArch64 side can be checked under
+qemu-user: build the driver with `--target aarch64-unknown-linux-gnu`
+(linker `aarch64-linux-gnu-gcc`), point `BOTLISH_NATIVE_BIN` at a script
+that runs it through `qemu-aarch64 -L /usr/aarch64-linux-gnu`, and set
+`::tcl_platform(machine)` to `aarch64` before sourcing a test file (its
+executable tests need a native arm64 host); CI's arm64 workflow
+(`workflow_dispatch` on a branch) runs everything natively.
 
 ## Affine values
 
@@ -1467,9 +1521,10 @@ every backend, through the front-end cache (Running the tests locally,
 above). A suite that cannot run on a backend declares
 `# golden-exclude: BACKEND -- REASON` in its leading comments; keep such tests
 in a companion suite so the main suite keeps all four backends. A suite that
-runs on one host only (live Linux x86-64 syscalls) declares
-`# golden-host: linux-x86_64 -- REASON`: elsewhere it compiles but does not
-run. On such a host check.tcl accepts a row whose Tcl original a host
+runs on one host only (live syscalls through one architecture's transport)
+declares `# golden-host: linux-x86_64 -- REASON` (or `linux-aarch64`):
+elsewhere it compiles but does not run. A suite whose syscalls go through
+the portable wrappers needs no host. On such a host check.tcl accepts a row whose Tcl original a host
 constraint skipped (`host-skip`) with its golden test passing or
 host-excluded; every other row must still be "old pass, new pass".
 

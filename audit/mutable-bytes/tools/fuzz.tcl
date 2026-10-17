@@ -503,7 +503,10 @@ proc fillText {cap} {
     return $s
 }
 
-set readPrelude {import abi
+# A direct module (DIRECT-MODULES.md): out and rd call linux::write and
+# linux::read with no context of the program's own.
+set readPrelude {direct module
+import abi
 import abi::bytes
 import byte
 import linux

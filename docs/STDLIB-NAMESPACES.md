@@ -81,7 +81,7 @@ and `ns-qualified-inventory` pin the after-state in a fresh process):
 | `mutable_array_allocate _capacity _get _set _copy _freeze` | standard type op (MutableArray) | `mutable_array::allocate/capacity/at/set/copy/freeze` |
 | `immutable_set_from_list immutable_set_contains` | standard type op (ImmutableSet) | `immutable_set::from_list/contains` |
 | `char_codepoint` | standard type op (UnicodeChar; the primitive behind `lib/char.bot`'s existing `char::codepoint`) | `char::scalar_value` (the follow-up removed the `char::codepoint` wrapper, §11) |
-| `linux::abi::syscall` | platform-ABI, already qualified | unchanged |
+| `linux::abi::x86_64::syscall` | platform-ABI, already qualified | unchanged |
 | (added later, ABI-BYTES.md) `byte_store::from_list`, `byte_store::byte_count` | standard type ops of the byte-storage value kind behind `abi::bytes::Bytes` (like `immutable_set::*` for `ImmutableSet`) | `byte_store::*` |
 | (added later, ABI-BYTES.md) `abi::x86_64::from_bytes` | platform-ABI raw address bridge, already qualified | `abi::x86_64::from_bytes` |
 | (added later, MUTABLE-BYTES.md) `mutable_byte_store::zeroed/_from/_count/_set/_copy`, `mutable_byte_store::freeze`, `mutable_byte_store::freeze_prefix` | standard type ops of the writable byte-storage value kind behind `abi::bytes::MutableBytes` | `byte_store::*` |
@@ -116,7 +116,7 @@ hierarchy (`ns-no-nested-stdlib`):
 | `mutable_array` | `allocate capacity at set copy freeze` | `from_list create` (moved from the old `mutarray` module), `get` (new) |
 | `immutable_set` | `from_list contains` | none |
 | `char` | `scalar_value` | none (no module file since §11) |
-| `linux::abi` | `syscall` | (unchanged) |
+| `linux::abi::x86_64` (was `linux::abi`), `linux::abi::aarch64` (LINUX-SYSCALL-TRANSPORTS.md) | `syscall` | (unchanged) |
 | `coroutine` | `done?` (COROUTINES.md; its other operations are internal `coroutine#...` root natives no source spells) | none (no module file) |
 
 `lib/mutarray.bot` was renamed to `lib/mutable_array.bot` (its namespace
@@ -154,7 +154,7 @@ char::codepoint          char::scalar_value  (§11; the lib/char.bot wrapper is 
 
 ### How a qualified intrinsic resolves
 
-The mechanism is the one `linux::abi::syscall` already used: a *qualified
+The mechanism is the one `linux::abi::x86_64::syscall` already used: a *qualified
 root native*, registered under its qualified name
 (`core::native::isQualifiedNative`). `surface/lower.tcl` lowers a reference
 `str::concat` to a root reference to that native (`hir::syntax::rootRef`);
@@ -336,7 +336,7 @@ root native; protection is the membership test
 `CheckNativeMembers` rejects a function or immutable binding named MEMBER in
 any module file of namespace NS (`LoadNamespace`); the entry program is in no
 namespace and is not checked. This generalizes the check
-that already protected `linux::abi::syscall`. The diagnostic:
+that already protected `linux::abi::x86_64::syscall`. The diagnostic:
 
 ```
 SURFACE MODULE DUPLICATE-NATIVE: module "list" (.../list.bot) cannot define

@@ -191,15 +191,19 @@ proc hir::escape::Classify {hir instance arity e {structOpts {}}} {
     lassign [dict get $node target] targetKind target
     if {$targetKind eq "native"} {
         set name [dict get [hir::symbol $hir $target] name]
-        if {$name eq "linux::abi::syscall" || [core::bytestore::isBridge $name]} {
-            # (The raw address bridge builds its Register64 result from the one
-            # address word `bytesaddr` produces, exactly the same way.)
-            # The raw kernel transition builds its result, an abi::x86_64::
-            # Register64, from one word (the rax it returns): a local
-            # construction of that one-field shape, exactly as a struct
+        if {[core::linuxabi::isSyscall $name]} {
+            # A raw kernel transition builds its result, its architecture's
+            # Register64 (abi::x86_64::Register64, abi::aarch64::
+            # Register64), from one word (the result register it returns): a
+            # local construction of that one-field shape, exactly as a struct
             # literal is (native/lower.tcl's SyscallCall hands back the op's
             # result register as the field; LINUX-X86-64-SYSCALL.md).
-            return [SyscallResult $hir $e $structOpts]
+            return [SyscallResult $hir $e [core::linuxabi::registerType $name] $structOpts]
+        }
+        if {[core::bytestore::isBridge $name]} {
+            # The raw address bridge builds its Register64 result from the one
+            # address word `bytesaddr` produces, exactly the same way.
+            return [SyscallResult $hir $e [core::bytestore::bridgeRegisterType $name] $structOpts]
         }
         if {[hir::layouts::RoleOf [hir::layouts::Role $name] op] eq "parse"} {
             # binary::parse (BINARY-LAYOUT.md) builds its LayoutStruct from
@@ -279,16 +283,15 @@ proc hir::escape::ClassifyIf {hir instance arity e structOpts} {
     return [list [expr {$targets eq "" ? "local" : "remote"}] $desc [lsort -unique $targets]]
 }
 
-# linux::abi::syscall's (or an address bridge's) result (call E) as a
+# A syscall transport's (or an address bridge's) result (call E) as a
 # recognized construction: {local {1 {ID LAYOUT}} {}} when its static type is
-# the declared abi::x86_64::Register64 (hir::types::ShapeResult's named-struct
-# result), "" otherwise.
-proc hir::escape::SyscallResult {hir e structOpts} {
+# the declared Register64 ID it returns (hir::types::ShapeResult's
+# named-struct result), "" otherwise.
+proc hir::escape::SyscallResult {hir e id structOpts} {
     if {![StructEnabled $structOpts]} {
         return ""
     }
     set type [hir::typeOf $hir $e]
-    set id [core::linuxabi::registerType]
     if {$type ne [list nstruct $id] || ![hir::structs::declared $id]} {
         return ""
     }
@@ -315,19 +318,29 @@ proc hir::escape::LayoutParseResult {hir e structOpts} {
     return [list local [list [llength $layout] [list [lindex $type 1] $layout]] {}]
 }
 
-# The register field expressions of linux::abi::syscall call E (VIEW) whose
+# The syscall transport native (core/linuxabi.tcl) call E (VIEW) calls, or
+# "" when E is no such call.
+proc hir::escape::SyscallNative {view e} {
+    if {[hir::kind $view $e] ne "call"} {
+        return ""
+    }
+    lassign [hir::get $view $e target] targetKind target
+    if {$targetKind ne "native"} {
+        return ""
+    }
+    set name [dict get [hir::symbol $view $target] name]
+    return [expr {[core::linuxabi::isSyscall $name] ? $name : ""}]
+}
+
+# The register field expressions of syscall transport call E (VIEW) whose
 # argument is an inline struct literal: each is consumed only by reading its
 # Register64's one word (native/lower.tcl's SyscallCall), never as an object
 # -- the literal itself is never built. "" for any other expression.
 proc hir::escape::SyscallFields {view e} {
-    if {[hir::kind $view $e] ne "call"} {
+    if {[SyscallNative $view $e] eq ""} {
         return ""
     }
     set node [hir::node $view $e]
-    lassign [dict get $node target] targetKind target
-    if {$targetKind ne "native" || [dict get [hir::symbol $view $target] name] ne "linux::abi::syscall"} {
-        return ""
-    }
     set args [dict get $node args]
     if {[llength $args] != 1 || [hir::kind $view [lindex $args 0]] ne "struct"} {
         return ""
@@ -781,7 +794,7 @@ proc hir::escape::RegionInfo {hir spec id} {
     set argPos [dict create]
     set projByRecv [dict create]
     set bindValue [dict create]
-    # A register field of an inline linux::abi::syscall literal (SyscallFields)
+    # A register field of an inline syscall transport literal (SyscallFields)
     # -> 1: read for its one word, like a projection of that word.
     set wordUse [dict create]
     # The value of a context installation (CONTEXTS.md) -> 1: native/lower.tcl
@@ -2270,8 +2283,8 @@ proc hir::escape::DirectRoots {regions arity structOpts} {
 }
 
 # InstanceId -> ExprId -> DESC: every register field FE of an inline
-# linux::abi::syscall literal (SyscallFields) that is itself a recognized
-# construction of the one-field abi::x86_64::Register64 shape -- a
+# syscall transport literal (SyscallFields) that is itself a recognized
+# construction of the transport's one-field Register64 shape -- a
 # register64(...) call returning fields, a Register64 literal, a nested
 # syscall, an `if` of those: lowering reads its word straight from its
 # fields, so no Register64 object is built for it (a register held in a
@@ -2281,10 +2294,14 @@ proc hir::escape::RegisterWords {regions arity structOpts} {
     if {![StructEnabled $structOpts]} {
         return $words
     }
-    set id64 [core::linuxabi::registerType]
     dict for {id info} $regions {
         set view [dict get $info view]
         foreach e [dict get $info exprs] {
+            set native [SyscallNative $view $e]
+            if {$native eq ""} {
+                continue
+            }
+            set id64 [core::linuxabi::registerType $native]
             foreach f [SyscallFields $view $e] {
                 set c [Classify $view [dict get $info instance] $arity $f $structOpts]
                 if {$c eq ""} {
@@ -2791,8 +2808,8 @@ proc hir::escape::directRoot {analysis id e} {
     return ""
 }
 
-# The descriptor ({N SHAPE ?CUT?}) of register field E of an inline
-# linux::abi::syscall literal in instance ID when E is a recognized one-field
+# The descriptor ({N SHAPE ?CUT?}) of register field E of an inline syscall
+# transport literal in instance ID when E is a recognized one-field
 # Register64 construction read straight from its fields (RegisterWords), ""
 # otherwise.
 proc hir::escape::registerWord {analysis id e} {

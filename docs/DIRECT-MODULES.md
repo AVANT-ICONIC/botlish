@@ -6,11 +6,10 @@ direct module
 
 import abi
 import abi::bytes
-import abi::x86_64
-import linux::abi
+import linux::sys
 
 fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
-    abi::x86_64::to_int(linux::abi::syscall({...}))
+    linux::sys::write(fd, data)        # the architecture's raw syscall
 ```
 
 ```
@@ -69,13 +68,16 @@ module defines itself. Then the module is ordinary, and so is everything above
 it:
 
 ```
-linux::abi      DIRECT (intrinsic)     the raw syscall transition
+linux::abi::x86_64,   DIRECT (intrinsic)        the raw syscall transitions
+linux::abi::aarch64
    |
-linux           DIRECT (`direct module`)  write(fd, data), read(fd, data)
+linux::sys            DIRECT (`direct module`)  one architecture's numbers and registers
    |
-linux::io       ordinary               defines LinuxIO; every call into linux requires it
+linux                 DIRECT (`direct module`)  write(fd, data), read(fd, data)
    |
-io, 2048, ...   ordinary               see only the LinuxIO capability
+linux::io             ordinary                  defines LinuxIO; every call into linux requires it
+   |
+io, 2048, ...         ordinary                  see only the LinuxIO capability
 ```
 
 The taint stops at the module that contextualizes the authority.
@@ -93,7 +95,7 @@ architectural authority, not machine risk.
 # comments and blank lines may come first (a #! line is a comment)
 direct module
 
-import linux::abi
+import linux::abi::x86_64
 ...
 ```
 
@@ -129,8 +131,9 @@ A module is **designated direct** when
 * its file starts with `direct module`, or
 * it is an intrinsic namespace the compiler declares direct:
   `core::native::declareDirectNamespace NS`, registration metadata beside the
-  namespace's natives. Today exactly one: `linux::abi`
-  (core/linuxabi.tcl).
+  namespace's natives. Today exactly the raw syscall transports,
+  `linux::abi::x86_64` and `linux::abi::aarch64` (core/linuxabi.tcl declares
+  each entry of its transport table).
 
 Nothing else designates one: no module name (`raw`, `syscall`, `ffi`,
 `linux...`), path, library or naming convention is ever read
@@ -198,6 +201,88 @@ its fields correspond to the call, or that the function reads it. A
 module-owned context requirement is the explicit architectural act of
 mediation; the module author defines the policy, as an FFI contract's author
 does.
+
+### Context construction
+
+A context whose construction itself needs direct authority -- a descriptor a
+future `openat` mints, a handle a foreign library returns -- gets no
+exemption: its constructor is a function like any other, and a direct call
+in it is mediated only when the constructor requires a context of its
+module. So the owning module chains its contexts: a first context minted
+with no direct call, and a constructor that requires it.
+
+```
+# fs.bot -- ordinary: contextualized
+import raw
+
+opaque context struct Root:
+    ok: bool
+
+opaque context struct Probe:
+    value: int
+
+fn root() -> Root:                    # no direct call: needs no context
+    Root {ok: true}
+
+fn open(context r: Root) -> Probe:    # the direct call, mediated by fs's Root
+    Probe {value: raw::add(40, 2)}
+
+fn value(context p: Probe) -> int:
+    p.value
+```
+
+```
+import fs
+
+with context fs::root()
+with context fs::open()               # under the earlier installation (CONTEXTS.md, "Order")
+fs::value()
+```
+
+`raw` is direct, `fs` contextualized, the program ordinary; with `fn open()
+-> Probe`, a context-free constructor, `fs` is DIRECT
+(`dm-context-construction-chain`). The standard library needs none of this:
+`linux::io::create()` makes LinuxIO's three descriptor tokens with no
+syscall (§5).
+
+**Why no constructor exemption.** Exempting the direct calls of a function
+that returns a context of its own module would be unsound, three ways:
+
+* **A constructor is an ordinary function.** `with context` installs a
+  context from any expression, but nothing restricts where a function
+  returning one is called: from any function of any module that imports it,
+  whose call runs its body. An exempt `fs::open()` making the call is a
+  context-free wrapper of raw authority with a context for a result; every
+  importer reaches the authority through it with no context of its own,
+  which is exactly what the rule rules out.
+* **The exemption would be keyed on a signature, which says nothing about
+  the body.** Any function could be exempted by returning a context of its
+  module: `fn write(fd, data) -> Receipt`, Receipt a context struct nobody
+  ever installs. That launders directness by a signature, the way a foreign
+  context would (§4, "Why the context must be the module's own").
+* **Opacity controls who builds a context, not what building it does.** An
+  opaque context can be constructed only inside its module, but the
+  module's exported constructor is the point: its effects happen at every
+  call, installed or not.
+
+A sound version exists, and was not built: exempt a constructor's direct
+calls only when every call of it is the expression of a `with context`
+installation, so that the authority is exercised once per installation, in
+the installing code. It is a call-site rule: today a DIRECT diagnostic reads
+only the function making the call, its context section and declarations
+(§3, "Static intrinsics"); this one would read the syntax of every caller,
+in every module, so a function's directness would depend on how other
+modules call it -- the cross-module inference "callers read designation, not
+inference" avoids -- and it would add a category of function. The chain
+gives the same architecture under the unchanged rule: the authority-free
+first context is the explicit grant, installed by the application, and the
+constructor is mediated by it.
+
+What the chain does not add is unforgeability: `fs::root()` is a
+context-free function any importer may call and install, as
+`linux::io::create()` is. That is every context's property: a context makes
+the capability explicit and visible where it is installed and required, not
+unobtainable (§4: no adequacy of a context's policy is claimed).
 
 ### The module result
 
@@ -281,8 +366,8 @@ struct or context trait declared by the entry program) in "emit", the function t
 the direct call, or declare the module direct with `direct module` as its first line
 
 DIRECT: b.bot:6:25: module "b" uses direct authority: function "b::raw_pid" calls
-linux::abi::syscall, a callable of the direct module "linux::abi", without a context
-defined by "b" ("b::raw_pid" requires a::ContextA, a context defined by module "a", but a
+linux::abi::x86_64::syscall, a callable of the direct module "linux::abi::x86_64",
+without a context defined by "b" ("b::raw_pid" requires a::ContextA, a context defined by module "a", but a
 context mediates direct authority only in the module that defines it: a context declared
 by "b" itself); require one of this module's own contexts ... or declare the module direct
 with `direct module` as its first line
@@ -350,6 +435,10 @@ dependency analysis needed no channel for it.
   low-level program says so in its first line.
 * **Why stale markers are errors.** A marker that survives its last direct
   edge is a permission under which a future direct call would hide.
+* **Why constructors get no exemption.** A function returning a context is
+  callable anywhere; exempting it would turn it into a context-free wrapper
+  of raw authority (§3, "Context construction", which also has the pattern
+  that needs no exemption).
 
 What a non-direct root establishes: *every path from application code to a
 module explicitly exposing raw authority crosses a module-owned context
@@ -359,18 +448,26 @@ policy.
 
 ## 5. The standard library: the syscall boundary
 
-* **The direct module of raw syscall authority is `linux::abi`**, the
-  intrinsic namespace of `linux::abi::syscall` (the raw x86-64 kernel
-  transition), declared direct by `core::native::declareDirectNamespace
-  linux::abi` in core/linuxabi.tcl. It is the smallest module boundary of
-  raw syscall authority: `abi::x86_64`'s register and address conversions
-  (`from_bytes`, `from_mutable_bytes`, `register64`, ...) take no authority
-  by themselves -- an address does nothing without the syscall -- and stay
-  ordinary.
+* **The direct modules of raw syscall authority are the transports
+  `linux::abi::x86_64` and `linux::abi::aarch64`**, the intrinsic namespaces
+  of `linux::abi::x86_64::syscall` and `linux::abi::aarch64::syscall` (the
+  raw kernel transitions, LINUX-SYSCALL-TRANSPORTS.md), each declared direct
+  by `core::native::declareDirectNamespace` beside its registration in
+  core/linuxabi.tcl's loop over the transport table: a third architecture's
+  transport is direct by the same line. They are the smallest module
+  boundary of raw syscall authority: `abi::x86_64`'s and `abi::aarch64`'s
+  register and address conversions (`from_bytes`, `from_mutable_bytes`,
+  `register64`, ...) take no authority by themselves -- an address does
+  nothing without the syscall -- and stay ordinary.
+* **`linux::sys` (lib/linux/sys.x86_64.bot, lib/linux/sys.aarch64.bot, the
+  target's architecture selecting one) is a declared direct module**, in
+  both files: its `write` and `read` call the architecture's transport for
+  any descriptor with no context.
 * **`linux` (lib/linux.bot) is a declared direct module.** `write(fd, data)`
-  and `read(fd, data)` call the syscall with no context: they take *any*
+  and `read(fd, data)` call `linux::sys` with no context: they take *any*
   descriptor, raw process authority, by design (the explicit low-level
-  layer). Its marker is justified by inference (two undischarged edges).
+  layer, the same source on every architecture). Its marker is justified by
+  inference (two undischarged edges).
 * **`linux::io` (lib/linux/io.bot) is ordinary -- contextualized.** Every
   function that calls into `linux` requires `LinuxIO`, the opaque context it
   defines. One function needed a change: `write_all(fd, bytes)` (the
@@ -387,17 +484,21 @@ policy.
   linux::io implements), `linux::path`, the 2048 engine and demo (unchanged:
   they use linux::io only).
 * **No module split was required.** The existing boundaries already matched:
-  the raw transition was its own intrinsic namespace, the descriptor-taking
-  wrappers their own module, the capability layer a third.
+  the raw transitions are their own intrinsic namespaces, the
+  architecture's register convention and the descriptor-taking wrappers
+  their own modules, the capability layer another. (linux::sys was split
+  out of linux for the AArch64 port, not for directness; both are direct.)
 * **Context establishment.** `linux::io::create()` builds the three
   descriptor tokens 0, 1, 2 with no syscall, so installing LinuxIO needs no
   direct authority: no bootstrap exception was needed.
-* Programs that call `linux` or `linux::abi` themselves are low-level by
+* Programs that call `linux` or a transport themselves are low-level by
   nature and declare it: examples/linux/getpid.bot, write.bot, read-stdin.bot,
   the golden suites abi-bytes, abi-bytes-native, abi-numeric-native,
-  imports-abi-child, linux-io and linux-io-native, and the test programs of
-  tests/linux-syscall.test, abi-bytes.test, abi-mutable-bytes.test,
-  abi-numeric.test and imports.test that make raw calls.
+  imports-abi-child, linux-io, linux-io-native and linux-transports, and the
+  test programs of tests/linux-syscall.test, linux-syscall-transports.test,
+  abi-bytes.test, abi-mutable-bytes.test, abi-numeric.test and imports.test
+  that make raw calls, and the raw programs the abi-bytes, mutable-bytes and
+  imports fuzzers and bench/c-pointer-borrowing.tcl generate.
   examples/linux/context-hello.bot and examples/io/hello.bot are ordinary.
 
 The syscall execution and lowering are unchanged: no wrapper, no runtime
@@ -411,7 +512,7 @@ tests of the syscall path are unchanged.
 | the marker's grammar | surface/parser.tcl `DirectModule`, `AtDirectModule`, `MisplacedDirectModule`; the AST's `direct` (surface/ast.tcl) |
 | module declarations | surface/modules.tcl `ModuleDecl`, the loader's `moduleDecls`, `BuildProgram`'s `-module-decls` |
 | HIR | hir/hir.tcl: `-module-decls` -> `moduleDecls`; `hir::direct::verify` in `CheckOnce` after contexts; DIRECT an obligation kind of method calls; the monomorphized program keeps the checked program's summary |
-| intrinsic metadata | core/native.tcl `declareDirectNamespace`, `isDirectNamespace`, `directNamespaces`, `namespaceOf`; core/linuxabi.tcl declares `linux::abi` |
+| intrinsic metadata | core/native.tcl `declareDirectNamespace`, `isDirectNamespace`, `directNamespaces`, `namespaceOf`; core/linuxabi.tcl declares each transport's namespace |
 | the analysis | hir/direct.tcl |
 | static intrinsics | hir/static.tcl codes `DIRECT` -> `Direct`, `DIRECT-CALLABLE-VALUE` -> `DirectCallableValue`; lib/compiler.bot; lib/test.bot's `code_name` |
 
@@ -432,7 +533,7 @@ What HIR keeps: `moduleDecls` (the declarations, as given) and `direct`:
 units {NS {declared 0|1 marker ORIGIN provided 0|1 inferred 0|1 status STATUS
            edges {{function NAME origin ORIGIN target D callee NAME via call|trait
                    discharged CONTEXT foreign {{CONTEXT OWNER} ...}} ...}} ...}
-intrinsic {linux::abi ...}
+intrinsic {linux::abi::x86_64 ...}
 ```
 
 STATUS is `ordinary`, `contextualized`, `direct`, `provided` (an intrinsic
@@ -464,12 +565,12 @@ context that mediates it:
 
 ```
 module raw: direct (declared direct, inferred direct)
-    raw::getpid -> linux::abi::syscall (direct module linux::abi, raw.bot:10:25): undischarged
+    raw::getpid -> linux::abi::x86_64::syscall (direct module linux::abi::x86_64, raw.bot:10:25): undischarged
 module wrapper: contextualized (declared ordinary, inferred ordinary)
     wrapper::pid -> raw::getpid (direct module raw, wrapper.bot:10:5): mediated by wrapper::Pids
 module consumer: ordinary (declared ordinary, inferred ordinary)
 entry program: ordinary (declared ordinary, inferred ordinary)
-intrinsic linux::abi: provided direct by the compiler
+intrinsic linux::abi::x86_64: provided direct by the compiler
 ```
 
 `hir::direct::explain HIR NS` answers "why is this module direct?" for one
@@ -530,7 +631,7 @@ parameters are all noescape need not be direct at all
 
 ## 10. Tests, fuzzing, mutation testing, regression
 
-* `tests/direct-modules.test` (55 tests; applications of several files in
+* `tests/direct-modules.test` (56 tests; applications of several files in
   fresh directories, on interp and compile, natively where a value is the
   point): the grammar and its errors (`dm-parse-*`); intrinsic metadata and a
   probe intrinsic namespace; no name heuristic; the syscall acceptance case in
@@ -538,7 +639,7 @@ parameters are all noescape need not be direct at all
   `-contextualized`) and the stdlib's layering; top-level code; stale markers
   (no authority; fully mediated); no silent promotion; the context carried to
   the direct point; nested functions; foreign contexts and context
-  identity; the transitive boundary (statuses, a native run, `-direct`);
+  identity; context construction; the transitive boundary (statuses, a native run, `-direct`);
   coarseness; direct modules with and without contexts; imports and types;
   callable escapes and aliases; context traits and value-trait operations;
   cycles; the root; recovery; unreachable code; method syntax; coroutine
@@ -570,12 +671,14 @@ distinct and the summary keeps each:
   `contextualized`, `direct`, `provided`); otherwise DIRECT (`unacknowledged`)
   or STALE-DIRECT-MODULE (`stale`).
 
-**Syscall integration (item 75).** §5: `linux::abi` direct by intrinsic
-metadata (`core::native::declareDirectNamespace`); `linux` direct by its
-marker, justified by `write` and `read`; `linux::io` imports `linux` and is
-contextualized by its own LinuxIO (write, write_error, read, write_all);
-nothing else in the library imports `linux` or `linux::abi`; no wrapper
-remains direct; no module split was required.
+**Syscall integration (item 75).** §5: the transports `linux::abi::x86_64`
+and `linux::abi::aarch64` direct by intrinsic metadata
+(`core::native::declareDirectNamespace`); `linux::sys` (both architectures'
+files) and `linux` direct by their markers, justified by their `write` and
+`read`; `linux::io` imports `linux` and is contextualized by its own LinuxIO
+(write, write_error, read, write_all); nothing else in the library imports
+`linux`, `linux::sys` or a transport; no wrapper remains direct; no module
+split was required.
 
 **Context limitations (item 76).** One concrete case of friction:
 `linux::io::write_all(fd, bytes)` receives an opaque, module-minted
@@ -583,15 +686,18 @@ FileDescriptor and still had to require LinuxIO, because the rule mediates
 by the context in the function that makes the direct call, not by a token
 argument. The rule was kept: the change is one context entry, free natively.
 No other existing context API was affected, and no bootstrap limitation
-appeared (linux::io::create makes no syscall). The latent one, recorded and
-not designed around: a context whose *construction* needs raw authority (a
-future `openat`-minted descriptor) cannot be built by its owning module from
-top-level code or a context-free constructor without that module being
-direct, unless the constructor requires an earlier context of the same
-module (installation order already lets a constructor use an earlier
-context, CONTEXTS.md "Order"). Also recorded: a context trait
-a module declares mediates like its context structs (CONTEXT-TRAITS.md is
-part of the context system); a context of another module never does.
+appeared (linux::io::create makes no syscall). The latent one -- a context
+whose *construction* needs raw authority, a future `openat`-minted
+descriptor -- has a pattern under the unchanged rule and no exemption (§3,
+"Context construction"): the owning module mints an authority-free first
+context and its constructor requires it (`dm-context-construction-chain`).
+Exempting constructors is unsound (a function returning a context is
+callable anywhere, so an exempt one is a context-free wrapper of raw
+authority); the sound variant, a constructor exempt only where every call
+of it is a `with context` installation, is a cross-module call-site rule and
+was not built. Also recorded: a context trait a module declares mediates
+like its context structs (CONTEXT-TRAITS.md is part of the context system);
+a context of another module never does.
 
 **The `extern c fn` hook (item 77).** §9: `hir::direct::Designated` (a third
 designation source, derived from foreign contracts:
@@ -648,30 +754,32 @@ remain forbidden.
 73. This document.
 78. None of the non-goals was built.
 
-Regression and audit runs (Linux x86-64, Tcl 9.0.1):
+Regression and audit runs (Linux x86-64, Tcl 9.0.1), after the merge of
+main's AArch64 transports (LINUX-SYSCALL-TRANSPORTS.md):
 
 | run | result |
 |---|---|
-| `tests/direct-modules.test` (interp; with `BOTLISH_SINGLE` the single-executable test too) | 55 tests, 0 failed |
+| `tests/direct-modules.test` (interp) | 56 tests, 0 failed (the single-executable test skipped without `BOTLISH_SINGLE`) |
 | `audit/direct-modules/tools/fuzz.tcl -n 100`, seeds 2, 3, 17, 41 | 400 programs (137 accepted, 263 rejected), 0 disagreements |
 | `audit/direct-modules/tools/mutate.tcl` | 18 mutants, 18 killed, 0 survivors |
-| `tests/local.tcl -jobs 3` (every Tcl test file on interp and compile, golden duplicates skipped; every golden suite on four backends) | interp 5703 passed, 0 failed, 1 skipped; compile 5699 passed, 0 failed, 5 skipped (2092 golden duplicates skipped on each); golden suites 91 run, 0 failed: interp 4708/4708, compile 4708/4708, cranelift-generic 4615/4615, cranelift 4717/4717 (2539 s) |
+| `tests/local.tcl -jobs 4` (every Tcl test file on interp and compile, golden duplicates skipped; every golden suite on four backends) | interp 5718 passed, 0 failed, 3 skipped; compile 5714 passed, 0 failed, 7 skipped (2098 golden duplicates skipped on each); golden suites 92 run: interp 4708/4708, compile 4708/4708, cranelift-generic 4616/4616, cranelift 4718/4718, and one failure, linux-transports.bot, whose marker was stale (every call it made was in a rejected block); with raw_x86_64 and raw_aarch64 added it passes 13/13 on four backends (1962 s) |
+| `audit/golden/tools/check.tcl -suites linux-transports.bot,linux-io.bot,imports-abi-child.bot` | 85 ported rows, old pass, new pass: 85 |
+| `audit/abi-bytes/tools/fuzz.tcl -mode write`, `audit/mutable-bytes/tools/fuzz.tcl -mode read` (`-n 20`), `audit/imports/tools/fuzz.tcl -n 40` | 0 failures, 0 failures, 0 disagreements (their raw programs now declare `direct module`) |
+| `bench/c-pointer-borrowing.tcl -runs 1 -n 10 -sizes 16` | runs, the `linux` row included |
+| `audit/refactor/tools/gate.tcl` (the warning gate: lib, examples, bench) | passed: the observed warnings are exactly the manifest |
+
+Before the merge, on the same analysis:
+
+| run | result |
+|---|---|
 | `audit/compilation-isolation/tools/interleave.tcl`, its ten suites plus linux-io.bot and imports-abi-child.bot (direct modules) | 12 suites, 96 artifacts and outcomes, 0 differ |
 | `audit/compilation-isolation/tools/mutate.tcl` | 14 mutants, 14 killed |
 | `audit/hir-interchange/tools/roundtrip.tcl -via interchange` / `-via cache`, the same 12 suites | 108 / 120 artifacts and outcomes, 0 differ |
 | `audit/hir-interchange/tools/mutate.tcl` | 27 mutants, 27 killed |
 | `audit/contexts/tools/fuzz.tcl -n 100 -seed 20261017` | 100 programs, 0 disagreements |
 | `audit/contexts/tools/mutate.tcl -n 30` | 26 mutants, 26 killed (one, `stdout-stderr-swapped`, no longer applied before this milestone -- lib/linux/io.bot's write had become `io.stdout.raw.write(data)` -- and its text was updated; it is killed) |
-| `audit/refactor/tools/gate.tcl` (the warning gate: lib, examples, bench) | passed: the observed warnings are exactly the manifest |
 | `single/build.sh`, then `single/smoke-test.sh` and `dm-single-executable` with the built executable | smoke test passed; the test passes |
 | NIR of examples/io/hello.bot and examples/linux/context-hello.bot, before and after | identical but for expression ids (`write_all`'s new context parameter loads nothing) |
-
-The full `tests/local.tcl` run started before the last change to the
-analysis (trait operations read declarations only, never the program's
-context selection); the files that change touches were run again after it
--- tests/direct-modules.test, context-traits.test, portable-io.test,
-traits.test, and the golden suites contexts, linux-io, traits, traits-path
-and imports on four backends -- all passing.
 
 Not run locally: the batched-against-sequential comparison of the golden
 suites' static decisions (`audit/static-decisions/tools/compare.tcl`), which

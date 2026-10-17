@@ -7,7 +7,9 @@
 # {bytestore HEX}; natively one heap object, header + length + the bytes in
 # one allocation): an immutable, finite, contiguous sequence of bytes with an
 # exact length. Two root natives in the `byte_store` namespace build and
-# measure it, and one in `abi::x86_64` reads its machine address:
+# measure it, and one per architecture (`abi::x86_64`, `abi::aarch64`: the
+# architectures of core/linuxabi.tcl's syscall transports) reads its machine
+# address:
 #
 #   byte_store::from_list(List[Byte]) -> byte storage
 #       EAGER conversion: the result owns its own copy of the bytes; it is
@@ -20,11 +22,13 @@
 #       The exact byte count, 0 <= n <= the runtime's collection-length
 #       ceiling (the same enforced bound a String's or List's length has).
 #   abi::x86_64::from_bytes(abi::Bytes) -> abi::x86_64::Register64
+#   abi::aarch64::from_bytes(abi::Bytes) -> abi::aarch64::Register64
 #       The one operation that needs a machine: the address of the first
-#       byte of the Bytes' payload, as register contents. The address of a
-#       machine object exists only on the native backend, so the Tcl
-#       backends refuse the call (NATIVE-ONLY), exactly as they refuse
-#       linux::abi::syscall; nothing imitates an address.
+#       byte of the Bytes' payload, as register contents of the
+#       architecture whose transport consumes it. The address of a machine
+#       object exists only on the native backend, so the Tcl backends refuse
+#       the call (NATIVE-ONLY), exactly as they refuse the syscall
+#       transports; nothing imitates an address.
 #
 # The writable counterpart (MUTABLE-BYTES.md) is a second, distinct runtime
 # kind, `mutbytes` ({mutbytes HEX} in Tcl; KIND_MUTBYTES natively), behind
@@ -47,7 +51,8 @@
 #                                        M's current bytes (a copy)
 #   mutable_byte_store::freeze_prefix(m, n)      the first N bytes of M, likewise
 #   abi::x86_64::from_mutable_bytes(abi::MutableBytes) -> Register64
-#                                        the WRITABLE address bridge
+#   abi::aarch64::from_mutable_bytes(abi::MutableBytes) -> Register64
+#                                        the WRITABLE address bridges
 #
 # None of them is context-free: a mutable value is never a compile-time
 # constant, so no two logical values can ever share one writable static
@@ -62,16 +67,14 @@
 
 namespace eval core::bytestore {
     # The declaration identity of the opaque struct whose one field holds a
-    # byte storage (lib/abi/bytes.bot), that field's name, and the qualified name of
-    # the raw address bridge: the compiler's only knowledge of Bytes. Like
-    # core::linuxabi::registerType for Register64, they come from one place.
+    # byte storage (lib/abi/bytes.bot) and that field's name: the compiler's
+    # only knowledge of Bytes. Like core::linuxabi's register types, they
+    # come from one place.
     variable bytesType abi::bytes::Bytes
     variable storageField storage
-    variable addressNative abi::x86_64::from_bytes
     # The writable counterpart: the declaration identity of abi::MutableBytes
-    # (its one field is also named `storage`) and its address bridge.
+    # (its one field is also named `storage`).
     variable mutableBytesType abi::bytes::MutableBytes
-    variable mutableAddressNative abi::x86_64::from_mutable_bytes
 }
 
 proc core::bytestore::mutableBytesType {} {
@@ -79,20 +82,22 @@ proc core::bytestore::mutableBytesType {} {
     return $mutableBytesType
 }
 
-proc core::bytestore::mutableAddressNative {} {
-    variable mutableAddressNative
-    return $mutableAddressNative
-}
-
-# The address bridges, as {NAME TYPE WRITABLE}: the root native, the opaque
-# struct its one argument must statically be, and whether the address it
-# yields is one the kernel may write through.
+# The address bridges, as {NAME TYPE WRITABLE ARCH}: the root native, the
+# opaque struct its one argument must statically be, whether the address it
+# yields is one the kernel may write through, and the architecture whose
+# Register64 it returns (core/linuxabi.tcl's transports): a readable and a
+# writable bridge per architecture, `ABI::from_bytes` and
+# `ABI::from_mutable_bytes` in the transport's own abi namespace.
 proc core::bytestore::bridges {} {
     variable bytesType
-    variable addressNative
     variable mutableBytesType
-    variable mutableAddressNative
-    return [list [list $addressNative $bytesType 0] [list $mutableAddressNative $mutableBytesType 1]]
+    set bridges {}
+    foreach arch [core::linuxabi::architectures] {
+        set ns [core::linuxabi::transport $arch abi]
+        lappend bridges [list ${ns}::from_bytes $bytesType 0 $arch] \
+            [list ${ns}::from_mutable_bytes $mutableBytesType 1 $arch]
+    }
+    return $bridges
 }
 
 # 1 if NAME is the qualified name of an address bridge.
@@ -125,6 +130,22 @@ proc core::bytestore::bridgeWritable {name} {
     return 0
 }
 
+# The architecture (core/linuxabi.tcl) whose Register64 the bridge NAME
+# returns, or "".
+proc core::bytestore::bridgeArch {name} {
+    foreach bridge [bridges] {
+        if {[lindex $bridge 0] eq $name} {
+            return [lindex $bridge 3]
+        }
+    }
+    return ""
+}
+
+# The Register64 declaration identity the bridge NAME returns.
+proc core::bytestore::bridgeRegisterType {name} {
+    return [core::linuxabi::transport [bridgeArch $name] registerType]
+}
+
 proc core::bytestore::bytesType {} {
     variable bytesType
     return $bytesType
@@ -133,11 +154,6 @@ proc core::bytestore::bytesType {} {
 proc core::bytestore::storageField {} {
     variable storageField
     return $storageField
-}
-
-proc core::bytestore::addressNative {} {
-    variable addressNative
-    return $addressNative
 }
 
 # The storage of List[Byte] L, eagerly. Raises TYPE for a non-List argument
@@ -170,9 +186,10 @@ proc core::bytestore::length {storage} {
     return [core::value::intFromNumber [core::value::bytestoreLength $storage]]
 }
 
-proc core::bytestore::addressImpl {data} {
+proc core::bytestore::addressImpl {name data} {
+    set label [core::linuxabi::transport [bridgeArch $name] label]
     core::semanticError NATIVE-ONLY \
-        "abi::x86_64::from_bytes produces the machine address of a byte buffer, which exists only in the native backend (cranelift, or a standalone executable) on Linux x86-64; the Tcl backends (interp, compile) have no machine addresses and do not imitate one"
+        "$name produces the machine address of [expr {[bridgeWritable $name] ? "a writable byte buffer" : "a byte buffer"}], which exists only in the native backend (cranelift, or a standalone executable) on Linux $label; the Tcl backends (interp, compile) have no machine addresses and do not imitate one"
 }
 
 core::native::register byte_store::from_list -arity 1 -impl core::bytestore::fromList \
@@ -180,12 +197,6 @@ core::native::register byte_store::from_list -arity 1 -impl core::bytestore::fro
 core::native::register byte_store::byte_count -arity 1 -impl core::bytestore::length \
     -param-types {any} -result-type int -result-range collection-length -context-free 1
 
-# The raw address bridge (ABI-BYTES.md). Not context-free: an address is a
-# property of one run's memory, never a compile-time or module-initialization
-# value. The argument must statically be an abi::Bytes (hir/syscall.tcl).
-core::native::register [core::bytestore::addressNative] -arity 1 -impl core::bytestore::addressImpl \
-    -param-types {struct} -result-type struct -runtime {raw-address} \
-    -result-shape [list named-struct [core::linuxabi::registerType]]
 
 # ---------------------------------------------------------------------------
 # The writable storage kind (MUTABLE-BYTES.md). In Tcl every value is
@@ -272,11 +283,6 @@ proc core::bytestore::freezePrefix {m count} {
     return [core::value::bytestore [string range $hex 0 [expr {2 * $n - 1}]]]
 }
 
-proc core::bytestore::mutableAddressImpl {data} {
-    core::semanticError NATIVE-ONLY \
-        "abi::x86_64::from_mutable_bytes produces the machine address of a writable byte buffer, which exists only in the native backend (cranelift, or a standalone executable) on Linux x86-64; the Tcl backends (interp, compile) have no machine addresses and do not imitate one"
-}
-
 core::native::register mutable_byte_store::zeroed -arity 1 -impl core::bytestore::mutableNew \
     -param-types {int} -result-type any -runtime {bytestore-alloc}
 core::native::register mutable_byte_store::from_storage -arity 1 -impl core::bytestore::mutableFrom \
@@ -292,10 +298,16 @@ core::native::register mutable_byte_store::freeze -arity 1 -impl core::bytestore
 core::native::register mutable_byte_store::freeze_prefix -arity 2 -impl core::bytestore::freezePrefix \
     -param-types {any int} -result-type any -runtime {bytestore-alloc}
 
-# The writable address bridge: like from_bytes, never context-free (an
-# address is a property of one run's memory) and only ever called, with an
-# argument that statically is an abi::MutableBytes (hir/syscall.tcl).
-core::native::register [core::bytestore::mutableAddressNative] -arity 1 \
-    -impl core::bytestore::mutableAddressImpl \
-    -param-types {struct} -result-type struct -runtime {raw-address} \
-    -result-shape [list named-struct [core::linuxabi::registerType]]
+# The raw address bridges (ABI-BYTES.md, MUTABLE-BYTES.md). Not
+# context-free: an address is a property of one run's memory, never a
+# compile-time or module-initialization value. Only ever called, with an
+# argument that statically is the bridge's own opaque struct -- an abi::Bytes
+# for from_bytes, an abi::MutableBytes for from_mutable_bytes
+# (hir/syscall.tcl).
+foreach bridge [core::bytestore::bridges] {
+    set name [lindex $bridge 0]
+    core::native::register $name -arity 1 -impl [list core::bytestore::addressImpl $name] \
+        -param-types {struct} -result-type struct -runtime {raw-address} \
+        -result-shape [list named-struct [core::bytestore::bridgeRegisterType $name]]
+}
+unset bridge name

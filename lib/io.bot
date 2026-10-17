@@ -39,7 +39,7 @@ import str
 # A portable output operation did not complete: the environment could not
 # write all of the text (on Linux: write(2) returned an error, or made no
 # progress). The portable API says only that; the low-level layers
-# (linux::write, linux::abi::syscall) keep the raw kernel result for callers
+# (linux::write, the syscall transports) keep the raw kernel result for callers
 # that want it.
 error WriteFailed
 

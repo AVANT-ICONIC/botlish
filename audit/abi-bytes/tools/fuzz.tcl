@@ -69,7 +69,13 @@ set scratch [file tempdir abi-bytes-fuzz]
 set counter 0
 
 proc hirOfText {text} {
-    set text [surface::modules::ImportHeader $text]$text
+    # A `direct module` marker stays the file's first line, above the imports.
+    set marker ""
+    if {[string match "direct module\n*" $text]} {
+        set marker "direct module\n"
+        set text [string range $text [string length $marker] end]
+    }
+    set text $marker[surface::modules::ImportHeader $text]$text
     set path [file join $::scratch p[incr ::counter].bot]
     set channel [open $path w]
     fconfigure $channel -encoding utf-8
@@ -360,7 +366,10 @@ proc writeProgram {specs} {
     # an aliased value written twice, to both descriptors
     append lets "alias = d0\n"
     lappend results "out(3, alias)" "out(4, alias)"
-    return "import abi
+    # A direct module (DIRECT-MODULES.md): out calls linux::write with no
+    # context of the program's own.
+    return "direct module
+import abi
 import byte
 import linux
 import str

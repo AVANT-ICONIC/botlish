@@ -23,12 +23,10 @@
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 
-testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux"
-    && $::tcl_platform(machine) in {x86_64 amd64}}]
-
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines) without the x86-64 syscall that
-# linuxX86_64 tests need.
+# stack maps, the stack guard, coroutines), and syscalls through the portable
+# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md).
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
@@ -606,7 +604,7 @@ set scCensus {
     top-level-install {CONTEXT-TYPE-NOT-EXACT DUPLICATE-CONTEXT}
     not-from-source {LISTLOOP-BREAK-VALUE}
     header {CYCLE DUPLICATE-IMPORT DUPLICATE-NATIVE INVALID-TOPLEVEL MODULE-COLLISION NOT-A-TYPE SELF-IMPORT
-        TYPE-IMPORT-COLLISION UNKNOWN-TARGET STALE-DIRECT-MODULE}
+        TYPE-IMPORT-COLLISION UNKNOWN-TARGET AMBIGUOUS-MODULE UNSUPPORTED-ARCHITECTURE STALE-DIRECT-MODULE}
     warning {SAME-RETURN-VALUE METHOD-ELIGIBLE FIXED-ARITY-LIST-RETURN SAME-FAILURE PROVES-NAMING
         ONE-CHAR-STRING-LITERAL MANY-BOOLEAN-ARGUMENTS}
     parser {STATIC-INTRINSIC-FORM STATIC-UNKNOWN-OPERATION COROUTINE-BINDING-FIELD MALFORMED-CONTEXT-SECTION
@@ -839,7 +837,7 @@ test sc-core-ir {items 42, 75, 76: the Core IR of an accepted block is the unwra
         [regexp {static|compile[^r]} $c]
 } -cleanup {unset -nocomplain a b c} -result {1 1 1 0}
 
-test sc-nir-accepted-identical {items 15, 48, 77, 86: an accepted block's NIR is byte-identical to the unwrapped body's (one that binds nothing), and to the `if true:` block's (one that does): no branch, wrapper, check or allocation} -constraints nativeLinux -body {
+test sc-nir-accepted-identical {items 15, 48, 77, 86: an accepted block's NIR is byte-identical to the unwrapped body's (one that binds nothing), and to the `if true:` block's (one that does): no branch, wrapper, check or allocation} -body {
     set a [scFunc [scHir "fn f(x: int) -> int:\n    static compile:\n        x * 3 + 1\n\nfn g(n: int):\n    f(n) + f(n + 1)\n\ng(1)\n"] g]
     set b [scFunc [scHir "fn f(x: int) -> int:\n    x * 3 + 1\n\nfn g(n: int):\n    f(n) + f(n + 1)\n\ng(1)\n"] g]
     set c [scFunc [scHir "fn f(x: int) -> int:\n    static compile:\n        y = x * 3\n        y + 1\n\nf(2)\n"] f]
@@ -847,7 +845,7 @@ test sc-nir-accepted-identical {items 15, 48, 77, 86: an accepted block's NIR is
     list [expr {$a eq $b}] [expr {$c eq $d}] [lsearch -all -inline -regexp [concat $c] {\m(br|bool true)\M}]
 } -cleanup {unset -nocomplain a b c d} -result {1 1 {}}
 
-test sc-nir-rejected-payload-slots {items 49, 77: a rejected block's NIR is the ordinary payload failure: `faildeclared` with the payload's fields in the payload slots, no static instruction} -constraints nativeLinux -body {
+test sc-nir-rejected-payload-slots {items 49, 77: a rejected block's NIR is the ordinary payload failure: `faildeclared` with the payload's fields in the payload slots, no static instruction} -body {
     set lines [scFunc [scHir "fn f() errors compiler::CompilerError:\n    static compile:\n        missing\n\nr = f():\n    on compiler::CompilerError:\n        0\nr\n"] f]
     list [llength [lsearch -all -inline -glob $lines {faildeclared * "compiler::CompilerError" *}]] \
         [lsearch -all -inline -glob $lines {*static*}]

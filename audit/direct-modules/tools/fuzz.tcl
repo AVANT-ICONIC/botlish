@@ -13,7 +13,7 @@
 #     install them);
 #   * 1..3 functions, each requiring none, its own context, an earlier
 #     module's context, or both, whose bodies make calls of five kinds:
-#       raw      the intrinsic direct module linux::abi (a getpid syscall)
+#       raw      the intrinsic direct module linux::abi::x86_64 (a getpid syscall)
 #       call     a function of an earlier module, called directly
 #       alias    the same through a local alias (`g = mJ::fN` then `g()`)
 #       nested   the same from a nested function, which requires the
@@ -26,7 +26,7 @@
 #     function requiring a context of its own.
 #
 # The model, written from the specification, not from hir/direct.tcl: a
-# module is designated direct by its marker (linux::abi by the compiler); a
+# module is designated direct by its marker (linux::abi::x86_64 by the compiler); a
 # call of a function of a designated module other than the caller's own is a
 # direct edge; an edge is mediated when the function making it -- the nested
 # function itself, for a nested call -- requires a context its own module
@@ -74,7 +74,7 @@ proc chance {percent} {
     return [expr {[rnd 100] < $percent}]
 }
 
-set rawCall {abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(39)}))}
+set rawCall {abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}))}
 
 # One program: {FILES MODEL} where FILES is {NAME TEXT ...} and MODEL is
 # {verdicts {KIND UNIT ...} statuses {UNIT STATUS ...}}, UNIT "" for the entry
@@ -138,9 +138,9 @@ proc generate {seed} {
                 switch -- $kind {
                     raw {
                         dict set imports abi::x86_64 1
-                        dict set imports linux::abi 1
+                        dict set imports linux::abi::x86_64 1
                         lappend terms $::rawCall
-                        lappend edges [list $fname linux::abi $own]
+                        lappend edges [list $fname linux::abi::x86_64 $own]
                     }
                     pure {
                         lappend terms [expr {1 + [rnd 9]}]

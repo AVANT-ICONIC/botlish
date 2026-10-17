@@ -80,6 +80,14 @@ proc core::cabi::targetNames {} {
     return [lsort [dict keys $targets]]
 }
 
+# The architectures of the targets (their `arch`), sorted: what an
+# architecture-specific module file may be specific to (surface/modules.tcl's
+# ModuleFile: lib/P.ARCH.bot).
+proc core::cabi::architectures {} {
+    variable targets
+    return [lsort -unique [lmap name [dict keys $targets] {dict get $targets $name arch}]]
+}
+
 proc core::cabi::isTarget {name} {
     variable targets
     return [dict exists $targets $name]

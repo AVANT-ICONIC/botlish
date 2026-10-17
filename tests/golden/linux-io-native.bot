@@ -1,4 +1,4 @@
-# linux-io-native.bot -- live Linux x86-64 syscalls through linux::abi::syscall
+# linux-io-native.bot -- live Linux x86-64 syscalls through linux::abi::x86_64::syscall
 # (LINUX-X86-64-SYSCALL.md), in process, as a source-level specification:
 # getpid (x86-64 syscall number 39, argument-free and harmless) returns a
 # positive pid, the same on every call in one process, however the registers
@@ -8,8 +8,8 @@
 # the result words, materialized in a List or holding the i64 extremes,
 # survive allocation unchanged.
 #
-# golden-exclude: interp, compile -- CORE SEMANTIC NATIVE-ONLY: linux::abi::syscall executes the x86-64 syscall instruction and the Tcl backends refuse it at run time by design (tests/linux-syscall.test linux-syscall-tcl-backends-refuse pins the refusal); a refusal aborts a suite, so these tests run on cranelift-generic and cranelift only
-# golden-host: linux-x86_64 -- live getpid syscalls through linux::abi::syscall, which the native backend compiles for Linux x86-64 only (tests/linux-syscall.test's live tests carry the linuxX86_64 constraint)
+# golden-exclude: interp, compile -- CORE SEMANTIC NATIVE-ONLY: linux::abi::x86_64::syscall executes the x86-64 syscall instruction and the Tcl backends refuse it at run time by design (tests/linux-syscall.test linux-syscall-tcl-backends-refuse pins the refusal); a refusal aborts a suite, so these tests run on cranelift-generic and cranelift only
+# golden-host: linux-x86_64 -- live getpid syscalls through linux::abi::x86_64::syscall, the x86-64 transport, which runs on Linux x86-64 only (tests/linux-syscall.test's live tests carry the linuxX86_64 constraint)
 #
 # The only live syscall is getpid, in the runner's process: no other syscall
 # number is ever executed. Ported from tests/linux-syscall.test, which stays
@@ -20,18 +20,18 @@
 # standalone executables' pids. The register struct's static contract, and
 # programs that only define a syscall wrapper, are linux-io.bot's.
 #
-# Imports: compiler and test (the framework); abi::x86_64, linux::abi and
+# Imports: compiler and test (the framework); abi::x86_64, linux::abi::x86_64 and
 # list are the Tcl programs' own (the rawGetpid prelude). Every call is
 # written qualified.
 #
 # A direct module (DIRECT-MODULES.md): its programs call
-# linux::abi::syscall with no context of their own -- the raw layer under
-# test.
+# linux::abi::x86_64::syscall with no context of their own -- the raw layer
+# under test.
 direct module
 
 import abi::x86_64
 import compiler
-import linux::abi
+import linux::abi::x86_64
 import list
 import test
 
@@ -41,7 +41,7 @@ fn register_getpid_tests():
         static compile:
             fn raw_getpid():
                 abi::x86_64::to_int(
-                    linux::abi::syscall({
+                    linux::abi::x86_64::syscall({
                         rax: abi::x86_64::register64(39),
                     })
                 )
@@ -56,31 +56,31 @@ fn register_getpid_tests():
         static compile:
             fn raw_getpid():
                 abi::x86_64::to_int(
-                    linux::abi::syscall({
+                    linux::abi::x86_64::syscall({
                         rax: abi::x86_64::register64(39),
                     })
                 )
             fn sys1(nr: abi::x86_64::Register64) -> abi::x86_64::Register64:
-                linux::abi::syscall({rax: nr})
+                linux::abi::x86_64::syscall({rax: nr})
 
             fn via_local():
                 nr = abi::x86_64::register64(39)
-                abi::x86_64::to_int(linux::abi::syscall({rax: nr}))
+                abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: nr}))
 
             fn via_struct_var():
                 regs = {rdi: abi::x86_64::register64(0 - 1), rax: abi::x86_64::register64(39)}
-                abi::x86_64::to_int(linux::abi::syscall(regs))
+                abi::x86_64::to_int(linux::abi::x86_64::syscall(regs))
 
             fn twice_used():
-                r = linux::abi::syscall({rax: abi::x86_64::register64(39)})
+                r = linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})
                 abi::x86_64::to_int(r) - abi::x86_64::to_int(r)
 
             fn discarded():
-                linux::abi::syscall({rax: abi::x86_64::register64(39)})
+                linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})
                 7
 
             a = raw_getpid()
-            s = list::at([linux::abi::syscall({rax: abi::x86_64::register64(39)})], 0)
+            s = list::at([linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})], 0)
             [a == abi::x86_64::to_int(sys1(abi::x86_64::register64(39))), a == via_local(), a == via_struct_var(), twice_used(), a == abi::x86_64::to_int(s), discarded()]
     test::value("linux-syscall-argument-shapes", [true, true, true, 0, true, 7], argument_shapes)
 
@@ -90,14 +90,14 @@ fn register_getpid_tests():
         static compile:
             fn f():
                 regs = {rdi: abi::x86_64::register64(1), rax: abi::x86_64::register64(39)}
-                abi::x86_64::to_int(linux::abi::syscall(regs))
+                abi::x86_64::to_int(linux::abi::x86_64::syscall(regs))
             f() > 0
     test::value("linux-syscall-bound-register-struct-is-an-object/bound", true, bound_register_struct)
 
     fn inline_register_struct() errors compiler::CompilerError:
         static compile:
             fn f():
-                abi::x86_64::to_int(linux::abi::syscall({rdi: abi::x86_64::register64(1), rax: abi::x86_64::register64(39)}))
+                abi::x86_64::to_int(linux::abi::x86_64::syscall({rdi: abi::x86_64::register64(1), rax: abi::x86_64::register64(39)}))
             f() > 0
     test::value("linux-syscall-bound-register-struct-is-an-object/inline", true, inline_register_struct)
 
@@ -107,12 +107,12 @@ fn register_getpid_tests():
         static compile:
             fn raw_getpid():
                 abi::x86_64::to_int(
-                    linux::abi::syscall({
+                    linux::abi::x86_64::syscall({
                         rax: abi::x86_64::register64(39),
                     })
                 )
             fn stored():
-                [linux::abi::syscall({rax: abi::x86_64::register64(39), rdi: abi::x86_64::register64(0 - 9223372036854775807 - 1), r9: abi::x86_64::register64(9223372036854775807)})]
+                [linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rdi: abi::x86_64::register64(0 - 9223372036854775807 - 1), r9: abi::x86_64::register64(9223372036854775807)})]
             a = raw_getpid()
             xs = stored()
             r = list::at(xs, 0):

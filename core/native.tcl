@@ -277,15 +277,17 @@ namespace eval core::native {
     #   bytestore-alloc      allocates a new owned byte storage (core/bytestore.tcl;
     #                        ABI-BYTES.md)
     #   raw-address          produces the machine address of an owned byte
-    #                        storage's payload (abi::x86_64::from_bytes; native
-    #                        only, ABI-BYTES.md)
+    #                        storage's payload (abi::x86_64::from_bytes,
+    #                        abi::aarch64::from_bytes; native only,
+    #                        ABI-BYTES.md)
     #   mutvec-alloc         allocates a new MutableVector header
     #                        (core/mutvec.tcl; MUTABLE-VECTOR.md)
     #   mutvec-mutate        mutates a MutableVector header in place (push,
     #                        pop, take, swap, clear)
-    #   raw-syscall          executes a raw Linux x86-64 kernel transition
-    #                        (the `syscall` instruction) with unknown effects
-    #                        (core/linuxabi.tcl; LINUX-X86-64-SYSCALL.md)
+    #   raw-syscall          executes a raw Linux kernel transition (x86-64's
+    #                        `syscall`, AArch64's `svc #0`) with unknown
+    #                        effects (core/linuxabi.tcl;
+    #                        LINUX-X86-64-SYSCALL.md)
     variable runtimeTags {bigint string-alloc list-alloc result-alloc char-index
         range-check structural-equality mutarray-alloc mutarray-mutate hash set-alloc
         process-argv raw-syscall bytestore-alloc raw-address mutvec-alloc mutvec-mutate}
@@ -338,8 +340,8 @@ proc core::native::directNamespaces {} {
 }
 
 # The intrinsic namespace of the qualified root native NAME (the part of its
-# registered name before the last "::": linux::abi::syscall is a member of
-# linux::abi, qualifiedMembers' membership), "" for a native in no namespace.
+# registered name before the last "::": linux::abi::x86_64::syscall is a
+# member of linux::abi::x86_64, qualifiedMembers' membership), "" for a native in no namespace.
 proc core::native::namespaceOf {name} {
     set cut [string last :: $name]
     if {$cut <= 0} {
@@ -652,7 +654,7 @@ proc core::native::ValidShape {shape count} {
     }
     if {[lindex $shape 0] eq {named-struct}} {
         # {named-struct ID}: the result is a struct of the named declaration
-        # ID (linux::abi::syscall's abi::x86_64::Register64), a fixed fact
+        # ID (linux::abi::x86_64::syscall's abi::x86_64::Register64), a fixed fact
         # about the native itself. ID is a symbolic declaration identity,
         # resolved lazily by hir::types::ShapeResult against the compiling
         # program's own struct registry (a library struct is declared by a
@@ -825,7 +827,7 @@ proc core::native::names {} {
 }
 
 # 1 if NAME is a registered native whose name is itself namespace-qualified
-# ("linux::abi::syscall", core/linuxabi.tcl): source spells it exactly like
+# ("linux::abi::x86_64::syscall", core/linuxabi.tcl): source spells it exactly like
 # a module function, but it is a root native, and no module file defines it
 # (surface/modules.tcl, surface/lower.tcl).
 proc core::native::isQualifiedNative {name} {
@@ -834,7 +836,7 @@ proc core::native::isQualifiedNative {name} {
 }
 
 # The member names of the qualified root natives that live directly in
-# namespace NS (`list` -> at append length; `linux::abi` -> syscall), sorted:
+# namespace NS (`list` -> at append length; `linux::abi::x86_64` -> syscall), sorted:
 # the intrinsic members of NS, which no module source may define
 # (surface/modules.tcl's DUPLICATE-NATIVE) and which a reference
 # NS::MEMBER always denotes. Empty for a namespace with none.

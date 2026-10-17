@@ -14,7 +14,7 @@ This is a feasibility study, written before any implementation.
 * The prototypes ran against `5199491`. Between that commit and `f6207f4` the
   only change under `native/src/` is one unit test (`string_alloc_tests.rs`).
 * Later commits on `main` are not covered. One of them bears on the plan: the
-  Linux x86-64-only `linux::abi::syscall` intrinsic (LINUX-X86-64-SYSCALL.md).
+  Linux x86-64-only `linux::abi::x86_64::syscall` intrinsic (LINUX-X86-64-SYSCALL.md).
   * `clif.rs` refuses its op on every other target through a sixth check of
     the compiling host, `cfg!(all(target_arch = "x86_64", target_os = "linux"))`.
   * The explicit `Target` (§4.2) has to replace that check too, so that a Linux

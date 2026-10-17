@@ -24,8 +24,6 @@ core::cabi::installBorrowFixture
 set cbBackends {interp compile cranelift-generic cranelift}
 set cbNative {cranelift-generic cranelift}
 
-testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64}}]
 # Linux on x86-64 or AArch64: the native runtime (coroutines, stack maps)
 # without a syscall.
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
@@ -630,10 +628,10 @@ test cb-allocations {allocation evidence, natively -- what the exposure itself c
 # ---------------------------------------------------------------------------
 # The Linux syscall machinery: shared, and unchanged
 
-test cb-syscall-nir-unchanged {extracting the shared exposure mechanism changed nothing the syscall wrappers lower to: linux::write is one bytesaddr, one syscall and one keepalive of the same storage, linux::read one detach, one mbytesaddr, one syscall and one keepalive of the detached storage, with no new copy or allocation (the NIR of MUTABLE-BYTES.md and ABI-BYTES.md)} -constraints linuxX86_64 -body {
-    set nir [native::nir [surface::readProgramFile [file join $::projectRoot examples linux read-stdin.bot] -warnings off]]
-    set write [cbNirOf $nir linux::write]
-    set read [cbNirOf $nir linux::read]
+test cb-syscall-nir-unchanged {extracting the shared exposure mechanism changed nothing the syscall wrappers lower to: linux::write's x86-64 transport (linux::sys::write, compiled for -target linux-x86_64 whatever the host) is one bytesaddr, one syscall and one keepalive of the same storage, linux::read's (linux::sys::read) one detach, one mbytesaddr, one syscall and one keepalive of the detached storage, with no new copy or allocation (the NIR of MUTABLE-BYTES.md and ABI-BYTES.md)} -body {
+    set nir [native::nir [surface::readProgramFile [file join $::projectRoot examples linux read-stdin.bot] -warnings off -target linux-x86_64]]
+    set write [cbNirOf $nir linux::sys::write]
+    set read [cbNirOf $nir linux::sys::read]
     regexp {op bytesaddr (%[0-9]+)} $write -> w1
     regexp {op keepalive (%[0-9]+)} $write -> w2
     regexp {op mbytesaddr (%[0-9]+)} $read -> r1

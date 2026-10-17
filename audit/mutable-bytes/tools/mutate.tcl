@@ -63,18 +63,19 @@ while {[lindex $args 0] in {-only -list -fuzz}} {
     set args [lrange $args 2 end]
 }
 
-# The library text of linux::read, the one place the Tcl-side mutants rewrite.
-set readHead {fn read(fd: abi::I32, data: abi::bytes::MutableBytes) -> ReadResult:
+# The library text of linux::read's x86-64 transport (lib/linux/sys.x86_64.bot:
+# linux::sys::read), the one place the Tcl-side mutants rewrite.
+set readHead {fn read(fd: abi::I32, data: abi::bytes::MutableBytes):
     local = abi::bytes::detach(data)
     result = abi::x86_64::to_int(
-        linux::abi::syscall({
+        linux::abi::x86_64::syscall({
             rax: abi::x86_64::register64(0),
             rdi: abi::x86_64::from_i32(fd),
             rsi: abi::x86_64::from_mutable_bytes(local),
             rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(local)),
         })
     )
-    ReadResult {result: result, data: local}}
+    {result: result, data: local}}
 
 # {NAME KIND FILE OLD NEW}: NEW replaces the first occurrence of OLD in FILE
 # (KIND rust: rebuild afterwards).
@@ -88,7 +89,7 @@ set mutations {
     {set-aliases rust native/src/runtime/ops.rs
         {let r = vm(p).new_mutbytes_with(len, |init| init.push_slice(mutbytes_of(m)));}
         {let r = m;}}
-    {read-does-not-detach tcl lib/linux.bot
+    {read-does-not-detach tcl lib/linux/sys.x86_64.bot
         {    local = abi::bytes::detach(data)}
         {    local = data}}
     {freeze-shares rust native/src/runtime/ops.rs
@@ -114,10 +115,10 @@ set mutations {
     {read-uses-bytes-bridge tcl native/lower.tcl
         {set address [ExposeStorage fn $storage [core::bytestore::bridgeWritable $native] $e]}
         {set address [ExposeStorage fn $storage 0 $e]}}
-    {count-off-by-one tcl lib/linux.bot
+    {count-off-by-one tcl lib/linux/sys.x86_64.bot
         {            rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(local)),}
         {            rdx: abi::x86_64::from_usize(plus_one(abi::bytes::mutable_length(local))),}}
-    {count-unrelated tcl lib/linux.bot
+    {count-unrelated tcl lib/linux/sys.x86_64.bot
         {            rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(local)),}
         {            rdx: abi::x86_64::from_usize(abi::usize(1)),}}
     {no-keepalive tcl native/lower.tcl
@@ -126,10 +127,10 @@ set mutations {
     }}
         {    foreach storage $kept {
     }}}
-    {result-is-the-original tcl lib/linux.bot
-        {    ReadResult {result: result, data: local}}
-        {    ReadResult {result: result, data: data}}}
-    {rax-is-write tcl lib/linux.bot
+    {result-is-the-original tcl lib/linux/sys.x86_64.bot
+        {    {result: result, data: local}}
+        {    {result: result, data: data}}}
+    {rax-is-write tcl lib/linux/sys.x86_64.bot
         {            rax: abi::x86_64::register64(0),
             rdi: abi::x86_64::from_i32(fd),
             rsi: abi::x86_64::from_mutable_bytes(local),}
@@ -137,23 +138,27 @@ set mutations {
             rdi: abi::x86_64::from_i32(fd),
             rsi: abi::x86_64::from_mutable_bytes(local),}}
     {libc-read rust native/src/runtime/syscall.rs
-        {    let result: i64;}
+        {    let result: i64;
+    // SAFETY: the caller's contract (above). The operand constraints are
+    // exactly the Linux x86-64 syscall register convention; rcx and r11 are}
         {    if rax == 0 {
         unsafe extern "C" { fn read(fd: i32, buf: *mut u8, n: usize) -> isize; }
         return unsafe { read(rdi as i32, rsi as *mut u8, rdx as usize) as i64 };
     }
-    let result: i64;}}
-    {read-twice tcl lib/linux.bot
-        {    ReadResult {result: result, data: local}}
+    let result: i64;
+    // SAFETY: the caller's contract (above). The operand constraints are
+    // exactly the Linux x86-64 syscall register convention; rcx and r11 are}}
+    {read-twice tcl lib/linux/sys.x86_64.bot
+        {    {result: result, data: local}}
         {    result2 = abi::x86_64::to_int(
-        linux::abi::syscall({
+        linux::abi::x86_64::syscall({
             rax: abi::x86_64::register64(0),
             rdi: abi::x86_64::from_i32(fd),
             rsi: abi::x86_64::from_mutable_bytes(local),
             rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(local)),
         })
     )
-    ReadResult {result: result2, data: local}}}
+    {result: result2, data: local}}}
     {prefix-is-suffix rust native/src/runtime/ops.rs
         {init.push_slice(&mutbytes_of(m)[..count])}
         {init.push_slice(&mutbytes_of(m)[mutbytes_of(m).len() - count..])}}
@@ -263,9 +268,9 @@ foreach m $mutations {
     copyTree $dir [expr {$kind eq "rust"}]
     replaceOnce [file join $dir $file] $old $new
     if {[dict exists $::extraLibrary $name]} {
-        # (placed before `struct ReadResult:`, so before its use: the language
-        # has no forward references)
-        replaceOnce [file join $dir $file] "struct ReadResult:" "[dict get $::extraLibrary $name]\nstruct ReadResult:"
+        # (placed before read's comment, so before its use: the language has
+        # no forward references)
+        replaceOnce [file join $dir $file] "# read(2): SYS_read" "[dict get $::extraLibrary $name]\n# read(2): SYS_read"
     }
     if {$kind eq "rust"} {
         puts "== $name: rebuilding the native backend"

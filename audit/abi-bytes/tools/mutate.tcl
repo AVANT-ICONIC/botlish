@@ -71,10 +71,10 @@ set mutations {
     {byte-masked-to-7-bits rust native/src/runtime/ops.rs
         {bytes.push(byte);}
         {bytes.push(byte & 0x7f);}}
-    {count-truncated tcl lib/linux.bot
+    {count-truncated tcl lib/linux/sys.x86_64.bot
         {fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
     abi::x86_64::to_int(
-        linux::abi::syscall({
+        linux::abi::x86_64::syscall({
             rax: abi::x86_64::register64(1),
             rdi: abi::x86_64::from_i32(fd),
             rsi: abi::x86_64::from_bytes(data),
@@ -90,7 +90,7 @@ set mutations {
 
 fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
     abi::x86_64::to_int(
-        linux::abi::syscall({
+        linux::abi::x86_64::syscall({
             rax: abi::x86_64::register64(1),
             rdi: abi::x86_64::from_i32(fd),
             rsi: abi::x86_64::from_bytes(data),
@@ -103,24 +103,28 @@ fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
     }}
         {    foreach storage $kept {
     }}}
-    {address-in-rdx tcl lib/linux.bot
+    {address-in-rdx tcl lib/linux/sys.x86_64.bot
         {            rsi: abi::x86_64::from_bytes(data),
             rdx: abi::x86_64::from_usize(abi::bytes::length(data)),}
         {            rdx: abi::x86_64::from_bytes(data),
             rsi: abi::x86_64::from_usize(abi::bytes::length(data)),}}
     {libc-write rust native/src/runtime/syscall.rs
-        {    let result: i64;}
+        {    let result: i64;
+    // SAFETY: the caller's contract (above). The operand constraints are
+    // exactly the Linux x86-64 syscall register convention; rcx and r11 are}
         {    if rax == 1 {
         unsafe extern "C" { fn write(fd: i32, buf: *const u8, n: usize) -> isize; }
         return unsafe { write(rdi as i32, rsi as *const u8, rdx as usize) as i64 };
     }
-    let result: i64;}}
-    {write-twice tcl lib/linux.bot
+    let result: i64;
+    // SAFETY: the caller's contract (above). The operand constraints are
+    // exactly the Linux x86-64 syscall register convention; rcx and r11 are}}
+    {write-twice tcl lib/linux/sys.x86_64.bot
         {fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
     abi::x86_64::to_int(}
         {fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
     abi::x86_64::to_int(
-        linux::abi::syscall({
+        linux::abi::x86_64::syscall({
             rax: abi::x86_64::register64(1),
             rdi: abi::x86_64::from_i32(fd),
             rsi: abi::x86_64::from_bytes(data),

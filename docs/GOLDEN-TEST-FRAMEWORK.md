@@ -397,7 +397,7 @@ failed test (`gf-runtime-only-failure-aborts`).
 
 ### Exit status
 
-Botlish has no exit-status facility (`linux::abi::syscall` can make
+Botlish has no exit-status facility (`linux::abi::x86_64::syscall` can make
 `exit_group` natively, in a standalone executable only; there is no library
 function, and the Tcl backends cannot). A suite's value is its report, and
 `tests/golden/run.tcl` interprets it: exit 1 when a test failed, a suite did
