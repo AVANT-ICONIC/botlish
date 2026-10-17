@@ -335,8 +335,9 @@ names for a front-end, cache or interchange change, passed individually:
   namespaces (`app-reference-without-import`), main.tcl's `cranelift` and
   `cranelift-generic` runs discarding output (8 and 4), main.tcl without the
   recursion policy and the policy lowered to 1000 (4 each).
-* `audit/hir-interchange/tools/roundtrip.tcl -via interchange` and `-via
-  cache`: pending at this commit.
+* `audit/hir-interchange/tools/roundtrip.tcl`: `-via interchange` 10
+  suites, 90 artifacts and outcomes compared, 0 differ; `-via cache` 10
+  suites, 100 compared, 0 differ.
 * `tclsh9.0 tests/local.tcl` (every Tcl test file on interp and compile,
   every golden suite on four backends): pending at this commit.
 
