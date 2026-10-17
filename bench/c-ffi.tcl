@@ -4,9 +4,10 @@
 #
 # 1. Per call, ns: programs that each make N calls of the C FFI test fixture
 #    (tests/cffi/fixture.c, compiled here with the host C compiler into a
-#    private static archive) in a loop, reported as (program - baseline) / N,
-#    the baseline being the same loop without the call
-#    (bench/c-pointer-borrowing.tcl's method):
+#    private static archive) in a loop, reported per iteration beside the
+#    same loop without the call, and their difference
+#    (bench/c-pointer-borrowing.tcl's method; a call cheaper than the loop's
+#    noise shows as a difference of a few ns either way):
 #
 #      count     bcf_count(): no argument, an unsigned long result (C
 #                increments a static) -- the call itself
@@ -120,22 +121,26 @@ proc best {text} {
     return $best
 }
 
+# "LOOP CALL DIFFERENCE": ns per iteration of the loop without and with
+# the call, and their difference (within the loop's noise, a few ns either
+# way, when the call costs less than that).
 proc perCall {setup call discarded} {
-    set baseline [best [program $setup 0 0 $::n]]
-    set t [best [program $setup $call $discarded $::n]]
-    return [expr {1000.0 * ($t - $baseline) / $::n}]
+    set baseline [expr {1000.0 * [best [program $setup 0 0 $::n]] / $::n}]
+    set t [expr {1000.0 * [best [program $setup $call $discarded $::n]] / $::n}]
+    return [format "%10.1f %10.1f %10.1f" $baseline $t [expr {$t - $baseline}]]
 }
 
 try {
-    puts "1. per call, ns (best of $runs runs of $n calls, minus the empty loop):"
-    puts [format "  %-12s %10.1f" count [perCall {x = 0} {bcf::count()} 0]]
-    puts [format "  %-12s %10.1f" add [perCall {x = 0} {bcf::add(i, 1)} 0]]
-    puts [format "  %-12s %10.1f" big [perCall {x = 0} {bcf::echo_ulonglong(18446744073709551615)} 0]]
+    puts "1. ns per iteration (best of $runs runs of $n iterations): the loop without the call, with it, the difference"
+    puts [format "  %-14s %10s %10s %10s" "" loop "+ call" call]
+    puts [format "  %-14s %s" count [perCall {x = 0} {bcf::count()} 0]]
+    puts [format "  %-14s %s" add [perCall {x = 0} {bcf::add(i, 1)} 0]]
+    puts [format "  %-14s %s" big [perCall {x = 0} {bcf::echo_ulonglong(18446744073709551615)} 0]]
     foreach s $sizes {
-        puts [format "  %-12s %10.1f" "read $s" [perCall "data = abi::bytes::from_list(pattern($s))" {bcf::sum(data, 0)} 0]]
+        puts [format "  %-14s %s" "read $s" [perCall "data = abi::bytes::from_list(pattern($s))" {bcf::sum(data, 0)} 0]]
     }
     foreach s $sizes {
-        puts [format "  %-12s %10.1f" "write $s" [perCall "m = abi::bytes::from_bytes(abi::bytes::from_list(pattern($s)))" {bcf::fill(m, 0, 0)} 1]]
+        puts [format "  %-14s %s" "write $s" [perCall "m = abi::bytes::from_bytes(abi::bytes::from_list(pattern($s)))" {bcf::fill(m, 0, 0)} 1]]
     }
     puts ""
     if {$boringssl eq ""} {

@@ -815,24 +815,67 @@ an exposed storage's liveness across one, as it was designed to be.
 
 ## 21. Performance
 
-`bench/c-ffi.tcl` (Linux x86-64, 4-core container, cranelift specialized,
-best of 5; per-call numbers are a loop of N calls minus the same loop
-without the call):
+`bench/c-ffi.tcl` (Linux x86-64, a 4-core container with another job
+running beside it, 2026-10-17; cranelift specialized, best of 5 runs,
+compilation and linking excluded). The calls are of the fixture's
+functions; each row is ns per iteration of a loop of 100,000 calls, beside
+the same loop without the call, and their difference:
 
-PERFORMANCE-TABLE
+| call | loop | + call | call |
+|---|---:|---:|---:|
+| `bcf_count()`: no argument, an unsigned long result | 32.3 | 32.6 | 0.3 |
+| `bcf_add(i, 1)`: two ints, an int result | 32.2 | 44.5 | 12.3 |
+| `bcf_echo_ulonglong(2^64 - 1)`: a BigInt both ways | 31.5 | 77.2 | 45.7 |
+| `bcf_sum(data, 0)`, a 64-byte Bytes exposed for reading | 33.5 | 48.7 | 15.2 |
+| the same, 64 KiB | 68.1 | 69.6 | 1.4 |
+| the same, 1 MiB | 549.1 | 431.5 | -117.6 |
+| `bcf_fill(m, 0, 0)`, a 64-byte MutableBytes exposed for writing | 34.6 | 124.1 | 89.5 |
+| the same, 64 KiB | 66.9 | 13,086.4 | 13,019.5 |
+| the same, 1 MiB | 562.5 | 90,684.3 | 90,121.8 |
 
-What this shows: a C call from a running native program is an ordinary
-native call -- no process, no lookup, no copy of read-only bytes (the read
-exposure's cost is flat in its size); a write exposure costs its detach
-copy, linear in size, as C-POINTER-BORROWING.md measured; a 64-bit value
-beyond the small Int range costs a BigInt conversion each way. SHA-256 runs
-at BoringSSL's own speed. The link is the cost of an FFI program: linking a
-temporary executable every run adds the system link (and a process start)
-to `-backend cranelift`, which an executable pays once.
+(The 1 MiB loops' time is mostly building their input once, amortized: the
+difference there is that setup's noise.) SHA-256 through the static
+BoringSSL, `sha256::digest` per call (one read exposure, one 32-byte write
+exposure):
+
+| input | per digest | throughput |
+|---|---:|---:|
+| 64 B | 0.64 us | 100.8 MB/s |
+| 1 KiB | 1.22 us | 839.9 MB/s |
+| 64 KiB | 44.91 us | 1,459.4 MB/s |
+| 1 MiB | 634.01 us | 1,653.9 MB/s |
+
+Compile and link, ms, best of 5 (front end excluded):
+
+| program | `native::evalHir` (lower, compile, run) | `native::executable` (rustc link) |
+|---|---:|---:|
+| `x + 2`, no C | 7.2 | 422.1 |
+| `bcf::add(40, 2)` | 422.9 | 397.2 |
+
+What this shows:
+
+* **A C call is an ordinary native call.** A call with no argument costs
+  less than the loop's own noise; two int arguments and a result cost about
+  12 ns with their conversions and the result's list element; nothing
+  spawns a process, opens a library or looks up a symbol per call.
+* **Read-only bytes are never copied.** The read exposure's cost does not
+  grow with the storage (64 B, 64 KiB and 1 MiB within the noise).
+* **A write exposure costs its detach copy**, linear in size (13 us for 64
+  KiB, 90 us for 1 MiB), exactly as C-POINTER-BORROWING.md measured for the
+  synthetic fixture; a 64-bit value beyond the small Int range costs a
+  BigInt conversion each way (~45 ns).
+* **SHA-256 runs at BoringSSL's speed**: past a few KiB the digest is the
+  hash's own work (1.6 GB/s), the borrowing's cost vanishing beside it.
+* **The link is an FFI program's cost.** `-backend cranelift` links a
+  temporary executable for each run of a program that calls C: about 0.4 s
+  of system link and process start, against 7 ms for a JIT run. An
+  executable pays the link once, and costs the same with or without C.
+  That is the price of resolving symbols with the platform linker, the
+  design's point; nothing links twice.
 
 ## 22. Tests, fuzzing, mutants
 
-**`tests/c-ffi.test`** (CFFI-TEST-COUNT tests) covers the grammar and its
+**`tests/c-ffi.test`** (55 tests) covers the grammar and its
 errors, declarations, the HIR table, ABI classes per target, the link plan,
 call typing, borrowing through real C, pointer results and the contract
 check, the transport, NIR and CLIF, the backend matrix, linking and its
@@ -853,17 +896,93 @@ compares what C saw of every argument, the result, the write-back bytes and
 the caller's unchanged bytes with its own ABI model; on the Tcl backends
 every program must be `NATIVE-ONLY`.
 
-FUZZ-RESULTS
+| run | programs | C functions | disagreements |
+|---|---:|---:|---:|
+| `-seed 1`, `-seed 2`, `-seed 3` (`-n 20`, 12 functions each) | 60 | 720 | 0 |
+| `-seed 4 -n 20` | 20 | 240 | 0 |
+| `-seed 9 -n 10 -gc-stress 1` | 10 | 120 | 0 |
+
+The fuzzer's model is independent of the compiler's (its own table of C
+widths and signedness, its own conversion rule, its own byte arithmetic),
+and it kills 12 of the mutants below on its own (6 programs per mutant).
 
 **Mutants** (`audit/c-ffi/tools/mutate.tcl`, `mutants.txt`): each a
 deliberate bug, run against `tests/c-ffi.test` and the fuzzer in a private
 copy of the tree.
 
-MUTANT-RESULTS
+27 mutants, 27 killed: the 18 the brief lists (the table's first 18 rows)
+and 9 more. One run of all 27 (29 minutes) killed 26; the linker
+group's mutant survived it, on this host for a real reason: rustc's x86-64
+linker here is lld, which resolves static archives in any order, so
+dropping the group changes nothing it links (GNU ld and gold do need it:
+the same two archives fail to link with `cc -fuse-ld=bfd` and `gold`).
+`codegen::aot`'s `ffi_link_plan_is_one_linker_group` now pins the
+arguments, the mutation tool runs the `ffi_` Rust tests for native mutants,
+and a second run of the two linker mutants killed both.
+
+| mutant | killed by |
+|---|---|
+| `named-ignored` (the parser drops `named`) | 46 tests, the fuzzer |
+| `botlish-name-as-symbol` (the foreign table names the Botlish name) | 13 tests, the fuzzer |
+| `library-dropped` (the plan loses its last library) | 35 tests, the fuzzer |
+| `unsigned-result-sign-extended` | `cf-scalar-transport`, `cf-scalar-extension`, the fuzzer |
+| `signed-result-zero-extended` | `cf-scalar-transport`, `cf-scalar-extension`, `cf-stack-arguments`, the fuzzer |
+| `long-always-64` (C long's class 64 bits whatever the target) | `cf-abi-classes-follow-the-target` |
+| `pointer-untag-forgotten` (a pointer argument passed tagged) | 5 tests, the fuzzer |
+| `pointer-tag-forgotten` (a returned address untagged) | `cf-pointers`, `cf-gc-stress` |
+| `captures-borrow-allowed` (a captures parameter admits an exposure) | `cf-borrow-refusals`, `cf-strict0-replay` |
+| `read-bytes-copied` (a read exposure of a private copy) | 9 tests, the fuzzer |
+| `original-mutablebytes-mutated` (C writes the owner's storage) | 6 tests (the SHA-256 acceptance among them), the fuzzer |
+| `keepalive-dropped` | `cf-nir` |
+| `argument-after-exposure` (a read exposure made before later arguments run) | `cf-nir` |
+| `every-extern-direct` | 38 tests, the fuzzer |
+| `retaining-not-direct` | 7 tests (`cf-direct-*`) |
+| `nearest-library` (each function's library the last its unit declares, only those linked) | `cf-link-plan`, `cf-link-order`, `cf-missing-library`, the SHA-256 tests |
+| `extern-state-shared` (activation does not re-install a HIR's externs) | `cf-isolation`, `cf-interchange` |
+| `interchange-loses-foreign` | `cf-interchange` |
+| `alias-check-dropped` | `cf-contract-violation` |
+| `address-masked` (an unrepresentable address masked) | `cf-wild-address` |
+| `unsigned-64-result-boxed-signed` | `cf-scalar-transport`, the fuzzer |
+| `unsigned-64-argument-truncated` (a BigInt argument passed as 0) | `cf-scalar-transport`, `cf-stack-arguments`, the fuzzer |
+| `link-group-dropped` | `ffi_link_plan_is_one_linker_group` (and `cf-link-order` where the linker is GNU ld or gold) |
+| `stub-links-c` (the stub linker accepts a program that calls C) | `cf-stub-linker` |
+| `tcl-backends-return-zero` (the Tcl backends run a C call as 0) | `cf-tcl-backends`, `cf-static-compile`, the fuzzer |
+| `unknown-provenance-exposed` (memchr's shape admitted) | `cf-result-provenance` |
+| `extern-arity-unchecked` | `cf-call-typing`, `cf-static-compile` |
+
+Two are killed by the NIR shape test alone, and that is what they can be:
+a missing keepalive or an exposure made before a later argument's code is
+observable only if a collection runs while the exposure is open, and no
+collection can run inside a real C call (section 20); the borrowing
+milestone's synthetic reentrant test guards the liveness itself.
 
 ## 23. Regression
 
-REGRESSION-RESULTS
+On this checkout (Linux x86-64, Tcl 9.0.1, rustc 1.97.0):
+
+| suite | result |
+|---|---|
+| `tests/local.tcl` (every Tcl test file on interp and compile, every golden suite on four backends through the front-end cache) | 5,772 + 5,768 Tcl tests passed, 2,098 golden duplicates skipped each; 92 golden suites, every test passed on every backend (4,721 / 4,721 / 4,629 / 4,731). One failure, fixed: `compilation-isolation.test`'s `ci-declarations-recorded` pins the declaration state's keys, which now include `foreign` |
+| `tests/c-ffi.test` | 55 passed; under `BOTLISH_NATIVE_GC_STRESS=1` 55 passed; with `BOTLISH_NATIVE_LINKER=stub` (CI's stub job) 11 passed, 44 skipped (they need the rustc linker) |
+| the executable test files with the stub linker (the `stub-linker` job's command) | 2,394 passed, 56 skipped, 0 failed |
+| `tests/aot-stub-linker.test` (also under GC stress) | 6 passed |
+| `tests/c-pointer-borrowing.test` under GC stress; its fuzzer (`-seed 3`; `-seed 5 -gc-stress 1`); its mutants | 61 passed; 0 disagreements; 22 / 22 killed |
+| `audit/direct-modules/tools/fuzz.tcl` (seeds 1, 2); its mutants | 0 disagreements; 18 / 18 killed |
+| `audit/c-abi-types/tools/fuzz.tcl`; its mutants | 0 disagreements; 26 / 26 killed |
+| `audit/compilation-isolation/tools/interleave.tcl`; its mutants | 80 artifacts and outcomes, 0 differ; 14 / 14 killed |
+| `audit/hir-interchange/tools/roundtrip.tcl -via interchange`, `-via cache`; its mutants | 90 and 100 compared, 0 differ; 27 / 27 killed |
+| `audit/static-compile/tools/fuzz.tcl`; its mutants | 0 disagreements; 21 / 21 killed |
+| `audit/static-decisions/tools/fuzz.tcl` (seeds 17, 41) | 0 failures |
+| the warning fuzzers (`method-eligible`, `many-boolean-arguments`, `fixed-arity-list-return`, `proves-naming`: 300 seeds each), `audit/imports/tools/fuzz.tcl` | 0 failures |
+| the warning gate | passed: the observed warnings are exactly the manifest |
+| `cargo test --release` (also under GC stress) | 237 runtime and 34 codegen unit tests passed |
+| `tests/native-coverage.tcl` of `c-ffi.test` and `compilation-isolation.test`, both native backends | 43 native, 31 backend-independent, 0 failed |
+| the single executable (`single/build.sh`) | builds; refuses a program that calls C or declares a library with the stub's `NATIVE LINK`, runs it on the Tcl backends to its first C call |
+
+Not run here: the batched-versus-sequential static decisions (CI only,
+`static-decisions.yml`, dispatched on the branch) and the arm64 workflow
+(dispatched on the branch). The 2048 workload is untouched
+(`tests/workload-2048.test` passes in the local run).
 
 ## 24. Architectural boundaries
 
@@ -953,5 +1072,5 @@ acceptance tests run. `bench/c-ffi.tcl` regenerates section 21.
 | native/src/runtime/ffi.rs, runtime/error.rs | the slow paths and the two failures |
 | examples/ffi/ | the Tcl and BoringSSL bindings and demos |
 | tests/c-ffi.test, tests/cffi/fixture.c, tests/cffi/boringssl.tcl | the tests, the C fixture, the package-owned BoringSSL |
-| audit/c-ffi/tools/ | the fuzzer, the mutation tool and its mutants |
+| audit/c-ffi/tools/, audit/c-ffi/*-result.txt | the fuzzer, the mutation tool and its mutants; their recorded runs |
 | bench/c-ffi.tcl | the performance report |
