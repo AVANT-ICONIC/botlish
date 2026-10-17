@@ -1,0 +1,699 @@
+# c-ffi.test -- `extern c library` and `extern c fn`: real link-time C calls
+# (C-FFI.md).
+#
+# An extern c fn is a truthful C ABI declaration with no body, carrying the
+# foreign call contract every foreign call has (C-POINTER-BORROWING.md); an
+# extern c library names a library of the program's link plan. The native
+# backends link a program that calls C with the system linker and call the
+# symbols directly with the platform C ABI; the Tcl backends refuse a C call
+# at run time (NATIVE-ONLY).
+#
+# The C side of most tests is tests/cffi/fixture.c, compiled here with the
+# host C compiler into a static archive in a private directory (test
+# infrastructure only) and bound by the module text below. The Tcl and
+# BoringSSL acceptance tests run examples/ffi/ against the installed
+# libtcl9.0 and the package-owned static BoringSSL (tests/cffi/boringssl.tcl;
+# skipped when it is not built). Every application is a fresh directory of
+# the tcltest temporary directory.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+source [file join $::projectRoot native native.tcl]
+source [file join $::projectRoot tests cffi boringssl.tcl]
+
+testConstraint nativeBuilt [expr {![catch {native::binary}]}]
+testConstraint linuxNative [expr {$::tcl_platform(os) eq "Linux"
+    && $::tcl_platform(machine) in {x86_64 amd64 aarch64 arm64}}]
+testConstraint cCompiler [expr {[auto_execok cc] ne ""}]
+
+set mainScript [file join $::projectRoot main.tcl]
+set ::appCounter 0
+
+# The fixture library: built once, in a private directory, when a C compiler
+# is there.
+set ::fixtureDir ""
+if {[testConstraint cCompiler] && [testConstraint linuxNative]} {
+    set ::fixtureDir [makeDirectory cffi-fixture-[pid]]
+    if {[catch {
+        exec cc -c -O2 -fPIC [file join $::projectRoot tests cffi fixture.c] -o [file join $::fixtureDir fixture.o]
+        exec ar rcs [file join $::fixtureDir libbotlish_cffi_fixture.a] [file join $::fixtureDir fixture.o]
+    } message]} {
+        puts stderr "c-ffi.test: the fixture library did not build: $message"
+        set ::fixtureDir ""
+    }
+}
+testConstraint cfFixture [expr {$::fixtureDir ne "" && [testConstraint nativeBuilt] && [testConstraint rustcLinker]}]
+# libtcl9.0, as the Tcl acceptance links it: a probe link with the host's
+# linker driver.
+proc tclLinkable {} {
+    if {![testConstraint cCompiler]} {
+        return 0
+    }
+    set dir [makeDirectory cffi-tclprobe-[pid]]
+    set src [file join $dir probe.c]
+    set channel [open $src w]
+    puts $channel "void *Tcl_CreateInterp(void);\nint main(void) { return Tcl_CreateInterp() == 0; }"
+    close $channel
+    set ok [expr {![catch {exec cc $src -o [file join $dir probe] -ltcl9.0}]}]
+    file delete -force $dir
+    return $ok
+}
+testConstraint tclLibrary [expr {[testConstraint nativeBuilt] && [testConstraint rustcLinker] && [tclLinkable]}]
+testConstraint boringssl [expr {[testConstraint nativeBuilt] && [testConstraint rustcLinker] && [cffi::boringsslDir] ne ""}]
+
+# A fresh application directory holding FILES ({RELATIVE-PATH TEXT ...}): its
+# absolute path.
+proc app {files} {
+    set dir [makeDirectory cf-app-[pid]-[incr ::appCounter]]
+    foreach {relative text} $files {
+        set path [file join $dir {*}[file split $relative]]
+        file mkdir [file dirname $path]
+        set channel [open $path w]
+        fconfigure $channel -encoding utf-8 -translation lf
+        puts -nonewline $channel $text
+        close $channel
+    }
+    return $dir
+}
+
+proc removeApps {} {
+    foreach dir [glob -nocomplain -directory [temporaryDirectory] cf-app-[pid]-*] {
+        file delete -force $dir
+    }
+}
+
+# The HIR of DIR/MAIN (strict unless STRICT is 0).
+proc appHir {dir {main main.bot} {strict 1}} {
+    return [surface::readProgramFile [file join $dir $main] -warnings off -cache "" -strict $strict]
+}
+
+# "KIND: MESSAGE" of the compilation of DIR/MAIN, with DIR spelled away, or
+# accepted.
+proc appRejection {dir {main main.bot}} {
+    if {[catch {appHir $dir $main} message options]} {
+        set kind [lindex [dict get $options -errorcode] end]
+        return "$kind: [string map [list $dir/ ""] $message]"
+    }
+    return accepted
+}
+
+# The value of DIR/MAIN on each of BACKENDS (with the fixture's directory on
+# the linker's search path), or the backend's error: {CODE MESSAGE} with DIR
+# spelled away.
+proc appValues {dir backends {main main.bot}} {
+    set hir [appHir $dir $main]
+    native::withLinkDirs [list $::fixtureDir] {
+        lmap backend $backends {
+            lassign [outcomeUnderHir $backend $hir] tag value message
+            expr {$tag eq "value" ? $value : [list [lrange $value end-1 end] [string map [list $dir/ ""] $message]]}
+        }
+    }
+}
+
+# The error code's last words of DIR/MAIN on BACKEND, or its value.
+proc appCode {dir backend {main main.bot}} {
+    set hir [appHir $dir $main]
+    native::withLinkDirs [list $::fixtureDir] {
+        lassign [outcomeUnderHir $backend $hir] tag value
+    }
+    return [expr {$tag eq "value" ? $value : [lrange $value end-1 end]}]
+}
+
+# {UNIT STATUS ...} of HIR's module directness, for UNITS (all when empty).
+proc statuses {hir {units {}}} {
+    set result {}
+    dict for {unit u} [dict get $hir direct units] {
+        if {$units ne {} && $unit ni $units} continue
+        lappend result $unit [dict get $u status]
+    }
+    return $result
+}
+
+# The NIR of DIR/MAIN.
+proc appNir {dir {main main.bot}} {
+    return [native::nir [appHir $dir $main]]
+}
+
+# The fixture's binding module (an application module `bcf`).
+set bcfModule {import ffi::c
+
+extern c library "botlish_cffi_fixture"
+
+extern c fn echo_schar named "bcf_echo_schar"(x: ffi::c::SChar) -> ffi::c::SChar
+extern c fn echo_uchar named "bcf_echo_uchar"(x: ffi::c::UChar) -> ffi::c::UChar
+extern c fn echo_char named "bcf_echo_char"(x: ffi::c::Char) -> ffi::c::Char
+extern c fn echo_short named "bcf_echo_short"(x: ffi::c::Short) -> ffi::c::Short
+extern c fn echo_ushort named "bcf_echo_ushort"(x: ffi::c::UShort) -> ffi::c::UShort
+extern c fn echo_int named "bcf_echo_int"(x: ffi::c::Int) -> ffi::c::Int
+extern c fn echo_uint named "bcf_echo_uint"(x: ffi::c::UInt) -> ffi::c::UInt
+extern c fn echo_long named "bcf_echo_long"(x: ffi::c::Long) -> ffi::c::Long
+extern c fn echo_ulong named "bcf_echo_ulong"(x: ffi::c::ULong) -> ffi::c::ULong
+extern c fn echo_longlong named "bcf_echo_longlong"(x: ffi::c::LongLong) -> ffi::c::LongLong
+extern c fn echo_ulonglong named "bcf_echo_ulonglong"(x: ffi::c::ULongLong) -> ffi::c::ULongLong
+extern c fn widen_schar named "bcf_widen_schar"(x: ffi::c::SChar) -> ffi::c::Long
+extern c fn widen_uchar named "bcf_widen_uchar"(x: ffi::c::UChar) -> ffi::c::Long
+extern c fn widen_short named "bcf_widen_short"(x: ffi::c::Short) -> ffi::c::Long
+extern c fn widen_ushort named "bcf_widen_ushort"(x: ffi::c::UShort) -> ffi::c::Long
+extern c fn widen_int named "bcf_widen_int"(x: ffi::c::Int) -> ffi::c::LongLong
+extern c fn widen_uint named "bcf_widen_uint"(x: ffi::c::UInt) -> ffi::c::ULongLong
+extern c fn add named "bcf_add"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int
+extern c fn many named "bcf_many"(a: ffi::c::Long, b: ffi::c::Int, c: ffi::c::Short, d: ffi::c::SChar, e: ffi::c::UChar, f: ffi::c::UShort, g: ffi::c::UInt, h: ffi::c::ULong, i: ffi::c::Long, j: ffi::c::Int) -> ffi::c::LongLong
+extern c fn tenth named "bcf_tenth"(a: ffi::c::Int, b: ffi::c::Int, c: ffi::c::Int, d: ffi::c::Int, e: ffi::c::Int, f: ffi::c::Int, g: ffi::c::Int, h: ffi::c::Int, i: ffi::c::Int, j: ffi::c::Int) -> ffi::c::Int
+extern c fn nothing named "bcf_nothing"() -> unit
+extern c fn dirty_uchar named "bcf_dirty_uchar"() -> ffi::c::UChar
+extern c fn dirty_schar named "bcf_dirty_schar"() -> ffi::c::SChar
+extern c fn dirty_ushort named "bcf_dirty_ushort"() -> ffi::c::UShort
+extern c fn dirty_short named "bcf_dirty_short"() -> ffi::c::Short
+extern c fn dirty_uint named "bcf_dirty_uint"() -> ffi::c::UInt
+extern c fn dirty_int named "bcf_dirty_int"() -> ffi::c::Int
+extern c fn address named "bcf_address"() -> ffi::c::Ptr[ffi::c::Void] independent
+extern c fn null named "bcf_null"() -> ffi::c::Ptr[ffi::c::Void] independent
+extern c fn is_null named "bcf_is_null"(p: ffi::c::Ptr[ffi::c::Void] noescape) -> ffi::c::Int
+extern c fn echo_ptr named "bcf_echo_ptr"(p: ffi::c::Ptr[ffi::c::Void] noescape) -> ffi::c::Ptr[ffi::c::Void] alias p
+extern c fn same named "bcf_same"(a: ffi::c::Ptr[ffi::c::Void] noescape, b: ffi::c::Ptr[ffi::c::Void] noescape) -> ffi::c::Int
+extern c fn wild named "bcf_wild"() -> ffi::c::Ptr[ffi::c::Void]
+extern c fn sum named "bcf_sum"(data: ffi::c::Ptr[ffi::c::UChar] read noescape, count: ffi::c::ULong) -> ffi::c::ULong
+extern c fn sum_proven named "bcf_sum"(data: ffi::c::Ptr[ffi::c::UChar] read proven noescape, count: ffi::c::ULong) -> ffi::c::ULong
+extern c fn fill named "bcf_fill"(out: ffi::c::Ptr[ffi::c::UChar] write noescape, count: ffi::c::ULong, seed: ffi::c::UChar) -> unit
+extern c fn reverse named "bcf_reverse"(data: ffi::c::Ptr[ffi::c::UChar] read noescape, count: ffi::c::ULong, out: ffi::c::Ptr[ffi::c::UChar] write noescape) -> ffi::c::Ptr[ffi::c::UChar] alias out
+extern c fn reverse_off named "bcf_reverse_off"(data: ffi::c::Ptr[ffi::c::UChar] read noescape, count: ffi::c::ULong, out: ffi::c::Ptr[ffi::c::UChar] write noescape) -> ffi::c::Ptr[ffi::c::UChar] alias out
+extern c fn find named "bcf_find"(data: ffi::c::Ptr[ffi::c::UChar] read noescape, count: ffi::c::ULong, byte: ffi::c::UChar) -> ffi::c::Ptr[ffi::c::UChar]
+extern c fn next named "bcf_next"(p: ffi::c::Ptr[ffi::c::UChar] noescape) -> ffi::c::Ptr[ffi::c::UChar] alias p
+extern c fn callback_twice named "bcf_callback_twice"() -> ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}]
+extern c fn apply named "bcf_apply"(f: ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}] noescape, x: ffi::c::Int) -> ffi::c::Int
+extern c fn count named "bcf_count"() -> ffi::c::ULong
+}
+
+# The retaining part of the fixture's API, for the direct tests: keep stores
+# its pointer (escape captures); keep_unknown is the same function with no
+# escape fact (unknown, which retains).
+set retainingDecls {extern c fn keep named "bcf_keep"(p: ffi::c::Ptr[ffi::c::Void] captures) -> unit
+extern c fn keep_unknown named "bcf_keep"(p: ffi::c::Ptr[ffi::c::Void]) -> unit
+extern c fn address named "bcf_address"() -> ffi::c::Ptr[ffi::c::Void] independent
+}
+
+# The byte helpers the borrow programs share.
+set bytesPrelude {import abi
+import abi::bytes
+import ffi::c
+import str
+import bcf
+
+fn text(s: str) -> abi::bytes::Bytes:
+    abi::bytes::from_list(str::encode_utf8(s))
+
+fn len(d: abi::bytes::Bytes) -> ffi::c::ULong:
+    abi::bytes::length(d).value
+
+}
+
+# An application of the fixture binding and MAIN (an entry program's text).
+proc bcfApp {main {extra {}}} {
+    return [app [concat [list main.bot $main bcf.bot $::bcfModule] $extra]]
+}
+
+# ---------------------------------------------------------------------------
+# Syntax
+
+test cf-parse-forms {the two declarations: a library by its linker name, a function by its C signature, with an optional link symbol, pointer facts per parameter and a pointer result's provenance; no body} -body {
+    set ast [surface::parse "import ffi::c\n\nextern c library \"crypto\"\n\nextern c fn SHA256 named \"PRE_SHA256\"(\n    data: ffi::c::Ptr\[ffi::c::UChar\] read noescape,\n    len: ffi::c::ULong,\n    out: ffi::c::Ptr\[ffi::c::UChar\] write proven noescape,\n) -> ffi::c::Ptr\[ffi::c::UChar\] alias out\nextern c fn f(p: ffi::c::Ptr\[ffi::c::Void\] captures) -> unit\nextern c fn g() -> ffi::c::Ptr\[ffi::c::Void\] independent\n" t.bot]
+    lrange [split [surface::formatAst $ast] \n] 1 end
+} -result {{extern c library "crypto"} {extern c fn SHA256 named "PRE_SHA256"(data: ffi::c::Ptr[ffi::c::UChar] read noescape, len: ffi::c::ULong, out: ffi::c::Ptr[ffi::c::UChar] write proven noescape) -> ffi::c::Ptr[ffi::c::UChar] alias out} {extern c fn f(p: ffi::c::Ptr[ffi::c::Void] captures) -> unit} {extern c fn g() -> ffi::c::Ptr[ffi::c::Void] independent}}
+
+test cf-parse-errors {malformed declarations are located EXTERN-SYNTAX errors: no ABI, an unknown ABI, an unquoted or path-like library, a body colon, a malformed or duplicate `named`, varargs, an untyped parameter, an unknown fact, a repeated access, no result type, an errors clause, an unknown result fact, a declaration inside a function} -body {
+    lmap src [list \
+        "extern fn f() -> unit\n" \
+        "extern rust fn f() -> unit\n" \
+        "extern c library foo\n" \
+        "extern c library \"/usr/lib/libfoo.so\"\n" \
+        "extern c library \"-Wl,--wrap=x\"\n" \
+        "extern c fn f() -> unit:\n    1\n" \
+        "extern c fn f named (x: int) -> unit\n" \
+        "extern c fn f named \"a\" named \"b\"() -> unit\n" \
+        "extern c fn f(x: int, ...) -> unit\n" \
+        "extern c fn f(x) -> unit\n" \
+        "extern c fn f(x: int const) -> unit\n" \
+        "extern c fn f(x: int read write) -> unit\n" \
+        "extern c fn f(x: int)\n" \
+        "extern c fn f(x: int) -> int errors E\n" \
+        "extern c fn f(x: int) -> int fresh\n" \
+        "extern c thing\n" \
+        "fn g():\n    extern c fn f() -> unit\n"] {
+        if {[catch {surface::parse $src t.bot} message]} {
+            regexp {^t.bot:([0-9]+:[0-9]+): ([A-Z-]+):} $message -> at code
+            list $at $code
+        } else {
+            set src
+        }
+    }
+} -result {{1:8 EXTERN-SYNTAX} {1:8 EXTERN-SYNTAX} {1:18 EXTERN-SYNTAX} {1:18 EXTERN-SYNTAX} {1:18 EXTERN-SYNTAX} {1:24 EXTERN-SYNTAX} {1:21 EXTERN-SYNTAX} {1:25 EXTERN-SYNTAX} {1:23 EXTERN-SYNTAX} {1:15 EXTERN-SYNTAX} {1:22 EXTERN-SYNTAX} {1:27 EXTERN-SYNTAX} {1:22 EXTERN-SYNTAX} {1:30 EXTERN-SYNTAX} {1:30 EXTERN-SYNTAX} {1:10 EXTERN-SYNTAX} {2:5 EXTERN-SYNTAX}}
+
+test cf-parse-messages {the messages name what is wrong and the remedy} -body {
+    lmap src [list "extern fn f() -> unit\n" "extern c fn f() -> unit:\n" "extern c fn f(x: int, ...) -> unit\n" "extern c fn f(x: int)\n"] {
+        catch {surface::parse $src t.bot} message
+        set message
+    }
+} -result {{t.bot:1:8: EXTERN-SYNTAX: an extern declaration names its foreign ABI: write "extern c fn NAME(...) -> T" (the only foreign ABI is c)} {t.bot:1:24: EXTERN-SYNTAX: an extern c fn is a declaration with no body: it has no trailing ":" (write "extern c fn f(...) -> T" on its own)} {t.bot:1:23: EXTERN-SYNTAX: variadic C functions are not supported: extern c fn "f" must have a fixed signature (bind a fixed-argument sibling, such as a v-prefixed function's caller, instead)} {t.bot:1:22: EXTERN-SYNTAX: expected "->" and the C result type after the parameter list of extern c fn "f", found end of line (a C function returning void is "-> unit")}}
+
+test cf-parse-recover {a recovering parse reports each malformed declaration once and keeps the valid ones: no cascade} -body {
+    set ast [surface::parse "extern fn f()\nextern c fn g() -> unit\nextern c fn h(x: int, ...) -> unit\nextern c library \"m\"\nx = 1\n" t.bot -recover 1]
+    list [lmap d [dict get $ast diagnostics] {dict get $d line}] [lmap s [dict get $ast body] {dict get $s kind}]
+} -result {{1 3} {error externfn error externlib bind}}
+
+test cf-parse-contextual {extern, c, library, named, read, write, noescape, proven, captures, independent and alias are contextual: ordinary names everywhere else} -body {
+    set hir [surface::compile "extern = 1\nfn f(named, alias, read, write, library, c, noescape, proven, captures, independent):\n    named + alias + read + write + library + c + noescape + proven + captures + independent\nf(extern, 1, 1, 1, 1, 1, 1, 1, 1, 1)\n" -warnings off]
+    outcomeUnderHir interp $hir
+} -result {value 10 {}}
+
+# ---------------------------------------------------------------------------
+# Declarations
+
+test cf-decl-types {every parameter and result type is a C ABI value type (a C integer scalar, a Ptr, a FnPtr; the result also unit), located in the declaring file} -body {
+    lmap decl [list \
+        "extern c fn f(x: int) -> unit" \
+        "extern c fn f(x: ffi::c::Int) -> str" \
+        "extern c fn f(x: ffi::c::Ptr\[int\]) -> unit" \
+        "extern c fn f(x: unit) -> unit" \
+        "extern c fn f(x: ffi::c::Ptr\[T\]) -> unit" \
+        "extern c fn f(x: Nope) -> unit"] {
+        appRejection [app [list main.bot "import m\n1\n" m.bot "import ffi::c\n\n$decl\n"]]
+    }
+} -cleanup removeApps -result {{TYPE: m.bot:3:18: parameter "x" of extern c fn "f": int is not a C ABI value type (a C integer scalar such as ffi::c::Int, ffi::c::Ptr[...] or ffi::c::FnPtr[...])} {TYPE: m.bot:3:34: the result of extern c fn "f": str is not a C ABI value type (a C integer scalar such as ffi::c::Int, ffi::c::Ptr[...] or ffi::c::FnPtr[...])} {TYPE: m.bot:3:18: unknown or invalid type ffi::c::Ptr[int] for parameter "x" of extern c fn "f": invalid pointee in ffi::c::Ptr[int]: int has no C representation: a pointee is ffi::c::Void, a C integer scalar, an opaque struct or another pointer} {TYPE: m.bot:3:18: parameter "x" of extern c fn "f": unit is not a C parameter type (a C function of no parameters has an empty parameter list)} {TYPE: m.bot:3:18: unknown or invalid type ffi::c::Ptr[T] for parameter "x" of extern c fn "f": core::type: unknown type "T"} {TYPE: m.bot:3:18: unknown or invalid type Nope for parameter "x" of extern c fn "f": core::type: unknown type "Nope"}}
+
+test cf-decl-facts {a fact is a pointer's: access a data pointer's, escape any pointer's; a provenance a data pointer result's, and an alias names a parameter of the result's own type} -body {
+    lmap decl [list \
+        "extern c fn f(x: ffi::c::Int noescape) -> unit" \
+        "extern c fn f(x: ffi::c::FnPtr\[Fn{args: \[\], return: unit}\] read) -> unit" \
+        "extern c fn f(x: ffi::c::Int) -> ffi::c::Int independent" \
+        "extern c fn f(x: ffi::c::Ptr\[ffi::c::UChar\]) -> ffi::c::Ptr\[ffi::c::UChar\] alias y" \
+        "extern c fn f(x: ffi::c::Ptr\[ffi::c::Char\]) -> ffi::c::Ptr\[ffi::c::UChar\] alias x" \
+        "extern c fn f(result: ffi::c::Ptr\[ffi::c::UChar\] write noescape) -> unit" \
+        "extern c fn f(x: ffi::c::Int, x: ffi::c::Int) -> unit"] {
+        appRejection [app [list main.bot "import m\n1\n" m.bot "import ffi::c\n\n$decl\n"]]
+    }
+} -cleanup removeApps -result {{TYPE: m.bot:3:30: parameter "x" of extern c fn "f" is a C value (ffi::c::Int), not a pointer: access and escape are facts of a pointer parameter} {TYPE: m.bot:3:60: parameter "x" of extern c fn "f" is a C function pointer: C reads or writes through a data pointer only, so it states no access (its escape says whether C keeps it)} {TYPE: m.bot:3:46: extern c fn "f" returns ffi::c::Int, not a data pointer: only a pointer result has a provenance ("independent" or "alias PARAM")} {TYPE: m.bot:3:76: the result of extern c fn "f" is declared an alias of "y", which is not one of its parameters} {TYPE: m.bot:3:75: the result of extern c fn "f" (ffi::c::Ptr[ffi::c::UChar]) is declared an alias of parameter "x" (ffi::c::Ptr[ffi::c::Char]): an exact alias is the same pointer, of the same type} {TYPE: m.bot:3:15: write parameter "result" of extern c fn "f": a written parameter's bytes come back as the call result's field of its name, beside `result`, so it needs another name} {DUPLICATE: m.bot:3:31: duplicate parameter "x" of extern c fn "f"}}
+
+test cf-decl-duplicate {two declarations of one Botlish qualified name are DUPLICATE, never merged (even with one signature); an extern and a function of one name are the ordinary duplicate binding; two modules may bind the same C symbol} -body {
+    set same [app [list main.bot "import m\n1\n" m.bot "import ffi::c\n\nextern c fn f(x: ffi::c::Int) -> ffi::c::Int\nextern c fn f(x: ffi::c::Int) -> ffi::c::Int\n"]]
+    set fnToo [app [list main.bot "import ffi::c\n\nextern c fn f(x: ffi::c::Int) -> ffi::c::Int\n\nfn f(x):\n    x\n\n1\n"]]
+    set twoModules [app [list main.bot "import a\nimport b\n1\n" \
+        a.bot "import ffi::c\n\nextern c fn f(x: ffi::c::Int) -> ffi::c::Int\n" \
+        b.bot "import ffi::c\n\nextern c fn f named \"f\"(x: ffi::c::Long) -> ffi::c::Long\n"]]
+    set hir [appHir $twoModules]
+    list [appRejection $same] [appRejection $fnToo] \
+        [lmap key [lsort [dict keys [hir::foreign::declarations $hir]]] {list $key [dict get [hir::foreign::declarations $hir] $key symbol]}]
+} -cleanup removeApps -result {{DUPLICATE: m.bot:4:13: extern c fn "f" is already declared in module "m" (at m.bot:3:13): two declarations of one Botlish name are never merged, whatever their signatures} {DUPLICATE: main.bot:5:1: duplicate binding "f" in the same lexical scope} {{a::f f} {b::f f}}}
+
+test cf-hir-foreign-table {the HIR keeps every declaration: its Botlish identity, its link symbol (the name, or `named`'s), the one normalized foreign contract (an unstated fact unknown; noescape declared, `proven noescape` proven) and the ABI class of each parameter and the result} -body {
+    set dir [app [list main.bot "import m\n1\n" m.bot "import ffi::c\n\nextern c library \"x\"\n\nextern c fn f named \"F_SYM\"(a: ffi::c::Char, b: ffi::c::UShort, p: ffi::c::Ptr\[ffi::c::UChar\] read proven noescape, q: ffi::c::Ptr\[ffi::c::Void\]) -> ffi::c::Ptr\[ffi::c::UChar\] alias p\nextern c fn g(x: ffi::c::LongLong) -> unit\n"]]
+    set table [hir::foreign::declarations [appHir $dir]]
+    lmap key [lsort [dict keys $table]] {
+        set r [dict get $table $key]
+        list $key [dict get $r namespace] [dict get $r name] [dict get $r symbol] [dict get $r native] \
+            [dict get $r contract] [dict get $r abi]
+    }
+} -cleanup removeApps -result {{m::f m f F_SYM extern#m::f {vars {} params {{name a type {refined int ffi::c::Char}} {name b type {refined int ffi::c::UShort}} {name p type {cptr {refined int ffi::c::UChar}} access read escape proven-noescape} {name q type {cptr void} access unknown escape unknown}} result {cptr {refined int ffi::c::UChar}} provenance {alias p}} {params {i8 u16 ptr ptr} result ptr}} {m::g m g g extern#m::g {vars {} params {{name x type {refined int ffi::c::LongLong}}} result unit provenance unknown} {params i64 result void}}}
+
+test cf-abi-classes-follow-the-target {a parameter's ABI class is its C type's width and signedness on the compilation's target, read from the registry: long is 64 bits on LP64 and 32 on LLP64, plain char signed on x86-64 and unsigned on Linux AArch64} -body {
+    set dir [app [list main.bot "import ffi::c\n\nextern c fn f(a: ffi::c::Long, b: ffi::c::Char, c: ffi::c::ULong) -> ffi::c::Long\n1\n"]]
+    lmap target {linux-x86_64 windows-x86_64 linux-aarch64} {
+        set hir [surface::readProgramFile [file join $dir main.bot] -warnings off -cache "" -target $target]
+        dict get [hir::foreign::declarations $hir] f abi
+    }
+} -cleanup removeApps -result {{params {i64 i8 u64} result i64} {params {i32 i8 u32} result i32} {params {i64 u8 u64} result i64}}
+
+test cf-link-plan {the link plan is every extern c library of the program, each name once, in first-declaration order (modules after their imports, the entry program last); a library is associated with no function} -body {
+    set dir [app [list main.bot "import a\nimport b\n\nextern c library \"z\"\nextern c library \"a1\"\n1\n" \
+        a.bot "import b\n\nextern c library \"a1\"\nextern c library \"shared\"\n" \
+        b.bot "import ffi::c\n\nextern c library \"shared\"\nextern c library \"b1\"\nextern c fn f(x: ffi::c::Int) -> ffi::c::Int\n"]]
+    set hir [appHir $dir]
+    list [hir::foreign::links $hir] [lmap entry [dict get $hir links] {llength [dict get $entry origins]}] \
+        [lsort [dict keys [dict get [hir::foreign::declarations $hir] b::f]]] \
+        [regexp -all -line {^link } [native::nir $hir]] [lsearch -all -inline -regexp [split [native::nir $hir] \n] {^link }]
+} -cleanup removeApps -result {{shared b1 a1 z} {2 1 2 1} {abi contract key name namespace native origin symbol} 4 {{link "shared"} {link "b1"} {link "a1"} {link "z"}}}
+
+# ---------------------------------------------------------------------------
+# Calls and typing
+
+test cf-call-typing {a call is typed by the declaration: its result's C type, arguments held to the C types by the ordinary admission proof (an Int where a C scalar is declared needs its range proven), arity checked} -constraints cfFixture -body {
+    set ok [bcfApp "import ffi::c\nimport bcf\n\nfn f(x: ffi::c::Int) -> int:\n    bcf::add(x, 2)\n\nf(40)\n"]
+    set unproven [bcfApp "import ffi::c\nimport bcf\n\nfn f(x: int) -> int:\n    bcf::add(x, 2)\n\nf(40)\n"]
+    set arity [bcfApp "import ffi::c\nimport bcf\n\nbcf::add(1)\n"]
+    set ptr [bcfApp "import ffi::c\nimport bcf\n\nbcf::is_null(5)\n"]
+    list [appValues $ok {cranelift}] [appRejection $unproven] [appRejection $arity] [appRejection $ptr]
+} -cleanup removeApps -result {42 {TYPE: main.bot:5:14: argument 1 of bcf::add cannot be proven to satisfy ffi::c::Int (argument type: int)} {ARITY: main.bot:4:1: bcf::add is a C function of 2 parameter(s), its declaration's C signature, and this call passes 1 argument(s)} {TYPE: main.bot:4:14: argument 1 of bcf::is_null cannot be proven to satisfy ffi::c::Ptr[ffi::c::Void] (argument type: int)}}
+
+test cf-not-a-value {an extern c fn is only called: bound, passed or returned as a value it is TYPE (it would be called with no contract and no symbol)} -constraints cfFixture -body {
+    list [appRejection [bcfApp "import ffi::c\nimport bcf\n\nf = bcf::add\n1\n"]] \
+        [appRejection [bcfApp "import ffi::c\nimport bcf\n\nfn g(h):\n    h\n\ng(bcf::add)\n"]]
+} -cleanup removeApps -result {{TYPE: main.bot:4:5: bcf::add can only be called directly: it is a C function (extern c fn), and a call through a function value would have no C signature, no contract and no link symbol -- it is not a value (a C function pointer value is ffi::c::FnPtr, which Botlish does not call)} {TYPE: main.bot:7:3: bcf::add can only be called directly: it is a C function (extern c fn), and a call through a function value would have no C signature, no contract and no link symbol -- it is not a value (a C function pointer value is ffi::c::FnPtr, which Botlish does not call)}}
+
+test cf-method-syntax {method syntax reaches an extern c fn as it reaches any visible function of an imported namespace: no FFI-specific rule} -constraints cfFixture -body {
+    appValues [bcfApp "import ffi::c\nimport bcf\n\nfn f(x: ffi::c::Int) -> int:\n    x.add(2)\n\nf(40)\n"] {cranelift}
+} -cleanup removeApps -result 42
+
+test cf-entry-program-declares {the entry program declares and calls its own extern c fn like a module: visible in the whole program, not in any module} -constraints cfFixture -body {
+    set dir [app [list main.bot "import ffi::c\n\nextern c library \"botlish_cffi_fixture\"\n\nfn f() -> int:\n    plus(40, 2)\n\nextern c fn plus named \"bcf_add\"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int\n\nf()\n"]]
+    set hidden [app [list main.bot "import m\nimport ffi::c\n\nextern c fn plus named \"bcf_add\"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int\n\nm::g()\n" m.bot "fn g() -> int:\n    plus(1, 2)\n"]]
+    list [appValues $dir {cranelift}] [appRejection $hidden]
+} -cleanup removeApps -result {42 {UNBOUND: m.bot:2:5: unbound name "plus"}}
+
+# ---------------------------------------------------------------------------
+# Byte borrowing through real C
+
+test cf-borrow-read {a Bytes (and a MutableBytes) at a read/noescape byte pointer is exposed for the call as it is, no copy; C reads the real storage} -constraints cfFixture -body {
+    appValues [bcfApp "${::bytesPrelude}m = abi::bytes::from_bytes(text(\"hello\"))\n\[bcf::sum(text(\"hello\"), 5), bcf::sum(m, 5), bcf::sum(text(\"\"), 0), bcf::sum_proven(text(\"\u00ff\"), 2)\]\n"] {cranelift cranelift-generic}
+} -cleanup removeApps -result {{[532, 532, 0, 386]} {[532, 532, 0, 386]}}
+
+test cf-borrow-write {a MutableBytes at a write/noescape byte pointer: C writes a private copy, which the call returns as the parameter's field of the write-back struct; the caller's value, and every copy of it, is unchanged} -constraints cfFixture -body {
+    appValues [bcfApp "import byte\n${::bytesPrelude}fn byte_of(n: int) -> byte::Byte:\n    if n >= 0 and n <= 255:\n        return n\n    0\n\nm = abi::bytes::zeroed(abi::usize(5))\nkept = m\nr = bcf::fill(m, 5, 7)\nexpected = abi::bytes::from_list(\[byte_of(7), byte_of(44), byte_of(81), byte_of(118), byte_of(155)\])\n\[abi::bytes::freeze(r.out) == expected, abi::bytes::freeze(m) == abi::bytes::freeze(abi::bytes::zeroed(abi::usize(5))), abi::bytes::freeze(kept) == abi::bytes::freeze(m), r.result\]\n"] {cranelift}
+} -cleanup removeApps -result {{[true, true, true, unit]}}
+
+test cf-borrow-sha256-shape {SHA256's shape: read input, write output, and a pointer result that is exactly the output: the call yields unit in its place, the write-back carries the bytes} -constraints cfFixture -body {
+    set dir [bcfApp "${::bytesPrelude}src = text(\"hello\")\nout = abi::bytes::zeroed(abi::usize(5))\nr = bcf::reverse(src, len(src), out)\n\[abi::bytes::freeze(r.out) == text(\"olleh\"), r.result, src == text(\"hello\"), abi::bytes::freeze(out) == abi::bytes::freeze(abi::bytes::zeroed(abi::usize(5)))\]\n"]
+    set hir [appHir $dir]
+    set call [lindex [lsearch -all -inline -regexp [split [native::nir $hir] \n] {foreigncall}] 0]
+    list [appValues $dir {cranelift cranelift-generic}] [regexp {foreigncall \d+ %\d+ %\d+ %\d+ exposed=0,2 discard} $call]
+} -cleanup removeApps -result {{{[true, unit, true, true]} {[true, unit, true, true]}} 1}
+
+test cf-borrow-refusals {byte storage is refused, FOREIGN-BORROW, where the contract may keep the pointer (captures, unknown), where C may write an immutable Bytes, and where the pointee is not byte-sized -- exactly the borrowing milestone's rules} -constraints cfFixture -body {
+    set decls "extern c fn keep named \"bcf_keep\"(p: ffi::c::Ptr\[ffi::c::UChar\] read captures) -> unit\nextern c fn keep2 named \"bcf_keep\"(p: ffi::c::Ptr\[ffi::c::UChar\] read) -> unit\nextern c fn fill2 named \"bcf_fill\"(out: ffi::c::Ptr\[ffi::c::UChar\] write noescape, count: ffi::c::ULong, seed: ffi::c::UChar) -> unit\nextern c fn ints named \"bcf_sum\"(data: ffi::c::Ptr\[ffi::c::Int\] read noescape, count: ffi::c::ULong) -> ffi::c::ULong\n"
+    lmap call {"r.keep(text(\"x\"))" "r.keep2(text(\"x\"))" "r.fill2(text(\"x\"), 1, 2)" "r.ints(text(\"x\"), 1)"} {
+        set dir [app [list main.bot "direct module\n\nimport abi\nimport abi::bytes\nimport ffi::c\nimport str\nimport r\n\nfn text(s: str) -> abi::bytes::Bytes:\n    abi::bytes::from_list(str::encode_utf8(s))\n\n[string map {r. r::} $call]\n" r.bot "import ffi::c\n\n$decls"]]
+        lindex [split [appRejection $dir] :] 0
+    }
+} -cleanup removeApps -result {FOREIGN-BORROW FOREIGN-BORROW FOREIGN-BORROW FOREIGN-BORROW}
+
+test cf-result-provenance {a pointer result of a call that exposes storage needs a stated provenance: unknown (memchr's shape) is FOREIGN-BORROW, independent is a pointer, an alias of a raw pointer argument a new alias of it, of an exposed one unit} -constraints cfFixture -body {
+    set refused [bcfApp "${::bytesPrelude}p = bcf::find(text(\"hey\"), 3, 101)\np.null?()\n"]
+    set raw [bcfApp "import ffi::c\nimport bcf\n\np = bcf::address()\nq = bcf::echo_ptr(p)\n\[bcf::same(p, q), q.null?()\]\n"]
+    list [appRejection $refused] [appValues $raw {cranelift}]
+} -cleanup removeApps -result {{FOREIGN-BORROW: main.bot:13:15: argument 1 of bcf::find: byte storage (abi::bytes::Bytes) is exposed to a call whose pointer result (ffi::c::Ptr[ffi::c::UChar]) may point into it: the contract does not say where the result comes from, and a pointer into Botlish storage never outlives the call -- a result independent of every argument is declared `independent`, exactly the pointer of a parameter `alias PARAM`} {{[1, false]}}}
+
+test cf-contract-violation {a result declared an alias of its argument that is not is a CONTRACT-VIOLATION where the run sees it, after the call: a development assertion of the binding's contract, for an exposure and for a raw pointer alike} -constraints cfFixture -body {
+    set exposed [bcfApp "${::bytesPrelude}src = text(\"hey\")\nr = bcf::reverse_off(src, len(src), abi::bytes::zeroed(abi::usize(3)))\n1\n"]
+    set raw [bcfApp "import ffi::c\nimport bcf\n\np = bcf::address()\nu = ffi::c::retype\[ffi::c::UChar\](p)\nq = bcf::next(u)\n1\n"]
+    list [appCode $exposed cranelift] [appCode $raw cranelift-generic]
+} -cleanup removeApps -result {{NATIVE CONTRACT-VIOLATION} {NATIVE CONTRACT-VIOLATION}}
+
+test cf-wild-address {a returned address the C pointer word cannot hold is a NATIVE ADDRESS failure, never a truncated pointer} -constraints cfFixture -body {
+    lindex [appValues [bcfApp "import ffi::c\nimport bcf\n\np = bcf::wild()\np.null?()\n"] {cranelift}] 0
+} -cleanup removeApps -result {{NATIVE ADDRESS} {the C function bcf::wild returned the address 0xf000000000000010, which a Botlish C pointer cannot hold (its word keeps a sign-extended 60-bit address: a top-byte-tagged pointer is not one); the pointer is never truncated or masked}}
+
+# ---------------------------------------------------------------------------
+# The C ABI
+
+test cf-scalar-transport {every C integer scalar crosses both ways at its own width and signedness, at both bounds; 64-bit values beyond the small Int range as BigInts, both ways} -constraints cfFixture -body {
+    appValues [bcfApp "import ffi::c\nimport bcf\n\n\[bcf::echo_schar(-128), bcf::echo_schar(127), bcf::echo_uchar(0), bcf::echo_uchar(255), bcf::echo_char(-128), bcf::echo_char(127), bcf::echo_short(-32768), bcf::echo_short(32767), bcf::echo_ushort(65535), bcf::echo_int(-2147483648), bcf::echo_int(2147483647), bcf::echo_uint(4294967295), bcf::echo_long(-9223372036854775808), bcf::echo_long(9223372036854775807), bcf::echo_ulong(18446744073709551615), bcf::echo_ulong(4611686018427387904), bcf::echo_longlong(-4611686018427387905), bcf::echo_ulonglong(18446744073709551615)\]\n"] {cranelift cranelift-generic}
+} -cleanup removeApps -result {{[-128, 127, 0, 255, -128, 127, -32768, 32767, 65535, -2147483648, 2147483647, 4294967295, -9223372036854775808, 9223372036854775807, 18446744073709551615, 4611686018427387904, -4611686018427387905, 18446744073709551615]} {[-128, 127, 0, 255, -128, 127, -32768, 32767, 65535, -2147483648, 2147483647, 4294967295, -9223372036854775808, 9223372036854775807, 18446744073709551615, 4611686018427387904, -4611686018427387905, 18446744073709551615]}}
+
+test cf-scalar-extension {C sees a narrow argument sign- or zero-extended by its own type; a narrow result is extended by Botlish from its width, whatever the callee left in the register's other bits (GCC leaves them)} -constraints {cfFixture} -body {
+    appValues [bcfApp "import ffi::c\nimport bcf\n\n\[bcf::widen_schar(-1), bcf::widen_uchar(255), bcf::widen_short(-2), bcf::widen_ushort(65535), bcf::widen_int(-3), bcf::widen_uint(4294967295), bcf::dirty_uchar(), bcf::dirty_schar(), bcf::dirty_ushort(), bcf::dirty_short(), bcf::dirty_uint(), bcf::dirty_int()\]\n"] {cranelift}
+} -cleanup removeApps -result {{[-1, 255, -2, 65535, -3, 4294967295, 128, -128, 32768, -32768, 4294967280, -16]}}
+
+test cf-stack-arguments {ten arguments of mixed classes: the ones past the argument registers on the stack, each at its own weight} -constraints cfFixture -body {
+    appValues [bcfApp "import ffi::c\nimport bcf\n\n\[bcf::many(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), bcf::many(-1, -2, -3, -4, 255, 65535, 4294967295, 18446744073709551615, -9, -10), bcf::tenth(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), bcf::tenth(0, 0, 0, 0, 0, 0, 0, 0, 0, -2147483648)\]\n"] {cranelift cranelift-generic}
+} -cleanup removeApps -result {{[763, 55835297053, 10, -2147483648]} {[763, 55835297053, 10, -2147483648]}}
+
+test cf-void-and-unit {a void C function returns unit} -constraints cfFixture -body {
+    appValues [bcfApp "import ffi::c\nimport bcf\n\nbcf::nothing()\n"] {cranelift}
+} -cleanup removeApps -result unit
+
+test cf-pointers {raw pointers cross as raw machine addresses: null both ways (ffi::c::null[T]() into C, a NULL from C), a C address round-trips with its identity (C compares the two), no borrowing involved} -constraints cfFixture -body {
+    appValues [bcfApp "import ffi::c\nimport bcf\n\np = bcf::address()\nq = bcf::echo_ptr(p)\nn = bcf::null()\nz = ffi::c::null\[ffi::c::Void\]()\n\[bcf::same(p, q), p.null?(), n.null?(), bcf::is_null(z), bcf::is_null(p), bcf::is_null(n)\]\n"] {cranelift cranelift-generic}
+} -cleanup removeApps -result {{[1, false, true, 1, 0, 1]} {[1, false, true, 1, 0, 1]}}
+
+test cf-function-pointers {a C function pointer is an ABI value: C returns one and takes it back, and calls it itself (Botlish never calls one)} -constraints cfFixture -body {
+    appValues [bcfApp "import ffi::c\nimport bcf\n\nf = bcf::callback_twice()\nbcf::apply(f, 21)\n"] {cranelift}
+} -cleanup removeApps -result 42
+
+test cf-nir {the call lowers to one foreigncall of the program's foreign table -- symbol, ABI classes, alias -- after the argument evaluation and exposures, with the keepalives after it; the link plan in the header} -constraints cfFixture -body {
+    set nir [appNir [bcfApp "${::bytesPrelude}src = text(\"hello\")\nr = bcf::reverse(src, len(src), abi::bytes::zeroed(abi::usize(5)))\nbcf::add(1, 2)\n"]]
+    set lines [split $nir \n]
+    set call [lsearch -regexp $lines {foreigncall}]
+    list [lsearch -all -inline -regexp $lines {^(link|foreign) }] \
+        [lindex [regexp -inline {op mbytesclone} [lindex $lines [expr {$call - 3}]]] 0] \
+        [lindex [regexp -inline {op bytesaddr} [lindex $lines [expr {$call - 2}]]] 0] \
+        [lindex [regexp -inline {op mbytesaddr} [lindex $lines [expr {$call - 1}]]] 0] \
+        [lindex [regexp -inline {op keepalive} [lindex $lines [expr {$call + 1}]]] 0] \
+        [lindex [regexp -inline {op keepalive} [lindex $lines [expr {$call + 2}]]] 0]
+} -cleanup removeApps -result {{{link "botlish_cffi_fixture"} {foreign 0 "bcf_reverse" params="ptr u64 ptr" result=ptr alias=2 name="bcf::reverse"} {foreign 1 "bcf_add" params="i32 i32" result=i32 name="bcf::add"}} {op mbytesclone} {op bytesaddr} {op mbytesaddr} {op keepalive} {op keepalive}}
+
+test cf-clif {natively the call is one direct call of the imported symbol with the platform C signature -- narrow parameters extended by their class, the result at its width -- no helper, no lookup, no Tcl} -constraints {cfFixture} -body {
+    set hir [appHir [bcfApp "import ffi::c\nimport bcf\n\nfn f(x: ffi::c::UChar, y: ffi::c::Short) -> int:\n    bcf::widen_uchar(x) + bcf::widen_short(y)\n\nf(1, 2)\n"]]
+    set clif [native::clif $hir]
+    regexp {; u0:(\d+) = bcf_widen_uchar \(C bcf::widen_uchar\)} $clif -> id
+    regexp "fn(\\d+) = u0:$id (sig\\d+)" $clif -> fn sig
+    list [regexp "$sig = \\(i8 uext\\) -> i64 system_v" $clif] [regexp {sig\d+ = \(i16 sext\) -> i64 system_v} $clif] \
+        [regexp "= call fn$fn\\(v\\d+\\)" $clif]
+} -cleanup removeApps -result {1 1 1}
+
+# ---------------------------------------------------------------------------
+# Backends
+
+test cf-tcl-backends {the Tcl backends have no machine to call C on: a C call is NATIVE-ONLY at run time (after its exposures were modeled), and a program that declares but does not call one runs on all four backends} -constraints cfFixture -body {
+    set calls [bcfApp "import ffi::c\nimport bcf\n\nbcf::add(1, 2)\n"]
+    set declares [bcfApp "import ffi::c\nimport bcf\n\n1 + 1\n"]
+    list [lmap backend {interp compile} {lindex [appCode $calls $backend] end}] [appValues $declares {interp compile cranelift-generic cranelift}]
+} -cleanup removeApps -result {{NATIVE-ONLY NATIVE-ONLY} {2 2 2 2}}
+
+test cf-strict0-replay {an unchecked (-strict 0) program's refused exposure replays the refusal on every backend, the C call never made} -constraints cfFixture -body {
+    set dir [app [list main.bot "direct module\n\nimport abi\nimport abi::bytes\nimport ffi::c\nimport str\nimport r\n\nr::keep(abi::bytes::from_list(str::encode_utf8(\"x\")))\n" r.bot "import ffi::c\n\nextern c library \"botlish_cffi_fixture\"\nextern c fn keep named \"bcf_keep\"(p: ffi::c::Ptr\[ffi::c::UChar\] read captures) -> unit\n"]]
+    set hir [appHir $dir main.bot 0]
+    native::withLinkDirs [list $::fixtureDir] {
+        lmap backend {interp compile cranelift} {lindex [lindex [outcomeUnderHir $backend $hir] 1] end}
+    }
+} -cleanup removeApps -result {TYPE TYPE TYPE}
+
+# ---------------------------------------------------------------------------
+# Linking
+
+test cf-missing-library {a library the linker cannot find compiles through the front end and fails at the native link, with the linker's own words, as NATIVE LINK -- never an UNKNOWN-NAMESPACE, a TYPE or a HIR error} -constraints {nativeBuilt rustcLinker} -body {
+    set dir [app [list main.bot "extern c library \"definitely_missing_botlish_lib\"\n1 + 1\n"]]
+    set hir [appHir $dir]
+    lassign [native::withLinkDirs {} {outcomeUnderHir cranelift $hir}] tag code message
+    list [hir::foreign::links $hir] [outcomeUnderHir interp $hir] $code \
+        [string match "native link failed: the system linker could not link this program with the C functions and libraries it declares (libraries -ldefinitely_missing_botlish_lib):*" $message] \
+        [regexp {(cannot|unable to) find[^\n]*definitely_missing_botlish_lib} $message]
+} -cleanup removeApps -result {definitely_missing_botlish_lib {value 2 {}} {NATIVE LINK} 1 1}
+
+test cf-undefined-symbol {a symbol no library defines is the linker's undefined symbol, reported as NATIVE LINK; an unused declaration needs no definition} -constraints cfFixture -body {
+    set used [bcfApp "import ffi::c\nimport m\n\nm::nope(1)\n" [list m.bot "import ffi::c\n\nextern c fn nope named \"botlish_no_such_symbol\"(x: ffi::c::Int) -> ffi::c::Int\n"]]
+    set unused [bcfApp "import ffi::c\nimport m\nimport bcf\n\nbcf::add(1, 2)\n" [list m.bot "import ffi::c\n\nextern c fn nope named \"botlish_no_such_symbol\"(x: ffi::c::Int) -> ffi::c::Int\n"]]
+    lassign [lindex [appValues $used {cranelift}] 0] code message
+    list $code [regexp {undefined (symbol|reference).*botlish_no_such_symbol} $message] [appValues $unused {cranelift}]
+} -cleanup removeApps -result {{NATIVE LINK} 1 3}
+
+test cf-named-symbol {`named` changes exactly the link symbol: the Botlish name stays the declaration's; without it the symbol is the name} -constraints cfFixture -body {
+    set lib "extern c library \"botlish_cffi_fixture\"\n"
+    set renamed [bcfApp "import ffi::c\nimport m\n\nm::plus(40, 2)\n" [list m.bot "import ffi::c\n\n${lib}extern c fn plus named \"bcf_add\"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int\n"]]
+    set plain [bcfApp "import ffi::c\nimport m\n\nm::bcf_add(40, 2)\n" [list m.bot "import ffi::c\n\n${lib}extern c fn bcf_add(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int\n"]]
+    set unrenamed [bcfApp "import ffi::c\nimport m\n\nm::plus(40, 2)\n" [list m.bot "import ffi::c\n\n${lib}extern c fn plus(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int\n"]]
+    list [appValues $renamed {cranelift}] [appValues $plain {cranelift}] [lindex [lindex [appValues $unrenamed {cranelift}] 0] 0]
+} -cleanup removeApps -result {42 42 {NATIVE LINK}}
+
+test cf-executable {a program that calls C links as a standalone executable with the libraries it declares and runs with no Tcl, no rustc and no source} -constraints cfFixture -body {
+    set dir [bcfApp "${::bytesPrelude}src = text(\"hello\")\nr = bcf::reverse(src, len(src), abi::bytes::zeroed(abi::usize(5)))\n\[bcf::add(40, 2), abi::bytes::freeze(r.out) == text(\"olleh\")\]\n"]
+    set exe [file join $dir program]
+    native::withLinkDirs [list $::fixtureDir] {native::executable [appHir $dir] $exe}
+    string trim [exec $exe]
+} -cleanup removeApps -result {[42, true]}
+
+test cf-stub-linker {the stub linker links no native library: it refuses a program that calls C, naming what it calls and the linker that can} -constraints {cfFixture} -body {
+    set dir [bcfApp "import ffi::c\nimport bcf\n\nbcf::add(40, 2)\n"]
+    set saved [expr {[info exists ::env(BOTLISH_NATIVE_LINKER)] ? $::env(BOTLISH_NATIVE_LINKER) : ""}]
+    set ::env(BOTLISH_NATIVE_LINKER) stub
+    try {
+        catch {native::withLinkDirs [list $::fixtureDir] {native::executable [appHir $dir] [file join $dir program]}} message options
+    } finally {
+        if {$saved eq ""} { unset ::env(BOTLISH_NATIVE_LINKER) } else { set ::env(BOTLISH_NATIVE_LINKER) $saved }
+    }
+    list [dict get $options -errorcode] $message
+} -cleanup removeApps -result {{NATIVE LINK} {native link failed: this program calls C (symbols bcf_add; libraries -lbotlish_cffi_fixture), whose symbols and libraries only the system linker resolves, and the stub linker (BOTLISH_NATIVE_LINKER=stub) links no native library: link it with BOTLISH_NATIVE_LINKER=rustc (C-FFI.md)}}
+
+test cf-main-tcl {main.tcl -backend cranelift -L DIR compiles, links with the declared libraries, runs and reports the value, the program's own output in its place (native program output is main.tcl's own)} -constraints cfFixture -body {
+    set dir [bcfApp "import ffi::c\nimport bcf\n\nbcf::add(40, 2)\n"]
+    exec [info nameofexecutable] $::mainScript -backend cranelift -warnings off -L $::fixtureDir [file join $dir main.bot]
+} -cleanup removeApps -result "== main.bot (cranelift)\n   value: 42"
+
+test cf-argv {the linked run of a program that calls C gets the run's argument vector} -constraints cfFixture -body {
+    set dir [bcfApp "import ffi::c\nimport bcf\nimport list\n\nargs = argv():\n    on InvalidArgumentEncoding:\n        \[\]\n\[bcf::add(1, 1), list::length(args)\]\n"]
+    exec [info nameofexecutable] $::mainScript -backend cranelift -warnings off -L $::fixtureDir -argv a -argv b -argv c [file join $dir main.bot]
+} -cleanup removeApps -result "== main.bot (cranelift)\n   value: \[2, 3\]"
+
+# ---------------------------------------------------------------------------
+# direct
+
+test cf-direct-noescape-ordinary {a foreign call is not direct by being foreign: a module whose C calls are all noescape (and pass and return raw pointers) is ordinary} -constraints cfFixture -body {
+    set hir [appHir [bcfApp "import ffi::c\nimport bcf\n\nfn f() -> int:\n    p = bcf::address()\n    bcf::is_null(p)\n\nf()\n"]]
+    statuses $hir {bcf ""}
+} -cleanup removeApps -result {bcf ordinary {} ordinary}
+
+test cf-direct-retaining {a call of a C function whose contract may keep a pointer (captures, or no escape fact: unknown) is an authority source: from a context-free function DIRECT, naming the function and the retaining parameter} -constraints cfFixture -body {
+    lmap fn {keep keep_unknown} {
+        appRejection [app [list main.bot "import ffi::c\nimport r\n\nfn f():\n    p = r::address()\n    r::$fn\(p)\n\nf()\n" r.bot "import ffi::c\n\nextern c library \"botlish_cffi_fixture\"\n$::retainingDecls"]]
+    }
+} -cleanup removeApps -result {{DIRECT: main.bot:6:5: the entry program uses direct authority: function "f" calls r::keep, a C function whose contract lets it retain pointer authority past the call (parameter "p": escape captures), without a context defined by the entry program; require one of this module's own contexts ("context NAME: T", T a context struct or context trait declared by the entry program) in "f", the function that makes the direct call, or declare the module direct with `direct module` as its first line} {DIRECT: main.bot:6:5: the entry program uses direct authority: function "f" calls r::keep_unknown, a C function whose contract lets it retain pointer authority past the call (parameter "p": escape unknown), without a context defined by the entry program; require one of this module's own contexts ("context NAME: T", T a context struct or context trait declared by the entry program) in "f", the function that makes the direct call, or declare the module direct with `direct module` as its first line}}
+
+test cf-direct-contextualized {the retaining call from a function requiring a context the calling module declares is mediated: contextualized, and it runs} -constraints cfFixture -body {
+    set dir [app [list main.bot "import ffi::c\nimport r\n\ncontext struct Keeper:\n    ok: bool\n\nfn f(context k: Keeper) -> int:\n    p = r::address()\n    r::keep(p)\n    1\n\nwith context Keeper {ok: true}\nf()\n" r.bot "import ffi::c\n\nextern c library \"botlish_cffi_fixture\"\n$::retainingDecls"]]
+    list [statuses [appHir $dir] {r ""}] [appValues $dir {cranelift}]
+} -cleanup removeApps -result {{r ordinary {} contextualized} 1}
+
+test cf-direct-declared {the same call in a `direct module` is a deliberate direct module, justified by it (not stale)} -constraints cfFixture -body {
+    set dir [app [list main.bot "direct module\n\nimport ffi::c\nimport r\n\np = r::address()\nr::keep(p)\n1\n" r.bot "import ffi::c\n\nextern c library \"botlish_cffi_fixture\"\n$::retainingDecls"]]
+    list [statuses [appHir $dir] {r ""}] [appValues $dir {cranelift}]
+} -cleanup removeApps -result {{r ordinary {} direct} 1}
+
+test cf-direct-not-predesignated {declaring a retaining extern designates nothing: the declaring module is ordinary while it does not call it, stale if marked, and the authority is its caller's -- a call of it in its own module is an edge too} -constraints cfFixture -body {
+    set decls "import ffi::c\n\nextern c library \"botlish_cffi_fixture\"\n$::retainingDecls"
+    set marked [app [list main.bot "import r\n1\n" r.bot "direct module\n\n$decls"]]
+    set own [app [list main.bot "import r\nr::wrap()\n" r.bot "${decls}\nfn wrap():\n    p = address()\n    keep(p)\n"]]
+    list [lindex [split [appRejection $marked] :] 0] [appRejection $own]
+} -cleanup removeApps -result {STALE-DIRECT-MODULE {DIRECT: r.bot:10:5: module "r" uses direct authority: function "r::wrap" calls r::keep, a C function whose contract lets it retain pointer authority past the call (parameter "p": escape captures), without a context defined by "r"; require one of this module's own contexts ("context NAME: T", T a context struct or context trait declared by "r") in "r::wrap", the function that makes the direct call, or declare the module direct with `direct module` as its first line}}
+
+test cf-direct-two-modules-one-library {one C library, two Botlish modules: an ordinary one binding its noescape functions and a direct one binding its retaining function, both declaring the library; the capability boundary is the module, the link plan has the library once} -constraints cfFixture -body {
+    set lib "extern c library \"botlish_cffi_fixture\"\n"
+    set dir [app [list \
+        main.bot "import ffi::c\nimport cfoo::basic\nimport cfoo::direct\n\ncontext struct Holder:\n    ok: bool\n\nfn hold(context h: Holder) -> int:\n    cfoo::direct::hold()\n\nwith context Holder {ok: true}\n\[cfoo::basic::add(40, 2), hold()\]\n" \
+        cfoo/basic.bot "import ffi::c\n\n${lib}\nextern c fn add named \"bcf_add\"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int\n" \
+        cfoo/direct.bot "direct module\n\nimport ffi::c\n\n${lib}\nextern c fn keep named \"bcf_keep\"(p: ffi::c::Ptr\[ffi::c::Void\] captures) -> unit\nextern c fn address named \"bcf_address\"() -> ffi::c::Ptr\[ffi::c::Void\] independent\n\nfn hold() -> int:\n    p = address()\n    keep(p)\n    7\n"]]
+    set hir [appHir $dir]
+    list [statuses $hir {cfoo::basic cfoo::direct ""}] [hir::foreign::links $hir] [appValues $dir {cranelift}]
+} -cleanup removeApps -result {{cfoo::basic ordinary cfoo::direct direct {} contextualized} botlish_cffi_fixture {{[42, 7]}}}
+
+test cf-direct-summary {main.tcl -direct names a retaining C call among the edges} -constraints cfFixture -body {
+    set dir [app [list main.bot "direct module\n\nimport ffi::c\nimport r\n\np = r::address()\nr::keep(p)\n1\n" r.bot "import ffi::c\n\nextern c library \"botlish_cffi_fixture\"\n$::retainingDecls"]]
+    string map [list $dir/ ""] [lindex [split [hir::direct::explain [appHir $dir] ""] \n] 1]
+} -cleanup removeApps -result {    top-level code -> r::keep, a C function whose contract lets it retain pointer authority past the call (parameter "p": escape captures) (a retaining C call, main.bot:7:1): undischarged}
+
+# ---------------------------------------------------------------------------
+# static compile
+
+test cf-static-compile {a static block diagnoses a C call like any call -- arity, a C scalar's range, a refused exposure, an unmediated retaining call -- as compiler::DiagnosticCode values; nothing is executed at compile time, and an accepted block is the ordinary call} -constraints cfFixture -body {
+    set decls "extern c fn keep named \"bcf_keep\"(p: ffi::c::Ptr\[ffi::c::Void\] captures) -> unit\n"
+    lmap {body code} {
+        "bcf::add(1)" Arity
+        "bcf::add(x, 2)" Type
+        "bcf::keep(abi::bytes::from_list(str::encode_utf8(\"x\")))" ForeignBorrow
+        "p = bcf::address()\n        bcf::keep(p)" Direct
+        "bcf::add(1, 2)" Arity
+    } {
+        set dir [app [list main.bot "import abi\nimport abi::bytes\nimport compiler\nimport ffi::c\nimport str\nimport bcf\n\nfn probe(x: int) -> int errors compiler::CompilerError:\n    static compile:\n        $body\n        0\n\nr = probe(5):\n    on compiler::CompilerError {code}:\n        if code == compiler::DiagnosticCode::$code:\n            1\n        else:\n            2\nr\n" bcf.bot "${::bcfModule}${decls}"]]
+        set v [lindex [appValues $dir {interp}] 0]
+        expr {[llength $v] == 2 ? [lindex $v 0 end] : $v}
+    }
+} -cleanup removeApps -result {1 1 1 1 NATIVE-ONLY}
+
+# ---------------------------------------------------------------------------
+# Interchange, cache, isolation
+
+test cf-interchange {HIR interchange text carries everything a C call needs past the front end -- the declarations, contracts, link symbols, link plan, transports -- and its HIR, read back in a fresh process with no front end, lowers to the identical NIR and runs} -constraints cfFixture -body {
+    set dir [bcfApp "${::bytesPrelude}src = text(\"hello\")\nr = bcf::reverse(src, len(src), abi::bytes::zeroed(abi::usize(5)))\n\[bcf::add(40, 2), abi::bytes::freeze(r.out) == text(\"olleh\")\]\n"]
+    set hir [appHir $dir]
+    set path [file join $dir main.hirx]
+    hir::interchange::writeFile $path $hir
+    set direct [native::nir $hir]
+    set script [file join $dir read.tcl]
+    set channel [open $script w]
+    puts $channel "source [list [file join $::projectRoot native native.tcl]]\nset h \[hir::interchange::readFile [list $path]\]\nputs -nonewline \[native::nir \$h\]"
+    close $channel
+    set read [exec [info nameofexecutable] $script]
+    list [expr {$read eq [string trimright $direct \n]}] [native::withLinkDirs [list $::fixtureDir] {
+        lindex [outcomeUnderHir cranelift [hir::interchange::readFile $path]] 1
+    }]
+} -cleanup removeApps -result {1 {[42, true]}}
+
+test cf-cache {the front-end cache keeps a program that calls C as its build (a hit runs identically), and a changed library name, link symbol, signature or contract of an imported binding module is a miss} -constraints cfFixture -body {
+    set dir [bcfApp "import ffi::c\nimport bcf\n\nbcf::add(40, 2)\n"]
+    set cache [makeDirectory cf-cache-[pid]]
+    set path [file join $dir main.bot]
+    set first [surface::readProgramFile $path -warnings off -cache $cache]
+    set hit [surface::readProgramFile $path -warnings off -cache $cache]
+    set misses {}
+    foreach {from to} {
+        {extern c library "botlish_cffi_fixture"} {extern c library "botlish_cffi_fixture2"}
+        {named "bcf_add"} {named "bcf_add2"}
+        {extern c fn add named "bcf_add"(a: ffi::c::Int, b: ffi::c::Int)} {extern c fn add named "bcf_add"(a: ffi::c::Long, b: ffi::c::Int)}
+        {(p: ffi::c::Ptr[ffi::c::Void] noescape) -> ffi::c::Int} {(p: ffi::c::Ptr[ffi::c::Void] captures) -> ffi::c::Int}
+    } {
+        set channel [open [file join $dir bcf.bot] w]
+        puts -nonewline $channel [string map [list $from $to] $::bcfModule]
+        close $channel
+        set changed [surface::readProgramFile $path -warnings off -cache $cache]
+        lappend misses [expr {[dict get $changed foreign] ne [dict get $first foreign] || [dict get $changed links] ne [dict get $first links]}]
+    }
+    list [expr {[native::nir $hit] eq [native::nir $first]}] $misses \
+        [native::withLinkDirs [list $::fixtureDir] {lindex [outcomeUnderHir cranelift $hit] 1}]
+} -cleanup {removeApps; file delete -force [file join [temporaryDirectory] cf-cache-[pid]]} -result {1 {1 1 1 1} 42}
+
+test cf-isolation {extern declarations, link plans and their natives are compilation-local: compiling another program (with other externs of the same names, or none) never changes an earlier HIR's lowering, and no later compilation links an earlier one's library} -constraints cfFixture -body {
+    set a [bcfApp "import ffi::c\nimport bcf\n\nbcf::add(40, 2)\n"]
+    set b [app [list main.bot "import ffi::c\nimport bcf\n\nbcf::add(1)\n" bcf.bot "import ffi::c\n\nextern c library \"other\"\nextern c fn add named \"other_add\"(a: ffi::c::Int) -> ffi::c::Int\n"]]
+    set c [app [list main.bot "1 + 1\n"]]
+    set hirA [appHir $a]
+    set nirA [native::nir $hirA]
+    set hirB [appHir $b]
+    set hirC [appHir $c]
+    set nirC [native::nir $hirC]
+    set registered [lsearch -all -inline -glob [core::native::names] extern#*]
+    list [expr {[native::nir $hirA] eq $nirA}] [regexp {link|foreign} $nirC] \
+        [lsearch -all -inline -regexp [split [native::nir $hirB] \n] {^(link|foreign) }] \
+        $registered \
+        [native::withLinkDirs [list $::fixtureDir] {lindex [outcomeUnderHir cranelift $hirA] 1}]
+} -cleanup removeApps -result {1 0 {{link "other"} {foreign 0 "other_add" params="i32" result=i32 name="bcf::add"}} {} 42}
+
+# ---------------------------------------------------------------------------
+# Acceptance
+
+test cf-tcl-acceptance {Botlish calls the Tcl C library: Tcl_CreateInterp gives a non-null interpreter, Tcl_EvalEx of a valid script is TCL_OK (and Tcl prints), of an invalid one not, Tcl_DeleteInterp deletes it -- on both native backends, from an application-module binding, warning-free} -constraints tclLibrary -body {
+    set path [file join $::projectRoot examples ffi tcl demo.bot]
+    set hir [surface::readProgramFile $path -warnings error -cache ""]
+    list [statuses $hir {tcl ""}] \
+        [exec [info nameofexecutable] $::mainScript -backend cranelift $path] \
+        [exec [info nameofexecutable] $::mainScript -backend cranelift-generic $path]
+} -result "{tcl ordinary {} ordinary} {== demo.bot (cranelift)\nhello from Tcl\n   value: \[true, true, true\]} {== demo.bot (cranelift-generic)\nhello from Tcl\n   value: \[true, true, true\]}"
+
+test cf-sha256-acceptance {Botlish Bytes through real BoringSSL SHA-256: the digests of "", "abc" and a longer message byte for byte, the write-back MutableBytes holding C's writes, the input Bytes and the original MutableBytes unchanged -- statically linked BoringSSL, on both native backends} -constraints boringssl -body {
+    set path [file join $::projectRoot examples ffi sha256 demo.bot]
+    set hir [surface::readProgramFile $path -warnings error -cache ""]
+    native::withLinkDirs [list [cffi::boringsslDir]] {
+        list [statuses $hir {boringssl sha256 ""}] [hir::foreign::links $hir] \
+            [lindex [outcomeUnderHir cranelift $hir] 1] [lindex [outcomeUnderHir cranelift-generic $hir] 1]
+    }
+} -result {{boringssl ordinary sha256 ordinary {} ordinary} {crypto stdc++} {[true, true, true, true, true, true]} {[true, true, true, true, true, true]}}
+
+test cf-sha256-executable {the SHA-256 demo as a standalone executable: BoringSSL linked into it (no libcrypto it needs at run time), the prefixed symbol inside} -constraints boringssl -body {
+    set path [file join $::projectRoot examples ffi sha256 demo.bot]
+    set dir [makeDirectory cf-sha-exe-[pid]]
+    set exe [file join $dir demo]
+    native::withLinkDirs [list [cffi::boringsslDir]] {
+        native::executable [surface::readProgramFile $path -warnings off -cache ""] $exe
+    }
+    list [string trim [exec $exe]] [regexp {libcrypto} [exec ldd $exe]]
+} -cleanup {file delete -force [file join [temporaryDirectory] cf-sha-exe-[pid]]} -result {{[true, true, true, true, true, true]} 0}
+
+test cf-gc-stress {under BOTLISH_NATIVE_GC_STRESS=1 (a collection attempt at every allocation site) the exposures survive real C calls: the read and write borrows, the Tcl script, the SHA-256 digests} -constraints cfFixture -body {
+    set saved [expr {[info exists ::env(BOTLISH_NATIVE_GC_STRESS)] ? $::env(BOTLISH_NATIVE_GC_STRESS) : ""}]
+    set ::env(BOTLISH_NATIVE_GC_STRESS) 1
+    try {
+        set results [list [appValues [bcfApp "${::bytesPrelude}src = text(\"hello, world\")\nr = bcf::reverse(src, len(src), abi::bytes::zeroed(abi::usize(12)))\n\[bcf::sum(src, len(src)), abi::bytes::freeze(r.out) == text(\"dlrow ,olleh\")\]\n"] {cranelift cranelift-generic}]]
+        if {[testConstraint tclLibrary]} {
+            lappend results [lindex [outcomeUnderHir cranelift [surface::readProgramFile [file join $::projectRoot examples ffi tcl demo.bot] -warnings off -cache ""]] 1]
+        } else {
+            lappend results {[true, true, true]}
+        }
+        if {[testConstraint boringssl]} {
+            lappend results [native::withLinkDirs [list [cffi::boringsslDir]] {
+                lindex [outcomeUnderHir cranelift [surface::readProgramFile [file join $::projectRoot examples ffi sha256 demo.bot] -warnings off -cache ""]] 1
+            }]
+        } else {
+            lappend results {[true, true, true, true, true, true]}
+        }
+    } finally {
+        if {$saved eq ""} { unset ::env(BOTLISH_NATIVE_GC_STRESS) } else { set ::env(BOTLISH_NATIVE_GC_STRESS) $saved }
+    }
+    set results
+} -cleanup removeApps -result {{{[1160, true]} {[1160, true]}} {[true, true, true]} {[true, true, true, true, true, true]}}
+
+cleanupTests

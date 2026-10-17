@@ -455,6 +455,15 @@ proc core::cabi::CanonicalTerm {type} {
     if {[llength $type] <= 1} {
         return [lindex $type 0]
     }
+    if {[lindex $type 0] eq "fn" && [llength $type] == 2} {
+        # A function signature (a FnPtr's, C-ABI-TYPES.md) is a dict whose
+        # `args` is a list of types: one argument is a one-element list,
+        # never a type of its own.
+        set fields [lindex $type 1]
+        dict set fields args [lmap arg [dict get $fields args] {CanonicalTerm $arg}]
+        dict set fields return [CanonicalTerm [dict get $fields return]]
+        return [list fn $fields]
+    }
     return [lmap element $type {CanonicalTerm $element}]
 }
 

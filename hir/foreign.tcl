@@ -175,8 +175,7 @@ proc hir::foreign::apply {decls linkDecls} {
             set provenance $written
         }
         set symbol [expr {[dict get $decl symbol] ne "" ? [dict get $decl symbol] : $name}]
-        set contract [core::cabi::NormalizeForeign $key \
-            [dict create params $params result $result provenance $provenance] [llength $params]]
+        set contract [dict create params $params result $result provenance $provenance]
         set native [nativeName $key]
         set abi [dict create params $abiParams result [AbiClass $result]]
         set kinds [lmap p $params {

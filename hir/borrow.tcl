@@ -278,11 +278,18 @@ proc hir::borrow::Problems {hir ranges e node name} {
         return {}
     }
     set params [Parameters $hir $e $contract]
-    if {$params eq ""} {
+    if {$params eq "" && [dict get $contract params] ne {}} {
         # Imprints that did not bind (IMPRINT, hir/imprint.tcl).
         return {}
     }
     set problems {}
+    set native [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name]
+    if {[core::native::isExtern $native] && [llength [dict get $node args]] != [llength $params]} {
+        # A C call passes exactly its signature's arguments (the platform
+        # ABI has no other call): a compile-time ARITY, never a run-time one.
+        return [list [list ARITY [format {%s is a C function of %d parameter(s), its declaration's C signature, and this call passes %d argument(s)} \
+            $name [llength $params] [llength [dict get $node args]]] $e]]
+    }
     set index 0
     foreach arg [dict get $node args] param $params {
         incr index
