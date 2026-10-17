@@ -123,6 +123,11 @@ extern const bgf_table *bgf_table_ptr;
 extern BGF_EXPORT int bgf_get(int x);
 #define bgf_get (bgf_table_ptr->get)
 
+/* A declared function its own function-like macro shadows: a C caller of
+ * bgf_shadowed(x) gets the macro, bgf_add(x, 100), never the symbol. */
+extern BGF_EXPORT int bgf_shadowed(int x);
+#define bgf_shadowed(x) bgf_add((x), 100)
+
 /* Platform-only API. */
 #if defined(__linux__)
 extern BGF_EXPORT int bgf_linux_only(void);

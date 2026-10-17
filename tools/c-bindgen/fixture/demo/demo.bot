@@ -72,6 +72,7 @@ bgf::bgf::bgf_close(handle)
  bgf::thunks::bgf::bgf_square(7),
  bgf::thunks::bgf::BGF_TWICE(21),
  bgf::thunks::bgf::bgf_get(3),
+ bgf::thunks::bgf::bgf_shadowed(1),
  bgf::bgf::BGF_FLAG_ALL,
  bgf::bgf::BGF_BIG,
  bgf::bgf::BGF_SIZE_NONE,

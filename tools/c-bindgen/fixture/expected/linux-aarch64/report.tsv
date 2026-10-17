@@ -35,6 +35,7 @@ function	bgf_square	thunk	bgf::thunks::bgf	thunk (inline)	symbol botlish_bgf_bgf
 function	bgf_point_x	thunk	bgf::thunks::bgf	thunk (inline)	symbol botlish_bgf_bgf_point_x; (ffi::c::Ptr[bgf_point]) -> ffi::c::Int
 function	bgf_half	unsupported		double	parameter 1 (x): double; result: double
 macro	bgf_get	thunk	bgf::thunks::bgf	thunk (stub)	symbol botlish_bgf_bgf_get; (ffi::c::Int) -> ffi::c::Int
+function	bgf_shadowed	thunk	bgf::thunks::bgf	thunk (macro-shadow: call wrapper: computed arguments)	symbol botlish_bgf_bgf_shadowed; (ffi::c::Int) -> ffi::c::Int
 function	bgf_linux_only	direct	bgf::bgf	direct	symbol bgf_linux_only; () -> ffi::c::Int
 function	bgf_arm_only	direct	bgf::bgf	direct	symbol bgf_arm_only; () -> ffi::c::Int
 macro	BGF_UINT64_C	unsupported		macro-needs-signature	a function-like macro (expression; paste): no signature of its own

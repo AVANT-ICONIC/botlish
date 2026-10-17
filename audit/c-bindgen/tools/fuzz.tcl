@@ -29,8 +29,9 @@
 #     model's -- including static inline functions through their thunks and
 #     macro aliases through their symbols.
 #
-# The last line is "programs N declarations D disagreements X"; every
-# disagreement is printed with its directory, kept unless -keep is 0.
+# The last line is "programs N declarations D disagreements X" (the exit
+# status is 1 on any); every disagreement is printed with its directory,
+# kept unless -keep is 0.
 
 set root [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]]
 set options [dict create -n 10 -seed 1 -functions 12 -gc-stress 0 -keep 1 -verbose 0]
@@ -494,3 +495,4 @@ for {set p 0} {$p < [dict get $options -n]} {incr p} {
 }
 if {$disagreements == 0} { file delete -force $scratch }
 puts "programs $programs declarations $declarations disagreements $disagreements"
+exit [expr {$disagreements > 0}]

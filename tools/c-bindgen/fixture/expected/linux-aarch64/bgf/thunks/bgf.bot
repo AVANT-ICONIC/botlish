@@ -6,7 +6,7 @@
 import ffi::c
 import bgf::ctypes
 
-extern c library "botlish_shim_bgf_b92e778b"
+extern c library "botlish_shim_bgf_e63d0497"
 extern c library "bgf"
 
 # C: static inline int bgf_square(int x)
@@ -19,6 +19,9 @@ extern c fn bgf_point_x named "botlish_bgf_bgf_point_x"(
 
 # C: int bgf_get(int x) (called through (bgf_table_ptr -> get))
 extern c fn bgf_get named "botlish_bgf_bgf_get"(x: ffi::c::Int) -> ffi::c::Int
+
+# C: int bgf_shadowed(int x), shadowed by a function-like macro of its name
+extern c fn bgf_shadowed named "botlish_bgf_bgf_shadowed"(x: ffi::c::Int) -> ffi::c::Int
 
 # C: macro BGF_TWICE, as int BGF_TWICE(int x)
 extern c fn BGF_TWICE named "botlish_bgf_BGF_TWICE"(x: ffi::c::Int) -> ffi::c::Int

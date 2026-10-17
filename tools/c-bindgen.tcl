@@ -9,7 +9,7 @@
 #   tclsh9.0 tools/c-bindgen.tcl profiles
 #   tclsh9.0 tools/c-bindgen.tcl fetch PROFILE
 #   tclsh9.0 tools/c-bindgen.tcl generate PROFILE ?-target T|all? ?-out DIR? ?-timing 1?
-#   tclsh9.0 tools/c-bindgen.tcl check PROFILE ?-target T|all? ?-dir DIR?
+#   tclsh9.0 tools/c-bindgen.tcl check PROFILE ?-target T|all|committed? ?-dir DIR?
 #   tclsh9.0 tools/c-bindgen.tcl report PROFILE ?-target T? ?-why NAME? ?-status S? ?-reason R?
 #   tclsh9.0 tools/c-bindgen.tcl build PROFILE ?-target T? -out DIR
 #   tclsh9.0 tools/c-bindgen.tcl stage PROFILE ?-target T? -app DIR -into DIR
@@ -50,11 +50,17 @@ proc Options {args defaults} {
     return [list $options $rest]
 }
 
-# The targets an option -target names for PROFILE: one, or all of the
-# profile's. The default is the host's when the profile has it, else the
+# The targets an option -target names for PROFILE: one, all of the
+# profile's, or the committed ones (those with a directory under its
+# output). The default is the host's when the profile has it, else the
 # profile's first.
 proc Targets {profile value} {
     if {$value eq "all"} { return [dict get $profile targets] }
+    if {$value eq "committed"} {
+        return [lmap t [dict get $profile targets] {
+            expr {[file isdirectory [::cbind::profile::outputDir $profile $t]] ? $t : [continue]}
+        }]
+    }
     if {$value ne ""} { return [list $value] }
     set host [core::cabi::hostTarget]
     if {$host in [dict get $profile targets]} { return [list $host] }
@@ -217,7 +223,7 @@ proc Diff {name args} {
     set profile [::cbind::profile::load $name]
     set targets [split [string map {, " "} [dict get $o -targets]]]
     set targets [lsearch -all -inline -not -exact $targets ""]
-    if {$targets eq ""} { set targets [dict get $profile targets] }
+    if {$targets eq ""} { set targets [Targets $profile committed] }
     set base [lindex $targets 0]
     set baseDir [expr {[dict get $o -dir] ne "" ? [file join [dict get $o -dir] $base] : [::cbind::profile::outputDir $profile $base]}]
     set baseRows [::cbind::generate::readTsv [::chdr::readFile [file join $baseDir report.tsv]]]

@@ -1,0 +1,340 @@
+# Mutants of the C binding generator (audit/c-bindgen/tools/mutate.tcl;
+# C-BINDGEN.md): each a deliberate bug in the binding model
+# (tools/c-bindgen/model.tcl), the compiler probes (probe.tcl), the emitter
+# (emit.tcl), the report and manifest (report.tcl), the profile reader
+# (profile.tcl) or the pipeline (generate.tcl). The brief's mutants come
+# first, then further ones.
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# Lines starting with # outside an edit are comments.
+
+# --- the brief's mutants -----------------------------------------------------
+
+@@ typedef-wrong-scalar every integer typedef resolves to C int, whatever its declaration chain ends in
+## tools/c-bindgen/model.tcl
+<<<<
+            return [Value $final $role $name]
+        }
+        struct - union {
+====
+            if {[lindex $final 0] eq "int"} { return [list ok ffi::c::Int {}] }
+            return [Value $final $role $name]
+        }
+        struct - union {
+>>>>
+
+@@ plain-char-fact-ignored a constant of C char is read as signed on every target (the target's plain-char signedness ignored)
+## tools/c-bindgen/model.tcl
+<<<<
+($ctype eq "char" && [dict get [core::cabi::scalarInfo Char $::cbind::model::target] signed])
+====
+$ctype eq "char"
+>>>>
+
+@@ opaque-collapsed a pointer to a C struct or union is ffi::c::Ptr[ffi::c::Void]: every opaque identity collapsed into one
+## tools/c-bindgen/model.tcl
+<<<<
+            return [list ok "ffi::c::Ptr\[\x01$key\x02\]" $features]
+====
+            return [list ok "ffi::c::Ptr\[ffi::c::Void\]" $features]
+>>>>
+
+@@ symbol-prefix-ignored a direct API's link symbol is its C name, not what the symbol probe found (BoringSSL's prefix, asm labels, redefine_extname lost)
+## tools/c-bindgen/model.tcl
+<<<<
+                dict set entry symbol $symbol
+====
+                dict set entry symbol $probeName
+>>>>
+
+@@ macro-alias-as-symbol an object-like or renaming macro alias is bound as an exported symbol of its own name
+## tools/c-bindgen/model.tcl
+<<<<
+                dict set entry symbol $symbol
+====
+                dict set entry symbol [expr {$kind eq "alias" ? $name : $symbol}]
+>>>>
+
+@@ inline-as-direct a static inline function is bound as a direct extern of its name (it has no link symbol)
+## tools/c-bindgen/model.tcl
+<<<<
+        } elseif {[dict get $body definition] || [dict get $body storage] eq "static"} {
+            dict set entry kind thunk
+====
+        } elseif {[dict get $body definition] || [dict get $body storage] eq "static"} {
+            dict set entry kind direct
+>>>>
+
+@@ stub-redirect-as-symbol a stub-table-redirected API name is bound directly to the declared function's own symbol, bypassing the table
+## tools/c-bindgen/model.tcl
+<<<<
+                dict set entry kind [expr {[dict get $profile stubs] eq "thunk" ? "thunk" : "unsupported"}]
+====
+                dict set entry kind direct
+>>>>
+<<<<
+                lassign [dict get $facts symbols $probeName] status symbol
+====
+                lassign [expr {[dict exists $entry via] && [dict get $entry via] eq "stub" ? [list ok $name] : [dict get $facts symbols $probeName]}] status symbol
+>>>>
+
+@@ unknown-escape-noescape a pointer parameter without a contract fact is emitted noescape (unknown read as favorable)
+## tools/c-bindgen/model.tcl
+<<<<
+        set access ""
+        set escape ""
+        set sources {}
+====
+        set access ""
+        set escape declared-noescape
+        set sources {}
+>>>>
+
+@@ const-noescape a pointer to const is assumed not to escape
+## tools/c-bindgen/model.tcl
+<<<<
+        dict set p access $access
+        dict set p escape $escape
+====
+        set pt [Unq [dict get $p ctype]]
+        if {$escape eq "" && [lindex $pt 0] eq "ptr" && "const" in [::cir::quals [lindex $pt 1]]} {
+            set escape declared-noescape
+        }
+        dict set p access $access
+        dict set p escape $escape
+>>>>
+
+@@ manual-alias-dropped the profile's `result {alias P}` is dropped: the result's provenance is unknown
+## tools/c-bindgen/model.tcl
+<<<<
+        set provenance [dict get $f provenance]
+====
+        set provenance [dict get $f provenance]
+        if {[lindex $provenance 0] eq "alias"} { set provenance "" }
+>>>>
+
+@@ proven-as-declared a fact the compiler proved is emitted as the binding author's declaration (noescape, not proven noescape)
+## tools/c-bindgen/emit.tcl
+<<<<
+        proven-noescape { lappend words proven noescape }
+====
+        proven-noescape { lappend words noescape }
+>>>>
+
+@@ float-as-int a floating-point parameter or result is mapped to C int
+## tools/c-bindgen/model.tcl
+<<<<
+        float {
+            set sp [lindex $t 1]
+====
+        float {
+            return [list ok ffi::c::Int {}]
+            set sp [lindex $t 1]
+>>>>
+
+@@ unsupported-omitted an unsupported API is left out of the report
+## tools/c-bindgen/report.tcl
+<<<<
+    foreach e [dict get $model apis] {
+        set k [dict get $e kind]
+====
+    foreach e [dict get $model apis] {
+        set k [dict get $e kind]
+        if {$k eq "unsupported"} continue
+>>>>
+
+@@ twin-identities-merged two C tags whose identity names collide get one Botlish name
+## tools/c-bindgen/model.tcl
+<<<<
+    while {$name in $taken} { append name _[lindex $key 0] }
+====
+>>>>
+
+@@ identity-duplicated a C type several modules point to is declared once per module that uses it
+## tools/c-bindgen/emit.tcl
+<<<<
+    set allKeys [lsort -unique $allKeys]
+====
+    set allKeys [lsort $allKeys]
+>>>>
+
+@@ library-nearest-module the C library is declared by the first module only, the one nearest the library rule
+## tools/c-bindgen/emit.tcl
+<<<<
+            foreach l $libs { append text "extern c library [Quote $l]\n" }
+====
+            if {[string match thunks::* $key]} { set libs [list $shim] } elseif {$key ne [lindex $plain 0]} { set libs {} }
+            foreach l $libs { append text "extern c library [Quote $l]\n" }
+>>>>
+
+@@ order-by-hash the ctypes module's identities come in an order that changes from run to run (hash or set iteration)
+## tools/c-bindgen/emit.tcl
+<<<<
+    return [lsort -command [list ::cbind::emit::RankCompare $rank] $keys]
+====
+    return [lsort -command {apply {{a b} {expr {rand() < 0.5 ? -1 : 1}}}} $keys]
+>>>>
+
+@@ shim-name-varies the shim library's name changes between runs (a clock, not the shim's text)
+## tools/c-bindgen/emit.tcl
+<<<<
+    return botlish_shim_${ns}_[::chdr::crc32 [Shim [lmap t $thunks {lindex $t 0}]]]
+====
+    return botlish_shim_${ns}_[clock microseconds]
+>>>>
+
+@@ target-omitted-from-manifest the manifest does not record the target
+## tools/c-bindgen/report.tcl
+<<<<
+    lappend lines "target [dict get $model target]"
+====
+>>>>
+
+@@ target-preprocessing-ignored every target is preprocessed and probed with the host's toolchain (macOS generation sees Linux's APIs)
+## tools/c-bindgen/generate.tcl
+<<<<
+    set config [::chdr::toolchain::configFor $target]
+    set tool [ToolProfile $hprofile $sourceRoot]
+====
+    set config [::chdr::toolchain::configFor [core::cabi::hostTarget]]
+    set tool [ToolProfile $hprofile $sourceRoot]
+>>>>
+
+# --- further mutants ----------------------------------------------------------
+
+@@ label-prefix-ignored the target's user label prefix is kept in the link symbol (Apple's _ doubled by the linker)
+## tools/c-bindgen/probe.tcl
+<<<<
+                dict set out $name [list ok [string range $sym [string length $prefix] end]]
+====
+                dict set out $name [list ok $sym]
+>>>>
+
+@@ typedef-probe-ignored a typedef is trusted by its declaration, not checked against the compiler's _Generic (an attribute that widens it is missed)
+## tools/c-bindgen/model.tcl
+<<<<
+    set key td:$name
+====
+    return ""
+    set key td:$name
+>>>>
+
+@@ bool-as-uchar C _Bool is bound as unsigned char
+## tools/c-bindgen/model.tcl
+<<<<
+            return [list ok ffi::c::Bool {bool}]
+====
+            return [list ok ffi::c::UChar {}]
+>>>>
+
+@@ enum-always-int every enum is C int, whatever integer type the compiler gives it
+## tools/c-bindgen/model.tcl
+<<<<
+        if {$s ne ""} { return [list $s $ctype] }
+====
+        if {$s ne ""} { return [list ffi::c::Int int] }
+>>>>
+
+@@ conflict-silent a profile fact the compiler contradicts is kept silently
+## tools/c-bindgen/model.tcl
+<<<<
+    if {$conflicts ne ""} {
+        error "c-bindgen: contract conflict for $name:\n  [join $conflicts "\n  "]"
+====
+    if {0} {
+        error "c-bindgen: contract conflict for $name:\n  [join $conflicts "\n  "]"
+>>>>
+
+@@ stale-policy-silent a contract naming a function or parameter that does not exist is ignored
+## tools/c-bindgen/model.tcl
+<<<<
+    if {$problems ne ""} {
+        error "c-bindgen: profile [dict get $profile name] (target $target): stale or invalid contract policy:\n  [join $problems "\n  "]"
+====
+    if {0} {
+        error "c-bindgen: profile [dict get $profile name] (target $target): stale or invalid contract policy:\n  [join $problems "\n  "]"
+>>>>
+
+@@ constant-always-int an integer macro constant is typed C int, whatever its expression's type
+## tools/c-bindgen/model.tcl
+<<<<
+                    dict set c status constant
+                    dict set c type $scalar
+                    dict set c ctype $ctype
+                    dict set c value $v
+                } elseif {$ctype in {float double {long double}}} {
+====
+                    dict set c status constant
+                    dict set c type ffi::c::Int
+                    dict set c ctype $ctype
+                    dict set c value $v
+                } elseif {$ctype in {float double {long double}}} {
+>>>>
+
+@@ struct-by-value-as-pointer a struct or union passed by value is bound as a pointer to it
+## tools/c-bindgen/model.tcl
+<<<<
+        struct - union {
+            set what [expr {[lindex $t 0] eq "union" ? "union-by-value" : "by-value-aggregate"}]
+====
+        struct - union {
+            return [Pointer $t]
+            set what [expr {[lindex $t 0] eq "union" ? "union-by-value" : "by-value-aggregate"}]
+>>>>
+
+@@ callback-unchecked a callback's signature is not checked: its unrepresentable arguments and result are dropped
+## tools/c-bindgen/model.tcl
+<<<<
+    if {$blockers ne ""} { return [list no $blockers] }
+    return [list ok "ffi::c::FnPtr
+====
+    return [list ok "ffi::c::FnPtr
+>>>>
+
+@@ calling-convention-ignored an explicit calling convention attribute is ignored
+## tools/c-bindgen/model.tcl
+<<<<
+        if {[lindex $a 0] in {cc gnu std declspec} && $name in $conventions} {
+====
+        if {0} {
+>>>>
+
+@@ variadic-ignored a variadic function is bound by its fixed parameters
+## tools/c-bindgen/model.tcl
+<<<<
+    if {"variadic" in $flags} { lappend blockers [list variadic "a variadic function (...)"] }
+====
+>>>>
+
+@@ evidence-readonly-as-write the compiler's readonly is read as write access
+## tools/c-bindgen/model.tcl
+<<<<
+    if {"readonly" in $attrs || "readnone" in $attrs} { dict set out access read }
+====
+    if {"readonly" in $attrs || "readnone" in $attrs} { dict set out access write }
+>>>>
+
+@@ thunk-rejection-ignored a thunk the C compiler rejects stays bound (its blame is dropped)
+## tools/c-bindgen/generate.tcl
+<<<<
+            if {[dict exists $blame [dict get $e name]] && [dict get $e kind] eq "thunk"} {
+====
+            if {0} {
+>>>>
+
+@@ macro-shadow-direct a declared function its own function-like macro shadows is bound directly, not through the macro
+## tools/c-bindgen/model.tcl
+<<<<
+            dict set entry kind thunk
+            dict set entry via macro-shadow
+====
+            dict set entry kind direct
+            dict set entry via macro-shadow
+>>>>

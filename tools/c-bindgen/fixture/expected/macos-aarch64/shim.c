@@ -17,6 +17,10 @@ int botlish_bgf_bgf_get(int botlish_x) {
     return bgf_get(botlish_x);
 }
 
+int botlish_bgf_bgf_shadowed(int botlish_x) {
+    return bgf_shadowed(botlish_x);
+}
+
 int botlish_bgf_BGF_TWICE(int botlish_x) {
     return BGF_TWICE(botlish_x);
 }

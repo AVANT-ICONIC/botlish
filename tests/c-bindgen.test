@@ -62,6 +62,10 @@ if {[testConstraint sdl3Library]} {
     set ::env(LD_LIBRARY_PATH) [join [concat [list [cffi::sdl3Dir]] [expr {[info exists ::env(LD_LIBRARY_PATH)] ? [list $::env(LD_LIBRARY_PATH)] : {}}]] :]
 }
 
+# What the fixture's demo (and its C caller) computes on the host: its last
+# value is (char)200, -56 where plain char is signed.
+set ::demoValues "\[5, 5, 95, 2, 66, 12345, 10, 3, true, true, 6, 10, 14, 14, 42, 49, 42, 30, 101, 3, 18446744073709551615, -1, -42, 120, 6, 6, false, true, true, false, 2, 40, [expr {$::hostTarget ne "" && [dict get [core::cabi::scalarInfo Char $::hostTarget] signed] ? -56 : 200}]\]"
+
 # A fresh directory of the tcltest temporary directory.
 proc scratch {} {
     return [makeDirectory cb-scratch-[pid]-[incr ::appCounter]]
@@ -222,13 +226,13 @@ test cb-fixture-unsupported {every declaration outside the C ABI universe is rep
     }
 } -result {{unsupported {} double,float {parameter 1 (x): double; parameter 2 (y): float; result: double}} {unsupported {} by-value-aggregate {parameter 1 (p): struct bgf_pair by value; result: struct bgf_pair by value}} {unsupported {} variadic {a variadic function (...)}} {unsupported {} va-list {parameter 2 (args): __builtin_va_list}} {unsupported {} unsupported-callback-signature {parameter 1 (measure): callback argument 1: double (double); parameter 1 (measure): callback result: double (double)}} {unsupported {} unsupported-calling-convention {an explicit calling convention: ms_abi}} {unsupported {} typedef-abi-mismatch {parameter 1 (w): typedef bgf_wide is unsigned long by its declaration, but the compiler gives it no C integer type of the table (16 bytes): an attribute or extension changes it}} {unsupported {} no-prototype {declared without a prototype: ()}} {unsupported {} float {parameter 1 (out): a pointer to float}} {unsupported {} double {parameter 1 (x): double; result: double}}}
 
-test cb-fixture-api-names {an API name is classified by what the compiler makes of it: an exported declaration is direct (its link symbol the symbol probe's: an asm label, a redefine_extname), an object-like macro naming another function and a renaming function-like macro are aliases of that symbol (named, no thunk), a static inline function, a table-redirected name and a macro with a profile signature are thunks, a macro without one is unsupported} -constraints clang -body {
+test cb-fixture-api-names {an API name is classified by what the compiler makes of it: an exported declaration is direct (its link symbol the symbol probe's: an asm label, a redefine_extname), an object-like macro naming another function and a renaming function-like macro are aliases of that symbol (named, no thunk), a static inline function, a table-redirected name, a declared function a function-like macro of its name shadows and a macro with a profile signature are thunks, a macro without one is unsupported} -constraints clang -body {
     set rows [::cbind::generate::readTsv [dict get [generation $::fixture linux-x86_64] files report.tsv]]
-    lmap key {{function bgf_labeled} {function bgf_renamed} {macro bgf_legacy} {macro bgf_call_add} {function bgf_square} {macro bgf_get} {macro BGF_TWICE} {macro BGF_UINT64_C}} {
+    lmap key {{function bgf_labeled} {function bgf_renamed} {macro bgf_legacy} {macro bgf_call_add} {function bgf_square} {macro bgf_get} {function bgf_shadowed} {macro BGF_TWICE} {macro BGF_UINT64_C}} {
         set row [dict get $rows $key]
         list [lindex $row 2] [lindex $row 4] [lindex [split [lindex $row 5] ";"] 0]
     }
-} -result {{direct direct {symbol bgf_labeled_v2}} {direct direct {symbol bgf_renamed_impl}} {alias {alias of bgf_current} {symbol bgf_current}} {alias {alias of bgf_add} {symbol bgf_add}} {thunk {thunk (inline)} {symbol botlish_bgf_bgf_square}} {thunk {thunk (stub)} {symbol botlish_bgf_bgf_get}} {thunk {thunk (macro)} {symbol botlish_bgf_BGF_TWICE}} {unsupported macro-needs-signature {a function-like macro (expression}}}
+} -result {{direct direct {symbol bgf_labeled_v2}} {direct direct {symbol bgf_renamed_impl}} {alias {alias of bgf_current} {symbol bgf_current}} {alias {alias of bgf_add} {symbol bgf_add}} {thunk {thunk (inline)} {symbol botlish_bgf_bgf_square}} {thunk {thunk (stub)} {symbol botlish_bgf_bgf_get}} {thunk {thunk (macro-shadow: call wrapper: computed arguments)} {symbol botlish_bgf_bgf_shadowed}} {thunk {thunk (macro)} {symbol botlish_bgf_BGF_TWICE}} {unsupported macro-needs-signature {a function-like macro (expression}}}
 
 test cb-fixture-constants {constants are the compiler's values of their C types: a macro's type is its expression's (unsigned int for 0x1u, unsigned long for UINT64_C on LP64 Linux, long for a Tcl_Size-style cast), an enumerator's its enum's ABI type, an anonymous enum's int; floating, string, pointer and fragment macros are reported, not emitted} -constraints clang -body {
     set rows [::cbind::generate::readTsv [dict get [generation $::fixture linux-x86_64] files report.tsv]]
@@ -281,13 +285,13 @@ test cb-fixture-compiles {every target's generated modules are ordinary Botlish:
     }
 } -cleanup removeScratch -result {{linux-x86_64 ordinary ordinary ordinary ordinary} {linux-aarch64 ordinary ordinary ordinary ordinary} {macos-aarch64 ordinary ordinary ordinary ordinary}}
 
-test cb-fixture-run {the generated binding links and runs: demo.bot (a Botlish caller) and caller.c (a C caller of the header's own API) compute the same values -- direct calls, aliases, link names, a stub-table thunk, inline and macro thunks, typed constants, C _Bool, opaque handles, byte borrowing and write-back -- on both native backends} -constraints nativeRun -body {
+test cb-fixture-run {the generated binding links and runs: demo.bot (a Botlish caller) and caller.c (a C caller of the header's own API) compute the same values -- direct calls, aliases, link names, a stub-table thunk, inline and macro thunks, a declared function its macro shadows, typed constants, C _Bool, opaque handles, byte borrowing and write-back -- on both native backends} -constraints nativeRun -body {
     set dir [staged $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot]]
     set shim [shimOf $::fixture $::hostTarget [file join $dir .shim]]
     set values [stagedValues $dir demo.bot {cranelift cranelift-generic} [list [bgfLib] $shim]]
     set c [cCaller $::fixture [file join $::fixtureDir demo caller.c] [list [file join [bgfLib] libbgf.a]]]
     list [expr {[lindex $values 0] eq $c}] [expr {[lindex $values 1] eq $c}] $c
-} -cleanup removeScratch -result {1 1 {[5, 5, 95, 2, 66, 12345, 10, 3, true, true, 6, 10, 14, 14, 42, 49, 42, 30, 3, 18446744073709551615, -1, -42, 120, 6, 6, false, true, true, false, 2, 40, -56]}}
+} -cleanup removeScratch -result [list 1 1 $::demoValues]
 
 test cb-fixture-only-reached-externs {a program's foreign table holds only the C functions it calls, and its link plan each library once, however many modules declare it: importing a generated module adds its libraries, never its unreached symbols} -constraints nativeRun -body {
     set dir [staged $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot]]
@@ -311,7 +315,7 @@ test cb-fixture-no-c-at-compile-time {compiling a program over a generated bindi
         array unset ::env
         array set ::env $savedEnv
     }
-} -cleanup removeScratch -result 31
+} -cleanup removeScratch -result 32
 
 test cb-fixture-interchange {a program over a generated binding written as HIR interchange and run in a fresh process, with no header, generator input or binding module left, behaves identically} -constraints nativeRun -body {
     set dir [staged $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot]]
@@ -322,7 +326,7 @@ test cb-fixture-interchange {a program over a generated binding written as HIR i
     file delete -force $dir
     set out [exec [info nameofexecutable] [file join $::projectRoot main.tcl] -backend cranelift -L [bgfLib] -L $shim $hirx 2>@1]
     lindex [split [string trim $out] \n] end
-} -cleanup removeScratch -result {   value: [5, 5, 95, 2, 66, 12345, 10, 3, true, true, 6, 10, 14, 14, 42, 49, 42, 30, 3, 18446744073709551615, -1, -42, 120, 6, 6, false, true, true, false, 2, 40, -56]}
+} -cleanup removeScratch -result "   value: $::demoValues"
 
 test cb-fixture-isolation {two generated bindings with the same Botlish declaration names but other link symbols, compiled one after the other: each HIR keeps its own foreign declarations (the registry is compilation-local)} -constraints clang -body {
     set a [scratch]

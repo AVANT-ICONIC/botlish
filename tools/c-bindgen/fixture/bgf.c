@@ -107,13 +107,16 @@ int bgf_noproto() { return 0; }
 
 void bgf_float_out(float *out) { *out = 1.5f; }
 
-/* The table the bgf_get macro reads, and a same-named function that is not
- * the API: a binding that linked bgf_get directly would call this one. */
+/* The table the bgf_get macro reads, and same-named functions that are not
+ * the API: a binding that linked bgf_get or bgf_shadowed directly would
+ * call these. */
 static int table_get(int x) { return x * 10; }
 static const bgf_table table = { table_get };
 const bgf_table *bgf_table_ptr = &table;
 #undef bgf_get
 int bgf_get(int x) { return -x; }
+#undef bgf_shadowed
+int bgf_shadowed(int x) { return -x; }
 
 #if defined(__linux__)
 int bgf_linux_only(void) { return 1; }
