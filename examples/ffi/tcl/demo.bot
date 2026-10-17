@@ -1,0 +1,32 @@
+# demo.bot -- Botlish calls the Tcl C library (C-FFI.md, "The Tcl
+# binding"): it creates an interpreter, evaluates a script that prints a
+# line and one that fails, checks their statuses and deletes the
+# interpreter.
+#
+#   tclsh9.0 main.tcl -backend cranelift examples/ffi/tcl/demo.bot
+#
+# The value is [true, true, true]: the interpreter exists, the first script
+# returned TCL_OK, the second did not. The line "hello from Tcl" is Tcl's
+# own output. Native backends only: the Tcl backends have no machine to call
+# C on (NATIVE-ONLY).
+import abi
+import abi::bytes
+import byte
+import ffi::c
+import list
+import str
+import tcl
+
+fn nul() -> byte::Byte:
+    0
+
+# The bytes of TEXT followed by the NUL byte the C API requires.
+fn script(text: str) -> abi::bytes::Bytes:
+    abi::bytes::from_list(str::encode_utf8(text).append(nul()))
+
+interp = tcl::Tcl_CreateInterp()
+created = not interp.null?()
+printed = interp.clone().eval(script("puts {hello from Tcl}; flush stdout"))
+failed = interp.clone().eval(script("error {deliberately}"))
+tcl::Tcl_DeleteInterp(interp)
+[created, printed == tcl::ok(), failed != tcl::ok()]

@@ -1,0 +1,41 @@
+# tcl.bot -- a hand-written binding of three functions of the Tcl 9 C
+# library (C-FFI.md, "The Tcl binding"): an application module beside the
+# program that imports it. The declarations are the C API's own signatures
+# (tcl.h, tclDecls.h); the binding states each pointer parameter's contract.
+#
+# Tcl 9's Tcl_Eval is a macro, Tcl_EvalEx(interp, script, TCL_INDEX_NONE, 0):
+# the library's symbol is Tcl_EvalEx, so that is what is declared, and
+# `eval` below is the macro's Botlish spelling. Tcl_Size is ptrdiff_t, a C
+# `long` on LP64.
+#
+# An ordinary module: every pointer it hands C is noescape, so no call here
+# is direct (a foreign call is not direct by being foreign).
+import abi
+import abi::bytes
+import ffi::c
+
+extern c library "tcl9.0"
+
+# The pointee identity of C's Tcl_Interp: a raw Ptr[Interp] owns nothing.
+opaque struct Interp:
+    tag: unit
+
+extern c fn Tcl_CreateInterp() -> ffi::c::Ptr[Interp] independent
+
+extern c fn Tcl_EvalEx(
+    interp: ffi::c::Ptr[Interp] noescape,
+    script: ffi::c::Ptr[ffi::c::Char] read noescape,
+    numBytes: ffi::c::Long,
+    flags: ffi::c::Int
+) -> ffi::c::Int
+
+extern c fn Tcl_DeleteInterp(interp: ffi::c::Ptr[Interp] noescape) -> unit
+
+# TCL_OK, the status of a script that completed normally.
+fn ok() -> int:
+    0
+
+# Evaluates SCRIPT, the bytes of a NUL-terminated Tcl script (the C API's
+# `const char *`: Botlish adds no terminator), in INTERP: its Tcl status.
+fn eval(interp: ffi::c::Ptr[Interp], script: abi::bytes::Bytes) -> int:
+    interp.Tcl_EvalEx(script, -1, 0)

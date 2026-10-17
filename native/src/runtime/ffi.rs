@@ -31,6 +31,12 @@ fn vm<'a>(p: *mut Vm) -> &'a mut Vm {
     unsafe { &mut *p }
 }
 
+/// The text of the String constant V (a C function's Botlish name).
+fn text_of(v: Value) -> String {
+    let shown = super::show::show(v);
+    shown.strip_prefix('"').and_then(|s| s.strip_suffix('"')).map(str::to_string).unwrap_or(shown)
+}
+
 /// The two's-complement 64-bit word of the Int V: a C `long`, `long long`
 /// or their unsigned forms (the caller's static proof keeps V inside the
 /// C type's range, so one of the two conversions holds). Never fails and
@@ -62,7 +68,7 @@ pub extern "C" fn rt_ffi_box_u64(p: *mut Vm, n: u64) -> Value {
 /// is a sign-extended 60-bit number). Records it and returns NO_VALUE.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_ffi_bad_address(p: *mut Vm, name: Value, address: u64) -> Value {
-    let name = super::show::show(name);
+    let name = text_of(name);
     vm(p).fail(RtError::ForeignAddress(format!(
         "the C function {name} returned the address 0x{address:x}, which a Botlish C pointer cannot hold (its word keeps a sign-extended 60-bit address: a top-byte-tagged pointer is not one); the pointer is never truncated or masked"
     )))
@@ -74,7 +80,7 @@ pub extern "C" fn rt_ffi_bad_address(p: *mut Vm, name: Value, address: u64) -> V
 /// the binding's error, reported where it is seen.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_ffi_contract_violation(p: *mut Vm, name: Value, expected: u64, returned: u64) -> Value {
-    let name = super::show::show(name);
+    let name = text_of(name);
     vm(p).fail(RtError::ContractViolation(format!(
         "the C function {name} returned 0x{returned:x}, but its extern c fn declaration says its result is exactly its pointer argument (alias), 0x{expected:x}: the binding's contract is false"
     )))
