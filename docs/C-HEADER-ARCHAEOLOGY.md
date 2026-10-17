@@ -104,11 +104,11 @@ is used.
 ```
 profile (entry headers, include directories, defines)
    |
-   |  tools/toolchain.tcl       cc -E -x c -I.. -D..        (the only command-line knowledge)
+   |  tools/cheader/toolchain.tcl   cc -E -x c -I.. -D..    (the only command-line knowledge)
    v
 preprocessed C, line markers, #pragma lines     + a -dD run: every #define in place
    |
-   |  tools/cdecl.tcl           tokenizer -> declaration parser -> IR records
+   |  tools/cheader/cdecl.tcl   tokenizer -> declaration parser -> IR records
    v
 IR records: function typedef struct enum variable pragma unsupported (+ macro records)
    |
@@ -122,7 +122,14 @@ IR records: function typedef struct enum variable pragma unsupported (+ macro re
 
 Ordinary Botlish compilation never runs any of this. The instrument lives
 in `audit/c-header/`, uses the C toolchain only because its subject is C,
-and imports nothing from the compiler.
+and imports nothing from the compiler. Since the binding generator
+(C-BINDGEN.md), the parts both use -- the toolchain adapter, the declaration
+parser, the IR utilities, the macro records and classifier, and the
+preprocessing pipeline -- are the C header library in the repository's
+`tools/cheader/` (`toolchain.tcl`, `cdecl.tcl`, `ir.tcl`, `macros.tcl`,
+`macrocat.tcl`, `pipeline.tcl`, `common.tcl`); this report's results
+regenerate identically from it. Paths below that name those files mean
+`tools/cheader/`.
 
 ## The instrument
 
@@ -1479,11 +1486,14 @@ audit/c-header/
   README.md                 what this directory is, in one screen
   profiles/boringssl.tcl    the three BoringSSL profiles (revision, entry set, defines)
   profiles/tcl.tcl          the three Tcl profiles
-  tools/toolchain.tcl       the toolchain adapter (BOTLISH_C_*; the only command-line knowledge)
-  tools/cdecl.tcl           tokenizer and declaration parser (the instrument's core)
-  tools/ir.tcl              IR text, indexes, typedef resolution, rendering back to C
-  tools/macros.tcl          macro records from -dD output
+  tools/common.tcl          the audit's paths and profiles; loads the C header library
   tools/run.tcl             run a profile: preprocess, parse, probe macros, write results
+../../tools/cheader/        the C header library the binding generator shares (C-BINDGEN.md):
+  toolchain.tcl             the toolchain adapter (BOTLISH_C_*; the only command-line knowledge)
+  cdecl.tcl                 tokenizer and declaration parser (the instrument's core)
+  ir.tcl                    IR text, indexes, typedef resolution, rendering back to C
+  macros.tcl macrocat.tcl   macro records from -dD output; their classification
+  pipeline.tcl              one header profile through the preprocessor and the parser
   tools/census.tcl          every count of this report
   tools/oracle.tcl          the compiler oracle
   tools/abiprobe.tcl        the native ABI probe and generated layouts

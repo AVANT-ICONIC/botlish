@@ -144,10 +144,12 @@ $ctype eq "char"
 <<<<
     foreach e [dict get $model apis] {
         set k [dict get $e kind]
+        set module [expr {$k in {direct alias} ? "${ns}::[dict get $e module]" : ($k eq "thunk" ? "${ns}::thunks::[dict get $e module]" : "")}]
 ====
     foreach e [dict get $model apis] {
         set k [dict get $e kind]
         if {$k eq "unsupported"} continue
+        set module [expr {$k in {direct alias} ? "${ns}::[dict get $e module]" : ($k eq "thunk" ? "${ns}::thunks::[dict get $e module]" : "")}]
 >>>>
 
 @@ twin-identities-merged two C tags whose identity names collide get one Botlish name
