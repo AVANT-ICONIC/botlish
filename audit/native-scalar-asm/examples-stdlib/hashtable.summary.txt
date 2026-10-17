@@ -2,7 +2,7 @@ source:  examples/stdlib/hashtable.bot
 backend: Cranelift (specialize=1)
 asm:     hashtable.asm
 vcode:   hashtable.vcode
-machine-code bytes: 10826 (per function: 45 427 385 70 69 69 46 182 178 628 1032 341 261 388 407 616 654 801 673 920 700 925 862 147)
+machine-code bytes: 10838 (per function: 45 427 385 70 69 69 46 182 178 628 1032 341 261 388 407 616 666 801 673 920 700 925 862 147)
 
 functions:
   0 <program entry>: nir-regs=1
@@ -169,7 +169,7 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     safepoints: 2
     root candidates: 4
     max live roots: 3
-    shadow slots: 3
+    shadow slots: 4
     entry zero slots: 0
     depth reservation: no
     storage: native frame
@@ -247,8 +247,8 @@ GC roots (hashtable.asm's NIR ids match roots.txt's "function N"):
     safepoints: 3
     root candidates: 11
     max live roots: 9
-    shadow slots: 9
-    entry zero slots: 7
+    shadow slots: 10
+    entry zero slots: 8
     depth reservation: no
     storage: native frame
   
