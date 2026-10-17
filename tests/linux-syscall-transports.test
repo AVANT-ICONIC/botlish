@@ -418,5 +418,36 @@ test lst-cache-dependencies {the front-end cache's dependencies of a build that 
     }
 } -cleanup {unset -nocomplain hir deps root} -result {{{linux/sys.bot 0} {linux/sys.x86_64.bot 1}} {{linux/sys.aarch64.bot 1} {linux/sys.bot 0}}}
 
+test lst-application-arch-namespace {application modules (IMPORTS.md) and architecture-specific namespaces: an application's own linux/sys.bot never replaces the standard linux::sys -- importing it is MODULE-COLLISION naming the standard library's architecture files -- while an application module importing linux gets the target's linux::sys from the standard library, and the cache records the target's file and the application path as dependencies} -body {
+    set app [file join $::scratch app[incr ::programCounter]]
+    file mkdir [file join $app linux] [file join $app other]
+    foreach {relative text} {
+        main.bot "import linux::sys\n1\n"
+        linux/sys.bot "fn write():\n    1\n"
+        other/main.bot "import game\ngame::size()\n"
+        other/game.bot "import linux\nfn size():\n    3\n"
+    } {
+        set channel [open [file join $app {*}[file split $relative]] w]
+        puts -nonewline $channel $text
+        close $channel
+    }
+    catch {surface::readProgramFile [file join $app main.bot] -target linux-aarch64 -cache ""} message options
+    set collision [list [lindex [dict get $options -errorcode] end] [string match "*application module [file join $app linux sys.bot] has the name of the standard namespace \"linux::sys\" (the standard library's *linux/sys.aarch64.bot, *linux/sys.x86_64.bot)*" $message]]
+    set other [file join $app other]
+    set result [list $collision]
+    foreach target {linux-x86_64 linux-aarch64} {
+        set hir [surface::readProgramFile [file join $other main.bot] -target $target -cache ""]
+        set arch [dict get [core::cabi::target $target] arch]
+        set deps [lmap dependency [surface::cache::Dependencies $hir {} $target $other] {
+            lassign $dependency path exists
+            if {[file tail $path] ni [list sys.$arch.bot sys.bot]} continue
+            list [file tail [file dirname $path]]/[file tail $path] $exists
+        }]
+        lappend result [lsearch -inline [libraryFiles $hir] linux/sys.*] [lsort $deps] \
+            [lindex [outcomeUnderHir interp $hir] 1]
+    }
+    set result
+} -cleanup {unset -nocomplain app relative text channel message options collision other result target hir arch deps} -result {{MODULE-COLLISION 1} linux/sys.x86_64.bot {{linux/sys.bot 0} {linux/sys.bot 0} {linux/sys.x86_64.bot 1}} 3 linux/sys.aarch64.bot {{linux/sys.aarch64.bot 1} {linux/sys.bot 0} {linux/sys.bot 0}} 3}
+
 removeDirectory linux-syscall-transports-scratch
 cleanupTests

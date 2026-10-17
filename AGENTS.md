@@ -1392,18 +1392,55 @@ machine. So:
 series (2048-ENGINE-WORKLOAD.md): a 2048 engine as an ordinary module
 (`game2048.bot`), its demo, its golden suite and its benchmark program. The
 engine is not standard library and must not move into `lib/` (it would ship
-in the single executable): its programs are compiled against a private
-library directory, a temporary copy of `lib/` plus the engine, that
-`examples/games/2048/run.tcl` builds (`-suite`, `-hirx OUT FILE.bot` for
-main.tcl's options, `-backend B FILE.bot`). `tests/workload-2048.test` runs
-the suite, the warning check, the benchmark checksum and the demo executable
-(also under GC stress) in the ordinary suite; `bench/2048.tcl` is the
+in the single executable): it is an application module, the file beside its
+programs, which every entry point compiles as they are (`tclsh9.0 main.tcl
+-backend cranelift examples/games/2048/demo.bot`; `examples/games/2048/run.tcl`
+adds `-suite`, `-hirx OUT FILE.bot` and `-backend B FILE.bot`).
+`tests/workload-2048.test` runs the suite, the warning check, the benchmark
+checksum, the demo executable (also under GC stress) and the demo under
+main.tcl's native backends in the ordinary suite; `bench/2048.tcl` is the
 performance report. If you change the engine or the suite, also run
 `audit/2048/mutate.tcl` (every mutant in `audit/2048/mutants.txt` must
-still apply and be killed) and `audit/golden/tools/perturb.tcl -lib DIR`
-on `golden.bot` (DIR: a copy of `lib/` with the engine added). The
-workload's golden suite is not in `tests/golden/`: its tests port no Tcl
-test, so they have no manifest rows.
+still apply and be killed; each mutant is a private application directory,
+the suite beside the mutated engine) and `audit/golden/tools/perturb.tcl -lib
+DIR` on `golden.bot` (DIR: a copy of `lib/` with the engine added: the
+perturbed copies live in directories of their own, without the engine beside
+them). The workload's golden suite is not in `tests/golden/`: its tests port
+no Tcl test, so they have no manifest rows. The workload keeps its
+workarounds for what Botlish lacks (no Int-to-String, division, fold, typed
+empty vector, List length facts, ...): they are its evidence
+(POST-2048-PRODUCT-FIXES.md); do not rewrite them with a new convenience.
+
+## Application modules, native program output, the recursion limit
+
+Three product rules (POST-2048-PRODUCT-FIXES.md):
+
+* **Application modules** (IMPORTS.md, "Application modules";
+  `surface::modules::ResolveModule`). A program file's application root is
+  the directory of its entry file; for an import an application file writes,
+  a standard namespace comes first and `ROOT/NAME.bot` otherwise, and a file
+  that would shadow an imported standard namespace is `MODULE-COLLISION`.
+  Never make resolution read the working directory, an environment variable,
+  a parent directory or a path list, never let a standard-library module's
+  imports see the application, and never prefer one candidate silently. The
+  root is a front-end input: it is in `surface::cache::Key` and each import's
+  application path in `Dependencies`. If you change resolution, run
+  `tests/application-modules.test`, `tests/imports.test`,
+  `tests/surface-modules.test`, `tests/hir-cache.test` and
+  `audit/hir-interchange/tools/mutate.tcl`.
+* **Native program output.** main.tcl runs native programs with
+  `native::evalHir ... -output inherit`: the program writes to main.tcl's own
+  standard output and error, and `botlish-native --result PATH` carries the
+  result lines (the overflow guard's report included:
+  `platform::linux::set_result_fd`). Never route a program's output through a
+  pipe of main.tcl, buffer it, or parse it for results. Everything else
+  (`native::evalHir` with no `-output`, `native::Driver`) drops it, so tests
+  stay quiet. `tests/native-program-output.test` pins the bytes and the order.
+* **The recursion limit.** Entry points that run programs on the Tcl backends
+  (main.tcl, `tests/golden/run.tcl`) call `core::useProgramRecursionLimit`
+  (core/core.tcl); never give one a number of its own. `core::evalProgram`
+  and the compiler raise nothing themselves (tests/compiler-opt.test's
+  opt-tail-2 checks a compiled tail call under 1000). `tests/main-recursion.test`.
 
 ## Golden tests (Botlish-native test framework)
 

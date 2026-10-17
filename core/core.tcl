@@ -19,6 +19,30 @@ namespace eval core {
     variable home [file dirname [file normalize [info script]]]
     variable libraryDir [file join [file dirname $home] lib]
     variable loadedLibraries {}
+    # The Tcl recursion limit an entry point runs Botlish programs under
+    # (core::useProgramRecursionLimit): main.tcl, and so the single
+    # executable, and tests/golden/run.tcl. The Tcl backends evaluate a
+    # Botlish call as nested Tcl evaluations (the interpreter about seven per
+    # call, the Tcl compiler one), so tclsh's default of 1000 ends an
+    # ordinary interpreted recursion about 140 calls deep
+    # (2048-ENGINE-WORKLOAD.md, S22). Under this limit the interpreter runs
+    # about 14,000 nested calls and the compiler about 99,000; deeper still
+    # fails as before, with TCL LIMIT STACK (on the interpreter only after
+    # about a minute: Tcl unwinds an error through its nested try/finally
+    # bodies in quadratic time). Tcl 9's non-recursive engine
+    # does not grow the C stack for these evaluations, so the limit bounds a
+    # count, not native memory. The same number as the front end's floor
+    # (hir::recursionFloor).
+    variable programRecursionLimit 100000
+}
+
+# Raises this interpreter's recursion limit to programRecursionLimit (above);
+# an embedder's higher limit is kept.
+proc core::useProgramRecursionLimit {} {
+    variable programRecursionLimit
+    if {[interp recursionlimit {}] < $programRecursionLimit} {
+        interp recursionlimit {} $programRecursionLimit
+    }
 }
 
 apply {{dir} {

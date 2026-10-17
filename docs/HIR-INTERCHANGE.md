@@ -179,20 +179,26 @@ tclsh9.0 tests/golden/run.tcl tests/golden/traits-path.bot
 * **The key**, compared exactly; its checksum only names the entry file:
   - the front end's fingerprint;
   - the program's path as given (the HIR records it) and its exact text;
+  - its application root, the directory of its entry file (IMPORTS.md,
+    "Application modules": one relative path names another program from
+    another working directory);
   - the library directory modules are read from, and the Tcl libraries
     loaded;
   - `-strict`, the warning mode, and `BOTLISH_STATIC_SCHEDULER`.
-* **The dependencies**, checked on every hit: the module path of every
+* **The dependencies**, checked on every hit: the module paths of every
   namespace a file of the program imports, by `import NS` or by `import type
-  NS::Type`, with the exact text the build read there, or none.
+  NS::Type` -- its standard-library path and its application-module path --
+  with the exact text the build read there, or none.
   - Imports are the only thing that loads a module (IMPORTS.md: dependencies
     are declared, never discovered), so these are all the files a build reads
     besides the program. The cache audit checks this for every suite.
   - A namespace with no module file (an intrinsics-only one such as `str`)
-    must still have none.
-  - A module's path is a function of its namespace and the library directory
-    alone (no search path, surface/modules.tcl), so nothing else can change
-    which files a program reads.
+    must still have none, and so must an application path a standard
+    namespace's import did not need (a file there would now be a
+    MODULE-COLLISION).
+  - A module's paths are a function of its namespace, the library directory
+    and the application root alone (no search path, surface/modules.tcl), so
+    nothing else can change which files a program reads.
   - The text recorded is the one the loader read during the build, so a
     module edited during the build leaves an entry that misses.
 

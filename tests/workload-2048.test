@@ -5,8 +5,10 @@
 # and without GC stress.
 #
 # The engine is an ordinary module that is not standard library, so it is
-# not in lib/: every program here is compiled against the private library
-# directory examples/games/2048/run.tcl builds (lib/ plus game2048.bot).
+# not in lib/: it is an application module, the file beside its programs
+# (IMPORTS.md, "Application modules"), and every program here is compiled as
+# it is, by the front end main.tcl uses. (Before application modules they
+# were compiled against a private copy of lib/ with the engine added: S4.)
 #
 # Backends, as tests/golden.test's: the outer pass's own (CORE_BACKEND
 # interp or compile) plus cranelift in the interp pass and
@@ -47,31 +49,18 @@ testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 set gameDir [file join $::projectRoot examples games 2048]
+testConstraint nativeBuilt [expr {![catch {native::binary}]}]
 
-# Runs SCRIPT with ::core::libraryDir at the private library, restoring
-# the library directory and removing the private one afterwards.
-proc with2048 {script} {
-    set saved $::core::libraryDir
-    try {
-        game2048::library
-        uplevel 1 $script
-    } finally {
-        game2048::cleanup
-        set ::core::libraryDir $saved
-    }
-}
-
-# The HIR of bench.bot making MOVES moves.
+# The HIR of bench.bot making MOVES moves: its text, with its own directory
+# as its application root.
 proc benchHir {moves} {
     set path [file join $::gameDir bench.bot]
     regsub -line {^benchmark\(\d+, (.*)\)$} [core::ReadFile $path] "benchmark($moves, \\1)" text
-    return [surface::compile $text $path -warnings off]
+    return [surface::compile $text $path -warnings off -root $::gameDir]
 }
 
 test workload-2048-golden-suite "golden.bot: compiles once, all 68 tests pass on [join $suiteBackends {, }], the same report on each" -constraints suiteBackends -body {
-    with2048 {
-        set result [golden::suite [file join $gameDir golden.bot] $suiteBackends]
-    }
+    set result [golden::suite [file join $gameDir golden.bot] $suiteBackends]
     set status [dict get $result status]
     if {$status eq "compile-error"} {
         return "compile error: [lindex [dict get $result compile] 1]"
@@ -101,42 +90,45 @@ test workload-2048-golden-suite "golden.bot: compiles once, all 68 tests pass on
 } -result ok
 
 test workload-2048-warning-clean {the engine, the demo, the suite and the benchmark have no warnings of their own (the stdlib's own findings, manifested by the warning gate, are not theirs)} -body {
-    with2048 {
-        set found {}
-        foreach name {game2048.bot demo.bot golden.bot bench.bot} {
-            set hir [surface::readProgramFile [file join $gameDir $name] -warnings default -warning-channel ""]
-            foreach warning [hir::warnings::of $hir] {
-                set text [hir::warnings::render $hir $warning]
-                if {[string match "$::core::libraryDir/*" $text] && ![string match "$::core::libraryDir/game2048.bot:*" $text]} {
-                    continue
-                }
-                lappend found "$name: [lindex [split $text \n] 0]"
+    set found {}
+    foreach name {game2048.bot demo.bot golden.bot bench.bot} {
+        set hir [surface::readProgramFile [file join $gameDir $name] -warnings default -warning-channel ""]
+        foreach warning [hir::warnings::of $hir] {
+            set text [hir::warnings::render $hir $warning]
+            if {[string match "$::core::libraryDir/*" $text]} {
+                continue
             }
+            lappend found "$name: [lindex [split $text \n] 0]"
         }
     }
     join $found \n
 } -result {}
 
 test workload-2048-strict-warnings {S16: the engine, the demo, the suite and the benchmark compile under -warnings error -- the stdlib modules they load (io, linux::io, test, ...) carry no warning either, so nothing their authors did not write rejects them} -body {
-    with2048 {
-        set rejected {}
-        foreach name {game2048.bot demo.bot golden.bot bench.bot} {
-            if {[catch {surface::readProgramFile [file join $gameDir $name] -warnings error -warning-channel ""} message]} {
-                lappend rejected "$name: [lindex [split $message \n] 0]"
-            }
+    set rejected {}
+    foreach name {game2048.bot demo.bot golden.bot bench.bot} {
+        if {[catch {surface::readProgramFile [file join $gameDir $name] -warnings error -warning-channel ""} message]} {
+            lappend rejected "$name: [lindex [split $message \n] 0]"
         }
     }
     join $rejected \n
 } -result {}
 
 test workload-2048-bench-checksum "bench.bot's 200-move checksum is the same on [join $workloadBackends {, }] (and equals the independent Python oracle's, audit/2048/oracle.py)" -body {
-    with2048 {
-        set hir [benchHir 200]
-        lmap backend $workloadBackends {
-            core::value::show [game2048::run $hir $backend]
-        }
+    set hir [benchHir 200]
+    lmap backend $workloadBackends {
+        core::value::show [game2048::run $hir $backend]
     }
 } -result [lrepeat [llength $workloadBackends] 2002720]
+
+test workload-2048-application-module {S4: the engine is an application module -- the file beside its programs, one namespace -- and no copy of it is in the standard library} -body {
+    set hir [surface::readProgramFile [file join $gameDir demo.bot] -warnings off -cache ""]
+    set engine [lmap {id file} [dict get $hir files] {
+        expr {[file tail [dict get $file path]] eq "game2048.bot" ? [dict get $file path] : [continue]}
+    }]
+    list [expr {$engine eq [list [file join $gameDir game2048.bot]]}] \
+        [file exists [file join $::core::libraryDir game2048.bot]]
+} -result {1 0}
 
 # The demo's whole output: a deterministic game from a fixed seed.
 set demoOutput {start
@@ -186,14 +178,25 @@ unit}
 test workload-2048-demo-executable {the demo as a standalone executable prints the whole game, identically under GC stress} -constraints {executableAot nativeLinux} -body {
     set dir [makeDirectory workload-2048-demo]
     try {
-        with2048 {
-            set hir [surface::readProgramFile [file join $gameDir demo.bot] -warnings off]
-            native::executable $hir [file join $dir demo]
-        }
+        set hir [surface::readProgramFile [file join $gameDir demo.bot] -warnings off]
+        native::executable $hir [file join $dir demo]
         list [string equal [exec [file join $dir demo]] $demoOutput] \
             [string equal [exec env BOTLISH_NATIVE_GC_STRESS=1 [file join $dir demo]] $demoOutput]
     } finally {
         removeDirectory workload-2048-demo
+    }
+} -result {1 1}
+
+# S4 and S15 together: `main.tcl -backend cranelift demo.bot` used to need the
+# private library to compile, and then showed only `value: unit`. Now it
+# compiles the demo as it is and shows the game the executable prints, then
+# the value.
+test workload-2048-demo-main-native {main.tcl -backend cranelift (and cranelift-generic) runs demo.bot as it is and prints its whole game before its value} -constraints {linuxX86_64 nativeBuilt} -body {
+    set game [string range $demoOutput 0 end-[string length unit]]
+    lmap backend {cranelift cranelift-generic} {
+        string equal [exec [info nameofexecutable] [file join $::projectRoot main.tcl] -warnings off \
+            -backend $backend [file join $gameDir demo.bot]] \
+            "== demo.bot ($backend)\n${game}   value: unit"
     }
 } -result {1 1}
 

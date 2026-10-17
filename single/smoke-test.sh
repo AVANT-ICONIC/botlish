@@ -13,8 +13,10 @@
 # Checked: every backend runs the sample programs to the same values; the
 # no-argument default run; the inspection options; a rejected program fails;
 # -emit-native-executable produces executables that run without anything
-# else; and the native backend still works with no cache directory at all
-# (no HOME).
+# else; an application of two files (a module beside its entry file) with a
+# recursion deeper than tclsh's default limit allows on the interpreter; a
+# native run shows what the program prints; and the native backend still
+# works with no cache directory at all (no HOME).
 set -euo pipefail
 
 botlish=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
@@ -64,6 +66,25 @@ for program in hello:unit context-hello:14; do
   name=${program%%:*}
   run -warnings off -emit-native-executable "$name.bot" >/dev/null || fail "emit $name"
   [[ $(env -i "./$name") == "Hello, world!"$'\n'"${program#*:}" ]] || fail "executable $name"
+done
+# An application module beside its entry file, from another working
+# directory (IMPORTS.md, "Application modules"), 3000 calls deep on every
+# backend (the interpreter's recursion limit: core/core.tcl).
+mkdir -p "$work/app"
+printf 'fn count(k: int) -> int:\n    if k == 0:\n        return 0\n    1 + count(k - 1)\n' >"$work/app/counter.bot"
+printf 'import counter\n\ncounter::count(3000)\n' >"$work/app/value.bot"
+for backend in interp compile cranelift-generic cranelift; do
+  (cd / && run -backend "$backend" "$work/app/value.bot") | grep -qx '   value: 3000' ||
+    fail "an application module on $backend"
+done
+printf 'import nosuch\n\n1\n' >"$work/app/missing.bot"
+if run "$work/app/missing.bot" >"$work/missing.out"; then fail "a missing module was accepted"; fi
+grep -qF "no such module file $work/app/nosuch.bot" "$work/missing.out" ||
+  fail "a missing module's diagnostic names no application path"
+# A native run shows the program's output, then its value.
+for backend in cranelift cranelift-generic; do
+  [[ $(run -backend "$backend" hello.bot) == "== hello.bot ($backend)"$'\n'"Hello, world!"$'\n'"   value: unit" ]] ||
+    fail "-backend $backend shows no program output"
 done
 # Without HOME the native backend lives in a temporary directory for the run.
 env -i "$botlish" -warnings off -emit-native-executable hello.bot >/dev/null || fail "emit without HOME"

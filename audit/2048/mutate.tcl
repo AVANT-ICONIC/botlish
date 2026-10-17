@@ -4,9 +4,9 @@
 #   tclsh9.0 audit/2048/mutate.tcl ?-backends LIST? ?-jobs N? ?-timeout S? ?NAME ...?
 #
 # For every mutant of audit/2048/mutants.txt (or the NAMEs given): a
-# private library directory -- a copy of lib/ with the mutated
-# examples/games/2048/game2048.bot added -- and one run of
-# examples/games/2048/golden.bot against it through tests/golden/run.tcl
+# private application directory -- a copy of examples/games/2048/golden.bot
+# with the mutated game2048.bot beside it, its application module
+# (IMPORTS.md) -- and one run of that golden.bot through tests/golden/run.tcl
 # (default backend compile: the mutants are engine bugs, not backend ones).
 # A mutant is killed when a test fails or the suite stops compiling. Every
 # mutant must still apply (its text occurs exactly once) and be killed; the
@@ -36,12 +36,14 @@ set engine examples/games/2048/game2048.bot
 set suite [file join $root examples games 2048 golden.bot]
 set original [goldentools::readFile [file join $root $engine]]
 
-# A private library holding lib/ and the engine text TEXT, under WORK/NAME.
-proc library {work name text} {
+# A private application under WORK/NAME: the suite, and the engine text
+# TEXT beside it. Its suite's path.
+proc application {work name text} {
     set dir [file join $work $name]
-    file copy [file join $::root lib] $dir
+    file mkdir $dir
+    file copy $::suite [file join $dir golden.bot]
     goldentools::writeFile [file join $dir game2048.bot] $text
-    return $dir
+    return [file join $dir golden.bot]
 }
 
 set work [file tempdir botlish-2048-mutate]
@@ -50,7 +52,7 @@ try {
     set commands [dict create]
     set problems {}
     dict set commands baseline [list [info nameofexecutable] [file join $root tests golden run.tcl] \
-        -backends [dict get $options -backends] -lib [library $work baseline $original] -names $suite]
+        -backends [dict get $options -backends] -names [application $work baseline $original]]
     foreach {name description edits} [goldentools::readMutants [file join $here mutants.txt]] {
         if {$names ne {} && $name ni $names} continue
         set text $original
@@ -69,7 +71,7 @@ try {
             continue
         }
         dict set commands $name [list [info nameofexecutable] [file join $root tests golden run.tcl] \
-            -backends [dict get $options -backends] -lib [library $work m-$name $text] -names $suite]
+            -backends [dict get $options -backends] -names [application $work m-$name $text]]
     }
     set results [goldentools::runParallel [dict get $options -jobs] [dict get $options -timeout] $commands]
     lassign [goldentools::suiteVerdicts [lindex [dict get $results baseline] 1]] state verdicts

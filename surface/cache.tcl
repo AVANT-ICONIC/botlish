@@ -21,17 +21,23 @@
 #
 #   the front end's fingerprint (hir::interchange::fingerprint)
 #   the program's path as given (the HIR records it) and its exact text
+#   its application root (the entry file's directory: surface/modules.tcl)
 #   the library directory modules are read from, and the Tcl libraries loaded
-#   -strict, the warning mode, and the static scheduler (BOTLISH_STATIC_SCHEDULER)
+#   -strict, the warning mode, the C target (ffi::c's widths, and the
+#   architecture that selects an architecture-specific module), and the
+#   static scheduler (BOTLISH_STATIC_SCHEDULER)
 #
-# The dependencies, checked on every hit: the module path of each namespace
+# The dependencies, checked on every hit: the module paths of each namespace
 # a file of the program imports, by `import NS` or `import type NS::Type`
-# (imports are the only thing that loads a module), with the exact text the
-# build read there, or none for a namespace
-# that had no module file (an intrinsics-only one: `str`), which must still
-# have none. A module's path is a function of its namespace and the library
-# directory alone (surface/modules.tcl: no search path), so nothing else can
-# change which files a program reads.
+# (imports are the only thing that loads a module) -- its standard-library
+# path, its architecture-specific file for the target's architecture
+# (lib/linux/sys.x86_64.bot) and its application-module path -- with the
+# exact text the build read there, or none for a path that had no module
+# file (an intrinsics-only namespace's, `str`; an application path a
+# standard namespace does not need), which must still have none. A module's
+# paths are a function of its namespace, the library directory, the
+# target's architecture and the application root alone (surface/modules.tcl:
+# no search path), so nothing else can change which files a program reads.
 #
 # Warnings: an entry is per warning mode, and a hit in the default mode
 # prints the warnings its HIR carries, as the build did. A compilation that
@@ -72,15 +78,18 @@ proc surface::cache::Usable {dir} {
         && $::env(BOTLISH_STATIC_TRACE) ni {"" 0})}]
 }
 
-proc surface::cache::Key {path source mode strict {target ""}} {
+proc surface::cache::Key {path source mode strict {target ""} {root ""}} {
     variable version
     # TARGET is the resolved C ABI target (hir::cabi::ResolveTarget): the
     # widths of ffi::c's integer scalars follow it (C-ABI-TYPES.md), and its
     # architecture picks an architecture-specific module's file
-    # (surface/modules.tcl's ModuleFile).
+    # (surface/modules.tcl's ModuleFile). ROOT is the application root (the
+    # same PATH as given names another directory from another working
+    # directory).
     return [list version $version front-end [hir::interchange::fingerprint] \
         path $path source $source library $::core::libraryDir \
         libraries $::core::loadedLibraries strict $strict warnings $mode target $target \
+        root $root \
         scheduler [expr {[info exists ::env(BOTLISH_STATIC_SCHEDULER)]
             ? $::env(BOTLISH_STATIC_SCHEDULER) : ""}]]
 }
@@ -98,16 +107,18 @@ proc surface::cache::Contents {path existsVar} {
 }
 
 # HIR's dependencies besides the program itself: {PATH EXISTS TEXT} for the
-# module path of each namespace a file of it imports, by `import NS` or by
-# `import type NS::Type`, and for the namespace's architecture-specific file
-# of C target TARGET's architecture (surface/modules.tcl's ModuleFile: the
-# host's when "", as the build's) -- imports are the only thing that loads a
-# module (IMPORTS.md: dependencies are declared, never discovered), so these
-# are every file its build read besides the program, and the paths it found
-# no file at -- with the text its build read (READS: PATH -> text). Both
-# candidate paths of every namespace are kept, whichever exists: a file
-# appearing at the other one changes what the build would do.
-proc surface::cache::Dependencies {hir reads {target ""}} {
+# module paths of each namespace a file of it imports, by `import NS` or by
+# `import type NS::Type`: its standard-library path, its architecture-
+# specific file of C target TARGET's architecture (surface/modules.tcl's
+# ModuleFile: the host's when "", as the build's) and its application-module
+# path under ROOT, the program's application root ("" for none) -- imports
+# are the only thing that loads a module (IMPORTS.md: dependencies are
+# declared, never discovered), so these are every file its build read
+# besides the program, and the paths it found no file at -- with the text
+# its build read (READS: PATH -> text). Every candidate path of every
+# namespace is kept, whichever exists: a file appearing at another one
+# changes what the build would do.
+proc surface::cache::Dependencies {hir reads {target ""} {root ""}} {
     set target [hir::cabi::ResolveTarget $target]
     set arch [expr {$target eq "" ? "" : [dict get [core::cabi::target $target] arch]}]
     set paths {}
@@ -121,6 +132,9 @@ proc surface::cache::Dependencies {hir reads {target ""}} {
             lappend paths [surface::modules::ModulePath $namespace]
             if {$arch ne ""} {
                 lappend paths [surface::modules::ArchModulePath $namespace $arch]
+            }
+            if {$root ne ""} {
+                lappend paths [surface::modules::NamespaceFile $root $namespace]
             }
         }
     }
@@ -137,15 +151,16 @@ proc surface::cache::Dependencies {hir reads {target ""}} {
 }
 
 # The HIR cached in DIR for the program at PATH with text SOURCE, compiled
-# with warning MODE, -strict STRICT and C target TARGET, or "" (a miss).
-proc surface::cache::lookup {dir path source mode strict {target ""}} {
+# with warning MODE, -strict STRICT, C target TARGET and application root
+# ROOT, or "" (a miss).
+proc surface::cache::lookup {dir path source mode strict {target ""} {root ""}} {
     variable stats
     variable magic
     variable version
     if {![Usable $dir]} {
         return ""
     }
-    set key [Key $path $source $mode $strict $target]
+    set key [Key $path $source $mode $strict $target $root]
     set entryPath [EntryPath $dir $key]
     if {![file isfile $entryPath]} {
         dict incr stats misses
@@ -194,19 +209,19 @@ proc surface::cache::Replay {hir mode channel} {
 # text), in DIR. Writes the entry under a private name, then renames it into
 # place: a concurrent lookup sees the whole entry or none. A failure leaves
 # the cache as it was (unstored).
-proc surface::cache::store {dir path source mode strict hir reads {target ""}} {
+proc surface::cache::store {dir path source mode strict hir reads {target ""} {root ""}} {
     variable stats
     variable magic
     variable version
     if {![Usable $dir]} {
         return
     }
-    set key [Key $path $source $mode $strict $target]
+    set key [Key $path $source $mode $strict $target $root]
     set entryPath [EntryPath $dir $key]
     set temporary ""
     try {
         set entry [list $magic $version key $key \
-            dependencies [Dependencies $hir $reads $target] \
+            dependencies [Dependencies $hir $reads $target $root] \
             interchange [hir::interchange::encode $hir -trait-source 1]]
         file mkdir $dir
         set temporary $entryPath.[pid].[clock microseconds]

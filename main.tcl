@@ -25,7 +25,11 @@
 # transport is NATIVE UNSUPPORTED).
 #
 # Runs the given program files (default: every examples/*.ir) and prints
-# each program's value, with runtime evidence shown as "text"#{Type}. With
+# each program's value, with runtime evidence shown as "text"#{Type}. On the
+# native backends what a program prints (io::print_line) goes to this
+# process's standard output and error as it writes it, between its "== FILE"
+# line and its value, as a standalone executable writes it; the Tcl backends
+# cannot print (io's only context makes raw syscalls). With
 # -backend compile it also prints the inferred types of program-level
 # bindings; -code prints the Tcl code the compiler generates; -hir prints the
 # program's semantic HIR (hir::format); -ast prints the surface AST of a .bot
@@ -65,7 +69,10 @@
 # A .hir file (HIR text, e.g. examples/hir/*.hir) is read with hir::readFile;
 # a .hirx file (HIR interchange) with hir::interchange::readFile;
 # a .bot file (Botlish source, e.g. examples/surface/*.bot) is parsed and
-# lowered to HIR with surface::readProgramFile. From that HIR, the interpreter
+# lowered to HIR with surface::readProgramFile -- its `import`s name standard
+# namespaces (lib/) and, otherwise, the program's own modules: the .bot files
+# beside it, in its directory (IMPORTS.md, "Application modules"), whatever
+# the working directory. From that HIR, the interpreter
 # runs the core IR it lowers to (the Tcl reference branch), the compiler
 # compiles the HIR itself (core::compiler::compileHir: -code and the printed
 # types are that compilation's, the code that runs) and the native backends
@@ -92,6 +99,10 @@ set root [file dirname [file normalize [info script]]]
 source [file join $root compiler compiler.tcl]
 source [file join $root surface surface.tcl]
 source [file join $root native native.tcl]
+# The Tcl backends evaluate a Botlish call as nested Tcl evaluations: run
+# programs under the entry points' recursion limit (core/core.tcl), not
+# tclsh's default 1000, which ends an interpreted recursion ~140 calls deep.
+core::useProgramRecursionLimit
 
 proc probeValues {value} {
     switch -- [core::value::kind $value] {
@@ -138,10 +149,13 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         if {$backend eq "interp"} {
             set program [hir::lower $hir]
         }
+        # A native run writes what the program prints to this process's own
+        # standard output and error, before the value line below, as a
+        # standalone executable does.
         set run [dict get {
             compile   {core::compiler::evalUnit $unit}
-            cranelift {native::evalHir $hir}
-            cranelift-generic {native::evalHir $hir -specialize 0}
+            cranelift {native::evalHir $hir -output inherit}
+            cranelift-generic {native::evalHir $hir -specialize 0 -output inherit}
             interp    {core::evalProgram $program}
         } $backend]
     } else {

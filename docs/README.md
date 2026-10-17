@@ -92,7 +92,7 @@ tclsh9.0 tests/local.tcl                       # local run: Tcl tests minus gold
 tclsh9.0 tests/all.tcl                         # test suite, interp and compile (every test, as CI)
 cargo build --release --manifest-path native/Cargo.toml   # build the native backend (§20)
 tclsh9.0 tests/native-coverage.tcl             # test suite on cranelift, classified (§20; -backend cranelift-generic)
-tclsh9.0 main.tcl -backend cranelift FILE.bot  # run natively
+tclsh9.0 main.tcl -backend cranelift FILE.bot  # run natively: what it prints, then its value
 tclsh9.0 main.tcl -emit-native-executable FILE.bot  # compile to ./FILE (Linux x86_64 glibc)
 tclsh9.0 main.tcl -emit-nir -emit-clif FILE.bot   # show NIR, then Cranelift IR, of every function
 tclsh9.0 main.tcl -emit-hir-interchange FILE.bot   # write the analyzed HIR as FILE.hirx (HIR-INTERCHANGE.md)
@@ -1869,12 +1869,30 @@ namespace): a namespace of ordinary function definitions and immutable value
 bindings. A value initializer executes once before the entry program, after
 its dependency modules and after earlier values in the same source file. It
 must be context-free and must retain a transitively immutable result; there
-are no mutable module bindings or top-level expression statements. `NAME`
-maps to exactly one file, `lib/NAME.bot` (`core::libraryDir`, the same
-directory as the existing `lib/NAME.tcl` native-library convention) -- no
-search path, so there is never more than one candidate file for a name. A
+are no mutable module bindings or top-level expression statements. A
+standard namespace `NAME` is exactly one file, `lib/NAME.bot`
+(`core::libraryDir`, the same directory as the existing `lib/NAME.tcl`
+native-library convention), or compiler intrinsics. A program's *own*
+modules are the files beside its entry file: the directory of the `.bot`
+file given to main.tcl (or the single executable) is the program's
+*application root*, and for an import the entry program or one of its own
+modules writes, a namespace that is not a standard one is the file
+`ROOT/NAME.bot` (IMPORTS.md, "Application modules"). So a program
+`main.bot` beside `game.bot` writes `import game`; nothing has to be copied
+into `lib/`. The rule is fixed -- the standard library first, then the
+application root, never the working directory, an environment variable or a
+parent directory -- so there is never more than one candidate file for a
+name: an application file named like a standard namespace that the
+application imports is a `MODULE-COLLISION` error, never a replacement of the
+standard one, and a standard module's own imports never see the application.
+The entry file is not a module (importing it is `SELF-IMPORT`). A missing
+module's `UNKNOWN-NAMESPACE` names the application path it looked for and then
+the standard library's. Once built, a program's HIR holds its modules: a
+`.hirx` (`-emit-hir-interchange`) runs, becomes NIR or an executable with no
+source directory at all. A
 nested namespace `a::b` (used as `a::b::symbol`) is the file
-`lib/a/b.bot`, one directory per leading segment; `a` and `a::b` are unrelated
+`lib/a/b.bot` (an application's `ROOT/a/b.bot`), one directory per leading
+segment; `a` and `a::b` are unrelated
 modules (LINUX-X86-64-SYSCALL.md). A root native may itself carry a qualified
 name (`linux::abi::x86_64::syscall`): it is spelled like a module definition but
 resolves to the root native, and no module may define that member.
@@ -1888,7 +1906,8 @@ value-access syntax. Resolution fixes a stable binding identity before
 lowering; a module value does not use a runtime namespace lookup. See
 NATIVE-MODULES.md, MODULE-BINDINGS.md, and `surface/modules.tcl` for the
 implementation. Deliberately not built: namespace aliasing, import aliases
-or wildcards, re-exports, a search path, or anything package-manager-shaped.
+or wildcards, re-exports, a search path beyond the two roots, or anything
+package-manager-shaped (manifests, dependencies, versions).
 
 ### Lowering
 
@@ -2505,7 +2524,28 @@ exact message. The native backend's own failures are `NATIVE UNSUPPORTED`,
 `NATIVE INVALID-NIR`, `NATIVE CODEGEN`, `NATIVE BUG` and
 `NATIVE LIMIT STACK`. Unbounded recursion ends in `NATIVE LIMIT STACK`,
 not a crash. The Tcl backends raise Tcl's recursion limit instead, which is
-a resource limit, not semantics.
+a resource limit, not semantics: main.tcl (and so the single executable)
+runs programs under `core::programRecursionLimit` (core/core.tcl, the
+golden runner's limit too), about 14,000 nested Botlish calls on the
+interpreter and 99,000 on the Tcl compiler, where tclsh's default of 1000
+nested evaluations stopped an interpreted recursion about 140 calls deep.
+Beyond it a recursion still fails with `TCL LIMIT STACK` (on the
+interpreter only after about a minute: Tcl unwinds the error through the
+evaluator's nested `try`/`finally` bodies in quadratic time).
+
+A program's output under main.tcl's `-backend cranelift` and
+`-backend cranelift-generic` is the program's own: `botlish-native` runs it
+with main.tcl's standard output and standard error (native::evalHir's
+`-output inherit`), so what it writes (`io::print_line`, `linux::io::write`)
+appears as it writes it, byte for byte, between main.tcl's `== FILE
+(BACKEND)` line and its `value:` (or `error:`) line, exactly as a
+standalone executable writes it before printing its value; the driver's
+result comes back through a file of its own (`--result`), never through the
+program's output. A program that fails after printing keeps what it printed.
+`native::evalHir` without `-output` (the test suite, the tools) drops what a
+program writes. Printing needs the native backend: the only `io::IO`
+context, `linux::io::LinuxIO`, makes raw syscalls, which the Tcl backends
+reject (`NATIVE-ONLY`).
 
 Memory management is temporary: a precise, non-moving mark-and-sweep
 collector (`runtime/heap.rs`). Every native frame reserves one shadow-stack

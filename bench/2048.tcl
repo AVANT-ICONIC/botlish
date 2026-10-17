@@ -8,8 +8,8 @@
 # generator seeded at run time, a game that is over replaced by a new one --
 # on every backend, with a move count per backend (defaults: interp 300,
 # compile 3000, both native backends 100000). The program is compiled once
-# per move count against the private library examples/games/2048/run.tcl
-# provides (the engine is not in lib/).
+# per move count, with the engine beside it as its application module (the
+# engine is not in lib/).
 #
 # Reported per backend: the best of RUNS in-process executions (compilation
 # excluded: the Tcl backends run in this process; native::measure times the
@@ -46,9 +46,8 @@ if {![regexp -line {^benchmark\(\d+, (.*)\)$} $template -> seedExpr]} {
 proc program {moves} {
     global template path
     regsub -line {^benchmark\(\d+, (.*)\)$} $template "benchmark($moves, \\1)" text
-    game2048::library
     set start [clock microseconds]
-    set hir [surface::compile $text $path -warnings off]
+    set hir [surface::compile $text $path -warnings off -root [file dirname $path]]
     return [list $hir [expr {([clock microseconds] - $start) / 1e6}]]
 }
 
@@ -61,38 +60,34 @@ proc best {script runs} {
     return $best
 }
 
-try {
-    set rows {}
-    foreach backend {interp compile cranelift-generic cranelift} {
-        set moves [dict get $sizes [expr {[string match cranelift* $backend] ? "native" : $backend}]]
-        lassign [program $moves] hir frontSeconds
-        if {[string match cranelift* $backend]} {
-            set options [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
-            lassign [native::measure $hir $runs {*}$options] lowerUs compileUs bestUs collections value
-            set alloc [native::allocationReport $hir summary 1 {*}$options]
-            set total [dict get $alloc total]
-            set extra [format "lower %6.0f ms, cranelift %5.0f ms, %6.2f allocs/move, %7.0f B/move, %d GC cycles" \
-                [expr {$lowerUs / 1000.0}] [expr {$compileUs / 1000.0}] \
-                [expr {double([dict get $total allocations]) / $moves}] \
-                [expr {double([dict get $total allocatedBytes]) / $moves}] [dict get $alloc gc cycles]]
-            set shown [core::value::show $value]
-        } else {
-            set bestUs [best {set value [game2048::run $hir $backend]} $runs]
-            set extra ""
-            set shown [core::value::show $value]
-        }
-        lappend rows [list $backend $moves $bestUs $shown $frontSeconds $extra]
+set rows {}
+foreach backend {interp compile cranelift-generic cranelift} {
+    set moves [dict get $sizes [expr {[string match cranelift* $backend] ? "native" : $backend}]]
+    lassign [program $moves] hir frontSeconds
+    if {[string match cranelift* $backend]} {
+        set options [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]
+        lassign [native::measure $hir $runs {*}$options] lowerUs compileUs bestUs collections value
+        set alloc [native::allocationReport $hir summary 1 {*}$options]
+        set total [dict get $alloc total]
+        set extra [format "lower %6.0f ms, cranelift %5.0f ms, %6.2f allocs/move, %7.0f B/move, %d GC cycles" \
+            [expr {$lowerUs / 1000.0}] [expr {$compileUs / 1000.0}] \
+            [expr {double([dict get $total allocations]) / $moves}] \
+            [expr {double([dict get $total allocatedBytes]) / $moves}] [dict get $alloc gc cycles]]
+        set shown [core::value::show $value]
+    } else {
+        set bestUs [best {set value [game2048::run $hir $backend]} $runs]
+        set extra ""
+        set shown [core::value::show $value]
     }
-    puts [bench::backends::manifest {interp compile native}]
-    puts "  (cranelift-generic: Cranelift without call-site specialization)"
-    puts ""
-    puts [format "%-18s %8s %12s %10s %12s  %s" backend moves "best ms" "us/move" checksum "front end"]
-    foreach row $rows {
-        lassign $row backend moves bestUs shown frontSeconds extra
-        puts [format "%-18s %8d %12.1f %10.2f %12s  %5.2f s" $backend $moves [expr {$bestUs / 1000.0}] \
-            [expr {double($bestUs) / $moves}] $shown $frontSeconds]
-        if {$extra ne ""} { puts [format "%-18s %s" "" $extra] }
-    }
-} finally {
-    game2048::cleanup
+    lappend rows [list $backend $moves $bestUs $shown $frontSeconds $extra]
+}
+puts [bench::backends::manifest {interp compile native}]
+puts "  (cranelift-generic: Cranelift without call-site specialization)"
+puts ""
+puts [format "%-18s %8s %12s %10s %12s  %s" backend moves "best ms" "us/move" checksum "front end"]
+foreach row $rows {
+    lassign $row backend moves bestUs shown frontSeconds extra
+    puts [format "%-18s %8d %12.1f %10.2f %12s  %5.2f s" $backend $moves [expr {$bestUs / 1000.0}] \
+        [expr {double($bestUs) / $moves}] $shown $frontSeconds]
+    if {$extra ne ""} { puts [format "%-18s %s" "" $extra] }
 }

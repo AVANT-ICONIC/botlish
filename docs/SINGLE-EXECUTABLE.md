@@ -13,6 +13,15 @@ single/out/botlish -backend cranelift examples/surface/01-arithmetic.bot
 single/out/botlish -emit-native-executable examples/io/hello.bot && examples/io/hello
 ```
 
+A program may have several files: its own modules are the `.bot` files beside
+its entry file (IMPORTS.md, "Application modules"), so in a directory holding
+only `botlish`, `main.bot` and `game.bot`, `main.bot`'s `import game` names
+`game.bot` -- the packed standard library is consulted first, and a missing
+module's diagnostic names the application path before the archive's. A native
+run shows what the program prints, then its value, as an executable would, and
+the interpreter runs ordinary recursion thousands of calls deep (main.tcl's
+recursion limit, core/core.tcl): main.tcl's own behavior, packed.
+
 CI builds it on every push to `main` (`.github/workflows/single-executable.yml`),
 smoke-tests it in stock `ubuntu:24.04` and `ubuntu:latest` containers, and
 uploads it as the run's `botlish-linux-x86_64` artifact.
@@ -80,7 +89,9 @@ archive.
   arguments. Every path the compiler computes from its own location
   (`core::libraryDir`, the `source` chain) lands inside the archive, which
   Tcl reads like any directory. Diagnostics in library modules therefore name
-  `//zipfs:/app/botlish/lib/...`.
+  `//zipfs:/app/botlish/lib/...`. A program's application root is the
+  directory of the entry file it is given, outside the archive, exactly as
+  from a checkout.
 
 The only processes a run starts are the kit itself and its installed
 `botlish-native`. `strace -f -e trace=execve` of
@@ -195,4 +206,5 @@ passing except the 10 that read rustc-linked symbols, which now skip.
   an AArch64 stub linker and build need.
 * The single executable runs the checkout's code as of its build. It reports
   library diagnostics at `//zipfs:/app/...` paths, and it has no tests or
-  tools.
+  tools. Its standard library is the packed one: an application adds modules
+  of its own beside its entry file, never into the archive.

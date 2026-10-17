@@ -154,9 +154,20 @@ proc native::lowered {hir args} {
 }
 
 # Runs the driver: botlish-native COMMAND NIR-FILE ARGS... Returns its output
-# lines.
+# lines. Whatever the program writes to its standard output and error is read
+# with them and dropped (native::Outcome keeps the result line).
 proc native::Driver {command nirText args} {
+    return [RunDriver discard $command $nirText $args]
+}
+
+# Runs the driver like Driver, with OUTPUT "discard" (Driver's way) or
+# "inherit": the program then writes to this process's own standard output
+# and error, as a standalone executable writes to its own -- as it writes,
+# byte for byte, never through this process -- and the driver's lines come
+# back through a file instead (botlish-native's --result). Returns them.
+proc native::RunDriver {output command nirText arguments} {
     variable runs
+    set args $arguments
     set binary [binary]
     incr runs
     lassign [file tempfile path botlish.nir] channel
@@ -176,18 +187,31 @@ proc native::Driver {command nirText args} {
         close $argvChannel
         lappend args --argv-file $argvPath
     }
+    set resultPath ""
     try {
-        set pipe [open |[list $binary $command {*}$args $path 2>@1] r]
-        fconfigure $pipe -encoding utf-8 -translation lf
-        set output [read $pipe]
-        if {[catch {close $pipe} closeMessage]} {
-            if {![regexp -line {^(value|error) } $output]} {
+        if {$output eq "inherit"} {
+            lassign [file tempfile resultPath botlish.result] resultChannel
+            close $resultChannel
+            # (exec flushes this process's stdout before the program writes.)
+            set failed [catch {exec $binary $command --result $resultPath {*}$args $path >@stdout 2>@stderr} closeMessage]
+            set output [core::ReadFile $resultPath]
+            if {$failed && ![regexp -line {^(value|error) } $output]} {
                 throw {NATIVE BUG} "native backend failed: $closeMessage\n$output"
+            }
+        } else {
+            set pipe [open |[list $binary $command {*}$args $path 2>@1] r]
+            fconfigure $pipe -encoding utf-8 -translation lf
+            set output [read $pipe]
+            if {[catch {close $pipe} closeMessage]} {
+                if {![regexp -line {^(value|error) } $output]} {
+                    throw {NATIVE BUG} "native backend failed: $closeMessage\n$output"
+                }
             }
         }
     } finally {
         file delete $path
         if {$argvPath ne ""} { file delete $argvPath }
+        if {$resultPath ne ""} { file delete $resultPath }
     }
     return [split [string trimright $output \n] \n]
 }
@@ -247,11 +271,23 @@ proc native::HostVectors {value} {
     return $value
 }
 
+# The value of the program-mode HIR program HIR, run natively; ARGS are
+# native lowering's options, and -output: discard (the default: what the
+# program writes is dropped) or inherit (it writes to this process's standard
+# output and error, main.tcl's -backend cranelift: RunDriver).
 proc native::evalHir {hir args} {
     if {[hir::mode $hir] ne "program"} {
         error "native::evalHir: expected a program-mode HIR"
     }
-    return [Outcome [Driver run [nir $hir {*}$args]]]
+    set output discard
+    if {[dict exists $args -output]} {
+        set output [dict get $args -output]
+        dict unset args -output
+        if {$output ni {discard inherit}} {
+            error "native::evalHir: -output must be discard or inherit, not \"$output\""
+        }
+    }
+    return [Outcome [RunDriver $output run [nir $hir {*}$args] {}]]
 }
 
 # Compile closed, specialized HIR to a standalone Linux glibc ELF (x86_64, or

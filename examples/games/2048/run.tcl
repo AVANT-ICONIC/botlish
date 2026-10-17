@@ -5,14 +5,13 @@
 #   tclsh9.0 examples/games/2048/run.tcl -suite ?-backends LIST?
 #
 # The engine, game2048.bot, is an ordinary module, and its programs (the
-# demo, the golden suite, the benchmark) `import game2048`. Botlish resolves
-# `import NAME` to exactly $::core::libraryDir/NAME.bot -- lib/, the
-# standard library -- and has no other module root (docs/README.md section
-# 17, "Modules"), so this script compiles them against a private library
-# directory: a copy of lib/ with game2048.bot added, in a temporary
-# directory removed on exit (the composition tests/helpers.tcl's
-# withPrivateLibrary uses). The engine is not standard library and is not
-# installed into lib/.
+# demo, the golden suite, the benchmark) `import game2048`: an application
+# module, the file beside them (IMPORTS.md, "Application modules"), which
+# every compiler entry point finds as it is -- `tclsh9.0 main.tcl -backend
+# cranelift examples/games/2048/demo.bot` runs the demo. The engine is not
+# standard library and is not installed into lib/. (Before application
+# modules this script compiled them against a private copy of lib/ with the
+# engine added: 2048-ENGINE-WORKLOAD.md, S4.)
 #
 # FILE.bot is compiled once (warnings off unless -warnings says otherwise)
 # and run on backend B (interp, compile, cranelift, cranelift-generic;
@@ -22,42 +21,16 @@
 # exit status is 1 if a test failed, the backends disagreed or a program did
 # not compile or run.
 #
-# Other scripts source this file for game2048::library and game2048::run.
+# Other scripts source this file for game2048::compile and game2048::run.
 
 namespace eval game2048 {
     variable here [file dirname [file normalize [info script]]]
     variable root [file dirname [file dirname [file dirname $here]]]
-    variable library ""
 }
 source [file join $::game2048::root tests golden run.tcl]
 
-# The private library directory (made on first use): lib/ plus the engine.
-proc game2048::library {} {
-    variable library
-    variable here
-    variable root
-    if {$library eq ""} {
-        set library [file tempdir]
-        foreach entry [glob -directory [file join $root lib] *] {
-            file copy $entry $library
-        }
-        file copy [file join $here game2048.bot] $library
-        set ::core::libraryDir $library
-    }
-    return $library
-}
-
-proc game2048::cleanup {} {
-    variable library
-    if {$library ne ""} {
-        file delete -force $library
-        set library ""
-    }
-}
-
-# Compiles FILE against the private library: the HIR, or an error.
+# Compiles FILE (its application modules beside it): the HIR, or an error.
 proc game2048::compile {file {warnings off}} {
-    library
     return [surface::readProgramFile $file -warnings $warnings]
 }
 
@@ -109,30 +82,25 @@ proc game2048::main {argv} {
             default { lappend files $arg }
         }
     }
-    try {
-        library
-        if {$suite} {
-            return [golden::main [list -backends [join $backends ,] [file join $here golden.bot]]]
-        }
-        foreach file $files {
-            if {[catch {compile $file $warnings} hir options]} {
-                puts stderr "$file: $hir ([dict get $options -errorcode])"
-                return 1
-            }
-            if {$hirx ne ""} {
-                hir::interchange::writeFile $hirx $hir
-                continue
-            }
-            if {[catch {run $hir $backend} value options]} {
-                puts stderr "$file: $value ([dict get $options -errorcode])"
-                return 1
-            }
-            puts [text $value]
-        }
-        return 0
-    } finally {
-        cleanup
+    if {$suite} {
+        return [golden::main [list -backends [join $backends ,] [file join $here golden.bot]]]
     }
+    foreach file $files {
+        if {[catch {compile $file $warnings} hir options]} {
+            puts stderr "$file: $hir ([dict get $options -errorcode])"
+            return 1
+        }
+        if {$hirx ne ""} {
+            hir::interchange::writeFile $hirx $hir
+            continue
+        }
+        if {[catch {run $hir $backend} value options]} {
+            puts stderr "$file: $value ([dict get $options -errorcode])"
+            return 1
+        }
+        puts [text $value]
+    }
+    return 0
 }
 
 if {[info script] eq $::argv0} {

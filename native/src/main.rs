@@ -33,6 +33,13 @@
 //! one synthetic argument `botlish-runner` (runtime/vm.rs's DEFAULT_ARGV),
 //! never this driver's own arguments.
 //!
+//! `--result PATH` (anywhere on the line, any command) writes the output
+//! lines below to PATH instead of standard output, which `run` then leaves
+//! to the program alone: what it writes there (io::print_line, raw
+//! write(2)s) is never mixed with, or taken for, a result line. main.tcl
+//! runs programs so (native::evalHir's `-output inherit`), with the
+//! driver's standard output and error its own.
+//!
 //! `run`/`bench` accept `--alloc off|summary|sites` (default `off`,
 //! byte-identical to no instrumentation): see runtime/metrics.rs. For
 //! `bench`, the report reflects the last of RUNS executions (Vm::reset
@@ -63,10 +70,22 @@ use runtime::value::NO_VALUE;
 use runtime::vm::{EnumInfo, FunctionInfo, NativeInfo, ProgramInfo, ShapeInfo, Vm};
 use std::io::{Read, Write};
 use std::rc::Rc;
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
+
+/// The file `--result PATH` names: where emit writes instead of standard
+/// output.
+static RESULT: OnceLock<Mutex<std::fs::File>> = OnceLock::new();
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    let args = match extract_result(&args) {
+        Ok(args) => args,
+        Err(message) => {
+            emit_error(&["NATIVE", "IO"], &message);
+            std::process::exit(2);
+        }
+    };
     let stack_size = std::env::var("BOTLISH_NATIVE_STACK_BYTES")
         .ok().and_then(|text| text.parse::<usize>().ok())
         .filter(|&size| size >= 1 << 20)
@@ -88,10 +107,39 @@ fn main() {
 }
 
 fn emit(line: &str) {
+    if let Some(file) = RESULT.get() {
+        let mut out = file.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        out.write_all(line.as_bytes()).unwrap();
+        out.write_all(b"\n").unwrap();
+        out.flush().unwrap();
+        return;
+    }
     let mut out = std::io::stdout().lock();
     out.write_all(line.as_bytes()).unwrap();
     out.write_all(b"\n").unwrap();
     out.flush().unwrap();
+}
+
+/// Pulls "--result PATH" out of ARGS (it may appear anywhere) and makes
+/// PATH, created or truncated, where emit writes: the remaining arguments in
+/// order. Err if PATH is missing or cannot be created.
+fn extract_result(args: &[String]) -> Result<Vec<String>, String> {
+    let mut out = Vec::with_capacity(args.len());
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--result" {
+            let path = args.get(i + 1).ok_or("--result needs a file")?;
+            let file = std::fs::File::create(path).map_err(|e| format!("{path}: {e}"))?;
+            #[cfg(target_os = "linux")]
+            runtime::platform::linux::set_result_fd(std::os::unix::io::AsRawFd::as_raw_fd(&file));
+            RESULT.set(Mutex::new(file)).map_err(|_| "--result given twice".to_string())?;
+            i += 2;
+            continue;
+        }
+        out.push(args[i].clone());
+        i += 1;
+    }
+    Ok(out)
 }
 
 fn emit_error(code: &[&str], message: &str) {
@@ -174,7 +222,7 @@ fn extract_argv(args: &[String]) -> Option<(Vec<String>, Option<Vec<Vec<u8>>>)> 
 
 fn cli(args: &[String]) -> i32 {
     let usage = || {
-        eprintln!("usage: botlish-native run|clif|vcode|size|roots|calls|check FILE.nir [--alloc off|summary|sites] [--argv ARGS|--argv-file PATH] | bench RUNS FILE.nir [--alloc ...] | batch CALLS FILE.nir | object|executable OUT FILE.nir");
+        eprintln!("usage: botlish-native run|clif|vcode|size|roots|calls|check FILE.nir [--alloc off|summary|sites] [--argv ARGS|--argv-file PATH] | bench RUNS FILE.nir [--alloc ...] | batch CALLS FILE.nir | object|executable OUT FILE.nir (each also [--result PATH])");
         2
     };
     let Some((args, snapshot)) = extract_argv(args) else { return usage() };

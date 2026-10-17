@@ -19,19 +19,22 @@
 # namespace: its own definitions are plain names and its types keep their
 # bare names.
 #
-# Namespace <-> file: deterministic and search-free. Namespace NAME maps to
-# exactly one path, $::core::libraryDir/NAME.bot (the same directory as the
-# existing Tcl library convention, lib/NAME.tcl -- see core/core.tcl): the
-# file's path *is* its namespace, so there is nothing to disagree with, and
-# there is no `namespace` declaration (the parser rejects one with a
-# message saying so). A nested namespace (NAME of several "::"-separated
-# segments, `abi::x86_64`) maps one directory per leading segment:
-# $::core::libraryDir/abi/x86_64.bot. Nesting is a naming path only:
+# Namespace <-> file: deterministic and search-free. A standard namespace
+# NAME maps to exactly one path, $::core::libraryDir/NAME.bot (the same
+# directory as the existing Tcl library convention, lib/NAME.tcl -- see
+# core/core.tcl): the file's path *is* its namespace, so there is nothing to
+# disagree with, and there is no `namespace` declaration (the parser rejects
+# one with a message saying so). A nested namespace (NAME of several
+# "::"-separated segments, `abi::x86_64`) maps one directory per leading
+# segment: $::core::libraryDir/abi/x86_64.bot. Nesting is a naming path only:
 # `abi::x86_64` and `abi` are two unrelated modules (neither loads, contains
-# or sees the other implicitly), each its own file. There is no search path,
-# so "two files define namespace NAME" cannot arise: NAME has only ever one
-# candidate file. A missing file is a clear diagnostic (Error, below), never
-# silently ignored or guessed at.
+# or sees the other implicitly), each its own file. A program's own modules
+# map the same way under its application root, the directory of its entry
+# file ("Application modules", below), for the imports its own files write:
+# a standard namespace first, the application's file otherwise, and the two
+# never both (MODULE-COLLISION), so "two files define namespace NAME" cannot
+# arise: NAME has only ever one candidate file. A missing file is a clear
+# diagnostic (Error, below), never silently ignored or guessed at.
 #
 # Architecture-specific modules (LINUX-SYSCALL-TRANSPORTS.md). A namespace
 # whose source differs by machine architecture -- linux::sys, the Linux
@@ -166,18 +169,111 @@ proc surface::modules::ParseModule {path} {
     return $ast
 }
 
-# The one deterministic path namespace NAME maps to. No search path: this
-# is the only file that can ever define NAME. A nested NAME (`abi::x86_64`)
-# is one directory per leading segment (lib/abi/x86_64.bot): never a "::" in
-# a file name.
+# The standard library's path for namespace NAME, in $::core::libraryDir. A
+# nested NAME (`abi::x86_64`) is one directory per leading segment
+# (lib/abi/x86_64.bot): never a "::" in a file name.
 proc surface::modules::ModulePath {name} {
+    return [NamespaceFile $::core::libraryDir $name]
+}
+
+# The path of namespace NAME's file under the directory DIR (ModulePath's
+# mapping, for any root).
+proc surface::modules::NamespaceFile {dir name} {
     set segments [split [string map {:: \x00} $name] \x00]
     foreach segment $segments {
         if {![regexp {^[A-Za-z_][A-Za-z0-9_]*$} $segment]} {
             error "surface::modules: invalid namespace name \"$name\""
         }
     }
-    return [file join $::core::libraryDir {*}[lrange $segments 0 end-1] [lindex $segments end].bot]
+    return [file join $dir {*}[lrange $segments 0 end-1] [lindex $segments end].bot]
+}
+
+# Application modules (IMPORTS.md, "Application modules"). A program file's
+# *application root* is the directory of its entry file (compileProgramFile;
+# STATE's `root`, "" for program text with no file of its own unless the
+# caller names one). An *application file* is the entry program or a module
+# loaded from that root. For an import written in an application file,
+# namespace NAME is, in this order and with no search beyond it:
+#
+#   1. a standard namespace -- $::core::libraryDir/NAME.bot (or its
+#      architecture-specific files, ModuleFile below), or compiler
+#      intrinsics of NAME -- exactly as before: application files never
+#      replace one;
+#   2. else the application module ROOT/NAME.bot (nested: ROOT/a/b.bot for
+#      a::b), one namespace like any module, loaded once;
+#   3. else no namespace (UNKNOWN-NAMESPACE, naming both places).
+#
+# A file ROOT/NAME.bot for a standard namespace NAME that an application file
+# imports is MODULE-COLLISION, never a silent choice; the entry file itself
+# is not a module (importing it is SELF-IMPORT, or CYCLE from a module). A
+# standard-library module's imports are resolved in the standard library
+# only. Nothing reads the shell's working directory, an environment variable
+# or a parent directory.
+
+# 1 if the file of module KEY ("" for the entry program) is an application
+# file of STATE's program.
+proc surface::modules::IsApplicationFile {state key} {
+    return [expr {[dict get $state root] ne ""
+        && ($key eq "" || [dict exists $state application $key])}]
+}
+
+# The application module file ROOT/NAME.bot of STATE's program, if it is a
+# file and is neither the entry program nor the standard library's own file
+# (an application root inside lib/), else "".
+proc surface::modules::ApplicationFile {state name} {
+    set path [NamespaceFile [dict get $state root] $name]
+    if {![file isfile $path] || [file normalize $path] eq [file normalize [ModulePath $name]]} {
+        return ""
+    }
+    return $path
+}
+
+# The module file the namespace NAME, imported at SPAN by the file of module
+# KEY, denotes: its standard-library file, an application module file, or ""
+# for a namespace with no file (intrinsics only, or none at all). Raises
+# MODULE-COLLISION, SELF-IMPORT and CYCLE as the rules above say.
+proc surface::modules::ResolveModule {stateVar key name span} {
+    upvar 1 $stateVar state
+    set hasStandard [HasModule $name]
+    set isStandard [expr {$hasStandard || [IntrinsicMembers $name] ne ""}]
+    if {![IsApplicationFile $state $key]} {
+        return [expr {$hasStandard ? [ModuleFile $name [dict get $state target] $span] : ""}]
+    }
+    set application [ApplicationFile $state $name]
+    if {$application ne "" && [file normalize $application] eq [dict get $state entry]} {
+        if {!$isStandard} {
+            if {$key eq ""} {
+                Error SELF-IMPORT $span "\"$name\" names this program's own entry file ($application): an entry program is in no namespace and is not a module, so it cannot be imported"
+            }
+            set chain [concat [list "$application (the entry program)"] [dict get $state stack] [list $name]]
+            Error CYCLE $span "module dependency cycle: [join $chain { -> }] (an entry program is not a module and cannot be imported)"
+        }
+        # The entry program named like a standard namespace imports that one.
+        set application ""
+    }
+    if {$application ne "" && $isStandard} {
+        Error MODULE-COLLISION $span "application module $application has the name of the standard namespace \"$name\" ([expr {$hasStandard ? "the standard library's [StandardFiles $name]" : "compiler intrinsics"}]), which `import $name` names: a standard namespace is never replaced by an application file, and never silently chosen over one; rename the application module"
+    }
+    if {$hasStandard} {
+        return [ModuleFile $name [dict get $state target] $span]
+    }
+    return $application
+}
+
+# 1 if NS names a namespace for the file of module KEY of STATE's program:
+# NamespaceExists, or an application module (above).
+proc surface::modules::NamespaceExistsFor {state key ns} {
+    return [expr {[NamespaceExists $ns]
+        || ([IsApplicationFile $state $key] && [ApplicationFile $state $ns] ne "")}]
+}
+
+# The UNKNOWN-NAMESPACE explanation of NS for the file of module KEY of
+# STATE's program: where it looked.
+proc surface::modules::NoSuchNamespace {state key ns} {
+    if {[IsApplicationFile $state $key]} {
+        return "no such module file [NamespaceFile [dict get $state root] $ns] (an application's own modules are the files beside its entry program), and in the standard library no such module file [ModulePath $ns] and no intrinsics of that namespace"
+    }
+    return "no such module file [ModulePath $ns] and no intrinsics of that namespace"
 }
 
 # The path of NAME's architecture-specific module file for architecture
@@ -204,6 +300,21 @@ proc surface::modules::ArchModuleFiles {name} {
 # files (whether or not one is the compilation target's).
 proc surface::modules::HasModule {name} {
     return [expr {[file exists [ModulePath $name]] || [ArchModuleFiles $name] ne ""}]
+}
+
+# The standard library's files of namespace NAME, for a message: its module
+# file, or its architecture-specific files.
+proc surface::modules::StandardFiles {name} {
+    if {[file exists [ModulePath $name]]} {
+        return [ModulePath $name]
+    }
+    return [join [dict values [ArchModuleFiles $name]] {, }]
+}
+
+# 1 if PATH is one of the standard library's files of namespace NAME (as
+# ModuleFile returns them), not an application module.
+proc surface::modules::IsStandardFile {name path} {
+    return [expr {$path eq [ModulePath $name] || $path in [dict values [ArchModuleFiles $name]]}]
 }
 
 # The module file that defines namespace NAME when compiling for C ABI
@@ -574,7 +685,7 @@ proc surface::modules::RemapFile {node fileId} {
 # loaded (found on STATE's own "stack"). USEDATSPAN is the span of the
 # reference that asked for it, for diagnostics ("" if none -- a
 # non-source-driven load, e.g. the native backend's bridge).
-proc surface::modules::LoadNamespace {stateVar name usedAtSpan} {
+proc surface::modules::LoadNamespace {stateVar name usedAtSpan {path ""}} {
     upvar 1 $stateVar state
     if {[dict exists $state loaded $name]} {
         return
@@ -583,7 +694,17 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan} {
         set chain [concat [dict get $state stack] [list $name]]
         Error CYCLE $usedAtSpan "module dependency cycle: [join $chain { -> }]"
     }
-    set path [ModuleFile $name [dict get $state target] $usedAtSpan]
+    # PATH: the file ResolveModule chose; the standard library's for the
+    # compilation target by default (ModuleFile).
+    if {$path eq ""} {
+        set path [ModuleFile $name [dict get $state target] $usedAtSpan]
+    }
+    if {![file exists $path]} {
+        Error UNKNOWN-NAMESPACE $usedAtSpan "unknown namespace \"$name\": no such module file $path"
+    }
+    if {![IsStandardFile $name $path]} {
+        dict set state application $name 1
+    }
     set ast [ParseModule $path]
     foreach statement [dict get $ast body] {
         if {[dict get $statement kind] eq "destructure"} {
@@ -789,11 +910,12 @@ proc surface::modules::CheckImports {stateVar ast own} {
             if {$ns eq $own} {
                 Error SELF-IMPORT $span "a file of namespace \"$ns\" cannot import its own namespace: a module is inside its namespace and needs no import to name its own members"
             }
-            if {![NamespaceExists $ns]} {
-                Error UNKNOWN-NAMESPACE $span "unknown namespace \"$ns\": no such module file [ModulePath $ns] and no intrinsics of that namespace"
+            set path [ResolveModule state $own $ns $span]
+            if {$path eq "" && [IntrinsicMembers $ns] eq ""} {
+                Error UNKNOWN-NAMESPACE $span "unknown namespace \"$ns\": [NoSuchNamespace $state $own $ns]"
             }
-            if {[HasModule $ns]} {
-                LoadNamespace state $ns $span
+            if {$path ne ""} {
+                LoadNamespace state $ns $span $path
             }
             dict set nsSpans $ns $span
             lappend namespaces $ns
@@ -809,12 +931,13 @@ proc surface::modules::CheckImports {stateVar ast own} {
         if {$ns eq $own} {
             Error SELF-IMPORT [dict get $import span] "a file of namespace \"$ns\" cannot import a type of its own namespace: its own type \"$name\" is already usable by that name"
         }
-        if {![NamespaceExists $ns]} {
-            Error UNKNOWN-NAMESPACE $span "unknown namespace \"$ns\": no such module file [ModulePath $ns] and no intrinsics of that namespace (in \"import type $canonical\")"
+        set path [ResolveModule state $own $ns $span]
+        if {$path eq "" && [IntrinsicMembers $ns] eq ""} {
+            Error UNKNOWN-NAMESPACE $span "unknown namespace \"$ns\": [NoSuchNamespace $state $own $ns] (in \"import type $canonical\")"
         }
-        set hasFile [HasModule $ns]
+        set hasFile [expr {$path ne ""}]
         if {$hasFile} {
-            LoadNamespace state $ns $span
+            LoadNamespace state $ns $span $path
         }
         set typeNames [expr {$hasFile ? [concat [dict get $state loadedTypes $ns] [dict get $state loadedTraits $ns] [dict get $state loadedEnums $ns]] : {}}]
         if {$name ni $typeNames} {
@@ -924,7 +1047,7 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
         # member, and never a reason to load anything.
         set enum [EnumQualifier state $ast $own $env $namespaceName]
         if {$enum ne ""} {
-            if {$namespaceName in $imported || [NamespaceExists $namespaceName]} {
+            if {$namespaceName in $imported || [NamespaceExistsFor $state $key $namespaceName]} {
                 # (Imported or not: `list::length` must never mean an
                 # intrinsic in one file and a case in another because
                 # of an enum's name.)
@@ -952,7 +1075,7 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
             "\"${namespaceName}::$symbolName\" names a case of the enum $namespaceName, not a struct: a payload-free case is written ${namespaceName}::$symbolName, without braces (payload-bearing cases are not supported)"
     }
     if {$namespaceName ni $imported} {
-        if {$refKind eq "value" && ![NamespaceExists $namespaceName]} {
+        if {$refKind eq "value" && ![NamespaceExistsFor $state $key $namespaceName]} {
             # `Struct::Case`, `int::Case`: a case qualified by a type that
             # is not an enum (ENUMS.md). Types are not namespaces.
             set other [OtherTypeQualifier state $ast $own $env $namespaceName]
@@ -961,18 +1084,18 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
                     "\"$namespaceName\" is $other, not an enum: only an enum type qualifies a case (\"Enum::Case\"), and a type is not a namespace, so \"${namespaceName}::$symbolName\" names nothing"
             }
         }
-        if {![NamespaceExists $namespaceName]} {
+        if {![NamespaceExistsFor $state $key $namespaceName]} {
             set cut [string last :: $namespaceName]
             if {$refKind eq "value" && $cut > 0} {
                 # `ns::Enum::Case` (ENUMS.md) whose module is not
                 # imported: the import is what is missing, as for any
                 # member of that module.
                 set prefix [string range $namespaceName 0 [expr {$cut - 1}]]
-                if {$prefix ni $imported && $prefix ne $own && [NamespaceExists $prefix]} {
+                if {$prefix ni $imported && $prefix ne $own && [NamespaceExistsFor $state $key $prefix]} {
                     Error MISSING-IMPORT $span "namespace \"$prefix\" is not imported; add `import $prefix` to use `${namespaceName}::$symbolName`"
                 }
             }
-            Error UNKNOWN-NAMESPACE $span "unknown namespace \"$namespaceName\": no such module file [ModulePath $namespaceName] and no intrinsics of that namespace[expr {$refKind eq "value" ? " (nor is \"$namespaceName\" an enum type visible in this file: a case is written Enum::Case)" : ""}]"
+            Error UNKNOWN-NAMESPACE $span "unknown namespace \"$namespaceName\": [NoSuchNamespace $state $key $namespaceName][expr {$refKind eq "value" ? " (nor is \"$namespaceName\" an enum type visible in this file: a case is written Enum::Case)" : ""}]"
         }
         set note ""
         set related [RelatedImport $namespaceName $imported]
@@ -989,10 +1112,10 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
         # root reference).
         return
     }
-    if {![HasModule $namespaceName]} {
+    if {![dict exists $state loaded $namespaceName]} {
         # A namespace whose only members are intrinsics (str): there is
-        # no module file, so an unknown member is reported against the
-        # intrinsics, not as a missing file.
+        # no module file (the import loaded none), so an unknown member is
+        # reported against the intrinsics, not as a missing file.
         Error UNKNOWN-SYMBOL $span \
             "namespace \"$namespaceName\" has no [dict get {value definition type type struct type error error} $refKind] \"$symbolName\" (its members are the intrinsics: [join $natives {, }])"
     }
@@ -1200,7 +1323,7 @@ proc surface::modules::NewState {files nextFile} {
         loadedErrors [dict create] loadedTraits [dict create] loadedEnums [dict create] \
         loadedLayouts [dict create] imports [dict create] stack {} sections {} \
         typeDecls {} errorDecls {} structDecls {} traitDecls {} staticDeferred [dict create] \
-        target ""]
+        target "" root "" entry "" application [dict create]]
 }
 
 # {sections SECTIONS files FILES functions NAMESPACE->{FUNCTION-NAME ...}
@@ -1236,14 +1359,19 @@ proc surface::modules::LoadNamespaces {namespaces args} {
 # every origin), after loading -- and compiling once, alongside it -- every
 # module its imports name, transitively. Shared by compileProgramFile and by
 # callers that compile source text instead of a file (examples/stdlib/
-# corpus.tcl). Returns HIR before the frontend's finishing steps
-# (surface::lower::Finish).
-proc surface::modules::BuildProgram {ast strict {target ""}} {
+# corpus.tcl). ROOT is the program's application root (the directory of its
+# entry file, application modules above), "" for none. Returns HIR before
+# the frontend's finishing steps (surface::lower::Finish).
+proc surface::modules::BuildProgram {ast strict {target ""} {root ""}} {
     set state [NewState [dict create f1 [dict get $ast span file]] 2]
     # The C ABI target (C-ABI-TYPES.md): the host's unless given. Only a
     # file importing ffi::c, or an architecture-specific module (ModuleFile),
     # reads it.
     dict set state target [hir::cabi::ResolveTarget $target]
+    if {$root ne ""} {
+        dict set state root [file normalize $root]
+        dict set state entry [file normalize [dict get $ast span file]]
+    }
     CollectAndLoad state $ast ""
     lassign [surface::lower::SplitTypeDecls [dict get $ast body]] executable ownDecls ownErrorDecls ownStructDecls ownTraitDecls
     set decls [concat [dict get $state typeDecls] $ownDecls]
@@ -1259,7 +1387,9 @@ proc surface::modules::BuildProgram {ast strict {target ""}} {
 }
 
 # The HIR of the .bot program file PATH, after loading (and compiling once,
-# alongside it) every module its imports name, transitively.
+# alongside it) every module its imports name, transitively: standard
+# namespaces from the standard library, and the program's own application
+# modules from the directory PATH is in, its application root (above).
 # -strict as surface::lowerToHir's. -target NAME is the C ABI target whose
 # data model ffi::c's integer scalars follow (C-ABI-TYPES.md; core/cabi.tcl:
 # the host's when "", the default). -cache DIR reads the HIR from the
@@ -1285,14 +1415,17 @@ proc surface::modules::compileProgramFile {path args} {
     set channel [dict get $options -warning-channel]
     set cache [dict get $options -cache]
     set target [hir::cabi::ResolveTarget [dict get $options -target]]
-    set hir [surface::cache::lookup $cache $path $source $mode $strict $target]
+    # The application root: the entry file's own directory, wherever the
+    # compilation was started from.
+    set root [file dirname [file normalize $path]]
+    set hir [surface::cache::lookup $cache $path $source $mode $strict $target $root]
     if {$hir ne ""} {
         return [surface::cache::Replay $hir $mode $channel]
     }
     variable reads
     set reads [dict create]
     set ast [surface::parse $source $path]
-    set hir [surface::lower::Finish [BuildProgram $ast $strict $target] $strict $mode $channel]
-    surface::cache::store $cache $path $source $mode $strict $hir $reads $target
+    set hir [surface::lower::Finish [BuildProgram $ast $strict $target $root] $strict $mode $channel]
+    surface::cache::store $cache $path $source $mode $strict $hir $reads $target $root
     return $hir
 }
