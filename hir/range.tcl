@@ -39,7 +39,9 @@
 # known ranges (interval arithmetic; unknown if either operand is unknown),
 # natives whose -result-range metadata promises a fact (core/native.tcl),
 # references to a local/param binding (the range last bound to it on this
-# path), and `if` branches (joined; the known-branch shortcut reuses
+# path; for a binding established outside the region -- a program-level or
+# module-level constant a function reads -- the exact Int it is bound to,
+# BindingRange), and `if` branches (joined; the known-branch shortcut reuses
 # hir::types::KnownOutcome so a statically decided condition does not lose
 # precision). Every other expression's range is unknown: nothing here infers
 # a bound from an exact call until its successful-result summary is known,
@@ -903,6 +905,26 @@ proc hir::range::InductionBinding {startR endR direction endKind} {
     return [intersect [TypeFact int] [InductionSeed $startR $endR $direction $endKind]]
 }
 
+# The Range a walk whose own binding facts are BINDINGS reads for binding B:
+# the walk's fact (a binding of the region walked, a parameter, a
+# transported capture), else the exact Int B is bound to (hir::exact::
+# BindingIntOf), else unknown. The second case is a binding established
+# outside the region the walk analyzes -- a program-level or module-level
+# constant a function reads, by a capture or through `ns::name` -- which no
+# walk of that function binds or seeds: `size = 4` is the point 4 in every
+# function that reads `size`, exactly as it is in the code that binds it.
+# It is a fact of the HIR alone (an immutable binding's one `bind`), never
+# of where or how often the function is called. The one reading of such a
+# binding: this analysis and hir/completions.tcl's walk both use it, so the
+# two agree on it.
+proc hir::range::BindingRange {hir bindings b} {
+    if {[dict exists $bindings $b]} {
+        return [dict get $bindings $b]
+    }
+    set n [hir::exact::BindingIntOf $hir $b]
+    return [expr {$n eq "" ? [unknown] : [point $n]}]
+}
+
 proc hir::range::Expr {hirVar ctxVar e} {
     upvar 1 $hirVar hir $ctxVar ctx
     if {![hir::get $hir $e reachable]} {
@@ -920,10 +942,7 @@ proc hir::range::Expr {hirVar ctxVar e} {
             if {[dict get $node binding] eq ""} {
                 return never
             }
-            set b [dict get $node binding]
-            set bindings [dict get $ctx bindings]
-            set r [expr {[dict exists $bindings $b] ? [dict get $bindings $b] : [unknown]}]
-            set r [ConstrainType $hir $e $r]
+            set r [ConstrainType $hir $e [BindingRange $hir [dict get $ctx bindings] [dict get $node binding]]]
             dict set ctx exprs $e $r
             return $r
         }
@@ -957,7 +976,7 @@ proc hir::range::Expr {hirVar ctxVar e} {
                 set bindings [dict get $ctx bindings]
                 set capRanges [dict create]
                 foreach b $captures {
-                    dict set capRanges $b [expr {[dict exists $bindings $b] ? [dict get $bindings $b] : [unknown]}]
+                    dict set capRanges $b [BindingRange $hir $bindings $b]
                 }
                 set creates [dict get $ctx creates]
                 lappend creates [list $e $capRanges]
@@ -3145,7 +3164,9 @@ proc hir::range::NarrowRounds {ctx narrowed captures results narrowResults round
 # way M7.c.1's own closeCallersRoundLimit is a debug/audit-only knob, not a
 # CLI option. CAPTUREOPT 0 computes captureSeeds exactly as usual (spec
 # #38: no separate code path) but never seeds it into ctx bindings, so a
-# captured binding reads as unknown exactly as before this milestone.
+# captured binding reads as unknown exactly as before this milestone --
+# unless it is bound to an exact Int, which every read of it is, transported
+# or not (BindingRange).
 # NARROWOPT 0 skips the narrowing phase outright, committing the ascending
 # phase's own widened ASSUMED/CAPTURESEEDS as final.
 proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {

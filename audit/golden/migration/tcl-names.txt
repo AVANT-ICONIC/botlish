@@ -1485,6 +1485,12 @@ tests/exact-value-facts.test ev-opaque-call-instance-value-fact pass
 tests/exact-value-facts.test ev-opaque-call-loses-fact pass
 tests/exact-value-facts.test ev-order-independent pass
 tests/exact-value-facts.test ev-ordering-decided pass
+tests/exact-value-facts.test ev-outer-computed-not-a-fact pass
+tests/exact-value-facts.test ev-outer-constant-both-walks pass
+tests/exact-value-facts.test ev-outer-constant-like-literal pass
+tests/exact-value-facts.test ev-outer-constant-out-of-domain pass
+tests/exact-value-facts.test ev-outer-constant-proves-domain pass
+tests/exact-value-facts.test ev-outer-module-constant pass
 tests/exact-value-facts.test ev-param-fact-not-from-body pass
 tests/exact-value-facts.test ev-parity-oob pass
 tests/exact-value-facts.test ev-parity-projections pass
@@ -5615,6 +5621,7 @@ tests/static-economics.test se-equal-internal-ids-exact pass
 tests/static-economics.test se-equal-multiple-contributors pass
 tests/static-economics.test se-equal-nested-chain pass
 tests/static-economics.test se-equal-nested-checked pass
+tests/static-economics.test se-equal-outer-constant pass
 tests/static-economics.test se-equal-ownership-siblings pass
 tests/static-economics.test se-equal-ownership-verdict pass
 tests/static-economics.test se-equal-plan-gate pass

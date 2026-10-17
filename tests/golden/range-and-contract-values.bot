@@ -1137,6 +1137,69 @@ fn register_aggregate_entry_tests(empty):
             consume([])
     test::value("empty-list-admissibility-unaffected", 1, empty_list)
 
+# ---------------------------------------------------------------------------
+# Program-level constants read inside functions (exact-value-facts.test's
+# ev-outer-* tests; 2048-ENGINE-WORKLOAD.md, S8)
+#
+# An immutable binding of an exact Int is that Int in every function that
+# reads it, as it is where it is bound. The Tcl programs' constants are
+# program-level and their functions top-level; here the constants are this
+# suite's own program-level bindings, read by functions nested in the
+# blocks (captures, the same reads).
+
+type Quad = Int in 0..3
+
+struct QuadPosition:
+    row: Quad
+    column: Quad
+
+quad_base = 2
+quad_size = quad_base * 2
+quad_wide = 5
+
+fn quad_four() -> int:
+    4
+
+quad_computed = quad_four()
+
+fn register_outer_constant_tests():
+    # ev-outer-constant-proves-domain: quad_size proves an argument's Quad
+    # domain over a loop to it, a declared Quad result quad_size - 1 and that
+    # checked(quad_size) cannot fail (no handler).
+    fn named_constant() errors compiler::CompilerError:
+        static compile:
+            fn coordinate(n: Quad) -> Quad:
+                n
+            fn last() -> Quad:
+                quad_size - 1
+            fn checked(n: int) -> int errors TooLarge:
+                if n > 10:
+                    fail TooLarge
+                n
+            fn positions() -> List[QuadPosition]:
+                loop r from 0 to quad_size:
+                    QuadPosition {row: coordinate(r), column: last()}
+            [list::length(positions()), last(), checked(quad_size)]
+    test::value("ev-outer-constant-proves-domain", [4, 3, 4], named_constant)
+
+    # ev-outer-constant-out-of-domain: the value is read, not assumed:
+    # quad_wide - 1 is exactly 4, outside Quad.
+    fn wide_constant() errors compiler::CompilerError:
+        static compile:
+            fn last() -> Quad:
+                quad_wide - 1
+            last()
+    test::rejects_containing("ev-outer-constant-out-of-domain", compiler::DiagnosticCode::Type, "facts: [4, 4]", wide_constant)
+
+    # ev-outer-computed-not-a-fact: a binding of a user function's result
+    # (4 at run time) is no fact: quad_computed - 1 proves nothing.
+    fn computed_constant() errors compiler::CompilerError:
+        static compile:
+            fn last() -> Quad:
+                quad_computed - 1
+            last()
+    test::rejects_containing("ev-outer-computed-not-a-fact", compiler::DiagnosticCode::Type, "does not prove declared type", computed_constant)
+
 with context test::suite()
 register_intrinsic_contract_tests()
 register_closed_closure_tests()
@@ -1146,4 +1209,5 @@ register_exact_value_tests()
 register_result_narrowing_tests()
 register_range_tests()
 register_aggregate_entry_tests([])
+register_outer_constant_tests()
 test::report()

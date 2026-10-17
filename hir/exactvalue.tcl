@@ -3,6 +3,7 @@
 #
 #   hir::exact::Of HIR E ?LEVEL?      -> FACT | ""
 #   hir::exact::IntOf HIR E           -> INTEGER | ""
+#   hir::exact::BindingIntOf HIR B    -> INTEGER | ""
 #   hir::exact::ListOf HIR E ?LEVEL?  -> {list LEVEL SRC...} | ""
 #
 # The principle: if the compiler already knows the value, do not throw the
@@ -101,6 +102,22 @@ proc hir::exact::Of {hir e {level 0}} {
 proc hir::exact::IntOf {hir e} {
     set fact [Of $hir $e]
     return [expr {[lindex $fact 0] eq "int" ? [lindex $fact 1] : ""}]
+}
+
+# The exact Int the immutable local binding B is bound to, or "": the
+# value of its one `bind` (IntOf), which is what every read of B sees. A
+# read runs only once B is established -- a forward reference is UNBOUND
+# in a function body and in a module alike (MODULE-BINDINGS.md) -- so the
+# fact holds at every reachable read of B, in whatever function it is
+# written: B's own, a function capturing B, or a module function reading
+# a module binding through `ns::name`. A parameter or loop element (no
+# `bind`) and a root or ambient binding have none.
+proc hir::exact::BindingIntOf {hir b} {
+    set binding [dict get $hir bindings $b]
+    if {[dict get $binding kind] ne "local" || [dict get $binding declaredBy] eq ""} {
+        return ""
+    }
+    return [IntOf $hir [dict get $binding declaredBy]]
 }
 
 # E's exact List fact ({list SRC...}), or "".

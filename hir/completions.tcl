@@ -19,11 +19,12 @@
 # is NOT a second independent abstract interpreter built from scratch: every
 # numeric fact it computes reuses hir::range.tcl's own pure Range lattice
 # operations directly (join, intersect, ComparisonNarrowing, Narrowed,
-# RefBinding, TypeFact/ConstrainType, add/sub/mul/BitOp, ExactOf, point,
-# unknown, JoinBindings) -- see each proc below for exactly which one it
-# calls. What this file adds on top, that hir::range.tcl deliberately does
-# not need for its own purpose, is: (a) treating a narrowed branch fact that
-# becomes an empty interval as a *provably infeasible* branch, pruned
+# RefBinding, BindingRange, TypeFact/ConstrainType, add/sub/mul/BitOp,
+# ExactOf, point, unknown, JoinBindings) -- see each proc below for exactly
+# which one it calls. What this file adds on top, that hir::range.tcl
+# deliberately does not need for its own purpose, is: (a) treating a
+# narrowed branch fact that becomes an empty interval as a *provably
+# infeasible* branch, pruned
 # entirely rather than merely computed and joined (general branch
 # feasibility, not just the existing purely-syntactic hir::types::
 # KnownOutcome); and (b) tracking *which* declared error names are reachable
@@ -1453,9 +1454,7 @@ proc hir::completions::Eval {hirVar ctxVar diagnose enclosing guard e} {
             if {$b eq {}} {
                 return never
             }
-            set bindings [dict get $ctx bindings]
-            set r [expr {[dict exists $bindings $b] ? [dict get $bindings $b] : [hir::range::unknown]}]
-            set r [hir::range::ConstrainType $hir $e $r]
+            set r [hir::range::ConstrainType $hir $e [hir::range::BindingRange $hir [dict get $ctx bindings] $b]]
             dict set ctx exprs $e $r
             return $r
         }

@@ -763,6 +763,54 @@ test se-equal-untyped-capture {two blocks capturing an untyped parameter of the 
     list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
 } -result {{} {TYPE accepted} 2}
 
+test se-equal-outer-constant {a block reading a constant bound outside its function (a capture) reads its exact value (hir::range::BindingRange), so its verdict depends on the constant's own block: rejected (UNBOUND), the constant is a failure, not 4, and the reader is TYPE; accepted through an alias (size = base * 2), the reader is accepted; 5 rejects the reader. The dependency is the existing one -- the reader's function mentions the binding, the binding's definition holds the site -- and the batched decisions are the sequential ones} -body {
+    set text {import compiler
+
+type Coordinate = Int in 0..3
+
+fn coord(n: Coordinate) -> Coordinate:
+    n
+
+fn rejected() -> int errors compiler::CompilerError:
+    size = static compile:
+        y = no_such_name
+        4
+    fn last() -> int errors compiler::CompilerError:
+        static compile:
+            coord(size - 1)
+    last()
+
+fn accepted() -> int errors compiler::CompilerError:
+    base = static compile:
+        2
+    size = base * 2
+    fn last() -> int errors compiler::CompilerError:
+        static compile:
+            coord(size - 1)
+    last()
+
+fn wide() -> int errors compiler::CompilerError:
+    size = static compile:
+        5
+    fn last() -> int errors compiler::CompilerError:
+        static compile:
+            coord(size - 1)
+    last()
+
+r0 = rejected():
+    on compiler::CompilerError:
+        -1
+r1 = accepted():
+    on compiler::CompilerError:
+        -1
+r2 = wide():
+    on compiler::CompilerError:
+        -1
+[r0, r1, r2]
+}
+    list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0] [lindex [seEcon $text sequential] 0]
+} -result {{} {UNBOUND TYPE accepted accepted accepted TYPE} 3 4}
+
 test se-equal-corpus {contexts, opaque structs, traits, coroutines and ownership, method sugar, namespaced errors: batched equals sequential (every program compiles: seSame refuses two failures alike)} -body {
     set results {}
     foreach text [list \

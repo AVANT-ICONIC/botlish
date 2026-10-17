@@ -198,6 +198,16 @@ the same holds for a List (`ev-get-alias-of-list`), a projection bound to a
 name (`ev-nested-via-alias`) and module-level bindings referenced from
 functions.
 
+The Range layer reads that fact for every binding the walk of a function
+neither binds nor seeds: a program-level or module-level constant read
+inside a function, by a capture or through `ns::name`. `size = 4` is the
+point 4 in every function that reads `size` (`hir::range::BindingRange`,
+which the completion walk shares, over `hir::exact::BindingIntOf`), so a
+counted loop to it proves a 0..3 domain exactly as the literal does. Until
+2048-ENGINE-WORKLOAD.md's S8 it read only the walk's own bindings, and such
+a constant was unknown inside the function (`ev-outer-*`; the golden ports
+are in `range-and-contract-values.bot`).
+
 ## Exact selector/index propagation
 
 **Q5. How is exact index 0 represented?** Three views of one thing: the fact
