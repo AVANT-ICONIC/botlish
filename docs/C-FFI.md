@@ -141,7 +141,11 @@ only (`cf-entry-program-declares`). Two declarations of one qualified name
 are `DUPLICATE`, never merged, whatever their signatures; a function and an
 extern of one name are the ordinary duplicate binding; two modules may
 declare the same C symbol, each with its own Botlish name and contract
-(`cf-decl-duplicate`).
+(`cf-decl-duplicate`). There is no registry of symbols: Botlish module
+identity is independent of linker symbol identity, and two declarations of
+one symbol with different signatures are each their author's ABI promise --
+not diagnosed, since no check could cover every external linkage, and no
+whole-program C symbol-type verification is attempted.
 
 **The link symbol** is the declaration's name, or `named`'s string. `named`
 changes exactly the symbol: the Botlish name stays the declaration's
