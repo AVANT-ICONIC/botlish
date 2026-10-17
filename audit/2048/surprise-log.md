@@ -432,6 +432,15 @@ loads them"), but a user cannot act on them and they appear in their
 build output (here with a temporary path, because of D5).
 DIAGNOSTIC/STDLIB. MODERATE (noise that trains users to ignore warnings).
 
+**Resolved** (b94e3d0): `lib/io.bot`'s `print_line` and `write_error_line`
+append the newline as a character, `text.append_char('\n')`, through the
+new intrinsic `str::append_char` (a String followed by one UnicodeChar,
+the append of a character to text the warning manifest's `char->text`
+obstruction lacked), so `lib/io.bot` carries no warning. Regressions:
+`tests/portable-io.test` (`io-warning-clean`, `io-line-text-exact`,
+`io-line-newline-is-a-character`), `tests/workload-2048.test`
+(`workload-2048-strict-warnings`) and `tests/str-append-char.test`.
+
 ### S17 METHOD-ELIGIBLE fires 12 times on the demo's ordinary calls
 
 `fits(n, p)`, `digits(n, next)`, `show(title, board)`, `play(start, 3)`,
@@ -731,6 +740,9 @@ rebuilding the demo with `run.tcl -warnings error`: `the String literal
 "\n" is one character long ...`). The warning gate avoids this only
 because it compares against a manifest. DIAGNOSTIC/STDLIB; raises S16 to
 a CLI problem for anyone using strict warnings in CI.
+**Resolved** with S16 (b94e3d0): `run.tcl -warnings error -backend cranelift
+demo.bot` compiles and runs, and the engine, the suite and the benchmark
+compile under `-warnings error` too (`workload-2048-strict-warnings`).
 * S24 is not single-file only: the same shape with nested functions
   (`fn outer(n): base = n - 5 / fn spawned(...) -> Turn: ... base ... /
   fn main(): first = spawned(1, 2) / first.game + first.seed`) fails the
