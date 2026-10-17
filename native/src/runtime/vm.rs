@@ -384,6 +384,14 @@ impl Vm {
         self.collect_with(reason);
     }
 
+    /// A collection on demand, from inside a call: the borrow test fixture's
+    /// `read_reentrant` (runtime/ffifixture.rs), which stands for foreign
+    /// code running Botlish code mid-call. Its caller is at a safepoint
+    /// (its op is op_may_allocate), so every live root is in a stack map.
+    pub fn collect_explicit(&mut self) {
+        self.collect_with(GcReason::Explicit);
+    }
+
     /// A collection on demand, for unit tests that drive the Vm directly.
     #[cfg(test)]
     pub fn collect_for_test(&mut self, reason: GcReason) {

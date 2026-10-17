@@ -1173,6 +1173,7 @@ proc hir::CheckOnce {hirVar demote {roundsVar ""}} {
     hir::affine::verify hir
     hir::mutvec::verify hir
     hir::syscall::verify hir
+    hir::borrow::verify hir
     hir::layouts::verify hir
     hir::semantic::verify hir
     # {FROM TO}: the diagnostics at indices FROM to TO - 1 were reported
@@ -1487,7 +1488,7 @@ proc hir::exprsAt {hir origin} {
 }
 
 apply {{dir} {
-    foreach file {syntax static staticdeps imports resolve flags contexts coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings declarations interchange} {
+    foreach file {syntax static staticdeps imports resolve flags contexts coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings declarations interchange} {
         uplevel #0 [list source [file join $dir $file.tcl]]
     }
 }} $hir::home

@@ -524,6 +524,10 @@ twelve mutants of exactly the failures this boundary is prone to -- see
   NUL the storage does not have today, embedded-NUL validation, `strlen`
   conversions); the object layout has room for it (payload length vs. content
   length), nothing was added.
+* **C calls** (done for the noescape case: see C-POINTER-BORROWING.md, which
+  reuses this milestone's storage, `StorageOf`, address ops and `keepalive`
+  as the shared byte-exposure mechanism of both the syscall bridge and a
+  foreign call's temporary exposure).
 * **Retained-pointer `opaque resource struct` APIs**: ownership anchoring (`with`,
   mutable context storage), a lifetime longer than one synchronous call, a way for the
   collector to keep storage alive while foreign code holds the pointer (pinning is

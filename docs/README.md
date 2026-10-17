@@ -715,7 +715,7 @@ result until `web::uri_query_value?` proves it one.
 | `core/linuxabi.tcl` | `linux::abi::syscall`, the raw Linux x86-64 kernel transition (native only; LINUX-X86-64-SYSCALL.md) |
 | `core/contexts.tcl` | the two internal context operations `context#install` / `context#load` and the Tcl backends' per-run context environment (CONTEXTS.md); `context#unreachable`, the placeholder of code no installed context reaches (CONTEXT-TRAITS.md) |
 | `core/coroutines.tcl` | the coroutine operations `coroutine#create` / `#start` / `#resume` / `#yield` and `coroutine::done?`, and the Tcl backends' coroutine store: one Tcl coroutine per Botlish coroutine (COROUTINES.md) |
-| `core/cabi.tcl` | the C ABI targets and data models, the C integer scalars' metadata, the `cptr` value kind and the `ffi::c` pointer operations, and the C pointer test fixture (C-ABI-TYPES.md) |
+| `core/cabi.tcl` | the C ABI targets and data models, the C integer scalars' metadata, the `cptr` value kind and the `ffi::c` pointer operations, and the C pointer test fixture (C-ABI-TYPES.md); the foreign call contract vocabulary (a pointer parameter's access and escape), the Tcl backends' model of temporary byte exposure (`ForeignBoundary`) and the borrow test fixture (C-POINTER-BORROWING.md) |
 | `core/binary.tcl` | fixed binary layouts' operations `binary::parse` / `binary::emit` / the layout queries, the reference implementation the interpreter runs over a layout's static descriptor (BINARY-LAYOUT.md) |
 | `core/bytestore.tcl` | the byte-storage value kinds' natives (immutable `bytestore`, writable `mutbytes`) and the raw address bridges `abi::x86_64::from_bytes` / `from_mutable_bytes` (ABI-BYTES.md, MUTABLE-BYTES.md) |
 | `hir/hir.tcl` | HIR data model, ids, `hir::build`, queries |
@@ -723,6 +723,7 @@ result until `web::uri_query_value?` proves it one.
 | `hir/hygiene.tcl` | renaming bindings that shadow root references |
 | `hir/resolve.tcl` | scopes, bindings, symbols, lexical resolution, captures, control targets |
 | `hir/types.tcl` | static types (delegating to `core/type.tcl`) and type inference |
+| `hir/borrow.tcl` | temporary foreign byte exposure: which byte owners a foreign call's pointer parameters admit, the transport recorded on the call, the write-back result type, `FOREIGN-BORROW`, and the `direct` hook (C-POINTER-BORROWING.md) |
 | `hir/refine.tcl` | branch refinement facts and statically decided type tests |
 | `hir/lower.tcl` | HIR → core IR |
 | `hir/format.tcl` | readable HIR |

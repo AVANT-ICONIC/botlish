@@ -3061,13 +3061,23 @@ proc hir::types::Call {hirVar ctxVar e} {
                     set result [Unshaped $result]
                 }
             }
+            set foreign [dict get $meta foreign]
             if {[dict get $meta imprint] ne ""} {
                 # An intrinsic's imprint signature (hir/imprint.tcl): its
-                # result imprinted for this call (ffi::c::null[T]()).
-                set result [hir::imprint::Call hir $e $calleeType $argTypes \
+                # result imprinted for this call (ffi::c::null[T]()). A byte
+                # owner exposed to a foreign pointer parameter establishes
+                # no pointee (hir/borrow.tcl).
+                set result [hir::imprint::Call hir $e $calleeType \
+                    [expr {$foreign eq "" ? $argTypes : [hir::borrow::ImprintArgTypes $foreign $argTypes]}] \
                     [dict get $meta imprint result] $result]
             } elseif {[dict exists $node imprint]} {
                 hir::imprint::Call hir $e $calleeType $argTypes $result $result
+            }
+            if {$foreign ne ""} {
+                # A foreign call contract (hir/borrow.tcl): the call's byte
+                # exposures, recorded on the node, and its type -- the C
+                # result, or the write-back struct of the bytes C wrote.
+                set result [hir::borrow::Type hir $e $meta $argTypes]
             }
             if {!$dead} {
                 # The call returned, so every argument had its parameter type.

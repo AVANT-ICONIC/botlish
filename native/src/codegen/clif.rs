@@ -1941,6 +1941,17 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         CoDone => ("rt_co_done", None, false, None),
                         CPtrFixture => ("rt_cptr_fixture", None, true, None),
                         CPtrFixtureAddress => ("rt_cptr_fixture_address", None, false, None),
+                        // The borrow test fixture (runtime/ffifixture.rs):
+                        // fallible on an operand that is no address or count,
+                        // fill_checked also with its declared UpperOverrun.
+                        FfiFixtureRead => ("rt_ffi_fixture_read", None, true, Some(("ffifixtureread", KIND_LIST))),
+                        FfiFixtureReadReentrant => {
+                            ("rt_ffi_fixture_read_reentrant", None, true, Some(("ffifixturereadreentrant", KIND_LIST)))
+                        }
+                        FfiFixtureFill => ("rt_ffi_fixture_fill", None, true, None),
+                        FfiFixtureFillChecked => ("rt_ffi_fixture_fill_checked", None, true, None),
+                        FfiFixtureCopy => ("rt_ffi_fixture_copy", None, true, None),
+                        FfiFixtureMixed => ("rt_ffi_fixture_mixed", None, true, None),
                         CoRelease => ("rt_co_release", None, false, None),
                         AffineDrop => ("rt_affine_drop", None, false, None),
                         // MutableVector (MUTABLE-VECTOR.md, runtime/mutvec.rs).

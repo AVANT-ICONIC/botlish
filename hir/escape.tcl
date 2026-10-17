@@ -849,6 +849,17 @@ proc hir::escape::RegionInfo {hir spec id} {
                     # need not be built for it.
                     dict set wordUse [lindex $args 0] 1
                 }
+                if {$targetKind eq "native" && [dict exists $view exprs $e borrows]} {
+                    # A foreign call's exposed byte owners (hir/borrow.tcl) are
+                    # read only for their storage field, the same way
+                    # (native/lower.tcl's BorrowCall).
+                    foreach borrow [dict get $view exprs $e borrows] {
+                        set arg [lindex $args [lindex $borrow 0]]
+                        if {$arg ne ""} {
+                            dict set wordUse $arg 1
+                        }
+                    }
+                }
                 set callee ""
                 if {$targetKind eq "block" && [dict exists [dict get $instance calls] $e]} {
                     set callee [dict get [dict get $instance calls] $e]

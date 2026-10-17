@@ -519,6 +519,9 @@ operations under a collection at every allocation.
 * **Dead-value reuse / return transfer**: deadness facts across `linux::read`'s call
   boundary (the escape machinery does not span it today; ABI-BYTES.md had the same
   frontier) to elide the detach and the wrapper.
+* **Writable exposure to C** (done for one noescape call: C-POINTER-BORROWING.md
+  -- the detach-then-expose discipline of `linux::read`, generalized: the
+  call returns the copy C wrote as the parameter's updated value).
 * **Long-lived retained writable pointers / resources**: ownership anchoring, a
   lifetime beyond one synchronous call, destructors, and the `direct`/raw-ABI
   restrictions on the operations that expose addresses -- none started; the storage

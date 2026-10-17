@@ -1,0 +1,259 @@
+# Mutants of temporary foreign byte exposure (audit/c-pointer-borrowing/tools/
+# mutate.tcl; C-POINTER-BORROWING.md): each a deliberate bug in the contract
+# vocabulary and the Tcl exposure model (core/cabi.tcl), the static
+# admission and the write-back type (hir/borrow.tcl), argument admission
+# (hir/range.tcl), the scalar-replacement fact (hir/escape.tcl) or the
+# shared exposure lowering (native/lower.tcl). The brief's mutants come
+# first, then further ones.
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# Lines starting with # outside an edit are comments.
+
+# --- the brief's mutants -----------------------------------------------------
+
+@@ const-implies-noescape a read (C const) parameter admits byte storage whatever its escape fact says
+## hir/borrow.tcl
+<<<<
+    if {![core::cabi::isNoescape $escape]} {
+        return [list problem [format \
+====
+    if {![core::cabi::isNoescape $escape] && $access ne "read"} {
+        return [list problem [format \
+>>>>
+
+@@ unknown-implies-noescape an unknown escape fact is treated as noescape ("probably synchronous")
+## core/cabi.tcl
+<<<<
+    return [expr {$escape in {proven-noescape declared-noescape}}]
+====
+    return [expr {$escape in {proven-noescape declared-noescape unknown}}]
+>>>>
+
+@@ read-borrow-allows-write the Tcl exposure model lets an operation write through a read exposure
+## core/cabi.tcl
+<<<<
+    if {[dict get $exposures $id access] ne "write"} {
+====
+    if {0} {
+>>>>
+
+@@ immutable-bytes-satisfy-write an immutable Bytes is admitted for a write parameter
+## hir/borrow.tcl
+<<<<
+    if {$access eq "write" && ![IsMutableOwner $argType]} {
+====
+    if {0} {
+>>>>
+
+@@ borrow-produces-first-class-ptr byte storage is admitted where an ordinary ffi::c::Ptr is declared (a pointer value of it)
+## hir/range.tcl
+<<<<
+        # one of a callable.
+        return [hir::types::subtype $argType $declared]
+====
+        # one of a callable.
+        return [expr {[hir::types::subtype $argType $declared] || ([hir::types::IsCPtr $declared] && [hir::borrow::IsOwner $argType])}]
+>>>>
+
+@@ borrow-address-can-clone clone (or null?) accepts byte storage, as if it were a pointer to copy
+## hir/borrow.tcl
+<<<<
+        if {[IsOwner $argType]} {
+            hir::Diagnose hir TYPE [format {argument %d of %s must be a C pointer (argument type: %s)%s} \
+====
+        if {0} {
+            hir::Diagnose hir TYPE [format {argument %d of %s must be a C pointer (argument type: %s)%s} \
+>>>>
+
+@@ owner-liveness-dropped no keepalive of the exposed storage after the foreign operation
+## native/lower.tcl
+<<<<
+    set result [Assign fn "[dict get $natives $name] [join $operands { }]" $e]
+    KeepExposedAlive fn $operands $e
+====
+    set result [Assign fn "[dict get $natives $name] [join $operands { }]" $e]
+>>>>
+
+@@ mutable-exclusivity-dropped a write exposure hands C the owner's own (shared, published) storage instead of a private copy
+## native/lower.tcl
+<<<<
+            set private [Assign fn "op mbytesclone [lindex $operands $i]" $e]
+            lset operands $i $private
+====
+            set private [lindex $operands $i]
+            lset operands $i $private
+>>>>
+
+@@ borrow-allowed-across-yield a read exposure is made where its argument is evaluated, so later arguments' code (a call, a yield) runs while it is open
+## native/lower.tcl
+<<<<
+            set register [StorageOf fn $arg [lindex [hir::typeOf $hir $arg] 1]]
+        } else {
+====
+            set register [StorageOf fn $arg [lindex [hir::typeOf $hir $arg] 1]]
+            if {[dict get $access $index] eq "read" && $register ne "never"} {
+                set register [ExposeStorage fn $register [hir::borrow::IsMutableOwner [hir::typeOf $hir $arg]] $e]
+            }
+        } else {
+>>>>
+## native/lower.tcl
+<<<<
+    dict for {i how} $access {
+        # The address op follows the storage's kind (a MutableBytes' storage
+====
+    dict for {i how} $access {
+        if {$how eq "read"} continue
+        # The address op follows the storage's kind (a MutableBytes' storage
+>>>>
+
+@@ capturing-parameter-accepts-borrow a parameter that captures the pointer admits byte storage (only an unknown escape is refused)
+## hir/borrow.tcl
+<<<<
+    if {![core::cabi::isNoescape $escape]} {
+        return [list problem [format \
+====
+    if {$escape eq "unknown"} {
+        return [list problem [format \
+>>>>
+
+@@ ptr-int-from-byte-storage byte storage is exposed as a pointer to any C integer scalar of at least 8 bits (Ptr[Int], Ptr[Long])
+## hir/borrow.tcl
+<<<<
+    return [expr {$info ne "" && [dict get $info bits] == 8}]
+====
+    return [expr {$info ne "" && [dict get $info bits] >= 8}]
+>>>>
+
+@@ c-borrowing-uses-syscall-namespace exposure is made to depend on the Linux syscall ABI (its register type) being loaded
+## hir/borrow.tcl
+<<<<
+proc hir::borrow::Decide {param argType} {
+    set type [dict get $param type]
+====
+proc hir::borrow::Decide {param argType} {
+    if {![hir::structs::declared [core::linuxabi::registerType]]} {
+        return ""
+    }
+    set type [dict get $param type]
+>>>>
+
+@@ read-write-roles-swapped native lowering takes the private copy of a read exposure and hands a write exposure the owner's storage
+## native/lower.tcl
+<<<<
+    dict for {i how} $access {
+        if {$how eq "write"} {
+            set private [Assign fn "op mbytesclone [lindex $operands $i]" $e]
+====
+    dict for {i how} $access {
+        if {$how eq "read" && [hir::borrow::IsMutableOwner [hir::typeOf $hir [lindex [dict get $node args] $i]]]} {
+            set private [Assign fn "op mbytesclone [lindex $operands $i]" $e]
+            lset operands $i $private
+        }
+        if {$how eq "write"} {
+            dict set written $i [lindex $operands $i]
+        }
+        if {0} {
+            set private [Assign fn "op mbytesclone [lindex $operands $i]" $e]
+>>>>
+
+@@ copy-back-omitted native lowering returns the owner's own storage as the written value, not the copy C wrote
+## native/lower.tcl
+<<<<
+            set private [Assign fn "op mbytesclone [lindex $operands $i]" $e]
+            lset operands $i $private
+            dict set written $i $private
+====
+            set private [Assign fn "op mbytesclone [lindex $operands $i]" $e]
+            dict set written $i [lindex $operands $i]
+            lset operands $i $private
+>>>>
+
+# --- further mutants ----------------------------------------------------------
+
+@@ copy-back-omitted-tcl the Tcl exposure model drops what an operation writes (the write-back is the bytes it was given)
+## core/cabi.tcl
+<<<<
+    dict set exposures $id hex [string replace $hex [expr {2 * $offset}] [expr {2 * ($offset + $count) - 1}] $new]
+====
+>>>>
+
+@@ evidence-changes-semantics only declared noescape admits exposure: proven noescape is refused
+## core/cabi.tcl
+<<<<
+    return [expr {$escape in {proven-noescape declared-noescape}}]
+====
+    return [expr {$escape in {declared-noescape}}]
+>>>>
+
+@@ unknown-access-admitted a noescape parameter whose access nobody declared admits byte storage
+## hir/borrow.tcl
+<<<<
+    if {$access eq "unknown"} {
+        return [list problem [format \
+====
+    if {0} {
+        return [list problem [format \
+>>>>
+
+@@ exposure-outlives-call-tcl the Tcl exposure model leaves an exposure open after its call returns
+## core/cabi.tcl
+<<<<
+    } finally {
+        foreach id $opened {
+            dict unset exposures $id
+        }
+    }
+}
+====
+    } finally {
+    }
+}
+>>>>
+
+@@ foreign-operation-as-value a foreign operation may be referred to as a function value
+## hir/borrow.tcl
+<<<<
+        if {[dict get [core::native::metadata $name] foreign] eq ""} continue
+        if {[dict get [core::native::metadata $name] imprint] ne ""} continue
+====
+        continue
+>>>>
+
+@@ strict0-not-replayed native lowering makes an unchecked program's refused exposure instead of replaying the refusal
+## native/lower.tcl
+<<<<
+    set refused [hir::borrow::refused $hir $e]
+====
+    set refused ""
+>>>>
+
+@@ owner-built-for-exposure escape analysis treats an exposed owner as escaping, so its one-field wrapper is built for the call
+## hir/escape.tcl
+<<<<
+                    foreach borrow [dict get $view exprs $e borrows] {
+                        set arg [lindex $args [lindex $borrow 0]]
+                        if {$arg ne ""} {
+                            dict set wordUse $arg 1
+                        }
+                    }
+====
+>>>>
+
+@@ write-back-without-writes a call with a write exposure is typed by the C result alone (the written bytes have no place to come back)
+## hir/borrow.tcl
+<<<<
+    if {[dict size $writes] == 0} {
+        return $result
+    }
+====
+    if {1} {
+        return $result
+    }
+>>>>

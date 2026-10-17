@@ -317,6 +317,26 @@ pub enum OpCode {
     CPtrSame,
     CPtrFixture,
     CPtrFixtureAddress,
+    /// The borrow test fixture's synthetic foreign operations
+    /// (C-POINTER-BORROWING.md; runtime/ffifixture.rs): only the natives
+    /// core/cabi.tcl's installBorrowFixture registers lower to them, so no
+    /// program outside a test reaches one. A pointer operand is a machine
+    /// address -- a byte exposure's (`bytesaddr`/`mbytesaddr`, kept alive by
+    /// a `keepalive` after the op) or a C address word -- read or written
+    /// through as C would. `ffifixtureread %p %n` and
+    /// `ffifixturereadreentrant %p %n` (a collection and allocations first)
+    /// return the N bytes at %p as a List; `ffifixturefill %p %n %seed`,
+    /// `ffifixturefillchecked %p %n %limit` (the declared UpperOverrun when
+    /// %n > %limit, after writing min(%n, %limit) bytes) and `ffifixturecopy
+    /// %dst %src %n` write and return unit; `ffifixturemixed %in %state %out
+    /// %n` writes %in reversed to %out and returns the sum of %in's bytes.
+    /// Every one is a GC safepoint: a foreign call may run Botlish code.
+    FfiFixtureRead,
+    FfiFixtureReadReentrant,
+    FfiFixtureFill,
+    FfiFixtureFillChecked,
+    FfiFixtureCopy,
+    FfiFixtureMixed,
     /// `affinedrop %v %d`: the owner of the affine aggregate %v is dead from
     /// here (AFFINE-VALUES.md; native/lower.tcl emits it where the affine
     /// analysis put a release): releases every affine value %v owns, by the
@@ -639,6 +659,12 @@ op_spellings! {
     "cptrsame" => CPtrSame,
     "cptrfixture" => CPtrFixture,
     "cptrfixtureaddress" => CPtrFixtureAddress,
+    "ffifixtureread" => FfiFixtureRead,
+    "ffifixturereadreentrant" => FfiFixtureReadReentrant,
+    "ffifixturefill" => FfiFixtureFill,
+    "ffifixturefillchecked" => FfiFixtureFillChecked,
+    "ffifixturecopy" => FfiFixtureCopy,
+    "ffifixturemixed" => FfiFixtureMixed,
     "corelease" => CoRelease,
     "affinedrop" => AffineDrop,
     "mvfromlist" => MvFromList,
@@ -713,8 +739,8 @@ impl OpCode {
             | CoRelease | CPtrIsNull | CPtrSame | CPtrFixture | CPtrFixtureAddress | MvFromList | MvLen | MvEmpty | MvPop | MvClear | MvToList | MvTakeFront | CtxRoot
             | MutArrayFromList | MutArrayToList | MutArrayEmpty | MutArrayTakeFront => Some(1),
             Substr | SubstrProven | MutArraySet | MutArraySetProven | MBytesSet | BinLoad | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum | StrSliceShort
-            | MvSwap | MutArraySwap | MutArrayGenerateDrop => Some(3),
-            RegionEq | MvSwapDrop | MutArraySwapDrop | MutArraySetDrop | BinStore => Some(4),
+            | MvSwap | MutArraySwap | MutArrayGenerateDrop | FfiFixtureFill | FfiFixtureFillChecked | FfiFixtureCopy => Some(3),
+            RegionEq | MvSwapDrop | MutArraySwapDrop | MutArraySetDrop | BinStore | FfiFixtureMixed => Some(4),
             MutArrayCopy | MutArrayCopyProven => Some(5),
             _ => Some(2),
         }

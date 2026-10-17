@@ -81,6 +81,10 @@ use super::mutvec::{
 };
 use super::coroutine::{rt_co_create, rt_co_done, rt_co_release, rt_co_resume, rt_co_resume0, rt_co_start, rt_co_yield};
 use super::error::{semantic_kind, RtError};
+use super::ffifixture::{
+    rt_ffi_fixture_copy, rt_ffi_fixture_fill, rt_ffi_fixture_fill_checked, rt_ffi_fixture_mixed, rt_ffi_fixture_read,
+    rt_ffi_fixture_read_reentrant,
+};
 use super::syscall::rt_linux_x86_64_syscall;
 use super::value::*;
 use super::vm::{current_program, Vm, NativeInfo};
@@ -124,6 +128,13 @@ pub fn op_may_allocate(op: OpCode) -> bool {
             // The raw rax result is boxed as a BigInt when it is outside the
             // small-Int range (runtime/syscall.rs).
             | SyscallLinuxX86_64
+            // The borrow test fixture's foreign operations
+            // (runtime/ffifixture.rs): a foreign call may run Botlish code
+            // (read_reentrant collects and allocates on purpose), and read
+            // builds a List, so each is a safepoint whose stack map holds
+            // the exposed storages its keepalives keep live.
+            | FfiFixtureRead | FfiFixtureReadReentrant | FfiFixtureFill | FfiFixtureFillChecked | FfiFixtureCopy
+            | FfiFixtureMixed
             // Same allocation behavior as SetFromList (same runtime helper,
             // same `new_set` construction) -- only its own `op_may_error`
             // classification differs. See SetFromListTotal's own doc
@@ -154,6 +165,11 @@ pub fn op_may_error(op: OpCode) -> bool {
     matches!(op, IMod | IShl | IShr | VEq | Hash | Substr | StrCat | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
         // The C pointer test fixture's out-of-range address (RANGE).
         | CPtrFixture
+        // The borrow test fixture: an operand that is no address or count
+        // (TYPE; a checked program passes neither), and fill_checked's
+        // declared UpperOverrun.
+        | FfiFixtureRead | FfiFixtureReadReentrant | FfiFixtureFill | FfiFixtureFillChecked | FfiFixtureCopy
+        | FfiFixtureMixed
         // A non-byte element (TYPE, never a truncation), an operand that is
         // not a byte storage (TYPE), an oversized storage (RANGE). A checked
         // program cannot produce any of them: lib/abi/bytes.bot's creator takes
@@ -1719,7 +1735,7 @@ pub fn fail_index_not_found(p: *mut Vm) -> Value {
 /// Records the builtin declared error ID (named NAME) as pending and fails:
 /// what a handler's `declarederroreq` reads, with an UNCAUGHT-ERROR fallback
 /// for the program boundary. Returns NO_VALUE.
-fn fail_builtin(p: *mut Vm, id: u32, name: &str) -> Value {
+pub(crate) fn fail_builtin(p: *mut Vm, id: u32, name: &str) -> Value {
     let vm = vm(p);
     vm.declared_error = id;
     vm.declared_payload.clear();
@@ -2558,6 +2574,10 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         // (hir/syscall.tcl rejects any use but a direct call), so no Native
         // value ever dispatches to them; keepalive is a lowering-internal op.
         | SyscallLinuxX86_64 | BytesAddr | MBytesAddr | KeepAlive
+        // A foreign operation is only called (hir/borrow.tcl): its byte
+        // exposures exist only as one call's arguments.
+        | FfiFixtureRead | FfiFixtureReadReentrant | FfiFixtureFill | FfiFixtureFillChecked | FfiFixtureCopy
+        | FfiFixtureMixed
         // The fixed-layout ops exist only in the straight-line code of one
         // statically known layout (native/lower.tcl's LayoutParse /
         // LayoutEmit): a binary operation is never a value.
@@ -2583,6 +2603,12 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_type_error, 4),
         h!(rt_cptr_fixture, 2),
         h!(rt_cptr_fixture_address, 2),
+        h!(rt_ffi_fixture_read, 3),
+        h!(rt_ffi_fixture_read_reentrant, 3),
+        h!(rt_ffi_fixture_fill, 4),
+        h!(rt_ffi_fixture_fill_checked, 4),
+        h!(rt_ffi_fixture_copy, 4),
+        h!(rt_ffi_fixture_mixed, 5),
         h!(rt_not_boolean, 2),
         h!(rt_raise, 3),
         h!(rt_stack_overflow, 1),

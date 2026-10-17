@@ -182,6 +182,14 @@ namespace eval native::lower {
         mutable_vector#take_front {op mvtakefront} \
         mutable_vector#clear_drop {op mvcleardrop} \
         mutable_vector#swap_drop  {op mvswapdrop}]
+    # The borrow test fixture's synthetic foreign operations (core/cabi.tcl's
+    # installBorrowFixture; runtime/ffifixture.rs), one op per behavior.
+    foreach {name behavior} [core::cabi::borrowFixture] {
+        dict set natives $name [list op [dict get {
+            read ffifixtureread  read-reentrant ffifixturereadreentrant  fill ffifixturefill
+            fill-checked ffifixturefillchecked  copy ffifixturecopy  mixed ffifixturemixed
+        } $behavior]]
+    }
     # State of the program being lowered. hir is the view of the instance
     # being lowered, baseHir the program's semantic HIR.
     variable hir {}
@@ -4538,19 +4546,7 @@ proc native::lower::SyscallCall {fnVar e node wantVirtual} {
     # else the function does with it (or does not). This is the one place
     # that guarantees it, explicit in the NIR, never an accident of
     # register allocation or lexical variable lifetime (ABI-BYTES.md).
-    set kept {}
-    foreach operand $operands {
-        if {[dict exists $fn keepAddr $operand]} {
-            foreach storage [dict get $fn keepAddr $operand] {
-                if {$storage ni $kept} {
-                    lappend kept $storage
-                }
-            }
-        }
-    }
-    foreach storage $kept {
-        Assign fn "op keepalive $storage" $e
-    }
+    KeepExposedAlive fn $operands $e
     if {$wantVirtual ne ""} {
         if {$wantVirtual != 1} {
             throw {NATIVE BUG} "native lowering: expected a 1-field Register64 construction at $e"
@@ -4820,15 +4816,9 @@ proc native::lower::BytesAddrCall {fnVar e node wantVirtual} {
     }
     dict lappend fn calls [list native $native]
     # The readable bridge's operand is a Bytes storage, the writable one's a
-    # MutableBytes storage: two ops (two run-time kind checks), never
-    # interchanged. Provenance (keepAddr) is the same for both: the storage
-    # must stay live until the syscall has returned; for the writable one the
-    # kernel also changes its contents meanwhile, which needs nothing more
-    # here because every read of a storage is itself a runtime helper call
-    # that Cranelift can neither cache nor reorder across the syscall.
-    set bridgeOp [expr {[core::bytestore::bridgeWritable $native] ? "mbytesaddr" : "bytesaddr"}]
-    set address [Assign fn "op $bridgeOp $storage" $e]
-    dict set fn keepAddr $address [list $storage]
+    # MutableBytes storage (ExposeStorage); the syscall that takes the
+    # address keeps the storage alive (SyscallCall's KeepExposedAlive).
+    set address [ExposeStorage fn $storage [core::bytestore::bridgeWritable $native] $e]
     if {$wantVirtual ne ""} {
         if {$wantVirtual != 1} {
             throw {NATIVE BUG} "native lowering: expected a 1-field Register64 construction at $e"
@@ -4840,6 +4830,164 @@ proc native::lower::BytesAddrCall {fnVar e node wantVirtual} {
     }
     set object [Assign fn "structnew [ShapeIndex $registerType $layout] $address" $e]
     return [list $object tagged]
+}
+
+# ---------------------------------------------------------------------------
+# Byte exposure: the one mechanism behind every machine address of Botlish
+# byte storage (ABI-BYTES.md, MUTABLE-BYTES.md, C-POINTER-BORROWING.md),
+# shared by the Linux syscall bridges (BytesAddrCall, SyscallCall) and by
+# foreign calls' temporary exposures (BorrowCall). It knows storages,
+# addresses and lifetimes -- nothing of syscalls, registers or C:
+#
+#   ExposeStorage       %a = op bytesaddr %s   (readable storage)
+#                       %a = op mbytesaddr %s  (writable storage)
+#                       the payload address, a small Int; never a copy and
+#                       never an allocation. The collector never moves an
+#                       object, so the address is valid exactly while %s is
+#                       live, which `fn keepAddr` (%a -> %s) records.
+#   KeepExposedAlive    op keepalive %s, after the operation that consumed
+#                       the addresses, for every storage they point into:
+#                       %s is then a GC root at every safepoint up to and
+#                       including that operation's own, whatever else the
+#                       function does or does not do with it.
+#
+# The two ops are two run-time kind checks, never interchanged: a readable
+# address is never taken of writable storage or the reverse. A storage a
+# foreign operation writes changes meanwhile, which needs nothing more:
+# every read of a storage is itself a runtime helper call Cranelift can
+# neither cache nor move across the operation.
+
+# The payload address of storage register STORAGE (writable when WRITABLE),
+# recorded as pointing into it.
+proc native::lower::ExposeStorage {fnVar storage writable e} {
+    upvar 1 $fnVar fn
+    set address [Assign fn "op [expr {$writable ? "mbytesaddr" : "bytesaddr"}] $storage" $e]
+    dict set fn keepAddr $address [list $storage]
+    return $address
+}
+
+# Keeps every storage the addresses among OPERANDS point into (fn keepAddr)
+# alive until here: call it right after the operation that consumed them.
+proc native::lower::KeepExposedAlive {fnVar operands e} {
+    upvar 1 $fnVar fn
+    set kept {}
+    foreach operand $operands {
+        if {[dict exists $fn keepAddr $operand]} {
+            foreach storage [dict get $fn keepAddr $operand] {
+                if {$storage ni $kept} {
+                    lappend kept $storage
+                }
+            }
+        }
+    }
+    foreach storage $kept {
+        Assign fn "op keepalive $storage" $e
+    }
+}
+
+# A call of a native with a foreign call contract (hir/borrow.tcl): lowered
+# from the call node alone -- its `borrows` (which arguments are exposed,
+# and how) and its static type -- never from the contract, the callee's
+# name beyond its op, or anything outside the HIR:
+#
+#   * every argument is evaluated, in order; an exposed one only to its
+#     owner's storage register (StorageOf: a virtual field, or structget);
+#   * then the exposures are made, after every argument, so no argument's
+#     code -- a call, an allocation, a yield -- runs between an exposure
+#     and the call: each write exposure's private copy first (the detach,
+#     `op mbytesclone`, the only allocation: MUTABLE-BYTES.md's "published
+#     storage is never written"), then every address (ExposeStorage);
+#   * the operation (`op NAME`, the native's own op), every address its
+#     argument;
+#   * KeepExposedAlive: a keepalive of every exposed storage after it;
+#   * with a write exposure, the call's value is the write-back struct
+#     {result: R, NAME: MutableBytes} (sorted fields), each NAME the
+#     MutableBytes over the private copy C wrote.
+#
+# An unchecked (-strict 0) program's call that hir/borrow.tcl refused
+# (`borrowRefused`) evaluates its arguments and replays the refusal at run
+# time, as every backend does: no address of storage is ever handed to an
+# operation that may keep it.
+proc native::lower::BorrowCall {fnVar e node} {
+    upvar 1 $fnVar fn
+    variable hir
+    variable natives
+    variable context
+    variable structOpt
+    set name [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name]
+    set refused [hir::borrow::refused $hir $e]
+    if {$refused ne ""} {
+        foreach arg [dict get $node args] {
+            if {[Expr fn $arg] eq "never"} {
+                return {never tagged}
+            }
+        }
+        Emit fn "raise TYPE [Quote $refused]" $e
+        return {never tagged}
+    }
+    if {![dict exists $natives $name]} {
+        Unsupported $e "native $name" "the foreign operation \"$name\" has no native implementation"
+    }
+    set access [dict create]
+    set names [dict create]
+    foreach borrow [dict get $node borrows] {
+        lassign $borrow i how pname
+        dict set access $i $how
+        dict set names $pname $i
+    }
+    set operands {}
+    set index 0
+    foreach arg [dict get $node args] {
+        if {[dict exists $access $index]} {
+            set register [StorageOf fn $arg [lindex [hir::typeOf $hir $arg] 1]]
+        } else {
+            set register [Expr fn $arg]
+        }
+        if {$register eq "never"} {
+            return {never tagged}
+        }
+        lappend operands $register
+        incr index
+    }
+    dict lappend fn calls [list native $name]
+    set written [dict create]
+    dict for {i how} $access {
+        if {$how eq "write"} {
+            set private [Assign fn "op mbytesclone [lindex $operands $i]" $e]
+            lset operands $i $private
+            dict set written $i $private
+        }
+    }
+    dict for {i how} $access {
+        # The address op follows the storage's kind (a MutableBytes' storage
+        # is the writable kind whether it is exposed for reading or writing).
+        set owner [hir::typeOf $hir [lindex [dict get $node args] $i]]
+        lset operands $i [ExposeStorage fn [lindex $operands $i] [hir::borrow::IsMutableOwner $owner] $e]
+    }
+    set result [Assign fn "[dict get $natives $name] [join $operands { }]" $e]
+    KeepExposedAlive fn $operands $e
+    if {[dict size $written] == 0} {
+        return [list $result tagged]
+    }
+    if {$structOpt && [dict exists $context discarded $e]} {
+        return [list [Assign fn unit] tagged]
+    }
+    set type [hir::typeOf $hir $e]
+    set layout [hir::types::StructLayout $type]
+    set mutableType [core::bytestore::mutableBytesType]
+    set fields {}
+    foreach field $layout {
+        if {$field eq "result"} {
+            lappend fields $result
+            continue
+        }
+        set i [expr {[dict exists $names $field] ? [dict get $names $field] : -1}]
+        if {$i < 0 || ![dict exists $written $i]} {
+            throw {NATIVE BUG} "native lowering: write-back field $field of $name has no written argument ($e)"
+        }
+        lappend fields [Assign fn "structnew [ShapeIndex $mutableType [hir::structs::names $mutableType]] [dict get $written $i]" $e]
+    }
+    return [list [Assign fn "structnew [ShapeIndex {} $layout] [join $fields { }]" $e] tagged]
 }
 
 # ---------------------------------------------------------------------------
@@ -6273,9 +6421,7 @@ proc native::lower::AddressFlowAcrossCall {fnVar e node result} {
     }
     # A callee may consume a carried address (a syscall inside it): keep what
     # the operands carry alive until it has returned.
-    foreach storage $carried {
-        Assign fn "op keepalive $storage" $e
-    }
+    KeepExposedAlive fn $operands $e
 }
 
 proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}} {
@@ -6342,6 +6488,11 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
         # is the descriptor constant the call carries, read here, so the
         # call becomes straight-line code over that one layout.
         return [LayoutCall fn $e $node $wantVirtual]
+    }
+    if {$targetKind eq "native" && [dict exists $node borrows]} {
+        # A foreign call (hir/borrow.tcl): its byte exposures, from the
+        # call node.
+        return [BorrowCall fn $e $node]
     }
     if {$targetKind eq "native" && [core::bytestore::isBridge [dict get [hir::symbol $hir $target] name]]} {
         # The raw address bridge (core/bytestore.tcl, ABI-BYTES.md): reads the

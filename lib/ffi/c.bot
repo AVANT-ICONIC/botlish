@@ -41,3 +41,27 @@
 # ownership: a pointer owns, frees and retains nothing, and is never
 # dereferenced here. It is not an Int: no arithmetic, ordering, equality or
 # integer conversion exists, in either direction.
+#
+# Temporary byte exposure (C-POINTER-BORROWING.md). A C pointer parameter of
+# a foreign call may admit existing Botlish byte storage for that one call --
+# never as a pointer value -- when the call's contract says, for that
+# parameter, that C does not keep the pointer (noescape) and whether C reads
+# or writes through it, and its pointee is a byte-sized C type
+# (ffi::c::Char, SChar, UChar) or ffi::c::Void:
+#
+#   abi::bytes::Bytes          read access only: C sees the bytes
+#   abi::bytes::MutableBytes   read: its bytes as they are; write: a private
+#                              copy C may modify, which the call returns as
+#                              the parameter's updated value (the caller's
+#                              own value never changes: a MutableBytes is a
+#                              value)
+#
+# A parameter that may keep the pointer, or about which nothing is known,
+# never admits it: `const` is not noescape, and unknown is not
+# "probably synchronous". No operation of this namespace (or any other)
+# makes a Ptr of byte storage, so no pointer into Botlish storage can be
+# stored, returned, captured, cloned, erased or retyped. The exposure adds
+# no length and no terminator: the caller passes the count, a C integer
+# scalar, separately. There is no source syntax for a contract yet: the
+# facts are a foreign call's parameter metadata (a native's, and later an
+# `extern c fn` declaration's).

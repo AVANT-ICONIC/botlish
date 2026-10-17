@@ -9,6 +9,7 @@ pub mod constants;
 pub mod construct;
 pub mod coroutine;
 pub mod error;
+pub mod ffifixture;
 pub mod framemap;
 pub mod framewalk;
 pub mod heap;

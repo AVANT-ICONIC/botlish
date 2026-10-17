@@ -1149,6 +1149,49 @@ harnesses for a change to affinity and the isolation and interchange audits
 for a change to the scalars' declarations. `bench/c-abi-types.tcl`
 regenerates the compile-cost table.
 
+## C pointer borrowing (temporary byte exposure)
+
+A foreign call's pointer parameter may admit existing `abi::bytes::Bytes` or
+`abi::bytes::MutableBytes` storage for that one call
+(C-POINTER-BORROWING.md): only when its contract (core/native.tcl's
+`-foreign`; an `extern c fn` declaration's later) says, for that parameter,
+`escape proven-noescape|declared-noescape`, a known `access` (read | write),
+and a byte-sized pointee (Char, SChar, UChar by registry metadata, or Void).
+`hir/borrow.tcl` decides it and records the transport on the call
+(`borrows`); every backend lowers from that field. Keep it so:
+
+* No pointer value of byte storage, ever: no `BorrowedPtr`, no operation
+  turning a Bytes into an `ffi::c::Ptr`, no internal `cptr` for an exposure
+  (`cb-no-pointer-value`, `cb-no-pointer-producing-native`), and no
+  FFI-specific byte type (`ffi::c::Bytes`, `PinnedBytes`, ...).
+* No fact from anything but the contract: `const` (read access) is not
+  noescape, an absent fact is `unknown`, and `unknown` never admits
+  exposure; never read a fact from a C type, a parameter or function name or
+  a namespace. Facts are per parameter.
+* A write exposure is a private copy (the detach): MutableBytes stays a
+  value, and the written bytes come back as the call's
+  `{result: R, NAME: MutableBytes}`. Never expose an owner's own storage
+  writable.
+* Exposures are made after every argument is evaluated and kept alive by a
+  `keepalive` after the operation; the syscall bridges and the foreign call
+  share `ExposeStorage`/`KeepExposedAlive` (native/lower.tcl): no other code
+  emits an address op or a keepalive. The C side never names the Linux
+  syscall ABI and the syscall side never names `ffi::c`.
+* The borrow fixture (`core::cabi::installBorrowFixture`, `ffi_fixture::`) is
+  a test process's own; nothing else may call it.
+
+If you change any of that (the files are C-POINTER-BORROWING.md's "What to
+run when changing this" list), run `tests/c-pointer-borrowing.test` (also
+under `BOTLISH_NATIVE_GC_STRESS=1`), `audit/c-pointer-borrowing/tools/fuzz.tcl`
+(several seeds, once with `-gc-stress 1`) and
+`audit/c-pointer-borrowing/tools/mutate.tcl` (every mutant in its
+`mutants.txt` must still apply and be killed: update a mutant's text when you
+change the code it mutates, keeping it a mutant of the same rule), plus
+`tests/abi-bytes.test`, `tests/abi-mutable-bytes.test`,
+`tests/linux-syscall.test` and the abi-bytes and mutable-bytes mutation tools
+for a change to the shared exposure mechanism. `bench/c-pointer-borrowing.tcl`
+regenerates the performance table.
+
 ## C header archaeology (a research instrument)
 
 `audit/c-header/` (C-HEADER-ARCHAEOLOGY.md) preprocesses BoringSSL's and

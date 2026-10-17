@@ -604,6 +604,14 @@ and general generic declarations.
 
 ## Remaining blockers for the C FFI
 
+> **Follow-up (C-POINTER-BORROWING.md).** Passing existing Botlish byte
+> storage to a C pointer parameter now exists as a call-boundary capability:
+> a per-parameter foreign call contract (access read | write, escape
+> noescape | captures | unknown) admits an `abi::bytes::Bytes` or
+> `MutableBytes` for one call, never as a `Ptr` value. An `extern c fn`
+> attaches the same contract to its parameters (that document's section
+> 14).
+
 For **`extern c fn`**:
 
 1. a declaration form and its linkage: the link symbol (asm labels,

@@ -1,0 +1,16 @@
+# audit/c-pointer-borrowing/tools/fuzz.tcl (2026-10-17), 8 cases per program;
+# each refused case compiled on its own (FOREIGN-BORROW naming the model's
+# reason), each program's admitted cases run on interp, compile,
+# cranelift-generic and cranelift (and with -gc-stress 1 natively again
+# under BOTLISH_NATIVE_GC_STRESS=1) against the model's values.
+
+$ tclsh9.0 audit/c-pointer-borrowing/tools/fuzz.tcl -n 40 -seed 1
+programs 40 cases 320 refused 148 disagreements 0
+$ tclsh9.0 audit/c-pointer-borrowing/tools/fuzz.tcl -n 40 -seed 17
+programs 40 cases 320 refused 156 disagreements 0
+$ tclsh9.0 audit/c-pointer-borrowing/tools/fuzz.tcl -n 40 -seed 41
+programs 40 cases 320 refused 175 disagreements 0
+$ tclsh9.0 audit/c-pointer-borrowing/tools/fuzz.tcl -n 25 -seed 5001 -gc-stress 1
+programs 25 cases 200 refused 103 disagreements 0
+
+Totals: 145 programs, 1160 cases (582 refused, 578 run), 0 disagreements.

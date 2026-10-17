@@ -1252,6 +1252,12 @@ proc core::compiler::CompileCall {ctxVar e {calleeVar ""} {argsVar ""}} {
     }
 
     variable hir
+    if {[dict exists $hir exprs $e borrowRefused]} {
+        # A -strict 0 program's refused byte exposure (hir/borrow.tcl): the
+        # arguments ran; the refusal is replayed instead of the call.
+        Emit ctx "core::semanticError TYPE [Word [N $e borrowRefused]]"
+        return [Never]
+    }
     lassign [N $e target] targetKind targetId
     switch -- $targetKind {
         native {

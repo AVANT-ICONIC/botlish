@@ -1,0 +1,730 @@
+# c-pointer-borrowing.test -- temporary foreign byte exposure
+# (C-POINTER-BORROWING.md): existing Botlish byte storage (abi::bytes::Bytes,
+# abi::bytes::MutableBytes) given to a C pointer parameter for one call, only
+# where the parameter's foreign call contract says the pointer does not
+# escape the call (core/cabi.tcl's -foreign; hir/borrow.tcl decides it).
+#
+# There is no C call yet, so the operations are the private borrow test
+# fixture's (core::cabi::installBorrowFixture): synthetic, synchronous
+# foreign operations that read and write the bytes they are given through
+# the pointer -- natively through the real payload address
+# (runtime/ffifixture.rs), on the Tcl backends through the exposure model of
+# core::cabi::ForeignBoundary. This file installs it in its own process,
+# under a namespace (ffi_fixture) no program outside a test can name.
+#
+# Programs that run do so on all four executable paths (the interpreter,
+# the Tcl compiler, native code with and without specialization) and must
+# agree.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+core::cabi::installBorrowFixture
+
+set cbBackends {interp compile cranelift-generic cranelift}
+set cbNative {cranelift-generic cranelift}
+
+testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64}}]
+# Linux on x86-64 or AArch64: the native runtime (coroutines, stack maps)
+# without a syscall.
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
+
+set cbPrelude {import abi
+import abi::bytes
+import coroutine
+import ffi::c
+import byte
+import list
+import str
+import ffi_fixture
+
+opaque struct Tag:
+    t: unit
+
+fn pattern(n: int, step: int):
+    loop i from 0 to n:
+        byte::from_int(mod(i * step + 3, 256))
+
+fn mk(n: int, step: int) -> abi::bytes::Bytes:
+    abi::bytes::from_list(pattern(n, step))
+
+fn mmk(n: int, step: int) -> abi::bytes::MutableBytes:
+    abi::bytes::from_bytes(mk(n, step))
+
+fn len(data: abi::bytes::Bytes) -> ffi::c::ULong:
+    abi::bytes::length(data).value
+
+fn mlen(data: abi::bytes::MutableBytes) -> ffi::c::ULong:
+    abi::bytes::mutable_length(data).value
+
+fn filled(n: int, seed: int):
+    loop i from 0 to n:
+        byte::from_int(mod(seed + 37 * i, 256))
+
+}
+
+# The outcome of the program BODY (after the prelude) on every backend,
+# which must agree; a compile error is {error ERRORCODE MESSAGE}.
+proc cbAgree {body args} {
+    set source "$::cbPrelude$body\n"
+    if {[catch {surface::compile $source -warnings off {*}$args} hir options]} {
+        return [list error [dict get $options -errorcode] $hir]
+    }
+    return [cbAgreeHir $hir]
+}
+
+proc cbAgreeHir {hir {backends ""}} {
+    if {$backends eq ""} {
+        set backends $::cbBackends
+    }
+    set outcomes [lmap b $backends {lrange [outcomeUnderHir $b $hir] 0 end-1}]
+    if {[llength [lsort -unique $outcomes]] != 1} {
+        error "mismatch across $backends: $outcomes"
+    }
+    return [lindex $outcomes 0]
+}
+
+# {KIND MESSAGE} of the compile error BODY (after the prelude) is rejected
+# with, or ok.
+proc cbError {body args} {
+    if {![catch {surface::compile "$::cbPrelude$body\n" -warnings off {*}$args} message options]} {
+        return ok
+    }
+    set code [dict get $options -errorcode]
+    set kind [expr {[lrange $code 0 1] eq {SURFACE SYNTAX} ? "SYNTAX" : [lindex $code 2]}]
+    regsub {^[^:]*:[0-9]+:[0-9]+: } $message {} message
+    return [list $kind $message]
+}
+
+# Only the kind of cbError's result.
+proc cbKind {body args} {
+    return [lindex [cbError $body {*}$args] 0]
+}
+
+proc cbHir {body args} {
+    return [surface::compile "$::cbPrelude$body\n" -warnings off {*}$args]
+}
+
+# Runs SCRIPT in the caller with environment variable NAME set to VALUE,
+# restoring it afterwards (a suite-wide setting, such as a GC-stress run's,
+# is kept).
+proc cbWithEnv {name value script} {
+    set had [info exists ::env($name)]
+    if {$had} {
+        set old $::env($name)
+    }
+    set ::env($name) $value
+    try {
+        return [uplevel 1 $script]
+    } finally {
+        if {$had} {
+            set ::env($name) $old
+        } else {
+            unset ::env($name)
+        }
+    }
+}
+
+# Runs SCRIPT in the caller with environment variable NAME unset, restoring
+# it afterwards.
+proc cbWithoutEnv {name script} {
+    set had [info exists ::env($name)]
+    if {$had} {
+        set old $::env($name)
+        unset ::env($name)
+    }
+    try {
+        return [uplevel 1 $script]
+    } finally {
+        if {$had} {
+            set ::env($name) $old
+        }
+    }
+}
+
+# The NIR text of function NAME of the program BODY.
+proc cbNirFunction {body name} {
+    return [cbNirOf [native::nir [cbHir $body]] $name]
+}
+
+# The text of function NAME (its first instance) in NIR text NIR.
+proc cbNirOf {nir name} {
+    set lines [split $nir \n]
+    set start [lsearch -regexp $lines "^func \[0-9\]+ \"[string map {: \\:} $name]\""]
+    if {$start < 0} {
+        return ""
+    }
+    set end [lsearch -start $start -exact $lines end]
+    return [join [lrange $lines $start $end] \n]
+}
+
+# The operation names of NIR function text FN, in order: op NAME, or the
+# instruction word (structnew, call, ...).
+proc cbOps {fn} {
+    set ops {}
+    foreach line [split $fn \n] {
+        if {[regexp {^\s+%[0-9]+ = op (\S+)} $line -> op]} {
+            lappend ops $op
+        } elseif {[regexp {^\s+%[0-9]+ = (structnew|structget|call|callmulti|callenv|bytes)\M} $line -> op]} {
+            lappend ops $op
+        }
+    }
+    return $ops
+}
+
+# The bytes the fixture writes: (SEED + 37 i) mod 256 for i < N (the
+# oracle, independent of every backend).
+proc cbFill {n seed} {
+    set bytes {}
+    for {set i 0} {$i < $n} {incr i} {
+        lappend bytes [expr {($seed + 37 * $i) % 256}]
+    }
+    return $bytes
+}
+
+# The bytes of the prelude's pattern(N, STEP).
+proc cbPattern {n step} {
+    set bytes {}
+    for {set i 0} {$i < $n} {incr i} {
+        lappend bytes [expr {($i * $step + 3) % 256}]
+    }
+    return $bytes
+}
+
+# The Botlish List text of Ints XS.
+proc cbList {xs} {
+    return "\[[join $xs {, }]\]"
+}
+
+# The revealed MutableBytes holding BYTES (core::value::show's internal
+# reveal, how the harness prints a MutableBytes' storage).
+proc cbMutable {bytes} {
+    set hex [binary encode hex [binary format cu* $bytes]]
+    return "abi::bytes::MutableBytes {storage: <mutbytes [llength $bytes]: $hex>}"
+}
+
+# ---------------------------------------------------------------------------
+# The contract (core/cabi.tcl)
+
+test cb-contract-normalized {a -foreign contract is normalized at registration: every pointer parameter gets an access and an escape, unknown when the binding says nothing; scalars get neither} -body {
+    set c [dict get [core::native::metadata ffi_fixture::read_unspecified] foreign]
+    list [dict get $c vars] [lmap p [dict get $c params] {lsort -stride 2 $p}] [dict get $c result] \
+        [dict get [lindex [dict get [core::native::metadata ffi_fixture::mixed] foreign params] 1] access]
+} -cleanup {unset -nocomplain c} -result {T {{access unknown escape unknown name data type {cptr {imprint T}}} {name count type {refined int ffi::c::ULong}}} {list int} unknown}
+
+test cb-contract-validated {a contract is checked when it is registered: access is a data pointer's fact and escape a pointer's, the values are the four escapes and three accesses, and a write parameter is never named result (the write-back field beside the C result)} -body {
+    lmap contract {
+        {params {{name n type int access read}} result unit}
+        {params {{name p type {cptr void} access maybe}} result unit}
+        {params {{name p type {cptr void} escape borrowed}} result unit}
+        {params {{name f type {cfnptr {fn {args {} return unit errors {}}}} access read}} result unit}
+        {params {{name result type {cptr void} access write escape declared-noescape}} result unit}
+        {params {{name p type {cptr void}} {name p type int}} result unit}
+    } {
+        catch {core::native::register cbtest::bad -arity 1 -impl list -foreign $contract} message
+        expr {[string match "core::native::register: *" $message] && ![core::native::exists cbtest::bad]}
+    }
+} -cleanup {unset -nocomplain contract message} -result {1 1 1 1 1 1}
+
+test cb-contract-signature-is-one-description {a contract is the native's whole static signature: its imprint signature, when it has variables, is derived from it, and a separate -imprint is refused} -body {
+    list [dict get [core::native::metadata ffi_fixture::fill] imprint] \
+        [dict get [core::native::metadata ffi_fixture::copy] imprint] \
+        [catch {core::native::register cbtest::twice -arity 1 -impl list \
+            -foreign {vars T params {{name p type {cptr {imprint T}}}} result unit} \
+            -imprint {vars T params {{cptr {imprint T}}} result unit}} message] $message
+} -cleanup {unset -nocomplain message} -result {{vars T params {{cptr {imprint T}} {refined int ffi::c::ULong} {refined int ffi::c::UChar}} result unit} {} 1 {core::native::register: "cbtest::twice" has a -foreign contract, which is its signature: no separate -imprint}}
+
+test cb-direct-hook {the direct hook is per pointer parameter: a contract's retaining parameters are those whose escape is captures or unknown (the absent fact is unknown), never inferred from access, a name or a type; a call's is its target's contract's} -body {
+    set calls {}
+    set hir [cbHir "data = mk(3, 1)\nm = mmk(3, 1)\nstate = ffi::c::null\[ffi::c::Void\]()\nr = ffi_fixture::mixed(data, state, m, 3)\n\[ffi_fixture::read\[ffi::c::UChar\](data, 3), r.result\]"]
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "call" && [lindex [dict get $node target] 0] eq "native"} {
+            set name [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name]
+            if {[string match ffi_fixture::* $name]} {
+                dict set calls $name [hir::borrow::retaining $hir $e]
+            }
+        }
+    }
+    list [lmap name {read read_proven read_retained read_unknown read_unspecified read_unknown_access fill fill_retained copy mixed} {
+            core::cabi::RetainingParameters [dict get [core::native::metadata ffi_fixture::$name] foreign]
+        }] [dict get $calls ffi_fixture::mixed] [dict get $calls ffi_fixture::read]
+} -cleanup {unset -nocomplain calls hir e node name} -result {{{} {} {{0 data captures}} {{0 data unknown}} {{0 data unknown}} {} {} {{0 out captures}} {} {{1 state captures}}} {{1 state captures}} {}}
+
+test cb-fixture-private {the borrow fixture is the test's own: nothing in the compiler, the libraries, the native runtime's Tcl side or main.tcl installs it, and a process that does not install it has none of its natives} -body {
+    set callers {}
+    foreach path [concat [glob [file join $::projectRoot core *.tcl] [file join $::projectRoot hir *.tcl] \
+            [file join $::projectRoot surface *.tcl] [file join $::projectRoot compiler *.tcl] \
+            [file join $::projectRoot native *.tcl] [file join $::projectRoot lib *.bot] [file join $::projectRoot lib * *.bot]] \
+            [list [file join $::projectRoot main.tcl]]] {
+        if {[regexp {installBorrowFixture\s*$|installBorrowFixture\]|^\s*core::cabi::installBorrowFixture} [core::ReadFile $path]]} {
+            lappend callers [file tail $path]
+        }
+    }
+    set probe [file join [file tempdir] probe.tcl]
+    set f [open $probe w]
+    puts $f "source [list [file join $::projectRoot core core.tcl]]\nputs \[core::native::isQualifiedNative ffi_fixture::read\]"
+    close $f
+    set fresh [exec [info nameofexecutable] $probe]
+    file delete -force [file dirname $probe]
+    list $callers $fresh [core::native::isQualifiedNative ffi_fixture::read]
+} -cleanup {unset -nocomplain callers path probe f fresh} -result {{} 0 1}
+
+# ---------------------------------------------------------------------------
+# Read exposure
+
+test cb-read-bytes {an immutable Bytes is exposed for reading to a noescape read parameter: the operation reads the bytes through the pointer -- natively the real payload address -- 1 byte, an embedded and a leading and a trailing zero, 0xff and the high half, and the empty Bytes with a count of 0, on every backend} -body {
+    cbAgree "fn f(data: abi::bytes::Bytes) -> List\[int\]:\n    ffi_fixture::read\[ffi::c::UChar\](data, len(data))\n\n\[f(abi::bytes::from_list(\[byte::from_int(65)\])), f(abi::bytes::from_list(\[byte::from_int(0), byte::from_int(65), byte::from_int(0), byte::from_int(66), byte::from_int(0)\])), f(abi::bytes::from_list(\[byte::from_int(255), byte::from_int(128), byte::from_int(127)\])), f(abi::bytes::from_list(\[\])), f(mk(9, 31))\]"
+} -result [list value "\[\[65\], \[0, 65, 0, 66, 0\], \[255, 128, 127\], \[\], [cbList [cbPattern 9 31]]\]"]
+
+test cb-read-byte-pointees {byte storage is exposed as a pointer to any byte-sized C type -- ffi::c::Char, ffi::c::SChar, ffi::c::UChar -- or to ffi::c::Void, and the same bytes arrive through each} -body {
+    cbAgree "data = mk(6, 45)\n\[ffi_fixture::read\[ffi::c::Char\](data, 6), ffi_fixture::read\[ffi::c::SChar\](data, 6), ffi_fixture::read\[ffi::c::UChar\](data, 6), ffi_fixture::read\[ffi::c::Void\](data, 6)\]"
+} -result [list value [cbList [lrepeat 4 [cbList [cbPattern 6 45]]]]]
+
+test cb-read-larger {a larger buffer (5000 bytes, every byte value many times) arrives intact} -body {
+    cbAgree "data = mk(5000, 7)\nffi_fixture::read\[ffi::c::UChar\](data, len(data)) == pattern(5000, 7)"
+} -result {value true}
+
+test cb-read-mutable {a MutableBytes is exposed for reading as it is: its current bytes arrive, and it is unchanged afterwards (exposure is not a copy; and nothing was written)} -body {
+    cbAgree "m = mmk(5, 11)\nseen = ffi_fixture::read\[ffi::c::UChar\](m, mlen(m))\n\[seen, abi::bytes::freeze(m) == mk(5, 11)\]"
+} -result [list value "\[[cbList [cbPattern 5 11]], true\]"]
+
+test cb-read-no-mutation {a read exposure leaves its owner exactly as it was, and the same Bytes can be exposed again and again} -body {
+    cbAgree "data = mk(4, 3)\na = ffi_fixture::read\[ffi::c::UChar\](data, 4)\nb = ffi_fixture::read\[ffi::c::Void\](data, 4)\n\[a == b, data == mk(4, 3)\]"
+} -result {value {[true, true]}}
+
+test cb-read-evidence-equivalent {proven and declared noescape are the same fact for exposure: two kinds of evidence, one semantics} -body {
+    cbAgree "data = mk(7, 9)\nffi_fixture::read\[ffi::c::UChar\](data, 7) == ffi_fixture::read_proven\[ffi::c::UChar\](data, 7)"
+} -result {value true}
+
+test cb-read-prefix {the count is the caller's: the operation reads exactly what it is told, so a shorter count exposes the whole storage and reads only its prefix -- the pointer carries no bounds into C} -body {
+    cbAgree "data = mk(8, 5)\nffi_fixture::read\[ffi::c::UChar\](data, 3)"
+} -result [list value [cbList [lrange [cbPattern 8 5] 0 2]]]
+
+test cb-read-raw-pointer {the same parameter takes an ordinary C pointer as a raw pointer (no exposure, nothing about lifetime): a null ffi::c::Ptr[UChar] with a count of 0, on every backend; it establishes the pointee imprint itself} -body {
+    cbAgree "p = ffi::c::null\[ffi::c::UChar\]()\nffi_fixture::read(p, 0)"
+} -result {value {[]}}
+
+# ---------------------------------------------------------------------------
+# Write exposure
+
+test cb-write-fill {a MutableBytes is exposed writable to a noescape write parameter: the operation writes through the pointer, and its writes come back as the call's updated value of that parameter -- the write-back struct {out: MutableBytes, result: unit} -- on every backend} -body {
+    cbAgree "m = abi::bytes::zeroed(abi::usize(6))\nffi_fixture::fill\[ffi::c::UChar\](m, mlen(m), 3)"
+} -result [list value "{out: [cbMutable [cbFill 6 3]], result: unit}"]
+
+test cb-write-value-semantics {MutableBytes stays a value (MUTABLE-BYTES.md): the caller's own value and every copy of it are unchanged by C's writes -- the exposure is a private copy -- and the written bytes are exactly in the result} -body {
+    cbAgree "m = mmk(5, 2)\nb = m\nr = ffi_fixture::fill\[ffi::c::UChar\](m, 5, 9)\n\[abi::bytes::freeze(m) == mk(5, 2), abi::bytes::freeze(b) == mk(5, 2), abi::bytes::freeze(r.out) == abi::bytes::from_list(filled(5, 9))\]"
+} -result {value {[true, true, true]}}
+
+test cb-write-owner-usable-again {the owner is usable again after the call (it was never moved or locked), and so is the written value: a second exposure of each sees what it holds} -body {
+    cbAgree "m = abi::bytes::zeroed(abi::usize(3))\nr = ffi_fixture::fill\[ffi::c::UChar\](m, 3, 200)\nr2 = ffi_fixture::fill\[ffi::c::UChar\](r.out, 2, 1)\n\[ffi_fixture::read\[ffi::c::UChar\](m, 3), ffi_fixture::read\[ffi::c::UChar\](r.out, 3), ffi_fixture::read\[ffi::c::UChar\](r2.out, 3)\]"
+} -result [list value "\[\[0, 0, 0\], [cbList [cbFill 3 200]], [cbList [concat [cbFill 2 1] [lindex [cbFill 3 200] 2]]]\]"]
+
+test cb-write-sees-current-bytes {a write exposure shows C the owner's current bytes first (nothing in a MutableBytes is ever uninitialized): a partial fill keeps the untouched suffix} -body {
+    cbAgree "m = mmk(5, 1)\nr = ffi_fixture::fill\[ffi::c::UChar\](m, 2, 0)\nffi_fixture::read\[ffi::c::UChar\](r.out, 5)"
+} -result [list value [cbList [concat [cbFill 2 0] [lrange [cbPattern 5 1] 2 end]]]]
+
+test cb-write-independent-exposures {two write exposures of one owner are two private copies: neither sees the other's writes} -body {
+    cbAgree "m = abi::bytes::zeroed(abi::usize(3))\nr1 = ffi_fixture::fill\[ffi::c::UChar\](m, 3, 10)\nr2 = ffi_fixture::fill\[ffi::c::UChar\](m, 3, 20)\n\[ffi_fixture::read\[ffi::c::UChar\](r1.out, 3), ffi_fixture::read\[ffi::c::UChar\](r2.out, 3)\]"
+} -result [list value "\[[cbList [cbFill 3 10]], [cbList [cbFill 3 20]]\]"]
+
+test cb-write-byte-pointees {a write exposure is a pointer to any byte-sized C type or Void, and C's writes arrive the same through each} -body {
+    cbAgree "m = abi::bytes::zeroed(abi::usize(4))\n\[ffi_fixture::fill\[ffi::c::Char\](m, 4, 77).out, ffi_fixture::fill\[ffi::c::SChar\](m, 4, 77).out, ffi_fixture::fill\[ffi::c::UChar\](m, 4, 77).out, ffi_fixture::fill\[ffi::c::Void\](m, 4, 77).out\]"
+} -result [list value "\[[join [lrepeat 4 [cbMutable [cbFill 4 77]]] {, }]\]"]
+
+test cb-write-larger {a larger writable exposure (5000 bytes) comes back exactly} -body {
+    cbAgree "m = abi::bytes::zeroed(abi::usize(5000))\nr = ffi_fixture::fill\[ffi::c::UChar\](m, mlen(m), 5)\nabi::bytes::freeze(r.out) == abi::bytes::from_list(filled(5000, 5))"
+} -result {value true}
+
+test cb-write-empty {an empty MutableBytes is exposed with a count of 0: nothing is written, the result holds the empty value} -body {
+    cbAgree "m = abi::bytes::zeroed(abi::usize(0))\nffi_fixture::fill\[ffi::c::UChar\](m, 0, 1)"
+} -result [list value "{out: [cbMutable {}], result: unit}"]
+
+test cb-write-discarded {a write exposure whose call is a statement runs (the operation writes into the private copy) and publishes nothing} -body {
+    cbAgree "m = abi::bytes::zeroed(abi::usize(2))\nffi_fixture::fill\[ffi::c::UChar\](m, 2, 5)\nffi_fixture::read\[ffi::c::UChar\](m, 2)"
+} -result {value {[0, 0]}}
+
+test cb-read-write-one-owner {one owner exposed for reading and, in the same call, for writing: the read sees its bytes as they are, the write is a private copy -- C never sees them aliased, and copying the owner onto its own copy gives the owner's bytes} -body {
+    cbAgree "m = mmk(4, 13)\nr = ffi_fixture::copy(m, m, 4)\n\[abi::bytes::freeze(r.dst) == mk(4, 13), abi::bytes::freeze(m) == mk(4, 13)\]"
+} -result {value {[true, true]}}
+
+test cb-copy-from-bytes {an immutable Bytes for reading and a MutableBytes for writing in one call} -body {
+    cbAgree "src = mk(5, 17)\ndst = abi::bytes::zeroed(abi::usize(5))\nr = ffi_fixture::copy(dst, src, len(src))\n\[abi::bytes::freeze(r.dst) == src, abi::bytes::freeze(dst) == abi::bytes::freeze(abi::bytes::zeroed(abi::usize(5)))\]"
+} -result {value {[true, true]}}
+
+test cb-write-result-type {the write-back result is the anonymous struct of the C result and each written parameter's name (sorted, as every anonymous struct's fields are); a call without a write exposure has the C result's own type} -body {
+    set hir [cbHir "m = abi::bytes::zeroed(abi::usize(2))\ndata = mk(2, 1)\nstate = ffi::c::null\[ffi::c::Void\]()\na = ffi_fixture::fill\[ffi::c::UChar\](m, 2, 1)\nb = ffi_fixture::mixed(data, state, m, 2)\nc = ffi_fixture::read\[ffi::c::UChar\](data, 2)\np = ffi::c::null\[ffi::c::UChar\]()\nd = ffi_fixture::fill(p, 0, 1)\n\[a, b, c, d\]"]
+    set root [lindex [hir::roots $hir] end]
+    lmap e [hir::get $hir $root args] {hir::types::show [hir::typeOf $hir $e]}
+} -cleanup {unset -nocomplain hir root} -result {{struct{out: abi::bytes::MutableBytes, result: unit}} {struct{output: abi::bytes::MutableBytes, result: ffi::c::ULong}} {List[int]} unit}
+
+# ---------------------------------------------------------------------------
+# Mixed parameters: the contract is per parameter
+
+test cb-mixed-parameters {one call with a read/noescape byte pointer, a userdata Ptr[Void] that may be retained, a write/noescape byte pointer and a C count: only the first and third admit byte storage; the second takes an ordinary raw pointer} -body {
+    list [cbAgree "data = mk(4, 50)\nout = abi::bytes::zeroed(abi::usize(4))\nstate = ffi::c::null\[ffi::c::Void\]()\nr = ffi_fixture::mixed(data, state, out, len(data))\n\[r.result, ffi_fixture::read\[ffi::c::UChar\](r.output, 4)\]"] \
+        [cbKind "data = mk(4, 50)\nout = abi::bytes::zeroed(abi::usize(4))\nffi_fixture::mixed(data, data, out, 4)"] \
+        [cbKind "data = mk(4, 50)\nout = abi::bytes::zeroed(abi::usize(4))\nffi_fixture::mixed(data, out, out, 4)"] \
+        [cbKind "data = mk(4, 50)\nstate = ffi::c::null\[ffi::c::Void\]()\nffi_fixture::mixed(data, state, data, 4)"]
+} -result [list [list value "\[[tcl::mathop::+ {*}[cbPattern 4 50]], [cbList [lreverse [cbPattern 4 50]]]\]"] FOREIGN-BORROW FOREIGN-BORROW FOREIGN-BORROW]
+
+test cb-mixed-borrows-recorded {the call node records exactly the two exposures, by argument, access and parameter name; the retained userdata argument is not one} -body {
+    set hir [cbHir "data = mk(4, 50)\nout = abi::bytes::zeroed(abi::usize(4))\nstate = ffi::c::null\[ffi::c::Void\]()\nffi_fixture::mixed(data, state, out, 4)"]
+    set found {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict exists $node borrows] && [dict get $node borrows] ne ""} {
+            lappend found [dict get $node borrows]
+        }
+    }
+    set found
+} -cleanup {unset -nocomplain hir found e node} -result {{{0 read input} {2 write output}}}
+
+# ---------------------------------------------------------------------------
+# What is refused (FOREIGN-BORROW), before anything runs
+
+test cb-refuse-bytes-write {an immutable Bytes never satisfies a write parameter, whatever memory its storage is in} -body {
+    cbError "data = mk(2, 1)\nffi_fixture::fill\[ffi::c::UChar\](data, 2, 1)"
+} -result {FOREIGN-BORROW {argument 1 of ffi_fixture::fill: parameter "out" lets C modify the bytes (access write), and an immutable abi::bytes::Bytes is exposed only for reading: expose an abi::bytes::MutableBytes, whose written bytes the call returns}}
+
+test cb-refuse-capturing {a parameter that may retain the pointer (escape captures) never admits byte storage -- read or write, Bytes or MutableBytes -- though it takes an ordinary raw pointer} -body {
+    list [cbError "ffi_fixture::read_retained\[ffi::c::UChar\](mk(2, 1), 2)"] \
+        [cbKind "m = abi::bytes::zeroed(abi::usize(2))\nffi_fixture::read_retained\[ffi::c::UChar\](m, 2)"] \
+        [cbKind "m = abi::bytes::zeroed(abi::usize(2))\nffi_fixture::fill_retained\[ffi::c::UChar\](m, 2, 1)"] \
+        [cbAgree "p = ffi::c::null\[ffi::c::UChar\]()\nffi_fixture::read_retained(p, 0)"]
+} -result {{FOREIGN-BORROW {argument 1 of ffi_fixture::read_retained: byte storage (abi::bytes::Bytes) is exposed to C only for a call that cannot keep the pointer, but parameter "data" may retain it (escape captures): a pointer C keeps after the call needs storage that outlives the call, which nothing provides yet, and only a contract that says noescape -- never a const, a name or a guess -- admits temporary exposure}} FOREIGN-BORROW FOREIGN-BORROW {value {[]}}}
+
+test cb-refuse-unknown-escape {unknown means retaining: a parameter whose escape nobody stated -- written unknown, or with no facts at all -- never admits byte storage} -body {
+    list [cbError "ffi_fixture::read_unknown\[ffi::c::UChar\](mk(2, 1), 2)"] \
+        [cbKind "ffi_fixture::read_unspecified\[ffi::c::UChar\](mk(2, 1), 2)"] \
+        [cbKind "m = abi::bytes::zeroed(abi::usize(2))\nffi_fixture::fill_unknown\[ffi::c::UChar\](m, 2, 1)"]
+} -result {{FOREIGN-BORROW {argument 1 of ffi_fixture::read_unknown: byte storage (abi::bytes::Bytes) is exposed to C only for a call that cannot keep the pointer, but parameter "data" may retain it (escape unknown, which is treated as retaining): a pointer C keeps after the call needs storage that outlives the call, which nothing provides yet, and only a contract that says noescape -- never a const, a name or a guess -- admits temporary exposure}} FOREIGN-BORROW FOREIGN-BORROW}
+
+test cb-refuse-const-is-not-noescape {read access (C const) is not noescape: a const parameter that may retain the pointer refuses byte storage exactly like any retaining one, and noescape alone, without a declared access, refuses it too} -body {
+    list [dict get [lindex [dict get [core::native::metadata ffi_fixture::read_retained] foreign params] 0] access] \
+        [cbKind "ffi_fixture::read_retained\[ffi::c::UChar\](mk(2, 1), 2)"] \
+        [cbError "ffi_fixture::read_unknown_access\[ffi::c::UChar\](mk(2, 1), 2)"]
+} -result {read FOREIGN-BORROW {FOREIGN-BORROW {argument 1 of ffi_fixture::read_unknown_access: byte storage (abi::bytes::Bytes) is exposed to C only through a parameter whose access is declared, and parameter "data" does not say whether C reads or modifies the bytes (access unknown)}}}
+
+test cb-refuse-wide-pointees {byte storage is never a pointer to a wider C type, a pointer or a struct: Ptr[Int], Ptr[Short], Ptr[Long], Ptr[ULongLong], Ptr[Ptr[UChar]] and a pointer to an opaque struct all refuse it, for reading and for writing} -body {
+    set m "m = abi::bytes::zeroed(abi::usize(8))\n"
+    list [cbError "ffi_fixture::read\[ffi::c::Int\](mk(8, 1), 8)"] \
+        [lmap t {ffi::c::Short ffi::c::Long ffi::c::ULongLong ffi::c::Ptr\[ffi::c::UChar\] Tag} {
+            list [cbKind "ffi_fixture::read\[$t\](mk(8, 1), 8)"] [cbKind "${m}ffi_fixture::fill\[$t\](m, 8, 1)"]
+        }]
+} -cleanup {unset -nocomplain m} -result {{FOREIGN-BORROW {argument 1 of ffi_fixture::read: byte storage (abi::bytes::Bytes) is exposed only as a pointer to a byte-sized C type (ffi::c::Char, ffi::c::SChar, ffi::c::UChar) or ffi::c::Void, and parameter "data" is ffi::c::Ptr[ffi::c::Int]: its bytes are not values of ffi::c::Int, and no alignment or element layout is promised}} {{FOREIGN-BORROW FOREIGN-BORROW} {FOREIGN-BORROW FOREIGN-BORROW} {FOREIGN-BORROW FOREIGN-BORROW} {FOREIGN-BORROW FOREIGN-BORROW} {FOREIGN-BORROW FOREIGN-BORROW}}}
+
+test cb-refuse-order {the reasons are reported in one fixed order: retention first (the central rule), then an undeclared access, then immutability, then the pointee} -body {
+    list [string match {*may retain it*} [lindex [cbError "ffi_fixture::read_retained\[ffi::c::Int\](mk(2, 1), 2)"] 1]] \
+        [string match {*lets C modify*} [lindex [cbError "ffi_fixture::fill\[ffi::c::Int\](mk(2, 1), 2, 1)"] 1]] \
+        [string match {*may retain it*} [lindex [cbError "ffi_fixture::fill_retained\[ffi::c::UChar\](mk(2, 1), 2, 1)"] 1]]
+} -result {1 1 1}
+
+test cb-refuse-non-owner {only the byte owner types are exposed: a List of bytes, a String, an Int or a byte::Byte at a pointer parameter is the ordinary TYPE mismatch} -body {
+    lmap arg {{pattern(2, 1)} {"ab"} 5 {byte::from_int(1)}} {
+        cbKind "ffi_fixture::read\[ffi::c::UChar\]($arg, 2)"
+    }
+} -result {TYPE TYPE TYPE TYPE}
+
+# ---------------------------------------------------------------------------
+# No pointer value: an exposure is never a Ptr
+
+test cb-no-pointer-value {byte storage never becomes an ffi::c::Ptr: given to an ordinary function's Ptr parameter, returned as one, stored in a Ptr field or a List[Ptr], given to clone, null?, erase or retype -- every one a compile-time error, never a run-time conversion} -body {
+    list [cbError "fn keep(p: ffi::c::Ptr\[ffi::c::UChar\]) -> bool:\n    p.null?()\n\nkeep(mk(2, 1))"] \
+        [cbKind "fn leak(d: abi::bytes::Bytes) -> ffi::c::Ptr\[ffi::c::UChar\]:\n    d\n\nleak(mk(2, 1))"] \
+        [cbKind "struct Holder:\n    p: ffi::c::Ptr\[ffi::c::UChar\]\n\nHolder {p: mk(2, 1)}"] \
+        [cbKind "fn many(ps: List\[ffi::c::Ptr\[ffi::c::UChar\]\]) -> int:\n    list::length(ps)\n\nmany(\[mk(2, 1)\])"] \
+        [cbError "data = mk(2, 1)\nffi::c::clone(data)"] \
+        [cbKind "data = mk(2, 1)\nffi::c::null?(data)"] \
+        [cbKind "data = mk(2, 1)\nffi::c::erase(data)"] \
+        [cbKind "data = mk(2, 1)\nffi::c::retype\[ffi::c::UChar\](data)"]
+} -result {{TYPE {argument for parameter "p" cannot be proven to satisfy ffi::c::Ptr[ffi::c::UChar] (argument type: abi::bytes::Bytes); byte storage is never a pointer value: an abi::bytes::Bytes is exposed to C only as the argument of a foreign call whose parameter's contract admits it (noescape, a known access, a byte-sized pointee), for that call alone}} TYPE TYPE TYPE {TYPE {argument 1 of ffi::c::clone must be a C pointer (argument type: abi::bytes::Bytes); byte storage is never a pointer value: an abi::bytes::Bytes is exposed to C only as the argument of a foreign call whose parameter's contract admits it (noescape, a known access, a byte-sized pointee), for that call alone}} TYPE IMPRINT TYPE}
+
+test cb-no-pointer-producing-native {no operation makes a pointer of anything but a pointer or an Int: every native whose result is a C address takes only C addresses and Ints -- so no byte owner, storage or exposure can become one (the test fixture's address[T](n) is the one Int source, and only a test can name it)} -body {
+    set bad {}
+    foreach name [core::native::names] {
+        set meta [core::native::metadata $name]
+        set result [dict get $meta resultType]
+        set imprint [dict get $meta imprint]
+        set foreign [dict get $meta foreign]
+        set makes [expr {$result eq "cptr" || ($imprint ne "" && [lindex [dict get $imprint result] 0] in {cptr cfnptr})
+            || ($foreign ne "" && [lindex [dict get $foreign result] 0] in {cptr cfnptr})}]
+        if {!$makes} continue
+        foreach kind [dict get $meta paramTypes] {
+            if {$kind ni {cptr int}} {
+                lappend bad $name
+            }
+        }
+    }
+    set bad
+} -cleanup {unset -nocomplain bad name meta result imprint foreign makes kind} -result {}
+
+test cb-foreign-operation-only-called {a foreign operation is only called: a function value of one would have no contract at its calls, so referring to it otherwise is refused (TYPE; IMPRINT for an imprinted one)} -body {
+    list [cbKind "f = ffi_fixture::copy\n1"] [cbKind "g = ffi_fixture::read\n1"] [cbKind "\[ffi_fixture::mixed\]"]
+} -result {TYPE IMPRINT TYPE}
+
+test cb-imprint-owner-establishes-nothing {a byte owner is no pointer, so it establishes no pointee imprint: the pointee is explicit (or comes from a raw pointer argument)} -body {
+    cbError "ffi_fixture::read(mk(2, 1), 2)"
+} -result {IMPRINT {ffi_fixture::read: imprint variable T is not established (the arguments do not establish it here): write ffi_fixture::read[T](...) with explicit imprints}}
+
+test cb-raw-pointer-type-exact {a raw pointer argument is held to the parameter's pointer type exactly (no implicit pointee conversion)} -body {
+    list [cbKind "dst = abi::bytes::zeroed(abi::usize(2))\np = ffi::c::null\[ffi::c::Char\]()\nffi_fixture::copy(dst, p, 0)"] \
+        [cbAgree "dst = abi::bytes::zeroed(abi::usize(2))\np = ffi::c::null\[ffi::c::UChar\]()\nffi_fixture::copy(dst, p, 0).dst"]
+} -result [list TYPE [list value [cbMutable {0 0}]]]
+
+# ---------------------------------------------------------------------------
+# The length is separate: an ordinary C scalar
+
+test cb-length-separate {an exposure adds no length: the count is a separate ordinary argument, a C integer scalar (ffi::c::ULong here) admitted by its proven range -- an unproven Int is TYPE, a target whose unsigned long is 32 bits needs the proof the 64-bit Usize does not give} -body {
+    list [cbKind "fn f(n: int) -> List\[int\]:\n    ffi_fixture::read\[ffi::c::UChar\](mk(2, 1), n)\n\nf(2)"] \
+        [cbKind "ffi_fixture::read\[ffi::c::UChar\](mk(2, 1), -1)"] \
+        [cbKind "data = mk(2, 1)\nffi_fixture::read\[ffi::c::UChar\](data, len(data))"] \
+        [cbKind "data = mk(2, 1)\nffi_fixture::read\[ffi::c::UChar\](data, abi::bytes::length(data).value)" -target windows-x86_64]
+} -result {TYPE TYPE ok TYPE}
+
+# ---------------------------------------------------------------------------
+# Synchronous: the exposure lives for the call alone
+
+test cb-exposure-after-arguments {every argument is evaluated before any exposure is made -- here an argument that yields (deep, inside a coroutine) -- so no argument's code, no call, allocation or suspension, comes between an exposure and the call; the borrow is categorically synchronous, and works inside a coroutine} -constraints nativeLinux -body {
+    cbAgree "struct Count:\n    n: ffi::c::ULong\n\nfn ask(resume Count) -> ffi::c::ULong:\n    c = yield \[0\]\n    c.n\n\nfn worker(data: abi::bytes::Bytes, resume Count) -> List\[int\]:\n    ffi_fixture::read\[ffi::c::UChar\](data, ask())\n\nfn f() -> List\[int\]:\n    coroutine {step} = worker(mk(5, 21))\n    step(Count {n: 3})\n\nf()"
+} -result [list value [cbList [lrange [cbPattern 5 21] 0 2]]]
+
+test cb-exposure-after-arguments-nir {NIR: the exposures follow the code of every argument (the count's call, len(...), here), the private copy of a write exposure precedes every address, and the operation follows every address} -body {
+    set read [cbNirFunction "fn f(d: abi::bytes::Bytes) -> List\[int\]:\n    ffi_fixture::read\[ffi::c::UChar\](d, len(d))\n\nf(mk(3, 1))" f]
+    set copy [cbNirFunction "fn f(src: abi::bytes::Bytes, dst: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:\n    ffi_fixture::copy(dst, src, len(src)).dst\n\nf(mk(3, 1), abi::bytes::zeroed(abi::usize(3)))" f]
+    list [lsearch -all -inline -not -exact [cbOps $read] structget] [lsearch -all -inline -not -exact [cbOps $copy] structget]
+} -cleanup {unset -nocomplain read copy} -result {{call bytesaddr ffifixtureread keepalive} {call mbytesclone mbytesaddr bytesaddr ffifixturecopy keepalive keepalive structnew structnew}}
+
+# The Tcl model of an exposure: a handle of one call, gone when it returns.
+core::native::register cbtest::stash -arity 1 -impl [list apply {{p} {
+    set ::cbStashed $p
+    core::cabi::ExposedBytes $p 0 1 cbtest::stash
+    return [core::value::unit]
+}}] -param-types {any} -result-type any -ownership {observe} \
+    -foreign {params {{name p type {cptr {refined int {ffi::c::UChar}}} access read escape declared-noescape}} result unit}
+
+test cb-tcl-exposure-ends {on the Tcl backends an exposure is a handle into the call's own table of exposed bytes, closed when the call returns: an operation that broke its noescape contract and kept the handle reaches nothing with it afterwards (natively a false contract is undefined behavior, like any false FFI contract)} -body {
+    set before [dict size $::core::cabi::exposures]
+    set hir [surface::compile "import cbtest\n$::cbPrelude\ncbtest::stash(mk(2, 1))\n" -warnings off]
+    set outcome [cbAgreeHir $hir {interp compile}]
+    list $outcome [lindex $::cbStashed 0] [catch {core::cabi::ExposedBytes $::cbStashed 0 1 later} message] $message \
+        [expr {[dict size $::core::cabi::exposures] == $before}]
+} -cleanup {unset -nocomplain before hir outcome message} -match glob -result {{value unit} exposure 1 {later: exposure * has ended: an exposure lives only for the call it was made for} 1}
+
+test cb-tcl-read-exposure-not-writable {on the Tcl backends a read exposure cannot be written through (C writing through a const pointer is ruled out by the contract; there it is seen), and a raw C address reaches no memory: only a zero-byte access} -body {
+    set m [core::value::structOf {abi::bytes::MutableBytes storage} [list [core::value::mutbytes 0102]]]
+    set seen {}
+    core::native::register cbtest::poke -arity 1 -impl [list apply {{p} {
+        lappend ::cbSeen [catch {core::cabi::StoreExposed $p 0 {9} cbtest::poke} message] $message
+        return [core::value::unit]
+    }}] -param-types {any} -result-type any -ownership {observe} \
+        -foreign {params {{name p type {cptr {refined int {ffi::c::UChar}}} access read escape declared-noescape}} result unit}
+    set ::cbSeen {}
+    core::native::invoke [core::value::native cbtest::poke] [list $m]
+    list $::cbSeen [catch {core::cabi::ExposedBytes [core::cabi::address 4096] 0 1 raw} message] $message \
+        [core::cabi::ExposedBytes [core::cabi::address 4096] 0 0 raw]
+} -cleanup {unset -nocomplain m seen message} -match glob -result {{1 {cbtest::poke: a write through read exposure * C may not modify what it was given to read}} 1 {raw reads 1 byte(s) through a raw C address, which only the native backend can do: the Tcl backends have no machine memory} {}}
+
+test cb-tcl-boundary-rechecks {the Tcl entry of a foreign operation refuses by itself what a run-time value shows -- byte storage at a retaining parameter, or an immutable Bytes for writing -- so even a direct call never makes such an exposure} -body {
+    set b [core::value::structOf {abi::bytes::Bytes storage} [list [core::value::bytestore 41]]]
+    list [catch {core::native::invoke [core::value::native ffi_fixture::fill] [list $b [core::value::int 1] [core::value::int 0]]} m1 o1] \
+        [lindex [dict get $o1 -errorcode] 2] \
+        [catch {core::native::invoke [core::value::native ffi_fixture::read_retained] [list $b [core::value::int 1]]} m2 o2] \
+        [lindex [dict get $o2 -errorcode] 2] [dict size $::core::cabi::exposures]
+} -cleanup {unset -nocomplain b m1 o1 m2 o2} -result {1 TYPE 1 TYPE 0}
+
+# ---------------------------------------------------------------------------
+# Failure: the exposure still ends; nothing is published
+
+test cb-failure-publishes-nothing {an operation that writes part of its output and then fails (here with the declared UpperOverrun): the exposure ends, the partial writes went to the private copy and are discarded with it, and the caller's value is unchanged -- the natural behavior of linux::read's detach; no rollback is needed, and on success the writes are the result} -body {
+    cbAgree "fn attempt(m: abi::bytes::MutableBytes, count: ffi::c::ULong) -> List\[int\]:\n    r = ffi_fixture::fill_checked(m, count, 2):\n        on UpperOverrun:\n            return \[-1\]\n    ffi_fixture::read\[ffi::c::UChar\](r.out, mlen(r.out))\n\nm = mmk(4, 1)\n\[attempt(m, 4), attempt(m, 2), ffi_fixture::read\[ffi::c::UChar\](m, 4)\]"
+} -result [list value "\[\[-1\], [cbList [concat {91 128} [lrange [cbPattern 4 1] 2 end]]], [cbList [cbPattern 4 1]]\]"]
+
+test cb-failure-gc-stress {the failing and the succeeding exposure under a collection at every allocation: the same results} -constraints nativeLinux -body {
+    cbWithEnv BOTLISH_NATIVE_GC_STRESS 1 {
+        cbAgreeHir [cbHir "fn attempt(m: abi::bytes::MutableBytes, count: ffi::c::ULong) -> List\[int\]:\n    r = ffi_fixture::fill_checked(m, count, 2):\n        on UpperOverrun:\n            return \[-1\]\n    ffi_fixture::read\[ffi::c::UChar\](r.out, mlen(r.out))\n\nm = mmk(4, 1)\nloop i from 0 to 30:\n    \[attempt(m, 4), attempt(m, 2)\]"] $::cbNative
+    }
+} -result [list value [cbList [lrepeat 30 "\[\[-1\], [cbList [concat {91 128} [lrange [cbPattern 4 1] 2 end]]]\]"]]]
+
+# ---------------------------------------------------------------------------
+# Owner liveness and storage stability
+
+set cbReentrant "fn exposed(n: ffi::c::ULong) -> List\[int\]:\n    ffi_fixture::read_reentrant\[ffi::c::UChar\](mk(n, 7), n)\n\n\[exposed(5), exposed(64), exposed(1000) == pattern(1000, 7)\]"
+
+test cb-liveness-reentrant {the owner stays live for the whole call: a storage nothing but the exposure references survives a collection and same-sized allocations DURING the foreign operation (read_reentrant, foreign code running Botlish code mid-call), with and without a collection at every allocation -- the non-moving collector makes liveness enough, and the keepalive after the call makes it live} -body {
+    set normal [cbAgree $::cbReentrant]
+    set stressed [cbWithEnv BOTLISH_NATIVE_GC_STRESS 1 {cbAgreeHir [cbHir $::cbReentrant] $::cbNative}]
+    list $normal [expr {$stressed eq $normal}]
+} -cleanup {unset -nocomplain normal stressed} -result [list [list value "\[[cbList [cbPattern 5 7]], [cbList [cbPattern 64 7]], true\]"] 1]
+
+test cb-liveness-mutant-detected {the same program with the keepalive deleted from its NIR reads the canary bytes the in-call allocations wrote into the reclaimed storage: this test fails that mutant, so the liveness rule is exercised, not assumed (run without a suite-wide GC stress, under which the freed block is recycled by every allocation instead of by the canary's)} -body {
+    set nir [native::nir [cbHir $::cbReentrant]]
+    set mutant [join [lmap line [split $nir \n] {
+        if {[regexp {= op keepalive } $line]} continue
+        set line
+    }] \n]
+    set outcome [cbWithoutEnv BOTLISH_NATIVE_GC_STRESS {native::Outcome [native::Driver run $mutant]}]
+    list [expr {[regexp -all {op keepalive} $nir] > 0}] [string match {*238, 238, 238, 238, 238*} [core::value::show $outcome]]
+} -cleanup {unset -nocomplain nir mutant outcome} -result {1 1}
+
+test cb-gc-stress-programs {the read, write, copy and mixed programs under a collection at every allocation: identical natively, specialized and generic} -body {
+    set program "fn f(n: ffi::c::ULong) -> List\[int\]:\n    data = mk(n, 3)\n    m = abi::bytes::zeroed(abi::usize(n))\n    state = ffi::c::null\[ffi::c::Void\]()\n    r = ffi_fixture::mixed(data, state, m, n)\n    w = ffi_fixture::fill\[ffi::c::UChar\](r.output, n, 9)\n    c = ffi_fixture::copy(m, data, n)\n    \[r.result, list::length(ffi_fixture::read\[ffi::c::UChar\](w.out, n)), list::length(ffi_fixture::read\[ffi::c::Void\](c.dst, n))\]\n\nloop i from 1 to 40:\n    f(i)"
+    set normal [cbAgree $program]
+    set stressed [cbWithEnv BOTLISH_NATIVE_GC_STRESS 1 {cbAgreeHir [cbHir $program] $::cbNative}]
+    list [lindex $normal 0] [expr {$stressed eq $normal}]
+} -cleanup {unset -nocomplain program normal stressed} -result {value 1}
+
+# ---------------------------------------------------------------------------
+# Evidence: NIR and allocations
+
+test cb-nir-read {NIR of a read exposure: the owner's storage (a field read of the Bytes), its payload address (bytesaddr), the operation taking THAT address, and a keepalive of THAT storage after it -- no copy, no wrapper, no pointer value} -body {
+    set fn [cbNirFunction "fn f(d: abi::bytes::Bytes) -> List\[int\]:\n    ffi_fixture::read\[ffi::c::UChar\](d, 4)\n\nf(mk(4, 1))" f]
+    regexp {(%[0-9]+) = op bytesaddr (%[0-9]+)} $fn -> address storage
+    regexp {op ffifixtureread (%[0-9]+) } $fn -> operand
+    regexp {op keepalive (%[0-9]+)} $fn -> kept
+    list [lsearch -all -inline -not -exact [cbOps $fn] structget] [expr {$operand eq $address}] [expr {$kept eq $storage}] \
+        [regexp -all {cptr|mbytesclone|structnew} $fn]
+} -cleanup {unset -nocomplain fn address storage operand kept} -result {{bytesaddr ffifixtureread keepalive} 1 1 0}
+
+test cb-nir-read-mutable {NIR of a read exposure of a MutableBytes: its own storage's address (the writable kind's op, mbytesaddr), never a copy} -body {
+    lsearch -all -inline -not -exact [cbOps [cbNirFunction "fn f(m: abi::bytes::MutableBytes) -> List\[int\]:\n    ffi_fixture::read\[ffi::c::UChar\](m, 4)\n\nf(abi::bytes::zeroed(abi::usize(4)))" f]] structget
+} -result {mbytesaddr ffifixtureread keepalive}
+
+test cb-nir-write {NIR of a write exposure: a private copy of the owner's storage (mbytesclone, the detach), ITS address, the operation, a keepalive of the copy, and the write-back struct over the copy -- the operand of the copy is the owner's storage, and the owner is never exposed itself} -body {
+    set fn [cbNirFunction "fn f(m: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:\n    ffi_fixture::fill\[ffi::c::UChar\](m, 4, 1).out\n\nf(abi::bytes::zeroed(abi::usize(4)))" f]
+    regexp {(%[0-9]+) = op mbytesclone (%[0-9]+)} $fn -> copy owner
+    regexp {(%[0-9]+) = op mbytesaddr (%[0-9]+)} $fn -> address exposed
+    regexp {op ffifixturefill (%[0-9]+) } $fn -> operand
+    regexp {op keepalive (%[0-9]+)} $fn -> kept
+    list [lsearch -all -inline -not -exact [cbOps $fn] structget] [expr {$exposed eq $copy}] [expr {$operand eq $address}] \
+        [expr {$kept eq $copy}] [expr {$owner ne $copy}]
+} -cleanup {unset -nocomplain fn copy owner address exposed operand kept} -result {{mbytesclone mbytesaddr ffifixturefill keepalive structnew structnew} 1 1 1 1}
+
+proc cbAllocations {body} {
+    set report [native::allocationReport [cbHir $body] summary]
+    lmap kind {Bytes MutableBytes Struct List} {
+        expr {[dict exists $report byKind $kind] ? [dict get $report byKind $kind allocations] : 0}
+    }
+}
+
+# What exposing costs: the allocations of program WITH beside those of the
+# same program WITHOUT the foreign call ({Bytes MutableBytes Struct List}).
+proc cbAllocationCost {without with} {
+    lmap a [cbAllocations $without] b [cbAllocations $with] {expr {$b - $a}}
+}
+
+test cb-allocations {allocation evidence, natively -- what the exposure itself costs beside the same program without the call {Bytes MutableBytes Struct List}: a read exposure of a Bytes or of a MutableBytes held in a binding allocates nothing (the List is the operation's own result), while an owner written inline as the argument is built as its one-field wrapper first (1 Struct: the address bridge's StorageOf has the same frontier); a write exposure costs exactly the private copy of the storage (MutableBytes' eager detach, MUTABLE-BYTES.md) and, when the result is used, its write-back struct and the copy's MutableBytes wrapper; measured, none hidden} -constraints nativeLinux -body {
+    set fn "fn f(n: ffi::c::ULong) -> int:\n    m = abi::bytes::zeroed(abi::usize(n))\n"
+    list [cbAllocationCost "${fn}    abi::bytes::mutable_length(m).value\n\nf(64)" \
+            "${fn}    list::length(ffi_fixture::read\[ffi::c::UChar\](m, n))\n\nf(64)"] \
+        [cbAllocationCost "fn g() -> int:\n    data = abi::bytes::from_list(str::encode_utf8(\"hello\"))\n    abi::bytes::length(data).value\n\ng()" \
+            "fn g() -> int:\n    data = abi::bytes::from_list(str::encode_utf8(\"hello\"))\n    list::length(ffi_fixture::read\[ffi::c::UChar\](data, 5))\n\ng()"] \
+        [cbAllocationCost "abi::bytes::length(abi::bytes::from_list(str::encode_utf8(\"hello\"))).value" \
+            "list::length(ffi_fixture::read\[ffi::c::UChar\](abi::bytes::from_list(str::encode_utf8(\"hello\")), 5))"] \
+        [cbAllocationCost "${fn}    abi::bytes::mutable_length(m).value\n\nf(64)" \
+            "${fn}    r = ffi_fixture::fill\[ffi::c::UChar\](m, n, 1)\n    abi::bytes::mutable_length(r.out).value\n\nf(64)"] \
+        [cbAllocationCost "${fn}    abi::bytes::mutable_length(m).value\n\nf(64)" \
+            "${fn}    ffi_fixture::fill\[ffi::c::UChar\](m, n, 1)\n    abi::bytes::mutable_length(m).value\n\nf(64)"]
+} -cleanup {unset -nocomplain fn} -result {{0 0 0 1} {0 0 0 1} {0 0 1 1} {0 1 2 0} {0 1 0 0}}
+
+# ---------------------------------------------------------------------------
+# The Linux syscall machinery: shared, and unchanged
+
+test cb-syscall-nir-unchanged {extracting the shared exposure mechanism changed nothing the syscall wrappers lower to: linux::write is one bytesaddr, one syscall and one keepalive of the same storage, linux::read one detach, one mbytesaddr, one syscall and one keepalive of the detached storage, with no new copy or allocation (the NIR of MUTABLE-BYTES.md and ABI-BYTES.md)} -constraints linuxX86_64 -body {
+    set nir [native::nir [surface::readProgramFile [file join $::projectRoot examples linux read-stdin.bot] -warnings off]]
+    set write [cbNirOf $nir linux::write]
+    set read [cbNirOf $nir linux::read]
+    regexp {op bytesaddr (%[0-9]+)} $write -> w1
+    regexp {op keepalive (%[0-9]+)} $write -> w2
+    regexp {op mbytesaddr (%[0-9]+)} $read -> r1
+    regexp {op keepalive (%[0-9]+)} $read -> r2
+    list [cbOps $write] [expr {$w1 eq $w2}] [cbOps $read] [expr {$r1 eq $r2}]
+} -cleanup {unset -nocomplain nir write read w1 w2 r1 r2} -result {{callmulti callmulti structget bytesaddr callmulti callmulti syscall_linux_x86_64 keepalive call} 1 {callmulti callmulti callmulti mbytesaddr callmulti callmulti syscall_linux_x86_64 keepalive call structnew} 1}
+
+test cb-shared-mechanism {one exposure mechanism, two consumers: the syscall bridge and the foreign call take addresses through ExposeStorage, and the syscall, a call that may make one, and the foreign call keep storages alive through KeepExposedAlive (native/lower.tcl); no other code emits an address op or a keepalive} -body {
+    set text [core::ReadFile [file join $::projectRoot native lower.tcl]]
+    set procs {}
+    set lines [split $text \n]
+    foreach name {BytesAddrCall SyscallCall AddressFlowAcrossCall BorrowCall} {
+        set start [lsearch -glob $lines "proc native::lower::$name *"]
+        set end [lsearch -start $start -exact $lines "\}"]
+        set body [join [lrange $lines $start $end] \n]
+        lappend procs [list $name [regexp {ExposeStorage fn} $body] [regexp {KeepExposedAlive fn} $body]]
+    }
+    list $procs [regexp -all {"op keepalive } $text] [regexp -all {mbytesaddr" : "bytesaddr"} $text]
+} -cleanup {unset -nocomplain text lines procs name start end body} -result {{{BytesAddrCall 1 0} {SyscallCall 0 1} {AddressFlowAcrossCall 0 1} {BorrowCall 1 1}} 1 1}
+
+test cb-namespace-separation {the C ABI and the Linux syscall ABI share internals, not namespaces: no syscall wrapper mentions ffi::c, the C side (lib/ffi/c.bot, hir/borrow.tcl, core/cabi.tcl, the fixture runtime) mentions no Linux, syscall, register or x86-64 name, a borrow program imports neither linux nor abi::x86_64 and calls no syscall native, and a syscall program's calls carry no exposures} -body {
+    set linuxSide [lmap path [concat [list [file join $::projectRoot lib linux.bot]] [glob [file join $::projectRoot lib linux *.bot]]] {
+        expr {[regexp {ffi::c|ffi_fixture} [core::ReadFile $path]] ? [file tail $path] : [continue]}
+    }]
+    set cSide [lmap path [list [file join $::projectRoot lib ffi c.bot] [file join $::projectRoot hir borrow.tcl] \
+            [file join $::projectRoot core cabi.tcl] [file join $::projectRoot native src runtime ffifixture.rs]] {
+        set code [join [lmap line [split [core::ReadFile $path] \n] {
+            expr {[regexp {^\s*(#|//)} $line] ? [continue] : $line}
+        }] \n]
+        expr {[regexp {linux::|syscall|Register64|abi::x86_64|linuxabi} $code] ? [file tail $path] : [continue]}
+    }]
+    set hir [cbHir "data = mk(2, 1)\nffi_fixture::read\[ffi::c::UChar\](data, 2)"]
+    set natives {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "call" && [lindex [dict get $node target] 0] eq "native"} {
+            lappend natives [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name]
+        }
+    }
+    set write [surface::readProgramFile [file join $::projectRoot examples linux write.bot] -warnings off]
+    set exposures 0
+    dict for {e node} [dict get $write exprs] {
+        if {[dict exists $node borrows]} {
+            incr exposures
+        }
+    }
+    list $linuxSide $cSide [lsearch -all -inline -regexp $natives {linux|abi::x86_64|from_bytes|syscall}] \
+        [regexp {import (linux|abi::x86_64)} $::cbPrelude] $exposures
+} -cleanup {unset -nocomplain linuxSide cSide code line hir natives write exposures e node path} -result {{} {} {} 0 0}
+
+# ---------------------------------------------------------------------------
+# The HIR carries the transport: interchange, isolation, unchecked programs
+
+test cb-interchange {HIR interchange carries the exposures on the call nodes: written and read back after another compilation, the HIR lowers to the same NIR and every backend gets the same outcome -- the backend needs no header, IR, C compiler or name knowledge to know a call's transport} -body {
+    set program "fn f(n: ffi::c::ULong) -> List\[int\]:\n    data = mk(n, 3)\n    m = abi::bytes::zeroed(abi::usize(n))\n    state = ffi::c::null\[ffi::c::Void\]()\n    r = ffi_fixture::mixed(data, state, m, n)\n    ffi_fixture::read\[ffi::c::UChar\](r.output, n)\n\nf(5)"
+    set hir [cbHir $program]
+    set text [hir::interchange::encode $hir]
+    surface::compile "1 + 2\n" -warnings off
+    set back [hir::interchange::decode $text]
+    set borrows {}
+    dict for {e node} [dict get $back exprs] {
+        if {[dict exists $node borrows] && [dict get $node borrows] ne ""} {
+            lappend borrows [dict get $node borrows]
+        }
+    }
+    list [lsort $borrows] [expr {[native::nir $back] eq [native::nir $hir]}] [cbAgreeHir $back]
+} -cleanup {unset -nocomplain program hir text back borrows e node} -result [list {{{0 read data}} {{0 read input} {2 write output}}} 1 [list value [cbList [lreverse [cbPattern 5 3]]]]]
+
+test cb-native-lowering-reads-the-node {native lowering takes a call's transport from its node alone: the same call with its recorded exposures emptied lowers to no address and no keepalive -- the contract is not consulted to lower it} -body {
+    set hir [cbHir "fn f(p: ffi::c::Ptr\[ffi::c::UChar\], d: abi::bytes::Bytes) -> List\[int\]:\n    ffi_fixture::read(p, 0)\n\nf(ffi::c::null\[ffi::c::UChar\](), mk(1, 1))"]
+    set fn [lindex [regexp -inline {func [0-9]+ "f"[^\n]*\n(.*?)\nend} [native::nir $hir]] 1]
+    cbOps $fn
+} -cleanup {unset -nocomplain hir fn} -result {ffifixtureread}
+
+test cb-strict0-replay {an unchecked (-strict 0) program keeps a refused exposure as a run-time error: every backend evaluates the arguments and raises the refusal (TYPE, the diagnostic's message) instead of making the call -- no backend exposes storage to a parameter that refused it} -body {
+    lmap body {
+        {ffi_fixture::fill[ffi::c::UChar](mk(2, 1), 2, 1)}
+        {ffi_fixture::read_retained[ffi::c::UChar](mk(2, 1), 2)}
+        {ffi_fixture::read[ffi::c::Int](mk(2, 1), 2)}
+    } {
+        set outcome [cbAgreeHir [cbHir $body -strict 0]]
+        list [lindex $outcome 0] [lindex $outcome 1] [string match {ffi_fixture::*: argument 1 of ffi_fixture::*} [lindex $outcome 2]]
+    }
+} -cleanup {unset -nocomplain body outcome} -result {{error {CORE SEMANTIC TYPE} 1} {error {CORE SEMANTIC TYPE} 1} {error {CORE SEMANTIC TYPE} 1}}
+
+test cb-executable {a standalone executable of a program with read and write exposures prints what every in-process backend computes} -constraints nativeLinux -body {
+    set dir [makeDirectory cb-executables]
+    set exe [file join $dir borrow]
+    native::executable [cbHir "m = abi::bytes::zeroed(abi::usize(4))\nr = ffi_fixture::fill\[ffi::c::UChar\](m, 4, 33)\n\[ffi_fixture::read\[ffi::c::UChar\](mk(3, 9), 3), ffi_fixture::read\[ffi::c::Void\](r.out, 4)\]"] $exe
+    set out [exec $exe]
+    file delete -force $dir
+    set out
+} -cleanup {unset -nocomplain dir exe out} -result "\[[cbList [cbPattern 3 9]], [cbList [cbFill 4 33]]\]"
+
+cleanupTests

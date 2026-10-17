@@ -1699,7 +1699,14 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
         # its imprinted parameter types (hir/imprint.tcl).
         set name [dict get [hir::symbol $hir $targetBlock] name]
         hir::containers::VerifyNative hir $ranges $e $node $name
-        VerifyImprintedNative hir $ranges $e $node $name
+        if {[dict get [core::native::metadata $name] foreign] ne ""} {
+            # A foreign call contract is the native's whole signature: its
+            # byte exposures and its typed C parameters (hir/borrow.tcl).
+            hir::borrow::VerifyCall hir $ranges $e $node $name
+        } else {
+            VerifyImprintedNative hir $ranges $e $node $name
+            hir::borrow::VerifyPointerKinds hir $e $node $name
+        }
         return
     }
     if {$targetKind ne {block}} { return }
@@ -1958,6 +1965,12 @@ proc hir::range::MismatchClause {argType declared} {
         return [format {; %s is a nominal enum type: only its own cases (%s) are its values, never a case of another enum, an Int or a String} \
             [hir::types::show $declared] \
             [::join [lmap c [hir::enums::cases [lindex $declared 1]] {string cat [hir::types::show $declared] :: $c}] {, }]]
+    }
+    if {[hir::types::IsCPtr $declared] && [hir::borrow::IsOwner $argType]} {
+        # C-POINTER-BORROWING.md: an exposure is a call's argument
+        # transport, never a pointer value.
+        return [format {; byte storage is never a pointer value: an %s is exposed to C only as the argument of a foreign call whose parameter's contract admits it (noescape, a known access, a byte-sized pointee), for that call alone} \
+            [hir::types::show $argType]]
     }
     if {[hir::types::IsMutArray $declared] && !([hir::types::IsMutArray $argType])} {
         return [format {; only a value already known to be a %s satisfies this contract: a kind test proves the kind, never the element type, and no element check is inserted} \

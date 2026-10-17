@@ -256,7 +256,9 @@ proc hir::imprint::Bind {sig argTypes explicit callee} {
         set index 0
         foreach param [dict get $sig params] argType $argTypes {
             incr index
-            if {$param eq "" || ![Mentions $param]} {
+            if {$param eq "" || $argType eq "" || ![Mentions $param]} {
+                # (An argument type "" establishes nothing: a byte owner
+                # exposed to a foreign pointer parameter, hir/borrow.tcl.)
                 continue
             }
             set problem [Match $param $argType binding $index]

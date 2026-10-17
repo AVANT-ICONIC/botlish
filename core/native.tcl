@@ -166,6 +166,19 @@
 #                   both are bound and checked by the same code.
 #                   -param-types/-result-type stay the run-time kind
 #                   contract.
+#   foreign         "" or the native's foreign call contract (core/cabi.tcl,
+#                   C-POINTER-BORROWING.md): {vars {T...} params {P...}
+#                   result R}, one P per parameter -- {name N type T} for a
+#                   C value, plus {access read|write|unknown escape
+#                   proven-noescape|declared-noescape|captures|unknown} for
+#                   a C pointer -- and R the C result (or unit). The static
+#                   signature of the call (its types, like an -imprint's,
+#                   which -foreign derives when it has variables) and, per
+#                   pointer parameter, whether an abi::bytes::Bytes or
+#                   abi::bytes::MutableBytes may be exposed to it for the
+#                   call (hir/borrow.tcl). The implementation is entered
+#                   through core::cabi::ForeignBoundary, which models the
+#                   exposures on the Tcl backends.
 #   resultRange     "" (nothing known) or a fact about every Int result, for
 #                   hir/range.tcl's representation analysis and
 #                   hir/completions.tcl's completion proofs, which both read
@@ -299,7 +312,7 @@ proc core::native::register {name args} {
     set options [dict create -impl "" -arity "" -refines-true {} -refines-false {} \
         -param-types "" -result-type any -tests-type "" -runtime {} -result-shape {} -result-range {} \
         -context-free 0 -errors {} -bounds {} -nomethod 0 -completion 0 -ownership {} -errors-from {} \
-        -result-length {} -drop-form {} -layout {} -imprint {}]
+        -result-length {} -drop-form {} -layout {} -imprint {} -foreign {}]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "core::native::register: unknown option \"$option\""
@@ -426,6 +439,22 @@ proc core::native::register {name args} {
     if {$layout ne "" && ![ValidLayoutRole $layout $arity]} {
         error "core::native::register: bad -layout \"$layout\" for \"$name\""
     }
+    set foreign [dict get $options -foreign]
+    if {$foreign ne ""} {
+        # A foreign call contract (core/cabi.tcl) is the native's static
+        # signature: its imprint signature, when it has variables, is derived
+        # from it (one description, never two), and the implementation is
+        # entered through the exposure boundary.
+        set foreign [core::cabi::NormalizeForeign $name $foreign $arity]
+        if {[dict get $options -imprint] ne ""} {
+            error "core::native::register: \"$name\" has a -foreign contract, which is its signature: no separate -imprint"
+        }
+        if {[dict get $foreign vars] ne ""} {
+            dict set options -imprint [dict create vars [dict get $foreign vars] \
+                params [lmap p [dict get $foreign params] {dict get $p type}] result [dict get $foreign result]]
+        }
+        set impl [list core::cabi::ForeignBoundary $name $impl]
+    }
     set imprint [dict get $options -imprint]
     if {$imprint ne "" && ([catch {dict size $imprint}] || [lsort [dict keys $imprint]] ne {params result vars}
             || [llength [dict get $imprint vars]] == 0 || $arity eq "*"
@@ -450,7 +479,7 @@ proc core::native::register {name args} {
         contextFree [dict get $options -context-free] errors $errors bounds $bounds \
         nomethod [dict get $options -nomethod] completion [dict get $options -completion] \
         ownership $ownership errorsFrom $errorsFrom resultLength $length dropForm $dropForm \
-        layout $layout imprint $imprint]
+        layout $layout imprint $imprint foreign $foreign]
     return [core::value::native $name]
 }
 

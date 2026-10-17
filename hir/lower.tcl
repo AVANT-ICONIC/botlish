@@ -107,6 +107,12 @@ proc hir::lower::expr {hir e} {
                 return [list call [list ref "trait-operation#[dict get $node traitCall requirement]"] \
                     {*}[Exprs $hir [dict get $node args]]]
             }
+            if {[dict exists $node borrowRefused]} {
+                # A -strict 0 program's refused byte exposure (hir/borrow.tcl):
+                # its arguments run, then the refusal is replayed.
+                return [list call [list ref [core::cabi::refusedNative]] \
+                    [list const str [dict get $node borrowRefused]] {*}[Exprs $hir [dict get $node args]]]
+            }
             set operands [concat [list [dict get $node callee]] [dict get $node args]]
             set lowered [Pending $hir $e $operands {apply {{ops} {list call {*}$ops}}}]
             if {$lowered eq ""} {

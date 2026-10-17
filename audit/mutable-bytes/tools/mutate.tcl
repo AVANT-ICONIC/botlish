@@ -112,8 +112,8 @@ set mutations {
         {let address = BytesObj::payload_address(m) as i64;}
         {let address = BytesObj::payload_address(m) as i64 + 1;}}
     {read-uses-bytes-bridge tcl native/lower.tcl
-        {set bridgeOp [expr {[core::bytestore::bridgeWritable $native] ? "mbytesaddr" : "bytesaddr"}]}
-        {set bridgeOp bytesaddr}}
+        {set address [ExposeStorage fn $storage [core::bytestore::bridgeWritable $native] $e]}
+        {set address [ExposeStorage fn $storage 0 $e]}}
     {count-off-by-one tcl lib/linux.bot
         {            rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(local)),}
         {            rdx: abi::x86_64::from_usize(plus_one(abi::bytes::mutable_length(local))),}}
