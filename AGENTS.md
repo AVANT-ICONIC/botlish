@@ -1494,9 +1494,9 @@ code and text, a line per further one, the list as `-diagnostics`), in the
 build's order. Keep it so:
 
 * Never suppress a diagnostic by comparing message text, and never merge
-  two at distinct written sites -- except a missing import, which is one
-  fact about a file (its absent `import NS`), reported once per file and
-  namespace, at its first use. A dependency is semantic: poison, a
+  two at distinct written sites (two uses of one missing import are two:
+  merging them made one static compile block's diagnostic depend on
+  another's, a scheduler disagreement). A dependency is semantic: poison, a
   resolution failure's taint (`hir/recovery.tcl`), a construct the parser
   skipped (`surface::parser::Independent`), one written construct the front
   end expanded.

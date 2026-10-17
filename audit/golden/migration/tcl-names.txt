@@ -1135,6 +1135,7 @@ tests/diagnostic-recovery.test dr-independent-three-in-module pass
 tests/diagnostic-recovery.test dr-independent-application-modules pass
 tests/diagnostic-recovery.test dr-resolution-taint pass
 tests/diagnostic-recovery.test dr-resolution-taint-transitive pass
+tests/diagnostic-recovery.test dr-missing-import-each-use pass
 tests/diagnostic-recovery.test dr-loader-references pass
 tests/diagnostic-recovery.test dr-single-diagnostic-unchanged pass
 tests/diagnostic-recovery.test dr-message-lists-all pass

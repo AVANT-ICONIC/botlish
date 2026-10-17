@@ -763,9 +763,8 @@ proc hir::structs::verifyExprs {hirVar exprs} {
 proc hir::structs::verify {hirVar} {
     upvar 1 $hirVar hir
     set live ""
-    # Receiver bindings and missing imports already reported (below).
+    # Receiver bindings already reported (below).
     set receivers [dict create]
-    set missing [dict create]
     dict for {e node} [dict get $hir exprs] {
         if {[dict get $node kind] eq "call" && [dict exists $node method]} {
             set problem [AmbiguousMethodCall $hir $e]
@@ -784,15 +783,6 @@ proc hir::structs::verify {hirVar} {
             }
             set owner [OwnerBlock $hir $e]
             if {$owner ne "program" && $owner ni $live} continue
-        }
-        if {$kind eq "MISSING-IMPORT"} {
-            # One missing import is one error, however many method-style
-            # calls need it: reported at the code's first (the loader's rule
-            # for qualified references, surface/modules.tcl).
-            set key [list [expr {[dict exists $node ns] ? [dict get $node ns] : ""}] \
-                [lmap c [UnimportedCandidates $hir $e [hir::typeOf $hir [dict get $node receiver]]] {Owner $c}]]
-            if {[dict exists $missing $key]} continue
-            dict set missing $key 1
         }
         if {$kind in {NOT-A-STRUCT OPAQUE-REPRESENTATION}} {
             # A failure of the receiver's type, whatever the field: one

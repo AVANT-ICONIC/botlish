@@ -116,9 +116,13 @@ Before and after (the S13 reduction, r7.bot):
     before: error: program.bot:3:5: function result does not prove declared type str (CORE SEMANTIC TYPE)
     after:  error: program.bot:4:7: namespace "str" is not imported; add `import str` to use `str::concat` (the method-style call ".concat(...)" applies only a function visible by that name) (CORE SEMANTIC MISSING-IMPORT)
 
-One missing import is one error however many calls need it: the second
-`s.concat(...)` of a file without `import str` is not reported again (the
-loader's rule for qualified references is the same, section 3).
+Each use of a missing import is reported where it is written, in both
+spellings: two calls are two diagnostics. (A first version reported a
+missing import once per file and namespace. The static-decisions CI
+comparison rejected it: one `static compile:` block's diagnostic then
+depended on whether another block used the same namespace, and the batched
+scheduler mispredicted a build in `imports-unimported.bot` and
+`methods-list-without-str.bot`.)
 
 ## 2. Poison
 
@@ -236,7 +240,7 @@ of `hir::CheckOnce` run to completion. Three things cut a compilation short:
 * **The loader** checks every qualified reference of every file it loads and
   raises them together once the program is loaded
   (`RaiseReferenceErrors`), each module before the file importing it, each
-  file's in source order; one missing import per namespace and file.
+  file's in source order.
 
 Declaration-header failures stay where they were: a struct, enum, error,
 trait, layout or type declaration the registries cannot establish is raised
@@ -423,9 +427,10 @@ whole HIR text, its warnings and whether the HIR has any recovery state
   loaders, its 40 manifest entries.
 
 **Tests.** Every Tcl test on interp and compile (`tests/local.tcl -all 1
--parts tcl`): 7866 and 7862 passed, none failed (3 and 7 skipped). Every golden suite on every backend (`tests/local.tcl -parts
-golden`, 94 suites): 4726 tests on interp and on compile, 4634 on
-cranelift-generic and 4736 on cranelift, none failed.
+-parts tcl`): 7867 and 7863 passed, none failed (3 and 7 skipped). Every
+golden suite on every backend (`tests/local.tcl -parts golden`, 94 suites):
+4726 tests on interp and on compile, 4634 on cranelift-generic and 4736 on
+cranelift, none failed.
 
 **Backends.** `audit/compilation-isolation/tools/interleave.tcl -print 1`,
 run in both trees, checksums each of its ten suites' core IR, Tcl compiler
@@ -479,15 +484,17 @@ different rounds, as it had), error payloads (and `-fault unhandled`, `-fault wr
 structural contracts (and `-fault carrier`, `unknown`, `drop`), method
 eligibility, SAME-FAILURE, traits, context traits, affine values,
 coroutines, opaque structs and destructuring; the mutation harnesses of
-diagnostic recovery (24 of 24 killed), error payloads (44), traits (20),
+diagnostic recovery (25 of 25 killed), error payloads (44), traits (20),
 static compile (21), structural contracts (18), context traits (23),
 compilation isolation (14), HIR interchange (27), affine values (29),
 SAME-FAILURE (15) and coroutines (52), all killed. The static decisions'
 harness (73 mutants, each rerunning the static-economics suites) did not
-finish in this session: its first 26 were all killed. Every one of the
-repository's 624 mutants still applies. The batched-against-sequential
-static-decisions comparison runs in CI only (AGENTS.md): it is the
-`static-decisions` workflow's verdict on this branch.
+finish in this session: its first 61 were all killed. Every one of the
+repository's 625 mutants still applies. The batched-against-sequential
+static-decisions comparison runs in CI only (AGENTS.md); its first run on
+this branch found the scheduler disagreement section 1 describes (two uses
+of one missing import merged into one diagnostic), fixed since, and it is
+the `static-decisions` workflow's verdict on the fix.
 
 ## 10. Tests that changed, and why
 
@@ -557,7 +564,7 @@ locally again (it is no longer a frozen duplicate).
 (one) port the five tests of `tests/diagnostic-recovery.test` a block can
 express: the codes and whole messages blocks reify for a missing import in
 both spellings and for an unhandled set, the callable field, and the S13
-program with its import. The other 45 are classified in
+program with its import. The other 46 are classified in
 `audit/golden/migration/census/diagnostic-recovery.tsv`: they observe the
 whole set of diagnostics a rejected compilation reports (a block reifies its
 first), syntax recovery, several files or programs, HIR internals,

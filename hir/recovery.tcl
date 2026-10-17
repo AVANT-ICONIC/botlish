@@ -40,9 +40,9 @@
 # in source order, then each check's, in the order the checks run, each in its
 # own deterministic walk -- the first is the one a strict compilation always
 # reported, and names the error code. No diagnostic is ever dropped for being
-# like another: two at distinct sites are two. (Where a diagnostic is made,
-# a missing import is one per file and namespace, reported at its first use:
-# hir::structs::verify, and the loader for qualified references.)
+# like another: two at distinct sites are two -- two uses of one missing
+# import too. (Merging them would make a static compile block's diagnostic
+# depend on another block's: STATIC-DECISION-ECONOMICS.md.)
 #
 # A build that stopped after resolution (-halt-on-resolution-errors, a strict
 # core IR text build) has resolution diagnostics only: it reports them all.

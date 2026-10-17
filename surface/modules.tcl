@@ -1031,14 +1031,6 @@ proc surface::modules::CollectAndLoad {stateVar ast {key ""}} {
             try {
                 CheckRef state $ast $own $key $env $imported $ref
             } trap {SURFACE MODULE} {message options} {
-                # One missing import is one error, whatever number of
-                # references need it: reported at the file's first.
-                set kind [lindex [dict get $options -errorcode] 2]
-                set missing [list $key [lindex $ref 0]]
-                if {$kind eq "MISSING-IMPORT" && [dict exists $state missingImports $missing]} {
-                    continue
-                }
-                dict set state missingImports $missing 1
                 dict lappend state referenceErrors [dict create \
                     errorcode [dict get $options -errorcode] message $message]
             }
@@ -1356,7 +1348,7 @@ proc surface::modules::NewState {files nextFile} {
         loadedLayouts [dict create] imports [dict create] stack {} sections {} \
         typeDecls {} errorDecls {} structDecls {} traitDecls {} staticDeferred [dict create] \
         target "" root "" entry "" application [dict create] moduleDecls [dict create] \
-        referenceErrors {} missingImports [dict create]]
+        referenceErrors {}]
 }
 
 # Raises the qualified references of every file STATE loaded that the file

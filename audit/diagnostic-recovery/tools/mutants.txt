@@ -235,3 +235,26 @@
     }
     set diagnostics [dict get $hir diagnostics]
 >>>>
+
+@@ missing-import-once two uses of one missing import are one diagnostic, the first use's: a static compile block's diagnostic then depends on whether another block uses the namespace
+## hir/structs.tcl
+<<<<
+    # Receiver bindings already reported (below).
+    set receivers [dict create]
+====
+    # Receiver bindings already reported (below).
+    set receivers [dict create]
+    set missing [dict create]
+>>>>
+## hir/structs.tcl
+<<<<
+        if {$kind in {NOT-A-STRUCT OPAQUE-REPRESENTATION}} {
+====
+        if {$kind eq "MISSING-IMPORT"} {
+            set key [list [expr {[dict exists $node ns] ? [dict get $node ns] : ""}] \
+                [lmap c [UnimportedCandidates $hir $e [hir::typeOf $hir [dict get $node receiver]]] {Owner $c}]]
+            if {[dict exists $missing $key]} continue
+            dict set missing $key 1
+        }
+        if {$kind in {NOT-A-STRUCT OPAQUE-REPRESENTATION}} {
+>>>>

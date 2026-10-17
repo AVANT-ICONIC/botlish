@@ -269,6 +269,30 @@ test dr-resolution-taint-transitive {taint is transitive through bindings: a val
     drSites "fn broken() -> int:\n    missing_name\n\nvalue = broken()\nfn use(v: int) -> str:\n    v\n\nshown = use(value)\nfn independent(n: int) -> str:\n    n\n\nindependent(1)\n"
 } -result {{UNBOUND 2:5} {TYPE 5:7} {TYPE 9:15}}
 
+# Three static compile blocks, two of which miss the same import (the shape
+# of imports-unimported.bot, where the static-decisions CI comparison found a
+# scheduler disagreement).
+set ::drThreeBlocks "import compiler\n\nfn b_list_at() errors compiler::CompilerError:\n    static compile:\n        xs = \[1, 2\]\n        xs.at(0)\n\nfn b_str_length() errors compiler::CompilerError:\n    static compile:\n        s = \"ab\"\n        s.length()\n\nfn b_list_length() errors compiler::CompilerError:\n    static compile:\n        xs = \[1, 2\]\n        xs.length()\n\nfn code(body):\n    r = body():\n        on compiler::CompilerError \{code, message\}:\n            message\n    r\n\n\[code(b_list_at), code(b_str_length), code(b_list_length)\]\n"
+
+test dr-missing-import-each-use {two uses of one missing import are two diagnostics, in both spellings: merging them (a first version did) made one static compile block's diagnostic depend on another's -- three blocks, two of them missing the same import, are decided alike by both schedulers, with no mispredicted build} -body {
+    set sites [list [drSites "fn f(xs: List\[int\]) -> int:\n    xs.length() + xs.length()\n\nf(\[1\])\n"] \
+        [drSites "fn f(xs: List\[int\]) -> int:\n    list::length(xs) + list::length(xs)\n\nf(\[1\])\n"]]
+    set path [makeFile $::drThreeBlocks dr-blocks.bot]
+    set outcomes {}
+    foreach scheduler {batched sequential} {
+        set saved $hir::static::scheduler
+        set hir::static::scheduler $scheduler
+        try {
+            set hir [surface::readProgramFile $path -warnings off]
+        } finally {
+            set hir::static::scheduler $saved
+        }
+        lappend outcomes [list [dict get $hir staticStats mispredicted] [lrange [outcomeUnderHir interp $hir] 0 1]]
+    }
+    removeFile dr-blocks.bot
+    list $sites [lindex $outcomes 0 0] [lindex $outcomes 1 0] [expr {[lindex $outcomes 0 1] eq [lindex $outcomes 1 1]}] [lindex $outcomes 0 1 0]
+} -result {{{{MISSING-IMPORT 2:8} {MISSING-IMPORT 2:22}} {{MISSING-IMPORT 2:5} {MISSING-IMPORT 2:24}}} {} {} 1 value}
+
 test dr-loader-references {every qualified reference the loader rejects is reported, in source order (old: the first only)} -body {
     drSites "fn f(s: str) -> int:\n    str::length(s)\n\nfn g(xs: List\[int\]) -> int:\n    list::length(xs)\n\nfn h() -> int:\n    nosuch::thing()\n\nf(\"ab\")\n"
 } -result {{MISSING-IMPORT 2:5} {MISSING-IMPORT 5:5} {UNKNOWN-NAMESPACE 8:5}}
