@@ -866,7 +866,59 @@ acceptance) and the fuzzer against it. A mutant that only the `*-current`
 tests (the committed files' byte equality) kill is reported "pinned only":
 every mutant should also be killed by a test of behavior or by the fuzzer.
 
-*(Pending: measured at the end of the milestone.)*
+Every one of the 34 mutants (the 20 the brief names, then 14 more) applies
+and is killed, each by at least one test of behavior; none only by the
+pinned comparison. `tests failing` counts the failed tests of
+`tests/c-bindgen.test` (36, with the Tcl, BoringSSL and SDL3 acceptance), the
+fuzzer ran 3 programs (seed 11) per mutant:
+
+| mutant | the bug | tests failing | among them (behavior) | fuzzer |
+|---|---|---:|---|---|
+| `typedef-wrong-scalar` | every integer typedef resolves to C int, whatever its declaration chain ends in | 13 | `cb-boringssl-acceptance`, `cb-boringssl-inventory` | killed |
+| `plain-char-fact-ignored` | a constant of C char is read as signed on every target (the target's plain-char signedness ignored) | 3 | `cb-fixture-compiles`, `cb-fixture-targets` | -- |
+| `opaque-collapsed` | a pointer to a C struct or union is ffi::c::Ptr[ffi::c::Void]: every opaque identity collapsed into one | 13 | `cb-fixture-contracts`, `cb-fixture-interchange` | -- |
+| `symbol-prefix-ignored` | a direct API's link symbol is its C name, not what the symbol probe found (BoringSSL's prefix, asm labels, redefine_extname lost) | 12 | `cb-boringssl-acceptance`, `cb-boringssl-inventory` | killed |
+| `macro-alias-as-symbol` | an object-like or renaming macro alias is bound as an exported symbol of its own name | 9 | `cb-boringssl-symbols`, `cb-fixture-api-names` | killed |
+| `inline-as-direct` | a static inline function is bound as a direct extern of its name (it has no link symbol) | 18 | `cb-boringssl-inventory`, `cb-boringssl-symbols` | killed |
+| `stub-redirect-as-symbol` | a stub-table-redirected API name is bound directly to the declared function's own symbol, bypassing the table | 8 | `cb-fixture-api-names`, `cb-fixture-interchange` | -- |
+| `unknown-escape-noescape` | a pointer parameter without a contract fact is emitted noescape (unknown read as favorable) | 22 | `cb-boringssl-acceptance`, `cb-boringssl-inventory` | killed |
+| `const-noescape` | a pointer to const is assumed not to escape | 6 | `cb-fixture-contracts`, `cb-fixture-mapping` | -- |
+| `manual-alias-dropped` | the profile's `result {alias P}` is dropped: the result's provenance is unknown | 9 | `cb-boringssl-acceptance`, `cb-boringssl-inventory` | -- |
+| `proven-as-declared` | a fact the compiler proved is emitted as the binding author's declaration (noescape, not proven noescape) | 6 | `cb-fixture-contracts` | -- |
+| `float-as-int` | a floating-point parameter or result is mapped to C int | 8 | `cb-fixture-unsupported`, `cb-sdl3-breadth` | killed |
+| `unsupported-omitted` | an unsupported API is left out of the report | 9 | `cb-fixture-api-names`, `cb-fixture-targets` | killed |
+| `twin-identities-merged` | two C tags whose identity names collide get one Botlish name | 10 | `cb-fixture-compiles`, `cb-fixture-interchange` | -- |
+| `identity-duplicated` | a C type several modules point to is declared once per module that uses it | 18 | `cb-boringssl-acceptance`, `cb-fixture-compiles` | killed |
+| `library-nearest-module` | the C library is declared by the first module only, the one nearest the library rule | 12 | `cb-boringssl-acceptance`, `cb-boringssl-thunk-behavior` | -- |
+| `order-by-hash` | the ctypes module's identities come in an order that changes from run to run (hash or set iteration) | 6 | `cb-fixture-deterministic` | -- |
+| `shim-name-varies` | the shim library's name changes between runs (a clock, not the shim's text) | 13 | `cb-boringssl-thunk-behavior`, `cb-fixture-deterministic` | killed |
+| `target-omitted-from-manifest` | the manifest does not record the target | 5 | `cb-fixture-targets` | -- |
+| `target-preprocessing-ignored` | every target is preprocessed and probed with the host's toolchain (macOS generation sees Linux's APIs) | 6 | `cb-fixture-compiles`, `cb-fixture-targets` | -- |
+| `label-prefix-ignored` | the target's user label prefix is kept in the link symbol (Apple's _ doubled by the linker) | 2 | `cb-fixture-targets` | -- |
+| `typedef-probe-ignored` | a typedef is trusted by its declaration, not checked against the compiler's _Generic (an attribute that widens it is missed) | 4 | `cb-fixture-unsupported` | -- |
+| `bool-as-uchar` | C _Bool is bound as unsigned char | 9 | `cb-fixture-interchange`, `cb-fixture-mapping` | killed |
+| `enum-always-int` | every enum is C int, whatever integer type the compiler gives it | 7 | `cb-fixture-constants`, `cb-fixture-mapping` | killed |
+| `conflict-silent` | a profile fact the compiler contradicts is kept silently | 1 | `cb-policy-conflict` | -- |
+| `stale-policy-silent` | a contract naming a function or parameter that does not exist is ignored | 1 | `cb-policy-stale` | -- |
+| `constant-always-int` | an integer macro constant is typed C int, whatever its expression's type | 17 | `cb-fixture-compiles`, `cb-fixture-constants` | killed |
+| `struct-by-value-as-pointer` | a struct or union passed by value is bound as a pointer to it | 5 | `cb-fixture-unsupported` | killed |
+| `callback-unchecked` | a callback's signature is not checked: its unrepresentable arguments and result are dropped | 12 | `cb-fixture-compiles`, `cb-fixture-interchange` | -- |
+| `calling-convention-ignored` | an explicit calling convention attribute is ignored | 5 | `cb-fixture-targets`, `cb-fixture-unsupported` | -- |
+| `variadic-ignored` | a variadic function is bound by its fixed parameters | 7 | `cb-fixture-unsupported` | -- |
+| `evidence-readonly-as-write` | the compiler's readonly is read as write access | 7 | `cb-fixture-contracts`, `cb-policy-conflict` | -- |
+| `thunk-rejection-ignored` | a thunk the C compiler rejects stays bound (its blame is dropped) | 5 | `cb-tcl-acceptance`, `cb-tcl-inventory` | -- |
+| `macro-shadow-direct` | a declared function its own function-like macro shadows is bound directly, not through the macro | 8 | `cb-fixture-api-names`, `cb-fixture-interchange` | -- |
+
+```
+34 mutants, 34 killed (34 by a test of behavior or the fuzzer), 0 survived
+```
+
+The fuzzer kills 13 of them on its own; the rules it cannot see -- targets other than the
+host, the manifest, ordering and determinism, profile policy, stub tables,
+macro shadowing, thunk rejection -- are the tests'. One mutant's text first
+occurred twice in its file and did not apply; it was made unambiguous and
+rerun. A run takes about 90 minutes here (each mutant about 50 s of tests and
+up to 2 minutes of fuzzing).
 
 ## 32. CI
 
