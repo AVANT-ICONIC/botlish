@@ -338,8 +338,16 @@ names for a front-end, cache or interchange change, passed individually:
 * `audit/hir-interchange/tools/roundtrip.tcl`: `-via interchange` 10
   suites, 90 artifacts and outcomes compared, 0 differ; `-via cache` 10
   suites, 100 compared, 0 differ.
-* `tclsh9.0 tests/local.tcl` (every Tcl test file on interp and compile,
-  every golden suite on four backends): pending at this commit.
+* `tclsh9.0 tests/local.tcl -jobs 4` on the final tree: Tcl tests on interp
+  5,649 passed and on compile 5,645 passed (4 skipped), 0 failed (2,092
+  golden duplicates skipped on each); 91 golden suites, 0 failed: interp
+  4,708/4,708, compile 4,708/4,708, cranelift-generic 4,615/4,615,
+  cranelift 4,717/4,717 (42 minutes).
+* The new and changed executable-building test files with the stub linker
+  (`BOTLISH_NATIVE_LINKER=stub CORE_BACKEND=compile`, CI's `stub-linker`
+  job): 45 of 45; `tests/application-modules.test` and
+  `tests/native-program-output.test` under `BOTLISH_NATIVE_GC_STRESS=1` on
+  both passes: 32 of 32 each.
 
 Not run here: the arm64 workflow (the guard change is the same code on
 AArch64) and the static-decisions comparison (CI's, on the push to main:
