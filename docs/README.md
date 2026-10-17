@@ -3185,13 +3185,14 @@ observed warnings are exactly the manifest -- a new warning anywhere, an entry
 that no longer fires, or a drifted location fails it -- and compiles every
 program and loader without a manifest entry under `-warnings error`. A
 library's findings print for every program that loads it (there is no "system
-header" notion); since the refactor only three modules carry any, all
+header" notion); since the refactor only two modules carry any, all
 `ONE-CHAR-STRING-LITERAL`: `lib/web.bot` (23: its hexadecimal digit table,
-`"%"`, and the local-part and label classes beside `str::is_tcl_alnum`),
-`lib/io.bot` (2: the newline `print_line` and `write_error_line` append) and `lib/linux/path.bot` (2:
-the joining `"/"`, and an index the completion proof does not cover). A program
-that loads none of them compiles under `-warnings error` whenever its own code
-is clean.
+`"%"`, and the local-part and label classes beside `str::is_tcl_alnum`) and
+`lib/linux/path.bot` (2: the joining `"/"`, and an index the completion proof
+does not cover). `lib/io.bot`'s line operations append their newline as a
+character (`str::append_char`), so every program that prints through `io`
+or `linux::io` is free of library findings. A program that loads neither
+module compiles under `-warnings error` whenever its own code is clean.
 
 **Botlish does not currently provide GCC/Clang-style `-Wfoo` controls** (no
 `-Wno-foo`, `-Werror=foo`, `-Wall`, warning groups or levels), and no source
