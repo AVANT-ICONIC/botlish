@@ -251,7 +251,14 @@ Three levels stay distinct:
   (`si-bad-3`), a valid `writer` instance does not make `writer(m, 5)` valid
   (`si-bad-4`). A problem the definition already has for every call (the generic
   verification reported the same diagnostic at the same expression) stays the
-  definition's and is not re-reported per call. A call to an invalid instance from
+  definition's and is not re-reported per call. Nor is a problem in code the
+  instance itself proves unreachable (an arm its types decide against, the body
+  of a loop over an empty domain): the call never runs it, and its typing there
+  describes values that cannot exist -- an empty caller's loop element is
+  `never`, so a handled call of it is typed by its handlers' join (an Int where
+  the contract's analysis proves a Byte). The definition's own verification
+  still checks that code as written (`empty-caller-loop-body-typed-call`,
+  `tests/empty-collection-admissibility.test`). A call to an invalid instance from
   inside another instance makes the caller invalid too, with a nested message
   (`si-bad-5`).
 

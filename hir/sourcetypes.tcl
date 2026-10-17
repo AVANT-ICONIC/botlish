@@ -516,11 +516,16 @@ proc hir::sourcetypes::RegisterOne {decl parentId} {
     variable generation
     set name [dict get $decl name]
     set id [Identity $decl]
-    if {$name eq "Int"} {
+    # A C integer scalar of namespace ffi::c (C-ABI-TYPES.md): a declaration
+    # the loader synthesizes for the compilation's C target
+    # (hir::cabi::NamespaceTypeDecls), or its HIR text read back. Its short
+    # name may be a built-in one (ffi::c::Int): its identity is qualified.
+    set cabi [expr {[dict exists $decl cabi] ? [dict get $decl cabi] : ""}]
+    if {$name eq "Int" && $cabi eq ""} {
         Fail [dict get $decl nameSpan] \
             "\"Int\" is the compiler's own built-in integer type and cannot be redeclared"
     }
-    if {[dict get $decl namespace] ne "" && ([core::type::isBuiltinName $name]
+    if {$cabi eq "" && [dict get $decl namespace] ne "" && ([core::type::isBuiltinName $name]
             || [dict exists $::hir::types::constructors $name] || $name in {any never Fn})} {
         Fail [dict get $decl nameSpan] \
             "type \"$name\" cannot be declared in namespace \"[dict get $decl namespace]\": the name is already a built-in type"
@@ -545,10 +550,18 @@ proc hir::sourcetypes::RegisterOne {decl parentId} {
         Fail [dict get $decl domainSpan] \
             "the domain of \"$id\" is not a subset of its parent \"$parentId\"'s domain [core::type::showIntegerDomain $parentDomain]"
     }
-    core::type::register $id -base int -parents $parents -integer-domain $domain -source 1
+    if {$cabi ne "" && ($parents ne {} || $domain ne [core::cabi::scalarDomain $cabi])} {
+        Fail [dict get $decl domainSpan] \
+            "the C integer scalar \"$id\" must be Int in exactly its target's range [core::type::showIntegerDomain [core::cabi::scalarDomain $cabi]]"
+    }
+    core::type::register $id -base int -parents $parents -integer-domain $domain -source 1 -c-abi $cabi
     lappend generation [list type $id]
-    return [dict create name $id parent [expr {$parentName eq "Int" ? "Int" : $parentId}] \
+    set entry [dict create name $id parent [expr {$parentName eq "Int" ? "Int" : $parentId}] \
         domain [dict get [core::type::metadata $id] integerDomain]]
+    if {$cabi ne ""} {
+        dict set entry cabi $cabi
+    }
+    return $entry
 }
 
 # A multi-line, human-auditable rendering of HIR's own source-defined types

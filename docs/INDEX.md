@@ -104,6 +104,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [MUTABLE-BYTES.md](MUTABLE-BYTES.md) -- `abi::bytes::MutableBytes` and `linux::read`
 - [BINARY-LAYOUT.md](BINARY-LAYOUT.md) -- fixed binary layouts: `layout`, `LayoutStruct[L]`, `binary::parse` and `binary::emit`
 - [C-HEADER-ARCHAEOLOGY.md](C-HEADER-ARCHAEOLOGY.md) -- empirical C header archaeology: BoringSSL's and Tcl's preprocessed headers, an exploratory FFI IR and what a first C FFI needs (corpus: `audit/c-header/`)
+- [C-ABI-TYPES.md](C-ABI-TYPES.md) -- the C ABI type universe: target-resolved C integer scalars, `ffi::c::Void`, `ffi::c::Ptr[T]`, `ffi::c::FnPtr[F]`, the pointer operations, and callable imprinting (`ffi::c::null[T]()`)
 - [ABI-NUMERIC-DOMAINS.md](ABI-NUMERIC-DOMAINS.md) -- `abi::I8` ... `abi::Usize`
 - [LINUX-X86-64-SYSCALL.md](LINUX-X86-64-SYSCALL.md) -- direct Linux x86-64 syscalls
 - [ARGV.md](ARGV.md) -- `argv()`: the process argument vector

@@ -1,0 +1,161 @@
+name: static-decisions
+
+# The batched static-decision scheduler against the sequential reference on
+# every golden suite: audit/static-decisions/tools/compare.tcl (STATIC-
+# COMPILE.md, "Decision economics"; AGENTS.md, "Static intrinsics"). Every
+# site's outcome and reified diagnostic, the program's diagnostics and the
+# decided HIR must agree, with no misprediction.
+#
+# The sequential order is one whole-program build per typed rejection. On a
+# hosted runner mutable-array.bot takes 75 minutes of it (69 rounds, 953
+# builds; the first run here, eaac3dd), destructuring.bot 15 (205 builds) and
+# every other suite under 8. In an agent's container it is several times
+# slower (mutable-array.bot did not finish in 2 h 37 min), beyond the 2-hour
+# background-task limit. So the comparison runs here, never locally.
+#
+# It runs on every push to main that changes what a front end builds -- the
+# directories the front-end cache fingerprints (core/, hir/, surface/, lib/;
+# hir/interchange.tcl's Fingerprint) -- or a golden suite or the comparison
+# tool, and on demand on any branch (workflow_dispatch; the `suites` input
+# narrows it to some suites). No program outside tests/golden has a static
+# site, so the golden suites are the whole corpus.
+#
+# mutable-array.bot, the one suite whose sequential run takes over an hour,
+# gets a job of its own; the others are split round-robin into at most
+# MAX_SHARDS jobs, which finish well within its time. A job may take up to 6
+# hours, GitHub's limit for a hosted runner.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/**"
+      - "hir/**"
+      - "surface/**"
+      - "lib/**"
+      - "tests/golden/*.bot"
+      - "audit/static-decisions/tools/**"
+      - ".github/workflows/static-decisions.yml"
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: "Golden suites to compare (file names in tests/golden, separated by spaces or commas); empty for every suite"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+# One run per branch at a time. On main a newer push waits for the running
+# comparison (and replaces any run still waiting), so every run finishes and
+# the newest commit is always checked; on another branch a newer dispatch
+# cancels the running one.
+concurrency:
+  group: static-decisions-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Split the suites into jobs
+        id: plan
+        shell: bash
+        env:
+          SUITES: ${{ inputs.suites }}
+          OWN_JOB: mutable-array.bot
+          MAX_SHARDS: "4"
+        run: |
+          cd tests/golden
+          selected=()
+          if [[ -n ${SUITES//[[:space:],]/} ]]; then
+            for name in ${SUITES//,/ }; do
+              name=${name##*/}
+              if [[ $name != *.bot || ! -f $name ]]; then
+                echo "::error::no golden suite $name in tests/golden"
+                exit 1
+              fi
+              selected+=("$name")
+            done
+            mapfile -t selected < <(printf '%s\n' "${selected[@]}" | sort -u)
+          else
+            selected=(*.bot)
+          fi
+          jobs='[]'
+          rest=()
+          for name in "${selected[@]}"; do
+            if [[ " $OWN_JOB " == *" $name "* ]]; then
+              jobs=$(jq -c --arg n "${name%.bot}" --arg s "$name" '. + [{name: $n, suites: $s}]' <<<"$jobs")
+            else
+              rest+=("$name")
+            fi
+          done
+          count=${#rest[@]}
+          shards=$(( count < MAX_SHARDS ? count : MAX_SHARDS ))
+          for ((i = 0; i < shards; i++)); do
+            group=()
+            for ((j = i; j < count; j += shards)); do
+              group+=("${rest[j]}")
+            done
+            jobs=$(jq -c --arg n "shard $((i + 1))/$shards" --arg s "${group[*]}" '. + [{name: $n, suites: $s}]' <<<"$jobs")
+          done
+          echo "matrix=$(jq -c '{include: .}' <<<"$jobs")" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Jobs"
+            jq -r '.[] | "* **\(.name)**: \(.suites)"' <<<"$jobs"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  compare:
+    name: compare (${{ matrix.name }})
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+    steps:
+      - uses: actions/checkout@v5
+
+      # Keep the devcontainer and GitHub Actions prerequisite setup in one
+      # place so they stay in sync. (The comparison compiles only: it needs
+      # no native backend.)
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      # One line per suite: each scheduler's rounds/builds and front-end
+      # seconds, then any DISAGREE or DOES NOT COMPILE; exit status 1 on
+      # either. `shell: bash` runs it with pipefail, so tee does not hide
+      # that status. The step stops short of the job's limit so that the
+      # summary below still records how far a run that ran out of time got.
+      - name: Batched against sequential
+        shell: bash
+        timeout-minutes: 350
+        env:
+          SUITES: ${{ matrix.suites }}
+        run: |
+          files=()
+          for name in $SUITES; do
+            files+=("tests/golden/$name")
+          done
+          tclsh9.0 audit/static-decisions/tools/compare.tcl "${files[@]}" 2>&1 | tee compare.log
+
+      - name: Publish summary
+        if: always()
+        shell: bash
+        env:
+          NAME: ${{ matrix.name }}
+        run: |
+          {
+            echo "## $NAME"
+            echo '```'
+            cat compare.log 2>/dev/null || echo "(no output)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

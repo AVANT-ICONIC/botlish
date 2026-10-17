@@ -2607,8 +2607,11 @@ strongly-connected-components pass (`depMs`, [Measurements](#measurements)).
 STATIC-COMPILE.md, "What to run when changing this", and AGENTS.md
 ("Static intrinsics"): `tests/static-economics.test`,
 `tests/static-compile.test`, `tests/golden.test`,
-`audit/static-decisions/tools/fuzz.tcl` (several seeds),
-`audit/static-decisions/tools/compare.tcl tests/golden/*.bot` and
-`audit/static-decisions/tools/mutate.tcl`; a new cross-function fact an
+`audit/static-decisions/tools/fuzz.tcl` (several seeds) and
+`audit/static-decisions/tools/mutate.tcl`, and
+`audit/static-decisions/tools/compare.tcl tests/golden/*.bot` in CI, never
+locally (the `static-decisions` workflow: the sequential reference of
+mutable-array.bot alone takes 75 minutes on a GitHub runner and hours in an
+agent's container); a new cross-function fact an
 analysis reads is a new edge of `hir/staticdeps.tcl`, never a special case of
 the scheduler.

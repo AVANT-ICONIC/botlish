@@ -523,8 +523,21 @@ proc hir::resolve::SetField {hirVar e key value} {
 # hir::types::resolveApplication -- the one place that knows which names
 # are registered type constructors, so this proc stays fully generic over
 # constructor identity.
-proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""}} {
+#
+# IMPRINTS 1 resolves a function's declared signature (hir/imprint.tcl): a
+# name that is an imprint variable's (hir::imprint::IsVariableName) and
+# names no visible type is the variable {imprint NAME}. IMPRINTS a list of
+# names resolves a type inside the body of functions whose signatures have
+# those variables (a call's explicit imprint forwarding one: `null[T]()`):
+# only those are variables. Everywhere else such a name is the unknown type
+# it always was.
+proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""} {imprints 0}} {
     if {[llength $typeExpr] == 1} {
+        if {($imprints eq "1" || ($imprints ni {0 ""} && $typeExpr in $imprints))
+                && [hir::imprint::IsVariableName $typeExpr]
+                && [catch {hir::types::resolveNamed $typeExpr $ns} type]} {
+            return [list imprint $typeExpr]
+        }
         return [hir::types::resolveNamed $typeExpr $ns]
     }
     lassign $typeExpr name arg
@@ -534,8 +547,8 @@ proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""}} {
         # every argument and the return type resolve like any other type
         # annotation, and every error name must be a declared error
         # identity, exactly as in a function's own "errors" clause.
-        set argTypes [lmap t [dict get $arg args] {ResolveTypeExpr $t $ns}]
-        set result [ResolveTypeExpr [dict get $arg return] $ns]
+        set argTypes [lmap t [dict get $arg args] {ResolveTypeExpr $t $ns $imprints}]
+        set result [ResolveTypeExpr [dict get $arg return] $ns $imprints]
         foreach t [concat $argTypes [list $result]] {
             set contextTrait [hir::types::MentionedContextTrait $t]
             if {$contextTrait ne ""} {
@@ -595,7 +608,15 @@ proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""}} {
         # LayoutStruct[L] (BINARY-LAYOUT.md): L names a layout, never a type.
         return [hir::layouts::ResolveLayoutStruct $arg $ns]
     }
-    return [hir::types::resolveApplication $name [list [ResolveTypeExpr $arg $ns]]]
+    if {$name eq [hir::cabi::PtrName]} {
+        # ffi::c::Ptr[T] (C-ABI-TYPES.md): T is a pointee identity
+        # (ffi::c::Void among them), never a value type.
+        return [hir::cabi::ResolvePtr $arg $ns $imprints]
+    }
+    if {$name eq [hir::cabi::FnPtrName]} {
+        return [hir::cabi::ResolveFnPtr $arg $ns $imprints]
+    }
+    return [hir::types::resolveApplication $name [list [ResolveTypeExpr $arg $ns $imprints]]]
 }
 
 # The diagnostic kind of a failed ResolveTypeExpr whose catch OPTIONS are
@@ -838,7 +859,8 @@ proc hir::resolve::Expr {hirVar node ctx} {
                     lappend declaredParamTypes {}
                     continue
                 }
-                if {[catch {ResolveTypeExpr $paramType [CtxNamespace $ctx]} normalized options]} {
+                # (With imprint variables: hir/imprint.tcl.)
+                if {[catch {ResolveTypeExpr $paramType [CtxNamespace $ctx] 1} normalized options]} {
                     hir::Diagnose hir [TypeErrorKind $options TYPE] \
                         [format {unknown or invalid type %s for parameter "%s": %s} [ShowTypeExpr $paramType] $name $normalized] $e
                     lappend declaredParamTypes {}
@@ -854,6 +876,10 @@ proc hir::resolve::Expr {hirVar node ctx} {
                     lappend declaredParamTypes $normalized
                 }
             }
+            # Imprint variables (hir/imprint.tcl): each one a parameter uses
+            # must be established by an earlier one.
+            set declaredParamTypes [hir::imprint::CheckSignature hir $e $declaredParamTypes \
+                [lmap param [dict get $node params] {lindex $param 0}]]
             set head [hir::traits::CloneHead $ctx $node]
             if {$head ne ""} {
                 # The block of a trait clone (TRAITS.md, "Monomorphization"):
@@ -898,7 +924,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
             SetField hir $e staticRefs {}
             set declared [expr {[dict exists $node declaredResult] ? [dict get $node declaredResult] : {}}]
             if {$declared ne {}} {
-                if {[catch {ResolveTypeExpr $declared [CtxNamespace $ctx]} normalized options]} {
+                if {[catch {ResolveTypeExpr $declared [CtxNamespace $ctx] 1} normalized options]} {
                     hir::Diagnose hir [TypeErrorKind $options TYPE] [format {unknown or invalid result type %s: %s} [ShowTypeExpr $declared] $normalized] $e
                     set declared {}
                 } elseif {[hir::types::MentionedContextTrait $normalized] ne ""} {
@@ -1066,6 +1092,25 @@ proc hir::resolve::Expr {hirVar node ctx} {
                     # field value it has always been. Only diagnostics need
                     # to know it was written as a method call.
                     SetField hir [dict get $hir exprs $e callee] methodCallee 1
+                }
+            }
+            if {[dict exists $node imprint]} {
+                # Explicit imprints `f[T, ...](...)` (hir/imprint.tcl): each
+                # a type, or a pointee identity (ffi::c::Void), bound to the
+                # callee's variables by its typing (hir::types::Call).
+                set imprint {}
+                set valid 1
+                set variables [hir::imprint::EnclosingVariables $hir $ctx]
+                foreach t [dict get $node imprint] origin [dict get $node imprintOrigins] {
+                    if {[catch {hir::cabi::ResolveImprint $t [CtxNamespace $ctx] $variables} type options]} {
+                        hir::DiagnoseAt hir [TypeErrorKind $options TYPE] \
+                            [format {unknown or invalid imprint %s: %s} [ShowTypeExpr $t] $type] $e $origin
+                        set valid 0
+                    }
+                    lappend imprint $type
+                }
+                if {$valid} {
+                    SetField hir $e imprint $imprint
                 }
             }
             hir::flags::ResolveCall hir $e $node $ctx

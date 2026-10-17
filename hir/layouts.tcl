@@ -284,6 +284,12 @@ proc hir::layouts::NotScalarReason {type spelled} {
     if {[hir::types::IsNamedStruct $type]} {
         return "[hir::types::show $type] is a struct type, not an integer domain or a layout (a nested layout field names the layout itself)"
     }
+    if {[hir::types::IsCAddress $type]} {
+        # C-ABI-TYPES.md, "Pointers in layouts": imprinting reads arbitrary
+        # bytes, and a pointer made from arbitrary bytes would be authority
+        # to an address nothing gave the program.
+        return "[hir::types::show $type] is a C pointer, not a binary scalar: imprinting arbitrary bytes into it would fabricate a pointer (pointer-valued layout fields need a capability-preserving mechanism that does not exist yet)"
+    }
     return "[hir::types::show $type] has no fixed binary width (a layout field is an integer domain of exact fixed width, or a nested layout)"
 }
 
@@ -484,6 +490,10 @@ proc hir::layouts::Resolve {id byId doneVar stack} {
 proc hir::layouts::UnresolvedFieldType {typeExpr ns spelled fieldName layoutName detail} {
     variable batchStructs
     if {[llength $typeExpr] == 1} {
+        if {$typeExpr eq [hir::cabi::VoidName]} {
+            # C-ABI-TYPES.md: no field holds a value of C's void.
+            return "field \"$fieldName\" of layout \"$layoutName\" cannot have type $spelled: [hir::cabi::VoidMessage]"
+        }
         set id [expr {[string first :: $typeExpr] >= 0 ? $typeExpr : [identity $typeExpr $ns]}]
         if {[info exists batchStructs] && [dict exists $batchStructs $id]} {
             return "field \"$fieldName\" of layout \"$layoutName\" cannot have type $spelled: $spelled is a struct type, not an integer domain or a layout (a struct holds domain meaning, not bytes; a nested layout field names a layout)"

@@ -146,7 +146,9 @@ namespace eval surface::lower {
 }
 
 proc surface::lowerToHir {ast args} {
-    set options [dict create -strict 1 -warnings [hir::warnings::defaultMode] -warning-channel stderr]
+    # -target NAME: the C ABI target (C-ABI-TYPES.md), the host's when "".
+    set options [dict create -strict 1 -warnings [hir::warnings::defaultMode] -warning-channel stderr \
+        -target ""]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "surface::lowerToHir: unknown option \"$option\""
@@ -165,7 +167,7 @@ proc surface::lowerToHir {ast args} {
     # imports are validated, the modules they name are loaded and compiled
     # alongside it, and a qualified reference with no import is rejected --
     # for program text exactly as for a file.
-    set hir [surface::modules::BuildProgram $ast [dict get $options -strict]]
+    set hir [surface::modules::BuildProgram $ast [dict get $options -strict] [dict get $options -target]]
     return [surface::lower::Finish $hir [dict get $options -strict] \
         [dict get $options -warnings] [dict get $options -warning-channel]]
 }
@@ -257,6 +259,21 @@ proc surface::lower::StructDeclOf {node namespace} {
 # by the loader's canonical module identity (never read from the cached,
 # importer-neutral AST): for a refinement it is also the type's owner, the
 # one module that may mint it (REFINEMENT-VALUES.md).
+# CALL (a lowered `call` node) with the explicit imprints of the call or
+# methodcall NODE that wrote it, if any (C-ABI-TYPES.md, "Imprinting").
+proc surface::lower::Imprinted {call node} {
+    if {![dict exists $node imprints]} {
+        return $call
+    }
+    set origins {}
+    set i 0
+    foreach span [dict get $node imprintSpans] {
+        lappend origins [Origin $span [dict get $node id]/imprint$i]
+        incr i
+    }
+    return [hir::syntax::withImprint $call [dict get $node imprints] $origins]
+}
+
 proc surface::lower::TypeDeclOf {node {namespace ""}} {
     if {[dict exists $node form] && [dict get $node form] eq "refined"} {
         return [dict create kind refined \
@@ -629,13 +646,13 @@ proc surface::lower::Node {node} {
                 {*}[Sequence [dict get $node items]]] list]
         }
         call {
-            return [hir::syntax::withFlags [hir::syntax::withWritten [hir::syntax::callNode $origin \
-                [Node [dict get $node callee]] {*}[Sequence [dict get $node args]]] function] [Flags $node]]
+            return [Imprinted [hir::syntax::withFlags [hir::syntax::withWritten [hir::syntax::callNode $origin \
+                [Node [dict get $node callee]] {*}[Sequence [dict get $node args]]] function] [Flags $node]] $node]
         }
         methodcall {
-            return [hir::syntax::withFlags [hir::syntax::methodCallNode $origin [Node [dict get $node receiver]] \
+            return [Imprinted [hir::syntax::withFlags [hir::syntax::methodCallNode $origin [Node [dict get $node receiver]] \
                 [dict get $node name] [Origin [dict get $node nameSpan] [dict get $node id]/method] \
-                {*}[Sequence [dict get $node args]]] [Flags $node]]
+                {*}[Sequence [dict get $node args]]] [Flags $node]] $node]
         }
         anonstruct {
             return [hir::syntax::structNode $origin "" [FieldInits $node]]

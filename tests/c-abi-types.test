@@ -1,0 +1,601 @@
+# c-abi-types.test -- the C ABI type universe (C-ABI-TYPES.md): the
+# target-resolved C integer scalars of namespace ffi::c, ffi::c::Void,
+# ffi::c::Ptr[T], ffi::c::FnPtr[F], the pointer operations (null[T](),
+# null?, clone, erase, retype[T]) and callable imprinting (hir/imprint.tcl),
+# which they share with ordinary Botlish functions.
+#
+# Programs that run do so on all four executable paths (the interpreter, the
+# Tcl compiler, native code with and without specialization) and must agree.
+# Non-null pointers come only from the private test fixture
+# (core::cabi::installTestFixture): the language has no integer-to-pointer
+# conversion, so this file installs one in its own process, under a
+# namespace (ffi_fixture) no program outside a test can name.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+core::cabi::installTestFixture
+
+set caBackends {interp compile cranelift-generic cranelift}
+
+# The outcome of source program SOURCE (compiled with ARGS, e.g. -target T)
+# on every backend, which must agree; a compile error is {error ERRORCODE
+# MESSAGE}.
+proc caAgree {source args} {
+    if {[catch {surface::compile $source -warnings off {*}$args} hir options]} {
+        return [list error [dict get $options -errorcode] $hir]
+    }
+    set outcomes [lmap b $::caBackends {lrange [outcomeUnderHir $b $hir] 0 end-1}]
+    if {[llength [lsort -unique $outcomes]] != 1} {
+        error "mismatch across $::caBackends: $outcomes"
+    }
+    return [lindex $outcomes 0]
+}
+
+# {KIND MESSAGE} of the compile error SOURCE is rejected with (compiled with
+# ARGS), or {ok} when it compiles. KIND is the diagnostic's kind (the last
+# word of the error code's kind part); MESSAGE without its location prefix.
+proc caError {source args} {
+    if {![catch {surface::compile $source -warnings off {*}$args} message options]} {
+        return ok
+    }
+    set code [dict get $options -errorcode]
+    set kind [expr {[lrange $code 0 1] eq {SURFACE SYNTAX} ? "SYNTAX" : [lindex $code 2]}]
+    regsub {^[^:]*:[0-9]+:[0-9]+: } $message {} message
+    return [list $kind $message]
+}
+
+# The outcome of HIR on every backend (they must agree).
+proc caAgreeHir {hir} {
+    set outcomes [lmap b $::caBackends {lrange [outcomeUnderHir $b $hir] 0 end-1}]
+    if {[llength [lsort -unique $outcomes]] != 1} {
+        error "mismatch across $::caBackends: $outcomes"
+    }
+    return [lindex $outcomes 0]
+}
+
+# The HIR of SOURCE, compiled with ARGS.
+proc caHir {source args} {
+    return [surface::compile $source -warnings off {*}$args]
+}
+
+# The static type (hir::types::show) of the program's last top-level value.
+proc caResultType {source args} {
+    set hir [caHir $source {*}$args]
+    return [hir::types::show [hir::typeOf $hir [lindex [hir::roots $hir] end]]]
+}
+
+set caOpaque {opaque struct SSL:
+    tag: unit
+
+opaque struct Ctx:
+    tag: unit
+
+}
+
+# ---------------------------------------------------------------------------
+# Targets and data models (core/cabi.tcl)
+
+test ca-targets {the six targets the design represents, each with its data model and plain char's signedness; pointers are 64 bits on all of them} -body {
+    lmap t [core::cabi::targetNames] {
+        set m [core::cabi::target $t]
+        list $t [dict get $m model] [dict get $m charSigned] [dict get $m pointer]
+    }
+} -result {{linux-aarch64 LP64 0 64} {linux-x86_64 LP64 1 64} {macos-aarch64 LP64 1 64} {macos-x86_64 LP64 1 64} {windows-aarch64 LLP64 1 64} {windows-x86_64 LLP64 1 64}}
+
+test ca-lp64-llp64 {C long is 64 bits on LP64 and 32 on LLP64, where long long is 64: the width is the target's, never the name's} -body {
+    lmap t {linux-x86_64 macos-aarch64 windows-x86_64 windows-aarch64} {
+        list $t [dict get [core::cabi::scalarInfo Long $t] bits] [dict get [core::cabi::scalarInfo ULong $t] bits] \
+            [dict get [core::cabi::scalarInfo LongLong $t] bits]
+    }
+} -result {{linux-x86_64 64 64 64} {macos-aarch64 64 64 64} {windows-x86_64 32 32 64} {windows-aarch64 32 32 64}}
+
+test ca-char-signedness {plain char is its own type whose signedness is the target's (unsigned on Linux AArch64); signed char and unsigned char never vary} -body {
+    lmap t {linux-x86_64 linux-aarch64 macos-aarch64 windows-aarch64} {
+        list $t [lmap n {Char SChar UChar} {core::cabi::scalarDomain [core::cabi::scalarInfo $n $t]}]
+    }
+} -result {{linux-x86_64 {{interval -128 127} {interval -128 127} {interval 0 255}}} {linux-aarch64 {{interval 0 255} {interval -128 127} {interval 0 255}}} {macos-aarch64 {{interval -128 127} {interval -128 127} {interval 0 255}}} {windows-aarch64 {{interval -128 127} {interval -128 127} {interval 0 255}}}}
+
+test ca-host-target {the default target is the host's, and an unknown target is an error} -body {
+    list [expr {[core::cabi::hostTarget] in [core::cabi::targetNames]}] \
+        [catch {caHir "import ffi::c\n1\n" -target vax-ultrix} message] $message
+} -cleanup {unset -nocomplain message} -result {1 1 {unknown C ABI target "vax-ultrix" (known: linux-aarch64, linux-x86_64, macos-aarch64, macos-x86_64, windows-aarch64, windows-x86_64)}}
+
+test ca-scalar-info-validated {a scalar's metadata is checked against the table: a width or signedness that is not the target's is refused, so nothing can register a hard-coded one} -body {
+    list [core::cabi::validScalarInfo [core::cabi::scalarInfo ULong windows-x86_64]] \
+        [core::cabi::validScalarInfo {c {unsigned long} target windows-x86_64 bits 64 signed 0}] \
+        [core::cabi::validScalarInfo {c char target linux-aarch64 bits 8 signed 1}] \
+        [core::cabi::validScalarInfo {c long target pdp-11 bits 32 signed 1}]
+} -result {1 0 0 0}
+
+# ---------------------------------------------------------------------------
+# C integer scalars
+
+# The scalar matrix on TARGET: for each scalar, its registered identity
+# (registry name), C type, width, signedness, domain and the range facts the
+# analyses read.
+proc caMatrix {target} {
+    caHir "import ffi::c\n1\n" -target $target
+    lmap name [core::cabi::scalarNames] {
+        set id ffi::c::$name
+        set info [core::type::cabiOf $id]
+        set facts [core::type::integerFacts $id]
+        list $id [dict get $info c] [dict get $info bits] [dict get $info signed] \
+            [dict get $facts min] [dict get $facts max]
+    }
+}
+
+test ca-scalar-matrix-lp64 {every C integer scalar on linux-x86_64: identity, C type, width, signedness and the exact bounds the range analysis sees} -body {
+    join [caMatrix linux-x86_64] \n
+} -result {ffi::c::Char char 8 1 -128 127
+ffi::c::SChar {signed char} 8 1 -128 127
+ffi::c::UChar {unsigned char} 8 0 0 255
+ffi::c::Short short 16 1 -32768 32767
+ffi::c::UShort {unsigned short} 16 0 0 65535
+ffi::c::Int int 32 1 -2147483648 2147483647
+ffi::c::UInt {unsigned int} 32 0 0 4294967295
+ffi::c::Long long 64 1 -9223372036854775808 9223372036854775807
+ffi::c::ULong {unsigned long} 64 0 0 18446744073709551615
+ffi::c::LongLong {long long} 64 1 -9223372036854775808 9223372036854775807
+ffi::c::ULongLong {unsigned long long} 64 0 0 18446744073709551615}
+
+test ca-scalar-matrix-llp64 {the same matrix on windows-x86_64: long and unsigned long are 32 bits} -body {
+    join [caMatrix windows-x86_64] \n
+} -result {ffi::c::Char char 8 1 -128 127
+ffi::c::SChar {signed char} 8 1 -128 127
+ffi::c::UChar {unsigned char} 8 0 0 255
+ffi::c::Short short 16 1 -32768 32767
+ffi::c::UShort {unsigned short} 16 0 0 65535
+ffi::c::Int int 32 1 -2147483648 2147483647
+ffi::c::UInt {unsigned int} 32 0 0 4294967295
+ffi::c::Long long 32 1 -2147483648 2147483647
+ffi::c::ULong {unsigned long} 32 0 0 4294967295
+ffi::c::LongLong {long long} 64 1 -9223372036854775808 9223372036854775807
+ffi::c::ULongLong {unsigned long long} 64 0 0 18446744073709551615}
+
+test ca-scalar-boundaries {for every scalar and two targets: each bound is admitted and the value one past it is rejected at compile time (no truncation, no wrapping)} -body {
+    set result {}
+    foreach target {linux-x86_64 windows-x86_64 linux-aarch64} {
+        foreach name [core::cabi::scalarNames] {
+            lassign [core::cabi::scalarDomain [core::cabi::scalarInfo $name $target]] _ lo hi
+            set row [list $target $name]
+            foreach value [list $lo $hi [expr {$lo - 1}] [expr {$hi + 1}]] {
+                set src "import ffi::c\nfn f(x: ffi::c::$name) -> int:\n    x\n\nf($value)\n"
+                lappend row [lindex [caError $src -target $target] 0]
+            }
+            lappend result $row
+        }
+    }
+    lsort -unique [lmap row $result {lrange $row 2 end}]
+} -cleanup {unset -nocomplain result target name lo hi row value src} -result {{ok ok TYPE TYPE}}
+
+test ca-scalar-runs {a C scalar's values run as ordinary Ints on every backend, including the full unsigned 64-bit range} -body {
+    caAgree "import ffi::c\nfn f(x: ffi::c::ULongLong) -> int:\n    x\n\nf(18446744073709551615)\n"
+} -result {value 18446744073709551615}
+
+test ca-scalar-arithmetic-is-botlish {arithmetic on C scalars is Botlish arithmetic: no integer promotion, wrapping or truncation (255 + 255 of two unsigned chars is 510, an Int)} -body {
+    list [caAgree "import ffi::c\nfn add(a: ffi::c::UChar, b: ffi::c::UChar) -> int:\n    a + b\n\nadd(255, 255)\n"] \
+        [caResultType "import ffi::c\nfn add(a: ffi::c::UChar, b: ffi::c::UChar) -> int:\n    a + b\n\nfn g(a: ffi::c::UChar) -> int:\n    a + a\n\ng(1)\n"]
+} -result {{value 510} int}
+
+test ca-scalar-no-silent-narrowing {an Int becomes a C scalar only where its range proves it fits: returned unchecked it is rejected, guarded it is admitted} -body {
+    list [caError "import ffi::c\nfn f(x: int) -> ffi::c::UInt:\n    x\n\nf(1)\n"] \
+        [caAgree "import ffi::c\nfn f(x: int) -> ffi::c::UInt:\n    if x >= 0 and x <= 4294967295:\n        x\n    else:\n        0\n\nf(4294967295)\n"]
+} -result {{TYPE {function result does not prove declared type ffi::c::UInt (facts: [-∞, +∞])}} {value 4294967295}}
+
+test ca-scalar-identity-distinct {two scalars of one range (int and long on LLP64) stay two types: neither is a subtype of the other, and each keeps its own name; a value moves between them by its range, as between any domains} -body {
+    set hir [caHir "import ffi::c\nfn widen(x: ffi::c::Int) -> ffi::c::Long:\n    x\n\nwiden(5)\n" -target windows-x86_64]
+    list [core::type::integerDomainSubset [dict get [core::type::metadata ffi::c::Int] integerDomain] \
+            [dict get [core::type::metadata ffi::c::Long] integerDomain]] \
+        [core::type::subtype ffi::c::Int ffi::c::Long] [core::type::subtype ffi::c::Long ffi::c::Int] \
+        [hir::types::show [hir::typeOf $hir [lindex [hir::roots $hir] end]]]
+} -cleanup {unset -nocomplain hir} -result {1 0 0 ffi::c::Long}
+
+test ca-scalar-printing {diagnostics and HIR print a C scalar by its name} -body {
+    list [hir::types::show [core::type::normalize ffi::c::ULong]] \
+        [caError "import ffi::c\nfn f(x: ffi::c::Long) -> int:\n    x\n\nf(9223372036854775807)\n" -target windows-x86_64]
+} -result {ffi::c::ULong {TYPE {argument for parameter "x" cannot be proven to satisfy ffi::c::Long (argument type: int, facts: [9223372036854775807, 9223372036854775807] {9223372036854775807})}}}
+
+test ca-scalar-hir-text {HIR text names each scalar's C type and target; read back, the registry entries are identical (the widths re-derived from the target, not read)} -body {
+    set hir [caHir "import ffi::c\nfn f(x: ffi::c::ULong) -> ffi::c::ULong:\n    x\n\nf(4294967295)\n" -target windows-x86_64]
+    set text [hir::format $hir]
+    set before [core::type::metadata ffi::c::ULong]
+    caHir "import ffi::c\n1\n" -target linux-x86_64
+    set back [hir::read::Program $text]
+    list [lindex [regexp -inline {type ffi::c::ULong [^\n]*} $text] 0] [expr {[core::type::metadata ffi::c::ULong] eq $before}] \
+        [expr {[hir::format $back] eq $text}]
+} -cleanup {unset -nocomplain hir text before back} -result {{type ffi::c::ULong parent Int domain interval 0 4294967295 cabi {unsigned long} windows-x86_64} 1 1}
+
+test ca-scalar-hir-text-checked {HIR text whose range disagrees with its C type and target is refused} -body {
+    set text "type ffi::c::Long parent Int domain interval 0 4294967295 cabi {long} windows-x86_64\nprogram s1\ne1 const 1 : int\n"
+    list [catch {hir::read::Program $text} message] $message
+} -cleanup {unset -nocomplain text message} -result {1 {<hir-text>:1:1: the C integer scalar "ffi::c::Long" must be Int in exactly its target's range [-2147483648, 2147483647]}}
+
+# ---------------------------------------------------------------------------
+# Targets and compilation isolation
+
+test ca-target-isolation {a HIR keeps its own target's widths: compiling for another target afterwards changes nothing it reads once activated} -body {
+    set windows [caHir "import ffi::c\nfn f(x: ffi::c::Long) -> int:\n    x\n\nf(1)\n" -target windows-x86_64]
+    set linux [caHir "import ffi::c\nfn f(x: ffi::c::Long) -> int:\n    x\n\nf(1)\n" -target linux-x86_64]
+    set after [dict get [core::type::cabiOf ffi::c::Long] bits]
+    hir::activate $windows
+    set win [list [dict get [core::type::cabiOf ffi::c::Long] bits] [dict get [core::type::metadata ffi::c::Long] integerDomain]]
+    hir::activate $linux
+    list $after $win [dict get [core::type::cabiOf ffi::c::Long] bits]
+} -cleanup {unset -nocomplain windows linux after win} -result {64 {32 {interval -2147483648 2147483647}} 64}
+
+test ca-target-interchange {interchange text keeps the target: read back in this process after another compilation, the HIR has its own widths} -body {
+    set hir [caHir "import ffi::c\nfn f(x: ffi::c::Long) -> int:\n    x\n\nf(1)\n" -target windows-aarch64]
+    set text [hir::interchange::encode $hir]
+    caHir "import ffi::c\n1\n" -target linux-aarch64
+    set back [hir::interchange::decode $text]
+    list [core::type::cabiOf ffi::c::Long] [core::type::cabiOf ffi::c::Char] [caAgreeHir $back]
+} -cleanup {unset -nocomplain hir text back} -result {{c long target windows-aarch64 bits 32 signed 1} {c char target windows-aarch64 bits 8 signed 1} {value 1}}
+
+test ca-target-cache-key {the front-end cache keys an entry by its target: one program compiled for two targets is two entries} -body {
+    expr {[surface::cache::Key p.bot "1\n" default 1 linux-x86_64] ne [surface::cache::Key p.bot "1\n" default 1 windows-x86_64]}
+} -result 1
+
+test ca-target-only-ffi {a program that does not import ffi::c is the same HIR for every target} -body {
+    expr {[hir::format [caHir "fn f(x: int) -> int:\n    x\n\nf(1)\n" -target windows-x86_64]]
+        eq [hir::format [caHir "fn f(x: int) -> int:\n    x\n\nf(1)\n" -target linux-aarch64]]}
+} -result 1
+
+# ---------------------------------------------------------------------------
+# The namespace
+
+test ca-namespace-import {ffi::c's types and operations need `import ffi::c`; a scalar may be imported by its short name (not Int, a built-in); Void, Ptr and FnPtr are intrinsic types, not source types} -body {
+    list [caError "fn f(p: ffi::c::Ptr\[ffi::c::Void\]) -> int:\n    1\n\n1\n"] \
+        [caAgree "import ffi::c\nimport type ffi::c::UInt\nfn f(x: UInt) -> int:\n    x\n\nf(7)\n"] \
+        [lindex [caError "import ffi::c\nimport type ffi::c::Int\n1\n"] 0] \
+        [caError "import ffi::c\nimport type ffi::c::Ptr\n1\n"]
+} -result {{MISSING-IMPORT {namespace "ffi::c" is not imported; add `import ffi::c` to use `ffi::c::Ptr`}} {value 7} TYPE-IMPORT-COLLISION {NOT-A-TYPE {"ffi::c::Ptr" is an intrinsic type of namespace "ffi::c", not a source-defined `type`: spell it ffi::c::Ptr after `import ffi::c`}}}
+
+test ca-namespace-members {the namespace's operations are its intrinsic members; nothing converts an Int to a pointer} -body {
+    list [core::native::qualifiedMembers ffi::c] \
+        [caError "import ffi::c\nopaque struct A:\n    t: unit\n\np = ffi::c::Ptr\[A\](1234)\n1\n"] \
+        [lindex [caError "import ffi::c\np = ffi::c::from_int(1234)\n1\n"] 0]
+} -result {{clone erase null null? retype} {UNKNOWN-SYMBOL {ffi::c::Ptr is a type, not a value or a function: no pointer is made from an Int or constructed from fields (pointers come from ffi::c::null[T](), and later from C itself)}} UNKNOWN-SYMBOL}
+
+# ---------------------------------------------------------------------------
+# ffi::c::Void
+
+test ca-void-no-values {ffi::c::Void is only a pointee: a parameter, a result, a List element, a struct field, a layout field and a construction of it are all rejected} -body {
+    set msg [hir::cabi::VoidMessage]
+    lmap src [list \
+        "import ffi::c\nfn f(x: ffi::c::Void) -> int:\n    1\n\n1\n" \
+        "import ffi::c\nfn f() -> ffi::c::Void:\n    1\n\n1\n" \
+        "import ffi::c\nfn f(x: List\[ffi::c::Void\]) -> int:\n    1\n\n1\n" \
+        "import ffi::c\nstruct S:\n    v: ffi::c::Void\n\n1\n" \
+        "import ffi::c\nlayout L:\n    size 4\n    align 4\n    field v: ffi::c::Void at 0\n\n1\n" \
+        "import ffi::c\nx = ffi::c::Void {a: 1}\n1\n" \
+        "import ffi::c\nfn f(cb: ffi::c::FnPtr\[Fn{args: \[ffi::c::Void\], return: unit}\]) -> int:\n    1\n\n1\n"] {
+        lassign [caError $src] kind message
+        list $kind [expr {[string first $msg $message] >= 0}]
+    }
+} -cleanup {unset -nocomplain msg src kind message} -result {{TYPE 1} {TYPE 1} {TYPE 1} {TYPE 1} {LAYOUT-FIELD-TYPE 1} {TYPE 1} {TYPE 1}}
+
+# ---------------------------------------------------------------------------
+# ffi::c::Ptr[T]: formation and pointee validation
+
+test ca-ptr-formation {pointer types to Void, scalars, opaque identities and pointers, nested structurally to any depth, print as written} -body {
+    set hir [caHir "import ffi::c\n${::caOpaque}fn f(a: ffi::c::Ptr\[ffi::c::Void\], b: ffi::c::Ptr\[ffi::c::Int\], c: ffi::c::Ptr\[SSL\], d: ffi::c::Ptr\[ffi::c::Ptr\[SSL\]\], e: ffi::c::Ptr\[ffi::c::Ptr\[ffi::c::Ptr\[ffi::c::Ptr\[ffi::c::Ptr\[ffi::c::Ptr\[ffi::c::Char\]\]\]\]\]\]) -> int:\n    1\n\n1\n"]
+    set block [lindex [hirFind $hir block] 0]
+    lmap t [dict get $hir exprs $block declaredParamTypes] {hir::types::show $t}
+} -cleanup {unset -nocomplain hir block} -result {{ffi::c::Ptr[ffi::c::Void]} {ffi::c::Ptr[ffi::c::Int]} {ffi::c::Ptr[SSL]} {ffi::c::Ptr[ffi::c::Ptr[SSL]]} {ffi::c::Ptr[ffi::c::Ptr[ffi::c::Ptr[ffi::c::Ptr[ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]]]]]]}}
+
+test ca-ptr-pointee-rejected {a pointee with no C representation contract is rejected: int, bool, str, List[int], an ordinary struct, an enum, LayoutStruct[L], a non-C integer domain, a Fn} -body {
+    set prelude "import ffi::c\nimport binary\nstruct P:\n    x: int\n\nenum Color:\n    Red, Green\n\nlayout L:\n    size 4\n    align 4\n    field n: binary::U32 at 0\n\n"
+    lmap pointee {int bool str List[int] P Color LayoutStruct[L] binary::U32 {Fn{args: [], return: int}}} {
+        lassign [caError "${prelude}fn f(p: ffi::c::Ptr\[$pointee\]) -> int:\n    1\n\n1\n"] kind message
+        list $kind [regexp -inline {(no C representation|ordinary struct|imprinted from bytes|not a C integer type)} $message]
+    }
+} -cleanup {unset -nocomplain prelude pointee kind message} -result {{TYPE {{no C representation} {no C representation}}} {TYPE {{no C representation} {no C representation}}} {TYPE {{no C representation} {no C representation}}} {TYPE {{no C representation} {no C representation}}} {TYPE {{ordinary struct} {ordinary struct}}} {TYPE {{no C representation} {no C representation}}} {TYPE {{imprinted from bytes} {imprinted from bytes}}} {TYPE {{not a C integer type} {not a C integer type}}} {TYPE {{no C representation} {no C representation}}}}
+
+test ca-ptr-bare-kind {there is no pointer without a pointee: the runtime kind is not a type} -body {
+    caError "import ffi::c\nfn f(p: cptr) -> int:\n    1\n\n1\n"
+} -result {TYPE {unknown or invalid type cptr for parameter "p": "cptr" is not a type: a C pointer always has a pointee identity (ffi::c::Ptr[ffi::c::Void] is C's void *)}}
+
+# ---------------------------------------------------------------------------
+# Pointer operations
+
+test ca-ptr-operations {null[T](), null?, clone, erase and retype[T] on every backend: null stays null through clone, erase and retype} -body {
+    caAgree "import ffi::c\n${::caOpaque}fn f() -> bool:\n    p = ffi::c::null\[SSL\]()\n    q = p.clone()\n    v = ffi::c::erase(q)\n    r = ffi::c::retype\[SSL\](v)\n    ffi::c::null?(r) and p.null?()\n\nf()\n"
+} -result {value true}
+
+test ca-ptr-bits-preserved {clone, erase and retype keep a non-null address's bits exactly (the test fixture's address_of reads them), on every backend} -body {
+    caAgree "import ffi::c\nimport ffi_fixture\n${::caOpaque}fn f() -> List\[int\]:\n    p = ffi_fixture::address\[SSL\](123456789)\n    q = p.clone()\n    v = ffi::c::erase(q)\n    r = ffi::c::retype\[Ctx\](v)\n    n = ffi::c::null\[SSL\]()\n    m = ffi::c::erase(n)\n    \[ffi_fixture::address_of(p), ffi_fixture::address_of(r), ffi_fixture::address_of(m)\]\n\nf()\n"
+} -result {value {[123456789, 123456789, 0]}}
+
+test ca-ptr-wide-address {an address beyond 32 bits keeps every bit through clone, erase and retype -- 2^32, the top of x86-64 user space and the fixture's largest, 2^59-1 -- on every backend} -body {
+    caAgree "import ffi::c\nimport ffi_fixture\n${::caOpaque}fn bits(n: int) -> int:\n    p = ffi_fixture::address\[SSL\](n)\n    q = p.clone()\n    r = ffi::c::retype\[Ctx\](ffi::c::erase(q))\n    ffi_fixture::address_of(r)\n\nfn f() -> List\[int\]:\n    p = ffi_fixture::address\[SSL\](576460752303423487)\n    q = p.clone()\n    \[bits(4294967296), bits(140737488351232), bits(576460752303423487), ffi_fixture::address_of(q)\]\n\nf()\n"
+} -result {value {[4294967296, 140737488351232, 576460752303423487, 576460752303423487]}}
+
+test ca-ptr-fixture-range {the fixture makes only addresses 0..2^59-1 (what the native word holds): outside, a RANGE failure on every backend} -body {
+    lmap n {-1 576460752303423488} {
+        lrange [caAgree "import ffi::c\nimport ffi_fixture\n${::caOpaque}fn f(n: int) -> int:\n    p = ffi_fixture::address\[SSL\](n)\n    ffi_fixture::address_of(p)\n\nf($n)\n"] 0 1
+    }
+} -cleanup {unset -nocomplain n} -result {{error {CORE SEMANTIC RANGE}} {error {CORE SEMANTIC RANGE}}}
+
+test ca-ptr-null-test {null? reads only the address: a non-null pointer is not null, on every backend} -body {
+    caAgree "import ffi::c\nimport ffi_fixture\n${::caOpaque}fn f() -> List\[bool\]:\n    p = ffi_fixture::address\[SSL\](4096)\n    n = ffi::c::null\[SSL\]()\n    \[p.null?(), n.null?(), ffi::c::null?(p)\]\n\nf()\n"
+} -result {value {[false, true, false]}}
+
+test ca-ptr-null-types {null[T]() has exactly the type Ptr[T] the imprint names, for every pointee category} -body {
+    lmap pointee {ffi::c::Void SSL ffi::c::Int {ffi::c::Ptr[SSL]} {ffi::c::FnPtr[Fn{args: [], return: unit}]}} {
+        set hir [caHir "import ffi::c\n${::caOpaque}fn f() -> bool:\n    p = ffi::c::null\[$pointee\]()\n    p.null?()\n\nf()\n"]
+        set call [lindex [hirFind $hir call] 0]
+        hir::types::show [hir::typeOf $hir $call]
+    }
+} -cleanup {unset -nocomplain pointee hir call} -result {{ffi::c::Ptr[ffi::c::Void]} {ffi::c::Ptr[SSL]} {ffi::c::Ptr[ffi::c::Int]} {ffi::c::Ptr[ffi::c::Ptr[SSL]]} {ffi::c::Ptr[ffi::c::FnPtr[Fn{args: [], return: unit}]]}}
+
+test ca-ptr-clone-type {clone keeps the pointee type; erase makes Ptr[Void]; retype[T] makes Ptr[T]} -body {
+    set hir [caHir "import ffi::c\n${::caOpaque}fn f() -> bool:\n    p = ffi::c::null\[SSL\]()\n    q = p.clone()\n    v = ffi::c::erase(q)\n    r = ffi::c::retype\[Ctx\](v)\n    p.null?() and r.null?()\n\nf()\n"]
+    lmap call [lrange [hirFind $hir call] 0 3] {hir::types::show [hir::typeOf $hir $call]}
+} -cleanup {unset -nocomplain hir call} -result {{ffi::c::Ptr[SSL]} {ffi::c::Ptr[SSL]} {ffi::c::Ptr[ffi::c::Void]} {ffi::c::Ptr[Ctx]}}
+
+test ca-ptr-no-implicit-conversion {no implicit pointer conversion: Ptr[A] is not Ptr[B], not Ptr[Void], and retype takes only a Ptr[Void]} -body {
+    list [caError "import ffi::c\n${::caOpaque}fn take(p: ffi::c::Ptr\[SSL\]) -> bool:\n    p.null?()\n\nfn f() -> bool:\n    take(ffi::c::null\[Ctx\]())\n\nf()\n"] \
+        [caError "import ffi::c\n${::caOpaque}fn take(p: ffi::c::Ptr\[ffi::c::Void\]) -> bool:\n    p.null?()\n\nfn f() -> bool:\n    take(ffi::c::null\[Ctx\]())\n\nf()\n"] \
+        [caError "import ffi::c\n${::caOpaque}fn f() -> bool:\n    p = ffi::c::retype\[SSL\](ffi::c::null\[Ctx\]())\n    p.null?()\n\nf()\n"]
+} -result {{TYPE {argument for parameter "p" cannot be proven to satisfy ffi::c::Ptr[SSL] (argument type: ffi::c::Ptr[Ctx])}} {TYPE {argument for parameter "p" cannot be proven to satisfy ffi::c::Ptr[ffi::c::Void] (argument type: ffi::c::Ptr[Ctx])}} {TYPE {argument 1 of ffi::c::retype cannot be proven to satisfy ffi::c::Ptr[ffi::c::Void] (argument type: ffi::c::Ptr[Ctx]): a pointer's pointee identity is never converted implicitly (ffi::c::erase makes a Ptr[ffi::c::Void], ffi::c::retype[T] one back)}}}
+
+test ca-ptr-join {two pointers of different pointees join to no Ptr type at all: the joined value is still affine and fits no declared pointer parameter} -body {
+    caError "import ffi::c\n${::caOpaque}fn take(p: ffi::c::Ptr\[SSL\]) -> bool:\n    p.null?()\n\nfn f(c: bool) -> bool:\n    p = if c:\n        ffi::c::null\[SSL\]()\n    else:\n        ffi::c::null\[Ctx\]()\n    take(p)\n\nf(true)\n"
+} -result {TYPE {argument for parameter "p" cannot be proven to satisfy ffi::c::Ptr[SSL] (argument type: cptr)}}
+
+test ca-ptr-not-int {a pointer is not an Int: no arithmetic, ordering, bitwise operation or Int parameter takes one, and no Int becomes one} -body {
+    set p "    p = ffi::c::null\[ffi::c::Int\]()\n"
+    lmap body [list "${p}    p + 1" "${p}    q = ffi::c::null\[ffi::c::Int\]()\n    p < q" "${p}    bit_and(p, 1)" "${p}    needs_int(p)"] {
+        lindex [caError "import ffi::c\nfn needs_int(n: int) -> int:\n    n\n\nfn f():\n$body\n\nf()\n"] 0
+    }
+} -cleanup {unset -nocomplain p body} -result {TYPE TYPE TYPE TYPE}
+
+test ca-ptr-not-int-message {the message says why} -body {
+    caError "import ffi::c\nfn f() -> int:\n    p = ffi::c::null\[ffi::c::Int\]()\n    p + 1\n\nf()\n"
+} -result {TYPE {argument 1 of + is ffi::c::Ptr[ffi::c::Int], a C pointer, where + requires int: a pointer is an opaque address, not an Int or any other value (it has no arithmetic, ordering, bitwise operation or conversion)}}
+
+test ca-ptr-from-int-rejected {an Int is never a pointer: not as an argument, not through retype} -body {
+    list [caError "import ffi::c\n${::caOpaque}fn take(p: ffi::c::Ptr\[SSL\]) -> bool:\n    p.null?()\n\ntake(1234)\n"] \
+        [caError "import ffi::c\n${::caOpaque}fn f() -> bool:\n    p = ffi::c::retype\[SSL\](1234)\n    p.null?()\n\nf()\n"]
+} -result {{TYPE {argument for parameter "p" cannot be proven to satisfy ffi::c::Ptr[SSL] (argument type: int)}} {TYPE {argument 1 of ffi::c::retype cannot be proven to satisfy ffi::c::Ptr[ffi::c::Void] (argument type: int)}}}
+
+# ---------------------------------------------------------------------------
+# Affinity
+
+test ca-affine-move {a pointer is affine: binding it to another name moves it, and a use of the moved name is rejected} -body {
+    lindex [caError "import ffi::c\nfn f() -> bool:\n    p = ffi::c::null\[ffi::c::Int\]()\n    q = p\n    p.null?()\n\nf()\n"] 0
+} -result USE-AFTER-MOVE
+
+test ca-affine-clone {clone makes a second usable alias without consuming the first; erase and retype consume their argument} -body {
+    list [caAgree "import ffi::c\nfn f() -> bool:\n    p = ffi::c::null\[ffi::c::Int\]()\n    q = p.clone()\n    p.null?() and q.null?()\n\nf()\n"] \
+        [lindex [caError "import ffi::c\nfn f() -> bool:\n    p = ffi::c::null\[ffi::c::Int\]()\n    v = ffi::c::erase(p)\n    p.null?()\n\nf()\n"] 0] \
+        [lindex [caError "import ffi::c\nfn f() -> bool:\n    v = ffi::c::null\[ffi::c::Void\]()\n    p = ffi::c::retype\[ffi::c::Int\](v)\n    v.null?()\n\nf()\n"] 0]
+} -result {{value true} USE-AFTER-MOVE USE-AFTER-MOVE}
+
+test ca-affine-no-equality {pointers have no ==, no hash and no ImmutableSet membership (an affine value has none)} -body {
+    list [lindex [caError "import ffi::c\nfn f() -> bool:\n    p = ffi::c::null\[ffi::c::Int\]()\n    q = ffi::c::null\[ffi::c::Int\]()\n    p == q\n\nf()\n"] 0] \
+        [lindex [caError "import ffi::c\nfn f() -> int:\n    p = ffi::c::null\[ffi::c::Int\]()\n    hash(p)\n\nf()\n"] 0] \
+        [lindex [caError "import ffi::c\nfn f(s: ImmutableSet\[ffi::c::Ptr\[ffi::c::Int\]\]) -> int:\n    1\n\n1\n"] 0]
+} -result {AFFINE-EQUALITY-UNSUPPORTED AFFINE-EQUALITY-UNSUPPORTED AFFINE-CONTAINER-UNSUPPORTED}
+
+test ca-affine-capture {a closure cannot capture a pointer (it could be called twice)} -body {
+    lindex [caError "import ffi::c\nfn f() -> bool:\n    p = ffi::c::null\[ffi::c::Int\]()\n    fn g() -> bool:\n        p.null?()\n    g()\n\nf()\n"] 0
+} -result AFFINE-CAPTURE-UNSUPPORTED
+
+test ca-affine-aggregates {a struct or a List holding a pointer is affine by the ordinary rule, and moves; destructuring takes the pointer out; nothing is released for it} -body {
+    list [caAgree "import ffi::c\nimport ffi_fixture\nimport list\n${::caOpaque}struct Conn:\n    ssl: ffi::c::Ptr\[SSL\]\n    n: int\n\nfn open(n: int) -> Conn:\n    Conn {ssl: ffi_fixture::address\[SSL\](8), n: n}\n\nfn f() -> List\[int\]:\n    c = open(3)\n    d = c\n    {ssl, n} = d\n    xs = \[ssl, ffi::c::null\[SSL\]()\]\n    \[n, list::length(xs)\]\n\nf()\n"] \
+        [lindex [caError "import ffi::c\n${::caOpaque}struct Conn:\n    ssl: ffi::c::Ptr\[SSL\]\n\nfn f() -> bool:\n    c = Conn {ssl: ffi::c::null\[SSL\]()}\n    d = c\n    {ssl} = c\n    ssl.null?()\n\nf()\n"] 0] \
+        [hir::types::Affinity [list nstruct x]] [hir::affine::Descriptor {} {cptr void}]
+} -result {{value {[3, 2]}} USE-AFTER-MOVE unrestricted {}}
+
+test ca-affine-generic {an untyped (generic) function given a pointer is specialized for it, as for every affine argument} -body {
+    caAgree "import ffi::c\nfn pass(x):\n    x\n\nfn f() -> bool:\n    p = pass(ffi::c::null\[ffi::c::Int\]())\n    p.null?()\n\nf()\n"
+} -result {value true}
+
+test ca-affine-error-and-result {a pointer moves through results and survives a declared error path on every backend} -body {
+    caAgree "import ffi::c\n${::caOpaque}error Nope\n\nfn make(ok: bool) -> ffi::c::Ptr\[SSL\] errors Nope:\n    p = ffi::c::null\[SSL\]()\n    if not ok:\n        fail Nope\n    p\n\nfn f(ok: bool) -> bool:\n    q = make(ok):\n        on Nope:\n            ffi::c::null\[SSL\]()\n    q.null?()\n\nf(false)\n"
+} -result {value true}
+
+test ca-affine-payload {an error payload may carry a pointer: the handler destructures it and the address is the one failed with, on every backend} -body {
+    caAgree "import ffi::c\nimport ffi_fixture\n${::caOpaque}error Failed:\n    handle: ffi::c::Ptr\[SSL\]\n\nfn open(n: int) -> int errors Failed:\n    if n > 0:\n        fail Failed {handle: ffi_fixture::address\[SSL\](n)}\n    1\n\nfn f(n: int) -> int:\n    r = open(n):\n        on Failed {handle}:\n            ffi_fixture::address_of(handle)\n    r\n\nf(7)\n"
+} -result {value 7}
+
+test ca-affine-coroutines {a coroutine may own a pointer it was given, but no coroutine segment ends with one (a completed coroutine returns its cached result again)} -body {
+    list [caAgree "import ffi::c\n${::caOpaque}fn work(p: ffi::c::Ptr\[SSL\]) -> int:\n    yield 1\n    if p.null?():\n        2\n    else:\n        3\n\nfn f() -> int:\n    coroutine {step} = work(ffi::c::null\[SSL\]())\n    a = step()\n    b = step()\n    a + b\n\nf()\n"] \
+        [lindex [caError "import ffi::c\n${::caOpaque}fn gen() -> ffi::c::Ptr\[SSL\]:\n    yield ffi::c::null\[SSL\]()\n    ffi::c::null\[SSL\]()\n\nfn f() -> bool:\n    coroutine {step} = gen()\n    true\n\nf()\n"] 0]
+} -result {{value 4} COROUTINE-CONTRACT}
+
+test ca-affine-containers-contexts {a MutableVector owns pointers (moved in and out), a context struct may not hold one (installation would erase it)} -body {
+    list [caAgree "import ffi::c\nimport ffi_fixture\nimport mutable_vector\nfn f() -> int:\n    v = mutable_vector::from_list(\[ffi_fixture::address\[ffi::c::Int\](16)\])\n    v.push(ffi::c::null\[ffi::c::Int\]())\n    p = v.pop():\n        on IndexNotFound:\n            ffi::c::null\[ffi::c::Int\]()\n    q = v.pop():\n        on IndexNotFound:\n            ffi::c::null\[ffi::c::Int\]()\n    ffi_fixture::address_of(p) + ffi_fixture::address_of(q) + mutable_vector::length(v)\n\nf()\n"] \
+        [lindex [caError "import ffi::c\n${::caOpaque}context struct Tls:\n    ssl: ffi::c::Ptr\[SSL\]\n\nwith context Tls {ssl: ffi::c::null\[SSL\]()}\n\nfn f(context tls: Tls) -> int:\n    1\n\nf()\n"] 0]
+} -result {{value 16} AFFINE-ERASURE-UNSUPPORTED}
+
+# ---------------------------------------------------------------------------
+# Function pointers
+
+# The function-pointer specimens of the header archaeology (C-HEADER-
+# ARCHAEOLOGY.md), as ffi::c::FnPtr types.
+set caSpecimens [list \
+    {int (*)(void *)} {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}]} \
+    {void (*)(void *)} {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]} \
+    {int (*)(int, X509_STORE_CTX *)} {ffi::c::FnPtr[Fn{args: [ffi::c::Int, ffi::c::Ptr[X509_STORE_CTX]], return: ffi::c::Int}]} \
+    {int (*)(char *, int, int, void *)} {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Char], ffi::c::Int, ffi::c::Int, ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}]} \
+    {Tcl_ObjCmdProc} {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[Tcl_Interp], ffi::c::Int, ffi::c::Ptr[ffi::c::Ptr[Tcl_Obj]]], return: ffi::c::Int}]} \
+    {Tcl_FreeProc *} {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Char]], return: unit}]} \
+    {returns a callback} {ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]}]} \
+    {pointer to a callback} {ffi::c::Ptr[ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}]]}]
+
+test ca-fnptr-specimens {every function-pointer shape the archaeology found is a type, printed as written} -body {
+    set prelude "import ffi::c\nopaque struct X509_STORE_CTX:\n    t: unit\n\nopaque struct Tcl_Interp:\n    t: unit\n\nopaque struct Tcl_Obj:\n    t: unit\n\n"
+    lmap {c type} $::caSpecimens {
+        set hir [caHir "${prelude}fn f(cb: $type) -> bool:\n    cb.null?()\n\n1\n"]
+        set block [lindex [hirFind $hir block] 0]
+        expr {[hir::types::show [lindex [dict get $hir exprs $block declaredParamTypes] 0]] eq $type}
+    }
+} -cleanup {unset -nocomplain prelude c type hir block} -result {1 1 1 1 1 1 1 1}
+
+test ca-fnptr-invalid {a C signature has C ABI argument types, a C ABI or unit result, and no errors; a coroutine type is no signature} -body {
+    lmap sig {{Fn{args: [int], return: ffi::c::Int}} {Fn{args: [], return: str}} {Fn{args: [], return: ffi::c::Int, errors: [Boom]}} {Coroutine{args: [], return: ffi::c::Int}} {ffi::c::Int}} {
+        lassign [caError "import ffi::c\nerror Boom\n\nfn f(cb: ffi::c::FnPtr\[$sig\]) -> int:\n    1\n\n1\n"] kind message
+        list $kind [lindex [regexp -inline {(argument 1: int is not a C ABI value type|result: str is not a C ABI value type|a C function declares no Botlish errors|a C function pointer's argument is its signature)} $message] 0]
+    }
+} -cleanup {unset -nocomplain sig kind message} -result {{TYPE {argument 1: int is not a C ABI value type}} {TYPE {result: str is not a C ABI value type}} {TYPE {a C function declares no Botlish errors}} {TYPE {a C function pointer's argument is its signature}} {TYPE {a C function pointer's argument is its signature}}}
+
+test ca-fnptr-distinct {a function pointer is neither a data pointer nor a Botlish Fn: erase rejects one, a Ptr[Void] parameter rejects one, a Fn parameter rejects one, and none is callable from Botlish yet} -body {
+    set cb "ffi::c::FnPtr\[Fn{args: \[ffi::c::Ptr\[ffi::c::Void\]\], return: unit}\]"
+    list [caError "import ffi::c\nfn f(cb: $cb) -> bool:\n    v = ffi::c::erase(cb)\n    v.null?()\n\n1\n"] \
+        [lindex [caError "import ffi::c\nfn take(p: ffi::c::Ptr\[ffi::c::Void\]) -> bool:\n    p.null?()\n\nfn f(cb: $cb) -> bool:\n    take(cb)\n\n1\n"] 0] \
+        [lindex [caError "import ffi::c\nfn take(g: Fn{args: \[ffi::c::Ptr\[ffi::c::Void\]\], return: unit}) -> int:\n    1\n\nfn f(cb: $cb) -> int:\n    take(cb)\n\n1\n"] 0] \
+        [caError "import ffi::c\nfn f(cb: $cb):\n    v = ffi::c::null\[ffi::c::Void\]()\n    cb(v)\n\n1\n"] \
+        [lindex [caError "import ffi::c\n${::caOpaque}fn f(cb: $cb) -> bool:\n    p = ffi::c::retype\[SSL\](cb)\n    p.null?()\n\n1\n"] 0]
+} -cleanup {unset -nocomplain cb} -result {{IMPRINT {ffi::c::erase: argument 1 is the C function pointer ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}] where a data pointer ffi::c::Ptr[T] is required: data and function pointers are distinct, and nothing converts one into the other}} TYPE TYPE {TYPE {cb is a C function pointer, ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]: Botlish cannot call one yet (calling C is the next milestone)}} TYPE}
+
+test ca-fnptr-affine {a function pointer is affine like a data pointer: moved by binding, cloned explicitly, null-tested, its bits kept, on every backend} -body {
+    set cb "Fn{args: \[ffi::c::Ptr\[ffi::c::Void\]\], return: unit}"
+    list [lindex [caError "import ffi::c\nimport ffi_fixture\nfn f() -> bool:\n    cb = ffi_fixture::function_address\[$cb\](64)\n    k = cb\n    cb.null?()\n\nf()\n"] 0] \
+        [caAgree "import ffi::c\nimport ffi_fixture\nfn f() -> List\[int\]:\n    cb = ffi_fixture::function_address\[$cb\](64)\n    k = cb.clone()\n    \[ffi_fixture::address_of(cb), ffi_fixture::address_of(k)\]\n\nf()\n"]
+} -cleanup {unset -nocomplain cb} -result {USE-AFTER-MOVE {value {[64, 64]}}}
+
+# ---------------------------------------------------------------------------
+# Layouts
+
+test ca-layout-scalar-field {a C scalar whose range is a fixed-width encoding is a layout field with no C-specific rule: unsigned int round-trips 4000000000} -body {
+    caAgree "import ffi::c\nimport binary\nlayout X:\n    size 4\n    align 4\n    field n: ffi::c::UInt at 0\n\nfn f() -> int errors LayoutLengthMismatch:\n    x = LayoutStruct\[X\] {n: 4000000000}\n    binary::parse(X, binary::emit(x)).n\n\nf():\n    on LayoutLengthMismatch:\n        0\n"
+} -result {value 4000000000}
+
+test ca-layout-target-encodings {a scalar field's encoding follows the target: long is 8 bytes on LP64 and 4 on LLP64, plain char signed or not} -body {
+    lmap target {linux-x86_64 windows-x86_64 linux-aarch64} {
+        caHir "import ffi::c\n1\n" -target $target
+        list $target [hir::layouts::Encoding [core::type::normalize ffi::c::Long]] \
+            [hir::layouts::Encoding [core::type::normalize ffi::c::Char]]
+    }
+} -cleanup {unset -nocomplain target} -result {{linux-x86_64 {8 1} {1 1}} {windows-x86_64 {4 1} {1 1}} {linux-aarch64 {8 1} {1 0}}}
+
+test ca-layout-no-pointer-field {a pointer is not a layout field: imprinting arbitrary bytes would fabricate one} -body {
+    lmap t {{ffi::c::Ptr[ffi::c::Void]} {ffi::c::FnPtr[Fn{args: [], return: unit}]}} {
+        lassign [caError "import ffi::c\nlayout X:\n    size 8\n    align 8\n    field p: $t at 0\n\n1\n"] kind message
+        list $kind [expr {[string first "would fabricate a pointer" $message] >= 0}]
+    }
+} -cleanup {unset -nocomplain t kind message} -result {{LAYOUT-FIELD-TYPE 1} {LAYOUT-FIELD-TYPE 1}}
+
+# ---------------------------------------------------------------------------
+# Imprinting (hir/imprint.tcl), independent of ffi::c
+
+set caList "import list\nimport str\n"
+
+test ca-imprint-structured-input {a structured argument imprints T, and a bare T result is that type: first(List[str]) is a str} -body {
+    set src "${::caList}fn first(xs: List\[T\]) -> T errors IndexNotFound:\n    list::at(xs, 0)\n\nfn f() -> int errors IndexNotFound:\n    x = first(\[\"ab\", \"c\"\])\n    str::length(x)\n\nf():\n    on IndexNotFound:\n        0\n"
+    set hir [caHir $src]
+    set calls [lmap e [hirFind $hir call] {
+        set callee [dict get $hir exprs $e callee]
+        expr {[dict get $hir exprs $callee kind] eq "ref" && [hir::semantic::RefName $hir $callee] eq "first" ? $e : [continue]}
+    }]
+    list [caAgree $src] [lmap e $calls {hir::types::show [hir::typeOf $hir $e]}]
+} -cleanup {unset -nocomplain src hir calls e callee} -result {{value 2} str}
+
+test ca-imprint-result-contains {a result may contain an established variable: wrap(List[int]) is a List[int]} -body {
+    caResultType "fn wrap(xs: List\[T\]) -> List\[T\]:\n    xs\n\nwrap(\[1, 2\])\n"
+} -result {List[int]}
+
+test ca-imprint-result-only {a variable only in the result is supplied at the call; without it the call is rejected} -body {
+    list [caResultType "fn empty() -> List\[T\]:\n    \[\]\n\nempty\[str\]()\n"] \
+        [caError "fn empty() -> List\[T\]:\n    \[\]\n\nempty()\n"]
+} -result {{List[str]} {IMPRINT {empty: imprint variable T is not established (it occurs only in the result, and no type named T is visible where empty is declared): write empty[T](...) with explicit imprints}}}
+
+test ca-imprint-bare-input-rejected {a naked input variable establishes nothing: identity(x: T) and sizeof(x: T) are rejected at their declaration, as the invalid types they are there (TYPE)} -body {
+    list [lindex [caError "fn identity(x: T) -> T:\n    x\n\nidentity(1)\n"] 0] \
+        [lindex [caError "fn sizeof(x: T) -> int:\n    1\n\n1\n"] 0] \
+        [lindex [caError "fn apply(f: Fn{args: \[T\], return: T}, x: T) -> T:\n    f(x)\n\n1\n"] 0]
+} -result {TYPE TYPE TYPE}
+
+test ca-imprint-established-constrains {an established variable constrains a later input: lookup(m: MutableArray[K], key: K) takes only a K} -body {
+    set src "import mutable_array\nfn lookup(m: MutableArray\[K\], key: K) -> K:\n    key\n\n"
+    list [caAgree "${src}a = mutable_array::from_list(\[1, 2\])\nlookup(a, 3)\n"] \
+        [caError "${src}a = mutable_array::from_list(\[1, 2\])\nlookup(a, \"x\")\n"]
+} -cleanup {unset -nocomplain src} -result {{value 3} {TYPE {argument for parameter "key" cannot be proven to satisfy int (argument type: str)}}}
+
+test ca-imprint-explicit-constrains {an explicit imprint fixes T for the arguments too: wrap[int]([]) is a List[int], first[str]([1]) is rejected} -body {
+    set src "${::caList}fn first(xs: List\[T\]) -> T errors IndexNotFound:\n    list::at(xs, 0)\n\nfn wrap(xs: List\[T\]) -> List\[T\]:\n    xs\n\n"
+    list [caResultType "${src}wrap\[int\](\[\])\n"] \
+        [caError "${src}fn f() -> str errors IndexNotFound:\n    first\[str\](\[1\])\n\nf():\n    on IndexNotFound:\n        \"\"\n"]
+} -cleanup {unset -nocomplain src} -result {{List[int]} {TYPE {argument for parameter "xs" cannot be proven to satisfy List[str] (argument type: List[int])}}}
+
+test ca-imprint-order {explicit imprints are all or nothing, in first-occurrence order (parameters left to right, then the result)} -body {
+    set src "fn convert(xs: List\[A\]) -> List\[B\]:\n    \[\]\n\n"
+    list [caResultType "${src}convert\[int, str\](\[1\])\n"] \
+        [caError "${src}convert\[str\](\[1\])\n"] \
+        [caError "${src}convert(\[1\])\n"]
+} -cleanup {unset -nocomplain src} -result {{List[str]} {IMPRINT {convert takes 2 imprint(s), [A, B] (in the order they first occur in its signature), but 1 is given}} {IMPRINT {convert: imprint variable B is not established (it occurs only in the result, and no type named B is visible where convert is declared): write convert[A, B](...) with explicit imprints}}}
+
+test ca-imprint-conflict {two arguments that imprint one variable differently are rejected; an empty List says nothing} -body {
+    set src "fn both(a: List\[T\], b: List\[T\]) -> List\[T\]:\n    a\n\n"
+    list [caError "${src}both(\[1\], \[\"x\"\])\n"] [caResultType "${src}both(\[\], \[1\])\n"]
+} -cleanup {unset -nocomplain src} -result {{IMPRINT {both: imprint variable T is int by an earlier argument but str by argument 2}} {List[int]}}
+
+test ca-imprint-no-variables {an explicit imprint on a callable without variables is rejected} -body {
+    caError "fn f(x: int) -> int:\n    x\n\nf\[int\](1)\n"
+} -result {IMPRINT {f has no imprint variables, so it takes no imprint f[...]: only a callable whose signature has an imprint variable (a statically known function or intrinsic) is imprinted at a call}}
+
+test ca-imprint-parametric-body {the body is checked once for every T: returning an Int as T is rejected} -body {
+    caError "fn bad(xs: List\[T\]) -> T:\n    5\n\nbad(\[1\])\n"
+} -result {TYPE {function result does not prove declared type T (facts: [5, 5] {5})}}
+
+test ca-imprint-not-a-value {an imprinted callable is only called: a user function and an intrinsic alike are rejected as values} -body {
+    list [caError "fn empty() -> List\[T\]:\n    \[\]\n\ng = empty\n1\n"] \
+        [caError "import ffi::c\ng = ffi::c::null\n1\n"]
+} -result {{IMPRINT {empty has imprint variables, so it is not a value: an imprinted callable is only called, where each call imprints its variables (wrap the call in a function to pass it on)}} {IMPRINT {ffi::c::null has imprint variables, so it is not a value: an imprinted callable is only called, where each call imprints its variables (wrap the call in a function to pass it on)}}}
+
+test ca-imprint-affine {a variable that has values in the body is never affine; one that is only a pointee may be any pointee} -body {
+    list [lindex [caError "import ffi::c\nfn wrap(xs: List\[T\]) -> List\[T\]:\n    xs\n\nfn f() -> int:\n    ys = wrap(\[ffi::c::null\[ffi::c::Int\]()\])\n    1\n\nf()\n"] 0] \
+        [caAgree "import ffi::c\n${::caOpaque}fn same(p: ffi::c::Ptr\[T\]) -> ffi::c::Ptr\[T\]:\n    p\n\nfn f() -> bool:\n    q = same(ffi::c::null\[ffi::c::Ptr\[SSL\]\]())\n    q.null?()\n\nf()\n"]
+} -result {IMPRINT {value true}}
+
+test ca-imprint-same-path {a user function and an intrinsic go through one binding path: the same signature form, the same diagnostics, the same explicit imprint field} -body {
+    set hir [caHir "import ffi::c\n${::caOpaque}fn mynull() -> ffi::c::Ptr\[T\]:\n    ffi::c::null\[T\]()\n\nfn f() -> bool:\n    p = mynull\[SSL\]()\n    q = ffi::c::null\[SSL\]()\n    p.null?() and q.null?()\n\nf()\n"]
+    set calls [lmap e [hirFind $hir call] {expr {[dict exists $hir exprs $e imprint] ? $e : [continue]}}]
+    list [lmap e $calls {list [hir::types::show [hir::typeOf $hir $e]] [dict get $hir exprs $e imprint] [dict get $hir exprs $e imprintBinding]}] \
+        [lindex [caError "import ffi::c\n${::caOpaque}fn mynull() -> ffi::c::Ptr\[T\]:\n    ffi::c::null\[T\]()\n\nmynull\[int\]()\n"] 1] \
+        [lindex [caError "import ffi::c\nffi::c::null\[int\]()\n"] 1]
+} -cleanup {unset -nocomplain hir calls e} -result {{{{ffi::c::Ptr[T]} {{imprint T}} {T {imprint T}}} {{ffi::c::Ptr[SSL]} {{nstruct SSL}} {T {nstruct SSL}}} {{ffi::c::Ptr[SSL]} {{nstruct SSL}} {T {nstruct SSL}}}} {mynull: T is imprinted as int, which cannot be a pointee: int has no C representation: a pointee is ffi::c::Void, a C integer scalar, an opaque struct or another pointer} {ffi::c::null: T is imprinted as int, which cannot be a pointee: int has no C representation: a pointee is ffi::c::Void, a C integer scalar, an opaque struct or another pointer}}
+
+test ca-imprint-method {method sugar takes explicit imprints too: v.retype[T]()} -body {
+    caAgree "import ffi::c\n${::caOpaque}fn f() -> bool:\n    v = ffi::c::null\[ffi::c::Void\]()\n    q = v.retype\[SSL\]()\n    q.null?()\n\nf()\n"
+} -result {value true}
+
+test ca-imprint-no-generic-declaration {there is no declaration-side type parameter: fn f[T](...) stays a syntax error} -body {
+    caError "fn first\[T\](xs: List\[T\]) -> T:\n    1\n\n1\n"
+} -result {SYNTAX {expected "(" after the function name, found "["}}
+
+test ca-imprint-syntax {an explicit imprint is written only before a call's arguments} -body {
+    list [caError "import ffi::c\nx = ffi::c::null\[ffi::c::Int\]\n1\n"] \
+        [lindex [caError "fn f() -> int:\n    1\n\nx = f\[int\]\n1\n"] 0]
+} -result {{SYNTAX {explicit imprints ffi::c::null[...] are written only before a call's argument list, found end of line after them}} SYNTAX}
+
+test ca-imprint-hir-text {HIR text carries a call's imprints and a signature's variables, and reads back to the same text} -body {
+    set hir [caHir "import ffi::c\n${::caOpaque}fn wrap(xs: List\[T\]) -> List\[T\]:\n    xs\n\nfn f() -> bool:\n    p = ffi::c::null\[ffi::c::Ptr\[SSL\]\]()\n    v = ffi::c::null\[ffi::c::Void\]()\n    p.null?() and v.null?()\n\nwrap(\[1\])\nf()\n"]
+    set text [hir::format $hir]
+    list [regexp -all -inline {call native\(ffi::c::null\) imprint \[[^\]]*\]+} $text] \
+        [regexp -inline {xs:List\[T\]} $text] \
+        [expr {[hir::format [hir::read::Program $text]] eq $text}]
+} -cleanup {unset -nocomplain hir text} -result {{{call native(ffi::c::null) imprint [ffi::c::Ptr[SSL]]} {call native(ffi::c::null) imprint [ffi::c::Void]}} {{xs:List[T]}} 1}
+
+# ---------------------------------------------------------------------------
+# Generated code
+
+test ca-native-code {natively, null is a constant word, null? one comparison with it, and clone, erase and retype no operation at all: no helper call, no allocation, no runtime type descriptor} -body {
+    set hir [caHir "import ffi::c\n${::caOpaque}fn f() -> bool:\n    p = ffi::c::null\[SSL\]()\n    q = p.clone()\n    v = ffi::c::erase(q)\n    r = ffi::c::retype\[SSL\](v)\n    r.null?()\n\nf()\n"]
+    set nir [native::nir $hir]
+    set ops [lsort -unique [regexp -all -inline {op cptr[a-z]+} $nir]]
+    set clif [native::clif $hir]
+    set f [string range $clif [string first {; function 1 "f"} $clif] end]
+    list $ops [regexp -all {call } $f] [regexp -all {iconst.i64 14} $f] [regexp -all {icmp eq} $f] \
+        [native::assertAllocations $hir 0]
+} -cleanup {unset -nocomplain hir nir ops clif f} -result {{{op cptrisnull} {op cptrnull} {op cptrsame}} 0 2 1 {}}
+
+test ca-runtime-no-int {the interpreter's pointer value is its own kind, never an Int, and shows only its address} -body {
+    list [core::value::kind [core::cabi::nullImpl]] [core::value::show [core::cabi::address 4096]] \
+        [catch {core::value::intOf [core::cabi::nullImpl]}] [catch {core::value::equal [core::cabi::nullImpl] [core::cabi::nullImpl]}]
+} -result {cptr {<C pointer 0x1000>} 1 1}
+
+cleanupTests

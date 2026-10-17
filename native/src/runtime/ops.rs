@@ -152,6 +152,8 @@ pub fn op_may_allocate(op: OpCode) -> bool {
 pub fn op_may_error(op: OpCode) -> bool {
     use OpCode::*;
     matches!(op, IMod | IShl | IShr | VEq | Hash | Substr | StrCat | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
+        // The C pointer test fixture's out-of-range address (RANGE).
+        | CPtrFixture
         // A non-byte element (TYPE, never a truncation), an operand that is
         // not a byte storage (TYPE), an oversized storage (RANGE). A checked
         // program cannot produce any of them: lib/abi/bytes.bot's creator takes
@@ -477,8 +479,8 @@ fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
     let (ka, kb) = (kind_of(a), kind_of(b));
     // MutableArray, like Block/Native, has no structural equality (req #31:
     // its identity/equality semantics are a separate design question).
-    if matches!(ka, Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec)
-        || matches!(kb, Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec)
+    if matches!(ka, Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr)
+        || matches!(kb, Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr)
     {
         vm(p).fail(RtError::Equality { a, b });
         return Err(());
@@ -542,7 +544,7 @@ fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
             }
             true
         }
-        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec => unreachable!(),
+        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr => unreachable!(),
     })
 }
 
@@ -620,7 +622,7 @@ fn fnv1a(h: u64, bytes: &[u8]) -> u64 {
 /// a Result payload exactly as `equal` recurses (see ops.rs's `equal`).
 fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
     let kind = kind_of(v);
-    if matches!(kind, Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec) {
+    if matches!(kind, Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr) {
         vm(p).fail(RtError::Unhashable { value: v });
         return Err(());
     }
@@ -641,7 +643,7 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         Kind::ByteStore => 9,
         Kind::MutByteStore => 10,
         Kind::Enum => 11,
-        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec => unreachable!(),
+        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr => unreachable!(),
     };
     let h = fnv1a(h, &[tag]);
     Ok(match kind {
@@ -739,7 +741,7 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
             h = fnv1a(h, &combined.to_le_bytes());
             h
         }
-        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec => unreachable!(),
+        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr => unreachable!(),
     })
 }
 
@@ -829,6 +831,25 @@ pub extern "C" fn rt_bytes_addr(p: *mut Vm, v: Value) -> Value {
         return vm(p).fail(RtError::Semantic { kind: "RANGE", message });
     }
     make_small(address)
+}
+
+/// `op cptrfixture %n` (C-ABI-TYPES.md): the C address whose bits are the
+/// small Int N, 0 <= N < 2^59 -- the range core::cabi::fixtureAddressImpl
+/// accepts. Only the test fixture's natives lower to it.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_cptr_fixture(p: *mut Vm, n: Value) -> Value {
+    if !is_small(n) || small_of(n) < 0 || small_of(n) >= (1i64 << 59) {
+        let message = format!("C pointer test fixture: address {} is outside 0..2^59-1", super::show::show(n));
+        return vm(p).fail(RtError::Semantic { kind: "RANGE", message });
+    }
+    make_cptr(small_of(n))
+}
+
+/// `op cptrfixtureaddress %p` (C-ABI-TYPES.md): the address bits of the C
+/// address word P, an Int. Only the test fixture's address_of lowers to it.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_cptr_fixture_address(p: *mut Vm, v: Value) -> Value {
+    vm(p).new_int(cptr_address(v))
 }
 
 /// `op keepalive %b`: a use of V that the optimizer cannot remove and that
@@ -2522,6 +2543,11 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         CoResume0 => rt_co_resume0(p, a[0]),
         CoYield => rt_co_yield(p, a[0]),
         CoDone => rt_co_done(p, a[0]),
+        CPtrNull => CPTR_NULL,
+        CPtrIsNull => bool_value(a[0] == CPTR_NULL),
+        CPtrSame => a[0],
+        CPtrFixture => rt_cptr_fixture(p, a[0]),
+        CPtrFixtureAddress => rt_cptr_fixture_address(p, a[0]),
         CoRelease => rt_co_release(p, a[0]),
         AffineDrop => rt_affine_drop(p, a[0], a[1]),
         RegionCheck | RegionEq | RBox | RUnbox | RIAdd | RISub | RIMul | RILt | RILe | RIGt | RIGe | RIEq
@@ -2555,6 +2581,8 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
     }
     vec![
         h!(rt_type_error, 4),
+        h!(rt_cptr_fixture, 2),
+        h!(rt_cptr_fixture_address, 2),
         h!(rt_not_boolean, 2),
         h!(rt_raise, 3),
         h!(rt_stack_overflow, 1),

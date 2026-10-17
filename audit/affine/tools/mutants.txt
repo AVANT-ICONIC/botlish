@@ -57,16 +57,14 @@
 ## hir/types.tcl
 <<<<
     switch -- [lindex $type 0] {
-        coroutine {
+        coroutine - cptr - cfnptr {
             return 1
         }
-        list {
 ====
     switch -- [lindex $type 0] {
-        coroutine - block {
+        coroutine - cptr - cfnptr - block {
             return 1
         }
-        list {
 >>>>
 
 # ---------------------------------------------------------------------------

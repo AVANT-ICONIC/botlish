@@ -4,7 +4,7 @@
 #                    [-aot] [-aot-data] [-aot-spec] [-contexts] [-traits] [-emit-nir] [-emit-clif]
 #                    [-emit-native-executable] [-emit-hir-interchange]
 #                    [-argv TEXT]... [-argv-hex HEX]...
-#                    [-argv-none] [-warnings default|off|error]
+#                    [-argv-none] [-warnings default|off|error] [-target NAME]
 #                    [FILE.bot|FILE.hir|FILE.hirx|FILE.ir ...]
 #
 # -warnings sets the one global compiler-warning policy of a .bot compilation
@@ -13,6 +13,12 @@
 # rejects a program that has a warning, with the warning's own code
 # (SAME-RETURN-VALUE), before any backend runs. There are no per-warning
 # switches (no -Wfoo): that is intentional.
+#
+# -target NAME selects the C ABI target of a .bot compilation (C-ABI-TYPES.md;
+# core/cabi.tcl lists linux-x86_64, linux-aarch64, macos-x86_64,
+# macos-aarch64, windows-x86_64, windows-aarch64): the widths and signedness
+# of ffi::c's integer scalars follow its data model. The default is the
+# host's. It changes static types only; the program still runs on the host.
 #
 # Runs the given program files (default: every examples/*.ir) and prints
 # each program's value, with runtime evidence shown as "text"#{Type}. With
@@ -92,7 +98,7 @@ proc probeValues {value} {
 }
 
 proc runFile {path showCode showHir showAst showAot showNative} {
-    global backend nativeBackends warnings showContexts showTraits
+    global backend nativeBackends warnings target showContexts showTraits
     puts "== [file tail $path] ($backend)"
     set hir ""
     set extension [file extension $path]
@@ -117,7 +123,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
                 puts "   error: $hir ([dict get $options -errorcode])"
                 return 1
             }
-        } elseif {[catch {surface::readProgramFile $path -warnings $warnings} hir options]} {
+        } elseif {[catch {surface::readProgramFile $path -warnings $warnings -target $target} hir options]} {
             puts "   error: $hir ([dict get $options -errorcode])"
             return 1
         }
@@ -226,10 +232,10 @@ proc runFile {path showCode showHir showAst showAot showNative} {
 # Writes the analyzed HIR of the .bot or .hir file PATH in the HIR
 # interchange format, as PATH without its extension plus .hirx.
 proc emitInterchange {path} {
-    global warnings
+    global warnings target
     if {[catch {
         switch -- [file extension $path] {
-            .bot { set hir [surface::readProgramFile $path -warnings $warnings] }
+            .bot { set hir [surface::readProgramFile $path -warnings $warnings -target $target] }
             .hir { set hir [hir::readFile $path] }
             default { throw {HIR INTERCHANGE INPUT} "expected a .bot or .hir input file: $path" }
         }
@@ -243,10 +249,10 @@ proc emitInterchange {path} {
 }
 
 proc emitExecutable {path} {
-    global warnings
+    global warnings target
     if {[catch {
         switch -- [file extension $path] {
-            .bot { set hir [surface::readProgramFile $path -warnings $warnings] }
+            .bot { set hir [surface::readProgramFile $path -warnings $warnings -target $target] }
             .hir { set hir [hir::readFile $path] }
             .hirx { set hir [hir::interchange::readFile $path] }
             default { throw {NATIVE AOT INPUT} "expected a .bot, .hir or .hirx input file (native executables are built from HIR, never from core IR text): $path" }
@@ -264,6 +270,7 @@ set nativeBackends {cranelift cranelift-generic}
 set backend [core::useBackend]
 set files {}
 set warnings [hir::warnings::defaultMode]
+set target ""
 set showCode 0
 set showHir 0
 set showContexts 0
@@ -285,6 +292,13 @@ for {set i 0} {$i < [llength $argv]} {incr i} {
                 core::useBackend $backend
             } else {
                 puts stderr "unknown backend \"$backend\" (known: [core::backends] $nativeBackends)"
+                exit 2
+            }
+        }
+        -target {
+            set target [lindex $argv [incr i]]
+            if {![core::cabi::isTarget $target]} {
+                puts stderr "unknown C ABI target \"$target\" (known: [join [core::cabi::targetNames] {, }])"
                 exit 2
             }
         }

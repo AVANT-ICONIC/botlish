@@ -340,6 +340,10 @@ What it costs, measured on a 4-core container (2026-10-15):
   - the stub-linked executables;
   - the warning gate;
   - on pushes to main, the GC-stress run;
+  - on pushes to main that change the front end, the golden suites'
+    static decisions under the batched and the sequential scheduler
+    (`static-decisions.yml`, about 80 minutes; Static intrinsics, "The
+    sequential comparison runs in CI, never locally");
   - on Linux arm64 (`.github/workflows/tests-arm64.yml`, ubuntu-24.04-arm):
     the Tcl suite on interp and compile, its cranelift and cranelift-generic
     coverage, the golden suites, the native Rust unit tests (also under GC
@@ -1106,6 +1110,45 @@ native/Cargo.toml --lib bin_`. The registry is a declaration registry
 kind is classified in `tests/static-compile.test`'s census.
 `bench/binary-layout.tcl` regenerates the performance report.
 
+## C ABI types and imprinting
+
+`ffi::c` (C-ABI-TYPES.md) is the C ABI value universe: the C integer scalars
+`ffi::c::Char` ... `ffi::c::ULongLong` (integer domains whose ranges are the
+compilation's C target's -- `-target`, the host's by default; core/cabi.tcl
+is the one target table), `ffi::c::Void` (a pointee only), the affine
+`ffi::c::Ptr[T]` and `ffi::c::FnPtr[Fn{...}]`, and `null[T]()`, `null?`,
+`clone`, `erase`, `retype[T]`. It calls no C. Keep it a model of C's ABI,
+not of C: no width or signedness read from a name (the registry entry's
+`cabi` metadata, `core::type::cabiOf`), no C integer promotion, no implicit
+pointer conversion or covariance, no integer-to-pointer conversion or
+pointer arithmetic, no dereference, no ownership operation on `Ptr`, no
+nullable wrapper, no pointer layout field, no runtime pointee descriptor,
+and no C compiler in ordinary compilation. A non-null pointer in a test comes
+only from `core::cabi::installTestFixture`, which nothing but a test process
+calls; never add a public way to make one.
+
+The scalars are per-compilation source types the loader declares for the
+target when a file imports ffi::c (`hir::cabi::NamespaceTypeDecls`): the
+target is a front-end input, in `surface::cache::Key`. Imprinting
+(hir/imprint.tcl) is general, not generics: one binding path for Botlish
+functions (their declared types) and intrinsics (`-imprint`), variables
+established by applied types left to right, explicit imprints all or
+nothing in first-occurrence order. Never add declared type parameters
+(`fn f[T]`), constraints, or specialization keyed by a variable.
+
+If you change core/cabi.tcl, hir/cabi.tcl, hir/imprint.tcl, the `cptr`,
+`cfnptr` or `imprint` cases of hir/types.tcl, how the scalars are declared,
+printed or read, the call imprint syntax, or the C address word and its ops
+(native/src/runtime/value.rs, ops.rs, show.rs, nir.rs, codegen/clif.rs,
+native/lower.tcl), run `tests/c-abi-types.test`,
+`audit/c-abi-types/tools/fuzz.tcl` (several seeds) and
+`audit/c-abi-types/tools/mutate.tcl` (every mutant in its `mutants.txt` must
+still apply and be killed: update a mutant's text when you change the code
+it mutates, keeping it a mutant of the same rule), plus the affine
+harnesses for a change to affinity and the isolation and interchange audits
+for a change to the scalars' declarations. `bench/c-abi-types.tcl`
+regenerates the compile-cost table.
+
 ## C header archaeology (a research instrument)
 
 `audit/c-header/` (C-HEADER-ARCHAEOLOGY.md) preprocesses BoringSSL's and
@@ -1207,11 +1250,49 @@ another's presence: a site's contract-boundary edges read
 contract-boundary report and stays first whatever the program erases), run
 `tests/static-economics.test`, `tests/static-compile.test`, `tests/golden.test`
 (`golden-static-economics`), `audit/static-decisions/tools/fuzz.tcl` (several
-seeds), `audit/static-decisions/tools/compare.tcl tests/golden/*.bot` and
-`audit/static-decisions/tools/mutate.tcl` (every mutant in its `mutants.txt`
-must still apply and be killed, the economic ones -- a build too many -- as
-much as the semantic ones). `bench/static-decisions.tcl` regenerates the
-economics report.
+seeds) and `audit/static-decisions/tools/mutate.tcl` (every mutant in its
+`mutants.txt` must still apply and be killed, the economic ones -- a build too
+many -- as much as the semantic ones), and check the golden suites' batched
+against sequential comparison in CI (next section). `bench/static-decisions.tcl`
+regenerates the economics report.
+
+### The sequential comparison runs in CI, never locally
+
+`audit/static-decisions/tools/compare.tcl` compiles each golden suite under
+the batched scheduler and the sequential reference and requires them to
+agree. The sequential order is one whole-program build per typed rejection:
+mutable-array.bot takes 69 rounds and 953 builds, destructuring.bot 205. On a
+GitHub runner that is 75 and 15 minutes; in an agent's container it is
+several times slower (mutable-array.bot did not finish in 2 h 37 min), beyond
+the 2-hour background-task limit, and it starves everything else on the
+machine. So:
+
+* **Never run it locally.** Don't run `compare.tcl` on a golden suite, all
+  of them or one, and don't compile one under
+  `BOTLISH_STATIC_SCHEDULER=sequential`. A small program of your own (a
+  reproducer of a disagreement CI found) is fine.
+* **The `static-decisions` workflow runs it**
+  (`.github/workflows/static-decisions.yml`), one job for mutable-array.bot
+  and the other suites in four shards:
+  - automatically on every push to main that changes `core/`, `hir/`,
+    `surface/`, `lib/`, a golden suite or `audit/static-decisions/tools/`,
+    which covers every change the list above names;
+  - on demand, on any branch, when you judge your change likely to move a
+    decision (the schedulers, the dependency analysis, a new cross-function
+    fact) and want the verdict before main has it: push the branch, then
+    dispatch the workflow on it (`workflow_dispatch` of
+    `static-decisions.yml` with your branch as the ref: the GitHub MCP
+    server's `actions_run_trigger`, method `run_workflow`, or `gh workflow
+    run static-decisions.yml --ref BRANCH`). The optional `suites` input (file
+    names, separated by spaces or commas) narrows it.
+* **Read its result.** A run takes about 80 minutes, mutable-array.bot's job
+  (the shards finish within it), and on main it may first wait for the run
+  before it. Don't wait idle for it: carry on, and before you call the change
+  done read the run's jobs. Each job's summary lists every suite's rounds and
+  builds under both schedulers, and any `DISAGREE` or `DOES NOT COMPILE`. If
+  the run has not finished, report it as pending, never as passed.
+* **A failing run on main is a standing signal**, like a failing `gc-stress`
+  run: reproduce the disagreement on a small program and fix it.
 
 ## Workloads (examples/games/2048)
 

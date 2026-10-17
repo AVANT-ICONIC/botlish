@@ -173,6 +173,10 @@ fn show_into(v: Value, out: &mut String) {
         Kind::Coroutine => {
             out.push_str("<coroutine>");
         }
+        Kind::CPtr => {
+            // Matches core::cabi::show: the address bits, unsigned hex.
+            out.push_str(&format!("<C pointer {:#x}>", super::value::cptr_address(v) as u64));
+        }
         Kind::MutVec => {
             // Matches core::value::show's mutvec rendering: the current
             // elements, never the header or its backing.
@@ -308,6 +312,8 @@ pub fn tcl_value(v: Value) -> Result<String, RtError> {
                 show(v)
             )));
         }
+        // A C address as core/cabi.tcl holds it: its bits, unsigned decimal.
+        Kind::CPtr => tcl_list(&["cptr".to_string(), (super::value::cptr_address(v) as u64).to_string()]),
         // A vector's current elements, under a tag of their own: the host
         // (native::Outcome) makes them a vector value of its own runtime
         // (core/mutvec.tcl), exactly as it would hold one.

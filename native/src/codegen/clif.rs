@@ -1206,6 +1206,10 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let x = self.b.ins().band_imm_s(v, ENUM_TAG_MASK as i64);
                 return self.b.ins().icmp_imm_s(IntCC::Equal, x, ENUM_TAG as i64);
             }
+            Kind::CPtr => {
+                let x = self.b.ins().band_imm_s(v, CPTR_TAG_MASK as i64);
+                return self.b.ins().icmp_imm_s(IntCC::Equal, x, CPTR_TAG as i64);
+            }
             _ => {}
         }
         let done = self.b.create_block();
@@ -1232,7 +1236,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             Kind::MutByteStore => KIND_MUTBYTES,
             Kind::Coroutine => KIND_COROUTINE,
             Kind::MutVec => KIND_MUTVEC,
-            Kind::Bool | Kind::Unit | Kind::UnicodeChar | Kind::Enum => unreachable!(),
+            Kind::Bool | Kind::Unit | Kind::UnicodeChar | Kind::Enum | Kind::CPtr => unreachable!(),
         };
         let low3 = self.b.ins().band_imm_s(v, 7);
         let pointer = self.b.ins().icmp_imm_s(IntCC::Equal, low3, 0);
@@ -1699,6 +1703,16 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let eq = self.b.ins().icmp(IntCC::Equal, a[0], a[1]);
                 self.bool_of(eq)
             }
+            // C addresses (C-ABI-TYPES.md): the null pointer is a constant
+            // word, the null test one comparison with it, and clone, erase
+            // and retype are the word itself -- no machine operation, no
+            // allocation, no runtime type descriptor.
+            CPtrNull => self.iconst(CPTR_NULL),
+            CPtrIsNull => {
+                let eq = self.b.ins().icmp_imm_s(IntCC::Equal, a[0], CPTR_NULL as i64);
+                self.bool_of(eq)
+            }
+            CPtrSame => a[0],
             VEq => {
                 // Two small Ints compare as words; everything else structurally.
                 let (fast, slow, done, result) = self.both_small_split(a[0], a[1]);
@@ -1925,6 +1939,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         CoResume0 => ("rt_co_resume0", None, true, None),
                         CoYield => ("rt_co_yield", None, true, None),
                         CoDone => ("rt_co_done", None, false, None),
+                        CPtrFixture => ("rt_cptr_fixture", None, true, None),
+                        CPtrFixtureAddress => ("rt_cptr_fixture_address", None, false, None),
                         CoRelease => ("rt_co_release", None, false, None),
                         AffineDrop => ("rt_affine_drop", None, false, None),
                         // MutableVector (MUTABLE-VECTOR.md, runtime/mutvec.rs).

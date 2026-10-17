@@ -82,7 +82,11 @@ source. No built-in was added or renamed.
   about independent bounds beyond that). The loop variable is a fresh immutable
   binding per iteration and is not in scope in any clause operand.
 * **Empty domains.** The body never runs; the result is `[]`. Under each form
-  that is: `a >= b`, `a > b`, `b <= a`, `b < a` respectively.
+  that is: `a >= b`, `a > b`, `b <= a`, `b < a` respectively. Statically, a
+  list domain typed `List[never]` (only an empty List is one) makes the body
+  unreachable code and the loop `List[never]`, whatever the body's type
+  (M7AA-EMPTY-COLLECTION-AND-APPLIED-TYPE-SEMANTICS.md, "Addendum:
+  collecting loops over an empty domain").
 * **Inclusive without overflow.** `through` is tested with `<=`/`>=` against
   the endpoint; no `b + 1` / `a - 1` is formed at any level, so there is no
   `INT_MAX + 1` / `INT_MIN - 1` artifact. At HIR the endpoint kind is the field

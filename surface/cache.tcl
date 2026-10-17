@@ -72,11 +72,13 @@ proc surface::cache::Usable {dir} {
         && $::env(BOTLISH_STATIC_TRACE) ni {"" 0})}]
 }
 
-proc surface::cache::Key {path source mode strict} {
+proc surface::cache::Key {path source mode strict {target ""}} {
     variable version
+    # TARGET is the resolved C ABI target (hir::cabi::ResolveTarget): the
+    # widths of ffi::c's integer scalars follow it (C-ABI-TYPES.md).
     return [list version $version front-end [hir::interchange::fingerprint] \
         path $path source $source library $::core::libraryDir \
-        libraries $::core::loadedLibraries strict $strict warnings $mode \
+        libraries $::core::loadedLibraries strict $strict warnings $mode target $target \
         scheduler [expr {[info exists ::env(BOTLISH_STATIC_SCHEDULER)]
             ? $::env(BOTLISH_STATIC_SCHEDULER) : ""}]]
 }
@@ -124,15 +126,15 @@ proc surface::cache::Dependencies {hir reads} {
 }
 
 # The HIR cached in DIR for the program at PATH with text SOURCE, compiled
-# with warning MODE and -strict STRICT, or "" (a miss).
-proc surface::cache::lookup {dir path source mode strict} {
+# with warning MODE, -strict STRICT and C target TARGET, or "" (a miss).
+proc surface::cache::lookup {dir path source mode strict {target ""}} {
     variable stats
     variable magic
     variable version
     if {![Usable $dir]} {
         return ""
     }
-    set key [Key $path $source $mode $strict]
+    set key [Key $path $source $mode $strict $target]
     set entryPath [EntryPath $dir $key]
     if {![file isfile $entryPath]} {
         dict incr stats misses
@@ -181,14 +183,14 @@ proc surface::cache::Replay {hir mode channel} {
 # text), in DIR. Writes the entry under a private name, then renames it into
 # place: a concurrent lookup sees the whole entry or none. A failure leaves
 # the cache as it was (unstored).
-proc surface::cache::store {dir path source mode strict hir reads} {
+proc surface::cache::store {dir path source mode strict hir reads {target ""}} {
     variable stats
     variable magic
     variable version
     if {![Usable $dir]} {
         return
     }
-    set key [Key $path $source $mode $strict]
+    set key [Key $path $source $mode $strict $target]
     set entryPath [EntryPath $dir $key]
     set temporary ""
     try {

@@ -920,6 +920,40 @@ fn register_never_element_tests():
     # (The fifth program, an untyped parameter with mixed callers, is
     # closure-escape-instances.bot's never-element/mixed-callers.)
 
+    # native-listloop-empty-domain-bodies-run: the body of a loop over an
+    # empty domain never runs and is not lowered -- a call of a function only
+    # it calls, a closure it creates and calls, a coroutine handle it moves,
+    # and a lockstep loop in the empty caller's instance.
+    fn empty_domain_bodies() errors compiler::CompilerError:
+        static compile:
+            fn only_dead(x: int) -> int:
+                x * 2
+            fn counter(start: int) -> int:
+                yield start
+                return start + 1
+            fn eat(c) -> int:
+                c()
+            fn calls() -> list:
+                loop v in []:
+                    only_dead(3)
+            fn closes(n: int) -> list:
+                loop v in []:
+                    fn step(x):
+                        x + n
+                    step(5)
+            fn moves() -> list:
+                coroutine {step, first} = counter(10)
+                ys = loop v in []:
+                    eat(step)
+                [ys, first, step()]
+            fn lockstep(xs: List[int]) -> list:
+                loop x in xs and i from 0 to list::length(xs):
+                    fn add(y):
+                        y + i
+                    add(x)
+            [calls(), closes(1), moves(), lockstep([]), lockstep([4, 5])]
+    test::value("empty-domain/bodies-run", [[], [], [[], 10, 11], [], [4, 6]], empty_domain_bodies)
+
 # ---------------------------------------------------------------------------
 
 with context test::suite()

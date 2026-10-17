@@ -138,6 +138,13 @@
 #                             mutates it (every logical copy is a new header,
 #                             mutable_vector#share), so no alias of a header
 #                             can observe it. No equality, no hash.
+#   {cptr ADDRESS}            a raw C address (C-ABI-TYPES.md, core/cabi.tcl):
+#                             a data or a function pointer -- distinct static
+#                             types of this one kind -- ADDRESS its bits as
+#                             a canonical unsigned decimal, 0 for null. Not
+#                             an Int: no arithmetic, ordering, conversion,
+#                             equality or hash (an affine value has none);
+#                             the pointee identity is static only.
 #
 # Every value is treated as a value: a {mutbytes HEX} because the backends
 # realize each update as a new storage, a {mutarray ID}/{mutvec ID} header
@@ -146,7 +153,7 @@
 # procedures.
 
 namespace eval core::value {
-    variable kinds {int str bool unit list result block native mutarray UnicodeChar immutableSet errorId struct bytestore mutbytes coroutine mutvec enum}
+    variable kinds {int str bool unit list result block native mutarray UnicodeChar immutableSet errorId struct bytestore mutbytes coroutine mutvec enum cptr}
 }
 
 proc core::value::isCanonicalInt {text} {
@@ -447,7 +454,7 @@ proc core::value::equal {a b} {
     # MutableArray and MutableVector, like Block/Native, have no equality
     # (MUTABLE-ARRAY.md, MUTABLE-VECTOR.md: none was added for either; a
     # header's identity is never a value's).
-    if {$ka in {block native mutarray coroutine mutvec} || $kb in {block native mutarray coroutine mutvec}} {
+    if {$ka in {block native mutarray coroutine mutvec cptr} || $kb in {block native mutarray coroutine mutvec cptr}} {
         core::semanticError EQUALITY \
             "== is not defined for callables: [show $a] == [show $b]"
     }
@@ -662,6 +669,7 @@ proc core::value::show {v {debug 0} {reveal 0}} {
             return "<mutable-array \[[join $parts {, }]\]>"
         }
         coroutine { return "<coroutine>" }
+        cptr { return [core::cabi::show $v] }
         mutvec {
             # The current elements (a value's contents, never its header).
             set parts {}

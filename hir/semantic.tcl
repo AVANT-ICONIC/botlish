@@ -141,8 +141,12 @@
 # (hir::callables::verifyBlocks). A diagnostic there means "this function is
 # invalid for this call": it is reported at the CALL that needed the instance
 # (status invalid); the source function is not rejected and other calls are
-# unaffected. A call to an invalid instance from inside another instance makes
-# that one invalid too. Explicit parameter declarations and intrinsic
+# unaffected. A diagnostic in code the instance proves unreachable (an arm its
+# types decide against, the body of a loop over an empty domain) is not one:
+# the call never runs that code, whose typing describes values that cannot
+# exist (a loop element of type `never`); the definition's own verification
+# still checks it as written. A call to an invalid instance from inside
+# another instance makes that one invalid too. Explicit parameter declarations and intrinsic
 # contracts (hir/signatures.tcl) are not changed by any of this: contracts are
 # still derived from declaration + body alone, and hir::moduleSignatures never
 # reports an instance.
@@ -751,6 +755,13 @@ proc hir::semantic::verify {hirVar} {
         }
         dict set own $id [lmap d [dict get $view diagnostics] {
             if {[dict exists $definitional [list [dict get $d expr] [dict get $d message]]]} continue
+            # Nor is a problem in code this instance proves unreachable (an
+            # empty domain's loop body, an arm its types decide against):
+            # the call never runs it. Its typing there describes values that
+            # cannot exist (a loop element of type `never`). The definition's
+            # own verification still checks that code as written.
+            if {[dict exists $view exprs [dict get $d expr]]
+                    && ![dict get $view exprs [dict get $d expr] reachable]} continue
             dict set d curable [expr {[dict get $d kind] eq "UNPROVEN-FIELD"}]
             set d
         }]

@@ -21,10 +21,10 @@
 @@ type-names-resolve-as-predicates a domain declaration registers its membership predicate NAME? again (a root native, so `Small?(x)` resolves)
 ## hir/sourcetypes.tcl
 <<<<
-    core::type::register $id -base int -parents $parents -integer-domain $domain -source 1
+    core::type::register $id -base int -parents $parents -integer-domain $domain -source 1 -c-abi $cabi
     lappend generation [list type $id]
 ====
-    core::type::register $id -base int -parents $parents -integer-domain $domain -source 1
+    core::type::register $id -base int -parents $parents -integer-domain $domain -source 1 -c-abi $cabi
     lappend generation [list type $id]
     catch {core::native::register $id? -arity 1 -param-types int \
         -impl [list apply {{t v} {core::value::bool [core::type::validate $t $v]}} $id] \
