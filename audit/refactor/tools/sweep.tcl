@@ -66,9 +66,26 @@ proc refactor::sweep::modules {root} {
     set modules {}
     foreach path [lsort [concat [glob -nocomplain -directory [file join $root lib] *.bot] \
             [glob -nocomplain -directory [file join $root lib] */*.bot]]] {
-        lappend modules [string map {/ ::} [string range [file rootname [Rel $root $path]] 4 end]]
+        set module [string range [file rootname [Rel $root $path]] 4 end]
+        if {[regexp {^(.*)\.([A-Za-z0-9_]+)$} $module -> base arch]} {
+            # An architecture-specific module's file (lib/linux/sys.x86_64.bot,
+            # surface/modules.tcl's ModuleFile): loaded by its namespace
+            # under a Linux target of its architecture, NS@TARGET.
+            lappend modules "[string map {/ ::} $base]@linux-$arch"
+        } else {
+            lappend modules [string map {/ ::} $module]
+        }
     }
     return $modules
+}
+
+# {NS TARGET} of a module unit MODULE, NS or NS@TARGET (modules); TARGET ""
+# for the host's.
+proc refactor::sweep::moduleTarget {module} {
+    if {[regexp {^(.*)@(.*)$} $module -> ns target]} {
+        return [list $ns $target]
+    }
+    return [list $module ""]
 }
 
 proc refactor::sweep::Rel {root path} {
@@ -105,8 +122,8 @@ proc refactor::sweep::Files {root hir} {
 
 # Compiles one program at PATH (absolute) under warning policy MODE.
 # Returns {ok WARNINGS FILES} or {failed ERRORCODE MESSAGE}.
-proc refactor::sweep::Compile {root path mode} {
-    if {[catch {surface::readProgramFile $path -warnings $mode -warning-channel ""} hir options]} {
+proc refactor::sweep::Compile {root path mode {target ""}} {
+    if {[catch {surface::readProgramFile $path -warnings $mode -warning-channel "" -target $target} hir options]} {
         return [list failed [dict get $options -errorcode] [string map [list [file normalize $root]/ ""] $hir]]
     }
     return [list ok [Records $root $hir] [Files $root $hir]]
@@ -122,10 +139,11 @@ proc refactor::sweep::observe {root {mode default}} {
     }
     set scratch [file tempdir refactor-sweep]
     try {
-        foreach ns [modules $root] {
-            set path [file join $scratch load-[string map {:: -} $ns].bot]
+        foreach module [modules $root] {
+            lassign [moduleTarget $module] ns target
+            set path [file join $scratch load-[string map {:: - @ -} $module].bot]
             writeText $path "import $ns\n0\n"
-            dict set units "import $ns" [Compile $root $path $mode]
+            dict set units "import $module" [Compile $root $path $mode $target]
         }
     } finally {
         file delete -force $scratch

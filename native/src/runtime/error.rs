@@ -55,7 +55,7 @@ pub const SEMANTIC_KINDS: &[&str] = &[
     // A -strict 0 program's rejected lockstep loop, replayed at run time
     // (native::lower::LockLoop, as hir::lower / core::forms::op-lockloop do).
     "LOCKSTEP-UNPROVEN", "LOCKSTEP-UNEQUAL",
-    // A -strict 0 program's rejected linux::abi::syscall register struct,
+    // A -strict 0 program's rejected linux::abi::x86_64::syscall register struct,
     // replayed at run time (native::lower::SyscallCall; hir/syscall.tcl).
     "UNKNOWN-FIELD", "MISSING-FIELD",
     // A -strict 0 program that failed context verification (CONTEXTS.md),

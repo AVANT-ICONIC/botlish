@@ -26,6 +26,14 @@ interp recursionlimit {} 100000
 
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
+
+# Linux on x86-64 or AArch64: the native backend's whole runtime (native
+# stack maps, the stack guard, coroutines), and syscalls through the portable
+# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
+# spells the x86-64 transport or reads its machine code.
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint posixShell [expr {[auto_execok sh] ne ""}]
 testConstraint strace [expr {[auto_execok strace] ne "" && ![catch {exec strace -f -qq -o /dev/null true 2>@1}]}]
 # strace's fault injection (-e inject=...), used to provoke short writes and
@@ -314,7 +322,7 @@ test io-line-newline-is-a-character {NIR: print_line's and write_error_line's cl
 # ---------------------------------------------------------------------------
 # Real output (standalone executables)
 
-test io-hello-executable {examples/io/hello.bot as a standalone executable: descriptor 1 receives exactly "Hello, world!\n" (then the runner's own result line); nothing on descriptor 2; the same under GC stress} -constraints {linuxX86_64 posixShell} -body {
+test io-hello-executable {examples/io/hello.bot as a standalone executable: descriptor 1 receives exactly "Hello, world!\n" (then the runner's own result line); nothing on descriptor 2; the same under GC stress} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable hello $::helloText]
     set plain [runCaptured $exe]
     set ::env(BOTLISH_NATIVE_GC_STRESS) 1
@@ -328,7 +336,7 @@ test io-hello-executable {examples/io/hello.bot as a standalone executable: desc
 unit
 } {}} 1}
 
-test io-routing-utf8 {print and print_line write to descriptor 1, write_error and write_error_line to descriptor 2, as UTF-8 (a two-byte and a four-byte scalar), each line ending in exactly one newline} -constraints {linuxX86_64 posixShell} -body {
+test io-routing-utf8 {print and print_line write to descriptor 1, write_error and write_error_line to descriptor 2, as UTF-8 (a two-byte and a four-byte scalar), each line ending in exactly one newline} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable routing $::routingText]
     lassign [runCaptured $exe] out err
     list [encoding convertfrom utf-8 $out] [encoding convertfrom utf-8 $err] [string length $out]
@@ -337,7 +345,7 @@ test io-routing-utf8 {print and print_line write to descriptor 1, write_error an
 } {err: done
 } 18}
 
-test io-strace {each portable operation is one write(2) of the complete text on the right descriptor; the Hello World's write comes from the raw syscall boundary through linux::write, linux::io::write_all, linux::io::write_text, print_line's clone and hello's clone -- no libc frame} -constraints {linuxX86_64 strace posixShell rustcLinker} -body {
+test io-strace {each portable operation is one write(2) of the complete text on the right descriptor; the Hello World's write comes from the raw syscall boundary through linux::sys::write (linux::write's x86-64 transport), linux::write, linux::io::write_all, linux::io::write_text, print_line's clone and hello's clone -- no libc frame} -constraints {linuxX86_64 strace posixShell rustcLinker} -body {
     set exe [buildExecutable routing $::routingText]
     set log [file join $::scratch strace.routing]
     exec strace -f -qq -e trace=write -o $log $exe >/dev/null 2>/dev/null
@@ -369,10 +377,10 @@ test io-strace {each portable operation is one write(2) of the complete text on 
             lappend frames LIBC
         }
     }
-    list $routing [lrange $frames 0 7]
-} -result {{{1 out: 4} {1 { \303\251 \360\235\204\236\n} 9} {2 err: 4} {2 { done\n} 6}} {botlish_linux_x86_64_syscall rt_linux_x86_64_syscall linux::write linux::io::write_all linux::io::write_text io::print_line<io::IO=linux::io::LinuxIO> hello<io::IO=linux::io::LinuxIO> <program>}}
+    list $routing [lrange $frames 0 8]
+} -result {{{1 out: 4} {1 { \303\251 \360\235\204\236\n} 9} {2 err: 4} {2 { done\n} 6}} {botlish_linux_x86_64_syscall rt_linux_x86_64_syscall linux::sys::write linux::write linux::io::write_all linux::io::write_text io::print_line<io::IO=linux::io::LinuxIO> hello<io::IO=linux::io::LinuxIO> <program>}}
 
-test io-short-write-completed {a short write is completed: when the kernel accepts 5 of the 14 bytes (strace-injected), the remaining 9 bytes are written next, and the caller sees success -- never a byte count} -constraints {linuxX86_64 straceInject posixShell} -body {
+test io-short-write-completed {a short write is completed: when the kernel accepts 5 of the 14 bytes (strace-injected), the remaining 9 bytes are written next, and the caller sees success -- never a byte count} -constraints {nativeLinux straceInject posixShell} -body {
     set exe [buildExecutable status $::statusText]
     set log [file join $::scratch strace.short]
     lassign [runCaptured strace -f -qq -o $log -e trace=write -e inject=write:retval=5:when=1 $exe] out err
@@ -381,7 +389,7 @@ test io-short-write-completed {a short write is completed: when the kernel accep
 "ok"
 }}
 
-test io-write-failed {a negative write result (the kernel's -errno, here an injected EBADF) and a write that makes no progress (0 bytes) are io::WriteFailed: the portable caller's handler runs; the errno never reaches it} -constraints {linuxX86_64 straceInject posixShell} -body {
+test io-write-failed {a negative write result (the kernel's -errno, here an injected EBADF) and a write that makes no progress (0 bytes) are io::WriteFailed: the portable caller's handler runs; the errno never reaches it} -constraints {nativeLinux straceInject posixShell} -body {
     set exe [buildExecutable status $::statusText]
     lmap inject {write:error=EBADF:when=1 write:retval=0:when=1} {
         set log [file join $::scratch strace.fail]
@@ -392,7 +400,7 @@ test io-write-failed {a negative write result (the kernel's -errno, here an inje
 }} {2 {"failed"
 }}}
 
-test io-allocations {allocation evidence: the context-trait path adds nothing -- io::print_line(text) allocates exactly what the direct linux::io::write_text(str::append_char(text, '\n')) does: the line String, the UTF-8 byte List and the Bytes (the operation's own), plus linux::io::create's 7 structs and the one struct linux::write builds} -constraints {linuxX86_64} -body {
+test io-allocations {allocation evidence: the context-trait path adds nothing -- io::print_line(text) allocates exactly what the direct linux::io::write_text(str::append_char(text, '\n')) does: the line String, the UTF-8 byte List and the Bytes (the operation's own), plus linux::io::create's 7 structs and the one struct linux::write builds} -constraints {nativeLinux} -body {
     set pre "import io\nimport linux::io\nimport str\nwith context linux::io::create()\n"
     lmap call {{io::print_line("Hello, world!")} {linux::io::write_text(str::append_char("Hello, world!", '\n'))}} {
         set report [native::allocationReport [ioHir "${pre}r = $call:\n    on io::WriteFailed:\n        unit\nr\n"] summary]

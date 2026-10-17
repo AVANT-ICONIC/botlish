@@ -35,8 +35,10 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
 
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines) without the x86-64 syscall that
-# linuxX86_64 tests need.
+# stack maps, the stack guard, coroutines), and syscalls through the portable
+# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
+# spells the x86-64 transport or reads its machine code.
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint objdump [expr {[auto_execok objdump] ne ""}]
@@ -765,7 +767,7 @@ test ct-native-context-area {the native context area has a slot for the installe
     lsearch -all -inline -regexp [split $nir \n] {^(nir|context) }
 } -result {{nir 1 call-effects=1 statics=0 contexts=8} {context 0 "A" offset=0 words=1 fields="k"}}
 
-test ct-allocation-free {context-trait specialization allocates nothing: 100 operations through the trait, like 100 direct calls of the concrete implementation, allocate 0 objects} -constraints {linuxX86_64} -body {
+test ct-allocation-free {context-trait specialization allocates nothing: 100 operations through the trait, like 100 direct calls of the concrete implementation, allocate 0 objects} -constraints {nativeLinux} -body {
     lmap last {{sum(50, 0)} {sum_a(50, 0)}} {
         set report [native::allocationReport [surface::compile "$::evidence\n$last\n" -warnings off] summary]
         list [dict get $report total allocations] [dict get $report total allocatedBytes]

@@ -204,7 +204,7 @@ pub enum OpCode {
     /// `faildeclared` of that id does, so an enclosing `handle` matches it
     /// like any other declared error.
     Argv,
-    /// `linux::abi::syscall` (core/linuxabi.tcl, LINUX-X86-64-SYSCALL.md):
+    /// `linux::abi::x86_64::syscall` (core/linuxabi.tcl, LINUX-X86-64-SYSCALL.md):
     /// the raw Linux x86-64 kernel transition. Seven operands, the Ints
     /// (each proven in -2^63..2^63-1: an abi::x86_64::Register64's word)
     /// for RAX (the syscall number) and RDI, RSI, RDX, R10, R8, R9
@@ -214,6 +214,16 @@ pub enum OpCode {
     /// `syscall` instruction itself (runtime/syscall.rs); never removed,
     /// merged or reordered (a helper call); Linux x86-64 targets only.
     SyscallLinuxX86_64,
+    /// `linux::abi::aarch64::syscall` (core/linuxabi.tcl,
+    /// LINUX-SYSCALL-TRANSPORTS.md): the raw Linux AArch64 kernel
+    /// transition, SyscallLinuxX86_64's AArch64 sibling. Seven operands, the
+    /// Ints (each proven in -2^63..2^63-1: an abi::aarch64::Register64's
+    /// word) for X8 (the syscall number) and X0..X5 (arguments 1-6; the Int
+    /// 0 for an argument the source omitted). The result is the raw X0
+    /// afterwards, read as a signed 64-bit Int. Executes `svc #0` itself
+    /// (runtime/syscall.rs); never removed, merged or reordered (a helper
+    /// call); Linux AArch64 targets only.
+    SyscallLinuxAarch64,
     /// `byte_store::from_list` (core/bytestore.tcl, ABI-BYTES.md): the owned
     /// byte storage holding the bytes of a List of Ints in 0..255, eagerly
     /// copied (one allocation, or the shared static empty storage; a
@@ -647,6 +657,7 @@ op_spellings! {
     "strcharatproven" => StrCharAtProven,
     "argv" => Argv,
     "syscall_linux_x86_64" => SyscallLinuxX86_64,
+    "syscall_linux_aarch64" => SyscallLinuxAarch64,
     "bytesfromlist" => BytesFromList,
     "byteslen" => BytesLen,
     "bytesaddr" => BytesAddr,
@@ -735,7 +746,7 @@ impl OpCode {
         match self {
             ListNew => None,
             Argv | CPtrNull => Some(0),
-            SyscallLinuxX86_64 => Some(7),
+            SyscallLinuxX86_64 | SyscallLinuxAarch64 => Some(7),
             StrLen | StrLower | ListLen | MutArrayAllocate | MutArrayCapacity | IsInt | IsStr | IsList | IsMutArray
             | IsOk | IsError | ResultValue | ResultError | MkOk | MkError | Hash | RBox | RUnbox
             | StrByteLen | StrUtf8Bytes | StrIsTclAlpha | StrIsTclAlnum | CharCodepoint | SetFromList

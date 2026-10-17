@@ -1,5 +1,13 @@
 # Direct Linux x86-64 syscalls: the machine boundary
 
+> **Partially superseded by LINUX-SYSCALL-TRANSPORTS.md.** The transport is
+> now spelled `linux::abi::x86_64::syscall` (imported as
+> `linux::abi::x86_64`), beside its AArch64 sibling
+> `linux::abi::aarch64::syscall`; both are rows of one table
+> (`core::linuxabi`'s `transports`). The wrappers' x86-64 bodies moved to
+> `lib/linux/sys.x86_64.bot`. The spellings below are updated; the design
+> and its evidence are unchanged.
+
 ## Outcome
 
 Botlish can take an ordinary integer, encode it as an x86-64 machine-register
@@ -10,11 +18,11 @@ knowing what `getpid` is:
 
 ```botlish
 import abi::x86_64
-import linux::abi
+import linux::abi::x86_64
 
 fn raw_getpid():
     abi::x86_64::to_int(
-        linux::abi::syscall({
+        linux::abi::x86_64::syscall({
             rax: abi::x86_64::register64(39),
         })
     )
@@ -23,7 +31,7 @@ fn raw_getpid():
 ```
 Botlish Int
     --abi::x86_64::register64-->  Register64      (ordinary Botlish, lib/abi/x86_64.bot)
-    --linux::abi::syscall------>  `syscall`       (the one privileged operation)
+    --linux::abi::x86_64::syscall------>  `syscall`       (the one privileged operation)
     --> rax as a Register64
     --abi::x86_64::to_int------>  Botlish Int     (ordinary Botlish)
 ```
@@ -31,7 +39,7 @@ Botlish Int
 * `abi::x86_64::Register64` and both conversions are **ordinary Botlish**: a
   nominal struct whose one field is typed with a source-defined integer
   domain. Nothing about them is compiler-defined.
-* `linux::abi::syscall` is the **only** privileged operation: a root native
+* `linux::abi::x86_64::syscall` is the **only** privileged operation: a root native
   that knows the Linux x86-64 syscall *transport* convention (which register
   carries what) and no syscall. Natively it is a helper call whose body is a
   seven-register inline-asm `syscall`; the Tcl backends refuse it with an
@@ -129,10 +137,10 @@ struct construction"): `Register64 {word: 9223372036854775808}` and
 `fn wrap(x: int): Register64 {word: x}` are compile-time TYPE errors. Every
 Register64 that exists holds exactly one of the 2^64 bit patterns.
 
-### `linux::abi::syscall` (core/linuxabi.tcl, hir/syscall.tcl)
+### `linux::abi::x86_64::syscall` (core/linuxabi.tcl, hir/syscall.tcl)
 
 ```
-linux::abi::syscall({rax: R, rdi: R, rsi: R, rdx: R, r10: R, r8: R, r9: R})
+linux::abi::x86_64::syscall({rax: R, rdi: R, rsi: R, rdx: R, r10: R, r8: R, r9: R})
     -> abi::x86_64::Register64          R: abi::x86_64::Register64
 ```
 
@@ -155,7 +163,7 @@ linux::abi::syscall({rax: R, rdi: R, rsi: R, rdx: R, r10: R, r8: R, r9: R})
   ever inserted). A named struct, a Register64 itself or an Int argument is
   `TYPE`; a wrong argument count is `ARITY`.
 * **An omitted argument register is zero.** No caller writes six meaningless
-  zeros: `linux::abi::syscall({rax: abi::x86_64::register64(39)})` is getpid.
+  zeros: `linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})` is getpid.
 * The result is the raw rax as a Register64: no negative-to-error mapping, no
   errno, no `-1` convention, no retry, no Result, no `pid_t`.
 * It can only be **called directly**: a reference to it that is not a call's
@@ -185,7 +193,7 @@ declaration, unknown member).
 
 ## Effects
 
-`linux::abi::syscall` interacts with the kernel, may block, may modify any
+`linux::abi::x86_64::syscall` interacts with the kernel, may block, may modify any
 process or kernel state, may (with future pointer arguments) read or write
 any memory, and returns different results for identical inputs. It is
 treated accordingly at every layer, by default rather than by exception
@@ -243,7 +251,7 @@ replacement (STRUCT-SCALAR-REPLACEMENT.md, VALUE-TRANSPORT-MATERIALIZATION.md),
 extended (hir/escape.tcl) with exactly the knowledge this transport needs:
 
 * **The syscall's result is a construction.** `Classify` recognizes a
-  `linux::abi::syscall` call as a local one-field Register64 construction,
+  `linux::abi::x86_64::syscall` call as a local one-field Register64 construction,
   exactly as it recognizes the `list` native as a List construction: a
   consumer that takes fields (`to_int`'s `fields` variant, a projection, a
   virtual local, an exact return) gets the op's result register, never an
@@ -263,7 +271,7 @@ extended (hir/escape.tcl) with exactly the knowledge this transport needs:
   calls and 1001 conversions, 0 allocations of any kind.
 * **One syscall-specific frontier remains (pinned by a test).** A register
   struct *bound to a local* and then passed by name
-  (`regs = {rax: ..., rdi: ...}; linux::abi::syscall(regs)`) is built as an
+  (`regs = {rax: ..., rdi: ...}; linux::abi::x86_64::syscall(regs)`) is built as an
   object: the struct itself (only an inline literal argument is opened; an
   ordinary exact call would take the bound struct as fields), plus one
   Register64 per register (a `register64(...)` result nested in a bound
@@ -387,10 +395,11 @@ defines a syscall compiles and runs there as on the Tcl backends (it used to
 be refused at code generation, `NATIVE CODEGEN`, which rejected such programs
 outright); the NIR op, the helper and the register set are named for
 Linux x86-64; and the register struct's names and Register64 type come from
-one place (`core::linuxabi::registers`/`registerType`). No x32, i386, ARM or
-AArch64 convention exists; another architecture would add its own transport
-(its own register type under `abi::<arch>` and its own register contract)
-rather than reinterpret this one.
+one place (`core::linuxabi::registers`/`registerType`; now the x86-64 row of
+its `transports` table). No x32, i386 or ARM convention exists; another
+architecture adds its own transport (its own register type under
+`abi::<arch>` and its own register contract) rather than reinterpret this
+one -- as LINUX-SYSCALL-TRANSPORTS.md did for AArch64.
 
 ## Tcl backends: an intentional refusal
 
@@ -399,7 +408,7 @@ not imitate a syscall with some other host facility (a Tcl `pid` would test
 the wrong abstraction). The native's Tcl implementation raises:
 
 ```
-linux::abi::syscall executes the x86-64 "syscall" instruction (a raw Linux kernel
+linux::abi::x86_64::syscall executes the x86-64 "syscall" instruction (a raw Linux kernel
 transition) and is performed only by the native backend (cranelift, or a standalone
 executable) on Linux x86-64; the Tcl backends (interp, compile) do not execute machine
 instructions and do not imitate a syscall (CORE SEMANTIC NATIVE-ONLY)
@@ -495,7 +504,7 @@ Botlish on both native backends:
 
 ```botlish
 fn sys(nr: abi::x86_64::Register64, a1: abi::x86_64::Register64, a4: abi::x86_64::Register64):
-    abi::x86_64::to_int(linux::abi::syscall({rax: nr, rdi: a1, r10: a4}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: nr, rdi: a1, r10: a4}))
 
 # 100000: no such syscall, the kernel returns -ENOSYS and does nothing.
 # 157 = prctl, option 39 = PR_GET_NO_NEW_PRIVS (a getter), which requires
@@ -607,7 +616,7 @@ each finding was checked by a separate skeptic. Fixed as a result:
    automatic predicate native `Register64Word?`, removed by
    ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md) and the errors `Register64BelowRange`,
    `Register64AboveRange`. `linux::abi`: the root native
-   `linux::abi::syscall` (core/linuxabi.tcl); no module file. Language: nested
+   `linux::abi::x86_64::syscall` (core/linuxabi.tcl); no module file. Language: nested
    namespaces and qualified root natives.
 2. **Register64** is **ordinary Botlish** (a nominal struct over a
    source-defined domain). The compiler's only knowledge of it: the
@@ -628,7 +637,7 @@ each finding was checked by a separate skeptic. Fixed as a result:
    (an immediate for `|v| < 2^62`, a static constant for a literal, else a
    BigInt pointer), the struct erased by scalar replacement; a `StructObj`
    only at materialization frontiers.
-7. **Source signature:** `linux::abi::syscall({rax: R, rdi: R, rsi: R, rdx:
+7. **Source signature:** `linux::abi::x86_64::syscall({rax: R, rdi: R, rsi: R, rdx:
    R, r10: R, r8: R, r9: R}) -> abi::x86_64::Register64`, R =
    `abi::x86_64::Register64`, fields optional except `rax`.
 8. **Omitted argument registers:** absent from the struct; lowering passes
@@ -714,10 +723,10 @@ over an owned, contiguous byte storage; the raw address bridge
 `abi::x86_64::from_bytes` makes the address of its payload a `Register64`; the
 syscall lowering keeps the backing storage alive until the kernel returns
 (`keepalive`); and `linux::write(fd, data)` is the first syscall wrapper that moves
-memory. `linux::abi::syscall` itself is unchanged: still generic, still native-only.
+memory. `linux::abi::x86_64::syscall` itself is unchanged: still generic, still native-only.
 
 A second follow-up, MUTABLE-BYTES.md, adds the writable direction: `abi::bytes::MutableBytes`
 (a value, not a reference), the writable address bridge
 `abi::x86_64::from_mutable_bytes`, and `linux::read(fd, data)`, the first syscall
-wrapper whose kernel call writes into Botlish memory. Again `linux::abi::syscall` is
+wrapper whose kernel call writes into Botlish memory. Again `linux::abi::x86_64::syscall` is
 unchanged: syscall number 0 is ordinary data in `lib/linux.bot`.

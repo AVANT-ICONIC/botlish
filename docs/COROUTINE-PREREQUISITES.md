@@ -734,7 +734,7 @@ for little extra work.
 * **Rust `std`.** It links libc on the `-gnu` target and installs its own
   SIGSEGV handler for the main thread's guard. Leaving glibc ultimately means
   a `no_std` runtime or the project's own system-call layer, which
-  `linux::abi::syscall` (LINUX-X86-64-SYSCALL.md) already points toward.
+  `linux::abi::x86_64::syscall` (LINUX-X86-64-SYSCALL.md) already points toward.
   Appendix B lists, measured on a real executable, every glibc and libgcc
   symbol a produced executable imports, which code needs each one, and what
   replaces it.
@@ -806,7 +806,7 @@ semantics change and no NIR change.
 | R5 | Global per-thread runtime state | medium (blocks actors, not coroutines) | `thread_local PROGRAM`, process-global guard atomics, `Rc`; in Tcl, `ModuleBase`, argv, frame/mutarray stores per interp, and non-re-entrant compile state (`hir/sourcetypes.tcl:24-66`) | §4.2 item 5; §4.3 item 10 |
 | R6 | Frame-store lifetime in the Tcl backends | medium (correctness bug once interleaving exists) | the watermark `releaseSince` (A.2b); `containsBlock` blind to handles; abandonment skips `finally` (A.3) | §4.2 items 3-4 |
 | R7 | A Rust frame below a yield | low | `rt_call_value` can sit between a closure that yields and its caller. It holds only the raw `p: *mut Vm` and forms short-lived `&mut` borrows (`ops.rs:1444-1456`); release builds may compile it to a tail call (CRANELIFT-WASM.md:1947-1949) | keep the rule "helpers never hold a `&mut Vm` across a call into generated code"; audit new helpers against it |
-| R8 | Blocking system calls | low now, central for async | `linux::abi::syscall` runs in a helper (`runtime/syscall.rs:73`). A blocking call stops every coroutine of the thread, by design of cooperative scheduling | nothing for coroutines; async I/O is a later design (§8) |
+| R8 | Blocking system calls | low now, central for async | `linux::abi::x86_64::syscall` runs in a helper (`runtime/syscall.rs:73`). A blocking call stops every coroutine of the thread, by design of cooperative scheduling | nothing for coroutines; async I/O is a later design (§8) |
 | R9 | Cross-actor heap pointers | future | marking writes `header.marked` into any non-static object it reaches, and only the owning heap's sweep clears it (`heap.rs:121-129, 161-165`). A foreign pointer would leave another heap's object permanently marked. A walk over a stack shared by two actors cannot tell their frames apart | every actor's activations, including its root, run on actor-owned stacks (§6). Sendability forbids sharing mutable or handle values |
 | R10 | Moving a suspended coroutine to another actor or thread | future | suspended native frames hold the `Vm` pointer in callee-saved registers and spill slots no stack map describes. A Rust helper frame holds `p`. Stack maps describe only `Value` roots | §6. Interpreter frames do not have this problem (§7) |
 

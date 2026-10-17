@@ -38,6 +38,14 @@ testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
 
+# Linux on x86-64 or AArch64: the native backend's whole runtime (native
+# stack maps, the stack guard, coroutines), and syscalls through the portable
+# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
+# spells the x86-64 transport or reads its machine code.
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
+
 set gameDir [file join $::projectRoot examples games 2048]
 
 # Runs SCRIPT with ::core::libraryDir at the private library, restoring
@@ -173,9 +181,9 @@ unit}
 # (native/src/codegen/roots.rs shared a root slot between a call's result
 # and a List live across the call; tests/native-root-liveness.test's
 # root-def-interference-1 is the reduced case). It prints through
-# linux::io, whose syscalls exist on Linux x86-64 only (AGENTS.md, "Linux
-# AArch64"), hence linuxX86_64.
-test workload-2048-demo-executable {the demo as a standalone executable prints the whole game, identically under GC stress} -constraints {executableAot linuxX86_64} -body {
+# linux::io, whose syscalls go through the target architecture's own
+# transport (LINUX-SYSCALL-TRANSPORTS.md), hence nativeLinux.
+test workload-2048-demo-executable {the demo as a standalone executable prints the whole game, identically under GC stress} -constraints {executableAot nativeLinux} -body {
     set dir [makeDirectory workload-2048-demo]
     try {
         with2048 {

@@ -9,7 +9,7 @@
 # Every ABI numeric value is an ordinary mathematical Int plus the static
 # proof that it lies in its domain; nothing here is fixed-width arithmetic.
 # The types, creators and encoders are ordinary Botlish and run on every
-# backend; only linux::abi::syscall itself (getpid, the one live syscall any
+# backend; only linux::abi::x86_64::syscall itself (getpid, the one live syscall any
 # test makes, as in linux-syscall.test) is native-only.
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
@@ -24,8 +24,10 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
 
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines) without the x86-64 syscall that
-# linuxX86_64 tests need.
+# stack maps, the stack guard, coroutines), and syscalls through the portable
+# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
+# spells the x86-64 transport or reads its machine code.
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
@@ -256,7 +258,7 @@ test abi-numeric-no-compiler-knowledge {the compiler knows no ABI numeric type: 
     # mentions abi but the raw transport's own.
     set natives [lsearch -all -inline -regexp [core::native::names] {(?i)abi}]
     list [expr {[llength $files] > 60}] $hits $natives
-} -result {1 {} {linux::abi::syscall abi::x86_64::from_bytes abi::x86_64::from_mutable_bytes}}
+} -result {1 {} {linux::abi::x86_64::syscall linux::abi::aarch64::syscall abi::x86_64::from_bytes abi::x86_64::from_mutable_bytes abi::aarch64::from_bytes abi::aarch64::from_mutable_bytes}}
 
 test abi-numeric-namespaced-types {abi::x86_64 loads lib/abi.bot, whose domain types are members of namespace abi (abi::U8Value): a program's own U8Value or I32Value beside the raw transport -- and beside abi::U8Value -- compiles, and a program may even declare a type named like the module's (AbiU8Value) -- or an error named like the module's (AbiIntegerAboveRange, beside abi::AbiIntegerAboveRange: errors are module-qualified too); a real collision is one module or program declaring a name twice} -body {
     list [agree "import abi::x86_64\ntype U8Value = Int in 0..255\ntype I32Value = Int in 0..9\nfn f(x: U8Value) -> int:\n    x\nabi::x86_64::to_int(abi::x86_64::register64(f(39)))"] \
@@ -530,8 +532,8 @@ test abi-numeric-upper-u64-frontier {the documented optimization frontier, pinne
     set rows
 } -result {{1 1 0 0 0} {1 1 0 0 1001} {1 1 0 0 0}}
 
-test abi-numeric-syscall-operands-are-the-encoded-words {natively, an ABI value crosses into linux::abi::syscall as its encoder's result register, with nothing in between: each argument operand of the op is the from_* call's own result (getpid: the encoded arguments are ignored by the kernel, and the pid is the same); the canonical path allocates nothing} -constraints linuxX86_64 -body {
-    set text "import abi\nimport abi::x86_64\nimport linux::abi\nfn raw_getpid():\n    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(39)}))\nfn with_args():\n    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(39), rdi: abi::x86_64::from_u64(abi::u64(18446744073709551615)), rsi: abi::x86_64::from_i8(abi::i8(0 - 1)), rdx: abi::x86_64::from_u32(abi::u32(4294967295)), r10: abi::x86_64::from_usize(abi::usize(3))}))\nloop i from 0 to 1000:\n    with_args()\n\[raw_getpid() == with_args(), with_args() > 0\]"
+test abi-numeric-syscall-operands-are-the-encoded-words {natively, an ABI value crosses into linux::abi::x86_64::syscall as its encoder's result register, with nothing in between: each argument operand of the op is the from_* call's own result (getpid: the encoded arguments are ignored by the kernel, and the pid is the same); the canonical path allocates nothing} -constraints linuxX86_64 -body {
+    set text "import abi\nimport abi::x86_64\nimport linux::abi::x86_64\nfn raw_getpid():\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}))\nfn with_args():\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rdi: abi::x86_64::from_u64(abi::u64(18446744073709551615)), rsi: abi::x86_64::from_i8(abi::i8(0 - 1)), rdx: abi::x86_64::from_u32(abi::u32(4294967295)), r10: abi::x86_64::from_usize(abi::usize(3))}))\nloop i from 0 to 1000:\n    with_args()\n\[raw_getpid() == with_args(), with_args() > 0\]"
     lassign [nativeEvidence $text] nir total structs bigints
     set body [nirFunction $nir with_args]
     regexp {= op syscall_linux_x86_64 ((?:%[0-9]+ ?){7})} $body -> operands

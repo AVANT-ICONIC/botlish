@@ -19,7 +19,7 @@
 # and runs on every backend of -backends (tests/golden/run.tcl -names), at most
 # -jobs suites at a time. Every ported row must be "old pass, new pass" --
 # or, when the Tcl test cannot run on this host (skipped by a host
-# constraint: linuxX86_64, stubLinker, x86_64Host), "old host-skip, new pass"
+# constraint: linuxX86_64, linuxAarch64, stubLinker, x86_64Host), "old host-skip, new pass"
 # or "old host-skip, new host-excluded" (a suite whose golden-host this host
 # is not: tests/golden/run.tcl); the
 # report lists every other pair, and every suite whose state is not ok
@@ -187,10 +187,11 @@ proc runNew {tree suites timeout backends jobs} {
 set ::suiteStates [dict create]
 
 # The Tcl suite's host constraints: a test they skip cannot run on this host
-# (linuxX86_64: a live Linux x86-64 syscall or x86-64 machine code; stubLinker
-# and x86_64Host: the x86-64-only stub linker and object relocations). Old
+# (linuxX86_64, linuxAarch64: a live syscall through that architecture's
+# transport, or its machine code; stubLinker and x86_64Host: the x86-64-only
+# stub linker and object relocations). Old
 # tests skipped by one are "host-skip" (::hostSkipped, "FILE NAME" -> 1).
-set ::hostConstraints {linuxX86_64 stubLinker x86_64Host}
+set ::hostConstraints {linuxX86_64 linuxAarch64 stubLinker x86_64Host}
 set ::hostSkipped [dict create]
 proc hostVerdict {key verdict} {
     return [expr {$verdict eq "skip" && [dict exists $::hostSkipped $key] ? "host-skip" : $verdict}]

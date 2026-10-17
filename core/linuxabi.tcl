@@ -1,34 +1,44 @@
-# linuxabi.tcl -- linux::abi::syscall, the raw Linux x86-64 kernel
-# transition (LINUX-X86-64-SYSCALL.md).
+# linuxabi.tcl -- the raw Linux kernel transitions, one per architecture
+# (LINUX-X86-64-SYSCALL.md, LINUX-SYSCALL-TRANSPORTS.md).
 #
-#   linux::abi::syscall({rax: R, rdi: R, rsi: R, rdx: R, r10: R, r8: R, r9: R})
-#       -> abi::x86_64::Register64
+#   linux::abi::x86_64::syscall({rax: R, rdi: R, rsi: R, rdx: R, r10: R, r8: R, r9: R})
+#       -> abi::x86_64::Register64             R: abi::x86_64::Register64
+#   linux::abi::aarch64::syscall({x8: R, x0: R, x1: R, x2: R, x3: R, x4: R, x5: R})
+#       -> abi::aarch64::Register64            R: abi::aarch64::Register64
 #
-# One root native, registered under its qualified name (no module file
-# defines it: surface/modules.tcl and surface/lower.tcl resolve a qualified
-# native name to a root reference). It is the one genuinely machine/OS-
-# specific operation Botlish exposes: it executes the x86-64 `syscall`
-# instruction with the given register contents and returns rax.
+# Each is one root native, registered under its qualified name (no module
+# file defines it: surface/modules.tcl and surface/lower.tcl resolve a
+# qualified native name to a root reference), and each is a *transport*: the
+# one genuinely machine/OS-specific operation Botlish exposes for its
+# architecture. It executes that architecture's syscall instruction with the
+# given register contents and returns the result register.
 #
 # The argument is a syscall-input description, not an inline assembly API:
-# an anonymous struct whose fields are named after the Linux x86-64 syscall
-# register convention and are abi::x86_64::Register64 values (lib/abi/
-# x86_64.bot):
+# an anonymous struct whose fields are named after the architecture's Linux
+# syscall register convention and are that architecture's Register64 values
+# (lib/abi/x86_64.bot, lib/abi/aarch64.bot):
 #
-#   rax   the syscall number            (required)
-#   rdi   argument 1    rsi   argument 2    rdx   argument 3
-#   r10   argument 4    r8    argument 5    r9    argument 6
+#   x86-64   rax the number, rdi rsi rdx r10 r8 r9 arguments 1-6,
+#            `syscall`, the result in rax
+#   AArch64  x8 the number,  x0 x1 x2 x3 x4 x5 arguments 1-6,
+#            `svc #0`, the result in x0
 #
-# An omitted argument register is zero. Any other field is rejected
-# (hir/syscall.tcl: UNKNOWN-FIELD), and so is a missing rax (MISSING-FIELD)
-# or a field that is not a Register64 (TYPE). The result is the raw rax
-# after the transition, as a Register64: no errno, no -1 convention, no
-# retry, no Result -- the kernel's own return value, nothing above it.
+# The number register is required; an omitted argument register is zero.
+# Any other field is rejected (hir/syscall.tcl: UNKNOWN-FIELD), and so is a
+# missing number register (MISSING-FIELD) or a field that is not the
+# transport's own Register64 (TYPE: an abi::aarch64::Register64 is never an
+# x86-64 register). The result is the raw result register after the
+# transition, as a Register64: no errno, no -1 convention, no retry, no
+# Result -- the kernel's own return value, nothing above it.
 #
-# The native knows the Linux x86-64 *transport* convention (which register
-# carries what) and nothing about individual syscalls: no syscall number,
-# argument meaning or signature is known to the compiler. getpid is
-# `rax: abi::x86_64::register64(39)` in ordinary Botlish.
+# A transport knows its architecture's Linux *transport* convention (which
+# register carries what) and nothing about individual syscalls: no syscall
+# number, argument meaning or signature is known to the compiler. getpid is
+# `rax: abi::x86_64::register64(39)` on x86-64 and `x8:
+# abi::aarch64::register64(172)` on AArch64, in ordinary Botlish
+# (lib/linux/sys.x86_64.bot, lib/linux/sys.aarch64.bot: the architecture's
+# syscall numbers are source data of the library the compilation target
+# selects).
 #
 # Effects: maximally conservative, by the registry's own defaults and by
 # being in no allowlist anywhere (CLOSED-CALL-EFFECTS.md, M6's "condition
@@ -40,37 +50,106 @@
 # reading and writing all memory.
 #
 # Backends: only the native backend performs it (cranelift, cranelift-
-# generic, standalone executables; Linux x86-64 only -- the target the
-# native backend is built for, checked again at code generation). The Tcl
-# backends (interp, compile) cannot execute an x86-64 instruction and do
-# not imitate one with some other host facility (a Tcl `pid` would test the
-# wrong abstraction): a call raises the semantic error NATIVE-ONLY when it
-# runs. Only the call is refused -- a program that defines but never calls
-# it, and every pure abi::x86_64 conversion, runs on every backend.
+# generic, standalone executables), and only on its own architecture: every
+# transport compiles on every target, and running one on another
+# architecture fails with NATIVE UNSUPPORTED. The Tcl backends (interp,
+# compile) cannot execute a machine instruction and do not imitate one with
+# some other host facility (a Tcl `pid` would test the wrong abstraction): a
+# call raises the semantic error NATIVE-ONLY when it runs. Only the call is
+# refused -- a program that defines but never calls it, and every pure
+# abi::x86_64 / abi::aarch64 conversion, runs on every backend.
 
 namespace eval core::linuxabi {
-    # The register fields the argument may name, in the syscall convention's
-    # own order: rax (the number), then arguments 1-6.
-    variable registers {rax rdi rsi rdx r10 r8 r9}
-    # The struct declaration identity of a register word (lib/abi/x86_64.bot).
-    variable registerType abi::x86_64::Register64
+    # ARCH -> the transport of the Linux syscall convention of architecture
+    # ARCH (core/cabi.tcl's target `arch`):
+    #   native        the root native's qualified name
+    #   registers     the register fields its argument may name, in the
+    #                 convention's own order: the number register first,
+    #                 then arguments 1-6
+    #   abi           the namespace of its register type, conversions and
+    #                 address bridges (lib/abi/x86_64.bot, lib/abi/aarch64.bot)
+    #   registerType  the struct declaration identity of one register word
+    #   op            the NIR op it lowers to (native/src/nir.rs)
+    #   instruction   the machine instruction its boundary executes
+    #   label         the architecture, as messages name it
+    variable transports [dict create \
+        x86_64 {
+            native linux::abi::x86_64::syscall
+            registers {rax rdi rsi rdx r10 r8 r9}
+            abi abi::x86_64
+            registerType abi::x86_64::Register64
+            op syscall_linux_x86_64
+            instruction syscall
+            label x86-64
+        } \
+        aarch64 {
+            native linux::abi::aarch64::syscall
+            registers {x8 x0 x1 x2 x3 x4 x5}
+            abi abi::aarch64
+            registerType abi::aarch64::Register64
+            op syscall_linux_aarch64
+            instruction {svc #0}
+            label AArch64
+        }]
 }
 
-proc core::linuxabi::registers {} {
-    variable registers
-    return $registers
+# The architectures that have a transport, in table order.
+proc core::linuxabi::architectures {} {
+    variable transports
+    return [dict keys $transports]
 }
 
-proc core::linuxabi::registerType {} {
-    variable registerType
-    return $registerType
+# The architecture whose transport native NAME is, or "" if NAME is none.
+proc core::linuxabi::transportOf {name} {
+    variable transports
+    dict for {arch transport} $transports {
+        if {[dict get $transport native] eq $name} {
+            return $arch
+        }
+    }
+    return ""
 }
 
-proc core::linuxabi::syscallImpl {registers} {
+# 1 if NAME is the qualified name of a syscall transport native.
+proc core::linuxabi::isSyscall {name} {
+    return [expr {[transportOf $name] ne ""}]
+}
+
+# Field FIELD (native registers abi registerType op instruction label) of the
+# transport of architecture ARCH.
+proc core::linuxabi::transport {arch field} {
+    variable transports
+    return [dict get $transports $arch $field]
+}
+
+# The register fields the argument of transport native NAME may name, in
+# its convention's order (the number register first).
+proc core::linuxabi::registers {name} {
+    return [transport [transportOf $name] registers]
+}
+
+# The Register64 declaration identity transport native NAME takes and
+# returns.
+proc core::linuxabi::registerType {name} {
+    return [transport [transportOf $name] registerType]
+}
+
+# Every transport's Register64 declaration identity, in table order.
+proc core::linuxabi::registerTypes {} {
+    return [lmap arch [architectures] {transport $arch registerType}]
+}
+
+proc core::linuxabi::syscallImpl {arch registers} {
+    set label [transport $arch label]
+    set instruction [transport $arch instruction]
     core::semanticError NATIVE-ONLY \
-        "linux::abi::syscall executes the x86-64 \"syscall\" instruction (a raw Linux kernel transition) and is performed only by the native backend (cranelift, or a standalone executable) on Linux x86-64; the Tcl backends (interp, compile) do not execute machine instructions and do not imitate a syscall"
+        "[transport $arch native] executes the $label \"$instruction\" instruction (a raw Linux kernel transition) and is performed only by the native backend (cranelift, or a standalone executable) on Linux $label; the Tcl backends (interp, compile) do not execute machine instructions and do not imitate a syscall"
 }
 
-core::native::register linux::abi::syscall -arity 1 -impl core::linuxabi::syscallImpl \
-    -param-types {struct} -result-type struct -runtime {raw-syscall} \
-    -result-shape [list named-struct [core::linuxabi::registerType]]
+foreach arch [core::linuxabi::architectures] {
+    core::native::register [core::linuxabi::transport $arch native] -arity 1 \
+        -impl [list core::linuxabi::syscallImpl $arch] \
+        -param-types {struct} -result-type struct -runtime {raw-syscall} \
+        -result-shape [list named-struct [core::linuxabi::transport $arch registerType]]
+}
+unset arch

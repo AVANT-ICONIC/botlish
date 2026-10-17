@@ -6,7 +6,7 @@
 #     --abi::bytes::from_list--------------> abi::bytes::Bytes      (owned, contiguous, opaque)
 #     --linux::write------------> address + abi::Usize length
 #     --abi::x86_64::from_*-----> Register64 words (rsi, rdx)
-#     --linux::abi::syscall-----> the x86-64 `syscall` instruction (rax = 1)
+#     --linux::abi::x86_64::syscall-----> the x86-64 `syscall` instruction (rax = 1)
 #     --> the kernel's write(2) --> file descriptor 1
 #
 # No libc `write`, no special runtime implementation of Linux write: the

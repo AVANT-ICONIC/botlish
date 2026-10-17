@@ -12,14 +12,14 @@ family is known to the compiler.
 x = abi::u32(n)                      # n, proven 0 <= n <= 2^32 - 1, or an error
 m = x.value                          # exactly n again: an ordinary Int
 r = abi::x86_64::from_u32(x)         # the x86-64 register word (zero-extended)
-linux::abi::syscall({rax: abi::x86_64::register64(39), rdi: r})
+linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rdi: r})
 ```
 
 ```
 ordinary computation in Int
     --abi::u32(...)------------->  abi::U32        checked/proven domain     (lib/abi.bot)
     --abi::x86_64::from_u32----->  Register64      x86-64 transport          (lib/abi/x86_64.bot)
-    --linux::abi::syscall------->  the kernel                                (unchanged)
+    --linux::abi::x86_64::syscall------->  the kernel                                (unchanged)
 ```
 
 The two theorems the milestone asked for hold, and are tested:
@@ -352,7 +352,7 @@ compiler the family -- the opposite of the brief's preference.
 Within a register literal:
 
 ```botlish
-linux::abi::syscall({
+linux::abi::x86_64::syscall({
     rax: abi::x86_64::register64(nr),
     rdi: abi::x86_64::from_i32(fd),
     rdx: abi::x86_64::from_usize(count),
@@ -570,7 +570,7 @@ result whatever `CORE_BACKEND` is), and none disturbing a suite-wide
   this target yet separately declared (no parent, not subtypes); the compiler
   knows no ABI type (no native, and no non-comment line of `core/`, `hir/`,
   `native/`, `surface/`, `compiler/` or any Rust source names a member,
-  domain or error, and the only abi natives are `linux::abi::syscall` and
+  domain or error, and the only abi natives are `linux::abi::x86_64::syscall` and
   the ten generic predicates every source `type` gets); names (a
   program's own `U8Value` beside `register64` and beside `abi::U8Value`; a
   real *error* name collision names `lib/abi.bot`; a same-file duplicate

@@ -27,8 +27,10 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux"
     && $::tcl_platform(machine) in {x86_64 amd64}}]
 
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines) without the x86-64 syscall that
-# linuxX86_64 tests need.
+# stack maps, the stack guard, coroutines), and syscalls through the portable
+# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
+# spells the x86-64 transport or reads its machine code.
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
@@ -606,7 +608,7 @@ set scCensus {
     top-level-install {CONTEXT-TYPE-NOT-EXACT DUPLICATE-CONTEXT}
     not-from-source {LISTLOOP-BREAK-VALUE}
     header {CYCLE DUPLICATE-IMPORT DUPLICATE-NATIVE INVALID-TOPLEVEL NOT-A-TYPE SELF-IMPORT TYPE-IMPORT-COLLISION
-        UNKNOWN-TARGET}
+        UNKNOWN-TARGET AMBIGUOUS-MODULE UNSUPPORTED-ARCHITECTURE}
     warning {SAME-RETURN-VALUE METHOD-ELIGIBLE FIXED-ARITY-LIST-RETURN SAME-FAILURE PROVES-NAMING
         ONE-CHAR-STRING-LITERAL MANY-BOOLEAN-ARGUMENTS}
     parser {STATIC-INTRINSIC-FORM STATIC-UNKNOWN-OPERATION COROUTINE-BINDING-FIELD MALFORMED-CONTEXT-SECTION

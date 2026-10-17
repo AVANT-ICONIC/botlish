@@ -75,7 +75,9 @@ proc surface::cache::Usable {dir} {
 proc surface::cache::Key {path source mode strict {target ""}} {
     variable version
     # TARGET is the resolved C ABI target (hir::cabi::ResolveTarget): the
-    # widths of ffi::c's integer scalars follow it (C-ABI-TYPES.md).
+    # widths of ffi::c's integer scalars follow it (C-ABI-TYPES.md), and its
+    # architecture picks an architecture-specific module's file
+    # (surface/modules.tcl's ModuleFile).
     return [list version $version front-end [hir::interchange::fingerprint] \
         path $path source $source library $::core::libraryDir \
         libraries $::core::loadedLibraries strict $strict warnings $mode target $target \
@@ -97,11 +99,17 @@ proc surface::cache::Contents {path existsVar} {
 
 # HIR's dependencies besides the program itself: {PATH EXISTS TEXT} for the
 # module path of each namespace a file of it imports, by `import NS` or by
-# `import type NS::Type` -- imports are the only thing that loads a module
-# (IMPORTS.md: dependencies are declared, never discovered), so these are
-# every file its build read besides the program, and the paths it found no
-# file at -- with the text its build read (READS: PATH -> text).
-proc surface::cache::Dependencies {hir reads} {
+# `import type NS::Type`, and for the namespace's architecture-specific file
+# of C target TARGET's architecture (surface/modules.tcl's ModuleFile: the
+# host's when "", as the build's) -- imports are the only thing that loads a
+# module (IMPORTS.md: dependencies are declared, never discovered), so these
+# are every file its build read besides the program, and the paths it found
+# no file at -- with the text its build read (READS: PATH -> text). Both
+# candidate paths of every namespace are kept, whichever exists: a file
+# appearing at the other one changes what the build would do.
+proc surface::cache::Dependencies {hir reads {target ""}} {
+    set target [hir::cabi::ResolveTarget $target]
+    set arch [expr {$target eq "" ? "" : [dict get [core::cabi::target $target] arch]}]
     set paths {}
     dict for {ns environment} [dict get $hir declarations imports] {
         set imported [dict get $environment namespaces]
@@ -111,6 +119,9 @@ proc surface::cache::Dependencies {hir reads} {
         }
         foreach namespace $imported {
             lappend paths [surface::modules::ModulePath $namespace]
+            if {$arch ne ""} {
+                lappend paths [surface::modules::ArchModulePath $namespace $arch]
+            }
         }
     }
     set result {}
@@ -195,7 +206,7 @@ proc surface::cache::store {dir path source mode strict hir reads {target ""}} {
     set temporary ""
     try {
         set entry [list $magic $version key $key \
-            dependencies [Dependencies $hir $reads] \
+            dependencies [Dependencies $hir $reads $target] \
             interchange [hir::interchange::encode $hir -trait-source 1]]
         file mkdir $dir
         set temporary $entryPath.[pid].[clock microseconds]

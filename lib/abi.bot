@@ -25,7 +25,7 @@
 #   ordinary computation in Int
 #       --abi::u32(...)-->           abi::U32       checked/proven domain
 #       --abi::x86_64::from_u32-->   Register64     x86-64 transport
-#       --linux::abi::syscall-->     the kernel
+#       --linux::abi::x86_64::syscall-->     the kernel
 #
 # The family (exact inclusive domains):
 #

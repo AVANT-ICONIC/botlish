@@ -22,7 +22,7 @@
 #   abi       abi::u8(n).value, abi::x86_64::from_u8(...), to_int and back,
 #             and a typed parameter spelled abi::U8Value, or U8Value after
 #             `import type abi::U8Value`
-#   syscall   a function using linux::abi::syscall (compiled, never run)
+#   syscall   a function using linux::abi::x86_64::syscall (compiled, never run)
 #
 # NEGATIVE programs rotate through the shapes imports must refuse, each with its
 # expected diagnostic kind (anything else, or acceptance, is a "negative
@@ -269,7 +269,7 @@ proc negative {shape} {
         parent-for-child { return [list "import abi\nabi::x86_64::register64([rnd 0 9])\n" MISSING-IMPORT] }
         child-for-parent { return [list "import abi::x86_64\nabi::u8([rnd 0 9])\n" MISSING-IMPORT] }
         duplicate-import {
-            set ns [pick {list str mutable_array abi abi::x86_64 linux::abi}]
+            set ns [pick {list str mutable_array abi abi::x86_64 abi::aarch64 linux::abi::x86_64 linux::abi::aarch64 linux::sys}]
             return [list "import $ns\nimport $ns\n1\n" DUPLICATE-IMPORT]
         }
         missing-namespace { return [list "import [pick {nothere nosuch::deep linux abi::nope}]\n1\n" UNKNOWN-NAMESPACE] }
@@ -342,9 +342,9 @@ try {
             incr values
         }
 
-        # A compile-only program with linux::abi::syscall (never run).
+        # A compile-only program with linux::abi::x86_64::syscall (never run).
         if {$k % 10 == 0} {
-            set text "import abi::x86_64\nimport linux::abi\nfn raw():\n    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64([rnd 0 9])}))\n1\n"
+            set text "import abi::x86_64\nimport linux::abi::x86_64\nfn raw():\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64([rnd 0 9])}))\n1\n"
             set compiled [compileFile $text]
             if {[lindex $compiled 0] ne "ok"} {
                 incr negativeEscapes

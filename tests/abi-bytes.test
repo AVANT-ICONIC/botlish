@@ -30,6 +30,13 @@ set nativeBackends {cranelift-generic cranelift}
 
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
+# Linux on x86-64 or AArch64: the native backend's whole runtime (native
+# stack maps, the stack guard, coroutines), and syscalls through the portable
+# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
+# spells the x86-64 transport or reads its machine code.
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint objdump [expr {[auto_execok objdump] ne ""}]
 testConstraint posixShell [expr {[auto_execok sh] ne ""}]
 # strace is optional evidence: it needs the binary and permission to ptrace.
@@ -408,7 +415,7 @@ import abi::bytes
 import abi::x86_64
 import byte
 import linux
-import linux::abi
+import linux::abi::x86_64
 import str
 import type byte::Byte
 
@@ -458,7 +465,7 @@ proc utf8 {text} {
     return [encoding convertto utf-8 $text]
 }
 
-test abi-bytes-example-writes-hello-to-stdout {examples/linux/write.bot: the standalone executable writes exactly "Hello from Botlish!\n" to descriptor 1 through the raw syscall path; the executable's own result line (the 20 bytes written) follows it} -constraints {linuxX86_64} -body {
+test abi-bytes-example-writes-hello-to-stdout {examples/linux/write.bot: the standalone executable writes exactly "Hello from Botlish!\n" to descriptor 1 through the raw syscall path; the executable's own result line (the 20 bytes written) follows it} -constraints {nativeLinux} -body {
     set path [file join $::executableDir example]
     native::executable [surface::readProgramFile [file join $::projectRoot examples linux write.bot]] $path
     set channel [open |[list $path] rb]
@@ -467,49 +474,49 @@ test abi-bytes-example-writes-hello-to-stdout {examples/linux/write.bot: the sta
     set output
 } -result "Hello from Botlish!\n20\n"
 
-test abi-bytes-example-file-on-every-backend {the example file's value is 20 on both native backends and NATIVE-ONLY on the Tcl backends (the syscall is never imitated)} -constraints {linuxX86_64} -body {
+test abi-bytes-example-file-on-every-backend {the example file's value is 20 on both native backends and NATIVE-ONLY on the Tcl backends (the syscall is never imitated)} -constraints {nativeLinux} -body {
     set hir [surface::readProgramFile [file join $::projectRoot examples linux write.bot]]
     lmap backend $::allBackends {lrange [outcomeUnderHir $backend $hir] 0 1}
 } -result {{error {CORE SEMANTIC NATIVE-ONLY}} {error {CORE SEMANTIC NATIVE-ONLY}} {value 20} {value 20}}
 
-test abi-bytes-write-returns-the-count-and-the-bytes-arrive {a small write (static storage) and a dynamic one (heap storage) both go through the same wrapper and syscall: the kernel's result is the byte count, and descriptor 3 holds exactly the bytes} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-write-returns-the-count-and-the-bytes-arrive {a small write (static storage) and a dynamic one (heap storage) both go through the same wrapper and syscall: the kernel's result is the byte count, and descriptor 3 holds exactly the bytes} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable basic "${::linuxPrelude}\nstatic = abi::bytes::from_list(str::encode_utf8(\"hello\\n\"))\ndynamic = mk(\"world\\n\")\n\[out(3, static), out(3, dynamic)\]"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout $f3 [string length $f4]
 } -result "{\[6, 6\]} {hello\nworld\n} 0"
 
-test abi-bytes-empty-write {linux::write of the empty Bytes performs the syscall with a zero count and returns 0, writing nothing -- whether the empty Bytes was built statically or dynamically, without relying on what address a zero-length payload has} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-empty-write {linux::write of the empty Bytes performs the syscall with a zero count and returns 0, writing nothing -- whether the empty Bytes was built statically or dynamically, without relying on what address a zero-length payload has} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable empty "${::linuxPrelude}\nstatic = abi::bytes::from_list(\[\])\ndynamic = mk(\"\")\n\[out(3, static), out(3, dynamic), out(4, static)\]"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout [string length $f3] [string length $f4]
 } -result {{[0, 0, 0]} 0 0}
 
-test abi-bytes-empty-write-to-an-invalid-descriptor-is-still-the-syscall {a zero-length write to a bad descriptor is EBADF (-9): the descriptor is checked by the kernel even with a zero count, proving the empty write is a real syscall} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-empty-write-to-an-invalid-descriptor-is-still-the-syscall {a zero-length write to a bad descriptor is EBADF (-9): the descriptor is checked by the kernel even with a zero count, proving the empty write is a real syscall} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable emptybad "${::linuxPrelude}\nout(1000, abi::bytes::from_list(\[\]))"]
     lindex [runExecutable $exe] 0
 } -result -9
 
-test abi-bytes-embedded-nul {a payload 41 00 42 is three bytes, not a C string: the kernel receives A, NUL, B -- from static storage and from heap storage alike, with the NUL at the start, in the middle and at the end} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-embedded-nul {a payload 41 00 42 is three bytes, not a C string: the kernel receives A, NUL, B -- from static storage and from heap storage alike, with the NUL at the start, in the middle and at the end} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable nul "${::linuxPrelude}\nfn nul3(m: Byte):\n    abi::bytes::from_list(\[byte::from_int(65), m, byte::from_int(66)\])\nfn edges(z: Byte):\n    abi::bytes::from_list(\[z, byte::from_int(67), z\])\nzero = byte::from_int(0)\n\[out(3, abi::bytes::from_list(\[byte::from_int(65), byte::from_int(0), byte::from_int(66)\])), out(3, nul3(zero)), out(4, edges(zero)), out(4, abi::bytes::from_list(\[byte::from_int(0)\])), abi::bytes::length(nul3(zero)).value\]"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout [binary encode hex $f3] [binary encode hex $f4]
 } -result {{[3, 3, 3, 1, 3]} 410042410042 00430000}
 
-test abi-bytes-utf8-write {a String with multi-byte scalars written through the existing encoder: the result is the encoded byte count (not the scalar count) and the kernel receives exactly the encoded bytes} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-utf8-write {a String with multi-byte scalars written through the existing encoder: the result is the encoded byte count (not the scalar count) and the kernel receives exactly the encoded bytes} -constraints {nativeLinux posixShell} -body {
     set text "héllo ☃ \U0001f600\n"
     set exe [buildExecutable utf8 "${::linuxPrelude}\ns = \"héllo ☃ \U0001f600\\n\"\n\[str::length(s), out(3, mk(s)), out(4, abi::bytes::from_list(str::encode_utf8(\"héllo ☃ \U0001f600\\n\")))\]"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout [string length $text] [string length [utf8 $text]] [expr {$f3 eq [utf8 $text]}] [expr {$f4 eq [utf8 $text]}]
 } -result {{[10, 16, 16]} 10 16 1 1}
 
-test abi-bytes-large-heap-write {a heap-backed payload of 81920 bytes (1-, 2-, 3- and 4-byte UTF-8 scalars repeated 8192 times, built dynamically: a storage of header + 81920 bytes) written to a file: the result is 81920 and every byte arrives} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-large-heap-write {a heap-backed payload of 81920 bytes (1-, 2-, 3- and 4-byte UTF-8 scalars repeated 8192 times, built dynamically: a storage of header + 81920 bytes) written to a file: the result is 81920 and every byte arrives} -constraints {nativeLinux posixShell} -body {
     set seed "A\u00e9\u2603\U0001f600"
     set exe [buildExecutable large "${::linuxPrelude}\nbig = abi::bytes::from_list(str::encode_utf8(doubled(\"$seed\", 13)))\n\[abi::bytes::length(big).value, out(3, big)\]"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout [expr {$f3 eq [string repeat [utf8 $seed] 8192]}] [string length $f3]
 } -result {{[81920, 81920]} 1 81920}
 
-test abi-bytes-every-byte-value-heap-write {a dynamically built payload holding every byte value 0..255 (and then again, 3000 bytes) is a heap storage whose every byte arrives exactly: no value is truncated, signed, or treated as a terminator} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-every-byte-value-heap-write {a dynamically built payload holding every byte value 0..255 (and then again, 3000 bytes) is a heap storage whose every byte arrives exactly: no value is truncated, signed, or treated as a terminator} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable allvalues "${::linuxPrelude}\n\[out(3, abi::bytes::from_list(pattern(3000))), out(4, abi::bytes::from_list(pattern(256)))\]"]
     lassign [runExecutable $exe] stdout f3 f4
     set expected3 {}
@@ -519,7 +526,7 @@ test abi-bytes-every-byte-value-heap-write {a dynamically built payload holding 
     list $stdout [expr {$f3 eq [binary format c* $expected3]}] [expr {$f4 eq [binary format c* $expected4]}]
 } -result {{[3000, 256]} 1 1}
 
-test abi-bytes-write-to-a-pipe {the same write to a real pipe (descriptor 3 is the read end Tcl holds): the large payload exceeds the pipe's buffer, so the kernel returns only when the reader has taken it all, and the reader receives every byte} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-write-to-a-pipe {the same write to a real pipe (descriptor 3 is the read end Tcl holds): the large payload exceeds the pipe's buffer, so the kernel returns only when the reader has taken it all, and the reader receives every byte} -constraints {nativeLinux posixShell} -body {
     set seed "A\u00e9\u2603\U0001f600"
     set exe [buildExecutable pipe "${::linuxPrelude}\nbig = abi::bytes::from_list(str::encode_utf8(doubled(\"$seed\", 14)))\nsmall = mk(\"tail\")\n\[out(3, big), out(3, small)\]"]
     set channel [open |[list sh -c {exec "$0" 3>&1 1>/dev/null} $exe] rb]
@@ -528,19 +535,19 @@ test abi-bytes-write-to-a-pipe {the same write to a real pipe (descriptor 3 is t
     list [string length $data] [expr {[string range $data 0 163839] eq [string repeat [utf8 $seed] 16384]}] [string range $data 163840 end]
 } -result {163844 1 tail}
 
-test abi-bytes-repeated-writes-of-one-value {one Bytes written again and again: producing a raw call pointer neither consumes nor invalidates the value (it is not a resource), so every write sees identical contents, from a static and a heap storage} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-repeated-writes-of-one-value {one Bytes written again and again: producing a raw call pointer neither consumes nor invalidates the value (it is not a resource), so every write sees identical contents, from a static and a heap storage} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable repeated "${::linuxPrelude}\nstatic = abi::bytes::from_list(str::encode_utf8(\"static\\n\"))\ndynamic = mk(\"dynamic\\n\")\nrs = \[out(3, static), out(3, static), out(3, dynamic), out(3, dynamic), out(3, dynamic), out(3, static)\]\nrs"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout $f3
 } -result "{\[7, 7, 8, 8, 8, 7\]} {static\nstatic\ndynamic\ndynamic\ndynamic\nstatic\n}"
 
-test abi-bytes-aliased-writes {a = abi::bytes::from_list(...); b = a: writing a and b writes the identical bytes (the physical representation may be shared or copied, and cannot be told apart), also through a List of aliases and a closure over the value} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-aliased-writes {a = abi::bytes::from_list(...); b = a: writing a and b writes the identical bytes (the physical representation may be shared or copied, and cannot be told apart), also through a List of aliases and a closure over the value} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable alias "${::linuxPrelude}\na = mk(\"shared\\n\")\nb = a\nxs = \[a, b, a\]\nfn emit() -> int:\n    out(4, b)\nr1 = out(3, a)\nr2 = out(3, b)\nr3 = loop x in xs:\n    out(3, x)\nr4 = emit()\n\[r1, r2, r3, r4\]"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout $f3 $f4
 } -result "{\[7, 7, \[7, 7, 7\], 7\]} {shared\nshared\nshared\nshared\nshared\n} {shared\n}"
 
-test abi-bytes-write-error-is-the-raw-negative-result {a write the kernel refuses returns its raw negative -errno as an ordinary Int, preserved exactly (never reread as unsigned): an invalid descriptor is EBADF (-9) on Linux, for a static, a heap and an empty payload alike; a closed descriptor too} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-write-error-is-the-raw-negative-result {a write the kernel refuses returns its raw negative -errno as an ordinary Int, preserved exactly (never reread as unsigned): an invalid descriptor is EBADF (-9) on Linux, for a static, a heap and an empty payload alike; a closed descriptor too} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable badfd "${::linuxPrelude}\n\[out(1000, mk(\"x\")), out(1000, abi::bytes::from_list(str::encode_utf8(\"static\"))), out(1000, abi::bytes::from_list(\[\])), out(63, abi::bytes::from_list(pattern(10))), abi::x86_64::to_int(abi::x86_64::register64(0 - 9)) < 0\]"]
     lindex [runExecutable $exe] 0
 } -result {[-9, -9, -9, -9, true]}
@@ -548,7 +555,7 @@ test abi-bytes-write-error-is-the-raw-negative-result {a write the kernel refuse
 test abi-bytes-short-write-is-reported-not-completed {a REAL short write: descriptor 3 is a pipe set non-blocking (by the test program's own raw fcntl), filled with a 40960-byte write, then a 81920-byte write that the kernel can only partly accept. linux::write returns exactly the kernel's short count (0 < n < 81920) and writes nothing more (no loop, no retry); the next write finds the pipe full and returns the raw -EAGAIN (-11); and the pipe holds exactly the first payload followed by the first n bytes of the second} -constraints {linuxX86_64 posixShell} -body {
     set program "${::linuxPrelude}
 fn nonblock(fd: abi::I32) -> int:
-    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(72), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::register64(4), rdx: abi::x86_64::register64(2048)}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(72), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::register64(4), rdx: abi::x86_64::register64(2048)}))
 a = abi::bytes::from_list(str::encode_utf8(doubled(\"0123456789\", 12)))
 b = abi::bytes::from_list(str::encode_utf8(doubled(\"abcdefghij\", 13)))
 r0 = nonblock(abi::i32(3))
@@ -577,16 +584,16 @@ r3 = out(3, b)
         [expr {[string length $data] == 40960 + $short}]
 } -result {1 -11 1 1}
 
-test abi-bytes-write-is-exactly-one-syscall {the wrapper performs ONE write(2) and returns exactly the kernel's result: a short write (a pipe, a signal) is reported as the short count and never completed or retried by the wrapper. Verified structurally here -- linux::write's NIR has exactly one syscall op and no branch, jump, label or tail call, so there is no loop or retry to complete a partial write -- and observed in the preceding test, which provokes a real short write on a non-blocking pipe} -constraints {linuxX86_64} -body {
+test abi-bytes-write-is-exactly-one-syscall {the wrapper performs ONE write(2) and returns exactly the kernel's result: a short write (a pipe, a signal) is reported as the short count and never completed or retried by the wrapper. Verified structurally here -- linux::write's x86-64 transport, linux::sys::write, has exactly one syscall op in its NIR and no branch, jump, label or tail call, so there is no loop or retry to complete a partial write -- and observed in the preceding test, which provokes a real short write on a non-blocking pipe} -constraints {linuxX86_64} -body {
     set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, mk(\"x\"))"]]
-    set body [nirFunction $nir linux::write]
+    set body [nirFunction $nir linux::sys::write]
     list [regexp -all {op syscall_linux_x86_64} $body] [regexp -all {\mjump\M|\mbr\M|\mtail\M|\mlabel\M} $body]
 } -result {1 0}
 
 # ---------------------------------------------------------------------------
 # GC stress: a collection attempted at every allocation site
 
-test abi-bytes-gc-stress-writes-are-exact {with BOTLISH_NATIVE_GC_STRESS=1 every write is still exact: static, small dynamic and large heap storages, the empty Bytes, UTF-8, embedded NULs, aliases and a List of Bytes -- run many times so an accidental liveness assumption would show} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-gc-stress-writes-are-exact {with BOTLISH_NATIVE_GC_STRESS=1 every write is still exact: static, small dynamic and large heap storages, the empty Bytes, UTF-8, embedded NULs, aliases and a List of Bytes -- run many times so an accidental liveness assumption would show} -constraints {nativeLinux posixShell} -body {
     set program "${::linuxPrelude}
 fn nul3(m: Byte):
     abi::bytes::from_list(\[byte::from_int(65), m, byte::from_int(66)\])
@@ -614,7 +621,7 @@ rs"
         [expr {[lindex $stressed 2] eq [string repeat [utf8 "alias\nalias\n"] 40]}]
 } -result {1 1 1}
 
-test abi-bytes-gc-stress-in-process {the in-process native runs (specialized and unspecialized) under GC stress give the same results as without stress: lengths, equality and hashes of Bytes held in Lists, and write results} -constraints {linuxX86_64} -body {
+test abi-bytes-gc-stress-in-process {the in-process native runs (specialized and unspecialized) under GC stress give the same results as without stress: lengths, equality and hashes of Bytes held in Lists, and write results} -constraints {nativeLinux} -body {
     set text "import list\n${::linuxPrelude}
 a = mk(\"alias\\n\")
 xs = \[a, mk(\"other\\n\"), a, abi::bytes::from_list(pattern(100))\]
@@ -639,7 +646,7 @@ set livenessHeader {import abi
 import abi::bytes
 import abi::x86_64
 import byte
-import linux::abi
+import linux::abi::x86_64
 import str
 
 fn doubled(s: str, k: int) -> str:
@@ -652,7 +659,7 @@ fn addr_of(d: abi::bytes::Bytes) -> abi::x86_64::Register64:
     abi::x86_64::from_bytes(d)
 
 fn raw_write(fd: abi::x86_64::Register64, addr: abi::x86_64::Register64, n: abi::x86_64::Register64) -> int:
-    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: fd, rsi: addr, rdx: n}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: fd, rsi: addr, rdx: n}))
 
 }
 set livenessFooter {
@@ -664,26 +671,26 @@ rs
 }
 set livenessShapes [dict create \
     inline {fn w(fd: abi::I32, a: str, b: str) -> int:
-    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_bytes(abi::bytes::from_list(str::encode_utf8(a))), rdx: abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_bytes(abi::bytes::from_list(str::encode_utf8(a))), rdx: abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))}))
 } \
     locals {fn w(fd: abi::I32, a: str, b: str) -> int:
     addr = abi::x86_64::from_bytes(abi::bytes::from_list(str::encode_utf8(a)))
     n = abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))
-    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: n}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: n}))
 } \
     struct {fn w(fd: abi::I32, a: str, b: str) -> int:
     regs = {rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_bytes(abi::bytes::from_list(str::encode_utf8(a))), rdx: abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))}
-    abi::x86_64::to_int(linux::abi::syscall(regs))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall(regs))
 } \
     helper {fn w(fd: abi::I32, a: str, b: str) -> int:
-    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr_of(abi::bytes::from_list(str::encode_utf8(a))), rdx: abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr_of(abi::bytes::from_list(str::encode_utf8(a))), rdx: abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))}))
 } \
     join {fn w(fd: abi::I32, a: str, b: str) -> int:
     addr = if str::length(a) > 0:
         abi::x86_64::from_bytes(abi::bytes::from_list(str::encode_utf8(a)))
     else:
         abi::x86_64::register64(0)
-    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))}))
 } \
     callee {fn w(fd: abi::I32, a: str, b: str) -> int:
     raw_write(abi::x86_64::from_i32(fd), abi::x86_64::from_bytes(abi::bytes::from_list(str::encode_utf8(a))), abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b)))))
@@ -726,7 +733,7 @@ test abi-bytes-nir-write-path {NIR of the canonical write path, dynamic input: t
     set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, mk(\"hi\"))"]]
     set names [dict create]
     foreach {- id name} [regexp -all -inline -line {^func ([0-9]+) "([^"]+)"} $nir] { dict set names $id $name }
-    set write [nirFunction $nir linux::write]
+    set write [nirFunction $nir linux::sys::write]
     set seq {}
     foreach line [split $write \n] {
         if {[regexp {^\s+(%[0-9]+) = op (bytesaddr|syscall_linux_x86_64|keepalive) } $line -> reg op]} {
@@ -743,7 +750,7 @@ test abi-bytes-nir-write-path {NIR of the canonical write path, dynamic input: t
 
 test abi-bytes-nir-register-order-and-keepalive-operand {the syscall's operands are, in register order, rax = the register64(1) word, rdi = the fd word, rsi = THE ADDRESS (the bytesaddr result, never any other register), rdx = the length word, then the zero constant for r10 r8 r9 -- and the keepalive's operand is exactly bytesaddr's operand} -constraints linuxX86_64 -body {
     set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, mk(\"hi\"))"]]
-    set write [nirFunction $nir linux::write]
+    set write [nirFunction $nir linux::sys::write]
     regexp {(%[0-9]+) = op bytesaddr (%[0-9]+)} $write -> address storage
     regexp {op syscall_linux_x86_64 (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+)} $write -> rax rdi rsi rdx r10 r8 r9
     regexp {op keepalive (%[0-9]+)} $write -> kept
@@ -781,11 +788,11 @@ test abi-bytes-nir-dynamic-payload-precedes-the-syscall {a payload built dynamic
         [orderOf $names [nirFunction $nir out]] [regexp -all {op bytesfromlist} [nirFunction $nir abi::bytes::from_list]]
 } -result {{mk out} {strutf8bytes abi::bytes::from_list} {abi::i32 linux::write} 1}
 
-test abi-bytes-clif-keepalive-and-stack-map {CLIF of linux::write: rt_bytes_addr, then the syscall helper, then rt_keepalive, in that order, with the keepalive's operand the very value rt_bytes_addr took (the storage), and the syscall call's stack map names the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint} -constraints linuxX86_64 -body {
+test abi-bytes-clif-keepalive-and-stack-map {CLIF of linux::sys::write (linux::write's x86-64 transport): rt_bytes_addr, then the syscall helper, then rt_keepalive, in that order, with the keepalive's operand the very value rt_bytes_addr took (the storage), and the syscall call's stack map names the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint} -constraints linuxX86_64 -body {
     set clif [native::clif [bytesHir "${::linuxPrelude}\nout(3, mk(\"hi\"))"]]
     set helperOf [dict create]
     foreach {- ref name} [regexp -all -inline -line {^; (u0:[0-9]+) = (rt_[a-z0-9_]+)} $clif] { dict set helperOf $ref $name }
-    regexp {; function [0-9]+ "linux::write": botlish_fn_[0-9]+} $clif header
+    regexp {; function [0-9]+ "linux::sys::write": botlish_fn_[0-9]+} $clif header
     set start [string first $header $clif]
     set block [string range $clif $start [string first "\n\}" $clif $start]]
     # fnK -> helper name
@@ -816,9 +823,9 @@ test abi-bytes-clif-keepalive-and-stack-map {CLIF of linux::write: rt_bytes_addr
         [regexp "ss0\\+$offset\[,\\]\]" [lindex $syscall 2]]
 } -result {{rt_bytes_addr rt_linux_x86_64_syscall rt_keepalive} 1 1}
 
-test abi-bytes-nir-static-constant {NIR of a small constant: abi::bytes::from_list(str::encode_utf8("hello\n")) is one static byte-storage constant (`bytes "HEX"`): no abi::bytes::from_list call, no op bytesfromlist, no List, no String -- and it goes through the very same linux::write (one bytesaddr, one syscall, one keepalive), so there are not two source semantics for the two physical forms} -constraints linuxX86_64 -body {
+test abi-bytes-nir-static-constant {NIR of a small constant: abi::bytes::from_list(str::encode_utf8("hello\n")) is one static byte-storage constant (`bytes "HEX"`): no abi::bytes::from_list call, no op bytesfromlist, no List, no String -- and it goes through the very same linux::write (whose transport linux::sys::write has one bytesaddr, one syscall, one keepalive), so there are not two source semantics for the two physical forms} -constraints linuxX86_64 -body {
     set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, abi::bytes::from_list(str::encode_utf8(\"hello\\n\")))"]]
-    set write [nirFunction $nir linux::write]
+    set write [nirFunction $nir linux::sys::write]
     list [regexp -all {= bytes "([0-9a-f]*)"} $nir] [lindex [regexp -inline {= bytes "([0-9a-f]*)"} $nir] 1] \
         [regexp -all {op bytesfromlist|op strutf8bytes|op listnew} [nirFunction $nir <program>]] \
         [regexp -all {op bytesaddr} $write] [regexp -all {op syscall_linux_x86_64} $write] [regexp -all {op keepalive} $write]
@@ -850,14 +857,14 @@ proc allocationsOf {text} {
         [dict get $report byKind List allocations]
 }
 
-test abi-bytes-allocations-empty-and-constant {the empty Bytes and a small constant Bytes allocate nothing at all: the storage is a static constant, the wrapper is scalar-replaced, and writing them allocates nothing (total, Bytes, Struct, List); a dynamically built empty Bytes allocates no storage either (only its source List)} -constraints linuxX86_64 -body {
+test abi-bytes-allocations-empty-and-constant {the empty Bytes and a small constant Bytes allocate nothing at all: the storage is a static constant, the wrapper is scalar-replaced, and writing them allocates nothing (total, Bytes, Struct, List); a dynamically built empty Bytes allocates no storage either (only its source List)} -constraints nativeLinux -body {
     list [allocationsOf "out(3, abi::bytes::from_list(\[\]))"] \
         [allocationsOf "out(3, abi::bytes::from_list(str::encode_utf8(\"hello\\n\")))"] \
         [allocationsOf "out(3, abi::bytes::from_list(\[byte::from_int(1), byte::from_int(2)\]))"] \
         [allocationsOf "dyn = mk(\"\")\nout(3, dyn)"]
 } -result {{0 0 0 0} {0 0 0 0} {0 0 0 0} {1 0 0 1}}
 
-test abi-bytes-allocations-dynamic {a dynamic Bytes costs the source List (garbage after construction) and ONE Bytes storage; the Bytes wrapper never exists; a large one is the same two objects; writing allocates nothing more (Bytes, Struct, List)} -constraints linuxX86_64 -body {
+test abi-bytes-allocations-dynamic {a dynamic Bytes costs the source List (garbage after construction) and ONE Bytes storage; the Bytes wrapper never exists; a large one is the same two objects; writing allocates nothing more (Bytes, Struct, List)} -constraints nativeLinux -body {
     lmap text [list "out(3, mk(\"hello\\n\"))" \
             "out(3, mk(doubled(\"0123456789\", 9)))" \
             "out(3, mk(doubled(\"0123456789\", 14)))"] {
@@ -865,21 +872,21 @@ test abi-bytes-allocations-dynamic {a dynamic Bytes costs the source List (garba
     }
 } -result {{1 0 1} {1 0 1} {1 0 1}}
 
-test abi-bytes-allocations-aliased {aliasing costs nothing: b = a shares the one storage (the scalar-replaced field), and writing a and b allocates no more than writing a} -constraints linuxX86_64 -body {
+test abi-bytes-allocations-aliased {aliasing costs nothing: b = a shares the one storage (the scalar-replaced field), and writing a and b allocates no more than writing a} -constraints nativeLinux -body {
     list [allocationsOf "a = mk(\"alias\\n\")\nout(3, a)"] \
         [allocationsOf "a = mk(\"alias\\n\")\nb = a\nout(3, a)\nout(3, b)\nout(3, a)"]
 } -result {{2 1 0 1} {2 1 0 1}}
 
-test abi-bytes-allocations-bytes-in-a-list {a Bytes stored in a List materializes its one-field wrapper (one Struct object, shared by both slots holding the same value) beside the one shared storage: the only case that builds the wrapper} -constraints linuxX86_64 -body {
+test abi-bytes-allocations-bytes-in-a-list {a Bytes stored in a List materializes its one-field wrapper (one Struct object, shared by both slots holding the same value) beside the one shared storage: the only case that builds the wrapper} -constraints nativeLinux -body {
     lrange [allocationsOf "a = mk(\"alias\\n\")\nxs = \[a, a\]\nloop x in xs:\n    out(3, x)"] 1 2
 } -result {1 1}
 
-test abi-bytes-allocations-unspecialized-generic {the unspecialized (generic) build materializes the one-field wrapper where it carries the value across a call: the storage is still the one allocation} -constraints linuxX86_64 -body {
+test abi-bytes-allocations-unspecialized-generic {the unspecialized (generic) build materializes the one-field wrapper where it carries the value across a call: the storage is still the one allocation} -constraints nativeLinux -body {
     set report [native::allocationReport [bytesHir "${::linuxPrelude}\nout(3, mk(\"hello\\n\"))"] summary 1 -specialize 0]
     list [dict get $report byKind Bytes allocations] [expr {[dict get $report byKind Struct allocations] > 0}]
 } -result {1 1}
 
-test abi-bytes-heap-object-layout {the heap storage is ONE allocation of 16 header bytes (kind, marked, static flag, then the 8-byte length) plus the payload, in-line: a 4096-byte Bytes is a 4112-byte object, with no pointer to a second block} -constraints linuxX86_64 -body {
+test abi-bytes-heap-object-layout {the heap storage is ONE allocation of 16 header bytes (kind, marked, static flag, then the 8-byte length) plus the payload, in-line: a 4096-byte Bytes is a 4112-byte object, with no pointer to a second block} -constraints nativeLinux -body {
     set report [native::allocationReport [bytesHir "${::linuxPrelude}\nout(3, mk(doubled(\"0123456789abcdef\", 8)))"] summary]
     list [dict get $report byKind Bytes allocations] [dict get $report byKind Bytes headerBytes] \
         [dict get $report byKind Bytes payloadBytes] [dict get $report byKind Bytes allocatedBytes]
@@ -907,10 +914,10 @@ proc machineCalls {exe function} {
     return $calls
 }
 
-test abi-bytes-machine-code-write-function {the machine code of linux::write in a standalone executable: it calls the runtime helper that takes the payload address, then the one syscall helper, then the keepalive helper, then to_int; the address helper and the keepalive helper are given the SAME register (the storage) as their operand, so the storage is live across the syscall; and there is no call to libc's write, send or syscall anywhere in it} -constraints {linuxX86_64 objdump rustcLinker} -body {
+test abi-bytes-machine-code-write-function {the machine code of linux::sys::write (linux::write's x86-64 transport) in a standalone executable: it calls the runtime helper that takes the payload address, then the one syscall helper, then the keepalive helper, then to_int; the address helper and the keepalive helper are given the SAME register (the storage) as their operand, so the storage is live across the syscall; and there is no call to libc's write, send or syscall anywhere in it} -constraints {linuxX86_64 objdump rustcLinker} -body {
     set text "${::linuxPrelude}\nout(3, mk(\"hi\"))"
     set exe [buildExecutable machine $text]
-    set id [nirFunctionId [native::nir [bytesHir $text]] linux::write]
+    set id [nirFunctionId [native::nir [bytesHir $text]] linux::sys::write]
     set calls [machineCalls $exe botlish_fn_$id]
     set targets [lmap c $calls {lindex $c 0}]
     set helpers [lsearch -all -inline -regexp $targets {^rt_}]
@@ -982,7 +989,7 @@ test abi-bytes-kernel-sees-the-count-not-the-scalars {strace of a UTF-8 write: t
     set first
 } -result {write(3, "\xc3\xa9\xe2\x98\x83", 5) = 5}
 
-test abi-bytes-the-example-never-routes-through-libc-write {the Botlish write is the generic syscall: linux::write's machine code and every helper it calls contain no call into libc, and rt_linux_x86_64_syscall's chain ends at the one inline-asm `syscall` instruction of the whole executable (the earlier syscall milestone's own evidence, here for the write path)} -constraints {linuxX86_64 objdump} -body {
+test abi-bytes-the-example-never-routes-through-libc-write {the Botlish write is the generic syscall: linux::write's transport's machine code and every helper it calls contain no call into libc, and rt_linux_x86_64_syscall's chain ends at the one inline-asm `syscall` instruction of the whole executable (the earlier syscall milestone's own evidence, here for the write path)} -constraints {linuxX86_64 objdump} -body {
     set exe [file join $::executableDir example]
     if {![file exists $exe]} {
         native::executable [surface::readProgramFile [file join $::projectRoot examples linux write.bot]] $exe

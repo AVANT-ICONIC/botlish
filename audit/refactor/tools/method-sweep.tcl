@@ -62,8 +62,8 @@ file mkdir $loaderDir
 # or a loader program (the same loader text serves both trees).
 proc unitPath {tree unit} {
     if {[string match "import *" $unit]} {
-        set ns [lindex $unit 1]
-        set path [file join $::loaderDir load-[string map {:: -} $ns].bot]
+        set ns [lindex [refactor::sweep::moduleTarget [lindex $unit 1]] 0]
+        set path [file join $::loaderDir load-[string map {:: - @ -} [lindex $unit 1]].bot]
         if {![file exists $path]} {
             refactor::sweep::writeText $path "import $ns\n0\n"
         }
@@ -76,7 +76,8 @@ proc unitPath {tree unit} {
 proc compileUnit {tree unit} {
     set ::core::libraryDir [file join $tree lib]
     try {
-        return [surface::readProgramFile [unitPath $tree $unit] -warnings default -warning-channel ""]
+        set target [expr {[string match "import *" $unit] ? [lindex [refactor::sweep::moduleTarget [lindex $unit 1]] 1] : ""}]
+        return [surface::readProgramFile [unitPath $tree $unit] -warnings default -warning-channel "" -target $target]
     } finally {
         set ::core::libraryDir $::realLib
     }

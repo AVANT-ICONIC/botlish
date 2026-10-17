@@ -4,11 +4,11 @@
 #   abi::x86_64::register64(value: int) -> abi::x86_64::Register64
 #       errors Register64BelowRange, Register64AboveRange
 #   abi::x86_64::to_int(register: abi::x86_64::Register64) -> Int
-#   linux::abi::syscall({rax: R, rdi: R, rsi: R, rdx: R, r10: R, r8: R, r9: R})
+#   linux::abi::x86_64::syscall({rax: R, rdi: R, rsi: R, rdx: R, r10: R, r8: R, r9: R})
 #       -> abi::x86_64::Register64
 #
 # Register64 and its two conversions are ordinary Botlish (lib/abi/
-# x86_64.bot) and run on every backend. linux::abi::syscall is the one
+# x86_64.bot) and run on every backend. linux::abi::x86_64::syscall is the one
 # privileged operation: a generic raw kernel transition that knows the Linux
 # x86-64 register convention and no syscall. It runs only natively (Linux
 # x86-64); the Tcl backends refuse it with NATIVE-ONLY. The only live syscall
@@ -120,11 +120,11 @@ proc nirFunction {nir name} {
 }
 
 set rawGetpid {import abi::x86_64
-import linux::abi
+import linux::abi::x86_64
 import list
 fn raw_getpid():
     abi::x86_64::to_int(
-        linux::abi::syscall({
+        linux::abi::x86_64::syscall({
             rax: abi::x86_64::register64(39),
         })
     )
@@ -133,17 +133,17 @@ fn raw_getpid():
 # ---------------------------------------------------------------------------
 # Namespaces and registration
 
-test linux-syscall-native-registered {linux::abi::syscall is one root native under its qualified name: arity 1, a struct argument, a Register64 result shape, no declared errors, never context-free; the only qualified natives outside the standard value-family namespaces (STDLIB-NAMESPACES.md) are this one, the byte-storage / address-bridge natives of ABI-BYTES.md and MUTABLE-BYTES.md, the binary operations of BINARY-LAYOUT.md, and the C pointer operations of C-ABI-TYPES.md} -body {
-    set meta [core::native::metadata linux::abi::syscall]
+test linux-syscall-native-registered {linux::abi::x86_64::syscall is one root native under its qualified name: arity 1, a struct argument, a Register64 result shape, no declared errors, never context-free; the only qualified natives outside the standard value-family namespaces (STDLIB-NAMESPACES.md) are this one and its AArch64 sibling, the byte-storage / address-bridge natives of ABI-BYTES.md and MUTABLE-BYTES.md, the binary operations of BINARY-LAYOUT.md, and the C pointer operations of C-ABI-TYPES.md} -body {
+    set meta [core::native::metadata linux::abi::x86_64::syscall]
     list [dict get $meta arity] [dict get $meta paramTypes] [dict get $meta resultType] \
         [dict get $meta resultShape] [dict get $meta errors] [dict get $meta contextFree] \
-        [dict get $meta runtime] [core::native::isQualifiedNative linux::abi::syscall] \
+        [dict get $meta runtime] [core::native::isQualifiedNative linux::abi::x86_64::syscall] \
         [lsearch -all -inline -not -regexp [lsearch -all -inline [core::native::names] *::*] {^(list|str|char|mutable_array|immutable_set|coroutine|mutable_vector)::}]
-} -result {1 struct struct {named-struct abi::x86_64::Register64} {} 0 raw-syscall 1 {linux::abi::syscall byte_store::from_list byte_store::byte_count abi::x86_64::from_bytes mutable_byte_store::zeroed mutable_byte_store::from_storage mutable_byte_store::count mutable_byte_store::replace mutable_byte_store::detach mutable_byte_store::freeze mutable_byte_store::freeze_prefix abi::x86_64::from_mutable_bytes binary::parse binary::emit binary::layout_length binary::layout_alignment ffi::c::null ffi::c::null? ffi::c::clone ffi::c::erase ffi::c::retype}}
+} -result {1 struct struct {named-struct abi::x86_64::Register64} {} 0 raw-syscall 1 {linux::abi::x86_64::syscall linux::abi::aarch64::syscall byte_store::from_list byte_store::byte_count mutable_byte_store::zeroed mutable_byte_store::from_storage mutable_byte_store::count mutable_byte_store::replace mutable_byte_store::detach mutable_byte_store::freeze mutable_byte_store::freeze_prefix abi::x86_64::from_bytes abi::x86_64::from_mutable_bytes abi::aarch64::from_bytes abi::aarch64::from_mutable_bytes binary::parse binary::emit binary::layout_length binary::layout_alignment ffi::c::null ffi::c::null? ffi::c::clone ffi::c::erase ffi::c::retype}}
 
-test linux-syscall-no-syscall-specific-intrinsics {the compiler knows the transport, not syscalls: no getpid/write/read/open native, no other linux or abi native -- the only other natives in an abi namespace are the raw address bridges abi::x86_64::from_bytes and from_mutable_bytes, which know no syscall either (ABI-BYTES.md, MUTABLE-BYTES.md)} -body {
+test linux-syscall-no-syscall-specific-intrinsics {the compiler knows the transports, not syscalls: no getpid/write/read/open native, no other linux or abi native -- the only other natives in an abi namespace are the raw address bridges ABI::from_bytes and from_mutable_bytes of each architecture, which know no syscall either (ABI-BYTES.md, MUTABLE-BYTES.md)} -body {
     lsearch -all -inline -regexp [core::native::names] {(?i)pid|^write|^read|^open|^close|linux|abi|errno}
-} -result {linux::abi::syscall abi::x86_64::from_bytes abi::x86_64::from_mutable_bytes}
+} -result {linux::abi::x86_64::syscall linux::abi::aarch64::syscall abi::x86_64::from_bytes abi::x86_64::from_mutable_bytes abi::aarch64::from_bytes abi::aarch64::from_mutable_bytes}
 
 test linux-syscall-abi-module-is-nested {abi::x86_64 is the nested-namespace file lib/abi/x86_64.bot: Register64 (one field, a source-defined -2^63..2^63-1 domain), register64, to_int} -body {
     set hir [syscallHir "import abi::x86_64
@@ -252,72 +252,72 @@ test linux-syscall-dynamic-bounds-are-static-constants {for a dynamic Int, the -
 } -result {1 0 2}
 
 # ---------------------------------------------------------------------------
-# linux::abi::syscall: the static contract of the register struct
+# linux::abi::x86_64::syscall: the static contract of the register struct
 
 test linux-syscall-unknown-register-rejected {a field that is not a syscall-input register is UNKNOWN-FIELD at that field, never ignored} -body {
     list [strictError "import abi::x86_64
-import linux::abi
-linux::abi::syscall({rax: abi::x86_64::register64(39), rbp: abi::x86_64::register64(1)})"] \
+import linux::abi::x86_64
+linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rbp: abi::x86_64::register64(1)})"] \
         [diagKinds "import abi::x86_64
-import linux::abi
-linux::abi::syscall({rax: abi::x86_64::register64(39), rcx: abi::x86_64::register64(1)})"] \
+import linux::abi::x86_64
+linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rcx: abi::x86_64::register64(1)})"] \
         [diagKinds "import abi::x86_64
-import linux::abi
-linux::abi::syscall({rax: abi::x86_64::register64(39), r11: abi::x86_64::register64(1)})"] \
+import linux::abi::x86_64
+linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), r11: abi::x86_64::register64(1)})"] \
         [diagKinds "import abi::x86_64
-import linux::abi
-linux::abi::syscall({rax: abi::x86_64::register64(39), rsp: abi::x86_64::register64(1)})"]
-} -match glob -result {{UNKNOWN-FIELD 3:56 {"rbp" is not a syscall register: linux::abi::syscall's argument may name only rax, rdi, rsi, rdx, r10, r8, r9*}} UNKNOWN-FIELD UNKNOWN-FIELD UNKNOWN-FIELD}
+import linux::abi::x86_64
+linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rsp: abi::x86_64::register64(1)})"]
+} -match glob -result {{UNKNOWN-FIELD 3:64 {"rbp" is not a syscall register: linux::abi::x86_64::syscall's argument may name only rax, rdi, rsi, rdx, r10, r8, r9*}} UNKNOWN-FIELD UNKNOWN-FIELD UNKNOWN-FIELD}
 
 test linux-syscall-rax-required {rax, the syscall number, is required; only the six argument registers may be omitted} -body {
     strictError "import abi::x86_64
-import linux::abi
-linux::abi::syscall({rdi: abi::x86_64::register64(39)})"
-} -match glob -result {MISSING-FIELD 3:21 {linux::abi::syscall's argument has no field "rax"*}}
+import linux::abi::x86_64
+linux::abi::x86_64::syscall({rdi: abi::x86_64::register64(39)})"
+} -match glob -result {MISSING-FIELD 3:29 {linux::abi::x86_64::syscall's argument has no field "rax"*}}
 
 test linux-syscall-registers-must-be-register64 {every register field must statically be an abi::x86_64::Register64: a plain Int, a List or an untyped value is TYPE (no run-time check is inserted)} -body {
-    list [strictError "import linux::abi
-linux::abi::syscall({rax: 39})"] \
-        [diagKinds "import abi::x86_64\nimport linux::abi\nlinux::abi::syscall({rax: abi::x86_64::register64(39), rdi: \[1\]})"] \
-        [diagKinds "import linux::abi\nfn sys(nr):\n    linux::abi::syscall({rax: nr})\n1"] \
-        [diagKinds "import abi::x86_64\nimport linux::abi\nfn sys(nr: abi::x86_64::Register64):\n    linux::abi::syscall({rax: nr})\n1"]
-} -match glob -result {{TYPE 2:22 {syscall register "rax" must be an abi::x86_64::Register64*its type here is int}} TYPE TYPE {}}
+    list [strictError "import linux::abi::x86_64
+linux::abi::x86_64::syscall({rax: 39})"] \
+        [diagKinds "import abi::x86_64\nimport linux::abi::x86_64\nlinux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rdi: \[1\]})"] \
+        [diagKinds "import linux::abi::x86_64\nfn sys(nr):\n    linux::abi::x86_64::syscall({rax: nr})\n1"] \
+        [diagKinds "import abi::x86_64\nimport linux::abi::x86_64\nfn sys(nr: abi::x86_64::Register64):\n    linux::abi::x86_64::syscall({rax: nr})\n1"]
+} -match glob -result {{TYPE 2:30 {syscall register "rax" must be an abi::x86_64::Register64*its type here is int}} TYPE TYPE {}}
 
 test linux-syscall-argument-must-be-register-struct {the argument is an anonymous register struct: a Register64 itself, an Int or a named struct is TYPE; arity is exactly one} -body {
     list [diagKinds "import abi::x86_64
-import linux::abi
-linux::abi::syscall(abi::x86_64::register64(39))"] \
-        [diagKinds "import linux::abi
-linux::abi::syscall(39)"] \
-        [diagKinds "import abi::x86_64\nimport linux::abi\nstruct Regs:\n    rax: abi::x86_64::Register64\nlinux::abi::syscall(Regs {rax: abi::x86_64::register64(39)})"] \
-        [diagKinds "import linux::abi
-linux::abi::syscall()"] \
+import linux::abi::x86_64
+linux::abi::x86_64::syscall(abi::x86_64::register64(39))"] \
+        [diagKinds "import linux::abi::x86_64
+linux::abi::x86_64::syscall(39)"] \
+        [diagKinds "import abi::x86_64\nimport linux::abi::x86_64\nstruct Regs:\n    rax: abi::x86_64::Register64\nlinux::abi::x86_64::syscall(Regs {rax: abi::x86_64::register64(39)})"] \
+        [diagKinds "import linux::abi::x86_64
+linux::abi::x86_64::syscall()"] \
         [diagKinds "import abi::x86_64
-import linux::abi
-linux::abi::syscall({rax: abi::x86_64::register64(39)}, {rax: abi::x86_64::register64(39)})"]
+import linux::abi::x86_64
+linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}, {rax: abi::x86_64::register64(39)})"]
 } -result {TYPE TYPE TYPE ARITY ARITY}
 
 test linux-syscall-diverging-field-hides-nothing {a literal field that cannot complete (its value is never, so the literal's whole type is never) does not hide the other fields' problems: each field is checked by its own name and value type} -body {
-    set text "import abi::x86_64\nimport linux::abi\nerror Nope\nfn boom(c: bool) errors Nope:\n    if c:\n        fail Nope\n    loop:\n        unit\nfn sc(c: bool) -> int errors Nope:\n    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(39), rcx: 5, rbp: \"x\", rdi: boom(c)}))\nv = sc(true):\n    on Nope:\n        0 - 1\nv"
+    set text "import abi::x86_64\nimport linux::abi::x86_64\nerror Nope\nfn boom(c: bool) errors Nope:\n    if c:\n        fail Nope\n    loop:\n        unit\nfn sc(c: bool) -> int errors Nope:\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rcx: 5, rbp: \"x\", rdi: boom(c)}))\nv = sc(true):\n    on Nope:\n        0 - 1\nv"
     list [lmap d [hir::diagnostics [syscallHir $text 0]] {dict get $d kind}] [lrange [strictError $text] 0 1]
-} -result {{UNKNOWN-FIELD UNKNOWN-FIELD} {UNKNOWN-FIELD 10:80}}
+} -result {{UNKNOWN-FIELD UNKNOWN-FIELD} {UNKNOWN-FIELD 10:88}}
 
 test linux-syscall-unchecked-program-replays-the-contract {a -strict 0 program (diagnostics kept, not raised) still never runs a call that broke the contract natively: the problem is replayed as a run-time error before anything is evaluated -- no syscall with a defaulted rax, no register read from an unproven value} -constraints linuxX86_64 -body {
     set results {}
     foreach text [list \
-            "import abi::x86_64\nimport linux::abi\nfn f() -> int:\n    abi::x86_64::to_int(linux::abi::syscall({rdi: abi::x86_64::register64(140), rbp: abi::x86_64::register64(7)}))\nf()" \
-            "import abi::x86_64\nimport linux::abi\nfn f() -> int:\n    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(39), rdi: 5}))\nf()" \
-            "import abi::x86_64\nimport linux::abi\nfn f() -> int:\n    abi::x86_64::to_int(linux::abi::syscall({rdi: abi::x86_64::register64(140)}))\nf()"] {
+            "import abi::x86_64\nimport linux::abi::x86_64\nfn f() -> int:\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rdi: abi::x86_64::register64(140), rbp: abi::x86_64::register64(7)}))\nf()" \
+            "import abi::x86_64\nimport linux::abi::x86_64\nfn f() -> int:\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rdi: 5}))\nf()" \
+            "import abi::x86_64\nimport linux::abi::x86_64\nfn f() -> int:\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rdi: abi::x86_64::register64(140)}))\nf()"] {
         set hir [syscallHir $text 0]
         lappend results [lsort -unique [lmap b $::nativeBackends {lrange [outcomeUnderHir $b $hir] 0 1}]]
     }
     set results
 } -result {{{error {CORE SEMANTIC UNKNOWN-FIELD}}} {{error {CORE SEMANTIC TYPE}}} {{error {CORE SEMANTIC MISSING-FIELD}}}}
 
-test linux-syscall-not-a-value {linux::abi::syscall can only be called directly: it has no function value} -body {
-    list [strictError "import linux::abi\nf = linux::abi::syscall\nf"] \
-        [diagKinds "import linux::abi\nfn apply(g, x):\n    g(x)\napply(linux::abi::syscall, 1)"]
-} -match glob -result {{TYPE 2:5 {linux::abi::syscall can only be called directly*}} TYPE}
+test linux-syscall-not-a-value {linux::abi::x86_64::syscall can only be called directly: it has no function value} -body {
+    list [strictError "import linux::abi::x86_64\nf = linux::abi::x86_64::syscall\nf"] \
+        [diagKinds "import linux::abi::x86_64\nfn apply(g, x):\n    g(x)\napply(linux::abi::x86_64::syscall, 1)"]
+} -match glob -result {{TYPE 2:5 {linux::abi::x86_64::syscall can only be called directly*}} TYPE}
 
 test linux-syscall-cannot-initialize-a-module-binding {a syscall never initializes a module binding (MODULE-CONTEXT). Today the register-struct literal every call needs is already rejected first (a struct is not a context-free initializer); independently, the native itself is classified not context-free, so the call stays rejected even if struct initializers are ever accepted} -body {
     set dir [makeDirectory linux-syscall-modules]
@@ -330,29 +330,29 @@ test linux-syscall-cannot-initialize-a-module-binding {a syscall never initializ
         # abi's Bytes is typed List[Byte] (lib/abi.bot imports byte::Byte).
         file copy -force [file join $::projectRoot lib byte.bot] [file join $dir byte.bot]
         set channel [open [file join $dir pidmod.bot] w]
-        puts $channel "import abi::x86_64\nimport linux::abi\npid = abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(39)}))"
+        puts $channel "import abi::x86_64\nimport linux::abi::x86_64\npid = abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}))"
         close $channel
         set ::core::libraryDir $dir
         list [diagKinds "import pidmod
-pidmod::pid"] [dict get [core::native::metadata linux::abi::syscall] contextFree]
+pidmod::pid"] [dict get [core::native::metadata linux::abi::x86_64::syscall] contextFree]
     } finally {
         set ::core::libraryDir $saved
         removeDirectory linux-syscall-modules
     }
 } -result {MODULE-CONTEXT 0}
 
-test linux-syscall-module-cannot-shadow-the-native {a linux::abi module may not define syscall: every linux::abi::syscall reference is the native} -body {
+test linux-syscall-module-cannot-shadow-the-native {a linux::abi::x86_64 module may not define syscall: every linux::abi::x86_64::syscall reference is the native} -body {
     set dir [makeDirectory linux-syscall-shadow]
     set saved $::core::libraryDir
     try {
-        file mkdir [file join $dir linux]
-        set channel [open [file join $dir linux abi.bot] w]
+        file mkdir [file join $dir linux abi]
+        set channel [open [file join $dir linux abi x86_64.bot] w]
         puts $channel "fn helper():\n    1\nfn syscall(x):\n    x"
         close $channel
         set ::core::libraryDir $dir
-        catch {syscallHir "import linux::abi
-linux::abi::helper()"} message options
-        list [dict get $options -errorcode] [string match {*cannot define "syscall": linux::abi::syscall is a compiler-provided intrinsic (a root native registered under that qualified name)*} $message]
+        catch {syscallHir "import linux::abi::x86_64
+linux::abi::x86_64::helper()"} message options
+        list [dict get $options -errorcode] [string match {*cannot define "syscall": linux::abi::x86_64::syscall is a compiler-provided intrinsic (a root native registered under that qualified name)*} $message]
     } finally {
         set ::core::libraryDir $saved
         removeDirectory linux-syscall-shadow
@@ -365,11 +365,11 @@ linux::abi::helper()"} message options
 test linux-syscall-tcl-backends-refuse {interp and compile refuse the call itself with the semantic error NATIVE-ONLY (they do not imitate a syscall with a host facility)} -body {
     set outcomes [outcomesOf "${::rawGetpid}raw_getpid()" {interp compile}]
     list [llength [lsort -unique $outcomes]] [lindex $outcomes 0 1] [lindex $outcomes 0 2]
-} -match glob -result {1 {CORE SEMANTIC NATIVE-ONLY} {linux::abi::syscall executes the x86-64 "syscall" instruction (a raw Linux kernel transition) and is performed only by the native backend*the Tcl backends (interp, compile) do not execute machine instructions and do not imitate a syscall}}
+} -match glob -result {1 {CORE SEMANTIC NATIVE-ONLY} {linux::abi::x86_64::syscall executes the x86-64 "syscall" instruction (a raw Linux kernel transition) and is performed only by the native backend*the Tcl backends (interp, compile) do not execute machine instructions and do not imitate a syscall}}
 
 test linux-syscall-tcl-backends-refuse-only-the-call {a program that defines raw_getpid but never calls it runs on every backend; a discarded call is still refused (never optimized away)} -body {
     list [agree "${::rawGetpid}abi::x86_64::to_int(abi::x86_64::register64(7))"] \
-        [lsort -unique [lmap o [outcomesOf "import abi::x86_64\nimport linux::abi\nlinux::abi::syscall({rax: abi::x86_64::register64(39)})\n1" {interp compile}] {lindex $o 1}]]
+        [lsort -unique [lmap o [outcomesOf "import abi::x86_64\nimport linux::abi::x86_64\nlinux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})\n1" {interp compile}] {lindex $o 1}]]
 } -result {7 {{CORE SEMANTIC NATIVE-ONLY}}}
 
 # ---------------------------------------------------------------------------
@@ -394,8 +394,8 @@ test linux-syscall-transport-allocates-nothing {the canonical syscall path is ze
 } -result {0 0}
 
 test linux-syscall-bound-register-struct-is-an-object {a known representation frontier, pinned: a register struct bound to a local and then passed by name is built as an object -- the struct, plus one Register64 per register (register64(...) results nested in a bound literal are opaque call results to scalar replacement) -- where the same registers written inline allocate nothing; the values are the same} -constraints linuxX86_64 -body {
-    set bound [syscallHir "import abi::x86_64\nimport linux::abi\nfn f():\n    regs = {rdi: abi::x86_64::register64(1), rax: abi::x86_64::register64(39)}\n    abi::x86_64::to_int(linux::abi::syscall(regs))\nf() > 0"]
-    set inline [syscallHir "import abi::x86_64\nimport linux::abi\nfn f():\n    abi::x86_64::to_int(linux::abi::syscall({rdi: abi::x86_64::register64(1), rax: abi::x86_64::register64(39)}))\nf() > 0"]
+    set bound [syscallHir "import abi::x86_64\nimport linux::abi::x86_64\nfn f():\n    regs = {rdi: abi::x86_64::register64(1), rax: abi::x86_64::register64(39)}\n    abi::x86_64::to_int(linux::abi::x86_64::syscall(regs))\nf() > 0"]
+    set inline [syscallHir "import abi::x86_64\nimport linux::abi::x86_64\nfn f():\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rdi: abi::x86_64::register64(1), rax: abi::x86_64::register64(39)}))\nf() > 0"]
     list [dict get [native::allocationReport $bound summary] byKind Struct allocations] \
         [dict get [native::allocationReport $inline summary] byKind Struct allocations] \
         [lindex [outcomeUnderHir cranelift $bound] 1] [lindex [outcomeUnderHir cranelift $inline] 1]
@@ -448,7 +448,7 @@ test linux-syscall-standalone-getpid-is-its-pid {a standalone executable prints 
 } -result {1 1 1}
 
 test linux-syscall-gc-stress {every allocation site collecting (GC stress) changes nothing: syscall results transported virtually, materialized in a List, or BigInt register words} -constraints linuxX86_64 -body {
-    set text "${::rawGetpid}fn stored():\n    \[linux::abi::syscall({rax: abi::x86_64::register64(39), rdi: abi::x86_64::register64(0 - 9223372036854775807 - 1), r9: abi::x86_64::register64(9223372036854775807)})\]\na = raw_getpid()\nxs = stored()\nr = list::at(xs, 0):\n    on IndexNotFound:\n        abi::x86_64::register64(0)\nb = abi::x86_64::to_int(r)\nbig = abi::x86_64::to_int(abi::x86_64::register64(9223372036854775807))\n\[a == b, a > 0, big\]"
+    set text "${::rawGetpid}fn stored():\n    \[linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rdi: abi::x86_64::register64(0 - 9223372036854775807 - 1), r9: abi::x86_64::register64(9223372036854775807)})\]\na = raw_getpid()\nxs = stored()\nr = list::at(xs, 0):\n    on IndexNotFound:\n        abi::x86_64::register64(0)\nb = abi::x86_64::to_int(r)\nbig = abi::x86_64::to_int(abi::x86_64::register64(9223372036854775807))\n\[a == b, a > 0, big\]"
     set plain [agree $text $::nativeBackends]
     underGcStress {set stressed [agree $text $::nativeBackends]}
     list $plain [expr {$plain eq $stressed}]
@@ -456,26 +456,26 @@ test linux-syscall-gc-stress {every allocation site collecting (GC stress) chang
 
 test linux-syscall-argument-shapes {every way of supplying registers reaches the same kernel call: register64 calls, Register64 locals, a typed Register64 parameter, a register struct held in a variable, results used twice, stored in a List, discarded} -constraints linuxX86_64 -body {
     agree "${::rawGetpid}fn sys1(nr: abi::x86_64::Register64) -> abi::x86_64::Register64:
-    linux::abi::syscall({rax: nr})
+    linux::abi::x86_64::syscall({rax: nr})
 
 fn via_local():
     nr = abi::x86_64::register64(39)
-    abi::x86_64::to_int(linux::abi::syscall({rax: nr}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: nr}))
 
 fn via_struct_var():
     regs = {rdi: abi::x86_64::register64(0 - 1), rax: abi::x86_64::register64(39)}
-    abi::x86_64::to_int(linux::abi::syscall(regs))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall(regs))
 
 fn twice_used():
-    r = linux::abi::syscall({rax: abi::x86_64::register64(39)})
+    r = linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})
     abi::x86_64::to_int(r) - abi::x86_64::to_int(r)
 
 fn discarded():
-    linux::abi::syscall({rax: abi::x86_64::register64(39)})
+    linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})
     7
 
 a = raw_getpid()
-s = list::at(\[linux::abi::syscall({rax: abi::x86_64::register64(39)})\], 0)
+s = list::at(\[linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})\], 0)
 \[a == abi::x86_64::to_int(sys1(abi::x86_64::register64(39))), a == via_local(), a == via_struct_var(), twice_used(), a == abi::x86_64::to_int(s), discarded()\]" $::nativeBackends
 } -result {[true, true, true, 0, true, 7]}
 
@@ -483,7 +483,7 @@ s = list::at(\[linux::abi::syscall({rax: abi::x86_64::register64(39)})\], 0)
 # Backend evidence: a raw syscall, not libc's getpid
 
 test linux-syscall-nir-generic-op {NIR: one generic op over seven register words in the syscall convention's order (rax rdi rsi rdx r10 r8 r9), an omitted register the Int 0; 39 is only the source literal's own constant; no getpid anywhere} -constraints linuxX86_64 -body {
-    set nir [native::nir [syscallHir "import abi::x86_64\nimport linux::abi\nfn f():\n    abi::x86_64::to_int(linux::abi::syscall({r8: abi::x86_64::register64(8), rdi: abi::x86_64::register64(1), rax: abi::x86_64::register64(39)}))\nf()"]]
+    set nir [native::nir [syscallHir "import abi::x86_64\nimport linux::abi::x86_64\nfn f():\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({r8: abi::x86_64::register64(8), rdi: abi::x86_64::register64(1), rax: abi::x86_64::register64(39)}))\nf()"]]
     set body [nirFunction $nir f]
     regexp {(%[0-9]+) = op syscall_linux_x86_64 ((?:%[0-9]+ ?){7})} $body -> result operands
     # Each written field's register64(...) call, in written order.
@@ -501,7 +501,7 @@ test linux-syscall-nir-generic-op {NIR: one generic op over seven register words
 } -result {{w39 w1 0 0 0 w8 0} {8 1 39} 0 1}
 
 test linux-syscall-clif-is-a-helper-call {CLIF: the op is a real call of the runtime helper rt_linux_x86_64_syscall (a GC safepoint with its result checked) -- never inline code Cranelift could merge, hoist or delete; two calls stay two calls, a discarded one stays} -constraints linuxX86_64 -body {
-    set clif [native::clif [syscallHir "import abi::x86_64\nimport linux::abi\nfn f():\n    linux::abi::syscall({rax: abi::x86_64::register64(39)})\n    linux::abi::syscall({rax: abi::x86_64::register64(39)})\n    1\nf()"]]
+    set clif [native::clif [syscallHir "import abi::x86_64\nimport linux::abi::x86_64\nfn f():\n    linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})\n    linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})\n    1\nf()"]]
     regexp {; (u0:[0-9]+) = rt_linux_x86_64_syscall} $clif -> helper
     regexp {; function [0-9]+ "f": botlish_fn_[0-9]+} $clif header
     set start [string first $header $clif]

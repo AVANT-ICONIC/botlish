@@ -1,42 +1,45 @@
-# syscall.tcl -- the static contract of linux::abi::syscall (core/
-# linuxabi.tcl, LINUX-X86-64-SYSCALL.md): its one argument is a syscall-
-# input description, an anonymous struct naming Linux x86-64 syscall
-# registers, each holding an abi::x86_64::Register64.
+# syscall.tcl -- the static contract of the Linux syscall transports
+# (core/linuxabi.tcl, LINUX-X86-64-SYSCALL.md, LINUX-SYSCALL-TRANSPORTS.md):
+# the one argument of linux::abi::x86_64::syscall and of
+# linux::abi::aarch64::syscall is a syscall-input description, an anonymous
+# struct naming that architecture's Linux syscall registers, each holding the
+# architecture's own Register64 (abi::x86_64::Register64,
+# abi::aarch64::Register64).
 #
 #   hir::syscall::verify HIRVAR      diagnostics, part of hir::CheckOnce
 #
 # Botlish has no annotation for an anonymous struct type and no optional
 # fields (STRUCTS.md: anonymous structs are inferred, never spelled, never
-# width-subtyped), so this one native's parameter is checked here, against
-# the argument's statically inferred struct type, instead of through a new
+# width-subtyped), so a transport's parameter is checked here, against the
+# argument's statically inferred struct type, instead of through a new
 # general optional-field system:
 #
 #   * the argument's static type is an anonymous struct (a named struct, or a
 #     struct value whose fields are not statically known, is TYPE);
-#   * every field is one of rax rdi rsi rdx r10 r8 r9 (any other is
+#   * every field is one of the transport's registers -- rax rdi rsi rdx r10
+#     r8 r9 on x86-64, x8 x0 x1 x2 x3 x4 x5 on AArch64 -- (any other is
 #     UNKNOWN-FIELD, located at that field when the argument is a literal):
 #     the syscall-input registers, never an arbitrary CPU register;
-#   * rax, the syscall number, is present (MISSING-FIELD); an omitted
+#   * the number register (rax, x8) is present (MISSING-FIELD); an omitted
 #     argument register is zero (the lowering's job, native/lower.tcl);
-#   * every field is statically an abi::x86_64::Register64 (TYPE): no
+#   * every field is statically the transport's own Register64 (TYPE): no
 #     runtime check is ever inserted, and the native backend relies on it --
-#     a Register64's word is a proven -2^63..2^63-1 Int (lib/abi/x86_64.bot).
+#     a Register64's word is a proven -2^63..2^63-1 Int (lib/abi/x86_64.bot,
+#     lib/abi/aarch64.bot) -- and the architectures are never mixed (an
+#     abi::aarch64::Register64 is no x86-64 register).
 #
-# And the native is only ever *called*: a reference to linux::abi::syscall
-# that is not the callee of a direct call is TYPE. It has no function value
-# -- its parameter type cannot be spelled in an Fn{...} contract, and a
-# dynamic call would have to find register fields by name at run time.
+# And a transport is only ever *called*: a reference to one that is not the
+# callee of a direct call is TYPE. It has no function value -- its parameter
+# type cannot be spelled in an Fn{...} contract, and a dynamic call would
+# have to find register fields by name at run time.
 #
-# Nothing here knows any syscall number or signature: the contract is the
-# x86-64 syscall transport convention only.
+# Nothing here knows any syscall number or signature: the contract is each
+# architecture's syscall transport convention only.
 
-namespace eval hir::syscall {
-    variable native linux::abi::syscall
-}
+namespace eval hir::syscall {}
 
 proc hir::syscall::verify {hirVar} {
     upvar 1 $hirVar hir
-    variable native
     set callees [dict create]
     dict for {e node} [dict get $hir exprs] {
         if {[dict get $node kind] ne "call"} continue
@@ -44,7 +47,7 @@ proc hir::syscall::verify {hirVar} {
         lassign [dict get $node target] targetKind target
         if {$targetKind ne "native"} continue
         set name [dict get [hir::symbol $hir $target] name]
-        if {$name ne $native && ![core::bytestore::isBridge $name]} continue
+        if {![core::linuxabi::isSyscall $name] && ![core::bytestore::isBridge $name]} continue
         if {![dict get $node reachable]} continue
         VerifyCall hir $e $node
     }
@@ -54,7 +57,8 @@ proc hir::syscall::verify {hirVar} {
         if {$b eq ""} continue
         set binding [hir::binding $hir $b]
         if {[dict get $binding kind] ne "root"} continue
-        if {[dict get $binding name] eq $native} {
+        if {[core::linuxabi::isSyscall [dict get $binding name]]} {
+            set native [dict get $binding name]
             hir::Diagnose hir TYPE \
                 "$native can only be called directly: it is the raw kernel transition, not a function value (its register-struct parameter has no Fn{...} spelling, and a register is never looked up by name at run time)" $e
         } elseif {[core::bytestore::isBridge [dict get $binding name]]} {
@@ -65,7 +69,7 @@ proc hir::syscall::verify {hirVar} {
     }
 }
 
-# The problems of one call E (NODE) of either native of this file.
+# The problems of one call E (NODE) of a transport or an address bridge.
 proc hir::syscall::VerifyCall {hirVar e node} {
     upvar 1 $hirVar hir
     set name [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name]
@@ -96,15 +100,19 @@ proc hir::syscall::VerifyCall {hirVar e node} {
 # field cannot complete) hides nothing about its other fields; a field whose
 # own value cannot complete has no register to check.
 proc hir::syscall::Problems {hir e node} {
-    variable native
+    set native [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name]
+    set arch [core::linuxabi::transportOf $native]
+    set label [core::linuxabi::transport $arch label]
+    set abi [core::linuxabi::transport $arch abi]
+    set registers [core::linuxabi::registers $native]
+    set number [lindex $registers 0]
     set args [dict get $node args]
     if {[llength $args] != 1} {
         return [list [list ARITY \
-            "$native takes exactly one argument, the register struct {rax: ..., rdi: ..., ...} ([llength $args] given)" $e ""]]
+            "$native takes exactly one argument, the register struct {$number: ..., [lindex $registers 1]: ..., ...} ([llength $args] given)" $e ""]]
     }
     set arg [lindex $args 0]
-    set registers [core::linuxabi::registers]
-    set expected "an anonymous struct of syscall registers, {rax: abi::x86_64::register64(NUMBER), rdi: ..., ...} (fields among [join $registers {, }]; rax required)"
+    set expected "an anonymous struct of syscall registers, {$number: ${abi}::register64(NUMBER), [lindex $registers 1]: ..., ...} (fields among [join $registers {, }]; $number required)"
     set fields {}
     if {[hir::kind $hir $arg] eq "struct" && ![hir::get $hir $arg named]} {
         # name -> {VALUE-TYPE NAME-ORIGIN VALUE-ORIGIN}
@@ -127,12 +135,13 @@ proc hir::syscall::Problems {hir e node} {
         }
     }
     set problems {}
-    set registerType [core::linuxabi::registerType]
+    set registerType [core::linuxabi::registerType $native]
+    set abiFile lib/[string map {:: /} $abi].bot
     dict for {name info} $fields {
         lassign $info fieldType nameOrigin valueOrigin
         if {$name ni $registers} {
             lappend problems [list UNKNOWN-FIELD \
-                "\"$name\" is not a syscall register: $native's argument may name only [join $registers {, }] (the Linux x86-64 syscall number and its six argument registers; an omitted argument register is zero)" \
+                "\"$name\" is not a syscall register: $native's argument may name only [join $registers {, }] (the Linux $label syscall number and its six argument registers; an omitted argument register is zero)" \
                 $arg $nameOrigin]
             continue
         }
@@ -141,20 +150,21 @@ proc hir::syscall::Problems {hir e node} {
         }
         if {![hir::structs::declared $registerType] || ![hir::types::subtype $fieldType [list nstruct $registerType]]} {
             lappend problems [list TYPE \
-                "syscall register \"$name\" must be an $registerType (abi::x86_64::register64(...), lib/abi/x86_64.bot): a register holds one 64-bit word, never an arbitrary value, and no run-time check is inserted; its type here is [hir::types::show $fieldType]" \
+                "syscall register \"$name\" must be an $registerType (${abi}::register64(...), $abiFile): a register holds one 64-bit word, never an arbitrary value, and no run-time check is inserted; its type here is [hir::types::show $fieldType]" \
                 $arg $valueOrigin]
         }
     }
-    if {![dict exists $fields rax]} {
+    if {![dict exists $fields $number]} {
         lappend problems [list MISSING-FIELD \
-            "$native's argument has no field \"rax\": rax carries the syscall number and is required (only the argument registers [join [lrange $registers 1 end] {, }] may be omitted, as zero)" $arg ""]
+            "$native's argument has no field \"$number\": $number carries the syscall number and is required (only the argument registers [join [lrange $registers 1 end] {, }] may be omitted, as zero)" $arg ""]
     }
     return $problems
 }
 
-# Every way call E (NODE) of an address bridge (abi::x86_64::from_bytes or
-# abi::x86_64::from_mutable_bytes, core/bytestore.tcl) breaks its contract: a
-# list of {KIND MESSAGE EXPR ORIGIN}, as Problems. A bridge takes exactly one
+# Every way call E (NODE) of an address bridge (ABI::from_bytes or
+# ABI::from_mutable_bytes, ABI abi::x86_64 or abi::aarch64: core/
+# bytestore.tcl) breaks its contract: a list of {KIND MESSAGE EXPR ORIGIN},
+# as Problems. A bridge takes exactly one
 # argument, and it must statically be the bridge's own opaque struct -- an
 # abi::bytes::Bytes for the readable bridge, an abi::bytes::MutableBytes for the writable
 # one, never the other: no run-time check is ever inserted, and native

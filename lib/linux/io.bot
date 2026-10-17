@@ -18,7 +18,9 @@
 # is the existing raw-thin wrapper applied to a descriptor taken from the
 # context, and every external effect still flows
 #
-#   linux::io::write --> linux::write --> linux::abi::syscall --> `syscall`
+#   linux::io::write --> linux::write --> linux::sys::write --> the target
+#   architecture's transport (linux::abi::x86_64::syscall: `syscall`;
+#   linux::abi::aarch64::syscall: `svc #0`)
 #
 # with no libc, no compiler knowledge of write(2) and no new syscall code. The
 # low-level layer stays as it is: code that wants an explicit descriptor calls

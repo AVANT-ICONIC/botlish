@@ -4473,18 +4473,27 @@ proc native::lower::ContextFieldCount {id path cut} {
 }
 
 # ---------------------------------------------------------------------------
-# linux::abi::syscall (core/linuxabi.tcl, LINUX-X86-64-SYSCALL.md)
+# The syscall transports (core/linuxabi.tcl, LINUX-X86-64-SYSCALL.md,
+# LINUX-SYSCALL-TRANSPORTS.md)
 #
-# `linux::abi::syscall(REGS)`, REGS an anonymous struct of abi::x86_64::
-# Register64 fields named after the Linux x86-64 syscall registers (hir/
-# syscall.tcl proved that statically), lowers to
+# `linux::abi::x86_64::syscall(REGS)`, REGS an anonymous struct of
+# abi::x86_64::Register64 fields named after the Linux x86-64 syscall
+# registers (hir/syscall.tcl proved that statically), lowers to
 #
 #   %w = op syscall_linux_x86_64 RAX RDI RSI RDX R10 R8 R9
 #
+# and `linux::abi::aarch64::syscall(REGS)`, of abi::aarch64::Register64
+# fields named after the AArch64 ones, to
+#
+#   %w = op syscall_linux_aarch64 X8 X0 X1 X2 X3 X4 X5
+#
 # the seven operands being the registers' words (Ints, each a proven
-# -2^63..2^63-1 Register64Word) in the syscall convention's order, the Int 0
-# for an argument register REGS omits, and %w the raw rax afterwards (an
-# Int). The op is a helper call the backend never removes, merges or moves.
+# -2^63..2^63-1 Register64Word) in the convention's order (the number
+# register first), the Int 0 for an argument register REGS omits, and %w the
+# raw result register afterwards (an Int). The op is a helper call the
+# backend never removes, merges or moves. Both ops compile on every target;
+# running one on another architecture is NATIVE UNSUPPORTED
+# (native/src/runtime/syscall.rs).
 #
 # Representation (the transport is zero-allocation in its canonical form):
 #   * an inline REGS literal is never built: its fields are evaluated in
@@ -4503,6 +4512,7 @@ proc native::lower::SyscallCall {fnVar e node wantVirtual} {
     variable hir
     variable context
     variable structOpt
+    set native [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name]
     set problems [hir::syscall::Problems $hir $e $node]
     if {$problems ne ""} {
         # A -strict 0 program whose call hir/syscall.tcl rejected: replay the
@@ -4512,12 +4522,12 @@ proc native::lower::SyscallCall {fnVar e node wantVirtual} {
         # registers are not the ones written.
         lassign [lindex $problems 0] kind message
         dict incr fn skippedGuards [SkippedBlockers [dict get $node args]]
-        Emit fn "raise $kind [Quote "linux::abi::syscall: $message"]" $e
+        Emit fn "raise $kind [Quote "$native: $message"]" $e
         return {never tagged}
     }
-    set registerType [core::linuxabi::registerType]
+    set registerType [core::linuxabi::registerType $native]
     if {![hir::structs::declared $registerType]} {
-        throw {NATIVE BUG} "native lowering: linux::abi::syscall without a declared $registerType ($e)"
+        throw {NATIVE BUG} "native lowering: $native without a declared $registerType ($e)"
     }
     set layout [hir::structs::names $registerType]
     set words [SyscallWords fn $e [lindex [dict get $node args] 0]]
@@ -4526,7 +4536,7 @@ proc native::lower::SyscallCall {fnVar e node wantVirtual} {
     }
     set operands {}
     set zero ""
-    foreach register [core::linuxabi::registers] {
+    foreach register [core::linuxabi::registers $native] {
         if {[dict exists $words $register]} {
             lappend operands [dict get $words $register]
         } else {
@@ -4537,8 +4547,9 @@ proc native::lower::SyscallCall {fnVar e node wantVirtual} {
             lappend operands $zero
         }
     }
-    dict lappend fn calls [list native linux::abi::syscall]
-    set rax [Assign fn "op syscall_linux_x86_64 [join $operands { }]" $e]
+    dict lappend fn calls [list native $native]
+    set op [core::linuxabi::transport [core::linuxabi::transportOf $native] op]
+    set result [Assign fn "op $op [join $operands { }]" $e]
     # The kernel may read memory the address operands point into. Every byte
     # storage whose address (`bytesaddr`, BytesAddrCall) reached an operand
     # register stays a GC root until the syscall has returned: a `keepalive`
@@ -4552,18 +4563,18 @@ proc native::lower::SyscallCall {fnVar e node wantVirtual} {
         if {$wantVirtual != 1} {
             throw {NATIVE BUG} "native lowering: expected a 1-field Register64 construction at $e"
         }
-        return [list [list $rax] virtual]
+        return [list [list $result] virtual]
     }
     if {$structOpt && [dict exists $context discarded $e]} {
         # Nothing reads the result (statement position): the transition ran,
         # no Register64 object is needed.
         return [list [Assign fn unit] tagged]
     }
-    return [list [Assign fn "structnew [ShapeIndex $registerType $layout] $rax" $e] tagged]
+    return [list [Assign fn "structnew [ShapeIndex $registerType $layout] $result" $e] tagged]
 }
 
 # Register name -> the register's word (an Int register), for the registers
-# REGS (linux::abi::syscall's argument expression) names, every field
+# REGS (a syscall transport's argument expression) names, every field
 # evaluated once in written order; "never" if one cannot complete normally.
 proc native::lower::SyscallWords {fnVar e regs} {
     upvar 1 $fnVar fn
@@ -4806,7 +4817,7 @@ proc native::lower::BytesAddrCall {fnVar e node wantVirtual} {
         Emit fn "raise $kind [Quote "$native: $message"]" $e
         return {never tagged}
     }
-    set registerType [core::linuxabi::registerType]
+    set registerType [core::bytestore::bridgeRegisterType $native]
     if {![hir::structs::declared $registerType]} {
         throw {NATIVE BUG} "native lowering: $native without a declared $registerType ($e)"
     }
@@ -6393,7 +6404,8 @@ proc native::lower::AddressFlowAcrossCall {fnVar e node result} {
     # of a Register64-returning call (a Bytes, its storage, or an address
     # that already carries provenance), plus what the operands carry.
     set source $carried
-    if {[hir::typeOf $hir $e] eq [list nstruct [core::linuxabi::registerType]]} {
+    set resultType [hir::typeOf $hir $e]
+    if {[lindex $resultType 0] eq "nstruct" && [lindex $resultType 1] in [core::linuxabi::registerTypes]} {
         # Which operands are the Bytes: by position when every argument is one
         # operand (each Bytes argument, as its storage or its object), else (a
         # parameter passed as several field registers) every non-raw operand.
@@ -6444,9 +6456,9 @@ proc native::lower::CallInner {fnVar e node want {wantVirtual ""} {wantRegion 0}
     set calleeExpr [dict get $node callee]
     set argExprs [dict get $node args]
 
-    if {$targetKind eq "native" && [dict get [hir::symbol $hir $target] name] eq "linux::abi::syscall"} {
-        # The raw Linux x86-64 kernel transition (core/linuxabi.tcl): its own
-        # form, never NativeCall's one-operand-per-argument shape.
+    if {$targetKind eq "native" && [core::linuxabi::isSyscall [dict get [hir::symbol $hir $target] name]]} {
+        # A raw Linux kernel transition (core/linuxabi.tcl): its own form,
+        # never NativeCall's one-operand-per-argument shape.
         return [SyscallCall fn $e $node $wantVirtual]
     }
     if {$targetKind eq "native" && [dict get [hir::symbol $hir $target] name] eq [core::contexts::installNative]} {

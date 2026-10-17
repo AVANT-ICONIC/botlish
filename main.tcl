@@ -17,8 +17,12 @@
 # -target NAME selects the C ABI target of a .bot compilation (C-ABI-TYPES.md;
 # core/cabi.tcl lists linux-x86_64, linux-aarch64, macos-x86_64,
 # macos-aarch64, windows-x86_64, windows-aarch64): the widths and signedness
-# of ffi::c's integer scalars follow its data model. The default is the
-# host's. It changes static types only; the program still runs on the host.
+# of ffi::c's integer scalars follow its data model, and its architecture
+# picks the file of an architecture-specific module (linux::sys: the Linux
+# syscall numbers and registers, LINUX-SYSCALL-TRANSPORTS.md). The default
+# is the host's. It changes static types and those modules only; the
+# program still runs on the host (where another architecture's syscall
+# transport is NATIVE UNSUPPORTED).
 #
 # Runs the given program files (default: every examples/*.ir) and prints
 # each program's value, with runtime evidence shown as "text"#{Type}. With

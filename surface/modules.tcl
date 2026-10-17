@@ -33,6 +33,23 @@
 # candidate file. A missing file is a clear diagnostic (Error, below), never
 # silently ignored or guessed at.
 #
+# Architecture-specific modules (LINUX-SYSCALL-TRANSPORTS.md). A namespace
+# whose source differs by machine architecture -- linux::sys, the Linux
+# syscall numbers and register conventions -- has no NAME.bot but one file
+# per architecture instead, NAME.ARCH.bot (lib/linux/sys.x86_64.bot,
+# lib/linux/sys.aarch64.bot; ARCH one of core::cabi::architectures), and the
+# compilation target's architecture (the same -target, the host's by
+# default, that ffi::c's widths follow) picks the one that defines NAME
+# (ModuleFile). Still one file per namespace per compilation, still no
+# search: a namespace segment cannot contain a dot, so NAME.ARCH.bot is never
+# another namespace's file, and the qualified spelling stays the only one
+# (linux::sys::write is defined by exactly the target's file). A namespace
+# with both kinds of file is AMBIGUOUS-MODULE; one with no file for the
+# target's architecture is UNSUPPORTED-ARCHITECTURE (and, on a host that is
+# no known target, UNKNOWN-TARGET: compile with -target). The selection is by
+# architecture only, never by operating system: the module's own namespace
+# says which OS it is for.
+#
 # Reference syntax (needs the file's `import mod`, or `import a::b`): mod::name, or a::b::name for a nested namespace a::b
 # (surface/parser.tcl's qualname primary: every segment but the last is the
 # namespace path).
@@ -59,7 +76,7 @@
 # cycle (Error CYCLE); one already fully loaded is simply reused (each module
 # is parsed and resolved at most once per program, regardless of how many
 # files import it). A namespace exists if it has a module file or compiler
-# intrinsics (`str`, `linux::abi`), so an intrinsics-only namespace is
+# intrinsics (`str`, `linux::abi::x86_64`), so an intrinsics-only namespace is
 # importable with no file. The result of the header, per file, is its
 # import environment (NewState's `imports`: the dependency graph), handed to
 # hir::buildSyntax as -imports; the AST (cached, importer-neutral) keeps the
@@ -161,6 +178,61 @@ proc surface::modules::ModulePath {name} {
         }
     }
     return [file join $::core::libraryDir {*}[lrange $segments 0 end-1] [lindex $segments end].bot]
+}
+
+# The path of NAME's architecture-specific module file for architecture
+# ARCH: ModulePath with ARCH before the extension (lib/linux/sys.x86_64.bot).
+proc surface::modules::ArchModulePath {name arch} {
+    return "[file rootname [ModulePath $name]].$arch.bot"
+}
+
+# NAME's architecture-specific module files that exist, as {ARCH PATH ...}
+# in architecture order. Each candidate is one fixed path per known
+# architecture: no search.
+proc surface::modules::ArchModuleFiles {name} {
+    set files {}
+    foreach arch [core::cabi::architectures] {
+        set path [ArchModulePath $name $arch]
+        if {[file exists $path]} {
+            lappend files $arch $path
+        }
+    }
+    return $files
+}
+
+# 1 if namespace NAME has a module source: its file, or architecture-specific
+# files (whether or not one is the compilation target's).
+proc surface::modules::HasModule {name} {
+    return [expr {[file exists [ModulePath $name]] || [ArchModuleFiles $name] ne ""}]
+}
+
+# The module file that defines namespace NAME when compiling for C ABI
+# target TARGET (core/cabi.tcl; "" when the host is none of the known ones):
+# ModulePath when it exists, else the architecture-specific file of TARGET's
+# architecture. USEDATSPAN locates the errors: AMBIGUOUS-MODULE for both
+# kinds of file, UNKNOWN-TARGET for an architecture-specific namespace
+# without a known target, UNSUPPORTED-ARCHITECTURE for no file of TARGET's
+# architecture, UNKNOWN-NAMESPACE for none at all.
+proc surface::modules::ModuleFile {name target usedAtSpan} {
+    set path [ModulePath $name]
+    set archFiles [ArchModuleFiles $name]
+    if {[file exists $path]} {
+        if {$archFiles ne ""} {
+            Error AMBIGUOUS-MODULE $usedAtSpan "namespace \"$name\" has both a module file $path and architecture-specific module files ([join [dict values $archFiles] {, }]): a namespace is either the same on every architecture or specific to each, never both"
+        }
+        return $path
+    }
+    if {$archFiles eq ""} {
+        Error UNKNOWN-NAMESPACE $usedAtSpan "unknown namespace \"$name\": no such module file $path"
+    }
+    if {$target eq ""} {
+        Error UNKNOWN-TARGET $usedAtSpan "namespace \"$name\" is architecture-specific (its files are [join [dict values $archFiles] {, }]), and this host ($::tcl_platform(os) $::tcl_platform(machine)) is none of the known targets; compile with -target ([join [core::cabi::targetNames] {, }])"
+    }
+    set arch [dict get [core::cabi::target $target] arch]
+    if {![dict exists $archFiles $arch]} {
+        Error UNSUPPORTED-ARCHITECTURE $usedAtSpan "namespace \"$name\" has no module for the $arch architecture of target $target: it is architecture-specific, and its files are [join [dict values $archFiles] {, }] (no [ArchModulePath $name $arch])"
+    }
+    return [dict get $archFiles $arch]
 }
 
 # Raises {SURFACE MODULE KIND} "LOCATION: MESSAGE" (or just MESSAGE if SPAN
@@ -511,10 +583,7 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan} {
         set chain [concat [dict get $state stack] [list $name]]
         Error CYCLE $usedAtSpan "module dependency cycle: [join $chain { -> }]"
     }
-    set path [ModulePath $name]
-    if {![file exists $path]} {
-        Error UNKNOWN-NAMESPACE $usedAtSpan "unknown namespace \"$name\": no such module file $path"
-    }
+    set path [ModuleFile $name [dict get $state target] $usedAtSpan]
     set ast [ParseModule $path]
     foreach statement [dict get $ast body] {
         if {[dict get $statement kind] eq "destructure"} {
@@ -617,7 +686,7 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan} {
 # (a function or an immutable binding) a member NAME::MEMBER that is a
 # compiler/runtime-provided intrinsic: a root native registered under that
 # qualified name (core::native::isQualifiedNative -- list::at, str::concat,
-# mutable_array::set, linux::abi::syscall, ...). Every reference spelled
+# mutable_array::set, linux::abi::x86_64::syscall, ...). Every reference spelled
 # NAME::MEMBER denotes the native (surface/lower.tcl), so such a definition
 # could never be named, would silently not replace the intrinsic, and
 # Botlish has no overloading for it to coexist as. The protection is per
@@ -647,11 +716,11 @@ proc surface::modules::IntrinsicMembers {ns} {
 }
 
 # 1 if NS names a real namespace: a source module file ($libraryDir/NS.bot)
-# or a namespace of compiler-provided intrinsics (`str`, `linux::abi`). A
-# bare prefix of either (`linux` of `linux::abi`) is not one: namespaces are
+# or a namespace of compiler-provided intrinsics (`str`, `linux::abi::x86_64`).
+# A bare prefix of either (`linux::abi` of `linux::abi::x86_64`) is not one: namespaces are
 # exact, never trees.
 proc surface::modules::NamespaceExists {ns} {
-    return [expr {[file exists [ModulePath $ns]] || [IntrinsicMembers $ns] ne ""}]
+    return [expr {[HasModule $ns] || [IntrinsicMembers $ns] ne ""}]
 }
 
 # 1 if SHORT cannot be bound by a type import because it already names a
@@ -723,7 +792,7 @@ proc surface::modules::CheckImports {stateVar ast own} {
             if {![NamespaceExists $ns]} {
                 Error UNKNOWN-NAMESPACE $span "unknown namespace \"$ns\": no such module file [ModulePath $ns] and no intrinsics of that namespace"
             }
-            if {[file exists [ModulePath $ns]]} {
+            if {[HasModule $ns]} {
                 LoadNamespace state $ns $span
             }
             dict set nsSpans $ns $span
@@ -743,7 +812,7 @@ proc surface::modules::CheckImports {stateVar ast own} {
         if {![NamespaceExists $ns]} {
             Error UNKNOWN-NAMESPACE $span "unknown namespace \"$ns\": no such module file [ModulePath $ns] and no intrinsics of that namespace (in \"import type $canonical\")"
         }
-        set hasFile [file exists [ModulePath $ns]]
+        set hasFile [HasModule $ns]
         if {$hasFile} {
             LoadNamespace state $ns $span
         }
@@ -915,12 +984,12 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
     set natives [IntrinsicMembers $namespaceName]
     if {$refKind eq "value" && [core::native::isQualifiedNative "${namespaceName}::$symbolName"]} {
         # A root native registered under a qualified name
-        # (linux::abi::syscall, str::concat): no module file defines it,
+        # (linux::abi::x86_64::syscall, str::concat): no module file defines it,
         # so nothing more is loaded (surface/lower.tcl lowers it to a
         # root reference).
         return
     }
-    if {![file exists [ModulePath $namespaceName]]} {
+    if {![HasModule $namespaceName]} {
         # A namespace whose only members are intrinsics (str): there is
         # no module file, so an unknown member is reported against the
         # intrinsics, not as a missing file.
@@ -1172,7 +1241,8 @@ proc surface::modules::LoadNamespaces {namespaces args} {
 proc surface::modules::BuildProgram {ast strict {target ""}} {
     set state [NewState [dict create f1 [dict get $ast span file]] 2]
     # The C ABI target (C-ABI-TYPES.md): the host's unless given. Only a
-    # file importing ffi::c reads it.
+    # file importing ffi::c, or an architecture-specific module (ModuleFile),
+    # reads it.
     dict set state target [hir::cabi::ResolveTarget $target]
     CollectAndLoad state $ast ""
     lassign [surface::lower::SplitTypeDecls [dict get $ast body]] executable ownDecls ownErrorDecls ownStructDecls ownTraitDecls

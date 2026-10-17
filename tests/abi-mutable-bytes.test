@@ -32,8 +32,10 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
 
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines) without the x86-64 syscall that
-# linuxX86_64 tests need.
+# stack maps, the stack guard, coroutines), and syscalls through the portable
+# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
+# spells the x86-64 transport or reads its machine code.
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint objdump [expr {[auto_execok objdump] ne ""}]
@@ -560,7 +562,7 @@ import abi::bytes
 import abi::x86_64
 import byte
 import linux
-import linux::abi
+import linux::abi::x86_64
 import list
 import str
 import type byte::Byte
@@ -646,13 +648,13 @@ b = out(4, abi::bytes::freeze(buf))
 \[r.result, a, b\]"
 }
 
-test abi-mutable-bytes-example-echoes-stdin {examples/linux/read-stdin.bot as a standalone executable fed a real pipe: it makes one read(2) of descriptor 0 into a 4096-byte MutableBytes, freezes exactly the 17 bytes received and writes them to descriptor 1 through linux::write; the runner's own result line (the 17 bytes written) follows} -constraints {linuxX86_64 posixShell} -body {
+test abi-mutable-bytes-example-echoes-stdin {examples/linux/read-stdin.bot as a standalone executable fed a real pipe: it makes one read(2) of descriptor 0 into a 4096-byte MutableBytes, freezes exactly the 17 bytes received and writes them to descriptor 1 through linux::write; the runner's own result line (the 17 bytes written) follows} -constraints {nativeLinux posixShell} -body {
     set path [file join $::executableDir read-stdin]
     native::executable [surface::readProgramFile [file join $::projectRoot examples linux read-stdin.bot]] $path
     lindex [runPiped $path "hello from stdin\n"] 0
 } -result "hello from stdin\n17\n"
 
-test abi-mutable-bytes-example-eof-and-binary {the example at end of file (no input) writes nothing and its value is the raw 0; with binary input -- NUL, 0x80, 0xff and multi-byte UTF-8 -- the bytes arrive byte for byte (it is a byte abstraction, not a text API)} -constraints {linuxX86_64 posixShell} -body {
+test abi-mutable-bytes-example-eof-and-binary {the example at end of file (no input) writes nothing and its value is the raw 0; with binary input -- NUL, 0x80, 0xff and multi-byte UTF-8 -- the bytes arrive byte for byte (it is a byte abstraction, not a text API)} -constraints {nativeLinux posixShell} -body {
     set path [file join $::executableDir read-stdin]
     if {![file exists $path]} {
         native::executable [surface::readProgramFile [file join $::projectRoot examples linux read-stdin.bot]] $path
@@ -663,7 +665,7 @@ test abi-mutable-bytes-example-eof-and-binary {the example at end of file (no in
     list [string trim $eof] [expr {$data eq "$binary[string length $binary]\n"}] [string length $binary]
 } -result "0 1 [expr {7 + 15}]"
 
-test abi-mutable-bytes-read-short-read-and-untouched-suffix {a real short read: 5 bytes are available for a 16-byte buffer of A's. The result is exactly 5, the returned buffer is the 5 bytes then the 11 untouched A's (no truncation, no resizing, nothing past the kernel's count overwritten), and the caller's own buffer is still 16 A's} -constraints {linuxX86_64 posixShell} -body {
+test abi-mutable-bytes-read-short-read-and-untouched-suffix {a real short read: 5 bytes are available for a 16-byte buffer of A's. The result is exactly 5, the returned buffer is the 5 bytes then the 11 untouched A's (no truncation, no resizing, nothing past the kernel's count overwritten), and the caller's own buffer is still 16 A's} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable short [readProgram 16]]
     foreach mode {runIn runPiped} {
         lassign [$mode $exe hello] stdout f3 f4
@@ -672,7 +674,7 @@ test abi-mutable-bytes-read-short-read-and-untouched-suffix {a real short read: 
     set results
 } -result "{\[5, 16, 16\]} helloAAAAAAAAAAA AAAAAAAAAAAAAAAA {\[5, 16, 16\]} helloAAAAAAAAAAA AAAAAAAAAAAAAAAA"
 
-test abi-mutable-bytes-read-binary-prefix-and-suffix {the issue's example, binary: before AA AA AA AA AA AA, the kernel reads 01 02 03, after 01 02 03 AA AA AA -- proving the exact pointer start, the exact count, that the kernel's write reaches the returned value, and that nothing resizes} -constraints {linuxX86_64 posixShell} -body {
+test abi-mutable-bytes-read-binary-prefix-and-suffix {the issue's example, binary: before AA AA AA AA AA AA, the kernel reads 01 02 03, after 01 02 03 AA AA AA -- proving the exact pointer start, the exact count, that the kernel's write reaches the returned value, and that nothing resizes} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable binprefix "${::linuxPrelude}
 buf = abi::bytes::from_bytes(abi::bytes::from_list(\[byte::from_int(170), byte::from_int(170), byte::from_int(170), byte::from_int(170), byte::from_int(170), byte::from_int(170)\]))
 r = rd(0, buf)
@@ -681,20 +683,20 @@ r = rd(0, buf)
     list $stdout [binary encode hex $f3] [binary encode hex $f4]
 } -result {{[3, 6, 6]} 010203aaaaaa aaaaaaaaaaaa}
 
-test abi-mutable-bytes-read-eof {end of file is the raw result 0, not an error and not a special object: the returned buffer is unchanged (still all A's), the length is unchanged, nothing is read in a loop} -constraints {linuxX86_64 posixShell} -body {
+test abi-mutable-bytes-read-eof {end of file is the raw result 0, not an error and not a special object: the returned buffer is unchanged (still all A's), the length is unchanged, nothing is read in a loop} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable eof [readProgram 8]]
     lassign [runIn $exe ""] stdout f3 f4
     lassign [runPiped $exe ""] stdout2 f3b f4b
     list $stdout $f3 $f4 [string trim $stdout2] $f3b
 } -result {{[0, 8, 8]} AAAAAAAA AAAAAAAA {[0, 8, 8]} AAAAAAAA}
 
-test abi-mutable-bytes-read-error-is-the-raw-negative-result {a read the kernel refuses returns its raw negative -errno as an ordinary Int, preserved exactly: an invalid descriptor is EBADF (-9), a descriptor that is not readable (the write end, descriptor 1 here is a file opened for writing) is EBADF too; the returned buffer is unchanged and nothing is mapped to an error} -constraints {linuxX86_64 posixShell} -body {
+test abi-mutable-bytes-read-error-is-the-raw-negative-result {a read the kernel refuses returns its raw negative -errno as an ordinary Int, preserved exactly: an invalid descriptor is EBADF (-9), a descriptor that is not readable (the write end, descriptor 1 here is a file opened for writing) is EBADF too; the returned buffer is unchanged and nothing is mapped to an error} -constraints {nativeLinux posixShell} -body {
     set bad [buildExecutable badfd [readProgram 8 1000]]
     lassign [runIn $bad "ignored"] stdout f3 f4
     list $stdout $f3 $f4
 } -result {{[-9, 8, 8]} AAAAAAAA AAAAAAAA}
 
-test abi-mutable-bytes-read-larger-input-reads-one-chunk {more input than the buffer: 10000 bytes for a 4096-byte buffer. The one linux::read returns exactly 4096 and mutates only that capacity, allocates nothing more, does not continue reading -- and the remaining 5904 bytes are still there for the next reader of the same open file (a shell `cat` after the program, sharing its file offset)} -constraints {linuxX86_64 posixShell} -body {
+test abi-mutable-bytes-read-larger-input-reads-one-chunk {more input than the buffer: 10000 bytes for a 4096-byte buffer. The one linux::read returns exactly 4096 and mutates only that capacity, allocates nothing more, does not continue reading -- and the remaining 5904 bytes are still there for the next reader of the same open file (a shell `cat` after the program, sharing its file offset)} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable larger [readProgram 4096]]
     set input {}
     for {set i 0} {$i < 10000} {incr i} { append input [format %c [expr {($i * 7 + 3) % 256}]] }
@@ -709,7 +711,7 @@ test abi-mutable-bytes-read-larger-input-reads-one-chunk {more input than the bu
         [expr {[readBinary $rest] eq [string range $input 4096 end]}] [string length [readBinary $rest]]
 } -result {{[4096, 4096, 4096]} 1 1 1 5904}
 
-test abi-mutable-bytes-read-does-not-change-the-callers-buffer {the caller's value is a value: after read(fd, original) the logical value `original` is unchanged and the kernel's bytes are in result.data only -- and reading the SAME original twice gives two independent results (the second read, at end of file, leaves the first result's data as it was)} -constraints {linuxX86_64 posixShell} -body {
+test abi-mutable-bytes-read-does-not-change-the-callers-buffer {the caller's value is a value: after read(fd, original) the logical value `original` is unchanged and the kernel's bytes are in result.data only -- and reading the SAME original twice gives two independent results (the second read, at end of file, leaves the first result's data as it was)} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable original "${::linuxPrelude}
 original = mb(\"______\")
 r1 = rd(0, original)
@@ -719,7 +721,7 @@ r2 = rd(0, original)
     list $stdout $f3
 } -result {{[6, 0, 6, 6, 6, true, false, true]} abcdef____________}
 
-test abi-mutable-bytes-read-result-copies-are-independent {a linux::ReadResult contains a MutableBytes, so copying the result copies the value: r2 = r1, then updating the buffer derived from one leaves the other result's logical contents unchanged (value-copy semantics recurse through ordinary structs), through a List and a function parameter as well} -constraints {linuxX86_64 posixShell} -body {
+test abi-mutable-bytes-read-result-copies-are-independent {a linux::ReadResult contains a MutableBytes, so copying the result copies the value: r2 = r1, then updating the buffer derived from one leaves the other result's logical contents unchanged (value-copy semantics recurse through ordinary structs), through a List and a function parameter as well} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable resultcopy "${::linuxPrelude}
 fn bump(r: linux::ReadResult) -> linux::ReadResult:
     linux::ReadResult {result: r.result, data: put(r.data, 0, byte::from_int(90))}
@@ -735,7 +737,7 @@ r4 = bump(r2)
 
 test abi-mutable-bytes-read-is-exactly-one-syscall {the wrapper makes ONE read(2) (the program as a whole has two syscall ops: this one and linux::write's) and returns exactly the kernel's result: linux::read's NIR has exactly one syscall op and no branch, jump, label or tail call, so there is no loop or retry to fill the buffer or repeat a short read; and its register mapping is rax = 0 (SYS_read), r10 = r8 = r9 = 0} -constraints linuxX86_64 -body {
     set nir [native::nir [bytesHir [readProgram 8]]]
-    set body [nirFunction $nir linux::read]
+    set body [nirFunction $nir linux::sys::read]
     list [regexp -all {op syscall_linux_x86_64} $body] [regexp -all {\mjump\M|\mbr\M|\mtail\M|\mlabel\M} $body] \
         [regexp -all {op syscall_linux_x86_64} $nir]
 } -result {1 0 2}
@@ -747,7 +749,7 @@ test abi-mutable-bytes-nir-read-path {NIR of linux::read, in order: the detached
     set nir [native::nir [bytesHir [readProgram 8]]]
     set names [dict create]
     foreach {- id name} [regexp -all -inline -line {^func ([0-9]+) "([^"]+)"} $nir] { dict set names $id $name }
-    set read [nirFunction $nir linux::read]
+    set read [nirFunction $nir linux::sys::read]
     set seq {}
     foreach line [split $read \n] {
         if {[regexp {^\s+(%[0-9]+) = op (mbytesaddr|bytesaddr|syscall_linux_x86_64|keepalive) } $line -> reg op]} {
@@ -766,7 +768,7 @@ test abi-mutable-bytes-nir-read-path {NIR of linux::read, in order: the detached
 
 test abi-mutable-bytes-nir-operands {the syscall's operands are, in register order, rax = the register64(0) word, rdi = the fd word, rsi = THE ADDRESS (the mbytesaddr result), rdx = the length word, then ONE zero constant for r10 r8 r9 -- and the address op's operand, the length call's operand, the keepalive's operand, the ReadResult's data and the detach call's result are ONE register: the buffer the kernel writes is the buffer returned} -constraints linuxX86_64 -body {
     set nir [native::nir [bytesHir [readProgram 8]]]
-    set read [nirFunction $nir linux::read]
+    set read [nirFunction $nir linux::sys::read]
     regexp {(%[0-9]+) = op mbytesaddr (%[0-9]+)} $read -> address storage
     regexp {op syscall_linux_x86_64 (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+)} $read -> rax rdi rsi rdx r10 r8 r9
     regexp {op keepalive (%[0-9]+)} $read -> kept
@@ -800,7 +802,7 @@ test abi-mutable-bytes-clif-keepalive-and-stack-map {CLIF of linux::read: the wr
     set clif [native::clif [bytesHir [readProgram 8]]]
     set helperOf [dict create]
     foreach {- ref name} [regexp -all -inline -line {^; (u0:[0-9]+) = (rt_[a-z0-9_]+)} $clif] { dict set helperOf $ref $name }
-    regexp {; function [0-9]+ "linux::read": botlish_fn_[0-9]+} $clif header
+    regexp {; function [0-9]+ "linux::sys::read": botlish_fn_[0-9]+} $clif header
     set start [string first $header $clif]
     set block [string range $clif $start [string first "\n\}" $clif $start]]
     set fnName [dict create]
@@ -846,7 +848,7 @@ proc machineCalls {exe function} {
 test abi-mutable-bytes-machine-code-read-function {the machine code of linux::read in a standalone executable: a call to the detach function, the runtime helper taking the WRITABLE payload address, the one syscall helper, then the keepalive helper, then to_int; the address and keepalive helpers are given the SAME register (the storage) so it is live across the syscall; and there is no call to libc's read, recv, pread or syscall(3) anywhere in it -- libc exists elsewhere in the executable (the runner's own machinery), the Botlish read path never reaches it} -constraints {linuxX86_64 objdump rustcLinker} -body {
     set text [readProgram 8]
     set exe [buildExecutable machine $text]
-    set id [nirFunctionId [native::nir [bytesHir $text]] linux::read]
+    set id [nirFunctionId [native::nir [bytesHir $text]] linux::sys::read]
     set calls [machineCalls $exe botlish_fn_$id]
     set targets [lmap c $calls {lindex $c 0}]
     set helpers [lsearch -all -inline -regexp $targets {^rt_}]
@@ -925,7 +927,7 @@ test abi-mutable-bytes-kernel-sees-binary-short-eof-and-bad-fd {strace of the re
 # ---------------------------------------------------------------------------
 # GC stress: a collection attempted at every allocation site
 
-test abi-mutable-bytes-gc-stress-reads-are-exact {with BOTLISH_NATIVE_GC_STRESS=1 forty reads of 16 bytes each from one open file reassemble the file exactly: each read detaches a fresh storage, the kernel writes into it, the storage is returned and frozen, with garbage allocated between -- run so an accidental liveness assumption would show} -constraints {linuxX86_64 posixShell} -body {
+test abi-mutable-bytes-gc-stress-reads-are-exact {with BOTLISH_NATIVE_GC_STRESS=1 forty reads of 16 bytes each from one open file reassemble the file exactly: each read detaches a fresh storage, the kernel writes into it, the storage is returned and frozen, with garbage allocated between -- run so an accidental liveness assumption would show} -constraints {nativeLinux posixShell} -body {
     set program "${::linuxPrelude}
 rs = loop round from 0 to 40:
     junk = mk(doubled(\"x\", 5))
@@ -961,7 +963,7 @@ set livenessHeader {import abi
 import abi::bytes
 import abi::x86_64
 import byte
-import linux::abi
+import linux::abi::x86_64
 import str
 
 fn doubled(s: str, k: int) -> str:
@@ -977,7 +979,7 @@ fn addr_of(d: abi::bytes::MutableBytes) -> abi::x86_64::Register64:
     abi::x86_64::from_mutable_bytes(d)
 
 fn raw_write(fd: abi::x86_64::Register64, addr: abi::x86_64::Register64, n: abi::x86_64::Register64) -> int:
-    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: fd, rsi: addr, rdx: n}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: fd, rsi: addr, rdx: n}))
 
 }
 set livenessFooter {
@@ -989,26 +991,26 @@ rs
 }
 set livenessShapes [dict create \
     inline {fn w(fd: abi::I32, a: str, b: str) -> int:
-    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_mutable_bytes(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_mutable_bytes(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
 } \
     locals {fn w(fd: abi::I32, a: str, b: str) -> int:
     addr = abi::x86_64::from_mutable_bytes(mbm(a))
     n = abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))
-    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: n}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: n}))
 } \
     struct {fn w(fd: abi::I32, a: str, b: str) -> int:
     regs = {rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_mutable_bytes(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}
-    abi::x86_64::to_int(linux::abi::syscall(regs))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall(regs))
 } \
     helper {fn w(fd: abi::I32, a: str, b: str) -> int:
-    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr_of(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr_of(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
 } \
     join {fn w(fd: abi::I32, a: str, b: str) -> int:
     addr = if str::length(a) > 0:
         abi::x86_64::from_mutable_bytes(mbm(a))
     else:
         abi::x86_64::register64(0)
-    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
 } \
     callee {fn w(fd: abi::I32, a: str, b: str) -> int:
     raw_write(abi::x86_64::from_i32(fd), abi::x86_64::from_mutable_bytes(mbm(a)), abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b))))
@@ -1040,7 +1042,7 @@ test abi-mutable-bytes-liveness-mutant-without-keepalive-is-detected {the inline
 test abi-mutable-bytes-read-liveness-an-unreferenced-buffer-under-stress {the read variant: the kernel WRITES through an address whose only owner is the raw register, while a register word evaluated after it allocates a same-sized MutableBytes (GC stress). The second storage -- a fresh buffer of B's -- must be intact afterwards: the kernel's bytes went into the first storage, which stayed alive, never into a reclaimed block the second one reused} -constraints {linuxX86_64 posixShell} -body {
     set program "${::livenessHeader}
 fn raw_read(fd: abi::I32, a: str, b: str) -> int:
-    abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(0), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_mutable_bytes(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
+    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(0), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_mutable_bytes(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
 sa = doubled(\"A\", 11)
 sb = doubled(\"B\", 11)
 rs = loop i from 0 to 5:
@@ -1059,14 +1061,14 @@ test abi-mutable-bytes-raw-bridge-writes-through-the-storage-it-is-given {docume
     set program "${::linuxPrelude}
 a = mb(\"______\")
 b = a
-n = abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(0), rdi: abi::x86_64::from_i32(abi::i32(0)), rsi: abi::x86_64::from_mutable_bytes(a), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(a))}))
+n = abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(0), rdi: abi::x86_64::from_i32(abi::i32(0)), rsi: abi::x86_64::from_mutable_bytes(a), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(a))}))
 \[n, out(3, abi::bytes::freeze(a)), out(3, abi::bytes::freeze(b))\]"
     set exe [buildExecutable rawshare $program]
     lassign [runIn $exe "abcdef"] stdout f3 f4
     list $stdout $f3
 } -result {{[6, 6, 6]} abcdefabcdef}
 
-test abi-mutable-bytes-wrapper-read-never-writes-through-shared-values {the safe wrapper over the same situation: read(0, a) with b = a, c = [a] and a struct holding a all keep their contents -- the kernel's bytes are only in result.data} -constraints {linuxX86_64 posixShell} -body {
+test abi-mutable-bytes-wrapper-read-never-writes-through-shared-values {the safe wrapper over the same situation: read(0, a) with b = a, c = [a] and a struct holding a all keep their contents -- the kernel's bytes are only in result.data} -constraints {nativeLinux posixShell} -body {
     set program "${::linuxPrelude}
 struct Holder:
     data: abi::bytes::MutableBytes
@@ -1095,7 +1097,7 @@ proc allocationsOf {text} {
         [dict get $report byKind List allocations]
 }
 
-test abi-mutable-bytes-allocations {allocation evidence {total MutableBytes Bytes Struct List}: the empty MutableBytes is one shared static (0), a small and a large one are exactly one heap object each, a binding is plain sharing (no second storage; the one List is the test's own tuple), passing and returning through a function shares the storage too (it only materializes the one-field wrapper Struct where the value crosses a call), set costs one copy of the storage (and its wrapper), freeze one immutable Bytes, a read costs the detach clone beside the original (2 storages, one wrapper for the returned buffer) -- the eager copies this milestone accepts, none hidden} -constraints linuxX86_64 -body {
+test abi-mutable-bytes-allocations {allocation evidence {total MutableBytes Bytes Struct List}: the empty MutableBytes is one shared static (0), a small and a large one are exactly one heap object each, a binding is plain sharing (no second storage; the one List is the test's own tuple), passing and returning through a function shares the storage too (it only materializes the one-field wrapper Struct where the value crosses a call), set costs one copy of the storage (and its wrapper), freeze one immutable Bytes, a read costs the detach clone beside the original (2 storages, one wrapper for the returned buffer) -- the eager copies this milestone accepts, none hidden} -constraints nativeLinux -body {
     list \
         [allocationsOf "m = abi::bytes::zeroed(abi::usize(0))\nabi::bytes::mutable_length(m).value"] \
         [allocationsOf "m = abi::bytes::zeroed(abi::usize(16))\nabi::bytes::mutable_length(m).value"] \
@@ -1107,7 +1109,7 @@ test abi-mutable-bytes-allocations {allocation evidence {total MutableBytes Byte
         [allocationsOf "m = abi::bytes::zeroed(abi::usize(16))\nr = rd(1000, m)\nr.result"]
 } -result {{0 0 0 0 0} {1 1 0 0 0} {1 1 0 0 0} {2 1 0 0 1} {2 1 0 1 0} {4 2 0 2 0} {2 1 1 0 0} {3 2 0 1 0}}
 
-test abi-mutable-bytes-allocations-aggregates {a MutableBytes stored in a List is the one storage shared: a List of two copies of one value holds ONE storage object (MutableBytes column 1); a mutated copy beside it is a second (2) -- storing in an aggregate copies nothing} -constraints linuxX86_64 -body {
+test abi-mutable-bytes-allocations-aggregates {a MutableBytes stored in a List is the one storage shared: a List of two copies of one value holds ONE storage object (MutableBytes column 1); a mutated copy beside it is a second (2) -- storing in an aggregate copies nothing} -constraints nativeLinux -body {
     lmap text [list \
         "m = abi::bytes::zeroed(abi::usize(16))\nxs = \[m, m\]\nloop x in xs:\n    abi::bytes::mutable_length(x).value" \
         "m = abi::bytes::zeroed(abi::usize(16))\nxs = \[m, put(m, 0, byte::from_int(1))\]\nloop x in xs:\n    abi::bytes::mutable_length(x).value"] {
@@ -1115,13 +1117,13 @@ test abi-mutable-bytes-allocations-aggregates {a MutableBytes stored in a List i
     }
 } -result {1 2}
 
-test abi-mutable-bytes-heap-object-layout {the heap storage is ONE allocation of 16 header bytes (kind, marked, static flag, then the 8-byte length) plus the payload, in-line, with no pointer to a second block: a 4096-byte MutableBytes is a 4112-byte object, reported as its own kind} -constraints linuxX86_64 -body {
+test abi-mutable-bytes-heap-object-layout {the heap storage is ONE allocation of 16 header bytes (kind, marked, static flag, then the 8-byte length) plus the payload, in-line, with no pointer to a second block: a 4096-byte MutableBytes is a 4112-byte object, reported as its own kind} -constraints nativeLinux -body {
     set report [native::allocationReport [bytesHir "${::linuxPrelude}\nm = abi::bytes::zeroed(abi::usize(4096))\nabi::bytes::mutable_length(m).value"] summary]
     list [dict get $report byKind MutableBytes allocations] [dict get $report byKind MutableBytes headerBytes] \
         [dict get $report byKind MutableBytes payloadBytes] [dict get $report byKind MutableBytes allocatedBytes]
 } -result {1 16 4096 4112}
 
-test abi-mutable-bytes-no-static-mutable-constants {a compile-time-known mutable value is never a shared writable static: two identical mutable_bytes_from_bytes of the same constant Bytes, and two mutable_bytes(3), are FOUR separate heap storages (an immutable constant Bytes, by contrast, is one static object): no unrelated logical values can share writable static storage} -constraints linuxX86_64 -body {
+test abi-mutable-bytes-no-static-mutable-constants {a compile-time-known mutable value is never a shared writable static: two identical mutable_bytes_from_bytes of the same constant Bytes, and two mutable_bytes(3), are FOUR separate heap storages (an immutable constant Bytes, by contrast, is one static object): no unrelated logical values can share writable static storage} -constraints nativeLinux -body {
     list \
         [lindex [allocationsOf "a = mb(\"abc\")\nb = mb(\"abc\")\n\[abi::bytes::mutable_length(a).value, abi::bytes::mutable_length(b).value\]"] 1] \
         [lindex [allocationsOf "a = abi::bytes::zeroed(abi::usize(3))\nb = abi::bytes::zeroed(abi::usize(3))\n\[abi::bytes::mutable_length(a).value, abi::bytes::mutable_length(b).value\]"] 1] \
@@ -1132,7 +1134,7 @@ test abi-mutable-bytes-raw-write-is-a-memory-barrier {the raw syscall is a stron
     set program "${::linuxPrelude}
 m = mb(\"______\")
 before = abi::bytes::freeze(m)
-n = abi::x86_64::to_int(linux::abi::syscall({rax: abi::x86_64::register64(0), rdi: abi::x86_64::from_i32(abi::i32(0)), rsi: abi::x86_64::from_mutable_bytes(m), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(m))}))
+n = abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(0), rdi: abi::x86_64::from_i32(abi::i32(0)), rsi: abi::x86_64::from_mutable_bytes(m), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(m))}))
 after = abi::bytes::freeze(m)
 \[n, out(3, before), out(3, after), before == after\]"
     set exe [buildExecutable barrier $program]

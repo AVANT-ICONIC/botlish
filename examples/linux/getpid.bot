@@ -2,7 +2,7 @@
 # syscall path (LINUX-X86-64-SYSCALL.md):
 #
 #   Botlish Int --abi::x86_64::register64--> Register64 (one register word)
-#     --linux::abi::syscall--> the x86-64 `syscall` instruction
+#     --linux::abi::x86_64::syscall--> the x86-64 `syscall` instruction
 #     --> raw rax as a Register64 --abi::x86_64::to_int--> Botlish Int
 #
 # raw_getpid is ordinary Botlish except for its one call of the generic
@@ -17,11 +17,11 @@
 # expect (native): [PID > 0, the same PID twice] -> [true, true]
 
 import abi::x86_64
-import linux::abi
+import linux::abi::x86_64
 
 fn raw_getpid():
     abi::x86_64::to_int(
-        linux::abi::syscall({
+        linux::abi::x86_64::syscall({
             rax: abi::x86_64::register64(39),
         })
     )

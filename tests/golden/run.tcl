@@ -26,9 +26,10 @@
 # A suite may exclude backends it cannot run, with the reason, in its leading
 # comment block ("# golden-exclude: cranelift-generic -- REASON"): the runner
 # skips them for that suite and prints the exclusion (golden::exclusions).
-# A suite that only runs on one host -- a live Linux x86-64 syscall -- says
-# so the same way ("# golden-host: linux-x86_64 -- REASON"): elsewhere it is
-# compiled but not run, and its status is host-excluded (golden::host).
+# A suite that only runs on one host -- a live syscall through one
+# architecture's transport -- says so the same way ("# golden-host:
+# linux-x86_64 -- REASON"): elsewhere it is compiled but not run, and its
+# status is host-excluded (golden::host).
 #
 # -lib DIR compiles against the library directory DIR instead of lib/ (a
 # private, mutated copy: audit/golden/tools/). -names prints only the test
@@ -163,11 +164,15 @@ proc golden::exclusions {path} {
 #
 #   # golden-host: HOST -- REASON
 #
-# as {HOST REASON}, or "" (any host). HOST is linux-x86_64, the one host a
-# suite can need today: its tests make live Linux x86-64 syscalls
-# (linux::abi::syscall), which the native backend compiles for no other
-# target, exactly as the Tcl tests they were ported from carry the
-# linuxX86_64 constraint. Any other HOST is an error, never a silent skip.
+# as {HOST REASON}, or "" (any host). HOST is linux-x86_64 or linux-aarch64
+# (golden::hosts): the suite's tests make live syscalls through that
+# architecture's own transport (linux::abi::x86_64::syscall,
+# linux::abi::aarch64::syscall), which runs on no other, exactly as the Tcl
+# tests they were ported from carry the linuxX86_64 (linuxAarch64)
+# constraint. (A suite that makes its syscalls through the portable wrappers
+# -- linux::write, linux::io -- needs only Linux natively, which its
+# golden-exclude of the Tcl backends already says.) Any other HOST is an
+# error, never a silent skip.
 proc golden::host {path} {
     set f [open $path]
     fconfigure $f -encoding utf-8
@@ -175,9 +180,9 @@ proc golden::host {path} {
     while {[gets $f line] >= 0} {
         if {![string match "#*" $line]} break
         if {[regexp {^#\s*golden-host:\s*(\S+)\s+--\s+(.+)$} $line -> host reason]} {
-            if {$host ne "linux-x86_64"} {
+            if {$host ni [hosts]} {
                 close $f
-                error "$path: unknown golden-host $host (known: linux-x86_64)"
+                error "$path: unknown golden-host $host (known: [join [hosts] {, }])"
             }
             set required [list $host $reason]
         }
@@ -186,10 +191,18 @@ proc golden::host {path} {
     return $required
 }
 
+# The hosts a suite may require (golden::host).
+proc golden::hosts {} {
+    return {linux-x86_64 linux-aarch64}
+}
+
 # Whether this process runs on HOST (a golden::host name).
 proc golden::onHost {host} {
-    return [expr {$host eq "linux-x86_64" && $::tcl_platform(os) eq "Linux"
-        && $::tcl_platform(machine) in {x86_64 amd64}}]
+    if {$::tcl_platform(os) ne "Linux"} {
+        return 0
+    }
+    set machines [dict get {linux-x86_64 {x86_64 amd64} linux-aarch64 {aarch64 arm64}} $host]
+    return [expr {$::tcl_platform(machine) in $machines}]
 }
 
 # Runs the suite at PATH on BACKENDS (minus those it excludes). Returns a

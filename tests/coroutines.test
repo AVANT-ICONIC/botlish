@@ -28,8 +28,10 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
 
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
-# stack maps, the stack guard, coroutines) without the x86-64 syscall that
-# linuxX86_64 tests need.
+# stack maps, the stack guard, coroutines), and syscalls through the portable
+# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
+# spells the x86-64 transport or reads its machine code.
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
@@ -838,7 +840,7 @@ test co-context-portable-io {io::print_line deep inside a coroutine, through the
     }
 } -cleanup {unset -nocomplain program driver} -result {{value {[10, 10, 2]}} {value {[10, -2, -3]}}}
 
-test co-executable-linux-io {a standalone executable printing through io::print_line and linux::io::LinuxIO before and after a yield: descriptor 1 receives both lines in segment order, then the result; the same under GC stress} -constraints linuxX86_64 -body {
+test co-executable-linux-io {a standalone executable printing through io::print_line and linux::io::LinuxIO before and after a yield: descriptor 1 receives both lines in segment order, then the result; the same under GC stress} -constraints nativeLinux -body {
     set exe [file join [temporaryDirectory] co-io-[pid]]
     native::executable [surface::compile "import str\nimport io\nimport linux::io\nstruct Ev:\n    n: int\nfn report(label: str) -> unit errors io::WriteFailed:\n    io::print_line(str::concat(\"report \", label))\nfn worker(n: int) -> Ev errors io::WriteFailed:\n    report(\"before\")\n    yield Ev {n: n}\n    report(\"after\")\n    return Ev {n: n + 2}\nwith context linux::io::create()\ncoroutine {step, first} = worker(1):\n    on io::WriteFailed:\n        Ev {n: -1}\nlast = step():\n    on io::WriteFailed:\n        Ev {n: -2}\n\[first.n, last.n\]\n" -warnings off] $exe
     set plain [exec $exe]

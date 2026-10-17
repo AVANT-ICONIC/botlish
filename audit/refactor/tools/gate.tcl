@@ -198,15 +198,17 @@ foreach e $entries {
 # Strict mode for every unit with an empty expected set.
 set strictFailures 0
 foreach unit $strictUnits {
+    set target ""
     if {[string match "import *" $unit]} {
+        lassign [refactor::sweep::moduleTarget [string range $unit 7 end]] ns target
         set scratch [file tempdir refactor-gate]
         set path [file join $scratch load.bot]
-        refactor::sweep::writeText $path "$unit\n0\n"
+        refactor::sweep::writeText $path "import $ns\n0\n"
     } else {
         set scratch ""
         set path [file join $root $unit]
     }
-    set result [refactor::sweep::Compile $root $path error]
+    set result [refactor::sweep::Compile $root $path error $target]
     if {$scratch ne ""} {
         file delete -force $scratch
     }

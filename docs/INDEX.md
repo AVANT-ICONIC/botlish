@@ -108,6 +108,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [C-POINTER-BORROWING.md](C-POINTER-BORROWING.md) -- temporary foreign byte exposure: existing `Bytes` / `MutableBytes` given to a C pointer parameter for one call when its contract says noescape, sharing the syscall path's exposure mechanism; the `extern c fn` and `direct` hooks
 - [ABI-NUMERIC-DOMAINS.md](ABI-NUMERIC-DOMAINS.md) -- `abi::I8` ... `abi::Usize`
 - [LINUX-X86-64-SYSCALL.md](LINUX-X86-64-SYSCALL.md) -- direct Linux x86-64 syscalls
+- [LINUX-SYSCALL-TRANSPORTS.md](LINUX-SYSCALL-TRANSPORTS.md) -- the AArch64 transport beside the x86-64 one (`linux::abi::ARCH::syscall`, one table), `linux::sys` as an architecture-specific module the compilation target selects, and what the single-file compiler needs on AArch64
 - [ARGV.md](ARGV.md) -- `argv()`: the process argument vector
 
 ### Compile-time evaluation and testing

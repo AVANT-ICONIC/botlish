@@ -6,7 +6,7 @@
 #     linux::io::write(message)          declares `context io: LinuxIO`; reads
 #                                        stdout from the installed context
 #       linux::write(fd, message)        the raw-thin write(2) wrapper
-#         linux::abi::syscall            the x86-64 `syscall` instruction
+#         linux::abi::x86_64::syscall            the x86-64 `syscall` instruction
 #
 # `hello` says nothing about contexts: the compiler derives that it requires
 # LinuxIO (through linux::io::write) and proves that the call below runs after

@@ -22,6 +22,14 @@ interp recursionlimit {} 100000
 
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
+
+# Linux on x86-64 or AArch64: the native backend's whole runtime (native
+# stack maps, the stack guard, coroutines), and syscalls through the portable
+# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
+# spells the x86-64 transport or reads its machine code.
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint posixShell [expr {[auto_execok sh] ne ""}]
 
 set scratch [makeDirectory linux-path-[pid]]
@@ -288,7 +296,7 @@ both("/home", "C:\\Users"):
     list $value [lsort [lsearch -all -inline -glob [lmap e [hirFind $hir bind] {dict get $hir bindings [hir::get $hir $e binding] name}] child<*>]]
 } -result {{value {["/home/child", "C:\\Users\\child"]}} {child<linux::path::LinuxPath> child<winpath::WinPath>}}
 
-test path-specialization-code-quality {child<LinuxPath> compiles to the same NIR as a hand-written concrete function over LinuxPath, and allocates exactly as much (the refinement and the trait cost nothing)} -constraints {linuxX86_64} -body {
+test path-specialization-code-quality {child<LinuxPath> compiles to the same NIR as a hand-written concrete function over LinuxPath, and allocates exactly as much (the refinement and the trait cost nothing)} -constraints {nativeLinux} -body {
     set text "${::pathHeader}import type io::path::Path\nfn child(path: Path) -> Path errors io::path::NotAPath:\n    path.concat(\"child\")\nfn child_l(path: LinuxPath) -> LinuxPath errors io::path::NotAPath:\n    linux::path::concat(path, \"child\")\nfn f(s: str) -> List\[str\] errors io::path::NotAPath:\n    linux::path::validate(s)\n    \[io::path::text(child(s)), linux::path::text(child_l(s))\]\nr = f(\"/a\"):\n    on io::path::NotAPath:\n        \[\]\nr\n"
     set nir [native::nir [pathHir $text]]
     set allocations [lmap last {{io::path::text(child(s))} {linux::path::text(child_l(s))}} {
@@ -302,7 +310,7 @@ test path-specialization-code-quality {child<LinuxPath> compiles to the same NIR
 # ---------------------------------------------------------------------------
 # Path + I/O
 
-test path-io-vertical {examples/io/show-path.bot as a standalone executable: a valid path is printed on stdout (still a String after validation), an invalid one reported on stderr by the io::path::NotAPath handler} -constraints {linuxX86_64 posixShell} -body {
+test path-io-vertical {examples/io/show-path.bot as a standalone executable: a valid path is printed on stdout (still a String after validation), an invalid one reported on stderr by the io::path::NotAPath handler} -constraints {nativeLinux posixShell} -body {
     set exe [file join $::scratch show-path]
     native::executable [pathHir [readFile [file join $::projectRoot examples io show-path.bot]]] $exe
     set out [file join $::scratch show.out]

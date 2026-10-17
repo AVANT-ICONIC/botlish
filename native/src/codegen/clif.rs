@@ -1477,11 +1477,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 self.def(*dst, v);
             }
             Inst::Op { dst, op, args } => {
-                // linux::abi::syscall compiles on every target: off Linux
-                // x86-64 its helper fails at run time (NATIVE UNSUPPORTED,
-                // runtime/syscall.rs), as the Tcl backends refuse it at run
-                // time, so a program that only defines a write still compiles
-                // and runs everywhere. The address bridges compute a payload
+                // Each syscall transport compiles on every target: off its
+                // own Linux architecture its helper fails at run time
+                // (NATIVE UNSUPPORTED, runtime/syscall.rs), as the Tcl
+                // backends refuse it at run time, so a program that only
+                // defines a write still compiles and runs everywhere. The address bridges compute a payload
                 // address on every target (range-checked into a small Int,
                 // runtime/ops.rs; a 48-bit AArch64 Linux user address fits).
                 let v = self.op(*op, args);
@@ -2029,19 +2029,23 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         // sets the pending declared id before returning
                         // NO_VALUE, so `check` routes it like a `fail`).
                         Argv => ("rt_argv", None, true, Some(("argv", KIND_LIST))),
-                        // linux::abi::syscall: seven Int operands (rax, then
-                        // arguments 1-6), the raw rax back as an Int. Always
+                        // The syscall transports: seven Int operands (the
+                        // number register, then arguments 1-6), the raw result
+                        // register back as an Int. Always
                         // a real helper call (never inline CLIF): Cranelift
                         // treats a call as reading and writing all memory,
                         // clobbering every caller-saved register, and never
                         // merges, hoists or deletes it. The helper itself
-                        // executes the `syscall` instruction
+                        // executes the `syscall` / `svc #0` instruction
                         // (runtime/syscall.rs). It allocates only a BigInt
                         // result outside the small-Int range; fallible only
                         // on an operand that is no 64-bit word (TYPE: an
                         // unchecked program's unproven Register64).
                         SyscallLinuxX86_64 => {
                             ("rt_linux_x86_64_syscall", None, true, Some(("syscall", KIND_BIGINT)))
+                        }
+                        SyscallLinuxAarch64 => {
+                            ("rt_linux_aarch64_syscall", None, true, Some(("syscall", KIND_BIGINT)))
                         }
                         // Never allocate (a Bool result, like StrEq); fallible
                         // (RANGE) on an operand that is not one Unicode scalar,
