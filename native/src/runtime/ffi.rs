@@ -14,6 +14,12 @@
 //!   (`rt_ffi_bad_address`): a NATIVE ADDRESS failure, never a masked or
 //!   truncated pointer -- every canonical x86-64 address and every untagged
 //!   AArch64 one fits; an AArch64 top-byte-tagged one does not;
+//! * a C `_Bool` result whose byte is neither 0 nor 1 (`rt_ffi_bad_bool`):
+//!   a NATIVE BOOL failure. The platform ABIs (x86-64 SysV, AAPCS64) define
+//!   a `_Bool` result as one byte holding 0 or 1, the register's other bits
+//!   unspecified; any other byte is no `_Bool` a C compiler returns, so the
+//!   declaration does not describe the function, and no Botlish bool is
+//!   made up from it;
 //! * a pointer result whose contract says it is exactly a pointer argument
 //!   (`alias`) but is not (`rt_ffi_contract_violation`): the development
 //!   assertion of the binding's contract, a CONTRACT-VIOLATION failure.
@@ -71,6 +77,17 @@ pub extern "C" fn rt_ffi_bad_address(p: *mut Vm, name: Value, address: u64) -> V
     let name = text_of(name);
     vm(p).fail(RtError::ForeignAddress(format!(
         "the C function {name} returned the address 0x{address:x}, which a Botlish C pointer cannot hold (its word keeps a sign-extended 60-bit address: a top-byte-tagged pointer is not one); the pointer is never truncated or masked"
+    )))
+}
+
+/// The failure of a C function NAME (a String constant) whose `_Bool` result
+/// byte was BYTE, neither 0 nor 1. Records it and returns NO_VALUE.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_ffi_bad_bool(p: *mut Vm, name: Value, byte: u64) -> Value {
+    let name = text_of(name);
+    vm(p).fail(RtError::ForeignBool(format!(
+        "the C function {name} returned the byte 0x{:02x} as its _Bool result, which is neither 0 nor 1: no C compiler returns such a _Bool, so its extern c fn declaration does not describe it",
+        byte & 0xff
     )))
 }
 

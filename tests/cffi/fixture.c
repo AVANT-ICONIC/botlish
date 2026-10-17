@@ -6,8 +6,10 @@
  * programs against it with `extern c library "botlish_cffi_fixture"` and
  * -L. Nothing in the compiler, the runtime or the libraries depends on it.
  * Every function is a plain fixed-signature C function of the ABI universe
- * extern c fn supports: integer scalars, data and function pointers, void.
+ * extern c fn supports: integer scalars, C _Bool, data and function
+ * pointers, void.
  */
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -149,6 +151,54 @@ __asm__(
     "    movz x0, #0xfff0\n    movk x0, #0xffff, lsl #16\n    movk x0, #0x5555, lsl #32\n    movk x0, #0x5555, lsl #48\n    ret\n"
     ".globl bcf_dirty_int\n.type bcf_dirty_int,%function\nbcf_dirty_int:\n"
     "    movz x0, #0xfff0\n    movk x0, #0xffff, lsl #16\n    movk x0, #0x5555, lsl #32\n    movk x0, #0x5555, lsl #48\n    ret\n");
+#endif
+
+/* C _Bool (ffi::c::Bool, C-BINDGEN.md "C bool"): round trips, what C
+ * sees, and the transport's corners. */
+bool bcf_echo_bool(bool x) { return x; }
+bool bcf_bool_false(void) { return false; }
+bool bcf_bool_true(void) { return true; }
+int bcf_observe_bool(bool x) { return x ? 1 : 0; }
+bool bcf_not(bool x) { return !x; }
+bool bcf_is_positive(int x) { return x > 0; }
+int bcf_bool_args(bool a, int b, bool c) { return (a ? 100 : 0) + b + (c ? 1 : 0); }
+/* Ten arguments, the bools last: on the stack on both targets. */
+int bcf_bool_stack(long a, long b, long c, long d, long e, long f, long g, long h, bool i, bool j) {
+    (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; (void)g; (void)h;
+    return (i ? 2 : 0) + (j ? 1 : 0);
+}
+/* A pointer to _Bool is only passed through. */
+bool *bcf_echo_bool_ptr(bool *p) { return p; }
+typedef bool (*bcf_predicate)(int);
+static bool bcf_odd(int x) { return x % 2 != 0; }
+bcf_predicate bcf_predicate_odd(void) { return bcf_odd; }
+
+/* The register a _Bool argument arrives in, all 32 low bits of it (the
+ * platform ABIs have the caller zero-extend it as an unsigned char), and
+ * _Bool results with dirty bits above the byte (valid: the bits are
+ * unspecified) or a byte that is no _Bool (2: the call must fail). */
+#if defined(__x86_64__)
+__asm__(
+    ".text\n"
+    ".globl bcf_bool_register\n.type bcf_bool_register,@function\nbcf_bool_register:\n"
+    "    movl %edi, %eax\n    ret\n"
+    ".globl bcf_dirty_bool_true\n.type bcf_dirty_bool_true,@function\nbcf_dirty_bool_true:\n"
+    "    movabsq $0x5555555555555501, %rax\n    ret\n"
+    ".globl bcf_dirty_bool_false\n.type bcf_dirty_bool_false,@function\nbcf_dirty_bool_false:\n"
+    "    movabsq $0x5555555555555500, %rax\n    ret\n"
+    ".globl bcf_invalid_bool\n.type bcf_invalid_bool,@function\nbcf_invalid_bool:\n"
+    "    movl $2, %eax\n    ret\n");
+#elif defined(__aarch64__)
+__asm__(
+    ".text\n"
+    ".globl bcf_bool_register\n.type bcf_bool_register,%function\nbcf_bool_register:\n"
+    "    mov w0, w0\n    ret\n"
+    ".globl bcf_dirty_bool_true\n.type bcf_dirty_bool_true,%function\nbcf_dirty_bool_true:\n"
+    "    movz x0, #0x5501\n    movk x0, #0x5555, lsl #16\n    movk x0, #0x5555, lsl #32\n    movk x0, #0x5555, lsl #48\n    ret\n"
+    ".globl bcf_dirty_bool_false\n.type bcf_dirty_bool_false,%function\nbcf_dirty_bool_false:\n"
+    "    movz x0, #0x5500\n    movk x0, #0x5555, lsl #16\n    movk x0, #0x5555, lsl #32\n    movk x0, #0x5555, lsl #48\n    ret\n"
+    ".globl bcf_invalid_bool\n.type bcf_invalid_bool,%function\nbcf_invalid_bool:\n"
+    "    mov w0, #2\n    ret\n");
 #endif
 
 /* Counts its own calls: the performance benchmark's per-call work. */

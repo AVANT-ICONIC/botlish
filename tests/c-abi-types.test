@@ -284,13 +284,13 @@ test ca-ptr-formation {pointer types to Void, scalars, opaque identities and poi
     lmap t [dict get $hir exprs $block declaredParamTypes] {hir::types::show $t}
 } -cleanup {unset -nocomplain hir block} -result {{ffi::c::Ptr[ffi::c::Void]} {ffi::c::Ptr[ffi::c::Int]} {ffi::c::Ptr[SSL]} {ffi::c::Ptr[ffi::c::Ptr[SSL]]} {ffi::c::Ptr[ffi::c::Ptr[ffi::c::Ptr[ffi::c::Ptr[ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]]]]]]}}
 
-test ca-ptr-pointee-rejected {a pointee with no C representation contract is rejected: int, bool, str, List[int], an ordinary struct, an enum, LayoutStruct[L], a non-C integer domain, a Fn} -body {
+test ca-ptr-pointee-rejected {a pointee with no C representation contract is rejected: int, str, List[int], an ordinary struct, an enum, LayoutStruct[L], a non-C integer domain, a Fn (bool is C _Bool since the binding generator: ffi::c::Bool, c-ffi.test cf-bool-type)} -body {
     set prelude "import ffi::c\nimport binary\nstruct P:\n    x: int\n\nenum Color:\n    Red, Green\n\nlayout L:\n    size 4\n    align 4\n    field n: binary::U32 at 0\n\n"
-    lmap pointee {int bool str List[int] P Color LayoutStruct[L] binary::U32 {Fn{args: [], return: int}}} {
+    lmap pointee {int str List[int] P Color LayoutStruct[L] binary::U32 {Fn{args: [], return: int}}} {
         lassign [caError "${prelude}fn f(p: ffi::c::Ptr\[$pointee\]) -> int:\n    1\n\n1\n"] kind message
         list $kind [regexp -inline {(no C representation|ordinary struct|imprinted from bytes|not a C integer type)} $message]
     }
-} -cleanup {unset -nocomplain prelude pointee kind message} -result {{TYPE {{no C representation} {no C representation}}} {TYPE {{no C representation} {no C representation}}} {TYPE {{no C representation} {no C representation}}} {TYPE {{no C representation} {no C representation}}} {TYPE {{ordinary struct} {ordinary struct}}} {TYPE {{no C representation} {no C representation}}} {TYPE {{imprinted from bytes} {imprinted from bytes}}} {TYPE {{not a C integer type} {not a C integer type}}} {TYPE {{no C representation} {no C representation}}}}
+} -cleanup {unset -nocomplain prelude pointee kind message} -result {{TYPE {{no C representation} {no C representation}}} {TYPE {{no C representation} {no C representation}}} {TYPE {{no C representation} {no C representation}}} {TYPE {{ordinary struct} {ordinary struct}}} {TYPE {{no C representation} {no C representation}}} {TYPE {{imprinted from bytes} {imprinted from bytes}}} {TYPE {{not a C integer type} {not a C integer type}}} {TYPE {{no C representation} {no C representation}}}}
 
 test ca-ptr-bare-kind {there is no pointer without a pointee: the runtime kind is not a type} -body {
     caError "import ffi::c\nfn f(p: cptr) -> int:\n    1\n\n1\n"
@@ -557,7 +557,7 @@ test ca-imprint-same-path {a user function and an intrinsic go through one bindi
     list [lmap e $calls {list [hir::types::show [hir::typeOf $hir $e]] [dict get $hir exprs $e imprint] [dict get $hir exprs $e imprintBinding]}] \
         [lindex [caError "import ffi::c\n${::caOpaque}fn mynull() -> ffi::c::Ptr\[T\]:\n    ffi::c::null\[T\]()\n\nmynull\[int\]()\n"] 1] \
         [lindex [caError "import ffi::c\nffi::c::null\[int\]()\n"] 1]
-} -cleanup {unset -nocomplain hir calls e} -result {{{{ffi::c::Ptr[T]} {{imprint T}} {T {imprint T}}} {{ffi::c::Ptr[SSL]} {{nstruct SSL}} {T {nstruct SSL}}} {{ffi::c::Ptr[SSL]} {{nstruct SSL}} {T {nstruct SSL}}}} {mynull: T is imprinted as int, which cannot be a pointee: int has no C representation: a pointee is ffi::c::Void, a C integer scalar, an opaque struct or another pointer} {ffi::c::null: T is imprinted as int, which cannot be a pointee: int has no C representation: a pointee is ffi::c::Void, a C integer scalar, an opaque struct or another pointer}}
+} -cleanup {unset -nocomplain hir calls e} -result {{{{ffi::c::Ptr[T]} {{imprint T}} {T {imprint T}}} {{ffi::c::Ptr[SSL]} {{nstruct SSL}} {T {nstruct SSL}}} {{ffi::c::Ptr[SSL]} {{nstruct SSL}} {T {nstruct SSL}}}} {mynull: T is imprinted as int, which cannot be a pointee: int has no C representation: a pointee is ffi::c::Void, a C integer scalar, ffi::c::Bool, an opaque struct or another pointer} {ffi::c::null: T is imprinted as int, which cannot be a pointee: int has no C representation: a pointee is ffi::c::Void, a C integer scalar, ffi::c::Bool, an opaque struct or another pointer}}
 
 test ca-imprint-method {method sugar takes explicit imprints too: v.retype[T]()} -body {
     caAgree "import ffi::c\n${::caOpaque}fn f() -> bool:\n    v = ffi::c::null\[ffi::c::Void\]()\n    q = v.retype\[SSL\]()\n    q.null?()\n\nf()\n"

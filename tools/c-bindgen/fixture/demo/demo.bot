@@ -1,0 +1,78 @@
+# demo.bot -- a Botlish caller of the generated bgf binding (C-BINDGEN.md,
+# "The synthetic fixture"). caller.c computes the same list with C calls of
+# the header's own API; tools/c-bindgen/tests/bindgen.test runs both (with
+# `tools/c-bindgen.tcl run`) and compares them value for value.
+#
+# A direct module: bgf_unnamed's pointer parameter has no contract (unknown
+# escape), so calling it is direct authority, acknowledged here; the binding
+# modules themselves stay ordinary.
+direct module
+
+import abi
+import abi::bytes
+import byte
+import ffi::c
+import list
+import str
+import bgf::bgf
+import bgf::thunks::bgf
+
+fn nul() -> byte::Byte:
+    0
+
+# The bytes of TEXT and the NUL the C API needs.
+fn cstring(text: str) -> abi::bytes::Bytes:
+    abi::bytes::from_list(str::encode_utf8(text).append(nul()))
+
+fn byte_of(n: int) -> byte::Byte:
+    if n >= 0 and n <= 255:
+        return n
+    0
+
+fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+    bytes = loop v in values:
+        byte_of(v)
+    abi::bytes::from_list(bytes)
+
+fn text(s: str) -> abi::bytes::Bytes:
+    abi::bytes::from_list(str::encode_utf8(s))
+
+handle = cstring("alpha").bgf_open(1)
+alias = handle.clone()
+window = bgf::bgf::bgf_window_of(alias)
+nothing = ffi::c::null[ffi::c::Char]()
+missing = cstring("beta").bgf_open(1)
+filled = abi::bytes::zeroed(abi::usize(3)).bgf_fill(3, 7)
+digest = text("abc").bgf_digest(3, abi::bytes::zeroed(abi::usize(4)))
+fill_bytes = abi::bytes::freeze(filled.out)
+digest_bytes = abi::bytes::freeze(digest.out)
+bgf::bgf::bgf_close(handle)
+[2.bgf_add(3),
+ bgf::bgf::bgf_length(cstring("hello")),
+ 1.bgf_mix(-2, 3, 4, -5, 6),
+ bgf::bgf::bgf_count(),
+ bgf::bgf::bgf_plain_char(65),
+ 1.bgf_keywords(2, 3, 4, 5),
+ 10.bgf_unnamed(nothing),
+ filled.result,
+ fill_bytes == bytes_of([7, 44, 81]),
+ digest_bytes == bytes_of([128, 160, 192, 4]),
+ bgf::bgf::bgf_labeled(2),
+ bgf::bgf::bgf_renamed(2),
+ bgf::bgf::bgf_current(2),
+ bgf::bgf::bgf_legacy(2),
+ 20.bgf_call_add(22),
+ bgf::thunks::bgf::bgf_square(7),
+ bgf::thunks::bgf::BGF_TWICE(21),
+ bgf::thunks::bgf::bgf_get(3),
+ bgf::bgf::BGF_FLAG_ALL,
+ bgf::bgf::BGF_BIG,
+ bgf::bgf::BGF_SIZE_NONE,
+ bgf::bgf::BGF_NEGATIVE,
+ bgf::bgf::BGF_CHAR,
+ bgf::bgf::BGF_BLUE,
+ bgf::bgf::bgf_next_color(bgf::bgf::BGF_GREEN),
+ window.null?(),
+ missing.null?(),
+ bgf::bgf::bgf_is_even(4),
+ bgf::bgf::bgf_flip(true)]

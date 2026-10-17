@@ -97,9 +97,9 @@ set fnSig {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: ffi::c::I
 # A random pointee base: {SPELLING VALID}.
 proc base {} {
     if {[chance 0.08]} {
-        return [list [pick {int str List[int] Plain binary::U32 bool}] 0]
+        return [list [pick {int str List[int] Plain binary::U32}] 0]
     }
-    return [list [pick [list ffi::c::Void ffi::c::[pick $::scalars] SSL Ctx $::fnSig]] 1]
+    return [list [pick [list ffi::c::Void ffi::c::[pick $::scalars] ffi::c::Bool SSL Ctx $::fnSig]] 1]
 }
 
 proc ptrOf {t} { return "ffi::c::Ptr\[$t\]" }

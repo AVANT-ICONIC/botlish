@@ -79,11 +79,15 @@ proc hir::foreign::Location {span} {
 
 # The ABI transport class of the C value type TYPE (a resolved type): i8 ..
 # u64 for a C integer scalar by its registry metadata's width and
-# signedness (never its name), ptr for a data or function pointer, void for
+# signedness (never its name), bool for C _Bool (ffi::c::Bool, Botlish's
+# bool: one byte, 0 or 1), ptr for a data or function pointer, void for
 # unit (a result only).
 proc hir::foreign::AbiClass {type} {
     if {$type eq "unit"} {
         return void
+    }
+    if {$type eq "bool"} {
+        return bool
     }
     if {[hir::types::IsCPtr $type] || [hir::types::IsCFnPtr $type]} {
         return ptr
@@ -179,7 +183,8 @@ proc hir::foreign::apply {decls linkDecls} {
         set native [nativeName $key]
         set abi [dict create params $abiParams result [AbiClass $result]]
         set kinds [lmap p $params {
-            expr {[hir::types::IsCPtr [dict get $p type]] || [hir::types::IsCFnPtr [dict get $p type]] ? "any" : "int"}
+            set t [dict get $p type]
+            expr {[hir::types::IsCPtr $t] || [hir::types::IsCFnPtr $t] ? "any" : ($t eq "bool" ? "bool" : "int")}
         }]
         set extern [dict create key $key namespace $ns name $name symbol $symbol abi $abi]
         core::native::register $native -arity [llength $params] \

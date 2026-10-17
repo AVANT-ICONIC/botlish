@@ -88,7 +88,7 @@ use super::ffifixture::{
     rt_ffi_fixture_copy, rt_ffi_fixture_fill, rt_ffi_fixture_fill_checked, rt_ffi_fixture_mixed, rt_ffi_fixture_read,
     rt_ffi_fixture_read_reentrant,
 };
-use super::ffi::{rt_ffi_bad_address, rt_ffi_box_i64, rt_ffi_box_u64, rt_ffi_contract_violation, rt_ffi_int_word};
+use super::ffi::{rt_ffi_bad_address, rt_ffi_bad_bool, rt_ffi_box_i64, rt_ffi_box_u64, rt_ffi_contract_violation, rt_ffi_int_word};
 use super::syscall::{rt_linux_aarch64_syscall, rt_linux_x86_64_syscall};
 use super::value::*;
 use super::vm::{current_program, Vm, NativeInfo};
@@ -2640,6 +2640,7 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_ffi_box_i64, 2),
         h!(rt_ffi_box_u64, 2),
         h!(rt_ffi_bad_address, 3),
+        h!(rt_ffi_bad_bool, 3),
         h!(rt_ffi_contract_violation, 4),
         h!(rt_not_boolean, 2),
         h!(rt_raise, 3),

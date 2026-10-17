@@ -1008,12 +1008,14 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
     ///
     /// Operands: an exposure's address is a small Int (`sshr 1`), a raw
     /// pointer a C address word (`sshr 4`: the sign-extended address), a C
+    /// `_Bool` a Botlish bool (its truth bit, `ushr 2` and 1: 0 or 1), a C
     /// integer an Int -- small for every class narrower than 64 bits (its
     /// proven range), else small or a BigInt (`rt_ffi_int_word`) -- then
     /// reduced to its width. Results: a narrow integer extended by its own
-    /// signedness and tagged; a 64-bit one tagged when it fits the small
-    /// range, else boxed (`rt_ffi_box_i64`/`_u64`); a pointer tagged when the
-    /// C address word holds it, else `rt_ffi_bad_address`; void unit.
+    /// signedness and tagged; a `_Bool` byte the bool it is when 0 or 1, else
+    /// `rt_ffi_bad_bool`; a 64-bit one tagged when it fits the small range,
+    /// else boxed (`rt_ffi_box_i64`/`_u64`); a pointer tagged when the C
+    /// address word holds it, else `rt_ffi_bad_address`; void unit.
     fn foreign_call(&mut self, foreign: u32, args: &[Reg], exposed: &[bool], discard: bool) -> ir::Value {
         let (id, decl) = self.symbols.foreigns[foreign as usize].clone();
         let mut words = Vec::with_capacity(args.len());
@@ -1025,6 +1027,9 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 self.b.ins().sshr_imm_s(v, 1)
             } else if class == nir::CAbi::Ptr {
                 self.b.ins().sshr_imm_s(v, 4)
+            } else if class == nir::CAbi::Bool {
+                let shifted = self.b.ins().ushr_imm_s(v, 2);
+                self.b.ins().band_imm_s(shifted, 1)
             } else if class.bits() < 64 {
                 self.b.ins().sshr_imm_s(v, 1)
             } else {
@@ -1068,6 +1073,21 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             self.fail_with("rt_ffi_bad_address", &[self.vm, name, returned]);
             self.b.switch_to_block(ok);
             return self.b.ins().bor_imm_s(shifted, CPTR_TAG as i64);
+        }
+        if class == nir::CAbi::Bool {
+            // The _Bool byte, whatever the register holds beyond it: 0 or 1
+            // is false or true, any other byte no _Bool at all.
+            let byte = self.b.ins().uextend(I64, returned);
+            let valid = self.b.ins().icmp_imm_s(IntCC::UnsignedLessThanOrEqual, byte, 1);
+            let ok = self.b.create_block();
+            let bad = self.b.create_block();
+            self.b.ins().brif(valid, ok, &[], bad, &[]);
+            self.b.switch_to_block(bad);
+            let name = self.string(&decl.name);
+            self.fail_with("rt_ffi_bad_bool", &[self.vm, name, byte]);
+            self.b.switch_to_block(ok);
+            let shifted = self.b.ins().ishl_imm_s(byte, 2);
+            return self.b.ins().bor_imm_s(shifted, 2);
         }
         if class.bits() < 64 {
             let wide = if class.signed() {

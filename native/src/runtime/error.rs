@@ -32,6 +32,10 @@ pub enum RtError {
     /// A C function returned an address no C address word can hold
     /// (runtime/ffi.rs, C-FFI.md): never truncated or masked.
     ForeignAddress(String),
+    /// A C function returned a _Bool result byte other than 0 or 1
+    /// (runtime/ffi.rs, C-FFI.md): no C compiler produces one, so the
+    /// declaration does not describe the function.
+    ForeignBool(String),
     /// A C function broke its declared contract where a run can see it: a
     /// result declared an alias of a pointer argument that is not
     /// (runtime/ffi.rs, C-FFI.md).
@@ -92,6 +96,7 @@ impl RtError {
             RtError::Unsupported(_) => vec!["NATIVE", "UNSUPPORTED", "value"],
             RtError::Bug(_) => vec!["NATIVE", "BUG"],
             RtError::ForeignAddress(_) => vec!["NATIVE", "ADDRESS"],
+            RtError::ForeignBool(_) => vec!["NATIVE", "BOOL"],
             RtError::ContractViolation(_) => vec!["NATIVE", "CONTRACT-VIOLATION"],
         }
     }
@@ -117,7 +122,7 @@ impl RtError {
             RtError::Semantic { message, .. } => message.clone(),
             RtError::StackOverflow => "native stack exhausted: too many nested calls".to_string(),
             RtError::Unsupported(message) | RtError::Bug(message) | RtError::ForeignAddress(message)
-            | RtError::ContractViolation(message) => message.clone(),
+            | RtError::ForeignBool(message) | RtError::ContractViolation(message) => message.clone(),
         }
     }
 
