@@ -2680,7 +2680,7 @@ Block 5([VReg(vreg = 246, class = Int)]):
   Inst 33: shrq $0x3, (%v311 <- %v246)
   Inst 34: shlq $1, (%v310 <- %v311)
   Inst 35: orq $0x1, (%v309 <- %v310)
-  Inst 36: movq %v309, <offset:1>+8(%rsp)
+  Inst 36: movq %v309, <offset:1>+0x18(%rsp)
   Inst 37: sarq $1, (%v308 <- %v309)
   Inst 38: cmpq $0x7f, %v308
   Inst 39: jnle    label15; j label6
@@ -2696,7 +2696,7 @@ Block 7([]):
     (successor: Block 9([]))
     (successor: Block 8([]))
   Inst 43: call    User(userextname5)
-    UserStackMap { by_type: [(types::I64, CompoundBitSet {0, 8})], sp_to_sized_stack_slots: None }
+    UserStackMap { by_type: [(types::I64, CompoundBitSet {0, 24})], sp_to_sized_stack_slots: None }
   Inst 44: testq %v306, %v306
   Inst 45: jnz     label9; j label8
 Block 8([]):
@@ -2761,7 +2761,7 @@ Block 15([]):
     (successor: Block 17([]))
     (successor: Block 16([]))
   Inst 81: call    User(userextname3)
-    UserStackMap { by_type: [(types::I64, CompoundBitSet {0, 8})], sp_to_sized_stack_slots: None }
+    UserStackMap { by_type: [(types::I64, CompoundBitSet {0, 24})], sp_to_sized_stack_slots: None }
   Inst 82: testq %v293, %v293
   Inst 83: jnz     label17; j label16
 Block 16([]):

@@ -2281,7 +2281,7 @@ Disassembly of section .text:
     206b:	shr    rsi,0x3
     206f:	shl    rsi,1
     2072:	or     rsi,0x1
-    2076:	mov    QWORD PTR [rsp+0x8],rsi
+    2076:	mov    QWORD PTR [rsp+0x18],rsi
     207b:	mov    rdi,rsi
     207e:	sar    rdi,1
     2081:	mov    r12,rsi

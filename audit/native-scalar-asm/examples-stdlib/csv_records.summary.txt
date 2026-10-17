@@ -2,7 +2,7 @@ source:  examples/stdlib/csv_records.bot
 backend: Cranelift (specialize=1)
 asm:     csv_records.asm
 vcode:   csv_records.vcode
-machine-code bytes: 19604 (per function: 45 89 89 89 357 420 420 420 202 202 202 81 365 309 470 932 310 758 215 480 318 427 385 70 493 114 69 69 46 182 178 628 1032 341 388 407 616 654 809 673 928 700 107 433 259 629 515 78 78 1222 301)
+machine-code bytes: 19616 (per function: 45 89 89 89 357 420 420 420 202 202 202 81 365 309 470 932 310 758 215 480 318 427 385 70 493 114 69 69 46 182 178 628 1032 341 388 407 616 666 809 673 928 700 107 433 259 629 515 78 78 1222 301)
 
 functions:
   0 <program entry>: nir-regs=1
@@ -482,7 +482,7 @@ GC roots (csv_records.asm's NIR ids match roots.txt's "function N"):
     safepoints: 2
     root candidates: 4
     max live roots: 3
-    shadow slots: 3
+    shadow slots: 4
     entry zero slots: 0
     depth reservation: no
     storage: native frame
@@ -547,8 +547,8 @@ GC roots (csv_records.asm's NIR ids match roots.txt's "function N"):
     safepoints: 3
     root candidates: 11
     max live roots: 9
-    shadow slots: 9
-    entry zero slots: 7
+    shadow slots: 10
+    entry zero slots: 8
     depth reservation: no
     storage: native frame
   
