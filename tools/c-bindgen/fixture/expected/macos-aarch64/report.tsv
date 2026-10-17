@@ -1,4 +1,5 @@
 kind	name	status	module	reason	detail
+function	bgf_handle_id	direct	bgf::types	direct	symbol bgf_handle_id; (ffi::c::Ptr[bgf_handle]) -> ffi::c::Int
 function	bgf_add	direct	bgf::bgf	direct	symbol bgf_add; (ffi::c::Int, ffi::c::Int) -> ffi::c::Int
 function	bgf_length	direct	bgf::bgf	direct	symbol bgf_length; (ffi::c::Ptr[ffi::c::Char]) -> ffi::c::Long
 function	bgf_mix	direct	bgf::bgf	direct	symbol bgf_mix; (ffi::c::UChar, ffi::c::Short, ffi::c::UInt, ffi::c::ULongLong, ffi::c::Long, ffi::c::ULongLong) -> ffi::c::UInt
@@ -18,6 +19,7 @@ function	bgf_keywords	direct	bgf::bgf	direct	symbol bgf_keywords; (ffi::c::Int, 
 function	bgf_unnamed	direct	bgf::bgf	direct	symbol bgf_unnamed; (ffi::c::Int, ffi::c::Ptr[ffi::c::Char]) -> ffi::c::Int
 function	bgf_handles	direct	bgf::bgf	direct	symbol bgf_handles; () -> ffi::c::Ptr[ffi::c::Ptr[bgf_handle]]
 function	bgf_digest	direct	bgf::bgf	direct	symbol bgf_digest; (ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong, ffi::c::Ptr[ffi::c::UChar]) -> ffi::c::Ptr[ffi::c::UChar]
+function	bgf_twins	direct	bgf::bgf	direct	symbol bgf_twins; (ffi::c::Ptr[bgf_twin], ffi::c::Ptr[bgf_twin_struct]) -> ffi::c::Int
 function	bgf_labeled	direct	bgf::bgf	direct	symbol bgf_labeled_v2; (ffi::c::Int) -> ffi::c::Int
 function	bgf_renamed	direct	bgf::bgf	direct	symbol bgf_renamed_impl; (ffi::c::Int) -> ffi::c::Int
 function	bgf_current	direct	bgf::bgf	direct	symbol bgf_current; (ffi::c::Int) -> ffi::c::Int
@@ -59,6 +61,7 @@ macro	BGF_HALF	unsupported		double	a double constant
 macro	BGF_NAME	not-constant		string-literal	constant: string literal
 macro	BGF_NULL_HANDLE	unsupported		not-integer-constant	its type is no C integer type (a pointer or another type)
 macro	BGF_CHAR	constant	bgf::bgf	ffi::c::Int	int 120
+macro	BGF_HIGH_CHAR	constant	bgf::bgf	ffi::c::Char	char -56
 typedef	bgf_u8	scalar		ffi::c::UChar	an ABI alias of C unsigned char
 typedef	bgf_i16	scalar		ffi::c::Short	an ABI alias of C short
 typedef	bgf_u32	scalar		ffi::c::UInt	an ABI alias of C unsigned int
@@ -74,10 +77,13 @@ typedef	bgf_free_fn	callback		ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]]
 typedef	bgf_measure	unsupported		unsupported-callback-signature	callback argument 1: double (double); callback result: double (double)
 typedef	bgf_point	opaque	bgf::ctypes	identity bgf_point	struct bgf_point
 typedef	bgf_pair	unused		struct bgf_pair	no bound signature points to it
+typedef	bgf_twin	opaque	bgf::ctypes	identity bgf_twin	struct bgf_other
 typedef	bgf_wide	unsupported		typedef-abi-mismatch	typedef bgf_wide is unsigned long by its declaration, but the compiler gives it no C integer type of the table (16 bytes): an attribute or extension changes it
 typedef	bgf_table	unused		struct bgf_table	no bound signature points to it
 tag	struct bgf_handle	opaque	bgf::ctypes	incomplete	identity bgf_handle
+tag	struct bgf_other	opaque	bgf::ctypes	incomplete	identity bgf_twin
 tag	struct bgf_pair	unused		complete	no bound signature points to it
 tag	struct bgf_point	opaque	bgf::ctypes	complete, behind pointers	identity bgf_point
 tag	struct bgf_table	unused		complete	no bound signature points to it
+tag	struct bgf_twin	opaque	bgf::ctypes	incomplete	identity bgf_twin_struct
 tag	struct bgf_window_	opaque	bgf::ctypes	incomplete	identity bgf_window

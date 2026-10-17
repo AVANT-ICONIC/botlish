@@ -160,6 +160,18 @@ proc ::cbind::profile::librariesOf {p header target} {
     return $names
 }
 
+# The name the command line gives P: its file's stem for a profile of the
+# profiles directory (the fixture's file is fixture.tcl, its name bgf), else
+# its file's path relative to the repository.
+proc ::cbind::profile::cliName {p} {
+    variable dir
+    set path [dict get $p path]
+    if {[file dirname $path] eq [file normalize $dir]} {
+        return [file rootname [file tail $path]]
+    }
+    return [::chdr::relPath $::chdr::repoDir $path]
+}
+
 # 1 if API NAME is excluded by P's explicit deny patterns.
 proc ::cbind::profile::excluded {p name} {
     foreach pattern [dict get $p exclude] {

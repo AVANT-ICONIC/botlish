@@ -77,6 +77,10 @@ unsigned char *bgf_digest(const unsigned char *data, size_t len, unsigned char o
     return out;
 }
 
+int bgf_twins(bgf_twin *a, struct bgf_twin *b) { return (a != 0) + 2 * (b != 0) + 40; }
+
+int bgf_handle_id(bgf_handle *handle) { return handle->id; }
+
 int bgf_labeled(int x) { return x * 3; }
 
 int bgf_renamed(int x) { return x * 5; }

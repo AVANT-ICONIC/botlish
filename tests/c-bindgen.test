@@ -112,12 +112,32 @@ proc staleFiles {result dir ns} {
     return [lmap d [::cbind::generate::compare [dict get $result files] $dir $ns] {lrange $d 0 1}]
 }
 
+# The directory holding PROFILE/TARGET's generation (`generation`) as files,
+# written once. The tests that compile, link and run a binding use it, not
+# the committed one, so that they test the generator; the *-current tests
+# check that the committed binding is the generation, byte for byte.
+set ::generatedDirs [dict create]
+proc generatedDir {profile target} {
+    set key [list $profile $target]
+    if {![dict exists $::generatedDirs $key]} {
+        set dir [makeDirectory cb-generated-[pid]-[dict size $::generatedDirs]]
+        ::cbind::generate::write [dict get [generation $profile $target] files] $dir [dict get $profile name]
+        dict set ::generatedDirs $key $dir
+    }
+    return [dict get $::generatedDirs $key]
+}
+
 # An application root holding PROGRAM's directory and PROFILE/TARGET's
-# committed binding: its directory.
+# generated binding: its directory.
 proc staged {profile target program} {
     set dir [scratch]
-    ::cbind::generate::stage $profile $target $program $dir
+    ::cbind::generate::stage $profile $target $program $dir [generatedDir $profile $target]
     return $dir
+}
+
+# The shim library of PROFILE/TARGET's generated binding, built in OUT.
+proc shimOf {profile target out} {
+    return [::cbind::generate::buildShim $profile $target $out [generatedDir $profile $target]]
 }
 
 # The HIR of DIR/MAIN for TARGET.
@@ -181,19 +201,19 @@ test cb-fixture-deterministic {generation is byte-for-byte deterministic: two ru
         if {[regexp {/tmp/|/home/|/root/|/usr/|[0-9]{4}-[0-9]{2}-[0-9]{2}} $text]} { lappend leaks $path }
     }
     list [expr {$first eq $second}] [lsort [dict keys $first]] $leaks
-} -result {1 {bgf/bgf.bot bgf/ctypes.bot bgf/thunks/bgf.bot manifest.txt report.tsv report.txt shim.c} {}}
+} -result {1 {bgf/bgf.bot bgf/ctypes.bot bgf/thunks/bgf.bot bgf/types.bot manifest.txt report.tsv report.txt shim.c} {}}
 
-test cb-fixture-mapping {the declaration mapping: integer typedefs resolve to the target's C scalars (no nominal type per typedef), enums to the compiler's integer type, a pointer to an incomplete or complete tag to one opaque identity per C tag (never Ptr[Void]), callbacks to FnPtr, arrays and function types of parameters to pointers, C names that are Botlish keywords renamed, unnamed parameters numbered} -constraints clang -body {
+test cb-fixture-mapping {the declaration mapping: integer typedefs resolve to the target's C scalars (no nominal type per typedef), enums to the compiler's integer type, a pointer to an incomplete or complete tag to one opaque identity per C tag (never Ptr[Void]; two tags whose names collide stay two identities), callbacks to FnPtr, arrays and function types of parameters to pointers, C names that are Botlish keywords renamed, unnamed parameters numbered} -constraints clang -body {
     set text [dict get [generation $::fixture linux-x86_64] files bgf/bgf.bot]
     set get {name {
         upvar text text
         regexp "# C: \[^\n\]*\n(extern c fn $name\[ (\]\[^#\]*?)\n\n" $text -> decl
         string map {"\n    " " " "\n) " ") "} [string trim $decl]
     }}
-    lmap name {bgf_mix bgf_next_color bgf_window_of bgf_handles bgf_point_sum bgf_walk bgf_set_free bgf_digest bgf_keywords bgf_unnamed bgf_is_even} {
+    lmap name {bgf_mix bgf_next_color bgf_window_of bgf_handles bgf_point_sum bgf_walk bgf_set_free bgf_digest bgf_keywords bgf_unnamed bgf_is_even bgf_twins} {
         apply $get $name
     }
-} -result {{extern c fn bgf_mix( a: ffi::c::UChar, b: ffi::c::Short, c: ffi::c::UInt, d: ffi::c::ULong, e: ffi::c::Long, f: ffi::c::ULongLong) -> ffi::c::UInt} {extern c fn bgf_next_color(c: ffi::c::UInt) -> ffi::c::UInt} {extern c fn bgf_window_of( handle: ffi::c::Ptr[bgf::ctypes::bgf_handle] noescape) -> ffi::c::Ptr[bgf::ctypes::bgf_window]} {extern c fn bgf_handles() -> ffi::c::Ptr[ffi::c::Ptr[bgf::ctypes::bgf_handle]]} {extern c fn bgf_point_sum(point: ffi::c::Ptr[bgf::ctypes::bgf_point]) -> ffi::c::Int} {extern c fn bgf_walk( handle: ffi::c::Ptr[bgf::ctypes::bgf_handle] noescape, visit: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[bgf::ctypes::bgf_handle], ffi::c::Int], return: ffi::c::Int}], userdata: ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Int} {extern c fn bgf_set_free( free_fn: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]) -> unit} {extern c fn bgf_digest( data: ffi::c::Ptr[ffi::c::UChar] read noescape, len: ffi::c::ULong, out: ffi::c::Ptr[ffi::c::UChar] write noescape) -> ffi::c::Ptr[ffi::c::UChar] alias out} {extern c fn bgf_keywords( fn_: ffi::c::Int, type_: ffi::c::Int, in: ffi::c::Int, loop_: ffi::c::Int, str: ffi::c::Int) -> ffi::c::Int} {extern c fn bgf_unnamed( arg1: ffi::c::Int, arg2: ffi::c::Ptr[ffi::c::Char]) -> ffi::c::Int} {extern c fn bgf_is_even(n: ffi::c::Int) -> ffi::c::Bool}}
+} -result {{extern c fn bgf_mix( a: ffi::c::UChar, b: ffi::c::Short, c: ffi::c::UInt, d: ffi::c::ULong, e: ffi::c::Long, f: ffi::c::ULongLong) -> ffi::c::UInt} {extern c fn bgf_next_color(c: ffi::c::UInt) -> ffi::c::UInt} {extern c fn bgf_window_of( handle: ffi::c::Ptr[bgf::ctypes::bgf_handle] noescape) -> ffi::c::Ptr[bgf::ctypes::bgf_window]} {extern c fn bgf_handles() -> ffi::c::Ptr[ffi::c::Ptr[bgf::ctypes::bgf_handle]]} {extern c fn bgf_point_sum(point: ffi::c::Ptr[bgf::ctypes::bgf_point]) -> ffi::c::Int} {extern c fn bgf_walk( handle: ffi::c::Ptr[bgf::ctypes::bgf_handle] noescape, visit: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[bgf::ctypes::bgf_handle], ffi::c::Int], return: ffi::c::Int}], userdata: ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Int} {extern c fn bgf_set_free( free_fn: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]) -> unit} {extern c fn bgf_digest( data: ffi::c::Ptr[ffi::c::UChar] read noescape, len: ffi::c::ULong, out: ffi::c::Ptr[ffi::c::UChar] write noescape) -> ffi::c::Ptr[ffi::c::UChar] alias out} {extern c fn bgf_keywords( fn_: ffi::c::Int, type_: ffi::c::Int, in: ffi::c::Int, loop_: ffi::c::Int, str: ffi::c::Int) -> ffi::c::Int} {extern c fn bgf_unnamed( arg1: ffi::c::Int, arg2: ffi::c::Ptr[ffi::c::Char]) -> ffi::c::Int} {extern c fn bgf_is_even(n: ffi::c::Int) -> ffi::c::Bool} {extern c fn bgf_twins( a: ffi::c::Ptr[bgf::ctypes::bgf_twin], b: ffi::c::Ptr[bgf::ctypes::bgf_twin_struct]) -> ffi::c::Int}}
 
 test cb-fixture-unsupported {every declaration outside the C ABI universe is reported with its precise blocker and never approximated: floats, a struct by value, varargs, a va_list, a callback with a double, an explicit calling convention, a typedef an attribute widens to 128 bits, a declaration without prototype, a pointer to float} -constraints clang -body {
     set rows [::cbind::generate::readTsv [dict get [generation $::fixture linux-x86_64] files report.tsv]]
@@ -223,47 +243,51 @@ test cb-fixture-contracts {contracts default to unknown; a favorable fact comes 
     list [regexp -all -inline -line {^contract .*$} $manifest] \
         [regexp -inline {extern c fn bgf_point_sum\([^)]*\)} [dict get $result files bgf/bgf.bot]] \
         [regexp -inline {extern c fn bgf_point_x named "[^"]*"\(\n[^\n]*\n} [dict get $result files bgf/thunks/bgf.bot]]
-} -result {{{contract bgf_length text {access read escape declared-noescape} manual {contract bgf_length}} {contract bgf_open name {access read escape declared-noescape} manual {contract bgf_open}} {contract bgf_open result independent manual {contract bgf_open}} {contract bgf_close handle {escape declared-noescape} manual {group handles}} {contract bgf_window_of handle {escape declared-noescape} manual {group handles}} {contract bgf_walk handle {escape declared-noescape} manual {group handles}} {contract bgf_fill out {access write escape declared-noescape} manual {contract bgf_fill}} {contract bgf_digest data {access read escape declared-noescape} manual {contract bgf_digest}} {contract bgf_digest out {access write escape declared-noescape} manual {contract bgf_digest}} {contract bgf_digest result {alias out} manual {contract bgf_digest}} {contract bgf_point_x p {escape proven-noescape access read} compiler {nocapture readonly}}} {{extern c fn bgf_point_sum(point: ffi::c::Ptr[bgf::ctypes::bgf_point])}} {{extern c fn bgf_point_x named "botlish_bgf_bgf_point_x"(
+} -result {{{contract bgf_handle_id handle {escape declared-noescape} manual {group handles}} {contract bgf_length text {access read escape declared-noescape} manual {contract bgf_length}} {contract bgf_open name {access read escape declared-noescape} manual {contract bgf_open}} {contract bgf_open result independent manual {contract bgf_open}} {contract bgf_close handle {escape declared-noescape} manual {group handles}} {contract bgf_window_of handle {escape declared-noescape} manual {group handles}} {contract bgf_walk handle {escape declared-noescape} manual {group handles}} {contract bgf_fill out {access write escape declared-noescape} manual {contract bgf_fill}} {contract bgf_digest data {access read escape declared-noescape} manual {contract bgf_digest}} {contract bgf_digest out {access write escape declared-noescape} manual {contract bgf_digest}} {contract bgf_digest result {alias out} manual {contract bgf_digest}} {contract bgf_point_x p {escape proven-noescape access read} compiler {nocapture readonly}}} {{extern c fn bgf_point_sum(point: ffi::c::Ptr[bgf::ctypes::bgf_point])}} {{extern c fn bgf_point_x named "botlish_bgf_bgf_point_x"(
     p: ffi::c::Ptr[bgf::ctypes::bgf_point] read proven noescape
 }}}
 
-test cb-fixture-modules {one canonical owner per C type (the ctypes module) imported by the modules that use it; each module declares the libraries of its header (thunk modules also the shim's, a deterministic name keyed by the shim's text); the type module declares none} -constraints clang -body {
+test cb-fixture-modules {one canonical owner per C type (the ctypes module, declaring it once) imported by the modules that use it, a type two headers' functions point to included; each module declares the libraries of its header (thunk modules also the shim's, a deterministic name keyed by the shim's text); the type module declares none} -constraints clang -body {
     set files [dict get [generation $::fixture linux-x86_64] files]
-    lmap path {bgf/bgf.bot bgf/thunks/bgf.bot bgf/ctypes.bot} {
+    set ctypes [dict get $files bgf/ctypes.bot]
+    list {*}[lmap path {bgf/bgf.bot bgf/types.bot bgf/thunks/bgf.bot bgf/ctypes.bot} {
         list $path [regexp -all -inline -line {^(?:import|extern c library) .*$} [dict get $files $path]]
-    }
-} -match glob -result {{bgf/bgf.bot {{import ffi::c} {import bgf::ctypes} {extern c library "bgf"}}} {bgf/thunks/bgf.bot {{import ffi::c} {import bgf::ctypes} {extern c library "botlish_shim_bgf_*"} {extern c library "bgf"}}} {bgf/ctypes.bot {{import ffi::c}}}}
+    }] [llength [regexp -all -inline -line {^opaque struct bgf_handle:$} $ctypes]] \
+        [lsort [lmap path [dict keys $files] {expr {[string match *.bot $path] && [regexp -line {^opaque struct } [dict get $files $path]] ? $path : [continue]}}]]
+} -match glob -result {{bgf/bgf.bot {{import ffi::c} {import bgf::ctypes} {extern c library "bgf"}}} {bgf/types.bot {{import ffi::c} {import bgf::ctypes} {extern c library "bgf"}}} {bgf/thunks/bgf.bot {{import ffi::c} {import bgf::ctypes} {extern c library "botlish_shim_bgf_*"} {extern c library "bgf"}}} {bgf/ctypes.bot {{import ffi::c}}} 1 bgf/ctypes.bot}
 
-test cb-fixture-targets {generation is target-aware: the target's preprocessing decides which declarations exist (Linux-only, Apple-only, AArch64-only, an x86-64 calling convention) and the target's typedef chains their C types (uint64_t is unsigned long on LP64 Linux, unsigned long long on Apple); a link symbol's user label prefix (Apple's _) is the target's} -constraints clang -body {
+test cb-fixture-targets {generation is target-aware: the target's preprocessing decides which declarations exist (Linux-only, Apple-only, AArch64-only, an x86-64 calling convention) and the target's typedef chains their C types (uint64_t is unsigned long on LP64 Linux, unsigned long long on Apple), the target's plain char a constant's value ((char)200 is -56 where char is signed, 200 on AArch64 Linux); a link symbol's user label prefix (Apple's _) is the target's; the manifest names the target} -constraints clang -body {
     set out {}
     foreach target [dict get $::fixture targets] {
         set rows [::cbind::generate::readTsv [dict get [generation $::fixture $target] files report.tsv]]
         lappend out $target [lmap name {bgf_linux_only bgf_apple_only bgf_arm_only bgf_ms} {
             expr {[dict exists $rows "function $name"] ? [lindex [dict get $rows "function $name"] 2] : "absent"}
         }] [lindex [dict get $rows "typedef bgf_u64"] 4] [lindex [dict get $rows "macro BGF_BIG"] 4] \
-            [lindex [split [lindex [dict get $rows "function bgf_renamed"] 5] ";"] 0]
+            [lindex [split [lindex [dict get $rows "function bgf_renamed"] 5] ";"] 0] \
+            [lindex [dict get $rows "macro BGF_HIGH_CHAR"] 5] \
+            [regexp -inline -line {^target .*$} [dict get [generation $::fixture $target] files manifest.txt]]
     }
     set out
-} -result {linux-x86_64 {direct absent absent unsupported} ffi::c::ULong ffi::c::ULong {symbol bgf_renamed_impl} linux-aarch64 {direct absent direct absent} ffi::c::ULong ffi::c::ULong {symbol bgf_renamed_impl} macos-aarch64 {absent direct direct absent} ffi::c::ULongLong ffi::c::ULongLong {symbol bgf_renamed_impl}}
+} -result {linux-x86_64 {direct absent absent unsupported} ffi::c::ULong ffi::c::ULong {symbol bgf_renamed_impl} {char -56} {{target linux-x86_64}} linux-aarch64 {direct absent direct absent} ffi::c::ULong ffi::c::ULong {symbol bgf_renamed_impl} {char 200} {{target linux-aarch64}} macos-aarch64 {absent direct direct absent} ffi::c::ULongLong ffi::c::ULongLong {symbol bgf_renamed_impl} {char -56} {{target macos-aarch64}}}
 
 test cb-fixture-compiles {every target's generated modules are ordinary Botlish: they compile, warning-free (warnings error), with the ordinary front end for that target, and generated modules of declarations only are ordinary modules (unknown escapes designate nothing)} -constraints clang -body {
     lmap target [dict get $::fixture targets] {
         set dir [scratch]
-        ::cbind::generate::stage $::fixture $target "" $dir
-        writeText [file join $dir main.bot] "import bgf::bgf\nimport bgf::thunks::bgf\nimport bgf::ctypes\n\nbgf::bgf::BGF_FLAG_ALL\n"
+        ::cbind::generate::stage $::fixture $target "" $dir [generatedDir $::fixture $target]
+        writeText [file join $dir main.bot] "import bgf::bgf\nimport bgf::thunks::bgf\nimport bgf::types\nimport bgf::ctypes\n\nbgf::bgf::BGF_FLAG_ALL\n"
         set hir [stagedHir $dir main.bot $target error]
         set units [dict get $hir direct units]
-        list $target [dict get $units bgf::bgf status] [dict get $units bgf::thunks::bgf status] [dict get $units bgf::ctypes status]
+        list $target {*}[lmap unit {bgf::bgf bgf::thunks::bgf bgf::types bgf::ctypes} {dict get $units $unit status}]
     }
-} -cleanup removeScratch -result {{linux-x86_64 ordinary ordinary ordinary} {linux-aarch64 ordinary ordinary ordinary} {macos-aarch64 ordinary ordinary ordinary}}
+} -cleanup removeScratch -result {{linux-x86_64 ordinary ordinary ordinary ordinary} {linux-aarch64 ordinary ordinary ordinary ordinary} {macos-aarch64 ordinary ordinary ordinary ordinary}}
 
 test cb-fixture-run {the generated binding links and runs: demo.bot (a Botlish caller) and caller.c (a C caller of the header's own API) compute the same values -- direct calls, aliases, link names, a stub-table thunk, inline and macro thunks, typed constants, C _Bool, opaque handles, byte borrowing and write-back -- on both native backends} -constraints nativeRun -body {
     set dir [staged $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot]]
-    set shim [::cbind::generate::buildShim $::fixture $::hostTarget [file join $dir .shim]]
+    set shim [shimOf $::fixture $::hostTarget [file join $dir .shim]]
     set values [stagedValues $dir demo.bot {cranelift cranelift-generic} [list [bgfLib] $shim]]
     set c [cCaller $::fixture [file join $::fixtureDir demo caller.c] [list [file join [bgfLib] libbgf.a]]]
     list [expr {[lindex $values 0] eq $c}] [expr {[lindex $values 1] eq $c}] $c
-} -cleanup removeScratch -result {1 1 {[5, 5, 95, 2, 66, 12345, 10, 3, true, true, 6, 10, 14, 14, 42, 49, 42, 30, 3, 18446744073709551615, -1, -42, 120, 6, 6, false, true, true, false]}}
+} -cleanup removeScratch -result {1 1 {[5, 5, 95, 2, 66, 12345, 10, 3, true, true, 6, 10, 14, 14, 42, 49, 42, 30, 3, 18446744073709551615, -1, -42, 120, 6, 6, false, true, true, false, 2, 40, -56]}}
 
 test cb-fixture-only-reached-externs {a program's foreign table holds only the C functions it calls, and its link plan each library once, however many modules declare it: importing a generated module adds its libraries, never its unreached symbols} -constraints nativeRun -body {
     set dir [staged $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot]]
@@ -274,7 +298,7 @@ test cb-fixture-only-reached-externs {a program's foreign table holds only the C
 
 test cb-fixture-no-c-at-compile-time {compiling a program over a generated binding needs no header, no preprocessor and no C compiler: a child process with no compiler on its PATH and no header sources compiles it} -constraints clang -body {
     set dir [scratch]
-    ::cbind::generate::stage $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot] $dir
+    ::cbind::generate::stage $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot] $dir [generatedDir $::fixture $::hostTarget]
     set script [file join $dir compile.tcl]
     writeText $script "source [list [file join $::projectRoot surface surface.tcl]]\nset hir \[surface::readProgramFile [list [file join $dir demo.bot]] -warnings error -cache {}\]\nputs \[llength \[dict keys \[hir::foreign::declarations \$hir\]\]\]\n"
     set savedEnv [array get ::env]
@@ -287,25 +311,25 @@ test cb-fixture-no-c-at-compile-time {compiling a program over a generated bindi
         array unset ::env
         array set ::env $savedEnv
     }
-} -cleanup removeScratch -result 29
+} -cleanup removeScratch -result 31
 
 test cb-fixture-interchange {a program over a generated binding written as HIR interchange and run in a fresh process, with no header, generator input or binding module left, behaves identically} -constraints nativeRun -body {
     set dir [staged $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot]]
-    set shim [::cbind::generate::buildShim $::fixture $::hostTarget [file join [scratch] shim]]
+    set shim [shimOf $::fixture $::hostTarget [file join [scratch] shim]]
     exec [info nameofexecutable] [file join $::projectRoot main.tcl] -emit-hir-interchange [file join $dir demo.bot] 2>@1
     set hirx [file join [scratch] demo.hirx]
     file rename [file join $dir demo.hirx] $hirx
     file delete -force $dir
     set out [exec [info nameofexecutable] [file join $::projectRoot main.tcl] -backend cranelift -L [bgfLib] -L $shim $hirx 2>@1]
     lindex [split [string trim $out] \n] end
-} -cleanup removeScratch -result {   value: [5, 5, 95, 2, 66, 12345, 10, 3, true, true, 6, 10, 14, 14, 42, 49, 42, 30, 3, 18446744073709551615, -1, -42, 120, 6, 6, false, true, true, false]}
+} -cleanup removeScratch -result {   value: [5, 5, 95, 2, 66, 12345, 10, 3, true, true, 6, 10, 14, 14, 42, 49, 42, 30, 3, 18446744073709551615, -1, -42, 120, 6, 6, false, true, true, false, 2, 40, -56]}
 
 test cb-fixture-isolation {two generated bindings with the same Botlish declaration names but other link symbols, compiled one after the other: each HIR keeps its own foreign declarations (the registry is compilation-local)} -constraints clang -body {
     set a [scratch]
-    ::cbind::generate::stage $::fixture $::hostTarget "" $a
+    ::cbind::generate::stage $::fixture $::hostTarget "" $a [generatedDir $::fixture $::hostTarget]
     writeText [file join $a main.bot] "import bgf::bgf\n\n1.bgf_add(2)\n"
     set b [scratch]
-    ::cbind::generate::stage $::fixture $::hostTarget "" $b
+    ::cbind::generate::stage $::fixture $::hostTarget "" $b [generatedDir $::fixture $::hostTarget]
     set path [file join $b bgf bgf.bot]
     set text [::chdr::readFile $path]
     writeText $path [string map {"extern c fn bgf_add(" "extern c fn bgf_add named \"other_add\"("} $text]
@@ -326,7 +350,7 @@ test cb-fixture-static-compile {a static compile: block over a generated extern 
         "bgf::bgf::bgf_add(1, 2)" Arity
     } {
         set dir [scratch]
-        ::cbind::generate::stage $::fixture $::hostTarget "" $dir
+        ::cbind::generate::stage $::fixture $::hostTarget "" $dir [generatedDir $::fixture $::hostTarget]
         writeText [file join $dir main.bot] "import compiler\nimport bgf::bgf\n\nfn probe(x: int) -> int errors compiler::CompilerError:\n    static compile:\n        $body\n        0\n\nr = probe(5):\n    on compiler::CompilerError {code}:\n        if code == compiler::DiagnosticCode::$code:\n            1\n        else:\n            2\nr\n"
         lassign [outcomeUnderHir interp [stagedHir $dir main.bot "" off]] tag value
         expr {$tag eq "value" ? $value : [lindex $value end]}
@@ -426,7 +450,7 @@ test cb-tcl-inventory {the Tcl inventory is the header archaeology's (tcl-embed)
 
 test cb-tcl-oracle {the generated Tcl declarations of the acceptance functions have the hand-written binding's ABI: the same link symbols, ABI classes and contracts (examples/ffi/tcl/tcl.bot, read as an oracle only; its pointee is named Interp, the generated one Tcl_Interp)} -constraints tclSources -body {
     set gen [scratch]
-    ::cbind::generate::stage [::cbind::profile::load tcl] linux-x86_64 "" $gen
+    ::cbind::generate::stage [::cbind::profile::load tcl] linux-x86_64 "" $gen [generatedDir [::cbind::profile::load tcl] linux-x86_64]
     writeText [file join $gen main.bot] "import tcl::decls\n\n1\n"
     set hand [scratch]
     file copy [file join $::projectRoot examples ffi tcl tcl.bot] [file join $hand tcl.bot]
@@ -444,7 +468,7 @@ test cb-tcl-oracle {the generated Tcl declarations of the acceptance functions h
 test cb-tcl-acceptance {the generated Tcl binding runs the Tcl acceptance: create an interpreter, evaluate a valid script (TCL_OK, a generated constant; Tcl prints) and a failing one (through the generated thunk of the Tcl_Eval macro), delete it -- on both native backends} -constraints tclLibrary -body {
     set profile [::cbind::profile::load tcl]
     set dir [staged $profile $::hostTarget [file join $::projectRoot examples ffi bindgen tcl demo.bot]]
-    set shim [::cbind::generate::buildShim $profile $::hostTarget [file join $dir .shim]]
+    set shim [shimOf $profile $::hostTarget [file join $dir .shim]]
     stagedValues $dir demo.bot {cranelift cranelift-generic} [list $shim]
 } -cleanup removeScratch -result {{[true, true, true]} {[true, true, true]}}
 
@@ -452,7 +476,7 @@ test cb-tcl-thunk-behavior {a Tcl macro thunk behaves as the macro: Tcl_Eval thr
     set profile [::cbind::profile::load tcl]
     set dir [staged $profile $::hostTarget ""]
     writeText [file join $dir main.bot] "import abi\nimport abi::bytes\nimport byte\nimport list\nimport str\nimport tcl::decls\nimport tcl::thunks::decls\n\nfn nul() -> byte::Byte:\n    0\n\nfn script(text: str) -> abi::bytes::Bytes:\n    abi::bytes::from_list(str::encode_utf8(text).append(nul()))\n\ni = tcl::decls::Tcl_CreateInterp()\nr = \[i.Tcl_Eval(script(\"set a 1\")), i.Tcl_Eval(script(\"error x\")), i.Tcl_Eval(script(\"return -code break\")), i.Tcl_Eval(script(\"continue\"))\]\ntcl::decls::Tcl_DeleteInterp(i)\nr\n"
-    set shim [::cbind::generate::buildShim $profile $::hostTarget [file join $dir .shim]]
+    set shim [shimOf $profile $::hostTarget [file join $dir .shim]]
     set botlish [lindex [stagedValues $dir main.bot {cranelift} [list $shim]] 0]
     set c [scratch]/caller.c
     writeText $c {#include <stdio.h>
@@ -493,7 +517,7 @@ test cb-boringssl-inventory {the BoringSSL inventory is the header archaeology's
 
 test cb-boringssl-symbols {every symbol the generated binding links directly is prefixed (the symbol probe's, for the whole inventory: no name is special) and defined by the prefixed static build -- libcrypto.a, libssl.a or libdecrepit.a -- but for the two FIPS-only functions a non-FIPS build does not define} -constraints boringsslLibrary -body {
     set profile [::cbind::profile::load boringssl]
-    set rows [::cbind::generate::readTsv [::chdr::readFile [file join [::cbind::profile::outputDir $profile $::hostTarget] report.tsv]]]
+    set rows [::cbind::generate::readTsv [dict get [generation $profile $::hostTarget] files report.tsv]]
     set defined [dict create]
     foreach library {libcrypto.a ssl/libssl.a decrepit/libdecrepit.a libssl.a libdecrepit.a} {
         set path [file join [cffi::boringsslDir] $library]
@@ -526,7 +550,7 @@ test cb-boringssl-thunk-behavior {a BoringSSL static inline thunk behaves as the
     set dir [staged $profile $::hostTarget ""]
     set codes {0 1 16777216 268435556 4294967295 84934656}
     writeText [file join $dir main.bot] "import boringssl::thunks::err\n\n\[[join [lmap c $codes {string cat "boringssl::thunks::err::ERR_GET_LIB($c), boringssl::thunks::err::ERR_GET_REASON($c)"}] {, }]\]\n"
-    set shim [::cbind::generate::buildShim $profile $::hostTarget [file join $dir .shim]]
+    set shim [shimOf $profile $::hostTarget [file join $dir .shim]]
     set botlish [lindex [stagedValues $dir main.bot {cranelift} [list $shim [cffi::boringsslDir]]] 0]
     set c [scratch]/caller.c
     writeText $c [format {#include <stdio.h>
@@ -562,7 +586,7 @@ test cb-sdl3-breadth {SDL3 is generated from the whole public header set by the 
 
 test cb-sdl3-symbols {every SDL3 function the binding links directly is one libSDL3.so exports, or, for SDL's aliases of C library functions (SDL_memcpy is memcpy), one the C library does} -constraints sdl3Library -body {
     set profile [::cbind::profile::load sdl3]
-    set rows [::cbind::generate::readTsv [::chdr::readFile [file join [::cbind::profile::outputDir $profile $::hostTarget] report.tsv]]]
+    set rows [::cbind::generate::readTsv [dict get [generation $profile $::hostTarget] files report.tsv]]
     set defined [dict create]
     set libc [string trim [exec cc -print-file-name=libc.so.6]]
     foreach library [list [file join [cffi::sdl3Dir] libSDL3.so] $libc] {
@@ -585,7 +609,7 @@ test cb-sdl3-symbols {every SDL3 function the binding links directly is one libS
 test cb-sdl3-acceptance {one ordinary Botlish program uses many generated SDL3 declarations, constants, typedef mappings and opaque handles together -- init, a window and a renderer, a frame drawn and presented, a delay, destruction, quit -- headless (the dummy video driver), on both native backends; only the functions it calls reach the foreign table} -constraints sdl3Library -body {
     set profile [::cbind::profile::load sdl3]
     set dir [staged $profile $::hostTarget [file join $::projectRoot examples ffi bindgen sdl3 demo.bot]]
-    set shim [::cbind::generate::buildShim $profile $::hostTarget [file join $dir .shim]]
+    set shim [shimOf $profile $::hostTarget [file join $dir .shim]]
     set foreign [llength [lsearch -all -regexp [split [native::nir [stagedHir $dir demo.bot]] \n] {^foreign }]]
     set values [stagedValues $dir demo.bot {cranelift cranelift-generic} [list [cffi::sdl3Dir] $shim]]
     list $foreign $values
@@ -596,7 +620,7 @@ test cb-sdl3-thunk-behavior {SDL3 static inline thunks behave as the inline func
     set dir [staged $profile $::hostTarget ""]
     set xs {0 1 2 3 32 1024 1025 2147483648 4294967295}
     writeText [file join $dir main.bot] "import sdl3::thunks::bits\n\n\[[join [lmap x $xs {string cat "sdl3::thunks::bits::SDL_MostSignificantBitIndex32($x), sdl3::thunks::bits::SDL_HasExactlyOneBitSet32($x)"}] {, }]\]\n"
-    set shim [::cbind::generate::buildShim $profile $::hostTarget [file join $dir .shim]]
+    set shim [shimOf $profile $::hostTarget [file join $dir .shim]]
     set botlish [lindex [stagedValues $dir main.bot {cranelift} [list $shim [cffi::sdl3Dir]]] 0]
     set c [scratch]/caller.c
     writeText $c [format {#include <stdio.h>

@@ -1,7 +1,7 @@
 # demo.bot -- a Botlish caller of the generated bgf binding (C-BINDGEN.md,
 # "The synthetic fixture"). caller.c computes the same list with C calls of
-# the header's own API; tools/c-bindgen/tests/bindgen.test runs both (with
-# `tools/c-bindgen.tcl run`) and compares them value for value.
+# the header's own API; tests/c-bindgen.test runs both and compares them value
+# for value (`tools/c-bindgen.tcl run fixture` runs this one).
 #
 # A direct module: bgf_unnamed's pointer parameter has no contract (unknown
 # escape), so calling it is direct authority, acknowledged here; the binding
@@ -15,7 +15,9 @@ import ffi::c
 import list
 import str
 import bgf::bgf
+import bgf::ctypes
 import bgf::thunks::bgf
+import bgf::types
 
 fn nul() -> byte::Byte:
     0
@@ -46,6 +48,11 @@ filled = abi::bytes::zeroed(abi::usize(3)).bgf_fill(3, 7)
 digest = text("abc").bgf_digest(3, abi::bytes::zeroed(abi::usize(4)))
 fill_bytes = abi::bytes::freeze(filled.out)
 digest_bytes = abi::bytes::freeze(digest.out)
+id_handle = handle.clone()
+handle_id = id_handle.bgf_handle_id()
+twin = ffi::c::null[bgf::ctypes::bgf_twin]()
+twin_struct = ffi::c::null[bgf::ctypes::bgf_twin_struct]()
+twins = twin.bgf_twins(twin_struct)
 bgf::bgf::bgf_close(handle)
 [2.bgf_add(3),
  bgf::bgf::bgf_length(cstring("hello")),
@@ -75,4 +82,7 @@ bgf::bgf::bgf_close(handle)
  window.null?(),
  missing.null?(),
  bgf::bgf::bgf_is_even(4),
- bgf::bgf::bgf_flip(true)]
+ bgf::bgf::bgf_flip(true),
+ handle_id,
+ twins,
+ bgf::bgf::BGF_HIGH_CHAR]

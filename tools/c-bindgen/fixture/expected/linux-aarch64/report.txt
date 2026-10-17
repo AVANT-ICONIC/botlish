@@ -1,62 +1,62 @@
 c-bindgen report: profile bgf, target linux-aarch64
 the synthetic fixture: every shape the generator decides about, in one small header
-(report.tsv has one row per name; `tclsh9.0 tools/c-bindgen.tcl report bgf -target linux-aarch64 -why NAME` explains one)
+(report.tsv has one row per name; `tclsh9.0 tools/c-bindgen.tcl report fixture -target linux-aarch64 -why NAME` explains one)
 
 Inventory (public headers, as this target's preprocessor sees them)
-  public declared functions                                                   32
+  public declared functions                                                   34
   static inline callable APIs                                                  3
   function-like macros                                                         3
   object-like macros naming a function (aliases)                               2
-  API names in all                                                            40
-  opaque (incomplete) struct types                                             2
+  API names in all                                                            42
+  opaque (incomplete) struct types                                             4
   complete struct and union types                                              3
   function-pointer typedefs                                                    3
-  object-like constant macros                                                 12
+  object-like constant macros                                                 13
   enumerators                                                                  5
 
 Bound (of the API names)
-  directly linked externs                                                     24    60.0%
-  aliases (externs of the symbol a macro names)                                2     5.0%
-  thunks (C wrappers in the shim)                                              4    10.0%
+  directly linked externs                                                     26    61.9%
+  aliases (externs of the symbol a macro names)                                2     4.8%
+  thunks (C wrappers in the shim)                                              4     9.5%
     of them table-redirected names (stubs)                                     1
-  bound in all                                                                30    75.0%
-  unsupported                                                                 10    25.0%
+  bound in all                                                                32    76.2%
+  unsupported                                                                 10    23.8%
   excluded by the profile                                                      0     0.0%
-  constants generated                                                         13    76.5%
+  constants generated                                                         14    77.8%
 
 Unsupported API names by blocker (an API may have several)
-  double                                                                       2     5.0%
-  float                                                                        2     5.0%
-  by-value-aggregate                                                           1     2.5%
-  macro-needs-signature                                                        1     2.5%
-  no-prototype                                                                 1     2.5%
-  typedef-abi-mismatch                                                         1     2.5%
-  unsupported-callback-signature                                               1     2.5%
-  va-list                                                                      1     2.5%
-  variadic                                                                     1     2.5%
+  double                                                                       2     4.8%
+  float                                                                        2     4.8%
+  by-value-aggregate                                                           1     2.4%
+  macro-needs-signature                                                        1     2.4%
+  no-prototype                                                                 1     2.4%
+  typedef-abi-mismatch                                                         1     2.4%
+  unsupported-callback-signature                                               1     2.4%
+  va-list                                                                      1     2.4%
+  variadic                                                                     1     2.4%
 
 Pointer contracts (bound APIs)
-  pointer parameters                                                          14
-    with a favorable manual fact (the profile)                                 8    57.1%
-    with a compiler-proven fact                                                1     7.1%
-    unknown (no fact: no exposure, retains)                                    5    35.7%
+  pointer parameters                                                          17
+    with a favorable manual fact (the profile)                                 9    52.9%
+    with a compiler-proven fact                                                1     5.9%
+    unknown (no fact: no exposure, retains)                                    7    41.2%
   pointer results                                                              4
     independent                                                                1    25.0%
     alias of a parameter                                                       1    25.0%
     unknown                                                                    2    50.0%
 
 Capability pressure (API names a missing FFI capability blocks or limits)
-  C _Bool in the signature (blocked without ffi::c::Bool)                      2     5.0%
-    of them bound now, bool their only blocker                                 2     5.0%
-  float/double                                                                 3     7.5%
-  aggregates by value (struct, union)                                          1     2.5%
-  varargs (..., va_list)                                                       2     5.0%
-  callback signature outside the ABI universe                                  1     2.5%
+  C _Bool in the signature (blocked without ffi::c::Bool)                      2     4.8%
+    of them bound now, bool their only blocker                                 2     4.8%
+  float/double                                                                 3     7.1%
+  aggregates by value (struct, union)                                          1     2.4%
+  varargs (..., va_list)                                                       2     4.8%
+  callback signature outside the ABI universe                                  1     2.4%
   explicit calling convention                                                  0     0.0%
-  macro without a signature                                                    1     2.5%
-  bound, taking a callback (no Botlish function can be one yet)                2     5.0%
-  bound, pointing to a complete C struct (needs memory views)                  2     5.0%
-  bound, a pointer parameter that may be retained (direct)                     4    10.0%
+  macro without a signature                                                    1     2.4%
+  bound, taking a callback (no Botlish function can be one yet)                2     4.8%
+  bound, pointing to a complete C struct (needs memory views)                  2     4.8%
+  bound, a pointer parameter that may be retained (direct)                     5    11.9%
 
 Macro APIs (apparent callables that are macros, and what each became)
   declared functions a function-like macro shadows (thunked: the macro)        0
@@ -71,9 +71,9 @@ Macro APIs (apparent callables that are macros, and what each became)
 
 Macros
   object: constant: integer literal                                            5
+  object: constant: expression with casts                                      3
   object: empty                                                                3
   function: expression                                                         2
-  object: constant: expression with casts                                      2
   object: constant: string literal                                             2
   function: call wrapper: rename                                               1
   object: alias: function                                                      1
@@ -83,9 +83,9 @@ Macros
   object: expression: a member of a global table (a stub-table entry)          1
 
 Generated source
-  Botlish files                                                                3
-  lines                                                                      200
-  extern c fn declarations                                                    30
-  opaque types                                                                 3
-  constants                                                                   13
+  Botlish files                                                                4
+  lines                                                                      229
+  extern c fn declarations                                                    32
+  opaque types                                                                 5
+  constants                                                                   14
   shim thunks                                                                  4

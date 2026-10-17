@@ -306,7 +306,7 @@ proc ::cbind::report::text {model} {
     set out {}
     lappend out "c-bindgen report: profile [dict get $p name], target [dict get $model target]"
     lappend out "[dict get $p description]"
-    lappend out "(report.tsv has one row per name; `tclsh9.0 tools/c-bindgen.tcl report [dict get $p name] -target [dict get $model target] -why NAME` explains one)"
+    lappend out "(report.tsv has one row per name; `tclsh9.0 tools/c-bindgen.tcl report [::cbind::profile::cliName $p] -target [dict get $model target] -why NAME` explains one)"
     lappend out ""
     lappend out "Inventory (public headers, as this target's preprocessor sees them)"
     lappend out [Line "public declared functions" [dict get $c declared]]

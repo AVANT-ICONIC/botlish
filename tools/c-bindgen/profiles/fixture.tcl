@@ -3,7 +3,7 @@
 # tools/c-bindgen/fixture, freestanding (clang's own headers only, never a
 # host's: -nostdlibinc), for three targets. Its generated
 # output is pinned in tools/c-bindgen/fixture/expected/TARGET and checked by
-# tools/c-bindgen/tests/bindgen.test.
+# tests/c-bindgen.test.
 dict create \
     name bgf \
     description "the synthetic fixture: every shape the generator decides about, in one small header" \
@@ -27,7 +27,7 @@ dict create \
         bgf_fill {out {write noescape}}
     } \
     groups {
-        {name handles functions {bgf_close bgf_window_of bgf_walk} facts {handle noescape}}
+        {name handles functions {bgf_close bgf_window_of bgf_walk bgf_handle_id} facts {handle noescape}}
     } \
     thunks {
         BGF_TWICE {int BGF_TWICE(int x)}

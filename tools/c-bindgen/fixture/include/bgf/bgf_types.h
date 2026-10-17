@@ -27,4 +27,8 @@ typedef struct bgf_handle bgf_handle;
 typedef struct bgf_window_ *bgf_window_ref;
 typedef struct bgf_window_ bgf_window;
 
+/* A function of this header: its module uses bgf_handle too, which has one
+ * identity however many modules point to it. */
+extern int bgf_handle_id(bgf_handle *handle);
+
 #endif

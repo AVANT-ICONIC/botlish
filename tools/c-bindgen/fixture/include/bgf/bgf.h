@@ -26,6 +26,7 @@
 #define BGF_NAME "bgf"
 #define BGF_NULL_HANDLE ((bgf_handle *) 0)
 #define BGF_CHAR 'x'
+#define BGF_HIGH_CHAR ((char)200)
 #define BGF_TWICE(x) ((x) * 2)
 
 /* Enums: a named one, used in signatures, and an anonymous one. */
@@ -54,6 +55,11 @@ typedef struct bgf_point {
 
 typedef struct bgf_pair { int a; int b; } bgf_pair;
 
+/* Two tags, one spelling: struct bgf_other is named bgf_twin by its
+ * typedef, and struct bgf_twin is a tag of its own -- two C types. */
+typedef struct bgf_other bgf_twin;
+struct bgf_twin;
+
 /* Ordinary functions. */
 extern BGF_EXPORT int bgf_add(int a, int b);
 extern BGF_EXPORT bgf_size bgf_length(const char *text);
@@ -74,6 +80,7 @@ extern BGF_EXPORT int bgf_keywords(int fn, int type, int in, int loop, int str);
 extern BGF_EXPORT int bgf_unnamed(int, const char *);
 extern BGF_EXPORT bgf_handle **bgf_handles(void);
 extern BGF_EXPORT unsigned char *bgf_digest(const unsigned char *data, size_t len, unsigned char out[4]);
+extern BGF_EXPORT int bgf_twins(bgf_twin *a, struct bgf_twin *b);
 
 /* Link names: an asm label, a renamed symbol, and an API name that is a
  * macro alias of another exported function. */
