@@ -655,4 +655,25 @@ Regression and audit runs (Linux x86-64, Tcl 9.0.1):
 | `tests/direct-modules.test` (interp; with `BOTLISH_SINGLE` the single-executable test too) | 55 tests, 0 failed |
 | `audit/direct-modules/tools/fuzz.tcl -n 100`, seeds 2, 3, 17, 41 | 400 programs (137 accepted, 263 rejected), 0 disagreements |
 | `audit/direct-modules/tools/mutate.tcl` | 18 mutants, 18 killed, 0 survivors |
-| `tests/local.tcl` (every Tcl test file on interp and compile, every golden suite on four backends) | running; recorded in the next revision of this table |
+| `tests/local.tcl -jobs 3` (every Tcl test file on interp and compile, golden duplicates skipped; every golden suite on four backends) | interp 5703 passed, 0 failed, 1 skipped; compile 5699 passed, 0 failed, 5 skipped (2092 golden duplicates skipped on each); golden suites 91 run, 0 failed: interp 4708/4708, compile 4708/4708, cranelift-generic 4615/4615, cranelift 4717/4717 (2539 s) |
+| `audit/compilation-isolation/tools/interleave.tcl`, its ten suites plus linux-io.bot and imports-abi-child.bot (direct modules) | 12 suites, 96 artifacts and outcomes, 0 differ |
+| `audit/compilation-isolation/tools/mutate.tcl` | 14 mutants, 14 killed |
+| `audit/hir-interchange/tools/roundtrip.tcl -via interchange` / `-via cache`, the same 12 suites | 108 / 120 artifacts and outcomes, 0 differ |
+| `audit/hir-interchange/tools/mutate.tcl` | 27 mutants, 27 killed |
+| `audit/contexts/tools/fuzz.tcl -n 100 -seed 20261017` | 100 programs, 0 disagreements |
+| `audit/contexts/tools/mutate.tcl -n 30` | CONTEXTS-MUTATE-RESULT |
+| `audit/refactor/tools/gate.tcl` (the warning gate: lib, examples, bench) | passed: the observed warnings are exactly the manifest |
+| `single/build.sh`, then `single/smoke-test.sh` and `dm-single-executable` with the built executable | smoke test passed; the test passes |
+| NIR of examples/io/hello.bot and examples/linux/context-hello.bot, before and after | identical but for expression ids (`write_all`'s new context parameter loads nothing) |
+
+The full `tests/local.tcl` run started before the last change to the
+analysis (trait operations read declarations only, never the program's
+context selection); the files that change touches were run again after it
+-- tests/direct-modules.test, context-traits.test, portable-io.test,
+traits.test, and the golden suites contexts, linux-io, traits, traits-path
+and imports on four backends -- all passing.
+
+Not run locally: the batched-against-sequential comparison of the golden
+suites' static decisions (`audit/static-decisions/tools/compare.tcl`), which
+AGENTS.md reserves for CI's `static-decisions` workflow; it runs on the next
+push to main that changes the front end (or on demand on a branch).
