@@ -138,12 +138,16 @@ set mutations {
             rdi: abi::x86_64::from_i32(fd),
             rsi: abi::x86_64::from_mutable_bytes(local),}}
     {libc-read rust native/src/runtime/syscall.rs
-        {    let result: i64;}
+        {    let result: i64;
+    // SAFETY: the caller's contract (above). The operand constraints are
+    // exactly the Linux x86-64 syscall register convention; rcx and r11 are}
         {    if rax == 0 {
         unsafe extern "C" { fn read(fd: i32, buf: *mut u8, n: usize) -> isize; }
         return unsafe { read(rdi as i32, rsi as *mut u8, rdx as usize) as i64 };
     }
-    let result: i64;}}
+    let result: i64;
+    // SAFETY: the caller's contract (above). The operand constraints are
+    // exactly the Linux x86-64 syscall register convention; rcx and r11 are}}
     {read-twice tcl lib/linux/sys.x86_64.bot
         {    {result: result, data: local}}
         {    result2 = abi::x86_64::to_int(
