@@ -495,5 +495,12 @@ proc ::cbind::report::manifest {model files} {
             lappend lines "contract [dict get $e name] result [list [lindex $s 2]] [lindex $s 0] [list [lindex $s 1]]"
         }
     }
+    # Policy for declared functions this target cannot bind: checked, kept,
+    # applied to nothing.
+    if {[dict exists $model unusedContracts]} {
+        dict for {fn labels} [dict get $model unusedContracts] {
+            lappend lines "contract-unused $fn [list $labels] (not bound on this target)"
+        }
+    }
     return [join $lines \n]\n
 }

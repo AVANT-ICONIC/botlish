@@ -468,12 +468,18 @@ proc ::cbind::model::FactWords {words what} {
 }
 
 # The manual contract facts of every function, expanded from the profile's
-# per-function contracts and its explicit groups: FUNCTION -> {PARAM-or-
-# result -> {facts F source S}}. A group or contract naming a function or a
-# parameter that does not exist is a stale policy: an error.
-proc ::cbind::model::ManualContracts {functions} {
+# per-function contracts and its explicit groups: {FACTS PROBLEMS UNUSED},
+# FACTS FUNCTION -> {PARAM-or-result -> {facts F source S}} for the bound
+# FUNCTIONS (name -> C parameter names). A group or contract naming a
+# function the headers do not declare, or a parameter it does not have, is
+# a stale policy (a problem: an error). One naming a declared function this
+# target cannot bind (DECLARED: name -> C parameter names; a blocker in the
+# report) is checked against its declaration and kept, unused: UNUSED
+# FUNCTION -> the rules naming it, which the manifest lists.
+proc ::cbind::model::ManualContracts {functions {declared {}}} {
     variable profile
     set out [dict create]
+    set unused [dict create]
     set seen [dict create]
     set rules {}
     dict for {fn spec} [dict get $profile contracts] {
@@ -489,11 +495,15 @@ proc ::cbind::model::ManualContracts {functions} {
     foreach rule $rules {
         lassign $rule label fns spec
         foreach fn $fns {
-            if {![dict exists $functions $fn]} {
-                lappend problems "$label names $fn, which this target's headers do not declare as a bindable function"
+            set bound [dict exists $functions $fn]
+            if {!$bound && ![dict exists $declared $fn]} {
+                lappend problems "$label names $fn, which this target's headers do not declare as a function"
                 continue
             }
-            set params [dict get $functions $fn]
+            set params [dict get [expr {$bound ? $functions : $declared}] $fn]
+            if {!$bound && ($label ni [expr {[dict exists $unused $fn] ? [dict get $unused $fn] : {}}])} {
+                dict lappend unused $fn $label
+            }
             dict for {param words} $spec {
                 if {$param ne "result" && $param ni $params} {
                     lappend problems "$label: $fn has no parameter \"$param\" (its parameters: [join $params {, }])"
@@ -504,11 +514,14 @@ proc ::cbind::model::ManualContracts {functions} {
                     continue
                 }
                 dict set seen $fn $param $label
-                dict set out $fn $param [dict create facts [FactWords $words "$fn $param"] source $label]
+                set facts [FactWords $words "$fn $param"]
+                if {$bound} {
+                    dict set out $fn $param [dict create facts $facts source $label]
+                }
             }
         }
     }
-    return [list $out $problems]
+    return [list $out $problems $unused]
 }
 
 # The compiler evidence of a thunk's parameter attribute list ATTRS (probe
@@ -877,12 +890,16 @@ proc ::cbind::model::resolve {model theFacts} {
     set functions {}
     set report {}
     set manualParams [dict create]
+    set declaredParams [dict create]
     set entries {}
     foreach entry [dict get $model apis] {
         set name [dict get $entry name]
         set kind [dict get $entry kind]
         set module [ModuleOf [dict get $entry header]]
         dict set entry module $module
+        if {[dict exists $entry decl]} {
+            dict set declaredParams $name [lmap p [lindex [dict get $entry decl type] 2] {lindex $p 0}]
+        }
         if {$kind in {excluded unsupported}} {
             lappend entries $entry
             continue
@@ -926,7 +943,7 @@ proc ::cbind::model::resolve {model theFacts} {
         dict set manualParams $name [lmap p $params {dict get $p cname}]
         lappend entries $entry
     }
-    lassign [ManualContracts $manualParams] manual problems
+    lassign [ManualContracts $manualParams $declaredParams] manual problems unused
     if {$problems ne ""} {
         error "c-bindgen: profile [dict get $profile name] (target $target): stale or invalid contract policy:\n  [join $problems "\n  "]"
     }
@@ -939,6 +956,7 @@ proc ::cbind::model::resolve {model theFacts} {
     }
     dict set model apis $out
     dict set model manual $manual
+    dict set model unusedContracts $unused
     dict set model constants [Constants $model]
     dict set model identities $identities
     return $model

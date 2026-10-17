@@ -168,7 +168,11 @@ Every policy is checked against the headers: a contract naming a function
 the target's headers do not declare, a parameter the function does not
 have, a group naming a missing function, a thunk signature of no macro or of
 a declared function -- each is an error, never a silent no-op
-(`cb-policy-stale`); a fact a declaration cannot carry (a contract on an
+(`cb-policy-stale`). A contract on a function the headers declare but the
+target cannot bind (a blocker in the report: a double, a `_Bool` under
+`-bool 0`) is no stale policy: it is checked against the declaration's
+parameters and kept, applied to nothing, and the manifest lists it
+(`contract-unused`); a fact a declaration cannot carry (a contract on an
 `int`, a provenance on a parameter) is the profile's error
 (`cb-policy-facts`).
 
