@@ -267,6 +267,23 @@ try on all four backends.
   later (F1).
 * CLI wish: "what Range does the compiler know for `size` at line N,
   and why?"
+* Resolved (0db2443): `hir::range::BindingRange` reads a binding the walk
+  of a function neither binds nor seeds as the exact Int it is bound to
+  (`hir::exact::BindingIntOf`: its one `bind`), in the range analysis's
+  `ref` case (and its capture transport) and the completion walk's
+  `ref` case alike -- a program-level constant a function captures and
+  a module constant read through `ns::name` or by the module's own
+  functions. No new static-decision edge: a function already depends on
+  every binding it mentions and a binding on its definition. The engine
+  names its size again (`size = 4`). Regression tests:
+  tests/exact-value-facts.test `ev-outer-*`, their golden ports in
+  tests/golden/range-and-contract-values.bot, and
+  tests/static-economics.test `se-equal-outer-constant`. The
+  entry-program example above stays rejected -- with the literal 4 as
+  well: S26. The native code is unchanged: bench.bot's NIR (the engine
+  before the rename) is identical before and after the fix, so S18's
+  `staticget` and tagged `ieq` for `empty` stay (the cell compared with
+  it has no Range).
 
 ### S9 Lockstep over a field projection is unproven; the message says "(expression)"
 
@@ -774,3 +791,35 @@ the repository, run with `env -i` (no PATH):
   suites with 0 failures (interp 4691, compile 4691, cranelift-generic
   4598, cranelift 4700), 1591 s with 4 jobs. Not run here: AArch64
   (CI's tests-arm64.yml).
+
+### S26 A collecting loop's elements' Ranges do not reach a declared List result
+
+* Context: checking S8's fix (0db2443) on S8's own entry-program example,
+  `fn coords() -> List[Coordinate]: loop r from 0 to size: r`.
+* Expected: r is 0..3 in the body, so the loop's List is a
+  List[Coordinate].
+* Actual: `function result does not prove declared type
+  List[int[Coordinate]]`, with `size` and with the literal 4 alike: the
+  loop's static type is List[int], and a declared List result is
+  admitted by its type alone (`hir::range::AggregateAdmits`), never by
+  its elements' Ranges. Each element through a `Coordinate` parameter
+  (`coordinate(r)`), or the struct the engine builds (`Position {row:
+  r, ...}`), is proven.
+* Classification: COMPILER-PRECISION, MINOR (the engine's own shape is
+  the workaround). Not fixed: what a List type may carry, not where a
+  fact is read. Pinned as is by tests/exact-value-facts.test
+  `ev-outer-constant-like-literal`.
+
+### S27 A named character constant is no exact element where its literal is
+
+* Context: the non-Int side of S8's fix (0db2443), probed.
+* Actual: `byte::set(['-', '.'])` needs no handler, but with `d = '-'`
+  -- in the same function, or a program-level constant read inside
+  one -- `byte::set([d, '.'])` may raise `byte::AboveRange`
+  (UNHANDLED-ERROR): the completion walk's literal-List proof
+  (`hir::completions::ExactValueOf`) reads a `ref`'s exact non-Int
+  value only from what its own walk binds (a literal List's loop
+  element, an exact call's argument), never from the binding's one
+  `bind`.
+* Classification: COMPILER-PRECISION, MINOR. Not fixed: S8's fix covers
+  exact Ints.
