@@ -22,7 +22,8 @@
 #   abi       abi::u8(n).value, abi::x86_64::from_u8(...), to_int and back,
 #             and a typed parameter spelled abi::U8Value, or U8Value after
 #             `import type abi::U8Value`
-#   syscall   a function using linux::abi::x86_64::syscall (compiled, never run)
+#   syscall   a function using linux::abi::x86_64::syscall or
+#             linux::abi::aarch64::syscall (compiled, never run)
 #
 # NEGATIVE programs rotate through the shapes imports must refuse, each with its
 # expected diagnostic kind (anything else, or acceptance, is a "negative
@@ -32,7 +33,8 @@
 #   parent-for-child    `import abi`, then abi::x86_64::... (MISSING-IMPORT)
 #   child-for-parent    `import abi::x86_64`, then abi::... (MISSING-IMPORT)
 #   duplicate-import    the same namespace twice (DUPLICATE-IMPORT)
-#   missing-namespace   an import naming no namespace (UNKNOWN-NAMESPACE)
+#   missing-namespace   an import naming no namespace, a bare prefix of one
+#                       included (UNKNOWN-NAMESPACE)
 #   unknown-member      a member the imported namespace lacks (UNKNOWN-SYMBOL)
 #   duplicate-type      the same type imported twice (DUPLICATE-IMPORT)
 #   same-short-name     two type imports with one final name
@@ -272,7 +274,12 @@ proc negative {shape} {
             set ns [pick {list str mutable_array abi abi::x86_64 abi::aarch64 linux::abi::x86_64 linux::abi::aarch64 linux::sys}]
             return [list "import $ns\nimport $ns\n1\n" DUPLICATE-IMPORT]
         }
-        missing-namespace { return [list "import [pick {nothere nosuch::deep linux abi::nope}]\n1\n" UNKNOWN-NAMESPACE] }
+        missing-namespace {
+            # linux::abi is a bare prefix of the transports' namespaces
+            # (linux::abi::x86_64, linux::abi::aarch64), not one itself; linux
+            # is a module (lib/linux.bot).
+            return [list "import [pick {nothere nosuch::deep linux::abi abi::nope}]\n1\n" UNKNOWN-NAMESPACE]
+        }
         unknown-member {
             set case [pick {{str reverse} {list nothere} {mutable_array push} {abi i7} {abi::x86_64 from_i7}}]
             lassign $case ns member
@@ -342,9 +349,11 @@ try {
             incr values
         }
 
-        # A compile-only program with linux::abi::x86_64::syscall (never run).
+        # A compile-only program with one architecture's transport,
+        # linux::abi::ARCH::syscall (never run).
         if {$k % 10 == 0} {
-            set text "import abi::x86_64\nimport linux::abi::x86_64\nfn raw():\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64([rnd 0 9])}))\n1\n"
+            lassign [pick {{x86_64 rax} {aarch64 x8}}] arch number
+            set text "import abi::$arch\nimport linux::abi::$arch\nfn raw():\n    abi::${arch}::to_int(linux::abi::${arch}::syscall({$number: abi::${arch}::register64([rnd 0 9])}))\n1\n"
             set compiled [compileFile $text]
             if {[lindex $compiled 0] ne "ok"} {
                 incr negativeEscapes

@@ -85,8 +85,8 @@ set mutations {
         {return [expr {[dict get $slot offset] + 8 * $i}]}
         {return [expr {8 * $i}]}}
     {stdout-stderr-swapped lib/linux/io.bot
-        {linux::write(io.stdout.raw, data)}
-        {linux::write(io.stderr.raw, data)}}
+        {io.stdout.raw.write(data)}
+        {io.stderr.raw.write(data)}}
     {context-arrives-as-argument native/lower.tcl
         {dict set fn locals $b [list context $id]}
         {dict set fn locals $b [list reg %0]}}
