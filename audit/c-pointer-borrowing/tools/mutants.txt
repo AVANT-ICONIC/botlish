@@ -75,10 +75,12 @@
 @@ owner-liveness-dropped no keepalive of the exposed storage after the foreign operation
 ## native/lower.tcl
 <<<<
-    set result [Assign fn "[dict get $natives $name] [join $operands { }]" $e]
+        set result [Assign fn "[dict get $natives $name] [join $operands { }]" $e]
+    }
     KeepExposedAlive fn $operands $e
 ====
-    set result [Assign fn "[dict get $natives $name] [join $operands { }]" $e]
+        set result [Assign fn "[dict get $natives $name] [join $operands { }]" $e]
+    }
 >>>>
 
 @@ mutable-exclusivity-dropped a write exposure hands C the owner's own (shared, published) storage instead of a private copy
