@@ -1,0 +1,290 @@
+# application-modules.test -- a program's own modules, beside its entry file
+# (IMPORTS.md, "Application modules"; 2048-ENGINE-WORKLOAD.md, S4).
+#
+# `import NAME` used to name exactly $::core::libraryDir/NAME.bot, so every
+# importable module was, by location, standard library: an application could
+# not have a module of its own without a private copy of lib/, and with the
+# single executable not at all. Now a program file's application root is the
+# directory of its entry file: for an import an application file (the entry
+# program or one of its application modules) writes, a standard namespace is
+# what it always was, and otherwise ROOT/NAME.bot is the application module
+# NAME (ROOT/a/b.bot for a::b) -- one namespace, loaded once, with ordinary
+# module boundaries. A file that would shadow a standard namespace is
+# MODULE-COLLISION; the entry file is not a module. Nothing reads the working
+# directory.
+#
+# Every application here is a fresh directory of the tcltest temporary
+# directory; programs are compiled by surface::readProgramFile (main.tcl's
+# front end) or by main.tcl itself as its own process.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+source [file join $::projectRoot native native.tcl]
+
+interp recursionlimit {} 100000
+
+testConstraint nativeBuilt [expr {![catch {native::binary}]}]
+testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
+
+set mainScript [file join $::projectRoot main.tcl]
+set ::appCounter 0
+
+# A fresh application directory holding FILES ({RELATIVE-PATH TEXT ...}, a
+# path such as util/math.bot for a nested module): its absolute path.
+proc app {files} {
+    set dir [makeDirectory app-[pid]-[incr ::appCounter]]
+    foreach {relative text} $files {
+        writeText [file join $dir {*}[file split $relative]] $text
+    }
+    return $dir
+}
+
+proc writeText {path text} {
+    file mkdir [file dirname $path]
+    set channel [open $path w]
+    fconfigure $channel -encoding utf-8 -translation lf
+    puts -nonewline $channel $text
+    close $channel
+}
+
+# The HIR of DIR/main.bot.
+proc appHir {dir {main main.bot}} {
+    return [surface::readProgramFile [file join $dir $main] -warnings off -cache ""]
+}
+
+# The value of DIR/main.bot on each of BACKENDS (the program's own value as
+# Botlish shows it), or the first backend's error.
+proc appValues {dir {backends {interp compile cranelift-generic cranelift}}} {
+    set hir [appHir $dir]
+    lmap backend $backends {
+        lassign [outcomeUnderHir $backend $hir] tag value
+        expr {$tag eq "value" ? $value : "$tag: $value"}
+    }
+}
+
+# "KIND: MESSAGE" of the compilation of DIR/MAIN, with DIR spelled APP and
+# the library directory LIB, or accepted.
+proc appRejection {dir {main main.bot}} {
+    if {[catch {appHir $dir $main} message options]} {
+        set kind [lindex [dict get $options -errorcode] end]
+        return "$kind: [string map [list $dir APP $::core::libraryDir LIB] $message]"
+    }
+    return accepted
+}
+
+# The removal of every application directory made so far.
+proc removeApps {} {
+    foreach dir [glob -nocomplain -directory [temporaryDirectory] app-[pid]-*] {
+        file delete -force $dir
+    }
+}
+
+set counterModule {fn count_down(k: int) -> int:
+    if k == 0:
+        return 0
+    1 + count_down(k - 1)
+
+fn doubled(x: int) -> int:
+    x + x
+}
+
+# ---------------------------------------------------------------------------
+# Resolution
+
+test app-sibling-module {S4: the entry program imports a module beside it, on every backend} -constraints nativeBuilt -body {
+    appValues [app [list main.bot "import counter\n\n\[counter::count_down(20), counter::doubled(21)\]\n" \
+        counter.bot $counterModule]]
+} -cleanup removeApps -result {{[20, 42]} {[20, 42]} {[20, 42]} {[20, 42]}}
+
+test app-module-imports-module {an application module imports another one, and a nested one (util/math.bot is util::math)} -constraints nativeBuilt -body {
+    appValues [app {
+        main.bot "import game\n\ngame::score(4)\n"
+        game.bot "import rules\nimport util::math\n\nfn score(n: int) -> int:\n    util::math::twice(rules::base() + n)\n"
+        rules.bot "fn base() -> int:\n    10\n"
+        util/math.bot "fn twice(x: int) -> int:\n    x + x\n"
+    }]
+} -cleanup removeApps -result {28 28 28 28}
+
+test app-method-sugar {an application module's functions are method candidates of the files that import it, like any module's} -body {
+    appValues [app [list main.bot "import counter\n\n21.doubled()\n" counter.bot $counterModule]] {interp compile}
+} -cleanup removeApps -result {42 42}
+
+test app-stdlib-still-standard {a standard import from an application file resolves exactly as before, beside an application module} -body {
+    set dir [app [list main.bot "import counter\nimport list\n\nlist::length(\[counter::doubled(1), 2, 3\])\n" counter.bot $counterModule]]
+    set hir [appHir $dir]
+    list [appValues $dir {interp compile}] \
+        [lsort [lmap {id file} [dict get $hir files] {string map [list $dir APP $::core::libraryDir LIB] [dict get $file path]}]]
+} -cleanup removeApps -result {{3 3} {APP/counter.bot APP/main.bot LIB/list.bot}}
+
+test app-module-loaded-once {a module two application files import is one namespace, compiled once: its struct passes between them} -body {
+    set dir [app {
+        main.bot "import maker\nimport reader\n\nreader::sum(maker::make(3, 4))\n"
+        maker.bot "import shared\n\nfn make(a: int, b: int) -> shared::Pair:\n    shared::Pair {left: a, right: b}\n"
+        reader.bot "import shared\n\nfn sum(p: shared::Pair) -> int:\n    p.left + p.right\n"
+        shared.bot "struct Pair:\n    left: int\n    right: int\n"
+    }]
+    set hir [appHir $dir]
+    set shared [lmap {id file} [dict get $hir files] {
+        expr {[file tail [dict get $file path]] eq "shared.bot" ? $id : [continue]}
+    }]
+    list [appValues $dir {interp compile}] [llength $shared]
+} -cleanup removeApps -result {{7 7} 1}
+
+test app-types-and-errors {an application module's types and errors are its namespace's: import type game::Small, on game::TooBig} -body {
+    appValues [app {
+        main.bot "import game\nimport type game::Small\n\nfn shown(s: Small) -> int:\n    s + 100\n\nfn tried(x: int) -> int:\n    s = game::small(x):\n        on game::TooBig:\n            return -1\n    shown(s)\n\n\[tried(3), tried(12)\]\n"
+        game.bot "type Small = Int in 0..9\n\nerror TooBig\n\nfn small(x: int) -> Small errors TooBig:\n    if x >= 0 and x <= 9:\n        return x\n    fail TooBig\n"
+    }] {interp compile}
+} -cleanup removeApps -result {{[103, -1]} {[103, -1]}}
+
+test app-opaque-authority {an application module owns its opaque struct: only it constructs it or reads its fields (OPAQUE-STRUCTS.md), as with a library module} -body {
+    set board "opaque struct Board:\n    size: int\n\nfn board(n: int) -> Board:\n    Board {size: n}\n\nfn size(b: Board) -> int:\n    b.size\n"
+    set dir [app [list board.bot $board \
+        main.bot "import board\n\nboard::size(board::board(4))\n" \
+        construct.bot "import board\n\nb = board::Board {size: 4}\n1\n" \
+        project.bot "import board\n\nboard::board(4).size\n"]]
+    list [appValues $dir {interp compile}] \
+        [lindex [split [appRejection $dir construct.bot] :] 0] \
+        [lindex [split [appRejection $dir project.bot] :] 0]
+} -cleanup removeApps -result {{4 4} OPAQUE-CONSTRUCTION OPAQUE-REPRESENTATION}
+
+test app-module-diagnostic-location {a diagnostic in an application module is located in its own file} -body {
+    appRejection [app {
+        main.bot "import broken\n\nbroken::f()\n"
+        broken.bot "fn f() -> int:\n    nothere(1)\n"
+    }]
+} -cleanup removeApps -match glob -result {UNBOUND: APP/broken.bot:2:5: *}
+
+# ---------------------------------------------------------------------------
+# Diagnostics
+
+test app-missing-module {a missing module names where an application's modules go, then the standard library} -body {
+    appRejection [app {main.bot "import game\n\n1\n"}]
+} -cleanup removeApps -result {UNKNOWN-NAMESPACE: APP/main.bot:1:8: unknown namespace "game": no such module file APP/game.bot (an application's own modules are the files beside its entry program), and in the standard library no such module file LIB/game.bot and no intrinsics of that namespace}
+
+test app-missing-nested-module {a missing nested module names its file under the root} -body {
+    appRejection [app {main.bot "import util::math\n\n1\n"}]
+} -cleanup removeApps -result {UNKNOWN-NAMESPACE: APP/main.bot:1:8: unknown namespace "util::math": no such module file APP/util/math.bot (an application's own modules are the files beside its entry program), and in the standard library no such module file LIB/util/math.bot and no intrinsics of that namespace}
+
+test app-reference-without-import {a qualified reference to an application module that is not imported is MISSING-IMPORT, as for any existing namespace} -body {
+    appRejection [app [list main.bot "counter::doubled(1)\n" counter.bot $counterModule]]
+} -cleanup removeApps -result {MISSING-IMPORT: APP/main.bot:1:1: namespace "counter" is not imported; add `import counter` to use `counter::doubled`}
+
+test app-cannot-shadow-standard {an application file named like a standard namespace never replaces it: importing that namespace is MODULE-COLLISION, for a module file and for an intrinsics-only namespace} -body {
+    set dir [app {
+        list.bot "fn length(xs) -> int:\n    0\n"
+        str.bot "fn length(s) -> int:\n    0\n"
+        linux/io.bot "fn create() -> int:\n    0\n"
+        main.bot "import list\n\nlist::length(\[1, 2\])\n"
+        strmain.bot "import str\n\nstr::length(\"ab\")\n"
+        nested.bot "import linux::io\n\n1\n"
+    }]
+    list [appRejection $dir] [appRejection $dir strmain.bot] [lindex [split [appRejection $dir nested.bot] :] 0]
+} -cleanup removeApps -result {{MODULE-COLLISION: APP/main.bot:1:8: application module APP/list.bot has the name of the standard namespace "list" (the standard library's LIB/list.bot), which `import list` names: a standard namespace is never replaced by an application file, and never silently chosen over one; rename the application module} {MODULE-COLLISION: APP/strmain.bot:1:8: application module APP/str.bot has the name of the standard namespace "str" (compiler intrinsics), which `import str` names: a standard namespace is never replaced by an application file, and never silently chosen over one; rename the application module} MODULE-COLLISION}
+
+test app-standard-modules-see-no-application {a standard-library module's own imports are the standard library's, whatever the application holds: lib/io.bot imports str, the application has a str.bot it never imports} -body {
+    appValues [app {
+        str.bot "fn length(s) -> int:\n    0\n"
+        main.bot "import io\n\n1\n"
+    }] {interp compile}
+} -cleanup removeApps -result {1 1}
+
+test app-entry-not-a-module {the entry file is not a module: importing it is SELF-IMPORT, and from a module a CYCLE; an entry named like a standard namespace imports that namespace} -body {
+    set dir [app {
+        main.bot "import main\n\n1\n"
+        prog.bot "import back\n\n1\n"
+        back.bot "import prog\n\nfn f() -> int:\n    1\n"
+        list.bot "import list\n\nlist::length(\[1, 2, 3\])\n"
+    }]
+    list [appRejection $dir] [appRejection $dir prog.bot] \
+        [lindex [outcomeUnderHir interp [appHir $dir list.bot]] 1]
+} -cleanup removeApps -result {{SELF-IMPORT: APP/main.bot:1:8: "main" names this program's own entry file (APP/main.bot): an entry program is in no namespace and is not a module, so it cannot be imported} {CYCLE: APP/back.bot:1:8: module dependency cycle: APP/prog.bot (the entry program) -> back -> prog (an entry program is not a module and cannot be imported)} 3}
+
+test app-module-cycle {a cycle between application modules is CYCLE, as between library modules} -body {
+    appRejection [app {
+        main.bot "import a\n\n1\n"
+        a.bot "import b\n\nfn f() -> int:\n    1\n"
+        b.bot "import a\n\nfn g() -> int:\n    2\n"
+    }]
+} -cleanup removeApps -result {CYCLE: APP/b.bot:1:8: module dependency cycle: a -> b -> a}
+
+test app-module-self-import {an application module importing its own namespace is SELF-IMPORT, as a library module} -body {
+    lindex [split [appRejection [app {main.bot "import a\n\n1\n" a.bot "import a\n\nfn f() -> int:\n    1\n"}]] :] 0
+} -cleanup removeApps -result SELF-IMPORT
+
+# ---------------------------------------------------------------------------
+# The root is the entry file's directory, nothing else
+
+test app-root-not-working-directory {the root is the entry file's directory, never the working directory: a decoy module in the working directory is never read, by an absolute or a relative path} -body {
+    set dir [app {main.bot "import counter\n\ncounter::which()\n" counter.bot "fn which() -> int:\n    1\n"}]
+    set decoy [app {counter.bot "fn which() -> int:\n    2\n"}]
+    set saved [pwd]
+    try {
+        cd $decoy
+        set absolute [lindex [outcomeUnderHir interp [surface::readProgramFile [file join $dir main.bot] -warnings off -cache ""]] 1]
+        set relative [lindex [outcomeUnderHir interp [surface::readProgramFile [file join .. [file tail $dir] main.bot] -warnings off -cache ""]] 1]
+    } finally {
+        cd $saved
+    }
+    list $absolute $relative
+} -cleanup removeApps -result {1 1}
+
+test app-text-has-no-root {program text has no application root unless the caller names one (-root): no directory is searched for it} -body {
+    set dir [app [list counter.bot $counterModule]]
+    set saved [pwd]
+    try {
+        cd $dir
+        set text "import counter\n\ncounter::doubled(5)\n"
+        set none [catch {surface::compile $text -warnings off} message options]
+        set rooted [lindex [outcomeUnderHir interp [surface::compile $text [file join $dir main.bot] -warnings off -root $dir]] 1]
+    } finally {
+        cd $saved
+    }
+    list $none [lindex [dict get $options -errorcode] end] \
+        [string map [list $::core::libraryDir LIB] $message] $rooted
+} -cleanup removeApps -result {1 UNKNOWN-NAMESPACE {<input>:1:8: unknown namespace "counter": no such module file LIB/counter.bot and no intrinsics of that namespace} 10}
+
+test app-root-inside-library {an entry file inside the library directory: its modules there are the standard library's (one file, no collision)} -body {
+    withPrivateLibrary {
+        writeText [file join $::core::libraryDir appmod.bot] "fn f() -> int:\n    5\n"
+        writeText [file join $::core::libraryDir appmain.bot] "import appmod\n\nappmod::f()\n"
+        set hir [surface::readProgramFile [file join $::core::libraryDir appmain.bot] -warnings off -cache ""]
+        lindex [outcomeUnderHir interp $hir] 1
+    }
+} -result 5
+
+# ---------------------------------------------------------------------------
+# HIR interchange (the front-end cache's application root and dependencies:
+# tests/hir-cache.test's hc-application-*)
+
+test app-interchange-without-sources {the analyzed HIR of an application (.hirx) runs on every backend, and becomes NIR and an executable, after its source directory is gone} -constraints {nativeBuilt executableAot} -body {
+    set dir [app [list main.bot "import counter\n\n\[counter::count_down(250), counter::doubled(21)\]\n" counter.bot $counterModule]]
+    exec [info nameofexecutable] $::mainScript -warnings off -emit-hir-interchange [file join $dir main.bot]
+    set elsewhere [makeDirectory app-interchange-[pid]]
+    file rename [file join $dir main.hirx] [file join $elsewhere main.hirx]
+    file delete -force $dir
+    set hirx [file join $elsewhere main.hirx]
+    try {
+        set values [lmap backend {interp compile cranelift-generic cranelift} {
+            lindex [regexp -inline -line {^   value: .*$} [exec [info nameofexecutable] $::mainScript -backend $backend $hirx]] 0
+        }]
+        set nir [regexp {func } [exec [info nameofexecutable] $::mainScript -emit-nir $hirx]]
+        exec [info nameofexecutable] $::mainScript -emit-native-executable $hirx
+        list $values $nir [exec [file join $elsewhere main]]
+    } finally {
+        removeDirectory app-interchange-[pid]
+    }
+} -cleanup removeApps -result {{{   value: [250, 42]} {   value: [250, 42]} {   value: [250, 42]} {   value: [250, 42]}} 1 {[250, 42]}}
+
+# ---------------------------------------------------------------------------
+# main.tcl
+
+test app-main-from-elsewhere {main.tcl runs an application from any working directory, on every backend} -constraints nativeBuilt -body {
+    set dir [app [list main.bot "import counter\n\ncounter::count_down(300)\n" counter.bot $counterModule]]
+    lmap backend {interp compile cranelift-generic cranelift} {
+        lindex [regexp -inline -line {^   value: .*$} [exec sh -c {cd / && exec "$0" "$@"} [info nameofexecutable] $::mainScript -backend $backend [file join $dir main.bot]]] 0
+    }
+} -cleanup removeApps -result {{   value: 300} {   value: 300} {   value: 300} {   value: 300}}
+
+cleanupTests

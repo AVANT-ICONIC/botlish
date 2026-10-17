@@ -1,0 +1,108 @@
+# main-recursion.test -- the Tcl recursion limit main.tcl runs programs under
+# (core::useProgramRecursionLimit, core/core.tcl; 2048-ENGINE-WORKLOAD.md,
+# S22).
+#
+# The Tcl backends evaluate a Botlish call as nested Tcl evaluations, so
+# tclsh's default limit of 1000 ended an ordinary interpreted recursion about
+# 140 calls deep: main.tcl -backend interp failed a 200-deep recursion with
+# TCL LIMIT STACK while the golden runner, which raised the limit, ran it.
+# main.tcl and the golden runner now apply the one policy. Each test runs
+# main.tcl as its own process: the limit is an entry point's, never this test
+# process's (tests/compiler-opt.test's opt-tail-2 runs under 1000 on purpose).
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+
+set mainScript [file join $::projectRoot main.tcl]
+
+# The program file NAME (in the tcltest temporary directory) that recurses
+# DEPTH calls deep, not in tail position, and returns the sum 1 + ... + DEPTH.
+proc recursionProgram {name depth} {
+    makeFile "fn total(k):\n    if k == 0:\n        return 0\n    k + total(k - 1)\n\ntotal($depth)\n" $name
+}
+
+# The `value:` line main.tcl prints for PATH on BACKEND, or its error line.
+proc mainValue {backend path} {
+    catch {exec [info nameofexecutable] $::mainScript -backend $backend $path 2>@1} out
+    foreach line [split $out \n] {
+        if {[regexp {^   (value|error): (.*)$} $line -> tag text]} {
+            return "$tag: $text"
+        }
+    }
+    return $out
+}
+
+test main-recursion-200 {S22: a 200-deep recursion runs under main.tcl on both Tcl backends} -setup {
+    set path [recursionProgram recursion-200.bot 200]
+} -body {
+    list [mainValue interp $path] [mainValue compile $path]
+} -cleanup {
+    removeFile recursion-200.bot
+} -result {{value: 20100} {value: 20100}}
+
+test main-recursion-deep {far beyond the old threshold: 5000 nested calls on interp, 20000 on compile} -setup {
+    set interpPath [recursionProgram recursion-5000.bot 5000]
+    set compilePath [recursionProgram recursion-20000.bot 20000]
+} -body {
+    list [mainValue interp $interpPath] [mainValue compile $compilePath]
+} -cleanup {
+    removeFile recursion-5000.bot
+    removeFile recursion-20000.bot
+} -result {{value: 12502500} {value: 200010000}}
+
+test main-recursion-managed-values {a deep recursion that builds Lists and Strings returns them whole} -setup {
+    set path [makeFile [join {
+        "import list"
+        "import str"
+        ""
+        "fn upto(k: int) -> List[int]:"
+        "    if k == 0:"
+        "        return []"
+        "    upto(k - 1).append(k)"
+        ""
+        "fn stars(k: int) -> str:"
+        "    if k == 0:"
+        "        return \"\""
+        "    stars(k - 1).concat(\"*\")"
+        ""
+        "xs = upto(3000)"
+        "\[list::length(xs), list::get(xs, 2999, 0), str::length(stars(3000))\]"
+        ""
+    } \n] recursion-managed.bot]
+} -body {
+    list [mainValue interp $path] [mainValue compile $path]
+} -cleanup {
+    removeFile recursion-managed.bot
+} -result {{value: [3000, 3000, 3000]} {value: [3000, 3000, 3000]}}
+
+test main-recursion-limit-is-the-policy {main.tcl and the golden runner raise the limit through core::useProgramRecursionLimit, never a number of their own} -body {
+    set main [core::ReadFile $mainScript]
+    set runner [core::ReadFile [file join $::projectRoot tests golden run.tcl]]
+    list [regexp {core::useProgramRecursionLimit} $main] [regexp {interp\s+recursionlimit} $main] \
+        [regexp {core::useProgramRecursionLimit} $runner] [regexp {interp\s+recursionlimit} $runner] \
+        [expr {$::core::programRecursionLimit >= 100000}]
+} -result {1 0 1 0 1}
+
+test main-recursion-keeps-a-higher-limit {the policy raises the limit and never lowers an embedder's higher one} -body {
+    set saved [interp recursionlimit {}]
+    try {
+        interp recursionlimit {} 1000
+        core::useProgramRecursionLimit
+        set raised [interp recursionlimit {}]
+        interp recursionlimit {} [expr {$::core::programRecursionLimit * 2}]
+        core::useProgramRecursionLimit
+        list [expr {$raised == $::core::programRecursionLimit}] \
+            [expr {[interp recursionlimit {}] == $::core::programRecursionLimit * 2}]
+    } finally {
+        interp recursionlimit {} $saved
+    }
+} -result {1 1}
+
+test main-recursion-still-bounded {a runaway recursion still fails with Tcl's own limit error, not a crash (compile: the quick one to reach)} -setup {
+    set path [makeFile "fn forever(k):\n    1 + forever(k + 1)\n\nforever(0)\n" recursion-forever.bot]
+} -body {
+    mainValue compile $path
+} -cleanup {
+    removeFile recursion-forever.bot
+} -result {error: too many nested evaluations (infinite loop?) (TCL LIMIT STACK)}
+
+cleanupTests

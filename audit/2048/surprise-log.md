@@ -97,6 +97,9 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
 * Classification: LANGUAGE (module system: no application root), CLI.
   MAJOR for any multi-file application workload.
 * Resolution: see D5.
+* **Resolved** (POST-2048-PRODUCT-FIXES.md): a program's own modules are the
+  files beside its entry file (IMPORTS.md, "Application modules"), from a
+  checkout and from the single executable; the private library is gone.
 
 ### S5 A descending loop does not prove its own index in range
 
@@ -438,6 +441,10 @@ mention `list`), DOCUMENTATION. MINOR. 1 retry.
   portable output on the reference backends), DOCUMENTATION.
   Must-fix candidate before the paired run: a black-box agent will run
   a printing program with `-backend cranelift` and see nothing.
+* **Resolved**, the CLI part (POST-2048-PRODUCT-FIXES.md): main.tcl runs a
+  native program with its own standard output and error and reads the
+  driver's result from a file (`botlish-native --result`); the Tcl backends
+  still cannot print (no `io::IO` context but LinuxIO's syscalls).
 
 ### S16 Every program that imports io gets two warnings about the stdlib's own source
 
@@ -653,6 +660,9 @@ is how Botlish carries loop state (S23). examples/games/2048/run.tcl
 inherits the golden runner's limit, which is why the workload never hit
 it. CLI, MAJOR for the paired run (a black-box agent's first
 interpreted run of any stateful loop).
+**Resolved** (POST-2048-PRODUCT-FIXES.md): main.tcl and the golden runner
+call `core::useProgramRecursionLimit` (100,000: about 14,000 interpreted
+calls).
 
 ### S23 Loop-carried state needs recursion or a mutable place
 

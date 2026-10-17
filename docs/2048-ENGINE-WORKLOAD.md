@@ -45,7 +45,7 @@ P1-P3, D1-D6): each entry was written when it happened.
   (S4), a printing program shows nothing under `-backend cranelift` (S15),
   the interpreter cannot run a 200-deep recursion under main.tcl (S22),
   and the golden-test tooling assumes every test is a port of a Tcl test
-  (S3).
+  (S3). S4, S15 and S22 are resolved since (POST-2048-PRODUCT-FIXES.md).
 * **Zero stdlib changes.** Several general operations were missed (Int to
   String, reverse, concat/flatten, sum, replace-at); each is recorded with
   its evidence below.
@@ -68,14 +68,18 @@ P1-P3, D1-D6): each entry was written when it happened.
 
 One module, `game2048` (one file, one namespace: IMPORTS.md), and three
 programs that import it: the demo, the golden suite and the benchmark
-program, all in `examples/games/2048/`. Because `import NAME` resolves only
-to `lib/NAME.bot` (S4), the programs are compiled against a private library
+program, all in `examples/games/2048/`. Because `import NAME` resolved only
+to `lib/NAME.bot` (S4), the programs were compiled against a private library
 directory -- a temporary copy of `lib/` with `game2048.bot` added -- that
-`examples/games/2048/run.tcl` builds; `tests/workload-2048.test` and
-`bench/2048.tcl` use it too (D5). `run.tcl -hirx OUT FILE.bot` writes the
+`examples/games/2048/run.tcl` built; `tests/workload-2048.test` and
+`bench/2048.tcl` used it too (D5). `run.tcl -hirx OUT FILE.bot` writes the
 analyzed HIR, which `main.tcl` then runs with every option it has
 (`-backend`, `-emit-nir`, `-emit-clif`, `-emit-native-executable`): the
-library is needed only by the front end.
+library was needed only by the front end. **Since S4's fix** the engine is an
+application module, the file beside its programs, and every entry point
+compiles them as they are (`tclsh9.0 main.tcl -backend cranelift
+examples/games/2048/demo.bot`); the private library is gone
+(POST-2048-PRODUCT-FIXES.md).
 
 ```sh
 tclsh9.0 examples/games/2048/run.tcl -suite                  # the golden suite, four backends
@@ -186,7 +190,8 @@ up; take the first move that changes the board), spawning from a small
 linear congruential generator with a fixed seed -- randomness lives in the
 caller. It prints the first five boards, the final board, the score and the
 largest tile: 316 moves, score 3888, largest tile 256. It prints through
-`io::print_line`, so it runs only natively (S15); as an executable it takes
+`io::print_line`, so it runs only natively (S15: under `-backend cranelift`
+main.tcl showed only its value until S15's fix); as an executable it takes
 10 ms.
 
 ### Size
@@ -504,9 +509,9 @@ Its findings, ranked:
 |---|---|---|---|---|
 | S19 | a definition overwrote a live root slot: crash / wrong value under GC stress | COMPILER-CORRECTNESS | BLOCKER | yes |
 | S24 | a valid single-file program rejected by specialized native lowering (`does not capture`) | COMPILER-CORRECTNESS | BLOCKER | yes |
-| S4 | no application module root; with the single executable, no module of one's own at all | LANGUAGE, CLI | MAJOR | no |
-| S15 | program output discarded under `-backend cranelift`; Tcl backends cannot print | CLI, STDLIB, DOCUMENTATION | MAJOR | no |
-| S22 | interp under main.tcl fails a 200-deep recursion | CLI | MAJOR | no |
+| S4 | no application module root; with the single executable, no module of one's own at all | LANGUAGE, CLI | MAJOR | yes (application modules: POST-2048-PRODUCT-FIXES.md) |
+| S15 | program output discarded under `-backend cranelift`; Tcl backends cannot print | CLI, STDLIB, DOCUMENTATION | MAJOR | the CLI part, yes (POST-2048-PRODUCT-FIXES.md); the Tcl backends still cannot print |
+| S22 | interp under main.tcl fails a 200-deep recursion | CLI | MAJOR | yes (POST-2048-PRODUCT-FIXES.md) |
 | S18 | ~169 allocations and 7.7 KB per move, half the time in GC, ~3x CPython | COMPILER-PERFORMANCE | MAJOR | no |
 | S1 | no Int-to-String | STDLIB, DOCUMENTATION | MODERATE | no |
 | S2 | no integer division | LANGUAGE, DOCUMENTATION | MODERATE | no |
@@ -713,11 +718,15 @@ experiment with a tooling failure rather than ordinary unfamiliarity):
 
 1. S15: show a program's output under `-backend cranelift` (the driver
    already has it; main.tcl drops it), and say in the reference that
-   output needs the native backend.
+   output needs the native backend. **Resolved** (POST-2048-PRODUCT-FIXES.md):
+   main.tcl runs a native program with its own standard output and error
+   (`native::evalHir -output inherit`, `botlish-native --result`).
 2. S22: raise main.tcl's Tcl recursion limit as the golden runner does.
+   **Resolved**: both call `core::useProgramRecursionLimit`.
 3. S4: a way for a program to have its own module, at least next to the
    entry file, usable from the single executable -- or, if that stays out,
-   say so in the prompt and the reference.
+   say so in the prompt and the reference. **Resolved**: application
+   modules, the files beside the entry file (IMPORTS.md).
 4. S8: a named program-level Int constant as an exact fact inside
    functions (`hir/range.tcl`'s `ref` case can consult
    `hir::exact::IntOf`). Resolved in `0db2443`: `hir::range::BindingRange`,
@@ -795,5 +804,10 @@ directory outside the repository and run with an empty environment
   that namespace (SURFACE MODULE UNKNOWN-NAMESPACE)` -- accurate, and it
   names the only place a module can live, inside the executable.
 
-Packaging works; what the single executable cannot do is let a program
-have more than one file.
+Packaging works; what the single executable could not do is let a program
+have more than one file. **Since S4's fix** it can: in an empty directory
+holding the single executable and copies of `demo.bot`, `game2048.bot` and
+`golden.bot`, `botlish -backend cranelift demo.bot` prints the whole game
+(S15) and the suite passes 68 of 68 on all four backends -- the two
+opacity tests included, since the engine is a module again
+(POST-2048-PRODUCT-FIXES.md).

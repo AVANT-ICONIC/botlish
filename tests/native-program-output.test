@@ -1,0 +1,266 @@
+# native-program-output.test -- what a program prints under main.tcl's
+# native backends (2048-ENGINE-WORKLOAD.md, S15).
+#
+# main.tcl -backend cranelift used to run botlish-native with its standard
+# output and error in one pipe and keep only the last result line, so a
+# printing program (io::print_line, linux::io::write) showed nothing but its
+# value. It now runs it with native::evalHir's `-output inherit`: the program
+# writes to main.tcl's own standard output and error, as a standalone
+# executable writes to its own, and the driver's result lines come back
+# through a file (botlish-native --result). The order is the one every
+# backend's line follows: main.tcl's `== FILE (BACKEND)` header, the
+# program's output as it writes it, then its `value:` or `error:` line.
+#
+# Each test runs main.tcl (or the driver) as its own process and compares
+# its standard output byte for byte.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+source [file join $::projectRoot native native.tcl]
+
+# The programs print through linux::io, whose syscalls exist on Linux x86-64
+# only (AGENTS.md, "Linux AArch64").
+testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64}}]
+testConstraint nativeBuilt [expr {![catch {native::binary}]}]
+
+set mainScript [file join $::projectRoot main.tcl]
+
+# {STDOUT STDERR STATUS} of COMMAND (a list: the program and its arguments)
+# run as its own process: STDOUT as raw bytes, STDERR as text, STATUS its
+# exit status.
+proc processRun {command} {
+    set errPath [file join [temporaryDirectory] native-output-stderr-[pid]]
+    try {
+        set pipe [open |[list {*}$command 2> $errPath] rb]
+        set out [read $pipe]
+        set status 0
+        if {[catch {close $pipe} message options]} {
+            set code [dict get $options -errorcode]
+            set status [expr {[lindex $code 0] eq "CHILDSTATUS" ? [lindex $code 2] : $code}]
+        }
+        set channel [open $errPath rb]
+        set err [read $channel]
+        close $channel
+        return [list $out $err $status]
+    } finally {
+        file delete $errPath
+    }
+}
+
+# {STDOUT STDERR STATUS} of main.tcl ARGS.
+proc mainRun {args} {
+    return [processRun [list [info nameofexecutable] $::mainScript -warnings off {*}$args]]
+}
+
+# The program file NAME (in the tcltest temporary directory) of the Botlish
+# lines LINES, which print through linux::io.
+proc printingProgram {name lines} {
+    return [makeFile [join [concat {"import io" "import linux::io"} $lines] \n]\n $name]
+}
+
+set nativeBackends {cranelift cranelift-generic}
+
+test native-output-one-line {S15: hello.bot's line is printed, then its value, on both native backends} -constraints {linuxX86_64 nativeBuilt} -body {
+    set path [file join $::projectRoot examples io hello.bot]
+    lmap backend $nativeBackends {
+        string equal [mainRun -backend $backend $path] \
+            [list "== hello.bot ($backend)\nHello, world!\n   value: unit\n" "" 0]
+    }
+} -result {1 1}
+
+test native-output-lines-and-value {several lines, then a non-unit value} -constraints {linuxX86_64 nativeBuilt} -setup {
+    set path [printingProgram native-output-lines.bot {
+        ""
+        "fn lines() -> int errors io::WriteFailed:"
+        "    io::print_line(\"one\")"
+        "    io::print_line(\"two\")"
+        "    io::print_line(\"three\")"
+        "    3"
+        ""
+        "with context linux::io::create()"
+        "lines():"
+        "    on io::WriteFailed:"
+        "        0"
+    }]
+} -body {
+    lmap backend $nativeBackends {
+        string equal [mainRun -backend $backend $path] \
+            [list "== native-output-lines.bot ($backend)\none\ntwo\nthree\n   value: 3\n" "" 0]
+    }
+} -cleanup {
+    removeFile native-output-lines.bot
+} -result {1 1}
+
+test native-output-empty {a program that prints nothing shows only its value, as before} -constraints nativeBuilt -setup {
+    set path [makeFile "fn f(x):\n    x * 6\n\nf(7)\n" native-output-empty.bot]
+} -body {
+    lmap backend $nativeBackends {
+        string equal [mainRun -backend $backend $path] \
+            [list "== native-output-empty.bot ($backend)\n   value: 42\n" "" 0]
+    }
+} -cleanup {
+    removeFile native-output-empty.bot
+} -result {1 1}
+
+test native-output-stderr-separate {the program's error output is main.tcl's standard error, its output main.tcl's standard output} -constraints {linuxX86_64 nativeBuilt} -setup {
+    set path [printingProgram native-output-stderr.bot {
+        ""
+        "fn both() errors io::WriteFailed:"
+        "    io::print(\"out-a \")"
+        "    io::write_error_line(\"to stderr\")"
+        "    io::print_line(\"out-b\")"
+        ""
+        "with context linux::io::create()"
+        "both():"
+        "    on io::WriteFailed:"
+        "        unit"
+    }]
+} -body {
+    mainRun -backend cranelift $path
+} -cleanup {
+    removeFile native-output-stderr.bot
+} -result [list "== native-output-stderr.bot (cranelift)\nout-a out-b\n   value: unit\n" "to stderr\n" 0]
+
+test native-output-raw-bytes {bytes linux::io::write writes reach main.tcl's standard output unchanged: no decoding, no newline translation} -constraints {linuxX86_64 nativeBuilt} -setup {
+    set path [makeFile [join {
+        "import abi::bytes"
+        "import byte"
+        "import linux::io"
+        ""
+        "fn raw() -> int:"
+        "    linux::io::write(abi::bytes::from_list([byte::from_int(255), byte::from_int(0), byte::from_int(128), byte::from_int(10), byte::from_int(13), byte::from_int(10)]))"
+        ""
+        "with context linux::io::create()"
+        "raw()"
+        ""
+    } \n] native-output-bytes.bot]
+} -body {
+    lmap backend $nativeBackends {
+        set expected [encoding convertto utf-8 "== native-output-bytes.bot ($backend)\n"]
+        append expected "\xff\x00\x80\n\r\n" [encoding convertto utf-8 "   value: 6\n"]
+        string equal [lindex [mainRun -backend $backend $path] 0] $expected
+    }
+} -cleanup {
+    removeFile native-output-bytes.bot
+} -result {1 1}
+
+test native-output-failure-keeps-output {a program that fails after printing keeps what it printed, then its error line (a native stack overflow)} -constraints {linuxX86_64 nativeBuilt} -setup {
+    set path [printingProgram native-output-failure.bot {
+        ""
+        "fn forever(k: int) -> int:"
+        "    1 + forever(k + 1)"
+        ""
+        "fn go() -> int:"
+        "    io::print_line(\"before the failure\"):"
+        "        on io::WriteFailed:"
+        "            unit"
+        "    forever(0)"
+        ""
+        "with context linux::io::create()"
+        "go()"
+    }]
+} -body {
+    lmap backend $nativeBackends {
+        string equal [mainRun -backend $backend $path] \
+            [list "== native-output-failure.bot ($backend)\nbefore the failure\n   error: native stack exhausted: too many nested calls (NATIVE LIMIT STACK)\n" "" 1]
+    }
+} -cleanup {
+    removeFile native-output-failure.bot
+} -result {1 1}
+
+test native-output-not-a-result {output that looks like the driver's result lines, even unterminated, is output: the value is the program's} -constraints {linuxX86_64 nativeBuilt} -setup {
+    set path [printingProgram native-output-lookalike.bot {
+        ""
+        "fn fake() -> int errors io::WriteFailed:"
+        "    io::print_line(\"value 99\")"
+        "    io::print(\"error {NATIVE BUG} {not an error}\")"
+        "    7"
+        ""
+        "with context linux::io::create()"
+        "fake():"
+        "    on io::WriteFailed:"
+        "        0"
+    }]
+} -body {
+    mainRun -backend cranelift $path
+} -cleanup {
+    removeFile native-output-lookalike.bot
+} -result [list "== native-output-lookalike.bot (cranelift)\nvalue 99\nerror {NATIVE BUG} {not an error}   value: 7\n" "" 0]
+
+test native-output-several-files {each file's output comes between its header and its value line} -constraints {linuxX86_64 nativeBuilt} -setup {
+    set first [printingProgram native-output-first.bot {
+        "" "fn p() errors io::WriteFailed:" "    io::print_line(\"first\")" ""
+        "with context linux::io::create()" "p():" "    on io::WriteFailed:" "        unit"
+    }]
+    set second [printingProgram native-output-second.bot {
+        "" "fn p() -> int errors io::WriteFailed:" "    io::print_line(\"second\")" "    2" ""
+        "with context linux::io::create()" "p():" "    on io::WriteFailed:" "        0"
+    }]
+} -body {
+    lindex [mainRun -backend cranelift $first $second] 0
+} -cleanup {
+    removeFile native-output-first.bot
+    removeFile native-output-second.bot
+} -result "== native-output-first.bot (cranelift)\nfirst\n   value: unit\n== native-output-second.bot (cranelift)\nsecond\n   value: 2\n"
+
+test native-output-agrees-with-executable {the output main.tcl -backend cranelift shows is the standalone executable's, byte for byte (each then shows the value its own way)} -constraints {linuxX86_64 nativeBuilt} -setup {
+    set dir [makeDirectory native-output-executable]
+    set path [file join $dir agree.bot]
+    set channel [open $path w]
+    puts $channel [join {
+        "import io"
+        "import linux::io"
+        ""
+        "fn lines(k: int) -> int errors io::WriteFailed:"
+        "    if k == 0:"
+        "        return 0"
+        "    io::print_line(\"line\")"
+        "    io::write_error_line(\"err\")"
+        "    1 + lines(k - 1)"
+        ""
+        "with context linux::io::create()"
+        "lines(3):"
+        "    on io::WriteFailed:"
+        "        0"
+    } \n]
+    close $channel
+} -body {
+    lassign [mainRun -backend cranelift $path] mainOut mainErr mainStatus
+    lassign [mainRun -emit-native-executable $path] _ buildErr buildStatus
+    lassign [processRun [list [file join $dir agree]]] exeOut exeErr exeStatus
+    list $buildStatus $mainStatus $exeStatus \
+        [string equal [string range $mainOut [string length "== agree.bot (cranelift)\n"] end-[string length "   value: 3\n"]] \
+            [string range $exeOut 0 end-[string length "3\n"]]] \
+        [string equal $mainErr $exeErr] $exeOut
+} -cleanup {
+    removeDirectory native-output-executable
+} -result [list 0 0 0 1 1 "line\nline\nline\n3\n"]
+
+test native-output-driver-result-file {botlish-native run --result PATH: the program alone writes to standard output, the result line goes to PATH} -constraints {linuxX86_64 nativeBuilt} -setup {
+    set nirPath [makeFile [native::nir [surface::readProgramFile [file join $::projectRoot examples io hello.bot] -warnings off]] native-output-hello.nir]
+    set resultPath [file join [temporaryDirectory] native-output-hello.result]
+} -body {
+    lassign [processRun [list [native::binary] run --result $resultPath $nirPath]] out err status
+    list $out $err $status [core::ReadFile $resultPath]
+} -cleanup {
+    removeFile native-output-hello.nir
+    file delete $resultPath
+} -result [list "Hello, world!\n" "" 0 "value unit\n"]
+
+test native-output-evalhir-discards {native::evalHir drops what the program writes unless told to inherit: tools and tests see only values} -constraints {linuxX86_64 nativeBuilt} -setup {
+    set script [makeFile [join [list \
+        "source [list [file join $::projectRoot surface surface.tcl]]" \
+        "source [list [file join $::projectRoot native native.tcl]]" \
+        "set hir \[surface::readProgramFile [list [file join $::projectRoot examples io hello.bot]] -warnings off\]" \
+        "puts \"discard: \[core::value::show \[native::evalHir \$hir\]\]\"" \
+        "puts \"inherit: \[core::value::show \[native::evalHir \$hir -output inherit\]\]\"" \
+        "puts \[catch {native::evalHir \$hir -output nowhere} message\]\$message" \
+    ] \n] native-output-evalhir.tcl]
+} -body {
+    processRun [list [info nameofexecutable] $script]
+} -cleanup {
+    removeFile native-output-evalhir.tcl
+} -result [list "discard: unit\nHello, world!\ninherit: unit\n1native::evalHir: -output must be discard or inherit, not \"nowhere\"\n" "" 0]
+
+cleanupTests

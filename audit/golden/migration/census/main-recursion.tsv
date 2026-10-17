@@ -1,0 +1,7 @@
+old_file	old_test	subsystem	status	confidence	observes	source_theorem	outcome	tcl_retained	tags	notes
+tests/main-recursion.test	main-recursion-200	harness	KEEP-MULTI-PROGRAM	high	main.tcl -backend interp and compile on a 200-deep non-tail recursion: value 20100 each (S22)	-	none	main.tcl's Tcl recursion limit	MAIN-TCL,STDOUT,MULTI-BACKEND	-
+tests/main-recursion.test	main-recursion-deep	harness	KEEP-MULTI-PROGRAM	high	main.tcl: 5000 nested calls on interp, 20000 on compile	-	none	main.tcl's Tcl recursion limit	MAIN-TCL,STDOUT,MULTI-BACKEND	-
+tests/main-recursion.test	main-recursion-managed-values	harness	KEEP-MULTI-PROGRAM	high	main.tcl: 3000-deep recursions building a List and a String: [3000, 3000, 3000] on interp and compile	-	none	deep recursion with managed values	MAIN-TCL,STDOUT,MULTI-BACKEND	-
+tests/main-recursion.test	main-recursion-limit-is-the-policy	harness	KEEP-INTERNAL	high	main.tcl and tests/golden/run.tcl call core::useProgramRecursionLimit and set no limit of their own	-	none	one recursion policy	-	-
+tests/main-recursion.test	main-recursion-keeps-a-higher-limit	harness	KEEP-INTERNAL	high	core::useProgramRecursionLimit raises 1000 to the policy and keeps a higher limit	-	none	the policy never lowers a limit	-	-
+tests/main-recursion.test	main-recursion-still-bounded	harness	KEEP-MULTI-PROGRAM	high	main.tcl -backend compile on a runaway recursion: the TCL LIMIT STACK error line	-	none	the limit is still a limit	MAIN-TCL,STDOUT	-

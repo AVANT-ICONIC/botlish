@@ -31,7 +31,17 @@ static ACTIVE_TID: AtomicI32 = AtomicI32::new(0);
 static GUARD_LOW: AtomicUsize = AtomicUsize::new(0);
 static USABLE_LOW: AtomicUsize = AtomicUsize::new(0);
 static EXECUTABLE: AtomicI32 = AtomicI32::new(0);
+/// Where the driver's result lines go (set_result_fd): standard output, or
+/// the file of botlish-native's `--result`.
+static RESULT_FD: AtomicI32 = AtomicI32::new(libc::STDOUT_FILENO);
 const OVERFLOW_LINE: &[u8] = b"error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}\n";
+
+/// Makes FD the descriptor the driver's overflow report is written to, with
+/// its other result lines: the `--result` file, so that a program's own
+/// standard output never carries it.
+pub fn set_result_fd(fd: libc::c_int) {
+    RESULT_FD.store(fd, Ordering::Relaxed);
+}
 
 extern "C" fn fault_handler(signal: libc::c_int, info: *mut libc::siginfo_t, _: *mut libc::c_void) {
     // Only atomic loads, syscall, write, and _exit on the alternate stack.
@@ -43,7 +53,7 @@ extern "C" fn fault_handler(signal: libc::c_int, info: *mut libc::siginfo_t, _: 
     {
         unsafe {
             let executable = EXECUTABLE.load(Ordering::Relaxed) != 0;
-            let fd = if executable { libc::STDERR_FILENO } else { libc::STDOUT_FILENO };
+            let fd = if executable { libc::STDERR_FILENO } else { RESULT_FD.load(Ordering::Relaxed) };
             libc::write(fd, OVERFLOW_LINE.as_ptr().cast(), OVERFLOW_LINE.len());
             libc::_exit(if executable { 1 } else { 0 });
         }

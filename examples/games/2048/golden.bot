@@ -4,7 +4,7 @@
 #
 # Run with `tclsh9.0 examples/games/2048/run.tcl -suite`
 # (tests/workload-2048.test runs it on every backend): `import game2048`
-# needs the engine on the library path, which run.tcl provides.
+# is the engine beside it, an application module (IMPORTS.md).
 #
 # Expected values are written out. The property tests compare the engine
 # with structural relations the tests compute themselves (mirroring and

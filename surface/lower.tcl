@@ -147,8 +147,11 @@ namespace eval surface::lower {
 
 proc surface::lowerToHir {ast args} {
     # -target NAME: the C ABI target (C-ABI-TYPES.md), the host's when "".
+    # -root DIR: the application root its imports may name modules of
+    # (surface/modules.tcl, "Application modules"; a program file's is its
+    # directory), "" for none: program text has no file of its own.
     set options [dict create -strict 1 -warnings [hir::warnings::defaultMode] -warning-channel stderr \
-        -target ""]
+        -target "" -root ""]
     foreach {option value} $args {
         if {![dict exists $options $option]} {
             error "surface::lowerToHir: unknown option \"$option\""
@@ -167,7 +170,8 @@ proc surface::lowerToHir {ast args} {
     # imports are validated, the modules they name are loaded and compiled
     # alongside it, and a qualified reference with no import is rejected --
     # for program text exactly as for a file.
-    set hir [surface::modules::BuildProgram $ast [dict get $options -strict] [dict get $options -target]]
+    set hir [surface::modules::BuildProgram $ast [dict get $options -strict] [dict get $options -target] \
+        [dict get $options -root]]
     return [surface::lower::Finish $hir [dict get $options -strict] \
         [dict get $options -warnings] [dict get $options -warning-channel]]
 }

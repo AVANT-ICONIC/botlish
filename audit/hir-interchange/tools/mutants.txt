@@ -134,6 +134,14 @@
         scheduler {}]
 >>>>
 
+@@ key-ignores-root the cache key leaves out the application root: one relative path from another working directory hits the other application's HIR
+## surface/cache.tcl
+<<<<
+        root $root \
+====
+        root {} \
+>>>>
+
 @@ deps-ignore-imports an entry's dependencies leave out the modules `import NS` names: an edited module, or a namespace that gains a module file, hits the old HIR
 ## surface/cache.tcl
 <<<<
@@ -149,6 +157,15 @@
             set segments [split [string map {:: \x00} $qualified] \x00]
             lappend imported [join [lrange $segments 0 end-1] ::]
         }
+====
+>>>>
+
+@@ deps-ignore-application-paths an entry's dependencies leave out the application-module paths of its imports: an edited application module, or a new application file that collides with a standard import, hits the old HIR
+## surface/cache.tcl
+<<<<
+            if {$root ne ""} {
+                lappend paths [surface::modules::NamespaceFile $root $namespace]
+            }
 ====
 >>>>
 

@@ -88,6 +88,10 @@ set root [file dirname [file normalize [info script]]]
 source [file join $root compiler compiler.tcl]
 source [file join $root surface surface.tcl]
 source [file join $root native native.tcl]
+# The Tcl backends evaluate a Botlish call as nested Tcl evaluations: run
+# programs under the entry points' recursion limit (core/core.tcl), not
+# tclsh's default 1000, which ends an interpreted recursion ~140 calls deep.
+core::useProgramRecursionLimit
 
 proc probeValues {value} {
     switch -- [core::value::kind $value] {
@@ -134,10 +138,13 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         if {$backend eq "interp"} {
             set program [hir::lower $hir]
         }
+        # A native run writes what the program prints to this process's own
+        # standard output and error, before the value line below, as a
+        # standalone executable does.
         set run [dict get {
             compile   {core::compiler::evalUnit $unit}
-            cranelift {native::evalHir $hir}
-            cranelift-generic {native::evalHir $hir -specialize 0}
+            cranelift {native::evalHir $hir -output inherit}
+            cranelift-generic {native::evalHir $hir -specialize 0 -output inherit}
             interp    {core::evalProgram $program}
         } $backend]
     } else {

@@ -430,6 +430,7 @@ tclsh9.0 main.tcl -backend compile examples/stdlib/csv.bot    # run through the 
 cargo build --release --manifest-path native/Cargo.toml       # build the native backend
 tclsh9.0 main.tcl -backend cranelift examples/stdlib/csv.bot  # run natively, just in time
 tclsh9.0 main.tcl -emit-native-executable examples/io/hello.bot && examples/io/hello
+tclsh9.0 main.tcl -backend cranelift examples/games/2048/demo.bot  # a program and its own module beside it; prints the game
 
 tclsh9.0 tests/golden/run.tcl tests/golden/coroutines.bot     # one golden suite, on every backend
 tclsh9.0 tests/local.tcl                                      # the whole test suite, in parallel

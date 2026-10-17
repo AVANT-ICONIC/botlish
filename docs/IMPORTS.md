@@ -12,7 +12,10 @@ import type abi::U8Value       # ... and binds one short type name
 A file's namespace is its path: `lib/abi/x86_64.bot` is `abi::x86_64`, and
 nothing inside the file states it (there is no `namespace` declaration; the
 word is an ordinary name and a `namespace NAME` line is a syntax error). The
-entry program is in no namespace.
+entry program is in no namespace. A program's own modules are the files
+beside its entry file, by the same rule: `game.bot` next to `main.bot` is
+`game`, `util/math.bot` is `util::math` ([Application
+modules](#application-modules)).
 
 ```
 # lib/foo.bot: namespace foo, by its path
@@ -135,8 +138,9 @@ source ──parse──▶ AST (program.imports: `import` / `typeimport` nodes)
 ### What an import loads
 
 An import loads the namespace's module file if it has one (`import list` loads
-`lib/list.bot`, `import abi::x86_64` loads `lib/abi/x86_64.bot`, each at
-most once per program), and nothing if the namespace is intrinsics-only
+`lib/list.bot`, `import abi::x86_64` loads `lib/abi/x86_64.bot`, `import game`
+in an application loads the `game.bot` beside its entry file, each at most
+once per program), and nothing if the namespace is intrinsics-only
 (`import str`). That is the whole of module loading: a module that is not
 imported, directly or by another module's own header, is never loaded. One
 visible consequence while `error` declarations stay global: `import list`
@@ -164,7 +168,8 @@ never `MISSING-IMPORT`. A reference into a namespace that does not exist at
 all is `UNKNOWN-NAMESPACE` (no import could repair it).
 
 A namespace *exists* if there is a source module file for it
-(`lib/NAME.bot`, one directory per leading segment) **or** it has compiler
+(`lib/NAME.bot`, one directory per leading segment, or for an application
+file an application module `ROOT/NAME.bot`) **or** it has compiler
 intrinsics (qualified root natives): `import str` is valid with no
 `lib/str.bot`; `import linux::abi` is valid for `linux::abi::syscall`. A bare
 prefix of either (`import linux`) is not a namespace. The intrinsic
@@ -177,9 +182,10 @@ Header diagnostics, all located at the import:
 
 | Kind | When |
 |------|------|
-| `UNKNOWN-NAMESPACE` | `import nosuch` -- resolved at the import, not at a later use |
+| `UNKNOWN-NAMESPACE` | `import nosuch` -- resolved at the import, not at a later use; from an application file the message names the application path first, then the standard library's |
 | `DUPLICATE-IMPORT` | the same namespace (or the same type) imported twice |
-| `SELF-IMPORT` | a file imports its own namespace (or one of its own types) |
+| `SELF-IMPORT` | a file imports its own namespace (or one of its own types), or the entry program imports its own file |
+| `MODULE-COLLISION` | an application file imports a standard namespace for which the application has a file of the same name (below) |
 | `UNKNOWN-SYMBOL` | `import type abi::DoesNotExist`: `abi` exists, has no such type |
 | `NOT-A-TYPE` | `import type abi::u8` (a function), or a struct / error: it exists, but is not a source-defined `type` |
 | `TYPE-IMPORT-COLLISION` | see below |
@@ -296,6 +302,75 @@ Types and values are separate namespaces in Botlish already (a type name is
 never a lexical binding), so a type import does not collide with a value
 binding of the same spelling (`U8Value = 5` is fine and unrelated).
 
+## Application modules
+
+A program's own modules live beside it: the directory of the entry file
+(the `.bot` file main.tcl or the single executable is given) is the
+program's **application root**, and an application of several files is just
+that directory:
+
+```
+project/
+    main.bot          import game
+    game.bot          import util::math
+    util/math.bot
+```
+
+`import game` in `main.bot` loads `project/game.bot` as namespace `game`, an
+ordinary module: one namespace, parsed and compiled once however many files
+import it, its own definitions bare inside it and qualified (`game::move`)
+outside it, its functions method candidates of its importers, its types,
+structs, enums and errors `game::`-qualified, its opaque structs constructed
+and inspected by `game.bot` alone (OPAQUE-STRUCTS.md). Nothing has to be
+copied into `lib/`, and nothing is.
+
+**Resolution.** For an import written in an *application file* -- the entry
+program, or an application module -- namespace `NAME` is, in this order and
+with no search beyond it:
+
+1. a standard namespace: `$::core::libraryDir/NAME.bot` (`lib/` in a
+   checkout, the packed `lib/` in the single executable) or compiler
+   intrinsics, exactly as before;
+2. else the application module `ROOT/NAME.bot` (`ROOT/a/b.bot` for `a::b`);
+3. else nothing: `UNKNOWN-NAMESPACE`, naming `ROOT/NAME.bot` and then the
+   standard library's path.
+
+A standard-library module's own imports are resolved in the standard library
+only: an application never changes what `lib/test.bot` imports.
+
+**The root is the entry file's directory and nothing else**: not the shell's
+working directory (`cd /; botlish /path/to/main.bot` and `cd /path/to;
+botlish main.bot` compile the same program), not an environment variable,
+not a parent directory, not a list of paths. Program *text* compiled with no
+file of its own (`surface::compile TEXT`) has no root unless its caller names
+one (`surface::compile TEXT FILE -root DIR`, what bench/2048.tcl does for its
+edited benchmark text).
+
+**Standard namespaces stay privileged.** An application file is never
+silently preferred to, and never replaces, a standard namespace: when an
+application file imports `NAME` and the application also has a file
+`ROOT/NAME.bot` for a standard `NAME` (`list.bot`, `str.bot`,
+`linux/io.bot`), the import is `MODULE-COLLISION`, which names both files;
+rename the application's. That is the one ambiguity the two roots can
+produce, and it is never resolved by precedence. An application file that is
+never imported collides with nothing, and an entry file named like a
+standard namespace (`test.bot` importing `test`) imports that namespace: the
+entry program is not a module. Importing the entry file itself is
+`SELF-IMPORT` (from the entry) or `CYCLE` (from one of its modules). Cycles
+between application modules are `CYCLE`, as between library modules.
+
+**After the front end.** The analyzed HIR holds every module it was built
+from, so a `.hirx` (`-emit-hir-interchange`) runs on every backend, becomes
+NIR, CLIF or an executable with the source directory gone. The front-end
+cache keys a program by its application root as well and records each
+import's application path as a dependency (HIR-INTERCHANGE.md).
+
+There is no package manager here: no manifest, no dependency download, no
+versions, no lock file, no search through installation directories.
+(`surface/modules.tcl`'s `ResolveModule` is the rule; tests in
+`tests/application-modules.test`; 2048-ENGINE-WORKLOAD.md's S4 is the
+finding.)
+
 ## Corpus migration
 
 A migrated file is the same program plus a header: `x = list::at(xs, i)` is
@@ -311,6 +386,7 @@ that reason alone it was removed.
 
 Import aliases, `as`, namespace aliases, wildcard imports, `using`, selective
 function/value imports, re-exports, public/private imports, export lists,
+private module members, package management,
 subtree imports, implicit imports, import-driven initialization,
 transitive visibility, nested-namespace *creation* or inheritance, overload
 resolution, namespaced `error` declarations.

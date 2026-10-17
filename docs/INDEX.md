@@ -216,6 +216,7 @@ The post-golden stress-test series: real programs written in ordinary
 Botlish to find what the language, library, compiler and tools need.
 
 - [2048-ENGINE-WORKLOAD.md](2048-ENGINE-WORKLOAD.md) -- a deterministic 2048 engine (`examples/games/2048/`), full-discovery baseline: findings, the GC root-slot fix it found, and what to fix before the restricted paired run
+- [POST-2048-PRODUCT-FIXES.md](POST-2048-PRODUCT-FIXES.md) -- the three product failures fixed before the paired run (application modules, native program output under main.tcl, the interpreter's recursion limit), and the findings deliberately left open
 
 ## Audits, censuses and investigations
 

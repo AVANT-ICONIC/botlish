@@ -9,13 +9,13 @@
 #
 # It prints the first moves' boards, then the final board, the score and
 # the largest tile. Output goes through io::print_line, which needs the
-# native backend; build it as an executable to see it:
+# native backend:
 #
-#   tclsh9.0 examples/games/2048/run.tcl -hirx /tmp/demo.hirx examples/games/2048/demo.bot
-#   tclsh9.0 main.tcl -emit-native-executable /tmp/demo.hirx && /tmp/demo
+#   tclsh9.0 main.tcl -backend cranelift examples/games/2048/demo.bot
 #
-# (Under `-backend cranelift` it runs, but main.tcl shows only its value:
-# 2048-ENGINE-WORKLOAD.md, S15.)
+# or, as a standalone executable (written beside it, as demo):
+#
+#   tclsh9.0 main.tcl -emit-native-executable examples/games/2048/demo.bot
 import game2048
 import io
 import linux::io

@@ -57,8 +57,9 @@ if {[info commands ::native::evalHir] eq ""} {
     source [file join $::golden::root native native.tcl]
 }
 # The Tcl backends evaluate Botlish calls as nested Tcl evaluations: the
-# test suite's own limit (tests/golden.test), not tclsh's default 1000.
-interp recursionlimit {} 100000
+# entry points' one limit (core/core.tcl), as main.tcl's, not tclsh's
+# default 1000.
+core::useProgramRecursionLimit
 
 
 # Compiles the Botlish program at PATH once: {ok HIR SECONDS} or {error
