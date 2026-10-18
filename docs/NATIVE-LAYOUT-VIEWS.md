@@ -400,9 +400,11 @@ on linux-x86_64, linux-aarch64, macos-*, windows-* (`nv-pointer-width-is-the-
 targets`). A layout's offsets are its own (explicit), so nothing else is
 target-dependent; byte order is the layout's (little-endian) and every
 supported target's. The native ops are architecture-neutral Rust (unaligned
-`copy_nonoverlapping`), so Linux AArch64 runs them as x86-64 does (its CI
-workflow runs the test file natively; it was not run on an arm64 machine for
-this report). macOS acceptance is not claimed.
+`copy_nonoverlapping`), so every host runs them alike. CI runs
+native-view.test natively on Linux AArch64 (`tests-arm64.yml`) and on
+macOS arm64 (Tier B), both green. On macOS its JIT tests run, while the
+allocation counts, GC stress, the executable and the C oracle skip by
+their capability constraints, exactly as every other file's do there.
 
 ## 12. Performance
 
@@ -594,7 +596,22 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
   (its Tcl original `gf-code-name-complete`) and macOS Tier B (both shards)
   all failed only on them. The native Rust unit tests, the warning gate,
   golden shards 2 and 4, macOS Tier A and the ubuntu control passed.
-  REGRESSION-CI-PENDING
+* **CI after the update**, every workflow on the branch:
+  - `tests` (`4563003`), every job green: interp, compile, cranelift and
+    cranelift-generic coverage, the four golden shards beside their Tcl
+    originals, the native Rust unit tests, the stub-linked executables and
+    the warning gate.
+  - `tests (linux arm64)` (`4563003`) on ubuntu-24.04-arm, green: interp,
+    compile, cranelift and cranelift-generic coverage, the four golden
+    shards, and the native Rust unit tests, also under GC stress. Its
+    GC-stress run of the Tcl suite: REGRESSION-ARM64-GC.
+  - `tests (macos arm64)` (`0802cc9`, after native-view.test's JIT tests
+    moved from `nativeLinux` to `nativeBuilt`), green: Tier A and both
+    Tier B shards. native-view.test runs in shard 1, on interp and compile,
+    with the native backend built.
+  - `static-decisions` (`4f73faf`; the later commits change no front-end
+    file), every suite's batched decisions agree with the sequential
+    reference.
 
 ## 15. What the existing layout architecture showed
 
