@@ -174,6 +174,9 @@ test abi-bytes-natives-registered {three natives and no more serve the immutable
     set bridge [core::native::metadata abi::x86_64::from_bytes]
     # (The writable counterpart's own natives -- byte_store::mutable_*, freeze,
     # freeze_prefix, from_mutable_bytes -- are pinned by tests/abi-mutable-bytes.test.)
+    # The only natives named for writing are the layout writes into a
+    # MutableBytes (NATIVE-LAYOUT-WRITES.md): each returns a new value and
+    # writes through no address; no native exposes storage or keeps it alive.
     list [lsort [lsearch -all -inline -not -regexp [lsearch -all -inline [core::native::names] byte_store::*] {mutable|freeze}]] \
         [dict get [core::native::metadata byte_store::from_list] paramTypes] \
         [dict get [core::native::metadata byte_store::from_list] contextFree] \
@@ -181,7 +184,7 @@ test abi-bytes-natives-registered {three natives and no more serve the immutable
         [dict get $bridge arity] [dict get $bridge paramTypes] [dict get $bridge resultShape] \
         [dict get $bridge contextFree] [dict get $bridge runtime] [dict get $bridge errors] \
         [lsearch -all -inline -regexp [core::native::names] {(?i)write|keepalive|pointer|ptr}]
-} -result {{byte_store::byte_count byte_store::from_list} list 1 collection-length 1 struct {named-struct abi::x86_64::Register64} 0 raw-address {} {}}
+} -result {{byte_store::byte_count byte_store::from_list} list 1 collection-length 1 struct {named-struct abi::x86_64::Register64} 0 raw-address {} {binary::write binary::write_foreign}}
 
 test abi-bytes-declaration {abi::bytes::Bytes is declared in lib/abi/bytes.bot (module abi::bytes, which owns both byte types) as an opaque struct with one hidden field; it is a source-level opaque struct like any other (OPAQUE-STRUCTS.md)} -body {
     set text [read [open [file join $::projectRoot lib abi bytes.bot]]]
