@@ -12,7 +12,8 @@
 #     each repeat one operation N times inside a collecting loop, reported as
 #     time per operation over the program's baseline, (program - baseline) /
 #     N, the whole program per operation in parentheses (bench/enums.tcl's
-#     method). The operations: a scalar field read through a view, a field
+#     method). The operations: a scalar field read through a view (and eight
+#     of them summed, the clearer per-read cost over the loop), a field
 #     two nested layouts deep, a pointer field (and its null test), making a
 #     view, binary::load of a whole record; beside the byte-backed
 #     equivalents: binary::parse of the same record then the same field
@@ -128,12 +129,14 @@ proc programText {kind n} {
         view-nested   { append p [Fn $n [Each $::viewSetup {v.outer.inner.x}]] }
         view-pointer  { append p [Fn $n [Each $::viewSetup {"q = v.next" "q.null?()"}]] }
         view-make     { append p [Fn $n [Each $::viewSetup {"w = binary::native::view(Rec, p)" "i"}]] }
+        view-scalar8  { append p [Fn $n [Each $::viewSetup {"v.word + v.head + v.outer.count + v.outer.last + v.word + v.head + v.outer.count + v.outer.last"}]] }
         view-load     { append p [Fn $n [Each $::viewSetup {"{word: w, next: q} = binary::load(v)" "w"}]] }
         bytes-base    { append p [Fn $n [Each $::bytesSetup {i}]] }
         bytes-parse-scalar { append p [Fn $n [Each $::bytesSetup {"s = binary::parse(RecBytes, d)" "s.word"}]] }
         bytes-parse-nested { append p [Fn $n [Each $::bytesSetup {"s = binary::parse(RecBytes, d)" "s.outer.inner.x"}]] }
         held-base     { append p [Fn $n [Each [concat $::bytesSetup {"s = binary::parse(RecBytes, d)"}] {i}]] }
         held-scalar   { append p [Fn $n [Each [concat $::bytesSetup {"s = binary::parse(RecBytes, d)"}] {s.word}]] }
+        held-scalar8  { append p [Fn $n [Each [concat $::bytesSetup {"s = binary::parse(RecBytes, d)"}] {"s.word + s.head + s.outer.count + s.outer.last + s.word + s.head + s.outer.count + s.outer.last"}]] }
         held-nested   { append p [Fn $n [Each [concat $::bytesSetup {"s = binary::parse(RecBytes, d)"}] {s.outer.inner.x}]] }
         default { error "unknown program $kind" }
     }
@@ -171,6 +174,7 @@ proc ns {x} {
 
 set operations {
     "view: a scalar field (v.word, one load)" view-scalar view-base
+    "view: eight scalar reads summed (8 loads)" view-scalar8 view-base
     "view: a field two layouts deep (v.outer.inner.x, one load)" view-nested view-base
     "view: a pointer field and its null test" view-pointer view-base
     "view: make a view (binary::native::view, a null test)" view-make view-base
@@ -179,6 +183,7 @@ set operations {
     "bytes: binary::parse of the same record, then the nested field" bytes-parse-nested bytes-base
     "bytes: the scalar of a LayoutStruct already imprinted" held-scalar held-base
     "bytes: the nested field of a LayoutStruct already imprinted" held-nested held-base
+    "bytes: eight scalar reads of a LayoutStruct already imprinted, summed" held-scalar8 held-base
 }
 
 puts "Read-only native layout views: performance (n = $n operations per program; best of $runs runs)\n"

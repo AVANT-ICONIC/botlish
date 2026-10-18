@@ -406,11 +406,56 @@ this report). macOS acceptance is not claimed.
 
 ## 12. Performance
 
-`bench/native-view.tcl` (RESULTS-PLACEHOLDER)
+`bench/native-view.tcl -runs 5 -n 200000` (4-core container, 2026-10-18,
+idle; two runs, both shown where they differ): programs that repeat one
+operation 200,000 times in a collecting loop, the time per operation over
+the loop's baseline (about 40-50 ns an iteration: the collecting loop
+itself), natively. The record is 32 bytes: a u8, a nested `Outer` (u32, a
+nested `Inner`, u8), a u32 and a pointer.
+
+| operation | Cranelift `-specialize 0` | Cranelift |
+|---|---:|---:|
+| view: one scalar field (`v.word`) | 12-17 ns | 13-16 ns |
+| view: eight scalar fields summed (8 loads) | 95-98 ns | 86-91 ns |
+| view: a field two layouts deep (`v.outer.inner.x`, one load) | 4-34 ns | 20-27 ns |
+| view: a pointer field and its null test | 4-7 ns | 7-9 ns |
+| view: make a view (`binary::native::view`: a null test) | about 0 | about 0-7 ns |
+| view: `binary::load` of the whole record (5 leaves, 3 structs) | 335-375 ns | 343-391 ns |
+| bytes: `binary::parse` of the same record, then one scalar | 263-282 ns | 254-268 ns |
+| bytes: one scalar of a `LayoutStruct` already imprinted | about 0 | about 0 |
+| bytes: eight scalars of a `LayoutStruct` already imprinted | about 0 | about 0-3 ns |
+
+Heap allocations per operation (Cranelift's counters): every field read,
+nested read, pointer read and view construction **0**; `binary::load` 3 (its
+`LayoutStruct` and the two nested ones); `binary::parse`-then-read 2 (the
+nested structs: a parse result read at once is held as fields, its nested
+`LayoutStruct`s are not). No byte storage is ever made by a view.
+
+* **A field read is about 11 ns** (eight summed: 86-98 ns): one runtime
+  helper call -- the unaligned load, the decode, the boxing -- exactly the
+  cost `binload` has per field (BINARY-LAYOUT.md item 51). It is a fixed
+  cost per read, never per record: no copy, no allocation, no layout walk.
+  The single-read rows are within the loop's noise; the eight-read row is
+  the measurement.
+* **Reads of an imprinted struct cost nothing here**: its fields are values
+  in registers, hoisted out of the loop, while every view read is a load of
+  memory that may change (it is a call, never hoisted or merged). A program
+  that reads a record many times and does not need its live contents can
+  `binary::load` it once (one record's cost, 335-391 ns) and read the
+  struct.
+* **Making a view is free** beyond its null test; a nested view is an
+  address computation, and a chain of nested views folds to one load at the
+  absolute offset (no `cptroffset` at all).
+* **Surprising fixed overhead**: none beyond the helper call. The deferred
+  optimization is the one BINARY-LAYOUT.md item 56 already names for
+  `binload`: an inline load (address word shifted, plus the constant
+  offset, a load of the field's width with its extension, the small-Int tag
+  or the BigInt helper for a u64 above i64::MAX) -- which needs the offset
+  and encoding as NIR immediates rather than registers.
 
 ## 13. Tests, the fixtures, fuzzing, mutants
 
-**`tests/native-view.test`** (38 tests, the authoritative suite; 19 s): the
+**`tests/native-view.test`** (39 tests, the authoritative suite; about 20 s): the
 pointer field declaration and rules, the target width, native-only layouts
 and their affine struct view; the NativeView type rules, distinctness, not a
 pointer, the operands, the untyped receiver, the declared null error,
@@ -420,7 +465,7 @@ and zero (u64 BigInts), nested and packed layouts, padding, pointer fields
 null), the byte-backed asymmetry, `binary::load` of a native-only layout;
 the Tcl backends, views as values, no equality; NIR shape, allocations; HIR
 text, interchange, isolation, cache; directness; the read-only surface; no
-new dependency; a standalone executable; GC stress; and the C oracle.
+new dependency; a standalone executable; GC stress; the unchecked (`-strict 0`) replays; and the C oracle.
 
 **The synthetic fixtures.**
 
@@ -441,13 +486,91 @@ new dependency; a standalone executable; GC stress; and the C oracle.
   read through the view are exactly C's (C compares them); the point record
   reads through a view of the recovered pointer.
 
-**Fuzzing** (`audit/native-view/tools/fuzz.tcl`, FUZZ-PLACEHOLDER).
+**Fuzzing** (`audit/native-view/tools/fuzz.tcl`). Each program is a chain of random layouts (one to six scalars of
+every width and signedness at random gapped offsets, random alignment, a
+layout nested by value two or three levels deep, and in the outermost zero
+to three pointer fields -- data and function pointers, aligned or not),
+values biased to each encoding's extremes and zero, random padding bytes,
+each pointer field null or not, a non-null data pointer the run-time address
+of a fixture record. The fuzzer assembles the record's bytes itself and
+checks every scalar leaf read through the view, the nested views passed to
+a function, every pointer field (null exactly when it wrote zeros, else the
+exact address; a data pointer read through a view of its own), the byte
+backing of the same bytes (the layout's parse, or its bits twin's, whose
+pointer words equal the pointers' address bits) and `binary::load`. Seeds 1,
+17, 41 and 99 at 40 programs each, seed 5 at 20 under
+`BOTLISH_NATIVE_GC_STRESS=1`, seed 7 at 20 with the Tcl backends too (each
+must refuse with NATIVE-ONLY): **no disagreement**. Running it first found
+nothing in the view code; it did find an unrelated pre-existing front-end
+limitation (section 15).
 
-**Mutants** (`audit/native-view/tools/mutate.tcl`, MUTANT-PLACEHOLDER).
+**Mutants** (`audit/native-view/tools/mutate.tcl`). `mutants.txt` holds 29 deliberate
+bugs, each applied alone to a private copy of the tree (the 7 native ones
+rebuilding its native backend), with three detectors: the Tcl suite
+(`tests/native-view.test`, the C oracle included), the fuzzer (20 programs,
+seed 7) and, for native mutants, the Rust unit tests (`--lib nview`). **All
+29 are killed** (2026-10-18):
+
+| defect (the brief's list first) | mutants | killed by |
+|---|---|---|
+| field offset ignored / read from offset zero | `offset-ignored-lowering`, `offset-zero-runtime` | tests, fuzzer (20/20), Rust |
+| signed load treated as unsigned | `signed-as-unsigned-lowering`, `-runtime` | tests, fuzzer (14/20), Rust |
+| width widened / narrowed | `width-widened-lowering`, `width-narrowed-runtime`, `pointer-width-hardcoded` | tests, fuzzer, Rust |
+| nested base address wrong | `nested-base-dropped-fold`, `-load`, `-runtime` | tests, fuzzer (9/20), Rust |
+| layout size ignored | `pointer-bounds-ignored` | tests (the declaration rules) |
+| byte-backed pointer field materialized | `bytes-make-pointers`, `nested-pointer-not-native-only` | tests |
+| native pointer field rejected or retagged | `pointer-retagged`, `pointer-rejected`, `pointer-as-int`, `pointer-type-unresolved` | tests, fuzzer, Rust |
+| null pointer mishandled | `null-check-inverted-native`, `null-check-missing-tcl`, `null-pointer-field-mishandled` | tests, fuzzer, Rust |
+| a view copies through Bytes | `copy-per-read` (a byte storage per read) | tests (NIR, allocations) |
+| directness bypassed | `view-not-direct` | tests, fuzzer (its programs' marker turns stale) |
+| the type: views structural, a view taken as a pointer, an untyped receiver accepted, the field type lost to specialization, pointer reads exempt from ownership | `views-structural`, `view-is-a-pointer`, `untyped-receiver-accepted`, `view-field-shape-lost`, `pointer-field-read-unowned` | tests (and the fuzzer for the shape) |
+| elaboration and HIR text | `projections-not-elaborated`, `hir-text-pointer-field-unread` | tests (and the fuzzer) |
+
+Per detector: the Tcl suite kills all 29, the fuzzer 19 (it generates valid
+programs only, so the static-check mutants are invisible to it), the Rust
+tests all 7 native mutants. None survived the first run.
 
 ## 14. Regression
 
-REGRESSION-PLACEHOLDER
+Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
+
+* **`tclsh9.0 tests/local.tcl`** (every Tcl test file on interp and compile,
+  every golden suite on all four backends through the front-end cache): 477
+  entries, 1,513 s. All 94 golden suites passed on every backend. Eight
+  entries failed, six tests in four files, and each failure was an
+  inventory pinning the registry's contents, which this milestone grows:
+  `ns-root-inventory` (the internal `binary#load`, `binary#view_field`),
+  `ns-error-signatures` (the builtin `NativeViewNull`),
+  `linux-syscall-native-registered` (`binary::native::view`,
+  `binary::load`), `me-nomethod-native-default-off` (the three new
+  `-nomethod` natives), `gf-code-name-complete` (98 diagnostic codes) and
+  `ns-no-nested-stdlib`. The last one is a design rule, not a count:
+  `binary::native` is two levels deep because directness is designated per
+  namespace (DIRECT-MODULES.md), and the view constructor needs a direct
+  namespace while `binary` itself must stay non-direct. The test now
+  exempts it alongside the platform and C ABI namespaces, and
+  STDLIB-NAMESPACES.md's table lists it. All four files pass after the
+  update (74/74, 37/37, 151/151, 42/42).
+* **`cargo test --release --lib`**: 242 passed, the five `nview_` tests
+  included.
+* **Stub linker** (`BOTLISH_NATIVE_LINKER=stub`): `tests/aot-stub-linker.test`
+  6/6, `tests/binary-layout.test` 51/51, `tests/native-view.test` 36 passed,
+  3 skipped. The skipped three are the C-oracle tests (`nvCFixture`): a
+  program that calls C links with the system linker, which the stub linker
+  refuses (C-FFI.md).
+* **GC stress** (`BOTLISH_NATIVE_GC_STRESS=1`): `tests/native-view.test`
+  39/39; the fuzzer, seed 5 × 20 programs, 0 disagreements.
+* **The neighbouring fuzzers**: binary-layout seeds 1, 17, 41 (× 40) and 5
+  (× 20, GC stress), c-abi-types seeds 1, 17, 41, direct-modules seeds 1, 17,
+  41: 0 disagreements.
+* **The neighbouring audits**: REGRESSION-AUDITS-PENDING
+* **CI, first push** (`4f73faf`, before the inventory update): every failure
+  was one of the six tests above. The Linux `tests (compile)` job (8,010
+  tests, 6 failed), the stub-linked executables (1 failed), golden shard 3
+  (its Tcl original `gf-code-name-complete`) and macOS Tier B (both shards)
+  all failed only on them. The native Rust unit tests, the warning gate,
+  golden shards 2 and 4, macOS Tier A and the ubuntu control passed.
+  REGRESSION-CI-PENDING
 
 ## 15. What the existing layout architecture showed
 
