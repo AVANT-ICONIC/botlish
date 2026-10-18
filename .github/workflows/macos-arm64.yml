@@ -1,14 +1,56 @@
 name: tests (macos arm64)
 
-# EXPLORATORY second version: a census of the whole test suite on a macOS
-# arm64 runner with the native backend built, the golden suites on every
-# backend, and probes of the native runtime's unsupported paths. Replaced by
-# the tiered workflow once the facts are known.
+# The macOS Apple Silicon port's CI (MACOS-AARCH64-PORT-AUDIT.md, section
+# 16): real arm64 macOS runners for an agent that develops on Linux. The
+# native backend is not ported yet; these jobs test what runs on macOS today
+# and check that what does not is refused the way the audit records.
+#
+#   smoke          Tier A, every push: the host and its C and Rust
+#                  toolchains (not Botlish), Tcl 9, core::cabi's macOS row,
+#                  the native build and its Rust unit tests, the native
+#                  status, the smoke tier (tests/platform/tier.tcl smoke)
+#   acceptance     Tier B, every push, two shards: the acceptance tier --
+#                  the test files and golden suites that pass on macOS
+#   linux control  Tier A on ubuntu-latest, every push: the same smoke
+#                  commands on Linux x86-64, for telling a macOS failure from
+#                  a Linux one at the same commit
+#   full           Tier C, opt-in: "[ci-full]" in the pushed head commit's
+#                  message, or a manual run with tier "full". By default
+#                  three shards of the acceptance tier on both Tcl backends
+#                  under BOTLISH_NATIVE_GC_STRESS=1; with a "CI-Tests:"
+#                  trailer in that commit message (or the "tests" input)
+#                  exactly the tier.tcl items it names -- "CI-Tests:
+#                  coroutines.test enums.bot", or "all" for the whole census
+#                  -- under GC stress only with a "CI-GC-Stress: 1" trailer
+#                  (or the "gc_stress" input)
+#
+# Pushes to any branch run it, so a feature branch gets macOS results before
+# this file is on main; a pull request from this repository's own branches
+# skips (its push already ran), one from a fork runs. Documentation-only
+# pushes skip. A newer push to the same branch cancels a running one, except
+# on main. The macOS runner label is MACOS_RUNNER below, the one place to
+# change it.
 
 on:
   push:
+    paths-ignore: ["**.md"]
   pull_request:
+    paths-ignore: ["**.md"]
   workflow_dispatch:
+    inputs:
+      tier:
+        description: "acceptance: the ordinary jobs; full: also Tier C"
+        type: choice
+        options: [acceptance, full]
+        default: acceptance
+      tests:
+        description: "Tier C's items instead of its default payload (tests/platform/tier.tcl items, space-separated: X.test, X.bot, smoke, acceptance, all, rust)"
+        required: false
+        default: ""
+      gc_stress:
+        description: "Run the named Tier C items under BOTLISH_NATIVE_GC_STRESS=1"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,155 +59,250 @@ concurrency:
   group: macos-arm64-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+env:
+  # An Apple Silicon (arm64) GitHub-hosted runner; the smoke job fails on
+  # anything else.
+  MACOS_RUNNER: macos-15
+
+defaults:
+  run:
+    # bash -eo pipefail (a step's default shell on macOS is /bin/bash -e,
+    # without pipefail, which would hide a failure piped through tee).
+    shell: bash
+
 jobs:
-  census:
-    name: census (Tcl suite on interp, shard ${{ matrix.shard }}/3)
+  plan:
+    name: plan
+    # A same-repository pull request's push run already covers its commits.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: macos-15
-    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.plan.outputs.runner }}
+      full: ${{ steps.plan.outputs.full }}
+      tests: ${{ steps.plan.outputs.tests }}
+      gc-stress: ${{ steps.plan.outputs.gc-stress }}
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - name: Decide the tiers
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+          INPUT_TIER: ${{ inputs.tier }}
+          INPUT_TESTS: ${{ inputs.tests }}
+          INPUT_GC_STRESS: ${{ inputs.gc_stress }}
+        run: |
+          full=false
+          tests=""
+          stress=0
+          case $EVENT in
+            workflow_dispatch)
+              [[ $INPUT_TIER == full ]] && full=true
+              tests=$INPUT_TESTS
+              [[ $INPUT_GC_STRESS == true ]] && stress=1
+              ;;
+            push)
+              [[ $MESSAGE == *"[ci-full]"* ]] && full=true
+              trailers=$(printf '%s\n' "$MESSAGE" | git interpret-trailers --parse)
+              tests=$(sed -n 's/^CI-Tests: *//p' <<< "$trailers" | tr '\n' ' ')
+              [[ $(sed -n 's/^CI-GC-Stress: *//p' <<< "$trailers") == 1 ]] && stress=1
+              ;;
+          esac
+          tests=$(echo $tests)
+          # The default payload is under GC stress.
+          [[ -z $tests ]] && stress=1
+          # Three shards for a tier, one job for named files and suites.
+          shards=1
+          if [[ -z $tests || " $tests " == *" all "* || " $tests " == *" acceptance "* ]]; then
+            shards=3
+          fi
+          {
+            echo "runner=$MACOS_RUNNER"
+            echo "full=$full"
+            echo "tests=$tests"
+            echo "gc-stress=$stress"
+            echo "shards=$(seq -s, 1 $shards | sed 's/^/[/; s/$/]/')"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## Plan"
+            echo "* event: $EVENT; macOS runner: \`$MACOS_RUNNER\`"
+            echo "* Tier A (smoke) and Tier B (acceptance): yes"
+            if [[ $full == true ]]; then
+              echo "* Tier C (full): yes; payload: ${tests:-the default, the acceptance tier}$([[ $stress == 1 ]] && echo ', under GC stress')"
+            else
+              echo "* Tier C (full): no (push a head commit whose message contains [ci-full], or run the workflow with tier full)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    name: smoke (Tier A, macOS arm64)
+    needs: plan
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Host
+        run: |
+          sw_vers
+          uname -a
+          echo "CPUs: $(sysctl -n hw.ncpu), memory: $(sysctl -n hw.memsize) bytes, page size: $(getconf PAGESIZE)"
+          echo "Xcode: $(xcode-select -p), SDK $(xcrun --show-sdk-version)"
+          if [[ $(uname -s) != Darwin || $(uname -m) != arm64 ]]; then
+            echo "::error::not a native arm64 macOS runner: $(uname -s) $(uname -m) (MACOS_RUNNER=$MACOS_RUNNER)"
+            exit 1
+          fi
+          if [[ $(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0) == 1 ]]; then
+            echo "::error::this shell runs under Rosetta translation"
+            exit 1
+          fi
+
+      # The toolchain, not Botlish: a C program (also linked against a
+      # static library) and Rust programs built and run as Mach-O arm64.
+      - name: Toolchain smoke (C, Rust, Cargo; not Botlish)
+        run: tests/platform/toolchain-smoke.sh
+
+      - name: Install prerequisites (Tcl 9, stable Rust)
+        run: tests/platform/setup-macos.sh "$GITHUB_PATH"
+
+      - name: C ABI facts against core::cabi's macos-aarch64 row
+        run: tclsh9.0 tests/platform/cabi-facts.tcl
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Native Rust unit tests
+        run: cargo test --release --manifest-path native/Cargo.toml --lib
+
+      # Each native capability works or is refused exactly as recorded for
+      # macos-aarch64 (MACOS-AARCH64-PORT-AUDIT.md, section 15).
+      - name: Native status
+        run: tclsh9.0 tests/platform/native-status.tcl -verbose 1
+
+      - name: Smoke tier
+        run: tclsh9.0 tests/platform/tier.tcl smoke 2>&1 | tee tier.log
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## Smoke (macOS arm64)"
+            echo '```'
+            awk '/^######## .*: (ok|FAILED)/ {print} /^######## [0-9]+ commands/ {tail = 1} tail {print}' tier.log 2>/dev/null | grep -a .  || echo "the smoke tier did not run"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  acceptance:
+    name: acceptance (Tier B, macOS arm64, shard ${{ matrix.shard }}/2)
+    needs: plan
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2]
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v5
-      - name: Prerequisites
+
+      - name: Install prerequisites (Tcl 9, stable Rust)
         run: tests/platform/setup-macos.sh "$GITHUB_PATH"
+
       - name: Build native (Cranelift) backend
         uses: ./.github/actions/build-native
-      - name: Tcl test files of this shard on interp
+
+      - name: Acceptance tier, this shard
         env:
-          CORE_BACKEND: interp
+          SHARD: ${{ matrix.shard }}
+        run: tclsh9.0 tests/platform/tier.tcl -shard "$SHARD/2" -backends interp acceptance 2>&1 | tee tier.log
+
+      - name: Publish summary
+        if: always()
+        env:
           SHARD: ${{ matrix.shard }}
         run: |
-          set +e
-          files=$(cd tests && ls *.test | awk -v s="$SHARD" 'NR % 3 == s' | tr '\n' ' ')
-          echo "files: $files"
-          start=$(date +%s)
-          tclsh9.0 tests/all.tcl -tmpdir "$(mktemp -d)" -file "$files" > census.log 2>&1
-          status=$?
-          end=$(date +%s)
-          echo "exit $status after $((end - start)) s"
-          grep -a -E '^(all.tcl:|Files with failing tests:|Test files exiting with errors:|Sourced)' -A3 census.log
           {
-            echo "## census shard $SHARD: exit $status, $((end - start)) s"
+            echo "## Acceptance (macOS arm64), shard $SHARD/2"
             echo '```'
-            grep -a -E '^[a-z0-9-]+\.test:|^all.tcl:|Files with failing tests|exiting with errors' -A2 census.log | grep -a -v '^--$' | head -300
+            awk '/^######## .*: (ok|FAILED)/ {print} /^######## [0-9]+ commands/ {tail = 1} tail {print}' tier.log 2>/dev/null | grep -a .  || echo "the acceptance tier did not run"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          tail -80 census.log
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: census-shard-${{ matrix.shard }}
-          path: census.log
-          if-no-files-found: ignore
 
-  golden:
-    name: golden suites on every backend (shard ${{ matrix.shard }}/2)
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: macos-15
-    timeout-minutes: 90
+  linux-control:
+    name: linux control (Tier A, ubuntu x86-64)
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain smoke (C, Rust, Cargo; not Botlish)
+        run: tests/platform/toolchain-smoke.sh
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: C ABI facts against core::cabi's linux-x86_64 row
+        run: tclsh9.0 tests/platform/cabi-facts.tcl
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Native status
+        run: tclsh9.0 tests/platform/native-status.tcl -verbose 1
+
+      - name: Smoke tier
+        run: tclsh9.0 tests/platform/tier.tcl smoke
+
+  full:
+    name: full (Tier C, macOS arm64, shard ${{ matrix.shard }})
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1]
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    env:
+      SHARDS: ${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@v5
-      - name: Prerequisites
+
+      - name: Install prerequisites (Tcl 9, stable Rust)
         run: tests/platform/setup-macos.sh "$GITHUB_PATH"
+
       - name: Build native (Cranelift) backend
         uses: ./.github/actions/build-native
-      - name: Golden suites of this shard
+
+      - name: Tier C items, this shard
         env:
+          ITEMS: ${{ needs.plan.outputs.tests }}
+          STRESS: ${{ needs.plan.outputs.gc-stress }}
           SHARD: ${{ matrix.shard }}
         run: |
-          set +e
-          suites=$(ls tests/golden/*.bot | awk -v s="$SHARD" 'NR % 2 == s')
-          start=$(date +%s)
-          tclsh9.0 tests/golden/run.tcl -quiet $suites > golden.log 2>&1
-          status=$?
-          end=$(date +%s)
-          echo "exit $status after $((end - start)) s"
+          read -r -a items <<< "${ITEMS:-acceptance}"
+          tclsh9.0 tests/platform/tier.tcl -shard "$SHARD/$SHARDS" -gc-stress "$STRESS" "${items[@]}" 2>&1 | tee tier.log
+
+      - name: Publish summary
+        if: always()
+        env:
+          SHARD: ${{ matrix.shard }}
+          ITEMS: ${{ needs.plan.outputs.tests }}
+          STRESS: ${{ needs.plan.outputs.gc-stress }}
+        run: |
           {
-            echo "## golden shard $SHARD: exit $status, $((end - start)) s"
+            echo "## Full, shard $SHARD/$SHARDS: ${ITEMS:-acceptance} (GC stress: $STRESS)"
             echo '```'
-            grep -a -v -E ' [0-9]+ passed, 0 failed' golden.log | head -200
+            awk '/^######## .*: (ok|FAILED)/ {print} /^######## [0-9]+ commands/ {tail = 1} tail {print}' tier.log 2>/dev/null | grep -a .  || echo "nothing ran in this shard"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          cat golden.log
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: golden-shard-${{ matrix.shard }}
-          path: golden.log
+          name: full-shard-${{ matrix.shard }}
+          path: tier.log
           if-no-files-found: ignore
-
-  probes:
-    name: native runtime probes
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: macos-15
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v5
-      - name: Prerequisites
-        run: tests/platform/setup-macos.sh "$GITHUB_PATH"
-      - name: Build native (Cranelift) backend
-        uses: ./.github/actions/build-native
-      - name: Probes
-        run: |
-          set +e
-          bin=native/target/release/botlish-native
-          fx=native/tests/fixtures
-          p="$RUNNER_TEMP/probes"; mkdir -p "$p"
-          probe() { echo "::group::$1"; shift; "$@"; echo "exit status: $?"; echo "::endgroup::"; }
-          probe "fib.nir" $bin run $fx/fib.nir
-          probe "stack_overflow.ir, 4 MiB stack" env BOTLISH_NATIVE_STACK_BYTES=4194304 $bin run $fx/stack_overflow.ir
-          probe "stack_overflow.ir, default stack" $bin run $fx/stack_overflow.ir
-          probe "large_frame_overflow.nir, 4 MiB stack" env BOTLISH_NATIVE_STACK_BYTES=4194304 $bin run $fx/large_frame_overflow.nir
-          probe "build400.nir under GC stress" env BOTLISH_NATIVE_GC_STRESS=1 $bin run $fx/build400.nir
-          probe "loop-count.nir" $bin run $fx/loop-count.nir
-          cat > "$p/deep.bot" <<'EOF'
-          fn depth(n):
-              if n == 0:
-                  return 0
-
-              1 + depth(n - 1)
-
-          depth(100000000)
-          EOF
-          cat > "$p/coroutine.bot" <<'EOF'
-          struct Message:
-              value: int
-
-          struct Event:
-              value: int
-
-          fn deep(base: int, resume Message) -> int:
-              message = yield Event {value: base}
-              message.value
-
-          fn worker(base: int, resume Message) -> Event:
-              x = deep(base)
-              message = yield Event {value: x}
-              return Event {value: message.value}
-
-          coroutine {step, first} = worker(10)
-          second = step(Message {value: 7})
-          [first.value, second.value]
-          EOF
-          probe "deep recursion, cranelift" tclsh9.0 main.tcl -backend cranelift "$p/deep.bot"
-          probe "deep recursion, cranelift, 64 MiB stack" env BOTLISH_NATIVE_STACK_BYTES=67108864 tclsh9.0 main.tcl -backend cranelift "$p/deep.bot"
-          probe "coroutine, interp" tclsh9.0 main.tcl -backend interp "$p/coroutine.bot"
-          probe "coroutine, cranelift" tclsh9.0 main.tcl -backend cranelift "$p/coroutine.bot"
-          probe "portable hello (syscalls), cranelift" tclsh9.0 main.tcl -backend cranelift examples/io/hello.bot
-          probe "linux::write, cranelift" tclsh9.0 main.tcl -backend cranelift examples/linux/write.bot
-          probe "C FFI (Tcl library), cranelift" tclsh9.0 main.tcl -backend cranelift examples/ffi/tcl/tcl.bot
-          probe "stdlib examples, cranelift" tclsh9.0 main.tcl -backend cranelift examples/stdlib/*.bot
-          probe "stdlib examples, cranelift-generic" tclsh9.0 main.tcl -backend cranelift-generic examples/stdlib/*.bot
-          probe "object file" sh -c "echo 'source native/native.tcl; native::object [surface::readProgramFile examples/surface/02-recursion.bot] $p/fib.o' | tclsh9.0; file $p/fib.o; nm $p/fib.o | head -20; otool -l $p/fib.o | grep -A4 LC_BUILD_VERSION"
-          probe "cargo test (all targets)" cargo test --release --manifest-path native/Cargo.toml
-          probe "cargo test under GC stress" env BOTLISH_NATIVE_GC_STRESS=1 cargo test --release --manifest-path native/Cargo.toml
-          probe "codesign of botlish-native" codesign -dv $bin
-          probe "botlish-aot-stub" native/target/release/botlish-aot-stub
-          probe "ulimit -s" sh -c 'ulimit -s; sysctl kern.stack_size 2>/dev/null; sysctl -a 2>/dev/null | grep -i -E "stack|maxproc" | head'
