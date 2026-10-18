@@ -356,7 +356,9 @@ new tests), `tests/golden-framework.test` (42 of 42), `tests/affine.test`
 0 disagreements). In CI: `tests.yml` run
 [39157572693](https://github.com/mwagner-webdev/botlish/actions/runs/39157572693):
 success (dispatched on 4dafa4e, the last commit that changed runtime code or
-test gating; later commits add a test, documentation and tier files).
+test gating), and again on the final head f2e2059, run
+[39173139465](https://github.com/mwagner-webdev/botlish/actions/runs/39173139465):
+success.
 
 ## 16. Linux AArch64 regression results
 
