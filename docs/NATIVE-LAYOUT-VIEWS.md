@@ -422,7 +422,7 @@ nested `Inner`, u8), a u32 and a pointer.
 | view: a field two layouts deep (`v.outer.inner.x`, one load) | 4-34 ns | 20-27 ns |
 | view: a pointer field and its null test | 4-7 ns | 7-9 ns |
 | view: make a view (`binary::native::view`: a null test) | about 0 | about 0-7 ns |
-| view: `binary::load` of the whole record (5 leaves, 3 structs) | 335-375 ns | 343-391 ns |
+| view: `binary::load` of the whole record (4 fields, 2 nested layouts: 3 structs) | 335-375 ns | 343-391 ns |
 | bytes: `binary::parse` of the same record, then one scalar | 263-282 ns | 254-268 ns |
 | bytes: one scalar of a `LayoutStruct` already imprinted | about 0 | about 0 |
 | bytes: eight scalars of a `LayoutStruct` already imprinted | about 0 | about 0-3 ns |
