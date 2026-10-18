@@ -750,8 +750,10 @@ It took 36.6 minutes.
 * The test then passed on both backends.
 * No other test pinned main.tcl's output in a way the help lines changed.
 
-After the last changes, the 37 test files that drive main.tcl or
-Compilerpedia were run again: pending at this revision.
+After the last changes, `tests/local.tcl -parts tcl` was run again over the
+38 test files that drive main.tcl or Compilerpedia, on interp and compile:
+3,553 passed, 0 failed, 1,405 skipped (golden duplicates and host
+constraints), in 8.4 minutes.
 
 **Compilerpedia**
 
