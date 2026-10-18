@@ -816,7 +816,27 @@ census row:
   * passed: warning gate, native Rust unit tests, and golden shards 1 to 4
     (every suite beside its Tcl originals);
   * failed: the stub-linked job, on the same pinned-output test, fixed above.
-* The run on the final head: pending at this revision.
+* `tests.yml` on the next head failed only in the interp and compile jobs'
+  examples step. That step, in `tests-arm64.yml` too, ran main.tcl with no
+  file and relied on the old demo mode; main.tcl then rejected it (`no
+  input file`). Both workflows now name `examples/*.ir`, and on that head
+  `tests.yml` and `tests-arm64.yml` passed every job.
+* Main gained the macOS port's CI in the meantime, and the branch merged
+  it. Two more fixes followed:
+  * its `tests/platform/tier.tcl` relied on the demo mode in the same way;
+  * the Compilerpedia check ran native examples on a host whose native
+    runtime does not yet make Linux syscalls or C calls.
+* On the final head, after the merge and those two fixes:
+  * `tests.yml` passed every job: interp, compile, cranelift and
+    cranelift-generic coverage, stub-linked executables, golden shards 1
+    to 4, warning gate and native Rust unit tests. The GC-stress job
+    runs only on pushes to main.
+  * `macos-arm64.yml` passed: Tier A smoke, Tier B acceptance (both
+    shards) and the Linux control.
+  * Since their green runs, nothing `single-executable.yml` packs has
+    changed. For `tests-arm64.yml`, the only change is the examples
+    check's host test, which still selects the native backends on Linux
+    AArch64.
 
 The static-decisions workflow was not dispatched. It compares the
 schedulers' decisions, which are taken inside the build, from diagnostics.
