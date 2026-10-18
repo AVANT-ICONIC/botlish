@@ -307,23 +307,33 @@ impl SetObj {
 /// its first element out by advancing it) or an affine drop emptied. Slots
 /// before START are no element: nothing reads or traces them again.
 ///
-/// Generated code reads two words of the header directly, at fixed
+/// Generated code reads three words of the header directly, at fixed
 /// `#[repr(C)]` offsets, the way it reads a List's `len`/`ptr`
-/// (codegen::clif's inline `mutable_array::capacity` and `at`):
+/// (codegen::clif's inline `mutable_array::capacity`, `at` and `set`):
 ///
 ///   * LEN (`MUTARRAY_LEN_OFFSET`), the number of elements, `backing.len()
 ///     - START` (so START is not stored: it is `backing.len() - LEN`);
 ///   * PTR (`MUTARRAY_PTR_OFFSET`), the address of the first element,
-///     `&backing[START]` (one past the last slot when there is none).
+///     `&backing[START]` (one past the last slot when there is none);
+///   * UNIQUE (`MUTARRAY_UNIQUE_OFFSET`), nonzero only while the backing is
+///     known to be this header's alone (`Rc::strong_count == 1`, no weak
+///     reference: what `Rc::get_mut` requires), so a write through PTR
+///     changes this array and no logical copy of it.
 ///
 /// They are a cache of the backing and START, never independent state: the
 /// backing is private, and the only operations that change it or START
-/// (`new`, `replace_backing`, `advance`) set LEN and PTR from it.
+/// (`new`, `replace_backing`, `advance`) set LEN and PTR from it. UNIQUE
+/// may be stale only in the safe direction (0 for a backing that has
+/// become unique again, when the collector freed the other header): it is
+/// set by `new` from the counts, cleared by `share_backing` (the one place
+/// a backing gains a holder) and refreshed by `items_mut` (every runtime
+/// write's entry, so the helper slow path re-enables the inline one).
 #[repr(C)]
 pub struct MutArrayObj {
     pub hdr: Header,
     len: usize,
     ptr: *mut Value,
+    unique: usize,
     backing: std::rc::Rc<[Value]>,
 }
 
@@ -331,17 +341,19 @@ impl MutArrayObj {
     /// A header on BACKING whose elements are its slots from START on.
     pub fn new(start: usize, backing: std::rc::Rc<[Value]>) -> MutArrayObj {
         assert!(start <= backing.len(), "a MutableArray's start is inside its backing");
-        let mut obj = MutArrayObj { hdr: Header::new(KIND_MUTARRAY, false), len: 0, ptr: std::ptr::null_mut(), backing };
+        let mut obj = MutArrayObj { hdr: Header::new(KIND_MUTARRAY, false), len: 0, ptr: std::ptr::null_mut(), unique: 0, backing };
         obj.cache(start);
         obj
     }
 
-    /// Sets LEN and PTR from the backing and START.
+    /// Sets LEN, PTR and UNIQUE from the backing and START.
     fn cache(&mut self, start: usize) {
+        use std::rc::Rc;
         self.len = self.backing.len() - start;
         // SAFETY: START <= backing.len(): an address inside the backing's
         // slots, or one past its last.
-        self.ptr = unsafe { (std::rc::Rc::as_ptr(&self.backing) as *mut Value).add(start) };
+        self.ptr = unsafe { (Rc::as_ptr(&self.backing) as *mut Value).add(start) };
+        self.unique = (Rc::strong_count(&self.backing) == 1 && Rc::weak_count(&self.backing) == 0) as usize;
     }
 
     /// The index of the first element in the backing.
@@ -361,16 +373,26 @@ impl MutArrayObj {
         self.len
     }
 
-    /// The elements, writable, when the backing is this header's alone;
-    /// None when it is shared.
+    /// The elements, writable, when the backing is this header's alone
+    /// (refreshing UNIQUE either way); None when it is shared.
     pub fn items_mut(&mut self) -> Option<&mut [Value]> {
         let start = self.start();
-        std::rc::Rc::get_mut(&mut self.backing).map(|slots| &mut slots[start..])
+        match std::rc::Rc::get_mut(&mut self.backing) {
+            Some(slots) => {
+                self.unique = 1;
+                Some(&mut slots[start..])
+            }
+            None => {
+                self.unique = 0;
+                None
+            }
+        }
     }
 
     /// START and a new holder of the backing, for a logical copy's header
     /// (`MutArrayObj::new` of them): the backing is shared from now on.
     pub fn share_backing(&mut self) -> (usize, std::rc::Rc<[Value]>) {
+        self.unique = 0;
         (self.start(), std::rc::Rc::clone(&self.backing))
     }
 
@@ -440,6 +462,7 @@ pub const LIST_PTR_OFFSET: i32 = offset_of!(ListObj, ptr) as i32;
 pub const STRUCT_PTR_OFFSET: i32 = offset_of!(StructObj, ptr) as i32;
 pub const MUTARRAY_LEN_OFFSET: i32 = offset_of!(MutArrayObj, len) as i32;
 pub const MUTARRAY_PTR_OFFSET: i32 = offset_of!(MutArrayObj, ptr) as i32;
+pub const MUTARRAY_UNIQUE_OFFSET: i32 = offset_of!(MutArrayObj, unique) as i32;
 
 #[inline]
 pub fn is_small(v: Value) -> bool {

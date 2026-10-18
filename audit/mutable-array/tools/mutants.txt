@@ -72,6 +72,27 @@
     vm(p).metrics.record_mutarray_share();
 >>>>
 
+# The header words generated code reads (value.rs's MutArrayObj: LEN, PTR,
+# UNIQUE; codegen/clif.rs's inline capacity, at and set).
+
+@@ share-keeps-unique-native a logical copy leaves its source header's UNIQUE word set (native): the inline set writes through the source into the backing the copy still holds
+## native/src/runtime/value.rs
+<<<<
+    pub fn share_backing(&mut self) -> (usize, std::rc::Rc<[Value]>) {
+        self.unique = 0;
+====
+    pub fn share_backing(&mut self) -> (usize, std::rc::Rc<[Value]>) {
+>>>>
+
+@@ detach-keeps-stale-pointer-native a detach leaves the header's PTR and LEN words on the old backing (native): inline reads and writes through the detached header still reach the backing its copies hold
+## native/src/runtime/value.rs
+<<<<
+        self.backing = backing;
+        self.cache(0);
+====
+        self.backing = backing;
+>>>>
+
 @@ param-mutation-leaks an array parameter is never copied for its callee (no entry copy, no caller-side copy of a consumed parameter's argument): the callee's mutations reach the caller's array
 ## hir/mutvec.tcl
 <<<<
