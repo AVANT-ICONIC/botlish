@@ -1,8 +1,9 @@
 name: tests (macos arm64)
 
-# EXPLORATORY first version: records what a macOS arm64 runner provides and
-# what the checkout does there. Replaced by the tiered workflow once the
-# facts are known.
+# EXPLORATORY second version: a census of the whole test suite on a macOS
+# arm64 runner with the native backend built, the golden suites on every
+# backend, and probes of the native runtime's unsupported paths. Replaced by
+# the tiered workflow once the facts are known.
 
 on:
   push:
@@ -17,86 +18,154 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  explore:
-    name: explore (macos-15)
+  census:
+    name: census (Tcl suite on interp, shard ${{ matrix.shard }}/3)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: macos-15
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prerequisites
+        run: tests/platform/setup-macos.sh "$GITHUB_PATH"
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+      - name: Tcl test files of this shard on interp
+        env:
+          CORE_BACKEND: interp
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set +e
+          files=$(cd tests && ls *.test | awk -v s="$SHARD" 'NR % 3 == s' | tr '\n' ' ')
+          echo "files: $files"
+          start=$(date +%s)
+          tclsh9.0 tests/all.tcl -tmpdir "$(mktemp -d)" -file "$files" > census.log 2>&1
+          status=$?
+          end=$(date +%s)
+          echo "exit $status after $((end - start)) s"
+          grep -a -E '^(all.tcl:|Files with failing tests:|Test files exiting with errors:|Sourced)' -A3 census.log
+          {
+            echo "## census shard $SHARD: exit $status, $((end - start)) s"
+            echo '```'
+            grep -a -E '^[a-z0-9-]+\.test:|^all.tcl:|Files with failing tests|exiting with errors' -A2 census.log | grep -a -v '^--$' | head -300
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          tail -80 census.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: census-shard-${{ matrix.shard }}
+          path: census.log
+          if-no-files-found: ignore
+
+  golden:
+    name: golden suites on every backend (shard ${{ matrix.shard }}/2)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: macos-15
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prerequisites
+        run: tests/platform/setup-macos.sh "$GITHUB_PATH"
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+      - name: Golden suites of this shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set +e
+          suites=$(ls tests/golden/*.bot | awk -v s="$SHARD" 'NR % 2 == s')
+          start=$(date +%s)
+          tclsh9.0 tests/golden/run.tcl -quiet $suites > golden.log 2>&1
+          status=$?
+          end=$(date +%s)
+          echo "exit $status after $((end - start)) s"
+          {
+            echo "## golden shard $SHARD: exit $status, $((end - start)) s"
+            echo '```'
+            grep -a -v -E ' [0-9]+ passed, 0 failed' golden.log | head -200
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat golden.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-shard-${{ matrix.shard }}
+          path: golden.log
+          if-no-files-found: ignore
+
+  probes:
+    name: native runtime probes
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: macos-15
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
-
-      - name: Host
-        run: |
-          sw_vers
-          uname -a
-          uname -m
-          sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize hw.pagesize || true
-          getconf PAGESIZE
-          xcode-select -p
-          xcrun --show-sdk-path
-          xcrun --show-sdk-version
-          clang --version
-          ld -v 2>&1 || true
-          which -a bash tclsh tclsh9.0 tclsh8.6 rustc cargo rustup cc ld file otool lipo nproc timeout objdump || true
-          bash --version | head -1
-          echo "PATH=$PATH"
-          locale -a | grep -i -E 'utf|^c' | head -20
-          brew --version
-          brew info tcl-tk | head -20
-
-      - name: Toolchain smoke (not Botlish)
-        run: tests/platform/toolchain-smoke.sh
-
       - name: Prerequisites
         run: tests/platform/setup-macos.sh "$GITHUB_PATH"
-
-      - name: Tcl facts
-        run: |
-          which tclsh9.0
-          for loc in unset C C.UTF-8 C.utf8 en_US.UTF-8; do
-            if [ $loc = unset ]; then
-              echo "locale $loc: $(env -u LANG -u LC_ALL -u LC_CTYPE tclsh9.0 <<< 'puts "[encoding system] [fconfigure stdout -encoding] [info patchlevel] $tcl_platform(os) $tcl_platform(machine) $tcl_platform(osVersion)"')"
-            else
-              echo "locale $loc: $(env LANG=$loc LC_ALL=$loc tclsh9.0 <<< 'puts "[encoding system] [fconfigure stdout -encoding]"')"
-            fi
-          done
-          tclsh9.0 <<< 'puts [array get tcl_platform]; puts [package require tcltest]; puts [info library]'
-
-      - name: C ABI facts against core::cabi
-        env: { LANG: en_US.UTF-8, LC_ALL: en_US.UTF-8 }
-        run: tclsh9.0 tests/platform/cabi-facts.tcl
-
-      - name: Examples on the Tcl backends
-        env: { LANG: en_US.UTF-8, LC_ALL: en_US.UTF-8 }
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+      - name: Probes
         run: |
           set +e
-          tclsh9.0 main.tcl -backend interp; echo "interp default: $?"
-          tclsh9.0 main.tcl -backend compile examples/surface/0[1-8]*.bot examples/surface/1[1-5]*.bot; echo "compile surface: $?"
-          tclsh9.0 main.tcl -backend interp examples/stdlib/*.bot > stdlib.txt 2>&1; echo "interp stdlib: $?"; tail -5 stdlib.txt
+          bin=native/target/release/botlish-native
+          fx=native/tests/fixtures
+          p="$RUNNER_TEMP/probes"; mkdir -p "$p"
+          probe() { echo "::group::$1"; shift; "$@"; echo "exit status: $?"; echo "::endgroup::"; }
+          probe "fib.nir" $bin run $fx/fib.nir
+          probe "stack_overflow.ir, 4 MiB stack" env BOTLISH_NATIVE_STACK_BYTES=4194304 $bin run $fx/stack_overflow.ir
+          probe "stack_overflow.ir, default stack" $bin run $fx/stack_overflow.ir
+          probe "large_frame_overflow.nir, 4 MiB stack" env BOTLISH_NATIVE_STACK_BYTES=4194304 $bin run $fx/large_frame_overflow.nir
+          probe "build400.nir under GC stress" env BOTLISH_NATIVE_GC_STRESS=1 $bin run $fx/build400.nir
+          probe "loop-count.nir" $bin run $fx/loop-count.nir
+          cat > "$p/deep.bot" <<'EOF'
+          fn depth(n):
+              if n == 0:
+                  return 0
 
-      - name: A few Tcl test files on interp
-        env: { LANG: en_US.UTF-8, LC_ALL: en_US.UTF-8, CORE_BACKEND: interp }
-        run: |
-          set +e
-          tclsh9.0 tests/all.tcl -tmpdir "$(mktemp -d)" -file "blocks.test control.test calls.test surface-samples.test hir-samples.test inference.test"; echo "exit $?"
+              1 + depth(n - 1)
 
-      - name: Native backend build
-        run: |
-          set +e
-          cargo build --release -j 3 --manifest-path native/Cargo.toml 2>&1 | tail -60; echo "cargo build: ${PIPESTATUS[0]}"
-          ls -la native/target/release | head -30
+          depth(100000000)
+          EOF
+          cat > "$p/coroutine.bot" <<'EOF'
+          struct Message:
+              value: int
 
-      - name: Native probes
-        env: { LANG: en_US.UTF-8, LC_ALL: en_US.UTF-8 }
-        run: |
-          set +e
-          if [ -x native/target/release/botlish-native ]; then
-            cargo test --release -j 3 --manifest-path native/Cargo.toml --lib 2>&1 | tail -60; echo "cargo test lib: ${PIPESTATUS[0]}"
-            tclsh9.0 main.tcl -backend cranelift examples/surface/01-arithmetic.bot; echo "cranelift 01: $?"
-            tclsh9.0 main.tcl -backend cranelift examples/surface/0[1-8]*.bot; echo "cranelift surface: $?"
-            cp examples/surface/01-arithmetic.bot "$RUNNER_TEMP/a.bot"
-            tclsh9.0 main.tcl -emit-native-executable "$RUNNER_TEMP/a.bot"; echo "emit exe: $?"
-            ls -la "$RUNNER_TEMP"
-            [ -f "$RUNNER_TEMP/a" ] && { file "$RUNNER_TEMP/a"; "$RUNNER_TEMP/a"; echo "run exe: $?"; }
-            CORE_BACKEND=interp tclsh9.0 tests/all.tcl -tmpdir "$(mktemp -d)" -file "elif.test" 2>&1 | tail -30
-          fi
+          struct Event:
+              value: int
+
+          fn deep(base: int, resume Message) -> int:
+              message = yield Event {value: base}
+              message.value
+
+          fn worker(base: int, resume Message) -> Event:
+              x = deep(base)
+              message = yield Event {value: x}
+              return Event {value: message.value}
+
+          coroutine {step, first} = worker(10)
+          second = step(Message {value: 7})
+          [first.value, second.value]
+          EOF
+          probe "deep recursion, cranelift" tclsh9.0 main.tcl -backend cranelift "$p/deep.bot"
+          probe "deep recursion, cranelift, 64 MiB stack" env BOTLISH_NATIVE_STACK_BYTES=67108864 tclsh9.0 main.tcl -backend cranelift "$p/deep.bot"
+          probe "coroutine, interp" tclsh9.0 main.tcl -backend interp "$p/coroutine.bot"
+          probe "coroutine, cranelift" tclsh9.0 main.tcl -backend cranelift "$p/coroutine.bot"
+          probe "portable hello (syscalls), cranelift" tclsh9.0 main.tcl -backend cranelift examples/io/hello.bot
+          probe "linux::write, cranelift" tclsh9.0 main.tcl -backend cranelift examples/linux/write.bot
+          probe "C FFI (Tcl library), cranelift" tclsh9.0 main.tcl -backend cranelift examples/ffi/tcl/tcl.bot
+          probe "stdlib examples, cranelift" tclsh9.0 main.tcl -backend cranelift examples/stdlib/*.bot
+          probe "stdlib examples, cranelift-generic" tclsh9.0 main.tcl -backend cranelift-generic examples/stdlib/*.bot
+          probe "object file" sh -c "echo 'source native/native.tcl; native::object [surface::readProgramFile examples/surface/02-recursion.bot] $p/fib.o' | tclsh9.0; file $p/fib.o; nm $p/fib.o | head -20; otool -l $p/fib.o | grep -A4 LC_BUILD_VERSION"
+          probe "cargo test (all targets)" cargo test --release --manifest-path native/Cargo.toml
+          probe "cargo test under GC stress" env BOTLISH_NATIVE_GC_STRESS=1 cargo test --release --manifest-path native/Cargo.toml
+          probe "codesign of botlish-native" codesign -dv $bin
+          probe "botlish-aot-stub" native/target/release/botlish-aot-stub
+          probe "ulimit -s" sh -c 'ulimit -s; sysctl kern.stack_size 2>/dev/null; sysctl -a 2>/dev/null | grep -i -E "stack|maxproc" | head'
