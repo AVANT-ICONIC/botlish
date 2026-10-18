@@ -194,7 +194,12 @@ transport): on another host it is compiled but not run (status
 `host-excluded`). A suite whose syscalls go through the portable wrappers
 (`linux::write`, `linux::read`, `linux::io`) needs no host: they use the
 target architecture's transport (LINUX-SYSCALL-TRANSPORTS.md), and its Tcl
-originals carry `nativeLinux`. On such a host `check.tcl` reports a Tcl
+originals carry `nativeLinux`. A suite that imports a Linux namespace is a
+Linux program: on a host of another operating system (macOS arm64) run.tcl
+compiles it for the Linux target of the host's architecture
+(`golden::target`, `core::cabi::systemTarget`) and runs it on the Tcl
+backends only, its native backends excluded with the reason (a native
+backend runs its own host's target only); on Linux nothing changes. On such a host `check.tcl` reports a Tcl
 original skipped by a host constraint (`linuxX86_64`, `linuxAarch64`,
 `stubLinker`, `x86_64Host`) as `host-skip` and accepts its row only as "old
 host-skip, new pass" or "old host-skip, new host-excluded": the row is

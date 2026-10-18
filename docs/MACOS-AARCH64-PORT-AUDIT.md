@@ -134,25 +134,49 @@ fallout).
 
 The front end already has a target dimension: a compilation's C ABI
 target, `-target NAME` or the host's. It is keyed by OS *and*
-architecture, and the macOS rows exist. What is keyed by architecture
-alone is the Linux syscall layer and the choice of an
-architecture-specific module.
+architecture, and the macOS rows exist. What was keyed by architecture
+alone -- the Linux syscall layer and the choice of an
+architecture-specific module -- milestone 2 resolved: a target is an
+operating system and an architecture everywhere target-dependent meaning
+enters (C facts, module resolution), persists (the HIR, interchange, the
+cache) or runs (the native driver). MACOS-AARCH64-MILESTONE-2.md has the
+details and the evidence.
 
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
-| core/cabi.tcl `targets`, `models` (:51-60) | none: `macos-aarch64 {os macos arch aarch64 model LP64 charSigned 1}` exists | -- | none: verified against Apple clang (section 1). The row's `os` field is read by no code | low | 2 | M (done) |
-| core/cabi.tcl `hostTarget` (:110-126) | none: Darwin -> macos, arm64 -> aarch64 | -- | none: verified, `macos-aarch64` | low | 2 | M (done) |
-| core/linuxabi.tcl `transports` (:75-93), `transportOf`, `syscallImpl` (:142-147, "on Linux") | the syscall transport table is keyed by architecture only | arch + linux | keep it Linux's: an OS dimension (or a Linux-only table that macOS never consults); never a Darwin row in it -- macOS needs no raw syscall transport (section 9) | medium | 2, 9 | L |
-| core/linuxabi.tcl :149-164 | both transports registered and their namespaces declared direct whatever the target | linux | on a macOS target they type-check and compile, and refuse at run time; decide whether a macOS compilation should reject them statically | low | 2, 9 | L |
-| core/bytestore.tcl `bridges` (:91-101, :133-146) | `abi::ARCH::from_bytes`/`from_mutable_bytes` come from the Linux transport table | arch | OS-neutral in substance (an address to a register word); keep them, decouple their generation from the Linux table if a second table appears | low | 2 | L |
-| surface/modules.tcl `ModuleFile`, `ArchModuleFiles`, `ArchModulePath` (:281-347); header :39-54 | an architecture-specific module is chosen by architecture only, "never by operating system" | arch | on `macos-aarch64` `linux::sys` resolves to `lib/linux/sys.aarch64.bot` today (pinned by tests/linux-syscall-transports.test:280-285). A Linux module on macOS should be an explicit refusal, not a silent pick: an OS check for `linux::*` or an OS-keyed module rule | medium | 2 | L |
-| surface/cache.tcl `Key` (:81-95), `Dependencies` (:121-151) | none for the key: it holds the full target name | -- | none (Dependencies follows ModuleFile's arch rule; change both together) | low | 2 | L |
-| hir/interchange.tcl `Fingerprint` (:63-78), `encode`/`decode` (:90-118); main.tcl `runFile` (:161-165), `emitExecutable` (:303) | a `.hirx` records no target; reading one built for another target is not detected, and `-target` is ignored for `.hirx`/`.hir` inputs | posix | record the target and refuse a mismatch with the host for native runs (a format change: HIR-INTERCHANGE.md's rules apply) | medium | 2 | L |
-| main.tcl :17-25, hir/cabi.tcl `ResolveTarget` (:62-70), hir/foreign.tcl `AbiClass` (:85-95) | `-target` changes the front end only; nothing compares the target with the host before a native run or link | posix | refuse a native run or link whose target is not the host (today `-target windows-x86_64` on Linux silently types `Long` as 32 bits for a C call) | medium | 2 | L |
-| surface/modules.tcl :801-805 | `NamespaceTypeDecls` runs before the UNKNOWN-TARGET check, so an unknown host gets a raw `core::cabi: unknown C ABI target ""` | posix | a bug for hosts outside the table (not macOS); move the check first | low | 2 | L |
+| core/cabi.tcl `targets`, `models` | **resolved (milestone 2)**: each row names its triple; `macos-aarch64 {os macos arch aarch64 model LP64 charSigned 1 triple aarch64-apple-darwin}`, distinct from `linux-aarch64` (same arch, model and pointer width; other OS, triple and plain char). `operatingSystems`, `systemName`, `hostArchitecture`, `systemTarget` added | -- | none: verified against Apple clang per scalar, `size_t` and `-dumpmachine` (cabi-facts.tcl, every smoke job) | low | 2 (done) | M (done) |
+| core/cabi.tcl `hostTarget` | none: Darwin -> macos, arm64 -> aarch64 | -- | none: verified, `macos-aarch64`; the OS is read, never inferred from the architecture (tests/target-model.test `tm-host-default`) | low | 2 (done) | M (done) |
+| core/linuxabi.tcl `transports`, `transportOf`, `syscallImpl` ("on Linux") | the syscall transport table is keyed by architecture only | arch + linux | **resolved at the import (milestone 2)**: the table stays Linux's and no macOS compilation reaches it -- its namespaces `linux::abi::*` are the Linux platform's, UNSUPPORTED-PLATFORM for any other OS's target. Never a Darwin row (section 9) | low | 2 (done), 9 | L (done) |
+| core/linuxabi.tcl registration | both transports registered and their namespaces declared direct whatever the target | linux | **resolved (milestone 2)**: still registered everywhere (bootstrap natives, the same in every compilation), but a macOS compilation cannot import them (UNSUPPORTED-PLATFORM); a Linux program run natively on macOS is refused (NATIVE TARGET) before the runtime refusal | low | 2 (done) | L (done) |
+| core/bytestore.tcl `bridges` | `abi::ARCH::from_bytes`/`from_mutable_bytes` come from the Linux transport table | arch | OS-neutral in substance (an address to a register word); unchanged: `abi::ARCH` are portable architecture namespaces, importable on macOS | low | -- | L |
+| surface/modules.tcl `ModuleFile`, `ArchModuleFiles`, `PlatformOf`, `PlatformCheck`, `ResolveModule` | an architecture-specific module is chosen by architecture only | arch | **resolved (milestone 2)**: the namespace trees the target table designates a platform's (`platforms`: `linux`) are that OS's, checked at the import before any file is chosen: `import linux::sys` for `macos-aarch64` is UNSUPPORTED-PLATFORM, never `sys.aarch64.bot`. Portable architecture-specific namespaces (a `demo::arch`, `abi::aarch64`) are every OS's; application modules the application's | low | 2 (done) | L (done) |
+| surface/cache.tcl `Key`, `Dependencies`, `lookup` | none for the key: it holds the full target name | -- | **verified and hardened (milestone 2)**: one entry per full target (tests/target-model.test `tm-cache-target-isolation`, both orders), and a hit's HIR is decoded with `-target` (an entry of another target filed under this key is invalid: `tm-cache-entry-of-another-target`). Dependencies unchanged: a Linux module's build for macOS fails and is never stored | low | 2 (done) | L (done) |
+| hir/interchange.tcl `decode`; main.tcl `runFile`, `emitExecutable` | a `.hirx` records no target | posix | **resolved (milestone 2)**: the HIR records its target (`hir::cabi::targetOf`: the compilation target when the build read one, "" for a HIR every target shares), interchange carries it, `decode -target T` refuses another target's (HIR INTERCHANGE TARGET), main.tcl reads a `.hirx` for its `-target` or the host's. No format version change: the field is part of the HIR dict | low | 2 (done) | L (done) |
+| main.tcl, hir/cabi.tcl `ResolveTarget`, hir/foreign.tcl `AbiClass` | nothing compares the target with the host before a native run or link | posix | **resolved (milestone 2)**: NIR names the program's target (`target "NAME" triple="TRIPLE"`) and the driver refuses `run`, `bench`, `batch`, `object` and `executable` for another target (NATIVE TARGET: `-target windows-x86_64` on Linux no longer runs a 32-bit `long` C call); the diagnostic commands (`clif`, `vcode`, `size`, `roots`) still show the host's view | low | 2 (done) | L (done) |
+| surface/modules.tcl `LoadNamespace` | `NamespaceTypeDecls` ran before the UNKNOWN-TARGET check | posix | **resolved (milestone 2)**: checked first (`tm-unknown-host`) | low | 2 (done) | L (done) |
 | main.tcl :61-64, native/native.tcl :46-47, :316 | doc text: executables are "Linux x86_64/glibc" (main.tcl is stale: aarch64 works too) | -- | update with the milestone that adds Mach-O executables | low | 6 | L |
 | native/rawabi.tcl :8-9, :31-34 | a 64-bit two's complement word, tagged small Ints in [-2^62, 2^62-1] | arch | none: holds on arm64 | low | -- | L |
 | core/process.tcl :9, :55-65 | the argument vector is NUL-terminated (Linux wording) | posix | none | low | -- | L |
+
+### Who owns what at the target boundary
+
+Since milestone 2:
+
+- **The Botlish compiler owns** the target identity (core/cabi.tcl's table:
+  name, OS, architecture, data model, triple), the C scalar type domains,
+  import selection (architecture-specific files, the platform check),
+  target compatibility (the HIR's recorded target, interchange's
+  `-target`, the native driver's host check) and the target-sensitive cache
+  identity (the full target in `surface::cache::Key`), and the choice of
+  the C convention a foreign signature is built in (`c_call_conv`: the
+  triple's).
+- **Cranelift owns** what that convention means: Apple AArch64 call
+  lowering, register assignment, stack argument placement, narrow-argument
+  extension and the machine ABI generally; and, with the object crate, the
+  object format a triple implies (Mach-O).
+- **The runtime and the system toolchain own** platform execution (threads,
+  stacks, guards), executable linking (Apple ld through rustc) and runtime
+  stack handling. Milestone 2 changed none of them.
 
 ## 4. Cranelift, JIT and object generation
 
@@ -164,7 +188,7 @@ object format from the ISA. The macOS run confirms the JIT half.
 |---|---|---|---|---|---|---|
 | codegen/mod.rs `isa` (:147-165) | none: `cranelift_native::builder_with_options` = the host triple (AppleAarch64 call conv, Mach-O on macOS); no `--target`, no cross-compilation | owned | none. Host CPU features only for the JIT (`!pic`) | low | 3 | M (JIT done) |
 | codegen/mod.rs :155-160 | stack probes (`enable_probestack`, inline) only when `native_stack_overflow_supported()`, i.e. Linux | linux | enable them with the macOS guard (milestone 5); until then a large frame can jump past the guard page -- observed: large_frame_overflow.nir ends in Rust's stack-overflow abort, not `NATIVE LIMIT STACK` (section 15). With 16 KiB pages Cranelift's probe spacing of one 4 KiB page is still conservative | high | 5 | M |
-| codegen/clif.rs `signature_n` (:182-196), helpers (:265-269), `c_signature` (:215-229) | none: every signature is `module.make_signature()` = the ISA's default convention | owned | none. Botlish-to-Botlish and helper calls use AppleAarch64 on macOS | low | 3 | M |
+| codegen/clif.rs `signature_n`, helpers, `c_signature`; codegen/target.rs `c_call_conv` | none: every signature is `module.make_signature()` = the ISA's default convention | owned | **made explicit (milestone 2)**: a foreign C signature's convention is selected where it is built, `c_call_conv(isa.triple())` = the triple's C convention (`apple_aarch64` for aarch64-apple-darwin, observed in CLIF on the macOS runner by native-status's `c-convention` probe); Botlish-to-Botlish and helper calls keep the ISA default (AppleAarch64 on macOS, unchanged) | low | 2 (done), 3 | M (done) |
 | codegen/clif.rs `c_signature` (:199-229), `foreign_call` (:1019-1104) | narrow C arguments carry `sext`/`uext`; narrow results are re-extended by the caller | owned | Cranelift honours the extension attributes only for AppleAarch64 (`isa/aarch64/abi.rs` `get_ext_mode`), so they start to matter on macOS; its comment says sub-32-bit extension is "not implemented yet" -- test i8/i16 arguments against clang callees (tests/cffi/fixture.c `bcf_widen_*`) | high | 7 | M |
 | codegen/clif.rs :171 | comment: "x86-64 SysV here has only two integer return registers"; the result-buffer rule is portable | arch | comment only | low | 3 | L |
 | codegen/clif.rs :237, :92-123 | direct helper calls (R_X86_64_PLT32) only when the ISA is `x64` | arch | none: aarch64 objects call helpers through the GOT; Mach-O the same | low | 6 | M |
@@ -245,14 +269,14 @@ FFI), behind the same portable `io::IO` context trait.
 
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
-| core/cabi.tcl `macos-aarch64` row; hir/cabi.tcl `NamespaceTypeDecls` | plain char signed, LP64 | -- | none: verified (section 1) | low | 2 | M (done) |
+| core/cabi.tcl `macos-aarch64` row; hir/cabi.tcl `NamespaceTypeDecls` | plain char signed, LP64 | -- | none: verified per scalar (section 1); a HIR built with it records `macos-aarch64` and keeps its facts through interchange and the cache (milestone 2) | low | 2 (done) | M (done) |
 | native/lower.tcl :1608-1619 (NIR `foreign N "symbol"`), clif.rs `foreign_call` | a bare C symbol name | owned | none: the object crate adds Mach-O's `_` (C-HEADER-ARCHAEOLOGY.md's "user label prefix"); verify a link | low | 7 | M |
 | value.rs :32-43, :430-452 (`cptr`), ffi.rs `rt_ffi_bad_address` | a C address is a sign-extended 60-bit word; a top-byte-tagged pointer fails `NATIVE ADDRESS` | arch | holds for arm64 user space (no TBI/PAC tags on data pointers expected): verify with real libSystem pointers | medium | 7 | M |
 | codegen/clif.rs `c_signature`; nir.rs `ForeignDecl` (no parameter-count limit) | stack-passed C arguments follow the platform ABI | owned | Cranelift implements Apple's natural-size packing of stack arguments: verify `bcf_many`/`bcf_tenth` (tests/cffi/fixture.c :45-55) | high | 7 | M |
 | native/lower.tcl `BorrowCall` (:4885-4960), `ExposeStorage`/`KeepExposedAlive` | byte exposure, private write copies, keepalive | posix | none | low | 8 | M |
 | tests/cffi/fixture.c :124-154, :180-202 (`bcf_dirty_*` and the other assembly) | inline assembly with ELF directives and bare labels | elf + test | a Mach-O variant of the AArch64 functions (`_` labels, no `.type`) | low | 7 | M |
 | tests/c-ffi.test :25-26 `linuxNative`, :36-50 (fixture build: `cc -c -O2 -fPIC`, `ar rcs`) | the fixture is built on Linux only | test | build it on macOS too (static archives work, section 1) | low | 7 | M |
-| tests/c-ffi.test `cf-scalar-transport` (:427-430); audit/c-ffi/tools/fuzz.tcl :65-66 | plain char unsigned when `tcl_platform(machine)` is `aarch64` *or* `arm64` | test | **wrong on macOS** (signed, section 1): take signedness from `core::cabi::target [core::cabi::hostTarget]` | low | 7 | L |
+| tests/c-ffi.test `cf-scalar-transport`; audit/c-ffi/tools/fuzz.tcl | plain char unsigned when `tcl_platform(machine)` is `aarch64` *or* `arm64` | test | **resolved (milestone 2)**: unsigned on Linux AArch64 only, read from the OS and the architecture (the fuzzer keeps its own model, independent of the registry, as its design requires); both run on macOS only once C calls do (milestone 7) | low | 2 (done) | L (done) |
 | tests/c-ffi.test `tclLinkable` (:55), examples/ffi/tcl/tcl.bot :17 | `-ltcl9.0` (Debian's library name, on the default library path) | test | the CI's Tcl 9.0.1 build installs `libtcl9.0.dylib` under `~/.cache/botlish/tcl-9.0.1/lib`: link it with `-L`, verify | low | 10 | M |
 | examples/ffi/sha256/boringssl.bot :23 | `extern c library "stdc++"` (GNU libstdc++) | linux | macOS links `c++` (libc++): a per-OS library list is a language question (C-FFI.md has no conditional `extern c library`) | medium | 10 | M |
 | tests/c-ffi.test `cf-missing-library` (:529), `cf-sha256-executable` (:732-739, `ldd`) | GNU ld wording; `ldd` | test | Apple ld wording; `otool -L` | low | 7 | M |
@@ -269,9 +293,10 @@ native tests carry no host constraint at all.
 | per-file constraints `nativeLinux`, `executableAot`, `nativeStackGuard` (`os eq "Linux" && machine in {x86_64 amd64 aarch64}`; 22, 36 and 1 files) | false on macOS (os, and machine `arm64` is not in the list): 117 + 131 + 4 tests skip there (the census) | test | as each capability lands, widen its constraint by capability, not by OS name; keep the definitions in step (they are copied per file) | medium | 3-9 | L |
 | `linuxX86_64` (7 files), `linuxAarch64`, `stubLinker` (3 files), `x86_64Host` (native.test :779, no OS check) | instruction-set/syscall-ABI and ELF tests | test | none: correct to skip on macOS; `x86_64Host` should also require Linux (it reads ELF with `readelf`) | low | 3 | L |
 | tests/helpers.tcl `outcomeUnder`/`outcomeUnderHir` (:234-278), `sourceAgree` (:293-302); 97 files with four-backend lists | a differential test runs every backend, cranelift included, unconditionally | test | on macOS these tests run natively and pass or fail on real behavior (section 15): the right signal | -- | 3 | M |
+| tests/helpers.tcl `linuxTarget`, `backendsFor`; 13 test files' compile helpers | (milestone 2) a test that compiles a Linux program used the host's default target | test | such a test compiles for `linuxTarget` (the host's own on Linux, so Linux runs exactly as before; `linux-aarch64` on macOS) and runs it on `backendsFor` its HIR's target (the Tcl backends on macOS); a native leg that needs the Linux runtime carries `nativeLinux` | -- | 2 (done) | M (done) |
 | tests/native-stack-overflow.test :8 | `native::binary` at top level: the file errors without a driver | test | none on macOS (the driver builds) | low | 5 | L |
 | tests/native-stack-map.test :126, :132, native-root-storage.test :180, native.test :798 | expect "no depth helper" on Linux x86-64/aarch64 and the depth helper elsewhere | test | run unconstrained on macOS, checking the "elsewhere" branch (section 15); flip with milestone 5 | low | 5 | M |
-| tests/golden/run.tcl `hosts`, `onHost` (:196-207) | golden hosts are `linux-x86_64`, `linux-aarch64`; `onHost` requires Linux | test | add `macos-aarch64` when a suite needs it; `abi-bytes-native.bot` makes live Linux syscalls with no `golden-host` (a gap on any non-Linux host) | low | 9 | L |
+| tests/golden/run.tcl `hosts`, `onHost`, `target` | golden hosts are `linux-x86_64`, `linux-aarch64`; `onHost` requires Linux | test | since milestone 2 a suite importing a Linux namespace (16 suites) is a Linux program: on macOS run.tcl compiles it for `linux-aarch64` (`golden::target`) and runs it on the Tcl backends, its native backends excluded with the reason. Add `macos-aarch64` to the hosts when a suite needs it | low | 9 | L |
 | tests/golden.test :32-39, tests/workload-2048.test :32-36 | drop the native backends off Linux | test | widen with milestone 3/4 | low | 3 | M |
 | tests/local.tcl `processors` (:50-53), :127-129 | `exec nproc` (falls back to 4: macOS has no `nproc`); `LANG=C.utf8` forced | test | `sysctl -n hw.ncpu` on Darwin; the locale is harmless | low | 10 | M |
 | objdump `-M intel`, `readelf`, `strace`, `ldd`, `/proc/$pid/maps`, `\x7fELF` (abi-bytes, linux-syscall, contexts, native.test :792, aot-stub-linker :240, native-executable :33, portable-io) | GNU/Linux tools and ELF | test | none: those tests are Linux-constrained or tool-constrained already, or read executables macOS does not build yet | low | 6 | L |
@@ -296,7 +321,9 @@ native tests carry no host constraint at all.
   the symbol prefix `_`. Do not add a `CallConv` or a symbol-mangling rule.
 - **The C ABI target model** (core/cabi.tcl, hir/cabi.tcl): the
   `macos-aarch64` row is right, and the cache key already holds the full
-  target. Do not invent a second target representation.
+  target. Do not invent a second target representation: the table's rows
+  (with their triples, milestone 2) are the one, and the native driver
+  reads the triple.
 - **The NIR and native lowering** (native/lower.tcl, nir.rs) know no OS:
   only the syscall ops name Linux, and they compile everywhere.
 - **The runtime's value model, heap and collector** (value.rs, heap.rs,
@@ -323,6 +350,9 @@ native tests carry no host constraint at all.
   `aarch64` row an OS-dependent meaning would change Linux AArch64's
   module and transport. An OS dimension must leave every Linux lookup's
   result unchanged (tests/linux-syscall-transports.test pins them).
+  Milestone 2 added it at the import (the platform check) and left the
+  table and ModuleFile alone: every Linux target resolves exactly as
+  before.
 - **The link plan.** GNU ld needs `--start-group` and the default linker
   libraries (the BoringSSL AArch64 fix of C-FFI.md, section 11). Apple ld
   needs neither: split by OS, never "simplify" Linux's.
@@ -460,7 +490,7 @@ tier of run 4.)
 | deep recursion (`depth(n - 1)`, 10^8 deep) on cranelift, 1 GiB | **`child killed: segmentation violation` (NATIVE BUG)** | the native stack ran out before the depth token, and the fault escaped Rust's handler too |
 | the same with a 64 MiB stack | Rust's stack-overflow abort (NATIVE BUG) | |
 | a coroutine program on cranelift | `native coroutines need stack switching, implemented for x86-64 Linux only (COROUTINES.md) (NATIVE UNSUPPORTED value)` | an explicit refusal (stale text: AArch64 Linux works too) |
-| examples/io/hello.bot, examples/linux/write.bot on cranelift | `linux::abi::aarch64::syscall needs a Linux AArch64 target (NATIVE UNSUPPORTED value)` | an explicit refusal; note the program compiled, with `lib/linux/sys.aarch64.bot` chosen for the macOS target (section 3) |
+| examples/io/hello.bot, examples/linux/write.bot on cranelift | `linux::abi::aarch64::syscall needs a Linux AArch64 target (NATIVE UNSUPPORTED value)` | an explicit refusal; note the program compiled, with `lib/linux/sys.aarch64.bot` chosen for the macOS target (section 3). **Since milestone 2** it does not compile for `macos-aarch64`: `namespace "linux" belongs to the Linux platform ... (SURFACE MODULE UNSUPPORTED-PLATFORM)`; compiled with `-target linux-aarch64` it is refused natively (NATIVE TARGET) |
 | examples/ffi/tcl/tcl.bot on cranelift | `executable emission requires Linux glibc on x86_64 or aarch64 (NATIVE LINK)` | an explicit refusal |
 | `-emit-native-executable` | the same text, `(NATIVE AOT)` | an explicit refusal |
 | the stdlib examples on cranelift | values | |
@@ -483,10 +513,17 @@ belongs to milestone 4 with the rest of macOS GC-stress validation.
 **What the native status check records** (tests/platform/native-status.tcl,
 every smoke run): on `macos-aarch64` the JIT and the GC frame walk under
 stress give their values; the stack overflow is the Rust abort (the one
-recorded crash, kept so milestone 5 must change it); coroutines, the Linux
-syscall and executables are their refusals above; a C call is
-`NATIVE LINK` with the executable-emission refusal. On Linux every one
-gives its value.
+recorded crash, kept so milestone 5 must change it); coroutines and
+executables are their refusals above; a C call is `NATIVE LINK` with the
+executable-emission refusal. On Linux every one gives its value. Since
+milestone 2 the Linux syscall probe is a compile-time refusal on macOS
+(UNSUPPORTED-PLATFORM), and three probes record the target boundary on
+every host: the driver's reading of the host triple (`format macho
+c-call-conv apple_aarch64 runs 1` on macOS, `elf system_v` on Linux), the
+convention of a foreign C signature in CLIF (`apple_aarch64` on macOS) and
+a program built for the other OS's target of the host's architecture
+(NATIVE TARGET: linux-aarch64 code is never run on macOS arm64, macOS code
+never on Linux).
 
 **No native code produced a wrong value.** Every native capability either
 works, refuses with a stated error, or -- the native stack overflow --
@@ -681,6 +718,9 @@ the census. Report: MACOS-AARCH64-MILESTONE-1.md.
 
 ### 2. Target representation and macOS C ABI facts
 
+- **Status: done** (MACOS-AARCH64-MILESTONE-2.md). The acceptance below
+  holds; the plain-char expectations of c-ffi.test and the C FFI fuzzer read
+  the OS and the architecture (the fuzzer keeps its own model).
 - **Files:** core/linuxabi.tcl, surface/modules.tcl (`ModuleFile`),
   surface/cache.tcl (`Dependencies`), hir/interchange.tcl, main.tcl,
   hir/cabi.tcl; tests/c-ffi.test :413-415, audit/c-ffi/tools/fuzz.tcl

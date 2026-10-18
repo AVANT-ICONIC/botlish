@@ -199,30 +199,14 @@ proc golden::host {path} {
 
 # The C ABI target the suite at PATH is compiled for: "" (the host's) unless
 # it is a program of another operating system's platform than this host's --
-# its header imports a platform namespace (surface/modules.tcl's PlatformOf:
-# linux::io, linux::path, linux::abi::x86_64, ...) -- and then that system's
-# target of this host's architecture (core::cabi::systemTarget: linux-aarch64
-# on an arm64 Mac), for which its imports compile. On a Linux host every
-# suite is the host's. The native backends never run a program built for
-# another host's target (golden::suite excludes them, saying so).
+# its header imports a platform namespace (linux::io, linux::path,
+# linux::abi::x86_64, ...) -- and then that system's target of this host's
+# architecture (surface::modules::PlatformTarget: linux-aarch64 on an arm64
+# Mac), for which its imports compile. On a Linux host every suite is the
+# host's. The native backends never run a program built for another host's
+# target (golden::suite excludes them, saying so).
 proc golden::target {path} {
-    set host [core::cabi::hostTarget]
-    set f [open $path]
-    fconfigure $f -encoding utf-8
-    set target ""
-    while {[gets $f line] >= 0} {
-        if {[regexp {^\s*(#.*)?$} $line] || $line eq "direct module"} continue
-        if {![regexp {^import\s+(?:type\s+)?(\S+)} $line -> name]} break
-        if {[string match *::* $name] && [string match "import type*" $line]} {
-            set name [join [lrange [split [string map {:: \x00} $name] \x00] 0 end-1] ::]
-        }
-        set os [surface::modules::PlatformOf $name]
-        if {$os ne "" && ($host eq "" || [dict get [core::cabi::target $host] os] ne $os)} {
-            set target [core::cabi::systemTarget $os]
-        }
-    }
-    close $f
-    return $target
+    return [surface::modules::PlatformTarget [core::ReadFile $path]]
 }
 
 # The hosts a suite may require (golden::host).

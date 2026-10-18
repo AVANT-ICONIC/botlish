@@ -53,12 +53,13 @@
 # architecture only, never by operating system: the module's own namespace
 # says which OS it is for (below).
 #
-# Platform namespaces. A standard namespace whose first segment names an
-# operating system of the target table (core::cabi::operatingSystems:
-# linux, macos, windows) belongs to that operating system's platform: the
-# `linux` namespace and every namespace under it (linux::sys, linux::io,
-# linux::path, the syscall transports linux::abi::x86_64 and
-# linux::abi::aarch64) are Linux's. Importing one is UNSUPPORTED-PLATFORM
+# Platform namespaces. The target table designates the standard namespace
+# trees that are an operating system's platform interface
+# (core::cabi::platformOf): the `linux` namespace and every namespace under
+# it (linux::sys, linux::io, linux::path, the syscall transports
+# linux::abi::x86_64 and linux::abi::aarch64) are Linux's. Nothing is
+# inferred from a spelling: a module that happens to be named like an
+# operating system (a private library's `windows`) is no platform's. Importing one is UNSUPPORTED-PLATFORM
 # when the compilation target's operating system is another one
 # (linux::sys for macos-aarch64 never becomes lib/linux/sys.aarch64.bot just
 # because both are AArch64), and UNKNOWN-TARGET on a host that is no known
@@ -307,13 +308,11 @@ proc surface::modules::NoSuchNamespace {state key ns} {
 }
 
 # The operating system whose platform the standard namespace NAME belongs
-# to, or "": a namespace whose first segment is an operating system of the
-# target table (core::cabi::operatingSystems) is that system's -- `linux`,
-# `linux::sys` and `linux::abi::x86_64` are Linux's (header, "Platform
-# namespaces").
+# to, or "": the target table's designation (core::cabi::platformOf) --
+# `linux`, `linux::sys` and `linux::abi::x86_64` are Linux's (header,
+# "Platform namespaces").
 proc surface::modules::PlatformOf {name} {
-    set first [lindex [split [string map {:: \x00} $name] \x00] 0]
-    return [expr {$first in [core::cabi::operatingSystems] ? $first : ""}]
+    return [core::cabi::platformOf $name]
 }
 
 # Checks that the standard namespace NAME, imported at SPAN, is available to
@@ -337,6 +336,34 @@ proc surface::modules::PlatformCheck {stateVar name span} {
         Error UNSUPPORTED-PLATFORM $span "namespace \"$name\" belongs to the $system platform (the standard namespace $os and every namespace under it), which is unavailable for target $target ([core::cabi::systemName [dict get $meta os]] on [dict get $meta arch]): a $system module is never chosen for, mapped to or substituted on another operating system, whatever the architecture; compile for a $system target (-target $os-[dict get $meta arch]) or import no $system namespace"
     }
     dict set state targetRead 1
+}
+
+# The C ABI target a tool on this host compiles the program text SOURCE for
+# when it runs programs of every platform (the golden runner, the warning
+# gate): "" -- the host's -- unless SOURCE's header imports a platform
+# namespace (PlatformOf) of another operating system than the host's, and
+# then that system's target of this host's architecture
+# (core::cabi::systemTarget: a Linux program on an arm64 Mac is compiled for
+# linux-aarch64, and runs there on the Tcl backends only). A compilation's
+# own target is always its -target or the host's: the compiler never calls
+# this. Text that does not parse is the host's (its compilation reports why).
+proc surface::modules::PlatformTarget {source} {
+    set host [core::cabi::hostTarget]
+    set hostOs [expr {$host eq "" ? "" : [dict get [core::cabi::target $host] os]}]
+    if {[lsort -unique [concat [dict values $::core::cabi::platforms] [list $hostOs]]] eq [list $hostOs]} {
+        # Every platform is the host's own: nothing to read.
+        return ""
+    }
+    if {[catch {surface::parse $source} ast]} {
+        return ""
+    }
+    foreach import [dict get $ast imports] {
+        set os [PlatformOf [dict get $import namespace]]
+        if {$os ne "" && $os ne $hostOs} {
+            return [core::cabi::systemTarget $os]
+        }
+    }
+    return ""
 }
 
 # The path of NAME's architecture-specific module file for architecture

@@ -59,6 +59,14 @@
     }
 >>>>
 
+@@ platform-by-spelling every standard namespace named like an operating system of the target table is that system's platform, designated or not
+## core/cabi.tcl
+<<<<
+    return [expr {[dict exists $platforms $root] ? [dict get $platforms $root] : ""}]
+====
+    return [expr {$root in [operatingSystems] ? $root : ""}]
+>>>>
+
 @@ platform-by-architecture-only the platform check accepts any target, the architecture deciding alone
 ## surface/modules.tcl
 <<<<

@@ -146,7 +146,14 @@ once per program), and nothing if the namespace is intrinsics-only
 one `lib/NAME.ARCH.bot` per architecture, and the import loads the one of the
 compilation target's architecture (`import linux::sys` loads
 `lib/linux/sys.x86_64.bot` or `lib/linux/sys.aarch64.bot`;
-LINUX-SYSCALL-TRANSPORTS.md). That is the whole of module loading: a module that is not
+LINUX-SYSCALL-TRANSPORTS.md). The target table designates the standard
+namespace trees that are an operating system's platform interface
+(core/cabi.tcl's `platforms`: `linux` and everything under it): importing
+one for a target of another operating system is `UNSUPPORTED-PLATFORM` at
+the import, before any file is chosen
+(`import linux::sys` for macos-aarch64 never loads `sys.aarch64.bot`;
+MACOS-AARCH64-MILESTONE-2.md). An application module is the application's
+whatever its name. That is the whole of module loading: a module that is not
 imported, directly or by another module's own header, is never loaded. One
 visible consequence while `error` declarations stay global: `import list`
 brings `error NotFound` (declared by `lib/list.bot`) into the program, so a

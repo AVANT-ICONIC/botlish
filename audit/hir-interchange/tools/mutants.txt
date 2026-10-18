@@ -22,11 +22,13 @@
 @@ decode-skips-activation decode returns the HIR without installing its declarations: the registries stay those of the last compilation until a backend activates it
 ## hir/interchange.tcl
 <<<<
-    set hir [dict get $body hir]
+        core::loadLibrary $name
+    }
     hir::activate $hir
     return $hir
 ====
-    set hir [dict get $body hir]
+        core::loadLibrary $name
+    }
     return $hir
 >>>>
 

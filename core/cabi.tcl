@@ -17,6 +17,8 @@
 #   models    MODEL -> {char BITS short BITS int BITS long BITS longlong BITS
 #             pointer BITS}
 #   systems   OS -> its name in messages (Linux, macOS, Windows)
+#   platforms NAMESPACE-ROOT -> OS: the standard namespace trees that are an
+#             operating system's platform interface (linux -> linux)
 #
 # A target is an operating system *and* an architecture: linux-aarch64 and
 # macos-aarch64 share an instruction set, a pointer width and a data model,
@@ -76,6 +78,13 @@ namespace eval core::cabi {
         windows-x86_64  {os windows arch x86_64 model LLP64 charSigned 1 triple x86_64-pc-windows-msvc} \
         windows-aarch64 {os windows arch aarch64 model LLP64 charSigned 1 triple aarch64-pc-windows-msvc}]
     variable systems [dict create linux Linux macos macOS windows Windows]
+    # The standard namespace trees that are an operating system's platform
+    # interface -- ROOT -> OS: the namespace ROOT and every namespace under
+    # it are OS's, importable only for a target of OS (surface/modules.tcl's
+    # PlatformCheck). Designated here, never inferred from a name: `linux`
+    # (lib/linux.bot, lib/linux/*, the syscall transports linux::abi::*). A
+    # macOS platform module tree is designated the same way when one exists.
+    variable platforms [dict create linux linux]
     # In declaration (and HIR text) order.
     variable scalars [dict create \
         Char      {c char width char signed char} \
@@ -106,12 +115,19 @@ proc core::cabi::architectures {} {
     return [lsort -unique [lmap name [dict keys $targets] {dict get $targets $name arch}]]
 }
 
-# The operating systems of the targets (their `os`), sorted: the platforms a
-# standard namespace may belong to (surface/modules.tcl's PlatformOf: the
-# `linux` namespace and everything under it are Linux's).
+# The operating systems of the targets (their `os`), sorted.
 proc core::cabi::operatingSystems {} {
     variable targets
     return [lsort -unique [lmap name [dict keys $targets] {dict get $targets $name os}]]
+}
+
+# The operating system whose platform interface the namespace NAME is part
+# of -- NAME is a designated platform root (`platforms`) or under one --
+# or "".
+proc core::cabi::platformOf {name} {
+    variable platforms
+    set root [lindex [split [string map {:: \x00} $name] \x00] 0]
+    return [expr {[dict exists $platforms $root] ? [dict get $platforms $root] : ""}]
 }
 
 # The name of operating system OS in a message (macOS for macos).

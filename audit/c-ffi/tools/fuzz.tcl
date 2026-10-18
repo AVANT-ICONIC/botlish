@@ -60,10 +60,11 @@ proc pick {list} { return [lindex $list [expr {int(rand() * [llength $list])}]] 
 proc chance {p} { return [expr {rand() < $p}] }
 proc between {lo hi} { return [expr {$lo + int(rand() * ($hi - $lo + 1))}] }
 
-# The model's C types on Linux's LP64 targets: Botlish name -> {C spelling
-# bits signed}. Plain char is signed on x86-64 and unsigned on AArch64.
+# The model's C types on the LP64 targets: Botlish name -> {C spelling bits
+# signed}. Plain char is unsigned on Linux AArch64 only: signed on x86-64,
+# and on Apple's AArch64 (its own C ABI, whatever the architecture shares).
 set machine $::tcl_platform(machine)
-set charSigned [expr {$machine in {x86_64 amd64}}]
+set charSigned [expr {!($::tcl_platform(os) eq "Linux" && $machine in {aarch64 arm64})}]
 set scalars [dict create \
     SChar     {{signed char} 8 1} \
     UChar     {{unsigned char} 8 0} \

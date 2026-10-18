@@ -120,9 +120,16 @@ proc refactor::sweep::Files {root hir} {
     return [lsort -unique $files]
 }
 
-# Compiles one program at PATH (absolute) under warning policy MODE.
-# Returns {ok WARNINGS FILES} or {failed ERRORCODE MESSAGE}.
+# Compiles one program at PATH (absolute) under warning policy MODE, for
+# TARGET -- by default the host's, or for a program of another operating
+# system's platform (a Linux program on macOS) that platform's target of the
+# host's architecture (surface::modules::PlatformTarget): the gate's
+# findings are the same on every host. Returns {ok WARNINGS FILES} or
+# {failed ERRORCODE MESSAGE}.
 proc refactor::sweep::Compile {root path mode {target ""}} {
+    if {$target eq ""} {
+        set target [surface::modules::PlatformTarget [readText $path]]
+    }
     if {[catch {surface::readProgramFile $path -warnings $mode -warning-channel "" -target $target} hir options]} {
         return [list failed [dict get $options -errorcode] [string map [list [file normalize $root]/ ""] $hir]]
     }

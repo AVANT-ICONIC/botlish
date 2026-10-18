@@ -340,8 +340,9 @@ test dm-transitive-runs {the contextualized syscall path runs natively (the cont
 
 test dm-tooling-explains {main.tcl -direct explains every unit: declaration, inference, status and each direct edge with what mediates it} -constraints nativeBuilt -body {
     set dir [app $::transitiveApp]
-    # (The run itself is the Tcl backend's NATIVE-ONLY refusal of the syscall.)
-    catch {exec [info nameofexecutable] $::mainScript -backend interp -direct -warnings off [file join $dir main.bot] 2>@1} out
+    # (The run itself is the Tcl backend's NATIVE-ONLY refusal of the syscall;
+    # a Linux program, compiled for a Linux target: linuxTarget.)
+    catch {exec [info nameofexecutable] $::mainScript -backend interp -direct -warnings off -target [linuxTarget] [file join $dir main.bot] 2>@1} out
     set lines [lmap line [split [string map [list $dir/ ""] $out] \n] {
         expr {[regexp {^(module (raw|wrapper|consumer)|entry program|    (raw|wrapper)::|intrinsic)} $line] ? $line : [continue]}
     }]

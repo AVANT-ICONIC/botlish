@@ -580,7 +580,18 @@ x86-64's signed plain `char` (now the target's).
 Elsewhere the native backends already refuse executables (Linux glibc
 only), so they refuse a program that calls C the same way. A `-target`
 other than the host's chooses the ABI classes of a compilation (its HIR),
-never a cross-link: linking is for the host.
+never a cross-link: linking is for the host, and the driver refuses to run
+or link a program built for another target at all (`NATIVE TARGET`,
+MACOS-AARCH64-MILESTONE-2.md), so a Windows LLP64 `long` is never passed to
+a Linux C function.
+
+**The calling convention** of a foreign call is the target triple's C
+convention, selected where its signature is built
+(`native/src/codegen/target.rs`'s `c_call_conv`, called by `clif.rs`'s
+`c_signature`): `system_v` on Linux, `apple_aarch64` on macOS AArch64 --
+never the generic AArch64 one there -- and Cranelift lowers it (registers,
+stack placement, narrow-argument extension). Botlish-to-Botlish calls and
+runtime helper calls keep the ISA's default convention.
 
 ## 14. Static compile, interchange, cache, isolation
 

@@ -884,6 +884,57 @@ and no acceptance depends on one.
   the branch with workflow_dispatch before a port change merges. A
   macOS-motivated test constraint names a capability, never the OS.
 
+## Compilation targets
+
+A compilation target (core/cabi.tcl's table; MACOS-AARCH64-MILESTONE-2.md)
+is an operating system *and* an architecture, named to the native backend
+by its triple: linux-aarch64 and macos-aarch64 share an instruction set, not
+a target. Keep it so:
+
+* Never read an operating system from an architecture, a pointer width or a
+  data model, and never take a matching architecture for a matching target
+  (C facts, module selection, interchange, the cache key, native
+  execution). The table is the one target representation: a new fact goes
+  in its row, never a second table (the driver reads the triple; Cranelift
+  derives the C convention and the object format from it).
+* The `linux` namespace and everything under it are the Linux platform's
+  (core/cabi.tcl's `platforms`, surface/modules.tcl's `PlatformCheck`):
+  UNSUPPORTED-PLATFORM for a target of another operating system. A platform
+  is designated in that table, never read from a namespace's spelling. Never map a Linux module to
+  another system's, and add no Darwin syscall transport. An
+  architecture-specific namespace that is no platform's stays every
+  system's.
+* A build reads the target in three places (ModuleFile's architecture file,
+  PlatformCheck, ffi::c's scalars), and the HIR records the target only then
+  (`hir::cabi::targetOf`; the loader's `targetRead`): a new place that reads
+  the target sets it too. A HIR built for one target is never taken for
+  another's: `hir::interchange::decode -target` refuses it, the cache key
+  holds the full target, and the driver refuses to run or emit machine code
+  for another target's program (`NATIVE TARGET`). Never add a way around
+  either.
+* Foreign C signatures use `codegen::target::c_call_conv` (the triple's C
+  convention: AppleAarch64 on Apple AArch64); Botlish-internal and runtime
+  helper calls the ISA's default. Never hard-code a convention, a register
+  or a stack placement: Cranelift owns them.
+* A test that compiles a Linux program (one importing `linux::*`) compiles
+  it for `linuxTarget` (tests/helpers.tcl: the host's own on Linux) and runs
+  it on `backendsFor` its HIR's target; the golden runner and the warning
+  gate do the same for a program that imports one
+  (`surface::modules::PlatformTarget`). Never skip such a test by operating
+  system instead.
+
+If you change the target table, `hostTarget`, the platform rule, what makes
+a HIR record its target, interchange's or the cache's target check, NIR's
+`target` line or native/src/codegen/target.rs, run
+`tests/target-model.test`, `tests/linux-syscall-transports.test`,
+`tests/c-abi-types.test`, `tests/hir-cache.test`, `cargo test --release
+--manifest-path native/Cargo.toml --bin botlish-native target::` and
+`audit/target-model/tools/mutate.tcl` (every mutant in its `mutants.txt`
+must still apply and be killed: update a mutant's text when you change the
+code it mutates, keeping it a mutant of the same rule). Apple clang checks
+the macOS row in every macOS smoke job (`tests/platform/cabi-facts.tcl`),
+and `tests/platform/native-status.tcl` the native target boundary.
+
 ## Linux syscall transports
 
 A raw Linux syscall is one architecture's transport
@@ -906,7 +957,8 @@ architecture is `linux::sys`, an architecture-specific module
 (`lib/linux/sys.x86_64.bot`, `lib/linux/sys.aarch64.bot`): the loader
 (surface/modules.tcl's `ModuleFile`) picks `lib/P.ARCH.bot` by the
 compilation target's architecture (`-target`, the host's by default) when
-there is no `lib/P.bot`. Keep both files' surfaces identical
+there is no `lib/P.bot` -- for a Linux target only: `linux::*` is the Linux
+platform's (Compilation targets, below). Keep both files' surfaces identical
 (`lst-linux-sys-same-surface`). The front-end cache records both candidate
 paths of every imported namespace (`surface::cache::Dependencies`); a new
 input that selects a file must go there too.

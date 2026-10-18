@@ -164,25 +164,34 @@ that milestone added.
 `core/cabi.tcl` is Botlish's own target table; ordinary compilation never asks
 a C compiler:
 
-| target | data model | `long` | `long long` | plain `char` | pointer |
-|---|---|---:|---:|---|---:|
-| linux-x86_64 | LP64 | 64 | 64 | signed | 64 |
-| linux-aarch64 | LP64 | 64 | 64 | **unsigned** | 64 |
-| macos-x86_64 | LP64 | 64 | 64 | signed | 64 |
-| macos-aarch64 | LP64 | 64 | 64 | signed | 64 |
-| windows-x86_64 | LLP64 | **32** | 64 | signed | 64 |
-| windows-aarch64 | LLP64 | **32** | 64 | signed | 64 |
+| target | data model | `long` | `long long` | plain `char` | pointer | triple |
+|---|---|---:|---:|---|---:|---|
+| linux-x86_64 | LP64 | 64 | 64 | signed | 64 | x86_64-unknown-linux-gnu |
+| linux-aarch64 | LP64 | 64 | 64 | **unsigned** | 64 | aarch64-unknown-linux-gnu |
+| macos-x86_64 | LP64 | 64 | 64 | signed | 64 | x86_64-apple-darwin |
+| macos-aarch64 | LP64 | 64 | 64 | signed | 64 | aarch64-apple-darwin |
+| windows-x86_64 | LLP64 | **32** | 64 | signed | 64 | x86_64-pc-windows-msvc |
+| windows-aarch64 | LLP64 | **32** | 64 | signed | 64 | aarch64-pc-windows-msvc |
+
+A target is an operating system and an architecture: linux-aarch64 and
+macos-aarch64 share an instruction set, a data model and a pointer width,
+and are two targets (plain `char`, the C calling convention, the object
+format and every platform interface differ). The triple is the name the
+native backend knows a target by (MACOS-AARCH64-MILESTONE-2.md).
 
 `char` is 8 bits, `short` 16 and `int` 32 on all of them. A compilation's
 target is `-target NAME` (main.tcl; `surface::compile`, `surface::
 readProgramFile` and `surface::modules::compileProgramFile` take the same
 option), the host's by default (`core::cabi::hostTarget`; a host outside the
 table can still compile everything but `import ffi::c`, which then needs
-`-target`). The target changes static types only: this milestone runs nothing
-target-specific, so a program compiled for `windows-x86_64` still runs on the
-host, on every backend. Linux x86-64 and AArch64 reach machine code today;
-the other four rows are metadata, tested as such (`ca-lp64-llp64`,
-`ca-char-signedness`, `ca-scalar-matrix-llp64`).
+`-target`). The target changes static types, and the HIR records it
+(`hir::cabi::targetOf`; "" for a HIR that read no target fact, which is
+every target's): the Tcl backends run a program compiled for any target,
+and the native backends only one compiled for the host's own target
+(`NATIVE TARGET` otherwise, MACOS-AARCH64-MILESTONE-2.md). Linux x86-64 and
+AArch64 reach machine code with C calls today, macOS AArch64 without them;
+the other rows are metadata, tested as such (`ca-lp64-llp64`,
+`ca-char-signedness`, `ca-scalar-matrix-llp64`, tests/target-model.test).
 
 **Isolation.** When a file imports `ffi::c`, the loader (`surface/
 modules.tcl`'s `LoadNamespace`) adds the eleven scalar declarations for the
@@ -200,6 +209,8 @@ range that disagrees with them is refused). A HIR compiled for one target
 keeps its widths whatever is compiled after it (`ca-target-isolation`), and
 interchange text and the front-end cache carry them (`ca-target-interchange`;
 the target is part of `surface::cache::Key`). No new registry was needed.
+Interchange text read as a compilation for another target is refused, never
+reinterpreted (`hir::interchange::decode -target`, HIR-INTERCHANGE.md).
 
 ## ffi::c::Void
 

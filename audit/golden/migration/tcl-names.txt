@@ -7886,6 +7886,7 @@ tests/target-model.test tm-linux-platform-refused pass
 tests/target-model.test tm-linux-platform-on-linux pass
 tests/target-model.test tm-portable-architecture-namespaces pass
 tests/target-model.test tm-architecture-specific-module-on-macos pass
+tests/target-model.test tm-os-named-module-is-no-platform pass
 tests/target-model.test tm-application-module-named-linux pass
 tests/target-model.test tm-hir-records-its-target pass
 tests/target-model.test tm-hir-text-target pass
