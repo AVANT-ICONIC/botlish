@@ -4566,6 +4566,7 @@ tests/native-tiny-leaf-inline.test tiny-leaf-default-matches-explicit-on pass
 tests/native-tiny-leaf-inline.test tiny-leaf-dynamic-call-not-inlined pass
 tests/native-tiny-leaf-inline.test tiny-leaf-dynamic-call-top-level-site-still-inlines pass
 tests/native-tiny-leaf-inline.test tiny-leaf-eligible-multi-op-budget pass
+tests/native-tiny-leaf-inline.test tiny-leaf-eligible-nonzero-mod pass
 tests/native-tiny-leaf-inline.test tiny-leaf-eligible-shift-proven-count pass
 tests/native-tiny-leaf-inline.test tiny-leaf-env-precedence-matches-convention pass
 tests/native-tiny-leaf-inline.test tiny-leaf-exact-callable-param-call-inlines pass
@@ -4585,6 +4586,7 @@ tests/native-tiny-leaf-inline.test tiny-leaf-ineligible-self-recursive pass
 tests/native-tiny-leaf-inline.test tiny-leaf-ineligible-shift-unproven-count pass
 tests/native-tiny-leaf-inline.test tiny-leaf-multi-call-site-all-inline pass
 tests/native-tiny-leaf-inline.test tiny-leaf-multi-call-site-deterministic pass
+tests/native-tiny-leaf-inline.test tiny-leaf-nonzero-mod-value pass
 tests/native-tiny-leaf-inline.test tiny-leaf-real-helpers-not-separately-emitted pass
 tests/native-tiny-leaf-inline.test tiny-leaf-real-high-nibble-has-mask-and-shift pass
 tests/native-tiny-leaf-inline.test tiny-leaf-real-high-nibble-no-calls pass

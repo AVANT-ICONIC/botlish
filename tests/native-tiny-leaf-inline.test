@@ -273,7 +273,21 @@ caller()}] caller]
     HasCallIn $body
 } -result 1
 
-test tiny-leaf-ineligible-erroring-mod {a leaf using mod (can raise on a zero divisor; no error-safety proof exists for it) declines} -body {
+test tiny-leaf-ineligible-erroring-mod {a leaf using mod whose divisor may be 0 (it can raise ARITHMETIC: LeafModSafe needs the divisor's Range to exclude 0) declines. Two callers passing 0 and 3, so the divisor's Range is {0, 3}} -body {
+    set body [FunctionBody [nirTextOf {fn m(x, d):
+    mod(x, d)
+
+fn caller(pick):
+    if pick:
+        m(10, 0)
+    else:
+        m(10, 3)
+
+caller(true)}] caller]
+    HasCallIn $body
+} -result 1
+
+test tiny-leaf-eligible-nonzero-mod {a leaf using mod by a divisor whose Range excludes 0 is total and inlines (LeafModSafe), as the raw rimodtotal} -body {
     set body [FunctionBody [nirTextOf {fn m(x):
     mod(x, 3)
 
@@ -281,8 +295,20 @@ fn caller():
     m(10)
 
 caller()}] caller]
-    HasCallIn $body
-} -result 1
+    list [NoCallIn $body] [expr {[string first "rimodtotal" $body] >= 0}]
+} -result {1 1}
+
+test tiny-leaf-nonzero-mod-value {inlining a nonzero-divisor mod leaf does not change its values, negative dividends and divisors included} -body {
+    set text {fn m(x, d):
+    mod(x, d)
+
+fn caller(x):
+    [m(x, 3), m(x, 0 - 3), m(0 - x, 7), m(x, 8), m(0 - x, 0 - 8)]
+
+caller(10)}
+    list [native::evalHir [sourceHir $text] -tiny-leaf-inline-opt 1] \
+        [native::evalHir [sourceHir $text] -tiny-leaf-inline-opt 0]
+} -result {{list {{int 1} {int 1} {int 4} {int 2} {int 6}}} {list {{int 1} {int 1} {int 4} {int 2} {int 6}}}}
 
 test tiny-leaf-ineligible-shift-unproven-count {a leaf shifting by a genuinely unproven (not a single joined value) amount declines: the generic shift's own RANGE check is not statically excluded. Two callers passing different literal counts, not one: a single caller's own literal count would itself get proven a single value by the existing closed-call parameter-fact fixpoint (CLOSED-CALL-PARAMETER-FACTS.md) and legitimately inline -- this is deliberately the case that fixpoint cannot narrow to a point} -body {
     set body [FunctionBody [nirTextOf {fn sh(x, k):

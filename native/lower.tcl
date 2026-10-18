@@ -340,11 +340,12 @@ namespace eval native::lower {
     variable leafInlineMaxOps 8
     # The fixed, generic set of native ops (the same op table above) a tiny
     # leaf's body may call: pure, total, allocation-free scalar Int
-    # arithmetic/comparison/bitwise ops, plus shift (LeafShiftSafe proves
-    # its own error-safety separately) -- deliberately not `imod` (no
-    # existing error-safety proof for it), not `veq`/`streq` (not proven
-    # allocation-free), and nothing else in the `natives` table above.
-    variable leafInlineSafeOps {iadd isub imul ilt ile igt ige ieq iand ior ixor ishr ishl}
+    # arithmetic/comparison/bitwise ops, plus shift and mod, each of which
+    # can raise and so proves its own error-safety separately (LeafShiftSafe,
+    # LeafModSafe: a mod only when its divisor's Range excludes 0) -- not
+    # `veq`/`streq` (not proven allocation-free), and nothing else in the
+    # `natives` table above.
+    variable leafInlineSafeOps {iadd isub imul ilt ile igt ige ieq iand ior ixor ishr ishl imod}
 }
 
 # ---------------------------------------------------------------------------
@@ -7735,11 +7736,10 @@ proc native::lower::InlineRegionConsumerCall {fnVar e argExpr calleeId paramInde
 #     cannot recurse through one);
 #   - every such native call resolves (NativeCallOp) to one of a small,
 #     fixed, generic set of pure, total, allocation-free scalar Int ops
-#     (LEAFINLINESAFEOPS, above: the arithmetic/comparison/bitwise/shift
-#     family already in the `natives` op table -- deliberately not `imod`,
-#     not equality across non-Int kinds, not any string/list/hash/mutable-
-#     array op, none of which this milestone attempts to prove error- or
-#     allocation-free);
+#     (LEAFINLINESAFEOPS, above: the arithmetic/comparison/bitwise/shift/mod
+#     family already in the `natives` op table -- not equality across
+#     non-Int kinds, not any string/list/hash/mutable-array op, none of
+#     which this milestone attempts to prove error- or allocation-free);
 #   - none of the body's own calls is *proven* to always raise
 #     (hir::aot's own `knownErrors` blocker fact -- computed here for the
 #     callee's own instance specifically, via the same
@@ -7769,6 +7769,9 @@ proc native::lower::InlineRegionConsumerCall {fnVar e argExpr calleeId paramInde
 #     NativeCall's own ordinary, unrelated decision, made the same way
 #     whether this body was inlined or not (spec's own "do not force
 #     rawness");
+#   - a mod call (`imod`) likewise proves (LeafModSafe) its divisor's Range
+#     excludes 0, the one way `mod` can raise (ARITHMETIC): a leaf whose
+#     divisor may be 0 declines, so an inlined body is still total;
 #   - the body's own total native-call count does not exceed
 #     LEAFINLINEMAXOPS (8, above): comfortably above both real target
 #     bodies (byte::high_nibble's 1 call, byte::nibble's 4), with headroom
@@ -7981,11 +7984,32 @@ proc native::lower::LeafExprEligible {e opsVar} {
             if {$op in {ishr ishl} && ![LeafShiftSafe $e $argExprs]} {
                 return 0
             }
+            if {$op eq "imod" && ![LeafModSafe $e $argExprs]} {
+                return 0
+            }
             incr ops
             return [expr {$ops <= $leafInlineMaxOps}]
         }
     }
     return 0
+}
+
+# 1 if mod call E's (op imod, ARGEXPRS = {dividend divisor}) divisor Range,
+# in the callee's own instance, excludes 0: the only condition
+# (core::primitives::modulo, rt_int_mod) under which `mod` raises
+# ({CORE SEMANTIC ARITHMETIC}), so with it the call is total -- the same
+# shape of proof as LeafShiftSafe, and likewise independent of the
+# dividend's size or sign (a BigInt operand still takes the tagged op's
+# helper path, wherever the call is lowered). Whether the inlined call ends
+# up raw (`rimodtotal`), a mask or tagged is NativeCall's ordinary decision,
+# made exactly as it would be in the callee's own function.
+proc native::lower::LeafModSafe {e argExprs} {
+    variable ranges
+    variable currentInstance
+    if {[llength $argExprs] != 2} {
+        return 0
+    }
+    return [RangeExcludesZero [hir::range::of $ranges $currentInstance [lindex $argExprs 1]]]
 }
 
 # 1 if shift call E's (op ishr/ishl, ARGEXPRS = {value amount}) own amount
