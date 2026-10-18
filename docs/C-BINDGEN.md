@@ -1014,8 +1014,16 @@ must be what generation produces, byte for byte, for every committed target
 `tests/c-bindgen.test` requiring no test skipped, and fuzzes the generator
 (eight programs, the run number as seed). The ordinary test jobs
 (`tests.yml`, `tests-arm64.yml`) run `tests/c-bindgen.test` as part of the
-suite, where only the fixture's tests run (clang is on the runners; the
-pinned sources and libraries are not).
+suite: the fixture's tests, and BoringSSL's, whose pinned sources and
+library those jobs fetch and build for the C FFI's own acceptance; the Tcl
+and SDL3 tests need sources only the `c-bindgen` workflow fetches. Each
+library's comparison with its committed bindings is two tests: the host
+target's (`cb-boringssl-current`) and the other Linux target's
+(`cb-boringssl-current-cross`), which needs that target's cross C library
+(`crossLinux`) and is skipped on the ordinary runners; the `c-bindgen`
+workflow installs it and fails on any skipped test, so every committed
+target is checked there. The tests whose expectations hold on every Linux
+target (inventories, the oracle, SDL3's breadth) generate the host's.
 
 ## 33. Regressions
 
