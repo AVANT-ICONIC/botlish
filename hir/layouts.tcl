@@ -383,7 +383,7 @@ proc hir::layouts::NativeFieldType {type name} {
 # ENDIAN} for a scalar, {NAME OFFSET ptr WIDTH ENDIAN} for a pointer. It is
 # the whole of what a backend needs for the write (one store of WIDTH bytes
 # at OFFSET from the record's start); the field's semantic type, which the
-# value is held to, is the registry's (PathFieldType). A designator names a
+# value is held to, is the registry's (PathField). A designator names a
 # leaf: a nested layout is written through its fields.
 
 # {ok CONSTANT} for the path NAMES (field names, outermost first) of layout

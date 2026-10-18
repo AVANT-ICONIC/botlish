@@ -8045,3 +8045,5 @@ tests/native-edit.test ne-c-oracle-edit pass
 tests/native-edit.test ne-c-oracle-edit-bytes pass
 tests/native-edit.test ne-c-oracle-built pass
 tests/native-edit.test ne-c-oracle-asymmetry pass
+tests/native-edit.test ne-c-scalar-stores pass
+tests/native-edit.test ne-native-memory-is-raw pass

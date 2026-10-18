@@ -617,6 +617,10 @@ test ne-nested-stores {a nested layout of an edit is the writable subrecord Nati
     neRun "fn set_inner(i: NativeEdit\[Inner\], x: binary::I16) -> unit:\n    binary::store(i, Inner.x, x)\n\nfn run() -> List\[any\] errors NativeEditNull:\n    p = memory(\[[join [lrepeat 24 165] {, }]\])\n    e = binary::native::edit(Deep, p)\n    binary::store(e, Deep.head, 1)\n    o = e.outer\n    binary::store(o, Outer.count, 4000000000)\n    set_inner(e.outer.inner, -300)\n    binary::store(e, Deep.outer.inner.y, 513)\n    binary::store(e.outer, Outer.last, 9)\n    binary::store(e, Deep.tail, -128)\n    \[dump(p, 24), e.outer.inner.x, e.outer.inner.y, o.inner.x\]\n\nr = run():\n    on NativeEditNull:\n        \[\]\nr\n"
 } -result {same: [[1, 165, 165, 165, 0, 40, 107, 238, 212, 254, 1, 2, 165, 165, 165, 165, 9, 165, 165, 165, 165, 165, 165, 128], -300, 513, -300]}
 
+test ne-c-scalar-stores {C scalar fields are written in the compilation target's widths and domains (an ffi::c::UInt is 4 bytes, an ffi::c::Long and an ffi::c::ULong 8 on linux-x86_64 and linux-aarch64): each extreme lands at its offset, little-endian, in exactly its width; the 4 bytes after the UInt keep the sentinel} -constraints nativeBuilt -body {
+    neValue [neStoreProgram CScalars 24 165 {uint 4294967295 lng -9223372036854775808 ulong 18446744073709551615}]
+} -result {{255 255 255 255 165 165 165 165 0 0 0 0 0 0 0 128 255 255 255 255 255 255 255 255} {4294967295 -9223372036854775808 18446744073709551615} {4294967295 -9223372036854775808 18446744073709551615}}
+
 # The pointer fields' program: P a fresh sentinel Linked record, TARGET a
 # fixture record (the data pointer stored), CB a fixture function address;
 # the store's values, then everything read back.
@@ -728,6 +732,13 @@ test ne-foreign-encoding-asymmetry {the central law, in one scenario: an existin
     list [neRun $scenario] \
         [neFirst "fn f(d: abi::bytes::MutableBytes, q: ffi::c::Ptr\[Node\]) -> int errors LayoutLengthMismatch:\n    w = binary::write_foreign(d, Linked.next, q)\n    s = binary::parse(Linked, frozen(w))\n    s.tag\n0\n"]
 } -cleanup {unset -nocomplain scenario} -result {{same: [true, true, true, 4242, 777]} {LAYOUT-NATIVE-ONLY {binary::parse cannot imprint layout "Linked" from bytes: its field "next" is a C pointer, and imprinting arbitrary bytes into it would make a pointer no foreign code handed out; a layout with a pointer field is read through a native view of live native memory (binary::native::view, binary::load)}}}
+
+test ne-native-memory-is-raw {native memory is raw: a module holding write authority over it can store an integer's bits through one layout (LinkedBits' U64 field) and read the same bytes back as a pointer through another layout's view (Linked's Ptr field) -- type punning, as C allows; nothing ties an address to one layout, and the view reads what memory holds. That is why making an edit is direct authority: the program must acknowledge it (DIRECT otherwise), while byte storage -- Botlish's own values -- never decodes into a pointer (ne-foreign-encoding-asymmetry)} -constraints nativeBuilt -body {
+    set punning "fn pun(p: ffi::c::Ptr\[ffi::c::Void\]) -> int errors NativeEditNull, NativeViewNull:\n    e = binary::native::edit(LinkedBits, p)\n    binary::store(e, LinkedBits.next, 4886718345)\n    v = binary::native::view(Linked, p)\n    q = v.next\n    ffi_fixture::address_of(q)\n"
+    list \
+        [neKinds "$::nePrelude$::neLayouts${punning}0\n" 1] \
+        [neRun "${punning}fn run() -> int errors NativeEditNull, NativeViewNull:\n    p = memory(\[[join [lrepeat 32 0] {, }]\])\n    pun(p)\nr = run():\n    on NativeEditNull:\n        -1\n    on NativeViewNull:\n        -1\nr\n"]
+} -cleanup {unset -nocomplain punning} -result {DIRECT {same: 4886718345}}
 
 test ne-ordinary-serialization-unchanged {encoding pointers is the explicit foreign write and nothing else: binary::emit of a native-only LayoutStruct stays LAYOUT-NATIVE-ONLY (it is not a pointer serializer), binary::parse of a native-only layout stays LAYOUT-NATIVE-ONLY, and the reference implementation still refuses a pointer descriptor entry in either} -body {
     list \

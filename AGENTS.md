@@ -1306,6 +1306,11 @@ the leaf's absolute offset and encoding. Keep it so:
   conversion); write authority is made from a pointer by
   `binary::native::edit`, which is `binary::native`'s and so direct; storing
   through an edit someone made, and every byte write, are not.
+* Native memory is raw: one layout's integer field and another's pointer
+  field can alias an address, so a holder of write authority can pun bits
+  into a pointer (`ne-native-memory-is-raw`). That is why making an edit is
+  direct: never make it ordinary, and never let byte storage (Botlish
+  values) decode into a pointer, which is the law that holds.
 * An edit is unrestricted, non-owning authority: never add affinity,
   uniqueness, a borrow rule, pinning, lifetime regions or ownership of the
   memory, and never claim exclusive access. A store is an ordinary store:

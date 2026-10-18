@@ -143,9 +143,10 @@ is bytes the program owns, filled through a layout and exposed for a call.
 
 `binary::native` keeps being the one namespace of native-memory authority and
 now has two members, `view` and `edit`; `binary::store`, `binary::write` and
-`binary::write_foreign` are `binary`'s. All five new natives are `nomethod`
-(their second argument is a static operand, never a value); none is
-context-free (a write is an effect: never folded, merged or dropped). No
+`binary::write_foreign` are `binary`'s. All four are `nomethod` (each takes
+a static operand -- the edit its layout, the others a field designator --
+that is never a receiver value); none is context-free (a write is an
+effect: never folded, merged or dropped). No
 statement, keyword, operator or assignment form was added: Botlish has no
 general assignment, and a write is an operation with operands, as everything
 else in `binary` is.
@@ -179,7 +180,7 @@ read from the registry along the path (`hir::layouts::PathField`).
 
 A designator names a leaf: a scalar or a pointer field. A nested layout is
 written through its fields (`RECORD.origin` alone is `LAYOUT-OPERAND`), and a
-whole-record write is `binary::emit` (pointer-free layouts). No runtime string
+whole pointer-free record is still emitted by `binary::emit`. No runtime string
 names a field; a String-literal spelling was rejected because it would look
 like one (and one-letter field names would warn, ONE-CHAR-STRING-LITERAL).
 
@@ -375,6 +376,24 @@ edit -- memory a test or foreign code put there, never a value Botlish
 decoded. `Ptr -> Int` and `Ptr -> Bytes` remain absent as conversions: the
 encoding is layout-directed into a statically compatible pointer field only.
 
+**Native memory is raw, and that is why an edit is direct.** The no-forging
+law is byte storage's: Botlish's own values never decode into a pointer.
+Native memory is not Botlish's value, and nothing ties an address to one
+layout: a module holding write authority over memory can store an
+integer's bits through one layout (a U64 field) and read the same bytes back
+through another layout's view as a pointer -- type punning, exactly as C
+permits (`ne-native-memory-is-raw`). The read milestone's premise, that a
+pointer in native memory is one foreign code put there, now reads "one that
+foreign code or a holder of write authority put there". Preventing the pun
+would need an ownership or typing model of foreign memory (which layouts may
+alias an address), which this milestone deliberately does not invent. What
+keeps it honest is the authority boundary: making an edit is a direct edge
+(DIRECT unless the module is `direct module` or mediates it with its own
+context), so every forged pointer traces back to a module that acknowledged
+raw authority -- as a raw syscall that writes memory already could. A wrapper
+that hands out edits of a record whose pointer fields matter should hand out
+only the scalar subrecords, or keep the edit private.
+
 **The caller-constructed record** -- the Win32 shape
 (`x.cbSize = sizeof x; x.handle = h; x.callback = cb; SomeApi(&x)`) -- is
 `abi::bytes::zeroed(abi::usize(binary::layout_length(L)))`, `binary::write`
@@ -494,18 +513,50 @@ reads the record, copies it through bytes, builds a `LayoutStruct` or walks
 the layout at run time (`ne-nir`; the mutant `copy-per-store` is killed by
 the NIR and allocation tests).
 
+`main.tcl -emit-nir` of three writes (`put` stores through an edit of
+`Deep`: `binary::store(e, Deep.head, 7)`, `binary::store(e.outer.inner,
+Inner.y, 513)`, `binary::store(e, Deep.outer.inner.x, -2)`; `link` stores a
+pointer; `build` makes a record in bytes):
+
 ```
-func "put" (e: NativeEdit[Deep])        binary::store(e, Deep.head, 7)
-    %1 = int 7                          binary::store(e.outer.inner, Inner.y, 513)
-    %3 = int 0                          binary::store(e, Deep.outer.inner.x, -2)
-    %4 = int 1
-    %5 = op nativestore %0 %3 %4 %1     ; head: offset 0, u8
-    %8 = int 10
-    %9 = int 2
-    %10 = op nativestore %0 %8 %9 %6    ; outer.inner.y: 4 + 4 + 2, u16 -- no cptroffset
-    %17 = int 8
-    %18 = int 18
-    %19 = op nativestore %0 %17 %18 %16 ; outer.inner.x: 4 + 4 + 0, i16 (2 + 16)
+func 3 "put" params=1 ... pnames="e" instance="cptr"
+    %1 = int 7
+    %3 = int 0                            ; Deep.head: offset 0
+    %4 = int 1                            ; u8
+    %5 = op nativestore %0 %3 %4 %1
+    %6 = int 513
+    %8 = int 10                           ; e.outer.inner then .y: 4 + 4 + 2, folded (no cptroffset)
+    %9 = int 2                            ; u16
+    %10 = op nativestore %0 %8 %9 %6
+    ...
+    %17 = int 8                           ; Deep.outer.inner.x
+    %18 = int 18                          ; i16 (width 2 + 16)
+    %19 = op nativestore %0 %17 %18 %16
+    ret %19
+end
+
+func 4 "link" params=2 ... pnames="e q"
+    %2 = int 8                            ; Linked.next: offset 8
+    %3 = int 8                            ; the target's pointer width
+    %4 = op nativestoreptr %0 %2 %3 %1
+    ret %4
+end
+
+func 5 "build" params=1 ... pnames="q" results=1
+    %3 = callmulti 1 %1                   ; abi::bytes::zeroed(abi::usize(16))
+    %4 = call 2 %3
+    %5 = structget 0 %4                   ; its storage
+    %8 = op mbyteslen %5                  ; exactly the layout's size, or LayoutLengthMismatch
+    %10 = op ieq %8 %9
+    br %10 L0 L1
+  label L1
+    faildeclared 1073741828 "LayoutLengthMismatch"
+  label L0
+    %13 = op mbyteswrite %5 %11 %12 %6    ; a fresh storage; %5 never written
+    ...                                   ; (the second write's length check)
+    %19 = op mbyteswriteptr %13 %17 %18 %0
+    retmulti %19                          ; the MutableBytes returned as its storage: no wrapper built
+end
 ```
 
 **The fixture.** `core::cabi::installTestFixture` also registers
@@ -573,7 +624,75 @@ MEASUREMENTS-TABLE
 
 ## 19. Tests, the oracles, fuzzing, mutants
 
-TESTS-SECTION
+**`tests/native-edit.test`** (54 tests, the authoritative suite; about a
+minute): the NativeEdit type, its argument diagnostics, distinctness from
+views (both directions, joins), not a pointer, the edit's operands and its
+declared null error, the field types read through an edit; field
+designators and their diagnostics, a store's own layout, a view's
+read-only-ness, the value admission of every field kind (twenty cases:
+domains, C scalars, pointees, signatures), the byte writes' diagnostics;
+native stores into the fixture's memory -- every encoding's extremes and
+zero, written out by hand byte for byte and by the test's own model, padding
+and neighbours untouched, packed and unaligned fields, nested subrecords and
+paths, C scalars, pointer and function pointer stores (exact address bits,
+null as zeros), the stored pointer's ownership, aliasing edits, read parity
+with views; byte writes on every backend -- a record built a field at a time,
+every encoding, value semantics, the exact-length rule, foreign writes, the
+encoding asymmetry, ordinary serialization unchanged; the Tcl backends, the
+`-strict 0` replays; NIR shape, no caching, allocations; HIR text,
+interchange (in process and a fresh process through `main.tcl`), isolation,
+the cache, specialization; directness within and across modules, the
+registrations, the plain-memory audit; a standalone executable; GC stress;
+and the C oracle.
+
+**The synthetic native oracle.** Native memory is the test fixture's
+`ffi_fixture::memory[T](bytes)`, initialized to sentinel bytes (0xA5) the
+test states; after the writes, `ffi_fixture::memory_bytes(p, n)` copies the
+memory back -- with no layout and no view -- and the test compares every byte
+with its own expectation: written out by hand (`ne-scalar-stores-literal`,
+`ne-store-touches-only-its-bytes`, `ne-packed-stores`, `ne-nested-stores`,
+`ne-c-scalar-stores`) or computed by the test's little-endian model
+(`neBytes`), never by Botlish. Reading the fields back through the edit and
+through a view of the same memory is a secondary check only.
+
+**The C oracle** (`tests/cffi/nedit-fixture.c`): a C struct of every width,
+a nested struct, a C `long`, a data pointer, a function pointer and a tail
+byte, its every offset, the size (72) and the alignment pinned by static
+assertions; padding at 26-27, 36-39 and 65-71.
+
+* *Native edits* (`ne-c-oracle-edit`, `ne-c-oracle-edit-bytes`): C resets
+  its record to 0xA5 and hands out its address; Botlish writes it through
+  `binary::native::edit`; C checks every field with its own typed reads
+  (`bne_check_live`, a mask of mismatching fields), the data pointer against
+  the object it handed out and the function pointer against its own
+  function, every padding byte against the sentinel. Case 0 writes every
+  width's minimum (or all-ones), `LONG_MAX`, both pointers; case 1 the other
+  extremes and null pointers (C's null function pointer: Botlish has no way
+  to make one); case 2 two fields only, and C finds every other byte's
+  sentinel intact. All three: mask 0. The record's bytes, copied out by C,
+  are the test's model of every scalar.
+* *The caller-constructed record* (`ne-c-oracle-built`): Botlish builds the
+  same record in byte storage it owns -- `abi::bytes::zeroed`, sixteen
+  `binary::write`s, two `binary::write_foreign`s (C's pointer and function
+  pointer, or null ones) -- and passes it to `bne_check_built(bytes: Ptr[UChar]
+  read noescape, n, which)`, the existing borrowing contract; C copies the
+  bytes into its struct and finds every field, both pointers identical to its
+  own, NULL as NULL, the padding zero and the size exactly `sizeof`: mask 0
+  for both cases, nonzero for the wrong one; the source pointers are still
+  C's own afterwards (`bne_is_target`, `bne_is_callback`).
+* *The asymmetry against C* (`ne-c-oracle-asymmetry`): those bytes, copied
+  into native memory, read back through a view as exactly C's pointers.
+
+**Rust unit tests** (`cargo test --release --lib nview`, 8 new beside the
+view's 5): every encoding stored with neighbours checked, a u64 BigInt and
+`i64::MIN`, out-of-range values refused with the memory unchanged, null and
+non-address operands refused, pointer stores (bits, null, read back), a
+4-byte pointer field refusing a wider address, an Int refused as a pointer,
+a byte write's fresh storage (the operand unchanged), the fixture copy.
+
+**Fuzzing** (`audit/native-edit/tools/fuzz.tcl`). FUZZ-RESULTS
+
+**Mutants** (`audit/native-edit/tools/mutate.tcl`). MUTANT-RESULTS
 
 ## 20. Regression and CI
 

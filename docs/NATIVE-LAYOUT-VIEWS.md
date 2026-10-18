@@ -188,6 +188,14 @@ word from bytes declares the word as what it is there -- an integer
 (`field next: binary::U64 at 8`, the "bits twin" the tests and the fuzzer
 use): an inert Int, with no pointer operation.
 
+> **Since NATIVE-LAYOUT-WRITES.md** native memory can also be written from
+> Botlish, through a `NativeEdit[L]`: a holder of that write authority can
+> store an integer's bits through one layout and read them back through
+> another layout's view as a pointer (type punning, `ne-native-memory-is-raw`).
+> Byte storage still never becomes a pointer; native memory is raw, and
+> making an edit is a direct edge for that reason (NATIVE-LAYOUT-WRITES.md
+> section 10).
+
 `LayoutStruct[L]` of a native-only layout is an ordinary struct holding
 pointers, affine by the ordinary rule (AFFINE-VALUES.md): its pointers move
 out only by destructuring, it has no equality. Making
