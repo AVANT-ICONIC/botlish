@@ -305,7 +305,8 @@ which runs it) fails on:
 * a matcher no rejected example exercises;
 * an example that does not compile, run, print or fail as stated, on every
   backend it names that is available (the native ones when the native
-  backend is built), or that draws a warning it does not state (`@warn`):
+  backend is built on Linux x86-64 or AArch64, where linux::io, syscalls
+  and C calls run natively), or that draws a warning it does not state (`@warn`):
   pages show code a reader can copy without a surprise.
 
 `tests/compilerpedia.test` adds the search and rendering behaviour (exact

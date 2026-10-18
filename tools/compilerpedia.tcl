@@ -768,10 +768,14 @@ proc cpt::Run {hir backend} {
 }
 
 # The backends examples may run on here: the Tcl backends, and the native
-# ones when the native backend is built.
+# ones when the native backend is built on a host that runs them.
 proc cpt::AvailableBackends {} {
     set backends {interp compile}
-    if {![catch {native::binary}]} {
+    # The native examples print through linux::io, make Linux syscalls or
+    # call C: the native runtime does that on Linux x86-64 and AArch64 (the
+    # tests' nativeLinux), not yet on another host.
+    if {![catch {native::binary}] && $::tcl_platform(os) eq "Linux"
+            && $::tcl_platform(machine) in {x86_64 amd64 aarch64 arm64}} {
         lappend backends cranelift-generic cranelift
     }
     return $backends
