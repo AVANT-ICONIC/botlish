@@ -61,6 +61,7 @@ set notYet {
     affine.test                            {4 native coroutines}
     branch-form-boolean.test               {4 native coroutines}
     c-abi-types.test                       {4 native coroutines}
+    c-bindgen.test                         {7 the fixture's manifest records Ubuntu's clang, not Apple's}
     c-ffi.test                             {7 C calls are refused before the linker runs}
     compilation-isolation.test             {4 native coroutines, the golden runner's too}
     coroutines.test                        {4 native coroutines}

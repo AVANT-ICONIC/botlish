@@ -21,10 +21,9 @@ milestones, is MACOS-AARCH64-PORT-AUDIT.md.
   C ABI fact check, the macOS prerequisites, the native status check and
   the tier runner, each runnable locally exactly as CI runs it.
 - **A census** of what the existing tests do on macOS arm64 today (173 of
-  188 test files pass with the baseline Tcl; every golden suite passes on
-  the Tcl backends), and
-  an opt-in mechanism (`[ci-full]` plus `CI-Tests:` trailers) that ran
-  from this branch.
+  189 test files pass with the baseline Tcl; every golden suite passes on
+  the Tcl backends), and an opt-in mechanism (`[ci-full]` plus `CI-Tests:`
+  trailers) that ran from this branch.
 - **A roadmap** of nine further milestones, each independently mergeable.
 
 The headline fact: **the native backend already builds on macOS arm64,
@@ -32,7 +31,10 @@ its Rust unit tests pass and the JIT runs ordinary programs correctly.**
 What does not work refuses explicitly -- coroutines, Linux syscalls,
 executables and C calls -- except one thing: a native stack overflow
 crashes the driver (Rust's own stack-overflow abort, or SIGSEGV), because
-the overflow guard is Linux-only.
+the overflow guard is Linux-only. Two non-macOS findings came with it: the
+Tcl backends deviate from Botlish's Unicode 16 strings under any Tcl newer
+than the 9.0.1 pin, and a GC-stress unit test passes on glibc only by
+allocator luck.
 
 ## Linux development host
 
@@ -69,7 +71,8 @@ touched, and nothing depends on it.
 | `.github/workflows/macos-arm64.yml` | new: the macOS workflow |
 | `tests/platform/toolchain-smoke.sh` | new: C (also a static archive with `-L -l`), rustc and Cargo executables built and run; the native format checked (Mach-O arm64 / ELF); facts printed |
 | `tests/platform/cabi-facts.c`, `cabi-facts.tcl` | new: core::cabi's host row against the host C compiler |
-| `tests/platform/setup-macos.sh` | new: Homebrew tcl-tk (Tcl 9), stable Rust |
+| `tests/platform/setup-macos.sh` | new: Tcl 9.0.1 built from single/build.sh's pinned source release, stable Rust |
+| `.github/actions/setup-macos/action.yml` | new: runs it, caching the Tcl build (like `.github/actions/build-native`) |
 | `tests/platform/native-status.tcl` | new: each native capability against its recorded outcome per host |
 | `tests/platform/tier.tcl` | new: the tiers over tests/all.tcl, tests/golden/run.tcl and main.tcl |
 | `docs/MACOS-AARCH64-PORT-AUDIT.md`, this file | new |
@@ -127,14 +130,15 @@ workflow existed on main.
 | [3](https://github.com/mwagner-webdev/botlish/actions/runs/39102407410) | 609d06d | the first tiered workflow, `[ci-full]` | cancelled: its ubuntu `plan` job sat in the queue (replaced in 542f054) |
 | [4](https://github.com/mwagner-webdev/botlish/actions/runs/39102645922) | 542f054 | the tiered workflow; `[ci-full]` with `CI-Tests:` naming 12 census files | smoke and Linux control green; Tier C ran the 12 files in one shard (the other two stopped after 4 s) and reported their causes; acceptance shard 2 green, shard 1 failed only `unicode-strings.bot` (Tcl 9.0.4) |
 | [5](https://github.com/mwagner-webdev/botlish/actions/runs/39104616134) | 073e331 (main merged) | Tcl 9.0.1 built from source; `[ci-full]` with `CI-Tests:` naming 8 items | the Tcl build and the Linux control green; Tier C: argv.test, native-tcl-unicode.test and unicode-strings.bot pass under 9.0.1, the five coroutine files fail as recorded; its smoke and acceptance were superseded by run 6 |
-@RUN6@
+| [6](https://github.com/mwagner-webdev/botlish/actions/runs/39105397358) | 8e0e03a | the final tiers; `[ci-full]` with `CI-Tests: smoke` and `CI-GC-Stress: 1` | smoke, Linux control and all three Tier C shards (the smoke tier split three ways, under GC stress) green; acceptance shard 1 green; shard 2 failed only tests/c-bindgen.test, which main's merge had brought in (section 15 of the audit), now in `notYet` |
+@RUN7@
 
 ## Botlish on macOS today
 
 MACOS-AARCH64-PORT-AUDIT.md, sections 1 and 15. In short: the front end,
 the interpreter and the Tcl compiler run everything; the native crate
 builds and its unit tests pass; the JIT runs programs; the GC frame walk
-works under stress; 173 of 188 Tcl test files (with Tcl 9.0.1) and every
+works under stress; 173 of 189 Tcl test files (with Tcl 9.0.1) and every
 golden suite on the Tcl backends pass; coroutines (and so the native golden runner),
 Linux syscalls, executables and C calls refuse explicitly; a native stack
 overflow crashes the driver.
@@ -269,3 +273,8 @@ program that recurses deeply on macOS dies today instead of failing with
 - **Main moved by 440 files during the milestone** (C-BINDGEN); merging it
   touched none of this milestone's files but shifted line numbers the
   audit cites, which were rechecked.
+- **Main's new c-bindgen.test failed on macOS for two reasons, neither
+  macOS's own:** its fixture's manifests record the clang that made them
+  (Ubuntu's 18.1.3), and one test pinned linux-x86_64's declaration count
+  for every host target -- which main fixed during the milestone after
+  Linux arm64 found it.

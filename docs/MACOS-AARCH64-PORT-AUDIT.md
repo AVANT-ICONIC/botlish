@@ -256,6 +256,7 @@ FFI), behind the same portable `io::IO` context trait.
 | tests/c-ffi.test `tclLinkable` (:55), examples/ffi/tcl/tcl.bot :17 | `-ltcl9.0` (Debian's library name, on the default library path) | test | the CI's Tcl 9.0.1 build installs `libtcl9.0.dylib` under `~/.cache/botlish/tcl-9.0.1/lib`: link it with `-L`, verify | low | 10 | M |
 | examples/ffi/sha256/boringssl.bot :23 | `extern c library "stdc++"` (GNU libstdc++) | linux | macOS links `c++` (libc++): a per-OS library list is a language question (C-FFI.md has no conditional `extern c library`) | medium | 10 | M |
 | tests/c-ffi.test `cf-missing-library` (:529), `cf-sha256-executable` (:732-739, `ldd`) | GNU ld wording; `ldd` | test | Apple ld wording; `otool -L` | low | 7 | M |
+| tests/c-bindgen.test, tools/c-bindgen (new on main during this milestone) | the fixture's committed manifests, checked byte for byte, record the clang that generated them (`toolchain_version {Ubuntu clang version 18.1.3 (1ubuntu1)}`) | test | under Apple clang the fixture's modules, shim and reports are identical and only its manifests differ (section 15): decide whether the check compares the toolchain lines, or record Apple clang's manifests beside Ubuntu's | low | 7 | M |
 
 ## 11. Tests and the test harness
 
@@ -366,13 +367,13 @@ native backends too, whatever CORE_BACKEND says):
 | 3/3 | 63 | 2375 | 89 | 94 | 426 s |
 | **all** | **188** | **7399** | **123** | **352** | |
 
-Under Tcl 9.0.4, 171 of the 188 files passed. The skips are the Linux host constraints of
-section 11 (`executableAot` 131, `nativeLinux` 117, `linuxX86_64` 45,
+Under Tcl 9.0.4, 171 of the 188 files passed. The skips are the Linux
+host constraints of section 11 (`executableAot` 131, `nativeLinux` 117, `linuxX86_64` 45,
 `cfFixture` 40, `stubLinker` 7, `nativeStackGuard` 4, `linuxAarch64` 2,
 `boringssl` 2, and single ones: `readelf`, `rustcAvailable`,
 `singleExecutable`, `tclLibrary`). The 17 files with failures, their
 causes and owners -- tests/platform/tier.tcl's `notYet` holds the first
-15, which the acceptance tier leaves out:
+15 (and c-bindgen.test, below), which the acceptance tier leaves out:
 
 | File | Failed (interp) | Cause | Milestone |
 |---|---:|---|---|
@@ -397,7 +398,28 @@ causes and owners -- tests/platform/tier.tcl's `notYet` holds the first
 With the baseline Tcl, then, 173 of the 188 files pass, and every one of
 the 15 that does not fails on a capability the port has not reached yet:
 14 on native coroutines, which every native run of an affine value
-needs, and one on C linking. @CBINDGEN@
+needs, and one on C linking. With main's c-bindgen.test (next paragraph),
+173 of 189.
+
+**A file main added during the milestone.** tests/c-bindgen.test (the C
+binding generator, C-BINDGEN.md) arrived with the merge of main and failed
+two tests on macOS in the acceptance tier (run 6).
+`cb-fixture-current` checks the fixture's committed bindings byte for byte
+against a fresh generation: under Apple clang the generated modules, shim
+and reports were identical and only every target's `manifest.txt` differed.
+A manifest records the clang that generated it (`toolchain_version
+{Ubuntu clang version 18.1.3 (1ubuntu1)}`, and the `evidence` line), so the
+check passes under that clang only: a toolchain pin, which a Linux host
+with another clang would meet too. (The test prints only which files
+changed; whether other lines, such as the preprocessed token count, differ
+as well is not verified.) `cb-fixture-no-c-at-compile-time` expected 32 foreign declarations,
+linux-x86_64's count, of the host target's binding; an AArch64 target's
+declares 33 (`bgf_arm_only`, and macOS's `bgf_apple_only` in place of
+`bgf_linux_only`), and main fixed it during this milestone (a96c898,
+which found it on Linux arm64). Whether the check should compare the
+toolchain lines is the generator's decision; milestone 7, which brings C
+to macOS, takes it. tier.tcl's `notYet` records the file until then, so
+the acceptance tier leaves it out.
 
 **The Tcl version.** Botlish's `str::lowercase` is the Unicode 16 simple
 mapping on every backend (README.md, "Strings"). The native runtime pins
@@ -483,7 +505,7 @@ secret or a self-hosted runner.
 
 | Job | Tier | Runner | What | Typical time |
 |---|---|---|---|---|
-| `smoke` | A | `macos-15` | host facts (fails unless `Darwin`/`arm64`, not Rosetta); `tests/platform/toolchain-smoke.sh`; `tests/platform/setup-macos.sh`; `tests/platform/cabi-facts.tcl`; the native build (`.github/actions/build-native`, cached); `cargo test --lib`; `tests/platform/native-status.tcl`; `tier.tcl smoke` | 1 min 18 s with warm caches (run 4); about 3 min more for the one-time Tcl build |
+| `smoke` | A | `macos-15` | host facts (fails unless `Darwin`/`arm64`, not Rosetta); `tests/platform/toolchain-smoke.sh`; `.github/actions/setup-macos` (tests/platform/setup-macos.sh: Tcl 9.0.1 from source, cached; stable Rust); `tests/platform/cabi-facts.tcl`; the native build (`.github/actions/build-native`, cached); `cargo test --lib`; `tests/platform/native-status.tcl`; `tier.tcl smoke` | 1 min 18 s with warm caches (run 4); about 3 min more for the one-time Tcl build |
 | `acceptance` (2 shards) | B | `macos-15` | `tier.tcl -shard I/2 -backends interp acceptance` | 20 and 27 min (run 4) |
 | `linux-control` | A | `ubuntu-latest` | the smoke commands on Linux x86-64 at the same commit | 1-4 min |
 | `full` (3 shards) | C | `macos-15` | opt-in (below) | 4-5 min for a dozen named files (runs 4 and 5); 4 s for a shard with nothing to run; the default payload was not run in milestone 1 |
@@ -499,8 +521,8 @@ secret or a self-hosted runner.
 - **No macOS job waits for a Linux runner.** (An earlier version planned
   the tiers in an ubuntu job; it sat in the queue behind main's Linux
   workflows, which share the account's concurrent-job limit with this
-  one.) The macOS jobs share GitHub's limit of 5 concurrent macOS jobs:
-  smoke and acceptance are 3, a full run 3 more, so a sixth queues.
+  one.) At most five macOS jobs ran at once (run 2's sixth waited):
+  smoke and acceptance are three, a full run three more.
 - **The runner label** is `macos-15`, written in the smoke, acceptance and
   full jobs. It is an Apple Silicon image (`macos-15-arm64`); the smoke
   job's host step fails on anything else, so a wrong label cannot pass
@@ -525,8 +547,10 @@ cargo test --release --manifest-path native/Cargo.toml --lib NAME   # one Rust t
 
 **Tier B, CI acceptance** (every push): `tier.tcl acceptance` -- every
 Tcl test file except `notYet`'s, and every golden suite on interp and
-compile. Locally it is about half an hour of one core; CI runs it in two
-shards on interp (`-backends interp`).
+compile. CI runs it on interp only (`-backends interp`) in two shards,
+about 47 minutes of macOS runner time together (run 4); the default
+`-backends interp,compile` of a local run doubles the Tcl test files'
+share.
 
 **Tier C, exhaustive, opt-in.** The default payload is the acceptance tier
 on both Tcl backends under `BOTLISH_NATIVE_GC_STRESS=1`, in three shards.
@@ -576,11 +600,12 @@ Co-Authored-By: ...
   unauthenticated (`curl -s
   https://api.github.com/repos/OWNER/REPO/actions/runs/RUN/jobs`, 60
   requests an hour).
-- **Logs:** `get_job_logs` with the job id (`tail_lines` to bound it). Every
-  tier.tcl run ends with its summary: one `######## LABEL: ok|FAILED`
-  line per command, then `FAILED:` lines, each with the command that reruns
-  the failing file or suite alone. The job's step summary shows the same
-  lines.
+- **Logs:** `get_job_logs` with the job id (`tail_lines` to bound it; it
+  returns at most the last 5000 lines, so a long run's early output may be
+  cut). Every tier.tcl run ends with its summary: one `######## LABEL:
+  ok|FAILED` line per command, then `FAILED:` lines, each with the command
+  that reruns the failing file or suite alone. The job's step summary shows
+  the same lines. For one file's whole output, rerun it alone (below).
 - **Artifacts:** Tier C uploads each shard's `tier.log`
   (`full-shard-N`). Downloading one goes through Azure blob storage, which
   an agent's network policy may block; the job log holds the same text.
@@ -613,9 +638,11 @@ check a change Tier B already covers.
 ### Keeping Linux covered
 
 The Linux workflows are unchanged (tests.yml, tests-arm64.yml,
-single-executable.yml, bench.yml, static-decisions.yml). They run on
-pushes to main and on pull requests; on a branch without a pull request,
-dispatch them (they all have `workflow_dispatch` on main):
+single-executable.yml, bench.yml, static-decisions.yml, c-bindgen.yml,
+scalar-asm-audit.yml). They run on pushes to main, and tests.yml,
+tests-arm64.yml, bench.yml and c-bindgen.yml on pull requests too; on a
+branch without a pull request, dispatch them (they have `workflow_dispatch`
+on main):
 `actions_run_trigger` with `workflow_id` `tests.yml` (and
 `tests-arm64.yml`; `static-decisions.yml` for a front-end change) and the
 branch as `ref`. A port milestone runs them before it merges.
@@ -739,9 +766,10 @@ the census. Report: MACOS-AARCH64-MILESTONE-1.md.
 - **Files:** codegen/aot.rs (`link_plan_args`, `linker_diagnostics`),
   codegen/clif.rs (`c_signature`, `foreign_call`), tests/cffi/fixture.c
   (Mach-O assembly), tests/c-ffi.test (fixture build, char, `ldd`, linker
-  wording).
+  wording), tests/c-bindgen.test and tools/c-bindgen (the generator under
+  Apple clang).
 - **Prerequisites:** 6.
-- **Acceptance:** c-ffi.test's fixture tests pass on macOS: narrow
+- **Acceptance:** c-ffi.test's fixture tests and c-bindgen.test pass on macOS: narrow
   arguments and results, stack-passed arguments, pointer results and wild
   addresses, `named` symbols, `extern c library` with `-L`;
   native-status's `c-call` expectation is its value.
