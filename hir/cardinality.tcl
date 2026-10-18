@@ -112,9 +112,10 @@ proc hir::cardinality::of_loop {hir e} {
 # are the same value (the same single-assignment argument hir/exactvalue.tcl
 # relies on):
 #
-#   {len KEY}   the length of one List value (KEY identifies the value: the
-#               defining expression an alias chain ends at, or a parameter /
-#               loop binding), always >= 0
+#   {len KEY}   the length of one List value (KEY identifies the value,
+#               ValueKey: {b B} for a parameter / loop binding B, {p KEY
+#               FIELD} for a field path, {e E} for the defining expression E
+#               an alias chain ends at), always >= 0
 #   {cap KEY}   the capacity of one MutableArray value (KEY as for len),
 #               always >= 0 and fixed at allocation (STDLIB-NAMESPACES.md's
 #               indexed-access proof is its one consumer besides lockstep)
@@ -243,6 +244,33 @@ proc hir::cardinality::Chase {hir e stepsVar} {
     }
 }
 
+# The key of the value of expression E in a size atom ({len KEY}, {cap
+# KEY}, {slen KEY}): {b B} when E's alias chain (Chase) ends at a binding B
+# with no defining expression (a parameter, a loop variable, a root name);
+# {p KEY FIELD} when it ends at a projection E'.FIELD, KEY the key of the
+# projection's receiver; else {e D}, the expression D it ends at, which
+# names only itself. A field path names one value however often it is
+# written: its root is a single-assignment binding (or one expression
+# evaluated once per binding of its alias), and a struct's fields are
+# immutable, so `t.slots` written twice is one MutableArray -- whose
+# capacity is fixed, even when it is mutated in place through that field
+# place (MUTABLE-ARRAY.md) -- and `b.cells` written twice one List. That is
+# what lets a guard or a reduction on `t.slots.capacity()` prove the read
+# `t.slots.at(i)` and the write `t.slots.set(i, v)`: the write has no
+# local-alias form, a local `s = t.slots` being a logical copy.
+proc hir::cardinality::ValueKey {hir e stepsVar} {
+    upvar 1 $stepsVar steps
+    lassign [Chase $hir $e steps] kind id
+    if {$kind eq "binding"} {
+        return [list b $id]
+    }
+    set node [dict get $hir exprs $id]
+    if {[dict get $node kind] eq "project"} {
+        return [list p [ValueKey $hir [dict get $node receiver] steps] [dict get $node name]]
+    }
+    return [list e $id]
+}
+
 proc hir::cardinality::NativeName {hir node} {
     if {[dict get $node kind] ne "call"} {
         return ""
@@ -301,8 +329,8 @@ proc hir::cardinality::IntForm {hir e stepsVar} {
 # sum of the operands' lengths for `str::concat`; the operand's length for
 # `str::lowercase` (a simple, one-to-one case mapping); END - START for a
 # `str::substring(s, START, END)` that returned; else the atom {slen KEY},
-# keyed like `len` -- a String is immutable, so equal keys are equal
-# lengths.
+# keyed like `len` (ValueKey) -- a String is immutable, so equal keys are
+# equal lengths.
 proc hir::cardinality::StrLength {hir e stepsVar} {
     upvar 1 $stepsVar steps
     set fact [hir::exact::Of $hir $e]
@@ -327,7 +355,7 @@ proc hir::cardinality::StrLength {hir e stepsVar} {
             return [FormAdd [IntForm $hir [lindex $args 2] steps] [IntForm $hir [lindex $args 1] steps] -1]
         }
     }
-    return [FormAtom [list slen [list e $id]]]
+    return [FormAtom [list slen [ValueKey $hir $id steps]]]
 }
 
 # The capacity of the MutableArray value of expression E, as a (nonnegative)
@@ -336,7 +364,7 @@ proc hir::cardinality::StrLength {hir e stepsVar} {
 # that capacity -- or of one of the library's intrinsic container
 # operations hir/containers.tcl registers (its `create` rule: the capacity
 # operand; its `from-list` rule: the List's length), else the atom
-# {cap KEY}, keyed like `len`. A MutableArray's
+# {cap KEY}, keyed like `len` (ValueKey: a field path too). A MutableArray's
 # capacity is fixed at allocation and never changes (core/mutarray.tcl), and
 # an immutable binding holds one array for its whole lifetime, so equal
 # atoms are the same capacity even though the array's *contents* mutate.
@@ -361,7 +389,7 @@ proc hir::cardinality::Capacity {hir e stepsVar} {
             return [expr {$how eq "int" ? [IntForm $hir $arg steps] : [ListLength $hir $arg steps]}]
         }
     }
-    return [FormAtom [list cap [list e $id]]]
+    return [FormAtom [list cap [ValueKey $hir $id steps]]]
 }
 
 # The length of the List value of expression E, as a (nonnegative) form.
@@ -387,7 +415,7 @@ proc hir::cardinality::ListLength {hir e stepsVar} {
     if {[NativeName $hir $node] eq "list"} {
         return [FormConst [llength [dict get $node args]]]
     }
-    return [FormAtom [list len [list e $id]]]
+    return [FormAtom [list len [ValueKey $hir $id steps]]]
 }
 
 # ---- domains -----------------------------------------------------------------
@@ -484,30 +512,22 @@ proc hir::cardinality::ShowAtom {hir atom} {
     switch -- $kind {
         v { return [hir::semantic::SourceName $hir $what] }
         max { return "max([show $hir $what], 0)" }
-        len {
-            lassign $what how id
-            if {$how eq "b"} {
-                return "length([hir::semantic::SourceName $hir $id])"
-            }
-            return "length([ShowExpr $hir $id])"
-        }
-        cap {
-            lassign $what how id
-            if {$how eq "b"} {
-                return "capacity([hir::semantic::SourceName $hir $id])"
-            }
-            return "capacity([ShowExpr $hir $id])"
-        }
-        slen {
-            lassign $what how id
-            if {$how eq "b"} {
-                return "str::length([hir::semantic::SourceName $hir $id])"
-            }
-            return "str::length([ShowExpr $hir $id])"
-        }
+        len { return "length([ShowKey $hir $what])" }
+        cap { return "capacity([ShowKey $hir $what])" }
+        slen { return "str::length([ShowKey $hir $what])" }
         e { return [ShowExpr $hir $what] }
     }
     return $atom
+}
+
+# Source-like text of a value key (ValueKey).
+proc hir::cardinality::ShowKey {hir key} {
+    lassign $key how what field
+    switch -- $how {
+        b { return [hir::semantic::SourceName $hir $what] }
+        p { return "[ShowKey $hir $what].$field" }
+    }
+    return [ShowExpr $hir $what]
 }
 
 proc hir::cardinality::ShowExpr {hir e} {

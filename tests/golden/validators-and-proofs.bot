@@ -1744,6 +1744,11 @@ fn register_proof_loop_intervals_tests():
 # (the source half of its tests; the verdicts and the NIR stay in Tcl). New
 # tests go at the end of the file: the rejections above pin their lines.
 
+# The field-path tests' table: a field path written twice is one value.
+struct BoundsTable:
+    slots: MutableArray[int]
+    names: List[str]
+
 fn register_bounds_theorem_tests():
     # bounds-values-agree-reduced: an index reduced mod, or masked by, the
     # container's own size needs no handler (mod returns only for a nonzero
@@ -1819,6 +1824,53 @@ fn register_bounds_theorem_tests():
                 list::at(xs, h.mod(list::length(xs)))
             0
     test::rejects("bounds-reduced-empty-container-stays-known-error/list", compiler::DiagnosticCode::KnownError, empty_list_reduced)
+
+    # bounds-values-agree-field-path: accesses through field paths proven
+    # by the same path's size need no handler and compute the same values
+    # on every backend: in-place writes reduced mod the field's capacity,
+    # guarded reads of every index around it, a reduced List read and a
+    # lockstep loop over a field.
+    fn field_path_reads() errors compiler::CompilerError:
+        static compile:
+            fn store(t: BoundsTable, h: int) -> BoundsTable:
+                t.slots.set(h.mod(mutable_array::capacity(t.slots)), h)
+                t
+            fn read(t: BoundsTable, i: int) -> int:
+                if i < 0 or i >= mutable_array::capacity(t.slots):
+                    return -1
+                mutable_array::at(t.slots, i)
+            t = store(store(store(BoundsTable {slots: mutable_array::create(5, 0), names: ["a", "bb", "ccc"]}, -3), 11), 1180591620717411303424)
+            loop i from -1 to 6:
+                read(t, i)
+    test::value("bounds-values-agree-field-path/write-read", [-1, 0, 11, -3, 0, 1180591620717411303424, -1], field_path_reads)
+
+    fn field_path_list() errors compiler::CompilerError:
+        static compile:
+            fn name(t: BoundsTable, h: int) -> str:
+                list::at(t.names, h.mod(list::length(t.names)))
+            t = BoundsTable {slots: mutable_array::create(5, 0), names: ["a", "bb", "ccc"]}
+            loop h in [0, -1, 4, 1180591620717411303424]:
+                name(t, h)
+    test::value("bounds-values-agree-field-path/list", ["a", "ccc", "bb", "bb"], field_path_list)
+
+    fn field_path_lockstep() errors compiler::CompilerError:
+        static compile:
+            fn widths(t: BoundsTable) -> List[int]:
+                loop x in t.names and k from 0 to list::length(t.names):
+                    str::length(x) + k
+            widths(BoundsTable {slots: mutable_array::create(5, 0), names: ["a", "bb", "ccc"]})
+    test::value("bounds-values-agree-field-path/lockstep", [1, 3, 5], field_path_lockstep)
+
+    # bounds-field-path-lockstep (its source half): a counted clause one
+    # longer than a field's List is provably unequal, and the diagnostic
+    # names the field path.
+    fn field_path_lockstep_unequal() errors compiler::CompilerError:
+        static compile:
+            fn widths(t: BoundsTable) -> List[int]:
+                loop x in t.names and k from 0 to list::length(t.names) + 1:
+                    str::length(x) + k
+            0
+    test::rejects_containing("bounds-field-path-lockstep/unequal", compiler::DiagnosticCode::LockstepUnequal, "clause 1 iterates length(t.names) times but clause 2 iterates length(t.names) + 1 times", field_path_lockstep_unequal)
 
 # ---------------------------------------------------------------------------
 

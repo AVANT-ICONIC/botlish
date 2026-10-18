@@ -56,8 +56,8 @@ when the call fails -- or the compiler has proven it cannot.
         binary::parse                     LayoutLengthMismatch
     `xs.at(i)` is free of the obligation only in the forms proof.list-bounds
     lists, and str::substring only in those of proof.slices. A guard on a
-    computed local, a descending loop or a field path is not related to
-    the length today:
+    computed local or a descending loop is not related to the length
+    today:
         this call of "list::at" may produce the declared error
         "IndexNotFound", which is neither handled here nor admitted ...
   * A function body is checked once, for every argument: facts about the
