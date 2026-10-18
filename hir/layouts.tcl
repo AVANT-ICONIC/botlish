@@ -44,13 +44,39 @@
 #
 #   {name F offset O kind scalar width W signed 0|1 endian little type T}
 #   {name F offset O kind layout layout INNER width W type T}
+#   {name F offset O kind pointer width W endian little type T}
 #
 # where T is the field's consumer type -- the declared integer domain
-# (`{refined int {binary::U16}}`), or `{nstruct LayoutStruct[INNER]}` -- and
-# W its byte width (a nested layout's width is its size). `endian` is the
-# scalar's byte order: the target's, little-endian on every supported
-# target; it is recorded per field so an explicit big-endian encoding is one
-# more value here, never a new representation.
+# (`{refined int {binary::U16}}`), `{nstruct LayoutStruct[INNER]}`, or the
+# declared C pointer type (`{cptr P}`, ffi::c::Ptr[P]; `{cfnptr F}`,
+# ffi::c::FnPtr[F]) -- and W its byte width (a nested layout's width is its
+# size, a pointer's the compilation's C target's pointer width). `endian` is
+# the byte order: the target's, little-endian on every supported target; it
+# is recorded per field so an explicit big-endian encoding is one more value
+# here, never a new representation.
+#
+# Pointer fields (NATIVE-LAYOUT-VIEWS.md). A field may hold a C data or
+# function pointer: its width and placement are representation facts like a
+# scalar's, but its meaning is authority -- an address some foreign code
+# handed out. So a layout with a pointer field (directly or in a nested
+# layout) is *native-only*: it is read through a native view of live native
+# memory (NativeView[L], binary::load), where the pointer is the one that
+# memory holds, and never imprinted from bytes (binary::parse would make a
+# pointer out of arbitrary bytes) or emitted into them (writing pointers is a
+# later milestone's): both are LAYOUT-NATIVE-ONLY. A pointer field's
+# pointee may name an opaque struct, which is registered after the layouts:
+# the width (the target's) is known at once, so the declaration checks run
+# as for any field, and the pointer type itself is resolved after the
+# structs (ResolvePointers).
+#
+# Native views (NATIVE-LAYOUT-VIEWS.md). NativeView[L] is {nview L}: a
+# window onto live native memory read through layout L, whose run-time value
+# is the address word of the pointer it was made from. Its fields are L's,
+# each read when projected: a scalar's integer domain, a nested layout's
+# NativeView[INNER] (no load: the inner layout's address), a pointer's
+# declared C pointer type (ViewFieldType). The same registry entry and the
+# same descriptor serve both backings -- bytes (LayoutStruct[L]) and native
+# memory (NativeView[L]); nothing here describes a layout twice.
 #
 # Scalar encodings. A scalar field's type is an integer domain whose value
 # set is exactly the value set of one fixed-width two's-complement or
@@ -203,8 +229,9 @@ proc hir::layouts::align {id} {
 #
 # STRUCTID the struct view's identity (the Tcl struct head is STRUCTID
 # followed by the field names), each FIELD {NAME OFFSET u|i WIDTH ENDIAN} for
-# a scalar or {NAME OFFSET layout DESCRIPTOR} for a nested layout, in declared
-# order. It is the whole of what imprinting and emission need, so it is the
+# a scalar, {NAME OFFSET layout DESCRIPTOR} for a nested layout or {NAME
+# OFFSET ptr WIDTH ENDIAN} for a pointer (read only through a native view),
+# in declared order. It is the whole of what imprinting and emission need, so it is the
 # constant argument the binary operations carry (core/binary.tcl reads it at
 # run time on the interpreter; the Tcl compiler and native lowering read it
 # statically). One layout has exactly one descriptor text.
@@ -215,6 +242,9 @@ proc hir::layouts::descriptor {id} {
         if {[dict get $field kind] eq "layout"} {
             lappend fields [list [dict get $field name] [dict get $field offset] layout \
                 [descriptor [dict get $field layout]]]
+        } elseif {[dict get $field kind] eq "pointer"} {
+            lappend fields [list [dict get $field name] [dict get $field offset] ptr \
+                [dict get $field width] [dict get $field endian]]
         } else {
             lappend fields [list [dict get $field name] [dict get $field offset] \
                 [expr {[dict get $field signed] ? "i" : "u"}] [dict get $field width] [dict get $field endian]]
@@ -230,6 +260,87 @@ proc hir::layouts::DescriptorLayout {descriptor} {
         return ""
     }
     return [string range $structId 13 end-1]
+}
+
+# The descriptor entry of field NAME of layout ID (the FIELD of its
+# descriptor), or "" when ID has no such field.
+proc hir::layouts::FieldDescriptor {id name} {
+    foreach field [lindex [descriptor $id] 3] {
+        if {[lindex $field 0] eq $name} {
+            return $field
+        }
+    }
+    return ""
+}
+
+# 1 if layout ID holds a pointer field, directly or in a nested layout: it is
+# native-only (the file header's "Pointer fields").
+proc hir::layouts::NativeOnly {id} {
+    return [expr {[PointerField $id] ne ""}]
+}
+
+# The path ("next", "inner.handle") of the first pointer field of layout ID in
+# declared order, nested layouts included, or "".
+proc hir::layouts::PointerField {id} {
+    foreach field [dict get [entry $id] fields] {
+        switch -- [dict get $field kind] {
+            pointer {
+                return [dict get $field name]
+            }
+            layout {
+                set inner [PointerField [dict get $field layout]]
+                if {$inner ne ""} {
+                    return "[dict get $field name].$inner"
+                }
+            }
+        }
+    }
+    return ""
+}
+
+# The native view type NativeView[ID].
+proc hir::layouts::viewType {id} {
+    return [list nview $id]
+}
+
+# The layout of TYPE when TYPE is a NativeView type, else "".
+proc hir::layouts::OfViewType {type} {
+    if {![hir::types::IsNativeView $type]} {
+        return ""
+    }
+    set id [lindex $type 1]
+    return [expr {[declared $id] ? $id : ""}]
+}
+
+# The static type of field NAME read through a NativeView[ID] (the file
+# header's "Native views"), or "" when ID has no such field.
+proc hir::layouts::ViewFieldType {id name} {
+    foreach field [dict get [entry $id] fields] {
+        if {[dict get $field name] ne $name} continue
+        if {[dict get $field kind] eq "layout"} {
+            return [viewType [dict get $field layout]]
+        }
+        return [dict get $field type]
+    }
+    return ""
+}
+
+# The pointer width in bytes on the compilation's C target: the target the
+# ffi::c scalars of this compilation were declared for (hir/cabi.tcl's
+# NamespaceTypeDecls; a pointer type can only be written where ffi::c is
+# imported), or "" when no file of the compilation imports ffi::c.
+proc hir::layouts::PointerWidth {} {
+    set target [hir::cabi::CompilationTarget]
+    if {$target eq ""} {
+        return ""
+    }
+    return [expr {[dict get [core::cabi::target $target] pointer] / 8}]
+}
+
+# 1 if the field type expression TYPEEXPR is written as a C pointer type
+# (ffi::c::Ptr[...] or ffi::c::FnPtr[...]).
+proc hir::layouts::PointerTypeExpr {typeExpr} {
+    return [expr {[llength $typeExpr] == 2 && [lindex $typeExpr 0] in [list [hir::cabi::PtrName] [hir::cabi::FnPtrName]]}]
 }
 
 # ---------------------------------------------------------------------------
@@ -285,10 +396,9 @@ proc hir::layouts::NotScalarReason {type spelled} {
         return "[hir::types::show $type] is a struct type, not an integer domain or a layout (a nested layout field names the layout itself)"
     }
     if {[hir::types::IsCAddress $type]} {
-        # C-ABI-TYPES.md, "Pointers in layouts": imprinting reads arbitrary
-        # bytes, and a pointer made from arbitrary bytes would be authority
-        # to an address nothing gave the program.
-        return "[hir::types::show $type] is a C pointer, not a binary scalar: imprinting arbitrary bytes into it would fabricate a pointer (pointer-valued layout fields need a capability-preserving mechanism that does not exist yet)"
+        # A pointer field is written ffi::c::Ptr[T] or ffi::c::FnPtr[F]
+        # (NATIVE-LAYOUT-VIEWS.md): its pointee identity is part of its type.
+        return "[hir::types::show $type] is a C pointer of no single pointee identity: a pointer field is written ffi::c::Ptr\[T\] or ffi::c::FnPtr\[F\]"
     }
     return "[hir::types::show $type] has no fixed binary width (a layout field is an integer domain of exact fixed width, or a nested layout)"
 }
@@ -336,7 +446,9 @@ proc hir::layouts::apply {decls {structDecls {}}} {
     variable maxAlign
     variable maxSize
     variable batchStructs
+    variable pendingPointers
     Reset
+    set pendingPointers {}
     # The structs of the same batch, registered after the layouts: a field
     # type naming one is reported as a struct, not as an unknown type.
     set batchStructs [dict create]
@@ -437,6 +549,20 @@ proc hir::layouts::Resolve {id byId doneVar stack} {
             set width [dict get $registry $nested size]
             lappend fields [dict create name $fieldName offset $offset kind layout layout $nested \
                 width $width type [structType $nested] span $nameSpan typeSpan $typeSpan offsetSpan $offsetSpan]
+        } elseif {[dict exists $field pointerText] || [PointerTypeExpr $typeExpr]} {
+            # A C pointer (the file header's "Pointer fields"): the target's
+            # width now, the type itself once the structs a pointee may name
+            # are registered (ResolvePointers).
+            set width [PointerWidth]
+            if {$width eq ""} {
+                Fail $typeSpan "field \"$fieldName\" of layout \"$name\" is a C pointer, whose width is the compilation's C target's: no file of this compilation imports ffi::c, so there is none" LAYOUT-FIELD-TYPE
+            }
+            variable pendingPointers
+            lappend pendingPointers [dict create id $id field $fieldName name $name ns $ns typeExpr $typeExpr \
+                typeSpan $typeSpan typeText [expr {[dict exists $field pointerText] ? $typeExpr : ""}]]
+            # The bare pointer kind until then: affine, like every pointer.
+            lappend fields [dict create name $fieldName offset $offset kind pointer width $width \
+                endian little type cptr span $nameSpan typeSpan $typeSpan offsetSpan $offsetSpan]
         } else {
             set spelled [ShowTypeExpr $typeExpr]
             if {[catch {hir::resolve::ResolveTypeExpr $typeExpr $ns} resolved]} {
@@ -481,6 +607,67 @@ proc hir::layouts::Resolve {id byId doneVar stack} {
         dict remove $f span typeSpan offsetSpan
     }]
     dict set done $id 1
+}
+
+# Resolves the type of every pointer field apply registered (the file
+# header's "Pointer fields"), once the structs a pointee may name are
+# registered (hir::sourcetypes::apply, after hir::structs::apply), and
+# writes it into the registry and into the layouts' `sourceTypes` entries
+# of ORDERVAR. A pointee or signature the C ABI types reject is
+# LAYOUT-FIELD-TYPE at the field's type.
+proc hir::layouts::ResolvePointers {orderVar} {
+    upvar 1 $orderVar order
+    variable registry
+    variable pendingPointers
+    if {![info exists pendingPointers] || $pendingPointers eq {}} {
+        return
+    }
+    set resolvedTypes [dict create]
+    foreach pending $pendingPointers {
+        dict with pending {}
+        set spelled [ShowTypeExpr $typeExpr]
+        if {$typeText ne ""} {
+            # HIR text (hir/read.tcl): the canonical type text, read now that
+            # the structs a pointee names are registered, and validated again.
+            if {[catch {hir::read::ParseType $typeText 0} type]} {
+                Fail $typeSpan "invalid type $typeText for field \"$field\" of layout \"$name\": $type" LAYOUT-FIELD-TYPE
+            }
+            set spelled $typeText
+            if {[hir::types::IsCPtr $type]} {
+                set problem [expr {[lindex $type 1] eq "void" ? "" : [hir::cabi::PointeeProblem [lindex $type 1]]}]
+            } elseif {[hir::types::IsCFnPtr $type]} {
+                set problem [hir::cabi::SignatureProblem [lindex $type 1]]
+            } else {
+                set problem "[hir::types::show $type] is not a C pointer type"
+            }
+            if {$problem ne ""} {
+                Fail $typeSpan "field \"$field\" of layout \"$name\" cannot have type $spelled: $problem" LAYOUT-FIELD-TYPE
+            }
+        } elseif {[catch {hir::resolve::ResolveTypeExpr $typeExpr $ns} type]} {
+            Fail $typeSpan "invalid type $spelled for field \"$field\" of layout \"$name\": $type" LAYOUT-FIELD-TYPE
+        }
+        dict set resolvedTypes [list $id $field] $type
+        set fields [lmap f [dict get $registry $id fields] {
+            if {[dict get $f name] eq $field} {
+                dict set f type $type
+            }
+            set f
+        }]
+        dict set registry $id fields $fields
+    }
+    set pendingPointers {}
+    set order [lmap entry $order {
+        if {[dict exists $entry kind] && [dict get $entry kind] eq "layout"} {
+            set id [dict get $entry id]
+            dict set entry fields [lmap f [dict get $entry fields] {
+                if {[dict exists $resolvedTypes [list $id [dict get $f name]]]} {
+                    dict set f type [dict get $resolvedTypes [list $id [dict get $f name]]]
+                }
+                set f
+            }]
+        }
+        set entry
+    }]
 }
 
 # The message of a field type TYPEEXPR (written SPELLED in namespace NS)
@@ -576,6 +763,26 @@ proc hir::layouts::ResolveLayoutStruct {arg ns} {
         "LayoutStruct\[$spelled\]: $spelled is $what, not a layout; the argument of LayoutStruct must name a layout declaration (`layout Name:`), whose fields LayoutStruct\[Name\] has"
 }
 
+# The type NativeView[ARG] denotes in code of namespace NS
+# (NATIVE-LAYOUT-VIEWS.md): the same argument rules, and the same
+# diagnostics, as LayoutStruct[ARG]'s.
+proc hir::layouts::ResolveNativeView {arg ns} {
+    if {[llength $arg] == 1} {
+        set id [lookup $arg $ns]
+        if {$id ne ""} {
+            return [viewType $id]
+        }
+    }
+    set spelled [ShowTypeExpr $arg]
+    set what [ArgumentKind $arg $ns]
+    if {$what eq ""} {
+        return -code error -errorcode {BOTLISH UNKNOWN-LAYOUT} \
+            "unknown layout \"$spelled\" in NativeView\[$spelled\]: no \"layout [lindex [split [string map {:: \x01} $spelled] \x01] end]:\" declaration is visible (the argument of NativeView must name a layout)"
+    }
+    return -code error -errorcode {BOTLISH LAYOUT-STRUCT-PARAMETER} \
+        "NativeView\[$spelled\]: $spelled is $what, not a layout; the argument of NativeView must name a layout declaration (`layout Name:`), the layout through which the view reads native memory"
+}
+
 # What the type expression ARG (written in NS) is when it is not a layout:
 # "a type", "a struct", "an enum", "a refinement", "a trait", "a built-in
 # type", "an applied type", or "" when it names nothing.
@@ -623,6 +830,16 @@ proc hir::layouts::ArgumentKind {arg ns} {
 #                   descriptor appended (Elaborate)
 #   input K         argument K is the bytes being imprinted: statically an
 #                   abi::bytes::Bytes (verify)
+#   pointer K       argument K is the data pointer a native view reads
+#                   through: statically an ffi::c::Ptr[T] (verify)
+#   viewed AT FORM  argument AT's static type is NativeView[L]; once types
+#                   are known the call becomes a call of FORM with L's
+#                   descriptor appended (Elaborate)
+#   field K         argument K is one field's descriptor entry (the
+#                   internal read a native view's projection becomes)
+#
+# and `op` the operation a backend performs (parse, emit; view, load,
+# field: NATIVE-LAYOUT-VIEWS.md).
 
 # The -layout role of native NAME, or "".
 proc hir::layouts::Role {name} {
@@ -661,10 +878,16 @@ proc hir::layouts::CalledNative {hir e} {
 # Diagnostics of the binary operations' static operands (part of
 # hir::CheckOnce):
 #
-#   BINARY-OPERAND   emit's value is not statically a LayoutStruct[L]; the
-#                    bytes given to parse are not statically an
-#                    abi::bytes::Bytes; an operation used as a value (it
-#                    takes static operands, so it has no function value)
+#   BINARY-OPERAND      emit's value is not statically a LayoutStruct[L];
+#                       the bytes given to parse are not statically an
+#                       abi::bytes::Bytes; the pointer given to
+#                       binary::native::view is not statically a data
+#                       pointer ffi::c::Ptr[T]; load's value is not
+#                       statically a NativeView[L]; an operation used as a
+#                       value (it takes static operands, so it has no
+#                       function value)
+#   LAYOUT-NATIVE-ONLY  parse or emit of a layout with a pointer field (the
+#                       file header's "Pointer fields")
 proc hir::layouts::verify {hirVar} {
     upvar 1 $hirVar hir
     set callees [dict create]
@@ -707,6 +930,60 @@ proc hir::layouts::Problems {hir e name role} {
                 "$name needs a value whose static type is LayoutStruct\[L\] for a layout L (the layout it emits with); this value's type here is [hir::types::show $type]" $arg]
         }
     }
+    set at [RoleOf $role viewed]
+    if {$at ne ""} {
+        set arg [lindex $args [lindex $at 0]]
+        set type [hir::typeOf $hir $arg]
+        if {$type ne "never" && [OfViewType $type] eq ""} {
+            lappend problems [list BINARY-OPERAND \
+                "$name needs a value whose static type is NativeView\[L\] for a layout L (a native view, binary::native::view, whose layout it reads every field of); this value's type here is [hir::types::show $type]" $arg]
+        }
+    }
+    set pointer [RoleOf $role pointer]
+    if {$pointer ne ""} {
+        set arg [lindex $args $pointer]
+        set type [hir::typeOf $hir $arg]
+        if {$type ne "never" && ![hir::types::IsCPtr $type]} {
+            if {[hir::types::IsCFnPtr $type]} {
+                set why "a C function pointer, which addresses code, not data"
+            } else {
+                set why [hir::types::show $type]
+            }
+            lappend problems [list BINARY-OPERAND \
+                "$name reads the live native memory a C data pointer addresses (an ffi::c::Ptr\[T\], which only foreign code hands out); this argument's type here is $why" $arg]
+        }
+    }
+    # A native-only layout (a pointer field) imprinted from or emitted into
+    # bytes: its pointer is authority, which arbitrary bytes are not.
+    set op [RoleOf $role op]
+    if {[RoleOf $role typed] ne ""} {
+        # binary::emit before elaboration.
+        set op emit
+    }
+    if {$op in {parse emit}} {
+        set id ""
+        set at [RoleOf $role typed]
+        if {$at ne ""} {
+            set id [OfType [hir::typeOf $hir [lindex $args [lindex $at 0]]]]
+            set where [lindex $args [lindex $at 0]]
+        }
+        set operand [RoleOf $role operand]
+        if {$id eq "" && $operand ne ""} {
+            set where [lindex $args $operand]
+            if {$where ne "" && [hir::kind $hir $where] eq "const"} {
+                set id [DescriptorLayout [lindex [hir::get $hir $where literal] end]]
+            }
+        }
+        if {$id ne "" && [declared $id] && [NativeOnly $id]} {
+            set path [PointerField $id]
+            if {$op eq "parse"} {
+                set message "$name cannot imprint layout \"$id\" from bytes: its field \"$path\" is a C pointer, and imprinting arbitrary bytes into it would make a pointer no foreign code handed out; a layout with a pointer field is read through a native view of live native memory (binary::native::view, binary::load)"
+            } else {
+                set message "$name cannot emit layout \"$id\" into bytes: its field \"$path\" is a C pointer, and writing a pointer into bytes is not supported (a layout with a pointer field is read through a native view only)"
+            }
+            lappend problems [list LAYOUT-NATIVE-ONLY $message $where]
+        }
+    }
     set input [RoleOf $role input]
     if {$input ne ""} {
         set arg [lindex $args $input]
@@ -726,19 +1003,87 @@ proc hir::layouts::Problems {hir e name role} {
 # the layout from the call alone. Part of hir::BuildFull, after the checks;
 # a call whose value is not a LayoutStruct (a BINARY-OPERAND diagnostic) is
 # left alone.
+#
+# Native views (NATIVE-LAYOUT-VIEWS.md) likewise: binary::load(v) becomes
+# binary#load(v, DESCRIPTOR) from v's static NativeView[L], and every
+# projection `v.f` of a receiver statically a NativeView[L] becomes the
+# internal read binary#view_field(v, FIELD), FIELD f's descriptor entry --
+# its static type the projection's -- so no backend reads a layout or
+# knows the view type: a field read is an explicit operation with constant
+# operands.
 proc hir::layouts::Elaborate {hirVar} {
     upvar 1 $hirVar hir
     dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "project"} {
+            set id [OfViewType [hir::typeOf $hir [dict get $node receiver]]]
+            if {$id eq ""} continue
+            set field [FieldDescriptor $id [dict get $node name]]
+            if {$field eq ""} continue
+            ViewRead hir $e $field
+            continue
+        }
         if {[dict get $node kind] ne "call"} continue
         set name [CalledNative $hir $e]
         if {$name eq ""} continue
-        set typed [RoleOf [Role $name] typed]
-        if {$typed eq ""} continue
-        lassign $typed at form
-        set id [OfType [hir::typeOf $hir [lindex [dict get $node args] $at]]]
+        set role [Role $name]
+        set typed [RoleOf $role typed]
+        if {$typed ne ""} {
+            lassign $typed at form
+            set id [OfType [hir::typeOf $hir [lindex [dict get $node args] $at]]]
+        } else {
+            set typed [RoleOf $role viewed]
+            if {$typed eq ""} continue
+            lassign $typed at form
+            set id [OfViewType [hir::typeOf $hir [lindex [dict get $node args] $at]]]
+        }
         if {$id eq ""} continue
         hir::mutvec::Retarget hir $e $form
         dict set hir exprs $e args [concat [dict get $hir exprs $e args] \
             [list [hir::mutvec::NewConst hir [descriptor $id] $e]]]
+    }
+}
+
+# The native that reads one field through a native view (core/binary.tcl).
+proc hir::layouts::ViewReadNative {} {
+    return binary#view_field
+}
+
+# Rewrites projection E of a native view, in place, into the call
+# binary#view_field(RECEIVER, FIELD) of the same static type: E keeps its
+# identity, so its parent, its type and every side table naming it are
+# unchanged.
+proc hir::layouts::ViewRead {hirVar e field} {
+    upvar 1 $hirVar hir
+    set node [dict get $hir exprs $e]
+    set native [ViewReadNative]
+    set b [hir::mutvec::NativeBinding $hir $native]
+    set y [dict get $hir bindings $b symbol]
+    set r [hir::NewId hir expr]
+    dict set hir exprs $r [dict create id $r kind ref origin [dict get $node origin] \
+        scope [dict get $node scope] type [hir::types::intern hir [list native $native]] \
+        reachable [dict get $node reachable] name $native binding $b init yes]
+    set c [hir::mutvec::NewConst hir $field $e]
+    dict set hir exprs $e [dict create id $e kind call origin [dict get $node origin] \
+        scope [dict get $node scope] type [dict get $node type] reachable [dict get $node reachable] \
+        callee $r args [list [dict get $node receiver] $c] target [list native $y] known ""]
+}
+
+# Diagnoses, in the view of semantic instance HIR (hir/semantic.tcl's View)
+# whose generic program is GENERIC, every projection in EXPRS whose receiver
+# is a native view in the instance but not statically one in the generic
+# program: a field read through a view lowers to the field's constant offset
+# and encoding (Elaborate), which an untyped receiver does not have -- so the
+# receiver must be statically NativeView[L] (BINARY-OPERAND), as emit's value
+# must be statically a LayoutStruct.
+proc hir::layouts::verifyInstance {hirVar generic exprs} {
+    upvar 1 $hirVar hir
+    foreach e $exprs {
+        set node [dict get $hir exprs $e]
+        if {[dict get $node kind] ne "project" || ![dict get $node reachable]} continue
+        set receiver [dict get $node receiver]
+        set id [OfViewType [hir::typeOf $hir $receiver]]
+        if {$id eq "" || [OfViewType [hir::typeOf $generic $receiver]] ne ""} continue
+        hir::Diagnose hir BINARY-OPERAND \
+            "the field \"[dict get $node name]\" is read through a native view (NativeView\[$id\]) whose type is not static here: a native view's field is read at its layout's constant offset, so the receiver must be statically a NativeView\[L\] (declare the parameter or result that carries it NativeView\[$id\])" $e
     }
 }

@@ -89,6 +89,7 @@ use super::ffifixture::{
     rt_ffi_fixture_read_reentrant,
 };
 use super::ffi::{rt_ffi_bad_address, rt_ffi_bad_bool, rt_ffi_box_i64, rt_ffi_box_u64, rt_ffi_contract_violation, rt_ffi_int_word};
+use super::nview::{rt_cptr_fixture_memory, rt_cptr_offset, rt_native_load, rt_native_load_ptr};
 use super::syscall::{rt_linux_aarch64_syscall, rt_linux_x86_64_syscall};
 use super::value::*;
 use super::vm::{current_program, Vm, NativeInfo};
@@ -125,6 +126,9 @@ pub fn op_may_allocate(op: OpCode) -> bool {
             // Fixed binary layouts (BINARY-LAYOUT.md): a fresh zeroed storage;
             // a 64-bit field read outside the small-Int range is a BigInt.
             | BytesZeroed | BinLoad
+            // A native view's 64-bit field read outside the small-Int range
+            // is a BigInt (NATIVE-LAYOUT-VIEWS.md).
+            | NativeLoad
             // The proven siblings allocate exactly like their checked forms; only
             // their op_may_error classification differs.
             | SubstrProven | MutArrayFreezeProven | MkError
@@ -191,6 +195,12 @@ pub fn op_may_error(op: OpCode) -> bool {
         // layout's fields lie inside its size, the length is checked before
         // any load, and a field's type is its encoding's exact range.
         | BinLoad | BinStore | BytesZeroed
+        // Native layout views (runtime/nview.rs): an operand that is no C
+        // address word, the null address or a malformed encoding (none of
+        // which a checked program produces), and a pointer field holding an
+        // address no C address word can hold (NATIVE ADDRESS, like a C
+        // call's pointer result). The fixture's: a non-storage operand.
+        | NativeLoad | NativeLoadPtr | CPtrOffset | CPtrFixtureMemory
         // Only on an operand that is not a 64-bit register word (TYPE, never
         // a truncation: runtime/syscall.rs), which a checked program cannot
         // produce. The kernel's own result is never an error here. (On
@@ -896,7 +906,7 @@ pub extern "C" fn rt_keepalive(_p: *mut Vm, v: Value) -> Value {
 
 /// The scalar encoding word of `binload`/`binstore`: width in bytes (1, 2, 4
 /// or 8), signedness, byte order -- or None for a malformed word.
-fn bin_encoding(code: Value) -> Option<(usize, bool, bool)> {
+pub(super) fn bin_encoding(code: Value) -> Option<(usize, bool, bool)> {
     let c = int_small(code)?;
     let width = (c & 15) as usize;
     if !matches!(width, 1 | 2 | 4 | 8) || c & !63 != 0 {
@@ -942,8 +952,16 @@ pub extern "C" fn rt_bin_load(p: *mut Vm, storage: Value, offset: Value, code: V
         Ok(operands) => operands,
         Err(failed) => return failed,
     };
+    bin_decode(p, &bytes_of(storage)[at..at + width], signed, big)
+}
+
+/// The Int the encoded scalar BYTES (1, 2, 4 or 8 of them) holds, SIGNED
+/// two's complement or unsigned, BIG-endian or little: `binload`'s decoding,
+/// shared with the native view's `nativeload` (runtime/nview.rs).
+pub(super) fn bin_decode(p: *mut Vm, bytes: &[u8], signed: bool, big: bool) -> Value {
+    let width = bytes.len();
     let mut word = [0u8; 8];
-    word[..width].copy_from_slice(&bytes_of(storage)[at..at + width]);
+    word[..width].copy_from_slice(bytes);
     if big {
         word[..width].reverse();
     }
@@ -2608,7 +2626,11 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         // The fixed-layout ops exist only in the straight-line code of one
         // statically known layout (native/lower.tcl's LayoutParse /
         // LayoutEmit): a binary operation is never a value.
-        | BinLoad | BinStore | BytesZeroed => {
+        | BinLoad | BinStore | BytesZeroed
+        // A native view's loads, likewise (one statically known layout's
+        // field reads, NATIVE-LAYOUT-VIEWS.md); the memory fixture is an
+        // imprinted native, never a value.
+        | NativeLoad | NativeLoadPtr | CPtrOffset | CPtrFixtureMemory => {
             // Raw (untagged) representation ops, StringRegion ops and String
             // traversal ops never implement a dynamic native: native/lower.tcl
             // emits them only directly, as `op` instructions inline in a
@@ -2699,6 +2721,10 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
         h!(rt_bytes_zeroed, 2),
         h!(rt_bin_load, 4),
         h!(rt_bin_store, 5),
+        h!(rt_native_load, 4),
+        h!(rt_native_load_ptr, 4),
+        h!(rt_cptr_offset, 3),
+        h!(rt_cptr_fixture_memory, 2),
         h!(rt_is_tcl_alpha, 2),
         h!(rt_is_tcl_alnum, 2),
         h!(rt_str_region_is_tcl_alpha, 4),

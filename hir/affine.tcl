@@ -704,6 +704,12 @@ proc hir::affine::AffineProjection {hir e} {
             && [IsDestructureTemp $hir [dict get $hir exprs $receiver binding]]} {
         return 0
     }
+    if {[hir::types::IsNativeView [hir::typeOf $hir $receiver]]} {
+        # A field read through a native view (NATIVE-LAYOUT-VIEWS.md) is a
+        # load from memory: a fresh value (a pointer field's own owner), never
+        # a move out of the view, which owns nothing.
+        return 0
+    }
     return [hir::types::IsAffine [hir::typeOf $hir $e]]
 }
 

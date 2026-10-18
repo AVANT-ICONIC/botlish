@@ -476,12 +476,14 @@ test ca-layout-target-encodings {a scalar field's encoding follows the target: l
     }
 } -cleanup {unset -nocomplain target} -result {{linux-x86_64 {8 1} {1 1}} {windows-x86_64 {4 1} {1 1}} {linux-aarch64 {8 1} {1 0}}}
 
-test ca-layout-no-pointer-field {a pointer is not a layout field: imprinting arbitrary bytes would fabricate one} -body {
+test ca-layout-pointer-field-native-only {a data or function pointer is a layout field of the target's pointer width that arbitrary bytes never fill: the declaration is accepted, and imprinting it from bytes (binary::parse) or emitting it into bytes (binary::emit) is LAYOUT-NATIVE-ONLY -- it is read through a native view only (NATIVE-LAYOUT-VIEWS.md)} -body {
     lmap t {{ffi::c::Ptr[ffi::c::Void]} {ffi::c::FnPtr[Fn{args: [], return: unit}]}} {
-        lassign [caError "import ffi::c\nlayout X:\n    size 8\n    align 8\n    field p: $t at 0\n\n1\n"] kind message
-        list $kind [expr {[string first "would fabricate a pointer" $message] >= 0}]
+        set layout "import abi\nimport abi::bytes\nimport binary\nimport ffi::c\nlayout X:\n    size 8\n    align 8\n    field p: $t at 0\n\n"
+        list [caError "${layout}1\n"] \
+            [caError "${layout}fn f(d: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    x = binary::parse(X, d)\n    0\n1\n"] \
+            [lindex [caError "${layout}fn f(v: LayoutStruct\[X\]) -> abi::bytes::Bytes:\n    binary::emit(v)\n1\n"] 0]
     }
-} -cleanup {unset -nocomplain t kind message} -result {{LAYOUT-FIELD-TYPE 1} {LAYOUT-FIELD-TYPE 1}}
+} -cleanup {unset -nocomplain t layout} -result {{ok {LAYOUT-NATIVE-ONLY {binary::parse cannot imprint layout "X" from bytes: its field "p" is a C pointer, and imprinting arbitrary bytes into it would make a pointer no foreign code handed out; a layout with a pointer field is read through a native view of live native memory (binary::native::view, binary::load)}} LAYOUT-NATIVE-ONLY} {ok {LAYOUT-NATIVE-ONLY {binary::parse cannot imprint layout "X" from bytes: its field "p" is a C pointer, and imprinting arbitrary bytes into it would make a pointer no foreign code handed out; a layout with a pointer field is read through a native view of live native memory (binary::native::view, binary::load)}} LAYOUT-NATIVE-ONLY}}
 
 # ---------------------------------------------------------------------------
 # Imprinting (hir/imprint.tcl), independent of ffi::c

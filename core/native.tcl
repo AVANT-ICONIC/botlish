@@ -564,14 +564,25 @@ proc core::native::register {name args} {
 #   input K          argument K is the bytes being imprinted (an abi::bytes::
 #                    Bytes)
 #   op OP            the operation a backend performs with the descriptor
-#                    constant of the operand: parse (imprint) or emit
+#                    constant of the operand: parse (imprint) or emit; view
+#                    (a native view of the pointer argument), load (every
+#                    field read through a native view) or field (one field
+#                    read, the operand that field's descriptor entry)
+#                    (NATIVE-LAYOUT-VIEWS.md)
+#   pointer K        argument K is the data pointer a native view reads
+#                    through (an ffi::c::Ptr[T])
+#   viewed {AT FORM} argument AT's static type is NativeView[L]; the call is
+#                    elaborated to a call of FORM with L's descriptor
+#                    appended (binary::load)
+#   field K          argument K is one field's descriptor entry (the
+#                    internal binary#view_field a view's projection becomes)
 proc core::native::ValidLayoutRole {role arity} {
     if {[catch {llength $role} n] || $n % 2 || ![string is digit -strict $arity]} {
         return 0
     }
     foreach {key value} $role {
         switch -- $key {
-            operand - input {
+            operand - input - pointer - field {
                 if {![string is digit -strict $value] || $value >= $arity} {
                     return 0
                 }
@@ -581,14 +592,14 @@ proc core::native::ValidLayoutRole {role arity} {
                     return 0
                 }
             }
-            typed {
+            typed - viewed {
                 if {[llength $value] != 2 || ![string is digit -strict [lindex $value 0]]
                         || [lindex $value 0] >= $arity} {
                     return 0
                 }
             }
             op {
-                if {$value ni {parse emit}} {
+                if {$value ni {parse emit view load field}} {
                     return 0
                 }
             }
@@ -695,6 +706,24 @@ proc core::native::ValidShape {shape count} {
         # is described by argument I's descriptor constant (binary::parse,
         # core/binary.tcl; BINARY-LAYOUT.md), resolved by hir::types::
         # ShapeResult.
+        return [expr {$length == 2 && [string is digit -strict [lindex $shape 1]]
+            && ($count eq "" || [lindex $shape 1] < $count)}]
+    }
+    if {[lindex $shape 0] eq {view-field}} {
+        # {view-field V F}: the static type of the field whose descriptor
+        # entry is argument F's constant, read through argument V's static
+        # NativeView[L] (binary#view_field, NATIVE-LAYOUT-VIEWS.md), resolved
+        # by hir::types::ShapeResult.
+        return [expr {$length == 3 && [string is digit -strict [lindex $shape 1]]
+            && [string is digit -strict [lindex $shape 2]]
+            && ($count eq "" || ([lindex $shape 1] < $count && [lindex $shape 2] < $count))}]
+    }
+    if {[lindex $shape 0] in {native-view view-struct}} {
+        # {native-view I}: the result is a NativeView[L] whose layout L is
+        # described by argument I's descriptor constant
+        # (binary::native::view); {view-struct I}: a LayoutStruct[L], L the
+        # layout of argument I's static NativeView[L] type (binary::load).
+        # Both resolved by hir::types::ShapeResult (NATIVE-LAYOUT-VIEWS.md).
         return [expr {$length == 2 && [string is digit -strict [lindex $shape 1]]
             && ($count eq "" || [lindex $shape 1] < $count)}]
     }

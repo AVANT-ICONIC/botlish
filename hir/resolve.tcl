@@ -631,6 +631,10 @@ proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""} {imprints 0}} {
         # LayoutStruct[L] (BINARY-LAYOUT.md): L names a layout, never a type.
         return [hir::layouts::ResolveLayoutStruct $arg $ns]
     }
+    if {$name eq "NativeView"} {
+        # NativeView[L] (NATIVE-LAYOUT-VIEWS.md): likewise.
+        return [hir::layouts::ResolveNativeView $arg $ns]
+    }
     if {$name eq [hir::cabi::PtrName]} {
         # ffi::c::Ptr[T] (C-ABI-TYPES.md): T is a pointee identity
         # (ffi::c::Void among them), never a value type.

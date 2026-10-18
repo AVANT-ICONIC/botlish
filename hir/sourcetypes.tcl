@@ -121,7 +121,7 @@ proc hir::sourcetypes::ElsewhereClause {first span} {
 # domain CANONICAL-DOMAIN}, PARENT-SPELLING "Int" or another declared name,
 # CANONICAL-DOMAIN core::type::metadata's own {interval LO HI} / {exact
 # {V...}} form (hir/format.tcl prints this; hir/read.tcl re-applies it).
-proc hir::sourcetypes::apply {decls {structDecls {}}} {
+proc hir::sourcetypes::apply {decls {structDecls {}} {pointers 1}} {
     if {$decls eq "" && $structDecls eq ""} {
         # Nothing new to register: leave the registry exactly as is,
         # neither resetting nor adding anything, and report no source types
@@ -204,6 +204,13 @@ proc hir::sourcetypes::apply {decls {structDecls {}}} {
         # types (whose names they may not reuse, and which their fields may
         # name), their entries joining the same ordered `sourceTypes` list.
         lappend order {*}[hir::structs::apply $structDecls]
+    }
+    if {$layoutDecls ne "" && $pointers} {
+        # A layout's pointer fields may name an opaque struct as their
+        # pointee (NATIVE-LAYOUT-VIEWS.md): their types are resolved now --
+        # or, with POINTERS 0, by the caller once it has registered the
+        # structs itself (hir/read.tcl).
+        hir::layouts::ResolvePointers order
     }
     return $order
 }

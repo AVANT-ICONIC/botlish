@@ -94,6 +94,11 @@ proc core::binary::Decode {descriptor bytes base} {
             lappend values [Decode [lindex $field 3] $bytes [expr {$base + $offset}]]
             continue
         }
+        if {$kind eq "ptr"} {
+            # Statically LAYOUT-NATIVE-ONLY (hir/layouts.tcl): arbitrary
+            # bytes never become a pointer.
+            core::semanticError TYPE "binary::parse: field \"$name\" of [lindex $descriptor 0] is a C pointer, which is never imprinted from bytes"
+        }
         lassign $field name offset sign width endian
         binary scan $bytes @[expr {$base + $offset}][Letter $width $sign $endian] n
         lappend values [core::value::intFromNumber $n]
@@ -115,6 +120,9 @@ proc core::binary::Encode {descriptor value bytes base} {
             set bytes [Encode [lindex $field 3] $fieldValue $bytes $at]
             continue
         }
+        if {$kind eq "ptr"} {
+            core::semanticError TYPE "binary::emit: field \"$name\" of $structId is a C pointer, which is never written into bytes"
+        }
         lassign $field name offset sign width endian
         set n [core::value::intOf $fieldValue]
         set bits [expr {8 * $width}]
@@ -134,8 +142,37 @@ proc core::binary::Encode {descriptor value bytes base} {
     return $bytes
 }
 
+# The path of the first pointer field of DESCRIPTOR ("link.next"), or "":
+# such a layout is native-only (NATIVE-LAYOUT-VIEWS.md), statically
+# LAYOUT-NATIVE-ONLY for parse and emit -- refused here too, for a program
+# compiled unchecked (-strict 0) or core IR written by hand.
+proc core::binary::PointerPath {descriptor} {
+    foreach field [lindex $descriptor 3] {
+        lassign $field name offset kind
+        if {$kind eq "ptr"} {
+            return $name
+        }
+        if {$kind eq "layout"} {
+            set inner [PointerPath [lindex $field 3]]
+            if {$inner ne ""} {
+                return $name.$inner
+            }
+        }
+    }
+    return ""
+}
+
+proc core::binary::RefuseNativeOnly {operation descriptor} {
+    set path [PointerPath $descriptor]
+    if {$path ne ""} {
+        core::semanticError LAYOUT-NATIVE-ONLY \
+            "$operation: field \"$path\" of [lindex $descriptor 0] is a C pointer, which bytes never become and are never written from (a layout with a pointer field is read through a native view only)"
+    }
+}
+
 proc core::binary::parse {descriptor data} {
     set descriptor [core::value::strOf $descriptor]
+    RefuseNativeOnly binary::parse $descriptor
     set bytes [BytesOf $data binary::parse]
     set size [lindex $descriptor 1]
     if {[string length $bytes] != $size} {
@@ -147,6 +184,7 @@ proc core::binary::parse {descriptor data} {
 
 proc core::binary::emit {value descriptor} {
     set descriptor [core::value::strOf $descriptor]
+    RefuseNativeOnly binary::emit $descriptor
     set size [lindex $descriptor 1]
     return [BytesValue [Encode $descriptor $value [binary format x$size] 0]]
 }
@@ -160,18 +198,86 @@ proc core::binary::Unelaborated {name args} {
     core::semanticError TYPE "$name: the layout is static (named at the call, or the static type of the emitted value), and this call has none"
 }
 
+# ---------------------------------------------------------------------------
+# Read-only native views (NATIVE-LAYOUT-VIEWS.md)
+#
+#   binary::native::view(L, p)      NativeView[L]: the live native memory the
+#                                   data pointer P (an ffi::c::Ptr[T])
+#                                   addresses, read through layout L
+#                                   (NativeViewNull for a null P). P is
+#                                   observed; the view is P's address word.
+#   v.field                         one field read at its offset: a scalar's
+#                                   Int, a nested layout's NativeView[Inner]
+#                                   (its address plus the offset, nothing
+#                                   read), a pointer field's ffi::c::Ptr /
+#                                   FnPtr (hir::layouts::Elaborate rewrites
+#                                   the projection to the internal
+#                                   binary#view_field(v, FIELD), FIELD the
+#                                   field's descriptor entry)
+#   binary::load(v)                 LayoutStruct[L]: every field read once,
+#                                   L from the view's static type (elaborated
+#                                   to binary#load(v, DESCRIPTOR))
+#
+# binary::native is an intrinsic namespace designated direct
+# (DIRECT-MODULES.md): reading live process memory is raw authority, so a
+# call of view is a direct edge of its module. Reading a view (a projection,
+# binary::load) is not: the view is the authority, already granted.
+#
+# The Tcl backends have no native memory: a null pointer is NativeViewNull
+# on every backend, and any other view is refused (NATIVE-ONLY) -- nothing
+# imitates a memory read. The native backend lowers each operation to
+# straight-line loads (native/lower.tcl's LayoutCall; runtime/nview.rs).
+
+proc core::binary::NativeOnly {operation} {
+    core::semanticError NATIVE-ONLY \
+        "$operation reads live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one"
+}
+
+proc core::binary::nativeView {descriptor p} {
+    set descriptor [core::value::strOf $descriptor]
+    if {[core::cabi::addressOf $p] == 0} {
+        core::native::failDeclared NativeViewNull \
+            "binary::native::view: the pointer is null, so there is no [string range [lindex $descriptor 0] 13 end-1] to read"
+    }
+    NativeOnly binary::native::view
+}
+
+proc core::binary::viewField {view field} {
+    NativeOnly "a native view's field read"
+}
+
+proc core::binary::load {view descriptor} {
+    NativeOnly binary::load
+}
+
 core::native::declareError LayoutLengthMismatch
+core::native::declareError NativeViewNull
 
 core::native::register binary::parse -arity 2 -impl core::binary::parse \
     -param-types {str struct} -result-type struct -result-shape {layout-struct 0} \
     -errors {LayoutLengthMismatch} -layout {operand 0 input 1 op parse} -nomethod 1
 core::native::register binary::emit -arity 1 -impl {core::binary::Unelaborated binary::emit} \
     -param-types {struct} -result-type struct -result-shape [list named-struct [core::bytestore::bytesType]] \
-    -layout {typed {0 binary#emit}}
+    -ownership {observe} -layout {typed {0 binary#emit}}
 core::native::register binary#emit -arity 2 -impl core::binary::emit \
     -param-types {struct str} -result-type struct -result-shape [list named-struct [core::bytestore::bytesType]] \
-    -runtime {bytestore-alloc} -layout {operand 1 op emit} -nomethod 1
+    -runtime {bytestore-alloc} -ownership {observe observe} -layout {operand 1 op emit} -nomethod 1
 core::native::register binary::layout_length -arity 1 -impl {core::binary::Unelaborated binary::layout_length} \
     -param-types {any} -result-type int -layout {operand 0 query length} -nomethod 1
 core::native::register binary::layout_alignment -arity 1 -impl {core::binary::Unelaborated binary::layout_alignment} \
     -param-types {any} -result-type int -layout {operand 0 query alignment} -nomethod 1
+core::native::register binary::native::view -arity 2 -impl core::binary::nativeView \
+    -param-types {str any} -result-type any -result-shape {native-view 0} -ownership {observe observe} \
+    -errors {NativeViewNull} -layout {operand 0 pointer 1 op view} -nomethod 1
+core::native::register binary::load -arity 1 -impl {core::binary::Unelaborated binary::load} \
+    -param-types {any} -result-type struct -result-shape {view-struct 0} -ownership {observe} \
+    -layout {viewed {0 binary#load}}
+core::native::register binary#load -arity 2 -impl core::binary::load \
+    -param-types {any str} -result-type struct -result-shape {layout-struct 1} -ownership {observe observe} \
+    -layout {operand 1 op load} -nomethod 1
+core::native::register binary#view_field -arity 2 -impl core::binary::viewField \
+    -param-types {any str} -result-type any -result-shape {view-field 0 1} -ownership {observe observe} \
+    -layout {field 1 op field} -nomethod 1
+# Reading live process memory is raw authority (DIRECT-MODULES.md): every
+# call of binary::native::view is a direct edge of the module making it.
+core::native::declareDirectNamespace binary::native

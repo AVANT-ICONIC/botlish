@@ -1422,12 +1422,19 @@ proc core::compiler::LayoutValueText {descriptor varsVar} {
 proc core::compiler::CompileLayoutOperation {ctxVar e name role argOps} {
     upvar 1 $ctxVar ctx
     variable hir
+    if {[hir::layouts::RoleOf $role op] ni {parse emit}} {
+        # A native view's operation (NATIVE-LAYOUT-VIEWS.md): the Tcl backends
+        # have no native memory, so the generic call runs its refusal
+        # (core/binary.tcl).
+        return ""
+    }
     set operand [lindex [N $e args] [hir::layouts::RoleOf $role operand]]
     if {[hir::kind $hir $operand] ne "const"} {
         return ""
     }
     set descriptor [lindex [hir::get $hir $operand literal] end]
-    if {[hir::layouts::DescriptorLayout $descriptor] eq ""} {
+    if {[hir::layouts::DescriptorLayout $descriptor] eq "" || [core::binary::PointerPath $descriptor] ne ""} {
+        # (A native-only layout: the reference implementation's refusal.)
         return ""
     }
     set size [lindex $descriptor 1]

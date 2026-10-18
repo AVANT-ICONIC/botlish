@@ -111,11 +111,14 @@ proc hir::structs::IsAffine {id {seen {}}} {
     if {[dict exists $affinity $id]} {
         return [dict get $affinity $id]
     }
-    if {$id in $seen || ![dict exists $registry $id]} {
+    if {$id in $seen || ![declared $id]} {
         return 0
     }
     set result 0
-    foreach {name t} [dict get $registry $id types] {
+    # (fieldTypes answers for a LayoutStruct[L] too, from the layout: a
+    # layout with a pointer field makes an affine struct view,
+    # NATIVE-LAYOUT-VIEWS.md.)
+    foreach {name t} [fieldTypes $id] {
         if {[hir::types::IsAffine $t [concat $seen [list $id]]]} {
             set result 1
             break
@@ -555,6 +558,16 @@ proc hir::structs::ProjectionProblem {hir e} {
         return ""
     }
     set kind [hir::types::kindOf $type]
+    set view [hir::layouts::OfViewType $type]
+    if {$view ne ""} {
+        # A field read through a native view (NATIVE-LAYOUT-VIEWS.md): the
+        # layout's fields, nothing else.
+        if {[hir::layouts::ViewFieldType $view $name] ne ""} {
+            return ""
+        }
+        return [list UNKNOWN-FIELD [format {native view type %s has no field "%s" (layout %s has fields: %s)} \
+            [hir::types::show $type] $name $view [join [hir::layouts::StructNames $view] {, }]]]
+    }
     if {[projectionDenied $type $node]} {
         set problem OPAQUE-REPRESENTATION
     } elseif {[hir::types::IsStructLike $type]} {

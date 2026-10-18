@@ -133,7 +133,9 @@ A module is **designated direct** when
   `core::native::declareDirectNamespace NS`, registration metadata beside the
   namespace's natives. Today exactly the raw syscall transports,
   `linux::abi::x86_64` and `linux::abi::aarch64` (core/linuxabi.tcl declares
-  each entry of its transport table).
+  each entry of its transport table), and `binary::native`, whose
+  `binary::native::view` reads live native memory (core/binary.tcl,
+  NATIVE-LAYOUT-VIEWS.md section 8).
 
 Nothing else designates one: no module name (`raw`, `syscall`, `ffi`,
 `linux...`), path, library or naming convention is ever read
