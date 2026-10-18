@@ -2994,7 +2994,8 @@ says `read noescape` or `write noescape`.
   * No fact comes from a name or a C type: an absent escape or access fact
     is unknown, which never admits a byte exposure.
   * Pointers are affine C ABI values: no arithmetic, dereference or
-    integer conversion.
+    integer conversion. The memory a data pointer addresses is read only
+    through a layout's native view (binary::native::view, concept.binary-layouts).
   * A retaining call (a pointer that may escape) is direct authority
     (concept.direct-modules).
   * tools/c-bindgen.tcl generates such declarations from real headers.

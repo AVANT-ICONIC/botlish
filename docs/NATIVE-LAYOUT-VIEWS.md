@@ -503,8 +503,8 @@ pointer words equal the pointers' address bits) and `binary::load`. Seeds 1,
 17, 41 and 99 at 40 programs each, seed 5 at 20 under
 `BOTLISH_NATIVE_GC_STRESS=1`, seed 7 at 20 with the Tcl backends too (each
 must refuse with NATIVE-ONLY): **no disagreement**. Running it first found
-nothing in the view code; it did find an unrelated pre-existing front-end
-limitation (section 15).
+nothing in the view code; the one program it could not write is a rule,
+not a defect (section 15, List invariance).
 
 **Mutants** (`audit/native-view/tools/mutate.tcl`). `mutants.txt` holds 29 deliberate
 bugs, each applied alone to a private copy of the tree (the 7 native ones
@@ -639,10 +639,14 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
   `cranelift` run, invisible on `cranelift-generic`.
 * **The strict-0 replays of the binary operations** (`BINARY-OPERAND`) were
   unknown to the native runtime's kind table and surfaced as NATIVE BUG.
-* **Unrelated, found by the fuzzer:** `fn f(a: I16) -> List[int]: [a]` is
-  rejected ("function result does not prove declared type List[int]") on
-  the commit before this work too; a List of one integer domain does not
-  prove `List[int]`. The tests and the fuzzer declare `List[any]` there.
+* **List invariance, met by the fuzzer:** `fn f(a: binary::I16) ->
+  List[int]: [a]` is rejected ("function result does not prove declared
+  type List[int]"). That is the documented rule, not a defect: List
+  element types are invariant (MINIMAL-APPLIED-LIST-TYPES.md, "Initial
+  invariance rule"; `nonempty-list-byte-to-int-still-rejected`), and a list
+  literal takes its element type from its elements. The fuzzer's
+  sub-functions declare `List[any]`, the erased spelling, because their
+  element type varies with the generated layout.
 
 ## 16. Pressure on the write milestone
 
