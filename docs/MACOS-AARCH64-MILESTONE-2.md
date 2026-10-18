@@ -94,7 +94,7 @@ AArch64 target (NATIVE UNSUPPORTED value)`. Now the same program
 | Subsystem | Files | Change |
 |---|---|---|
 | Target table | core/cabi.tcl | `triple` in every row; `systems` (OS display names); `platforms` (the designated platform namespace trees: `linux`); `operatingSystems`, `systemName`, `platformOf`, `hostArchitecture` (factored out of `hostTarget`), `systemTarget` |
-| Module resolution | surface/modules.tcl | `PlatformOf`, `PlatformCheck` in `ResolveModule`; `PlatformTarget` (for tools that run programs of every platform) (after the application-collision check); the loader's `targetRead` (set by an architecture-specific file, a platform namespace, ffi::c); `BuildProgram` stamps the HIR's `target`; UNKNOWN-TARGET for ffi::c checked before its declarations |
+| Module resolution | surface/modules.tcl | `PlatformOf`, `PlatformCheck` in `ResolveModule` (after the application-collision check); `PlatformTarget` (for tools that run programs of every platform); the loader's `targetRead` (set by an architecture-specific file, a platform namespace, ffi::c); `BuildProgram` stamps the HIR's `target`; UNKNOWN-TARGET for ffi::c checked before its declarations |
 | HIR target | hir/cabi.tcl, hir/read.tcl | `HasNamespaceTypes`, `targetOf`, `TargetMismatch`; HIR text's target from its C scalars |
 | Interchange | hir/interchange.tcl, main.tcl | `decode`/`readFile -target`; `{HIR INTERCHANGE TARGET}`; main.tcl passes its `-target` (or the host's) for `.hirx` inputs and documents the target rules |
 | Cache | surface/cache.tcl | a hit is decoded with `-target`; the header states the target rules |
