@@ -300,7 +300,7 @@ fn register_abi_numeric_tests():
             fn f(n: int):
                 abi::u8(n)
             f(3)
-    rep_rejects_message("abi-numeric-conversion-failure-points-at-the-call/unhandled", compiler::DiagnosticCode::UnhandledError, 301, 17, "this call may produce the declared error \"abi::AbiInteger", "Range\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_conversion_unhandled)
+    rep_rejects_message("abi-numeric-conversion-failure-points-at-the-call/unhandled", compiler::DiagnosticCode::UnhandledError, 301, 17, "this call may produce the declared errors \"abi::AbiIntegerAboveRange\" and \"abi::AbiIntegerBelowRange\"", ", which are neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_conversion_unhandled)
     fn b_conversion_dynamic() errors compiler::CompilerError:
         static compile:
             fn f(n: int) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:

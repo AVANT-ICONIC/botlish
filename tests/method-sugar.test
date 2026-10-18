@@ -29,7 +29,7 @@ set ::allBackends {interp compile cranelift-generic cranelift}
 
 # Error messages carry source locations, which differ between spellings.
 proc stripLocations {message} {
-    set message [regsub -all {[^ ]*\.bot:[0-9]+:[0-9]+} $message {t.bot:L:C}]
+    set message [regsub -all {[^ \n]*\.bot:[0-9]+:[0-9]+} $message {t.bot:L:C}]
     return [regsub -all {\(at [0-9]+:[0-9]+\)} $message {(at L:C)}]
 }
 
@@ -354,18 +354,18 @@ test method-not-visible-module-function {a module function of a namespace the fi
 test method-not-visible-other-namespace-import {importing a namespace makes only that namespace's functions candidates: another namespace's member of that name stays invisible, whatever else is imported or bound} -body {
     list [rejection "import list\nat = list::at\n\"abc\".concat(\"d\")"] [rejection "import list\n\"abc\".concat(\"d\")"] \
         [rejection "import str\n\"abc\".concat(\"d\")"]
-} -match glob -result {{NOT-A-STRUCT: *cannot project field "concat"*no function named "concat" is visible here either*} {NOT-A-STRUCT: *cannot project field "concat"*} accepted}
+} -match glob -result {{MISSING-IMPORT: *namespace "str" is not imported; add `import str` to use `str::concat`*} {MISSING-IMPORT: *namespace "str" is not imported; add `import str` to use `str::concat`*} accepted}
 
 test method-not-visible-names-the-fix {the diagnostic of a method call with no visible function says the function must be visible by that name, instead of blaming a missing member} -body {
     rejection "x = 5\nx.nothere(1)"
 } -result {NOT-A-STRUCT: t.bot:L:C: cannot project field "nothere" from a value of type int: only a struct has fields; as a method-style call, no function named "nothere" is visible here either: method syntax only applies a function that is already visible by that name (define it here, or import the namespace that defines it with `import NAMESPACE`)}
 
-test method-not-visible-no-type-import-needed-or-used {the receiver's type is never searched for the function: a function in a module that declares the receiver's type is no more visible than any other} -body {
+test method-not-visible-no-type-import-needed-or-used {the receiver's type is never searched for the function: a function in a module that declares the receiver's type is no more visible than any other -- once that module is loaded (by the type import) the call is the missing import of its namespace, never a call of it (DIAGNOSTIC-RECOVERY.md)} -body {
     # byte::complement takes a Byte; 200.complement() has no `complement` in
     # scope, and neither does a program that imports the Byte type alone.
     list [rejection "x = 200\nx.complement()"] [rejection "import type byte::Byte\nx = 200\nx.complement()"] \
         [rejection "import byte\nx = 200\nx.complement()"]
-} -match glob -result {{NOT-A-STRUCT: *cannot project field "complement"*no function named "complement" is visible here either*} {NOT-A-STRUCT: *cannot project field "complement"*no function named "complement" is visible here either*} accepted}
+} -match glob -result {{NOT-A-STRUCT: *cannot project field "complement"*no function named "complement" is visible here either*} {MISSING-IMPORT: *namespace "byte" is not imported; add `import byte` to use `byte::complement`*} accepted}
 
 test method-not-visible-forward-reference {a function defined later in the file is not visible yet: the ordinary rule (a binding is visible once established) is the sugar's rule} -body {
     list [rejection "5.later()\nfn later(a):\n    a"] [rejection "later(5)\nfn later(a):\n    a"]
@@ -422,7 +422,7 @@ test method-alias-name-is-the-local-name {a function bound to another name is ca
 test method-alias-does-not-import {binding one namespace's function makes no other member of that namespace, and nothing of another namespace, visible: only an import does} -body {
     list [rejection "import byte\ntransform = byte::complement\n200.high_nibble()"] \
         [rejection "import byte\ntransform = byte::complement\n\[1\].length()"]
-} -match glob -result {accepted {NOT-A-STRUCT: *cannot project field "length"*}}
+} -match glob -result {accepted {MISSING-IMPORT: *namespace "list" is not imported; add `import list` to use `list::length`*}}
 
 test method-alias-of-local-function {a local alias of a local function: both names are visible, each by ordinary lookup} -body {
     bothSpellings "${::fns}transform = inc\n\[5.transform(), 5.inc()\]" "${::fns}transform = inc\n\[transform(5), inc(5)\]"

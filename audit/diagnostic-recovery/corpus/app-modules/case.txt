@@ -1,0 +1,7 @@
+# Independent errors in an application module and in the entry program.
+primary shapes.bot:1:8
+fix shapes.bot 2     4
+primary shapes.bot:4:13
+fix shapes.bot 4 fn perimeter(s: int) -> int:
+primary 3:8
+fix 3 fn area(w: int, h: int) -> int:

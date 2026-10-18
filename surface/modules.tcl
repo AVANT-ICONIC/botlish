@@ -1042,7 +1042,15 @@ proc surface::modules::CollectAndLoad {stateVar ast {key ""}} {
     foreach ref [QualifiedRefs $ast] {
         set site [StaticSiteOf $sites [lindex $ref 2]]
         if {$site eq ""} {
-            CheckRef state $ast $own $key $env $imported $ref
+            # Each reference is checked on its own: every one the file may
+            # not make is reported, together, once the whole program is
+            # loaded (RaiseReferenceErrors, DIAGNOSTIC-RECOVERY.md).
+            try {
+                CheckRef state $ast $own $key $env $imported $ref
+            } trap {SURFACE MODULE} {message options} {
+                dict lappend state referenceErrors [dict create \
+                    errorcode [dict get $options -errorcode] message $message]
+            }
             continue
         }
         # A reference inside a static intrinsic's block: the rejection is
@@ -1362,7 +1370,20 @@ proc surface::modules::NewState {files nextFile} {
         loadedLayouts [dict create] imports [dict create] stack {} sections {} \
         typeDecls {} errorDecls {} structDecls {} traitDecls {} externDecls {} linkDecls {} \
         staticDeferred [dict create] \
-        target "" root "" entry "" application [dict create] moduleDecls [dict create]]
+        target "" root "" entry "" application [dict create] moduleDecls [dict create] \
+        referenceErrors {}]
+}
+
+# Raises the qualified references of every file STATE loaded that the file
+# may not make (CollectAndLoad: MISSING-IMPORT, UNKNOWN-NAMESPACE,
+# UNKNOWN-SYMBOL, ...) as one error, in loading order -- each module before
+# the file that imports it, each file's in source order -- the first one's
+# {SURFACE MODULE KIND} (core::raiseDiagnostics). Each is independent of the
+# others: one reference never decides another. Nothing if there is none.
+proc surface::modules::RaiseReferenceErrors {state} {
+    if {[dict get $state referenceErrors] ne {}} {
+        core::raiseDiagnostics [dict get $state referenceErrors]
+    }
 }
 
 # {sections SECTIONS files FILES functions NAMESPACE->{FUNCTION-NAME ...}
@@ -1388,6 +1409,7 @@ proc surface::modules::LoadNamespaces {namespaces args} {
     foreach name $namespaces {
         LoadNamespace state $name ""
     }
+    RaiseReferenceErrors $state
     return [dict create sections [dict get $state sections] files [dict get $state files] \
         functions [dict get $state loaded] typeDecls [dict get $state typeDecls] \
         errorDecls [dict get $state errorDecls] structDecls [dict get $state structDecls] \
@@ -1414,6 +1436,7 @@ proc surface::modules::BuildProgram {ast strict {target ""} {root ""}} {
         dict set state entry [file normalize [dict get $ast span file]]
     }
     CollectAndLoad state $ast ""
+    RaiseReferenceErrors $state
     lassign [surface::lower::SplitTypeDecls [dict get $ast body]] executable ownDecls ownErrorDecls ownStructDecls ownTraitDecls \
         ownExternDecls ownLinkDecls
     set decls [concat [dict get $state typeDecls] $ownDecls]
@@ -1425,8 +1448,9 @@ proc surface::modules::BuildProgram {ast strict {target ""} {root ""}} {
     # special case").
     set moduleDecls [dict get $state moduleDecls]
     dict set moduleDecls "" [ModuleDecl $ast f1]
+    # A strict compilation goes on past resolution failures: what checking
+    # finds independently of them is reported with them (hir/recovery.tcl).
     return [hir::buildSyntax [LowerStatements $state "" $executable] -strict 0 \
-        -halt-on-resolution-errors $strict \
         -origin [surface::lower::Origin [dict get $ast span] ""] \
         -files [dict get $state files] -modules [dict get $state sections] \
         -imports [dict get $state imports] -module-decls $moduleDecls \

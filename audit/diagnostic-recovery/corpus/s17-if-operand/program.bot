@@ -1,0 +1,13 @@
+#import str
+
+fn answer(flag: bool) -> str:
+    x = "answer: ".concat(if flag:
+        "yes"
+    else:
+        "no")
+    x
+
+fn later(n: int) -> int:
+    n +
+
+answer(true)

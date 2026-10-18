@@ -416,9 +416,11 @@ because none is needed. On success the writes are the result.
 **Liveness.** The owner must stay live while C uses its storage, even when
 nothing else references it and even though the storage never moves. The
 test makes that observable: `read_reentrant` stands for foreign code that
-runs Botlish code mid-call -- it forces a collection and allocates four
-storages of the exposed size, filled with `0xee`, before it reads. A storage
-only the exposure references survives it and is read intact
+runs Botlish code mid-call -- it forces a collection and allocates
+storages of the exposed size, filled with `0xee`, until one reuses the
+exposed block (at most 256: which free block malloc returns first is not
+predictable, and four were enough on one build only), before it reads. A
+storage only the exposure references survives it and is read intact
 (`cb-liveness-reentrant`, with and without `BOTLISH_NATIVE_GC_STRESS=1`);
 the same program with the keepalive deleted from its NIR reads `238, 238,
 ...` -- the canary in the reclaimed block (`cb-liveness-mutant-detected`;
@@ -634,7 +636,7 @@ decision reads:
 | native | contract | does |
 |---|---|---|
 | `read[T](data, count) -> List[int]` | data: read, declared-noescape; count: ULong | the COUNT bytes at DATA |
-| `read_proven[T]`, `read_reentrant[T]` | read, proven-noescape / declared-noescape | the same (`read_reentrant`: after a collection and four same-sized allocations) |
+| `read_proven[T]`, `read_reentrant[T]` | read, proven-noescape / declared-noescape | the same (`read_reentrant`: after a collection and same-sized allocations) |
 | `read_retained[T]`, `read_unknown[T]`, `read_unspecified[T]`, `read_unknown_access[T]` | read+captures, read+unknown, no facts, unknown access+noescape | the same -- reachable with raw pointers only |
 | `fill[T](out, count, seed: UChar) -> unit` (and `fill_proven`, `fill_retained`, `fill_unknown`) | out: write, ... | byte i = (seed + 37 i) mod 256 |
 | `fill_checked(out, count, limit) -> unit errors UpperOverrun` | out: write, declared-noescape | min(count, limit) bytes, then fails if count > limit |

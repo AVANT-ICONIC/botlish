@@ -632,7 +632,7 @@ fn register_hoc_composition_tests(k0: int, k1: int, k2: int, k3: int):
                         code
             top(0)
     test::rejects_at("hoc-undeclared-through-helper", compiler::DiagnosticCode::UnhandledError, 633, 13, undeclared_through_helper)
-    test::rejects_containing("hoc-undeclared-through-helper/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"E1\"", undeclared_through_helper)
+    test::rejects_containing("hoc-undeclared-through-helper/identity", compiler::DiagnosticCode::UnhandledError, "declared errors \"E1\" and \"E3\"", undeclared_through_helper)
 
     fn undeclared_in_narrow() errors compiler::CompilerError:
         static compile:
@@ -644,7 +644,7 @@ fn register_hoc_composition_tests(k0: int, k1: int, k2: int, k3: int):
                         code
             0
     test::rejects_at("hoc-undeclared-through-helper/narrow", compiler::DiagnosticCode::UnhandledError, 640, 17, undeclared_in_narrow)
-    test::rejects_containing("hoc-undeclared-through-helper/narrow/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"E1\"", undeclared_in_narrow)
+    test::rejects_containing("hoc-undeclared-through-helper/narrow/identity", compiler::DiagnosticCode::UnhandledError, "declared errors \"E1\" and \"E3\"", undeclared_in_narrow)
 
     # hoc-top-level: an unhandled error through the untyped helper outside
     # any declaring function is UnhandledError at the call (it used to escape
@@ -653,7 +653,7 @@ fn register_hoc_composition_tests(k0: int, k1: int, k2: int, k3: int):
         static compile:
             call(raise, 1)
     test::rejects_at("hoc-top-level", compiler::DiagnosticCode::UnhandledError, 654, 13, top_level)
-    test::rejects_containing("hoc-top-level/identity", compiler::DiagnosticCode::UnhandledError, "declared error \"E1\"", top_level)
+    test::rejects_containing("hoc-top-level/identity", compiler::DiagnosticCode::UnhandledError, "declared errors \"E1\", \"E2\" and \"E3\"", top_level)
 
     # hoc-mutable-array-factory: a factory closure that calls an erased
     # callable: mutable_array::generate charges what it may raise. Unhandled

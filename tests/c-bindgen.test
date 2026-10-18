@@ -66,6 +66,57 @@ if {[testConstraint sdl3Library]} {
 # value is (char)200, -56 where plain char is signed.
 set ::demoValues "\[5, 5, 95, 2, 66, 12345, 10, 3, true, true, 6, 10, 14, 14, 42, 49, 42, 30, 101, 3, 18446744073709551615, -1, -42, 120, 6, 6, false, true, true, false, 2, 40, [expr {$::hostTarget ne "" && [dict get [core::cabi::scalarInfo Char $::hostTarget] signed] ? -56 : 200}]\]"
 
+# The host's Linux target when the host is one, else linux-x86_64: the
+# target the tests whose expectations hold on every Linux target generate.
+set ::linuxHost [expr {$::hostTarget in {linux-x86_64 linux-aarch64} ? $::hostTarget : "linux-x86_64"}]
+# The other Linux target, cross from this host.
+set ::linuxOther [expr {$::linuxHost eq "linux-x86_64" ? "linux-aarch64" : "linux-x86_64"}]
+
+# 1 if a binding that reads the system headers can be generated for TARGET
+# here: the host's own target, or a cross target whose C library headers
+# clang searches (the generator refuses one without them,
+# ::cbind::generate::CheckCrossHeaders).
+proc generatable {target} {
+    if {[auto_execok clang] eq ""} { return 0 }
+    if {$target eq $::hostTarget} { return 1 }
+    if {![string match linux-* $target]} { return 0 }
+    set config [::chdr::toolchain::configFor $target]
+    lassign [::chdr::toolchain::searchDirs $config [dict create includeDirs {} defines {} undefines {} flags {}]] ok dirs
+    return [expr {$ok && [lsearch -glob $dirs *[dict get $config target]*] >= 0}]
+}
+# The committed bindings of the other Linux target are checked where its
+# cross C library is installed (the c-bindgen workflow installs it and
+# requires that no test is skipped).
+testConstraint crossLinux [expr {[testConstraint linuxNative] && [generatable $::linuxOther]}]
+testConstraint stubsTarget [generatable linux-x86_64]
+
+# The files of the committed bindings of PAIRS ({PROFILE TARGET ...}) that
+# generation does not reproduce: {PROFILE TARGET PATH STATUS ...}.
+proc staleBindings {pairs} {
+    set out {}
+    foreach {name target} $pairs {
+        set profile [::cbind::profile::load $name]
+        foreach d [staleFiles [generation $profile $target] [::cbind::profile::outputDir $profile $target] $name] {
+            lappend out $name $target {*}$d
+        }
+    }
+    return $out
+}
+
+# The committed {PROFILE TARGET} pairs of PROFILES whose target is (HOST 1)
+# or is not (HOST 0) this host's.
+proc committedPairs {profiles host} {
+    set out {}
+    foreach name $profiles {
+        set profile [::cbind::profile::load $name]
+        foreach target [dict get $profile targets] {
+            if {![file isdirectory [::cbind::profile::outputDir $profile $target]]} continue
+            if {($target eq $::hostTarget) == $host} { lappend out $name $target }
+        }
+    }
+    return $out
+}
+
 # A fresh directory of the tcltest temporary directory.
 proc scratch {} {
     return [makeDirectory cb-scratch-[pid]-[incr ::appCounter]]
@@ -320,7 +371,7 @@ test cb-fixture-only-reached-externs {a program's foreign table holds only the C
     lsearch -all -inline -regexp [split $nir \n] {^(foreign|link) }
 } -cleanup removeScratch -match glob -result {{link "bgf"} {link "botlish_shim_bgf_*"} {foreign 0 "bgf_count" params="" result=i32 name="bgf::bgf::bgf_count"}}
 
-test cb-fixture-no-c-at-compile-time {compiling a program over a generated binding needs no header, no preprocessor and no C compiler: a child process with no compiler on its PATH and no header sources compiles it} -constraints clang -body {
+test cb-fixture-no-c-at-compile-time {compiling a program over a generated binding needs no header, no preprocessor and no C compiler: a child process with no compiler on its PATH and no header sources compiles it, with every foreign declaration of the host target's binding (bgf_arm_only is declared on AArch64 only)} -constraints clang -body {
     set dir [scratch]
     ::cbind::generate::stage $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot] $dir [generatedDir $::fixture $::hostTarget]
     set script [file join $dir compile.tcl]
@@ -335,7 +386,7 @@ test cb-fixture-no-c-at-compile-time {compiling a program over a generated bindi
         array unset ::env
         array set ::env $savedEnv
     }
-} -cleanup removeScratch -result 32
+} -cleanup removeScratch -result [dict get {linux-x86_64 32 linux-aarch64 33 macos-aarch64 33} $::hostTarget]
 
 test cb-fixture-interchange {a program over a generated binding written as HIR interchange and run in a fresh process, with no header, generator input or binding module left, behaves identically} -constraints nativeRun -body {
     set dir [staged $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot]]
@@ -447,19 +498,18 @@ test cb-version-drift {a changed header is a generated diff the check reports wi
 # ---------------------------------------------------------------------------
 # The acceptance corpora
 
-test cb-tcl-current {the committed Tcl binding (direct-link profile, both Linux targets) and the stubs profile's are what generation produces} -constraints tclSources -body {
-    set out {}
-    foreach {name targets} {tcl {linux-x86_64 linux-aarch64} tclstubs linux-x86_64} {
-        set profile [::cbind::profile::load $name]
-        foreach target $targets {
-            lappend out $name $target [staleFiles [generation $profile $target] [::cbind::profile::outputDir $profile $target] $name]
-        }
-    }
-    set out
-} -result {tcl linux-x86_64 {} tcl linux-aarch64 {} tclstubs linux-x86_64 {}}
+test cb-tcl-current {the committed Tcl bindings of this host's target (direct-link profile and stubs profile) are what generation produces} -constraints {tclSources linuxNative} -body {
+    set pairs [committedPairs {tcl tclstubs} 1]
+    list [expr {[llength $pairs] > 0}] [staleBindings $pairs]
+} -result {1 {}}
 
-test cb-tcl-inventory {the Tcl inventory is the header archaeology's (tcl-embed): 753 declared functions and 1 static inline; with the direct-link profile no API name is a stub-table redirection, with USE_TCL_STUBS (the archaeology's tcl-stubs) every redirected name is a thunk through the table and none is a direct symbol} -constraints tclSources -body {
-    set tcl [::cbind::report::counts [dict get [generation [::cbind::profile::load tcl] linux-x86_64] model]]
+test cb-tcl-current-cross {the committed Tcl bindings of the other Linux target are what generation produces there, from that target's own C library headers} -constraints {tclSources crossLinux} -body {
+    set pairs [committedPairs {tcl tclstubs} 0]
+    list [expr {[llength $pairs] > 0}] [staleBindings $pairs]
+} -result {1 {}}
+
+test cb-tcl-inventory {the Tcl inventory is the header archaeology's (tcl-embed): 753 declared functions and 1 static inline; with the direct-link profile no API name is a stub-table redirection, with USE_TCL_STUBS (the archaeology's tcl-stubs) every redirected name is a thunk through the table and none is a direct symbol} -constraints {tclSources stubsTarget linuxNative} -body {
+    set tcl [::cbind::report::counts [dict get [generation [::cbind::profile::load tcl] $::linuxHost] model]]
     set stubs [dict get [generation [::cbind::profile::load tclstubs] linux-x86_64] model]
     set direct {}
     foreach e [dict get $stubs apis] {
@@ -471,15 +521,15 @@ test cb-tcl-inventory {the Tcl inventory is the header archaeology's (tcl-embed)
     list [dict get $tcl declared] [dict get $tcl inline] [dict get $tcl tablestubs] [dict get $s tablestubs] $direct
 } -result {753 1 0 694 {}}
 
-test cb-tcl-oracle {the generated Tcl declarations of the acceptance functions have the hand-written binding's ABI: the same link symbols, ABI classes and contracts (examples/ffi/tcl/tcl.bot, read as an oracle only; its pointee is named Interp, the generated one Tcl_Interp)} -constraints tclSources -body {
+test cb-tcl-oracle {the generated Tcl declarations of the acceptance functions have the hand-written binding's ABI: the same link symbols, ABI classes and contracts (examples/ffi/tcl/tcl.bot, read as an oracle only; its pointee is named Interp, the generated one Tcl_Interp)} -constraints {tclSources linuxNative} -body {
     set gen [scratch]
-    ::cbind::generate::stage [::cbind::profile::load tcl] linux-x86_64 "" $gen [generatedDir [::cbind::profile::load tcl] linux-x86_64]
+    ::cbind::generate::stage [::cbind::profile::load tcl] $::linuxHost "" $gen [generatedDir [::cbind::profile::load tcl] $::linuxHost]
     writeText [file join $gen main.bot] "import tcl::decls\n\n1\n"
     set hand [scratch]
     file copy [file join $::projectRoot examples ffi tcl tcl.bot] [file join $hand tcl.bot]
     writeText [file join $hand main.bot] "import tcl\n\n1\n"
-    set g [hir::foreign::declarations [stagedHir $gen main.bot linux-x86_64]]
-    set h [hir::foreign::declarations [stagedHir $hand main.bot linux-x86_64 off]]
+    set g [hir::foreign::declarations [stagedHir $gen main.bot $::linuxHost]]
+    set h [hir::foreign::declarations [stagedHir $hand main.bot $::linuxHost off]]
     lmap name {Tcl_CreateInterp Tcl_EvalEx Tcl_DeleteInterp} {
         set a [dict get $g tcl::decls::$name]
         set b [dict get $h tcl::$name]
@@ -514,15 +564,18 @@ int main(void) {
     list $botlish [cCaller $profile $c -ltcl9.0]
 } -cleanup removeScratch -result {{[0, 1, 1, 1]} {[0, 1, 1, 1]}}
 
-test cb-boringssl-current {the committed BoringSSL binding (both Linux targets) is what generation produces} -constraints boringsslSources -body {
-    set profile [::cbind::profile::load boringssl]
-    lmap target {linux-x86_64 linux-aarch64} {
-        staleFiles [generation $profile $target] [::cbind::profile::outputDir $profile $target] boringssl
-    }
-} -result {{} {}}
+test cb-boringssl-current {the committed BoringSSL binding of this host's target is what generation produces} -constraints {boringsslSources linuxNative} -body {
+    set pairs [committedPairs boringssl 1]
+    list [expr {[llength $pairs] > 0}] [staleBindings $pairs]
+} -result {1 {}}
 
-test cb-boringssl-inventory {the BoringSSL inventory is the header archaeology's: 3,109 declared functions and 817 static inline ones (all thunked), 2,867 integer-literal constants; SHA256 gets the prefixed symbol from the symbol probe and the profile's contract, exactly the hand-written declaration} -constraints boringsslSources -body {
-    set result [generation [::cbind::profile::load boringssl] linux-x86_64]
+test cb-boringssl-current-cross {the committed BoringSSL binding of the other Linux target is what generation produces there, from that target's own C library headers} -constraints {boringsslSources crossLinux} -body {
+    set pairs [committedPairs boringssl 0]
+    list [expr {[llength $pairs] > 0}] [staleBindings $pairs]
+} -result {1 {}}
+
+test cb-boringssl-inventory {the BoringSSL inventory is the header archaeology's: 3,109 declared functions and 817 static inline ones (all thunked), 2,867 integer-literal constants; SHA256 gets the prefixed symbol from the symbol probe and the profile's contract, exactly the hand-written declaration} -constraints {boringsslSources linuxNative} -body {
+    set result [generation [::cbind::profile::load boringssl] $::linuxHost]
     set c [::cbind::report::counts [dict get $result model]]
     set get {text {
         set from [string first "extern c fn SHA256 named" $text]
@@ -589,15 +642,18 @@ int main(void) {
     list [expr {$botlish eq [cCaller $profile $c]}] $botlish
 } -cleanup removeScratch -result {1 {[0, 0, 0, 1, 1, 0, 16, 100, 255, 4095, 5, 0]}}
 
-test cb-sdl3-current {the committed SDL3 binding (both Linux targets) is what generation produces} -constraints sdl3Sources -body {
-    set profile [::cbind::profile::load sdl3]
-    lmap target {linux-x86_64 linux-aarch64} {
-        staleFiles [generation $profile $target] [::cbind::profile::outputDir $profile $target] sdl3
-    }
-} -result {{} {}}
+test cb-sdl3-current {the committed SDL3 binding of this host's target is what generation produces} -constraints {sdl3Sources linuxNative} -body {
+    set pairs [committedPairs sdl3 1]
+    list [expr {[llength $pairs] > 0}] [staleBindings $pairs]
+} -result {1 {}}
 
-test cb-sdl3-breadth {SDL3 is generated from the whole public header set by the normal rules: over a thousand functions bound, most of them only because of ffi::c::Bool, every blocker counted (floats, aggregates, varargs, macros without a signature), opaque handles distinct (SDL_Window, SDL_Renderer, SDL_Surface, SDL_AudioStream), flags of their typedefs' C types} -constraints sdl3Sources -body {
-    set result [generation [::cbind::profile::load sdl3] linux-x86_64]
+test cb-sdl3-current-cross {the committed SDL3 binding of the other Linux target is what generation produces there, from that target's own C library headers} -constraints {sdl3Sources crossLinux} -body {
+    set pairs [committedPairs sdl3 0]
+    list [expr {[llength $pairs] > 0}] [staleBindings $pairs]
+} -result {1 {}}
+
+test cb-sdl3-breadth {SDL3 is generated from the whole public header set by the normal rules: over a thousand functions bound, most of them only because of ffi::c::Bool, every blocker counted (floats, aggregates, varargs, macros without a signature), opaque handles distinct (SDL_Window, SDL_Renderer, SDL_Surface, SDL_AudioStream), flags of their typedefs' C types} -constraints {sdl3Sources linuxNative} -body {
+    set result [generation [::cbind::profile::load sdl3] $::linuxHost]
     set c [::cbind::report::counts [dict get $result model]]
     set ctypes [dict get $result files sdl3/ctypes.bot]
     set rows [::cbind::generate::readTsv [dict get $result files report.tsv]]

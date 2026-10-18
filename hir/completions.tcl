@@ -2625,13 +2625,37 @@ proc hir::completions::CheckCallLegality {hirVar e target normal errors handled 
             [ErrorsPhrase $cited]] $e
         return
     }
-    foreach name $errors {
-        if {$name ni $handled && $name ni $enclosing} {
-            hir::Diagnose hir UNHANDLED-ERROR [format \
-                {this call may produce the declared error "%s", which is neither handled here nor admitted by the enclosing function's own "errors" declaration} \
-                $name] $e
-        }
+    set unhandled [Unhandled $errors $handled $enclosing]
+    if {$unhandled ne ""} {
+        hir::Diagnose hir UNHANDLED-ERROR [format \
+            {this call may produce %s, which %s neither handled here nor admitted by the enclosing function's own "errors" declaration} \
+            [UnhandledPhrase $unhandled] [UnhandledVerb $unhandled]] $e
     }
+}
+
+# The errors of ERRORS neither HANDLED nor admitted by ENCLOSING, sorted: a
+# call's whole unhandled set, which its one UNHANDLED-ERROR names
+# (DIAGNOSTIC-RECOVERY.md) -- in the canonical order of every error set
+# (effectiveErrors, a contract's `errors`).
+proc hir::completions::Unhandled {errors handled enclosing} {
+    return [lsort -unique [lmap name $errors {
+        expr {$name ni $handled && $name ni $enclosing ? $name : [continue]}
+    }]]
+}
+
+# `the declared error "A"`, or `the declared errors "A", "B" and "C"`: the
+# unhandled errors NAMES (Unhandled) as an UNHANDLED-ERROR message names them.
+proc hir::completions::UnhandledPhrase {names} {
+    set quoted [lmap name $names {string cat \" $name \"}]
+    if {[llength $quoted] == 1} {
+        return "the declared error [lindex $quoted 0]"
+    }
+    return "the declared errors [join [lrange $quoted 0 end-1] {, }] and [lindex $quoted end]"
+}
+
+# "is" or "are", for the unhandled errors NAMES.
+proc hir::completions::UnhandledVerb {names} {
+    return [expr {[llength $names] == 1 ? "is" : "are"}]
 }
 
 # CheckCallLegality for call E through a structural function type
@@ -2642,19 +2666,19 @@ proc hir::completions::CheckStructuralCallLegality {hirVar e calleeType errors h
     upvar 1 $hirVar hir
     dict set hir exprs $e effectiveErrors [lsort -unique $errors]
     dict set hir exprs $e mayReturnNormally 1
-    foreach name $errors {
-        if {$name ni $handled && $name ni $enclosing} {
-            if {[hir::types::IsCoroutine $calleeType]} {
-                hir::Diagnose hir UNHANDLED-ERROR [format \
-                    {this coroutine resume may produce the declared error "%s", which is neither handled here nor admitted by the enclosing function's own "errors" declaration} \
-                    $name] $e
-                continue
-            }
-            hir::Diagnose hir UNHANDLED-ERROR [format \
-                {this call through a callable of function type %s may produce the declared error "%s", which is neither handled here nor admitted by the enclosing function's own "errors" declaration} \
-                [hir::types::show $calleeType] $name] $e
-        }
+    set unhandled [Unhandled $errors $handled $enclosing]
+    if {$unhandled eq ""} {
+        return
     }
+    if {[hir::types::IsCoroutine $calleeType]} {
+        hir::Diagnose hir UNHANDLED-ERROR [format \
+            {this coroutine resume may produce %s, which %s neither handled here nor admitted by the enclosing function's own "errors" declaration} \
+            [UnhandledPhrase $unhandled] [UnhandledVerb $unhandled]] $e
+        return
+    }
+    hir::Diagnose hir UNHANDLED-ERROR [format \
+        {this call through a callable of function type %s may produce %s, which %s neither handled here nor admitted by the enclosing function's own "errors" declaration} \
+        [hir::types::show $calleeType] [UnhandledPhrase $unhandled] [UnhandledVerb $unhandled]] $e
 }
 
 # The legality of call E whose callee (static type CALLEETYPE) is not an
@@ -2670,12 +2694,12 @@ proc hir::completions::CheckIndirectCallLegality {hirVar e calleeType errors han
     }
     dict set hir exprs $e effectiveErrors [lsort -unique $errors]
     dict set hir exprs $e mayReturnNormally 1
-    foreach name $errors {
-        if {$name ni $handled && $name ni $enclosing} {
-            hir::Diagnose hir UNHANDLED-ERROR [format \
-                {this call through a callable value the completion analysis cannot identify, and that no callable contract bounds, may produce the declared error "%s" (this program passes a callable that declares it through an untyped parameter, and such a callable may reach this call), which is neither handled here nor admitted by the enclosing function's own "errors" declaration} \
-                $name] $e
-        }
+    set unhandled [Unhandled $errors $handled $enclosing]
+    if {$unhandled ne ""} {
+        hir::Diagnose hir UNHANDLED-ERROR [format \
+            {this call through a callable value the completion analysis cannot identify, and that no callable contract bounds, may produce %s (this program passes a callable that declares %s through an untyped parameter, and such a callable may reach this call), which %s neither handled here nor admitted by the enclosing function's own "errors" declaration} \
+            [UnhandledPhrase $unhandled] [expr {[llength $unhandled] == 1 ? "it" : "one of them"}] \
+            [UnhandledVerb $unhandled]] $e
     }
 }
 
@@ -2701,12 +2725,11 @@ proc hir::completions::CheckNativeCallLegality {hirVar e name normal errors hand
         coroutine#resume { expr {"coroutine resume"} }
         default { format {call of "%s"} $name }
     }]
-    foreach error $errors {
-        if {$error ni $handled && $error ni $enclosing} {
-            hir::Diagnose hir UNHANDLED-ERROR [format \
-                {this %s may produce the declared error "%s", which is neither handled here nor admitted by the enclosing function's own "errors" declaration} \
-                $what $error] $e
-        }
+    set unhandled [Unhandled $errors $handled $enclosing]
+    if {$unhandled ne ""} {
+        hir::Diagnose hir UNHANDLED-ERROR [format \
+            {this %s may produce %s, which %s neither handled here nor admitted by the enclosing function's own "errors" declaration} \
+            $what [UnhandledPhrase $unhandled] [UnhandledVerb $unhandled]] $e
     }
 }
 

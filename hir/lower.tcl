@@ -48,6 +48,7 @@ namespace eval hir::lower {
 # The core IR program of HIR: a list of expressions.
 proc hir::lower {hir} {
     hir::activate $hir
+    set hir [hir::recovery::runnable $hir]
     return [hir::lower::withTemporaries [hir::affine::temporaries $hir] {
         hir::lower::Seq $hir [dict get $hir roots]
     }]

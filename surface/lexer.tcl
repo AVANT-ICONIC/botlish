@@ -61,7 +61,22 @@
 #   mismatched ")" or "]"      closes the open bracket
 #   bracket never closed       closed by a zero-width token at the end of
 #                              input, or before a line that starts like a
-#                              statement (see UnclosedBefore)
+#                              statement (see UnclosedBefore); a closer of
+#                              its kind later in the construct that line
+#                              starts (on that line, or on one indented
+#                              deeper) is its own closer, written where the
+#                              lexer could not see it: dropped, not reported
+#                              as unmatched (DIAGNOSTIC-RECOVERY.md)
+#
+# Besides the tokens and diagnostics, the result says how the parser's
+# recovery may weigh each diagnostic (surface::parse, DIAGNOSTIC-RECOVERY.md):
+# `structural` lists the indices of the bracket diagnostics (never closed,
+# unmatched, mismatched: guesses about where a bracket's content ends, which a
+# malformed construct inside it makes), `skipped` those of the diagnostics
+# whose recovery removed source text from the token stream (an unexpected
+# character, the rest of an unterminated string's line: a bracket left open
+# around one is not reported at all), and `synthetic` the
+# start offsets of the zero-width closers it inserted.
 
 namespace eval surface::lexer {
     variable keywords {fn if elif else loop return break continue true false unit and or not type \
@@ -97,6 +112,17 @@ proc surface::lexer::tokenize {source file} {
     set indents {0}
     set brackets {}
     set atLineStart 1
+    set structural {}
+    set skipped {}
+    set synthetic {}
+    # Where an unterminated literal started: its line's rest, closers
+    # included, is in it.
+    set absorbing {}
+    # The closers of the brackets force-closed before the line ORPHANLINE (at
+    # indentation ORPHANINDENT), innermost last (above).
+    set orphans {}
+    set orphanLine 0
+    set orphanIndent 0
 
     while 1 {
         if {$atLineStart && $brackets eq ""} {
@@ -109,6 +135,12 @@ proc surface::lexer::tokenize {source file} {
                     set tab $j
                 }
                 incr j
+            }
+            if {$orphans ne "" && $line != $orphanLine && $j - $i <= $orphanIndent
+                    && [string index $source $j] ni {"#" "\n" "\r" ""}} {
+                # A line no deeper than the one that forced the close starts
+                # another construct.
+                set orphans {}
             }
             set c [string index $source $j]
             if {$j >= $n} {
@@ -161,6 +193,7 @@ proc surface::lexer::tokenize {source file} {
             }
             "\r" {
                 if {[string index $source $i+1] ne "\n"} {
+                    lappend skipped [llength $diagnostics]
                     Report diagnostics $file $i $line $lineStart 1 "unexpected carriage return"
                 }
                 incr i
@@ -168,11 +201,20 @@ proc surface::lexer::tokenize {source file} {
             "\n" {
                 if {$brackets ne "" && [UnclosedBefore $source [expr {$i + 1}] [lindex $brackets 0 2]]} {
                     set here [Span $file $i $i $line $lineStart]
+                    set orphans {}
                     foreach bracket [lreverse $brackets] {
                         lassign $bracket opener span
-                        lappend diagnostics [surface::diagnostic $span "\"$opener\" is never closed"]
+                        if {![Absorbed $absorbing $span]} {
+                            lappend structural [llength $diagnostics]
+                            lappend diagnostics [surface::diagnostic $span "\"$opener\" is never closed"]
+                        }
                         lappend tokens [Token [Closer $opener] "" "" $here]
+                        lappend synthetic $i
+                        set orphans [linsert $orphans 0 [Closer $opener]]
                     }
+                    set orphanLine [expr {$line + 1}]
+                    regexp -start [expr {$i + 1}] {\A[ \t]*} $source indentation
+                    set orphanIndent [string length $indentation]
                     set brackets {}
                 }
                 if {$brackets eq ""} {
@@ -190,12 +232,17 @@ proc surface::lexer::tokenize {source file} {
                     incr i
                 }
             }
-            {"} {
-                lappend tokens [String $source $i $file $line $lineStart diagnostics]
-                set i [dict get [lindex $tokens end] span end]
-            }
-            {'} {
-                lappend tokens [Char $source $i $file $line $lineStart diagnostics]
+            {"} - {'} {
+                set unterminated 0
+                set index [llength $diagnostics]
+                lappend tokens [[expr {$c eq "\"" ? "String" : "Char"}] $source $i $file $line $lineStart diagnostics unterminated]
+                if {$unterminated} {
+                    # The rest of the line went into the literal, a closer
+                    # with it: the text is skipped, and a bracket left open
+                    # around it is no error of its own (below).
+                    lappend skipped $index
+                    lappend absorbing $i
+                }
                 set i [dict get [lindex $tokens end] span end]
             }
             {[0-9]} {
@@ -269,6 +316,7 @@ proc surface::lexer::tokenize {source file} {
                         incr k
                     }
                     if {$k > $extraStart} {
+                        lappend skipped [llength $diagnostics]
                         Report diagnostics $file $extraStart $line $lineStart [expr {$k - $extraStart}] \
                             "\"$text\" already ends in \"?\": an identifier can end in at most one \"?\", with nothing directly after it"
                         set i $k
@@ -285,6 +333,7 @@ proc surface::lexer::tokenize {source file} {
                 }
                 if {$found eq ""} {
                     set what [expr {[string is print $c] ? "\"$c\"" : [format "U+%04X" [scan $c %c]]}]
+                    lappend skipped [llength $diagnostics]
                     Report diagnostics $file $i $line $lineStart 1 "unexpected character $what"
                     incr i
                     continue
@@ -299,10 +348,18 @@ proc surface::lexer::tokenize {source file} {
                     ) - ] - \} {
                         set opener [dict get {) ( ] [ \} \{} $found]
                         if {$brackets eq ""} {
+                            if {[lindex $orphans end] eq $found} {
+                                # The closer of a bracket already reported
+                                # as never closed (above).
+                                set orphans [lrange $orphans 0 end-1]
+                                continue
+                            }
+                            lappend structural [llength $diagnostics]
                             lappend diagnostics [surface::diagnostic $span "unmatched \"$found\""]
                             continue
                         }
                         if {[lindex $brackets end 0] ne $opener} {
+                            lappend structural [llength $diagnostics]
                             lappend diagnostics [surface::diagnostic $span \
                                 "\"$found\" does not match \"[lindex $brackets end 0]\" opened at [surface::ast::location [lindex $brackets end 1]]"]
                         }
@@ -317,8 +374,12 @@ proc surface::lexer::tokenize {source file} {
     set here [Span $file $n $n $line $lineStart]
     foreach bracket [lreverse $brackets] {
         lassign $bracket opener span
-        lappend diagnostics [surface::diagnostic $span "\"$opener\" is never closed"]
+        if {![Absorbed $absorbing $span]} {
+            lappend structural [llength $diagnostics]
+            lappend diagnostics [surface::diagnostic $span "\"$opener\" is never closed"]
+        }
         lappend tokens [Token [Closer $opener] "" "" $here]
+        lappend synthetic $n
     }
     if {$tokens ne "" && [dict get [lindex $tokens end] kind] ni {NEWLINE INDENT DEDENT}} {
         lappend tokens [Token NEWLINE "" "" $here]
@@ -327,20 +388,36 @@ proc surface::lexer::tokenize {source file} {
         lappend tokens [Token DEDENT "" "" $here]
     }
     lappend tokens [Token EOF "" "" $here]
-    return [dict create tokens $tokens diagnostics $diagnostics]
+    return [dict create tokens $tokens diagnostics $diagnostics structural $structural \
+        skipped $skipped synthetic $synthetic]
 }
 
 # True if the physical line starting at offset START cannot continue an
 # expression inside brackets: it is indented no deeper than INDENT (the level
 # of the line that opened them) and starts like a statement (a statement
-# keyword, or a binding). Brackets still open there are never closed.
+# keyword, or a binding) or a declaration (`struct NAME`, `error NAME`, `type
+# NAME`, `import`, ...: DIAGNOSTIC-RECOVERY.md -- no expression continues
+# with one). Brackets still open there are never closed.
 proc surface::lexer::UnclosedBefore {source start indent} {
     set line [string range $source $start [expr {$start + 200}]]
     if {![regexp {^( *)(\S.*)?} $line -> spaces rest] || $rest eq ""} {
         return 0
     }
     return [expr {[string length $spaces] <= $indent
-        && [regexp {^(?:(?:fn|if|elif|else|loop|return|break|continue|fail)\M|[A-Za-z_][A-Za-z0-9_]*[ \t]*=(?!=))} $rest]}]
+        && ([regexp {^(?:(?:fn|if|elif|else|loop|return|break|continue|fail)\M|[A-Za-z_][A-Za-z0-9_]*[ \t]*=(?!=))} $rest]
+            || [regexp {^(?:(?:opaque[ \t]+)?(?:context[ \t]+)?(?:struct|trait)|enum|error|(?:refined[ \t]+)?type|layout|import)[ \t]+[A-Za-z_]} $rest])}]
+}
+
+# 1 if an unterminated literal started after the opener at SPAN (ABSORBING:
+# their offsets): the closer may well be inside it, so the bracket left open
+# is a consequence of the literal's diagnostic (DIAGNOSTIC-RECOVERY.md).
+proc surface::lexer::Absorbed {absorbing span} {
+    foreach offset $absorbing {
+        if {$offset > [dict get $span start]} {
+            return 1
+        }
+    }
+    return 0
 }
 
 proc surface::lexer::Token {kind text value span} {
@@ -365,14 +442,18 @@ proc surface::lexer::Report {diagnosticsVar file start line lineStart length mes
 }
 
 # The STRING token starting at the quote at offset START.
-proc surface::lexer::String {source start file line lineStart diagnosticsVar} {
+proc surface::lexer::String {source start file line lineStart diagnosticsVar {unterminatedVar ""}} {
     upvar 1 $diagnosticsVar diagnostics
+    if {$unterminatedVar ne ""} {
+        upvar 1 $unterminatedVar unterminated
+    }
     set n [string length $source]
     set i [expr {$start + 1}]
     set value ""
     while 1 {
         if {$i >= $n || [string index $source $i] eq "\n"
                 || ([string index $source $i] eq "\r" && [string index $source $i+1] eq "\n")} {
+            set unterminated 1
             Report diagnostics $file $start $line $lineStart [expr {$i - $start}] "unterminated string"
             break
         }
@@ -425,8 +506,11 @@ proc surface::lexer::Codepoint {ch} {
 # String already relies on). The escape vocabulary mirrors String's own
 # (\\ \n \r \t), substituting \' for \" since a character literal is quoted
 # with '.
-proc surface::lexer::Char {source start file line lineStart diagnosticsVar} {
+proc surface::lexer::Char {source start file line lineStart diagnosticsVar {unterminatedVar ""}} {
     upvar 1 $diagnosticsVar diagnostics
+    if {$unterminatedVar ne ""} {
+        upvar 1 $unterminatedVar unterminated
+    }
     set n [string length $source]
     set i [expr {$start + 1}]
     set scalars {}
@@ -434,6 +518,7 @@ proc surface::lexer::Char {source start file line lineStart diagnosticsVar} {
     while 1 {
         if {$i >= $n || [string index $source $i] eq "\n"
                 || ([string index $source $i] eq "\r" && [string index $source $i+1] eq "\n")} {
+            set unterminated 1
             Report diagnostics $file $start $line $lineStart [expr {$i - $start}] "unterminated character literal"
             set ok 0
             break

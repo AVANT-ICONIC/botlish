@@ -1,0 +1,9 @@
+#import str
+
+fn shout(s):
+    s.concat("!")
+
+fn greeting() -> str:
+    shout("hi")
+
+greeting()

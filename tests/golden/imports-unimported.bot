@@ -10,16 +10,20 @@
 #   * the language primitives (list literals, the root natives list,
 #     integer?, string?, hash, mod) are no namespace and need no import;
 #   * method-call sugar finds no function of an unimported namespace: a
-#     List or String receiver's `.at`/`.length` is a field projection
-#     (NotAStruct), and the diagnostic names the namespaces that define the
-#     function and the import that would make it visible.
+#     List or String receiver's `.at`/`.length` is rejected as the missing
+#     import of the namespace whose function it would apply (MissingImport,
+#     as the qualified spelling is; DIAGNOSTIC-RECOVERY.md), and the
+#     diagnostic names that namespace alone and the import that would make
+#     it visible.
 #
 # Ported from tests/imports.test, which stays authoritative
 # (audit/golden/migration/fragments/imports-unimported.tsv maps every
 # test). A suite of its own because every other imports suite imports some
 # of these namespaces. Imports: compiler and test only (the framework; a
 # program needs them to be a suite, and neither defines a member the tests
-# below name).
+# below name. lib/test.bot's own imports load list, str and mutable_vector,
+# which is how a method call's diagnostic knows their members: a module
+# nobody imports is never searched, DIAGNOSTIC-RECOVERY.md).
 import compiler
 import test
 
@@ -101,29 +105,30 @@ fn register_primitive_tests():
 
 fn register_method_visibility_tests():
     # imports-method-requires-the-import: without `import list` (or str),
-    # xs.at(0) and s.length() find no function and are field projections
-    # from a non-struct.
+    # xs.at(0) and s.length() find no function: the import is what is
+    # missing, as for the explicit spelling.
     fn b_list_at() errors compiler::CompilerError:
         static compile:
             xs = [1, 2]
             xs.at(0)
-    test::rejects("imports-method-requires-the-import/list-at", compiler::DiagnosticCode::NotAStruct, b_list_at)
+    test::rejects("imports-method-requires-the-import/list-at", compiler::DiagnosticCode::MissingImport, b_list_at)
     fn b_str_length() errors compiler::CompilerError:
         static compile:
             s = "ab"
             s.length()
-    test::rejects("imports-method-requires-the-import/str-length", compiler::DiagnosticCode::NotAStruct, b_str_length)
+    test::rejects("imports-method-requires-the-import/str-length", compiler::DiagnosticCode::MissingImport, b_str_length)
 
-    # ... and the diagnostic says why and what to import: no `length` is
-    # visible, how a function becomes visible, and which standard
-    # namespaces define one.
+    # ... and the diagnostic says why and what to import: method syntax
+    # applies only a visible function, the import that makes list::length
+    # one, and no other namespace (mutable_vector::length and str::length
+    # would not apply to a List).
     fn b_list_length() errors compiler::CompilerError:
         static compile:
             xs = [1, 2]
             xs.length()
-    test::rejects_containing("imports-method-requires-the-import/not-visible", compiler::DiagnosticCode::NotAStruct, "no function named \"length\" is visible here either", b_list_length)
-    test::rejects_containing("imports-method-requires-the-import/how-to-import", compiler::DiagnosticCode::NotAStruct, "define it here, or import the namespace that defines it with `import NAMESPACE`", b_list_length)
-    test::rejects_containing("imports-method-requires-the-import/defining-namespaces", compiler::DiagnosticCode::NotAStruct, "`list::length`, `mutable_vector::length`, `str::length` exist: add `import list` or `import mutable_vector` or `import str`", b_list_length)
+    test::rejects_containing("imports-method-requires-the-import/not-visible", compiler::DiagnosticCode::MissingImport, "the method-style call \".length(...)\" applies only a function visible by that name", b_list_length)
+    test::rejects_containing("imports-method-requires-the-import/how-to-import", compiler::DiagnosticCode::MissingImport, "namespace \"list\" is not imported; add `import list` to use `list::length`", b_list_length)
+    test::rejects_message("imports-method-requires-the-import/defining-namespaces", compiler::DiagnosticCode::MissingImport, "namespace \"list\" is not imported; add `import list` to use `list::length` (the method-style call \".length(...)\" applies only a function visible by that name)", b_list_length)
 
 fn register_unimported_tests():
     register_no_implicit_import_tests()

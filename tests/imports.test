@@ -339,13 +339,13 @@ test imports-non-transitive-namespace {A imports B and B imports C: A does not g
     }
 } -result {8 {MISSING-IMPORT: namespace "leafc" is not imported; add `import leafc` to use `leafc::deep`} 16}
 
-test imports-non-transitive-methods {C's functions are not method candidates in A merely because B imports C} -body {
+test imports-non-transitive-methods {C's functions are not method candidates in A merely because B imports C: the call is rejected, MISSING-IMPORT naming C (DIAGNOSTIC-RECOVERY.md)} -body {
     withScratchLibrary {
         writeFixtures $dir
         list [diagKinds "import midb\nx = 1\nx.deep()\n"] \
             [agree "import leafc\nx = 1\nx.deep()\n"]
     }
-} -result {NOT-A-STRUCT 8}
+} -result {MISSING-IMPORT 8}
 
 test imports-module-declares-its-own-dependencies {a module's imports are its own: importing it grants its importer nothing} -body {
     withScratchLibrary {
@@ -398,13 +398,13 @@ test imports-method-mutable-array {a.set/a.at/a.get after import mutable_array e
     list [agree $method] [agree $free]
 } -result {{[5, 6, -1]} {[5, 6, -1]}}
 
-test imports-method-requires-the-import {without the import, xs.at(i) does not find list::at although the standard namespace exists} -body {
+test imports-method-requires-the-import {without the import, xs.at(i) does not find list::at although the standard namespace exists: the import is what is missing, MISSING-IMPORT as for the explicit spelling, naming the one namespace whose function the call would apply (DIAGNOSTIC-RECOVERY.md)} -body {
     set message [lindex [diagMessages "xs = \[1, 2\]\nxs.length()\n"] 0]
     list [diagKinds "xs = \[1, 2\]\nxs.at(0)\n"] [diagKinds "s = \"ab\"\ns.length()\n"] \
-        [expr {[string first {no function named "length" is visible here either} $message] >= 0}] \
-        [expr {[string first {define it here, or import the namespace that defines it with `import NAMESPACE`} $message] >= 0}] \
-        [expr {[string first {`list::length`, `mutable_vector::length`, `str::length` exist: add `import list` or `import mutable_vector` or `import str`} $message] >= 0}]
-} -result {NOT-A-STRUCT NOT-A-STRUCT 1 1 1}
+        [expr {[string first {namespace "list" is not imported; add `import list` to use `list::length`} $message] >= 0}] \
+        [expr {[string first {the method-style call ".length(...)" applies only a function visible by that name} $message] >= 0}] \
+        [expr {[string first mutable_vector $message] < 0 && [string first str:: $message] < 0}]
+} -result {MISSING-IMPORT MISSING-IMPORT 1 1 1}
 
 test imports-method-does-not-need-an-alias {an alias binding for method visibility is not needed, and where present is the same candidate (not an ambiguity)} -body {
     list [agree "import list\nat = list::length\n\[1, 2\].at()\n"] \
@@ -793,7 +793,7 @@ test imports-cache-does-not-leak-importer-state {one cached module AST serves tw
         set c [agree "import shared\nshared::id(1)\n"]
         list $a $b $c
     }
-} -result {accepted NOT-A-STRUCT 8}
+} -result {accepted MISSING-IMPORT 8}
 
 test imports-dependency-graph {the loader records each file's direct imports} -body {
     withScratchLibrary {

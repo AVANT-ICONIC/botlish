@@ -1,0 +1,4 @@
+# S13 through a generic function: the instance for s : str is invalid, reported at its call.
+primary 7:5
+fix 1 import str
+cascade 6:12

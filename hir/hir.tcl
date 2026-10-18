@@ -358,13 +358,16 @@ proc hir::DiagnoseAt {hirVar kind message expr origin} {
 #                   over the root environment; all names resolve statically
 #   -mode sequence  EXPRS run in an unknown existing environment: names not
 #                   bound by nested scopes resolve to ambient bindings
-#   -strict 1       (default) raise the first diagnostic as the semantic
-#                   error the runtime would raise ({CORE SEMANTIC KIND}).
+#   -strict 1       (default) raise the diagnostics as the semantic error
+#                   the runtime would raise ({CORE SEMANTIC KIND} of the
+#                   first, every one reported: hir/recovery.tcl).
 #                   A resolution diagnostic (an unbound name, which includes
 #                   every reference to a binding established later --
 #                   hir/resolve.tcl) is raised before type inference runs:
 #                   a program that fails to resolve is never typed, analyzed
-#                   or specialized.
+#                   or specialized. (The source frontend builds with
+#                   -strict 0 and goes on to check such a program,
+#                   surface/modules.tcl's BuildProgram.)
 #   -strict 0       keep diagnostics in the HIR; the error stays a run-time
 #                   error of the program (the compiler's core IR text entry
 #                   points, the test harness)
@@ -484,9 +487,9 @@ proc hir::BuildSyntax {nodes args} {
         set hir [BuildFull $nodes $options $given $halt checked]
     }
     if {[dict get $options -strict] && [dict get $hir diagnostics] ne ""} {
-        # Resolution failed, or a static check did: the first diagnostic.
-        core::semanticError [dict get [lindex [dict get $hir diagnostics] 0] kind] \
-            [dict get [lindex [dict get $hir diagnostics] 0] message]
+        # Resolution failed, or a static check did: every diagnostic the
+        # compilation reports (hir/recovery.tcl), the first one's kind.
+        hir::recovery::raise $hir [hir::recovery::reported $hir] 0
     }
     return $hir
 }
@@ -661,6 +664,13 @@ proc hir::BuildOnce {nodes options given choices halt checkedVar} {
         # -halt-on-resolution-errors and raises the diagnostics itself.
         hir::declarations::stamp hir
         return $hir
+    }
+    if {[dict get $hir diagnostics] ne ""} {
+        # The program is checked although it did not resolve: what the
+        # checks find in code that depends on a resolution failure is not
+        # reported (hir/recovery.tcl). Recovery bookkeeping of a rejected
+        # program only, never read by an analysis.
+        dict set hir resolutionDiagnostics [dict get $hir diagnostics]
     }
     hir::declarations::stamp hir
     hir::check hir
@@ -944,8 +954,15 @@ proc hir::DecideMethodCalls {nodes options given hir {seeds {}}} {
         if {![dict exists $final methodCalls $key]} continue
         if {[UnknownTraitOperationInside [dict get $problemsOf $key]]} {
             # A receiver computed by an operation its trait does not declare
-            # (TRAIT-UNKNOWN-OPERATION, typed any as a stand-in) fails every
-            # candidate: that diagnostic is the cause and is already reported.
+            # (TRAIT-UNKNOWN-OPERATION) fails every candidate: that
+            # diagnostic is the cause and is already reported.
+            continue
+        }
+        set callArgs [dict get $final exprs [dict get $final methodCalls $key expr] args]
+        if {$callArgs ne "" && [hir::types::Poisoned $final [lindex $callArgs 0]]} {
+            # A poisoned receiver (hir/types.tcl, "Poison") fits every
+            # candidate and decides nothing: the diagnostic that rejected it
+            # is the cause, already reported (DIAGNOSTIC-RECOVERY.md).
             continue
         }
         set info [dict get $final methodCalls $key]
@@ -1105,7 +1122,7 @@ proc hir::TraitCallsDecided {hir calls decidedVar} {
 # erasure of a callable whose contract is (hir::callables), is diagnosed
 # like any other; the whole typing is then redone with those parameters'
 # trusted contracts demoted to checked-only, keeping the original
-# diagnostics. With -strict 1 the first diagnostic is raised either way;
+# diagnostics. With -strict 1 the diagnostics are raised either way;
 # with -strict 0 (a lenient front-end or core IR text build, whose
 # diagnostics stay in the HIR and become AOT blockers) this is what keeps
 # every backend from
@@ -1544,7 +1561,7 @@ proc hir::exprsAt {hir origin} {
 }
 
 apply {{dir} {
-    foreach file {syntax static staticdeps imports resolve flags contexts direct coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow foreign errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings declarations interchange} {
+    foreach file {syntax static staticdeps imports resolve flags contexts direct coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow foreign errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings recovery declarations interchange} {
         uplevel #0 [list source [file join $dir $file.tcl]]
     }
 }} $hir::home

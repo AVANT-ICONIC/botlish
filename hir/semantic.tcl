@@ -427,6 +427,24 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
     return $result
 }
 
+# 1 if call E, typed in CTX, is answered by an instance whose result is
+# poison (Walk): never, because its every normal completion is a value the
+# instance's analysis proved invalid -- reported at the call that made the
+# instance (verify), never a divergence of the call.
+proc hir::semantic::PoisonedCall {ctx e} {
+    variable state
+    if {$state eq ""} {
+        return 0
+    }
+    set callKey [list [expr {[dict exists $ctx inst] ? [dict get $ctx inst] : "generic"}] $e]
+    if {![dict exists $state calls $callKey]} {
+        return 0
+    }
+    set id [dict get $state calls $callKey]
+    return [expr {[dict exists $state instances $id poisoned]
+        && [dict get $state instances $id result] eq "never"}]
+}
+
 # 1 if instance result TYPE is at least as precise as the generic result
 # GENERIC: a subtype of it; the same exact callable whose own result is (a
 # closure created inside the instance carries the result its in-place typing
@@ -595,6 +613,13 @@ proc hir::semantic::Walk {id} {
     dict set ctx types $types
     set body [hir::types::Sequence scratch ctx [dict get $node body]]
     set result [hir::types::lub $body [dict get $ctx returnType]]
+    if {$result eq "never" && [dict get $ctx poisonResult]} {
+        # Every normal completion of this walk is poison (hir/types.tcl,
+        # "Poison"): so is the call of the instance (PoisonedCall).
+        dict set state instances $id poisoned 1
+    } elseif {[dict exists $state instances $id poisoned]} {
+        dict unset state instances $id poisoned
+    }
     dict set scratch exprs $block inferredResultType [hir::types::intern scratch $result]
     set declared [dict get $node declaredResult]
     if {$declared ne {}} {
@@ -830,8 +855,10 @@ proc hir::semantic::verify {hirVar} {
 proc hir::semantic::DerivedKind {own id} {
     set first [lindex [dict get $own $id] 0]
     set kind [dict get $first kind]
-    if {$kind in {OPAQUE-REPRESENTATION USE-AFTER-MOVE UNHANDLED-ERROR} || [string match AFFINE-* $kind]} {
-        # (An ownership violation keeps its own kind: AFFINE-VALUES.md.)
+    if {$kind in {OPAQUE-REPRESENTATION USE-AFTER-MOVE UNHANDLED-ERROR MISSING-IMPORT} || [string match AFFINE-* $kind]} {
+        # (An ownership violation keeps its own kind: AFFINE-VALUES.md. So
+        # does a method-style call whose function's namespace is not
+        # imported: the explicit spelling's diagnostic, DIAGNOSTIC-RECOVERY.md.)
         return $kind
     }
     return TYPE

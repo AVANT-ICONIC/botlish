@@ -38,7 +38,8 @@ foreach {option value} $argv {
 
 # The tests whose only check is the committed bindings' equality with the
 # generation.
-set pinned {cb-fixture-current cb-tcl-current cb-boringssl-current cb-sdl3-current}
+set pinned {cb-fixture-current cb-tcl-current cb-tcl-current-cross cb-boringssl-current
+    cb-boringssl-current-cross cb-sdl3-current cb-sdl3-current-cross}
 
 # The mutants of mutants.txt (its header has the format), as
 # {NAME DESCRIPTION {FILE OLD NEW ...} ...}.

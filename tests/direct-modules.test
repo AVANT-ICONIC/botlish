@@ -242,7 +242,8 @@ test dm-stale-no-authority {`direct module` with no call into a direct module is
 
 test dm-stale-fully-mediated {a module whose every direct call is mediated by its own context must drop its marker: the marker is not a permission bit under which authority can accumulate} -body {
     appRejection [app [list main.bot "direct module\n\nimport m\n\n1\n" m.bot "direct module\n\nimport abi::x86_64\nimport linux::abi::x86_64\n\ncontext struct Pids:\n    ok: bool\n\nfn pid(context p: Pids) -> int:\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}))\n"]]
-} -cleanup removeApps -result {STALE-DIRECT-MODULE: m.bot:1:1: `direct module` is unnecessary: all direct authority in module "m" is mediated by contexts defined by "m" (every call into a direct module is in a function requiring one of them); remove the declaration (it must state exactly what the compiler infers)}
+} -cleanup removeApps -result {STALE-DIRECT-MODULE: m.bot:1:1: `direct module` is unnecessary: all direct authority in module "m" is mediated by contexts defined by "m" (every call into a direct module is in a function requiring one of them); remove the declaration (it must state exactly what the compiler infers)
+main.bot:1:1: `direct module` is unnecessary: the entry program makes no call into a direct module, so it exposes no direct authority; remove the declaration (it must state exactly what the compiler infers) (CORE SEMANTIC STALE-DIRECT-MODULE)}
 
 test dm-no-silent-promotion {a new unmediated call in an ordinary module is a compile error, never a silent promotion: the source diff must add `direct module`} -body {
     set before [app [list main.bot "import m\n\nm::two()\n" m.bot "fn two() -> int:\n    2\n"]]

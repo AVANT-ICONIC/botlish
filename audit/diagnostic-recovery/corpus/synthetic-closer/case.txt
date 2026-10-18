@@ -1,0 +1,4 @@
+# A bracket left open at the end of a line: the closer the lexer inserts is no token anyone wrote.
+primary 1:12
+fix 1 total = 1 + 2
+cascade 1:16

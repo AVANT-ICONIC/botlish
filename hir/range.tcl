@@ -1592,7 +1592,13 @@ proc hir::range::verifyDeclaredResults {hirVar} {
         if {[dict get $node kind] ne {block} || [dict get $node declaredResult] eq {}} { continue }
         if {[hir::types::IsTraitConstraint [dict get $node declaredResult]]} {
             # A declared trait result is proven per exit, with its witness
-            # (hir::traits::verify: TRAIT-NOT-SATISFIED, TRAIT-WITNESS-JOIN).
+            # (hir/traits.tcl's verify: TRAIT-NOT-SATISFIED, TRAIT-WITNESS-JOIN).
+            continue
+        }
+        if {[hir::types::Poisoned $hir $e]} {
+            # Every normal completion is a value an earlier diagnostic
+            # rejected (hir/types.tcl, "Poison"): there is no result to hold
+            # to the declaration, and no `return` contributes one.
             continue
         }
         set params [dict get $node params]
@@ -1754,6 +1760,11 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
     foreach arg $args paramBinding $params declaredType $declaredTypes checkedType $checkedTypes {
         set i $index
         incr index
+        if {[dict exists $hir poisoned $arg]} {
+            # A value an earlier diagnostic rejected (hir/types.tcl,
+            # "Poison"): nothing to hold to the parameter.
+            continue
+        }
         set argType [hir::typeOf $hir $arg]
         set argRange [expr {[dict exists $ranges $arg] ? [dict get $ranges $arg] : [unknown]}]
         set inferred [hir::signatures::inferredTrusted $hir $targetBlock $i]
@@ -2070,7 +2081,7 @@ proc hir::range::VerifyStructuralCall {hirVar ranges e node calleeType callee ar
     set index 0
     foreach arg $argExprs declaredType $declaredTypes {
         incr index
-        if {$declaredType eq "any"} { continue }
+        if {$declaredType eq "any" || [dict exists $hir poisoned $arg]} { continue }
         set argType [hir::typeOf $hir $arg]
         set argRange [expr {[dict exists $ranges $arg] ? [dict get $ranges $arg] : [unknown]}]
         if {[ProvesValueAcceptedBy $argType $argRange $declaredType]} {

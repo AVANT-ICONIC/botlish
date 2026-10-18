@@ -108,8 +108,9 @@ proc corpus::handled {driver {errors IndexNotFound}} {
 
 # corpus::program NAME DRIVER, or -- when DRIVER leaves builtin declared
 # errors unhandled at top level (and only then) -- of corpus::handled DRIVER
-# for exactly those errors (the compiler names one per rejection, so the
-# set grows until the driver compiles).
+# for exactly those errors (the compiler names a call's whole unhandled set in
+# one rejection, DIAGNOSTIC-RECOVERY.md; the set grows while another call
+# names more, until the driver compiles).
 proc corpus::driven {name driver args} {
     set errors {}
     while 1 {
@@ -117,12 +118,17 @@ proc corpus::driven {name driver args} {
         if {![catch {program $name $text {*}$args} hir options]} {
             return $hir
         }
-        if {[dict get $options -errorcode] ne {CORE SEMANTIC UNHANDLED-ERROR}
-                || ![regexp {declared error "(IndexNotFound|LowerUnderrun|UpperOverrun)"} $hir -> error]
-                || $error in $errors} {
+        set builtin {IndexNotFound LowerUnderrun UpperOverrun}
+        set named {}
+        if {[regexp {may produce the declared errors? (.*), which (?:is|are) neither handled} [lindex [split $hir \n] 0] -> list]} {
+            set named [lmap {- e} [regexp -all -inline {"([^"]*)"} $list] {set e}]
+        }
+        set new [lmap e $named {expr {$e in $errors ? [continue] : $e}}]
+        if {[dict get $options -errorcode] ne {CORE SEMANTIC UNHANDLED-ERROR} || $new eq {}
+                || [lmap e $named {expr {$e in $builtin ? [continue] : $e}}] ne {}} {
             return -options $options $hir
         }
-        lappend errors $error
+        lappend errors {*}$new
     }
 }
 

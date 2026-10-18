@@ -1,0 +1,10 @@
+fn parse(text: str) -> Board:
+    text
+
+fn render() -> str:
+    parse("x")
+
+fn score(n: int) -> str:
+    n
+
+score(1)

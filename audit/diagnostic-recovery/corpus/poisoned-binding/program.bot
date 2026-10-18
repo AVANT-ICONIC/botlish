@@ -1,0 +1,8 @@
+#import str
+
+fn shout(s: str) -> str:
+    loud = s.upper_case()
+    louder = loud.concat("!")
+    7
+
+shout("x")

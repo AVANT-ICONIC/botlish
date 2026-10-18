@@ -1,0 +1,10 @@
+# Two failed method calls and an independent wrong argument in one call (spec item 24).
+primary 8:17
+fix 8     place(label, xs.length(), "three")
+primary 8:32
+fix 2 import list
+primary 8:42
+fix 4 fn place(name: str, cells: int, n: str) -> int:
+fix 5     cells
+cascade 8:11
+cascade 8:28

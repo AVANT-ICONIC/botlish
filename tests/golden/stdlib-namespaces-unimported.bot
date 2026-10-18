@@ -3,8 +3,9 @@
 # name of a namespace is authorized only by its import (STDLIB-NAMESPACES.md,
 # IMPORTS.md), as a source-level specification: in a file that imports
 # neither list nor any other namespace defining `at`, [1, 2].at(0) finds no
-# function and is the projection of field "at" from a non-struct
-# (NotAStruct), and list::at([1, 2], 0) is MissingImport. (With `import str`
+# function, and both it and list::at([1, 2], 0) are the missing import of
+# list (MissingImport: the two spellings agree, DIAGNOSTIC-RECOVERY.md).
+# (With `import str`
 # alone: stdlib-namespaces-str-only.bot; with `import list`, `.at` is
 # list::at: stdlib-namespaces.bot's ns-method-requires-an-import/list-imported.)
 #
@@ -21,7 +22,7 @@ fn register_unimported_tests():
     fn b_method_without_import() errors compiler::CompilerError:
         static compile:
             [1, 2].at(0)
-    test::rejects("ns-method-requires-an-import/no-import", compiler::DiagnosticCode::NotAStruct, b_method_without_import)
+    test::rejects("ns-method-requires-an-import/no-import", compiler::DiagnosticCode::MissingImport, b_method_without_import)
     fn b_qualified_without_import() errors compiler::CompilerError:
         static compile:
             list::at([1, 2], 0)

@@ -706,12 +706,12 @@ test ns-method-alias-nir-identical {a binding of an imported function that stays
     expr {$m eq $q}
 } -result 1
 
-test ns-method-requires-an-import {a namespace's functions are method candidates only when the file imports that namespace: no import (or the import of another namespace) leaves `.at` the field of a non-struct; a qualified name alone is not even authorized without its import} -body {
+test ns-method-requires-an-import {a namespace's functions are method candidates only when the file imports that namespace: no import (or the import of another namespace) leaves `.at` unresolved -- the missing import, as a qualified name alone without its import is (DIAGNOSTIC-RECOVERY.md)} -body {
     list [lindex [rejection {[1, 2].at(0)}] 0] \
         [lindex [rejection "import str\n\[1, 2\].at(0)"] 0] \
         [rejection "import list\n\[1, 2\].at(0)"] \
         [lindex [rejection {list::at([1, 2], 0)}] 0]
-} -result {NOT-A-STRUCT NOT-A-STRUCT accepted MISSING-IMPORT}
+} -result {MISSING-IMPORT MISSING-IMPORT accepted MISSING-IMPORT}
 
 # ---------------------------------------------------------------------------
 # Randomized checking (audit/stdlib-namespaces/tools/fuzz.tcl): a bounded run;

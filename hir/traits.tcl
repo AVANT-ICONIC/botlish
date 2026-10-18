@@ -1033,7 +1033,9 @@ proc hir::traits::verify {hirVar} {
         }
         set declared [dict get $node declaredResult]
         if {[hir::types::IsTraitConstraint $declared]} {
-            VerifyTraitResult hir $e $declared
+            # (A join of its body's, already reported, is no second join of
+            # its result: the convention below for an undeclared one.)
+            VerifyTraitResult hir $e $declared [dict exists $joined $e]
         } elseif {![dict exists $joined $e] && [dict get $node resultType] ne ""} {
             set t [hir::type $hir [dict get $node resultType]]
             if {[hir::types::IsView $t] && [hir::types::IsJoinWitness [hir::types::ViewWitness $t]]} {
@@ -1164,8 +1166,10 @@ proc hir::traits::JoinDiagnostic {hirVar e type} {
 
 # Checks the exits of block E, which declares trait result CONSTRAINT: each
 # exit's value must be accepted by the trait (a view of it, or a concrete
-# type satisfying it), and all must have one witness (TRAIT-WITNESS-JOIN).
-proc hir::traits::VerifyTraitResult {hirVar e constraint} {
+# type satisfying it), and all must have one witness (TRAIT-WITNESS-JOIN),
+# unless JOINED: a join of an expression of its body was reported already
+# (verify), the join its exits make (DIAGNOSTIC-RECOVERY.md).
+proc hir::traits::VerifyTraitResult {hirVar e constraint {joined 0}} {
     upvar 1 $hirVar hir
     set id [lindex $constraint 1]
     set witnesses {}
@@ -1189,7 +1193,7 @@ proc hir::traits::VerifyTraitResult {hirVar e constraint} {
             lappend witnesses $w
         }
     }
-    if {[llength $witnesses] > 1} {
+    if {[llength $witnesses] > 1 && !$joined} {
         hir::Diagnose hir TRAIT-WITNESS-JOIN [format {the function's result has trait type %s but may contain either %s; heterogeneous trait values are not supported (every exit of a trait-typed result needs the same witness)} \
             $id [join [lmap w $witnesses {ShowWitness $w $hir}] { or }]] $e
     }

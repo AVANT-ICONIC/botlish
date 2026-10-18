@@ -266,7 +266,8 @@ test ma-place-receiver {item 33: a temporary receiver (a call's result, a List e
         [maCode "import mutable_array\nfn f(x: str) -> int:\n    y = x\n    mutable_array::set(y, 0, 1)\n    1\nf(\"s0\")\n"] \
         [maCode "import mutable_array\nfn f() -> int:\n    a = mutable_array::create(1, 0)\n    fn g() -> int:\n        a.set(0, 3)\n        1\n    g()\nf()\n"] \
         [maCode "import mutable_array\nfn f() -> int errors IndexNotFound:\n    a = mutable_array::create(1, 0)\n    fn g() -> int:\n        mutable_array::capacity(a)\n    a.set(0, 2)\n    g()\nr = f():\n    on IndexNotFound:\n        0\nr\n"]
-} -result {MUTABLE-PLACE-RECEIVER {the receiver of mutable_array::set is not a place: it is a temporary value, so the updated array would be lost (a MutableArray is a value; bind it to a name, mutate the name, and use the name afterwards)} MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-CAPTURE}
+} -result {MUTABLE-PLACE-RECEIVER {the receiver of mutable_array::set is not a place: it is a temporary value, so the updated array would be lost (a MutableArray is a value; bind it to a name, mutate the name, and use the name afterwards)
+<input>:4:1: this call of "mutable_array::set" may produce the declared error "IndexNotFound", which is neither handled here nor admitted by the enclosing function's own "errors" declaration (CORE SEMANTIC UNHANDLED-ERROR)} MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-CAPTURE}
 
 test ma-generic-place {item 33: a generic function's untyped parameter is a place its body may mutate (a dynamic copy on entry, `d`): the caller's array never changes} -body {
     maRoute "fn fill(x, v) errors IndexNotFound:\n    mutable_array::set(x, 0, v)\n    x\n" "    b = fill(a, 4)\n    c = fill(b, 5)\n    \[a.at(0), b.at(0), c.at(0)\]\n"
