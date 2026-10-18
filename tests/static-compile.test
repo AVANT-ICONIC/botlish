@@ -45,14 +45,17 @@ proc scAgree {text} {
     return [sourceAgree [scProgram $text]]
 }
 
-# The HIR of the program TEXT (scProgram), strict, warnings off.
+# The HIR of the program TEXT (scProgram), strict, warnings off, for a Linux
+# target (linuxTarget: the host's own on Linux), where a program may import
+# linux::io; one importing no platform namespace is every target's.
 proc scHir {text} {
-    return [surface::compile [scProgram $text] -warnings off]
+    return [surface::compile [scProgram $text] -warnings off -target [linuxTarget]]
 }
 
-# The error code (last word) of compiling the program TEXT (scProgram), or ok.
+# The error code (last word) of compiling the program TEXT (scProgram, for a
+# Linux target as scHir), or ok.
 proc scCode {text} {
-    if {[catch {surface::compile [scProgram $text] -warnings off} message options]} {
+    if {[catch {surface::compile [scProgram $text] -warnings off -target [linuxTarget]} message options]} {
         set code [dict get $options -errorcode]
         if {[lrange $code 0 1] eq {SURFACE SYNTAX}} {
             set diagnostic [lindex $code 2]
