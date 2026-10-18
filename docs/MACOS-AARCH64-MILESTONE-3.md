@@ -316,7 +316,33 @@ Run 39166998920 (head 3fec593): `CI-Tests: acceptance rust`, `CI-GC-Stress:
 compile, every golden suite on all four backends) and the Rust tests under
 `BOTLISH_NATIVE_GC_STRESS=1`, three shards.
 
-*(Result recorded below when the run finishes.)*
+Result: shards 2 and 3 **passed**. In shard 1, every Tcl test file on
+interp and compile (64 files) and all 32 golden suites on all four backends
+passed under stress (the suites in 273 s); the one failure was the native
+Rust tests, **one test of 241**:
+`runtime::ops::tests::bytes_from_list_copies_every_byte_exactly_including_nul_and_high_bytes`
+(`assertion left != right failed`, ops.rs:3920: the same address twice). It
+is the unrooted Rust local milestone 1 reported, in a test that has nothing to
+do with coroutines: under stress a collection frees an object that only a
+Rust local holds and the allocator hands its address out again, which Linux's
+allocator happens not to do. A rerun of just the Rust tests under stress
+(run [39171832146](https://github.com/mwagner-webdev/botlish/actions/runs/39171832146))
+reproduced it identically: 240 passed, 1 failed, with every coroutine,
+framewalk, affine and mutvec test among the passing. It does not block
+coroutine validation, so, as the task said, it is **not fixed here** and is
+left for the stack/GC robustness milestone; it should be fixed by rooting the
+list in that test, not by touching the collector. Because `cargo test` stops
+at the failing library target, the driver's own 37 tests did not run under
+stress on macOS in that step (they run, and passed, in the census without
+stress).
+
+What the stress run covers for suspended roots: `co-gc-stress`,
+`co-gc-nested-suspended-roots-stress`, `ep-gc-stress-coroutine`,
+`mv-affine-gc-stress`, `sc-gc-stress`, `gf-gc-stress` and `vc-gc-collect-1`
+(a plan suspended on a coroutine stack while the body allocates) run
+natively with a collection before every allocation, and the golden runner
+itself is a coroutine holding every registered case across the collections of
+each test.
 
 Linux: the local run of the Rust coroutine tests under GC stress passed;
 `tests.yml` and `tests-arm64.yml` run their GC-stress jobs on `main`.
@@ -348,7 +374,8 @@ success (native AArch64 runner, same commit as above).
 | [39156946975](https://github.com/mwagner-webdev/botlish/actions/runs/39156946975) | 6b1d98d | first push: smoke, Tier C `coroutines.test` | smoke and the Tier C job: success (the run was then cancelled by the next push) |
 | [39157740967](https://github.com/mwagner-webdev/botlish/actions/runs/39157740967) | ddb77a2 | Tier C: 14 `notYet` files + 3 gated files + Rust | 809/815; the one failure is `ci-golden-pair` (above) |
 | [39161417599](https://github.com/mwagner-webdev/botlish/actions/runs/39161417599) | d1bca21 | the census, `CI-Tests: all` | smoke, acceptance 1/2 and 2/2, linux control, shard 3: success; shards 1 and 2: failed only on `c-bindgen.test` and `c-ffi.test` |
-| [39166998920](https://github.com/mwagner-webdev/botlish/actions/runs/39166998920) | 3fec593 | acceptance (native golden) + GC stress | see section 14 |
+| [39166998920](https://github.com/mwagner-webdev/botlish/actions/runs/39166998920) | 3fec593 | acceptance (native golden) + Rust tests, `CI-GC-Stress: 1` | shards 2, 3, smoke, acceptance, linux control: success; shard 1: everything passed except one unrelated Rust test (section 14) |
+| [39171832146](https://github.com/mwagner-webdev/botlish/actions/runs/39171832146) | a179572 | `workflow_dispatch`: `tests=rust`, `gc_stress=true` | the same one Rust test fails; 240 others pass |
 
 The `CI-Tests:` trailers were verified with `git interpret-trailers --parse`
 before each push (milestone 2's mistake: a trailer outside the last
@@ -378,7 +405,18 @@ weakened.
 The repository's own coroutine mutants (`audit/coroutines/tools/mutate.tcl`,
 the 11 native ones, which edit `coroutine.rs` and rebuild a private copy):
 
-*(recorded below when the run finishes)*
+**all 11 killed** (7 in one pass, 4 in a second after the harness process
+was lost with its shell; each by the Tcl tests, the fuzzer and the Rust
+tests): `native-construction-lazy`, `native-first-yield-discarded`,
+`native-completed-raises-exhaustion`, `native-completed-reruns-body`,
+`native-failed-loses-error`, `native-message-wrong-yield`,
+`native-deep-stack-not-preserved`, `native-release-not-emitted`,
+`native-release-keeps-stack`, `native-exit-release-missing`,
+`native-error-release-missing`. For the last four the Rust tests did not
+detect the mutant (they test the runtime, not the lowering); the Tcl tests
+and the fuzzer did. They ran on Linux x86-64, against the shared logic; none
+was run on macOS. The fuzzer ran three more seeds on the final code: 36
+programs, 0 disagreements.
 
 Not exercised: stack alignment of the Mach-O build by mutation (the
 alignment test passes on macOS; no mutant ran there), unregistered suspended
