@@ -459,6 +459,8 @@ is whether anything moved:
 | [39132556766](https://github.com/mwagner-webdev/botlish/actions/runs/39132556766) (run 11) | 28356fc | smoke, acceptance 1/2 and 2/2, linux control, Tier C (`[ci-full]`: the acceptance tier under GC stress, 3 shards) | **every job success**; Tier C shard 1: 10 commands, 0 failed (59 Tcl test files on interp and compile, 32 golden suites, 2 checks, under `BOTLISH_NATIVE_GC_STRESS=1`) |
 | [39136630261](https://github.com/mwagner-webdev/botlish/actions/runs/39136630261) (run 12, `workflow_dispatch`: tier full, tests `static-compile.test target-model.test`) | 28356fc | smoke, acceptance 1/2 and 2/2, linux control, Tier C | smoke, both acceptance shards and linux control: **success**; Tier C: failure as designed, static-compile.test's 2 census failures on interp and on compile (the two native-coroutine tests above), target-model.test 24 of 24, 3 tests skipped by `nativeLinux` |
 
+| [39140319302](https://github.com/mwagner-webdev/botlish/actions/runs/39140319302) (run 13) | 98d4487 (main merged: Compilerpedia) | smoke, acceptance 1/2 and 2/2, linux control | **every job success**: main's compilerpedia.test and main-cli.test pass on macOS with the milestone |
+
 Run 11's commit asked for `CI-Tests: static-compile.test target-model.test`,
 but the line was not in the message's last paragraph, which is all `git
 interpret-trailers --parse` reads. With no items, Tier C ran its default
@@ -519,7 +521,12 @@ tests/compilerpedia.test (34) and main-cli.test (32), also simulated, and
 target-model, linux-syscall-transports, c-abi-types, hir-cache,
 hir-interchange, native-program-output, direct-modules, static-compile,
 warnings, method-eligible, same-failure and proves-naming: every test
-passes. The warning gate passes.
+passes. The warning gate passes. After the second merge (native layout
+views): native-view (39), target-model, c-abi-types, linux-syscall,
+linux-syscall-transports, direct-modules, static-compile,
+golden-framework, stdlib-namespaces, compilerpedia, binary-layout,
+hir-interchange, hir-cache, c-ffi, c-pointer-borrowing and
+compilation-isolation: every test passes.
 
 On GitHub Actions (every workflow dispatched on the branch):
 
@@ -531,6 +538,9 @@ On GitHub Actions (every workflow dispatched on the branch):
 | c-bindgen.yml | [39128824120](https://github.com/mwagner-webdev/botlish/actions/runs/39128824120) | 20957e9 | **success** |
 | tests.yml | [39132607153](https://github.com/mwagner-webdev/botlish/actions/runs/39132607153) | 28356fc | **success**, every job |
 | tests-arm64.yml | [39132604977](https://github.com/mwagner-webdev/botlish/actions/runs/39132604977) | 28356fc | **success**, every job (interp, compile, both coverage jobs, GC stress, the Rust unit tests, four golden shards) |
+| tests.yml | [39140323637](https://github.com/mwagner-webdev/botlish/actions/runs/39140323637) | 98d4487 (main merged) | **success**, every job |
+| tests-arm64.yml | [39140325574](https://github.com/mwagner-webdev/botlish/actions/runs/39140325574) | 98d4487 | **success**, every job |
+| static-decisions.yml | [39140327387](https://github.com/mwagner-webdev/botlish/actions/runs/39140327387) | 98d4487 | **success**: the merged front end's decisions agree under both schedulers |
 
 ## 13. Test and oracle discrepancies
 
@@ -593,6 +603,13 @@ On GitHub Actions (every workflow dispatched on the branch):
   acceptance tier runs tests/compilerpedia.test. The example check now
   compiles them for the Linux target and runs them on the Tcl backends:
   511 examples, 0 problems on Linux and under the simulated macOS host.
+- **A second merge of main** (native layout views, NATIVE-LAYOUT-VIEWS.md)
+  needed no change beyond the two new test-name blocks of tcl-names.txt.
+  A view's pointer width is the compilation's target's
+  (`hir::cabi::CompilationTarget`, read from the ffi::c scalars). A HIR
+  that reads it imports ffi::c, so it records its target as this milestone
+  requires. All 769 edits of every harness's mutants still apply to the
+  merged tree.
 - **One equivalent mutant left out.** Removing the explicit `sig.call_conv =
   c_call_conv(...)` line changes no behaviour on any host Cranelift
   supports, because the ISA default equals the triple's C convention. The
