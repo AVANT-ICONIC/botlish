@@ -1,0 +1,102 @@
+name: tests (macos arm64)
+
+# EXPLORATORY first version: records what a macOS arm64 runner provides and
+# what the checkout does there. Replaced by the tiered workflow once the
+# facts are known.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-arm64-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  explore:
+    name: explore (macos-15)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Host
+        run: |
+          sw_vers
+          uname -a
+          uname -m
+          sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize hw.pagesize || true
+          getconf PAGESIZE
+          xcode-select -p
+          xcrun --show-sdk-path
+          xcrun --show-sdk-version
+          clang --version
+          ld -v 2>&1 || true
+          which -a bash tclsh tclsh9.0 tclsh8.6 rustc cargo rustup cc ld file otool lipo nproc timeout objdump || true
+          bash --version | head -1
+          echo "PATH=$PATH"
+          locale -a | grep -i -E 'utf|^c' | head -20
+          brew --version
+          brew info tcl-tk | head -20
+
+      - name: Toolchain smoke (not Botlish)
+        run: tests/platform/toolchain-smoke.sh
+
+      - name: Prerequisites
+        run: tests/platform/setup-macos.sh "$GITHUB_PATH"
+
+      - name: Tcl facts
+        run: |
+          which tclsh9.0
+          for loc in unset C C.UTF-8 C.utf8 en_US.UTF-8; do
+            if [ $loc = unset ]; then
+              echo "locale $loc: $(env -u LANG -u LC_ALL -u LC_CTYPE tclsh9.0 <<< 'puts "[encoding system] [fconfigure stdout -encoding] [info patchlevel] $tcl_platform(os) $tcl_platform(machine) $tcl_platform(osVersion)"')"
+            else
+              echo "locale $loc: $(env LANG=$loc LC_ALL=$loc tclsh9.0 <<< 'puts "[encoding system] [fconfigure stdout -encoding]"')"
+            fi
+          done
+          tclsh9.0 <<< 'puts [array get tcl_platform]; puts [package require tcltest]; puts [info library]'
+
+      - name: C ABI facts against core::cabi
+        env: { LANG: en_US.UTF-8, LC_ALL: en_US.UTF-8 }
+        run: tclsh9.0 tests/platform/cabi-facts.tcl
+
+      - name: Examples on the Tcl backends
+        env: { LANG: en_US.UTF-8, LC_ALL: en_US.UTF-8 }
+        run: |
+          set +e
+          tclsh9.0 main.tcl -backend interp; echo "interp default: $?"
+          tclsh9.0 main.tcl -backend compile examples/surface/0[1-8]*.bot examples/surface/1[1-5]*.bot; echo "compile surface: $?"
+          tclsh9.0 main.tcl -backend interp examples/stdlib/*.bot > stdlib.txt 2>&1; echo "interp stdlib: $?"; tail -5 stdlib.txt
+
+      - name: A few Tcl test files on interp
+        env: { LANG: en_US.UTF-8, LC_ALL: en_US.UTF-8, CORE_BACKEND: interp }
+        run: |
+          set +e
+          tclsh9.0 tests/all.tcl -tmpdir "$(mktemp -d)" -file "blocks.test control.test calls.test surface-samples.test hir-samples.test inference.test"; echo "exit $?"
+
+      - name: Native backend build
+        run: |
+          set +e
+          cargo build --release -j 3 --manifest-path native/Cargo.toml 2>&1 | tail -60; echo "cargo build: ${PIPESTATUS[0]}"
+          ls -la native/target/release | head -30
+
+      - name: Native probes
+        env: { LANG: en_US.UTF-8, LC_ALL: en_US.UTF-8 }
+        run: |
+          set +e
+          if [ -x native/target/release/botlish-native ]; then
+            cargo test --release -j 3 --manifest-path native/Cargo.toml --lib 2>&1 | tail -60; echo "cargo test lib: ${PIPESTATUS[0]}"
+            tclsh9.0 main.tcl -backend cranelift examples/surface/01-arithmetic.bot; echo "cranelift 01: $?"
+            tclsh9.0 main.tcl -backend cranelift examples/surface/0[1-8]*.bot; echo "cranelift surface: $?"
+            cp examples/surface/01-arithmetic.bot "$RUNNER_TEMP/a.bot"
+            tclsh9.0 main.tcl -emit-native-executable "$RUNNER_TEMP/a.bot"; echo "emit exe: $?"
+            ls -la "$RUNNER_TEMP"
+            [ -f "$RUNNER_TEMP/a" ] && { file "$RUNNER_TEMP/a"; "$RUNNER_TEMP/a"; echo "run exe: $?"; }
+            CORE_BACKEND=interp tclsh9.0 tests/all.tcl -tmpdir "$(mktemp -d)" -file "elif.test" 2>&1 | tail -30
+          fi
