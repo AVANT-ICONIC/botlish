@@ -110,6 +110,9 @@ use unicode_general_category::{get_general_category, GeneralCategory};
 /// alone, so the whole instruction is conservatively a safepoint (see
 /// codegen::roots's module doc). `IMod` likewise: a BigInt operand can give
 /// a remainder outside the small-Int range, which `rt_int_mod` allocates.
+/// The raw `RIMod`/`RIModTotal` are not here: both operands are proven small,
+/// so the remainder is small too (|r| < |b| <= 2^62) and no path allocates
+/// (RIMod's zero-divisor path only records the error).
 pub fn op_may_allocate(op: OpCode) -> bool {
     use OpCode::*;
     matches!(
@@ -171,6 +174,10 @@ pub fn op_may_allocate(op: OpCode) -> bool {
 pub fn op_may_error(op: OpCode) -> bool {
     use OpCode::*;
     matches!(op, IMod | IShl | IShr | VEq | Hash | Substr | StrCat | StrAppendChar | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
+        // The raw mod's zero divisor (ARITHMETIC, IMod's own error).
+        // RIModTotal is not here: native/lower.tcl emits it only where the
+        // divisor's Range excludes 0 (see OpCode::RIMod).
+        | RIMod
         // The C pointer test fixture's out-of-range address (RANGE).
         | CPtrFixture
         // The borrow test fixture: an operand that is no address or count
@@ -391,6 +398,8 @@ pub extern "C" fn rt_int_mul(p: *mut Vm, a: Value, b: Value) -> Value {
 /// negative, add |b|" always lands on the unique representative in [0, |b|)
 /// congruent to a mod b, so both paths agree with each other and with the
 /// reference interpreter's identical fixup (core::primitives::modulo).
+/// The raw `rimod` (codegen::clif) calls it with a zero divisor, to raise the
+/// same error.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_int_mod(p: *mut Vm, a: Value, b: Value) -> Value {
     if let (Some(x), Some(y)) = (int_small(a), int_small(b)) {
@@ -2611,7 +2620,7 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         CoRelease => rt_co_release(p, a[0]),
         AffineDrop => rt_affine_drop(p, a[0], a[1]),
         RegionCheck | RegionEq | RBox | RUnbox | RIAdd | RISub | RIMul | RILt | RILe | RIGt | RIGe | RIEq
-        | RIShr | RIShl | RIAnd | RIOr | RIXor | StrToShort | ShortToStr | ShortLen | ShortEq | StrSliceShort | StrToAscii | AsciiToStr
+        | RIShr | RIShl | RIAnd | RIOr | RIXor | RIMod | RIModTotal | StrToShort | ShortToStr | ShortLen | ShortEq | StrSliceShort | StrToAscii | AsciiToStr
         | AsciiLen | AsciiEq | AsciiToShort | AsciiShortEq
         | DecodeCharAt | StrByteLen | StrRegionIsTclAlpha | StrRegionIsTclAlnum
         // The syscall transports and the raw address bridges are never

@@ -1,0 +1,159 @@
+# native-mod-lowering.test -- the native lowering of the root `mod`
+# (native/lower.tcl's "Euclidean mod" section; native/src/nir.rs's RIMod/
+# RIModTotal; native/src/codegen/clif.rs's euclid_mod): two operands
+# proved small are the raw `rimodtotal` (the divisor's Range excludes 0) or
+# `rimod` (an inline zero test), and everything else is the tagged
+# `imod`, a call of rt_int_mod. Every form computes Euclidean
+# mod exactly (core/primitives.tcl's modulo: 0 <= r < |d|) and raises its
+# ARITHMETIC error for a zero divisor; only the tagged form is a safepoint.
+# Nothing here names a function or a divisor the lowering looks for: the
+# choice is read from hir/range.tcl's facts alone.
+# audit/mod-lowering/tools/fuzz.tcl is the randomized differential check.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+interp recursionlimit {} 100000
+
+proc sourceHir {text} {
+    return [surface::compile $text t.bot -strict 0 -warnings off]
+}
+
+# NIR of TEXT, tiny-leaf inlining off so a small function keeps its own body.
+proc nirOf {text args} {
+    return [native::nir [sourceHir $text] -tiny-leaf-inline-opt 0 {*}$args]
+}
+
+proc FunctionBody {text name} {
+    set idx [string first "\"$name\"" $text]
+    if {$idx < 0} {
+        error "function \"$name\" not found"
+    }
+    set endIdx [string first "\nend" $text $idx]
+    return [string range $text $idx $endIdx]
+}
+
+# The sorted unique mod-family and bitwise ops of NIR function body BODY.
+proc ModOps {body} {
+    return [lsort -unique [lmap m [regexp -all -inline {op (?:rimodtotal|rimod|imod|riand|iand)\M} $body] {lindex $m 1}]]
+}
+
+# The `effects:` line of function NAME in native::roots' report.
+proc EffectsOf {text name} {
+    set report [native::roots [sourceHir $text] -tiny-leaf-inline-opt 0]
+    set at [string first "\"$name\"" $report]
+    regexp {effects: (may_error=\S+ may_gc=\S+)} [string range $report $at end] -> effects
+    return $effects
+}
+
+test mod-lowering-total-nir {two small operands and a constant divisor that is no power of two: the raw rimodtotal, no tagged imod, no helper} -body {
+    set body [FunctionBody [nirOf {fn f(x: int) -> int:
+    x.mod(1000)
+
+[f(5), f(0 - 5), f(123456)]}] f]
+    ModOps $body
+} -result rimodtotal
+
+test mod-lowering-checked-nir {a divisor whose Range contains 0 keeps the inline zero test: the raw rimod} -body {
+    set body [FunctionBody [nirOf {fn f(x: int, d: int) -> int:
+    mod(x, d)
+
+[f(5, 3), f(0 - 5, 0)]}] f]
+    ModOps $body
+} -result rimod
+
+test mod-lowering-total-negative-range {a divisor Range wholly below 0, or an exact set without 0, also needs no zero test} -body {
+    set a [FunctionBody [nirOf {fn f(x: int, d: int) -> int:
+    mod(x, d)
+
+[f(5, 0 - 3), f(0 - 5, 0 - 7)]}] f]
+    set b [FunctionBody [nirOf {fn g(x: int, d: int) -> int:
+    mod(x, d)
+
+[g(5, 0 - 3), g(0 - 5, 7)]}] g]
+    list [ModOps $a] [ModOps $b]
+} -result {rimodtotal rimodtotal}
+
+test mod-lowering-tagged-nir {a dividend of unknown range keeps the tagged imod} -body {
+    set body [FunctionBody [nirOf {fn f(x: int) -> int:
+    x.mod(1000)
+
+[f(5), f(100000000000000000000)]}] f]
+    ModOps $body
+} -result imod
+
+test mod-lowering-repr-opt-off {-repr-opt 0 turns the raw and mask forms off: every mod is the tagged imod} -body {
+    set text {fn f(x: int) -> int:
+    x.mod(1024) + x.mod(1000)
+
+[f(5), f(0 - 5)]}
+    ModOps [FunctionBody [nirOf $text -repr-opt 0] f]
+} -result imod
+
+test mod-lowering-effects {only the tagged imod makes its function may_gc; rimodtotal is neither fallible nor a safepoint, rimod is fallible only} -body {
+    list [EffectsOf {fn f(x: int) -> int:
+    x.mod(1000)
+
+[f(5), f(0 - 5)]} f] [EffectsOf {fn f(x: int, d: int) -> int:
+    mod(x, d)
+
+[f(5, 3), f(0 - 5, 0)]} f] [EffectsOf {fn f(x: int) -> int:
+    x.mod(1000)
+
+[f(5), f(100000000000000000000)]} f]
+} -result {{may_error=false may_gc=false} {may_error=true may_gc=false} {may_error=true may_gc=true}}
+
+test mod-lowering-values-agree {every form agrees with the reference on every backend: negative dividends and divisors, +-1, divisors near and beyond +-2^62, BigInt operands} -body {
+    sourceAgree {fn total(x: int) -> int:
+    x.mod(1000)
+
+fn neg(x: int) -> int:
+    x.mod(0 - 7)
+
+fn mask(x: int) -> int:
+    x.mod(1024)
+
+fn negmask(x: int) -> int:
+    x.mod(0 - 1024)
+
+fn one(x: int) -> int:
+    x.mod(0 - 1)
+
+fn top(x: int) -> int:
+    x.mod(4611686018427387904)
+
+fn var(x: int, d: int) -> int:
+    mod(x, d)
+
+fn wide(x: int, d: int) -> int:
+    mod(x, d)
+
+[total(0 - 1), total(1999), total(0 - 4611686018427387904), total(4611686018427387903),
+ neg(10), neg(0 - 10), neg(0),
+ mask(0 - 1), mask(1025), mask(0 - 4611686018427387904), mask(4611686018427387903),
+ negmask(0 - 1), negmask(2047),
+ one(12345), one(0 - 4611686018427387904),
+ top(0 - 1), top(4611686018427387903), top(0 - 4611686018427387904),
+ var(7, 2), var(0 - 7, 2), var(7, 0 - 2), var(0 - 7, 0 - 2), var(0 - 4611686018427387904, 4611686018427387903),
+ var(4611686018427387903, 0 - 4611686018427387904), var(0 - 4611686018427387904, 0 - 1),
+ wide(100000000000000000000, 7), wide(0 - 100000000000000000000, 7), wide(7, 100000000000000000000),
+ wide(0 - 7, 100000000000000000000), wide(18446744073709551617, 18446744073709551616),
+ wide(0 - 4611686018427387905, 4611686018427387904), wide(9223372036854775807, 0 - 9223372036854775807)]}
+} -result {value {[999, 999, 96, 903, 3, 4, 0, 1023, 1, 0, 1023, 1023, 1023, 0, 0, 4611686018427387903, 4611686018427387903, 0, 1, 1, 1, 1, 4611686018427387902, 4611686018427387903, 0, 2, 5, 7, 99999999999999999993, 1, 4611686018427387903, 0]}}
+
+test mod-lowering-zero-divisor {a zero divisor raises the same ARITHMETIC error from the raw rimod, the tagged imod (small and BigInt dividend) and a constant 0, on every backend} -body {
+    set outcomes {}
+    foreach call {{var(5, 0)} {var(0 - 5, 0)} {wide(100000000000000000000, 0)} {mod(9, 0)}} {
+        lappend outcomes [sourceAgree "fn var(x: int, d: int) -> int:
+    mod(x, d)
+
+fn wide(x: int, d: int) -> int:
+    mod(x, d)
+
+\[var(5, 3), var(0 - 5, 0 - 3), wide(5, 3), wide(100000000000000000000, 3)\]
+$call"]
+    }
+    lsort -unique $outcomes
+} -result {{error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}}}
+
+cleanupTests

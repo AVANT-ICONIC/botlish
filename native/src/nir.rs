@@ -497,6 +497,18 @@ pub enum OpCode {
     RIAnd,
     RIOr,
     RIXor,
+    /// Raw (untagged) Euclidean modulo (IMod's 0 <= result < |b|),
+    /// native/lower.tcl's RawEligibleCall ("Euclidean mod"): emitted only
+    /// when range analysis proves both operands small. The result of two
+    /// small operands is small again (|result| < |b| <= 2^62), so neither
+    /// form allocates or calls a helper on its success path: codegen
+    /// lowers them to `srem` and the fix-up `r < 0 ? r + |b| : r`. RIMod
+    /// tests the divisor for 0 first and raises IMod's own ARITHMETIC error
+    /// (`op_may_error`); RIModTotal is emitted only where the divisor's
+    /// Range excludes 0, so it has no test and no error exit -- the same
+    /// per-opcode split as SetContainsTotal's.
+    RIMod,
+    RIModTotal,
     /// ShortString1 (SHORT-STRING.md): a String the compiler proved has at
     /// most one character, carried as one signed i64 -- `-1` is the empty
     /// String, `0..=0x10FFFF` (never a surrogate) is the one Unicode scalar
@@ -749,6 +761,8 @@ op_spellings! {
     "riand" => RIAnd,
     "rior" => RIOr,
     "rixor" => RIXor,
+    "rimod" => RIMod,
+    "rimodtotal" => RIModTotal,
     "strtoshort" => StrToShort,
     "shorttostr" => ShortToStr,
     "shortlen" => ShortLen,
@@ -790,6 +804,7 @@ impl OpCode {
     pub fn raw_result(self) -> bool {
         matches!(self, OpCode::RUnbox | OpCode::RIAdd | OpCode::RISub | OpCode::RIMul
             | OpCode::RIShr | OpCode::RIShl | OpCode::RIAnd | OpCode::RIOr | OpCode::RIXor
+            | OpCode::RIMod | OpCode::RIModTotal
             | OpCode::ShortLen | OpCode::AsciiLen)
     }
 
@@ -797,7 +812,7 @@ impl OpCode {
     pub fn raw_operands(self) -> bool {
         use OpCode::*;
         matches!(self, RBox | RIAdd | RISub | RIMul | RILt | RILe | RIGt | RIGe | RIEq | RIShr | RIShl
-            | RIAnd | RIOr | RIXor)
+            | RIAnd | RIOr | RIXor | RIMod | RIModTotal)
     }
 
     /// The physical kind the operand at position I of OP must have.

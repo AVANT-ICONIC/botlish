@@ -2056,6 +2056,26 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             RIAnd => self.b.ins().band(a[0], a[1]),
             RIOr => self.b.ins().bor(a[0], a[1]),
             RIXor => self.b.ins().bxor(a[0], a[1]),
+            // native/lower.tcl's RawEligibleCall proved both raw operands
+            // small, so the remainder is small too and no path allocates.
+            // RIModTotal's divisor Range excludes 0 (no test at all); RIMod
+            // tests it and, for 0, raises rt_int_mod's own ARITHMETIC error
+            // on a cold path (the helper given a zero divisor only records
+            // the error: no allocation, so no safepoint).
+            RIModTotal => self.euclid_mod(a[0], a[1]),
+            RIMod => {
+                let nonzero = self.b.create_block();
+                let zero = self.b.create_block();
+                self.b.set_cold_block(zero);
+                self.b.ins().brif(a[1], nonzero, &[], zero, &[]);
+                self.b.switch_to_block(zero);
+                let shifted = self.b.ins().ishl_imm_s(a[0], 1);
+                let dividend = self.b.ins().bor_imm_s(shifted, 1);
+                let tagged_zero = self.iconst(1);
+                self.fail_with("rt_int_mod", &[self.vm, dividend, tagged_zero]);
+                self.b.switch_to_block(nonzero);
+                self.euclid_mod(a[0], a[1])
+            }
             RILt | RILe | RIGt | RIGe | RIEq => {
                 let cc = match op {
                     RILt => IntCC::SignedLessThan,
@@ -2429,6 +2449,20 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         self.b.ins().jump(done, &[BlockArg::Value(r)]);
         self.b.switch_to_block(done);
         result
+    }
+
+    /// Euclidean modulo of two raw small Ints, Y nonzero: `srem` (the sign
+    /// of X) and the fix-up `r < 0 ? r + |Y| : r`, which lands on the one
+    /// representative in [0, |Y|) -- rt_int_mod's and
+    /// core::primitives::modulo's own rule. No overflow: X and Y lie in
+    /// [-2^62, 2^62), so `srem` never sees i64::MIN / -1, |Y| <= 2^62, and
+    /// r + |Y| < |Y|.
+    fn euclid_mod(&mut self, x: ir::Value, y: ir::Value) -> ir::Value {
+        let r = self.b.ins().srem(x, y);
+        let abs = self.b.ins().iabs(y);
+        let fixed = self.b.ins().iadd(r, abs);
+        let negative = self.b.ins().icmp_imm_s(IntCC::SignedLessThan, r, 0);
+        self.b.ins().select(negative, fixed, r)
     }
 
     /// Bitwise AND/OR/XOR directly on the tagged words, never falling to a

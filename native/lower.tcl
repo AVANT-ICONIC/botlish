@@ -366,7 +366,8 @@ namespace eval native::lower {
 # RawIntOp), and, since the bounded-shift-lowering milestone, to `>>`/`<<`
 # (shift_right/shift_left) once both the shifted value and the shift amount
 # are additionally proven safe (RawEligibleShift): nonnegative, in range,
-# and (for the shift amount) a single already-known value. A tagged AND/OR/
+# and (for the shift amount) a single already-known value, and to `mod`
+# (raw `rimod`/`rimodtotal`: the "Euclidean mod" section). A tagged AND/OR/
 # XOR (native/src/codegen/clif.rs's int_bitop) works on the tagged words
 # directly, but still tests both operands for a BigInt and keeps a helper
 # call (rt_int_and/or/xor) on the slow path, with the spills that call
@@ -397,7 +398,7 @@ namespace eval native::lower {
 #
 #   ref   a local/parameter register already stored raw (a self-tail-proven
 #         parameter, RawParams): returned as-is, no conversion at all.
-#   call  a native `+ - * < <= > >= ==`, `bit_and bit_or bit_xor` or a
+#   call  a native `+ - * < <= > >= ==`, `bit_and bit_or bit_xor`, `mod` or a
 #         proven-safe `>>`/`<<` whose operands need no runtime kind guard
 #         (RawEligibleCall) and whose operand/result ranges are proven
 #         small (hir/range.tcl): its own
@@ -8333,9 +8334,12 @@ proc native::lower::NativeCall {fnVar e node name argRegs rawEligible op want} {
             iadd riadd  isub risub  imul rimul
             ilt  rilt   ile  rile   igt  rigt   ige rige   ieq rieq
             ishr rishr  ishl rishl
-            iand riand  ior  rior   ixor rixor
+            iand riand  ior  rior   ixor rixor  imod rimod
         } $op]
-        set arith [expr {$op in {iadd isub imul ishr ishl iand ior ixor}}]
+        if {$rawOp eq "rimod"} {
+            set rawOp [RawModOp $e $argExprs]
+        }
+        set arith [expr {$op in {iadd isub imul ishr ishl iand ior ixor imod}}]
         if {$arith} {
             set r [AssignRaw fn "op $rawOp $xa $xb" $e]
         } else {
@@ -8561,6 +8565,52 @@ proc native::lower::WantConvert {fnVar reg want} {
 }
 
 # ---------------------------------------------------------------------------
+# Euclidean mod
+#
+# `mod(x, d)` (core/primitives.tcl's modulo) is the one r with 0 <= r < |d|
+# and r = x (mod d); d = 0 raises {CORE SEMANTIC ARITHMETIC}. Besides the
+# tagged `imod`, two lowerings compute exactly that value, each chosen from
+# facts hir/range.tcl already proved for the current instance (nothing here
+# names a function, a type or a particular divisor):
+#
+#   rimodtotal  both Ranges fit small and D's excludes 0 (RangeExcludesZero):
+#               `srem` and the fix-up `r < 0 ? r + |d| : r` on the raw
+#               operands. It never fails, and never allocates (|r| < |d| <=
+#               2^62, so r <= smallMax): no error exit and no safepoint.
+#   rimod       both Ranges fit small, D's may contain 0: the same after an
+#               inline zero test whose cold branch raises rt_int_mod's own
+#               ARITHMETIC error. Fallible, never allocates: no safepoint.
+#
+# Everything else is the tagged `imod`, a call of rt_int_mod, which may
+# allocate a BigInt remainder, so a tagged `imod` stays a safepoint and
+# fallible (native/src/runtime/ops.rs's op_may_allocate/op_may_error are per
+# opcode).
+
+# 1 if Range R excludes 0: wholly positive, wholly negative, or an exact
+# value set without 0. A divisor with such a Range can never make `mod` fail.
+proc native::lower::RangeExcludesZero {r} {
+    if {$r eq "never"} {
+        return 0
+    }
+    set mn [dict get $r min]
+    set mx [dict get $r max]
+    if {($mn ne "-inf" && $mn > 0) || ($mx ne "+inf" && $mx < 0)} {
+        return 1
+    }
+    set exact [hir::range::ExactOf $r]
+    return [expr {$exact ne "" && [lsearch -exact $exact 0] < 0}]
+}
+
+# The raw op of a raw-eligible mod call E (ARGEXPRS = {dividend divisor}):
+# rimodtotal when the divisor's Range excludes 0, else the checked rimod.
+proc native::lower::RawModOp {e argExprs} {
+    variable ranges
+    variable currentInstance
+    set r [hir::range::of $ranges $currentInstance [lindex $argExprs 1]]
+    return [expr {[RangeExcludesZero $r] ? "rimodtotal" : "rimod"}]
+}
+
+# ---------------------------------------------------------------------------
 # Representation: local unboxing of proven-small Int arithmetic/comparisons
 #
 # Every operand here already has kind Int by this point (a guard just ran,
@@ -8583,7 +8633,9 @@ proc native::lower::WantConvert {fnVar reg want} {
 # arithmetic, the result's) ranges hir/range.tcl proved fit the small-Int
 # representation -- a bitwise result always does when both operands do (two
 # small Ints agree in bits 62 and 63, and AND, OR and XOR keep that
-# agreement). Decided purely from ARG-EXPRS/E, before either argument is
+# agreement), and so does a Euclidean `mod` (0 <= r < |b| <= 2^62, so r <=
+# smallMax: it never allocates; RawModOp picks its checked or total form).
+# Decided purely from ARG-EXPRS/E, before either argument is
 # lowered, so Call can ask each for raw directly instead of tagged-then-RawOf.
 # `ishr`/`ishl` (proven-safe shifts -- RawEligibleShift) get the same
 # treatment through the same entry point, so a shift chained onto another
@@ -8600,7 +8652,7 @@ proc native::lower::RawEligibleCall {e argExprs op} {
     if {$op in {ishr ishl}} {
         return [RawEligibleShift $e $argExprs $op]
     }
-    if {$op ni {iadd isub imul ilt ile igt ige ieq iand ior ixor}} {
+    if {$op ni {iadd isub imul ilt ile igt ige ieq iand ior ixor imod}} {
         return 0
     }
     lassign $argExprs ea eb
@@ -8724,7 +8776,7 @@ proc native::lower::RawIntOp {fnVar e argExprs argRegs op want} {
         }
         return [list [TaggedOf fn $r] tagged]
     }
-    if {$op ni {iadd isub imul ilt ile igt ige ieq iand ior ixor}} {
+    if {$op ni {iadd isub imul ilt ile igt ige ieq iand ior ixor imod}} {
         return ""
     }
     variable ranges
@@ -8736,7 +8788,7 @@ proc native::lower::RawIntOp {fnVar e argExprs argRegs op want} {
     if {![hir::range::fitsSmall $rangeA] || ![hir::range::fitsSmall $rangeB]} {
         return ""
     }
-    set arith [expr {$op in {iadd isub imul iand ior ixor}}]
+    set arith [expr {$op in {iadd isub imul iand ior ixor imod}}]
     if {$op in {iadd isub imul}} {
         switch -- $op {
             iadd { set resultRange [hir::range::add $rangeA $rangeB] }
@@ -8750,8 +8802,11 @@ proc native::lower::RawIntOp {fnVar e argExprs argRegs op want} {
     set rawOp [dict get {
         iadd riadd  isub risub  imul rimul
         ilt  rilt   ile  rile   igt  rigt   ige rige   ieq rieq
-        iand riand  ior  rior   ixor rixor
+        iand riand  ior  rior   ixor rixor  imod rimod
     } $op]
+    if {$rawOp eq "rimod"} {
+        set rawOp [RawModOp $e $argExprs]
+    }
     set xa [RawOf fn $ra]
     set xb [RawOf fn $rb]
     if {$arith} {

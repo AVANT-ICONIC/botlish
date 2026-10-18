@@ -4231,6 +4231,14 @@ tests/native-lockstep-rejected.test native-lockstep-rejected-nothing-evaluated p
 tests/native-lockstep-rejected.test native-lockstep-rejected-only-when-reached pass
 tests/native-lockstep-rejected.test native-lockstep-rejected-unequal pass
 tests/native-lockstep-rejected.test native-lockstep-rejected-unproven pass
+tests/native-mod-lowering.test mod-lowering-checked-nir pass
+tests/native-mod-lowering.test mod-lowering-effects pass
+tests/native-mod-lowering.test mod-lowering-repr-opt-off pass
+tests/native-mod-lowering.test mod-lowering-tagged-nir pass
+tests/native-mod-lowering.test mod-lowering-total-negative-range pass
+tests/native-mod-lowering.test mod-lowering-total-nir pass
+tests/native-mod-lowering.test mod-lowering-values-agree pass
+tests/native-mod-lowering.test mod-lowering-zero-divisor pass
 tests/native-mutarray.test mutarray-1 pass
 tests/native-mutarray.test mutarray-2 pass
 tests/native-mutarray.test mutarray-3 pass
