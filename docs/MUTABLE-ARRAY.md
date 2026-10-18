@@ -132,13 +132,17 @@ nothing affine. Pinned: `ma-type-affinity` (eleven types), `ma-nested-affine`.
 The MutableVector model, fixed length. A *header* is the identity of one
 logical array: on the Tcl backends `{mutarray ID}` over
 `core::mutarray::store(ID)`, a Tcl list (Tcl's own copy-on-write); natively
-`MutArrayObj { hdr, start, backing: Rc<[Value]> }` (`runtime/value.rs`): the
-length never changes, so the backing is one allocation (its count and its
-slots), and the array's elements are its slots from `start` on (0 but in an
-affine array a consuming loop drains, 22). A copy is a new header over the
-same backing; the first write through a header whose backing is shared
-detaches it. No runtime ownership state exists (no owner, moved bit or
-affine flag); the `Rc` count is copy-on-write bookkeeping only.
+`MutArrayObj { hdr, len, ptr, unique, backing: Rc<[Value]> }`
+(`runtime/value.rs`): the length never changes, so the backing is one
+allocation (its count and its slots), and the array's elements are its slots
+from `start` on (0 but in an affine array a consuming loop drains, 22;
+`start` is `backing.len() - len`, not stored). `len`, `ptr` (the first
+element's address) and `unique` (the backing is known to be this header's
+alone) are a cache of the backing at fixed offsets, for generated code (47).
+A copy is a new header over the same backing; the first write through a
+header whose backing is shared detaches it. No runtime ownership state exists
+(no owner, moved bit or affine flag); the `Rc` count, and `unique` caching
+it, are copy-on-write bookkeeping only.
 
 ### 5. Copy path
 
@@ -492,15 +496,32 @@ consuming loop (`core::forms::ConsumeVector`) drains a vector or an array
 
 ### 47. Native representation
 
-`MutArrayObj { hdr, start, backing: Rc<[Value]> }` (4); `mutarray_of`,
-`array_writable` (detaching), `array_owned` (an affine array's backing,
-never shared: a panic would be an ownership invariant violation, never
-reached), `share_array` (the header's `start` with the backing),
-`drop_array_elements` (the elements leave the dying array by its `start`
-moving past them), `array_elements` (trace: the slots from `start`). The
-consuming loop's `mutarraytakefront` advances `start` past the element it
-moves out: it never writes the backing, so it never detaches; the drained
+`MutArrayObj { hdr, len, ptr, unique, backing: Rc<[Value]> }` (4);
+`mutarray_of`, `array_writable` (detaching), `array_owned` (an affine
+array's backing, never shared: a panic would be an ownership invariant
+violation, never reached), `share_array` (the header's `start` with the
+backing), `drop_array_elements` (the elements leave the dying array by its
+`start` moving past them), `array_elements` (trace: the slots from `start`).
+The consuming loop's `mutarraytakefront` advances `start` past the element
+it moves out: it never writes the backing, so it never detaches; the drained
 slots are freed with the header.
+
+The backing is private to `value.rs`: only `MutArrayObj::new`,
+`replace_backing` (a detach) and `advance` (a consuming loop's step, a drop)
+change it or `start`, and each sets `len` and `ptr` from it. `unique` may be
+stale only towards 0: `new` and `replace_backing` set it from the counts,
+`share_backing` (the one place a backing gains a holder) clears it, and
+`items_mut` (every runtime write) refreshes it, so after the collector frees
+a copy the next helper write re-enables it. Generated code reads the three
+words (`MUTARRAY_LEN_OFFSET`, `_PTR_`, `_UNIQUE_`, in the AOT image's ABI
+fingerprint) and never writes them: codegen/clif.rs inlines `capacity` (one
+load), `at` (a tag test, an unsigned compare with `len`, two loads; a proven
+index only the loads) and `set` (the same, then the `unique` test and one
+store), with the helpers only on a cold path -- a BigInt or invalid index
+(IndexNotFound) or a shared backing (the detach). None of them allocates or
+is a safepoint. A run with allocation metrics on compiles `at` and `set`
+through their helpers, which alone count reads and writes;
+`BOTLISH_NATIVE_MUTARRAY_INLINE_OPT=0` disables the inline paths.
 The host round trip carries an array as `mutarrayitems` (an array can be a
 program's result now) and show prints its elements (`<mutable-array [...]>`,
 as a vector's).
