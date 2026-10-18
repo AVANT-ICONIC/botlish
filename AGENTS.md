@@ -1393,8 +1393,11 @@ mutant's text when you change the code it mutates, keeping it a mutant of
 the same rule). The Tcl, BoringSSL and SDL3 tests need their pinned sources
 (`tools/c-bindgen.tcl fetch PROFILE`) and libraries (`tests/cffi/
 boringssl.tcl`, `tests/cffi/sdl3.tcl`, the installed libtcl9.0) and are
-skipped without them; their `linux-aarch64` generation needs the arm64 C
-library headers (`libc6-dev-arm64-cross`). The `c-bindgen` workflow
+skipped without them; their `linux-aarch64` generation on an x86-64 host
+needs the arm64 cross C library where clang finds it (`gcc-aarch64-linux-gnu`,
+which brings `libc6-dev-arm64-cross`; the headers package alone is not
+enough, and generation then stops rather than read the host's headers). The
+`c-bindgen` workflow
 (`.github/workflows/c-bindgen.yml`) runs all of it. macOS bindings of real
 libraries need the macOS SDK (`BOTLISH_C_SYSROOT_macos_aarch64`, or a Mac).
 

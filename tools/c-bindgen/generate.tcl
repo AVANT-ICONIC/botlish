@@ -34,6 +34,29 @@ proc ::cbind::generate::LabelPrefix {text} {
     return ""
 }
 
+# For a Linux target that is not the host, with no sysroot and the system
+# headers in use: some directory clang searches must be the target's own
+# (one naming its triple: Debian's and Ubuntu's cross C library, which clang
+# finds through the GCC cross installation, /usr/TRIPLE/include). Without
+# one, clang would read the host's /usr/include as the target's headers --
+# another architecture's bits/, or, where they happen to compile, the
+# host's declarations under the target's name.
+proc ::cbind::generate::CheckCrossHeaders {target config tool hprofile} {
+    if {![string match linux-* $target] || $target eq [core::cabi::hostTarget]
+            || [dict get $config sysroot] ne "" || "-nostdlibinc" in [dict get $hprofile flags]
+            || "-nostdinc" in [dict get $hprofile flags]} {
+        return
+    }
+    set triple [dict get $config target]
+    lassign [::chdr::toolchain::searchDirs $config $tool] ok dirs stderr
+    if {!$ok} {
+        error "c-bindgen: [dict get $config cc] does not list its include directories for $target:\n[string range $stderr 0 2000]"
+    }
+    if {[lsearch -glob $dirs *$triple*] >= 0} { return }
+    set var BOTLISH_C_SYSROOT_[string map {- _} $target]
+    error "c-bindgen: $target is not this host's target: [lindex [dict get $config cc] 0] --target=$triple searches no directory of $target's C library headers ([join $dirs {, }]), so it would read the host's as the target's. Install the target's cross C library where clang finds it (Debian and Ubuntu: gcc-$triple, which brings libc6-dev for that architecture), or set $var (or BOTLISH_C_SYSROOT) to a sysroot"
+}
+
 proc ::cbind::generate::Seconds {t0} {
     return [format %.3f [expr {([clock microseconds] - $t0) / 1e6}]]
 }
@@ -60,6 +83,7 @@ proc ::cbind::generate::run {profile target {options {}}} {
             && [dict get $config sysroot] eq "" && "-nostdlibinc" ni [dict get $hprofile flags]} {
         error "c-bindgen: $target needs the macOS SDK's headers: generate on a Mac, or set BOTLISH_C_SYSROOT_[string map {- _} $target] (or BOTLISH_C_SYSROOT) to an SDK directory; the host's own headers are never a target's"
     }
+    CheckCrossHeaders $target $config $tool $hprofile
 
     set t0 [clock microseconds]
     set run [::chdr::pipeline::run $hprofile $sourceRoot $config [dict get $profile name]]

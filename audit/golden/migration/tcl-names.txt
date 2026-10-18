@@ -692,6 +692,7 @@ tests/c-bindgen.test cb-fixture-constants pass
 tests/c-bindgen.test cb-fixture-contracts pass
 tests/c-bindgen.test cb-fixture-modules pass
 tests/c-bindgen.test cb-fixture-targets pass
+tests/c-bindgen.test cb-fixture-cross-headers pass
 tests/c-bindgen.test cb-fixture-compiles pass
 tests/c-bindgen.test cb-fixture-run pass
 tests/c-bindgen.test cb-fixture-only-reached-externs pass

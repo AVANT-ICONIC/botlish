@@ -177,6 +177,11 @@ proc cCaller {profile caller {libs {}} {includes {}}} {
     return [string trim [exec $exe]]
 }
 
+# The fixture profile with KEY set to VALUE (a dict merged in).
+proc fixtureWith {changes} {
+    return [::cbind::profile::Validate [dict merge $::fixture $changes]]
+}
+
 # ---------------------------------------------------------------------------
 # The synthetic fixture: the generator's rules, pinned
 
@@ -273,6 +278,21 @@ test cb-fixture-targets {generation is target-aware: the target's preprocessing 
     }
     set out
 } -result {linux-x86_64 {direct absent absent unsupported} ffi::c::ULong ffi::c::ULong {symbol bgf_renamed_impl} {char -56} {{target linux-x86_64}} linux-aarch64 {direct absent direct absent} ffi::c::ULong ffi::c::ULong {symbol bgf_renamed_impl} {char 200} {{target linux-aarch64}} macos-aarch64 {absent direct direct absent} ffi::c::ULongLong ffi::c::ULongLong {symbol bgf_renamed_impl} {char -56} {{target macos-aarch64}}}
+
+test cb-fixture-cross-headers {a Linux target that is not the host is preprocessed with its own C library headers or not at all: when clang searches no directory of the target's (no GCC cross installation it finds, no sysroot), generation that uses the system headers stops with the remedy instead of reading the host's /usr/include as the target's; a freestanding profile (-nostdlibinc) needs none} -constraints {clang linuxNative} -body {
+    set other [expr {$::hostTarget eq "linux-aarch64" ? "linux-x86_64" : "linux-aarch64"}]
+    set savedEnv [array get ::env]
+    try {
+        set ::env(BOTLISH_C_CC) "clang --gcc-toolchain=[file join [temporaryDirectory] no-such-gcc]"
+        set system [fixtureWith [dict create headers [dict merge [dict get $::fixture headers] {flags {-ffreestanding}}]]]
+        catch {::cbind::generate::run $system $other} message
+        set freestanding [dict size [dict get [::cbind::generate::run $::fixture $other] files]]
+    } finally {
+        array unset ::env
+        array set ::env $savedEnv
+    }
+    list [string match "c-bindgen: $other is not this host's target: clang --target=* searches no directory of $other's C library headers *, so it would read the host's as the target's. Install the target's cross C library where clang finds it (Debian and Ubuntu: gcc-*), or set BOTLISH_C_SYSROOT_[string map {- _} $other] (or BOTLISH_C_SYSROOT) to a sysroot" $message] $freestanding
+} -result {1 8}
 
 test cb-fixture-compiles {every target's generated modules are ordinary Botlish: they compile, warning-free (warnings error), with the ordinary front end for that target, and generated modules of declarations only are ordinary modules (unknown escapes designate nothing)} -constraints clang -body {
     lmap target [dict get $::fixture targets] {
@@ -375,11 +395,6 @@ test cb-fixture-why {`report -why NAME` names why a declaration was or was not g
 
 # ---------------------------------------------------------------------------
 # Policy: explicit, checked, never a guess
-
-# The fixture profile with KEY set to VALUE (a dict merged in).
-proc fixtureWith {changes} {
-    return [::cbind::profile::Validate [dict merge $::fixture $changes]]
-}
 
 test cb-policy-stale {a policy that matches nothing is an error, never a silent no-op: a contract naming a function the headers do not declare, a parameter it does not have, a group naming a missing function, a thunk signature of no macro or of a declared function; a contract on a declared function the target cannot bind (bgf_scale: a double) is checked against its declaration and kept, listed unused in the manifest} -constraints clang -body {
     set out [lmap changes [list \
