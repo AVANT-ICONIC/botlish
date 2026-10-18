@@ -87,6 +87,7 @@ enum DiagnosticCode:
     ForeignBorrow,
     Imprint,
     KnownError,
+    LayoutNativeOnly,
     LayoutNotAType,
     LayoutNotAValue,
     LayoutOperand,

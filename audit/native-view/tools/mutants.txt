@@ -1,0 +1,306 @@
+# Mutants of read-only native layout views (audit/native-view/tools/mutate.tcl;
+# NATIVE-LAYOUT-VIEWS.md): each a deliberate bug in pointer-field
+# declaration (hir/layouts.tcl), the NativeView type (hir/types.tcl,
+# hir/cabi.tcl, hir/affine.tcl), the operand checks and elaboration
+# (hir/layouts.tcl), the Tcl backends' refusal (core/binary.tcl), native
+# lowering (native/lower.tcl) or the native runtime
+# (native/src/runtime/nview.rs, ops.rs) -- the brief's defects first, one per
+# layer where a layer implements the rule separately, then further ones.
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# A mutant may have several edits. A mutant editing native/src/ or the
+# native crate's manifest is a native mutant: mutate.tcl rebuilds the native
+# backend for it. Lines starting with # outside an edit are comments.
+
+# --- field offset ignored / read from offset zero ------------------------
+
+@@ offset-ignored-lowering native lowering reads every field of a view at the view's (folded) base, ignoring the field's own offset
+## native/lower.tcl
+<<<<
+    lassign $field name offset kind
+    set at [Assign fn "int [expr {$base + $offset}]" $e]
+    switch -- $kind {
+====
+    lassign $field name offset kind
+    set at [Assign fn "int $base" $e]
+    switch -- $kind {
+>>>>
+
+@@ offset-zero-runtime the runtime's native load ignores its offset operand: every field is read from the view's address itself
+## native/src/runtime/nview.rs
+<<<<
+    match base.checked_add(o as usize) {
+====
+    match base.checked_add(0) {
+>>>>
+
+# --- signedness ------------------------------------------------------------
+
+@@ signed-as-unsigned-lowering native lowering encodes every view field as unsigned
+## native/lower.tcl
+<<<<
+    set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+    return [Assign fn "op nativeload $view $at $code" $e]
+====
+    set code [Assign fn "int [LayoutEncoding u $width $endian]" $e]
+    return [Assign fn "op nativeload $view $at $code" $e]
+>>>>
+
+@@ signed-as-unsigned-runtime the runtime's native load decodes every encoding as unsigned
+## native/src/runtime/nview.rs
+<<<<
+    super::ops::bin_decode(p, &bytes[..width], signed, big)
+====
+    super::ops::bin_decode(p, &bytes[..width], false, big)
+>>>>
+
+# --- width -------------------------------------------------------------------
+
+@@ width-widened-lowering native lowering reads every view scalar as 8 bytes wide
+## native/lower.tcl
+<<<<
+    set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+    return [Assign fn "op nativeload $view $at $code" $e]
+====
+    set code [Assign fn "int [LayoutEncoding $sign 8 $endian]" $e]
+    return [Assign fn "op nativeload $view $at $code" $e]
+>>>>
+
+@@ width-narrowed-runtime the runtime's native load reads at most 4 bytes of a field
+## native/src/runtime/nview.rs
+<<<<
+    unsafe { std::ptr::copy_nonoverlapping(address as *const u8, bytes.as_mut_ptr(), width) };
+    super::ops::bin_decode(p, &bytes[..width], signed, big)
+====
+    unsafe { std::ptr::copy_nonoverlapping(address as *const u8, bytes.as_mut_ptr(), width.min(4)) };
+    super::ops::bin_decode(p, &bytes[..width], signed, big)
+>>>>
+
+@@ pointer-width-hardcoded a pointer field is 4 bytes wide whatever the target says
+## hir/layouts.tcl
+<<<<
+            set width [PointerWidth]
+====
+            set width 4
+>>>>
+
+# --- nested base address -----------------------------------------------------
+
+@@ nested-base-dropped-fold a nested view's field read in a chain drops the nested layout's offset
+## native/lower.tcl
+<<<<
+                return [list $view [expr {$base + [lindex $entry 1]}]]
+====
+                return [list $view $base]
+>>>>
+
+@@ nested-base-dropped-runtime the runtime's nested view (cptroffset) is the outer view's address
+## native/src/runtime/nview.rs
+<<<<
+    let address = match view_address(p, view, offset, "native view") {
+        Ok(address) => address as i64,
+====
+    let address = match view_address(p, view, make_small(0), "native view") {
+        Ok(address) => address as i64,
+>>>>
+
+@@ nested-base-dropped-load binary::load reads a nested layout's fields at the outer layout's base
+## native/lower.tcl
+<<<<
+            lappend registers [NativeDecode fn $e $view [lindex $field 3] [expr {$base + $offset}]]
+====
+            lappend registers [NativeDecode fn $e $view [lindex $field 3] $base]
+>>>>
+
+# --- layout size ---------------------------------------------------------------
+
+@@ pointer-bounds-ignored a pointer field may extend past the layout's size (its bounds are not checked)
+## hir/layouts.tcl
+<<<<
+        if {$end > $size} {
+====
+        if {$end > $size && [dict get $field kind] ne "pointer"} {
+>>>>
+
+# --- byte-backed pointer materialization ------------------------------------
+
+@@ bytes-make-pointers binary::parse and binary::emit of a native-only layout are accepted
+## hir/layouts.tcl
+<<<<
+        if {$id ne "" && [declared $id] && [NativeOnly $id]} {
+====
+        if {0 && $id ne "" && [declared $id] && [NativeOnly $id]} {
+>>>>
+
+@@ nested-pointer-not-native-only a pointer field inside a nested layout does not make the outer layout native-only
+## hir/layouts.tcl
+<<<<
+            layout {
+                set inner [PointerField [dict get $field layout]]
+                if {$inner ne ""} {
+                    return "[dict get $field name].$inner"
+                }
+            }
+====
+            layout {
+            }
+>>>>
+
+# --- native pointer fields --------------------------------------------------
+
+@@ pointer-retagged the runtime's pointer field read is a C address word of another address
+## native/src/runtime/nview.rs
+<<<<
+    make_cptr(stored)
+}
+====
+    make_cptr(stored + 8)
+}
+>>>>
+
+@@ pointer-rejected the runtime refuses every non-null pointer field (NATIVE ADDRESS)
+## native/src/runtime/nview.rs
+<<<<
+    if !cptr_fits(stored) {
+====
+    if stored != 0 {
+>>>>
+
+@@ pointer-as-int native lowering reads a pointer field as an unsigned 64-bit Int, not a pointer
+## native/lower.tcl
+<<<<
+            set w [Assign fn "int $width" $e]
+            return [Assign fn "op nativeloadptr $view $at $w" $e]
+====
+            set w [Assign fn "int $width" $e]
+            return [Assign fn "op nativeload $view $at $w" $e]
+>>>>
+
+@@ pointer-type-unresolved a pointer field keeps the bare pointer kind (its declared type is never resolved)
+## hir/sourcetypes.tcl
+<<<<
+        hir::layouts::ResolvePointers order
+====
+>>>>
+
+# --- null ----------------------------------------------------------------------
+
+@@ null-check-inverted-native the native view constructor fails on a non-null pointer and passes a null one
+## native/lower.tcl
+<<<<
+            Emit fn "br $null $bad $good" $e
+====
+            Emit fn "br $null $good $bad" $e
+>>>>
+
+@@ null-check-missing-tcl the Tcl backends refuse a view of the null pointer (NATIVE-ONLY) instead of NativeViewNull
+## core/binary.tcl
+<<<<
+    if {[core::cabi::addressOf $p] == 0} {
+====
+    if {0 && [core::cabi::addressOf $p] == 0} {
+>>>>
+
+@@ null-pointer-field-mishandled a null pointer field reads as a non-null pointer
+## native/src/runtime/nview.rs
+<<<<
+    let stored = u64::from_le_bytes(bytes) as i64;
+====
+    let stored = (u64::from_le_bytes(bytes) as i64) | 16;
+>>>>
+
+# --- no copy through Bytes ------------------------------------------------------
+
+@@ copy-per-read every field read through a view first makes a byte storage of the field's offset (an allocation per read)
+## native/lower.tcl
+<<<<
+    lassign $field name offset sign width endian
+    set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+    return [Assign fn "op nativeload $view $at $code" $e]
+====
+    lassign $field name offset sign width endian
+    Assign fn "op byteszeroed $at" $e
+    set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+    return [Assign fn "op nativeload $view $at $code" $e]
+>>>>
+
+# --- directness / authority -------------------------------------------------
+
+@@ view-not-direct binary::native is not designated direct: a view needs no acknowledged authority
+## core/binary.tcl
+<<<<
+core::native::declareDirectNamespace binary::native
+====
+>>>>
+
+# --- the type -------------------------------------------------------------------
+
+@@ views-structural two native views are compatible when both are views, whatever their layouts
+## hir/types.tcl
+<<<<
+        # ($a eq $b). A view is never a pointer, though its run-time word is
+        # one: no pointer operation (null?, clone, a C argument) takes it.
+        return 0
+====
+        # ($a eq $b). A view is never a pointer, though its run-time word is
+        # one: no pointer operation (null?, clone, a C argument) takes it.
+        return [expr {[IsNativeView $a] && [IsNativeView $b]}]
+>>>>
+
+@@ view-is-a-pointer a native view is accepted where a pointer operation's C address is required
+## hir/cabi.tcl
+<<<<
+            if {[hir::types::IsNativeView $argType] && $paramType ni {"" any} && [hir::layouts::Role $name] eq ""
+====
+            if {0 && [hir::types::IsNativeView $argType] && $paramType ni {"" any} && [hir::layouts::Role $name] eq ""
+>>>>
+
+@@ untyped-receiver-accepted a field read through a view whose type is not static (an untyped function's instance) is accepted
+## hir/semantic.tcl
+<<<<
+        hir::layouts::verifyInstance view $hir [Region $view $block]
+====
+>>>>
+
+@@ view-field-shape-lost an instance's re-inference types a view's field read as `any` (the field-type result shape is gone)
+## hir/types.tcl
+<<<<
+            set id [hir::layouts::OfViewType [lindex $argTypes $v]]
+====
+            set id ""
+>>>>
+
+@@ pointer-field-read-unowned a pointer read through a view is exempt from the affine rules of its use (taken for a move out of the view)
+## hir/affine.tcl
+<<<<
+    if {[hir::types::IsNativeView [hir::typeOf $hir $receiver]]} {
+        # A field read through a native view (NATIVE-LAYOUT-VIEWS.md) is a
+        # load from memory: a fresh value (a pointer field's own owner), never
+        # a move out of the view, which owns nothing.
+        return 0
+    }
+====
+>>>>
+
+@@ projections-not-elaborated a view's projection is left a struct projection (never rewritten into a field read)
+## hir/layouts.tcl
+<<<<
+            ViewRead hir $e $field
+====
+>>>>
+
+# --- HIR text --------------------------------------------------------------------
+
+@@ hir-text-pointer-field-unread HIR text's pointer field is read back as an ordinary type name
+## hir/read.tcl
+<<<<
+                dict set field pointerText 1
+====
+>>>>

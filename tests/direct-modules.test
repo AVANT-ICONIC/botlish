@@ -174,11 +174,11 @@ test dm-no-call-or-function-syntax {there is no call-, function- or block-level 
 # ---------------------------------------------------------------------------
 # Designation
 
-test dm-intrinsic-linux-abi {the syscall transports linux::abi::x86_64 and linux::abi::aarch64 -- the raw kernel transitions -- are the intrinsic namespaces the compiler declares direct: registry metadata, not a name; linux (the source module) is direct by its own marker; abi::x86_64's address and register conversions are not direct} -body {
+test dm-intrinsic-linux-abi {the syscall transports linux::abi::x86_64 and linux::abi::aarch64 -- the raw kernel transitions -- and binary::native, whose view reads live native memory (NATIVE-LAYOUT-VIEWS.md), are the intrinsic namespaces the compiler declares direct: registry metadata, not a name; linux (the source module) is direct by its own marker; abi::x86_64's address and register conversions are not direct} -body {
     list [core::native::directNamespaces] [core::native::isDirectNamespace linux] \
         [core::native::isDirectNamespace abi::x86_64] \
         [regexp {\ndirect module\n\nimport abi\n} [core::ReadFile [file join $::projectRoot lib linux.bot]]]
-} -result {{linux::abi::aarch64 linux::abi::x86_64} 0 0 1}
+} -result {{binary::native linux::abi::aarch64 linux::abi::x86_64} 0 0 1}
 
 test dm-intrinsic-metadata-participates {a probe intrinsic namespace declared direct is a direct module exactly like a source one: calling it unmediated is DIRECT, from a function requiring the caller's own context it is contextualized; undeclared, it is an ordinary namespace} -body {
     core::native::register dmprobe::poke -arity 1 -impl {apply {{x} {return $x}}} -param-types {int} -result-type int

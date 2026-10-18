@@ -2110,6 +2110,14 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         BytesZeroed => ("rt_bytes_zeroed", None, true, Some(("byteszeroed", KIND_BYTES))),
                         BinLoad => ("rt_bin_load", None, true, Some(("binload", KIND_BIGINT))),
                         BinStore => ("rt_bin_store", None, true, None),
+                        // Native layout views (NATIVE-LAYOUT-VIEWS.md,
+                        // runtime/nview.rs): one helper call per field read
+                        // through the view's address, like binload's; a
+                        // 64-bit scalar may build a BigInt (a safepoint).
+                        NativeLoad => ("rt_native_load", None, true, Some(("nativeload", KIND_BIGINT))),
+                        NativeLoadPtr => ("rt_native_load_ptr", None, true, None),
+                        CPtrOffset => ("rt_cptr_offset", None, true, None),
+                        CPtrFixtureMemory => ("rt_cptr_fixture_memory", None, true, None),
                         // The writable byte storage (MUTABLE-BYTES.md): new /
                         // from / set / clone allocate one object, freeze and
                         // freeze_prefix one immutable one (all fallible, all

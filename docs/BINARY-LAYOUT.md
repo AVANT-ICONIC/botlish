@@ -244,7 +244,8 @@ Every layout has a size known at compile time, and every field a fixed
 offset and a fixed width. There is no repetition (arrays), no union or
 overlay (overlap is rejected), no bitfield, no conditional or
 length-dependent field, no variable-length tail, no explicit byte order, no
-floating-point scalar and no pointer scalar. Each is future work with a
+floating-point scalar and no pointer scalar (pointer fields came later,
+native-only: NATIVE-LAYOUT-VIEWS.md). Each is future work with a
 place in this model (see [Report, items 65-74](#future-binary-work-65-74));
 none is approximated.
 
@@ -555,7 +556,9 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
 35. **Incomplete types.** Not representable: a layout has a fixed size.
     An incomplete struct is only ever behind a pointer, an opaque pointer
     scalar (item 36).
-36. **Pointer-field readiness.** The width is representable (a 64-bit
+36. **Pointer-field readiness.** (Resolved by NATIVE-LAYOUT-VIEWS.md:
+    `ffi::c::Ptr[T]`/`FnPtr[F]` fields of the target's width, read only
+    through native views.) The width is representable (a 64-bit
     unsigned domain), the meaning is not: a pointer is not a number, so the
     example's `HandleBits` is explicitly a stand-in. What is missing is an
     opaque pointer-width scalar type (no arithmetic, no construction from an
@@ -842,7 +845,8 @@ From `examples/binary/c-structs.bot`'s `raw_input_device` and `to_raw`.
     share bytes; its value is a sum, so it waits for enums with payloads
     (ENUMS.md's planned extension) and a discriminant rule. Overlap stays an
     error everywhere else.
-68. **Views.** A zero-copy `View[L]` over borrowed storage reading fields
+68. **Views.** (Native memory's came first: `NativeView[L]`,
+    NATIVE-LAYOUT-VIEWS.md.) A zero-copy `View[L]` over borrowed storage reading fields
     lazily -- a separate abstraction with a lifetime, never what
     `LayoutStruct` silently becomes (it retains nothing by design).
 69. **Mutable views.** Writing fields into foreign or shared storage in

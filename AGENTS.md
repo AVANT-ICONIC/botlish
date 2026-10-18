@@ -1296,6 +1296,54 @@ native/Cargo.toml --lib bin_`. The registry is a declaration registry
 kind is classified in `tests/static-compile.test`'s census.
 `bench/binary-layout.tcl` regenerates the performance report.
 
+## Native layout views
+
+A native view (NATIVE-LAYOUT-VIEWS.md) reads an ordinary `layout` from live
+native memory: `binary::native::view(L, p)` is `NativeView[L]`, the
+address word of the data pointer `p` (observed; `NativeViewNull` for null),
+each field read when projected (`v.f`: one load at the layout's offset),
+`binary::load(v)` the `LayoutStruct[L]` of all of them. One layout, one
+registry entry and one descriptor serve both backings; there is no second
+description language. Keep it so:
+
+* Never add `extern c struct`, a C layout rule, `repr(C)` or any
+  representation guarantee for an ordinary Botlish value (an address, a
+  stable offset, pinning): a layout is an explicit external description,
+  and a struct stays the compiler's.
+* A pointer field (`ffi::c::Ptr[T]`, `ffi::c::FnPtr[F]`) is native-only:
+  read through a view it is the pointer memory holds; bytes never become one
+  (`binary::parse` and `binary::emit` of its layout are
+  `LAYOUT-NATIVE-ONLY`). Never let byte storage, an Int or a layout make a
+  pointer, and never add pointer arithmetic, `Ptr <-> Int` or a dereference
+  outside the view's field reads.
+* Views are read-only: no setter, write, writable view, native allocation or
+  native record (a later milestone designs them, section 16). The only
+  memory-writing native op is the test fixture's private copy.
+* `NativeView[L]` is its own nominal type: never a pointer, a LayoutStruct
+  or another layout's view; unrestricted, with no equality. A field read is
+  elaborated after the checks to `binary#view_field(v, FIELD)` with the
+  field's descriptor entry, so no backend reads a layout; its receiver must
+  be statically a view (`hir::layouts::verifyInstance`).
+* `binary::native` is designated direct (`declareDirectNamespace`): making a
+  view is a direct edge; declaring layouts, `binary::parse` and reading a
+  view someone else made are not. Never move directness onto the layout.
+* The Tcl backends have no native memory: they refuse a view of a non-null
+  pointer (`NATIVE-ONLY`) and never imitate a read.
+* `ffi_fixture::memory[T](bytes)` (core/cabi.tcl's `installTestFixture`) is a
+  test process's own; nothing else may call it.
+
+If you change any of that (NATIVE-LAYOUT-VIEWS.md, "What to run when
+changing this", lists the files), run `tests/native-view.test` (its C oracle,
+tests/cffi/nview-fixture.c, needs `cc`), `tests/binary-layout.test`,
+`tests/c-abi-types.test`, `tests/direct-modules.test`,
+`audit/native-view/tools/fuzz.tcl` (several seeds, once with `-gc-stress 1`),
+`audit/native-view/tools/mutate.tcl` (every mutant in its `mutants.txt` must
+still apply and be killed: update a mutant's text when you change the code it
+mutates, keeping it a mutant of the same rule) and `cargo test --release
+--manifest-path native/Cargo.toml --lib nview`, plus the binary-layout
+harnesses (above) for a change to the layout registry or the descriptor.
+`bench/native-view.tcl` regenerates the performance report.
+
 ## C ABI types and imprinting
 
 `ffi::c` (C-ABI-TYPES.md) is the C ABI value universe: the C integer scalars

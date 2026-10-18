@@ -2344,6 +2344,33 @@ layout Header:
 @value [8, 4]
 @end
 
+@topic stdlib.binary::load
+title: binary::load -- intrinsic of namespace binary
+summary: Every field of a native view read once into a LayoutStruct[L], written binary::load(v) or v.load(), L from the view's static type NativeView[L].
+index: stdlib
+symbol: binary::load
+keywords: read whole struct; copy native record; snapshot; load view
+related: stdlib.module.binary concept.binary-layouts stdlib.binary::native::view stdlib.binary::parse
+
+== SIGNATURE
+    binary::load(any) -> struct
+
+== USE
+An intrinsic of namespace binary: import binary, then write binary::load.
+Method syntax: receiver.load(...) is the same call.
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+v must statically be a NativeView[L] (anything else is BINARY-OPERAND).
+The result is the same immutable LayoutStruct[L] binary::parse would
+give for the same bytes, nested layouts included, so a record read many
+times can be loaded once and read as ordinary fields; padding is never
+read. For a native-only layout the LayoutStruct owns the pointers it read
+and is affine like any value that holds a Ptr. Natively only, like the
+view itself.
+
 @topic stdlib.binary::parse
 title: binary::parse -- intrinsic of namespace binary
 summary: The LayoutStruct[L] imprinted from bytes of exactly layout L's size, written binary::parse(L, data); any other length fails with LayoutLengthMismatch.
@@ -2409,7 +2436,7 @@ fn second(data: abi::bytes::Bytes) -> int:
 
 @topic stdlib.module.binary
 title: binary -- standard namespace
-summary: Fixed binary layouts: parse bytes into a LayoutStruct (binary::parse), emit one back (binary::emit), and the layout's size and alignment.
+summary: Fixed binary layouts: parse bytes into a LayoutStruct (binary::parse), emit one back (binary::emit), read a native view of one (binary::load), and the layout's size and alignment.
 index: stdlib
 symbol: binary
 keywords: binary format; struct packing; serialize; deserialize; byte layout; parse bytes
@@ -2454,6 +2481,14 @@ the encoding follows from the interval, never from a name -- `byte::Byte` or
 `abi::U32Value` is as good a field type as `binary::U32`). Every byte order
 is the target's, little-endian.
 
+A layout read from live native memory instead of bytes is a native view
+(NATIVE-LAYOUT-VIEWS.md): `binary::native::view(L, p)` (namespace
+binary::native, direct authority) is a NativeView[L] whose fields are read
+when projected, and `binary::load(v)` the LayoutStruct[L] of all of them. A
+field may then also be a C pointer (ffi::c::Ptr[T], ffi::c::FnPtr[F]): such
+a layout is native-only -- bytes never become a pointer, so binary::parse
+and binary::emit of it are rejected.
+
 Nothing here knows about C: a C layer maps its target-dependent types
 (`unsigned long` on Windows, on Linux) to these domains and emits resolved
 layouts; this namespace records physical facts only.
@@ -2473,19 +2508,107 @@ lib/binary.bot (import binary).
     binary::emit                   intrinsic -- The bytes of a LayoutStruct...
     binary::layout_alignment       intrinsic -- The alignment in bytes of l...
     binary::layout_length          intrinsic -- The size in bytes of layout...
+    binary::load                   intrinsic -- Every field of a native vie...
     binary::parse                  intrinsic -- The LayoutStruct[L] imprint...
 
 Each member is a topic: -help NAME (e.g. -help binary::I16).
 
 == NOTES
-`import binary` for the four intrinsics and the scalar field types
+`import binary` for the five intrinsics and the scalar field types
 binary::U8 ... binary::I64. A `layout` declaration names a fixed number of
 bytes with explicit size, alignment and field offsets; every multi-byte
 field is little-endian (the target's order), and padding is never a
 field. The layout is static: it is named at a parse or a query and read
 from the value's type at an emit, never a runtime value. There are no
-arrays, unions, bitfields, variable-length tails, floats or pointers in a
-layout.
+arrays, unions, bitfields, variable-length tails or floats in a layout.
+
+A field may be a C pointer (ffi::c::Ptr[T] or ffi::c::FnPtr[F], of the
+target's pointer width). Such a layout is native-only: bytes never become
+a pointer, so binary::parse and binary::emit of it are LAYOUT-NATIVE-ONLY,
+and it is read from live native memory through a NativeView[L]
+(binary::native::view, then its fields or binary::load).
+
+@topic stdlib.binary::native::view
+title: binary::native::view -- intrinsic of namespace binary::native
+summary: The read-only NativeView[L] of the native memory a data pointer addresses, written binary::native::view(L, p); a null p fails with NativeViewNull.
+index: stdlib
+symbol: binary::native::view
+keywords: native view; read native memory; read C struct; peek; overlay; pointer to struct; view record
+related: stdlib.module.binary::native concept.binary-layouts stdlib.binary::load stdlib.module.binary concept.c-ffi rule.unhandled-errors
+
+== SIGNATURE
+    binary::native::view(str, any) -> any
+
+== ERRORS
+    NativeViewNull
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
+== USE
+An intrinsic of namespace binary::native: import binary::native, then
+write binary::native::view. Declared nomethod: method syntax does not
+apply (NOMETHOD-CALL); call it as binary::native::view(...).
+
+== BACKENDS
+every backend (interp, compile, cranelift-generic, cranelift)
+
+== NOTES
+L is a layout name written at the call; p must statically be an
+ffi::c::Ptr[T] (a data pointer), observed, never moved. Nothing is read
+when the view is made: each field is read when it is projected (v.field,
+one load at the layout's offset), a nested layout's field is a
+NativeView of the inner layout, and a pointer field is the exact pointer
+the memory holds. A view is read-only, never a pointer, a LayoutStruct or
+another layout's view, and has no equality. Making one is raw authority:
+binary::native is a direct namespace, so the calling module must be a
+`direct module` (or mediate the call through a context of its own);
+reading a view someone else made is not. It reads memory only on the
+native backends: interp and compile refuse a view of a non-null pointer
+with NATIVE-ONLY. A null pointer is the builtin declared error
+NativeViewNull on every backend. The memory must hold at least
+binary::layout_length(L) bytes for as long as the view is read; nothing
+checks it. Declared nomethod. NATIVE-LAYOUT-VIEWS.md.
+
+== EXAMPLES
+@example accept
+direct module
+
+import binary
+import binary::native
+import ffi::c
+
+layout Point:
+    size 4
+    align 2
+    field x: binary::I16 at 0
+    field y: binary::I16 at 2
+
+fn x_of(p: ffi::c::Ptr[ffi::c::Void]) -> int errors NativeViewNull:
+    v = binary::native::view(Point, p)
+    v.x
+
+r = x_of(ffi::c::null[ffi::c::Void]()):
+    on NativeViewNull:
+        -1
+r
+@caption A view of the null pointer fails before anything is read
+@value -1
+@end
+
+@topic stdlib.module.binary::native
+title: binary::native -- standard namespace
+summary: The intrinsics of namespace binary::native.
+index: stdlib
+symbol: binary::native
+
+== SOURCE
+Compiler intrinsics only, no module file (import binary::native).
+
+== MEMBERS
+    binary::native::view           intrinsic -- The read-only NativeView[L]...
+
+Each member is a topic: -help NAME (e.g. -help binary::native::view).
 
 @topic stdlib.byte::BelowRange
 title: byte::BelowRange -- Error of module byte

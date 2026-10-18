@@ -105,7 +105,9 @@ proc hir::read::TypeDecls {lines} {
     }
     set registered {}
     if {$decls ne ""} {
-        set registered [hir::sourcetypes::apply $decls]
+        # (A layout's pointer fields are resolved after the structs below,
+        # which their pointees may name.)
+        set registered [hir::sourcetypes::apply $decls {} 0]
     }
     # Struct declarations (hir::format::TypeDecl's "struct ..." lines) come
     # after the integer-domain types their fields may name.
@@ -144,6 +146,7 @@ proc hir::read::TypeDecls {lines} {
         hir::structs::applyEntries $final
         lappend registered {*}$final
     }
+    hir::layouts::ResolvePointers registered
     # Trait declarations (hir::format::TraitDecl's "trait ..." lines) and the
     # trait-polymorphic functions a monomorphized program replaced
     # (TRAITS.md): their requirement types may name the structs above.
@@ -303,11 +306,20 @@ proc hir::read::TypeDeclLine {content number} {
         # hir::layouts::apply, after the integer domains (printed earlier).
         set fields {}
         foreach item [SplitTop $fieldsText ", "] {
-            if {![regexp {^(\S+): (\S+) at ([0-9]+)$} $item -> fname ftype offset]} {
+            if {![regexp {^(\S+): (.+) at ([0-9]+)$} $item -> fname ftype offset]} {
                 Fail $number "expected \"FIELD: TYPE at OFFSET\" in a layout declaration, got \"$item\""
             }
-            lappend fields [dict create name $fname nameSpan $span type $ftype typeSpan $span \
+            set field [dict create name $fname nameSpan $span type $ftype typeSpan $span \
                 offset $offset offsetSpan $span]
+            if {[regexp {^ffi::c::(Ptr|FnPtr)\[} $ftype]} {
+                # A pointer field (NATIVE-LAYOUT-VIEWS.md): its canonical type
+                # text, read once the structs its pointee may name are
+                # registered (hir::layouts::ResolvePointers).
+                dict set field pointerText 1
+            } elseif {![regexp {^\S+$} $ftype]} {
+                Fail $number "expected \"FIELD: TYPE at OFFSET\" in a layout declaration, got \"$item\""
+            }
+            lappend fields $field
         }
         return [dict create kind layout resolved 1 name $id namespace [expr {$ns eq "-" ? "" : $ns}] \
             nameSpan $span size $size sizeSpan $span align $align alignSpan $span fields $fields span $span]
@@ -671,6 +683,11 @@ proc hir::read::ParseType {text number} {
     if {[regexp {^MutableArray\[(.+)\]$} $text -> inner]} {
         # PARAMETERIZED-MUTABLEARRAY.md: hir::types::show's own notation.
         return [list mutarray [ParseType $inner $number]]
+    }
+    if {[regexp {^NativeView\[(\S+)\]$} $text -> layout] && [hir::layouts::declared $layout]} {
+        # A native view of a layout (NATIVE-LAYOUT-VIEWS.md): hir::types::
+        # show's own notation.
+        return [hir::layouts::viewType $layout]
     }
     if {[regexp {^ffi::c::Ptr\[(.+)\]$} $text -> inner]} {
         # A C data pointer (C-ABI-TYPES.md): its pointee identity, as

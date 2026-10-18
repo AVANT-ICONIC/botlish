@@ -1433,7 +1433,11 @@ proc hir::range::ProvesValueAcceptedBy {argType argRange declared} {
         return [AggregateAdmits [hir::types::Unshaped $argType] $declared]
     }
     if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
-            || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]} {
+            || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]
+            || [hir::types::IsNativeView $declared]} {
+        # A native view (NATIVE-LAYOUT-VIEWS.md) only by the view of the same
+        # layout.
+        #
         # A C pointer (C-ABI-TYPES.md) only by its identical pointer type
         # (pointee identity is invariant; no Range fact is one of a
         # pointer), and an imprint variable (hir/imprint.tcl) only by

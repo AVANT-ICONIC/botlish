@@ -332,6 +332,25 @@ pub enum OpCode {
     CPtrSame,
     CPtrFixture,
     CPtrFixtureAddress,
+    /// Read-only native layout views (NATIVE-LAYOUT-VIEWS.md,
+    /// runtime/nview.rs): the code native/lower.tcl emits for the field
+    /// reads of one statically known layout through a C address word %v (a
+    /// `NativeView[L]`, never null), one op per field with constant operands.
+    /// `nativeload %v %o %c`: the Int at address %v + %o in the scalar
+    /// encoding %c (`binload`'s word); a 64-bit value outside the small-Int
+    /// range is a BigInt (so it may allocate). `nativeloadptr %v %o %w`: the
+    /// C address word of the %w-byte address stored at %v + %o (a pointer
+    /// field), NATIVE ADDRESS when no C address word holds it.
+    /// `cptroffset %v %o`: the address word %v + %o (a nested layout's view;
+    /// no memory is read). `cptrfixturememory %b`: the test fixture's fresh
+    /// native copy of byte storage %b (core/cabi.tcl's installTestFixture;
+    /// no native a program can name lowers to it). All are fallible only on
+    /// an operand a checked program cannot produce, except nativeloadptr's
+    /// NATIVE ADDRESS.
+    NativeLoad,
+    NativeLoadPtr,
+    CPtrOffset,
+    CPtrFixtureMemory,
     /// The borrow test fixture's synthetic foreign operations
     /// (C-POINTER-BORROWING.md; runtime/ffifixture.rs): only the natives
     /// core/cabi.tcl's installBorrowFixture registers lower to them, so no
@@ -676,6 +695,10 @@ op_spellings! {
     "cptrsame" => CPtrSame,
     "cptrfixture" => CPtrFixture,
     "cptrfixtureaddress" => CPtrFixtureAddress,
+    "nativeload" => NativeLoad,
+    "nativeloadptr" => NativeLoadPtr,
+    "cptroffset" => CPtrOffset,
+    "cptrfixturememory" => CPtrFixtureMemory,
     "ffifixtureread" => FfiFixtureRead,
     "ffifixturereadreentrant" => FfiFixtureReadReentrant,
     "ffifixturefill" => FfiFixtureFill,
@@ -753,9 +776,9 @@ impl OpCode {
             | SetFromListTotal | StrToShort | ShortToStr | ShortLen | StrToAscii | AsciiToStr | AsciiLen
             | AsciiToShort | BytesFromList | BytesLen | BytesAddr | KeepAlive | BytesZeroed | MBytesNew | MBytesFrom | MBytesLen
             | MBytesClone | MBytesFreeze | MBytesAddr | CoCreate | CoStart | CoResume0 | CoYield | CoDone
-            | CoRelease | CPtrIsNull | CPtrSame | CPtrFixture | CPtrFixtureAddress | MvFromList | MvLen | MvEmpty | MvPop | MvClear | MvToList | MvTakeFront | CtxRoot
+            | CoRelease | CPtrIsNull | CPtrSame | CPtrFixture | CPtrFixtureAddress | CPtrFixtureMemory | MvFromList | MvLen | MvEmpty | MvPop | MvClear | MvToList | MvTakeFront | CtxRoot
             | MutArrayFromList | MutArrayToList | MutArrayEmpty | MutArrayTakeFront => Some(1),
-            Substr | SubstrProven | MutArraySet | MutArraySetProven | MBytesSet | BinLoad | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum | StrSliceShort
+            Substr | SubstrProven | MutArraySet | MutArraySetProven | MBytesSet | BinLoad | NativeLoad | NativeLoadPtr | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum | StrSliceShort
             | MvSwap | MutArraySwap | MutArrayGenerateDrop | FfiFixtureFill | FfiFixtureFillChecked | FfiFixtureCopy => Some(3),
             RegionEq | MvSwapDrop | MutArraySwapDrop | MutArraySetDrop | BinStore | FfiFixtureMixed => Some(4),
             MutArrayCopy | MutArrayCopyProven => Some(5),

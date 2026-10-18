@@ -128,6 +128,14 @@ proc hir::cabi::IntrinsicTypeNames {ns} {
     return [expr {$ns eq $::core::cabi::namespace ? $intrinsicTypes : {}}]
 }
 
+# The C target of the compilation whose declarations are installed: the one
+# its ffi::c scalars were declared for (NamespaceTypeDecls, re-derived by
+# hir/read.tcl from HIR text), or "" when no file of it imports ffi::c.
+proc hir::cabi::CompilationTarget {} {
+    set info [core::type::cabiOf "$::core::cabi::namespace\::[lindex [core::cabi::scalarNames] 0]"]
+    return [expr {$info eq "" ? "" : [dict get $info target]}]
+}
+
 # The spellings of the intrinsic types, as a type expression writes them.
 proc hir::cabi::VoidName {} { return "$::core::cabi::namespace\::Void" }
 proc hir::cabi::BoolName {} { return "$::core::cabi::namespace\::Bool" }
@@ -317,6 +325,17 @@ proc hir::cabi::verify {hirVar} {
             set paramType [lindex $paramTypes [expr {min($index, [llength $paramTypes] - 1)}]]
             incr index
             set argType [hir::typeOf $hir $arg]
+            if {[hir::types::IsNativeView $argType] && $paramType ni {"" any} && [hir::layouts::Role $name] eq ""
+                    && [dict get [core::native::metadata $name] imprint] eq ""} {
+                # (An imprinted native's signature rejects it itself: IMPRINT.)
+                # A native view's word is its pointer's, but a view is no
+                # pointer and no Int (NATIVE-LAYOUT-VIEWS.md): no pointer
+                # operation (null?, clone, ...) and no other native takes one.
+                hir::Diagnose hir TYPE [format \
+                    {argument %d of %s is %s, a native view, where %s requires %s: a native view is a read-only window onto native memory, read by its fields (or binary::load), never a pointer, an Int or any other value} \
+                    $index $name [hir::types::show $argType] $name [core::type::show $paramType]] $arg
+                continue
+            }
             if {![hir::types::IsCAddress $argType] || $paramType in {"" any}
                     || [core::type::base $paramType] eq "cptr"} {
                 continue

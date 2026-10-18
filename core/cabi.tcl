@@ -332,6 +332,14 @@ core::native::register ffi::c::retype -arity 1 -impl core::cabi::sameImpl \
 #   ffi_fixture::function_address[F](n) FnPtr[F], the address N
 #   ffi_fixture::address_of(p)          the address bits of any C pointer P,
 #                                       an Int (observes P)
+#   ffi_fixture::memory[T](data)        Ptr[T], the address of a fresh,
+#                                       never-freed native copy of the bytes
+#                                       of the abi::bytes::Bytes DATA, 64-byte
+#                                       aligned: live memory a native view
+#                                       can read (NATIVE-LAYOUT-VIEWS.md). The
+#                                       Tcl backends have no native memory:
+#                                       there it is a fresh non-null address
+#                                       that nothing can read.
 #
 # Nothing in the compiler, the libraries or main.tcl calls it, so no Botlish
 # program outside a test process can name any of them: there is no public
@@ -350,6 +358,23 @@ proc core::cabi::installTestFixture {} {
         -imprint {vars {F} params {int} result {cfnptr {imprint F}}}
     core::native::register ffi_fixture::address_of -arity 1 -impl core::cabi::fixtureAddressOfImpl \
         -param-types {cptr} -result-type int -ownership {observe}
+    core::native::register ffi_fixture::memory -arity 1 -impl core::cabi::fixtureMemoryImpl \
+        -param-types {struct} -result-type cptr -errors {} -ownership {observe} \
+        -imprint [list vars {T} params [list [list nstruct [core::bytestore::bytesType]]] result {cptr {imprint T}}]
+}
+
+# The Tcl backends' ffi_fixture::memory: a fresh non-null address (beyond
+# the plain fixture addresses tests choose), never readable -- a native view
+# of it is NATIVE-ONLY there.
+proc core::cabi::fixtureMemoryImpl {data} {
+    variable fixtureMemoryNext
+    if {![info exists fixtureMemoryNext]} {
+        set fixtureMemoryNext [expr {2 ** 52}]
+    }
+    core::binary::BytesOf $data ffi_fixture::memory
+    set address $fixtureMemoryNext
+    set fixtureMemoryNext [expr {$fixtureMemoryNext + 4096}]
+    return [address $address]
 }
 
 # ---------------------------------------------------------------------------

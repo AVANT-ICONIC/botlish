@@ -168,6 +168,7 @@ namespace eval native::lower {
         ffi_fixture::address          {op cptrfixture} \
         ffi_fixture::function_address {op cptrfixture} \
         ffi_fixture::address_of       {op cptrfixtureaddress} \
+        ffi_fixture::memory           {op cptrfixturememory} \
         affine#drop {op affinedrop} \
         mutable_vector::from_list {op mvfromlist} \
         mutable_vector::length    {op mvlen} \
@@ -5102,6 +5103,21 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
         Emit fn "raise $kind [Quote $message]" $e
         return {never tagged}
     }
+    if {[hir::layouts::RoleOf $role op] eq "field"} {
+        # One field read through a native view (NATIVE-LAYOUT-VIEWS.md): the
+        # elaborated projection binary#view_field(VIEW, FIELD), FIELD the
+        # field's descriptor entry.
+        set field [lindex $args [hir::layouts::RoleOf $role field]]
+        if {[hir::kind $hir $field] ne "const"} {
+            throw {NATIVE BUG} "native lowering: the field operand of $name ($e) is not its descriptor entry"
+        }
+        lassign [ViewBase fn [lindex $args 0]] view base
+        if {$view eq "never"} {
+            return {never tagged}
+        }
+        dict lappend fn calls [list native $name]
+        return [list [NativeField fn $e $view [lindex [hir::get $hir $field literal] end] $base] tagged]
+    }
     set operand [lindex $args [hir::layouts::RoleOf $role operand]]
     if {[hir::kind $hir $operand] ne "const"} {
         throw {NATIVE BUG} "native lowering: the layout operand of $name ($e) is not its descriptor constant"
@@ -5184,8 +5200,103 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
             }
             return [list [Assign fn "structnew [ShapeIndex $bytesType [hir::structs::names $bytesType]] $storage" $e] tagged]
         }
+        view {
+            # binary::native::view(L, p): the pointer's own word, once it is
+            # known not to be null -- nothing is read (NATIVE-LAYOUT-VIEWS.md).
+            set pointer [Expr fn [lindex $args [hir::layouts::RoleOf $role pointer]]]
+            if {$pointer eq "never"} {
+                return {never tagged}
+            }
+            set null [Assign fn "op cptrisnull $pointer" $e]
+            set good [NewLabel fn]
+            set bad [NewLabel fn]
+            Emit fn "br $null $bad $good" $e
+            EmitLabel fn $bad
+            Emit fn "faildeclared [ErrorId NativeViewNull] [Quote NativeViewNull]" $e
+            EmitLabel fn $good
+            return [list $pointer tagged]
+        }
+        load {
+            # binary::load(v): every field read through the view, as parse
+            # reads every field of its bytes, and the LayoutStruct built.
+            if {$wantVirtual ne ""} {
+                throw {NATIVE BUG} "native lowering: binary::load $e asked for virtual fields (hir::escape never classifies one)"
+            }
+            set view [Expr fn [lindex $args 0]]
+            if {$view eq "never"} {
+                return {never tagged}
+            }
+            return [list [NativeDecode fn $e $view $descriptor 0] tagged]
+        }
     }
     throw {NATIVE BUG} "native lowering: binary operation $name ($e) has no operation"
+}
+
+# {REGISTER BASE} of the native view expression ARG, evaluated here: a
+# nested layout's view read straight off another view (`v.inner.x`, the
+# receiver a binary#view_field call of a layout field) is the outer view's
+# register with the nested field's offset added -- one load at the absolute
+# offset, no intermediate address -- and any other view its own register at
+# 0.
+proc native::lower::ViewBase {fnVar arg} {
+    upvar 1 $fnVar fn
+    variable hir
+    if {[hir::kind $hir $arg] eq "call" && [lindex [hir::get $hir $arg target] 0] eq "native"
+            && [dict get [hir::symbol $hir [lindex [hir::get $hir $arg target] 1]] name] eq [hir::layouts::ViewReadNative]} {
+        lassign [hir::get $hir $arg args] receiver field
+        if {[hir::kind $hir $field] eq "const"} {
+            set entry [lindex [hir::get $hir $field literal] end]
+            if {[lindex $entry 2] eq "layout"} {
+                lassign [ViewBase fn $receiver] view base
+                return [list $view [expr {$base + [lindex $entry 1]}]]
+            }
+        }
+    }
+    return [list [Expr fn $arg] 0]
+}
+
+# The value of the descriptor field entry FIELD read through the native view
+# VIEW (a register holding a C address word) at byte BASE: a scalar's Int
+# (one `nativeload`), a pointer's C address word (`nativeloadptr`), a nested
+# layout's view (`cptroffset`: no memory read) -- NATIVE-LAYOUT-VIEWS.md.
+proc native::lower::NativeField {fnVar e view field base} {
+    upvar 1 $fnVar fn
+    lassign $field name offset kind
+    set at [Assign fn "int [expr {$base + $offset}]" $e]
+    switch -- $kind {
+        layout {
+            return [Assign fn "op cptroffset $view $at" $e]
+        }
+        ptr {
+            lassign $field name offset kind width endian
+            set w [Assign fn "int $width" $e]
+            return [Assign fn "op nativeloadptr $view $at $w" $e]
+        }
+    }
+    lassign $field name offset sign width endian
+    set code [Assign fn "int [LayoutEncoding $sign $width $endian]" $e]
+    return [Assign fn "op nativeload $view $at $code" $e]
+}
+
+# The LayoutStruct DESCRIPTOR describes, read through the native view VIEW
+# at byte BASE (binary::load): every scalar and pointer field loaded in
+# declared (slot) order, a nested layout's struct recursively, then the
+# object -- LayoutDecode's shape, over live memory instead of bytes.
+proc native::lower::NativeDecode {fnVar e view descriptor base} {
+    upvar 1 $fnVar fn
+    lassign $descriptor structId size align fields
+    set names {}
+    set registers {}
+    foreach field $fields {
+        lassign $field name offset kind
+        lappend names $name
+        if {$kind eq "layout"} {
+            lappend registers [NativeDecode fn $e $view [lindex $field 3] [expr {$base + $offset}]]
+            continue
+        }
+        lappend registers [NativeField fn $e $view $field $base]
+    }
+    return [Assign fn "structnew [ShapeIndex $structId $names] [join $registers { }]" $e]
 }
 
 # The LayoutStruct DESCRIPTOR describes, imprinted from the bytes of STORAGE

@@ -771,6 +771,7 @@ proc hir::semantic::verify {hirVar} {
         hir::range::verifyBlocks view $blocks
         hir::callables::verifyBlocks view $blocks
         hir::structs::verifyExprs view [Region $view $block]
+        hir::layouts::verifyInstance view $hir [Region $view $block]
         if {[hir::types::AnyAffine [dict get $semantic instances $id args]]} {
             # An instance that owns an affine argument (AFFINE-VALUES.md):
             # the ownership discipline, with the instance's own types -- a

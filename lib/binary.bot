@@ -39,6 +39,14 @@
 # `byte::Byte` or `abi::U32Value` is as good a field type as `binary::U32`).
 # Every byte order is the target's, little-endian.
 #
+# A layout read from live native memory instead of bytes is a native view
+# (NATIVE-LAYOUT-VIEWS.md): `binary::native::view(L, p)` (namespace
+# binary::native, direct authority) is a NativeView[L] whose fields are read
+# when projected, and `binary::load(v)` the LayoutStruct[L] of all of them.
+# A field may then also be a C pointer (ffi::c::Ptr[T], ffi::c::FnPtr[F]):
+# such a layout is native-only -- bytes never become a pointer, so
+# binary::parse and binary::emit of it are rejected.
+#
 # Nothing here knows about C: a C layer maps its target-dependent types
 # (`unsigned long` on Windows, on Linux) to these domains and emits resolved
 # layouts; this namespace records physical facts only.

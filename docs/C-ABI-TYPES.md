@@ -509,6 +509,13 @@ LP64 and 4 on LLP64; `ffi::c::Char` signed or unsigned by target
 (`ca-layout-target-encodings`); 4000000000 round-trips through
 `binary::emit` and `binary::parse` on every backend.
 
+> **Follow-up (NATIVE-LAYOUT-VIEWS.md).** Pointer fields now exist and are
+> *native-only*: a layout with one is read through a native view of live
+> native memory (`binary::native::view`, `NativeView[L]`), where the pointer
+> is the one foreign memory holds -- the first mechanism below -- and
+> `binary::parse` / `binary::emit` of it are `LAYOUT-NATIVE-ONLY`. The
+> paragraphs below are this milestone's account.
+
 **Pointer fields remain deliberately unsupported** (LAYOUT-FIELD-TYPE: "a C
 pointer, not a binary scalar: imprinting arbitrary bytes into it would
 fabricate a pointer"). `binary::parse(L, bytes)` accepts arbitrary bytes; if
@@ -579,7 +586,7 @@ access.
 | a function pointer where `Ptr[Void]` or `Fn` is declared | TYPE | the ordinary mismatch |
 | calling a function pointer | TYPE | cb is a C function pointer ...: Botlish cannot call one yet |
 | invalid C signature | TYPE | invalid signature in ffi::c::FnPtr[...]: argument 1: int is not a C ABI value type ... |
-| a pointer layout field | LAYOUT-FIELD-TYPE | ... imprinting arbitrary bytes into it would fabricate a pointer ... |
+| a pointer layout field | LAYOUT-FIELD-TYPE | ... imprinting arbitrary bytes into it would fabricate a pointer ... (since NATIVE-LAYOUT-VIEWS.md: the field is legal, and `binary::parse`/`emit` of its layout is LAYOUT-NATIVE-ONLY) |
 | bare unestablished imprint variable | TYPE | unknown or invalid type for parameter "x": no type named T is visible here, and as an imprint variable T is not established ... |
 | missing / wrong number of / unbindable explicit imprints | IMPRINT | empty: imprint variable T is not established ...; convert takes 2 imprint(s), [A, B] ...; ffi::c::null: T is imprinted as int, which cannot be a pointee ... |
 | an imprinted callable as a value | IMPRINT | empty has imprint variables, so it is not a value ... |

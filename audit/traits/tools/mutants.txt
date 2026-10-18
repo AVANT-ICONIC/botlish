@@ -112,8 +112,7 @@
     if {$b eq "never"} {
         return 0
     }
-    if {[IsList $b]} {
-        if {![IsList $a] || ![subtype [lindex $a 1] [lindex $b 1]]} {
+    if {[IsNativeView $a] || [IsNativeView $b]} {
 ====
     if {$b eq "never"} {
         return 0
@@ -121,8 +120,7 @@
     if {[IsView $a] && [subtype [ViewWitness $a] $b]} {
         return 1
     }
-    if {[IsList $b]} {
-        if {![IsList $a] || ![subtype [lindex $a 1] [lindex $b 1]]} {
+    if {[IsNativeView $a] || [IsNativeView $b]} {
 >>>>
 
 @@ strengthen-view allow trait -> concrete strengthening (a fact about a view's value narrows it)

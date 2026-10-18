@@ -231,13 +231,15 @@ proc core::primitives::add {a b} {
 ## hir/range.tcl
 <<<<
     if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
-            || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]} {
+            || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]
+            || [hir::types::IsNativeView $declared]} {
 ====
     if {[hir::types::IsEnum $declared] && [hir::types::IsEnum $argType]} {
         return 1
     }
     if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
-            || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]} {
+            || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]
+            || [hir::types::IsNativeView $declared]} {
 >>>>
 
 @@ hash-ignores-enum-tcl the hash ignores the enum's identity (Tcl runtimes)

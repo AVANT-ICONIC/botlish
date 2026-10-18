@@ -143,6 +143,20 @@
 #   cptr                            the runtime kind of both (a pointer of
 #                                   unknown pointee, e.g. the join of two
 #                                   different pointer types); affine
+#   {nview L}                       a read-only native view NativeView[L]
+#                                   (NATIVE-LAYOUT-VIEWS.md): live native
+#                                   memory read through layout L, whose
+#                                   value is the address word of the
+#                                   pointer it was made from (runtime kind
+#                                   cptr). Nominal (NativeView[A] is a
+#                                   NativeView[B] only when A is B), never a
+#                                   pointer (no pointer operation takes
+#                                   one), never a LayoutStruct; its fields
+#                                   are read by projection
+#                                   (hir::layouts::ViewFieldType).
+#                                   Unrestricted: a non-owning window that
+#                                   confers nothing its copy does not; like
+#                                   a callable it has no equality
 #   {imprint T}                     an imprint variable (hir/imprint.tcl):
 #                                   in a function's declared signature, the
 #                                   type a call imprints as T. Rigid in the
@@ -231,8 +245,11 @@ namespace eval hir::types {
     # ffi::c::Ptr and ffi::c::FnPtr (C-ABI-TYPES.md) are registered for their
     # names and arity the same way: their argument is a pointee or a C
     # signature, resolved by hir::cabi (hir::resolve::ResolveTypeExpr).
+    #
+    # NativeView (NATIVE-LAYOUT-VIEWS.md) likewise: its argument is a layout
+    # (hir::layouts::ResolveNativeView).
     variable constructors [dict create List 1 ImmutableSet 1 MutableArray 1 MutableVector 1 LayoutStruct 1 \
-        ffi::c::Ptr 1 ffi::c::FnPtr 1]
+        NativeView 1 ffi::c::Ptr 1 ffi::c::FnPtr 1]
 }
 
 # The canonical resolved type for a bare (unapplied) type name NAME -- an
@@ -382,11 +399,11 @@ proc hir::types::resolveApplication {ctor argTypes} {
             # ResolveFnPtr), never from a resolved argument type.
             error "internal compiler error: $ctor is resolved by hir::cabi"
         }
-        LayoutStruct {
+        LayoutStruct - NativeView {
             # Only from a resolved argument type (never a layout): see
-            # hir::layouts::ResolveLayoutStruct.
+            # hir::layouts::ResolveLayoutStruct and ResolveNativeView.
             return -code error -errorcode {BOTLISH LAYOUT-STRUCT-PARAMETER} \
-                "LayoutStruct\[[show [lindex $argTypes 0]]\]: the argument of LayoutStruct must name a layout declaration, not a type"
+                "$ctor\[[show [lindex $argTypes 0]]\]: the argument of $ctor must name a layout declaration, not a type"
         }
         List { return [MakeList [lindex $argTypes 0] {} 0 0] }
         ImmutableSet { return [MakeSet [lindex $argTypes 0] 0] }
@@ -397,7 +414,7 @@ proc hir::types::resolveApplication {ctor argTypes} {
 
 proc hir::types::IsSpecific {type} {
     return [expr {$type eq "never"
-                  || ([llength $type] > 1 && [lindex $type 0] in {native block list immutableSet mutarray mutvec fn struct nstruct enum trait coroutine cptr cfnptr imprint})}]
+                  || ([llength $type] > 1 && [lindex $type 0] in {native block list immutableSet mutarray mutvec fn struct nstruct enum trait coroutine cptr cfnptr imprint nview})}]
 }
 
 # C ABI pointer forms (C-ABI-TYPES.md; the header's {cptr ...}/{cfnptr ...}).
@@ -410,6 +427,11 @@ proc hir::types::IsCFnPtr {type} {
 # 1 for any raw C address type: a data or function pointer, or the bare kind.
 proc hir::types::IsCAddress {type} {
     return [expr {$type eq "cptr" || [IsCPtr $type] || [IsCFnPtr $type]}]
+}
+# A native view NativeView[L] (NATIVE-LAYOUT-VIEWS.md; the header's
+# {nview L}).
+proc hir::types::IsNativeView {type} {
+    return [expr {[llength $type] == 2 && [lindex $type 0] eq "nview"}]
 }
 # An imprint variable (hir/imprint.tcl).
 proc hir::types::IsImprint {type} {
@@ -1457,6 +1479,12 @@ proc hir::types::subtype {a b} {
     if {$b eq "never"} {
         return 0
     }
+    if {[IsNativeView $a] || [IsNativeView $b]} {
+        # Nominal (NATIVE-LAYOUT-VIEWS.md): the same layout was decided above
+        # ($a eq $b). A view is never a pointer, though its run-time word is
+        # one: no pointer operation (null?, clone, a C argument) takes it.
+        return 0
+    }
     if {[IsList $b]} {
         if {![IsList $a] || ![subtype [lindex $a 1] [lindex $b 1]]} {
             return 0
@@ -1596,6 +1624,12 @@ proc hir::types::lub {a b} {
         # do.
         return [MakeMutArray [lub [lindex $a 1] [lindex $b 1]] 0]
     }
+    if {[IsNativeView $a] || [IsNativeView $b]} {
+        # Nominal (NATIVE-LAYOUT-VIEWS.md): views of two layouts, or a view
+        # and anything else, have no useful join -- never the bare pointer
+        # kind their words share, which is affine.
+        return any
+    }
     if {[IsEnum $a] || [IsEnum $b]} {
         # Nominal (ENUMS.md): the same enum was decided above ($a eq $b).
         # Two different enums -- or an enum and anything else -- have no
@@ -1727,7 +1761,7 @@ proc hir::types::narrow {current fact} {
         return $fact
     }
     if {[IsFn $fact] || [IsStructLike $fact] || [IsCoroutine $fact] || [IsEnum $fact]
-            || [IsCPtr $fact] || [IsCFnPtr $fact]} {
+            || [IsCPtr $fact] || [IsCFnPtr $fact] || [IsNativeView $fact]} {
         # A structural contract fact (a function contract, a struct type, a
         # coroutine handle's contract): a value already known to satisfy it
         # (a narrower contract, the same struct) says more.
@@ -1784,7 +1818,8 @@ proc hir::types::IsEqualityTotal {type} {
 
 # The runtime value kind every value of TYPE has, or "" if not fixed.
 proc hir::types::kindOf {type} {
-    if {[IsCFnPtr $type]} {
+    if {[IsCFnPtr $type] || [IsNativeView $type]} {
+        # (A native view's value is the address word of its pointer.)
         return cptr
     }
     if {$type eq "never" || [IsFn $type] || [IsTrait $type] || [IsImprint $type]} {
@@ -1803,7 +1838,7 @@ proc hir::types::kindOf {type} {
 
 # The core type (core/type.tcl) a static type implies.
 proc hir::types::semantic {type} {
-    if {[IsCFnPtr $type]} {
+    if {[IsCFnPtr $type] || [IsNativeView $type]} {
         return cptr
     }
     if {$type eq "never" || [IsFn $type] || [IsTrait $type] || [IsImprint $type]} {
@@ -1924,6 +1959,11 @@ proc hir::types::show {type} {
             }
             cfnptr {
                 return "[hir::cabi::FnPtrName]\[[hir::cabi::ShowSignature [lindex $type 1]]\]"
+            }
+            nview {
+                # A native view, by its layout's identity
+                # (NATIVE-LAYOUT-VIEWS.md), as LayoutStruct[L] is shown.
+                return "NativeView\[[lindex $type 1]\]"
             }
             imprint {
                 # An imprint variable, by its name (hir/imprint.tcl).
@@ -2190,6 +2230,44 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
                 if {$id ne "" && [hir::layouts::declared $id]} {
                     return [hir::layouts::structType $id]
                 }
+            }
+            return $result
+        }
+        native-view {
+            # binary::native::view(L, p) (core/binary.tcl,
+            # NATIVE-LAYOUT-VIEWS.md): a NativeView[L], L the layout argument
+            # I's descriptor constant describes.
+            set arg [lindex $argExprs [lindex $shape 1]]
+            if {$arg ne "" && [hir::kind $hir $arg] eq "const"} {
+                set id [hir::layouts::DescriptorLayout [lindex [hir::get $hir $arg literal] end]]
+                if {$id ne "" && [hir::layouts::declared $id]} {
+                    return [hir::layouts::viewType $id]
+                }
+            }
+            return $result
+        }
+        view-field {
+            # binary#view_field(v, FIELD), the elaborated field read of a
+            # native view: the field's view type (hir::layouts::
+            # ViewFieldType) when V's static type is a view -- what an
+            # instance's re-inference recovers (hir/specialize.tcl).
+            lassign $shape _ v f
+            set id [hir::layouts::OfViewType [lindex $argTypes $v]]
+            set arg [lindex $argExprs $f]
+            if {$id ne "" && $arg ne "" && [hir::kind $hir $arg] eq "const"} {
+                set t [hir::layouts::ViewFieldType $id [lindex [lindex [hir::get $hir $arg literal] end] 0]]
+                if {$t ne ""} {
+                    return $t
+                }
+            }
+            return $result
+        }
+        view-struct {
+            # binary::load(v): the LayoutStruct[L] of argument I's static
+            # NativeView[L] type.
+            set id [hir::layouts::OfViewType [lindex $argTypes [lindex $shape 1]]]
+            if {$id ne ""} {
+                return [hir::layouts::structType $id]
             }
             return $result
         }
@@ -2839,6 +2917,17 @@ proc hir::types::Project {hirVar ctxVar e} {
         }
         return [ProjectionFailed hir $ctx $e]
     }
+    set layout [hir::layouts::OfViewType $receiver]
+    if {$layout ne ""} {
+        # A field read through a native view (NATIVE-LAYOUT-VIEWS.md): the
+        # field's view type, read at run time from the memory the view
+        # addresses.
+        set t [hir::layouts::ViewFieldType $layout $name]
+        if {$t ne ""} {
+            return $t
+        }
+        return [ProjectionFailed hir $ctx $e]
+    }
     if {[kindOf $receiver] ni {"" struct}} {
         return [ProjectionFailed hir $ctx $e]
     }
@@ -3235,6 +3324,17 @@ proc hir::types::Call {hirVar ctxVar e} {
                 # applied type with no List-specific inference code of its
                 # own (MINIMAL-APPLIED-LIST-TYPES.md).
                 set result [ShapeResult $hir [dict get $meta resultShape] $argExprs $argTypes $result]
+                set shapeKind [lindex [dict get $meta resultShape] 0]
+                if {[MakesPoison $hir $ctx] && [dict get $ctx reachable]
+                        && (($shapeKind eq "view-struct" && [hir::layouts::OfType $result] eq "")
+                            || ($shapeKind eq "layout-struct" && [hir::layouts::RoleOf [dict get $meta layout] op] eq "parse"
+                                && [hir::layouts::OfType $result] ne "" && [hir::layouts::NativeOnly [hir::layouts::OfType $result]]))} {
+                    # binary::load of a value not statically a NativeView[L]
+                    # (BINARY-OPERAND), or binary::parse of a native-only
+                    # layout (LAYOUT-NATIVE-ONLY: hir::layouts::verify): no
+                    # LayoutStruct is ever produced (NATIVE-LAYOUT-VIEWS.md).
+                    set result [Poison hir $e]
+                }
                 if {!$spec} {
                     # Ordinary inference tracks only a List's element type
                     # (the applied List[T] a source annotation can spell),
