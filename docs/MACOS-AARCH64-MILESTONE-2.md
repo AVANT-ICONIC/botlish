@@ -433,7 +433,8 @@ is whether anything moved:
   census had 2. The third, `sc-tx-context`, compiled a `linux::io` program
   for the host's target; it was fixed in 95f0069, and both of its other
   failures are native coroutines (`sc-affine-rollback`,
-  `sc-affine-rollback-next-block`).
+  `sc-affine-rollback-next-block`). Run 12 (below) shows the file back at
+  the census's 2.
 - **Golden suites.** Every native failure is the coroutine refusal
   (`native coroutines need stack switching ...`: 78 cranelift and 71
   cranelift-generic suite runs), as in milestone 1. The 14 suites that
@@ -451,6 +452,17 @@ is whether anything moved:
   `apple_aarch64_is_not_the_linux_aarch64_convention` included: all pass on
   macOS.
 - **The examples and cabi:** ok on all four backends.
+
+| Run | Commit | Jobs | Result |
+|---|---|---|---|
+| [39132556766](https://github.com/mwagner-webdev/botlish/actions/runs/39132556766) (run 11) | 28356fc | smoke, acceptance 1/2 and 2/2, linux control, Tier C (`[ci-full]`: the acceptance tier under GC stress, 3 shards) | **every job success**; Tier C shard 1: 10 commands, 0 failed (59 Tcl test files on interp and compile, 32 golden suites, 2 checks, under `BOTLISH_NATIVE_GC_STRESS=1`) |
+| [39136630261](https://github.com/mwagner-webdev/botlish/actions/runs/39136630261) (run 12, `workflow_dispatch`: tier full, tests `static-compile.test target-model.test`) | 28356fc | smoke, acceptance 1/2 and 2/2, linux control, Tier C | smoke, both acceptance shards and linux control: **success**; Tier C: failure as designed, static-compile.test's 2 census failures on interp and on compile (the two native-coroutine tests above), target-model.test 24 of 24, 3 tests skipped by `nativeLinux` |
+
+Run 11's commit asked for `CI-Tests: static-compile.test target-model.test`,
+but the line was not in the message's last paragraph, which is all `git
+interpret-trailers --parse` reads. With no items, Tier C ran its default
+payload, the acceptance tier under GC stress: more than was asked, and
+green. Run 12 then ran the two files by hand.
 
 The smoke job's evidence (Darwin 24.6.0, `RELEASE_ARM64_VMAP`, `uname -m`
 `arm64`):
@@ -500,7 +512,16 @@ c-bindgen.test (22 run, 18 skipped without pinned sources); a seed of the
 C FFI fuzzer (4 programs, 48 functions, 0 disagreements). The full suite was
 left to CI, which the milestone asks to use for the broad regression.
 
-GitHub Actions: PENDING.
+On GitHub Actions (every workflow dispatched on the branch):
+
+| Workflow | Run | Commit | Result |
+|---|---|---|---|
+| tests.yml | [39128818793](https://github.com/mwagner-webdev/botlish/actions/runs/39128818793) | 20957e9 | **success**, every job |
+| tests-arm64.yml | [39128820551](https://github.com/mwagner-webdev/botlish/actions/runs/39128820551) | 20957e9 | failure: one test, `tm-foreign-signature-convention` (section 13), the only failure of the interp, compile and GC-stress jobs and of the cranelift-generic coverage; the cranelift coverage job failed too, its log unread (the 28356fc run below repeats it); the four golden shards and the Rust unit tests: success |
+| static-decisions.yml | [39128822453](https://github.com/mwagner-webdev/botlish/actions/runs/39128822453) | 20957e9 | **success**: every golden suite's static decisions agree between the batched and the sequential scheduler (the mutable-array job and four shards); 28356fc changes no front-end file |
+| c-bindgen.yml | [39128824120](https://github.com/mwagner-webdev/botlish/actions/runs/39128824120) | 20957e9 | **success** |
+| tests.yml | [39132607153](https://github.com/mwagner-webdev/botlish/actions/runs/39132607153) | 28356fc | **success**, every job |
+| tests-arm64.yml | [39132604977](https://github.com/mwagner-webdev/botlish/actions/runs/39132604977) | 28356fc | PENDING |
 
 ## 13. Test and oracle discrepancies
 
