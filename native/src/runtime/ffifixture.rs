@@ -23,6 +23,7 @@
 //! behind an exposure must survive that, which only its `keepalive` after
 //! the call guarantees.
 
+use super::bytesobj::BytesObj;
 use super::error::RtError;
 use super::value::*;
 use super::vm::Vm;
@@ -90,11 +91,17 @@ pub extern "C" fn rt_ffi_fixture_read(p: *mut Vm, ptr: Value, n: Value) -> Value
     byte_list(p, &bytes)
 }
 
+/// The most N-byte storages `read_reentrant` allocates.
+const REENTRANT_ALLOCATIONS: usize = 256;
+
 /// `ffifixturereadreentrant %p %n`: like read, but first runs what foreign
-/// code calling back into Botlish might -- a collection, then four
-/// allocations of N-byte storages filled with 0xee (the size class of an
-/// N-byte exposure, so a block the collection wrongly freed is reused by
-/// one of them) -- and only then reads.
+/// code calling back into Botlish might -- a collection, then allocations of
+/// N-byte storages filled with 0xee (the size class of an N-byte exposure)
+/// until one's payload is at P, at most REENTRANT_ALLOCATIONS -- and only
+/// then reads. Which of its free blocks of that size malloc returns first is
+/// not ours to predict, so a fixed few allocations would reuse a block the
+/// collection wrongly freed only by luck (four did on one build and not on
+/// another); a live block is never returned, and then all of them are made.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_ffi_fixture_read_reentrant(p: *mut Vm, ptr: Value, n: Value) -> Value {
     let a = operand!(address(p, ptr, "ffi_fixture::read_reentrant"));
@@ -102,9 +109,11 @@ pub extern "C" fn rt_ffi_fixture_read_reentrant(p: *mut Vm, ptr: Value, n: Value
     vm(p).collect_explicit();
     if n > 0 {
         let canary = vec![0xeeu8; n];
-        for _ in 0..4 {
+        for _ in 0..REENTRANT_ALLOCATIONS {
             let scratch = vm(p).new_bytes(&canary);
-            std::hint::black_box(scratch);
+            if BytesObj::payload_address(scratch) == a as u64 {
+                break;
+            }
         }
     }
     let bytes = load(a, n);
