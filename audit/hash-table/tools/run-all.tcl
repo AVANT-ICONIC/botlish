@@ -5,14 +5,14 @@
 #
 #   tclsh9.0 audit/hash-table/tools/run-all.tcl ?-phases LIST? ?-runs R? ?-tag TAG? ?-results DIR?
 #
-# Phases: rust copies nir sizes keys typed life policy mixed backends
+# Phases: rust copies memory nir sizes keys typed life policy mixed backends
 # membership (default all). -tag labels every row (the compiler/runtime
 # variant under test, e.g. "baseline" or a prototype's name) and goes into
 # the file names (PHASE-TAG.tsv).
 
 set here [file dirname [file normalize [info script]]]
 set base [file dirname $here]
-set options [dict create -phases {rust copies nir sizes keys typed life policy mixed backends membership} \
+set options [dict create -phases {rust copies memory nir sizes keys typed life policy mixed backends membership} \
     -runs 5 -tag baseline -results [file join $base results]]
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
@@ -54,7 +54,7 @@ set allModes {build presized hit miss member replace drop bulk}
 foreach phase [dict get $options -phases] {
     switch -- $phase {
         rust {
-            file delete [out rust] [out rust-mixed] [out rust-stats] [out rust-hashcost]
+            file delete [out rust] [out rust-mixed] [out rust-stats] [out rust-hashcost] [out rust-spike]
             set f [out rust]
             step "rust sweep" sh -c "$reference sweep -impls listmap,chain,lp,rh,std,stdb -keys int-dense,int-sparse,int-big,int-collide,str-short,str-medium,point -modes build,presized,hit,miss,member,replace,drop -sizes [join $sizes ,] -runs $runs > $f"
             step "rust life" sh -c "$reference sweep -impls listmap,chain,lp,rh,std -keys int-dense,str-short -modes life1,life10,life1000 -sizes 1,2,4,8,16,32,64,128,256 -runs $runs >> $f"
@@ -64,11 +64,19 @@ foreach phase [dict get $options -phases] {
             step "rust mixed" sh -c "$reference mixed -impls listmap,chain,lp,rh,std,stdb -bfs 64,256 -memo 10000,100000 -freq 16384,262144 -runs $runs > [out rust-mixed]"
             step "rust stats" sh -c "$reference stats -sizes [join $policySizes ,],1024,16384 -loads 1/2,7/10,17/20 > [out rust-stats]"
             step "rust hashcost" sh -c "$reference hashcost -runs $runs > [out rust-hashcost]"
+            step "rust spike" sh -c "$reference spike -sizes 11468,16384,65536 -loads 1/2,7/10,17/20 -runs $runs > [out rust-spike]"
         }
         copies {
             set impls {listmap chain0 ht0 chain lp lpc lpa lpmono lpfact rh cd sorted}
             foreach keys {int str point} {
                 step "copies $keys" sh -c "$tclsh [file join $here copies.tcl] -keys $keys $impls >> [out copies txt] 2>&1; true"
+            }
+        }
+        memory {
+            file delete [out memory]
+            foreach keys {int str} {
+                step "memory $keys" $tclsh [file join $here memory.tcl] -keys $keys -out [out memory] \
+                    listmap chain0 ht0 chain lpa rh cd sorted
             }
         }
         nir {

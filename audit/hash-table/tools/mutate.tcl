@@ -2,7 +2,7 @@
 # implementations (HASH-TABLE-EXPERIMENT.md, "Correctness").
 #
 #   tclsh9.0 audit/hash-table/tools/mutate.tcl ?-jobs N? ?-backends LIST?
-#       ?-seeds N? ?-file MUTANTS? ?NAME ...?
+#       ?-seeds N? ?-file MUTANTS? ?-timeout S? ?NAME ...?
 #
 # For every mutant of audit/hash-table/tools/mutants.txt (or the NAMEs
 # given) -- one or more text edits of an implementation, impl/IMPL.bot --
@@ -13,7 +13,9 @@
 # edit's text occurs exactly once) and be killed; the unmutated
 # implementations must pass, so a kill means the mutation.
 #
-# Prints one line per mutant: killed, SURVIVED or NOT APPLIED. Exit status
+# A mutant whose run does not finish within -timeout seconds (default 900;
+# a baseline takes well under a minute) is killed too: it made the table
+# loop forever. Prints one line per mutant: killed, SURVIVED or NOT APPLIED. Exit status
 # 1 if any survived or did not apply, or a baseline failed. Each mutant runs
 # in a child process (-jobs at a time), each with its own scratch directory.
 
@@ -21,7 +23,8 @@ set here [file dirname [file normalize [info script]]]
 source [file join $here lib.tcl]
 source [file join $here fuzzlib.tcl]
 
-set options [dict create -jobs [exec nproc] -backends {compile cranelift} -seeds 2 -one "" -file [file join $here mutants.txt]]
+set options [dict create -jobs [exec nproc] -backends {compile cranelift} -seeds 2 -one "" -file [file join $here mutants.txt] \
+    -timeout 900]
 set names {}
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
@@ -163,7 +166,9 @@ while {[llength $queue] || [dict size $running]} {
             report $name $preset
             continue
         }
-        set pipe [open |[list [info nameofexecutable] [info script] -one $name -file [dict get $options -file] \
+        # GNU timeout signals the child's whole process group, its native
+        # runs included.
+        set pipe [open |[list timeout -k 10 [dict get $options -timeout] [info nameofexecutable] [info script] -one $name -file [dict get $options -file] \
             -backends [dict get $options -backends] -seeds [dict get $options -seeds] 2>@1] r]
         dict set running $pipe $name
     }
@@ -171,8 +176,17 @@ while {[llength $queue] || [dict size $running]} {
     if {[dict size $running]} {
         set pipe [lindex [dict keys $running] 0]
         set output [read $pipe]
-        catch {close $pipe}
-        set verdict "ERROR (no verdict)"
+        set status 0
+        if {[catch {close $pipe} message closeOptions]} {
+            set code [dict get $closeOptions -errorcode]
+            if {[lindex $code 0] eq "CHILDSTATUS"} { set status [lindex $code 2] }
+        }
+        # timeout exits 124 (TERM) or 137 (KILL after the grace period).
+        if {$status in {124 137}} {
+            set verdict "killed (did not finish within [dict get $options -timeout] s)"
+        } else {
+            set verdict "ERROR (no verdict)"
+        }
         regexp -line {^RESULT (.*)$} $output -> verdict
         report [dict get $running $pipe] $verdict
         dict unset running $pipe

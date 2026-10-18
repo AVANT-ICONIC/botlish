@@ -1232,6 +1232,55 @@ fn main() {
                 }
             }
         }
+        "spike" => {
+            // TSV: impl load n mean-ns p99-ns max-ns growths: the latency of
+            // single inserts while building N Int keys from fresh(0), best of
+            // RUNS per insert position (a growth is the spike).
+            let runs: usize = arg(&args, "-runs", "5").parse().unwrap();
+            for load in list(&args, "-loads", "1/2,7/10,17/20") {
+                let load = parse_load(&load);
+                for size in list(&args, "-sizes", "11468,16384,65536") {
+                    let n: usize = size.parse().unwrap();
+                    let keys = i64::keys("int-dense", n);
+                    fn spikes<T: Table<i64>>(keys: &[i64], load: Load, runs: usize) -> (Vec<f64>, usize) {
+                        let mut best = vec![f64::INFINITY; keys.len()];
+                        let mut growths = 0;
+                        for _ in 0..runs {
+                            let mut t = T::fresh(0, load);
+                            let mut slots = t.slots();
+                            growths = 0;
+                            for (i, k) in keys.iter().enumerate() {
+                                let start = Instant::now();
+                                t.put(black_box(*k), i as i64);
+                                let ns = start.elapsed().as_nanos() as f64;
+                                if ns < best[i] {
+                                    best[i] = ns;
+                                }
+                                if t.slots() != slots {
+                                    slots = t.slots();
+                                    growths += 1;
+                                }
+                            }
+                            black_box(t.size());
+                        }
+                        (best, growths)
+                    }
+                    for imp in ["lp", "rh", "chain"] {
+                        let (times, growths) = match imp {
+                            "lp" => spikes::<Lp<i64>>(&keys, load, runs),
+                            "rh" => spikes::<Rh<i64>>(&keys, load, runs),
+                            _ => spikes::<Chain<i64>>(&keys, load, runs),
+                        };
+                        let mean = times.iter().sum::<f64>() / times.len() as f64;
+                        let mut sorted = times.clone();
+                        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                        let p99 = sorted[((sorted.len() as f64 - 1.0) * 0.99) as usize];
+                        let max = sorted[sorted.len() - 1];
+                        println!("{imp}\t{}/{}\t{n}\t{mean:.1}\t{p99:.0}\t{max:.0}\t{growths}", load.num, load.den);
+                    }
+                }
+            }
+        }
         "collide" => {
             // collide N RESIDUE: SPEC.md's int-collide keys, one per line.
             let n: usize = args[2].parse().unwrap();

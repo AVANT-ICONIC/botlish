@@ -157,22 +157,22 @@ fn next_slot(i: int, cap: int) -> int:
 # ---------------------------------------------------------------------------
 # lpa (lpint, lpstr and lpfact share its text; lpmono is lpa inlined)
 
-@@ lpa-probe-skips-slot the probe sequence steps two slots at a time
+@@ lpa-probe-step-three the probe sequence steps three slots at a time (still a permutation of a power-of-two capacity, so only removal's backward shift, which assumes step 1, breaks)
 ## impl/lpa.bot
 <<<<
 fn next_slot(i: int, cap: int) -> int:
     mod(i + 1, cap)
 ====
 fn next_slot(i: int, cap: int) -> int:
-    mod(i + 2, cap)
+    mod(i + 3, cap)
 >>>>
 
-@@ lpa-count-not-kept an insert of a new key does not count it
+@@ lpa-count-twice an insert of a new key counts it twice (one that does not count it at all never grows the table, which then fills and probes forever: the timeout kills it, but slowly)
 ## impl/lpa.bot
 <<<<
     counted(store(t, i, h, key, value), 1)
 ====
-    counted(store(t, i, h, key, value), 0)
+    counted(store(t, i, h, key, value), 2)
 >>>>
 
 @@ lpa-grow-loses-count growth starts the grown table's count at 0
