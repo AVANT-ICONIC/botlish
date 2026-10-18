@@ -856,8 +856,10 @@ branch (not documentation-only ones) -- never on a shared development Mac,
 and no acceptance depends on one.
 
 * Every push runs Tier A on macOS (`smoke`: the host and its toolchains,
-  Tcl 9 from Homebrew, `tests/platform/cabi-facts.tcl`, the native build
-  and its Rust unit tests, `tests/platform/native-status.tcl`,
+  Tcl 9.0.1 built from its pinned source by `tests/platform/setup-macos.sh`
+  -- not Homebrew's newer Tcl, whose Unicode 17 case tables break the Tcl
+  backends' Unicode 16 semantics -- `tests/platform/cabi-facts.tcl`, the
+  native build and its Rust unit tests, `tests/platform/native-status.tcl`,
   `tests/platform/tier.tcl smoke`), Tier B (`tier.tcl acceptance`, two
   shards) and the same smoke on ubuntu as a control. Locally, `tclsh9.0
   tests/platform/tier.tcl smoke` takes seconds, and `tier.tcl X.test
@@ -873,8 +875,9 @@ and no acceptance depends on one.
   refusal -- is recorded in `tests/platform/native-status.tcl`, and the
   test files that do not pass on macOS yet, with their causes, in
   `tier.tcl`'s `notYet`. A milestone that changes either updates it in the
-  same change (and the audit's census); never weaken a test or widen
-  `notYet` to make macOS green.
+  same change (and the audit's census). Never weaken a test to make macOS
+  green; a file joins `notYet` only for a capability not ported yet, with
+  that cause.
 * Linux CI is unchanged and stays the authority for Linux: run tests.yml
   and tests-arm64.yml (and static-decisions.yml for a front-end change) on
   the branch with workflow_dispatch before a port change merges. A

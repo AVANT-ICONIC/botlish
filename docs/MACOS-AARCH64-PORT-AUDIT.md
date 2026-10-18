@@ -76,13 +76,16 @@ AArch64 puts it at the bottom (`runtime/framewalk.rs`'s header). On Linux
 x86-64 the same probe shows no frame pointer, which is why
 `.cargo/config.toml` forces one there.
 
-**Tcl.** Homebrew's `tcl-tk` is Tcl **9.0.4** (`tclsh9.0`, tcltest 2.5.11;
-`tcl-tk@8` 8.6.18 is preinstalled and irrelevant), not the Linux pin 9.0.1.
-`tcl_platform(os)` is `Darwin`, `machine` `arm64`, so
-`core::cabi::hostTarget` is `macos-aarch64`. Tcl's system encoding and
-stdout encoding are `utf-8` whatever LANG/LC_ALL say (unset, `C`,
-`C.UTF-8`, `en_US.UTF-8`): the Linux `C.utf8` precaution is unnecessary
-there, and harmless.
+**Tcl.** The CI builds the repository's baseline, Tcl 9.0.1, from its
+pinned source release (tests/platform/setup-macos.sh). Homebrew's
+`tcl-tk`, which the first runs used, is Tcl **9.0.4**, and that is not
+equivalent: its Unicode 17 case tables make the Tcl backends'
+`str::lowercase` disagree with Botlish's Unicode 16 semantics, which the
+native runtime keeps (section 15). `tcl_platform(os)` is `Darwin`,
+`machine` `arm64`, so `core::cabi::hostTarget` is `macos-aarch64`. Tcl's
+system encoding and stdout encoding are `utf-8` whatever LANG/LC_ALL say
+(unset, `C`, `C.UTF-8`, `en_US.UTF-8`): the Linux `C.utf8` precaution is
+unnecessary there, and harmless.
 
 **What Botlish does there today** (with the native backend built by the
 ordinary `cargo build --release --manifest-path native/Cargo.toml`):
@@ -250,7 +253,7 @@ FFI), behind the same portable `io::IO` context trait.
 | tests/cffi/fixture.c :124-154, :180-202 (`bcf_dirty_*` and the other assembly) | inline assembly with ELF directives and bare labels | elf + test | a Mach-O variant of the AArch64 functions (`_` labels, no `.type`) | low | 7 | M |
 | tests/c-ffi.test :25-26 `linuxNative`, :36-50 (fixture build: `cc -c -O2 -fPIC`, `ar rcs`) | the fixture is built on Linux only | test | build it on macOS too (static archives work, section 1) | low | 7 | M |
 | tests/c-ffi.test `cf-scalar-transport` (:427-430); audit/c-ffi/tools/fuzz.tcl :65-66 | plain char unsigned when `tcl_platform(machine)` is `aarch64` *or* `arm64` | test | **wrong on macOS** (signed, section 1): take signedness from `core::cabi::target [core::cabi::hostTarget]` | low | 7 | L |
-| tests/c-ffi.test `tclLinkable` (:55), examples/ffi/tcl/tcl.bot :17 | `-ltcl9.0` (Debian's library name) | test | Homebrew's is `libtcl9.0.dylib` under `$(brew --prefix tcl-tk)/lib`: verify, with `-L` | low | 10 | M |
+| tests/c-ffi.test `tclLinkable` (:55), examples/ffi/tcl/tcl.bot :17 | `-ltcl9.0` (Debian's library name, on the default library path) | test | the CI's Tcl 9.0.1 build installs `libtcl9.0.dylib` under `~/.cache/botlish/tcl-9.0.1/lib`: link it with `-L`, verify | low | 10 | M |
 | examples/ffi/sha256/boringssl.bot :23 | `extern c library "stdc++"` (GNU libstdc++) | linux | macOS links `c++` (libc++): a per-OS library list is a language question (C-FFI.md has no conditional `extern c library`) | medium | 10 | M |
 | tests/c-ffi.test `cf-missing-library` (:529), `cf-sha256-executable` (:732-739, `ldd`) | GNU ld wording; `ldd` | test | Apple ld wording; `otool -L` | low | 7 | M |
 
@@ -277,7 +280,7 @@ native tests carry no host constraint at all.
 
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
-| .devcontainer/setup.sh | apt, `dpkg --print-architecture`, the Tcl 9.0.1 `.deb`s | linux | tests/platform/setup-macos.sh is macOS's (Homebrew tcl-tk) | -- | 1 (done) | -- |
+| .devcontainer/setup.sh | apt, `dpkg --print-architecture`, the Tcl 9.0.1 `.deb`s | linux | tests/platform/setup-macos.sh is macOS's: the same Tcl 9.0.1, built from single/build.sh's pinned source (no 9.0.1 package exists for macOS; Homebrew's 9.0.4 changes Unicode case mapping) | -- | 1 (done) | -- |
 | .github/actions/build-native | cache keyed by `runner.os` and `runner.arch` | -- | none: reused unchanged on macOS | -- | 1 (done) | M (done) |
 | audit/*/tools/mutate.tcl, audit/golden/tools/tree.tcl :151, :244 | `exec timeout` (GNU coreutils; tree.tcl :244 is used by check.tcl) | linux | macOS has no `timeout`: guard or replace before running the mutation harnesses or check.tcl there | low | 10 | M |
 | audit/2048/mutate.tcl :23 | `exec nproc` without a fallback | linux | as tests/local.tcl | low | 10 | M |
@@ -341,12 +344,17 @@ native tests carry no host constraint at all.
 ## 15. The macOS census
 
 What the repository's own tests do on a `macos-15` runner with the native
-backend built: run 2 of the workflow (at aac30aa, before main's merge),
-every `tests/*.test` file on interp in three shards (`tests/all.tcl
+backend built: run 2 of the workflow (at aac30aa, before main's later
+merge), every `tests/*.test` file on interp in three shards (`tests/all.tcl
 -file`), every golden suite on all four backends, and probes of the native
-runtime; then the files that failed, rerun alone (run @DIAGRUN@,
-`CI-Tests:`) to read their causes. `tclsh9.0 tests/platform/tier.tcl all`
-(`[ci-full]` with `CI-Tests: all`) reproduces it.
+runtime; then the files that failed, rerun alone with `[ci-full]` and
+`CI-Tests:` (runs 4 and 5) to read their causes. `tclsh9.0
+tests/platform/tier.tcl all` (`[ci-full]` with `CI-Tests: all`) reproduces
+it.
+
+The census ran under Homebrew's Tcl 9.0.4; the rerun of run 5 under the
+repository's baseline Tcl 9.0.1, which the CI uses since (section 16).
+That difference turned out to matter (below, "The Tcl version").
 
 **Tcl test files** (interp; the test files run every program on the
 native backends too, whatever CORE_BACKEND says):
@@ -358,25 +366,64 @@ native backends too, whatever CORE_BACKEND says):
 | 3/3 | 63 | 2375 | 89 | 94 | 426 s |
 | **all** | **188** | **7399** | **123** | **352** | |
 
-171 of the 188 files pass. The skips are the Linux host constraints of
+Under Tcl 9.0.4, 171 of the 188 files passed. The skips are the Linux host constraints of
 section 11 (`executableAot` 131, `nativeLinux` 117, `linuxX86_64` 45,
 `cfFixture` 40, `stubLinker` 7, `nativeStackGuard` 4, `linuxAarch64` 2,
 `boringssl` 2, and single ones: `readelf`, `rustcAvailable`,
 `singleExecutable`, `tclLibrary`). The 17 files with failures, their
-causes and owners -- tests/platform/tier.tcl's `notYet` holds the same
-list, which the acceptance tier leaves out:
+causes and owners -- tests/platform/tier.tcl's `notYet` holds the first
+15, which the acceptance tier leaves out:
 
-@CENSUS-TABLE@
+| File | Failed (interp) | Cause | Milestone |
+|---|---:|---|---|
+| affine.test | 31 | native coroutines: the coroutine handle is the primitive affine value | 4 |
+| branch-form-boolean.test | 3 | native coroutines | 4 |
+| c-abi-types.test | 1 (`ca-affine-coroutines`) | native coroutines | 4 |
+| c-ffi.test | 1 (`cf-missing-library`) | a C call's link is refused before the linker runs, so the linker's words for a missing library never appear | 6, 7 |
+| compilation-isolation.test | 3 | native coroutines (one is a golden suite: the golden runner is a coroutine) | 4 |
+| coroutines.test | 39 | native coroutines | 4 |
+| enums.test | 1 (`enum-coroutine-events`) | native coroutines | 4 |
+| error-payloads.test | 8 | native coroutines (affine payloads) | 4 |
+| hir-interchange.test | 5 | native coroutines (its sample program has one) | 4 |
+| mutable-array.test | 6 | native coroutines (affine elements) | 4 |
+| mutable-vector.test | 11 | native coroutines (affine elements, consuming loops) | 4 |
+| namespaced-errors.test | 2 | native coroutines | 4 |
+| native-listloop.test | 1 | native coroutines | 4 |
+| static-compile.test | 2 | native coroutines | 4 |
+| structural-contract-completions.test | 3 | native coroutines | 4 |
+| argv.test | 1 (`argv-focused-valid-fuzz`) | Tcl 9.0.4 (below); passes with 9.0.1 (run 5) | -- |
+| native-tcl-unicode.test | 5 | Tcl 9.0.4 (below); passes with 9.0.1 (run 5) | -- |
 
-**Golden suites.** Every suite passes on interp and compile. On both
+With the baseline Tcl, then, 173 of the 188 files pass, and every one of
+the 15 that does not fails on a capability the port has not reached yet:
+14 on native coroutines, which every native run of an affine value
+needs, and one on C linking. @CBINDGEN@
+
+**The Tcl version.** Botlish's `str::lowercase` is the Unicode 16 simple
+mapping on every backend (README.md, "Strings"). The native runtime pins
+it (`rt_str_lower` leaves the Unicode 17 additions alone: U+A7CE, U+A7D2,
+U+A7D4, Beria Erfe U+16EA0..U+16EB8), and the Tcl backends inherit Tcl's
+tables, which are Unicode 16 in the baseline 9.0.1. Homebrew's Tcl 9.0.4
+has Unicode 17 tables, so under it the interpreter and the Tcl compiler
+lowercase those capitals and disagree with native code: five tests of
+native-tcl-unicode.test, four of the golden unicode-strings.bot and one
+iteration of argv.test's fuzz, whose differential uppercases random
+multi-byte arguments. All of them pass under 9.0.1. The deviation is the
+reference implementation's, not macOS's: Linux with any Tcl newer than the
+pin would show it too. It is why the CI builds Tcl 9.0.1 from source on
+macOS rather than taking Homebrew's.
+
+**Golden suites.** Every suite passes on interp and compile (under Tcl
+9.0.4 all but `unicode-strings.bot`, 4 of whose 56 tests failed; under
+9.0.1 it passes, run 5). On both
 native backends every suite aborts with `native coroutines need stack
 switching, implemented for x86-64 Linux only (COROUTINES.md) (NATIVE
 UNSUPPORTED value)`: the golden runner, `lib/test.bot`, is itself a
 coroutine, so no native golden run is possible before milestone 4. The
 two `golden-host: linux-x86_64` suites are compiled and not run, as
 designed. (The second golden shard was cancelled by a later push before
-it finished; its suites passed on interp and compile in the acceptance
-tier, run @ACCRUN@.)
+it finished; its suites ran on interp and compile in the acceptance
+tier of run 4.)
 
 **Native runtime probes** (botlish-native and main.tcl, run 2):
 
@@ -418,10 +465,11 @@ syscall and executables are their refusals above; a C call is
 `NATIVE LINK` with the executable-emission refusal. On Linux every one
 gives its value.
 
-**Nothing silently wrong was found.** Every capability either works,
-refuses with a stated error, or -- the native stack overflow -- crashes the
-driver, which main.tcl reports as `NATIVE BUG`. No probe or test produced a
-wrong value on macOS.
+**No native code produced a wrong value.** Every native capability either
+works, refuses with a stated error, or -- the native stack overflow --
+crashes the driver, which main.tcl reports as `NATIVE BUG`. The only wrong
+values the census found were the Tcl backends' under Tcl 9.0.4 (above), a
+property of that Tcl, not of macOS.
 
 ## 16. CI and test tiers
 
@@ -435,10 +483,10 @@ secret or a self-hosted runner.
 
 | Job | Tier | Runner | What | Typical time |
 |---|---|---|---|---|
-| `smoke` | A | `macos-15` | host facts (fails unless `Darwin`/`arm64`, not Rosetta); `tests/platform/toolchain-smoke.sh`; `tests/platform/setup-macos.sh`; `tests/platform/cabi-facts.tcl`; the native build (`.github/actions/build-native`, cached); `cargo test --lib`; `tests/platform/native-status.tcl`; `tier.tcl smoke` | @SMOKE@ |
-| `acceptance` (2 shards) | B | `macos-15` | `tier.tcl -shard I/2 -backends interp acceptance` | @ACCEPTANCE@ |
-| `linux-control` | A | `ubuntu-latest` | the smoke commands on Linux x86-64 at the same commit | @LINUX@ |
-| `full` (3 shards) | C | `macos-15` | opt-in (below) | @FULL@ |
+| `smoke` | A | `macos-15` | host facts (fails unless `Darwin`/`arm64`, not Rosetta); `tests/platform/toolchain-smoke.sh`; `tests/platform/setup-macos.sh`; `tests/platform/cabi-facts.tcl`; the native build (`.github/actions/build-native`, cached); `cargo test --lib`; `tests/platform/native-status.tcl`; `tier.tcl smoke` | 1 min 18 s with warm caches (run 4); about 3 min more for the one-time Tcl build |
+| `acceptance` (2 shards) | B | `macos-15` | `tier.tcl -shard I/2 -backends interp acceptance` | 20 and 27 min (run 4) |
+| `linux-control` | A | `ubuntu-latest` | the smoke commands on Linux x86-64 at the same commit | 1-4 min |
+| `full` (3 shards) | C | `macos-15` | opt-in (below) | 4-5 min for a dozen named files (runs 4 and 5); 4 s for a shard with nothing to run; the default payload was not run in milestone 1 |
 
 - **Triggers:** `push` to any branch (so a feature branch is tested before
   the workflow is on main), `pull_request` (a same-repository pull request
@@ -543,7 +591,7 @@ Co-Authored-By: ...
 |---|---|
 | `Host` | not an arm64 macOS runner (the label changed meaning) |
 | `Toolchain smoke` | the runner's C or Rust toolchain: an image problem, not Botlish |
-| `Install prerequisites` | Homebrew's tcl-tk or rustup (network, a formula rename, Tcl 10) |
+| `Install prerequisites` | the Tcl 9.0.1 source build (its download, or an Xcode change breaking `configure`; the cache hides it until the script changes) or rustup |
 | `C ABI facts` | core::cabi's `macos-aarch64` row disagrees with Apple clang: a Botlish target-table bug |
 | `Build native` / `Native Rust unit tests` | the native crate on macOS: a Botlish change that compiles only on Linux, or a runtime unit test |
 | `Native status` | a native capability changed behavior (section 15): intended, then record it; otherwise a regression |
@@ -735,7 +783,7 @@ the census. Report: MACOS-AARCH64-MILESTONE-1.md.
 - **Prerequisites:** 9.
 - **Acceptance:** the census is all green (`CI-Tests: all`), the 2048
   workload runs natively and as an executable, the Tcl and BoringSSL
-  acceptance link on macOS (Homebrew's Tcl, libc++); this document's
+  acceptance link on macOS (the CI's Tcl build, libc++); this document's
   findings are closed or recorded as non-goals.
 - **macOS CI:** the full matrix; Tier B grows to the whole suite.
 - **Linux risks:** none specific.

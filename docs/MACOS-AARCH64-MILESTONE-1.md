@@ -20,8 +20,9 @@ milestones, is MACOS-AARCH64-PORT-AUDIT.md.
 - **Host-generic scripts** in `tests/platform/`: the toolchain smoke, the
   C ABI fact check, the macOS prerequisites, the native status check and
   the tier runner, each runnable locally exactly as CI runs it.
-- **A census** of what the existing tests do on macOS arm64 today (171 of
-  188 test files pass, every golden suite passes on the Tcl backends), and
+- **A census** of what the existing tests do on macOS arm64 today (173 of
+  188 test files pass with the baseline Tcl; every golden suite passes on
+  the Tcl backends), and
   an opt-in mechanism (`[ci-full]` plus `CI-Tests:` trailers) that ran
   from this branch.
 - **A roadmap** of nine further milestones, each independently mergeable.
@@ -92,26 +93,49 @@ golden manifest and its census do not see them.
 
 ## Tcl
 
-Homebrew's `tcl-tk` formula, **Tcl 9.0.4** with tcltest 2.5.11 (about 15
-seconds to install from bottles, with libtommath), at
-`/opt/homebrew/opt/tcl-tk/bin/tclsh9.0`; setup-macos.sh appends that
-directory to the job's PATH and requires 9.x and tcltest 2.5. The Linux
-baseline stays 9.0.1 (AGENTS.md): Homebrew offers no 9.0.1, and the two
-differ in nothing the census found to matter (@TCLDIFF@). `tcl-tk@8`
-8.6.18 is also preinstalled and never used. Tcl's encodings are UTF-8 on
-macOS with any locale, so the workflow sets no LANG.
+**The repository's baseline, Tcl 9.0.1** (AGENTS.md), built once from the
+source release single/build.sh pins (the same version and sha256, from
+SourceForge, `unix/configure --prefix`, `make install`) by
+tests/platform/setup-macos.sh into `~/.cache/botlish/tcl-9.0.1`, which
+`.github/actions/setup-macos` caches; the script requires exactly 9.0.1
+and tcltest 2.5.
+
+The first runs used Homebrew's `tcl-tk`, which is **Tcl 9.0.4** (tcltest
+2.5.11; 15 seconds from bottles). That was a mistake the census caught:
+Tcl 9.0.4 has Unicode 17 case tables, so on the Tcl backends
+`str::lowercase` maps the Unicode 17 capitals (U+A7CE, U+A7D2, U+A7D4,
+Beria Erfe U+16EA0..U+16EB8) that Botlish's Unicode 16 semantics -- which
+the native runtime keeps on purpose (`rt_str_lower`) -- leave alone. The
+interpreter and the Tcl compiler then disagreed with native code in
+tests/native-tcl-unicode.test (5 tests), the golden `unicode-strings.bot`
+(4 tests) and, through its uppercasing differential, tests/argv.test's
+fuzz (1). Under Tcl 9.0.1, built from source, all three pass on macOS (run 5). The same would happen on Linux with any Tcl newer than
+the pin. `tcl-tk@8` 8.6.18 is preinstalled on the image and never used.
+Tcl's encodings are UTF-8 on macOS with any locale, so the workflow sets
+no LANG.
 
 ## What passed in CI
 
-@RUNS@
+Every run is of `.github/workflows/macos-arm64.yml` on the feature branch
+`ccr-ea92b43b-fbi8ez`, triggered by an ordinary `git push`, before the
+workflow existed on main.
+
+| Run | Commit | What it ran | Result |
+|---|---|---|---|
+| [1](https://github.com/mwagner-webdev/botlish/actions/runs/39100974080) | 62e3064 | exploratory: host facts, the toolchain smoke, Homebrew Tcl, cabi-facts, examples, six test files, the native build and probes | green: Mach-O arm64 C and Rust executables; the native crate builds, 215 unit tests pass, the JIT runs the samples; executables refused |
+| [2](https://github.com/mwagner-webdev/botlish/actions/runs/39101335542) | aac30aa | the census (three shards of every test file on interp), golden suites on four backends (two shards), runtime probes | the census of section 15; the second golden shard cancelled by run 3's push |
+| [3](https://github.com/mwagner-webdev/botlish/actions/runs/39102407410) | 609d06d | the first tiered workflow, `[ci-full]` | cancelled: its ubuntu `plan` job sat in the queue (replaced in 542f054) |
+| [4](https://github.com/mwagner-webdev/botlish/actions/runs/39102645922) | 542f054 | the tiered workflow; `[ci-full]` with `CI-Tests:` naming 12 census files | smoke and Linux control green; Tier C ran the 12 files in one shard (the other two stopped after 4 s) and reported their causes; acceptance shard 2 green, shard 1 failed only `unicode-strings.bot` (Tcl 9.0.4) |
+| [5](https://github.com/mwagner-webdev/botlish/actions/runs/39104616134) | 073e331 (main merged) | Tcl 9.0.1 built from source; `[ci-full]` with `CI-Tests:` naming 8 items | the Tcl build and the Linux control green; Tier C: argv.test, native-tcl-unicode.test and unicode-strings.bot pass under 9.0.1, the five coroutine files fail as recorded; its smoke and acceptance were superseded by run 6 |
+@RUN6@
 
 ## Botlish on macOS today
 
 MACOS-AARCH64-PORT-AUDIT.md, sections 1 and 15. In short: the front end,
 the interpreter and the Tcl compiler run everything; the native crate
 builds and its unit tests pass; the JIT runs programs; the GC frame walk
-works under stress; 171 of 188 Tcl test files and every golden suite on
-the Tcl backends pass; coroutines (and so the native golden runner),
+works under stress; 173 of 188 Tcl test files (with Tcl 9.0.1) and every
+golden suite on the Tcl backends pass; coroutines (and so the native golden runner),
 Linux syscalls, executables and C calls refuse explicitly; a native stack
 overflow crashes the driver.
 
@@ -133,11 +157,45 @@ a milestone lands.
 
 ## Feature-branch remote testing, verified
 
-@VERIFIED@
+1. **Feature branch:** every change is on `ccr-ea92b43b-fbi8ez`.
+2. **Pushed:** runs 1-6 were started by ordinary pushes to it.
+3. **Executed from the branch before merge:** the workflow is new; it ran
+   from its very first commit on the branch.
+4. **Native ARM64:** `uname -m` `arm64`, `sysctl.proc_translated` 0 -- the
+   smoke job's Host step fails otherwise (runs 4-6).
+5. **C:** compiled, linked (also against a static archive with `-L -l`),
+   run, and `file` says `Mach-O 64-bit executable arm64`.
+6. **Rust:** rustc and Cargo executables built and run, Mach-O arm64.
+7. **Tcl:** 9.0.1 built from the pinned source and checked (patchlevel and
+   tcltest 2.5) in every macOS job since run 5; Homebrew's 9.0.4 before.
+8. **Botlish tests on macOS:** the smoke tier (runs 4-6), the acceptance
+   tier (runs 4 and 6), the census (run 2).
+9. **Linux:** below.
+10. **The opt-in trigger:** `[ci-full]` with `CI-Tests:` in runs 4 and 5
+    (one shard working, two stopping at once), and with a tier and
+    `CI-GC-Stress: 1` in run 6 (three shards under GC stress) -- each a
+    light payload, a few minutes of runner time.
 
 ## CI time and resources
 
-@RESOURCES@
+- **Runner:** 3 vCPUs, 7 GiB, an "Apple M1 (Virtual)". The census's
+  shards ran 62-63 test files in 7-10 minutes each, so the whole Tcl suite
+  on one backend is about 27 minutes of macOS runner time.
+- **Caches:** the native build (`native-cargo-macOS-ARM64-...`, about 107
+  MB compressed) takes about 1 minute cold and 20 seconds warm; the Tcl
+  9.0.1 build about 2 minutes once (run 5's setup step, rustup included,
+  took 2 min 37 s cold).
+- **Jobs:** with warm caches the smoke job takes 1 min 18 s, an
+  acceptance shard 20-27 minutes (shard 1 holds the slowest golden suite,
+  mutable-array.bot, 171 s to compile), the Linux control 1-4 minutes, a
+  Tier C shard with nothing to do 4 seconds.
+- **Queues:** the account runs at most 5 macOS jobs at once (run 2's sixth
+  job waited), and all jobs share its total limit with main's Linux
+  workflows: when main is busy, a macOS run waits minutes for a runner
+  (run 3's ubuntu planner stalled; runs 4 and 5 queued 3-5 minutes).
+- **Logs:** the GitHub MCP server returns at most the last 5000 lines of
+  a job log; a long tier.tcl run's early output (run 5's affine.test
+  failures) falls outside it, while its summary, at the end, never does.
 
 ## Remaining infrastructure blockers
 
@@ -202,6 +260,12 @@ program that recurses deeply on macOS dies today instead of failing with
   Linux workflows (the account's shared concurrency); removed.
 - **A push cancels the branch's running run** (the concurrency rule, as
   designed): the census's second golden shard was lost that way.
+- **Homebrew's Tcl is not the baseline Tcl.** 9.0.4's Unicode 17 case
+  tables made the Tcl backends deviate from Botlish's Unicode 16 strings
+  (three files); the CI now builds 9.0.1 from the pinned source.
+- **Artifacts cannot be downloaded from this sandbox** (GitHub serves them
+  from Azure blob storage, which its network policy refuses); job logs
+  through the GitHub MCP server can, up to their last 5000 lines.
 - **Main moved by 440 files during the milestone** (C-BINDGEN); merging it
   touched none of this milestone's files but shifted line numbers the
   audit cites, which were rechecked.

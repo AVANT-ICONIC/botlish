@@ -59,7 +59,6 @@ set smokeFiles {
 # on macOS for a capability not ported yet is added with its cause.
 set notYet {
     affine.test                            {4 native coroutines}
-    argv.test                              {- Tcl 9.0.4's Unicode 17 case tables}
     branch-form-boolean.test               {4 native coroutines}
     c-abi-types.test                       {4 native coroutines}
     c-ffi.test                             {7 C calls are refused before the linker runs}
@@ -72,7 +71,6 @@ set notYet {
     mutable-vector.test                    {4 native coroutines}
     namespaced-errors.test                 {4 native coroutines}
     native-listloop.test                   {4 native coroutines}
-    native-tcl-unicode.test                {- Tcl 9.0.4's Unicode 17 case tables}
     static-compile.test                    {4 native coroutines}
     structural-contract-completions.test   {4 native coroutines}
 }
