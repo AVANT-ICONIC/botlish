@@ -26,6 +26,11 @@ linux::abi::x86_64::syscall            (access read|write, escape noescape|...),
  in lib/linux.bot)             vocabulary; the test fixture's operations
 ```
 
+> Continued by C-FFI.md: `extern c fn` and `extern c library` attach this
+> contract to real C functions, call them natively and link them (section
+> 14's hook, filled; SHA256's result is now a truthful pointer, declared
+> `alias out`, C-FFI.md section 7).
+
 There is no C call yet, and no `extern c fn`. What exists is the contract
 the next milestone attaches to a C parameter, the compiler's decision and
 transport for it, and a synthetic, test-only foreign call boundary (the

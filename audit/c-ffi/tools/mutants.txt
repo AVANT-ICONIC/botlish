@@ -1,0 +1,340 @@
+# Mutants of `extern c fn` and `extern c library` (audit/c-ffi/tools/
+# mutate.tcl; C-FFI.md): each a deliberate bug in the declaration grammar
+# (surface/parser.tcl), the registration and link plan (hir/foreign.tcl),
+# the borrow admission (hir/borrow.tcl), the direct analysis (hir/direct.tcl),
+# HIR interchange (hir/interchange.tcl), the Tcl refusal (core/cabi.tcl),
+# native lowering (native/lower.tcl), the C call's code generation
+# (native/src/codegen/clif.rs), its runtime helpers (native/src/runtime/
+# ffi.rs) or the link step (native/src/codegen/aot.rs). The brief's mutants
+# come first, then further ones.
+#
+#   @@ NAME DESCRIPTION
+#   ## FILE
+#   <<<<
+#   text to replace (must occur exactly once in FILE)
+#   ====
+#   replacement
+#   >>>>
+#
+# Lines starting with # outside an edit are comments.
+
+# --- the brief's mutants -----------------------------------------------------
+
+@@ named-ignored the parser reads `named "SYMBOL"` and drops it: every link symbol is the Botlish name
+## surface/parser.tcl
+<<<<
+        Advance p
+        set symbol [dict get $token value]
+        set symbolSpan [dict get $token span]
+====
+        Advance p
+        set symbol ""
+        set symbolSpan [dict get $token span]
+>>>>
+
+@@ botlish-name-as-symbol native lowering's foreign table names the Botlish qualified name as the symbol, not the declaration's link symbol
+## native/lower.tcl
+<<<<
+        lappend header "foreign [ForeignIndex $key] [Quote [dict get $record symbol]] params=
+====
+        lappend header "foreign [ForeignIndex $key] [Quote [string map {:: _} $key]] params=
+>>>>
+
+@@ library-dropped the link plan loses the last library a program declares
+## hir/foreign.tcl
+<<<<
+    set links $plan
+}
+====
+    set links [lrange $plan 0 end-1]
+}
+>>>>
+
+@@ unsigned-result-sign-extended a narrow unsigned C result is sign-extended from its width
+## native/src/codegen/clif.rs
+<<<<
+            let wide = if class.signed() {
+                self.b.ins().sextend(I64, returned)
+====
+            let wide = if class.signed() || true {
+                self.b.ins().sextend(I64, returned)
+>>>>
+
+@@ signed-result-zero-extended a narrow signed C result is zero-extended from its width
+## native/src/codegen/clif.rs
+<<<<
+            let wide = if class.signed() {
+                self.b.ins().sextend(I64, returned)
+====
+            let wide = if class.signed() && false {
+                self.b.ins().sextend(I64, returned)
+>>>>
+
+@@ long-always-64 the ABI class of C long (and unsigned long) is 64 bits whatever the target says
+## hir/foreign.tcl
+<<<<
+    set info [core::type::cabiScalar $type]
+    return [expr {[dict get $info signed] ? "i" : "u"}][dict get $info bits]
+====
+    set info [core::type::cabiScalar $type]
+    if {[string match *::Long $type] || [string match *::ULong $type]} {
+        return [expr {[dict get $info signed] ? "i" : "u"}]64
+    }
+    return [expr {[dict get $info signed] ? "i" : "u"}][dict get $info bits]
+>>>>
+
+@@ pointer-untag-forgotten a raw C pointer argument is passed as its tagged C address word, not the address
+## native/src/codegen/clif.rs
+<<<<
+            } else if class == nir::CAbi::Ptr {
+                self.b.ins().sshr_imm_s(v, 4)
+====
+            } else if class == nir::CAbi::Ptr {
+                v
+>>>>
+
+@@ pointer-tag-forgotten a returned C address is used as a Botlish word without its C pointer tag
+## native/src/codegen/clif.rs
+<<<<
+            return self.b.ins().bor_imm_s(shifted, CPTR_TAG as i64);
+====
+            return self.b.ins().bor_imm_s(shifted, 0);
+>>>>
+
+@@ captures-borrow-allowed a parameter whose contract captures the pointer admits a temporary byte exposure (only an unknown escape is refused)
+## hir/borrow.tcl
+<<<<
+    if {![core::cabi::isNoescape $escape]} {
+        return [list problem [format \
+====
+    if {$escape eq "unknown"} {
+        return [list problem [format \
+>>>>
+
+@@ read-bytes-copied a read exposure is made of a private copy of the storage, not of the storage itself
+## native/lower.tcl
+<<<<
+    dict for {i how} $access {
+        if {$how eq "write"} {
+            set private [Assign fn "op mbytesclone [lindex $operands $i]" $e]
+            lset operands $i $private
+            dict set written $i $private
+        }
+    }
+====
+    dict for {i how} $access {
+        if {$how eq "write"} {
+            set private [Assign fn "op mbytesclone [lindex $operands $i]" $e]
+            lset operands $i $private
+            dict set written $i $private
+        } else {
+            lset operands $i [Assign fn "op mbytesclone [lindex $operands $i]" $e]
+        }
+    }
+>>>>
+
+@@ original-mutablebytes-mutated a write exposure hands C the owner's own storage, so the caller's MutableBytes changes
+## native/lower.tcl
+<<<<
+            set private [Assign fn "op mbytesclone [lindex $operands $i]" $e]
+            lset operands $i $private
+            dict set written $i $private
+====
+            set private [lindex $operands $i]
+            lset operands $i $private
+            dict set written $i $private
+>>>>
+
+@@ keepalive-dropped no keepalive of the exposed storage after the C call
+## native/lower.tcl
+<<<<
+        set result [Assign fn "[dict get $natives $name] [join $operands { }]" $e]
+    }
+    KeepExposedAlive fn $operands $e
+====
+        set result [Assign fn "[dict get $natives $name] [join $operands { }]" $e]
+        KeepExposedAlive fn $operands $e
+    }
+>>>>
+
+@@ argument-after-exposure a read exposure is made where its argument is evaluated, so later arguments' code runs while it is open
+## native/lower.tcl
+<<<<
+            set register [StorageOf fn $arg [lindex [hir::typeOf $hir $arg] 1]]
+        } else {
+====
+            set register [StorageOf fn $arg [lindex [hir::typeOf $hir $arg] 1]]
+            if {[dict get $access $index] eq "read" && $register ne "never"} {
+                set register [ExposeStorage fn $register [hir::borrow::IsMutableOwner [hir::typeOf $hir $arg]] $e]
+            }
+        } else {
+>>>>
+## native/lower.tcl
+<<<<
+    dict for {i how} $access {
+        # The address op follows the storage's kind (a MutableBytes' storage
+====
+    dict for {i how} $access {
+        if {$how eq "read"} continue
+        # The address op follows the storage's kind (a MutableBytes' storage
+>>>>
+
+@@ every-extern-direct every call of a C function is an authority source, noescape ones included
+## hir/direct.tcl
+<<<<
+        set retains [core::cabi::RetainingParameters [dict get [core::native::metadata $name] foreign]]
+        if {$retains ne {}} {
+====
+        set retains [core::cabi::RetainingParameters [dict get [core::native::metadata $name] foreign]]
+        if {1} {
+>>>>
+
+@@ retaining-not-direct a call of a C function that may retain a pointer is an ordinary call
+## hir/direct.tcl
+<<<<
+        set retains [core::cabi::RetainingParameters [dict get [core::native::metadata $name] foreign]]
+        if {$retains ne {}} {
+====
+        set retains [core::cabi::RetainingParameters [dict get [core::native::metadata $name] foreign]]
+        if {0} {
+>>>>
+
+@@ nearest-library each C function is associated with the last library its own unit declares, and only libraries some function is associated with are linked
+## hir/foreign.tcl
+<<<<
+    set links $plan
+}
+====
+    set near {}
+    foreach decl $decls {
+        set best ""
+        foreach link $linkDecls {
+            if {[dict get $link namespace] eq [dict get $decl namespace]} {
+                set best [dict get $link library]
+            }
+        }
+        if {$best ne "" && $best ni $near} {
+            lappend near $best
+        }
+    }
+    set links [lmap entry $plan {
+        if {[dict get $entry library] ni $near} continue
+        set entry
+    }]
+}
+>>>>
+
+@@ extern-state-shared activating a HIR does not re-install its own extern declarations: it reads whichever compilation registered last
+## hir/foreign.tcl
+<<<<
+    Reset
+    foreach {native meta} [dict get $state natives] {
+        dict set ::core::native::registry $native $meta
+    }
+    set registry [dict get $state registry]
+    set links [dict get $state links]
+}
+====
+}
+>>>>
+
+@@ interchange-loses-foreign HIR interchange text drops the HIR's extern declarations (its foreign side table)
+## hir/interchange.tcl
+<<<<
+        set hir [dict remove $hir traitSource]
+====
+        set hir [dict remove $hir traitSource foreign]
+>>>>
+
+# --- further mutants ----------------------------------------------------------
+
+@@ alias-check-dropped a pointer result declared an alias of its argument is never compared with it
+## native/src/codegen/clif.rs
+<<<<
+        if let (Some(alias), Some(returned)) = (decl.alias, returned) {
+====
+        if let (Some(alias), Some(returned), false) = (decl.alias, returned, true) {
+>>>>
+
+@@ address-masked a returned address the C pointer word cannot hold is masked into one instead of failing
+## native/src/codegen/clif.rs
+<<<<
+            let fits = self.b.ins().icmp(IntCC::Equal, back, returned);
+            let ok = self.b.create_block();
+            let bad = self.b.create_block();
+            self.b.ins().brif(fits, ok, &[], bad, &[]);
+            self.b.switch_to_block(bad);
+            let name = self.string(&decl.name);
+            self.fail_with("rt_ffi_bad_address", &[self.vm, name, returned]);
+====
+            let fits = self.b.ins().icmp(IntCC::Equal, back, back);
+            let ok = self.b.create_block();
+            let bad = self.b.create_block();
+            self.b.ins().brif(fits, ok, &[], bad, &[]);
+            self.b.switch_to_block(bad);
+            let name = self.string(&decl.name);
+            self.fail_with("rt_ffi_bad_address", &[self.vm, name, returned]);
+>>>>
+
+@@ unsigned-64-result-boxed-signed a 64-bit unsigned C result beyond the small range is boxed as a signed one
+## native/src/codegen/clif.rs
+<<<<
+            (self.b.ins().icmp_imm_s(IntCC::UnsignedLessThan, returned, SMALL_MAX + 1), "rt_ffi_box_u64")
+====
+            (self.b.ins().icmp_imm_s(IntCC::UnsignedLessThan, returned, SMALL_MAX + 1), "rt_ffi_box_i64")
+>>>>
+
+@@ unsigned-64-argument-truncated a BigInt argument of a 64-bit unsigned C type beyond i64 is passed as 0
+## native/src/runtime/ffi.rs
+<<<<
+        None => n.to_u64().unwrap_or(0),
+====
+        None => 0,
+>>>>
+
+@@ link-group-dropped the declared libraries are passed to the linker without a group, so their order decides a static link
+## native/src/codegen/aot.rs
+<<<<
+        args.extend(["-C".to_string(), "link-arg=-Wl,--start-group".to_string()]);
+====
+>>>>
+## native/src/codegen/aot.rs
+<<<<
+        args.extend(["-C".to_string(), "link-arg=-Wl,--end-group".to_string()]);
+====
+>>>>
+
+@@ stub-links-c the stub linker accepts a program that calls C, linking none of its libraries
+## native/src/codegen/aot.rs
+<<<<
+        Ok("stub") if calls_c(program) => Err(format!(
+====
+        Ok("stub") if calls_c(program) && false => Err(format!(
+>>>>
+
+@@ tcl-backends-return-zero the Tcl backends run a C call as a call that returns 0
+## core/cabi.tcl
+<<<<
+proc core::cabi::ExternImpl {display args} {
+    core::semanticError NATIVE-ONLY \
+====
+proc core::cabi::ExternImpl {display args} {
+    return 0
+    core::semanticError NATIVE-ONLY \
+>>>>
+
+@@ unknown-provenance-exposed an exposure is admitted where the pointer result's provenance is unknown (it may point into the exposed storage)
+## hir/borrow.tcl
+<<<<
+    if {[hir::types::IsCPtr [dict get $contract result]] && [dict get $contract provenance] eq "unknown"} {
+====
+    if {0} {
+>>>>
+
+@@ extern-arity-unchecked a C call passing a different number of arguments than its signature is not a compile-time ARITY
+## hir/borrow.tcl
+<<<<
+    if {[core::native::isExtern $native] && [llength [dict get $node args]] != [llength $params]} {
+====
+    if {0} {
+>>>>

@@ -93,7 +93,7 @@ namespace eval hir::resolve {}
 # binding a namespace's own section scope declares to its qualified
 # spelling afterward, so no two modules' definitions ever share a lowered
 # core IR name either.
-proc hir::resolve::program {nodes mode origin {modules {}} {choices {}}} {
+proc hir::resolve::program {nodes mode origin {modules {}} {choices {}} {externs 0}} {
     set hir [hir::Empty $mode]
     dict set hir laterIndex [dict create]
     dict set hir methodChoices $choices
@@ -110,9 +110,13 @@ proc hir::resolve::program {nodes mode origin {modules {}} {choices {}}} {
         dict set hir top $top
         foreach section $modules {
             lappend roots {*}[ProgramSection hir $root [dict get $section namespace] \
-                [dict get $section nodes] [dict get $section origin]]
+                [dict get $section nodes] [dict get $section origin] $externs]
         }
         NoteBody hir $top $nodes
+        if {$externs} {
+            # The entry program's extern c fn names (hir/foreign.tcl).
+            hir::foreign::DeclareBindings hir $top ""
+        }
     } else {
         set top [NewScope hir ambient "" "" "" {host environment}]
         dict set hir top $top
@@ -138,10 +142,15 @@ proc hir::resolve::program {nodes mode origin {modules {}} {choices {}}} {
 # namespace NAMESPACE's own in HIR's `modules` table (consulted by
 # ResolveQualifiedRef and by hir::hygiene::qualifyModules). Returns the
 # section's own resolved ExprIds, in order (to append to `roots`).
-proc hir::resolve::ProgramSection {hirVar root namespaceName nodes origin} {
+proc hir::resolve::ProgramSection {hirVar root namespaceName nodes origin {externs 0}} {
     upvar 1 $hirVar hir
     set scope [NewScope hir program $root "" "" $origin]
     NoteBody hir $scope $nodes
+    if {$externs} {
+        # The module's extern c fn names (hir/foreign.tcl): declarations,
+        # visible from the section's start like its types.
+        hir::foreign::DeclareBindings hir $scope $namespaceName
+    }
     dict set hir modules $namespaceName $scope
     # Reverse index of `modules`, checked by IsModuleScope/hir::isModuleScope:
     # every binding this scope declares has module/program lifetime and
@@ -168,7 +177,9 @@ proc hir::resolve::IsModuleScope {hirVar s} {
 }
 
 proc hir::resolve::RootNames {} {
-    return [concat [core::native::names] {true false unit}]
+    # An extern c fn's native (extern#KEY, hir/foreign.tcl) is no root name:
+    # its one name is a binding of the unit that declares it.
+    return [concat [lsearch -all -inline -not -glob [core::native::names] extern#*] {true false unit}]
 }
 
 proc hir::resolve::NewScope {hirVar kind parent invocation owner origin} {
@@ -269,6 +280,18 @@ proc hir::resolve::Lookup {hirVar s name} {
     return ""
 }
 
+# The native (or root constant) name root binding BINDING denotes: its
+# symbol's, which is its own name for a root-scope binding and, for an
+# extern c fn's binding, its internal native name even before hygiene
+# renames the binding to it (hir/foreign.tcl).
+proc hir::resolve::RootNative {hir binding} {
+    set y [dict get $binding symbol]
+    if {$y ne "" && [dict exists $hir symbols $y]} {
+        return [dict get $hir symbols $y name]
+    }
+    return [dict get $binding name]
+}
+
 # The binding identity binding B denotes for the purpose of telling method
 # candidates apart: an alias (`at = list::at`) is the function it aliases, a
 # root native is the native, anything else is itself. Two candidates with one
@@ -278,7 +301,7 @@ proc hir::resolve::CandidateIdentity {hirVar b} {
     for {set depth 0} {$depth < 32} {incr depth} {
         set binding [dict get $hir bindings $b]
         if {[dict get $binding kind] eq "root"} {
-            return native:[dict get $binding name]
+            return native:[RootNative $hir $binding]
         }
         set d [dict get $binding declaredBy]
         if {$d eq "" || ![dict exists $hir exprs $d] || [dict get $hir exprs $d kind] ne "bind"
@@ -304,7 +327,7 @@ proc hir::resolve::CandidateArity {hirVar b} {
     set binding [dict get $hir bindings $b]
     if {[dict get $binding kind] eq "root"} {
         if {[dict get $binding symbol] ne "" && [dict get $hir symbols [dict get $binding symbol] kind] eq "native"} {
-            return [dict get [core::native::metadata [dict get $binding name]] arity]
+            return [dict get [core::native::metadata [RootNative $hir $binding]] arity]
         }
         return ""
     }

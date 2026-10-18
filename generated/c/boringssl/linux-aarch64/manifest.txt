@@ -1,0 +1,435 @@
+c-bindgen manifest (C-BINDGEN.md, "Manifest")
+generator_version 1
+profile boringssl
+profile_file tools/c-bindgen/profiles/boringssl.tcl 1797f440
+target linux-aarch64
+library boringssl
+source {url https://github.com/google/boringssl tag 0.20260929.0 commit 427ec40cc8edc545253289232e885708c409e5ea}
+revision 427ec40cc8edc545253289232e885708c409e5ea
+entry {
+    openssl/aead.h openssl/aes.h openssl/arm_arch.h openssl/asm_base.h
+    openssl/asn1.h openssl/asn1_mac.h openssl/asn1t.h openssl/base.h
+    openssl/base64.h openssl/bio.h openssl/blake2.h openssl/blowfish.h
+    openssl/bn.h openssl/buf.h openssl/buffer.h openssl/bytestring.h
+    openssl/cast.h openssl/chacha.h openssl/cipher.h openssl/cmac.h
+    openssl/cms.h openssl/conf.h openssl/configuration.h openssl/cpu.h
+    openssl/crypto.h openssl/ctrdrbg.h openssl/curve25519.h openssl/des.h
+    openssl/dh.h openssl/digest.h openssl/dsa.h openssl/e_os2.h
+    openssl/ec.h openssl/ec_key.h openssl/ecdh.h openssl/ecdsa.h
+    openssl/engine.h openssl/err.h openssl/evp.h openssl/evp_errors.h
+    openssl/ex_data.h openssl/hkdf.h openssl/hmac.h openssl/hpke.h
+    openssl/hrss.h openssl/is_boringssl.h openssl/kdf.h openssl/lhash.h
+    openssl/md4.h openssl/md5.h openssl/mem.h openssl/mldsa.h
+    openssl/mlkem.h openssl/nid.h openssl/obj.h openssl/obj_mac.h
+    openssl/objects.h openssl/opensslconf.h openssl/opensslv.h
+    openssl/ossl_typ.h openssl/params.h openssl/pem.h openssl/pkcs12.h
+    openssl/pkcs7.h openssl/pkcs8.h openssl/poly1305.h openssl/pool.h
+    openssl/posix_time.h openssl/prefix_symbols.h openssl/rand.h
+    openssl/rc4.h openssl/ripemd.h openssl/rsa.h openssl/safestack.h
+    openssl/service_indicator.h openssl/sha.h openssl/sha2.h
+    openssl/siphash.h openssl/slhdsa.h openssl/span.h openssl/stack.h
+    openssl/target.h openssl/thread.h openssl/time.h openssl/tls_prf.h
+    openssl/trust_token.h openssl/type_check.h openssl/types.h
+    openssl/x509.h openssl/x509_vfy.h openssl/x509v3.h
+    openssl/x509v3_errors.h openssl/xwing.h openssl/dtls1.h openssl/srtp.h
+    openssl/ssl.h openssl/ssl3.h openssl/tls1.h
+    }
+include include
+defines BORINGSSL_PREFIX=botlish_bssl
+undefines {}
+flags {}
+command {clang -E -x c --target=aarch64-linux-gnu -I$SRC/include -DBORINGSSL_PREFIX=botlish_bssl $TU/entry.c}
+toolchain_family clang
+toolchain_version {Ubuntu clang version 18.1.3 (1ubuntu1)}
+toolchain_target aarch64-linux-gnu
+toolchain_sysroot none
+user_label_prefix {}
+evidence llvm {Ubuntu clang version 18.1.3 (1ubuntu1)}
+preprocessed_tokens 91116
+header include/openssl/aead.h e6f0d715
+header include/openssl/aes.h 1448262
+header include/openssl/asn1.h 2ea5d10e
+header include/openssl/asn1t.h 06b76969
+header include/openssl/base.h 58a98e3d
+header include/openssl/base64.h 62485acf
+header include/openssl/bio.h 9223d952
+header include/openssl/blake2.h 96ff0b03
+header include/openssl/blowfish.h 7e993a71
+header include/openssl/bn.h 145bcfba
+header include/openssl/buf.h 132165a8
+header include/openssl/bytestring.h 85eececa
+header include/openssl/cast.h 954e5b6f
+header include/openssl/chacha.h f5c01830
+header include/openssl/cipher.h 7b102454
+header include/openssl/cmac.h 75de6419
+header include/openssl/cms.h a6ee32cf
+header include/openssl/conf.h 1406d0f0
+header include/openssl/crypto.h 33cb40ab
+header include/openssl/ctrdrbg.h f1385a0b
+header include/openssl/curve25519.h b51a5b38
+header include/openssl/des.h dd4d9cc7
+header include/openssl/dh.h e0c6d45a
+header include/openssl/digest.h c3408edd
+header include/openssl/dsa.h 257a6502
+header include/openssl/ec.h a53b63e9
+header include/openssl/ec_key.h 3dcf2af5
+header include/openssl/ecdh.h cec9e6bc
+header include/openssl/ecdsa.h 8bb4ccc2
+header include/openssl/engine.h ec1b3fc7
+header include/openssl/err.h 4bad8a21
+header include/openssl/evp.h f4fc5d5f
+header include/openssl/ex_data.h edb65dd1
+header include/openssl/hkdf.h dac885cb
+header include/openssl/hmac.h b21a00f9
+header include/openssl/hpke.h d7dedce9
+header include/openssl/hrss.h 1ff2e0b0
+header include/openssl/kdf.h 1d8979d0
+header include/openssl/md4.h Inf
+header include/openssl/md5.h 79971105
+header include/openssl/mem.h 7006bed3
+header include/openssl/mldsa.h 9ba1fda3
+header include/openssl/mlkem.h a2d30382
+header include/openssl/obj.h fe181dab
+header include/openssl/params.h 1087931d
+header include/openssl/pem.h eeb3daf2
+header include/openssl/pkcs7.h 1fea3e83
+header include/openssl/pkcs8.h 562ed5fc
+header include/openssl/poly1305.h f375fd6b
+header include/openssl/pool.h 6a64d0bb
+header include/openssl/posix_time.h b78a6b2c
+header include/openssl/prefix_symbols.h c640cad0
+header include/openssl/rand.h 7fa632d6
+header include/openssl/rc4.h 12a45fa1
+header include/openssl/ripemd.h 29ac3158
+header include/openssl/rsa.h 6d51945a
+header include/openssl/sha.h 7d282645
+header include/openssl/sha2.h 77434299
+header include/openssl/siphash.h 7bc566d6
+header include/openssl/slhdsa.h a5ae11ba
+header include/openssl/ssl.h 2bca110e
+header include/openssl/stack.h 2909ba43
+header include/openssl/thread.h 8f303658
+header include/openssl/tls_prf.h a04e9fff
+header include/openssl/trust_token.h 92c90265
+header include/openssl/x509.h ad70fdee
+header include/openssl/xwing.h e194ae08
+shim_library botlish_shim_boringssl_752c8e63
+file boringssl/aead.bot 336 81e1aeb0
+file boringssl/aes.bot 129 8357500e
+file boringssl/asn1.bot 1578 2b38a516
+file boringssl/asn1t.bot 40 87d938a4
+file boringssl/base.bot 8 c958c52a
+file boringssl/base64.bot 95 c17c9048
+file boringssl/bio.bot 790 b96bcabb
+file boringssl/blake2.bot 36 e8c967b7
+file boringssl/blowfish.bot 50 e60110f2
+file boringssl/bn.bot 877 97d87dc2
+file boringssl/buf.bot 80 5c833644
+file boringssl/bytestring.bot 665 0daeed86
+file boringssl/cast.bot 61 50ea9a20
+file boringssl/chacha.bot 17 07e2f985
+file boringssl/cipher.bot 639 273eb98e
+file boringssl/cmac.bot 61 c6c89127
+file boringssl/cms.bot 65 15277d28
+file boringssl/conf.bot 79 5071c239
+file boringssl/crypto.bot 148 1e1121b5
+file boringssl/ctrdrbg.bot 67 d561d729
+file boringssl/ctypes.bot 779 c7ce2ac4
+file boringssl/curve25519.bot 120 cc705775
+file boringssl/des.bot 109 407a2371
+file boringssl/dh.bot 234 ef596fdf
+file boringssl/digest.bot 310 2f36ca0d
+file boringssl/dsa.bot 330 24817672
+file boringssl/ec.bot 429 d0097f81
+file boringssl/ec_key.bot 281 0f3193a4
+file boringssl/ecdh.bot 30 16c0fe3d
+file boringssl/ecdsa.bot 165 c448a774
+file boringssl/engine.bot 54 38175411
+file boringssl/err.bot 244 6839a47d
+file boringssl/evp.bot 1194 f5d51c19
+file boringssl/evp_errors.bot 50 aa410e4f
+file boringssl/ex_data.bot 10 4abe43d4
+file boringssl/hkdf.bot 45 0c6a7254
+file boringssl/hmac.bot 102 51b6c838
+file boringssl/hpke.bot 368 88e276e9
+file boringssl/hrss.bot 52 9f702ea6
+file boringssl/kdf.bot 45 c05c73e1
+file boringssl/md4.bot 42 a29c225f
+file boringssl/md5.bot 42 f1ec2b80
+file boringssl/mem.bot 187 ab4e2190
+file boringssl/mldsa.bot 284 8d5d7d74
+file boringssl/mlkem.bot 109 50aaa561
+file boringssl/nid.bot 982 9f2cbd74
+file boringssl/obj.bot 137 bd4c45b9
+file boringssl/pem.bot 804 f7cfb25e
+file boringssl/pkcs7.bot 143 328f1338
+file boringssl/pkcs8.bot 166 b3f24869
+file boringssl/pool.bot 80 f15e1351
+file boringssl/posix_time.bot 26 39b19c80
+file boringssl/rand.bot 88 91092875
+file boringssl/rc4.bot 26 382ce556
+file boringssl/ripemd.bot 43 679adda5
+file boringssl/rsa.bot 615 b5130c9c
+file boringssl/sha.bot 49 06165856
+file boringssl/sha2.bot 162 2e443841
+file boringssl/siphash.bot 14 23427ab6
+file boringssl/slhdsa.bot 143 84a69a7d
+file boringssl/ssl.bot 4355 0f0c524f
+file boringssl/ssl3.bot 74 981cc8ef
+file boringssl/stack.bot 193 f42d85ae
+file boringssl/thread.bot 93 cbef6da4
+file boringssl/thunks/asn1.bot 485 655826e0
+file boringssl/thunks/asn1t.bot 169 6570e6fa
+file boringssl/thunks/bio.bot 169 ba3b7d98
+file boringssl/thunks/bytestring.bot 28 6e8525d4
+file boringssl/thunks/conf.bot 169 22bf6472
+file boringssl/thunks/err.bot 32 217182e5
+file boringssl/thunks/pool.bot 169 48beb5a7
+file boringssl/thunks/ssl.bot 486 9915eb26
+file boringssl/thunks/stack.bot 327 bb48d4d3
+file boringssl/thunks/trust_token.bot 169 8afd9527
+file boringssl/thunks/x509.bot 2697 6cead4cc
+file boringssl/tls1.bot 117 5c7322c1
+file boringssl/tls_prf.bot 23 d4289fb6
+file boringssl/trust_token.bot 252 2ec53cb6
+file boringssl/x509.bot 4004 93f9a416
+file boringssl/x509v3.bot 25 d6c6e883
+file boringssl/x509v3_errors.bot 70 2bf66f03
+file boringssl/xwing.bot 59 d07bcbdf
+file report.tsv 11165 2c1b1803
+file report.txt 103 b18cb93d
+file shim.c 3374 752c8e63
+libraries boringssl/aead.bot {crypto stdc++}
+libraries boringssl/aes.bot {crypto stdc++}
+libraries boringssl/asn1.bot {crypto stdc++}
+libraries boringssl/base64.bot {crypto stdc++}
+libraries boringssl/bio.bot {crypto stdc++}
+libraries boringssl/blake2.bot {crypto stdc++}
+libraries boringssl/blowfish.bot {crypto stdc++}
+libraries boringssl/bn.bot {crypto stdc++}
+libraries boringssl/buf.bot {crypto stdc++}
+libraries boringssl/bytestring.bot {crypto stdc++}
+libraries boringssl/cast.bot {crypto stdc++}
+libraries boringssl/chacha.bot {crypto stdc++}
+libraries boringssl/cipher.bot {crypto stdc++}
+libraries boringssl/cmac.bot {crypto stdc++}
+libraries boringssl/cms.bot {crypto stdc++}
+libraries boringssl/conf.bot {crypto stdc++}
+libraries boringssl/crypto.bot {crypto stdc++}
+libraries boringssl/ctrdrbg.bot {crypto stdc++}
+libraries boringssl/curve25519.bot {crypto stdc++}
+libraries boringssl/des.bot {crypto stdc++}
+libraries boringssl/dh.bot {crypto stdc++}
+libraries boringssl/digest.bot {crypto stdc++}
+libraries boringssl/dsa.bot {crypto stdc++}
+libraries boringssl/ec.bot {crypto stdc++}
+libraries boringssl/ec_key.bot {crypto stdc++}
+libraries boringssl/ecdh.bot {crypto stdc++}
+libraries boringssl/ecdsa.bot {crypto stdc++}
+libraries boringssl/engine.bot {crypto stdc++}
+libraries boringssl/err.bot {crypto stdc++}
+libraries boringssl/evp.bot {crypto stdc++}
+libraries boringssl/ex_data.bot {crypto stdc++}
+libraries boringssl/hkdf.bot {crypto stdc++}
+libraries boringssl/hmac.bot {crypto stdc++}
+libraries boringssl/hpke.bot {crypto stdc++}
+libraries boringssl/hrss.bot {crypto stdc++}
+libraries boringssl/kdf.bot {crypto stdc++}
+libraries boringssl/md4.bot {crypto stdc++}
+libraries boringssl/md5.bot {crypto stdc++}
+libraries boringssl/mem.bot {crypto stdc++}
+libraries boringssl/mldsa.bot {crypto stdc++}
+libraries boringssl/mlkem.bot {crypto stdc++}
+libraries boringssl/obj.bot {crypto stdc++}
+libraries boringssl/pem.bot {crypto stdc++}
+libraries boringssl/pkcs7.bot {crypto stdc++}
+libraries boringssl/pkcs8.bot {crypto stdc++}
+libraries boringssl/pool.bot {crypto stdc++}
+libraries boringssl/posix_time.bot {crypto stdc++}
+libraries boringssl/rand.bot {crypto stdc++}
+libraries boringssl/rc4.bot {crypto stdc++}
+libraries boringssl/ripemd.bot {crypto stdc++}
+libraries boringssl/rsa.bot {crypto stdc++}
+libraries boringssl/sha.bot {crypto stdc++}
+libraries boringssl/sha2.bot {crypto stdc++}
+libraries boringssl/siphash.bot {crypto stdc++}
+libraries boringssl/slhdsa.bot {crypto stdc++}
+libraries boringssl/ssl.bot {ssl crypto stdc++}
+libraries boringssl/stack.bot {crypto stdc++}
+libraries boringssl/thread.bot {crypto stdc++}
+libraries boringssl/thunks/asn1.bot {botlish_shim_boringssl_752c8e63 crypto stdc++}
+libraries boringssl/thunks/asn1t.bot {botlish_shim_boringssl_752c8e63 crypto stdc++}
+libraries boringssl/thunks/bio.bot {botlish_shim_boringssl_752c8e63 crypto stdc++}
+libraries boringssl/thunks/bytestring.bot {botlish_shim_boringssl_752c8e63 crypto stdc++}
+libraries boringssl/thunks/conf.bot {botlish_shim_boringssl_752c8e63 crypto stdc++}
+libraries boringssl/thunks/err.bot {botlish_shim_boringssl_752c8e63 crypto stdc++}
+libraries boringssl/thunks/pool.bot {botlish_shim_boringssl_752c8e63 crypto stdc++}
+libraries boringssl/thunks/ssl.bot {botlish_shim_boringssl_752c8e63 ssl crypto stdc++}
+libraries boringssl/thunks/stack.bot {botlish_shim_boringssl_752c8e63 crypto stdc++}
+libraries boringssl/thunks/trust_token.bot {botlish_shim_boringssl_752c8e63 crypto stdc++}
+libraries boringssl/thunks/x509.bot {botlish_shim_boringssl_752c8e63 crypto stdc++}
+libraries boringssl/tls_prf.bot {crypto stdc++}
+libraries boringssl/trust_token.bot {crypto stdc++}
+libraries boringssl/x509.bot {crypto stdc++}
+libraries boringssl/xwing.bot {crypto stdc++}
+count alias 62
+count aliases 7
+count bool 0
+count boolOnly 0
+count callbacks 452
+count complete 95
+count constants 3117
+count constantsSeen 4429
+count declared 3109
+count direct 3098
+count enumerators 95
+count excluded 0
+count fnmacros 185
+count fnptrTypedefs 152
+count inline 817
+count manual 2
+count opaque 102
+count proven 123
+count ptrParams 6801
+count ptrResults 1288
+count resultAlias 1
+count resultIndependent 0
+count resultUnknown 1287
+count tablestubs 0
+count thunk 817
+count unknownParams 6676
+count unknownRetention 3542
+count unsupported 141
+count views 1317
+blocked double 1
+blocked macro-needs-signature 66
+blocked unsupported-macro 64
+blocked unsupported-type 3
+blocked va-list 2
+blocked variadic 5
+contract sk_void_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_void_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_void_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_void_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_OPENSSL_STRING_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_OPENSSL_STRING_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_OPENSSL_STRING_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_OPENSSL_STRING_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_BIO_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_BIO_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_BIO_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_BIO_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_INTEGER_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_INTEGER_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_INTEGER_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_INTEGER_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_OBJECT_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_OBJECT_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_OBJECT_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_OBJECT_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_TYPE_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_TYPE_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_TYPE_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_TYPE_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_VALUE_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_VALUE_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_VALUE_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ASN1_VALUE_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract CBS_init cbs {escape proven-noescape access write} compiler {nocapture writeonly}
+contract CBS_data cbs {escape proven-noescape access read} compiler {nocapture readonly}
+contract CBS_len cbs {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_CONF_VALUE_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_CONF_VALUE_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_CONF_VALUE_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_CONF_VALUE_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract SHA256 data {access read escape declared-noescape} manual {contract SHA256}
+contract SHA256 out {access write escape declared-noescape} manual {contract SHA256}
+contract SHA256 result {alias out} manual {contract SHA256}
+contract sk_CRYPTO_BUFFER_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_CRYPTO_BUFFER_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_CRYPTO_BUFFER_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_CRYPTO_BUFFER_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_GENERAL_NAME_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_GENERAL_NAME_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_GENERAL_NAME_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_GENERAL_NAME_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_CRL_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_CRL_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_CRL_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_CRL_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_REVOKED_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_REVOKED_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_REVOKED_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_REVOKED_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_NAME_ENTRY_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_NAME_ENTRY_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_NAME_ENTRY_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_NAME_ENTRY_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_NAME_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_NAME_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_NAME_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_NAME_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_EXTENSION_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_EXTENSION_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_EXTENSION_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_EXTENSION_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_GENERAL_SUBTREE_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_GENERAL_SUBTREE_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_GENERAL_SUBTREE_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_GENERAL_SUBTREE_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ACCESS_DESCRIPTION_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ACCESS_DESCRIPTION_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ACCESS_DESCRIPTION_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_ACCESS_DESCRIPTION_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_DIST_POINT_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_DIST_POINT_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_DIST_POINT_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_DIST_POINT_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_POLICYQUALINFO_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_POLICYQUALINFO_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_POLICYQUALINFO_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_POLICYQUALINFO_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_POLICYINFO_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_POLICYINFO_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_POLICYINFO_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_POLICYINFO_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_POLICY_MAPPING_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_POLICY_MAPPING_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_POLICY_MAPPING_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_POLICY_MAPPING_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_ALGOR_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_ALGOR_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_ALGOR_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_ALGOR_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_ATTRIBUTE_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_ATTRIBUTE_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_ATTRIBUTE_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_ATTRIBUTE_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_OBJECT_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_OBJECT_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_OBJECT_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_OBJECT_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_INFO_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_INFO_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_INFO_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_X509_INFO_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_TRUST_TOKEN_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_TRUST_TOKEN_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_TRUST_TOKEN_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_TRUST_TOKEN_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_SSL_CIPHER_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_SSL_CIPHER_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_SSL_CIPHER_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_SSL_CIPHER_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_SRTP_PROTECTION_PROFILE_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_SRTP_PROTECTION_PROFILE_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_SRTP_PROTECTION_PROFILE_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_SRTP_PROTECTION_PROFILE_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_SSL_COMP_call_free_func free_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_SSL_COMP_call_copy_func copy_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_SSL_COMP_call_cmp_func cmp_func {escape proven-noescape access read} compiler {nocapture readonly}
+contract sk_SSL_COMP_call_delete_if_func func {escape proven-noescape access read} compiler {nocapture readonly}

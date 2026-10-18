@@ -1,0 +1,29 @@
+# boringssl.bot -- a hand-written binding of BoringSSL's one-shot SHA-256
+# (C-FFI.md, "The BoringSSL binding"): an application module beside the
+# programs that import it.
+#
+# The declaration is include/openssl/sha2.h's own, of the pinned release
+# (C-HEADER-ARCHAEOLOGY.md; audit/c-header/results/boringssl-prefix/ir.txt):
+#
+#   uint8_t *SHA256(const uint8_t *data, size_t len, uint8_t out[32]);
+#
+# uint8_t is unsigned char, size_t unsigned long on LP64 (the archaeology's
+# ABI probe), and the result is OUT itself -- a truthful pointer result,
+# declared exactly an alias of `out`. The library is the package-owned
+# static BoringSSL (tests/cffi/boringssl.tcl), built with
+# BORINGSSL_PREFIX=botlish_bssl, so its symbol is botlish_bssl_SHA256: the
+# `named` link symbol, which no system OpenSSL defines (no silent fallback).
+# The static archive needs the C++ runtime's operator delete: its
+# dependency, declared like any other library of the link plan.
+#
+# An ordinary module: both pointers are noescape, so nothing here is direct.
+import ffi::c
+
+extern c library "crypto"
+extern c library "stdc++"
+
+extern c fn SHA256 named "botlish_bssl_SHA256"(
+    data: ffi::c::Ptr[ffi::c::UChar] read noescape,
+    len: ffi::c::ULong,
+    out: ffi::c::Ptr[ffi::c::UChar] write noescape
+) -> ffi::c::Ptr[ffi::c::UChar] alias out

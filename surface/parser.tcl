@@ -19,7 +19,18 @@
 #                     followed by a name or by "type", which no other
 #                     construct allows, so `import` stays an ordinary name.
 #   topStatement = typeDecl | structDecl | enumDecl | layoutDecl | errorDecl
-#                | traitDecl | statement
+#                | traitDecl | externDecl | statement
+#   externDecl   = "extern" "c" "library" STRING NEWLINE
+#                | "extern" "c" "fn" IDENT [ "named" STRING ]
+#                  "(" [ externParam { "," externParam } [ "," ] ] ")"
+#                  "->" typeExpr [ "independent" | "alias" IDENT ] NEWLINE
+#   externParam  = IDENT ":" typeExpr { "read" | "write" | "noescape"
+#                  | "proven" "noescape" | "captures" }
+#                  -- C-FFI.md: a C library the program links and a truthful
+#                  C ABI declaration with no body (ExternDecl). "extern" is
+#                  contextual (directly followed by a name or `fn`), and so
+#                  is every word after it, so each stays an ordinary name
+#                  everywhere else
 #   statement    = simple NEWLINE | valued | function | if | loop
 #                | withDecl NEWLINE
 #   withDecl     = "with" "context" expression    -- CONTEXTS.md: installs
@@ -1258,6 +1269,247 @@ proc surface::parser::WithDecl {pVar} {
         formSpan [dict get $form span] value $value]
 }
 
+# 1 if the next tokens start an extern declaration (C-FFI.md): the
+# contextual word "extern" directly followed by a name or by `fn` (`extern c
+# fn`, `extern c library`, and the malformed `extern fn`, `extern rust fn`
+# its diagnostics name). Two names side by side are never a valid
+# expression, so an ordinary variable called `extern` (`extern = 1`,
+# `extern(x)`, `x.extern`) is unaffected.
+proc surface::parser::AtExternDecl {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "extern"
+        && [Kind p 1] in {IDENT fn}}]
+}
+
+# An extern declaration (C-FFI.md), at "extern":
+#
+#   "extern" "c" "library" STRING NEWLINE
+#       an `externlib` node {library NAME librarySpan SPAN}: the platform
+#       linker's ordinary library name (-lNAME), never a path, and never
+#       associated with the declarations around it
+#   "extern" "c" "fn" IDENT [ "named" STRING ] "(" [ externParam
+#       { "," externParam } [ "," ] ] ")" "->" typeExpr [ resultFact ] NEWLINE
+#       an `externfn` node {name nameSpan symbol symbolSpan params paramsSpan
+#       resultType resultTypeSpan provenance provenanceSpan}: a truthful C
+#       ABI declaration with no body. SYMBOL is the native link symbol, the
+#       name itself unless `named` overrides it ("" when not written).
+#   externParam = IDENT ":" typeExpr { fact }
+#   fact        = "read" | "write"                          access
+#               | "noescape" | "proven" "noescape" | "captures"   escape
+#   resultFact  = "independent" | "alias" IDENT
+#
+# Every PARAM is {name nameSpan type typeSpan access A escape E factsSpan S}
+# with A one of read write "" and E one of declared-noescape proven-noescape
+# captures "" ("": not stated, the contract's unknown). PROVENANCE is
+# independent, {alias NAME} or "" (unknown). Only `c` names an ABI; every
+# word after `extern` is contextual. No varargs, no body, no `errors`.
+proc surface::parser::ExternDecl {pVar} {
+    upvar 1 $pVar p
+    set start [dict get [Advance p] span]
+    set abi [Peek p]
+    if {[dict get $abi kind] eq "fn"} {
+        FailCode [dict get $abi span] EXTERN-SYNTAX \
+            "an extern declaration names its foreign ABI: write \"extern c fn NAME(...) -> T\" (the only foreign ABI is c)"
+    }
+    if {[dict get $abi text] ne "c"} {
+        FailCode [dict get $abi span] EXTERN-SYNTAX \
+            "unknown foreign ABI \"[dict get $abi text]\": the only extern declarations are \"extern c fn\" and \"extern c library\""
+    }
+    Advance p
+    set what [Peek p]
+    if {[dict get $what kind] eq "IDENT" && [dict get $what text] eq "library"} {
+        Advance p
+        set library [Peek p]
+        if {[dict get $library kind] ne "STRING"} {
+            FailCode [dict get $library span] EXTERN-SYNTAX \
+                "expected the library's name as a string after \"extern c library\", found [Describe $library] (the platform linker's ordinary library name: \"crypto\" is -lcrypto)"
+        }
+        Advance p
+        set name [dict get $library value]
+        if {![regexp {^[A-Za-z0-9_+.][A-Za-z0-9_+.-]*$} $name]} {
+            FailCode [dict get $library span] EXTERN-SYNTAX \
+                "\"$name\" is not a library name: \"extern c library\" names a library the way the platform linker does (\"crypto\" for -lcrypto, \"tcl9.0\" for -ltcl9.0) -- letters, digits, _ + . and -, never a path or a linker option; search directories are the toolchain's (main.tcl -L DIR)"
+        }
+        ExternLineEnd p "the library name"
+        return [surface::ast::node externlib [SpanFrom p $start] library $name \
+            librarySpan [dict get $library span]]
+    }
+    if {[dict get $what kind] ne "fn"} {
+        FailCode [dict get $what span] EXTERN-SYNTAX \
+            "expected \"fn\" or \"library\" after \"extern c\", found [Describe $what]"
+    }
+    Advance p
+    set name [Expect p IDENT "a function name after \"extern c fn\""]
+    set symbol ""
+    set symbolSpan ""
+    while {[Kind p] eq "IDENT" && [dict get [Peek p] text] eq "named"} {
+        set word [Advance p]
+        if {$symbolSpan ne ""} {
+            FailCode [dict get $word span] EXTERN-SYNTAX \
+                "duplicate \"named\": an extern c fn has one link symbol (at [surface::ast::location $symbolSpan])"
+        }
+        set token [Peek p]
+        if {[dict get $token kind] ne "STRING"} {
+            FailCode [dict get $token span] EXTERN-SYNTAX \
+                "expected the link symbol as a string after \"named\", found [Describe $token]: \"extern c fn NAME named \\\"SYMBOL\\\"(...)\""
+        }
+        Advance p
+        set symbol [dict get $token value]
+        set symbolSpan [dict get $token span]
+        if {![regexp {^[A-Za-z_.$][A-Za-z0-9_.$]*$} $symbol]} {
+            FailCode $symbolSpan EXTERN-SYNTAX \
+                "\"$symbol\" is not a link symbol: a native symbol is letters, digits, _ . and \$, not starting with a digit"
+        }
+    }
+    set open [Peek p]
+    if {[dict get $open kind] ne "("} {
+        FailCode [dict get $open span] EXTERN-SYNTAX \
+            "expected \"(\" after the extern c fn name[expr {$symbolSpan eq "" ? " (or \"named\" and its link symbol)" : " and its link symbol"}], found [Describe $open]"
+    }
+    Advance p
+    set params {}
+    while {[Kind p] ne ")"} {
+        lappend params [ExternParam p [dict get $name value]]
+        if {[Kind p] eq ","} {
+            Advance p
+        } elseif {[Kind p] ne ")"} {
+            Fail [Peek p] "expected \",\" or \")\" in the parameter list, found [Describe [Peek p]]"
+        }
+    }
+    Advance p
+    set paramsSpan [SpanFrom p [dict get $open span]]
+    set arrow [Peek p]
+    if {[dict get $arrow kind] eq ":"} {
+        FailCode [dict get $arrow span] EXTERN-SYNTAX \
+            "an extern c fn is a declaration with no body: it has no trailing \":\" (write \"extern c fn [dict get $name value](...) -> T\" on its own)"
+    }
+    if {[dict get $arrow kind] ne "->"} {
+        FailCode [dict get $arrow span] EXTERN-SYNTAX \
+            "expected \"->\" and the C result type after the parameter list of extern c fn \"[dict get $name value]\", found [Describe $arrow] (a C function returning void is \"-> unit\")"
+    }
+    Advance p
+    set typeStart [dict get [Peek p] span]
+    set resultType [TypeExpr p "the C result type after \"->\""]
+    set resultTypeSpan [SpanFrom p $typeStart]
+    set provenance ""
+    set provenanceSpan ""
+    while {[Kind p] eq "IDENT"} {
+        set word [Peek p]
+        set text [dict get $word text]
+        if {$text ni {independent alias}} {
+            FailCode [dict get $word span] EXTERN-SYNTAX \
+                "unknown result fact \"$text\" of extern c fn \"[dict get $name value]\": a pointer result is \"independent\" (no argument's pointer) or \"alias PARAM\" (exactly the pointer argument PARAM)"
+        }
+        if {$provenanceSpan ne ""} {
+            FailCode [dict get $word span] EXTERN-SYNTAX \
+                "extern c fn \"[dict get $name value]\" states its result's provenance once (at [surface::ast::location $provenanceSpan])"
+        }
+        Advance p
+        if {$text eq "independent"} {
+            set provenance independent
+            set provenanceSpan [dict get $word span]
+        } else {
+            set target [Expect p IDENT "the parameter the result aliases after \"alias\""]
+            set provenance [list alias [dict get $target value]]
+            set provenanceSpan [surface::ast::cover [dict get $word span] [dict get $target span]]
+        }
+    }
+    if {[Kind p] eq "errors"} {
+        FailCode [dict get [Peek p] span] EXTERN-SYNTAX \
+            "a C function raises no Botlish error: an extern c fn has no \"errors\" clause (a C status is its result, checked by a Botlish wrapper)"
+    }
+    if {[Kind p] eq ":"} {
+        FailCode [dict get [Peek p] span] EXTERN-SYNTAX \
+            "an extern c fn is a declaration with no body: it has no trailing \":\" (write \"extern c fn [dict get $name value](...) -> T\" on its own)"
+    }
+    ExternLineEnd p "the extern c fn declaration"
+    return [surface::ast::node externfn [SpanFrom p $start] \
+        name [dict get $name value] nameSpan [dict get $name span] \
+        symbol $symbol symbolSpan $symbolSpan params $params paramsSpan $paramsSpan \
+        resultType $resultType resultTypeSpan $resultTypeSpan \
+        provenance $provenance provenanceSpan $provenanceSpan]
+}
+
+# One parameter of extern c fn FN: IDENT ":" typeExpr { fact } (ExternDecl).
+proc surface::parser::ExternParam {pVar fn} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    if {[dict get $token kind] in {.. .}} {
+        FailCode [dict get $token span] EXTERN-SYNTAX \
+            "variadic C functions are not supported: extern c fn \"$fn\" must have a fixed signature (there is no variadic C ABI here: bind a function of fixed parameters instead)"
+    }
+    set param [Expect p IDENT "a parameter name in the parameter list of extern c fn \"$fn\""]
+    set pname [dict get $param value]
+    if {[Kind p] ne ":"} {
+        FailCode [dict get $param span] EXTERN-SYNTAX \
+            "parameter \"$pname\" of extern c fn \"$fn\" needs its C type: write \"$pname: T\" (an extern declaration is the call's ABI, so every parameter is typed)"
+    }
+    Advance p
+    set typeStart [dict get [Peek p] span]
+    set type [TypeExpr p "the C type of parameter \"$pname\""]
+    set typeSpan [SpanFrom p $typeStart]
+    set access ""
+    set escape ""
+    set factsSpan ""
+    while {[Kind p] eq "IDENT"} {
+        set word [Peek p]
+        set text [dict get $word text]
+        set span [dict get $word span]
+        switch -- $text {
+            read - write {
+                if {$access ne ""} {
+                    FailCode $span EXTERN-SYNTAX \
+                        "parameter \"$pname\" of extern c fn \"$fn\" states its access twice (\"$access\" and \"$text\"): it is read or write"
+                }
+                set access $text
+                Advance p
+            }
+            noescape - captures - proven {
+                if {$escape ne ""} {
+                    FailCode $span EXTERN-SYNTAX \
+                        "parameter \"$pname\" of extern c fn \"$fn\" states its escape twice: it is noescape, proven noescape or captures"
+                }
+                Advance p
+                if {$text eq "proven"} {
+                    set next [Peek p]
+                    if {[dict get $next kind] ne "IDENT" || [dict get $next text] ne "noescape"} {
+                        FailCode [dict get $next span] EXTERN-SYNTAX \
+                            "expected \"noescape\" after \"proven\" (parameter \"$pname\" of extern c fn \"$fn\"): \"proven noescape\" records that a tool proved the pointer does not escape"
+                    }
+                    Advance p
+                    set span [surface::ast::cover $span [dict get $next span]]
+                    set escape proven-noescape
+                } elseif {$text eq "noescape"} {
+                    set escape declared-noescape
+                } else {
+                    set escape captures
+                }
+            }
+            default {
+                FailCode $span EXTERN-SYNTAX \
+                    "unknown fact \"$text\" of parameter \"$pname\" of extern c fn \"$fn\": a pointer parameter states its access (read, write) and its escape (noescape, proven noescape, captures); an unstated fact is unknown"
+            }
+        }
+        set factsSpan [expr {$factsSpan eq "" ? $span : [surface::ast::cover $factsSpan $span]}]
+    }
+    if {[Kind p] in {.. .}} {
+        FailCode [dict get [Peek p] span] EXTERN-SYNTAX \
+            "variadic C functions are not supported: extern c fn \"$fn\" must have a fixed signature"
+    }
+    return [dict create name $pname nameSpan [dict get $param span] type $type typeSpan $typeSpan \
+        access $access escape $escape factsSpan $factsSpan]
+}
+
+# The end of an extern declaration's line, after WHAT.
+proc surface::parser::ExternLineEnd {pVar what} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    if {[dict get $token kind] ni {NEWLINE EOF DEDENT}} {
+        FailCode [dict get $token span] EXTERN-SYNTAX "expected end of line after $what, found [Describe $token]"
+    }
+}
+
 # Statements up to a token of a kind in STOP (not consumed).
 proc surface::parser::Statements {pVar stop} {
     upvar 1 $pVar p
@@ -1432,6 +1684,15 @@ proc surface::parser::Statement {pVar} {
     }
     if {[AtStrayTypeModifier p]} {
         Fail $token "\"[dict get $token text]\" only modifies a type declaration (\"[dict get $token text] type NAME = CARRIER\"), not a \"[Kind p 1]\" declaration"
+    }
+    if {[AtExternDecl p]} {
+        # `extern c fn ...` / `extern c library "..."` (C-FFI.md): a
+        # contextual top-level declaration.
+        if {![dict get $p topLevel]} {
+            FailCode [dict get $token span] EXTERN-SYNTAX \
+                "an extern declaration is only allowed at the top level of a module, not nested in a function/if/loop"
+        }
+        return [ExternDecl p]
     }
     if {[AtStructDecl p]} {
         # A modifier-led struct declaration (`opaque struct Name:`); the

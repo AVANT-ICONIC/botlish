@@ -18,6 +18,15 @@
 //! Both link the same machine code (`emit_object`) and start it the same way
 //! (`runtime::aot::run`); `tests/aot-stub-linker.test` runs programs linked
 //! both ways side by side.
+//!
+//! A program that calls C (C-FFI.md: `foreign` functions, `link` libraries)
+//! needs the system linker to resolve its foreign symbols: the `rustc`
+//! linker passes the program's link plan to it -- `-lNAME` for every
+//! library, inside one `--start-group`/`--end-group`, so the order of the
+//! declarations never decides a static link, and `-LDIR` for every
+//! `--link-dir` search directory -- after the program object. The `stub`
+//! linker links no native library and refuses such a program. An ordinary
+//! program's link is unchanged.
 use super::{Const, ObjectProgram, emit_object};
 use crate::nir::Program;
 use botlish_native::runtime::aotimage::{self, Fixup, FunctionCode, Image, Target};
@@ -170,13 +179,23 @@ fn startup(program: &Program, object: &ObjectProgram) -> String {
     s
 }
 
-pub fn emit_executable(program: &Program, destination: &Path) -> Result<(), String> {
+/// Whether PROGRAM calls C or names a native library (C-FFI.md): it is then
+/// linked by the system linker, and run as an executable.
+pub fn calls_c(program: &Program) -> bool {
+    !program.foreigns.is_empty() || !program.links.is_empty()
+}
+
+pub fn emit_executable(program: &Program, destination: &Path, link_dirs: &[String]) -> Result<(), String> {
     if !cfg!(all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64"))) {
         return Err("executable emission requires Linux glibc on x86_64 or aarch64".into());
     }
     let destination = std::path::absolute(destination).map_err(|e| e.to_string())?;
     match std::env::var("BOTLISH_NATIVE_LINKER").as_deref() {
-        Err(std::env::VarError::NotPresent) | Ok("" | "rustc") => link_rustc(program, &destination),
+        Err(std::env::VarError::NotPresent) | Ok("" | "rustc") => link_rustc(program, &destination, link_dirs),
+        Ok("stub") if calls_c(program) => Err(format!(
+            "native link failed: this program calls C or declares a C library ({}), which only the system linker resolves, and the stub linker (BOTLISH_NATIVE_LINKER=stub, the single executable's) links no native library: link it with the rustc linker of a Botlish checkout whose native backend is built (BOTLISH_NATIVE_LINKER=rustc; C-FFI.md)",
+            describe_link_plan(program)
+        )),
         Ok("stub") => link_stub(program, &destination),
         Ok(other) => Err(format!("unknown BOTLISH_NATIVE_LINKER {other:?} (known: rustc stub)")),
         Err(e) => Err(format!("BOTLISH_NATIVE_LINKER: {e}")),
@@ -185,7 +204,41 @@ pub fn emit_executable(program: &Program, destination: &Path) -> Result<(), Stri
 
 /// The `rustc` linker: a generated startup crate, compiled and linked
 /// against this build's runtime library.
-fn link_rustc(program: &Program, destination: &Path) -> Result<(), String> {
+/// The C functions and libraries PROGRAM names, for messages.
+fn describe_link_plan(program: &Program) -> String {
+    let mut parts = Vec::new();
+    if !program.foreigns.is_empty() {
+        let names: Vec<&str> = program.foreigns.iter().map(|f| f.symbol.as_str()).collect();
+        parts.push(format!("symbols {}", names.join(", ")));
+    }
+    if !program.links.is_empty() {
+        let libraries: Vec<String> = program.links.iter().map(|l| format!("-l{l}")).collect();
+        parts.push(format!("libraries {}", libraries.join(" ")));
+    }
+    parts.join("; ")
+}
+
+/// The linker's own account of a failed link of a program that calls C:
+/// the lines of rustc's STDERR the system linker wrote (its diagnostics,
+/// never rustc's echo of the whole command line), else all of it.
+fn linker_diagnostics(stderr: &str) -> String {
+    let lines: Vec<&str> = stderr
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            line.contains("undefined reference")
+                || line.contains("cannot find")
+                || line.contains("ld:")
+                || line.contains("ld.lld:")
+                || line.starts_with("collect2")
+                || line.contains("error: linking with")
+        })
+        .filter(|line| !line.starts_with("= note: \"") && line.len() < 2000)
+        .collect();
+    if lines.is_empty() { stderr.to_string() } else { lines.join("\n") }
+}
+
+fn link_rustc(program: &Program, destination: &Path, link_dirs: &[String]) -> Result<(), String> {
     let driver = std::env::current_exe().map_err(|e| e.to_string())?;
     let release = driver.parent().ok_or("cannot locate native runtime")?;
     let library = release.join("libbotlish_native.rlib");
@@ -219,22 +272,60 @@ fn link_rustc(program: &Program, destination: &Path) -> Result<(), String> {
         .arg(format!("dependency={}", release.join("deps").display()))
         .arg("-C")
         .arg(format!("link-arg={}", object_path.display()))
+        .args(link_plan_args(program, link_dirs))
         .arg(&source_path)
         .arg("-o")
         .arg(&executable)
         .output()
         .map_err(|e| format!("cannot launch rustc to link executable: {e}"))?;
     if !output.status.success() {
-        return Err(format!(
-            "executable link failed ({}):\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        ));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if calls_c(program) {
+            return Err(format!(
+                "native link failed: the system linker could not link this program with the C functions and libraries it declares ({}):\n{}",
+                describe_link_plan(program),
+                linker_diagnostics(&stderr)
+            ));
+        }
+        return Err(format!("executable link failed ({}):\n{}", output.status, stderr));
     }
     // Publish only a successfully linked file, on the same filesystem. A
     // failed build leaves any previous executable intact.
     std::fs::rename(&executable, &destination).map_err(|e| format!("{}: {e}", destination.display()))?;
     Ok(())
+}
+
+/// rustc's arguments passing PROGRAM's link plan to the system linker: the
+/// search directories LINK_DIRS (`-LDIR`), then every library `-lNAME`, in
+/// the plan's order, inside one linker group. Nothing for a program that
+/// names none.
+///
+/// A program that calls C is also linked with the C compiler driver's
+/// default libraries (`-C default-linker-libraries=yes`: rustc passes no
+/// `-nodefaultlibs`), which the driver appends after every argument, so the
+/// libraries are followed by libc, its as-needed dynamic loader and libgcc
+/// exactly as in a C program's link. rustc's own system libraries come before
+/// its link arguments, and GNU ld drops an as-needed library nothing has
+/// referenced yet: a static archive needing a symbol only the loader defines
+/// (AArch64 glibc's `__stack_chk_guard`, which BoringSSL's stack protector
+/// reads) or a libgcc helper would otherwise fail to link.
+fn link_plan_args(program: &Program, link_dirs: &[String]) -> Vec<String> {
+    let mut args = Vec::new();
+    if !calls_c(program) {
+        return args;
+    }
+    args.extend(["-C".to_string(), "default-linker-libraries=yes".to_string()]);
+    for dir in link_dirs {
+        args.extend(["-C".to_string(), format!("link-arg=-L{dir}")]);
+    }
+    if !program.links.is_empty() {
+        args.extend(["-C".to_string(), "link-arg=-Wl,--start-group".to_string()]);
+        for library in &program.links {
+            args.extend(["-C".to_string(), format!("link-arg=-l{library}")]);
+        }
+        args.extend(["-C".to_string(), "link-arg=-Wl,--end-group".to_string()]);
+    }
+    args
 }
 
 /// The `stub` linker: the prebuilt `botlish-aot-stub` with the program's
@@ -573,4 +664,57 @@ fn image(program: &Program, object: &ObjectProgram) -> Result<Image, String> {
         fixups,
         functions,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A program that calls one C function and declares two libraries.
+    const FFI_PROGRAM: &str = concat!(
+        "nir 1 call-effects=1 statics=0\n",
+        "link \"first\"\n",
+        "link \"second\"\n",
+        "foreign 0 \"c_add\" params=\"i32 i32\" result=i32 name=\"m::add\"\n\n",
+        "func 0 \"<program>\" params=0 env=0 regs=3 pnames=\"\" captures=0\n",
+        "    %0 = int 40\n    %1 = int 2\n    %2 = foreigncall 0 %0 %1\n    ret %2\nend\n",
+    );
+
+    /// The link plan reaches the system linker as one group, in the plan's
+    /// order, after the search directories: GNU ld and gold resolve a static
+    /// archive only against what precedes it, so without the group an
+    /// archive declared before the archive that needs it would leave its
+    /// symbols undefined (lld, rustc's own x86-64 linker, does not care:
+    /// tests/c-ffi.test's cf-link-order shows the group's effect where the
+    /// linker is GNU ld).
+    #[test]
+    fn ffi_link_plan_is_one_linker_group() {
+        let program = crate::nir::parse(FFI_PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
+        assert!(calls_c(&program));
+        let args = link_plan_args(&program, &["/opt/lib".to_string()]);
+        let links: Vec<&str> = args.iter().filter(|a| *a != "-C").map(String::as_str).collect();
+        assert_eq!(
+            links,
+            vec![
+                "default-linker-libraries=yes",
+                "link-arg=-L/opt/lib",
+                "link-arg=-Wl,--start-group",
+                "link-arg=-lfirst",
+                "link-arg=-lsecond",
+                "link-arg=-Wl,--end-group"
+            ]
+        );
+        assert_eq!(describe_link_plan(&program), "symbols c_add; libraries -lfirst -lsecond");
+    }
+
+    /// An ordinary program passes the linker nothing.
+    #[test]
+    fn ffi_link_plan_is_empty_without_c() {
+        let text = FFI_PROGRAM.replace("link \"first\"\n", "").replace("link \"second\"\n", "")
+            .replace("foreign 0 \"c_add\" params=\"i32 i32\" result=i32 name=\"m::add\"\n", "")
+            .replace("%2 = foreigncall 0 %0 %1", "%2 = int 42");
+        let program = crate::nir::parse(&text).unwrap_or_else(|e| panic!("{}", e.message));
+        assert!(!calls_c(&program));
+        assert!(link_plan_args(&program, &["/opt/lib".to_string()]).is_empty());
+    }
 }

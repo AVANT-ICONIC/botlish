@@ -199,6 +199,8 @@ proc surface::lower::SplitTypeDecls {statements {namespace ""}} {
     set errorDecls {}
     set structDecls {}
     set traitDecls {}
+    set externDecls {}
+    set linkDecls {}
     foreach statement $statements {
         switch -- [dict get $statement kind] {
             typedecl   { lappend decls [TypeDeclOf $statement $namespace] }
@@ -207,10 +209,35 @@ proc surface::lower::SplitTypeDecls {statements {namespace ""}} {
             errordecl  { lappend errorDecls [ErrorDeclOf $statement $namespace] }
             structdecl { lappend structDecls [StructDeclOf $statement $namespace] }
             traitdecl  { lappend traitDecls [TraitDeclOf $statement $namespace] }
+            externfn   { lappend externDecls [ExternDeclOf $statement $namespace] }
+            externlib  { lappend linkDecls [LinkDeclOf $statement $namespace] }
             default    { lappend executable $statement }
         }
     }
-    return [list $executable $decls $errorDecls $structDecls $traitDecls]
+    return [list $executable $decls $errorDecls $structDecls $traitDecls $externDecls $linkDecls]
+}
+
+# The declaration dict of an `externfn` node declared in module NAMESPACE (""
+# for the entry program), for hir::buildSyntax's -foreign-decls (C-FFI.md):
+# the AST's fields, with `namespace` -- the declaring module, the loader's
+# canonical identity, never read from the (cached, importer-neutral) AST --
+# and `origin`, the declaration's HIR origin (file f1: the loader repoints a
+# module's at its own file, surface::modules::RemapDecls).
+proc surface::lower::ExternDeclOf {node namespace} {
+    return [dict create name [dict get $node name] nameSpan [dict get $node nameSpan] \
+        namespace $namespace symbol [dict get $node symbol] symbolSpan [dict get $node symbolSpan] \
+        params [dict get $node params] resultType [dict get $node resultType] \
+        resultTypeSpan [dict get $node resultTypeSpan] provenance [dict get $node provenance] \
+        provenanceSpan [dict get $node provenanceSpan] span [dict get $node span] \
+        origin [OriginOf $node]]
+}
+
+# The declaration dict of an `externlib` node declared in module NAMESPACE,
+# for hir::buildSyntax's -link-decls (C-FFI.md): {library NAME namespace NS
+# span SPAN origin ORIGIN}.
+proc surface::lower::LinkDeclOf {node namespace} {
+    return [dict create library [dict get $node library] namespace $namespace \
+        span [dict get $node span] origin [OriginOf $node]]
 }
 
 # The declaration dict of an `enumdecl` node declared in module NAMESPACE (""

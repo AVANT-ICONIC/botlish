@@ -1,0 +1,98 @@
+# tclsh9.0 audit/c-ffi/tools/mutate.tcl (2026-10-17, Linux x86-64, rustc 1.97.0)
+
+KILLED named-ignored -- the parser reads `named "SYMBOL"` and drops it: every link symbol is the Botlish name
+    tests:  killed (46 failed: cf-argv, cf-borrow-read, cf-borrow-refusals, cf-borrow-sha256-shape, cf-borrow-write, cf-cache, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED botlish-name-as-symbol -- native lowering's foreign table names the Botlish qualified name as the symbol, not the declaration's link symbol
+    tests:  killed (13 failed: cf-borrow-read, cf-direct-contextualized, cf-direct-declared, cf-direct-two-modules-one-library, cf-entry-program-declares, cf-gc-stress, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED library-dropped -- the link plan loses the last library a program declares
+    tests:  killed (35 failed: cf-argv, cf-borrow-read, cf-borrow-sha256-shape, cf-borrow-write, cf-cache, cf-call-typing, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED long-always-64 -- the ABI class of C long (and unsigned long) is 64 bits whatever the target says
+    tests:  killed (1 failed: cf-abi-classes-follow-the-target)
+    fuzz:   survived
+KILLED captures-borrow-allowed -- a parameter whose contract captures the pointer admits a temporary byte exposure (only an unknown escape is refused)
+    tests:  killed (2 failed: cf-borrow-refusals, cf-strict0-replay)
+    fuzz:   survived
+KILLED read-bytes-copied -- a read exposure is made of a private copy of the storage, not of the storage itself
+    tests:  killed (9 failed: cf-borrow-read, cf-borrow-sha256-shape, cf-contract-violation, cf-executable, cf-gc-stress, cf-interchange, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED original-mutablebytes-mutated -- a write exposure hands C the owner's own storage, so the caller's MutableBytes changes
+    tests:  killed (6 failed: cf-borrow-sha256-shape, cf-borrow-write, cf-gc-stress, cf-nir, cf-sha256-acceptance, cf-sha256-executable)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED keepalive-dropped -- no keepalive of the exposed storage after the C call
+    tests:  killed (1 failed: cf-nir)
+    fuzz:   survived
+KILLED argument-after-exposure -- a read exposure is made where its argument is evaluated, so later arguments' code runs while it is open
+    tests:  killed (1 failed: cf-nir)
+    fuzz:   survived
+KILLED every-extern-direct -- every call of a C function is an authority source, noescape ones included
+    tests:  killed (38 failed: cf-argv, cf-borrow-read, cf-borrow-sha256-shape, cf-borrow-write, cf-cache, cf-call-typing, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED retaining-not-direct -- a call of a C function that may retain a pointer is an ordinary call
+    tests:  killed (7 failed: cf-direct-contextualized, cf-direct-declared, cf-direct-not-predesignated, cf-direct-retaining, cf-direct-summary, cf-direct-two-modules-one-library, ...)
+    fuzz:   survived
+KILLED nearest-library -- each C function is associated with the last library its own unit declares, and only libraries some function is associated with are linked
+    tests:  killed (6 failed: cf-gc-stress, cf-link-order, cf-link-plan, cf-missing-library, cf-sha256-acceptance, cf-sha256-executable)
+    fuzz:   survived
+KILLED extern-state-shared -- activating a HIR does not re-install its own extern declarations: it reads whichever compilation registered last
+    tests:  killed (2 failed: cf-interchange, cf-isolation)
+    fuzz:   survived
+KILLED interchange-loses-foreign -- HIR interchange text drops the HIR's extern declarations (its foreign side table)
+    tests:  killed (1 failed: cf-interchange)
+    fuzz:   survived
+KILLED tcl-backends-return-zero -- the Tcl backends run a C call as a call that returns 0
+    tests:  killed (2 failed: cf-static-compile, cf-tcl-backends)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED unknown-provenance-exposed -- an exposure is admitted where the pointer result's provenance is unknown (it may point into the exposed storage)
+    tests:  killed (1 failed: cf-result-provenance)
+    fuzz:   survived
+KILLED extern-arity-unchecked -- a C call passing a different number of arguments than its signature is not a compile-time ARITY
+    tests:  killed (2 failed: cf-call-typing, cf-static-compile)
+    fuzz:   survived
+KILLED unsigned-result-sign-extended -- a narrow unsigned C result is sign-extended from its width
+    tests:  killed (2 failed: cf-scalar-extension, cf-scalar-transport)
+    fuzz:   killed (1 disagreements in 6 programs)
+KILLED signed-result-zero-extended -- a narrow signed C result is zero-extended from its width
+    tests:  killed (3 failed: cf-scalar-extension, cf-scalar-transport, cf-stack-arguments)
+    fuzz:   killed (3 disagreements in 6 programs)
+KILLED pointer-untag-forgotten -- a raw C pointer argument is passed as its tagged C address word, not the address
+    tests:  killed (5 failed: cf-function-pointers, cf-gc-stress, cf-pointers, cf-result-provenance, cf-tcl-acceptance)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED pointer-tag-forgotten -- a returned C address is used as a Botlish word without its C pointer tag
+    tests:  killed (2 failed: cf-gc-stress, cf-pointers)
+    fuzz:   survived
+KILLED alias-check-dropped -- a pointer result declared an alias of its argument is never compared with it
+    tests:  killed (1 failed: cf-contract-violation)
+    fuzz:   survived
+KILLED address-masked -- a returned address the C pointer word cannot hold is masked into one instead of failing
+    tests:  killed (1 failed: cf-wild-address)
+    fuzz:   survived
+KILLED unsigned-64-result-boxed-signed -- a 64-bit unsigned C result beyond the small range is boxed as a signed one
+    tests:  killed (1 failed: cf-scalar-transport)
+    fuzz:   killed (6 disagreements in 6 programs)
+KILLED unsigned-64-argument-truncated -- a BigInt argument of a 64-bit unsigned C type beyond i64 is passed as 0
+    tests:  killed (2 failed: cf-scalar-transport, cf-stack-arguments)
+    fuzz:   killed (6 disagreements in 6 programs)
+SURVIVED link-group-dropped -- the declared libraries are passed to the linker without a group, so their order decides a static link
+    tests:  survived
+    fuzz:   survived
+KILLED stub-links-c -- the stub linker accepts a program that calls C, linking none of its libraries
+    tests:  killed (1 failed: cf-stub-linker)
+    fuzz:   survived
+27 mutants, 26 killed, 1 survived: link-group-dropped
+
+# tclsh9.0 audit/c-ffi/tools/mutate.tcl -only link-group-dropped,stub-links-c
+# (after codegen::aot's ffi_ tests and the Rust detector were added: rustc's
+# x86-64 linker here is lld, which resolves archives in any order)
+
+KILLED link-group-dropped -- the declared libraries are passed to the linker without a group, so their order decides a static link
+    tests:  survived
+    fuzz:   survived
+    rust:   killed (1 failed: codegen::aot::tests::ffi_link_plan_is_one_linker_group)
+KILLED stub-links-c -- the stub linker accepts a program that calls C, linking none of its libraries
+    tests:  killed (1 failed: cf-stub-linker)
+    fuzz:   survived
+    rust:   survived
+2 mutants, 2 killed, 0 survived

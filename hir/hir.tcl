@@ -441,6 +441,11 @@ proc hir::build {exprs args} {
 #                   `errorDecls` field (hir/format.tcl, hir/read.tcl's
 #                   round-trip). Empty by default, like -type-decls.
 #
+#   -foreign-decls D, -link-decls L   a source program's extern c fn and
+#                   extern c library declarations (surface/lower.tcl's
+#                   ExternDeclOf and LinkDeclOf dicts; hir/foreign.tcl,
+#                   C-FFI.md): registered as compilation-local natives and
+#                   the HIR's link plan (`foreign`, `links`)
 #   -module-decls D the module declarations of a source program
 #                   (DIRECT-MODULES.md): NAMESPACE ("" for the entry program)
 #                   -> {direct 0|1 origin ORIGIN}, one per unit of the
@@ -461,7 +466,7 @@ proc hir::BuildSyntax {nodes args} {
     set options [Options hir::buildSyntax \
         {-mode program -strict 1 -origin "" -files {} -modules {} \
             -type-decls {} -error-decls {} -struct-decls {} -trait-decls {} -imports {} -module-decls {} \
-            -halt-on-resolution-errors 0} $args]
+            -foreign-decls {} -link-decls {} -halt-on-resolution-errors 0} $args]
     set mode [dict get $options -mode]
     if {$mode ni {program sequence}} {
         error "hir::build: -mode must be program or sequence"
@@ -607,8 +612,25 @@ proc hir::BuildOnce {nodes options given choices halt checkedVar} {
         # own types: resolved once those are registered.
         hir::errordecls::resolvePayloads
     }
+    # A source program's extern c fn declarations and link plan (C-FFI.md):
+    # their C types name the program's own (opaque structs, ffi::c's
+    # scalars), so they are registered once those are. A frontend that
+    # passes -error-decls (even empty) compiles a program of its own: no
+    # extern of an earlier compilation stays declared. Core IR text keeps
+    # them, as it keeps the errors.
+    set externs [dict exists $given -error-decls]
+    if {$externs} {
+        hir::foreign::apply [dict get $options -foreign-decls] [dict get $options -link-decls]
+    }
     set hir [hir::resolve::program $nodes [dict get $options -mode] [dict get $options -origin] \
-        [dict get $options -modules] $choices]
+        [dict get $options -modules] $choices $externs]
+    if {$externs} {
+        lassign [hir::foreign::tables] foreign links
+        if {[dict size $foreign] || $links ne {}} {
+            dict set hir foreign $foreign
+            dict set hir links $links
+        }
+    }
     if {[dict exists $given -module-decls]} {
         dict set hir moduleDecls [dict get $options -module-decls]
     }
@@ -1516,7 +1538,10 @@ proc hir::externalRefs {hir e} {
 # ordinary lexical local/param/ambient binding. See
 # MODULE-STATIC-RETAINED-VALUES.md's storage-class discussion.
 proc hir::isModuleBinding {hir b} {
-    return [dict exists $hir moduleScopeIds [dict get $hir bindings $b scope]]
+    # (An extern c fn's name is a root-kind binding of its module's scope,
+    # hir/foreign.tcl: it denotes a native and owns no storage.)
+    return [expr {[dict exists $hir moduleScopeIds [dict get $hir bindings $b scope]]
+        && [dict get $hir bindings $b kind] ne "root"}]
 }
 
 # 1 if ScopeId S is a module section's own scope (see hir::isModuleBinding).
@@ -1536,7 +1561,7 @@ proc hir::exprsAt {hir origin} {
 }
 
 apply {{dir} {
-    foreach file {syntax static staticdeps imports resolve flags contexts direct coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings recovery declarations interchange} {
+    foreach file {syntax static staticdeps imports resolve flags contexts direct coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow foreign errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings recovery declarations interchange} {
         uplevel #0 [list source [file join $dir $file.tcl]]
     }
 }} $hir::home

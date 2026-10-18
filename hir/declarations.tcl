@@ -9,7 +9,8 @@
 # A compilation registers its declarations in process-wide registries
 # (hir/sourcetypes.tcl, "Compilation isolation"): the source-defined entries
 # of core::type (a domain or a refinement), hir::structs, hir::enums,
-# hir::layouts, hir::errordecls, hir::traits and hir::imports.
+# hir::layouts, hir::errordecls, hir::traits, hir::imports and the extern c
+# fn natives of core::native with their link plan (hir/foreign.tcl).
 # The analyses and the backends read them by bare name, so a HIR is not
 # self-contained: compiling another program used to change what an earlier
 # HIR's lowering or run saw (a silently wrong value, native code that traps,
@@ -59,7 +60,8 @@ proc hir::declarations::capture {} {
         layouts $::hir::layouts::registry \
         errors $::hir::errordecls::current payloads $::hir::errordecls::payloads \
         traits $::hir::traits::registry impls $::hir::traits::impls \
-        unitNames $::hir::traits::unitNames imports $::hir::imports::table]
+        unitNames $::hir::traits::unitNames imports $::hir::imports::table \
+        foreign [hir::foreign::capture]]
 }
 
 # Forgets which state the registries hold: called before a build or a read
@@ -129,5 +131,6 @@ proc hir::declarations::Install {state} {
     set ::hir::traits::cache [dict create]
     hir::contexts::ResetTraitCache
     set ::hir::imports::table [dict get $state imports]
+    hir::foreign::Install [dict get $state foreign]
     set active $state
 }

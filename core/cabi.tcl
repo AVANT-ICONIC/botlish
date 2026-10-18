@@ -362,16 +362,23 @@ proc core::cabi::isNoescape {escape} {
 
 # The normalized foreign call contract CONTRACT of native NAME of ARITY
 # (core/native.tcl's -foreign), or a Tcl error: {vars V params {P...} result
-# R}, every P {name N type T} for a C value and {name N type T access A
-# escape E} for a C pointer (a type {cptr ...} or {cfnptr ...}), an absent
-# fact being `unknown`. Only a data pointer has an access; a write
+# R provenance PR}, every P {name N type T} for a C value and {name N type T
+# access A escape E} for a C pointer (a type {cptr ...} or {cfnptr ...}), an
+# absent fact being `unknown`. Only a data pointer has an access; a write
 # parameter's name is a field of the call's result, so it is never
 # `result`.
+#
+# PR is the provenance of a data pointer result (C-FFI.md, "Pointer
+# results"): `unknown` (the default: nothing is said), `independent` (never
+# derived from an argument's pointer) or {alias NAME} (exactly the pointer
+# argument NAME, a data pointer parameter of the result's own type: SHA256's
+# `out`). A result that is not a data pointer has provenance unknown.
 proc core::cabi::NormalizeForeign {name contract arity} {
     variable accesses
     variable escapes
-    if {[catch {dict size $contract}] || [lsort [dict keys $contract]] ni {{params result} {params result vars}}} {
-        error "core::native::register: bad -foreign \"$contract\" for \"$name\" (expected {vars {...} params {...} result R})"
+    if {[catch {dict size $contract}] || ![dict exists $contract params] || ![dict exists $contract result]
+            || [lmap key [dict keys $contract] {expr {$key in {vars params result provenance} ? [continue] : $key}}] ne {}} {
+        error "core::native::register: bad -foreign \"$contract\" for \"$name\" (expected {vars {...} params {...} result R ?provenance PR?})"
     }
     set vars [expr {[dict exists $contract vars] ? [dict get $contract vars] : {}}]
     set params [dict get $contract params]
@@ -386,8 +393,8 @@ proc core::cabi::NormalizeForeign {name contract arity} {
         }
         set pname [dict get $param name]
         set type [CanonicalTerm [dict get $param type]]
-        if {![regexp {^[a-z_][a-z0-9_]*$} $pname] || $pname in $names} {
-            error "core::native::register: -foreign parameter name \"$pname\" of \"$name\" is not a fresh lower-case name"
+        if {![regexp {^[A-Za-z_][A-Za-z0-9_]*$} $pname] || $pname in $names} {
+            error "core::native::register: -foreign parameter name \"$pname\" of \"$name\" is not a fresh name"
         }
         lappend names $pname
         set pointer [expr {[lindex $type 0] in {cptr cfnptr} && [llength $type] == 2}]
@@ -412,7 +419,33 @@ proc core::cabi::NormalizeForeign {name contract arity} {
         }
         lappend normalized $entry
     }
-    return [dict create vars $vars params $normalized result [CanonicalTerm [dict get $contract result]]]
+    set result [CanonicalTerm [dict get $contract result]]
+    set provenance [expr {[dict exists $contract provenance] ? [dict get $contract provenance] : "unknown"}]
+    if {$provenance ne "unknown"} {
+        if {[lindex $result 0] ne "cptr" || [llength $result] != 2} {
+            error "core::native::register: -foreign of \"$name\": only a data pointer result has a provenance"
+        }
+        if {[lindex $provenance 0] eq "alias" && [llength $provenance] == 2} {
+            set target [lindex $provenance 1]
+            set aliased [lsearch -exact -index 1 $normalized $target]
+            if {$aliased < 0 || [dict get [lindex $normalized $aliased] type] ne $result} {
+                error "core::native::register: -foreign of \"$name\": the result can alias only a data pointer parameter of its own type, and \"$target\" is none"
+            }
+        } elseif {$provenance ne "independent"} {
+            error "core::native::register: -foreign of \"$name\": bad provenance \"$provenance\" (unknown, independent or {alias NAME})"
+        }
+    }
+    return [dict create vars $vars params $normalized result $result provenance $provenance]
+}
+
+# The parameter index the result of CONTRACT aliases (provenance {alias
+# NAME}), or -1.
+proc core::cabi::AliasIndex {contract} {
+    set provenance [dict get $contract provenance]
+    if {[lindex $provenance 0] ne "alias"} {
+        return -1
+    }
+    return [lsearch -exact -index 1 [dict get $contract params] [lindex $provenance 1]]
 }
 
 # The HIR type term TYPE in its canonical text (a list rebuilt at every
@@ -421,6 +454,15 @@ proc core::cabi::NormalizeForeign {name contract arity} {
 proc core::cabi::CanonicalTerm {type} {
     if {[llength $type] <= 1} {
         return [lindex $type 0]
+    }
+    if {[lindex $type 0] eq "fn" && [llength $type] == 2} {
+        # A function signature (a FnPtr's, C-ABI-TYPES.md) is a dict whose
+        # `args` is a list of types: one argument is a one-element list,
+        # never a type of its own.
+        set fields [lindex $type 1]
+        dict set fields args [lmap arg [dict get $fields args] {CanonicalTerm $arg}]
+        dict set fields return [CanonicalTerm [dict get $fields return]]
+        return [list fn $fields]
     }
     return [lmap element $type {CanonicalTerm $element}]
 }
@@ -593,6 +635,16 @@ proc core::cabi::StoreExposed {p offset bytes context} {
     }
     set new [binary encode hex [binary format cu* $bytes]]
     dict set exposures $id hex [string replace $hex [expr {2 * $offset}] [expr {2 * ($offset + $count) - 1}] $new]
+}
+
+# The implementation of every `extern c fn`'s native on the Tcl backends
+# (C-FFI.md, "Backends"): there is no machine to call C on, so the call is
+# refused -- after core::cabi::ForeignBoundary opened (and then closes) its
+# exposures, so a refused call publishes nothing. Nothing fabricates an
+# address or imitates the C function.
+proc core::cabi::ExternImpl {display args} {
+    core::semanticError NATIVE-ONLY \
+        "$display is a C function (extern c fn): calling it runs only on the native backends (cranelift, cranelift-generic, a native executable), which link and call the C library; the Tcl backends have no machine to call it on"
 }
 
 # The replay of a byte exposure the static check refused, for an unchecked

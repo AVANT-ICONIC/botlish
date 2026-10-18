@@ -1282,6 +1282,47 @@ change the code it mutates, keeping it a mutant of the same rule), plus
 for a change to the shared exposure mechanism. `bench/c-pointer-borrowing.tcl`
 regenerates the performance table.
 
+## C calls (extern c fn, extern c library)
+
+`extern c fn NAME [named "SYMBOL"](PARAMS) -> TYPE [FACT]` and `extern c
+library "NAME"` (C-FFI.md) are a truthful C ABI declaration with no body and
+a link-plan entry. A declaration is registered as the compilation-local
+root native `extern#KEY` with exactly the foreign call contract a
+`-foreign` native has (hir/foreign.tcl), so its calls are typed, admitted,
+exposed, judged direct and lowered by the one foreign-call machinery
+(hir/borrow.tcl, hir/direct.tcl, native/lower.tcl's `BorrowCall`). Keep it
+so:
+
+* Never add a second contract representation, a body, a wrapper or a Tcl-side
+  FFI: the Tcl backends refuse a C call (`NATIVE-ONLY`, `core::cabi::
+  ExternImpl`). No fact comes from a name, a C type or a header: an absent
+  fact is `unknown`, which never admits an exposure and always retains.
+* A library is the linker's `-lNAME`, associated with no function; symbols
+  are resolved by the system linker at link time, never at run time (no
+  `dlopen`, `dlsym` or symbol string on the call path). The native backends
+  run a program that calls C as an executable linked with the same plan
+  as `-emit-native-executable` (native/src/main.rs's `run_linked`); the stub
+  linker refuses one. Ordinary programs link and run exactly as before.
+* A pointer result is truthful and its provenance (`independent`, `alias
+  P`, unknown) is the contract's; a returned address the C pointer word
+  cannot hold fails (`NATIVE ADDRESS`), never truncated. Retaining calls
+  (escape captures or unknown) are direct edges of the calling unit; a
+  declaration designates nothing.
+* The registry is a declaration registry (`hir::foreign::capture`/`Install`):
+  compilation isolation and HIR interchange carry it.
+
+If you change any of that (C-FFI.md, "What to run when changing this", lists
+the files), run `tests/c-ffi.test` (also under `BOTLISH_NATIVE_GC_STRESS=1`),
+`audit/c-ffi/tools/fuzz.tcl` (several seeds, once with `-gc-stress 1`) and
+`audit/c-ffi/tools/mutate.tcl` (every mutant in its `mutants.txt` must still
+apply and be killed: update a mutant's text when you change the code it
+mutates, keeping it a mutant of the same rule), plus the borrowing,
+direct-module, isolation and interchange harnesses above for a change to
+what they cover. The BoringSSL acceptance tests need the package-owned
+static BoringSSL: `tclsh9.0 tests/cffi/boringssl.tcl` builds it once into
+Botlish's cache (never the repository); without it they are skipped.
+`bench/c-ffi.tcl` regenerates the performance report.
+
 ## C header archaeology (a research instrument)
 
 `audit/c-header/` (C-HEADER-ARCHAEOLOGY.md) preprocesses BoringSSL's and
@@ -1290,17 +1331,72 @@ an exploratory FFI IR and counts what a first C FFI would need. It is
 research tooling, not the FFI: nothing in `core/`, `hir/`, `surface/`,
 `compiler/` or `native/` may load it, `tests/local.tcl` and CI do not run
 it, and ordinary Botlish compilation must never depend on a C preprocessor
-or compiler. Only `tools/toolchain.tcl` builds command lines (the
-`BOTLISH_C_*` variables). Keep it that way: a new tool asks the adapter,
-never `exec`s a compiler itself.
+or compiler. Its toolchain adapter, declaration parser, IR utilities, macro
+records and classifier and preprocessing pipeline are the C header library
+`tools/cheader/`, which the binding generator (next section) shares; the
+audit's tools load them with `::chdr::use`. Only
+`tools/cheader/toolchain.tcl` builds command lines (the `BOTLISH_C_*`
+variables). Keep it that way: a new tool asks the adapter, never `exec`s a
+compiler itself.
 
-If you change `tools/cdecl.tcl`, `tools/ir.tcl`, `tools/run.tcl` or the
+If you change `tools/cheader/` (`cdecl.tcl`, `ir.tcl`, `macros.tcl`,
+`macrocat.tcl`, `pipeline.tcl`), `audit/c-header/tools/run.tcl` or the
 census, run `tclsh9.0 audit/c-header/tests/parser.test` and
 `tests/corpus.test` (no toolchain needed), then `tools/fetch.tcl` once and
 `tools/all.tcl`: the oracle must stay at 0 rejected with every planted
 check caught, every thunk sample as predicted on gcc and clang. Commit the
 regenerated `results/` and `unsupported/` (they are deterministic; only
-`timing.txt` changes run to run).
+`timing.txt` changes run to run). A change to `tools/cheader/` is a change
+to the generator too: run its checks (next section).
+
+## The C binding generator (a development tool)
+
+`tools/c-bindgen.tcl` (C-BINDGEN.md) generates ordinary Botlish bindings
+(`extern c library`, `extern c fn`, opaque pointee types, typed constants)
+and C thunks from real C headers, by interrogating the C compiler for the
+profile's target: `_Generic` and data-directive probes compiled to
+assembly, a symbol probe of `&(NAME)`, clang's `-O2` IR of the shim for
+evidence. The committed bindings are `generated/c/PROFILE/TARGET/` and the
+fixture's `tools/c-bindgen/fixture/expected/TARGET/`. Keep it so:
+
+* The compiler never loads the generator or `tools/cheader/`, never learns
+  that a module was generated, and compiling a generated binding needs no
+  header, preprocessor or C compiler. A generated module is an ordinary
+  module, never `direct module`.
+* Never interpret C in Tcl beyond the archaeology's parser and the macro
+  classifier: every type, value and symbol is the compiler's answer. No
+  name is special: no API, symbol or prefix spelled in the generator; a
+  link symbol is the symbol probe's. A stub-table redirection is never a
+  symbol.
+* Contracts default to unknown; no fact from a C type (`const` is no
+  fact), a name or a namespace; a manual fact is the profile's, emitted as
+  declared, a compiler fact `proven`, both with their source in the
+  manifest; conflicting sources and stale policy are errors.
+* Never approximate: a declaration outside the C ABI universe is
+  unsupported with its blocker in the report, never mapped to something
+  that compiles. `ffi::c::Bool` is the one primitive this milestone added;
+  do not add another to make a binding pass.
+* Output is deterministic (no time, temporary path, host path, hash or
+  directory order), and every committed binding is what generation
+  produces: after changing the generator, a profile or a pinned source,
+  regenerate (`tools/c-bindgen.tcl generate PROFILE -target T`) and commit
+  the diff.
+
+If you change `tools/c-bindgen/`, `tools/cheader/`, a profile or the
+fixture, run `tclsh9.0 tests/c-bindgen.test`, `tools/c-bindgen.tcl check
+PROFILE -target committed` for every profile (fixture, tcl, tclstubs,
+boringssl, sdl3), `audit/c-bindgen/tools/fuzz.tcl` (several seeds) and
+`audit/c-bindgen/tools/mutate.tcl` (every mutant in
+`audit/c-bindgen/tools/mutants.txt` must still apply and be killed by a test
+of behavior or the fuzzer, not only by the pinned comparison: update a
+mutant's text when you change the code it mutates, keeping it a mutant of
+the same rule). The Tcl, BoringSSL and SDL3 tests need their pinned sources
+(`tools/c-bindgen.tcl fetch PROFILE`) and libraries (`tests/cffi/
+boringssl.tcl`, `tests/cffi/sdl3.tcl`, the installed libtcl9.0) and are
+skipped without them; their `linux-aarch64` generation needs the arm64 C
+library headers (`libc6-dev-arm64-cross`). The `c-bindgen` workflow
+(`.github/workflows/c-bindgen.yml`) runs all of it. macOS bindings of real
+libraries need the macOS SDK (`BOTLISH_C_SYSROOT_macos_aarch64`, or a Mac).
 
 ## Static intrinsics
 

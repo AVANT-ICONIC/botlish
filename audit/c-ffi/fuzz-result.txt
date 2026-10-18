@@ -1,0 +1,13 @@
+# audit/c-ffi/tools/fuzz.tcl (2026-10-17, Linux x86-64; both native backends,
+# NATIVE-ONLY checked on interp and compile)
+
+tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 20 -seed 1
+programs 20 functions 240 disagreements 0
+tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 20 -seed 2
+programs 20 functions 240 disagreements 0
+tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 20 -seed 3
+programs 20 functions 240 disagreements 0
+tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 20 -seed 4
+programs 20 functions 240 disagreements 0
+tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 10 -seed 9 -gc-stress 1
+programs 10 functions 120 disagreements 0

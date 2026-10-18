@@ -38,6 +38,24 @@ jobs:
       - name: Build native (Cranelift) backend
         uses: ./.github/actions/build-native
 
+      # The C FFI's SHA-256 acceptance (tests/c-ffi.test) links the
+      # package-owned static BoringSSL, built once per pinned release into
+      # Botlish's cache (C-FFI.md, "The BoringSSL binding"); without it those
+      # tests are skipped.
+      - name: Cache the package-owned BoringSSL
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/botlish/boringssl
+          key: boringssl-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('audit/c-header/profiles/boringssl.tcl', 'tests/cffi/boringssl.tcl') }}
+
+      - name: Build the package-owned BoringSSL
+        run: |
+          if ! command -v cmake >/dev/null || ! command -v ninja >/dev/null; then
+            sudo apt-get update
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cmake ninja-build
+          fi
+          tclsh9.0 tests/cffi/boringssl.tcl
+
       - name: Run test suite
         env:
           CORE_BACKEND: ${{ matrix.backend }}

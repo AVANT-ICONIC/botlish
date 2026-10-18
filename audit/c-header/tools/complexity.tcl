@@ -23,7 +23,7 @@ proc lines {path} {
 }
 
 set out {}
-set parser [file join $here cdecl.tcl]
+set parser [file join $::chdr::lib cdecl.tcl]
 lassign [lines $parser] code comment blank
 lappend out "cdecl.tcl lines: code $code, comment $comment, blank $blank"
 set text [::chdr::readFile $parser]
@@ -66,7 +66,7 @@ lappend out "Fail sites: [expr {[llength $fails] / 3}]"
 foreach {cat msgs} $byCat { lappend out "  $cat ([llength $msgs]): [join $msgs { | }]" }
 lappend out "recovery: Recover (skip to ';' at depth 0 or a function body's '}'), the unknown-type-name heuristic, the soft-type rule"
 # The rest of the instrument, for contrast.
-foreach f [lsort [glob -directory $here *.tcl]] {
+foreach f [lsort [concat [glob -directory $here *.tcl] [glob -directory $::chdr::lib *.tcl]]] {
     lassign [lines $f] c m b
     lappend out "tool [file tail $f]: code $c, comment $m, blank $b"
 }

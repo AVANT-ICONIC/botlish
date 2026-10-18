@@ -135,6 +135,9 @@ pub struct Symbols {
     /// cannot be vouched for). Either way a fixed program address, never a
     /// lookup.
     pub context_pc_relative: bool,
+    /// Per foreign function (nir::Program::foreigns, C-FFI.md): its imported
+    /// symbol, declared with its C signature, and its declaration.
+    pub foreigns: Vec<(ModuleFuncId, nir::ForeignDecl)>,
 }
 
 /// How many machine words F's direct function returns. Ordinarily
@@ -192,6 +195,39 @@ fn signature_n<M: Module>(module: &M, params: usize, results: usize) -> Signatur
     sig
 }
 
+/// The Cranelift type of C ABI class C (a pointer is a 64-bit word).
+fn c_type(c: nir::CAbi) -> ir::Type {
+    match c.bits() {
+        8 => types::I8,
+        16 => types::I16,
+        32 => types::I32,
+        _ => I64,
+    }
+}
+
+/// The C signature of foreign function DECL in the module's default (the
+/// platform C) calling convention: each integer parameter of its exact width,
+/// sign- or zero-extended by its class as the platform ABI expects of a
+/// caller (the narrow ones), a pointer a 64-bit word. The result is declared
+/// without an extension attribute: the bits beyond a narrow C result's width
+/// are unspecified by the ABI (GCC leaves them), so the caller extends it
+/// itself (`ForeignCall`).
+fn c_signature<M: Module>(module: &M, decl: &nir::ForeignDecl) -> Signature {
+    let mut sig = module.make_signature();
+    for c in &decl.params {
+        let param = AbiParam::new(c_type(*c));
+        sig.params.push(match (c.bits() < 64, c.signed()) {
+            (true, true) => param.sext(),
+            (true, false) => param.uext(),
+            _ => param,
+        });
+    }
+    if decl.result != nir::CAbi::Void {
+        sig.returns.push(AbiParam::new(c_type(decl.result)));
+    }
+    sig
+}
+
 fn module_error(e: cranelift_module::ModuleError) -> BackendError {
     BackendError::Codegen(format!("{e:?}"))
 }
@@ -208,6 +244,7 @@ pub fn declare<M: Module>(module: &mut M, program: &nir::Program, export: bool) 
         direct_helpers,
         context_area: None,
         context_pc_relative: export,
+        foreigns: vec![],
     };
     if program.context_bytes > 0 {
         // The context area (CONTEXTS.md): every context slot, at the offsets
@@ -229,6 +266,16 @@ pub fn declare<M: Module>(module: &mut M, program: &nir::Program, export: bool) 
         let id = module.declare_function(name, Linkage::Import, &signature(module, params)).map_err(module_error)?;
         symbols.helpers.insert(name, id);
         symbols.names.insert(id.as_u32(), name.to_string());
+    }
+    for decl in &program.foreigns {
+        // A C function (C-FFI.md): an imported symbol the system linker
+        // resolves (the JIT's compile-only uses resolve it to a stub,
+        // codegen/mod.rs), called with the platform C calling convention.
+        let id = module
+            .declare_function(&decl.symbol, Linkage::Import, &c_signature(module, decl))
+            .map_err(module_error)?;
+        symbols.names.insert(id.as_u32(), format!("{} (C {})", decl.symbol, decl.name));
+        symbols.foreigns.push((id, decl.clone()));
     }
     let linkage = if export { Linkage::Export } else { Linkage::Local };
     for f in &program.functions {
@@ -954,6 +1001,146 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         r
     }
 
+    /// A C call (C-FFI.md, nir.rs's `foreigncall`): the operands converted
+    /// to their C ABI classes, one direct call of the linked symbol, the
+    /// result checked against an alias contract and converted back. Returns
+    /// the tagged result.
+    ///
+    /// Operands: an exposure's address is a small Int (`sshr 1`), a raw
+    /// pointer a C address word (`sshr 4`: the sign-extended address), a C
+    /// `_Bool` a Botlish bool (its truth bit, `ushr 2` and 1: 0 or 1), a C
+    /// integer an Int -- small for every class narrower than 64 bits (its
+    /// proven range), else small or a BigInt (`rt_ffi_int_word`) -- then
+    /// reduced to its width. Results: a narrow integer extended by its own
+    /// signedness and tagged; a `_Bool` byte the bool it is when 0 or 1, else
+    /// `rt_ffi_bad_bool`; a 64-bit one tagged when it fits the small range,
+    /// else boxed (`rt_ffi_box_i64`/`_u64`); a pointer tagged when the C
+    /// address word holds it, else `rt_ffi_bad_address`; void unit.
+    fn foreign_call(&mut self, foreign: u32, args: &[Reg], exposed: &[bool], discard: bool) -> ir::Value {
+        let (id, decl) = self.symbols.foreigns[foreign as usize].clone();
+        let mut words = Vec::with_capacity(args.len());
+        let mut values = Vec::with_capacity(args.len());
+        for (i, r) in args.iter().enumerate() {
+            let v = self.get(*r);
+            let class = decl.params[i];
+            let word = if exposed[i] {
+                self.b.ins().sshr_imm_s(v, 1)
+            } else if class == nir::CAbi::Ptr {
+                self.b.ins().sshr_imm_s(v, 4)
+            } else if class == nir::CAbi::Bool {
+                let shifted = self.b.ins().ushr_imm_s(v, 2);
+                self.b.ins().band_imm_s(shifted, 1)
+            } else if class.bits() < 64 {
+                self.b.ins().sshr_imm_s(v, 1)
+            } else {
+                self.int_word(v)
+            };
+            words.push(word);
+            values.push(if class.bits() < 64 { self.b.ins().ireduce(c_type(class), word) } else { word });
+        }
+        let r = self.func_ref(id);
+        let call = self.b.ins().call(r, &values);
+        self.mark_safepoint(call);
+        let returned = (decl.result != nir::CAbi::Void).then(|| self.b.inst_results(call)[0]);
+        if let (Some(alias), Some(returned)) = (decl.alias, returned) {
+            // The development assertion of an alias contract: the returned
+            // address is exactly the argument's.
+            let expected = words[alias as usize];
+            let same = self.b.ins().icmp(IntCC::Equal, returned, expected);
+            let ok = self.b.create_block();
+            let bad = self.b.create_block();
+            self.b.ins().brif(same, ok, &[], bad, &[]);
+            self.b.switch_to_block(bad);
+            let name = self.string(&decl.name);
+            self.fail_with("rt_ffi_contract_violation", &[self.vm, name, expected, returned]);
+            self.b.switch_to_block(ok);
+        }
+        if discard {
+            return self.iconst(UNIT);
+        }
+        let Some(returned) = returned else { return self.iconst(UNIT) };
+        let class = decl.result;
+        if class == nir::CAbi::Ptr {
+            // (address << 4) | tag when the word holds the address.
+            let shifted = self.b.ins().ishl_imm_s(returned, 4);
+            let back = self.b.ins().sshr_imm_s(shifted, 4);
+            let fits = self.b.ins().icmp(IntCC::Equal, back, returned);
+            let ok = self.b.create_block();
+            let bad = self.b.create_block();
+            self.b.ins().brif(fits, ok, &[], bad, &[]);
+            self.b.switch_to_block(bad);
+            let name = self.string(&decl.name);
+            self.fail_with("rt_ffi_bad_address", &[self.vm, name, returned]);
+            self.b.switch_to_block(ok);
+            return self.b.ins().bor_imm_s(shifted, CPTR_TAG as i64);
+        }
+        if class == nir::CAbi::Bool {
+            // The _Bool byte, whatever the register holds beyond it: 0 or 1
+            // is false or true, any other byte no _Bool at all.
+            let byte = self.b.ins().uextend(I64, returned);
+            let valid = self.b.ins().icmp_imm_s(IntCC::UnsignedLessThanOrEqual, byte, 1);
+            let ok = self.b.create_block();
+            let bad = self.b.create_block();
+            self.b.ins().brif(valid, ok, &[], bad, &[]);
+            self.b.switch_to_block(bad);
+            let name = self.string(&decl.name);
+            self.fail_with("rt_ffi_bad_bool", &[self.vm, name, byte]);
+            self.b.switch_to_block(ok);
+            let shifted = self.b.ins().ishl_imm_s(byte, 2);
+            return self.b.ins().bor_imm_s(shifted, 2);
+        }
+        if class.bits() < 64 {
+            let wide = if class.signed() {
+                self.b.ins().sextend(I64, returned)
+            } else {
+                self.b.ins().uextend(I64, returned)
+            };
+            let shifted = self.b.ins().ishl_imm_s(wide, 1);
+            return self.b.ins().bor_imm_s(shifted, 1);
+        }
+        // A 64-bit result: tagged when it fits the small range, else boxed.
+        let (fits, helper) = if class.signed() {
+            let shifted = self.b.ins().ishl_imm_s(returned, 1);
+            let back = self.b.ins().sshr_imm_s(shifted, 1);
+            (self.b.ins().icmp(IntCC::Equal, back, returned), "rt_ffi_box_i64")
+        } else {
+            (self.b.ins().icmp_imm_s(IntCC::UnsignedLessThan, returned, SMALL_MAX + 1), "rt_ffi_box_u64")
+        };
+        let small = self.b.create_block();
+        let big = self.b.create_block();
+        let join = self.b.create_block();
+        self.b.append_block_param(join, I64);
+        self.b.ins().brif(fits, small, &[], big, &[]);
+        self.b.switch_to_block(small);
+        let shifted = self.b.ins().ishl_imm_s(returned, 1);
+        let tagged = self.b.ins().bor_imm_s(shifted, 1);
+        self.b.ins().jump(join, &[BlockArg::Value(tagged)]);
+        self.b.switch_to_block(big);
+        let boxed = self.call_helper(helper, &[self.vm, returned]);
+        self.b.ins().jump(join, &[BlockArg::Value(boxed)]);
+        self.b.switch_to_block(join);
+        self.b.block_params(join)[0]
+    }
+
+    /// The two's-complement 64-bit word of the Int V (a 64-bit C integer
+    /// argument): inline for a small Int, `rt_ffi_int_word` for a BigInt.
+    fn int_word(&mut self, v: ir::Value) -> ir::Value {
+        let small = self.b.create_block();
+        let big = self.b.create_block();
+        let join = self.b.create_block();
+        self.b.append_block_param(join, I64);
+        let tag = self.b.ins().band_imm_s(v, 1);
+        self.b.ins().brif(tag, small, &[], big, &[]);
+        self.b.switch_to_block(small);
+        let n = self.b.ins().sshr_imm_s(v, 1);
+        self.b.ins().jump(join, &[BlockArg::Value(n)]);
+        self.b.switch_to_block(big);
+        let w = self.call_helper("rt_ffi_int_word", &[self.vm, v]);
+        self.b.ins().jump(join, &[BlockArg::Value(w)]);
+        self.b.switch_to_block(join);
+        self.b.block_params(join)[0]
+    }
+
     fn call_helper(&mut self, name: &str, args: &[ir::Value]) -> ir::Value {
         let id = self.symbols.helpers[name];
         let r = self.helper_ref(id);
@@ -1522,6 +1709,10 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let (n, ptr) = self.array(args);
                 let v = self.call_helper("rt_call_value", &[self.vm, f, n, ptr]);
                 self.check(v);
+                self.def(*dst, v);
+            }
+            Inst::ForeignCall { dst, foreign, args, exposed, discard } => {
+                let v = self.foreign_call(*foreign, args, exposed, *discard);
                 self.def(*dst, v);
             }
             Inst::Tail { args } | Inst::TailEnv { args, .. } => {

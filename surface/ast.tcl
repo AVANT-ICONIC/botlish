@@ -186,6 +186,18 @@
 #              declared payload field, in written order, exactly a
 #              structdecl's; empty for a payload-free error. No runtime
 #              meaning, exactly like typedecl.
+#   externlib  library, librarySpan -- "extern c library NAME" (C-FFI.md): a
+#              native library the program's link plan names (-lNAME); no
+#              runtime meaning, no binding, associated with no declaration
+#   externfn   name, nameSpan, symbol (the `named` link symbol, "" for the
+#              name itself), symbolSpan, params ({name nameSpan type typeSpan
+#              access escape factsSpan} dicts in written order: access read |
+#              write | "", escape declared-noescape | proven-noescape |
+#              captures | "", "" an unstated fact), paramsSpan, resultType,
+#              resultTypeSpan, provenance (independent | {alias PARAM} |
+#              ""), provenanceSpan -- "extern c fn NAME(...) -> T" (C-FFI.md):
+#              a C ABI declaration with no body. A declaration like
+#              structdecl: no runtime meaning; the loader supplies its module
 #   with       form (context), formSpan, value -- "with context EXPR": a
 #              declaration-like statement installing EXPR's value as the
 #              execution-environment context of its type for the rest of
@@ -865,6 +877,35 @@ proc surface::ast::Statement {node indent show linesVar} {
                 }
                 lappend lines $line
             }
+            return
+        }
+        externlib {
+            lappend lines "${pad}extern c library [Quote [dict get $node library]]$at"
+            return
+        }
+        externfn {
+            set line "${pad}extern c fn [dict get $node name]"
+            if {[dict get $node symbol] ne ""} {
+                append line " named [Quote [dict get $node symbol]]"
+            }
+            set params [lmap param [dict get $node params] {
+                set text "[dict get $param name]: [showType [dict get $param type]]"
+                if {[dict get $param access] ne ""} {
+                    append text " [dict get $param access]"
+                }
+                switch -- [dict get $param escape] {
+                    declared-noescape { append text " noescape" }
+                    proven-noescape { append text " proven noescape" }
+                    captures { append text " captures" }
+                }
+                set text
+            }]
+            append line "([join $params {, }]) -> [showType [dict get $node resultType]]"
+            switch -- [lindex [dict get $node provenance] 0] {
+                independent { append line " independent" }
+                alias { append line " alias [lindex [dict get $node provenance] 1]" }
+            }
+            lappend lines "$line$at"
             return
         }
         structdecl {

@@ -57,7 +57,16 @@
 # binding's canonical spelling is "namespace::name" (hir::containers, module
 # native targets and diagnostics key on it).
 
-namespace eval hir::hygiene {}
+namespace eval hir::hygiene {
+    # While apply runs: binding -> the ref and bind expressions of it, built
+    # once (Uses), which RenameTo reads instead of scanning every expression
+    # for every rename -- a module or a binding of thousands of declarations
+    # (a generated C binding, C-BINDGEN.md "Performance") renames each one.
+    # Renames change names only, never which binding an expression denotes,
+    # so the index stays exact for the whole pass.
+    variable uses {}
+    variable active 0
+}
 
 # Renames bindings that shadow root references (recorded by resolution in
 # HIR's rootRefs); removes rootRefs. Then (ProtectEarlierRefs) renames later
@@ -65,6 +74,20 @@ namespace eval hir::hygiene {}
 # (qualifyModules) renames every module's own top-level definitions to their
 # qualified spelling.
 proc hir::hygiene::apply {hirVar} {
+    upvar 1 $hirVar hir
+    variable uses
+    variable active
+    set uses [Uses $hir]
+    set active 1
+    try {
+        Apply hir
+    } finally {
+        set uses {}
+        set active 0
+    }
+}
+
+proc hir::hygiene::Apply {hirVar} {
     upvar 1 $hirVar hir
     if {[dict exists $hir rootRefs]} {
         foreach e [dict get $hir rootRefs] {
@@ -80,8 +103,25 @@ proc hir::hygiene::apply {hirVar} {
         }
         dict unset hir rootRefs
     }
+    qualifyExterns hir
     ProtectEarlierRefs hir
     qualifyModules hir
+}
+
+# Renames the binding of every extern c fn (hir/foreign.tcl: a root-kind
+# binding of its unit's scope, `extern` its key) to the internal name of the
+# native it denotes, extern#KEY, keeping the written name in `spelling`: then
+# a name-based consumer (core IR, the Tcl compiler) finds the native under
+# the one name it is registered by, like any root native's, and a reference
+# from another file (`sha::SHA256`) and the module's own (`SHA256`) are one
+# name too.
+proc hir::hygiene::qualifyExterns {hirVar} {
+    upvar 1 $hirVar hir
+    dict for {b binding} [dict get $hir bindings] {
+        if {[dict exists $binding extern]} {
+            RenameTo hir $b [hir::foreign::nativeName [dict get $binding extern]] 1
+        }
+    }
 }
 
 # For every ordinary reference E to binding B, renames every other binding a
@@ -161,6 +201,11 @@ proc hir::hygiene::qualifyModules {hirVar} {
     }
     dict for {ns bodyScope} [dict get $hir modules] {
         foreach b [dict get $hir scopes $bodyScope bindings] {
+            if {[dict exists $hir bindings $b extern]} {
+                # An extern c fn's name (qualifyExterns) already is its one
+                # collision-free name.
+                continue
+            }
             if {[dict exists $hir bindings $b traitClone]} {
                 # A trait clone (TRAITS.md) already has its one qualified,
                 # collision-free name: its source function's.
@@ -193,9 +238,23 @@ proc hir::hygiene::RenameTo {hirVar b new {recordSpelling 0}} {
     }
     dict unset hir scopes $s names $old
     dict set hir scopes $s names $new $b
-    dict for {id node} [dict get $hir exprs] {
-        if {[dict get $node kind] in {ref bind} && [dict get $node binding] eq $b} {
+    variable uses
+    variable active
+    set index [expr {$active ? $uses : [Uses $hir]}]
+    if {[dict exists $index $b]} {
+        foreach id [dict get $index $b] {
             dict set hir exprs $id name $new
         }
     }
+}
+
+# The ref and bind expressions of every binding of HIR: binding -> ids.
+proc hir::hygiene::Uses {hir} {
+    set out [dict create]
+    dict for {id node} [dict get $hir exprs] {
+        if {[dict get $node kind] in {ref bind}} {
+            dict lappend out [dict get $node binding] $id
+        }
+    }
+    return $out
 }

@@ -200,6 +200,9 @@ fn is_safepoint(inst: &Inst) -> bool {
         Inst::Op { op, .. } => op_may_allocate(*op),
         Inst::Call { may_gc, .. } | Inst::CallEnv { may_gc, .. } | Inst::CallMulti { may_gc, .. } | Inst::CallEnvMulti { may_gc, .. } => *may_gc,
         Inst::CallValue { .. } => true,
+        // A C call (C-FFI.md): foreign code may reach the runtime (later,
+        // callbacks), and its result may be boxed (a 64-bit Int).
+        Inst::ForeignCall { .. } => true,
         _ => false,
     }
 }
@@ -259,6 +262,7 @@ fn def_use(inst: &Inst, params: u32) -> (Vec<Reg>, Vec<Reg>) {
             use_.extend(args);
             (vec![*dst], use_)
         }
+        Inst::ForeignCall { dst, args, .. } => (vec![*dst], args.clone()),
         // A self tail call rebinds every parameter register (codegen::clif's
         // Inst::Tail/TailEnv translation): the parameter slots 0..params are
         // defined, args (plus, for TailEnv, the new environment register)

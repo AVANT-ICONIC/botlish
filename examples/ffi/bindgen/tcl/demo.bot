@@ -1,0 +1,37 @@
+# demo.bot -- Botlish calls the Tcl C library through the GENERATED binding
+# (C-BINDGEN.md, "Tcl"): the hand-written examples/ffi/tcl/demo.bot's
+# behavior -- create an interpreter, evaluate a script that prints a line
+# and one that fails, check their statuses, delete the interpreter -- with
+# every declaration and constant generated from tcl.h and tclDecls.h
+# (generated/c/tcl/TARGET/tcl/). Run it with the generator, which stages
+# this program beside the target's binding and runs main.tcl:
+#
+#   tclsh9.0 tools/c-bindgen.tcl run tcl examples/ffi/bindgen/tcl/demo.bot -backend cranelift
+#
+# The value is [true, true, true]; "hello from Tcl" is Tcl's own output.
+# tcl::thunks::decls's Tcl_Eval is the thunk of Tcl 9's macro of that name
+# (Tcl_EvalEx(interp, script, TCL_INDEX_NONE, 0)): the second script runs
+# through it, so the shim library is linked too.
+import abi
+import abi::bytes
+import byte
+import ffi::c
+import list
+import str
+import tcl::decls
+import tcl::tcl
+import tcl::thunks::decls
+
+fn nul() -> byte::Byte:
+    0
+
+# The bytes of TEXT followed by the NUL byte the C API requires.
+fn script(text: str) -> abi::bytes::Bytes:
+    abi::bytes::from_list(str::encode_utf8(text).append(nul()))
+
+interp = tcl::decls::Tcl_CreateInterp()
+created = not interp.null?()
+printed = interp.Tcl_EvalEx(script("puts {hello from Tcl}; flush stdout"), tcl::tcl::TCL_INDEX_NONE, 0)
+failed = interp.Tcl_Eval(script("error {deliberately}"))
+tcl::decls::Tcl_DeleteInterp(interp)
+[created, printed == tcl::tcl::TCL_OK, failed != tcl::tcl::TCL_OK]

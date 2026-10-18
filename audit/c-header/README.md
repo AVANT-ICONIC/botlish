@@ -18,11 +18,13 @@ tclsh9.0 audit/c-header/tools/diff.tcl tcl-embed tcl-stubs
 
 * `profiles/` -- the import profiles (library revision, entry headers,
   include directories, defines).
-* `tools/` -- the toolchain adapter (`toolchain.tcl`, the only place that
-  builds a command line), the tokenizer and declaration parser
-  (`cdecl.tcl`), the IR text and type utilities (`ir.tcl`), the census,
-  the compiler oracle, the ABI probe, the thunk prototype, queries and
-  diffs.
+* `tools/` -- the census, the compiler oracle, the ABI probe, the thunk
+  prototype, queries and diffs, over the C header library in the
+  repository's `tools/cheader/`, which the binding generator
+  (`docs/C-BINDGEN.md`) shares: the toolchain adapter (`toolchain.tcl`, the
+  only place that builds a command line), the tokenizer and declaration
+  parser (`cdecl.tcl`), the IR text and type utilities (`ir.tcl`), the
+  macro records and classifier and the preprocessing pipeline.
 * `results/PROFILE/` -- the IR (`ir.txt`), the system declarations it
   depends on (`system.txt`), the macro records (`macros.txt`), the census
   (`census.txt`, `census.tsv`), the import profile (`profile.txt`), the
