@@ -143,7 +143,16 @@ clang triple (`x86_64-linux-gnu`, `aarch64-linux-gnu`, `arm64-apple-macos11`,
 `BOTLISH_C_SYSROOT_macos_aarch64`, or `BOTLISH_C_SYSROOT`). A target's system
 headers are its own or none: generating for macOS off a Mac without an SDK
 is an error, because clang would otherwise fall back to the host's
-`/usr/include` and preprocess Linux's headers as if they were Apple's.
+`/usr/include` and preprocess Linux's headers as if they were Apple's. A
+Linux target that is not the host's needs the target's cross C library
+where clang finds it -- on Debian and Ubuntu through the GCC cross
+installation (`gcc-aarch64-linux-gnu`, which brings `libc6-dev-arm64-cross`
+and makes clang search `/usr/aarch64-linux-gnu/include`) -- or a sysroot:
+when no directory clang searches (`::chdr::toolchain::searchDirs`, clang's
+own `-v` listing) names the target's triple, generation stops with that
+remedy rather than read the host's headers as the target's
+(`cb-fixture-cross-headers`). A freestanding profile (`-nostdlibinc`, the
+fixture) reads no system header and needs neither.
 
 ## 3. Profiles
 
@@ -996,7 +1005,8 @@ up to 2 minutes of fuzzing).
 ## 32. CI
 
 `.github/workflows/c-bindgen.yml` runs on every push to main, pull request
-and dispatch: it installs clang, LLVM and the arm64 C library headers,
+and dispatch: it installs clang, LLVM and the arm64 cross C library (through
+`gcc-aarch64-linux-gnu`, section 2),
 fetches the pinned Tcl, BoringSSL and SDL3 sources (cached), runs `check
 PROFILE -target committed` for every profile -- every committed binding
 must be what generation produces, byte for byte, for every committed target

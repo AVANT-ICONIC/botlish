@@ -30,15 +30,19 @@ jobs:
       - name: Install project prerequisites
         run: bash .devcontainer/setup.sh
 
-      # clang preprocesses and probes every target (clang --target); the
-      # AArch64 Linux targets read the arm64 C library's headers, the
-      # cross package's. CMake and Ninja build BoringSSL and SDL3.
+      # clang preprocesses and probes every target (clang --target). The
+      # AArch64 Linux targets read the arm64 C library's headers, which
+      # clang finds through the GCC cross installation (gcc-aarch64-linux-
+      # gnu brings libc6-dev-arm64-cross): without it clang would search
+      # only the host's /usr/include, which the generator refuses
+      # (C-BINDGEN.md, "Pipeline"). CMake and Ninja build BoringSSL and SDL3.
       - name: Install the C toolchain
         run: |
           sudo apt-get update
           sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            clang llvm libc6-dev-arm64-cross cmake ninja-build
+            clang llvm gcc-aarch64-linux-gnu libc6-dev-arm64-cross cmake ninja-build
           clang --version
+          clang --target=aarch64-linux-gnu -E -v -x c /dev/null -o /dev/null 2>&1 | sed -n '/search starts here/,/End of search/p'
 
       - name: Build native (Cranelift) backend
         uses: ./.github/actions/build-native

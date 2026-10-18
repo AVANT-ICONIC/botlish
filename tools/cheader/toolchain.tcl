@@ -16,6 +16,8 @@
 #                         generator's semantic evidence, clang only)
 #   object SOURCE OUT     compile to an object file
 #   archive OBJECTS OUT   a static library of objects
+#   searchDirs            the directories the compiler searches for
+#                         <...> includes, in order
 #
 # configFor TARGET is the configuration for a Botlish C target
 # (core/cabi.tcl's names): a clang-family compiler with --target, so that
@@ -58,6 +60,7 @@ namespace eval ::chdr::toolchain {
             llvm {-S -emit-llvm}
             sysroot --sysroot=
             appleSysroot -isysroot
+            verbose -v
         }
     }
     # Botlish C targets (core/cabi.tcl) -> the clang target triple configFor
@@ -335,6 +338,28 @@ proc ::chdr::toolchain::archive {config objects out} {
     set command [concat $ar rcs [list $out] $objects]
     lassign [Exec $command] ok text stderr
     return [list $ok $stderr $command]
+}
+
+# The directories the configuration searches for <...> includes, in
+# order: the compiler's own listing (-E -v of an empty translation unit),
+# between "#include <...> search starts here:" and "End of search list.".
+# {OK DIRS STDERR COMMAND}.
+proc ::chdr::toolchain::searchDirs {config profile} {
+    set dir [file tempdir]
+    set c [file join $dir empty.c]
+    close [open $c w]
+    set command [concat [PreprocessCommand $config $profile] [Flag $config verbose] [list $c] \
+        [Flag $config output] [list [file join $dir empty.i]]]
+    lassign [Exec $command] ok out stderr
+    file delete -force $dir
+    set dirs {}
+    set inside 0
+    foreach line [split $stderr \n] {
+        if {[string match "#include <...> search starts here:*" $line]} { set inside 1; continue }
+        if {[string match "End of search list.*" $line]} { set inside 0; continue }
+        if {$inside} { lappend dirs [file normalize [string trim [regsub { \(framework directory\)$} $line ""]]] }
+    }
+    return [list $ok $dirs $stderr $command]
 }
 
 # A description of the configuration for the import profile record.
