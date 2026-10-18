@@ -799,8 +799,10 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
   `ne-interchange-fresh-process`, `ne-cache` and `ne-hir-text-roundtrip`
   cover programs that write.
 * **The neighbouring mutation harnesses**, every mutant killed: native views
-  29/29, binary layout 39/39, C ABI types 26/26, direct modules 18/18.
-  ISOLATION-MUTANTS A static check of every audit's `mutants.txt` applies all
+  29/29, binary layout 39/39, C ABI types 26/26, direct modules 18/18,
+  compilation isolation 14/14, HIR interchange 27/27, affine values 29/29
+  (the coroutine harness, whose mutants this change does not touch, was not
+  rerun). A static check of every audit's `mutants.txt` applies all
   755 mutants of the 26 harnesses to the tree.
 * **Mutants this milestone moved.** Ten mutants of other areas no longer
   applied, because the code they mutate had moved or grown:
