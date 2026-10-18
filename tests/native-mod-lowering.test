@@ -1,8 +1,9 @@
 # native-mod-lowering.test -- the native lowering of the root `mod`
 # (native/lower.tcl's "Euclidean mod" section; native/src/nir.rs's RIMod/
-# RIModTotal; native/src/codegen/clif.rs's euclid_mod): two operands
-# proved small are the raw `rimodtotal` (the divisor's Range excludes 0) or
-# `rimod` (an inline zero test), and everything else is the tagged
+# RIModTotal; native/src/codegen/clif.rs's euclid_mod): a divisor
+# proved a single +-2^k is a mask (`riand`, or the tagged `iand`), two
+# operands proved small are the raw `rimodtotal` (the divisor's Range excludes
+# 0) or `rimod` (an inline zero test), and everything else is the tagged
 # `imod`, a call of rt_int_mod. Every form computes Euclidean
 # mod exactly (core/primitives.tcl's modulo: 0 <= r < |d|) and raises its
 # ARITHMETIC error for a zero divisor; only the tagged form is a safepoint.
@@ -73,6 +74,26 @@ test mod-lowering-total-negative-range {a divisor Range wholly below 0, or an ex
 [g(5, 0 - 3), g(0 - 5, 7)]}] g]
     list [ModOps $a] [ModOps $b]
 } -result {rimodtotal rimodtotal}
+
+test mod-lowering-mask-nir {a divisor proved the single value 2^k or -2^k is the mask 2^k - 1 (riand on a small dividend): no mod at all} -body {
+    set a [FunctionBody [nirOf {fn f(x: int) -> int:
+    x.mod(1024)
+
+[f(5), f(0 - 5)]}] f]
+    set b [FunctionBody [nirOf {fn g(x: int) -> int:
+    x.mod(0 - 8)
+
+[g(5), g(0 - 5)]}] g]
+    list [ModOps $a] [regexp {rawint 1023\M} $a] [ModOps $b] [regexp {rawint 7\M} $b]
+} -result {riand 1 riand 1}
+
+test mod-lowering-mask-tagged-nir {a power-of-two divisor of a dividend that may be a BigInt is the tagged iand (rt_int_and for a BigInt), still no mod} -body {
+    set body [FunctionBody [nirOf {fn f(x: int) -> int:
+    x.mod(16)
+
+[f(5), f(100000000000000000000)]}] f]
+    ModOps $body
+} -result iand
 
 test mod-lowering-tagged-nir {a dividend of unknown range keeps the tagged imod} -body {
     set body [FunctionBody [nirOf {fn f(x: int) -> int:
@@ -155,5 +176,36 @@ $call"]
     }
     lsort -unique $outcomes
 } -result {{error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}}}
+
+test mod-lowering-loop-gc-stress {mod in a self-tail loop that allocates every iteration, with a fresh String live across a call of a function whose only op is the raw rimod (so the call is no safepoint), computes the same values under GC stress, collecting at every allocation} -body {
+    set text {import str
+fn reduce(x: int, d: int) -> int:
+    mod(x, d)
+
+fn step(i: int, n: int, acc: int) -> int:
+    if i >= n:
+        acc
+    else:
+        s = str::lowercase(str::concat("A", "B"))
+        r = reduce(i * 7, i * i + 1) + i.mod(64) + (i * 3).mod(1000)
+        t = str::lowercase(s)
+        step(i + 1, n, acc + r + str::length(s) + str::length(t))
+
+step(0 - 50, 200, 0)}
+    set hir [sourceHir $text]
+    set saved [array get ::env BOTLISH_NATIVE_GC_STRESS]
+    unset -nocomplain ::env(BOTLISH_NATIVE_GC_STRESS)
+    try {
+        set plain [native::evalHir $hir]
+        set ::env(BOTLISH_NATIVE_GC_STRESS) 1
+        set stressed [native::measure $hir 1]
+    } finally {
+        unset -nocomplain ::env(BOTLISH_NATIVE_GC_STRESS)
+        array set ::env $saved
+    }
+    set nir [native::nir $hir]
+    list [ModOps [FunctionBody $nir reduce]] [ModOps [FunctionBody $nir step]] [EffectsOf $text reduce] \
+        [expr {$plain eq [lindex $stressed 4]}] [expr {[lindex $stressed 3] >= 250}] [lindex [sourceAgree $text] 1]
+} -result {rimod {riand rimodtotal} {may_error=true may_gc=false} 1 1 288226}
 
 cleanupTests

@@ -4233,6 +4233,9 @@ tests/native-lockstep-rejected.test native-lockstep-rejected-unequal pass
 tests/native-lockstep-rejected.test native-lockstep-rejected-unproven pass
 tests/native-mod-lowering.test mod-lowering-checked-nir pass
 tests/native-mod-lowering.test mod-lowering-effects pass
+tests/native-mod-lowering.test mod-lowering-loop-gc-stress pass
+tests/native-mod-lowering.test mod-lowering-mask-nir pass
+tests/native-mod-lowering.test mod-lowering-mask-tagged-nir pass
 tests/native-mod-lowering.test mod-lowering-repr-opt-off pass
 tests/native-mod-lowering.test mod-lowering-tagged-nir pass
 tests/native-mod-lowering.test mod-lowering-total-negative-range pass

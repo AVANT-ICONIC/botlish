@@ -367,7 +367,7 @@ namespace eval native::lower {
 # (shift_right/shift_left) once both the shifted value and the shift amount
 # are additionally proven safe (RawEligibleShift): nonnegative, in range,
 # and (for the shift amount) a single already-known value, and to `mod`
-# (raw `rimod`/`rimodtotal`: the "Euclidean mod" section). A tagged AND/OR/
+# (raw `rimod`/`rimodtotal`, or a mask: the "Euclidean mod" section). A tagged AND/OR/
 # XOR (native/src/codegen/clif.rs's int_bitop) works on the tagged words
 # directly, but still tests both operands for a BigInt and keeps a helper
 # call (rt_int_and/or/xor) on the slow path, with the spills that call
@@ -8326,6 +8326,13 @@ proc native::lower::NativeCall {fnVar e node name argRegs rawEligible op want} {
             return $folded
         }
     }
+    if {$op eq "imod"} {
+        set masked [ModMaskCall fn $e $argExprs $argRegs $want \
+            [expr {$rawEligible ? "raw" : "tagged"}]]
+        if {$masked ne ""} {
+            return $masked
+        }
+    }
     if {$rawEligible} {
         # ARGREGS are already raw (Call requested it): lower directly, with
         # no RawOf needed on either operand.
@@ -8569,10 +8576,18 @@ proc native::lower::WantConvert {fnVar reg want} {
 #
 # `mod(x, d)` (core/primitives.tcl's modulo) is the one r with 0 <= r < |d|
 # and r = x (mod d); d = 0 raises {CORE SEMANTIC ARITHMETIC}. Besides the
-# tagged `imod`, two lowerings compute exactly that value, each chosen from
+# tagged `imod`, three lowerings compute exactly that value, each chosen from
 # facts hir/range.tcl already proved for the current instance (nothing here
 # names a function, a type or a particular divisor):
 #
+#   mask        D's Range is the single value d with |d| = 2^k and 2^k - 1 a
+#               small Int (ModMask): r = bit_and(x, 2^k - 1) for every Int x,
+#               negative and BigInt x included -- in two's complement the low
+#               k bits of x are its residue modulo 2^k, and the mask clears
+#               every bit above them, the sign included. `riand` when X's
+#               Range fits small, else the tagged `iand` (an inline both-small
+#               fast path, rt_int_and for a BigInt). D was already evaluated
+#               (Call evaluates every argument); it cannot be 0.
 #   rimodtotal  both Ranges fit small and D's excludes 0 (RangeExcludesZero):
 #               `srem` and the fix-up `r < 0 ? r + |d| : r` on the raw
 #               operands. It never fails, and never allocates (|r| < |d| <=
@@ -8608,6 +8623,66 @@ proc native::lower::RawModOp {e argExprs} {
     variable currentInstance
     set r [hir::range::of $ranges $currentInstance [lindex $argExprs 1]]
     return [expr {[RangeExcludesZero $r] ? "rimodtotal" : "rimod"}]
+}
+
+# The mask 2^k - 1 when mod call E's divisor (the second of ARGEXPRS) is
+# proved the single value d with |d| = 2^k and the mask fits small, neither
+# operand needs a runtime check (a guard or a known-error guard, exactly
+# PureBitwiseEligible's rule) and representation optimization is on; else "".
+proc native::lower::ModMask {e argExprs} {
+    variable reprOpt
+    variable ranges
+    variable currentInstance
+    variable guards
+    variable knownErrors
+    if {!$reprOpt || [llength $argExprs] != 2} {
+        return ""
+    }
+    foreach a $argExprs {
+        set key [list $e $a]
+        if {[dict exists $guards $key] || [dict exists $knownErrors $key]} {
+            return ""
+        }
+    }
+    set r [hir::range::of $ranges $currentInstance [lindex $argExprs 1]]
+    if {$r eq "never"} {
+        return ""
+    }
+    set d [dict get $r min]
+    if {$d eq "-inf" || $d ne [dict get $r max] || $d == 0} {
+        return ""
+    }
+    set m [expr {abs($d)}]
+    if {($m & ($m - 1)) != 0 || ![hir::range::fitsSmall [hir::range::point [expr {$m - 1}]]]} {
+        return ""
+    }
+    return [expr {$m - 1}]
+}
+
+# {REG REPR} of mod call E lowered as its mask (ModMask), or "" when it has
+# none. ARGREGS are the evaluated operands, of representation ARGREPR (raw
+# when the call is raw-eligible, RawEligibleCall); WANT is the caller's.
+proc native::lower::ModMaskCall {fnVar e argExprs argRegs want argRepr} {
+    upvar 1 $fnVar fn
+    variable ranges
+    variable currentInstance
+    set mask [ModMask $e $argExprs]
+    if {$mask eq ""} {
+        return ""
+    }
+    set rx [lindex $argRegs 0]
+    set rangeX [hir::range::of $ranges $currentInstance [lindex $argExprs 0]]
+    if {$argRepr eq "raw" || ($rangeX ne "never" && [hir::range::fitsSmall $rangeX])} {
+        set xa [expr {$argRepr eq "raw" ? $rx : [RawOf fn $rx]}]
+        set m [lindex [WantConvert fn [IntConst fn $mask $e] raw] 0]
+        set r [AssignRaw fn "op riand $xa $m" $e]
+        dict incr fn rawArith
+        if {$want eq "raw"} {
+            return [list $r raw]
+        }
+        return [list [TaggedOf fn $r] tagged]
+    }
+    return [list [Assign fn "op iand $rx [IntConst fn $mask $e]" $e] tagged]
 }
 
 # ---------------------------------------------------------------------------
