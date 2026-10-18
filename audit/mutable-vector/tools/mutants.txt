@@ -397,6 +397,30 @@ proc hir::mutvec::ShareDescriptor {type} {
 >>>>
 
 # ---------------------------------------------------------------------------
+# Demand through struct literals (hir/mutvec.tcl's ExclusivePositions, and
+# FreshFunctions once the read-outs are written): both only remove copies
+# (tests/mutable-vector.test's mv-literal-demand-copies pins them; the
+# convention they extend is sound by construction: a consumed parameter's
+# caller, a demanded local's entry still copy what is not exclusive).
+
+@@ literal-fields-not-exclusive (economic) a struct literal in an exclusive position does not make its collection fields exclusive positions: a function returning a literal of its parameter (or of a plain local) is not fresh, and every caller copies its result
+## hir/mutvec.tcl
+<<<<
+        if {[dict get $hir exprs $v kind] ne "struct"} continue
+====
+        continue
+>>>>
+
+@@ literal-fresh-before-readouts (economic) the fresh functions are not computed again once the read-outs are written: a literal whose field became a copy is not fresh, and its caller copies the whole struct again
+## hir/mutvec.tcl
+<<<<
+    # With the read-outs written, a result whose collection fields are now
+    # copies (a held binding's path read before its last use) is fresh too.
+    set freshFunctions [FreshFunctions $hir $parent $blocks $rootSet]
+====
+>>>>
+
+# ---------------------------------------------------------------------------
 # Moves in and out
 
 @@ push-no-invalidate push of an affine element does not invalidate its source: a later use of the binding is accepted

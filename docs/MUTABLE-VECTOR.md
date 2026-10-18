@@ -33,6 +33,7 @@ primitive affine value the scheduler-shaped programs put in it.
 * [Report](#report) -- the 74 points of the milestone report, in order
 * [By-reference arguments](#by-reference-arguments) -- a later fix
 * [Last uses per path](#last-uses-per-path) -- a later precision change
+* [Demand through struct literals](#demand-through-struct-literals) -- another
 * [Files](#files)
 * [What to run when changing this](#what-to-run-when-changing-this)
 
@@ -1181,14 +1182,12 @@ is demanded (`r = put(t, i); fill(r.table, i + 1, acc + r.old)`), and
 sees the moves: a function ending in such a rebuild is fresh, and its
 callers copy nothing either.
 
-Remaining gaps of the same kind (all sound, all still copies): a struct
-literal in an exclusive position does not demand its fields, so a function
-rebuilding a struct from an *unmutated* parameter's fields (`with_count(t,
-c)` returning `T {keys: t.keys, vals: t.vals, count: c}`) is not fresh; a whole struct
-passed to a consumed parameter is copied when a later argument of the same
-call reads one of its collections, even only to observe it before the call
-runs (`store(dest, find_empty(dest.hashes, h), ...)`); and a parameter read
-by a nested function (a capture) is not observed-only.
+Remaining gaps of the same kind (all sound, all still copies): a whole
+struct passed to a consumed parameter is copied when a later argument of
+the same call reads one of its collections, even only to observe it before
+the call runs (`store(dest, find_empty(dest.hashes, h), ...)`); and a
+parameter read by a nested function (a capture) is not observed-only. (A
+struct literal in an exclusive position demands its fields: next section.)
 
 Evidence: `tests/mutable-vector.test`'s `mv-path-last-use-semantics` (eleven
 programs, each overlapping position copied and each disjoint one moved,
@@ -1206,6 +1205,43 @@ moves or pops the same path); and the
 same path, a header-bearing extension, later statements, later operands,
 branches, handlers or the next iteration ignored, a context path moved; and
 two economic ones: the per-binding rule back, an Int extension counted).
+
+## Demand through struct literals
+
+A third change of the copy convention. A struct literal is fresh only when
+each of its collection-bearing fields is fresh or the last use of a held
+path, but a literal in a position that needs an exclusive header (a
+place's entry, a consumed parameter's argument, a demanded function's
+result) did not make its fields such positions: `fn with_count(t: T, c:
+int) -> T` returning `T {keys: t.keys, vals: t.vals, count: c}`, or a step
+returning `Steps {memo: memo, count: found}`, left `t` / `memo` unconsumed,
+so the function was not fresh and each caller copied its result -- and the
+next write detached. Now `ExclusivePositions` follows a literal into its
+collection-bearing fields (through nested literals): the parameter or local
+a returned literal holds is consumed or demanded, the field moves its
+header, and the function is fresh. Sound by construction: demand only makes
+more bindings held, and a held binding's callers or entry copy whatever is
+not exclusive. `FreshFunctions` is computed again once the read-outs are
+written, so a literal whose field became a copy (`Pair {l: v, r: v}`: one
+copy, one move) is fresh too, and its caller does not copy it again.
+
+Measured: the hash-table experiment's memo driver with lpa (N = 1000):
+8908 shares, 8872 detaches, 15.6 million elements copied before; 0, 0, 0
+now (15642 object allocations, 53 now). `tests/mutable-vector.test`'s
+`mv-literal-demand-semantics` (a literal of a parameter used by its caller
+afterwards, twice, nested, of a local: independent values on every backend)
+-- and a generic function returning a List element, bare or in a literal,
+still never fresh: with the demand, `mv-cow-generic-results`' `wrap(x)`
+consumes `x` and its caller copies, so these cases are what keep the
+`fresh-result-imprecise` and `fresh-struct-imprecise` mutants killed --
+and `mv-literal-demand-copies` (a memo-shaped recursion: 45 shares and
+detaches before, none now; a literal of a local; one of a parameter put in
+two fields: one copy); the mutants `literal-fields-not-exclusive` and
+`literal-fresh-before-readouts` (both economic: the change only removes
+copies).
+
+Still not followed into: an `if` expression or a handled call in an
+exclusive position (`t2 = if c: put(t) else: put2(t)`), a List literal.
 
 ## Files
 

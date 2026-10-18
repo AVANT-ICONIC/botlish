@@ -500,6 +500,9 @@ proc hir::mutvec::Elaborate {hirVar} {
     lassign [hir::contexts::Walk $hir] owner parent rootOf calls blocks
     set currentParent $parent
     dict set convention uses [UseMap $hir $parent]
+    # With the read-outs written, a result whose collection fields are now
+    # copies (a held binding's path read before its last use) is fresh too.
+    set freshFunctions [FreshFunctions $hir $parent $blocks $rootSet]
     set wraps {}
     foreach b $roots {
         set binding [dict get $hir bindings $b]
@@ -595,8 +598,11 @@ proc hir::mutvec::Elaborate {hirVar} {
 # The positions needing an exclusive header are a place root's entry, a
 # consumed parameter's argument, and the result of a function whose call
 # sits in one of them (its result is *demanded*: a parameter it returns is
-# then consumed, which makes the function's result fresh). The three sets
-# grow together to their least fixed point (Convention).
+# then consumed, which makes the function's result fresh), and each
+# collection-bearing field of a struct literal in one of them (a literal is
+# fresh when its fields are: `T {keys: keys, count: n}` returned by a
+# function whose result is demanded consumes `keys`). The three sets grow
+# together to their least fixed point (Convention).
 
 namespace eval hir::mutvec {
     # The convention of the elaboration under way: consumed (parameter
@@ -680,6 +686,23 @@ proc hir::mutvec::ExclusivePositions {hir rootSet demandedResults} {
     }
     dict for {f _} $demandedResults {
         lappend result {*}[Results $hir $f]
+    }
+    # A struct literal in such a position gives an exclusive value only when
+    # each of its collection-bearing fields does (Fresh): those fields are
+    # exclusive positions too, through nested literals.
+    set work $result
+    set result {}
+    while {$work ne {}} {
+        set v [lindex $work end]
+        set work [lrange $work 0 end-1]
+        lappend result $v
+        if {[dict get $hir exprs $v kind] ne "struct"} continue
+        foreach f [dict get $hir exprs $v fields] {
+            set type [hir::typeOf $hir $f]
+            if {[ShareDescriptor $type] ne "" || [MayHoldVector $type]} {
+                lappend work $f
+            }
+        }
     }
     return $result
 }

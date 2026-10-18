@@ -989,6 +989,146 @@ fn f():
     }
 } -cleanup {unset -nocomplain case text mv} -result {{{value {[20, 21, 21]}} 0 0 0} {{value {[21021]}} 0 0 0} {{value {[190, 21, 21]}} 0 0 0} {{value {[20, 21]}} 0 0 0}}
 
+# Demand through struct literals (hir/mutvec.tcl's ExclusivePositions): a
+# struct literal in a position that needs an exclusive header -- a place's
+# entry, a consumed parameter's argument, a demanded function's result --
+# is exclusive when its collection-bearing fields are, so they are such
+# positions too: a parameter or local a returned literal holds is consumed
+# or demanded, the literal's field moves its header, and the function is
+# fresh. FreshFunctions is computed again once the read-outs are written, so
+# a literal whose field is a copy (not its path's last use) is fresh too.
+set mvLiteralDecls {import list
+import mutable_vector
+
+struct Memo:
+    seen: MutableVector[int]
+    count: int
+
+struct Step:
+    memo: Memo
+    found: int
+
+struct Pair:
+    l: MutableVector[int]
+    r: MutableVector[int]
+
+fn ints() -> MutableVector[int]:
+    mutable_vector::from_list([])
+
+fn wrap(v: MutableVector[int], n: int) -> Memo:
+    Memo {seen: v, count: n}
+
+fn note(m: Memo, x: int) -> Memo:
+    m.seen.push(x)
+    m
+
+fn steps(m: Memo, v: int) -> Step:
+    if v <= 0:
+        return Step {memo: m, found: 0}
+    if mod(v, 4) == 0 and m.seen.length() > v:
+        return Step {memo: m, found: v}
+    r = steps(m, v - 1)
+    Step {memo: note(r.memo, v), found: r.found + 1}
+
+fn run(m: Memo, i: int, n: int, acc: int) -> Memo:
+    if i > n:
+        return Memo {seen: m.seen, count: acc}
+    r = steps(m, i)
+    run(r.memo, i + 1, n, acc + r.found)
+
+fn twice(v: MutableVector[int]) -> Pair:
+    Pair {l: v, r: v}
+
+fn local_literal(n: int) -> Memo:
+    v = ints()
+    Memo {seen: v, count: n}
+
+fn get0(xs) errors IndexNotFound:
+    list::at(xs, 0)
+
+fn box0(xs) errors IndexNotFound:
+    {data: list::at(xs, 0)}
+
+}
+
+test mv-literal-demand-semantics {a function returning a struct literal of a parameter (once, twice, nested) or of a plain local hands each field a header of its own: the caller's argument, still used afterwards, never changes; a parameter put in two fields gives two independent vectors; a generic function returning a List element, bare or in a literal, is still never fresh (an imprecise result is no consumed parameter: its caller copies it) -- on every backend} -body {
+    lmap case {
+        {fn f():
+    a = mutable_vector::from_list([1])
+    w = wrap(a, 0)
+    w.seen.push(9)
+    [a.length(), w.seen.length()]
+}
+        {fn f():
+    a = mutable_vector::from_list([1])
+    p = twice(a)
+    p.l.push(9)
+    p.r.push(8)
+    p.r.push(7)
+    [a.length(), p.l.length(), p.r.length()]
+}
+        {fn f():
+    a = mutable_vector::from_list([1, 2])
+    s = Step {memo: wrap(a, 1), found: 2}
+    s.memo.seen.push(3)
+    [a.length(), s.memo.seen.length(), s.memo.count]
+}
+        {fn f():
+    m = local_literal(4)
+    m.seen.push(1)
+    [m.seen.length(), m.count]
+}
+        {fn g() -> List[int] errors IndexNotFound:
+    a = mutable_vector::from_list([1, 2, 3])
+    b = get0([a])
+    b.push(9)
+    [a.length(), b.length()]
+fn f():
+    r = g():
+        on IndexNotFound:
+            []
+    r
+}
+        {fn g() -> List[int] errors IndexNotFound:
+    a = mutable_vector::from_list([1, 2, 3])
+    s = box0([a])
+    s.data.push(9)
+    [a.length(), s.data.length()]
+fn f():
+    r = g():
+        on IndexNotFound:
+            []
+    r
+}
+    } {
+        set text "${::mvLiteralDecls}${case}f()\n"
+        mvAgree $text
+    }
+} -cleanup {unset -nocomplain case text} -result {{value {[1, 2]}} {value {[1, 2, 3]}} {value {[2, 3, 1]}} {value {[1, 4]}} {value {[3, 4]}} {value {[3, 4]}}}
+
+test mv-literal-demand-copies {a memo-shaped recursion -- a step only observes its parameter, recurses on it and returns it in a result struct, or a struct holding the recursive result's field updated; its caller passes the result's field on -- copies nothing; so does a literal of a plain local; one holding its parameter twice copies exactly once (one field copied, the other moved: the function is fresh, and its caller copies nothing more -- one share, and one detach at the first write): HIR share counts and native counters} -constraints nativeLinux -body {
+    lmap case {
+        {fn f():
+    m = run(wrap(ints(), 0), 1, 30, 0)
+    [m.seen.length(), m.count]
+}
+        {fn f():
+    m = local_literal(4)
+    m.seen.push(1)
+    [m.seen.length(), m.count]
+}
+        {fn f():
+    p = twice(mutable_vector::from_list([1]))
+    p.l.push(9)
+    [p.l.length(), p.r.length()]
+}
+    } {
+        set text "${::mvLiteralDecls}${case}f()\n"
+        set mv [lindex [mvNative $text] 1]
+        list [mvAgree $text] [mvShares $text] [dict get $mv shares] [dict get $mv detaches]
+    }
+} -cleanup {unset -nocomplain case text mv} -result {{{value {[45, 465]}} 0 0 0} {{value {[1, 4]}} 0 0 0} {{value {[2, 1]}} 1 1 1}}
+
 test mv-cow-gc-stress {items 64, 67, 94: heap values reachable only through vector elements survive collections at every allocation; copies stay valid and independent while either is mutated, collected and read} -constraints nativeLinux -body {
     set text "import mutable_vector\nimport str\nfn f() -> List\[str\] errors IndexNotFound:\n    a = mutable_vector::from_list(\[str::concat(\"x\", \"1\"), str::concat(\"y\", \"2\")\])\n    b = a\n    a.push(str::concat(\"z\", \"3\"))\n    junk = loop i from 0 to 50:\n        str::concat(\"j\", \"k\")\n    s = b.swap(0, str::concat(\"w\", \"4\"))\n    t = a.take(0)\n    \[a.at(0), a.at(1), b.at(0), b.at(1), s, t\]\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
     list [mvAgree $text] [withGcStress {lrange [outcomeUnderHir cranelift [surface::compile $text -warnings off]] 0 1}]

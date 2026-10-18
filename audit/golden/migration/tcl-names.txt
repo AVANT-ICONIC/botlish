@@ -3827,6 +3827,8 @@ tests/mutable-vector.test mv-element-type pass
 tests/mutable-vector.test mv-generic pass
 tests/mutable-vector.test mv-hir-evidence pass
 tests/mutable-vector.test mv-hir-type-roundtrip pass
+tests/mutable-vector.test mv-literal-demand-copies pass
+tests/mutable-vector.test mv-literal-demand-semantics pass
 tests/mutable-vector.test mv-loop-collect-affine pass
 tests/mutable-vector.test mv-loop-consumes pass
 tests/mutable-vector.test mv-loop-error-propagation pass
