@@ -28,6 +28,10 @@ source [file join $::projectRoot native native.tcl]
 
 core::cabi::installTestFixture
 
+# A native view needs only the native backend (the JIT): those tests run on
+# every host it is built for, macOS arm64 included. Allocation counts and GC
+# stress need the native runtime on Linux (as in binary-layout.test), and a
+# standalone executable a Linux glibc host.
 testConstraint nativeBuilt [expr {![catch {native::binary}]}]
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64} && [testConstraint nativeBuilt]}]
@@ -459,7 +463,7 @@ fn run(xs: List[int]) -> List[any]:
 
 }
 
-test nv-scalar-reads {every fixed-width encoding read through a native view -- unsigned and two's-complement, 1, 2, 4 and 8 bytes, at its offset, each width's extremes and zero, a u64 above i64::MAX a BigInt -- is the value the bytes hold (the test's own byte model), equal to binary::parse of the same bytes field by field, and binary::load of the view equals the parsed LayoutStruct} -constraints nativeLinux -body {
+test nv-scalar-reads {every fixed-width encoding read through a native view -- unsigned and two's-complement, 1, 2, 4 and 8 bytes, at its offset, each width's extremes and zero, a u64 above i64::MAX a BigInt -- is the value the bytes hold (the test's own byte model), equal to binary::parse of the same bytes field by field, and binary::load of the view equals the parsed LayoutStruct} -constraints nativeBuilt -body {
     nvRun "${::nvScalarsProgram}\[run($::nvScalarsA), run($::nvScalarsB), run($::nvScalarsC)\]\n"
 } -result {same: [[[255, -128, 65535, -2147483648, 18446744073709551615, -9223372036854775808, -1, 2147483649], [255, -128, 65535, -2147483648, 18446744073709551615, -9223372036854775808, -1, 2147483649], true], [[0, 127, 0, 2147483647, 0, 9223372036854775807, 0, 4294967295], [0, 127, 0, 2147483647, 0, 9223372036854775807, 0, 4294967295], true], [[1, -1, 258, -2, 72623859790382856, -2, -32768, 16909060], [1, -1, 258, -2, 72623859790382856, -2, -32768, 16909060], true]]}
 
@@ -473,11 +477,11 @@ test nv-scalar-bytes-every-backend {the byte-backed half of nv-scalar-reads on e
 set nvDeep [nvRecord 24 165 {{0 200 1} {4 4000000000 4} {8 -12345 2} {10 54321 2} {16 7 1} {23 -100 1}}]
 set nvPacked [nvRecord 9 165 {{0 9 1} {1 -2 2} {3 65534 2} {5 3000000000 4}}]
 
-test nv-nested-views {a nested layout's field is a native view of the inner layout at the outer offset plus its own (NativeView[Inner], no load): read in a chain, held in a binding, passed to a function that takes the inner view, two levels deep; every field at its absolute offset, padding never read, and binary::load of the outer view equals its parse} -constraints nativeLinux -body {
+test nv-nested-views {a nested layout's field is a native view of the inner layout at the outer offset plus its own (NativeView[Inner], no load): read in a chain, held in a binding, passed to a function that takes the inner view, two levels deep; every field at its absolute offset, padding never read, and binary::load of the outer view equals its parse} -constraints nativeBuilt -body {
     nvRun "fn inner_y(o: NativeView\[Outer\]) -> int:\n    o.inner.y\n\nfn deep(xs: List\[int\]) -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    p = memory(xs)\n    v = binary::native::view(Deep, p)\n    o = v.outer\n    i = o.inner\n    \[v.head, v.outer.count, v.outer.inner.x, i.y, o.last, v.tail, inner_y(v.outer), binary::load(v) == binary::parse(Deep, bytes_of(xs)), binary::load(i)\]\n\nfn packed(xs: List\[int\]) -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    p = memory(xs)\n    v = binary::native::view(Packed, p)\n    \[v.kind, v.inner.x, v.inner.y, v.word, binary::load(v) == binary::parse(Packed, bytes_of(xs))\]\n\nfn main() -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    \[deep($::nvDeep), packed($::nvPacked)\]\n\nr = main():\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
 } -result {same: [[200, 4000000000, -12345, 54321, 7, -100, 54321, true, LayoutStruct[Inner] {x: -12345, y: 54321}], [9, -2, 65534, 3000000000, true]]}
 
-test nv-padding-never-read {two native records that differ only in their padding bytes read identically through a view (fields and binary::load alike): a view reads the fields' bytes, never a padding byte} -constraints nativeLinux -body {
+test nv-padding-never-read {two native records that differ only in their padding bytes read identically through a view (fields and binary::load alike): a view reads the fields' bytes, never a padding byte} -constraints nativeBuilt -body {
     set zero [nvRecord 24 0 {{0 200 1} {4 4000000000 4} {8 -12345 2} {10 54321 2} {16 7 1} {23 -100 1}}]
     nvRun "fn all(xs: List\[int\]) -> List\[any\] errors NativeViewNull:\n    p = memory(xs)\n    v = binary::native::view(Deep, p)\n    \[v.head, v.outer.count, v.outer.inner.x, v.outer.inner.y, v.outer.last, v.tail, binary::load(v)\]\n\nfn same() -> bool errors NativeViewNull:\n    all($::nvDeep) == all($zero)\n\nr = same():\n    on NativeViewNull:\n        false\nr\n"
 } -cleanup {unset -nocomplain zero} -result {same: true}
@@ -494,15 +498,15 @@ fn linked(target: int, cb: int) -> List[int]:
 
 }
 
-test nv-pointer-fields {a pointer field read through a native view is the exact pointer the native memory holds: a data pointer of its declared pointee (the same address bits, readable through a view of its own), a function pointer of its declared signature, and null as null -- each a fresh owned value} -constraints nativeLinux -body {
+test nv-pointer-fields {a pointer field read through a native view is the exact pointer the native memory holds: a data pointer of its declared pointee (the same address bits, readable through a view of its own), a function pointer of its declared signature, and null as null -- each a fresh owned value} -constraints nativeBuilt -body {
     nvRun "${::nvLinkedProgram}fn run() -> List\[any\] errors NativeViewNull:\n    target = memory(\[146, 16, 9, 3\])\n    a = ffi_fixture::address_of(target)\n    p = memory(linked(a, 4886718345))\n    v = binary::native::view(Linked, p)\n    n = v.next\n    c = v.cb\n    d = v.data\n    w = binary::native::view(Inner, n)\n    \[v.tag, v.inner.x, v.inner.y, ffi_fixture::address_of(n) == a, n.null?(), w.x, w.y, ffi_fixture::address_of(c), c.null?(), d.null?()\]\n\nr = run():\n    on NativeViewNull:\n        \[\]\nr\n"
 } -result {same: [5, -1, 2, true, false, 4242, 777, 4886718345, false, true]}
 
-test nv-pointer-bytes-stay-inert {the asymmetry: the same Linked bytes as byte storage never give a pointer -- binary::parse(Linked, ...) is LAYOUT-NATIVE-ONLY (nv-native-only-layouts) -- while a layout that reads those words as plain U64 integers (LinkedBits) gives exactly the address bits the view's pointers have, inert Ints with no pointer operation} -constraints nativeLinux -body {
+test nv-pointer-bytes-stay-inert {the asymmetry: the same Linked bytes as byte storage never give a pointer -- binary::parse(Linked, ...) is LAYOUT-NATIVE-ONLY (nv-native-only-layouts) -- while a layout that reads those words as plain U64 integers (LinkedBits) gives exactly the address bits the view's pointers have, inert Ints with no pointer operation} -constraints nativeBuilt -body {
     nvRun "${::nvLinkedProgram}fn run() -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    target = memory(\[146, 16, 9, 3\])\n    a = ffi_fixture::address_of(target)\n    xs = linked(a, 4886718345)\n    p = memory(xs)\n    v = binary::native::view(Linked, p)\n    n = v.next\n    c = v.cb\n    bits = binary::parse(LinkedBits, bytes_of(xs))\n    \[bits.next == ffi_fixture::address_of(n), bits.cb == ffi_fixture::address_of(c), bits.data, bits.tag, bits.inner\]\n\nr = run():\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
 } -result {same: [true, true, 0, 5, LayoutStruct[Inner] {x: -1, y: 2}]}
 
-test nv-load-pointer-layout {binary::load of a view of a native-only layout reads every field once, pointers included: an affine LayoutStruct[L] owning the pointers it read (destructured to move them out), each pointer the exact one memory holds; a nested layout holding pointers too (Holder.link)} -constraints nativeLinux -body {
+test nv-load-pointer-layout {binary::load of a view of a native-only layout reads every field once, pointers included: an affine LayoutStruct[L] owning the pointers it read (destructured to move them out), each pointer the exact one memory holds; a nested layout holding pointers too (Holder.link)} -constraints nativeBuilt -body {
     nvRun "${::nvLinkedProgram}fn run() -> List\[any\] errors NativeViewNull:\n    target = memory(\[146, 16, 9, 3\])\n    a = ffi_fixture::address_of(target)\n    p = memory(linked(a, 4886718345))\n    v = binary::native::view(Linked, p)\n    \{tag: t, inner: i, next: n, cb: c, data: d\} = binary::load(v)\n    \[t, i, ffi_fixture::address_of(n) == a, ffi_fixture::address_of(c), d.null?()\]\n\nr = run():\n    on NativeViewNull:\n        \[\]\nr\n"
 } -result {same: [5, LayoutStruct[Inner] {x: -1, y: 2}, true, 4886718345, true]}
 
@@ -510,18 +514,18 @@ test nv-tcl-backends {the Tcl backends have no native memory: a view of the null
     list \
         [nvRun "fn f() -> int errors NativeViewNull:\n    p = ffi::c::null\[Node\]()\n    v = binary::native::view(Inner, p)\n    v.x\nr = f():\n    on NativeViewNull:\n        -1\nr\n" $::nvBackends] \
         [nvRun "fn f() -> int errors NativeViewNull:\n    p = memory(\[7, 0, 9, 0\])\n    v = binary::native::view(Inner, p)\n    v.x + v.y\nr = f():\n    on NativeViewNull:\n        -1\nr\n" $::nvBackends]
-} -constraints nativeLinux -result {{same: -1} {interp {error NATIVE-ONLY {binary::native::view reads live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one}} / compile {error NATIVE-ONLY {binary::native::view reads live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one}} / cranelift-generic {value 16} / cranelift {value 16}}}
+} -constraints nativeBuilt -result {{same: -1} {interp {error NATIVE-ONLY {binary::native::view reads live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one}} / compile {error NATIVE-ONLY {binary::native::view reads live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one}} / cranelift-generic {value 16} / cranelift {value 16}}}
 
-test nv-view-is-a-value {a native view is an unrestricted value (a non-owning window that confers nothing its copy does not): bound twice, passed and returned, a struct field, a List element, captured by a nested function -- read the same everywhere; the pointer it was made from stays its owner's (observed, never moved)} -constraints nativeLinux -body {
+test nv-view-is-a-value {a native view is an unrestricted value (a non-owning window that confers nothing its copy does not): bound twice, passed and returned, a struct field, a List element, captured by a nested function -- read the same everywhere; the pointer it was made from stays its owner's (observed, never moved)} -constraints nativeBuilt -body {
     nvRun "struct Box:\n    v: NativeView\[Inner\]\n    n: int\n\nfn id(v: NativeView\[Inner\]) -> NativeView\[Inner\]:\n    v\n\nfn f(p: ffi::c::Ptr\[ffi::c::Void\]) -> List\[any\] errors NativeViewNull:\n    v = binary::native::view(Inner, p)\n    w = v\n    b = Box \{v: id(w), n: 1\}\n    vs = \[v, w\]\n    fn k() -> int:\n        v.x + w.y\n    \[b.v.x, list::length(vs), k(), p.null?(), v.y\]\n\np = memory(\[3, 0, 4, 0\])\nr = f(p):\n    on NativeViewNull:\n        \[\]\nr\n"
 } -result {same: [3, 2, 7, false, 4]}
 
-test nv-no-equality {a native view has no equality and no hash, like a callable: comparing two is the run-time EQUALITY error on every native backend (no address identity is observable through one)} -constraints nativeLinux -body {
+test nv-no-equality {a native view has no equality and no hash, like a callable: comparing two is the run-time EQUALITY error on every native backend (no address identity is observable through one)} -constraints nativeBuilt -body {
     set hir [surface::compile [nvProgram "fn f() -> bool errors NativeViewNull:\n    p = memory(\[1, 0, 2, 0\])\n    v = binary::native::view(Inner, p)\n    w = binary::native::view(Inner, p)\n    v == w\nr = f():\n    on NativeViewNull:\n        false\nr\n"] view.bot -warnings off]
     lmap backend $::nvNative {lrange [nvOutcome $backend $hir] 0 1}
 } -cleanup {unset -nocomplain hir} -result {{error EQUALITY} {error EQUALITY}}
 
-test nv-nir {native code of a view: the constructor is one null test of the pointer's word (cptrisnull, NativeViewNull on null) and the view is that word -- no load, no allocation; a field read is one nativeload at the field's absolute offset with its encoding word (width, plus 16 when signed), a nested view's field folded to the outer view's address (no cptroffset in a chain), a nested view itself one cptroffset (no load), a pointer field one nativeloadptr of the target's width; nothing copies the record (no structnew, no byte storage)} -constraints nativeLinux -body {
+test nv-nir {native code of a view: the constructor is one null test of the pointer's word (cptrisnull, NativeViewNull on null) and the view is that word -- no load, no allocation; a field read is one nativeload at the field's absolute offset with its encoding word (width, plus 16 when signed), a nested view's field folded to the outer view's address (no cptroffset in a chain), a nested view itself one cptroffset (no load), a pointer field one nativeloadptr of the target's width; nothing copies the record (no structnew, no byte storage)} -constraints nativeBuilt -body {
     set program "fn f(v: NativeView\[Deep\]) -> int:\n    v.outer.inner.x + v.tail\n\nfn g(v: NativeView\[Linked\]) -> bool:\n    n = v.next\n    n.null?()\n\nfn h(p: ffi::c::Ptr\[ffi::c::Void\]) -> NativeView\[Deep\] errors NativeViewNull:\n    binary::native::view(Deep, p)\n\nfn i(v: NativeView\[Deep\]) -> NativeView\[Inner\]:\n    v.outer.inner\n\nfn main() -> int errors NativeViewNull:\n    p = memory($::nvDeep)\n    q = memory(\[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\])\n    v = h(p)\n    w = binary::native::view(Linked, q)\n    x = if g(w):\n        1\n    else:\n        0\n    f(v) + i(v).y + x\nr = main():\n    on NativeViewNull:\n        0\nr\n"
     set nir [lmap name {f g h i} {nvNir $program $name}]
     lassign $nir f g h i
@@ -546,7 +550,7 @@ test nv-allocations {natively, reading the fields of a view allocates nothing pe
 # ---------------------------------------------------------------------------
 # HIR, interchange, isolation, the front-end cache
 
-test nv-hir-text-roundtrip {HIR text carries a pointer layout (each pointer field with its canonical pointer type, read back after the structs its pointee names), NativeView[L] types and the elaborated field reads (binary#view_field with the field's descriptor entry): formatting, reading back and formatting again gives the same text, and the read HIR runs to the same outcome} -constraints nativeLinux -body {
+test nv-hir-text-roundtrip {HIR text carries a pointer layout (each pointer field with its canonical pointer type, read back after the structs its pointee names), NativeView[L] types and the elaborated field reads (binary#view_field with the field's descriptor entry): formatting, reading back and formatting again gives the same text, and the read HIR runs to the same outcome} -constraints nativeBuilt -body {
     set source "direct module\n\nimport binary::native\nimport ffi::c\n\ntype I16 = Int in -32768..32767\ntype U16 = Int in 0..65535\n\nopaque struct Node:\n    tag: unit\n\nlayout In:\n    size 4\n    align 2\n    field x: I16 at 0\n    field y: U16 at 2\n\nlayout Out:\n    size 24\n    align 8\n    field a: In at 0\n    field p: ffi::c::Ptr\[Node\] at 8\n    field f: ffi::c::FnPtr\[Fn\{args: \[ffi::c::Ptr\[ffi::c::Void\]\], return: unit\}\] at 16\n\nfn y_of(o: NativeView\[Out\]) -> int:\n    o.a.y\n\nfn run() -> int errors NativeViewNull:\n    p = ffi::c::null\[Node\]()\n    y_of(binary::native::view(Out, p))\n\nr = run():\n    on NativeViewNull:\n        -1\nr\n"
     set hir [surface::compile $source view.bot -warnings off]
     set text [hir::format $hir]
@@ -556,7 +560,7 @@ test nv-hir-text-roundtrip {HIR text carries a pointer layout (each pointer fiel
         [lmap backend {interp cranelift} {nvOutcome $backend $again}]
 } -cleanup {unset -nocomplain source hir text again} -result {{{layout Out ns - size 24 align 8 fields a: In at 0, p: ffi::c::Ptr[Node] at 8, f: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}] at 16}} 2 {{const str {a 0 layout {{LayoutStruct[In]} 4 2 {{x 0 i 2 little} {y 2 u 2 little}}}}}} 1 {{value -1} {value -1}}}
 
-test nv-interchange {HIR interchange keeps native views: a program written as interchange text and read back after another compilation that declares a same-named layout with other offsets reads its own fields, natively and through the Tcl backends' refusal alike} -constraints nativeLinux -body {
+test nv-interchange {HIR interchange keeps native views: a program written as interchange text and read back after another compilation that declares a same-named layout with other offsets reads its own fields, natively and through the Tcl backends' refusal alike} -constraints nativeBuilt -body {
     set hir [surface::compile [nvProgram "fn f() -> int errors NativeViewNull:\n    p = memory($::nvDeep)\n    v = binary::native::view(Deep, p)\n    v.outer.inner.y\nr = f():\n    on NativeViewNull:\n        -1\nr\n"] view.bot -warnings off]
     set text [hir::interchange::encode $hir]
     surface::compile "import binary\nlayout Deep:\n    size 1\n    align 1\n    field head: binary::U8 at 0\n\n0\n" other.bot -warnings off
@@ -564,7 +568,7 @@ test nv-interchange {HIR interchange keeps native views: a program written as in
     lmap backend $::nvBackends {lrange [nvOutcome $backend $read] 0 1}
 } -cleanup {unset -nocomplain hir text read} -result {{error NATIVE-ONLY} {error NATIVE-ONLY} {value 54321} {value 54321}}
 
-test nv-isolation {two programs declaring a same-named layout with different offsets, compiled one after the other in one process: the earlier HIR still reads through its own layout (the layout registry is part of a HIR's declarations; a field read carries its offset in the HIR)} -constraints nativeLinux -body {
+test nv-isolation {two programs declaring a same-named layout with different offsets, compiled one after the other in one process: the earlier HIR still reads through its own layout (the layout registry is part of a HIR's declarations; a field read carries its offset in the HIR)} -constraints nativeBuilt -body {
     set swap "layout Swap:\n    size 4\n    align 2\n    field first: binary::U16 at 0\n    field second: binary::U16 at 2\n\n"
     set swapped "layout Swap:\n    size 4\n    align 2\n    field first: binary::U16 at 2\n    field second: binary::U16 at 0\n\n"
     set body "fn f() -> int errors NativeViewNull:\n    p = memory(\[1, 0, 2, 0\])\n    v = binary::native::view(Swap, p)\n    v.first * 10 + v.second\nr = f():\n    on NativeViewNull:\n        -1\nr\n"
@@ -573,7 +577,7 @@ test nv-isolation {two programs declaring a same-named layout with different off
     list [nvOutcome cranelift $a] [nvOutcome cranelift $b] [nvOutcome cranelift-generic $a]
 } -cleanup {unset -nocomplain swap swapped body a b} -result {{value 12} {value 21} {value 12}}
 
-test nv-cache {the front-end cache keeps native views: a program file compiled through -cache twice is read back from its entry the second time and reads the same fields} -constraints nativeLinux -body {
+test nv-cache {the front-end cache keeps native views: a program file compiled through -cache twice is read back from its entry the second time and reads the same fields} -constraints nativeBuilt -body {
     set dir [makeDirectory nv-cache-[pid]]
     set cache [file join $dir cache]
     set path [file join $dir main.bot]
@@ -629,7 +633,7 @@ test nv-read-only {native views are read-only: binary::native's one operation ma
         [regexp -all {"native[a-z]*store"|"cptrstore"} $nir]
 } -cleanup {unset -nocomplain source nir} -result {view {binary#emit binary#load binary#view_field binary::emit binary::layout_alignment binary::layout_length binary::load binary::native::view binary::parse} 0 1 0}
 
-test nv-no-new-dependency {native views need nothing a program did not need before: a program that reads native memory through a view links no library and calls no C (it runs in the JIT), and a program that does not use views lowers to exactly the NIR ops it always did} -constraints nativeLinux -body {
+test nv-no-new-dependency {native views need nothing a program did not need before: a program that reads native memory through a view links no library and calls no C (it runs in the JIT), and a program that does not use views lowers to exactly the NIR ops it always did} -constraints nativeBuilt -body {
     set view [native::nir [surface::compile [nvProgram "fn f() -> int errors NativeViewNull:\n    p = memory(\[1, 2, 3, 4\])\n    v = binary::native::view(Inner, p)\n    v.y\nr = f():\n    on NativeViewNull:\n        0\nr\n"] view.bot -warnings off]]
     set plain [native::nir [surface::compile [nvProgram "o = LayoutStruct\[Outer\] \{count: 1, inner: LayoutStruct\[Inner\] \{x: 2, y: 3\}, last: 4\}\nbinary::parse(Outer, binary::emit(o)):\n    on LayoutLengthMismatch:\n        o\n"] view.bot -warnings off]]
     list [regexp -all -line {^(link|foreign) } $view] \
@@ -811,7 +815,7 @@ test nv-pointer-field-ownership {a pointer read through a view is a fresh affine
         [nvKinds "fn g(p: ffi::c::Ptr\[Node\]) -> bool:\n    p.null?()\nfn f(v: NativeView\[Linked\]) -> bool:\n    g(v.next)\n0\n"]
 } -result {AFFINE-TEMPORARY-UNSUPPORTED {AFFINE-EQUALITY-UNSUPPORTED AFFINE-EQUALITY-UNSUPPORTED} accepted accepted}
 
-test nv-unchecked-replay {a program compiled unchecked (-strict 0) whose view or parse the checks reject replays the diagnostic when the call runs, natively (the runtime knows BINARY-OPERAND and LAYOUT-NATIVE-ONLY) and, for a native-only parse, on the Tcl backends too -- nothing reads memory or imprints a pointer first} -constraints nativeLinux -body {
+test nv-unchecked-replay {a program compiled unchecked (-strict 0) whose view or parse the checks reject replays the diagnostic when the call runs, natively (the runtime knows BINARY-OPERAND and LAYOUT-NATIVE-ONLY) and, for a native-only parse, on the Tcl backends too -- nothing reads memory or imprints a pointer first} -constraints nativeBuilt -body {
     set view [surface::compile [nvProgram "fn f(x: int) -> int errors NativeViewNull:\n    v = binary::native::view(Inner, x)\n    v.x\nr = f(3):\n    on NativeViewNull:\n        -1\nr\n"] view.bot -warnings off -strict 0]
     set parse [surface::compile [nvProgram "fn f(d: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    v = binary::parse(Linked, d)\n    v.tag\nr = f(bytes_of(\[1\])):\n    on LayoutLengthMismatch:\n        -1\nr\n"] view.bot -warnings off -strict 0]
     list [lmap backend $::nvNative {lrange [nvOutcome $backend $view] 0 1}] [lmap backend $::nvBackends {lrange [nvOutcome $backend $parse] 0 1}]
