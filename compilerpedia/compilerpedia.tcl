@@ -1006,6 +1006,7 @@ proc compilerpedia::renderOverview {} {
     set me [Invocation]
     set out [list "Compilerpedia -- the Botlish compiler's built-in reference (offline)" ""]
     lappend out [Wrap "What Botlish means, what it guarantees, what this compiler can prove, and why its rules and warnings exist: every diagnostic code, warning, language rule, proof capability, standard-library symbol and backend fact is a topic with a stable ID, reachable from several indices and by search." ""] ""
+    lappend out "New to Botlish?  $me -help \"best practices\"" ""
     lappend out INDICES
     foreach {name description} $indices {
         set wrapped [split [Wrap "$description ([llength [Listed $name]])" [string repeat " " 16]] \n]

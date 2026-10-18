@@ -2,6 +2,140 @@
 # Some are backed by a warning (the page names it); most are not, because not
 # every good practice can be detected precisely enough to warn about.
 
+@topic principle.idiomatic-botlish
+title: Idiomatic Botlish
+summary: The few defaults that make Botlish code unsurprising to the language, its warnings and existing code: a compact map to the detailed pages, for programmers arriving with habits from other languages.
+index: principles concepts
+alias: idiomatic; idiomatic Botlish; idioms; best practices; best practice; style; coding style; botlish style; how should I write Botlish; how to write Botlish
+keywords: idiomatic, best practices, style, newcomer
+related: principle.receiver-first rule.application-modules principle.errors-over-sentinels principle.investigate-warnings proof.overview capability.overview
+
+== WHAT THIS PAGE IS
+Botlish often has several valid spellings. These are the defaults that keep
+code unsurprising to the language, its warnings and existing Botlish code,
+for a reader arriving from Python, JavaScript, Rust, Java, C# or similar who
+picks up syntax quickly. It is a map, not a tutorial: each item gives a
+default and links the pages with the rule, the reasons and the exceptions.
+
+Each item is a language rule (the compiler enforces it), an idiomatic
+default (code may depart from it for a reason) or a declaration of intent
+(written at a declaration).
+
+== 1. RECEIVER SYNTAX FOR AN OPERATION ABOUT ITS FIRST ARGUMENT
+Idiomatic default. When an operation is about its first argument, prefer
+`x.f(y)` to `f(x, y)`. The test is meaning, not shape: is the operation
+about the first value? A name, a position, a count, a destination or one of
+two equal operands is not a subject; a function that starts with one says
+so at its declaration with `nomethod fn` (declaration of intent).
+
+@example accept
+import str
+
+struct Board:
+    size: int
+
+fn wide?(board: Board) -> bool:
+    board.size > 2
+
+nomethod fn titled(title: str, board: Board) -> str:
+    if board.wide?():
+        return title.concat(" (wide)")
+    title
+
+b = Board {size: 3}
+titled("game", b)
+@caption wide? is about its board, a method; titled starts with a label, so nomethod
+@value "game (wide)"
+@quiet
+@end
+
+See: principle.receiver-first, concept.nomethod, warning.method-eligible.
+
+== 2. METHOD SYNTAX ALWAYS USES THE FIRST PARAMETER
+Language rule. `x.f(a)` is exactly `f(x, a)`: the receiver is the first
+argument, not whichever argument looks like the subject. For another
+reading, reorder the parameters or call the function functionally.
+
+See: concept.method-sugar, rule.method-resolution.
+
+== 3. IMPORTS KEEP THE FULL QUALIFIED NAME
+Language rule. `import engine::board` makes the namespace `engine::board`
+available, written in full: `engine::board::goal()`. It binds no local
+`board` and no bare `goal`. Imports are exact and not transitive, and a
+module file beside the entry program is imported the same way.
+
+See: concept.imports, rule.application-modules, rule.imports-not-transitive.
+
+== 4. DECLARED ERRORS FOR DISTINCT FAILURES
+Idiomatic default. If callers may need to tell why an operation failed,
+declare errors (`errors E`, `fail E`, `on E:`) rather than returning an
+in-band value such as -1 or "". A plain value stays right when it is a real
+answer, such as an empty List of matches.
+
+See: concept.errors, principle.errors-over-sentinels,
+warning.same-failure, warning.same-return-value.
+
+== 5. WARNINGS ASK ABOUT INTENT
+Idiomatic default. A warning usually marks an ambiguity between plausible
+designs. Read what it claims, then make the intended design explicit in the
+code or at the declaration (`nomethod fn`, a `-> List[T]` result type),
+rather than rewriting only until the message stops. Code that is right as
+written is evidence about the rule.
+
+See: lint.policy, principle.investigate-warnings,
+principle.lint-precision.
+
+== 6. STRUCTS ARE NAMED PRODUCTS; LISTS ARE SEQUENCES
+Idiomatic default. Group different values as a struct with named fields
+(Botlish has no tuples and no positional destructuring of a List); use a
+List for a sequence of like values. A function that deliberately returns a
+fixed-length sequence declares it with a list result type.
+
+See: principle.name-the-parts, concept.structs, concept.lists,
+warning.fixed-arity-list-return.
+
+== 7. CONTROL FORMS HAVE PLACEMENT RULES
+Language rule. `if` and a collecting `loop` are values only where their
+blocks get lines of their own, and not as an operand or an argument. When a
+control form cannot appear where an expression is expected, bind its result
+first, or move it into a small helper.
+
+See: rule.if-placement, rule.loop-placement, principle.bind-before-use,
+concept.if-expressions, concept.loops.
+
+== 8. LET PROOFS REMOVE FAILURE HANDLING
+Idiomatic default. When the compiler proves an operation cannot fail, the
+plain call needs no handler. It recognizes a fixed set of forms, not every
+valid argument: when a proof does not fire, read the proof's page before
+restructuring, and handle the error where it can occur.
+
+See: proof.overview, proof.list-bounds, principle.restate-in-proven-form.
+
+== 9. MUTATION GOES THROUGH PLACES
+Language rule. Mutable collections are still values. A mutating operation
+changes a place of the function that performs it, so passing a collection to
+a helper gives it no shared mutable identity; the helper's change reaches
+the caller only if it returns the collection.
+
+See: concept.mutable-vector, concept.mutable-array, principle.immutability.
+
+== 10. ORDINARY VALUES UNTIL A BOUNDARY NEEDS A REPRESENTATION
+Idiomatic default. Use ordinary structs, Lists and Ints for program state;
+they promise no byte layout. When a problem needs one (a file format, a wire
+protocol, a C library), cross that boundary explicitly with a `layout` or an
+`extern c` declaration.
+
+See: concept.binary-layouts, concept.c-ffi, concept.values.
+
+== 11. QUERY COMPILERPEDIA BEFORE BUILDING A WORKAROUND
+Practice. If something feels unexpectedly awkward or missing, look up the
+operation, warning, proof or error before emulating it around a guessed
+limitation. A diagnostic prints the topic that explains it as a `help:`
+line, and a facility other languages have that Botlish lacks has a page
+naming the nearest alternative.
+
+See: capability.overview, cli.output, lint.warnings-vs-errors.
+
 @topic principle.lint-precision
 title: A warning must be worth investigating
 summary: Botlish's warnings aim for precision over coverage: a legitimate exception to a rule is first evidence that the rule is too broad, not a reason to suppress it.
