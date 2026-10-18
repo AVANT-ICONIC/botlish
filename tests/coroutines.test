@@ -973,6 +973,84 @@ test co-gc-stress {the same program with a collection before every native alloca
     }
 } -cleanup {unset -nocomplain hir} -result [list [concat $gcExpected {{}}] [concat $gcExpected {{}}]]
 
+# Nested coroutines, an error crossing a resume and heap values (a list, a
+# struct holding one, strings) held only by suspended frames of both
+# coroutines while the main program, the outer and the inner all allocate: the
+# macOS port's acceptance program for suspended roots
+# (MACOS-AARCH64-MILESTONE-3.md), a semantic test for every backend.
+set gcNestedProgram {import coroutine
+import str
+import list
+
+error Boom
+
+struct Ev:
+    text: str
+
+struct Box:
+    head: str
+    items: list
+
+fn churn(n: int) -> int:
+    xs = loop i from 0 to n:
+        str::concat("x", str::concat("y", "z"))
+    list::length(xs)
+
+fn inner(label: str) -> Ev errors Boom:
+    local = [label, str::concat(label, "?"), [1, 2, 3]]
+    held = Box {head: str::concat(label, "!"), items: local}
+    yield Ev {text: str::concat("in1:", list::at(local, 0))}
+    churn(40)
+    yield Ev {text: str::concat("in2:", list::at(local, 1))}
+    churn(40)
+    if list::length(held.items) == 3:
+        fail Boom
+    return Ev {text: held.head}
+
+fn outer(label: str) -> Ev:
+    box = Box {head: str::concat(label, "#"), items: [label]}
+    coroutine {step: next, first: f} = inner(str::concat(label, "i")):
+        on Boom:
+            Ev {text: "early"}
+    yield Ev {text: str::concat("out1:", f.text)}
+    churn(40)
+    second = next():
+        on Boom:
+            Ev {text: "second"}
+    yield Ev {text: str::concat("out2:", second.text)}
+    third = next():
+        on Boom:
+            Ev {text: str::concat("handled:", box.head)}
+    return Ev {text: str::concat("end:", third.text)}
+
+fn run() -> list:
+    coroutine {step: a, first: fa} = outer("A")
+    coroutine {step: b, first: fb} = outer("B")
+    churn(60)
+    a2 = a()
+    churn(60)
+    b2 = b()
+    churn(60)
+    a3 = a()
+    b3 = b()
+    [fa.text, fb.text, a2.text, b2.text, a3.text, b3.text, coroutine::done?(a), coroutine::done?(b)]
+
+run()
+}
+
+set gcNestedExpected {value {["out1:in1:Ai", "out1:in1:Bi", "out2:in2:Ai?", "out2:in2:Bi?", "end:handled:A#", "end:handled:B#", true, true]}}
+
+test co-gc-nested-suspended-roots {nested suspended coroutines, a failing inner one and heap values held only by their suspended frames survive collections run by every party, on every backend} -body {
+    coAgree $gcNestedProgram
+} -result $gcNestedExpected
+
+test co-gc-nested-suspended-roots-stress {the same program with a collection before every native allocation} -constraints nativeCoroutines -body {
+    withGcStress {
+        set hir [surface::compile $gcNestedProgram -warnings off]
+        list [outcomeUnderHir cranelift $hir] [outcomeUnderHir cranelift-generic $hir]
+    }
+} -cleanup {unset -nocomplain hir} -result [list [concat $gcNestedExpected {{}}] [concat $gcNestedExpected {{}}]]
+
 test co-gc-many-coroutines {thousands of short coroutines: abandoned and finished ones are reclaimed (their stacks pooled), the program stays correct} -body {
     coAgree "import list\nstruct V:\n    n: int\nfn w(k: int) -> V:\n    yield V {n: k}\n    return V {n: k * 2}\nfn one(k: int) -> int:\n    coroutine {step, first} = w(k)\n    coroutine {step: abandoned} = w(k + 1)\n    last = step()\n    first.n + last.n\nxs = loop i from 0 to 2000:\n    one(i)\nlast = list::at(xs, 1999):\n    on IndexNotFound:\n        0\nlist::length(xs) + last\n"
 } -result {value 7997}

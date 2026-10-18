@@ -23,8 +23,9 @@ tclsh9.0 tests/golden/run.tcl -backends interp,compile tests/golden/values.bot
 The default backends are the four the Tcl suite's differential tests use:
 interp (the core IR on the reference interpreter), compile (the Tcl compiler
 compiling the HIR itself, as `main.tcl -backend compile` does),
-cranelift-generic and cranelift. Natively the suites run on x86-64 Linux only
-(the runner is a coroutine).
+cranelift-generic and cranelift. Natively the suites run wherever native
+coroutines do (the runner is a coroutine): Linux x86-64 and AArch64 and
+macOS AArch64.
 
 The exit status is 1 when any test fails, a suite does not compile, a run
 aborts (a failure no Botlish handler can catch: not a test result) or the

@@ -484,8 +484,10 @@ the tests, and what to re-run when you change a given part of the compiler.
 
 Botlish is young and changes quickly; most of its features arrived as
 milestones whose reports are in [docs/](docs/INDEX.md). CI runs the native
-backend on x86-64 and arm64 Linux; standalone executables and native
-coroutines are x86-64 Linux only; the Tcl backends run wherever Tcl 9 does.
+backend on x86-64 and arm64 Linux and, for the JIT, on Apple Silicon macOS;
+native coroutines run on Linux x86-64 and AArch64 and macOS AArch64;
+standalone executables are Linux only; the Tcl backends run wherever Tcl 9
+does.
 
 ## License
 

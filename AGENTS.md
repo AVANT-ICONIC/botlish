@@ -820,8 +820,16 @@ checkout's). A change to native stack switching or its GC walk also needs a
 `bench/coroutines.tcl` regenerates the performance report.
 
 Native coroutines switch stacks with hand-written x86-64 and AArch64
-assembly and exist on Linux x86-64 and AArch64 only; elsewhere the native
-backend reports them unsupported (the Tcl backends run them everywhere).
+assembly and exist on Linux x86-64, Linux AArch64 and macOS AArch64
+(MACOS-AARCH64-MILESTONE-3.md); elsewhere the native backend reports them
+unsupported (the Tcl backends run them everywhere). The AArch64 switch is
+one text (`aarch64_switch!`, `aarch64_trampoline!` in
+runtime/coroutine.rs) in ELF and Mach-O spelling: change it for both, run
+the coroutine Rust tests on Linux AArch64 (CI's arm64 workflow, or
+qemu-user) and on macOS (the macOS workflow's smoke job runs them), and
+never touch x18. A Tcl test that needs coroutines, the collector around
+them or native counters carries `nativeCoroutines` (tests/helpers.tcl), a
+capability of the host target, not `nativeLinux`.
 
 ## Linux AArch64
 
