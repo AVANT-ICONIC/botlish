@@ -1,0 +1,261 @@
+# tasks.topic -- task-oriented entry points: what to write to do a common
+# thing, found by the words people search with ("print output", "handle
+# several errors"). Each answers the task and points at the topics behind it.
+
+@topic task.print-output
+title: Printing output
+summary: io::print_line(text) prints a line on the native backends and in executables, with linux::io's context installed; on every backend the program's value is printed for you.
+index: stdlib backends
+alias: print output; print; println; print a line; write to stdout; hello world; console output
+keywords: print, output, stdout, stderr, io, hello, print_line, write
+related: backend.io stdlib.io::print_line stdlib.module.io concept.context-traits concept.program-value backend.native-only capability.int-to-string
+docs: CONTEXT-TRAITS.md
+
+== THE PROGRAM
+    import io
+    import linux::io
+
+    fn hello() errors io::WriteFailed:
+        io::print_line("Hello, world!")
+
+    with context linux::io::create()
+    hello():
+        on io::WriteFailed:
+            unit
+
+  * `import io` for the portable operations (print, print_line,
+    write_error, write_error_line); `import linux::io` for the context that
+    implements them.
+  * `with context linux::io::create()` installs it, at the entry program's
+    top level, before the first call that prints (concept.contexts).
+  * Printing can fail (io::WriteFailed): handle it or admit it.
+
+@example accept
+import io
+import linux::io
+
+fn hello() errors io::WriteFailed:
+    io::print_line("Hello, world!")
+
+with context linux::io::create()
+hello():
+    on io::WriteFailed:
+        unit
+@output Hello, world!
+@value unit
+@backends cranelift-generic cranelift
+@end
+
+== WHERE IT WORKS
+Native backends (-backend cranelift or cranelift-generic) and standalone
+executables, on Linux: linux::io makes raw system calls, which interp and
+compile refuse at run time (NATIVE-ONLY; backend.io). For output on every
+backend, make the text the program's value: the compiler prints it after
+"value:", and an executable prints it last.
+
+== NUMBERS
+There is no Int-to-String conversion in the standard namespaces;
+test::int_text (import test) is the available one
+(capability.int-to-string).
+
+@topic task.handle-several-errors
+title: Handling several declared errors
+summary: Write one `on NAME:` handler per error a call may raise (their values may be equal); there is no `on A, B:`; a callee can instead declare one error whose payload says which failure.
+index: concepts rules
+alias: handle several errors; handle multiple errors; catch multiple errors; several handlers; catch multiple exceptions; handle multiple exceptions
+keywords: handler, errors, several, multiple, on, payload, unhandled
+related: rule.one-handler-per-error capability.multi-error-handler concept.errors concept.error-payloads rule.unhandled-errors error.unhandled-error warning.same-return-value
+docs: EXPLICIT-ERROR-COMPLETIONS.md ERROR-PAYLOADS.md DIAGNOSTIC-RECOVERY.md
+
+== ONE HANDLER PER ERROR
+    moves = solve(board, 40):
+        on Unsolvable:
+            []
+        on LimitExceeded:
+            []
+The compiler reports every error a call may raise that is neither handled
+nor admitted, in one diagnostic ("may produce the declared errors "A", "B"
+and "C""), so you see the whole set at once. A handler's value is the
+call's value; `return` or `fail` in a handler leaves the function.
+Handlers that end the same way are not flagged by SAME-RETURN-VALUE or
+SAME-FAILURE: the language requires one handler per error.
+
+@example accept
+error Unsolvable
+error LimitExceeded
+
+fn solve(n: int) -> List[int] errors Unsolvable, LimitExceeded:
+    if n < 0:
+        fail Unsolvable
+    if n > 40:
+        fail LimitExceeded
+    [n]
+
+fn solution(n: int) -> List[int]:
+    moves = solve(n):
+        on Unsolvable:
+            []
+        on LimitExceeded:
+            []
+    moves
+
+solution(50)
+@value []
+@quiet
+@end
+
+== ONE ERROR WITH A PAYLOAD
+When every caller handles a family of failures alike, the callee's author
+can declare one error that says which failure it was:
+    enum Problem:
+        Empty, Duplicate, OutOfRange
+    error InvalidBoard:
+        problem: Problem
+    ...
+    fail InvalidBoard {problem: Problem::Duplicate}
+Callers write one handler (`on InvalidBoard {problem}:`) and can still look
+at the reason.
+
+== PASSING THEM ON
+Admit some or all in the enclosing function's own `errors` clause; its
+callers then decide.
+
+@topic task.string-concatenation
+title: Joining text
+summary: str::concat(a, b) (written a.concat(b) after `import str`) joins two Strings, str::append_char(s, c) appends a character; `+` is for Ints only.
+index: stdlib
+alias: string concatenation; concatenate strings; join strings; append string; string plus
+keywords: concat, join, append, String, text, plus
+related: stdlib.str::concat stdlib.str::append_char concept.strings capability.string-formatting capability.int-to-string stdlib.test::joined
+
+== HOW
+    import str
+    greeting = "Hello, ".concat(name)
+    line = greeting.append_char('!')
+`+` adds Ints; applied to Strings it fails (a TYPE error). For many parts,
+chain concat calls or use lib/test.bot's test::joined(parts, separator).
+Numbers need test::int_text first (capability.int-to-string).
+
+@example accept
+import str
+
+fn greet(name: str) -> str:
+    "Hello, ".concat(name).append_char('!')
+
+greet("Botlish")
+@value "Hello, Botlish!"
+@quiet
+@end
+
+@topic task.iterate-with-index
+title: Iterating with an index
+summary: Use a lockstep loop, `loop x in xs and i from 0 to xs.length():`, to get each element and its position; the compiler proves the two clauses run equally often.
+index: concepts
+alias: iterate with index; enumerate; loop with index; for each with index
+keywords: index, enumerate, loop, lockstep, position, element
+related: concept.lockstep concept.loops proof.lockstep proof.list-bounds
+
+== HOW
+    loop x in xs and i from 0 to xs.length():
+        ...x and i...
+There is no enumerate function: lockstep composes any equal-length
+clauses, and the compiler proves they are equal (proof.lockstep). For the
+index alone, `loop i from 0 to xs.length():` with xs.at(i) is proven in
+range (proof.list-bounds).
+
+@example accept
+import list
+
+fn numbered(xs: List[str]) -> List[int]:
+    loop x in xs and i from 0 to xs.length():
+        i * 10
+
+numbered(["one", "two", "three"])
+@value [0, 10, 20]
+@end
+
+@topic task.choose-backend
+title: Choosing a backend
+summary: Use the native backends (cranelift) or an executable for speed and for printing, compile when only Tcl is available, interp as the reference and for small checks.
+index: backends
+alias: choose backend; which backend should I use; select backend; fastest backend
+keywords: backend, choose, speed, print, native, interp, compile
+related: backend.overview backend.performance backend.io backend.native-executable cli.options
+
+== IN SHORT
+    develop and run          -backend cranelift (prints output, fast)
+    no native build          -backend compile
+    the reference semantics  -backend interp (default; slowest)
+    ship a program           -emit-native-executable
+All four accept and reject the same programs; tests of portable code
+(golden suites) usually run on all four (backend.overview).
+
+@topic task.read-arguments
+title: Reading command-line arguments
+summary: argv() returns the process arguments as Strings, argument zero first (InvalidArgumentEncoding for non-UTF-8); botlish passes them with -argv, an executable reads its own.
+index: stdlib
+alias: command line arguments; program arguments; read arguments; args
+keywords: argv, arguments, command line, process
+related: concept.argv stdlib.argv cli.options backend.native-executable
+docs: ARGV.md
+
+== HOW
+    args = argv():
+        on InvalidArgumentEncoding:
+            []
+Run by botlish, a program's arguments are those of -argv TEXT (repeatable;
+the first is argument zero), -argv-hex HEX or -argv-none; without them
+argv() is ["botlish-runner"]. A standalone executable reads its real process
+arguments each time it runs.
+
+@example accept
+args = argv():
+    on InvalidArgumentEncoding:
+        []
+args
+@value ["botlish-runner"]
+@end
+
+@topic task.list-element
+title: Reading an element of a list
+summary: xs.at(i) (list::at, after `import list`) returns the element or fails with IndexNotFound; xs.get(i, default) returns a default instead; `loop x in xs:` visits every element with no index at all.
+index: stdlib
+alias: list element; list index access; get element; nth element; access list item; xs[i]; xs[0]; subscript; index operator; square brackets
+keywords: list, element, index, at, get, first, last, subscript, brackets
+related: proof.list-bounds stdlib.list::at stdlib.list::get concept.lists task.iterate-with-index
+match: SURFACE SYNTAX | expected a type after "*\[", found*
+
+== HOW
+    import list
+    first = xs.at(0):                  # handle the missing element...
+        on IndexNotFound:
+            0
+    first = xs.get(0, 0)               # ...or name a default
+Inside a counted loop over xs.length(), or after a guard on the index,
+`xs.at(i)` needs no handler (proof.list-bounds lists the proven forms).
+There is no negative indexing (xs.at(-1) is a missing element); the last
+element is xs.at(xs.length() - 1), which needs a handler or a guard.
+
+== NO SUBSCRIPT OPERATOR
+`xs[1]` is not an element access: `[` written right after a name starts
+the explicit type arguments of a call (`ffi::c::null[ffi::c::Void]()`), so
+the parser expects a type and reports SURFACE SYNTAX ("expected a type
+after "xs["").
+
+@example reject
+xs = [1, 2, 3]
+xs[1]
+@error SURFACE SYNTAX
+@at 2:4
+@caption There is no subscript: write xs.at(1) (after import list)
+@end
+
+@example accept
+import list
+
+fn last_or(xs: List[int], fallback: int) -> int:
+    xs.get(xs.length() - 1, fallback)
+
+[[4, 5, 6].last_or(0), [].last_or(0)]
+@value [6, 0]
+@end

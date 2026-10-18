@@ -230,9 +230,11 @@ a static zipfs tclsh. `--basekit PATH` uses a prebuilt zipkit instead. To run
 the test suite, still install the `.deb`s.
 
 * `single/package.tcl` packs exactly main.tcl, LICENSE, `core/`,
-  `compiler/`, `hir/`, `surface/`, `native/*.tcl`, `lib/` and
-  `examples/*.ir`. If the compiler starts reading another file at run time,
-  add it there. Never make main.tcl or the compiler depend on the single
+  `compiler/`, `hir/`, `surface/`, `native/*.tcl`, `lib/`,
+  `compilerpedia/compilerpedia.tcl`, `compilerpedia/topics/` and
+  `compilerpedia/generated/`, plus a `BUILD` file naming the source
+  revision. If the compiler starts reading another file at run time, add
+  it there. Never make main.tcl or the compiler depend on the single
   executable: `single/main.tcl` only sets the environment and sources
   main.tcl unchanged.
 * Standalone executables have two linkers, chosen by `BOTLISH_NATIVE_LINKER`:
@@ -1628,6 +1630,42 @@ lexer's recovery, run `tests/diagnostic-recovery.test`,
 you change the code it mutates, keeping it a mutant of the same rule) and
 `audit/diagnostic-recovery/tools/efficiency.tcl` (the corpus: every known
 primary in the first compilation, no cascade, every case clean once fixed).
+
+## Compilerpedia (the built-in reference)
+
+`main.tcl -help` (COMPILERPEDIA.md) reads `compilerpedia/`: the engine
+`compilerpedia/compilerpedia.tcl`, hand-written topics in
+`compilerpedia/topics/*.topic`, and `compilerpedia/generated/stdlib.topic`,
+which `tclsh9.0 tools/compilerpedia.tcl generate` writes from
+`core::native`'s registry, `lib/*.bot` and `compilerpedia/notes/stdlib.notes`
+(never edit the generated file). Help reads only those files: it never
+compiles, loads a module or starts a backend, and the "help:" lines main.tcl
+prints under diagnostics and warnings are looked up from the printed code
+and message -- never add a topic field to a diagnostic, change a message or
+the CompilerError text for Compilerpedia's sake.
+
+`tclsh9.0 tools/compilerpedia.tcl check` must pass (`tests/compilerpedia.test`
+runs it); it fails when:
+
+* a diagnostic code or kind the source can report has no topic (`code:`) --
+  a new `hir::Diagnose` kind, loader `Error KIND`, parser `FailCode`,
+  `core::semanticError` kind, literal `throw` code or Rust error-code vector
+  needs one, with a rejected example where a source program produces it;
+* a registered warning lacks its topic in `topics/warnings.topic` with the
+  five required sections and an example that warns and one that does not --
+  a warning without a documented rationale cannot land;
+* a public intrinsic lacks a note in `notes/stdlib.notes`, or a note or the
+  generated file is stale (regenerate and commit after changing a native's
+  registration or a library declaration);
+* an example no longer compiles, runs or is rejected as stated: when the
+  compiler learns to prove a pattern a proof page lists as a limitation, or
+  changes a rule, update the page, never the example's expectation alone;
+* a reference, alias or matcher is broken.
+
+State only what the compiler does today; document an absent facility as
+absent (`capability.*`) with the nearest alternative. A change to the
+command line updates `cliOptions` (main.tcl), the `cli.options` topic and
+main.tcl's header comment (`tests/main-cli.test` checks all three).
 
 ## Golden tests (Botlish-native test framework)
 

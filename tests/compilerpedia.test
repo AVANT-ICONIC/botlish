@@ -1,0 +1,284 @@
+# compilerpedia.test -- Compilerpedia, the compiler's built-in reference
+# (COMPILERPEDIA.md): the catalogue's integrity, its coverage of the
+# compiler's diagnostics and warnings, the generated standard-library topics,
+# every example (through tools/compilerpedia.tcl, a process of its own that
+# compiles each through the public front end), search, rendering, the help
+# lines' diagnostic lookup, and that help is separate from compilation.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot compilerpedia compilerpedia.tcl]
+
+set toolScript [file join $::projectRoot tools compilerpedia.tcl]
+
+# The examples run once per test run, not once per CORE_BACKEND: the tool
+# runs each example on the backends it names itself.
+testConstraint examplesOnce [expr {[core::useBackend] eq "interp"}]
+
+# The kind of what QUERY finds, and its ID(s).
+proc found {query} {
+    set result [compilerpedia::lookup $query]
+    switch -- [dict get $result kind] {
+        page    { return [list page [dict get $result id]] }
+        list    { return [list list [lrange [dict get $result ids] 0 4]] }
+        index   { return [list index [dict get $result name]] }
+        none    { return [list none [dict get $result near]] }
+        default { return [dict get $result kind] }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# The catalogue and its coverage
+
+test cp-catalogue-valid {the catalogue is structurally sound: unique IDs, known indices, resolving references, unambiguous aliases, one topic per code and symbol, every index populated (compilerpedia::validate)} -body {
+    compilerpedia::validate
+} -result {}
+
+test cp-check-structure-and-coverage {tools/compilerpedia.tcl check -examples 0: the structure, the generated stdlib file is current, every intrinsic has a note, every diagnostic code the source can report and every warning is documented, warning topics carry their sections and both kinds of examples, every matcher is exercised} -body {
+    set data [exec [info nameofexecutable] $::toolScript check -examples 0 -format data]
+    dict get $data problems
+} -cleanup {unset -nocomplain data} -result {}
+
+test cp-examples {every example compiles, warns, runs, prints or is rejected exactly as its topic states, on every backend it names that is available (tools/compilerpedia.tcl examples)} -constraints examplesOnce -body {
+    set data [exec [info nameofexecutable] $::toolScript examples -format data]
+    list [dict get $data problems] [expr {[dict get $data examples] > 200}]
+} -cleanup {unset -nocomplain data} -result {{} 1}
+
+test cp-every-warning-documented {every registered warning code has exactly one topic, in the warnings and lint indices, that also documents its -warnings error code} -body {
+    lmap code [dict keys $::hir::warnings::passes] {
+        set ids [compilerpedia::codeTopics $code]
+        set topic [compilerpedia::topic [lindex $ids 0]]
+        list $code [llength $ids] [expr {"warnings" in [dict get $topic index] && "lint" in [dict get $topic index]}] \
+            [expr {[compilerpedia::codeTopics "CORE SEMANTIC $code"] eq $ids}]
+    }
+} -match glob -result {{SAME-RETURN-VALUE 1 1 1} {METHOD-ELIGIBLE 1 1 1} {FIXED-ARITY-LIST-RETURN 1 1 1} {SAME-FAILURE 1 1 1} {PROVES-NAMING 1 1 1} {ONE-CHAR-STRING-LITERAL 1 1 1} {MANY-BOOLEAN-ARGUMENTS 1 1 1}}
+
+test cp-every-recoverable-kind-documented {every diagnostic kind a static compile block can reify (hir::static::codes) has a topic, under the code it is printed with (CORE SEMANTIC KIND, or SURFACE MODULE KIND for the loader's)} -body {
+    lmap kind [dict keys [hir::static::codes]] {
+        expr {[compilerpedia::codeTopics "CORE SEMANTIC $kind"] ne ""
+            || [compilerpedia::codeTopics "SURFACE MODULE $kind"] ne "" ? [continue] : $kind}
+    }
+} -result {}
+
+test cp-indices-populated {each index lists real topics, and a topic in two indices appears on both index pages (cross-index)} -body {
+    set counts [lmap name [compilerpedia::indexNames] {expr {[llength [compilerpedia::members $name]] > 0}}]
+    list [lsort -unique $counts] \
+        [expr {[string first proof.list-bounds [compilerpedia::renderIndex proofs]] >= 0}] \
+        [expr {[string first proof.list-bounds [compilerpedia::renderIndex stdlib]] >= 0}] \
+        [expr {[string first warning.method-eligible [compilerpedia::renderIndex lint]] >= 0}]
+} -cleanup {unset -nocomplain counts} -result {1 1 1 1}
+
+test cp-inline-references-resolve {every topic ID a page's text mentions exists} -body {
+    set missing {}
+    foreach id [compilerpedia::topics] {
+        set topic [compilerpedia::topic $id]
+        foreach section [dict get $topic body] {
+            foreach item [lindex $section 1] {
+                if {[lindex $item 0] ne "text"} continue
+                foreach ref [regexp -all -inline {\m(?:concept|rule|proof|error|warning|principle|backend|cli|capability|task|lint|index)\.[a-z0-9][a-z0-9-]*[a-z0-9]} [lindex $item 1]] {
+                    if {![compilerpedia::exists $ref]} {
+                        lappend missing "$id: $ref"
+                    }
+                }
+            }
+        }
+    }
+    lsort -unique $missing
+} -cleanup {unset -nocomplain missing topic section item ref} -result {}
+
+# ---------------------------------------------------------------------------
+# Search
+
+test cp-search-exact-id {an exact topic ID shows its page} -body {
+    list [found proof.list-bounds] [found warning.method-eligible]
+} -result {{page proof.list-bounds} {page warning.method-eligible}}
+
+test cp-search-codes {a whole diagnostic code, or its last word, shows the topic documenting it; so does a warning's -warnings error code} -body {
+    list [found METHOD-ELIGIBLE] [found {CORE SEMANTIC METHOD-ELIGIBLE}] [found {SURFACE SYNTAX}] [found NATIVE-ONLY]
+} -match glob -result {{page warning.method-eligible} {page warning.method-eligible} {page error.surface-syntax} {page error.native-only}}
+
+test cp-search-plain-word-code-tails {a code's last word that is a plain word finds the code only as written: in lower case it is a word, which finds its concept} -body {
+    list [found STRUCT] [lindex [found struct] 0] [found RANGE] [lindex [found range] 0] [found known-error]
+} -result {{page error.struct} page {page error.range} list {page error.known-error}}
+
+test cp-search-index-pages-and-plurals {a lookup that lands on an index's introduction shows the whole index; plurals in -ies and -es fold to their singular} -body {
+    list [found "best practices"] [found index.errors] [found capabilities] \
+        [compilerpedia::Stem capabilities] [compilerpedia::Stem matches] [compilerpedia::Stem class]
+} -result {{index principles} {index errors} {page capability.overview} capability match class}
+
+test cp-search-symbols {a standard-library symbol shows its generated page} -body {
+    list [found list::at] [found str::concat] [found io::print_line] [found mod]
+} -result {{page stdlib.list::at} {page stdlib.str::concat} {page stdlib.io::print_line} {page stdlib.mod}}
+
+test cp-search-aliases {an alias shows its topic: phrases from other languages map to the Botlish concept that answers them} -body {
+    list [found "bounds proof"] [found "try catch"] [found throw] [found lambda] [found switch] \
+        [found "exit status"] [found "integer to string"] [found division]
+} -result {{page proof.list-bounds} {page capability.exceptions} {page capability.exceptions} {page capability.lambdas} {page capability.match} {page capability.process-exit-status} {page capability.int-to-string} {page capability.integer-division}}
+
+test cp-search-case-and-spelling {lookups ignore case, and hyphens, underscores and spaces alike} -body {
+    list [found method-eligible] [found Method_Eligible] [found "method eligible"] [found "BOUNDS PROOF"] [found LIST::AT]
+} -result {{page warning.method-eligible} {page warning.method-eligible} {page warning.method-eligible} {page proof.list-bounds} {page stdlib.list::at}}
+
+test cp-search-multiword {a query's words must all occur in a topic, ranked by where they occur; stop words are ignored} -body {
+    list [compilerpedia::Terms "how do I prove an index in range of a descending loop"] \
+        [found "how do I prove an index in range of a descending loop"] \
+        [lindex [found "handler error"] 0]
+} -result {{prove index in range descending loop} {page proof.list-bounds} list}
+
+test cp-search-single-generic-word-not-everything {a generic word does not return the catalogue: "value" matches some topics, never all} -body {
+    set result [compilerpedia::lookup "value"]
+    expr {[dict get $result kind] eq "list" && [llength [dict get $result ids]] < [llength [compilerpedia::topics]] / 2}
+} -cleanup {unset -nocomplain result} -result 1
+
+test cp-search-ambiguous-short-code {a code's last word shared by two codes lists both (UNSUPPORTED is not one topic)} -body {
+    set r [compilerpedia::lookup NATIVE]
+    dict get $r kind
+} -cleanup {unset -nocomplain r} -result list
+
+test cp-search-indices {an index name, its singular, and `all` show the index pages} -body {
+    list [found errors] [found warning] [found principle] [found all] [found ""]
+} -result {{index errors} {index warnings} {index principles} {index all} overview}
+
+test cp-search-missing {a query nothing matches finds nothing and offers near matches: close identifiers by edit distance, then topics holding most of the words; never an invented topic} -body {
+    set near [found metod-eligibel]
+    list [lindex $near 0] [lindex $near 1 0] [lindex [found "quantum entanglement"] 0]
+} -cleanup {unset -nocomplain near} -result {none warning.method-eligible none}
+
+test cp-search-deterministic {the same query gives the same ranking every time, ties broken by ID} -body {
+    set a [compilerpedia::lookup "error handler"]
+    set b [compilerpedia::lookup "error handler"]
+    list [expr {$a eq $b}] [dict get $a kind]
+} -cleanup {unset -nocomplain a b} -result {1 list}
+
+test cp-search-non-ascii {non-ASCII queries are searched like any other: no error, an honest result (an accented word no topic contains finds nothing; the words of a topic find it)} -body {
+    list [lindex [found "Größenordnung"] 0] [found "café"] \
+        [expr {[lindex [found "Unicode scalar values"] 0] in {page list}}] [compilerpedia::Words "Größe café"]
+} -result {none {none rule.names} 1 {größe 1 café 1}}
+
+test cp-search-text-mentions-are-near-matches {a topic whose text merely mentions the query's words (none of them, or fewer than half, in its title, aliases, keywords or summary) is no answer: it is a near match, and the lookup finds nothing} -body {
+    list [lindex [found no-such-topic-anywhere] 0] [lindex [found café] 0] [found threads] \
+        [found iterator]
+} -result {none none {page capability.concurrency} {list {concept.coroutines concept.loops}}}
+
+# ---------------------------------------------------------------------------
+# Rendering
+
+test cp-render-page-shape {a page starts with its ID, title and indices, then SUMMARY; plain text, no terminal control characters} -body {
+    set page [compilerpedia::render warning.method-eligible]
+    set lines [split $page \n]
+    list [lindex $lines 0] [string match "METHOD-ELIGIBLE*" [lindex $lines 1]] [lindex $lines 2] [lindex $lines 4] \
+        [regexp {[\x00-\x08\x0b-\x1f\x7f]} $page]
+} -cleanup {unset -nocomplain page lines} -result {warning.method-eligible 1 {Indices: warnings, lint} SUMMARY 0}
+
+test cp-render-code-lists-rules {a broad code's page lists the specific rules whose matchers point at it} -body {
+    set page [compilerpedia::render error.unhandled-error]
+    list [string match "*SPECIFIC RULES*proof.list-bounds*proof.slices*" $page]
+} -cleanup {unset -nocomplain page} -result 1
+
+test cp-render-examples-and-related {examples are shown with their expectation, related topics with their summaries, design documents as optional repository paths} -body {
+    set page [compilerpedia::render proof.list-bounds]
+    list [string match "*Accepted (value 3) -- A counted loop*" $page] \
+        [string match "*Rejected (CORE SEMANTIC UNHANDLED-ERROR at 7:5)*" $page] \
+        [string match "*RELATED*proof.slices *" $page] \
+        [string match "*DESIGN DOCUMENTS (in a repository checkout; optional)*docs/STDLIB-NAMESPACES.md*" $page]
+} -cleanup {unset -nocomplain page} -result {1 1 1 1}
+
+test cp-render-fits-80-columns {every line of every page, index and the overview fits 80 columns, except code (indented six or more: example and declaration lines, shown as written)} -body {
+    set long {}
+    foreach text [concat [lmap id [compilerpedia::topics] {compilerpedia::render $id}] \
+            [lmap name [concat [compilerpedia::indexNames] all] {compilerpedia::renderIndex $name}] \
+            [list [compilerpedia::renderOverview]]] {
+        foreach line [split $text \n] {
+            if {[string length $line] > 80 && ![string match "      *" $line]} {
+                lappend long $line
+            }
+        }
+    }
+    set long
+} -cleanup {unset -nocomplain long text line} -result {}
+
+test cp-render-every-page {every topic renders, every index renders} -body {
+    foreach id [compilerpedia::topics] {
+        compilerpedia::render $id
+    }
+    foreach name [concat [compilerpedia::indexNames] all] {
+        compilerpedia::renderIndex $name
+    }
+    compilerpedia::renderOverview
+    llength [compilerpedia::topics]
+} -match regexp -result {^[0-9]{3,}$}
+
+test cp-main-unknown-exit {compilerpedia::main returns 1 for a query nothing matches, writing only to the error channel} -setup {
+    set out [file tempfile outPath]
+    set err [file tempfile errPath]
+} -body {
+    set status [compilerpedia::main {zzzz qqqq} $out $err]
+    close $out
+    close $err
+    list $status [file size $outPath] [expr {[file size $errPath] > 0}]
+} -cleanup {file delete $outPath $errPath; unset -nocomplain out err outPath errPath status} -result {1 0 1}
+
+# ---------------------------------------------------------------------------
+# Help lines: diagnostics to topics
+
+test cp-diagnostic-specific-rule {a matcher points a broad code at its specific rule; another message of the same code falls back to the code's own topic} -body {
+    list [compilerpedia::topicForDiagnostic {CORE SEMANTIC UNHANDLED-ERROR} \
+            {t.bot:4:5: this call of "list::at" may produce the declared error "IndexNotFound", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}] \
+        [compilerpedia::topicForDiagnostic {CORE SEMANTIC UNHANDLED-ERROR} \
+            {t.bot:4:5: this call may produce the declared error "E", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}] \
+        [compilerpedia::topicForDiagnostic {SURFACE SYNTAX} {t.bot:1:7: unexpected character "/"}] \
+        [compilerpedia::topicForDiagnostic {NO SUCH CODE} {whatever}]
+} -result {proof.list-bounds error.unhandled-error capability.integer-division {}}
+
+test cp-diagnostic-code-prefix {a code whose last words vary (a value kind, an error name) falls back to its longest documented prefix; an undocumented kind of a broad family finds nothing} -body {
+    list [compilerpedia::topicForDiagnostic {NATIVE UNSUPPORTED value} x] \
+        [compilerpedia::topicForDiagnostic {NATIVE UNSUPPORTED {native list::at}} x] \
+        [compilerpedia::topicForDiagnostic {CORE DECLARED-ERROR geometry::Bad} x] \
+        [compilerpedia::topicForDiagnostic {CORE SEMANTIC NO-SUCH-KIND} x] \
+        [compilerpedia::topicForDiagnostic SAME-RETURN-VALUE ""] \
+        [compilerpedia::topicForDiagnostic {SURFACE SYNTAX} "x.bot:1:1: no rule says this"]
+} -result {error.native-unsupported error.native-unsupported error.core-declared-error {} warning.same-return-value error.surface-syntax}
+
+test cp-diagnostic-every-target-exists {every topic a help line can name exists: each matcher's topic, and each code's} -body {
+    set missing {}
+    foreach id [compilerpedia::topics] {
+        foreach code [dict get [compilerpedia::topic $id] code] {
+            set target [compilerpedia::topicForDiagnostic $code ""]
+            if {$target ne "" && ![compilerpedia::exists $target]} {
+                lappend missing $code
+            }
+        }
+    }
+    set missing
+} -cleanup {unset -nocomplain missing target} -result {}
+
+# ---------------------------------------------------------------------------
+# Separation from compilation
+
+test cp-help-loads-no-compiler {help needs nothing of the compiler: in a fresh interpreter, compilerpedia.tcl answers queries with no compiler, front end or backend namespace loaded} -body {
+    set child [interp create]
+    try {
+        $child eval [list set ::path [file join $::projectRoot compilerpedia compilerpedia.tcl]]
+        $child eval {
+            source $::path
+            set out [file tempfile scratch]
+            set status [compilerpedia::main {list::at} $out $out]
+            close $out
+            file delete $scratch
+        }
+        list [$child eval {set status}] \
+            [lmap ns {::core ::hir ::surface ::native} {$child eval [list namespace exists $ns]}]
+    } finally {
+        interp delete $child
+    }
+} -cleanup {unset -nocomplain child} -result {0 {0 0 0 0}}
+
+test cp-help-changes-no-compilation {compiling a program with the catalogue loaded and its help lookups made gives the same HIR as without it} -body {
+    set source "fn f(x: int) -> int:\n    x + 1\nf(2)\n"
+    set before [hir::format [surface::compile $source t.bot -warnings off]]
+    compilerpedia::lookup "bounds proof"
+    compilerpedia::topicForDiagnostic {CORE SEMANTIC TYPE} "x"
+    set after [hir::format [surface::compile $source t.bot -warnings off]]
+    expr {$before eq $after}
+} -setup {source [file join $::projectRoot surface surface.tcl]} -cleanup {unset -nocomplain source before after} -result 1
+
+cleanupTests

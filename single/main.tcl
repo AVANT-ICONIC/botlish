@@ -5,16 +5,18 @@
 # (//zipfs:/app/main.tcl), which Tcl 9's startup (TclZipfs_AppHook) runs with
 # the executable's own arguments. The archive holds this repository's compiler
 # stack under //zipfs:/app/botlish -- main.tcl, core/, compiler/, hir/,
-# surface/, native/*.tcl, lib/ and examples/*.ir, at the same relative paths
+# surface/, native/*.tcl, lib/ and compilerpedia/, at the same relative paths
 # as in a checkout -- and the native backend's two Rust executables under
 # //zipfs:/app/native-bin. This script
 #
 #   1. makes UTF-8 the system and standard-channel encoding (a checkout's
 #      canonical setup is LANG=C.utf8, AGENTS.md; a single executable does not
 #      ask its user for a locale),
-#   2. installs the native executables, which the kernel cannot run from
-#      inside the archive, into a per-build cache directory (once per build:
-#      later runs find them there), and points the native backend at them:
+#   2. unless the invocation is only the usage summary (no arguments), -help
+#      or -version, installs the native executables, which the kernel cannot
+#      run from inside the archive, into a per-build cache directory (once
+#      per build: later runs find them there), and points the native backend
+#      at them:
 #      BOTLISH_NATIVE_BIN (native::binary) for the driver, and the `stub`
 #      linker with BOTLISH_NATIVE_AOT_STUB for -emit-native-executable, which
 #      therefore needs no rustc, linker or runtime library,
@@ -94,13 +96,17 @@ proc ::single::NativeDir {} {
     return $dir
 }
 
-if {[catch {::single::NativeDir} ::single::nativeDir]} {
-    puts stderr "botlish: cannot install the native backend: $::single::nativeDir"
-    exit 2
+# The usage summary, -help and -version run no program: they install
+# nothing (main.tcl answers them before it loads the compiler).
+if {$::argv ne "" && [lindex $::argv 0] ni {-help --help -h -version --version}} {
+    if {[catch {::single::NativeDir} ::single::nativeDir]} {
+        puts stderr "botlish: cannot install the native backend: $::single::nativeDir"
+        exit 2
+    }
+    set ::env(BOTLISH_NATIVE_BIN) [file join $::single::nativeDir botlish-native]
+    set ::env(BOTLISH_NATIVE_AOT_STUB) [file join $::single::nativeDir botlish-aot-stub]
+    set ::env(BOTLISH_NATIVE_LINKER) stub
 }
-set ::env(BOTLISH_NATIVE_BIN) [file join $::single::nativeDir botlish-native]
-set ::env(BOTLISH_NATIVE_AOT_STUB) [file join $::single::nativeDir botlish-aot-stub]
-set ::env(BOTLISH_NATIVE_LINKER) stub
 
 set ::argv0 [info nameofexecutable]
 source [file join $::single::app botlish main.tcl]

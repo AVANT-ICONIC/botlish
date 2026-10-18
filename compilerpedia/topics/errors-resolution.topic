@@ -1,0 +1,3087 @@
+# errors-resolution.topic -- errors of names, types, structs, enums,
+# methods, flags, refinements, imports and modules; rule.type-* of TYPE.
+
+@topic error.unbound
+title: UNBOUND: a name used where no binding of it is visible
+summary: A name does not resolve to any binding at the point where it is used: it is misspelled, never defined, defined further down, or names a type or an enum case rather than a value.
+index: errors
+alias: unbound name; undefined name; name is not defined
+keywords: unbound, undefined, not defined, declared later, forward reference, binding, scope, typo, hoisting
+related: concept.bindings concept.definition-order rule.forward-references rule.no-callable-types concept.enums concept.mutual-recursion concept.imports error.missing-import
+docs: STRICT-REFERENCE-DETERMINISM.md README.md
+code: CORE SEMANTIC UNBOUND
+
+== MEANING
+Every name a program uses is resolved at compile time to exactly one
+binding: a value binding (`x = ...`), a function, a parameter, a loop
+variable, a root primitive (`true`, `mod`, `argv`), or -- written
+qualified -- a member of a namespace (`list::at`). A binding is visible
+from the point where it is established to the end of its scope. Nothing
+is hoisted, and there is no lookup by name at run time. UNBOUND reports a
+reference that resolves to nothing.
+
+The message says which case it is:
+
+    unbound name "count"
+        no binding of that name is visible here at all;
+    unbound name "later": "later" is declared later; forward references
+    are not allowed (a binding is visible only after it is established)
+        there is one, but further down: a forward reference;
+    unbound name "Color": "Color" is an enum type, not a value; ...
+    unbound name "Red": an enum case is never visible by its bare name;
+    write it qualified by its enum's type, e.g. Color::Red
+    unbound name "m::f": "f" is not established before this point in its
+    own namespace; ...
+        (inside module m, a qualified forward reference).
+
+== LIKELY CAUSES
+  * A typo, or a name from another language (`len`, `print`, `string`).
+  * A function called above the line that defines it. Functions are
+    bindings like any other: a function may call itself and what is
+    defined above it, never what is defined below it -- also when the
+    call only runs later. Write callees first.
+  * Two functions that call each other. One of the two calls is always a
+    forward reference, so plain mutual recursion is rejected; `mutual:`
+    groups exist only as a design (MUTUAL-RECURSION.md), not in this
+    compiler.
+  * A bare enum case (`Red`) or the enum type itself used as a value.
+  * A type used as a function or predicate: `Small(3)`, `Small?(x)`, or a
+    struct name `P` alone. No type is callable (rule.no-callable-types).
+  * A namespace member used without its qualifier: after `import list`
+    the function is `list::length(xs)` (or `xs.length()`), never a bare
+    `length(xs)`; an import never adds unqualified names.
+
+== HOW TO INVESTIGATE
+Read the quoted name and the clause after the colon. Without a clause,
+search the file for a definition: none means a typo or a missing
+definition; one in a module means the use must be written qualified
+(`ns::name`, after `import ns`). With "declared later", find the
+definition and move it above the first use, together with what it needs.
+
+== WHAT TO DO
+  * Define every function before the first function that calls it.
+  * For two functions that need each other, pass one to the other as an
+    argument: functions that reach each other through arguments are
+    legal (second example below).
+  * Write enum cases qualified: `Color::Red`.
+  * Instead of `T(x)` or `T?(x)`, call a function you write: a converter
+    whose declared result is the type, or a predicate with a `proves`
+    clause (concept.refinements, concept.integer-domains).
+
+The compiled program never reads an unresolved name: the interpreter's
+own run-time check ("name ... used before its binding") guards core IR
+text only, never a source program the front end accepted.
+
+@example reject
+total = count + 1
+total
+@caption A name that is defined nowhere
+@error CORE SEMANTIC UNBOUND
+@at 1:9
+@end
+
+@example accept
+fn is_even_step(n: int, odd) -> bool:
+    if n == 0:
+        return true
+    odd(n - 1)
+
+fn is_odd(n: int) -> bool:
+    if n == 0:
+        return false
+    is_even_step(n - 1, is_odd)
+
+is_odd(7)
+@caption Mutual recursion through an argument
+@value true
+@end
+
+@topic error.duplicate
+title: DUPLICATE: a name, error or handler given twice where one is allowed
+summary: Two bindings of one name in the same scope, the same error twice in an errors clause, two handlers for one error on one call, or two extern C declarations of one name.
+index: errors
+alias: already bound; rebinding a name
+keywords: duplicate, rebinding, reassignment, same scope, handler, errors clause, parameter, shadow
+related: concept.bindings rule.immutable-bindings capability.assignment rule.one-handler-per-error concept.errors concept.c-ffi error.unbound error.duplicate-field
+docs: README.md STRICT-REFERENCE-DETERMINISM.md C-FFI.md
+code: CORE SEMANTIC DUPLICATE
+
+== MEANING
+Botlish bindings are immutable and a name is bound once per scope:
+`x = 1` followed by `x = 2` in the same scope is not an update, there is
+no assignment at all, and a second binding would make `x` mean two
+things. The same one-name-one-meaning rule covers the other lists that
+name things:
+
+    duplicate binding "x" in the same lexical scope
+    duplicate binding "a" in the same lexical scope (block parameters)
+    duplicate error "Boom" in the same function's "errors" declaration
+    duplicate "on Boom" handler in the same handled call (error "Boom"
+    is already handled)
+    extern c fn "abs" is already declared in the entry program (at ...):
+    two declarations of one Botlish name are never merged, whatever their
+    signatures
+    duplicate parameter "x" of extern c fn "f"
+
+A nested scope (a function body, an `if` arm, a loop body) may bind a
+name its enclosing scope also binds. That is a new binding, visible only
+inside the nested scope; the outer binding is unchanged after it.
+
+== LIKELY CAUSES
+  * Updating a variable as in an imperative language: `total = total + x`
+    in the same scope, or a counter "incremented" in place.
+  * Two parameters of one function with the same name.
+  * The same error listed twice after `errors`, or two `on E:` handlers
+    for the same E on one call (often after a copy and paste).
+  * Two `extern c fn` declarations of one name (C has no overloading in
+    Botlish either).
+
+== HOW TO INVESTIGATE
+The location is the second binding; search the scope for the first one.
+For a binding, ask what the second one was meant to change: Botlish
+computes a new value under a new name instead of changing an old one.
+
+== WHAT TO DO
+  * Give the new value its own name (`subtotal`, `total`), or compute it
+    in one expression: an `if` expression or a collecting loop is a value
+    (concept.if-expressions, concept.loops).
+  * Accumulate with a loop that produces the list of values, or with a
+    recursive helper function that takes the running value as a
+    parameter.
+  * Merge duplicate handlers into one `on E:` body; list each error once.
+
+@example reject
+x = 1
+x = 2
+x
+@caption A second binding of x in the same scope
+@error CORE SEMANTIC DUPLICATE
+@at 2:1
+@end
+
+@example accept
+x = 1
+if true:
+    x = 2
+x
+@caption A nested scope's binding is a new one
+@value 1
+@end
+
+@topic error.arity
+title: ARITY: a call with the wrong number of arguments
+summary: A call passes a different number of arguments than its callee takes: some calls are rejected at compile time; an ordinary call with the wrong count is only stopped when it runs.
+index: errors
+alias: wrong number of arguments; argument count; too many arguments; too few arguments
+keywords: arity, arguments, parameters, count, flags, layout_length, extern
+related: concept.functions concept.flags rule.flags concept.binary-layouts error.unknown-flag error.type
+docs: FLAGS.md BINARY-LAYOUT.md README.md
+code: CORE SEMANTIC ARITY
+
+== MEANING
+A call must pass exactly as many arguments as its callee has parameters
+(flags are not counted: they are written as `:name`). A Botlish function
+has no default arguments, optional parameters or variadic parameters.
+
+What is checked when:
+
+  * At compile time, reported as this code:
+        function emit takes 1 ordinary argument(s) and the flags :quiet,
+        got 2 ordinary argument(s)
+            a call of a function that declares flags (FLAGS.md);
+        binary::layout_length takes exactly one argument, a layout name
+        (2 given)
+            the layout queries;
+        a C function of N parameter(s) ... passes M argument(s)
+            a call of an `extern c fn`, and the raw syscall transports.
+  * At run time, as the same code, for every other call. Today the
+    compiler does not reject a call of an ordinary function or of an
+    intrinsic with the wrong number of arguments: the program compiles,
+    and the call stops the program when (and only if) it runs:
+        block (a b) expects 2 argument(s), got 1
+        list::length expects 1 argument(s), got 2
+
+A call through a value of a structural function type (`Fn{args: [...]}`)
+with the wrong count is a TYPE error instead ("this call passes 2
+argument(s) to a callable of function type ..."); resuming a coroutine
+with the wrong count is COROUTINE-RESUME-ARITY.
+
+== LIKELY CAUSES
+  * A function's parameter list changed and a call was not updated.
+  * A flag written as an ordinary argument (`emit(x, true)` for
+    `emit(x, :quiet)`), or an argument forgotten before the flags.
+  * An argument that was meant as the receiver of method syntax written
+    twice: `xs.length(xs)` is `list::length(xs, xs)`.
+
+== HOW TO INVESTIGATE
+Compare the call with the callee's declaration (`-help NAME` shows the
+signature of a standard-library function). A run-time ARITY prints no
+source location: the message names the callee's parameters
+(`block (a b)`) or the intrinsic; search for the calls of that function.
+
+== WHAT TO DO
+Pass exactly one argument per parameter, flags as `:name`. Declaring
+parameter types does not add a compile-time count check today, so keep
+calls and declarations in step; tests that run every call catch a
+mismatch.
+
+@example reject
+fn emit(x, flags :quiet):
+    x
+
+emit(1, 2, :quiet)
+@caption Ordinary arguments of a function with flags
+@error CORE SEMANTIC ARITY
+@at 4:1
+@end
+
+@example reject
+import binary
+
+layout Header:
+    size 2
+    align 1
+    field tag: binary::U8 at 0
+    field len: binary::U8 at 1
+
+binary::layout_length(Header, 1)
+@caption A layout query takes exactly the layout
+@error CORE SEMANTIC ARITY
+@at 9:1
+@end
+
+@topic error.duplicate-loop-variable
+title: DUPLICATE-LOOP-VARIABLE: one name bound by two clauses of a lockstep loop
+summary: Two iteration clauses of one lockstep loop bind the same variable name; each clause needs its own name.
+index: errors
+alias: lockstep variable twice
+keywords: lockstep, loop, iteration clause, variable, and
+related: concept.lockstep concept.loops error.duplicate
+docs: COLLECTING-LOOPS.md README.md
+code: CORE SEMANTIC DUPLICATE-LOOP-VARIABLE
+
+== MEANING
+A lockstep loop advances several iteration clauses together
+(`loop x in xs and i from 0 to xs.length():`), binding one variable per
+clause in the loop body. Two clauses binding the same name would leave
+the body unable to say which value it means, so the loop is rejected:
+
+    lockstep loop variable "x" is bound by more than one iteration clause
+
+== LIKELY CAUSES
+  * A copied clause whose variable was not renamed.
+  * Two lists walked together under one name (`loop x in a and x in b:`).
+
+== HOW TO INVESTIGATE
+The location is the loop; the message names the variable. Read the
+variable before `in` (or `from`) in each `and` clause.
+
+== WHAT TO DO
+Give each clause its own variable: `loop a_item in a and b_item in b:`.
+
+@example reject
+loop x in [1, 2] and x in [3, 4]:
+    x
+@caption Both clauses bind x
+@error CORE SEMANTIC DUPLICATE-LOOP-VARIABLE
+@at 1:1
+@end
+
+@example accept
+pairs = loop x in [1, 2] and y in [3, 4]:
+    x * y
+pairs
+@caption One name per clause
+@value [3, 8]
+@end
+
+@topic error.type
+title: TYPE: a value, annotation or declaration that does not fit its type
+summary: The broad type diagnostic: a value cannot be proven to have the type its context declares, a type expression or declaration is invalid, or, at run time, an intrinsic got an argument of the wrong kind.
+index: errors
+alias: type error; type mismatch; wrong type
+keywords: type, cannot be proven, declared type, admissible, annotation, parameter type, result type, expected, got, kind
+related: rule.type-argument rule.type-result rule.type-field rule.type-annotation rule.type-generic-call rule.type-declaration concept.types proof.types rule.typed-parameters concept.function-types concept.mutable-vector concept.integer-domains
+docs: STRICT-TYPED-PARAMETERS.md MINIMAL-APPLIED-LIST-TYPES.md STRUCTURAL-FUNCTION-TYPES.md TYPED-CALLABLE-ESCAPE-SOUNDNESS.md README.md
+code: CORE SEMANTIC TYPE
+code: SURFACE MODULE TYPE
+
+== MEANING
+Botlish's declared types are compile-time proof obligations, not
+run-time checks. Where a program declares a type -- a parameter
+(`x: Digit`), a result (`-> str`), a struct field, an error's payload
+field, a MutableVector's element type, a structural function type -- the
+compiler must *prove* that every value reaching that place has the type.
+A value that is merely not proven is rejected exactly like one that is
+proven wrong: there is no third outcome that inserts a run-time guard,
+and nothing re-checks a declared type when the program runs. So the body
+of `fn show(d: Digit)` may rely on 0 <= d <= 9 with no check of its own.
+
+TYPE is the code of every such failure, and of invalid type expressions
+and declarations. The most common families have pages of their own (the
+help line names the right one; SPECIFIC RULES below lists them):
+
+    argument for parameter "x" cannot be proven to satisfy T
+        rule.type-argument
+    function result does not prove declared type T
+        rule.type-result
+    field "f" of struct S cannot be proven to satisfy its declared type T
+        rule.type-field
+    unknown or invalid type X for parameter "x"
+        rule.type-annotation
+    call to f with x : T is invalid: ...  /  ..., the parameter type
+    inferred from the function body
+        rule.type-generic-call
+    type "P" is already declared  /  duplicate field "x" in struct "P"
+        rule.type-declaration
+
+Other compile-time families, reported as TYPE with this page:
+
+  * Calls through a structural function type: "argument 1 cannot be
+    proven to satisfy int, the parameter type the callee's function type
+    Fn{...} requires", "this call passes 2 argument(s) to a callable of
+    function type ..., whose contract takes 1".
+  * Mutable containers: "value of type str is not admissible to element
+    type int of MutableVector[int]": an element type is fixed for the
+    container's lifetime, and a store never widens it.
+  * Handlers: "handler "on E" completes with type str, not admissible as
+    int (the call's own normal result type)": a handled call is one
+    value, so each handler must produce the call's type.
+  * Contracts of function values: a typed function passed where its
+    parameter types or declared errors would be forgotten ("has typed
+    parameter requirements that cannot be preserved ...", "a value of
+    function type ... is used here as a value of function type ...,
+    which does not declare it").
+  * The C ABI: an `extern c fn` signature that is not one ("unit is not
+    a C parameter type"), and `ffi::c::Void {...}` (SURFACE MODULE TYPE,
+    reported by the loader: C's void has no values).
+
+At run time, TYPE has a different source. The primitive operations and
+the standard-library intrinsics check the kinds of their arguments when
+they run, and a value of the wrong kind stops the program with this code:
+
+    +: expected int, got "a"
+    str::length: expected str, got 5
+
+A direct call of an intrinsic or operator is not rejected at compile
+time for an argument of the wrong kind (`1 + "a"` compiles); the
+argument is rejected statically only when it flows into a declared or
+inferred parameter type of a Botlish function.
+
+== LIKELY CAUSES
+  * A value whose type the compiler does not know precisely enough:
+    an untyped parameter (its type is `any`), a value read from a list of
+    mixed values, an `int` where an integer domain (`Digit`) is declared.
+  * A real mismatch: a str where an int is declared, a List[int] where a
+    List[str] is declared.
+  * A type name that does not exist (`Int`, `String`, `float`).
+
+== HOW TO INVESTIGATE
+Read the declared type and the "(argument type: ..., facts: ...)" part:
+the argument type is what the compiler knows; the facts are the integer
+range it proved. `facts: [-∞, +∞]` with an integer domain declared means
+nothing bounded the value. Then follow the help line to the specific
+rule page, which says how to make such a value provable.
+
+== WHAT TO DO
+Make the value provably of the type -- declare the type where the value
+comes from (a parameter or a function result), guard an integer with
+comparisons before the call, convert through a function whose declared
+result is the type -- or change the declaration to what the value is.
+For a run-time TYPE, the message names the intrinsic and the value: find
+where that value came from and convert it before the call.
+
+@example reject
+import mutable_vector
+
+fn add_name(v: MutableVector[int]) -> int:
+    v.push("seven")
+    0
+
+0
+@caption A str pushed onto a MutableVector[int]
+@error CORE SEMANTIC TYPE
+@at 4:12
+@end
+
+@example reject
+import ffi::c
+
+ffi::c::Void {}
+@caption C's void has no values
+@error SURFACE MODULE TYPE
+@at 3:1
+@end
+
+@topic rule.type-generic-call
+title: Calls of untyped functions are checked against what their bodies need
+summary: An untyped (generic) parameter is checked at each call against what the function's body does with it: an argument the body cannot accept rejects the call.
+index: rules errors
+alias: generic function call invalid; inferred parameter type
+keywords: untyped parameter, generic, inferred, instance, specialization, call to, is invalid, statically incompatible, sound type
+related: error.type concept.specialization concept.functions rule.type-argument rule.typed-parameters error.unproven-field
+docs: STRICT-TYPED-PARAMETERS.md INTRINSIC-FUNCTION-CONTRACT-INFERENCE.md OPPORTUNISTIC-SEMANTIC-INSTANCES.md
+match: CORE SEMANTIC TYPE | call to * is invalid: *
+match: CORE SEMANTIC TYPE | *the parameter type inferred from the function body*
+match: CORE SEMANTIC TYPE | cannot infer a sound type for parameter *
+
+== THE RULE
+A parameter without a type annotation is not unchecked. The compiler
+checks every call of the function in two ways:
+
+  * Inferred contract. From the body, it infers what each untyped
+    parameter must be: `x + 1` needs an int, `if x:` a bool, a call
+    `g(x)` whatever g's parameter needs. An argument statically of
+    another type is rejected at the call ("argument for parameter "x" is
+    statically incompatible with int, the parameter type inferred from
+    the function body"), with the reason ("inferred from the function
+    body: argument 1 of native + requires int (at 2:5)"). If two uses in
+    the body need types that nothing satisfies, the function itself is
+    rejected ("cannot infer a sound type for parameter ...").
+  * Semantic instance. A direct call is also analyzed with the actual
+    argument types, as if the body had been written for them. A problem
+    found there is reported at the call that made it:
+        call to first with x : int is invalid: cannot project field
+        "value" from a value of type int: only a struct has fields
+        (in the body of first, at 2:5)
+
+== WHY
+Untyped functions are Botlish's generic functions: one definition serves
+every argument type its body can handle, with no type parameters. The
+price is that a problem shows up where a call supplies an argument the
+body cannot handle -- so that is where it is reported, with the place in
+the body that cannot handle it.
+
+== WHAT IS REPORTED
+An inferred contract is reported at the call's argument, a semantic
+instance's problem at the call, and "cannot infer a sound type" at the
+use in the body that conflicts. The part after "is invalid:" or
+"inferred from the function body:" is the problem inside the function,
+with its location there.
+
+== WHAT TO DO
+  * Pass an argument the body can use, or convert it before the call.
+  * Declare the parameter's type (`fn inc(x: int) -> int`): the error
+    then moves to the call as a plain parameter-type error, and the body
+    is checked once against the declaration.
+  * For "cannot infer a sound type", the body uses one parameter in two
+    incompatible ways (as a number and as a condition): split the
+    function or fix the use that is wrong.
+
+@example reject
+fn inc(x):
+    x + 1
+
+inc("one")
+@caption The body adds 1 to x, so x must be an int
+@error CORE SEMANTIC TYPE
+@at 4:5
+@end
+
+@example reject
+fn first(x):
+    x.value
+
+first(3)
+@caption The instance for x : int reads a field
+@error CORE SEMANTIC TYPE
+@at 4:1
+@end
+
+@example reject
+fn g(x):
+    x + 1
+
+fn h(x):
+    g(x)
+    if x:
+        1
+    else:
+        2
+
+h(1)
+@caption x is used as an int and as a condition
+@error CORE SEMANTIC TYPE
+@at 5:7
+@end
+
+@example accept
+struct Box:
+    value: int
+
+fn first(x):
+    x.value
+
+first(Box {value: 3})
+@caption An argument the body can use
+@value 3
+@end
+
+@topic rule.type-argument
+title: An argument must be proven to satisfy its declared parameter type
+summary: At every call whose callee is known, each argument for a typed parameter must be proven to have that type at compile time; nothing checks it at run time.
+index: rules errors
+alias: parameter type mismatch
+keywords: argument, parameter, typed parameter, cannot be proven to satisfy, facts, integer domain, admissible, call
+related: error.type rule.typed-parameters rule.type-result rule.type-generic-call concept.types concept.integer-domains proof.types proof.ranges
+docs: STRICT-TYPED-PARAMETERS.md SOURCE-DEFINED-INTEGER-DOMAINS.md MINIMAL-APPLIED-LIST-TYPES.md
+match: CORE SEMANTIC TYPE | *argument for parameter * cannot be proven to satisfy*
+
+== THE RULE
+A parameter annotation (`fn show(d: Digit)`) is a compile-time proof
+obligation at each call whose target is known: the compiler must prove
+that every value the argument can have is a value of the declared type.
+It proves it either by type (the argument's type is the declared type or
+a subtype: a `Tiny` where its parent `Small` is declared) or, for integer
+domains, by range (the argument's proven range lies inside the domain:
+the literal 7 for `Int in 0..9`, or an int guarded by
+`if n < 0 or n > 9: return ...`).
+
+List element types must match exactly (List[T] is invariant today): a
+List[Digit] is not admissible for List[int], and a literal `[1, 2]` is a
+List[int], not a List[Digit], whatever its elements' values. Build such
+a list from values that already have the element type
+(`[digit(1), digit(2)]`, with `fn digit(n: Digit) -> Digit`).
+
+== WHY
+Types are proven, never checked at run time: no guard is inserted for a
+typed parameter, so the function's body can rely on its declaration
+(that d is between 0 and 9) without checking again, on every backend, at
+no cost. The price is that the caller must establish it. An unproven
+argument is rejected exactly like a wrong one, because there is no
+run-time check to catch it later.
+
+== WHAT IS REPORTED
+    argument for parameter "d" cannot be proven to satisfy int[Digit]
+    (argument type: int, facts: [-∞, +∞])
+at the argument. The argument type is what the compiler knows of the
+value; "facts" is its proven integer range ([12, 12] {12} for the
+literal 12, [-∞, +∞] for an unconstrained int). `int[Digit]` is how an
+integer domain prints.
+
+== WHAT TO DO
+  * Declare the type where the value comes from: give the caller's own
+    parameter the same type (`fn relay(n: Digit)`), so its callers prove
+    it, or call a function whose declared result is the type.
+  * Guard an integer before the call, in a form the range analysis
+    reads: `if n < 0 or n > 9: return 0` then `show(n)`, or
+    `if n >= 0 and n <= 9: show(n)`.
+  * For a real mismatch, convert the value or change the declaration.
+
+@example reject
+type Digit = Int in 0..9
+
+fn show(d: Digit) -> int:
+    d * 10
+
+fn relay(n: int) -> int:
+    show(n)
+
+relay(3)
+@caption Nothing bounds n to 0..9
+@error CORE SEMANTIC TYPE
+@at 7:10
+@end
+
+@example accept
+type Digit = Int in 0..9
+
+fn show(d: Digit) -> int:
+    d * 10
+
+fn show_or_zero(n: int) -> int:
+    if n < 0 or n > 9:
+        return 0
+    show(n)
+
+show_or_zero(7)
+@caption A guard proves the range before the call
+@value 70
+@end
+
+@topic rule.type-result
+title: A function's result must prove its declared result type
+summary: With a declared result type (-> T), every normal completion of the function -- its last value and every return -- must be proven to have type T.
+index: rules errors
+alias: function result does not prove declared type; result type mismatch
+keywords: result type, return type, declared result, return, does not prove, ->
+related: error.type rule.type-argument concept.functions concept.integer-domains proof.types principle.guard-clauses
+docs: CROSS-MODULE-REFINED-SIGNATURES.md STRICT-TYPED-PARAMETERS.md
+match: CORE SEMANTIC TYPE | function result does not prove declared type *
+
+== THE RULE
+`fn f(...) -> T:` declares that every normal completion of f is a T: the
+value of the body's last expression and the value of every `return`.
+The compiler proves it from the body, by type or, for an integer domain,
+by the proven range. A declared error (`fail E`) is not a normal
+completion and needs no proof.
+
+== WHY
+The declared result is what every caller sees instead of what the body
+happens to compute: callers rely on it without checks (it is a proof
+obligation of the callee, never a run-time cast), and the body can
+change without changing the callers' view. A converter into an integer
+domain is exactly a function whose declared result is the domain.
+
+== WHAT IS REPORTED
+    function result does not prove declared type int[Digit]
+    (facts: [-∞, +∞])
+at the function (the column of its parameter list). The facts are the
+range proven for the result when it is an integer. A `return` of another
+type (`return "pos"` in an `-> int` function) is reported the same way,
+at the function.
+
+== WHAT TO DO
+  * Guard the value: reject the out-of-range case first, with `fail` of a
+    declared error or an early `return` of a value of the type, then
+    produce the value (principle.guard-clauses).
+  * Fix the branch or `return` that produces another type.
+  * If the result really can be any int, declare `-> int`.
+
+@example reject
+type Digit = Int in 0..9
+
+fn digit(n: int) -> Digit:
+    n
+
+digit(4)
+@caption An unconstrained int does not prove Digit
+@error CORE SEMANTIC TYPE
+@at 3:9
+@end
+
+@example accept
+type Digit = Int in 0..9
+
+error NotADigit
+
+fn digit(n: int) -> Digit errors NotADigit:
+    if n < 0 or n > 9:
+        fail NotADigit
+    n
+
+r = digit(4):
+    on NotADigit:
+        0
+r
+@caption A failing guard proves the result's range
+@value 4
+@end
+
+@topic rule.type-field
+title: A struct field or error payload field must be proven to have its declared type
+summary: Constructing a struct, or failing with an error that carries a payload, requires each field value to be proven to have the field's declared type.
+index: rules errors
+alias: field cannot be proven to satisfy its declared type; payload field type
+keywords: struct field, construction, payload, declared type, field type, fail
+related: error.type rule.struct-construction concept.structs concept.error-payloads rule.type-argument
+docs: STRUCTS.md ERROR-PAYLOADS.md
+match: CORE SEMANTIC TYPE | field "*" of struct * cannot be proven to satisfy its declared type *
+match: CORE SEMANTIC TYPE | payload field "*" of error * cannot be proven to satisfy its declared type *
+
+== THE RULE
+A struct declaration's field types (`value: Digit`) and an error
+declaration's payload field types are held to the same proof as a typed
+parameter: in `Cell {value: n}` or `fail Bad {code: n}`, each value must
+be proven to have its field's declared type, by type or, for an integer
+domain, by the proven range.
+
+== WHY
+A struct value carries no run-time type tags or checks: a reader of
+`cell.value` relies on the declaration. So the one place the type is
+established is the construction.
+
+== WHAT IS REPORTED
+    field "value" of struct Cell cannot be proven to satisfy its declared
+    type int[Digit] (value type: int, facts: [-∞, +∞])
+    payload field "code" of error Bad cannot be proven to satisfy its
+    declared type ...
+at the field's value.
+
+== WHAT TO DO
+As for an argument (rule.type-argument): declare the type where the
+value comes from (`fn make(d: Digit) -> Cell`), guard an integer before
+constructing, or convert the value.
+
+@example reject
+type Digit = Int in 0..9
+
+struct Cell:
+    value: Digit
+
+fn make(n: int) -> Cell:
+    Cell {value: n}
+
+make(3)
+@caption An unconstrained int for a Digit field
+@error CORE SEMANTIC TYPE
+@at 7:11
+@end
+
+@example reject
+error Bad:
+    code: int
+
+fn check(s: str) -> int errors Bad:
+    fail Bad {code: s}
+
+0
+@caption A payload field is checked like a struct field
+@error CORE SEMANTIC TYPE
+@at 5:15
+@end
+
+@example accept
+type Digit = Int in 0..9
+
+struct Cell:
+    value: Digit
+
+fn make(d: Digit) -> Cell:
+    Cell {value: d}
+
+make(3).value
+@caption The parameter's declared type proves the field
+@value 3
+@end
+
+@topic rule.type-annotation
+title: A type annotation must name a type that exists here
+summary: Type annotations name the built-in types (int, str, bool, unit, UnicodeChar, any, List[T], ...), declared types, structs and enums, or a qualified ns::T after an import.
+index: rules errors
+alias: unknown or invalid type; unknown type name
+keywords: annotation, type name, int, str, bool, Int, String, List, unknown type, parent type, type constructor
+related: error.type concept.types concept.imports concept.integer-domains concept.function-types rule.type-declaration
+docs: MINIMAL-APPLIED-LIST-TYPES.md SOURCE-DEFINED-INTEGER-DOMAINS.md STRUCTURAL-FUNCTION-TYPES.md README.md
+match: CORE SEMANTIC TYPE | unknown or invalid *
+match: CORE SEMANTIC TYPE | unknown parent type *
+
+== THE RULE
+A parameter, result, field or context parameter type is one of:
+
+    int  str  bool  unit  UnicodeChar  any       built-in value types
+    List[T]  MutableVector[T]  MutableArray[T]  ImmutableSet[T]
+    Fn{args: [...], return: T, errors: [...]}    function types
+    Coroutine{...}
+    NAME          a `type`, `refined type`, struct or enum declared in
+                  this file, or imported with `import type ns::NAME`
+    ns::NAME      a type, struct or enum of an imported namespace
+
+The scalar types are spelled int, str, bool and unit: `Int`, `String`,
+`Bool` and `string` are not types. `Int` appears only as the parent of
+an integer domain (`type Digit = Int in 0..9`). A type constructor needs
+its argument: `List` alone is invalid, `List[int]` is a type.
+
+== WHY
+A declared type is a proof obligation (error.type): it must denote
+exactly one known set of values. An unknown name could only be guessed
+at, so it is an error rather than `any`.
+
+== WHAT IS REPORTED
+    unknown or invalid type Int for parameter "x": core::type: unknown
+    type "Int"
+    unknown or invalid result type Foo: ...
+    unknown or invalid type List for parameter "x": type constructor
+    "List" requires 1 type argument(s) (e.g. List[...])
+    unknown parent type "Foo"         (in `type T = Foo in ...`)
+
+== WHAT TO DO
+Spell the built-in type in lower case, give a constructor its element
+type, declare the type before using it, or import its namespace and
+spell it qualified. A struct of another module is spelled `ns::Name`
+after `import ns` (`import type` does not import structs).
+
+@example reject
+fn half(x: Int) -> int:
+    x
+
+half(4)
+@caption Int is not a type name: the integer type is int
+@error CORE SEMANTIC TYPE
+@at 1:8
+@end
+
+@example reject
+type Digit = Integer in 0..9
+
+0
+@caption An unknown parent type
+@error CORE SEMANTIC TYPE
+@at 1:14
+@end
+
+@example accept
+fn half(x: int) -> int:
+    x
+
+half(4)
+@caption The built-in names are lower case
+@value 4
+@end
+
+@topic rule.type-declaration
+title: Type, struct and enum declarations: one name, distinct fields and cases
+summary: Each type, struct, enum or layout name is declared once and is not a built-in type name; a struct's fields and an enum's cases are each declared once.
+index: rules errors
+alias: type is already declared; duplicate enum case; duplicate struct field declaration
+keywords: declaration, already declared, duplicate case, duplicate field, built-in type, struct, enum, type, redeclare
+related: error.type concept.structs concept.enums concept.integer-domains rule.type-annotation error.duplicate-field
+docs: STRUCTS.md ENUMS.md SOURCE-DEFINED-INTEGER-DOMAINS.md
+match: CORE SEMANTIC TYPE | type "*" is already declared*
+match: CORE SEMANTIC TYPE | duplicate field "*" in struct "*"
+match: CORE SEMANTIC TYPE | duplicate case "*" in enum "*"*
+match: CORE SEMANTIC TYPE | "*" cannot be declared*
+match: CORE SEMANTIC TYPE | type declaration cycle: *
+
+== THE RULE
+Types, structs, enums, layouts and traits share one type namespace per
+module: each name is declared once, and never as a built-in type name
+(`int`, `List`, `any`, ...). Within one declaration, each struct field
+and each enum case is declared once. An integer domain's chain of
+parents must end in `Int`, without cycles.
+
+== WHY
+A type's identity is its declaration: two declarations of one name, or a
+case declared twice, would make a name mean two things (Botlish has no
+aliases or overloading of declarations).
+
+== WHAT IS REPORTED
+    type "P" is already declared
+    duplicate field "x" in struct "P"
+    duplicate case "Red" in enum "Color": every case of an enum is a
+    distinct nominal case, declared once (there are no case aliases)
+    "int" cannot be declared as a struct: the name is already a built-in
+    or declared type
+    type declaration cycle: "A" depends on its own declaration through
+    its chain of parents
+at the offending declaration. Two `error` declarations of one name are
+reported as UNDECLARED-ERROR ("error "Boom" is already declared").
+
+== WHAT TO DO
+Rename one of the two declarations, or delete the copy.
+
+@example reject
+struct P:
+    x: int
+
+struct P:
+    y: int
+
+0
+@caption Two structs named P
+@error CORE SEMANTIC TYPE
+@at 4:8
+@end
+
+@example reject
+struct P:
+    x: int
+    x: int
+
+0
+@caption A struct field declared twice
+@error CORE SEMANTIC TYPE
+@at 3:5
+@end
+
+@example reject
+enum Color:
+    Red,
+    Red,
+
+0
+@caption An enum case declared twice
+@error CORE SEMANTIC TYPE
+@at 3:5
+@end
+
+@example reject
+struct int:
+    x: int
+
+0
+@caption A built-in type name
+@error CORE SEMANTIC TYPE
+@at 1:8
+@end
+
+@example reject
+type A = B in 0..3
+type B = A in 0..3
+
+0
+@caption Each domain is the other's parent
+@error CORE SEMANTIC TYPE
+@at 1:6
+@end
+
+@topic error.duplicate-field
+title: DUPLICATE-FIELD: one field given twice in a construction, payload or pattern
+summary: A struct construction, an error payload declaration, a layout or a struct destructuring pattern names the same field twice; each field appears exactly once.
+index: errors
+alias: duplicate field; field given twice
+keywords: duplicate field, construction, destructuring, payload, layout, field twice
+related: rule.struct-construction concept.structs concept.destructuring concept.error-payloads concept.binary-layouts rule.type-declaration error.missing-field
+docs: STRUCTS.md STRUCT-DESTRUCTURING.md ERROR-PAYLOADS.md BINARY-LAYOUT.md
+code: CORE SEMANTIC DUPLICATE-FIELD
+code: DUPLICATE-FIELD
+match: SURFACE SYNTAX | DUPLICATE-FIELD: *
+
+== MEANING
+Fields are named, and each is given exactly once: a construction gives
+every declared field one value, a destructuring pattern selects each
+field once, a payload or layout declares each field once. A second
+occurrence could only override or contradict the first, and Botlish has
+neither defaults nor overriding.
+
+    duplicate field "x" in the P construction: each field may be given
+    only once
+    duplicate field "code" in the payload of error "Bad": each payload
+    field is declared once
+    duplicate field "tag" in layout "Header" (first declared at ...)
+    DUPLICATE-FIELD: duplicate field "x" in this struct destructuring:
+    each field may be selected only once        (SURFACE SYNTAX)
+
+The last is found by the parser, so it is printed as SURFACE SYNTAX with
+the parser code DUPLICATE-FIELD at the start of its message. A field
+declared twice in a `struct` declaration is reported as TYPE
+(rule.type-declaration).
+
+== LIKELY CAUSES
+  * A copied `name: value` line in a construction.
+  * A destructuring that selects one field under two local names:
+    `{x, x: other}` -- write `{x}` and bind `other = x` afterwards.
+
+== HOW TO INVESTIGATE
+The location is the second occurrence; the first is earlier between the
+same braces (for a layout, the message gives its location).
+
+== WHAT TO DO
+Delete the repeated field. To use one field value under two names,
+select it once and bind the second name to the first.
+
+@example reject
+struct P:
+    x: int
+    y: int
+
+P {x: 1, x: 2, y: 3}
+@caption x is given twice
+@error CORE SEMANTIC DUPLICATE-FIELD
+@at 5:10
+@end
+
+@example reject
+struct P:
+    x: int
+    y: int
+
+fn f(p: P) -> int:
+    {x, x} = p
+    x
+
+f(P {x: 1, y: 2})
+@caption A pattern selects x twice (parser)
+@error SURFACE SYNTAX
+@at 6:9
+@end
+
+@topic error.missing-field
+title: MISSING-FIELD: a construction or payload that leaves out a declared field
+summary: A struct construction, or an error payload in fail, omits a field the declaration has; every declared field must be given exactly once, and there are no defaults.
+index: errors
+alias: missing field; field not given; default field value
+keywords: missing field, construction, payload, fail, defaults, required field
+related: rule.struct-construction concept.structs concept.error-payloads error.unknown-field error.duplicate-field
+docs: STRUCTS.md ERROR-PAYLOADS.md
+code: CORE SEMANTIC MISSING-FIELD
+
+== MEANING
+A named struct value is built with every declared field:
+`P {x: 1, y: 2}` for `struct P` with fields x and y. There are no
+default values, no optional fields and no partial constructions, so a
+construction that leaves a field out has no value for it. The same holds
+for the payload of `fail E {...}`: it gives every field `error E:`
+declares.
+
+    the P construction is missing field "y" (every declared field must
+    be given exactly once; there are no defaults)
+    the payload of error Bad is missing field "text" (...)
+
+The raw Linux syscall transports take a struct of registers; leaving out
+one they require is reported the same way.
+
+== LIKELY CAUSES
+  * A field added to the struct after the constructions were written.
+  * A struct used like a record with optional fields.
+
+== HOW TO INVESTIGATE
+Each missing field is a diagnostic of its own, naming the construction's
+type and the field; compare the construction with the `struct`
+declaration.
+
+== WHAT TO DO
+Give the field a value. When many constructions share values, write one
+function that builds the struct (a constructor function with the common
+values written once) and call it.
+
+@example reject
+struct P:
+    x: int
+    y: int
+
+P {x: 1}
+@caption y is not given
+@error CORE SEMANTIC MISSING-FIELD
+@at 5:1
+@end
+
+@example accept
+struct P:
+    x: int
+    y: int
+
+fn on_x_axis(x: int) -> P:
+    P {x: x, y: 0}
+
+on_x_axis(4).x
+@caption A function supplies the common value
+@value 4
+@end
+
+@topic error.unknown-field
+title: UNKNOWN-FIELD: a field the struct or payload does not declare
+summary: A construction gives, or a projection or pattern reads, a field the struct type (or the error payload) does not have.
+index: errors
+alias: no such field; struct has no field
+keywords: unknown field, field access, projection, construction, payload, typo, method syntax
+related: concept.structs rule.struct-construction concept.method-sugar concept.error-payloads error.missing-field error.not-a-struct error.missing-import
+docs: STRUCTS.md METHOD-SUGAR.md ERROR-PAYLOADS.md
+code: CORE SEMANTIC UNKNOWN-FIELD
+
+== MEANING
+Fields are resolved statically, by the struct type the compiler proves
+for the value; there is no field lookup at run time. A field name the
+struct's declaration does not have is rejected wherever it is written:
+
+    struct P has no field "z" (declared fields: x)
+        a construction `P {x: 1, z: 2}`;
+    struct type P has no field "z" (known fields: x)
+        a projection `p.z` or a destructuring `{z} = p` (in a handler
+        pattern `on Bad {nope}:` the type is the payload's anonymous
+        struct type, `struct{code: int}`);
+    the payload of error Bad has no field "extra" (declared fields: code)
+        a payload in `fail Bad {...}`.
+
+A method-style call `p.size()` is a field call when no function `size`
+is visible, so a missing function can surface here; the message then
+adds: "as a method-style call, no function named "size" is visible here
+either ...". When such a function exists in a namespace the file does
+not import, the diagnostic is MISSING-IMPORT instead.
+
+== LIKELY CAUSES
+  * A typo in the field name, or a field renamed in the declaration.
+  * A method call whose function is not defined, or is defined after the
+    call (functions are visible only from their definition on).
+  * The wrong struct: two structs with similar fields.
+
+== HOW TO INVESTIGATE
+Compare the name with the field list in the message. When the code is
+a method call (`p.size()`), the question is instead which function
+`size` was meant, whether it is defined above this line, and whether its
+namespace is imported.
+
+== WHAT TO DO
+Use a declared field (the message lists them), add the field to the
+declaration (and to every construction), or define the function the
+method call meant before the call.
+
+@example reject
+struct P:
+    x: int
+
+p = P {x: 1}
+p.z
+@caption P has no field z
+@error CORE SEMANTIC UNKNOWN-FIELD
+@at 5:3
+@end
+
+@topic error.unknown-struct
+title: UNKNOWN-STRUCT: a construction of a name that is not a struct type
+summary: A construction NAME {...} names no struct declaration visible here, or names a type that is not a struct (an integer domain, an applied type, a layout).
+index: errors
+alias: unknown struct type; not a struct type
+keywords: construction, struct, unknown struct, braces, layout, LayoutStruct, domain
+related: concept.structs rule.struct-construction concept.imports concept.binary-layouts error.not-a-struct
+docs: STRUCTS.md BINARY-LAYOUT.md
+code: CORE SEMANTIC UNKNOWN-STRUCT
+
+== MEANING
+`NAME {field: value, ...}` constructs a value of the struct NAME, which
+must be declared (`struct NAME:`) in this file, or be `ns::NAME` of an
+imported module. Only structs are constructed from fields:
+
+    unknown struct type "Q": no "struct Q" declaration is visible
+    "Small" is not a struct type              (an integer domain)
+    List[int] is not a struct type: of the applied types, only
+    LayoutStruct[L] is constructed from field values
+    "Header" is a layout, not a struct: its structural value is
+    constructed as LayoutStruct[Header] {...}
+
+An anonymous struct value needs no declaration: `{x: 1, y: 2}`.
+
+== LIKELY CAUSES
+  * A typo, or a struct of another module written without its qualifier
+    (`Point {...}` for `geo::Point {...}`).
+  * Not the order: unlike value bindings, struct declarations are
+    visible in the whole file, so a construction above the declaration
+    is fine.
+  * A value of an integer domain written like a construction:
+    `Small {value: 3}` -- a domain value is just the integer, produced by
+    a function whose declared result is the domain.
+
+== HOW TO INVESTIGATE
+Search the file for `struct NAME`. For a struct of a module, check the
+qualifier names that module and that the file imports it.
+
+== WHAT TO DO
+Declare the struct, qualify it (`ns::Name {...}` after `import ns`), or
+use an anonymous struct `{...}` if no named type is needed.
+
+@example reject
+Q {x: 1}
+@caption No struct Q is declared
+@error CORE SEMANTIC UNKNOWN-STRUCT
+@at 1:1
+@end
+
+@topic error.not-a-struct
+title: NOT-A-STRUCT: a field read from a value that is not a struct
+summary: A field projection or destructuring reads a field of a value whose type is not a struct (an int, a str, a List ...), or braces follow an enum case.
+index: errors
+alias: only a struct has fields; cannot project field
+keywords: projection, field, dot, struct, method syntax, destructuring, enum case braces
+related: concept.structs concept.method-sugar concept.enums error.unknown-field error.missing-import rule.method-requires-import
+docs: STRUCTS.md METHOD-SUGAR.md DIAGNOSTIC-RECOVERY.md ENUMS.md
+code: CORE SEMANTIC NOT-A-STRUCT
+code: SURFACE MODULE NOT-A-STRUCT
+
+== MEANING
+`value.name` reads field `name` of a struct value. For a value whose
+type is known not to be a struct, there is no field to read:
+
+    cannot project field "size" from a value of type int: only a struct
+    has fields
+
+The same holds for a destructuring `{a} = n` of a non-struct. The loader
+reports one more case (SURFACE MODULE NOT-A-STRUCT): braces after an
+enum case, `Color::Red {}` -- a case is a value, written without braces,
+and cases carry no payload.
+
+== LIKELY CAUSES
+  * Method syntax with no function of that name visible: `n.size()` is a
+    call of the field `size` when no function `size` is in scope. The
+    message then adds "as a method-style call, no function named "size"
+    is visible here either". Method syntax applies only functions
+    visible by name (concept.method-sugar). If such a function exists in
+    a namespace this file does not import, the diagnostic is
+    MISSING-IMPORT, naming the import to add.
+  * A wrong assumption about a value's type: a function returning a str
+    where a struct was expected.
+
+== HOW TO INVESTIGATE
+The message gives the value's type. For a method call, find the
+function that was meant: is it defined in this file, above the call? Is
+its namespace imported? If the type itself is unexpected, trace where
+the value comes from.
+
+== WHAT TO DO
+Define or import the function the method call meant, call a function
+explicitly (`size(n)`), or fix the value's type.
+
+@example reject
+n = 5
+n.size()
+@caption A field call on an int: no function size
+@error CORE SEMANTIC NOT-A-STRUCT
+@at 2:3
+@end
+
+@example reject
+enum Color:
+    Red,
+    Green,
+
+Color::Red {}
+@caption An enum case is a value: no braces
+@error SURFACE MODULE NOT-A-STRUCT
+@at 5:1
+@end
+
+@topic error.unproven-field
+title: UNPROVEN-FIELD: a field read whose struct type is not known statically
+summary: A field is read from a value of unknown type (an untyped parameter) in code that can run with any argument, so no struct and no field can be chosen at compile time.
+index: errors
+alias: receiver's struct type is not known; field of untyped parameter
+keywords: generic, untyped parameter, field projection, any, function value, higher-order, instance
+related: concept.specialization concept.structs rule.type-generic-call concept.function-types error.not-a-struct
+docs: STRUCTS.md OPPORTUNISTIC-SEMANTIC-INSTANCES.md DIAGNOSTIC-RECOVERY.md
+code: CORE SEMANTIC UNPROVEN-FIELD
+
+== MEANING
+A field projection is compiled to a fixed slot of a known struct type;
+there is no field lookup by name at run time. In an untyped (generic)
+function, `fn first(x): x.value`, the type of x is unknown in the body
+itself. That is fine while every call of the function is a direct call
+the compiler analyzes with the argument's actual type (a semantic
+instance: `first(Box {value: 3})` proves x is a Box). It is an error
+when the generic body itself can run with an argument of any type:
+
+  * the function is used as a value -- passed to another function,
+    stored in a list, bound to another name and called through it;
+  * or it is called with an argument whose type is itself unknown.
+
+    cannot project field "value": the receiver's struct type is not
+    known here (its type is any), and a field projection is resolved
+    statically, never looked up at run time
+
+== LIKELY CAUSES
+  * A generic accessor passed to a higher-order function:
+    `apply(first, box)`.
+  * A field read on an untyped parameter of a function that is called
+    with values of unknown type.
+
+== HOW TO INVESTIGATE
+The location is the projection. Find where the function escapes as a
+value (an argument, a list element, a binding `f = first`).
+
+== WHAT TO DO
+Declare the parameter's struct type (`fn first(x: Box) -> int`): the
+projection is then resolved in every context, including through
+function values. Alternatively call the function directly, where the
+argument's type is known.
+
+@example reject
+fn first(x):
+    x.value
+
+fn apply(f, v):
+    f(v)
+
+struct Box:
+    value: int
+
+apply(first, Box {value: 3})
+@caption first escapes as a value
+@error CORE SEMANTIC UNPROVEN-FIELD
+@at 2:7
+@end
+
+@example accept
+struct Box:
+    value: int
+
+fn first(x: Box) -> int:
+    x.value
+
+fn apply(v, f):
+    f(v)
+
+Box {value: 3}.apply(first)
+@caption A declared type resolves the field
+@value 3
+@end
+
+@topic error.opaque-construction
+title: OPAQUE-CONSTRUCTION: an opaque struct built outside its module
+summary: A struct declared opaque struct can be constructed from its fields only by the module that declares it; other code must call that module's functions.
+index: errors
+alias: opaque struct construction; opaque representation owned by
+keywords: opaque, construction, representation, module, owner, abstraction
+related: concept.opaque-structs rule.opaque-authority error.opaque-representation concept.modules concept.structs
+docs: OPAQUE-STRUCTS.md
+code: CORE SEMANTIC OPAQUE-CONSTRUCTION
+
+== MEANING
+`opaque struct Name:` in module m makes m the only code with authority
+over the struct's representation: only m can build a value from fields
+or read its fields. Everyone else may name the type, pass, store and
+compare its values, and call m's functions.
+
+    abi::bytes::Bytes has an opaque representation owned by module
+    "abi::bytes"; construct it through the public operations provided by
+    that module
+
+The diagnostic deliberately says nothing about the fields (which exist,
+which are missing): they are the owner's business.
+
+== WHY
+The owner can keep an invariant (a validated value, a private encoding)
+that a construction from arbitrary field values would break, and can
+change the representation without breaking other modules. Imports grant
+no authority: no parent, child or importing namespace may construct.
+
+== LIKELY CAUSES
+  * Building a library type from its fields, as for a plain struct.
+  * Code moved out of the module that owns the type.
+
+== HOW TO INVESTIGATE
+The message names the owning module. Its functions are the interface:
+`-help stdlib.module.NS` lists a standard module's members.
+
+== WHAT TO DO
+Use the module's constructor functions (`abi::bytes::from_list(...)`);
+`-help stdlib.module.NS` lists a module's functions. If you own the
+module and need another construction, add a function there.
+
+@example reject
+import abi::bytes
+
+abi::bytes::Bytes {storage: 0}
+@caption Only abi::bytes may build a Bytes
+@error CORE SEMANTIC OPAQUE-CONSTRUCTION
+@at 3:1
+@end
+
+@topic error.opaque-representation
+title: OPAQUE-REPRESENTATION: a field of an opaque struct read outside its module
+summary: A field projection or destructuring of an opaque struct value outside the module that declares it; only the owning module may inspect the representation.
+index: errors
+alias: field access on opaque struct; opaque fields
+keywords: opaque, field access, projection, destructuring, representation, owner
+related: concept.opaque-structs rule.opaque-authority error.opaque-construction concept.destructuring
+docs: OPAQUE-STRUCTS.md
+code: CORE SEMANTIC OPAQUE-REPRESENTATION
+
+== MEANING
+Outside its owning module an opaque struct's fields can be neither
+projected (`data.storage`) nor destructured (`{storage} = data`), and
+they are not method-call candidates. The message is the same whether the
+field exists or not, so the representation cannot be probed:
+
+    field access on abi::bytes::Bytes is not available outside module
+    "abi::bytes"; abi::bytes::Bytes has an opaque representation, so its
+    fields can be neither projected nor destructured here (use the public
+    operations provided by that module)
+
+== WHY
+See error.opaque-construction: the owner alone controls the
+representation, so it can keep invariants and change it freely.
+
+== LIKELY CAUSES
+  * Reading a field instead of calling an accessor function.
+  * Destructuring an opaque value: `{storage} = data`.
+  * A method call `data.f()` whose function f is not visible here:
+    without a function, method syntax reads the field f.
+
+== HOW TO INVESTIGATE
+The message names the owning module; look for an accessor among its
+functions (`-help stdlib.module.NS` for a standard module).
+
+== WHAT TO DO
+Call the owning module's accessor functions (`abi::bytes::length(data)`,
+or `data.length()` with method syntax after the import).
+
+@example reject
+import abi::bytes
+
+fn storage_of(data: abi::bytes::Bytes) -> any:
+    data.storage
+
+0
+@caption A field of an opaque struct
+@error CORE SEMANTIC OPAQUE-REPRESENTATION
+@at 4:10
+@end
+
+@topic error.unknown-enum-case
+title: UNKNOWN-ENUM-CASE: Enum::Case naming a case the enum does not declare
+summary: A qualified case Enum::Case names a case the enum's declaration does not have; the message lists the declared cases and suggests near spellings.
+index: errors
+alias: no such enum case; enum has no case
+keywords: enum, case, typo, did you mean, closed sum
+related: concept.enums error.not-an-enum error.ambiguous-qualifier
+docs: ENUMS.md
+code: CORE SEMANTIC UNKNOWN-ENUM-CASE
+
+== MEANING
+An enum is a closed set of named cases, all listed in its declaration.
+`Color::Blue` is valid only if `enum Color:` declares `Blue`; cases
+cannot be added elsewhere and have no numeric or string conversion.
+
+    enum Color has no case "Gren" (its cases: Red, Green); did you mean
+    Color::Green or Color::Red?
+
+== LIKELY CAUSES
+  * A typo or a renamed case.
+  * The wrong enum: two enums with similar cases.
+
+== HOW TO INVESTIGATE
+The message lists the enum's cases and the nearest spellings; check the
+enum's declaration if a case was renamed.
+
+== WHAT TO DO
+Use a declared case (the message lists them), or add the case to the
+declaration.
+
+@example reject
+enum Color:
+    Red,
+    Green,
+
+Color::Gren
+@caption A misspelled case
+@error CORE SEMANTIC UNKNOWN-ENUM-CASE
+@at 5:1
+@end
+
+@topic error.not-an-enum
+title: NOT-AN-ENUM: Type::Case qualified by a type that is not an enum
+summary: A case-like reference Name::Case is qualified by a struct or built-in type; only an enum type qualifies a case, and a type is never a namespace.
+index: errors
+alias: not an enum; only an enum type qualifies a case
+keywords: enum, case, qualifier, struct, built-in type, namespace
+related: concept.enums error.unknown-enum-case error.unknown-namespace error.ambiguous-qualifier
+docs: ENUMS.md
+code: SURFACE MODULE NOT-AN-ENUM
+
+== MEANING
+`X::Y` where X is not a namespace is read as an enum case: X must be an
+enum type visible in this file. When X is another kind of type, the
+reference names nothing:
+
+    "bool" is a built-in type, not an enum: only an enum type qualifies a
+    case ("Enum::Case"), and a type is not a namespace, so "bool::Yes"
+    names nothing
+    "P" is a struct, not an enum: ...
+
+Types are not namespaces in Botlish: a struct has no static members, and
+`P::make` is never a function of P.
+
+== LIKELY CAUSES
+  * Expecting static members or associated constants on a struct.
+  * A boolean written as an enum (`bool::True` for `true`).
+
+== HOW TO INVESTIGATE
+Check what X is: a struct, a built-in type or a `type` declaration. If
+a namespace's member was meant, the namespace has another name (and
+needs an import).
+
+== WHAT TO DO
+Declare an enum for a closed set of cases, write a plain function
+instead of `P::make` (`make_p(...)`), or use `true`/`false`.
+
+@example reject
+bool::Yes
+@caption bool is a type, not an enum
+@error SURFACE MODULE NOT-AN-ENUM
+@at 1:1
+@end
+
+@topic error.enum-empty
+title: ENUM-EMPTY: an enum declaration without cases
+summary: An enum declares no case; an enum needs at least one case on the indented lines after enum Name:.
+index: errors
+alias: enum without cases; empty enum
+keywords: enum, case, declaration, empty
+related: concept.enums error.anonymous-enum
+docs: ENUMS.md
+code: ENUM-EMPTY
+code: CORE SEMANTIC ENUM-EMPTY
+match: SURFACE SYNTAX | ENUM-EMPTY: *
+
+== MEANING
+An enum's values are its cases, so an enum with no case would be a type
+with no values. The parser rejects it:
+
+    ENUM-EMPTY: enum "Color" declares no case: an enum needs at least one
+    case, written on the indented lines after "enum Color:" ("Case,")
+
+The cases are one comma-separated list on indented lines:
+
+    enum Color:
+        Red,
+        Green,
+
+HIR text (a `.hirx` file) that declares an empty enum is rejected as
+CORE SEMANTIC ENUM-EMPTY when it is read; a source program never reaches
+that check.
+
+== LIKELY CAUSES
+  * A declaration written before its cases.
+  * Cases that are not indented under `enum Name:` (they are then not
+    part of the declaration).
+
+== HOW TO INVESTIGATE
+The location is the enum's name; look at the lines below it.
+
+== WHAT TO DO
+Declare the cases, indented under the declaration, separated by commas.
+
+@example reject
+enum Color:
+
+Color::Red
+@caption No indented case list
+@error SURFACE SYNTAX
+@at 1:6
+@end
+
+@topic error.anonymous-enum
+title: ANONYMOUS-ENUM: enum {...} used as an expression or type
+summary: An anonymous enum type such as enum {A, B} does not exist; an enum is always a named top-level declaration.
+index: errors
+alias: anonymous enum; inline enum
+keywords: enum, anonymous, braces, declaration
+related: concept.enums error.enum-empty
+docs: ENUMS.md
+code: ANONYMOUS-ENUM
+match: SURFACE SYNTAX | ANONYMOUS-ENUM: *
+
+== MEANING
+An enum's identity is its declaration: two enums with the same cases are
+different types, and `Color::Red` is a case of exactly one of them. A
+type written in place, `enum {Red, Green}`, would have no identity, so
+the parser rejects it:
+
+    ANONYMOUS-ENUM: anonymous enum types do not exist: an enum's identity
+    is its declaration, so an enum is always a named top-level
+    declaration ("enum Name:" with its cases on indented lines), and a
+    value of it is written Name::Case
+
+== LIKELY CAUSES
+  * An enum written inline, as some languages allow for a field's type
+    or a value: `kind: enum {A, B}`, `x = enum {A, B}`.
+
+== HOW TO INVESTIGATE
+The location is the word `enum` before the brace.
+
+== WHAT TO DO
+Declare the enum at the top level of the file and use its cases:
+
+    enum Color:
+        Red,
+        Green,
+
+    c = Color::Red
+
+@example reject
+c = enum {Red, Green}
+c
+@caption An enum written in place
+@error SURFACE SYNTAX
+@at 1:5
+@end
+
+@topic error.ambiguous-qualifier
+title: AMBIGUOUS-QUALIFIER: a qualifier that is both a namespace and an enum
+summary: X::Y is ambiguous because X names both a namespace and an enum type visible in this file; qualifiers are never resolved by precedence.
+index: errors
+alias: namespace and enum with the same name
+keywords: enum, namespace, qualifier, ambiguous, rename
+related: concept.enums concept.imports error.not-an-enum error.unknown-namespace
+docs: ENUMS.md IMPORTS.md
+code: SURFACE MODULE AMBIGUOUS-QUALIFIER
+
+== MEANING
+`X::Y` is a namespace member when X is a namespace and an enum case when
+X is an enum type. When an enum is named like a namespace that exists
+(a standard namespace or an application module), the reference has two
+meanings, and Botlish never picks one by a precedence rule:
+
+    "list::Red" is ambiguous: "list" names both a namespace and the enum
+    type list visible in this file (a qualifier is never resolved by
+    precedence; rename the enum)
+
+This is reported whether or not the file imports the namespace, so a
+qualified name never means an intrinsic in one file and a case in
+another.
+
+== LIKELY CAUSES
+  * An enum named in lower case like a standard namespace (`list`,
+    `test`, `io`), or like one of the program's own modules.
+
+== HOW TO INVESTIGATE
+The message names the namespace and the enum. `-help stdlib` lists the
+standard namespaces.
+
+== WHAT TO DO
+Rename the enum (enum types are conventionally capitalized: `List`,
+`Status`), so no namespace shares its name.
+
+@example reject
+enum list:
+    Red,
+
+list::Red
+@caption An enum named like the standard namespace list
+@error SURFACE MODULE AMBIGUOUS-QUALIFIER
+@at 4:1
+@end
+
+@topic error.ambiguous-method-call
+title: AMBIGUOUS-METHOD-CALL: method syntax with more than one possible callee
+summary: receiver.name(...) could call more than one visible function named name (or a function and a callable field), and Botlish never chooses by precedence; call the one you mean explicitly.
+index: errors
+alias: ambiguous method call; more than one visible function accepts the receiver
+keywords: method syntax, method sugar, candidates, ambiguous, precedence, field, local name, parameter name, shadowing
+related: concept.method-sugar rule.method-resolution error.no-applicable-method error.nomethod-call concept.imports
+docs: METHOD-SUGAR.md IMPORTS.md 2048-ENGINE-WORKLOAD.md
+code: CORE SEMANTIC AMBIGUOUS-METHOD-CALL
+
+== MEANING
+`x.f(a)` means `f(x, a)` for a function `f` visible by that name. The
+candidates are every `f` lexical resolution finds (functions, local
+bindings and parameters of this file) plus every member `f` of a
+namespace the file imports directly. Each candidate is tried as
+`f(x, a)`; the call is accepted when exactly one is valid. When several
+are, the call is rejected -- there is no precedence: not import order,
+not "local wins", not "standard library wins":
+
+    method-style call "length" is ambiguous: more than one visible
+    function accepts the receiver (length, list::length); there is no
+    precedence between them: call the one you mean explicitly, e.g.
+    length(receiver, ...)
+
+A second form: the receiver is a struct with a field `f` that may hold a
+callable, and a function `f` is also visible:
+
+    method-style call "greet" is ambiguous: the receiver (type Greeter)
+    has a field "greet" whose value may be callable, and a function
+    "greet" is also visible here; write (receiver.greet)(...) to call the
+    field, or greet(receiver, ...) to call the function
+
+== LIKELY CAUSES
+  * A local binding or parameter with the method's name: with
+    `import list`, a parameter `length: int` makes `xs.length()`
+    ambiguous. Today a local of any type counts as a candidate, even an
+    Int that could never be called.
+  * A helper function of your own named like an imported function
+    (`fn length(...)` beside `import list`).
+  * Two imported namespaces with a function of that name that both
+    accept the receiver (e.g. an untyped receiver).
+
+== HOW TO INVESTIGATE
+The message lists the candidates (`length, list::length`). For each,
+find where it comes from: a parameter or local binding, a function of
+this file, or a namespace this file imports.
+
+== WHAT TO DO
+  * Rename the local or parameter (`count`, `size_limit`), or your own
+    function.
+  * Or call explicitly: `list::length(xs)` or `length(xs)`, and for a
+    field `(x.f)(a)`.
+  * Give an untyped receiver a declared type, so only one candidate
+    accepts it.
+
+@example reject
+import list
+
+fn count(xs: List[int], length: int) -> int:
+    xs.length() + length
+
+count([1, 2], 3)
+@caption A parameter named like list::length
+@error CORE SEMANTIC AMBIGUOUS-METHOD-CALL
+@at 4:8
+@end
+
+@example accept
+import list
+
+fn count(xs: List[int], limit: int) -> int:
+    xs.length() + limit
+
+[1, 2].count(3)
+@caption Renamed: list::length is the only candidate
+@value 5
+@end
+
+@topic error.no-applicable-method
+title: NO-APPLICABLE-METHOD: method syntax where no candidate accepts the receiver
+summary: receiver.name(...) has several visible functions named name, and none of them accepts this receiver and these arguments; the message says why each one fails.
+index: errors
+alias: no visible function accepts the receiver
+keywords: method syntax, candidates, receiver type, overload, no applicable
+related: concept.method-sugar rule.method-resolution error.ambiguous-method-call error.type
+docs: METHOD-SUGAR.md IMPORTS.md
+code: CORE SEMANTIC NO-APPLICABLE-METHOD
+
+== MEANING
+When method syntax has several candidate functions (see
+error.ambiguous-method-call), each is tried with the receiver as first
+argument. If none of the calls would be valid, the call is rejected, and
+the message gives each candidate's reason:
+
+    method-style call "length": none of the visible functions of that
+    name accepts the receiver (length: argument for parameter "s" cannot
+    be proven to satisfy str (argument type: int); list::length: the
+    receiver is a int, but argument 1 of native list::length requires
+    list)
+
+Botlish has no overloading: candidates are not ranked or converted to,
+they are only tried. With a single candidate there is nothing to choose:
+the call is that function's call, checked like any other (a typed
+parameter rejects a wrong receiver as TYPE at compile time; an intrinsic
+checks its argument's kind when it runs).
+
+== LIKELY CAUSES
+  * A receiver of the wrong type: an int where a list was meant.
+  * Your own function and an imported one sharing a name, neither for
+    this receiver.
+
+== HOW TO INVESTIGATE
+The message gives each candidate's reason, separated by ";". The
+receiver's type is in the reasons ("the receiver is a int").
+
+== WHAT TO DO
+Read each candidate's reason; fix the receiver's type or call the
+intended function explicitly.
+
+@example reject
+import list
+
+fn length(s: str) -> int:
+    0
+
+5.length()
+@caption Neither length nor list::length accepts an int
+@error CORE SEMANTIC NO-APPLICABLE-METHOD
+@at 6:3
+@end
+
+@topic error.nomethod-call
+title: NOMETHOD-CALL: method syntax on a function declared nomethod
+summary: The only visible functions of that name are declared nomethod, so they cannot be called with method syntax; call them in function form.
+index: errors
+alias: declared nomethod; cannot be called with method syntax
+keywords: nomethod, method syntax, receiver, bit_and, function form
+related: concept.nomethod concept.method-sugar warning.method-eligible error.ambiguous-method-call
+docs: WARNINGS-METHOD-ELIGIBLE.md METHOD-SUGAR.md
+code: CORE SEMANTIC NOMETHOD-CALL
+
+== MEANING
+`nomethod fn f(...)` is the author's declaration that f has no receiver:
+its first argument is not "the thing it operates on" (`bit_and`'s two
+operands are symmetric; `mutable_array::create`'s first argument is a
+length). Method syntax skips such a function as a candidate; when every
+visible function of the name is nomethod, the call is rejected:
+
+    `bit_and` is declared nomethod and cannot be called with method
+    syntax; call it as bit_and(receiver, ...)
+
+It is not a warning and has no suppression: nomethod changes which call
+forms are legal. The standard library's nomethod functions include
+bit_and, bit_or, bit_xor, mutable_array::copy, mutable_array::create and
+binary::parse.
+
+== LIKELY CAUSES
+  * A symmetric operation or a constructor-like function written in
+    receiver form: `a.bit_and(b)`, `3.create(0)` for
+    mutable_array::create.
+
+== HOW TO INVESTIGATE
+For a standard function, `-help NAME` says whether it is nomethod; for
+your own, look for `nomethod fn` at its declaration.
+
+== WHAT TO DO
+Write the function form: `bit_and(12, 10)`. If you own the function and
+receiver syntax reads well for it, remove `nomethod`.
+
+@example reject
+12.bit_and(10)
+@caption bit_and is declared nomethod
+@error CORE SEMANTIC NOMETHOD-CALL
+@at 1:4
+@end
+
+@example accept
+bit_and(12, 10)
+@caption The function form
+@value 8
+@end
+
+@topic error.unknown-flag
+title: UNKNOWN-FLAG: a flag the called function does not declare
+summary: A call supplies :name, but the called function's flag section does not declare that flag (or the function declares no flags).
+index: errors
+alias: does not accept flag; unknown flag
+keywords: flag, flags, :name, option, flag section
+related: concept.flags rule.flags error.duplicate-flag error.flag-callee-unknown principle.options-are-flags
+docs: FLAGS.md
+code: CORE SEMANTIC UNKNOWN-FLAG
+
+== MEANING
+A flag parameter is an option declared in the function's flag section
+(`fn emit(x, flags :quiet):`) and set by naming it at the call
+(`emit(x, :quiet)`). A call may supply only flags its callee declares:
+
+    function emit does not accept flag :loud (accepted flags: :quiet)
+    function plain does not accept flag :loud (it declares no flags)
+
+The flag interface is the declaration's, checked statically at every
+call; a flag is never a value or a string looked up at run time.
+
+== LIKELY CAUSES
+  * A typo in the flag name, or a flag of another function.
+  * An option the function takes as an ordinary Bool parameter, not as
+    a flag.
+
+== HOW TO INVESTIGATE
+The message lists the accepted flags; read the function's flag section
+(`flags :a, :b` after its ordinary parameters).
+
+== WHAT TO DO
+Use a declared flag (the message lists them) or add it to the function's
+flag section.
+
+@example reject
+fn emit(x, flags :quiet):
+    x
+
+emit(1, :loud)
+@caption emit declares :quiet only
+@error CORE SEMANTIC UNKNOWN-FLAG
+@at 4:9
+@end
+
+@topic error.duplicate-flag
+title: DUPLICATE-FLAG: one flag supplied twice in a call
+summary: A call names the same flag twice; a flag is either present or absent, so each is written at most once.
+index: errors
+alias: flag supplied more than once
+keywords: flag, flags, duplicate, call
+related: concept.flags rule.flags error.unknown-flag error.duplicate-flag-declaration
+docs: FLAGS.md
+code: CORE SEMANTIC DUPLICATE-FLAG
+
+== MEANING
+A flag is a Bool that is true exactly when the call names it. Naming it
+twice means nothing more, so it is rejected as a likely mistake:
+
+    flag :quiet was supplied more than once
+
+== LIKELY CAUSES
+  * Copy and paste, or two flags meant to be different.
+
+== HOW TO INVESTIGATE
+The location is the second spelling of the flag.
+
+== WHAT TO DO
+Write each flag once.
+
+@example reject
+fn emit(x, flags :quiet):
+    x
+
+emit(1, :quiet, :quiet)
+@caption :quiet is written twice
+@error CORE SEMANTIC DUPLICATE-FLAG
+@at 4:17
+@end
+
+@topic error.duplicate-flag-declaration
+title: DUPLICATE-FLAG-DECLARATION: one flag declared twice in a flag section
+summary: A function's flag section declares the same flag name twice.
+index: errors
+alias: flag declared more than once
+keywords: flag, flags, declaration, flag section, duplicate
+related: concept.flags rule.flags error.flag-binding-collision error.duplicate
+docs: FLAGS.md
+code: CORE SEMANTIC DUPLICATE-FLAG-DECLARATION
+
+== MEANING
+Each flag of a function binds a local Bool of its name (`quiet` for
+`:quiet`), so a flag section declares each name once:
+
+    flag :quiet is declared more than once in the same flag section
+
+== LIKELY CAUSES
+  * Copy and paste in the flag section.
+
+== HOW TO INVESTIGATE
+The location is the second declaration of the flag.
+
+== WHAT TO DO
+Delete the repeated declaration, or rename it if two options were meant.
+
+@example reject
+fn emit(x, flags :quiet, :quiet):
+    x
+
+emit(1)
+@caption :quiet is declared twice
+@error CORE SEMANTIC DUPLICATE-FLAG-DECLARATION
+@at 1:26
+@end
+
+@topic error.flag-binding-collision
+title: FLAG-BINDING-COLLISION: a flag named like an ordinary parameter
+summary: A flag binds a local with its name, and an ordinary parameter of the same function already has that name.
+index: errors
+alias: flag named like a parameter
+keywords: flag, flags, parameter, local name, collision
+related: concept.flags rule.flags error.duplicate-flag-declaration error.duplicate
+docs: FLAGS.md
+code: CORE SEMANTIC FLAG-BINDING-COLLISION
+
+== MEANING
+In the body, flag `:quiet` is the Bool local `quiet`. Ordinary
+parameters and flags share the function's one local namespace, so they
+cannot share a name:
+
+    flag :quiet binds the local name "quiet", which is already a
+    parameter of this function: ordinary parameters and flags share one
+    local namespace
+
+== LIKELY CAUSES
+  * A Bool option first written as an ordinary parameter and then added
+    as a flag too.
+
+== HOW TO INVESTIGATE
+The location is the flag; the parameter of the same name is earlier in
+the parameter list.
+
+== WHAT TO DO
+Rename the parameter or the flag.
+
+@example reject
+fn emit(quiet, flags :quiet):
+    quiet
+
+emit(1)
+@caption The parameter and the flag are both quiet
+@error CORE SEMANTIC FLAG-BINDING-COLLISION
+@at 1:22
+@end
+
+@topic error.flag-callee-unknown
+title: FLAG-CALLEE-UNKNOWN: a flag supplied to a callee that is not a known function
+summary: A flag is written in a call whose callee is not statically a declared function (a parameter, a field, a computed value), so its flag interface is unknown.
+index: errors
+alias: cannot supply flag to a function value
+keywords: flag, flags, function value, parameter, higher-order, callee
+related: concept.flags rule.flags error.flag-function-value concept.function-types
+docs: FLAGS.md
+code: CORE SEMANTIC FLAG-CALLEE-UNKNOWN
+
+== MEANING
+Flags are resolved against the called declaration at compile time. A
+callee that is a parameter or another computed value has no declaration
+the compiler can see, so it cannot accept flags:
+
+    cannot supply flag :quiet: the callee is not a function whose
+    declaration is statically known (flags can only be supplied to a
+    call of a declared function, or of a name bound to one)
+
+Function types (`Fn{...}`) have no flag interface.
+
+== LIKELY CAUSES
+  * A flag passed through a callback parameter, a struct field holding a
+    function, or a function chosen at run time.
+
+== HOW TO INVESTIGATE
+Look at what the callee expression is: a declared function, a name
+bound to one, or a value of unknown identity.
+
+== WHAT TO DO
+Call the declared function directly (or through a name bound to it,
+`say = emit`), or pass the option as an ordinary Bool argument where a
+function value is needed.
+
+@example reject
+fn apply(f, x):
+    f(x, :quiet)
+
+fn id(x):
+    x
+
+apply(id, 1)
+@caption Flags on a call through a parameter
+@error CORE SEMANTIC FLAG-CALLEE-UNKNOWN
+@at 2:10
+@end
+
+@topic error.flag-function-value
+title: FLAG-FUNCTION-VALUE: a function with flags used as a value
+summary: A function that declares flags can only be called or bound to another name; passing, returning or storing it would lose its flag interface.
+index: errors
+alias: function with flags as a value
+keywords: flag, flags, function value, higher-order, alias, argument
+related: concept.flags rule.flags error.flag-callee-unknown concept.function-types
+docs: FLAGS.md
+code: CORE SEMANTIC FLAG-FUNCTION-VALUE
+
+== MEANING
+A function's flags belong to its declaration; no function type carries a
+flag interface. So a function with flags is not a first-class value: it
+can be called (directly, through method syntax, or through an alias bound
+as the whole right side of a binding, `say = emit`), but not passed as an
+argument, returned, stored in a list or struct, or chosen by an `if`:
+
+    function emit declares flags (:quiet), so it can only be called
+    directly or bound to another name (g = emit): it cannot be passed,
+    returned or stored as a value, which would lose its flag interface
+
+== LIKELY CAUSES
+  * A function with flags passed as a callback, returned, or stored in a
+    list or struct of handlers.
+
+== HOW TO INVESTIGATE
+The location is the reference that uses the function as a value.
+
+== WHAT TO DO
+Pass a small function without flags that calls it with the flags you
+want, or make the option an ordinary Bool parameter if callers must
+choose it through a function value.
+
+@example reject
+fn emit(x, flags :quiet):
+    x
+
+fn apply(f, x):
+    f(x)
+
+apply(emit, 1)
+@caption emit is passed as an argument
+@error CORE SEMANTIC FLAG-FUNCTION-VALUE
+@at 7:7
+@end
+
+@example accept
+fn emit(x, flags :quiet):
+    if quiet:
+        return 0
+    x
+
+fn emit_quietly(x):
+    emit(x, :quiet)
+
+fn apply(x, f):
+    f(x)
+
+apply(5, emit_quietly)
+@caption A function without flags wraps the call
+@value 0
+@end
+
+@topic error.proof-clause
+title: PROOF-CLAUSE: an invalid proves clause on a function
+summary: A proves PARAM: TYPE clause names no ordinary parameter, an unknown or non-refinement type, a parameter without its carrier type, or sits on a function that is neither -> bool nor -> unit.
+index: errors
+alias: invalid proves clause
+keywords: proves, refinement, predicate, validator, refined type, carrier, -> bool, -> unit
+related: concept.refinements proof.refinements error.refinement-mint-authority error.refinement-carrier warning.proves-naming
+docs: REFINEMENT-VALUES.md
+code: CORE SEMANTIC PROOF-CLAUSE
+
+== MEANING
+A refinement (`refined type Word = str`) is a carrier type plus a fact
+only the compiler tracks. Its values are minted by its owner's
+functions: a predicate `fn word?(v: str) -> bool proves v: Word` (its
+true result proves the fact) or a validator `fn validate_word(v: str) ->
+unit proves v: Word errors Invalid` (its normal completion proves it).
+The clause is checked:
+
+    proof clause "proves w: Word" must name one of the function's
+    ordinary parameters: the function has no parameter "w" (...)
+        (not a flag or context parameter either);
+    unknown proven type Nope in "proves v: Nope": ...
+    the proven type of "proves v: Small" is int[Small], which is not a
+    refinement type: ...
+        (an integer domain is proven by ranges, not by proves);
+    the proven parameter "v" must declare its type: ... write "v: str"
+    proof carrier mismatch: parameter "v" is declared int, but Word
+    refines str, ...
+    a proof-producing function must declare "-> bool" (a predicate ...)
+    or "-> unit" (a validator ...), but "proves v: Word" is on a function
+    declared -> int
+
+== WHY
+A proof clause is a promise every caller relies on without any run-time
+check: after `if word?(s):`, s is a Word. So the clause must say
+precisely which parameter, which refinement and which outcome proves it.
+
+== LIKELY CAUSES
+  * A parameter renamed without updating its clause.
+  * An untyped parameter: `fn ok?(v) -> bool proves v: Word`.
+  * Proving an integer domain (`type Small = Int in ...`), which is
+    entered through ranges, not through `proves`.
+  * A predicate without `-> bool`, or a validator without `-> unit`.
+
+== HOW TO INVESTIGATE
+The message says which part is wrong: the parameter's name, the proven
+type, the parameter's declared type, or the declared result.
+
+== WHAT TO DO
+Name an ordinary parameter, declare it of the refinement's carrier type,
+prove a `refined type` (not an integer domain), and declare `-> bool` or
+`-> unit`.
+
+@example reject
+refined type Word = str
+
+fn word?(v) -> bool proves v: Word:
+    true
+
+0
+@caption The proven parameter has no declared type
+@error CORE SEMANTIC PROOF-CLAUSE
+@at 3:28
+@end
+
+@example accept
+refined type Word = str
+
+fn word?(v: str) -> bool proves v: Word:
+    v != ""
+
+fn shout(w: Word) -> str:
+    w
+
+fn shout_if_word(s: str) -> str:
+    if word?(s):
+        return shout(s)
+    "none"
+
+shout_if_word("hi")
+@caption A predicate proving a refinement
+@value "hi"
+@end
+
+@topic error.refinement-mint-authority
+title: REFINEMENT-MINT-AUTHORITY: a proof of another module's refinement
+summary: A proves clause proves a refinement declared in another module (or in the entry program, from a module); only the refinement's owner may declare proofs of it.
+index: errors
+alias: only its owning module may mint it
+keywords: refinement, proves, owner, module, authority, mint
+related: concept.refinements error.proof-clause concept.modules rule.opaque-authority
+docs: REFINEMENT-VALUES.md
+code: CORE SEMANTIC REFINEMENT-MINT-AUTHORITY
+
+== MEANING
+A refinement means what its owner's predicates and validators check:
+`web::Emailish` is exactly what module web's predicate accepts. If any
+file could declare `proves v: web::Emailish`, the fact would mean
+nothing. So only the namespace that declares the refinement may declare
+proofs of it; no import, parent or child namespace grants that
+authority:
+
+    the entry program cannot declare a proof of refinement web::Emailish:
+    only its owning module "web" may mint it (no import, parent or child
+    namespace grants that authority)
+
+== LIKELY CAUSES
+  * A program writing its own predicate or validator for a library's
+    refinement.
+  * A predicate moved out of the module that declares its refinement.
+
+== HOW TO INVESTIGATE
+The message names the refinement's owner; its predicates and
+validators are the only way to the fact.
+
+== WHAT TO DO
+Call the owner's predicate or validator to obtain the proof
+(`-help stdlib.module.web` lists them), or declare a refinement of your
+own if you need a different fact.
+
+@example reject
+import web
+
+fn mine?(v: str) -> bool proves v: web::Emailish:
+    true
+
+0
+@caption The entry program cannot mint web::Emailish
+@error CORE SEMANTIC REFINEMENT-MINT-AUTHORITY
+@at 3:36
+@end
+
+@topic error.cyclic-refinement
+title: CYCLIC-REFINEMENT: a refinement that is its own carrier
+summary: A chain of refined type declarations leads back to itself; a refinement's carrier chain must end in a type that is not a refinement of it.
+index: errors
+alias: refinement carrier cycle
+keywords: refined type, carrier, cycle, declaration
+related: concept.refinements error.refinement-carrier rule.type-declaration
+docs: REFINEMENT-VALUES.md
+code: CORE SEMANTIC CYCLIC-REFINEMENT
+
+== MEANING
+`refined type A = B` makes B the representation of A's values. A chain
+`A = B`, `B = A` has no representation at all:
+
+    cyclic refinement: "A" is its own carrier through A -> B -> A (a
+    refinement's carrier chain must end in a type that is not a
+    refinement of it)
+
+It is reported at the declaration, before any code is compiled.
+
+== LIKELY CAUSES
+  * Two refinements, each written in terms of the other.
+  * A carrier name that is a typo of another refinement's name.
+
+== HOW TO INVESTIGATE
+The message prints the whole chain of carriers.
+
+== WHAT TO DO
+End the chain in a value type: `refined type A = str`, and refine A
+from B or B from A, not both.
+
+@example reject
+refined type A = B
+refined type B = A
+
+0
+@caption A and B are each other's carrier
+@error CORE SEMANTIC CYCLIC-REFINEMENT
+@at 1:14
+@end
+
+@topic error.refinement-carrier
+title: REFINEMENT-CARRIER: a refinement of a type that cannot carry one
+summary: A refined type's carrier is a struct, List, function, trait or other non-scalar type; refinements are supported over str, int, bool, UnicodeChar and their domains and refinements.
+index: errors
+alias: invalid refinement carrier
+keywords: refined type, carrier, struct, List, scalar, declaration
+related: concept.refinements error.cyclic-refinement concept.integer-domains concept.opaque-structs
+docs: REFINEMENT-VALUES.md
+code: CORE SEMANTIC REFINEMENT-CARRIER
+
+== MEANING
+A refined value has exactly its carrier's representation, with no tag
+or wrapper. Today the carriers are scalar value types -- str, int, bool,
+UnicodeChar, and integer-domain or refinement types over them:
+
+    invalid refinement carrier P for "Q": P is a struct type, and
+    refinements of struct values are not supported yet (...)
+    invalid refinement carrier List[int] for "Q": List[int] is a stable
+    value type, but refinements of aggregate, struct or callable values
+    are not supported yet (...)
+
+== LIKELY CAUSES
+  * Attaching a validated property to a struct, a List or a function
+    value.
+
+== HOW TO INVESTIGATE
+The message names the carrier and why it is not supported.
+
+== WHAT TO DO
+Refine a scalar field instead (`refined type Name = str`, used as a
+struct field's type). To keep an invariant over a whole struct or list,
+make it an opaque struct whose module constructs only valid values
+(concept.opaque-structs).
+
+@example reject
+struct P:
+    x: int
+
+refined type Q = P
+
+0
+@caption A struct cannot carry a refinement
+@error CORE SEMANTIC REFINEMENT-CARRIER
+@at 4:18
+@end
+
+@topic error.binary-operand
+title: BINARY-OPERAND: a binary layout operation without its static operand
+summary: binary::emit needs a value statically of type LayoutStruct[L], binary::parse needs an abi::bytes::Bytes, and neither operation can be used as a function value.
+index: errors
+alias: binary emit operand; binary parse operand
+keywords: binary, layout, emit, parse, LayoutStruct, Bytes, static operand
+related: concept.binary-layouts error.type
+docs: BINARY-LAYOUT.md
+code: CORE SEMANTIC BINARY-OPERAND
+
+== MEANING
+A layout is a compile-time schema: `binary::parse(L, data)` imprints
+bytes with layout L and `binary::emit(v)` writes v with the layout of
+v's static type LayoutStruct[L]. The layout is read from the call at
+compile time, so the operands must say it statically:
+
+    binary::emit needs a value whose static type is LayoutStruct[L] for
+    a layout L (the layout it emits with); this value's type here is int
+    binary::parse imprints the bytes of an abi::bytes::Bytes (...); this
+    argument's type here is str
+    binary::emit can only be called directly: its layout is a static
+    operand (...), so it has no function value
+
+== LIKELY CAUSES
+  * Emitting a value whose static type was lost: an untyped parameter,
+    a value read from a list.
+  * Parsing a str or a List: binary::parse takes abi::bytes::Bytes.
+  * `binary::emit` bound to a name or passed as an argument.
+
+== HOW TO INVESTIGATE
+The message shows the type the compiler sees for the operand.
+
+== WHAT TO DO
+Emit a value obtained from `binary::parse` (or constructed as
+`LayoutStruct[L] {...}`), give `binary::parse` an abi::bytes::Bytes
+(`abi::bytes::from_list`), and call the operations directly.
+
+@example reject
+import binary
+
+binary::emit(5)
+@caption An int has no layout
+@error CORE SEMANTIC BINARY-OPERAND
+@at 3:14
+@end
+
+@topic error.missing-import
+title: MISSING-IMPORT: a namespace member used without importing its namespace
+summary: Code uses a member of a namespace its file does not import -- written ns::member, or reached by method syntax x.member(); add import ns to that file.
+index: errors
+alias: namespace is not imported; add import; not imported
+keywords: import, namespace, qualified, method syntax, method sugar, exact imports, transitive, static compile, compiler
+related: concept.imports rule.method-requires-import rule.imports-not-transitive concept.method-sugar error.unknown-namespace error.unknown-symbol principle.explicit-dependencies
+docs: IMPORTS.md DIAGNOSTIC-RECOVERY.md METHOD-SUGAR.md
+code: SURFACE MODULE MISSING-IMPORT
+code: CORE SEMANTIC MISSING-IMPORT
+
+== MEANING
+A file may use the members of another namespace only after importing
+that namespace itself (`import str`). Imports are per file, exact and
+not transitive: importing `abi` does not import `abi::bytes`, and a
+module's imports do nothing for the files that import the module. The
+member exists -- otherwise the diagnostic would be UNKNOWN-SYMBOL or
+UNKNOWN-NAMESPACE -- but this file is not authorized to name it.
+
+It is reported for each use, in both spellings:
+
+  * Qualified, `str::length(s)`: the module loader reports it before
+    anything else is compiled, as SURFACE MODULE MISSING-IMPORT:
+        namespace "str" is not imported; add `import str` to use
+        `str::length`
+    with a note when a related namespace is imported:
+        ... (imports are exact: `import abi` does not import
+        "abi::bytes")
+  * Method syntax, `s.length()`: method syntax applies only functions
+    visible by name, and an unimported namespace's members are not
+    visible. When no visible function fits but a function of that name
+    in an unimported namespace would accept the receiver, the call is
+    reported as the missing import, CORE SEMANTIC MISSING-IMPORT, at the
+    method name:
+        namespace "str" is not imported; add `import str` to use
+        `str::length` (the method-style call ".length(...)" applies only
+        a function visible by that name)
+    In an untyped function, the method's receiver type is known only
+    for a call, so the problem is reported at the call:
+        call to shout with s : str is invalid: namespace "str" is not
+        imported; ... (in the body of shout, at 2:5)
+  * Also: a qualified enum case of an unimported module
+    (`compiler::DiagnosticCode::Unbound`), and `static compile:` in a
+    file without `import compiler` (a rejected block fails with
+    compiler::CompilerError).
+
+Earlier compilers reported the method-syntax case as a confusing TYPE
+error elsewhere ("function result does not prove declared type str");
+since the diagnostic recovery work (DIAGNOSTIC-RECOVERY.md) it is always
+this diagnostic.
+
+== WHY
+What a file can name is decided by its own header, never by what other
+files import or what happens to be loaded: adding an import to one file
+never changes what another file means. Method syntax does no search by
+receiver type, for the same reason.
+
+== LIKELY CAUSES
+  * Using a standard-library function without its import (`str`, `list`,
+    `mutable_vector` ...; the root primitives such as `mod` and `argv`
+    need none).
+  * Expecting an import to cover a child namespace (`import linux` for
+    `linux::io`) or to flow from an imported module.
+
+== HOW TO INVESTIGATE
+The message names the namespace to import and the member. Check the
+header of the file the location is in: in a program of several files it
+may be a module, which needs imports of its own.
+
+== WHAT TO DO
+Add `import NS` (the message names it) to the header of the file that
+uses the member. `-help stdlib` lists the standard namespaces and their
+members.
+
+@example reject
+str::length("abc")
+@caption A qualified use of str without import str
+@error SURFACE MODULE MISSING-IMPORT
+@at 1:1
+@end
+
+@example reject
+import abi
+
+abi::bytes::from_list([])
+@caption abi does not import abi::bytes
+@error SURFACE MODULE MISSING-IMPORT
+@at 3:1
+@end
+
+@example reject
+fn greet(name: str) -> str:
+    name.concat(" says hi")
+
+greet("Ada")
+@caption Method syntax without import str
+@error CORE SEMANTIC MISSING-IMPORT
+@at 2:10
+@end
+
+@example accept
+import str
+
+"abc".length()
+@caption With import str, method syntax works too
+@value 3
+@end
+
+@topic error.unknown-namespace
+title: UNKNOWN-NAMESPACE: a namespace that does not exist
+summary: No standard namespace, application module or set of intrinsics has this name: there is no ROOT/NAME.bot beside the entry program and no lib/NAME.bot.
+index: errors
+alias: unknown namespace; no such module; module not found
+keywords: import, namespace, module, application module, standard library, path, file beside, nested namespace
+related: concept.imports concept.modules rule.application-modules error.missing-import error.unknown-symbol error.module-collision error.not-an-enum
+docs: IMPORTS.md STDLIB-NAMESPACES.md
+code: SURFACE MODULE UNKNOWN-NAMESPACE
+
+== MEANING
+`import NAME` (and a qualified `NAME::member`) names a namespace, which
+is, in this order and with no other search:
+
+  1. a standard namespace: the standard library's module `NAME.bot`
+     (`a/b.bot` for `a::b`), or compiler intrinsics of that name (`str`,
+     `char` have no module file);
+  2. else, for the entry program and its application modules, the
+     application module `NAME.bot` in the entry file's directory (the
+     application root; `a/b.bot` for `a::b`).
+
+Nothing else is searched: not the working directory, not an environment
+variable, not a parent directory. A standard-library module's own
+imports see only the standard library. When neither exists, the message
+names where it looked:
+
+    unknown namespace "nosuch": no such module file ROOT/nosuch.bot (an
+    application's own modules are the files beside its entry program),
+    and in the standard library no such module file LIB/nosuch.bot and
+    no intrinsics of that namespace
+
+A qualified name `X::Y` whose X is neither a namespace nor an enum type
+of this file is reported the same way, with "(nor is "X" an enum type
+visible in this file: a case is written Enum::Case)".
+
+== LIKELY CAUSES
+  * A typo, or a name from another language's library (`math`, `os`).
+  * An application module that is not beside the entry file: the root
+    is the entry file's directory, whatever the working directory, and a
+    module in a subdirectory `util/` is the namespace `util::NAME`.
+  * A parent of a namespace imported as if it were one: `import linux::abi`
+    is not a namespace; `linux::abi::x86_64` is.
+  * A namespace name with a member appended: `list::length::x`.
+
+== HOW TO INVESTIGATE
+The message prints both places searched. Check that the module file
+exists at the first one, spelled exactly (letter case, `a/b.bot` for
+`a::b`), beside the entry file actually compiled.
+
+== WHAT TO DO
+Fix the name, or move the module to `NAME.bot` beside the entry program.
+`-help stdlib` lists the standard namespaces.
+
+@example reject
+import nosuch
+
+0
+@caption No module or intrinsics named nosuch
+@error SURFACE MODULE UNKNOWN-NAMESPACE
+@at 1:8
+@end
+
+@topic error.unknown-symbol
+title: UNKNOWN-SYMBOL: an imported namespace has no member of that name
+summary: The namespace is imported (or is the file's own), but it has no definition, type, struct or error of the written name.
+index: errors
+alias: namespace has no definition; no such member
+keywords: member, definition, function, type, struct, error, intrinsic, namespace, typo
+related: concept.imports error.missing-import error.unknown-namespace error.not-a-type concept.modules
+docs: IMPORTS.md STDLIB-NAMESPACES.md
+code: SURFACE MODULE UNKNOWN-SYMBOL
+
+== MEANING
+After `import NS`, a qualified reference `NS::name` must name something
+NS declares, of the right kind for where it is written. The message
+lists what NS has:
+
+    namespace "list" has no definition "nosuch" (it defines: all?, any?,
+    append, at, find, get, length, none?)
+    namespace "str" has no definition "reverse" (its members are the
+    intrinsics: append_char, char_at, concat, ...)
+    namespace "test" has no type "Nope" (it declares: Erased, Match, ...)
+    namespace "list" has no error "Nope" (it declares: NotFound)
+    namespace "list" has no type "Foo" (its types: none)  (import type)
+
+and `ffi::c::Bool` or `ffi::c::Ptr` used as a value ("is a type, not a
+value or a function").
+
+== LIKELY CAUSES
+  * A function another language's library has (`str::reverse`,
+    `list::map`); Botlish's standard library is small, and absent
+    facilities have capability.* pages.
+  * A type or error spelled with the wrong namespace.
+
+== HOW TO INVESTIGATE
+The message lists the namespace's members of the kind written
+(definitions, types, errors).
+
+== WHAT TO DO
+Use a member the message lists (`-help stdlib.module.NS` describes
+them), or write the function yourself.
+
+@example reject
+import list
+
+list::nosuch([1])
+@caption list has no definition nosuch
+@error SURFACE MODULE UNKNOWN-SYMBOL
+@at 3:1
+@end
+
+@topic error.not-a-type
+title: NOT-A-TYPE: import type of a member that is not a type declaration
+summary: import type NS::T names a struct, a function, an error, a layout or an intrinsic type; import type imports type declarations, enums and traits only.
+index: errors
+alias: is a struct, not a source-defined type
+keywords: import type, struct, type declaration, enum, function, error, layout, qualified
+related: rule.import-type concept.imports capability.struct-type-import concept.structs concept.enums error.type-import-collision
+docs: IMPORTS.md
+code: SURFACE MODULE NOT-A-TYPE
+
+== MEANING
+`import type NS::T` binds the short name T in this file for a type that
+module NS declares with `type`, `refined type`, `enum` or `trait`. It
+does not import structs: a struct of another module is always spelled
+qualified, `NS::Name`, after `import NS`. Other members are not types:
+
+    "test::Suite" is a struct, not a source-defined `type`: `import type`
+    imports `type` declarations only; spell the struct test::Suite after
+    `import test`
+    "list::get" exists, but is not a type (it is a function or value of
+    namespace "list"): ...
+    "compiler::CompilerError" is an error declaration, not a type
+    "binary::X" is a layout, not a type: ... (its values have the type
+    LayoutStruct[binary::X])
+    "ffi::c::Ptr" is an intrinsic type of namespace "ffi::c", not a
+    source-defined `type`: spell it ffi::c::Ptr after `import ffi::c`
+
+The struct case is the one people meet most: `import type` works for an
+enum of a module but not for a struct of the same module, and there is
+no other way to give a module's struct a short name (structs keep their
+qualified spelling, capability.struct-type-import).
+
+== LIKELY CAUSES
+  * Using `import type` as the way to import any named member: structs,
+    functions, errors.
+
+== HOW TO INVESTIGATE
+The message says what the member is instead.
+
+== WHAT TO DO
+For a struct, replace `import type NS::Name` by `import NS` and write
+`NS::Name` in annotations and constructions. For a function or error,
+import the namespace and use it qualified:
+
+    import compiler
+
+    fn line_of(at: compiler::SourceLocation) -> int:
+        at.line
+
+@example reject
+import type test::Suite
+
+0
+@caption import type does not import structs
+@error SURFACE MODULE NOT-A-TYPE
+@at 1:19
+@end
+
+@example reject
+import type list::get
+
+0
+@caption list::get is a function, not a type
+@error SURFACE MODULE NOT-A-TYPE
+@at 1:19
+@end
+
+@topic error.type-import-collision
+title: TYPE-IMPORT-COLLISION: import type binds a type name that is already taken
+summary: The short name an import type binds is also a type this file declares, a built-in type, or the short name of another import type.
+index: errors
+alias: type import collision
+keywords: import type, collision, short name, shadow, built-in type, qualified
+related: concept.imports error.not-a-type error.duplicate-import
+docs: IMPORTS.md
+code: SURFACE MODULE TYPE-IMPORT-COLLISION
+
+== MEANING
+A type import's short name must denote exactly one type in the file. It
+never shadows, and is never shadowed by, a type the file declares, a
+built-in type or another import -- there is no precedence and no
+renaming:
+
+    `import type compiler::DiagnosticCode` binds the type name
+    "DiagnosticCode", which this file also declares itself (at ...); an
+    imported type never shadows or is shadowed by a local one: drop the
+    import and spell the imported type compiler::DiagnosticCode (after
+    `import compiler`)
+    `import type ffi::c::Int` binds the type name "Int", which is a
+    built-in type; ...
+    `import type abi::aarch64::Register64Word` and `import type
+    abi::x86_64::Register64Word` (at ...) both bind the type name
+    "Register64Word"; ...
+
+== LIKELY CAUSES
+  * A type both imported and declared locally, after a refactoring.
+  * Two modules with types of the same short name.
+  * `import type ffi::c::Int` (`Int` is a built-in name).
+
+== HOW TO INVESTIGATE
+The message names both sides and the location of the other one.
+
+== WHAT TO DO
+Drop the `import type` and spell the type qualified after `import NS`
+(or rename your own type).
+
+@example reject
+import type compiler::DiagnosticCode
+
+enum DiagnosticCode:
+    A,
+
+0
+@caption The file declares its own DiagnosticCode
+@error SURFACE MODULE TYPE-IMPORT-COLLISION
+@at 1:23
+@end
+
+@topic error.duplicate-import
+title: DUPLICATE-IMPORT: the same namespace or type imported twice
+summary: A file's header imports the same namespace, or the same type, more than once.
+index: errors
+alias: already imported
+keywords: import, import type, header, duplicate
+related: concept.imports error.type-import-collision error.self-import
+docs: IMPORTS.md
+code: SURFACE MODULE DUPLICATE-IMPORT
+
+== MEANING
+Each import states one dependency of the file, once:
+
+    namespace "list" is already imported (first imported at ...)
+    type "byte::Byte" is already imported (first imported at ...)
+
+== LIKELY CAUSES
+  * Two headers merged, or an import added twice.
+
+== HOW TO INVESTIGATE
+The message gives the location of the first import.
+
+== WHAT TO DO
+Delete the second import.
+
+@example reject
+import list
+import list
+
+0
+@caption list is imported twice
+@error SURFACE MODULE DUPLICATE-IMPORT
+@at 2:8
+@end
+
+@topic error.self-import
+title: SELF-IMPORT: a file that imports itself or its own namespace
+summary: The entry program imports its own file, or a module imports its own namespace or one of its own types; a module needs no import for its own members.
+index: errors
+alias: import own namespace; entry program imports itself
+keywords: import, entry program, module, own namespace, self
+related: concept.imports concept.modules error.cycle error.duplicate-import
+docs: IMPORTS.md
+code: SURFACE MODULE SELF-IMPORT
+
+== MEANING
+A module is inside its namespace: it names its own members bare and
+needs no import of them. The entry program is in no namespace and is not
+a module, so it can be imported by nobody, itself included:
+
+    "game" names this program's own entry file (DIR/game.bot): an entry
+    program is in no namespace and is not a module, so it cannot be
+    imported
+    a file of namespace "helper" cannot import its own namespace: a
+    module is inside its namespace and needs no import to name its own
+    members
+    a file of namespace "geo" cannot import a type of its own namespace:
+    its own type "Point" is already usable by that name
+
+An entry file named like a standard namespace (`test.bot` importing
+`test`) imports the standard one: that is no self-import. A module of
+the program that imports the entry file is a CYCLE.
+
+== LIKELY CAUSES
+  * The entry program named like the module it was meant to import
+    (`game.bot` importing a `game` module).
+  * A module that imports its own namespace to qualify its own names.
+
+== HOW TO INVESTIGATE
+Compare the file names of the program's directory with its imports.
+
+== WHAT TO DO
+Delete the import. To share code between programs, move it into a
+module file beside them and import that.
+
+@example reject
+import example
+
+0
+@caption Saved as example.bot, it imports itself
+@error SURFACE MODULE SELF-IMPORT
+@at 1:8
+@end
+
+@topic error.cycle
+title: CYCLE: modules that import each other
+summary: A chain of imports leads back to a module being loaded (a -> b -> a), or a module imports the entry program; module dependencies must be acyclic.
+index: errors
+alias: module dependency cycle; circular import
+keywords: import, cycle, circular, module, dependency, entry program
+related: concept.modules concept.imports error.self-import rule.application-modules
+docs: IMPORTS.md
+code: SURFACE MODULE CYCLE
+
+== MEANING
+A module is loaded once, after everything it imports. Two modules that
+import each other, directly or through others, have no such order:
+
+    module dependency cycle: a -> b -> a
+    module dependency cycle: DIR/main.bot (the entry program) -> helper
+    -> main (an entry program is not a module and cannot be imported)
+
+It is reported at the import that closes the cycle. A cycle needs at
+least one module file, so there is no single-file example here; the
+first message comes from three files in one directory:
+
+    main.bot              a.bot                 b.bot
+      import a              import b              import a
+
+      a::f()                fn f() -> int:        fn g() -> int:
+                                1                     2
+
+== LIKELY CAUSES
+  * Two modules that each need a helper of the other.
+  * A module that imports the entry program to reach a function defined
+    there.
+
+== HOW TO INVESTIGATE
+The message prints the chain of imports; the location is the import
+that closes it.
+
+== WHAT TO DO
+Move what both modules need into a third module that both import, or
+merge the two. A module must never import the entry program: move the
+shared code from the entry program into a module.
+
+@topic error.module-collision
+title: MODULE-COLLISION: an application module named like a standard namespace
+summary: An application file imports a standard namespace while the application has a file of the same name beside the entry program; standard namespaces are never replaced.
+index: errors
+alias: application module has the name of a standard namespace
+keywords: application module, standard namespace, collision, rename, lib, entry file directory
+related: rule.application-modules concept.modules concept.imports error.unknown-namespace
+docs: IMPORTS.md POST-2048-PRODUCT-FIXES.md
+code: SURFACE MODULE MODULE-COLLISION
+
+== MEANING
+A standard namespace always wins resolution, so an application file
+named like one could never be imported -- and silently loading the
+standard module instead would hide the mistake. When an application
+file imports NAME and the application root also holds NAME.bot for a
+standard NAME, the import is rejected, naming both files:
+
+    application module DIR/list.bot has the name of the standard
+    namespace "list" (the standard library's LIB/list.bot), which
+    `import list` names: a standard namespace is never replaced by an
+    application file, and never silently chosen over one; rename the
+    application module
+
+An application file that nothing imports collides with nothing. A
+collision needs a second file, so there is no single-file example:
+
+    main.bot                    list.bot (beside it)
+      import list                 fn length(xs) -> int:
+                                      0
+      list::length([1])
+
+== LIKELY CAUSES
+  * An application module with a generic name the standard library also
+    uses (`list`, `str`, `test`, `io`, `byte`).
+
+== HOW TO INVESTIGATE
+The message names both files; `-help stdlib` lists the standard
+namespaces to avoid.
+
+== WHAT TO DO
+Rename the application module (`list.bot` to `my_lists.bot`) and its
+imports.
+
+@topic error.invalid-toplevel
+title: INVALID-TOPLEVEL: a statement at the top level of a module
+summary: A module file holds a top-level expression, call, loop or destructuring; a module's top level holds only declarations and immutable bindings.
+index: errors
+alias: statement at module top level
+keywords: module, top level, statement, expression, call, destructuring, declarations
+related: concept.modules rule.module-bindings error.module-immutable concept.program-value
+docs: MODULE-BINDINGS.md IMPORTS.md
+code: SURFACE MODULE INVALID-TOPLEVEL
+
+== MEANING
+Only the entry program runs statements and has a value. A module is a
+set of definitions: functions, immutable bindings and type, struct,
+enum, layout, trait, error and extern declarations. Anything else at
+its top level is rejected when the module is loaded:
+
+    module "helper" (DIR/helper.bot): only function definitions,
+    immutable bindings, type declarations, ... are allowed at module top
+    level, found a "call" statement
+    module "helper" (...): a struct destructuring is not allowed at
+    module top level (module bindings are context-free immutable values,
+    and a struct value is not one: MODULE-BINDINGS.md); destructure
+    inside a function
+
+(`with context` at a module's top level is reported as
+CONTEXT-INSTALLATION-UNSUPPORTED.)
+It needs a module file, so there is no single-file example:
+
+    main.bot                    helper.bot
+      import helper               fn f() -> int:
+                                      1
+      helper::f()
+                                  f()        <- rejected
+
+== LIKELY CAUSES
+  * A test call or a print left at a module's top level.
+  * Code moved from the entry program into a module unchanged.
+
+== HOW TO INVESTIGATE
+The message names the module, its file and the kind of statement.
+
+== WHAT TO DO
+Move the statement into the entry program, or into a function of the
+module that the entry program calls. A module binding (`limit = 3`) is
+fine; a test call is not.
+
+@topic error.duplicate-native
+title: DUPLICATE-NATIVE: a library module redefining a compiler intrinsic
+summary: A standard-library module defines a member whose qualified name is a compiler-provided intrinsic (such as list::at); an intrinsic cannot be redefined or overloaded.
+index: errors
+alias: cannot redefine an intrinsic
+keywords: intrinsic, native, module, redefine, overload, standard library
+related: concept.modules stdlib.module.list error.module-collision
+docs: STDLIB-NAMESPACES.md IMPORTS.md
+code: SURFACE MODULE DUPLICATE-NATIVE
+
+== MEANING
+Some members of standard namespaces are intrinsics provided by the
+compiler (`list::at`, `str::concat`). Every reference spelled
+`list::at` denotes the intrinsic, so a module definition of that name
+could never be called, and Botlish has no overloading for it to coexist
+as:
+
+    module "list" (LIB/list.bot) cannot define "at": list::at is a
+    compiler-provided intrinsic (...), which every reference of that
+    spelling denotes; it cannot be redefined or overloaded (other members
+    of namespace "list" are unaffected)
+
+Only a standard-library module can be in such a namespace: an
+application module named like a standard namespace is a MODULE-COLLISION
+first, and the entry program's definitions are plain names. So this
+diagnostic is met only when editing the standard library itself, and
+there is no example program for it.
+
+== LIKELY CAUSES
+  * A library change that adds a function named like an intrinsic of the
+    same namespace.
+
+== HOW TO INVESTIGATE
+`-help NS::NAME` describes the intrinsic the definition collides
+with.
+
+== WHAT TO DO
+Give the library function another name; the module may define any other
+member of its namespace (lib/list.bot's `list::get` beside the intrinsic
+`list::at`).
+
+@topic error.module-immutable
+title: MODULE-IMMUTABLE: a module binding whose value is not provably immutable
+summary: A module-level binding retains a value the compiler cannot prove transitively immutable, or reads a later module binding; module bindings are immutable, context-free values.
+index: errors
+alias: module binding cannot retain mutable value
+keywords: module binding, global, constant, immutable, mutable, MutableArray, initializer, order
+related: rule.module-bindings concept.modules concept.values error.invalid-toplevel
+docs: MODULE-BINDINGS.md MODULE-STATIC-RETAINED-VALUES.md
+code: CORE SEMANTIC MODULE-IMMUTABLE
+
+== MEANING
+A module binding (`hex_digits = [...]` at a module's top level) is
+evaluated once and shared by every caller, so it must be a value nobody
+can change: the compiler proves it transitively immutable (Ints, Bools,
+Strings, Lists of such, functions capturing such) and context-free
+(MODULE-CONTEXT, checked first: creating a MutableArray or a
+MutableVector is not context-free, so such an initializer is reported
+there). This check rejects:
+
+    module binding "NAME" cannot retain mutable value ...
+    module binding initializer may refer only to earlier module
+    bindings: ...
+    module binding "cfg::limit" cannot prove its retained value is
+    transitively immutable: control-flow result cannot be proven
+    immutable
+
+The proof is deliberately small and conservative: it follows literals,
+List construction and direct calls of functions whose bodies it can
+prove, and gives up on an unknown shape -- a call of a function whose
+body runs a `loop:` is rejected even when it returns an Int. This
+applies to modules only; the entry program's top-level bindings are
+ordinary bindings. It needs a module file, so there is no single-file
+example:
+
+    cfg.bot:  fn compute() -> int:
+                  loop:
+                      break
+                  3
+
+              limit = compute()       <- rejected
+
+== LIKELY CAUSES
+  * A module-level "constant" computed by a helper function the proof
+    cannot follow (one with a loop).
+  * A module binding meant to hold shared mutable state.
+
+== HOW TO INVESTIGATE
+The message ends with the part of the value the proof could not
+follow.
+
+== WHAT TO DO
+Write the value directly (`limit = 3`) or with expressions the proof
+follows, make it a function the callers call (`fn limit() -> int`), or
+build mutable state inside the functions that use it.
+
+@topic error.ambiguous-module
+title: AMBIGUOUS-MODULE: a namespace both general and architecture-specific
+summary: A standard-library namespace has both a module file NAME.bot and architecture-specific files NAME.ARCH.bot; a namespace is one or the other.
+index: errors
+alias: module file and architecture-specific module files
+keywords: architecture, module file, x86_64, aarch64, standard library, linux::sys
+related: error.unsupported-architecture error.unknown-target backend.targets concept.modules
+docs: LINUX-SYSCALL-TRANSPORTS.md
+code: SURFACE MODULE AMBIGUOUS-MODULE
+
+== MEANING
+A standard namespace is either the same on every architecture (one file
+`lib/NAME.bot`) or specific to each (`lib/NAME.x86_64.bot`,
+`lib/NAME.aarch64.bot`, chosen by the compilation's target, like
+`linux::sys`), never both:
+
+    namespace "linux::sys" has both a module file ... and
+    architecture-specific module files (...): a namespace is either the
+    same on every architecture or specific to each, never both
+
+Only the standard library has architecture-specific files (application
+modules are always one file), and the shipped library has no such
+namespace: the diagnostic means the library installation was edited or
+mixed. There is no example program for it.
+
+== LIKELY CAUSES
+  * Library files of another compiler version copied into the library
+    directory.
+
+== HOW TO INVESTIGATE
+The message names every file of the namespace.
+
+== WHAT TO DO
+Remove the stray file from the library directory, or restore the library
+of this compiler version.
+
+@topic error.unknown-target
+title: UNKNOWN-TARGET: a target-dependent namespace on an unknown host
+summary: The program imports an architecture-specific namespace or ffi::c, and the host machine is none of the known C ABI targets; compile with -target.
+index: errors
+alias: none of the known targets
+keywords: target, -target, host, architecture, ffi::c, linux::sys, C ABI
+related: backend.targets backend.platforms cli.options error.unsupported-architecture error.ambiguous-module concept.c-ffi
+docs: C-ABI-TYPES.md LINUX-SYSCALL-TRANSPORTS.md
+code: SURFACE MODULE UNKNOWN-TARGET
+
+== MEANING
+Two kinds of namespace depend on the compilation's C ABI target, which
+defaults to the host's: an architecture-specific module (`linux::sys`)
+and `ffi::c`, whose integer types have the target's sizes. On a host that
+is none of the known targets (linux, macos and windows on x86_64 and
+aarch64), the compiler cannot choose:
+
+    namespace "linux::sys" is architecture-specific (its files are ...),
+    and this host (OS MACHINE) is none of the known targets; compile with
+    -target (linux-aarch64, linux-x86_64, macos-aarch64, ...)
+    namespace "ffi::c" needs a C ABI target, and this host (...) is none
+    of the known ones; compile with -target (...)
+
+It depends on the host, so there is no example program for it.
+
+== LIKELY CAUSES
+  * Compiling on a host other than Linux, macOS or Windows on x86_64 or
+    aarch64 (another operating system, or another processor).
+
+== HOW TO INVESTIGATE
+The message prints the host's operating system and machine.
+
+== WHAT TO DO
+Pass the target explicitly: `botlish -target linux-x86_64 PROGRAM.bot`.
+
+@topic error.unsupported-architecture
+title: UNSUPPORTED-ARCHITECTURE: no module file for the target's architecture
+summary: An architecture-specific namespace has no file for the architecture of the compilation's target.
+index: errors
+alias: no module for the architecture
+keywords: architecture, target, module file, x86_64, aarch64, -target
+related: error.unknown-target error.ambiguous-module backend.targets backend.platforms
+docs: LINUX-SYSCALL-TRANSPORTS.md
+code: SURFACE MODULE UNSUPPORTED-ARCHITECTURE
+
+== MEANING
+An architecture-specific standard namespace is a set of files
+`lib/NAME.ARCH.bot`, one per supported architecture. When the target's
+architecture has none:
+
+    namespace "NAME" has no module for the ARCH architecture of target
+    TARGET: it is architecture-specific, and its files are ... (no
+    lib/NAME.ARCH.bot)
+
+Every architecture-specific namespace of the shipped library
+(`linux::sys`) has a file for both x86_64 and aarch64, the
+architectures of all known targets, so a program compiled against the
+shipped library does not meet this diagnostic; there is no example
+program for it.
+
+== LIKELY CAUSES
+  * A library extended with an architecture-specific namespace for only
+    some architectures.
+
+== HOW TO INVESTIGATE
+The message names the namespace's files and the missing one.
+
+== WHAT TO DO
+Compile for a target whose architecture the namespace supports, or add
+the missing architecture's module file to the library.

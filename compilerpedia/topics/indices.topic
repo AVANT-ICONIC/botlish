@@ -1,0 +1,142 @@
+# indices.topic -- the introductions of Compilerpedia's indices. The topic
+# index.NAME is printed at the top of `-help NAME`, before the list of the
+# index's topics (compilerpedia::renderIndex). COMPILERPEDIA.md describes the
+# format.
+
+@topic index.concepts
+title: Language concepts
+summary: What Botlish's constructs are, the restrictions that matter, and why the design is so.
+index: concepts
+
+== ABOUT THIS INDEX
+Entry points to Botlish's distinctive mechanisms: values and bindings, types
+and refinements, functions and method syntax, imports and modules, declared
+errors, contexts, affine values and coroutines, static compile and the test
+framework. Each is a short page with the rules that matter and a pointer to
+the design document behind it; the complete specification is docs/README.md
+in a repository checkout.
+
+@topic index.rules
+title: Language rules and semantic guarantees
+summary: The rules a program must follow, each stated once, with what the compiler reports when one is broken.
+index: rules
+alias: semantic rules; language rules; list of rules
+
+== ABOUT THIS INDEX
+A rule says what is legal and what a legal program is guaranteed. A rule
+that a diagnostic enforces names its code; a broad code such as SURFACE
+SYNTAX or TYPE covers several rules, and each rule has its own page here
+(the code's page lists them under SPECIFIC RULES).
+
+@topic index.proofs
+title: What the compiler proves
+summary: The facts the compiler establishes about a program, the forms it recognizes, and what it does not (yet) prove.
+index: proofs
+
+== ABOUT THIS INDEX
+Three kinds of statement, kept apart on every page:
+
+  LANGUAGE GUARANTEE      what Botlish semantics promise, whatever the
+                          implementation (an index that designates no
+                          element fails with IndexNotFound);
+  RECOGNIZED PATTERNS     what this compiler proves, and the program forms
+                          its analyses recognize (a counted loop over the
+                          same List's length);
+  LIMITATIONS             what may be true of a program but is not proven
+                          today (an index computed into a local binding).
+
+A limitation is not a language rule: a program the compiler cannot prove is
+rejected or must handle an error it cannot raise, and restating it in a
+recognized form is the remedy. Start with proof.overview.
+
+@topic index.errors
+title: Errors and diagnostic codes
+summary: Every diagnostic code the compiler, the runtime and the backends report, with its specific rules.
+index: errors
+alias: list of errors; all errors; error codes; diagnostic codes
+
+== ABOUT THIS INDEX
+An error is a violation of a language or compilation requirement: the
+program is rejected (or, at run time, stops). A diagnostic prints its code
+in parentheses, e.g. (CORE SEMANTIC UNHANDLED-ERROR) or (SURFACE SYNTAX);
+`-help CODE` (the whole code, or its last word: -help UNHANDLED-ERROR)
+shows its page, and the "help:" line printed under a diagnostic names the
+most specific topic for it.
+
+Codes by family:
+  CORE SEMANTIC KIND     the program is invalid (the front end), or failed
+                         at run time (RANGE, UNCAUGHT-ERROR, NATIVE-ONLY ...)
+  SURFACE SYNTAX         the source does not parse; parser codes such as
+                         LIST-DESTRUCTURING start the message
+  SURFACE MODULE KIND    an import or module file cannot be loaded
+  NATIVE ...             the native backend could not compile, link or run
+  HIR ..., CORE ...      HIR text, HIR interchange, core IR text, compiler
+                         limits and internal contract failures
+Warnings are not errors: see -help warnings and -help lint.
+
+@topic index.warnings
+title: Warnings
+summary: The built-in linter's rules: what each warning detects, why it matters and when the pattern is legitimate.
+index: warnings
+alias: list of warnings; all warnings; lint rules
+
+== ABOUT THIS INDEX
+A warning marks a pattern that may be undesirable in a program that is
+valid: the compiler proves the fact it states, and the page explains the
+practice behind it. Warnings are on by default and are one global policy
+(-warnings default|off|error; there are no per-warning switches): see
+lint.policy, and lint.warnings-vs-errors for how errors, warnings and
+principles differ.
+
+@topic index.lint
+title: The linter
+summary: Botlish's warnings as one coherent, built-in linter: its policy, its modes, its rules and the principles they serve.
+index: lint
+
+== ABOUT THIS INDEX
+Botlish has no third-party lint ecosystem and no configurable rule set: the
+compiler's warnings are the linter, on for everyone, so each must be precise
+enough that investigating it normally pays. A legitimate exception to a rule
+is first evidence that the rule is too broad (principle.lint-precision).
+The topics: the policy and modes (lint.policy), errors versus warnings
+versus principles (lint.warnings-vs-errors), every warning, and the
+principles the warnings serve.
+
+@topic index.principles
+title: Programming principles
+summary: Recommended practices for Botlish programs, with the reasoning; some are backed by a warning, most are not.
+index: principles
+alias: best practices; recommended practices; coding guidelines; style guide
+
+== ABOUT THIS INDEX
+A principle is advice, not a rule: a program that departs from one can be
+correct, and only some principles are mechanically checkable (their pages
+name the warning that checks them). The reasoning is the point: what a
+practice protects, and when it does not apply.
+
+@topic index.stdlib
+title: The standard library
+summary: The standard namespaces: their modules, intrinsic operations, functions and types.
+index: stdlib
+
+== ABOUT THIS INDEX
+A standard namespace NAME is the module lib/NAME.bot, the compiler's
+intrinsics registered under NAME::, or both; a file uses its members after
+`import NAME` (concept.imports), and the root namespace's primitives need
+no import. Below are the namespaces; each namespace's page lists its
+members, and every member has a page of its own: -help list::at,
+-help str::concat, -help test::value. The signatures, errors and backend
+availability are generated from the compiler's registry and the library
+sources (tools/compilerpedia.tcl generate), so they are what this compiler
+accepts. Looking a symbol up never imports or loads anything.
+
+@topic index.backends
+title: Backends, targets and the command line
+summary: How programs are compiled and run: the four backends, native executables, targets, platforms and the command line.
+index: backends
+
+== ABOUT THIS INDEX
+Every backend implements the same semantics; they differ in speed, in what
+they can do (native-only operations such as printing through io), and in
+where they run. Start with backend.overview; the command line is
+cli.usage and cli.options.

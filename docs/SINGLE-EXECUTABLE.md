@@ -59,7 +59,9 @@ zipfs-enabled tclsh) and a directory.
    main.tcl         single/main.tcl
    tcl_library/     the base kit's own Tcl script library
    botlish/         main.tcl, LICENSE, core/, compiler/, hir/, surface/,
-                    native/*.tcl, lib/, examples/*.ir (checkout-relative paths)
+                    native/*.tcl, lib/, compilerpedia/ (its engine, topics/
+                    and generated/), BUILD (the source revision -version
+                    prints) (checkout-relative paths)
    native-bin/      botlish-native, botlish-aot-stub, ID
    ```
 
@@ -85,6 +87,11 @@ archive.
 * It points the native backend at them: `BOTLISH_NATIVE_BIN`
   (`native::binary`'s existing override), `BOTLISH_NATIVE_LINKER=stub` and
   `BOTLISH_NATIVE_AOT_STUB`.
+* An invocation that runs no program -- no arguments (the usage summary),
+  `-help` or `-version` first -- skips both steps above: it installs nothing
+  and creates no cache directory (COMPILERPEDIA.md, "Packaging"). `-help`
+  reads the packed Compilerpedia (`compilerpedia/`), and `-version` the
+  packed `BUILD` file.
 * It sources `//zipfs:/app/botlish/main.tcl`, unchanged, with the original
   arguments. Every path the compiler computes from its own location
   (`core::libraryDir`, the `source` chain) lands inside the archive, which
