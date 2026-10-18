@@ -25,9 +25,9 @@
 
 set here [file dirname [file normalize [info script]]]
 source [file join $here common.tcl]
-source [file join $here toolchain.tcl]
-source [file join $here cdecl.tcl]
-source [file join $here ir.tcl]
+::chdr::use toolchain.tcl
+::chdr::use cdecl.tcl
+::chdr::use ir.tcl
 
 proc main {argv} {
     set name [lindex $argv 0]

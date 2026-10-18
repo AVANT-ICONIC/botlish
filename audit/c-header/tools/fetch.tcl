@@ -18,20 +18,12 @@ if {$libraries eq ""} {
         lappend libraries [file rootname [file tail $p]]
     }
 }
-set dir [::chdr::sourcesDir]
-file mkdir $dir
 foreach library $libraries {
     set profiles [::chdr::loadProfiles $library]
     set source [dict get [lindex [dict values $profiles] 0] source]
-    set target [file join $dir $library]
-    if {![file isdirectory $target]} {
-        puts "fetch: cloning [dict get $source url] [dict get $source tag] into $target"
-        exec git clone --quiet --depth 1 --branch [dict get $source tag] [dict get $source url] $target 2>@1
-    }
-    set head [exec git -C $target rev-parse HEAD]
-    if {$head ne [dict get $source commit]} {
-        puts "fetch: $library at $target is $head, not the pinned [dict get $source commit]"
+    if {[catch {::chdr::fetch $library $source} message]} {
+        puts $message
         exit 1
     }
-    puts "fetch: $library $head ok"
+    puts "fetch: $library [dict get $source commit] ok"
 }

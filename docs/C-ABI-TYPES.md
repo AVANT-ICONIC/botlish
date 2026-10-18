@@ -142,15 +142,22 @@ signedness is the target's: signed on x86-64 (Linux, macOS, Windows) and on
 Apple and Windows AArch64, unsigned on Linux AArch64. It is never Botlish's
 Byte and never `unsigned char` silently.
 
-**No `size_t`, no `_Bool`, no floating types.** The binding generator knows
+**No `size_t`, no floating types.** The binding generator knows
 from its ABI probe which C type `size_t` (`ptrdiff_t`, `wchar_t`, `int64_t`,
 ...) is on a profile, and emits an alias of it (`size_t` -> `ffi::c::ULong`
 on LP64); the archaeology found numeric typedef identity not worth making
-nominal (C-HEADER-ARCHAEOLOGY.md item 63). Neither subject library uses
-`_Bool` in its public API, and `double` appears in 1 + 7 functions: floats are
-their own language milestone. The registry has room for them (a floating
-category would be another `-c-abi` shape, beside the integer ones, without
-touching pointers).
+nominal (C-HEADER-ARCHAEOLOGY.md item 63). `double` appears in 1 + 7
+functions of the subject libraries: floats are their own language milestone.
+The registry has room for them (a floating category would be another `-c-abi`
+shape, beside the integer ones, without touching pointers).
+
+**`_Bool` came later.** Neither subject library uses it in its public API,
+so it was left out here; SDL3 uses it in 506 of its 1,405 API names, and the
+binding generator's milestone added `ffi::c::Bool`, which is Botlish's own
+`bool` with C `_Bool`'s ABI (one byte, 0 or 1; C-FFI.md section 3,
+C-BINDGEN.md "C bool"). A pointer may point to one (`ffi::c::Ptr[ffi::c::Bool]`)
+and a function pointer's signature may hold one. It is the only primitive
+that milestone added.
 
 ## Targets
 
@@ -585,7 +592,7 @@ the loader's, for `import ffi::c` on a host outside the target table with no
 | `Void` | required for `void *` | an incomplete pointee |
 
 Omitted, and why: floats (1 + 7 functions; their own milestone); `_Bool` (0
-public uses); `size_t`/`ptrdiff_t`/`wchar_t` as primitives (generator
+public uses; added later for SDL3, `ffi::c::Bool`); `size_t`/`ptrdiff_t`/`wchar_t` as primitives (generator
 aliases: typedef identity is not worth making nominal); C enums (21 + 2
 signatures, probed integer scalar + constants); arrays (49 + 5 fields: future
 layout repetition; parameters decay to pointers); varargs and `va_list` (5 +

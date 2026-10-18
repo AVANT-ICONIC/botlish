@@ -15,8 +15,8 @@
 package require tcltest 2.5
 namespace import ::tcltest::*
 set here [file dirname [file normalize [info script]]]
-source [file join $here .. tools cdecl.tcl]
-source [file join $here .. tools ir.tcl]
+source [file join $here .. .. .. tools cheader cdecl.tcl]
+source [file join $here .. .. .. tools cheader ir.tcl]
 
 set root [file dirname $here]
 set irCache [dict create]

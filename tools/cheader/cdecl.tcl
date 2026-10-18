@@ -63,6 +63,8 @@ namespace eval ::cdecl {
     # public, internal, system, builtin or entry; set by the driver.
     variable originCommand {}
     variable originCache [dict create]
+    # Typedef names known before the text (parse's TYPEDEFS).
+    variable seedTypedefs {}
 
     variable storageWords {typedef extern static auto register _Thread_local __thread thread_local constexpr}
     variable fnspecWords {inline __inline __inline__ _Noreturn __noreturn__}
@@ -292,6 +294,8 @@ proc ::cdecl::ParseAll {} {
     variable diags {}
     variable stack {}
     variable originCache [dict create]
+    variable seedTypedefs
+    foreach name $seedTypedefs { dict set typedefs $name 1 }
     set ntok [llength $kinds]
     while {$pos < $ntok} {
         set start $pos
@@ -1159,13 +1163,17 @@ proc ::cdecl::Apply {type ops} {
 # Driver helpers.
 
 # Parse TEXT (preprocessed C); return the records, directives merged in as
-# pragma/directive records at their positions.
-proc ::cdecl::parse {text {originCommand {}}} {
+# pragma/directive records at their positions. TYPEDEFS names typedefs
+# declared before TEXT (a declaration parsed apart from its translation
+# unit, such as a binding profile's signature of a macro API).
+proc ::cdecl::parse {text {originCommand {}} {typedefs {}}} {
     variable directives
     variable fileNames
+    variable seedTypedefs $typedefs
     set ::cdecl::originCommand $originCommand
     Lex $text
     set records [ParseAll]
+    set seedTypedefs {}
     # Merge the directives (pragmas, #ident, ...) in by token position.
     set out {}
     set di 0

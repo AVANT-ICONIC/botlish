@@ -1,14 +1,28 @@
-# toolchain.tcl -- the C toolchain adapter of the header experiment
-# (C-HEADER-ARCHAEOLOGY.md, "The toolchain adapter").
+# toolchain.tcl -- the C toolchain adapter of the C header library
+# (C-HEADER-ARCHAEOLOGY.md, "The toolchain adapter"; C-BINDGEN.md,
+# "Toolchain").
 #
-# The one place that knows how to run an installed C toolchain. The rest of
-# the instrument asks it to
+# The one place that knows how to run an installed C toolchain. The header
+# archaeology and the binding generator ask it to
 #
 #   preprocess ENTRY      the preprocessed C of a translation unit
 #   macros ENTRY          the same with every #define kept (macro census)
 #   predefined            the compiler's predefined macros
 #   compile SOURCE        does generated C compile? (thunk and oracle probes)
 #   run SOURCE            compile, link and run a native probe (ABI probe)
+#   assemble SOURCE       the assembly of a probe (facts read from its data,
+#                         for any target: nothing runs)
+#   llvm SOURCE           the optimized LLVM IR of a translation unit (the
+#                         generator's semantic evidence, clang only)
+#   object SOURCE OUT     compile to an object file
+#   archive OBJECTS OUT   a static library of objects
+#   searchDirs            the directories the compiler searches for
+#                         <...> includes, in order
+#
+# configFor TARGET is the configuration for a Botlish C target
+# (core/cabi.tcl's names): a clang-family compiler with --target, so that
+# every target is preprocessed and probed by one compiler and differences
+# between targets are the targets', not the toolchains'.
 #
 # and never sees a command line. Configuration comes from the environment
 # (and the profile adds its include directories and defines):
@@ -42,7 +56,20 @@ namespace eval ::chdr::toolchain {
             output -o
             target --target=
             version --version
+            assemble {-S}
+            llvm {-S -emit-llvm}
+            sysroot --sysroot=
+            appleSysroot -isysroot
+            verbose -v
         }
+    }
+    # Botlish C targets (core/cabi.tcl) -> the clang target triple configFor
+    # gives them. Windows is MSVC's ABI and toolchain: not implemented.
+    variable triples {
+        linux-x86_64 x86_64-linux-gnu
+        linux-aarch64 aarch64-linux-gnu
+        macos-x86_64 x86_64-apple-macos10.15
+        macos-aarch64 arm64-apple-macos11
     }
 }
 
@@ -96,6 +123,51 @@ proc ::chdr::toolchain::Identify {cc} {
     return [list unknown $first $path]
 }
 
+# The configuration for Botlish C target TARGET: config's, with the target
+# triple of the table and, for that target, BOTLISH_C_SYSROOT_<TARGET>
+# (a sysroot or SDK directory; "-" and "." in the target name become "_")
+# or BOTLISH_C_SYSROOT. The compiler is BOTLISH_C_CC when set (it must be
+# clang-family, or a compiler of exactly that target, which is then given
+# no --target), else clang.
+proc ::chdr::toolchain::configFor {target} {
+    variable triples
+    if {![dict exists $triples $target]} {
+        error "toolchain: no C toolchain configuration for target \"$target\" (known: [join [dict keys $triples] {, }])"
+    }
+    set saved [expr {[info exists ::env(BOTLISH_C_CC)] ? [list $::env(BOTLISH_C_CC)] : {}}]
+    if {$saved eq "" || [string trim [lindex $saved 0]] eq ""} {
+        set ::env(BOTLISH_C_CC) clang
+    }
+    set savedTarget [expr {[info exists ::env(BOTLISH_C_TARGET)] ? [list $::env(BOTLISH_C_TARGET)] : {}}]
+    catch {unset ::env(BOTLISH_C_TARGET)}
+    try {
+        set config [config]
+    } finally {
+        if {$saved eq ""} { unset ::env(BOTLISH_C_CC) } else { set ::env(BOTLISH_C_CC) [lindex $saved 0] }
+        if {$savedTarget ne ""} { set ::env(BOTLISH_C_TARGET) [lindex $savedTarget 0] }
+    }
+    set triple [dict get $triples $target]
+    if {[dict get $config family] eq "clang"} {
+        dict set config target $triple
+    } elseif {![string match "[lindex [split $triple -] 0]-*" [Machine $config]]} {
+        error "toolchain: [dict get $config cc] is a [dict get $config family] compiler for [Machine $config]: target $target ($triple) needs clang or a compiler of that target"
+    }
+    dict set config botlishTarget $target
+    set var BOTLISH_C_SYSROOT_[string map {- _ . _} $target]
+    set sysroot ""
+    foreach v [list $var BOTLISH_C_SYSROOT] {
+        if {[info exists ::env($v)] && $::env($v) ne ""} { set sysroot $::env($v); break }
+    }
+    dict set config sysroot $sysroot
+    return $config
+}
+
+# The machine a non-clang compiler targets (`-dumpmachine`).
+proc ::chdr::toolchain::Machine {config} {
+    if {[catch {exec {*}[dict get $config cc] -dumpmachine} out]} { return "" }
+    return [string trim $out]
+}
+
 proc ::chdr::toolchain::Flag {config name} {
     variable styles
     return [dict get $styles [dict get $config style] $name]
@@ -107,6 +179,13 @@ proc ::chdr::toolchain::CommonWords {config profile} {
     set words {}
     if {[dict get $config target] ne ""} {
         lappend words "[Flag $config target][dict get $config target]"
+    }
+    if {[dict exists $config sysroot] && [dict get $config sysroot] ne ""} {
+        if {[string match *-apple-* [dict get $config target]]} {
+            lappend words [Flag $config appleSysroot] [dict get $config sysroot]
+        } else {
+            lappend words "[Flag $config sysroot][dict get $config sysroot]"
+        }
     }
     foreach f [concat [dict get $profile flags] [dict get $config flags]] { lappend words $f }
     foreach d [concat [dict get $profile includeDirs] [dict get $config include]] {
@@ -206,11 +285,89 @@ proc ::chdr::toolchain::run {config profile source} {
     return [list $ok $out "$stderr$stderr2" $command]
 }
 
+# Compile SOURCE (C text) to assembly; {OK ASSEMBLY STDERR COMMAND}. Works
+# for any target the compiler has: nothing is linked or run, so the
+# generator reads compile-time facts from the data a probe defines.
+proc ::chdr::toolchain::assemble {config profile source {extra {}}} {
+    return [Emit $config $profile $source assemble .s $extra]
+}
+
+# The LLVM IR of SOURCE (clang only); {OK IR STDERR COMMAND}.
+proc ::chdr::toolchain::llvm {config profile source {extra {}}} {
+    if {[dict get $config family] ne "clang"} {
+        return [list 0 "" "toolchain: LLVM IR needs a clang-family compiler ([dict get $config cc] is [dict get $config family])" {}]
+    }
+    return [Emit $config $profile $source llvm .ll $extra]
+}
+
+proc ::chdr::toolchain::Emit {config profile source flag suffix extra} {
+    set dir [file tempdir]
+    set c [file join $dir probe.c]
+    set out [file join $dir probe$suffix]
+    set f [open $c w]
+    fconfigure $f -encoding utf-8 -translation lf
+    puts -nonewline $f $source
+    close $f
+    set command [concat [dict get $config cc] [Flag $config language] [CommonWords $config $profile] \
+        $extra [Flag $config $flag] [list $c] [Flag $config output] [list $out]]
+    lassign [Exec $command] ok text stderr
+    set result ""
+    if {$ok && [file exists $out]} {
+        set result [::chdr::readFile $out]
+    }
+    file delete -force $dir
+    return [list $ok $result [string map [list $c probe.c] $stderr] $command]
+}
+
+# Compile the C file SOURCEPATH to the object OUT; {OK STDERR COMMAND}.
+proc ::chdr::toolchain::object {config profile sourcePath out {extra {}}} {
+    set command [concat [dict get $config cc] [Flag $config language] [CommonWords $config $profile] \
+        $extra [Flag $config compile] [list $sourcePath] [Flag $config output] [list $out]]
+    lassign [Exec $command] ok text stderr
+    return [list $ok $stderr $command]
+}
+
+# A static library OUT of OBJECTS, by BOTLISH_C_AR (default: llvm-ar for a
+# clang-family configuration when installed, else ar); {OK STDERR COMMAND}.
+proc ::chdr::toolchain::archive {config objects out} {
+    set ar [Words BOTLISH_C_AR]
+    if {$ar eq ""} {
+        set ar [expr {[dict get $config family] eq "clang" && [auto_execok llvm-ar] ne "" ? "llvm-ar" : "ar"}]
+    }
+    file delete -force $out
+    set command [concat $ar rcs [list $out] $objects]
+    lassign [Exec $command] ok text stderr
+    return [list $ok $stderr $command]
+}
+
+# The directories the configuration searches for <...> includes, in
+# order: the compiler's own listing (-E -v of an empty translation unit),
+# between "#include <...> search starts here:" and "End of search list.".
+# {OK DIRS STDERR COMMAND}.
+proc ::chdr::toolchain::searchDirs {config profile} {
+    set dir [file tempdir]
+    set c [file join $dir empty.c]
+    close [open $c w]
+    set command [concat [PreprocessCommand $config $profile] [Flag $config verbose] [list $c] \
+        [Flag $config output] [list [file join $dir empty.i]]]
+    lassign [Exec $command] ok out stderr
+    file delete -force $dir
+    set dirs {}
+    set inside 0
+    foreach line [split $stderr \n] {
+        if {[string match "#include <...> search starts here:*" $line]} { set inside 1; continue }
+        if {[string match "End of search list.*" $line]} { set inside 0; continue }
+        if {$inside} { lappend dirs [file normalize [string trim [regsub { \(framework directory\)$} $line ""]]] }
+    }
+    return [list $ok $dirs $stderr $command]
+}
+
 # A description of the configuration for the import profile record.
 proc ::chdr::toolchain::describe {config} {
     set host "$::tcl_platform(os) $::tcl_platform(osVersion) $::tcl_platform(machine)"
     return [dict create cc [dict get $config cc] path [dict get $config path] \
         family [dict get $config family] version [dict get $config version] \
         style [dict get $config style] target [expr {[dict get $config target] eq "" ? "native" : [dict get $config target]}] \
+        sysroot [expr {[dict exists $config sysroot] && [dict get $config sysroot] ne "" ? "set" : "none"}] \
         host $host]
 }

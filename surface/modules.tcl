@@ -1164,14 +1164,19 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
         return
     }
     if {$symbolName in [hir::cabi::IntrinsicTypeNames $namespaceName]} {
-        # ffi::c::Void, ffi::c::Ptr, ffi::c::FnPtr (C-ABI-TYPES.md): intrinsic
-        # types of the namespace, resolved by hir/cabi.tcl -- and nothing
-        # else: no value, function or construction is named so.
+        # ffi::c::Void, ffi::c::Ptr, ffi::c::FnPtr (C-ABI-TYPES.md) and
+        # ffi::c::Bool (C _Bool, bool itself): intrinsic types of the
+        # namespace, resolved by hir/cabi.tcl -- and nothing else: no value,
+        # function or construction is named so.
         if {$refKind eq "type"} {
             return
         }
         if {$refKind eq "struct" && $symbolName eq "Void"} {
             Error TYPE $span [hir::cabi::VoidMessage]
+        }
+        if {$refKind in {value struct} && $symbolName eq "Bool"} {
+            Error UNKNOWN-SYMBOL $span \
+                "${namespaceName}::Bool is a type, not a value or a function: it is C _Bool's name for Botlish's bool, whose values are true and false"
         }
         if {$refKind in {value struct}} {
             Error UNKNOWN-SYMBOL $span \

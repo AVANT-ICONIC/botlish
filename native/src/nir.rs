@@ -1267,7 +1267,8 @@ pub struct EnumDecl {
 
 /// The C ABI transport class of a C function's parameter or result
 /// (C-FFI.md; hir/foreign.tcl's AbiClass): an integer of its exact width and
-/// signedness, a data or function pointer, or void (a result only).
+/// signedness, C `_Bool` (a Botlish bool: one byte holding 0 or 1), a data
+/// or function pointer, or void (a result only).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CAbi {
     I8,
@@ -1278,6 +1279,7 @@ pub enum CAbi {
     U32,
     I64,
     U64,
+    Bool,
     Ptr,
     Void,
 }
@@ -1293,6 +1295,7 @@ impl CAbi {
             "u32" => CAbi::U32,
             "i64" => CAbi::I64,
             "u64" => CAbi::U64,
+            "bool" => CAbi::Bool,
             "ptr" => CAbi::Ptr,
             "void" => CAbi::Void,
             _ => return None,
@@ -1302,7 +1305,7 @@ impl CAbi {
     /// The width in bits of an integer class (64 for a pointer), 0 for void.
     pub fn bits(self) -> u32 {
         match self {
-            CAbi::I8 | CAbi::U8 => 8,
+            CAbi::I8 | CAbi::U8 | CAbi::Bool => 8,
             CAbi::I16 | CAbi::U16 => 16,
             CAbi::I32 | CAbi::U32 => 32,
             CAbi::I64 | CAbi::U64 | CAbi::Ptr => 64,
@@ -1622,10 +1625,11 @@ fn summarize_call_effects(program: &mut Program, enabled: bool) {
                 Inst::Construct { .. } => local[i] = (true, true),
                 Inst::CallValue { .. } => local[i] = (true, true),
                 // A C call (C-FFI.md) is a safepoint; it fails only on a
-                // result it cannot represent or a violated alias contract.
+                // result it cannot represent (an address, a _Bool byte) or
+                // a violated alias contract.
                 Inst::ForeignCall { foreign, .. } => {
                     let decl = &program.foreigns[*foreign as usize];
-                    local[i].0 |= decl.result == CAbi::Ptr || decl.alias.is_some();
+                    local[i].0 |= decl.result == CAbi::Ptr || decl.result == CAbi::Bool || decl.alias.is_some();
                     local[i].1 = true;
                 }
                 _ => {}

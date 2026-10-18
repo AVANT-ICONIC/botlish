@@ -263,6 +263,11 @@ proc hir::types::resolveNamed {name {ns ""}} {
     if {$id ne ""} {
         return [list enum $id]
     }
+    if {$name eq [hir::cabi::BoolName]} {
+        # C _Bool (hir/cabi.tcl, C-BINDGEN.md): Botlish's bool, under its C
+        # ABI name.
+        return bool
+    }
     if {$name eq [hir::cabi::VoidName]} {
         # The C void (C-ABI-TYPES.md): a pointee identity, never the type of
         # a value.

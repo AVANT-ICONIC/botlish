@@ -6,6 +6,9 @@
 #                                        (Int in exactly the target's range
 #                                        of the C type) carrying C ABI
 #                                        metadata (core::type's -c-abi)
+#   ffi::c::Bool                         C _Bool: Botlish's own bool (the
+#                                        same type, the C ABI's spelling of
+#                                        it), carried as the one byte 0 or 1
 #   ffi::c::Void                         the C void: a permanently
 #                                        incomplete pointee, never a type of
 #                                        a value
@@ -32,6 +35,7 @@
 # A pointer's T is an identity, not the type of any value:
 #
 #   void                     ffi::c::Void
+#   bool                     ffi::c::Bool, C _Bool
 #   {refined int {NAME}}     a C integer scalar (NAME has -c-abi metadata)
 #   {nstruct ID}             an *opaque* struct: a module-owned nominal
 #                            identity (OPAQUE-STRUCTS.md), what a binding
@@ -41,7 +45,7 @@
 #   {imprint T}              an imprint variable (hir/imprint.tcl), bound to
 #                            a pointee at each call
 #
-# Everything else -- int, bool, str, List[...], an ordinary struct, an enum,
+# Everything else -- int, str, List[...], an ordinary struct, an enum,
 # LayoutStruct[L], a non-C integer domain -- has no C representation contract
 # and is rejected (PointeeProblem). A function pointer's argument types are
 # C ABI value types (a scalar, a Ptr or a FnPtr) and its result is one of
@@ -50,7 +54,7 @@
 namespace eval hir::cabi {
     # The intrinsic type names of namespace ffi::c besides its scalars: the
     # incomplete pointee and the two pointer constructors.
-    variable intrinsicTypes {Void Ptr FnPtr}
+    variable intrinsicTypes {Void Ptr FnPtr Bool}
 }
 
 # The C target a compilation uses: TARGET when given, else the host's. An
@@ -94,6 +98,7 @@ proc hir::cabi::IntrinsicTypeNames {ns} {
 
 # The spellings of the intrinsic types, as a type expression writes them.
 proc hir::cabi::VoidName {} { return "$::core::cabi::namespace\::Void" }
+proc hir::cabi::BoolName {} { return "$::core::cabi::namespace\::Bool" }
 proc hir::cabi::PtrName {} { return "$::core::cabi::namespace\::Ptr" }
 proc hir::cabi::FnPtrName {} { return "$::core::cabi::namespace\::FnPtr" }
 
@@ -166,10 +171,10 @@ proc hir::cabi::SignatureProblem {fn} {
     return ""
 }
 
-# 1 if TYPE is a C ABI value type: a C integer scalar, a C data or function
-# pointer, or an imprint variable (bound at each call).
+# 1 if TYPE is a C ABI value type: a C integer scalar, C _Bool (bool), a C
+# data or function pointer, or an imprint variable (bound at each call).
 proc hir::cabi::IsValueType {type} {
-    return [expr {[core::type::cabiScalar $type] ne "" || [hir::types::IsCPtr $type]
+    return [expr {[core::type::cabiScalar $type] ne "" || $type eq "bool" || [hir::types::IsCPtr $type]
         || [hir::types::IsCFnPtr $type] || [hir::types::IsImprint $type]}]
 }
 
@@ -178,7 +183,7 @@ proc hir::cabi::ValueTypeProblem {type} {
     if {[IsValueType $type]} {
         return ""
     }
-    return "[hir::types::show $type] is not a C ABI value type (a C integer scalar such as [hir::cabi::ScalarExample], [PtrName]\[...\] or [FnPtrName]\[...\])"
+    return "[hir::types::show $type] is not a C ABI value type (a C integer scalar such as [hir::cabi::ScalarExample], [BoolName], [PtrName]\[...\] or [FnPtrName]\[...\])"
 }
 
 proc hir::cabi::ScalarExample {} {
@@ -188,7 +193,7 @@ proc hir::cabi::ScalarExample {} {
 # Why the resolved type POINTEE cannot be a C pointer's pointee identity, or
 # "" if it can (this file's header, "Pointee identities").
 proc hir::cabi::PointeeProblem {pointee} {
-    if {$pointee eq "void" || [hir::types::IsCPtr $pointee] || [hir::types::IsCFnPtr $pointee]
+    if {$pointee eq "void" || $pointee eq "bool" || [hir::types::IsCPtr $pointee] || [hir::types::IsCFnPtr $pointee]
             || [hir::types::IsImprint $pointee] || [core::type::cabiScalar $pointee] ne ""} {
         return ""
     }
@@ -206,7 +211,7 @@ proc hir::cabi::PointeeProblem {pointee} {
     if {[lindex $pointee 0] eq "refined" && [lindex $pointee 1] eq "int"} {
         return "$shown is an integer domain, not a C integer type: a C pointee scalar is one of namespace $::core::cabi::namespace's (e.g. [ScalarExample])"
     }
-    return "$shown has no C representation: a pointee is [VoidName], a C integer scalar, an opaque struct or another pointer"
+    return "$shown has no C representation: a pointee is [VoidName], a C integer scalar, [BoolName], an opaque struct or another pointer"
 }
 
 # The display of pointee identity POINTEE (show's ffi::c::Ptr[...] argument).

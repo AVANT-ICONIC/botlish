@@ -104,10 +104,11 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [ABI-BYTES.md](ABI-BYTES.md) -- `abi::bytes::Bytes` and `linux::write`
 - [MUTABLE-BYTES.md](MUTABLE-BYTES.md) -- `abi::bytes::MutableBytes` and `linux::read`
 - [BINARY-LAYOUT.md](BINARY-LAYOUT.md) -- fixed binary layouts: `layout`, `LayoutStruct[L]`, `binary::parse` and `binary::emit`
-- [C-HEADER-ARCHAEOLOGY.md](C-HEADER-ARCHAEOLOGY.md) -- empirical C header archaeology: BoringSSL's and Tcl's preprocessed headers, an exploratory FFI IR and what a first C FFI needs (corpus: `audit/c-header/`)
+- [C-HEADER-ARCHAEOLOGY.md](C-HEADER-ARCHAEOLOGY.md) -- empirical C header archaeology: BoringSSL's and Tcl's preprocessed headers, an exploratory FFI IR and what a first C FFI needs (corpus: `audit/c-header/`; its parser and toolchain adapter now in `tools/cheader/`)
 - [C-ABI-TYPES.md](C-ABI-TYPES.md) -- the C ABI type universe: target-resolved C integer scalars, `ffi::c::Void`, `ffi::c::Ptr[T]`, `ffi::c::FnPtr[F]`, the pointer operations, and callable imprinting (`ffi::c::null[T]()`)
 - [C-POINTER-BORROWING.md](C-POINTER-BORROWING.md) -- temporary foreign byte exposure: existing `Bytes` / `MutableBytes` given to a C pointer parameter for one call when its contract says noescape, sharing the syscall path's exposure mechanism; the `extern c fn` and `direct` hooks
 - [C-FFI.md](C-FFI.md) -- `extern c library` and `extern c fn`: real link-time C calls with the platform ABI, linked by the system linker; contracts, byte borrowing and write-back through real C, truthful pointer results, retaining calls as direct authority; the Tcl and BoringSSL SHA-256 acceptance
+- [C-BINDGEN.md](C-BINDGEN.md) -- automatic C binding generation (`tools/c-bindgen.tcl`): ordinary Botlish bindings generated from real C headers by interrogating the C compiler (ABI, symbol and evidence probes), thunks for macros and static inline functions, explicit contracts, a deterministic report and manifest, `ffi::c::Bool`; the Tcl, BoringSSL and SDL3 acceptance
 - [ABI-NUMERIC-DOMAINS.md](ABI-NUMERIC-DOMAINS.md) -- `abi::I8` ... `abi::Usize`
 - [LINUX-X86-64-SYSCALL.md](LINUX-X86-64-SYSCALL.md) -- direct Linux x86-64 syscalls
 - [LINUX-SYSCALL-TRANSPORTS.md](LINUX-SYSCALL-TRANSPORTS.md) -- the AArch64 transport beside the x86-64 one (`linux::abi::ARCH::syscall`, one table), `linux::sys` as an architecture-specific module the compilation target selects, and what the single-file compiler needs on AArch64

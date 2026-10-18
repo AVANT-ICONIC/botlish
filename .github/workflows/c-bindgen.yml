@@ -1,0 +1,96 @@
+name: c-bindgen
+
+# The C binding generator's gate (C-BINDGEN.md, "CI"): every committed
+# binding is what generation produces from the pinned headers, for every
+# target of its profile (the check mode, byte for byte), and the generator's
+# tests and fuzzer pass with the Tcl, BoringSSL and SDL3 acceptance enabled.
+# The ordinary test jobs (tests.yml) run tests/c-bindgen.test too, but
+# without the pinned sources or libraries: there only the synthetic
+# fixture's tests run.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bindings:
+    name: c-bindgen (generate, check, acceptance)
+    runs-on: ubuntu-latest
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      # clang preprocesses and probes every target (clang --target). The
+      # AArch64 Linux targets read the arm64 C library's headers, which
+      # clang finds through the GCC cross installation (gcc-aarch64-linux-
+      # gnu brings libc6-dev-arm64-cross): without it clang would search
+      # only the host's /usr/include, which the generator refuses
+      # (C-BINDGEN.md, "Pipeline"). CMake and Ninja build BoringSSL and SDL3.
+      - name: Install the C toolchain
+        run: |
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            clang llvm gcc-aarch64-linux-gnu libc6-dev-arm64-cross cmake ninja-build
+          clang --version
+          clang --target=aarch64-linux-gnu -E -v -x c /dev/null -o /dev/null 2>&1 | sed -n '/search starts here/,/End of search/p'
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      # The pinned header sources (Tcl, BoringSSL, SDL3): shallow clones at
+      # the profiles' commits, checked on every use.
+      - name: Cache the pinned C header sources
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/botlish/c-header-src
+          key: c-header-src-${{ hashFiles('tools/c-bindgen/profiles/*.tcl', 'audit/c-header/profiles/*.tcl') }}
+
+      - name: Fetch the pinned C header sources
+        run: |
+          for profile in tcl boringssl sdl3; do
+            tclsh9.0 tools/c-bindgen.tcl fetch $profile
+          done
+
+      # Every committed target (the fixture's three, the Linux targets of
+      # the others: their macOS bindings need the macOS SDK's headers and
+      # are generated on a Mac).
+      - name: Check every committed binding
+        run: |
+          status=0
+          for profile in fixture tcl tclstubs boringssl sdl3; do
+            tclsh9.0 tools/c-bindgen.tcl check $profile -target committed || status=1
+          done
+          exit $status
+
+      - name: Cache the package-owned BoringSSL and SDL3
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/botlish/boringssl
+            ~/.cache/botlish/sdl3
+          key: cffi-libs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('audit/c-header/profiles/boringssl.tcl', 'tests/cffi/boringssl.tcl', 'tools/c-bindgen/profiles/sdl3.tcl', 'tests/cffi/sdl3.tcl') }}
+
+      - name: Build the package-owned BoringSSL and SDL3
+        run: |
+          tclsh9.0 tests/cffi/boringssl.tcl
+          tclsh9.0 tests/cffi/sdl3.tcl
+
+      - name: Run the generator's tests
+        run: |
+          tmp=$(mktemp -d)
+          tclsh9.0 tests/c-bindgen.test -tmpdir "$tmp" | tee "$tmp/log"
+          grep -qP 'Failed\t0$' "$tmp/log"
+          ! grep -qP 'Skipped\t[1-9]' "$tmp/log"
+
+      - name: Fuzz the generator
+        run: tclsh9.0 audit/c-bindgen/tools/fuzz.tcl -n 8 -seed ${{ github.run_number }} -keep 0

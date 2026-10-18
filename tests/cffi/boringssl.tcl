@@ -9,8 +9,9 @@
 # The library is BoringSSL's pinned release -- the header archaeology's own
 # (audit/c-header/profiles/boringssl.tcl: tag 0.20260929.0, its commit
 # checked), fetched by audit/c-header/tools/fetch.tcl into Botlish's cache --
-# built once with CMake and Ninja as the static libcrypto.a, with
-# BORINGSSL_PREFIX=botlish_bssl: every symbol it defines is prefixed
+# built once with CMake and Ninja as the static libcrypto.a (and libssl.a
+# and libdecrepit.a, whose symbols the binding generator's acceptance
+# checks too), with BORINGSSL_PREFIX=botlish_bssl: every symbol it defines is prefixed
 # (BoringSSL's own symbol-prefix build, BUILDING.md), so SHA256 is
 # botlish_bssl_SHA256, which nothing but this build defines. A binding that
 # names it (examples/ffi/sha256/boringssl.bot) can therefore never be
@@ -81,7 +82,7 @@ proc cffi::Build {} {
     file mkdir $dir
     puts "boringssl: building libcrypto.a (BORINGSSL_PREFIX=$prefix) in $dir"
     exec cmake -S $source -B $dir -GNinja -DCMAKE_BUILD_TYPE=Release -DBORINGSSL_PREFIX=$prefix >@stdout 2>@stderr
-    exec ninja -C $dir crypto >@stdout 2>@stderr
+    exec ninja -C $dir crypto ssl decrepit >@stdout 2>@stderr
     if {[boringsslDir] eq ""} {
         error "boringssl: the build produced no libcrypto.a in $dir"
     }

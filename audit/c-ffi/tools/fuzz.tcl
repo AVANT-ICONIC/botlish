@@ -11,13 +11,15 @@
 #
 #   * 0 to 14 parameters -- past the six (x86-64 SysV) or eight (AAPCS64)
 #     integer argument registers, so the later ones are on the stack -- each
-#     a C integer scalar (all eleven, plain char at the target's signedness),
+#     a C integer scalar (all eleven, plain char at the target's signedness)
+#     or a C _Bool (ffi::c::Bool: a Botlish bool),
 #     a raw `unsigned char *` (null, or an address inside the library's own
 #     cells), a read byte pointer (an abi::bytes::Bytes or a MutableBytes,
 #     exposed) or a write byte pointer (a MutableBytes, C writing a private
 #     copy), each pointer `noescape` or `proven noescape`;
-#   * a result: a C integer scalar computed from one argument (in C's own
-#     unsigned arithmetic, converted to the result type), void, an
+#   * a result: a C integer scalar or _Bool computed from one argument (in
+#     C's own unsigned arithmetic, converted to the result type: a _Bool is
+#     1 for any nonzero value), void, an
 #     independent pointer into the cells (or NULL), or a pointer declared an
 #     alias of one of its raw or write pointer parameters (which it returns);
 #   * with or without a `named` link symbol.
@@ -73,7 +75,8 @@ set scalars [dict create \
     Long      {long 64 1} \
     ULong     {{unsigned long} 64 0} \
     LongLong  {{long long} 64 1} \
-    ULongLong {{unsigned long long} 64 0}]
+    ULongLong {{unsigned long long} 64 0} \
+    Bool      {_Bool 1 0}]
 set cells 64
 
 proc bounds {type} {
@@ -96,8 +99,11 @@ proc scalarValue {type} {
 }
 
 # The C value of the unsigned 64-bit N converted to TYPE (GCC's modular
-# conversion for a signed type).
+# conversion for a signed type; C _Bool's: nonzero is 1).
 proc convert {n type} {
+    if {$type eq "Bool"} {
+        return [expr {$n != 0 ? 1 : 0}]
+    }
     lassign [dict get $::scalars $type] - bits signed
     set v [expr {$n % (2 ** $bits)}]
     if {$signed && $v >= 2 ** ($bits - 1)} {
@@ -189,7 +195,7 @@ proc drawFunction {p i} {
 
 # The C source of FUNCTIONS.
 proc cSource {functions} {
-    set c "#include <stddef.h>\n#include <stdint.h>\n\n"
+    set c "#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n\n"
     append c "unsigned char fz_cells\[$::cells\];\nunsigned long long fz_seen\[16\];\n"
     append c "unsigned char *fz_cell(int k) { return fz_cells + k; }\n"
     append c "unsigned long long fz_offset(unsigned char *p) { return p ? (unsigned long long)(p - fz_cells) + 1 : 0; }\n"
@@ -298,7 +304,11 @@ proc program {functions} {
             switch [dict get $param kind] {
                 scalar {
                     set v [dict get $param value]
-                    lappend args $v
+                    if {[dict get $param type] eq "Bool"} {
+                        lappend args [expr {$v ? "true" : "false"}]
+                    } else {
+                        lappend args $v
+                    }
                     lappend seen [expr {$v % (2 ** 64)}]
                 }
                 raw {
@@ -342,7 +352,8 @@ proc program {functions} {
         set result [dict get $f result]
         switch [dict get $result kind] {
             scalar {
-                lappend elements [expr {$hasOut ? "c$i.result" : "c$i"}]
+                set value [expr {$hasOut ? "c$i.result" : "c$i"}]
+                lappend elements [expr {[dict get $result type] eq "Bool" ? "bit($value)" : $value}]
                 set from [dict get $result from]
                 set base [expr {$from < 0 ? 0 : [lindex $seen $from]}]
                 lappend model [convert [expr {($base * 3 + [dict get $result add]) % (2 ** 64)}] [dict get $result type]]

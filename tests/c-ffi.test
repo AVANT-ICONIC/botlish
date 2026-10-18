@@ -25,6 +25,7 @@ testConstraint nativeBuilt [expr {![catch {native::binary}]}]
 testConstraint linuxNative [expr {$::tcl_platform(os) eq "Linux"
     && $::tcl_platform(machine) in {x86_64 amd64 aarch64 arm64}}]
 testConstraint cCompiler [expr {[auto_execok cc] ne ""}]
+testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64}}]
 
 set mainScript [file join $::projectRoot main.tcl]
 set ::appCounter 0
@@ -188,6 +189,20 @@ extern c fn next named "bcf_next"(p: ffi::c::Ptr[ffi::c::UChar] noescape) -> ffi
 extern c fn callback_twice named "bcf_callback_twice"() -> ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}]
 extern c fn apply named "bcf_apply"(f: ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}] noescape, x: ffi::c::Int) -> ffi::c::Int
 extern c fn count named "bcf_count"() -> ffi::c::ULong
+extern c fn echo_bool named "bcf_echo_bool"(x: ffi::c::Bool) -> ffi::c::Bool
+extern c fn bool_false named "bcf_bool_false"() -> ffi::c::Bool
+extern c fn bool_true named "bcf_bool_true"() -> ffi::c::Bool
+extern c fn observe_bool named "bcf_observe_bool"(x: ffi::c::Bool) -> ffi::c::Int
+extern c fn negate named "bcf_not"(x: ffi::c::Bool) -> ffi::c::Bool
+extern c fn is_positive named "bcf_is_positive"(x: ffi::c::Int) -> ffi::c::Bool
+extern c fn bool_args named "bcf_bool_args"(a: ffi::c::Bool, b: ffi::c::Int, c: ffi::c::Bool) -> ffi::c::Int
+extern c fn bool_stack named "bcf_bool_stack"(a: ffi::c::Long, b: ffi::c::Long, c: ffi::c::Long, d: ffi::c::Long, e: ffi::c::Long, f: ffi::c::Long, g: ffi::c::Long, h: ffi::c::Long, i: ffi::c::Bool, j: ffi::c::Bool) -> ffi::c::Int
+extern c fn bool_register named "bcf_bool_register"(x: ffi::c::Bool) -> ffi::c::UInt
+extern c fn dirty_bool_true named "bcf_dirty_bool_true"() -> ffi::c::Bool
+extern c fn dirty_bool_false named "bcf_dirty_bool_false"() -> ffi::c::Bool
+extern c fn invalid_bool named "bcf_invalid_bool"() -> ffi::c::Bool
+extern c fn echo_bool_ptr named "bcf_echo_bool_ptr"(p: ffi::c::Ptr[ffi::c::Bool] noescape) -> ffi::c::Ptr[ffi::c::Bool] alias p
+extern c fn predicate_odd named "bcf_predicate_odd"() -> ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Bool}]
 }
 
 # The retaining part of the fixture's API, for the direct tests: keep stores
@@ -284,7 +299,7 @@ test cf-decl-types {every parameter and result type is a C ABI value type (a C i
         "extern c fn f(x: Nope) -> unit"] {
         appRejection [app [list main.bot "import m\n1\n" m.bot "import ffi::c\n\n$decl\n"]]
     }
-} -cleanup removeApps -result {{TYPE: m.bot:3:18: parameter "x" of extern c fn "f": int is not a C ABI value type (a C integer scalar such as ffi::c::Int, ffi::c::Ptr[...] or ffi::c::FnPtr[...])} {TYPE: m.bot:3:34: the result of extern c fn "f": str is not a C ABI value type (a C integer scalar such as ffi::c::Int, ffi::c::Ptr[...] or ffi::c::FnPtr[...])} {TYPE: m.bot:3:18: unknown or invalid type ffi::c::Ptr[int] for parameter "x" of extern c fn "f": invalid pointee in ffi::c::Ptr[int]: int has no C representation: a pointee is ffi::c::Void, a C integer scalar, an opaque struct or another pointer} {TYPE: m.bot:3:18: parameter "x" of extern c fn "f": unit is not a C parameter type (a C function of no parameters has an empty parameter list)} {TYPE: m.bot:3:18: unknown or invalid type ffi::c::Ptr[T] for parameter "x" of extern c fn "f": core::type: unknown type "T"} {TYPE: m.bot:3:18: unknown or invalid type Nope for parameter "x" of extern c fn "f": core::type: unknown type "Nope"}}
+} -cleanup removeApps -result {{TYPE: m.bot:3:18: parameter "x" of extern c fn "f": int is not a C ABI value type (a C integer scalar such as ffi::c::Int, ffi::c::Bool, ffi::c::Ptr[...] or ffi::c::FnPtr[...])} {TYPE: m.bot:3:34: the result of extern c fn "f": str is not a C ABI value type (a C integer scalar such as ffi::c::Int, ffi::c::Bool, ffi::c::Ptr[...] or ffi::c::FnPtr[...])} {TYPE: m.bot:3:18: unknown or invalid type ffi::c::Ptr[int] for parameter "x" of extern c fn "f": invalid pointee in ffi::c::Ptr[int]: int has no C representation: a pointee is ffi::c::Void, a C integer scalar, ffi::c::Bool, an opaque struct or another pointer} {TYPE: m.bot:3:18: parameter "x" of extern c fn "f": unit is not a C parameter type (a C function of no parameters has an empty parameter list)} {TYPE: m.bot:3:18: unknown or invalid type ffi::c::Ptr[T] for parameter "x" of extern c fn "f": core::type: unknown type "T"} {TYPE: m.bot:3:18: unknown or invalid type Nope for parameter "x" of extern c fn "f": core::type: unknown type "Nope"}}
 
 test cf-decl-facts {a fact is a pointer's: access a data pointer's, escape any pointer's; a provenance a data pointer result's, and an alias names a parameter of the result's own type} -body {
     lmap decl [list \
@@ -421,6 +436,42 @@ test cf-scalar-extension {C sees a narrow argument sign- or zero-extended by its
 test cf-stack-arguments {ten arguments of mixed classes: the ones past the argument registers on the stack, each at its own weight} -constraints cfFixture -body {
     appValues [bcfApp "import ffi::c\nimport bcf\n\n\[bcf::many(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), bcf::many(-1, -2, -3, -4, 255, 65535, 4294967295, 18446744073709551615, -9, -10), bcf::tenth(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), bcf::tenth(0, 0, 0, 0, 0, 0, 0, 0, 0, -2147483648)\]\n"] {cranelift cranelift-generic}
 } -cleanup removeApps -result {{[763, 55835297053, 10, -2147483648]} {[763, 55835297053, 10, -2147483648]}}
+
+test cf-bool-type {ffi::c::Bool is C _Bool's name for Botlish's bool: a parameter takes and a result is a bool (true, false), a pointer may point to one and a function pointer's signature may have one; its ABI class is bool; it is a type, never a value, and an Int is no bool} -constraints cfFixture -body {
+    set hir [appHir [bcfApp "import ffi::c\nimport bcf\n\nfn f(b: ffi::c::Bool) -> bool:\n    b\n\n\[f(true), bcf::is_positive(3)\]\n"]]
+    set foreign [hir::foreign::declarations $hir]
+    list [dict get $foreign bcf::echo_bool abi] [dict get $foreign bcf::bool_args abi] [dict get $foreign bcf::echo_bool_ptr abi] \
+        [hir::types::show [dict get $foreign bcf::echo_bool contract result]] \
+        [hir::types::show [dict get $foreign bcf::echo_bool_ptr contract result]] \
+        [appRejection [bcfApp "import ffi::c\nimport bcf\n\nbcf::echo_bool(1)\n"]] \
+        [appRejection [bcfApp "import ffi::c\n\nx = ffi::c::Bool\nx\n"]] \
+        [appRejection [bcfApp "import ffi::c\n\nextern c fn f(x: ffi::c::Ptr\[str\]) -> ffi::c::Bool\n1\n"]]
+} -cleanup removeApps -match glob -result {{params bool result bool} {params {bool i32 bool} result i32} {params ptr result ptr} bool {ffi::c::Ptr\[bool\]} {TYPE: *bcf::echo_bool*} {UNKNOWN-SYMBOL: *ffi::c::Bool is a type, not a value*} {TYPE: *str has no C representation*}}
+
+test cf-bool-transport {C _Bool crosses both ways as the one byte 0 or 1: round trips, what C sees of a bool argument (in a register and on the stack, beside ints), C's own true and false, and results whose register holds dirty bits above the byte} -constraints cfFixture -body {
+    appValues [bcfApp "import ffi::c\nimport bcf\n\n\[bcf::echo_bool(true), bcf::echo_bool(false), bcf::bool_true(), bcf::bool_false(), bcf::observe_bool(true), bcf::observe_bool(false), bcf::negate(true), bcf::negate(false), bcf::is_positive(5), bcf::is_positive(-5), bcf::bool_args(true, 20, false), bcf::bool_args(false, 3, true), bcf::bool_stack(1, 2, 3, 4, 5, 6, 7, 8, true, false), bcf::bool_stack(1, 2, 3, 4, 5, 6, 7, 8, false, true), bcf::dirty_bool_true(), bcf::dirty_bool_false()\]\n"] {cranelift cranelift-generic}
+} -cleanup removeApps -result {{[true, false, true, false, 1, 0, false, true, true, false, 120, 4, 2, 1, true, false]} {[true, false, true, false, 1, 0, false, true, true, false, 120, 4, 2, 1, true, false]}}
+
+test cf-bool-register {on x86-64 the caller zero-extends a _Bool argument to all 32 low bits of its register, as GCC and Clang callees read it: C sees exactly 1 or 0} -constraints {cfFixture linuxX86_64} -body {
+    appValues [bcfApp "import ffi::c\nimport bcf\n\n\[bcf::bool_register(true), bcf::bool_register(false)\]\n"] {cranelift cranelift-generic}
+} -cleanup removeApps -result {{[1, 0]} {[1, 0]}}
+
+test cf-bool-invalid {a _Bool result byte that is neither 0 nor 1 is no _Bool a C compiler returns: a NATIVE BOOL failure naming the function and the byte, never a bool made of one bit} -constraints cfFixture -body {
+    appValues [bcfApp "import ffi::c\nimport bcf\n\nbcf::invalid_bool()\n"] {cranelift}
+} -cleanup removeApps -match glob -result {{{NATIVE BOOL} {*the C function bcf::invalid_bool returned the byte 0x02 as its _Bool result, which is neither 0 nor 1*}}}
+
+test cf-bool-pointers {a pointer to C _Bool and a function pointer with a _Bool result are ordinary C ABI values: passed, returned, never dereferenced} -constraints cfFixture -body {
+    appValues [bcfApp "import ffi::c\nimport bcf\n\np = ffi::c::null\[ffi::c::Bool\]()\nq = bcf::echo_bool_ptr(p)\nf = bcf::predicate_odd()\n\[q.null?(), f.null?()\]\n"] {cranelift}
+} -cleanup removeApps -result {{[true, false]}}
+
+test cf-bool-lowering {a _Bool parameter and result lower to the bool class in the foreign table and to i8, zero-extended like an unsigned char, in the platform C signature} -constraints cfFixture -body {
+    set dir [bcfApp "import ffi::c\nimport bcf\n\nbcf::bool_args(true, 1, false)\n"]
+    set nir [appNir $dir]
+    set clif [native::clif [appHir $dir]]
+    regexp {; u0:(\d+) = bcf_bool_args \(C bcf::bool_args\)} $clif -> id
+    regexp "fn(\\d+) = u0:$id (sig\\d+)" $clif -> fn sig
+    list [lsearch -inline -regexp [split $nir \n] {^foreign }] [regexp "$sig = \\(i8 uext, i32 sext, i8 uext\\) -> i32 system_v" $clif]
+} -cleanup removeApps -result {{foreign 0 "bcf_bool_args" params="bool i32 bool" result=i32 name="bcf::bool_args"} 1}
 
 test cf-void-and-unit {a void C function returns unit} -constraints cfFixture -body {
     appValues [bcfApp "import ffi::c\nimport bcf\n\nbcf::nothing()\n"] {cranelift}
