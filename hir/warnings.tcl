@@ -266,8 +266,20 @@ proc hir::warnings::Raise {hir warning} {
 # warning anchored at the first exit (source order) with the other exits as
 # secondary locations; each repeated value of a function is its own warning.
 #
+# Exits that end sibling handlers of one handled call are one exit unit
+# (HandlerTails): the language gives each error its own `on NAME:` handler
+# (there is no `on A, B:`), so `on A: return []` / `on B: return []` is one
+# decision -- "this call failed" -- written once per error, not two paths the
+# programmer chose to separate. A group warns when its exits span at least two
+# units (COMPILERPEDIA-REPORT.md, "Lint audit").
+#
 # `unit` is never reported: a procedural function with several unit exits
-# collapses no interesting domain information, only noise.
+# collapses no interesting domain information, only noise. A Bool constant is
+# reported only when every value exit of the function returns it (the
+# function's result is that constant): Bool has two values, so a predicate
+# with three or more exits -- the guard style, `if bad: return false` per
+# condition -- repeats a value by necessity, and the repetition says nothing
+# about the function; a predicate that can only ever answer one thing does.
 #
 # Scope: this reads the generic, source-level HIR once per source function,
 # so a function specialized into any number of semantic instances is still
@@ -316,14 +328,61 @@ proc hir::warnings::SameReturnValueIn {hir block name} {
         }
         set exit
     }]
+    set tails [HandlerTails $hir $block]
+    # The value exits: every exit that completes with a value other than unit,
+    # grouped or not (an exit with no proven identity still answers something).
+    set valueExits 0
+    foreach exit $exits {
+        set type [hir::typeOf $hir [lindex $exit 1]]
+        if {$type ne "never" && [hir::types::kindOf $type] ne "unit"} {
+            incr valueExits
+        }
+    }
     set warnings {}
     foreach group [Group $hir $exits] {
         lassign $group identity members
-        if {[llength $members] >= 2} {
-            lappend warnings [GroupWarning $hir $block $name $identity $members]
+        if {[Units $tails [lmap m $members {lindex $m 0}]] < 2} {
+            continue
         }
+        if {[lindex $identity 0] eq "value" && [core::value::kind [lindex $identity 1]] eq "bool"
+                && [llength $members] < $valueExits} {
+            continue
+        }
+        lappend warnings [GroupWarning $hir $block $name $identity $members]
     }
     return $warnings
+}
+
+# Expressions that end a handler of a `handle` node of BLOCK's own body
+# (BodyExprs: never a nested function's), each mapped to the unit key of its
+# handled call: ExprId -> handle:HANDLE-EXPRID. The handlers of one call are
+# one decision the language spells once per error, so exits that end them are
+# one exit unit (SAME-RETURN-VALUE above, SAME-FAILURE below). An exit
+# anywhere else in a handler body is an ordinary exit.
+proc hir::warnings::HandlerTails {hir block} {
+    set tails [dict create]
+    foreach e [BodyExprs $hir $block] {
+        set node [dict get $hir exprs $e]
+        if {[dict get $node kind] ne "handle"} {
+            continue
+        }
+        foreach body [dict get $node handlerBodies] {
+            if {$body ne ""} {
+                dict set tails [lindex $body end] handle:$e
+            }
+        }
+    }
+    return $tails
+}
+
+# The number of exit units the exit sites SITES span (TAILS: HandlerTails):
+# sites that end handlers of one call count once, every other site is its own.
+proc hir::warnings::Units {tails sites} {
+    set units [dict create]
+    foreach site $sites {
+        dict set units [expr {[dict exists $tails $site] ? [dict get $tails $site] : $site}] 1
+    }
+    return [dict size $units]
 }
 
 # EXITS ({SITE VALUE} pairs, source order) grouped by proven identity: a list
@@ -522,6 +581,9 @@ proc hir::warnings::SynthesizedBranch {hir node} {
 #   2. the callee declares at least 2 ordinary parameters (the sugar moves a
 #      trailing argument behind the dot; `length(s)` has none to move).
 #
+# An Int literal receiver is not reported (IntLiteralReceiver): eligible, but
+# not a value whose subject-ness the compiler can judge.
+#
 # Anything the compiler cannot establish is silence. Calls HIR marks
 # structurally unreachable are skipped. The pass reads the generic source HIR
 # once, never a semantic instance, and adds no analysis of its own.
@@ -544,7 +606,7 @@ proc hir::warnings::MethodEligible {hir} {
         }
         set receiver [lindex [dict get $node args] 0]
         set form [ReceiverForm $hir $receiver]
-        if {$form eq ""} {
+        if {$form eq "" || [IntLiteralReceiver $hir $receiver]} {
             continue
         }
         if {$view eq ""} {
@@ -713,6 +775,20 @@ proc hir::warnings::ReceiverForm {hir e} {
         }
     }
     return ""
+}
+
+# 1 if the receiver E is an Int literal. Method syntax presents its receiver
+# as the value the operation is about; a written number in that position is
+# almost always a constant parameter of an operation on something else -- a
+# position, a count, a size, a seed (`0.scan_while(p)`, `500.drive(0)`,
+# `0.register_empty_position(moves)`: REFACTOR-WARNINGS-CLEAN.md finding 6,
+# and the 15-puzzle study's S19) -- and whether a constant is the subject is
+# the writer's judgment, which the compiler cannot make. So the call is not
+# reported; the sugared spelling stays legal (`5.between(1, 10)`). A String,
+# character, Bool, list or struct literal receiver is still a candidate.
+proc hir::warnings::IntLiteralReceiver {hir e} {
+    return [expr {[dict get $hir exprs $e kind] eq "const"
+        && [hir::types::kindOf [hir::typeOf $hir $e]] eq "int"}]
 }
 
 # The names of every struct field the program can have: its struct
@@ -1101,8 +1177,12 @@ proc hir::warnings::SelfCall {hir node self} {
 #
 # One warning per failure raised from N >= 2 exits, anchored at its first
 # exit (source order), the others as secondary locations; a function failing
-# two names repeatedly gets two warnings. Scope: the generic source HIR, once
-# per source function; instances are never walked.
+# two names repeatedly gets two warnings. Fails that end sibling handlers of
+# one handled call are one exit unit (HandlerTails, as for SAME-RETURN-VALUE):
+# translating a call's several errors into one of the function's own,
+# `on A: fail Bad` / `on B: fail Bad`, is one decision the language spells once
+# per error, and the group warns only when it spans two units. Scope: the
+# generic source HIR, once per source function; instances are never walked.
 
 proc hir::warnings::SameFailure {hir} {
     set names [BlockNames $hir]
@@ -1131,10 +1211,11 @@ proc hir::warnings::SameFailureIn {hir block name} {
         }
         set site
     }]
+    set tails [HandlerTails $hir $block]
     set warnings {}
     foreach group [FailureGroups $sites] {
         lassign $group failure members
-        if {[llength $members] >= 2} {
+        if {[Units $tails $members] >= 2} {
             lappend warnings [FailureWarning $hir $block $name $failure $members]
         }
     }

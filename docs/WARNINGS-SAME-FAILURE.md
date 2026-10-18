@@ -834,6 +834,13 @@ was added or removed.
 * **No payload rule exercised.** `fail` has no payload today; the conservative
   rule is documented for the day it does (see "The payload question").
 * Only the first warning is raised under `error`, as in milestones 1-3.
+* Successor note (COMPILERPEDIA-REPORT.md, "Lint audit"): fails that end
+  the handlers of one handled call are one exit unit: translating a call's
+  errors into one of the function's own (`on A: fail Bad` / `on B: fail
+  Bad`) is one decision written once per error, because each error has its
+  own handler. A group warns when it spans two units. Pinned by
+  `sf-two-handlers-same-failure`, `sf-two-handlers-and-a-guard`,
+  `sf-handlers-of-two-calls` and the mutant `handler-alternatives-counted-apart`.
 * Successor note (REFACTOR-WARNINGS-CLEAN.md): the warning-driven refactor
   merged `abi::bytes::replace`'s two failures into one `fail IndexNotFound`
   after the nested in-range tests (`if index >= 0: if index < count: return

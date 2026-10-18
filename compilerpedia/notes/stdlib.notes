@@ -1,0 +1,3667 @@
+# stdlib.notes -- prose for the generated standard-library topics
+# (COMPILERPEDIA.md, "The standard library"). Each entry is a topic-format
+# block whose ID is a generated topic's (stdlib.NS::NAME, stdlib.NAME for a
+# root primitive, stdlib.module.NS for a namespace); tools/compilerpedia.tcl
+# generate merges its summary (which replaces the derived one), aliases,
+# keywords, related topics, sections and examples into that topic. Every
+# public intrinsic needs one: the registry gives its signature, not what it
+# does. Write `index: stdlib` and `title: -` (the generated title is kept).
+
+@topic stdlib.+
+title: -
+summary: The Int sum of A and B, written a + b: exact at any size, so it never overflows or wraps.
+index: stdlib
+keywords: add; addition; plus; sum; arithmetic
+related: concept.integers stdlib.- stdlib.* stdlib.str::concat capability.integer-division
+
+== NOTES
+Written as an operator, a + b: the native's name is +, and +(a, b) is not
+source syntax. Both operands must be Ints, and the result is the exact sum
+however large it is: Botlish has one Int type, of arbitrary precision, with
+no 64-bit overflow, wrapping or saturation.
+
++ is not overloaded. "ab" + "cd" fails when it runs with the TYPE error
+`+: expected int, got "ab"`: join Strings with str::concat (or add one
+character with str::append_char), and add one element to a List with
+list::append. There is no floating-point number and no division operator
+(capability.integer-division).
+
+== EXAMPLES
+@example accept
+x = 9223372036854775807
+[x + 1, 2 + -3]
+@value [9223372036854775808, -1]
+@caption No overflow past the 64-bit range
+@end
+
+@topic stdlib.-
+title: -
+summary: The Int difference A minus B, written a - b, and -x negates: exact at any size, never wrapping.
+index: stdlib
+keywords: subtract; subtraction; minus; difference; negate; negative number
+related: concept.integers stdlib.+ stdlib.mod
+
+== NOTES
+Written as an operator: a - b, and a leading minus negates (-x). Both
+operands must be Ints (another kind fails with the TYPE error when the
+operation runs), and the result is exact at any magnitude.
+
+A leading minus binds less tightly than a method call: -7.mod(2) is
+-(7.mod(2)), which is -1. To reduce a negative number, bind it first
+(x = -7, then x.mod(2)) or write mod(-7, 2).
+
+== EXAMPLES
+@example accept
+x = 5
+[x - 8, -x, 0 - x]
+@value [-3, -5, -5]
+@end
+
+@topic stdlib.*
+title: -
+summary: The Int product of A and B, written a * b: exact at any size (no overflow).
+index: stdlib
+keywords: multiply; multiplication; times; product
+related: concept.integers stdlib.+ stdlib.shift_left capability.integer-division
+
+== NOTES
+Written as an operator, a * b, on two Ints; the product is exact however
+many digits it has. There is no power operator (`**` is a syntax error)
+and no division (capability.integer-division); a multiplication by a
+power of two can also be written x.shift_left(k).
+
+== EXAMPLES
+@example accept
+[6 * 7, 99999999999 * 99999999999, -4 * 3]
+@value [42, 9999999999800000000001, -12]
+@end
+
+@topic stdlib.<
+title: -
+summary: Whether the Int A is less than the Int B, written a < b: Ints only, and comparisons do not chain.
+index: stdlib
+keywords: less than; compare numbers; comparison; ordering
+related: concept.integers stdlib.<= stdlib.> stdlib.>= stdlib.== proof.ranges proof.list-bounds
+
+== NOTES
+Written as an operator, a < b, giving a Bool. Both operands must be Ints:
+Strings, characters, Lists and Bools have no ordering operator, and an
+operand of another kind fails with the TYPE error when the comparison runs
+(`<: expected int, got "a"`). To order characters, compare their
+char::scalar_value.
+
+Comparisons do not chain: `a < b < c` is a syntax error ("comparison
+chaining is not supported"); write `a < b and b < c`.
+
+The four ordering comparisons are what the range analysis reads: a branch
+on `i < xs.length()` or `i >= 0` narrows i inside the branch, which is how
+the compiler proves an index in range (proof.list-bounds, proof.ranges).
+
+== EXAMPLES
+@example accept
+x = 3
+[x < 5, 5 < x, x < 3]
+@value [true, false, false]
+@end
+
+@topic stdlib.<=
+title: -
+summary: Whether the Int A is at most the Int B, written a <= b: Ints only, no chaining.
+index: stdlib
+keywords: less than or equal; at most; compare numbers; comparison
+related: concept.integers stdlib.< stdlib.> stdlib.>= proof.ranges
+
+== NOTES
+Written as an operator, a <= b, on two Ints (another kind is the TYPE
+error when it runs). Like every comparison it does not chain and it
+narrows ranges in the branches of an `if` (see stdlib.<).
+
+== EXAMPLES
+@example accept
+x = 3
+[x <= 3, x <= 2]
+@value [true, false]
+@end
+
+@topic stdlib.>
+title: -
+summary: Whether the Int A is greater than the Int B, written a > b: Ints only, no chaining.
+index: stdlib
+keywords: greater than; more than; compare numbers; comparison
+related: concept.integers stdlib.< stdlib.<= stdlib.>= proof.ranges
+
+== NOTES
+Written as an operator, a > b, on two Ints (another kind is the TYPE
+error when it runs). Like every comparison it does not chain and it
+narrows ranges in the branches of an `if` (see stdlib.<).
+
+== EXAMPLES
+@example accept
+x = 3
+[x > 2, x > 3]
+@value [true, false]
+@end
+
+@topic stdlib.>=
+title: -
+summary: Whether the Int A is at least the Int B, written a >= b: Ints only, no chaining.
+index: stdlib
+keywords: greater than or equal; at least; compare numbers; comparison
+related: concept.integers stdlib.< stdlib.<= stdlib.> proof.ranges
+
+== NOTES
+Written as an operator, a >= b, on two Ints (another kind is the TYPE
+error when it runs). Like every comparison it does not chain and it
+narrows ranges in the branches of an `if` (see stdlib.<).
+
+== EXAMPLES
+@example accept
+x = 3
+[x >= 3, x >= 4]
+@value [true, false]
+@end
+
+@topic stdlib.==
+title: -
+summary: Whether A and B are the same value, written a == b: structural equality, Strings included, never converting between kinds.
+index: stdlib
+keywords: equal; equality; compare values; same value; string equality; not equal; !=
+related: rule.equality stdlib.hash concept.values concept.structs
+
+== NOTES
+Written as an operator, a == b; `a != b` means not (a == b). It is the
+one equality of the language, for Strings as for everything else (the
+old `eq` is gone).
+
+It compares structure: Ints numerically, Strings by their characters
+(exact Unicode scalar values: no case folding, no normalization), Lists
+element by element, structs by shape (the same declaration, or the same
+anonymous field set) and then field by field, enum cases by identity,
+ImmutableSets as sets (order and duplicates do not matter), Bytes by their
+bytes. Values of different kinds are never equal and nothing is converted:
+"10" == 10 is false, a UnicodeChar never equals a String ('a' == "a" is
+false), and a named struct never equals an anonymous one with the same
+fields.
+
+Some values have no equality. Functions (closures and natives),
+MutableArray and MutableVector values fail with the EQUALITY error when
+the comparison runs. An affine value (a coroutine handle, or a struct or
+List that owns one) is rejected at compile time with
+AFFINE-EQUALITY-UNSUPPORTED. hash agrees with ==: equal values hash equal.
+
+== EXAMPLES
+@example accept
+struct P:
+    x: int
+
+[
+    [1, [2]] == [1, [2]],
+    "10" == 10,
+    P {x: 1} == P {x: 1},
+    P {x: 1} == {x: 1},
+    1 != 2
+]
+@value [true, false, true, false, true]
+@end
+
+@topic stdlib.mod
+title: -
+summary: The Euclidean remainder of A divided by B, written mod(a, b) or a.mod(b): always 0 <= r < abs(b); B = 0 fails with ARITHMETIC.
+index: stdlib
+keywords: modulo; remainder; modulus; divisible; even or odd; wrap around; bucket index
+related: concept.integers capability.integer-division stdlib.hash stdlib.shift_right proof.ranges
+
+== NOTES
+A language primitive: no import, written mod(a, b) or, as a method,
+a.mod(b) (the METHOD-ELIGIBLE warning suggests the method form when the
+first argument is not a literal). The remainder is Euclidean: it is never
+negative, whatever the signs, so mod(-7, 3) is 2 and mod(7, -3) is 1.
+That makes it safe for wrapping an index or a hash into a table:
+hash(key).mod(capacity) is always a valid slot.
+
+A zero divisor fails with the run-time error ARITHMETIC ("mod: division by
+zero"). It is not a declared error, so no `on` handler catches it: test
+the divisor first.
+
+There is no integer division (no `/`, no `div`): see
+capability.integer-division. The range analysis knows mod's result: with a
+divisor of bounded magnitude m it lies in 0..m-1, so `xs.at(k.mod(3))` is
+proven in range where xs is known to have three elements.
+
+A leading minus binds less tightly than the method call: -7.mod(3) is
+-(7.mod(3)), which is -1, not 2.
+
+== EXAMPLES
+@example accept
+x = -7
+[x.mod(3), mod(7, -3), mod(10, 5)]
+@value [2, 1, 0]
+@end
+
+@topic stdlib.bit_and
+title: -
+summary: The bitwise AND of two Ints, written bit_and(a, b), in two's complement over arbitrary precision.
+index: stdlib
+keywords: bitwise and; mask; bits; bit mask; &
+related: concept.integers stdlib.bit_or stdlib.bit_xor stdlib.shift_right stdlib.module.byte
+
+== NOTES
+The operands are Ints of any size, read as infinite two's-complement bit
+strings, so bit_and(-1, 255) is 255 and the result of a nonnegative mask
+is never negative. There is no `&` operator.
+
+bit_and, bit_or and bit_xor are declared nomethod: their two operands are
+symmetric, so neither is a receiver, and a.bit_and(b) is rejected with
+NOMETHOD-CALL. The range analysis bounds the result (an AND with a
+nonnegative mask lies in 0..mask), which is how lib/byte.bot's functions
+prove their Byte and Nibble results.
+
+== EXAMPLES
+@example accept
+[bit_and(12, 10), bit_and(-1, 255), bit_and(300, 255)]
+@value [8, 255, 44]
+@end
+
+@topic stdlib.bit_or
+title: -
+summary: The bitwise OR of two Ints, written bit_or(a, b), in two's complement over arbitrary precision.
+index: stdlib
+keywords: bitwise or; set bits; combine flags; bits; |
+related: concept.integers stdlib.bit_and stdlib.bit_xor stdlib.shift_left
+
+== NOTES
+The operands are Ints of any size, read as infinite two's-complement bit
+strings. There is no `|` operator. Declared nomethod, like bit_and: call
+it as bit_or(a, b) (a.bit_or(b) is NOMETHOD-CALL).
+
+== EXAMPLES
+@example accept
+[bit_or(12, 10), bit_or(1, 256)]
+@value [14, 257]
+@end
+
+@topic stdlib.bit_xor
+title: -
+summary: The bitwise exclusive OR of two Ints, written bit_xor(a, b), in two's complement over arbitrary precision.
+index: stdlib
+keywords: bitwise xor; exclusive or; flip bits; toggle; bits; ^
+related: concept.integers stdlib.bit_and stdlib.bit_or stdlib.module.byte
+
+== NOTES
+The operands are Ints of any size, read as infinite two's-complement bit
+strings: bit_xor(x, -1) is -x - 1, not an 8- or 64-bit complement (for a
+Byte's complement see byte::complement). There is no `^` operator.
+Declared nomethod, like bit_and: call it as bit_xor(a, b).
+
+== EXAMPLES
+@example accept
+[bit_xor(12, 10), bit_xor(5, -1)]
+@value [6, -6]
+@end
+
+@topic stdlib.shift_left
+title: -
+summary: The Int X shifted left by K bits, written x.shift_left(k): x times 2 to the power k, exact; K must be 0..1048576.
+index: stdlib
+keywords: shift left; bit shift; multiply by power of two; <<
+related: concept.integers stdlib.shift_right stdlib.* stdlib.bit_or
+
+== NOTES
+X is any Int and the result is exactly X * 2^K: nothing is shifted out,
+since Ints have no width. A shift amount below 0 or above 1048576 (2^20)
+fails with the run-time RANGE error "shift amount out of range
+(0..1048576)". There is no `<<` operator.
+
+Unlike the bit_* operations, the shifts take method syntax: the shifted
+value is the receiver, x.shift_left(k).
+
+== EXAMPLES
+@example accept
+x = 1
+[x.shift_left(4), shift_left(-3, 2), shift_left(1, 70)]
+@value [16, -12, 1180591620717411303424]
+@end
+
+@topic stdlib.shift_right
+title: -
+summary: The Int X shifted right by K bits, written x.shift_right(k): the floor of x divided by 2 to the power k; K must be 0..1048576.
+index: stdlib
+keywords: shift right; bit shift; halve; divide by power of two; >>
+related: concept.integers stdlib.shift_left stdlib.bit_and capability.integer-division
+
+== NOTES
+An arithmetic shift over arbitrary precision: the result is the floor of
+X / 2^K, so a negative X stays negative (shift_right(-9, 1) is -5,
+shift_right(-1, 3) is -1). It is the one way to divide by a power of two;
+there is no general division (capability.integer-division). A shift
+amount below 0 or above 1048576 fails with the run-time RANGE error. There
+is no `>>` operator; the method form x.shift_right(k) reads best.
+
+== EXAMPLES
+@example accept
+x = 100
+[x.shift_right(3), shift_right(-9, 1), shift_right(-1, 3)]
+@value [12, -5, -1]
+@end
+
+@topic stdlib.list
+title: -
+summary: The List of its arguments, in order: what a list literal [a, b, c] calls; list() is the empty List.
+index: stdlib
+keywords: list literal; make a list; build a list; new list; empty list
+related: concept.lists stdlib.module.list stdlib.list::append
+
+== NOTES
+A language primitive taking any number of arguments of any kinds. Source
+normally writes the literal `[a, b, c]`, which is a call of this
+primitive; `list(a, b, c)` is the same value. A List is immutable: there
+is no operation that changes one, only ones that make a new List
+(list::append, a collecting loop).
+
+== EXAMPLES
+@example accept
+[list(1, 2, 3) == [1, 2, 3], list(), [1, "two", [3]]]
+@value [true, [], [1, "two", [3]]]
+@end
+
+@topic stdlib.integer?
+title: -
+summary: Whether a value is an Int; inside `if integer?(x):` the compiler knows x is an Int.
+index: stdlib
+keywords: is integer; is number; type test; kind test; check type
+related: concept.types stdlib.string? stdlib.list? stdlib.mutarray? proof.types
+
+== NOTES
+A type test: it answers exactly whether its argument is an Int, never
+fails and allocates nothing, and the branch it guards knows the type, so
+an untyped parameter can be used as an Int there. An integer domain's
+value (a byte::Byte, ...) is an Int too. There is no type test for Bools,
+characters, structs or enum values, and no type gets one by being
+declared: the kind tests are integer?, string?, list?, mutarray?, ok?
+and error? (rule.no-callable-types).
+
+== EXAMPLES
+@example accept
+fn double(x) -> int:
+    if integer?(x):
+        return x * 2
+    0
+
+[double(21), double("no"), integer?([1])]
+@value [42, 0, false]
+@end
+
+@topic stdlib.string?
+title: -
+summary: Whether a value is a String; inside `if string?(x):` the compiler knows x is a String.
+index: stdlib
+keywords: is string; is text; type test; kind test; check type
+related: concept.types stdlib.integer? concept.strings
+
+== NOTES
+A type test like integer?: exact, never failing, and the branch it guards
+knows the argument is a String. A UnicodeChar is not a String, so
+string?('a') is false.
+
+== EXAMPLES
+@example accept
+[string?("text"), string?('t'), string?(1)]
+@value [true, false, false]
+@end
+
+@topic stdlib.list?
+title: -
+summary: Whether a value is a List; inside `if list?(x):` the compiler knows x is a List.
+index: stdlib
+keywords: is list; is array; type test; kind test; check type
+related: concept.types stdlib.integer? concept.lists
+
+== NOTES
+A type test like integer?: exact, never failing, and the branch it guards
+knows the argument is a List. A MutableArray or MutableVector is not a
+List (use mutarray? for an array; there is no test for a vector).
+
+== EXAMPLES
+@example accept
+[list?([]), list?([1, 2]), list?("[1]")]
+@value [true, true, false]
+@end
+
+@topic stdlib.mutarray?
+title: -
+summary: Whether a value is a MutableArray; inside `if mutarray?(x):` the compiler knows x is one.
+index: stdlib
+keywords: is array; is mutable array; type test; kind test
+related: concept.mutable-array stdlib.module.mutable_array stdlib.integer?
+
+== NOTES
+A type test like integer?: exact, never failing, allocating nothing. An
+argument already typed MutableArray[T] keeps that element type in the
+branch. A List is not a MutableArray, and there is no corresponding test
+for MutableVector.
+
+== EXAMPLES
+@example accept
+import mutable_array
+
+a = mutable_array::from_list([1, 2])
+[mutarray?(a), mutarray?([1, 2])]
+@value [true, false]
+@end
+
+@topic stdlib.ok?
+title: -
+summary: Whether a value is an ok Result; a source program has no way to build a Result, so for its values it is always false.
+index: stdlib
+keywords: result type; ok result; type test
+related: stdlib.error? concept.errors
+
+== NOTES
+A type test of the Result kind's ok tag. Result values (ok(v) and
+error(v)) exist in the runtime's value model and are built by core IR's
+`ok` and `error-value` forms, but the surface language has no syntax and
+no standard operation that builds one: `ok(1)` in a source program is an
+unbound name. So in a source program ok? and error? answer false for every
+value. Failure in Botlish source is a declared error (fail, on, errors),
+not a Result (concept.errors).
+
+== EXAMPLES
+@example accept
+[ok?(1), ok?("ok")]
+@value [false, false]
+@end
+
+@topic stdlib.error?
+title: -
+summary: Whether a value is an error Result; a source program has no way to build a Result, so for its values it is always false.
+index: stdlib
+keywords: result type; error result; type test
+related: stdlib.ok? concept.errors
+
+== NOTES
+The type test of the Result kind's error tag; see stdlib.ok?. It does not
+test for a declared error: a declared error is not a value at all, it is
+a completion that `on NAME:` handles (concept.errors).
+
+== EXAMPLES
+@example accept
+[error?(1), error?([])]
+@value [false, false]
+@end
+
+@topic stdlib.hash
+title: -
+summary: The structural hash of any value that has equality, an Int in 0..2^61-1: equal values (==) always hash equal.
+index: stdlib
+keywords: hash code; hashing; hash table; bucket; fingerprint
+related: stdlib.== stdlib.mod concept.values
+
+== NOTES
+hash(v) is a language primitive, exactly as general as ==: Ints, Strings,
+Bools, unit, characters, Lists, structs, enum cases, ImmutableSets and
+byte storage all hash, and two values that are == hash to the same Int.
+The result is nonnegative and below 2^61, so hash(key).mod(capacity) is a
+valid table slot.
+
+The value is deterministic: the same on every backend, in every run and
+every process, with no random seed. It is not promised across compiler
+versions, and it is not cryptographic: never persist it or use it for
+security. A function, MutableArray or MutableVector has no hash (the
+EQUALITY error when the call runs), and an affine value is rejected at
+compile time (AFFINE-EQUALITY-UNSUPPORTED).
+
+== EXAMPLES
+@example accept
+key = "apple"
+[
+    hash(key) == hash("apple"),
+    hash([1, 2]) == hash([1, 2]),
+    hash(key).mod(16) < 16
+]
+@value [true, true, true]
+@end
+
+@topic stdlib.argv
+title: -
+summary: The process's argument vector as a List of Strings, argument zero included; fails with InvalidArgumentEncoding if an argument is not UTF-8.
+index: stdlib
+keywords: command line arguments; program arguments; args; parameters; process arguments
+related: concept.argv task.read-arguments concept.errors
+
+== NOTES
+argv() is an ordinary call of a language primitive (no import): it returns
+a List[str] whose element 0 is the invocation name the launching process
+supplied (not necessarily a path to the executable), followed by the
+arguments. Every call of one run sees the same arguments.
+
+Each argument is validated as strict UTF-8 when argv() is called; one
+invalid argument fails the whole call with the builtin declared error
+InvalidArgumentEncoding (no partial List, no lossy decoding). So a call
+must handle it (`on InvalidArgumentEncoding:`), admit it in its
+function's errors clause, or let it reach top level, which is rejected as
+UNHANDLED-ERROR. The error carries no payload.
+
+Running under main.tcl, -argv TEXT appends one argument (the first one is
+argument zero), -argv-hex HEX one given as bytes, and -argv-none gives an
+empty vector; with none of them, argv() is ["botlish-runner"]. A native
+executable reads its real process arguments. It works on every backend.
+
+== EXAMPLES
+@example accept
+import list
+
+args = argv():
+    on InvalidArgumentEncoding:
+        []
+args.length() >= 1
+@value true
+@caption Handle the encoding error
+@end
+
+@topic stdlib.module.list
+title: -
+summary: Immutable List operations: length, indexed access (at, get), append, and the search helpers any?, all?, none? and find.
+index: stdlib
+keywords: list functions; array functions; sequence operations
+related: concept.lists task.list-element capability.map-filter
+
+== NOTES
+Three intrinsics (list::length, list::at, list::append) and the ordinary
+Botlish functions of lib/list.bot built on them. `import list` makes both
+callable, qualified (list::at(xs, 0)) or as methods (xs.at(0)). A List
+is immutable: append returns a new List and nothing changes one in place
+(a MutableVector is the growable mutable alternative).
+
+There is deliberately no map, filter, reduce, sum, reverse, sort, slice,
+concatenation of two Lists or index-of: a collecting loop
+(`loop x in xs: f(x)`, with `continue` to skip) is the transformation
+(capability.map-filter), and list::any?, all?, none? and find cover
+search.
+
+@topic stdlib.list::length
+title: -
+summary: The number of elements of a List, written xs.length() after `import list`.
+index: stdlib
+keywords: size; count; number of elements; how many; len
+related: concept.lists stdlib.list::at stdlib.str::length proof.list-bounds
+
+== NOTES
+Never fails and does not look at the elements. Its result is what the
+index proof relates indices to: a loop `loop i from 0 to xs.length():`
+or a guard on `xs.length()` makes xs.at(i) provably in range
+(proof.list-bounds).
+
+The method spelling resolves among the visible functions named length:
+with only `import str`, `xs.length()` means str::length and fails at run
+time on a List, so import list wherever Lists are measured.
+
+== EXAMPLES
+@example accept
+import list
+
+[[1, 2, 3].length(), [].length(), [[1, 2]].length()]
+@value [3, 0, 1]
+@end
+
+@topic stdlib.list::at
+title: -
+summary: The element of a List at index i (from 0), written xs.at(i); any other index fails with the declared error IndexNotFound.
+index: stdlib
+keywords: index; element at; get element; subscript; nth element; lookup
+related: proof.list-bounds task.list-element stdlib.list::get rule.unhandled-errors rule.known-error concept.lists
+
+== NOTES
+Valid indices are 0 to xs.length() - 1. Any other Int -- past the end,
+negative (there is no negative indexing: -1 is not "the last"), or huge
+-- completes with the builtin declared error IndexNotFound: an ordinary
+error a handler can catch, never a crash or a default. A non-List or
+non-Int argument is the TYPE error instead.
+
+Because IndexNotFound is declared, each call must handle it
+(`on IndexNotFound:`), admit it in its function's errors clause, or be
+proven unable to raise it; the compiler proves the common safe forms -- a
+counted loop over the List's own length, a dominating length guard, a
+literal List with a constant index (proof.list-bounds). A call proven to
+always fail (a literal index past a literal List) is rejected as
+KNOWN-ERROR even with a handler. When a fallback value is what you want,
+list::get(xs, i, default) is at with the error handled.
+
+== EXAMPLES
+@example accept
+import list
+
+fn third(xs: List[int]) -> int:
+    v = xs.at(2):
+        on IndexNotFound:
+            -1
+    v
+
+[[10, 20, 30].at(1), third([1, 2, 3]), third([1])]
+@value [20, 3, -1]
+@caption A proven index and a handled one
+@end
+
+@topic stdlib.list::append
+title: -
+summary: A new List of the elements of xs followed by one value, written xs.append(v); xs itself is unchanged.
+index: stdlib
+keywords: add element; push; append item; insert at end; extend
+related: concept.lists stdlib.list stdlib.module.mutable_vector stdlib.str::append_char
+
+== NOTES
+Lists are immutable values, so append builds a new List one element
+longer and every other holder of xs still sees the old one. It appends
+exactly one value: appending a List adds it as a single, nested element.
+There is no operation that joins two Lists; build the combined List with
+a collecting loop, or use a MutableVector (mutable_vector::push) when
+many elements are added one by one.
+
+== EXAMPLES
+@example accept
+import list
+
+xs = [1, 2]
+ys = xs.append(3)
+[xs, ys, xs.append([4])]
+@value [[1, 2], [1, 2, 3], [1, 2, [4]]]
+@end
+
+@topic stdlib.list::get
+title: -
+summary: The element at index i, or the given default when i designates no element: list::at with IndexNotFound handled; written xs.get(i, default).
+index: stdlib
+keywords: index with default; safe index; element or default; lookup with fallback
+related: stdlib.list::at task.list-element capability.null
+
+== NOTES
+An ordinary function of lib/list.bot: list::at(xs, index) with exactly
+its IndexNotFound handled by returning default. So a call needs no
+handler. The default is an ordinary argument, evaluated before the call
+whether or not it is used (there is no lazy default), and the result is
+never an optional or null value. Other failures of list::at -- a non-List
+or non-Int argument -- still fail. The result type joins the element type
+and the default's: list::get([1, 2], 5, 0) is an Int.
+
+== EXAMPLES
+@example accept
+import list
+
+xs = [10, 20, 30]
+[xs.get(1, 0), xs.get(7, 0), xs.get(-1, 0)]
+@value [20, 0, 0]
+@end
+
+@topic stdlib.list::any?
+title: -
+summary: Whether some element of a List satisfies the predicate, left to right, stopping at the first that does; false for the empty List.
+index: stdlib
+keywords: exists; some; contains matching; any element; search
+related: stdlib.list::all? stdlib.list::none? stdlib.list::find capability.map-filter capability.lambdas
+
+== NOTES
+The predicate is a function value of one argument returning a Bool --
+a named function, or a nested one declared just before the call, since
+there are no anonymous function expressions (capability.lambdas). It is
+called at most once per element, in order, and not at all after the
+first true.
+
+== EXAMPLES
+@example accept
+import list
+
+fn even?(n: int) -> bool:
+    n.mod(2) == 0
+
+[[1, 3, 4].any?(even?), [1, 3].any?(even?), [].any?(even?)]
+@value [true, false, false]
+@end
+
+@topic stdlib.list::all?
+title: -
+summary: Whether every element of a List satisfies the predicate, left to right, stopping at the first that does not; true for the empty List.
+index: stdlib
+keywords: every; for all; all elements; check each
+related: stdlib.list::any? stdlib.list::none? capability.map-filter
+
+== NOTES
+The predicate is a function value of one argument returning a Bool (see
+list::any?); it is called in order and not after the first false.
+
+== EXAMPLES
+@example accept
+import list
+
+fn positive?(n: int) -> bool:
+    n > 0
+
+[
+    [1, 2].all?(positive?),
+    [1, -2].all?(positive?),
+    [].all?(positive?)
+]
+@value [true, false, true]
+@end
+
+@topic stdlib.list::none?
+title: -
+summary: Whether no element of a List satisfies the predicate, left to right, stopping at the first that does; true for the empty List.
+index: stdlib
+keywords: no element; nothing matches; not any
+related: stdlib.list::any? stdlib.list::all? capability.map-filter
+
+== NOTES
+The predicate is a function value of one argument returning a Bool (see
+list::any?); it is called in order and not after the first true. It
+gives the same answers as `not xs.any?(predicate)`.
+
+== EXAMPLES
+@example accept
+import list
+
+fn negative?(n: int) -> bool:
+    n < 0
+
+[[1, 2].none?(negative?), [1, -2].none?(negative?)]
+@value [true, false]
+@end
+
+@topic stdlib.list::find
+title: -
+summary: The first element of a List that satisfies the predicate, written xs.find(p); no match fails with the declared error list::NotFound.
+index: stdlib
+keywords: search; first match; find element; locate; filter first
+related: stdlib.list::any? stdlib.list::NotFound capability.null concept.errors
+
+== NOTES
+Searches left to right and stops at the first match. When nothing
+matches (an empty List included) it fails with list::NotFound -- never a
+null, a sentinel or an optional value -- so a call handles it
+(`on list::NotFound:`, the error's module-qualified name), admits it in
+its function's errors clause, or is rejected as UNHANDLED-ERROR. There is
+no index-of: to find a position, loop over the indices.
+
+== EXAMPLES
+@example accept
+import list
+
+fn even?(n: int) -> bool:
+    n.mod(2) == 0
+
+fn first_even(xs: List[int]) -> int:
+    v = xs.find(even?):
+        on list::NotFound:
+            -1
+    v
+
+[first_even([3, 8, 6]), first_even([1, 5])]
+@value [8, -1]
+@end
+
+@topic stdlib.list::NotFound
+title: -
+summary: The declared error list::find fails with when no element satisfies its predicate; handled as `on list::NotFound:`.
+index: stdlib
+keywords: not found; no match; search failed
+related: stdlib.list::find concept.errors
+
+== NOTES
+A payload-free declared error of module list. Outside lib/list.bot it is
+spelled list::NotFound, in `on` handlers and errors clauses alike (an
+error's identity is module-qualified). It is not IndexNotFound, the
+builtin error of list::at.
+
+@topic stdlib.module.str
+title: -
+summary: String operations: length, slices, concatenation, appending a character, character access, UTF-8 bytes and lowercase.
+index: stdlib
+keywords: string functions; text functions; text operations
+related: concept.strings task.string-concatenation capability.string-formatting capability.int-to-string
+
+== NOTES
+Every member is an intrinsic; there is no lib/str.bot. `import str`
+makes them callable qualified (str::concat(a, b)) or as methods
+(a.concat(b)). Strings are immutable sequences of Unicode scalar values,
+and every length and index counts those -- never bytes, never grapheme
+clusters.
+
+What is not here: no uppercase, trim, split, join of a List, search,
+replace, comparison or ordering, number parsing and no Int-to-String
+conversion or formatting (capability.int-to-string,
+capability.string-formatting). Equality is == (stdlib.==).
+
+@topic stdlib.str::length
+title: -
+summary: The number of characters (Unicode scalar values) of a String, written s.length() after `import str`; not bytes.
+index: stdlib
+keywords: string length; size; count characters; number of characters; len
+related: concept.strings stdlib.str::char_at stdlib.str::substring stdlib.list::length proof.slices
+
+== NOTES
+Counts Unicode scalar values: "naïve" has 5 and "😀" 1, whatever their
+UTF-8 size (list::length(s.encode_utf8()) is the byte count). A character
+written as a letter plus a combining accent counts as two. Never fails.
+Its result bounds the indices of str::char_at and str::substring, and the
+compiler relates guards on it to those calls (proof.slices).
+
+== EXAMPLES
+@example accept
+import str
+
+word = "naïve"
+[word.length(), "".length(), "a😀b".length()]
+@value [5, 0, 3]
+@end
+
+@topic stdlib.str::substring
+title: -
+summary: The characters of a String from index start up to but not including end, written s.substring(start, end); an invalid slice fails with LowerUnderrun or UpperOverrun.
+index: stdlib
+keywords: slice; substring; part of string; cut; prefix; suffix
+related: proof.slices concept.strings stdlib.str::char_at stdlib.str::length rule.unhandled-errors
+
+== NOTES
+A half-open slice start..end over character indices, valid exactly when
+0 <= start <= end <= s.length(). Start is checked first, against
+0..length, then end against start..length: a bound below its interval
+fails with the builtin declared error LowerUnderrun, one above it with
+UpperOverrun. So an inverted slice (end < start) is LowerUnderrun, and
+"abc".substring(4, 1) is UpperOverrun for its start.
+
+Like every declared error they must be handled, admitted or proven
+impossible. The compiler proves slices from String lengths it knows: a
+literal, a str::concat of known lengths, and guards such as
+`if s.length() > 0:` (proof.slices). The result is a new plain String
+(a refinement of s is not carried over).
+
+== EXAMPLES
+@example accept
+import str
+
+fn initial(s: str) -> str:
+    if s.length() > 0:
+        return s.substring(0, 1)
+    ""
+
+["hello".substring(1, 3), initial("Botlish"), initial("")]
+@value ["el", "B", ""]
+@caption Proven slices need no handler
+@end
+
+@example accept
+import str
+
+fn cut(s: str, a: int, b: int) -> str:
+    t = s.substring(a, b):
+        on LowerUnderrun:
+            "below"
+        on UpperOverrun:
+            "above"
+    t
+
+["abc".cut(2, 1), "abc".cut(1, 9), "abc".cut(3, 3)]
+@value ["below", "above", ""]
+@caption Unproven slices handle both errors
+@end
+
+@topic stdlib.str::lowercase
+title: -
+summary: The String with every character mapped to lowercase by Unicode's simple one-to-one mapping, written s.lowercase().
+index: stdlib
+keywords: lower case; to lowercase; case conversion; downcase; case insensitive
+related: concept.strings stdlib.module.str
+
+== NOTES
+Uses the Unicode 16 simple (one-to-one) lowercase mapping on every
+backend: each character maps to exactly one character, so the length
+never changes. The full SpecialCasing rules are not applied ("İ" becomes
+"i", without a combining dot; a final sigma is "σ", not "ς"), and there is
+no locale. Characters without a lowercase form are unchanged. There is no
+uppercase or case-folding operation; to compare case-insensitively,
+compare the lowercased Strings.
+
+== EXAMPLES
+@example accept
+import str
+
+["Hello, World".lowercase(), "ÀB-Ⱥ".lowercase(), "ΑΣ".lowercase()]
+@value ["hello, world", "àb-ⱥ", "ασ"]
+@end
+
+@topic stdlib.str::concat
+title: -
+summary: The String A followed by the String B, written a.concat(b) after `import str`: a new String; neither argument changes.
+index: stdlib
+keywords: join strings; append text; combine strings; concatenate; build text
+related: task.string-concatenation concept.strings stdlib.str::append_char capability.string-formatting
+
+== NOTES
+The way to join text: + is for Ints only ("a" + "b" is the TYPE error).
+Both arguments must be Strings; to add a single character use
+str::append_char, and to put a number into text there is no standard
+conversion (capability.int-to-string). The length of the result is the
+sum of the lengths, which the slice proof knows (proof.slices). For many
+pieces, chain the calls: a.concat(b).concat(c).
+
+== EXAMPLES
+@example accept
+import str
+
+name = "world"
+["Hello, ".concat(name), "ab".concat("").concat("cd")]
+@value ["Hello, world", "abcd"]
+@end
+
+@topic stdlib.str::append_char
+title: -
+summary: The String followed by one UnicodeChar, written s.append_char(c): how a character becomes text, without a one-character String.
+index: stdlib
+keywords: add character; append char; push character; character to string; build text
+related: concept.strings stdlib.str::concat stdlib.str::char_at principle.characters-not-strings warning.one-char-string-literal
+
+== NOTES
+Returns a new String one character longer (str::length(s) + 1); s is
+unchanged. It is to a String what list::append is to a List. The second
+argument is a UnicodeChar -- a character literal such as '!' or '\n', or
+a str::char_at result -- never a String, so a character the code holds
+never has to become a one-character String first (the
+ONE-CHAR-STRING-LITERAL warning recommends exactly this). Total: every
+UnicodeChar, astral ones included, can be appended.
+
+== EXAMPLES
+@example accept
+import str
+
+line = "done".append_char('!').append_char('\n')
+[line, line.length()]
+@value ["done!\n", 6]
+@end
+
+@topic stdlib.str::encode_utf8
+title: -
+summary: The UTF-8 encoding of a String as a List of byte values (each a byte::Byte, 0..255), written s.encode_utf8().
+index: stdlib
+keywords: utf-8; utf8 bytes; encode; string to bytes; byte count
+related: concept.strings stdlib.module.byte stdlib.abi::bytes::from_list stdlib.str::char_at
+
+== NOTES
+The general byte-level view of a String: one Int per byte, in order. Its
+static type is List[byte::Byte], so it feeds abi::bytes::from_list (the
+bytes a write(2) or a C call takes) and ascii:: classification directly.
+Its length is the String's size in bytes, not its character count. There
+is no decoding operation back from bytes to a String. To classify
+characters, prefer str::char_at, which reads a character without building
+a List.
+
+== EXAMPLES
+@example accept
+import list
+import str
+
+["Aé".encode_utf8(), "€uro".encode_utf8().length(), "€uro".length()]
+@value [[65, 195, 169], 6, 4]
+@end
+
+@topic stdlib.str::char_at
+title: -
+summary: The character (UnicodeChar) at character index i of a String, written s.char_at(i); any other index fails with IndexNotFound.
+index: stdlib
+keywords: character at; char at; index string; nth character; get character
+related: proof.list-bounds concept.strings stdlib.char::scalar_value stdlib.str::append_char stdlib.str::length
+
+== NOTES
+Valid indices are 0 to s.length() - 1, in characters (the index space of
+length and substring); any other Int fails with the builtin declared
+error IndexNotFound, exactly like list::at, and the same proofs apply (a
+counted loop to s.length(), a dominating guard, a literal String). It
+never allocates: compare its result with character literals (c == ',')
+or measure it with char::scalar_value to scan a String without making a
+one-character String per position. There is no str::at.
+
+== EXAMPLES
+@example accept
+import char
+import list
+import str
+
+fn digit_count(s: str) -> int:
+    hits = loop i from 0 to s.length():
+        n = s.char_at(i).scalar_value()
+        if n < 48 or n > 57:
+            continue
+        n
+    hits.length()
+
+["héllo".char_at(1), digit_count("a1b22")]
+@value ['é', 3]
+@caption A counted loop needs no handler
+@end
+
+@topic stdlib.str::is_tcl_alpha
+title: -
+summary: Whether a one-character String is a letter (Unicode general category L*), exactly as Tcl 9's [:alpha:] decides; a temporary compatibility primitive.
+index: stdlib
+keywords: is letter; alphabetic; character class; unicode letter
+related: stdlib.str::is_tcl_alnum stdlib.module.ascii stdlib.web::emailish?
+
+== NOTES
+Exists so that lib/web.bot's emailish? can reproduce Tcl's character
+classes; "tcl" in the name says it is not Botlish's eventual
+character-classification API, so new code should not build on it. True
+for general categories Lu, Ll, Lt, Lm and Lo -- Unicode-aware, not
+ASCII-only. The argument must be a String of exactly one character;
+anything else (the empty String included) is the run-time RANGE error.
+It takes a String, not a UnicodeChar, so pass a one-character slice. For
+byte values, ascii::is_alphabetic is the structural ASCII test.
+
+== EXAMPLES
+@example accept
+import str
+
+text = "é7"
+[
+    str::is_tcl_alpha(text.substring(0, 1)),
+    str::is_tcl_alpha(text.substring(1, 2))
+]
+@value [true, false]
+@end
+
+@topic stdlib.str::is_tcl_alnum
+title: -
+summary: Whether a one-character String is a letter or a decimal digit (categories L* and Nd), exactly as Tcl 9's [:alnum:] decides; a temporary compatibility primitive.
+index: stdlib
+keywords: is alphanumeric; letter or digit; character class
+related: stdlib.str::is_tcl_alpha stdlib.ascii::is_alphanumeric
+
+== NOTES
+str::is_tcl_alpha plus general category Nd (decimal numbers, in any
+script); other numerals (Roman numerals, superscripts) are not included.
+Same contract as str::is_tcl_alpha: exactly one character or the run-time
+RANGE error, and a temporary compatibility primitive rather than a
+general API.
+
+== EXAMPLES
+@example accept
+import str
+
+text = "7-"
+[
+    str::is_tcl_alnum(text.substring(0, 1)),
+    str::is_tcl_alnum(text.substring(1, 2))
+]
+@value [true, false]
+@end
+
+@topic stdlib.module.char
+title: -
+summary: The UnicodeChar operation: char::scalar_value, a character's Unicode scalar value as an Int.
+index: stdlib
+keywords: character functions; char functions; unicode character
+related: concept.strings stdlib.str::char_at stdlib.str::append_char
+
+== NOTES
+`char` has no module file: its one member is an intrinsic. A UnicodeChar
+is written as a character literal ('a', '\n', '😀') and read from a
+String with str::char_at; it becomes text with str::append_char. There is
+no conversion from an Int to a UnicodeChar and no character
+classification beyond comparing scalar values (plus the byte-level
+ascii:: predicates and the temporary str::is_tcl_alpha/alnum).
+
+@topic stdlib.char::scalar_value
+title: -
+summary: The Unicode scalar value of a character as an Int (0..0x10FFFF, never a surrogate), written c.scalar_value() after `import char`.
+index: stdlib
+keywords: code point; character code; ord; unicode number; char to int
+related: stdlib.module.char stdlib.str::char_at concept.strings stdlib.byte::set
+
+== NOTES
+Total: every UnicodeChar has exactly one scalar value, and the result is
+known to lie in 0..1114111, which the range analysis uses. It is the
+number of the Unicode scalar, never a byte of an encoding or a UTF-16
+unit: 'é' is 233 and '😀' 128512. Its parameter is a UnicodeChar, checked
+when the call runs (char::scalar_value(65) is the TYPE error). There is no
+inverse: no operation makes a character from an Int.
+
+== EXAMPLES
+@example accept
+import char
+
+['A'.scalar_value(), 'é'.scalar_value(), '😀'.scalar_value()]
+@value [65, 233, 128512]
+@end
+
+@topic stdlib.module.mutable_array
+title: -
+summary: MutableArray[T]: a fixed-length mutable value with indexed reads and writes (at, set, swap), slice copies and List snapshots (freeze).
+index: stdlib
+keywords: array; fixed size array; mutable array; buffer; table
+related: concept.mutable-array concept.values stdlib.module.mutable_vector proof.list-bounds
+
+== NOTES
+A MutableArray is a value, not a reference: `b = a` makes an independent
+logical copy (copy-on-write underneath), so a mutation through a is
+never seen through b. Its length (capacity) is fixed when it is made.
+Mutations (set, swap, copy into it) change the array in place, so their
+receiver must be a place -- a local, parameter or context parameter, or a
+field path from one -- and a temporary receiver is MUTABLE-PLACE-RECEIVER.
+
+Make one with allocate (slots of unit), create (one value repeated),
+from_list or generate (a factory per slot). Read with at or
+mutable_array::get, write with set or swap, take snapshots with freeze,
+and visit the elements with `loop x in a:`. There is no equality or hash
+for arrays. An array of affine elements (coroutine handles, ...) is
+itself affine: elements move in and out only through set, swap and
+consuming loops, and at would copy one out (AFFINE-ELEMENT-COPY-OUT).
+
+@topic stdlib.mutable_array::allocate
+title: -
+summary: A new MutableArray of n slots, each holding unit, written mutable_array::allocate(n): the raw substrate (create(n, x) gives a typed one).
+index: stdlib
+keywords: new array; allocate array; array of size n; empty slots
+related: stdlib.mutable_array::create stdlib.module.mutable_array concept.mutable-array
+
+== NOTES
+Every slot holds unit until it is set. The capacity n must be 0..2^62-1;
+a negative or larger n is the run-time RANGE error. The compiler knows the
+capacity of an array made from a known n, so `a.at(i)` with i proven in
+0..n-1 needs no handler. Usually mutable_array::create(n, x) is what you
+want: its element type is x's, where allocate's starts as unit.
+
+== EXAMPLES
+@example accept
+import mutable_array
+
+a = mutable_array::allocate(3)
+[a.capacity(), a.at(0)]
+@value [3, unit]
+@end
+
+@topic stdlib.mutable_array::create
+title: -
+summary: A new MutableArray of n slots, each holding the value x, written mutable_array::create(n, x) (nomethod).
+index: stdlib
+keywords: new array; filled array; array of size n; initialize array; repeat value
+related: stdlib.mutable_array::generate stdlib.mutable_array::allocate concept.mutable-array concept.affine
+
+== NOTES
+x is repeated: every slot holds a logical copy of the one value, so x
+must be unrestricted -- an affine x (a coroutine handle, or a struct or
+List owning one) would end up with several owners and is rejected as
+AFFINE-DUPLICATION-UNSUPPORTED; use mutable_array::generate, which makes
+one value per slot. n must be 0..2^62-1 (otherwise the run-time RANGE
+error). Declared nomethod: its first argument is a length, not a
+receiver, so n.create(x) is NOMETHOD-CALL.
+
+== EXAMPLES
+@example accept
+import mutable_array
+
+a = mutable_array::create(3, 0)
+a.set(1, 7)
+a.freeze(3)
+@value [0, 7, 0]
+@end
+
+@topic stdlib.mutable_array::from_list
+title: -
+summary: A new MutableArray holding the elements of a List, in order, written mutable_array::from_list(xs).
+index: stdlib
+keywords: list to array; convert list; array from list
+related: stdlib.mutable_array::freeze stdlib.module.mutable_array concept.mutable-array
+
+== NOTES
+The capacity is the List's length, known to the compiler when the List's
+is. The List moves into the array (for affine elements the array becomes
+their owner); for ordinary values the List stays usable, being an
+immutable value. The way back is mutable_array::freeze.
+
+== EXAMPLES
+@example accept
+import mutable_array
+
+a = mutable_array::from_list([1, 2, 3])
+b = a
+a.set(0, 100)
+[a.freeze(3), b.freeze(3)]
+@value [[100, 2, 3], [1, 2, 3]]
+@caption b is an independent copy
+@end
+
+@topic stdlib.mutable_array::generate
+title: -
+summary: A new MutableArray of n slots whose slot i holds f(i), f called once per slot in index order; f's errors propagate.
+index: stdlib
+keywords: build array; array from function; tabulate; initialize with function; factory
+related: stdlib.mutable_array::create concept.mutable-array concept.affine proof.callable-contracts
+
+== NOTES
+f is a function value of one Int argument, a factory: it is called for
+0, 1, ..., n - 1, in order, and each result is owned by its slot, so it
+is the way to fill an array with affine values (create would duplicate
+one). The call can fail with whatever errors f can raise: the first
+failing call ends the construction, and for affine elements the ones
+already made are released. Handle or admit those errors as for a call of
+f. n must be 0..2^62-1.
+
+== EXAMPLES
+@example accept
+import mutable_array
+
+fn square(i: int) -> int:
+    i * i
+
+g = mutable_array::generate(4, square)
+g.freeze(4)
+@value [0, 1, 4, 9]
+@end
+
+@topic stdlib.mutable_array::capacity
+title: -
+summary: The number of slots of a MutableArray, written a.capacity(): fixed when the array is made.
+index: stdlib
+keywords: array length; size; count; number of slots; len
+related: stdlib.mutable_array::at proof.list-bounds stdlib.list::length
+
+== NOTES
+Never fails. It plays the role list::length plays for Lists: a counted
+loop `loop i from 0 to a.capacity():` proves a.at(i) and a.set(i, x) in
+range (proof.list-bounds). An array never grows; MutableVector is the
+growable one.
+
+== EXAMPLES
+@example accept
+import mutable_array
+
+fn fill(n: int) -> List[int]:
+    a = mutable_array::create(n, 0)
+    loop i from 0 to a.capacity():
+        a.set(i, i * 10)
+    a.freeze(a.capacity())
+
+fill(4)
+@value [0, 10, 20, 30]
+@caption Capacity-bounded indices are proven
+@end
+
+@topic stdlib.mutable_array::at
+title: -
+summary: The element of a MutableArray at index i, written a.at(i); any index outside 0..capacity-1 fails with IndexNotFound.
+index: stdlib
+keywords: array index; element at; read slot; subscript
+related: stdlib.list::at stdlib.mutable_array::set proof.list-bounds rule.unhandled-errors
+
+== NOTES
+The contract and the proofs are list::at's, against the capacity: a
+counted loop to a.capacity(), a dominating guard, or an array of known
+capacity with an index of known range needs no handler; otherwise handle
+or admit IndexNotFound, or use mutable_array::get with a default. For an
+array of affine elements, at would make a second owner and is rejected
+(AFFINE-ELEMENT-COPY-OUT): swap the element out instead.
+
+== EXAMPLES
+@example accept
+import mutable_array
+
+a = mutable_array::from_list([5, 6, 7])
+[a.at(0), a.at(2)]
+@value [5, 7]
+@end
+
+@topic stdlib.mutable_array::set
+title: -
+summary: Stores x in slot i of a MutableArray in place, written a.set(i, x); returns unit, and an index outside 0..capacity-1 fails with IndexNotFound and writes nothing.
+index: stdlib
+keywords: array write; store; assign slot; update element; put
+related: stdlib.mutable_array::at stdlib.mutable_array::swap proof.list-bounds concept.mutable-array
+
+== NOTES
+The receiver must be a place (a named local, parameter or field path):
+`mutable_array::from_list(xs).set(0, 1)` is MUTABLE-PLACE-RECEIVER,
+since the updated array would be lost. The array changes in place; other
+logical copies made earlier do not. x must fit the element type. Index
+proofs are those of mutable_array::at. For affine elements the displaced
+element is released.
+
+== EXAMPLES
+@example accept
+import mutable_array
+
+a = mutable_array::create(2, "")
+a.set(1, "hi")
+a.freeze(2)
+@value ["", "hi"]
+@end
+
+@topic stdlib.mutable_array::swap
+title: -
+summary: Stores x in slot i of a MutableArray and returns the element it replaced, written a.swap(i, x); a bad index fails with IndexNotFound and changes nothing.
+index: stdlib
+keywords: exchange; replace element; take out; move out of array
+related: stdlib.mutable_array::set stdlib.mutable_vector::swap concept.affine
+
+== NOTES
+Like set, but the old element comes back instead of being dropped: the
+way to move an element out of an array of affine values (the replacement
+moves in). The receiver must be a place.
+
+== EXAMPLES
+@example accept
+import mutable_array
+
+a = mutable_array::from_list([1, 2, 3])
+old = a.swap(0, 9)
+[old, a.freeze(3)]
+@value [1, [9, 2, 3]]
+@end
+
+@topic stdlib.mutable_array::copy
+title: -
+summary: Copies count elements of src from index ss into dst from index ds, written mutable_array::copy(dst, ds, src, ss, count); a bad slice fails with LowerUnderrun or UpperOverrun.
+index: stdlib
+keywords: copy elements; memmove; blit; array copy; move range
+related: proof.slices stdlib.mutable_array::freeze stdlib.str::substring
+
+== NOTES
+Memmove semantics: dst and src may be the same array with overlapping
+ranges, and the result is as if every source element were read before
+any write. Both ranges are half-open slices, checked like
+str::substring's: the destination ds..ds+count against dst's capacity
+first, then the source ss..ss+count; the first invalid one fails
+(LowerUnderrun for a bound below its interval, a negative count
+included; UpperOverrun above it) and nothing is copied. Returns unit; dst
+must be a place. Declared nomethod: the first argument is the
+destination, so dst.copy(...) would misread as copying dst.
+
+== EXAMPLES
+@example accept
+import mutable_array
+
+a = mutable_array::from_list([1, 2, 3, 4, 5])
+mutable_array::copy(a, 1, a, 0, 3)
+a.freeze(5)
+@value [1, 1, 2, 3, 5]
+@caption An overlapping copy within one array
+@end
+
+@topic stdlib.mutable_array::freeze
+title: -
+summary: An immutable List of the first n elements of a MutableArray, written a.freeze(n); n outside 0..capacity fails with LowerUnderrun or UpperOverrun.
+index: stdlib
+keywords: array to list; snapshot; convert to list; copy out
+related: proof.slices stdlib.mutable_array::from_list concept.lists
+
+== NOTES
+The slice 0..n of the array, copied into a new List: later mutations of
+the array do not affect it. A negative n is LowerUnderrun, one above the
+capacity UpperOverrun; a.freeze(a.capacity()) or a literal n within a
+known capacity is proven. For an array of affine elements, freeze would
+copy them out and is rejected (AFFINE-ELEMENT-COPY-OUT).
+
+== EXAMPLES
+@example accept
+import mutable_array
+
+a = mutable_array::from_list([4, 5, 6])
+[a.freeze(2), a.freeze(0), a.freeze(a.capacity())]
+@value [[4, 5], [], [4, 5, 6]]
+@end
+
+@topic stdlib.mutable_array::get
+title: -
+summary: The element at index i of a MutableArray, or the given default when i designates no slot: mutable_array::at with IndexNotFound handled; written a.get(i, default).
+index: stdlib
+keywords: index with default; safe index; element or default
+related: stdlib.mutable_array::at stdlib.list::get
+
+== NOTES
+An ordinary function of lib/mutable_array.bot, the array counterpart of
+list::get: no handler needed, the default evaluated before the call, and
+every other failure of at propagated. An array of affine elements cannot
+use it (its at copies the element out): swap the element out instead.
+
+== EXAMPLES
+@example accept
+import mutable_array
+
+a = mutable_array::from_list([1, 2, 3])
+[a.get(1, -1), a.get(7, -1)]
+@value [2, -1]
+@end
+
+@topic stdlib.module.mutable_vector
+title: -
+summary: MutableVector[T]: a growable mutable value with push, pop, take, swap, at, length and clear.
+index: stdlib
+keywords: vector; dynamic array; growable list; stack; mutable list; buffer
+related: concept.mutable-vector concept.values stdlib.module.mutable_array stdlib.module.list
+
+== NOTES
+All members are intrinsics (no module file): `import mutable_vector`.
+A MutableVector is a value, not a reference: `w = v` is an independent
+logical copy (copy-on-write underneath). Mutations (push, pop, take,
+swap, clear) change the vector in place, so their receiver must be a
+place -- a local, parameter or context parameter, or a field path from
+one (MUTABLE-PLACE-RECEIVER otherwise). Its element type is fixed by its
+type: pushing a value of another type is the TYPE error, and
+from_list([]) makes a MutableVector[never] nothing can be pushed into --
+make an empty one from a function whose declared result is
+MutableVector[T].
+
+Visit the elements with `loop x in v:` (which also turns it into a List).
+The indexed operations (at, pop, take, swap) declare IndexNotFound, and
+the compiler does not prove vector indices today: every call handles or
+admits it. There is no equality or hash for vectors.
+
+@topic stdlib.mutable_vector::from_list
+title: -
+summary: A new MutableVector holding the elements of a List, in order, written mutable_vector::from_list(xs).
+index: stdlib
+keywords: new vector; list to vector; create vector
+related: stdlib.module.mutable_vector stdlib.mutable_vector::push concept.mutable-vector
+
+== NOTES
+The element type is the List's: from_list([1, 2]) is a
+MutableVector[int]. An empty literal List gives a MutableVector[never],
+which accepts no push; for an empty vector of a type, return
+from_list([]) from a function declared `-> MutableVector[T]`. The List
+moves into the vector (it becomes the owner of affine elements).
+
+== EXAMPLES
+@example accept
+import mutable_vector
+
+fn no_ints() -> MutableVector[int]:
+    mutable_vector::from_list([])
+
+v = no_ints()
+v.push(1)
+w = mutable_vector::from_list([1, 2, 3])
+[v.length(), w.length()]
+@value [1, 3]
+@caption A typed empty vector
+@end
+
+@topic stdlib.mutable_vector::length
+title: -
+summary: The number of elements of a MutableVector, written v.length().
+index: stdlib
+keywords: vector size; count; number of elements; len
+related: stdlib.mutable_vector::empty? stdlib.list::length
+
+== NOTES
+Never fails. Unlike list::length it does not make v.at(i) provable: the
+compiler does not relate vector indices to the length today.
+
+== EXAMPLES
+@example accept
+import mutable_vector
+
+v = mutable_vector::from_list([1, 2])
+v.push(3)
+v.length()
+@value 3
+@end
+
+@topic stdlib.mutable_vector::empty?
+title: -
+summary: Whether a MutableVector has no elements, written v.empty?().
+index: stdlib
+keywords: is empty; no elements; vector empty
+related: stdlib.mutable_vector::length stdlib.mutable_vector::pop
+
+== NOTES
+The same as v.length() == 0; an observation that never fails.
+
+== EXAMPLES
+@example accept
+import mutable_vector
+
+v = mutable_vector::from_list([1])
+before = v.empty?()
+v.clear()
+[before, v.empty?()]
+@value [false, true]
+@end
+
+@topic stdlib.mutable_vector::at
+title: -
+summary: The element of a MutableVector at index i, written v.at(i); an index outside 0..length-1 fails with IndexNotFound.
+index: stdlib
+keywords: vector index; element at; read element
+related: stdlib.list::at stdlib.mutable_vector::take concept.mutable-vector rule.unhandled-errors
+
+== NOTES
+Every call must handle IndexNotFound or admit it: unlike list::at, a
+vector read is not proven in range, even inside
+`loop i from 0 to v.length():`. To visit every element, `loop x in v:`
+needs no index at all. For a vector of affine elements at would copy
+one out and is rejected (AFFINE-ELEMENT-COPY-OUT): use take, pop or swap.
+
+== EXAMPLES
+@example accept
+import mutable_vector
+
+fn second(v: MutableVector[int]) -> int:
+    x = v.at(1):
+        on IndexNotFound:
+            -1
+    x
+
+[
+    second(mutable_vector::from_list([4, 5])),
+    second(mutable_vector::from_list([4]))
+]
+@value [5, -1]
+@end
+
+@topic stdlib.mutable_vector::push
+title: -
+summary: Appends x to the end of a MutableVector in place, written v.push(x); returns unit.
+index: stdlib
+keywords: append; add element; push back; grow; insert at end
+related: stdlib.mutable_vector::pop stdlib.list::append concept.mutable-vector
+
+== NOTES
+Never fails. The receiver must be a place, and x must be admissible to
+the vector's element type (a value of another type is the compile-time
+TYPE error: elements are never widened or checked at run time). An
+affine x moves into the vector.
+
+== EXAMPLES
+@example accept
+import mutable_vector
+
+v = mutable_vector::from_list([1])
+v.push(2)
+v.push(3)
+loop x in v:
+    x
+@value [1, 2, 3]
+@end
+
+@topic stdlib.mutable_vector::pop
+title: -
+summary: Removes and returns the last element of a MutableVector, written v.pop(); an empty vector fails with IndexNotFound and is unchanged.
+index: stdlib
+keywords: remove last; pop back; stack pop; take last
+related: stdlib.mutable_vector::push stdlib.mutable_vector::take
+
+== NOTES
+The receiver must be a place. IndexNotFound is the empty case; it is
+never proven away by the compiler, so a pop handles or admits it (test
+v.empty?() first if that is clearer, but the handler is still needed).
+
+== EXAMPLES
+@example accept
+import mutable_vector
+
+fn last_or_zero(v: MutableVector[int]) -> int:
+    x = v.pop():
+        on IndexNotFound:
+            0
+    x
+
+[
+    last_or_zero(mutable_vector::from_list([1, 2])),
+    last_or_zero(mutable_vector::from_list([7]))
+]
+@value [2, 7]
+@end
+
+@topic stdlib.mutable_vector::take
+title: -
+summary: Removes and returns the element at index i of a MutableVector, later elements keeping their order, written v.take(i); a bad index fails with IndexNotFound.
+index: stdlib
+keywords: remove at; delete element; extract; remove index
+related: stdlib.mutable_vector::pop stdlib.mutable_vector::swap
+
+== NOTES
+The vector becomes one element shorter; nothing changes when the index
+is outside 0..length-1. The receiver must be a place. A way to move an
+affine element out.
+
+== EXAMPLES
+@example accept
+import list
+import mutable_vector
+
+fn demo() -> List[int] errors IndexNotFound:
+    v = mutable_vector::from_list([1, 2, 3])
+    mid = v.take(1)
+    rest = loop x in v:
+        x
+    rest.append(mid)
+
+demo():
+    on IndexNotFound:
+        []
+@value [1, 3, 2]
+@end
+
+@topic stdlib.mutable_vector::swap
+title: -
+summary: Stores x at index i of a MutableVector and returns the element it replaced, written v.swap(i, x); a bad index fails with IndexNotFound and changes nothing.
+index: stdlib
+keywords: exchange; replace element; update element; set element
+related: stdlib.mutable_array::swap stdlib.mutable_vector::take
+
+== NOTES
+The vector's write operation: there is no separate set, so to overwrite
+an element swap it and discard the old one. The receiver must be a place;
+an affine x moves in, the old element moves out (and an affine x is
+released if the index is bad).
+
+== EXAMPLES
+@example accept
+import mutable_vector
+
+fn demo() -> List[int] errors IndexNotFound:
+    v = mutable_vector::from_list([1, 2, 3])
+    old = v.swap(0, 10)
+    loop x in v:
+        x + old
+
+demo():
+    on IndexNotFound:
+        []
+@value [11, 3, 4]
+@end
+
+@topic stdlib.mutable_vector::clear
+title: -
+summary: Removes every element of a MutableVector in place, written v.clear(); returns unit.
+index: stdlib
+keywords: empty vector; remove all; reset; truncate
+related: stdlib.mutable_vector::empty? stdlib.mutable_vector::pop
+
+== NOTES
+Never fails; the receiver must be a place. Affine elements are released,
+first to last. Other logical copies of the vector keep their elements.
+
+== EXAMPLES
+@example accept
+import mutable_vector
+
+v = mutable_vector::from_list([1, 2])
+w = v
+v.clear()
+[v.length(), w.length()]
+@value [0, 2]
+@end
+
+@topic stdlib.module.immutable_set
+title: -
+summary: ImmutableSet[T]: a set fixed at construction, built from a List and queried for membership.
+index: stdlib
+keywords: set; membership; lookup table; distinct values
+related: concept.immutable-set stdlib.==
+
+== NOTES
+Two intrinsics and no module file: from_list and contains. A set has no
+order, no size, no iteration (`loop x in s:` is the TYPE error when it
+runs), no union or other set algebra and no way to add or remove a
+member. Sets compare with == as sets and hash consistently. Membership
+uses ==, so lookup is linear in the set's size today.
+
+@topic stdlib.immutable_set::from_list
+title: -
+summary: The ImmutableSet of the elements of a List, duplicates removed by ==, written immutable_set::from_list(xs).
+index: stdlib
+keywords: make set; list to set; deduplicate; unique values
+related: stdlib.immutable_set::contains concept.immutable-set stdlib.byte::set
+
+== NOTES
+Deduplicates with ==, so members need equality: two functions or arrays
+that must be compared fail with the EQUALITY error. Its type is
+ImmutableSet[T] for a List[T]. Built once and kept (for example as a
+module value), it can serve many contains calls.
+
+== EXAMPLES
+@example accept
+import immutable_set
+
+a = immutable_set::from_list([1, 2, 2])
+b = immutable_set::from_list([2, 1])
+a == b
+@value true
+@caption Order and duplicates do not matter
+@end
+
+@topic stdlib.immutable_set::contains
+title: -
+summary: Whether a value is a member of an ImmutableSet (by ==), written s.contains(v); total: an absent value or one of another kind is false.
+index: stdlib
+keywords: member; membership test; in set; includes; lookup
+related: stdlib.immutable_set::from_list stdlib.==
+
+== NOTES
+Never fails for a set: a value of a different kind than the members
+simply is not one. Equality is ==, so a member that is a function or an
+array makes the comparison the EQUALITY error.
+
+== EXAMPLES
+@example accept
+import immutable_set
+
+vowels = immutable_set::from_list(['a', 'e', 'i', 'o', 'u'])
+[vowels.contains('e'), vowels.contains('z'), vowels.contains(1)]
+@value [true, false, false]
+@end
+
+@topic stdlib.module.coroutine
+title: -
+summary: Observing coroutine handles: coroutine::done? (the coroutine binding, yield and resuming are syntax, not functions).
+index: stdlib
+keywords: coroutine functions; generator; resumable
+related: concept.coroutines concept.affine
+
+== NOTES
+The namespace has one public intrinsic, coroutine::done?, and no module
+file. A coroutine is made by the `coroutine {step, first} = f(args)`
+binding, suspends at `yield`, and is resumed by calling its handle
+(concept.coroutines); the operations behind them are internal
+coroutine#... natives no source can name.
+
+@topic stdlib.coroutine::done?
+title: -
+summary: Whether a coroutine has finished -- completed or failed -- written step.done?() after `import coroutine`; it does not consume the handle.
+index: stdlib
+keywords: finished; is complete; generator exhausted; has more
+related: concept.coroutines concept.affine stdlib.module.coroutine
+
+== NOTES
+True once the coroutine has returned or failed with an unhandled error;
+false while it is suspended at a yield. It only observes the handle: the
+handle stays usable afterwards (resuming a finished coroutine runs no
+code and returns its cached result again, or raises its cached error).
+It runs on every backend; natively, coroutines exist on Linux x86-64
+and AArch64.
+
+== EXAMPLES
+@example accept
+import coroutine
+
+fn countdown(n: int) -> int:
+    loop i from 0 to n:
+        yield i
+    n
+
+coroutine {step, first} = countdown(2)
+a = step.done?()
+second = step()
+third = step()
+[first, a, second, third, step.done?()]
+@value [0, false, 1, 2, true]
+@end
+
+@topic stdlib.module.byte_store
+title: -
+summary: The immutable byte storage behind abi::bytes::Bytes: build one from a List of bytes and measure it (a substrate: use abi::bytes).
+index: stdlib
+keywords: byte storage; raw bytes; byte buffer
+related: stdlib.module.abi::bytes stdlib.module.mutable_byte_store
+
+== NOTES
+Two intrinsics, no module file. A byte storage is a runtime value kind of
+its own: an immutable, finite sequence of bytes with an exact length, no
+terminator, compared and hashed by its bytes. No source type spells it
+(its static type is any); abi::bytes::Bytes is the opaque struct whose
+one field holds one, and only module abi::bytes can construct or open a
+Bytes. So programs use abi::bytes::from_list and abi::bytes::length;
+these intrinsics are what that module is written in. There is
+deliberately no operation that reads, slices or iterates the bytes.
+
+@topic stdlib.byte_store::from_list
+title: -
+summary: A new immutable byte storage holding exactly the given byte values, in order; every element must be an Int in 0..255.
+index: stdlib
+keywords: bytes from list; make bytes; byte buffer
+related: stdlib.abi::bytes::from_list stdlib.str::encode_utf8 stdlib.module.byte_store
+
+== NOTES
+The substrate of abi::bytes::from_list, which is what programs call (it
+takes a List[byte::Byte], so its elements are proven bytes). The
+conversion is eager: the storage owns its own copy and does not retain
+the List. Each element is stored exactly -- no `mod 256`, no signed
+reinterpretation -- and a 0 is an ordinary byte. An element that is not
+an Int in 0..255 is the TYPE error when the call runs ("element 1 must be
+a byte"). Context-free: usable in a module value.
+
+== EXAMPLES
+@example accept
+import byte_store
+import str
+
+s = byte_store::from_list("hi!".encode_utf8())
+s.byte_count()
+@value 3
+@end
+
+@topic stdlib.byte_store::byte_count
+title: -
+summary: The exact number of bytes of an immutable byte storage.
+index: stdlib
+keywords: byte length; size in bytes; count bytes
+related: stdlib.abi::bytes::length stdlib.module.byte_store
+
+== NOTES
+Never fails for a storage (another kind is the TYPE error). Programs ask
+abi::bytes::length(data), which returns the same count as an abi::Usize.
+
+== EXAMPLES
+@example accept
+import byte_store
+
+byte_store::from_list([]).byte_count()
+@value 0
+@end
+
+@topic stdlib.module.mutable_byte_store
+title: -
+summary: The writable byte storage behind abi::bytes::MutableBytes: fixed-length byte sequences whose updates return fresh storage (a substrate: use abi::bytes).
+index: stdlib
+keywords: mutable bytes; writable buffer; byte buffer
+related: stdlib.module.abi::bytes stdlib.module.byte_store
+
+== NOTES
+Seven intrinsics, no module file: the operations lib/abi/bytes.bot builds
+abi::bytes::MutableBytes from. A mutable byte storage is a value: no
+operation here ever changes a storage another value can observe --
+replace returns a new storage, and detach makes a physical copy for a
+foreign write. Its length is fixed. None of them is context-free, so a
+module value cannot hold one. Programs normally use abi::bytes::zeroed,
+from_bytes, mutable_length, replace, detach, freeze and freeze_prefix,
+whose errors are declared (IndexNotFound, UpperOverrun) where these
+intrinsics fail with run-time RANGE errors.
+
+@topic stdlib.mutable_byte_store::zeroed
+title: -
+summary: A new writable byte storage of n zero bytes.
+index: stdlib
+keywords: zero buffer; allocate bytes; new buffer
+related: stdlib.abi::bytes::zeroed stdlib.module.mutable_byte_store
+
+== NOTES
+Nothing is ever uninitialized: every byte is 0. n must be 0..2^62-1 (the
+run-time RANGE error otherwise); the Tcl backends also refuse more than
+2^30 bytes with RANGE. Programs call abi::bytes::zeroed(length), which
+takes an abi::Usize.
+
+== EXAMPLES
+@example accept
+import mutable_byte_store
+
+z = mutable_byte_store::zeroed(4)
+z.count()
+@value 4
+@end
+
+@topic stdlib.mutable_byte_store::from_storage
+title: -
+summary: A writable byte storage holding a copy of an immutable byte storage's bytes; changing it never changes the original.
+index: stdlib
+keywords: writable copy; thaw; bytes to mutable
+related: stdlib.abi::bytes::from_bytes stdlib.mutable_byte_store::freeze
+
+== NOTES
+The substrate of abi::bytes::from_bytes. The argument must be an
+immutable byte storage (another kind is the TYPE error).
+
+== EXAMPLES
+@example accept
+import byte_store
+import mutable_byte_store
+import str
+
+s = byte_store::from_list("hi".encode_utf8())
+mutable_byte_store::from_storage(s).count()
+@value 2
+@end
+
+@topic stdlib.mutable_byte_store::count
+title: -
+summary: The fixed number of bytes of a writable byte storage.
+index: stdlib
+keywords: byte length; size in bytes; count bytes
+related: stdlib.abi::bytes::mutable_length
+
+== NOTES
+Never fails for a writable storage. Programs ask
+abi::bytes::mutable_length(data).
+
+== EXAMPLES
+@example accept
+import mutable_byte_store
+
+mutable_byte_store::zeroed(3).count()
+@value 3
+@end
+
+@topic stdlib.mutable_byte_store::replace
+title: -
+summary: A new writable byte storage equal to m except that byte i is b, written m.replace(i, b); m itself is never written.
+index: stdlib
+keywords: set byte; write byte; update byte; poke
+related: stdlib.abi::bytes::replace stdlib.module.mutable_byte_store
+
+== NOTES
+An update returns a fresh storage (natively a copy, then the write), so
+every other holder of m keeps the old bytes. An index outside
+0..count-1 is the run-time RANGE error and a value outside 0..255 the
+TYPE error. abi::bytes::replace is the checked form programs use: its
+Byte parameter proves the value, and a bad index is its declared error
+IndexNotFound.
+
+== EXAMPLES
+@example accept
+import byte_store
+import mutable_byte_store
+import str
+
+s = byte_store::from_list("hi!".encode_utf8())
+m = mutable_byte_store::from_storage(s)
+m2 = m.replace(0, 72)
+[
+    m2.freeze() == byte_store::from_list("Hi!".encode_utf8()),
+    m.freeze() == s
+]
+@value [true, true]
+@caption The update is a new value
+@end
+
+@topic stdlib.mutable_byte_store::detach
+title: -
+summary: A writable byte storage equal to m with its own freshly allocated bytes: semantically m itself, physically a copy.
+index: stdlib
+keywords: copy buffer; detach; clone bytes
+related: stdlib.abi::bytes::detach stdlib.abi::x86_64::from_mutable_bytes
+
+== NOTES
+Copy-on-write's detach, taken every time: what a caller does before
+handing the storage to a foreign write (linux::read), because the
+writable address bridge writes through the storage it is given. As a
+value it is indistinguishable from m (== is true).
+
+== EXAMPLES
+@example accept
+import mutable_byte_store
+
+m = mutable_byte_store::zeroed(2)
+m.detach() == m
+@value true
+@end
+
+@topic stdlib.mutable_byte_store::freeze
+title: -
+summary: An immutable byte storage holding a copy of a writable storage's current bytes.
+index: stdlib
+keywords: snapshot; freeze bytes; mutable to immutable
+related: stdlib.abi::bytes::freeze stdlib.mutable_byte_store::freeze_prefix
+
+== NOTES
+The snapshot never changes afterwards, and m stays a valid, independent
+value. Programs call abi::bytes::freeze(data), which returns a Bytes.
+
+== EXAMPLES
+@example accept
+import byte_store
+import mutable_byte_store
+
+mutable_byte_store::zeroed(2).freeze().byte_count()
+@value 2
+@end
+
+@topic stdlib.mutable_byte_store::freeze_prefix
+title: -
+summary: An immutable byte storage holding a copy of the first n bytes of a writable storage, written m.freeze_prefix(n).
+index: stdlib
+keywords: prefix; first bytes; truncate snapshot
+related: stdlib.abi::bytes::freeze_prefix stdlib.mutable_byte_store::freeze
+
+== NOTES
+For the bytes a read(2) that returned n actually wrote. n outside
+0..count is the run-time RANGE error; abi::bytes::freeze_prefix checks
+the count first and fails with its declared UpperOverrun instead.
+
+== EXAMPLES
+@example accept
+import byte_store
+import mutable_byte_store
+
+z = mutable_byte_store::zeroed(4)
+z.freeze_prefix(1).byte_count()
+@value 1
+@end
+
+@topic stdlib.abi::x86_64::from_bytes
+title: -
+summary: The machine address of an abi::bytes::Bytes payload as an x86-64 register word, for a raw syscall; native backends only (interp and compile fail with NATIVE-ONLY).
+index: stdlib
+keywords: buffer address; pointer to bytes; raw address; syscall argument
+related: backend.native-only stdlib.linux::abi::x86_64::syscall stdlib.abi::x86_64::from_mutable_bytes stdlib.module.abi::bytes
+
+== NOTES
+Returns an abi::x86_64::Register64 holding the address of the first byte
+of the Bytes' storage (a valid one-past address for an empty one): the
+value a register argument of linux::abi::x86_64::syscall carries. The
+argument must statically be an abi::bytes::Bytes, and the bridge is only
+ever called: binding it as a function value is a TYPE error ("can only be
+called directly"). The native lowering keeps the storage alive until the
+syscall that consumes the address has returned. The address is read-only
+for the kernel: a buffer it writes needs from_mutable_bytes.
+
+A machine address exists only on the native backends (cranelift,
+cranelift-generic, executables) on Linux x86-64; the Tcl backends refuse
+the call when it runs (NATIVE-ONLY) and imitate nothing. It is not a
+direct operation by itself -- the syscall that uses the address is.
+Ordinary programs never need it: linux::write and io::print_line call it
+for them.
+
+@topic stdlib.abi::x86_64::from_mutable_bytes
+title: -
+summary: The machine address of an abi::bytes::MutableBytes payload as an x86-64 register word, for a syscall that writes the buffer; native backends only (NATIVE-ONLY elsewhere).
+index: stdlib
+keywords: writable buffer address; raw address; read buffer
+related: backend.native-only stdlib.abi::x86_64::from_bytes stdlib.mutable_byte_store::detach
+
+== NOTES
+The writable twin of abi::x86_64::from_bytes: the same contract, but the
+argument must statically be an abi::bytes::MutableBytes and the kernel
+may write through the address. It does not copy: it hands out the
+address of the storage it is given, so the caller must pass storage no
+other value observes -- linux::read does, by detaching a private copy
+first (abi::bytes::detach) and returning that copy as the result's data.
+That is the raw layer's sharp edge; use linux::read or linux::io instead.
+
+@topic stdlib.abi::aarch64::from_bytes
+title: -
+summary: The machine address of an abi::bytes::Bytes payload as an AArch64 register word, for a raw syscall; native backends only (NATIVE-ONLY elsewhere).
+index: stdlib
+keywords: buffer address; raw address; syscall argument; arm64
+related: backend.native-only stdlib.abi::x86_64::from_bytes stdlib.linux::abi::aarch64::syscall
+
+== NOTES
+abi::x86_64::from_bytes's AArch64 row: the same contract, returning an
+abi::aarch64::Register64 for linux::abi::aarch64::syscall's registers.
+One architecture's register word never reaches the other's transport.
+Runs only on the native backends on Linux AArch64.
+
+@topic stdlib.abi::aarch64::from_mutable_bytes
+title: -
+summary: The machine address of an abi::bytes::MutableBytes payload as an AArch64 register word, for a syscall that writes the buffer; native backends only.
+index: stdlib
+keywords: writable buffer address; raw address; arm64
+related: backend.native-only stdlib.abi::x86_64::from_mutable_bytes stdlib.abi::aarch64::from_bytes
+
+== NOTES
+abi::x86_64::from_mutable_bytes's AArch64 row: the writable bridge, with
+the same no-copy sharp edge, returning an abi::aarch64::Register64. Runs
+only on the native backends on Linux AArch64.
+
+@topic stdlib.module.linux::abi::x86_64
+title: -
+summary: The raw Linux x86-64 syscall transport, linux::abi::x86_64::syscall: native backends only, and a direct namespace (raw authority).
+index: stdlib
+keywords: syscall; system call; kernel; x86-64
+related: concept.direct-modules backend.native-only stdlib.module.linux
+
+== NOTES
+An intrinsic namespace declared direct (DIRECT-MODULES.md): a module that
+calls into it must itself be a `direct module` or mediate the call
+through a context it declares. lib/linux/sys.x86_64.bot and lib/linux.bot
+wrap it; programs use linux::write, linux::read, linux::io or io.
+
+@topic stdlib.module.linux::abi::aarch64
+title: -
+summary: The raw Linux AArch64 syscall transport (svc #0), linux::abi::aarch64::syscall: native backends only, and a direct namespace (raw authority).
+index: stdlib
+keywords: syscall; system call; kernel; arm64; aarch64
+related: concept.direct-modules backend.native-only stdlib.module.linux
+
+== NOTES
+The AArch64 row of the transport table; see
+stdlib.module.linux::abi::x86_64. lib/linux/sys.aarch64.bot wraps it on
+an AArch64 target.
+
+@topic stdlib.linux::abi::x86_64::syscall
+title: -
+summary: One raw Linux x86-64 kernel transition: the registers {rax, rdi, rsi, rdx, r10, r8, r9} in, the raw rax back; native backends only.
+index: stdlib
+keywords: syscall; system call; kernel call; raw syscall; x86-64
+related: backend.native-only concept.direct-modules stdlib.module.linux stdlib.abi::x86_64::from_bytes
+
+== NOTES
+The argument is an anonymous struct whose fields are named after the
+x86-64 Linux syscall registers and hold abi::x86_64::Register64 values:
+rax (the syscall number, required) and rdi, rsi, rdx, r10, r8, r9
+(arguments 1-6; an omitted one is zero). Another field is UNKNOWN-FIELD,
+a missing rax MISSING-FIELD, and a field of another type (an AArch64
+register included) the TYPE error. It executes `syscall` and returns rax
+as a Register64: the kernel's raw result, with no errno decoding, no -1
+convention, no retry. Read it with abi::x86_64::to_int (a negative value
+is -errno).
+
+The transport knows the register convention and nothing about any
+syscall: numbers and meanings are source data (lib/linux/sys.x86_64.bot).
+It is never context-free, folded, merged, reordered or removed.
+
+Native backends only (cranelift, cranelift-generic, executables), and
+only on an x86-64 host (elsewhere NATIVE UNSUPPORTED); interp and compile
+refuse the call when it runs with NATIVE-ONLY. The namespace is direct:
+the calling module must be a `direct module` or mediate the call through
+a context of its own. Ordinary programs use linux::write, linux::read,
+linux::io or io instead.
+
+@topic stdlib.linux::abi::aarch64::syscall
+title: -
+summary: One raw Linux AArch64 kernel transition (svc #0): the registers {x8, x0, ..., x5} in, the raw x0 back; native backends only.
+index: stdlib
+keywords: syscall; system call; kernel call; raw syscall; arm64; aarch64
+related: backend.native-only stdlib.linux::abi::x86_64::syscall stdlib.module.linux
+
+== NOTES
+Exactly the x86-64 transport's contract on AArch64: x8 the syscall number
+(required), x0..x5 arguments 1-6 (omitted ones zero), every field an
+abi::aarch64::Register64, the result the raw x0. It runs only on the
+native backends on an AArch64 host; interp and compile refuse it with
+NATIVE-ONLY. lib/linux/sys.aarch64.bot holds the AArch64 syscall numbers.
+
+@topic stdlib.module.binary
+title: -
+summary: Fixed binary layouts: parse bytes into a LayoutStruct (binary::parse), emit one back (binary::emit), and the layout's size and alignment.
+index: stdlib
+keywords: binary format; struct packing; serialize; deserialize; byte layout; parse bytes
+related: concept.binary-layouts stdlib.module.abi::bytes
+
+== NOTES
+`import binary` for the four intrinsics and the scalar field types
+binary::U8 ... binary::I64. A `layout` declaration names a fixed number of
+bytes with explicit size, alignment and field offsets; every multi-byte
+field is little-endian (the target's order), and padding is never a
+field. The layout is static: it is named at a parse or a query and read
+from the value's type at an emit, never a runtime value. There are no
+arrays, unions, bitfields, variable-length tails, floats or pointers in a
+layout.
+
+@topic stdlib.binary::parse
+title: -
+summary: The LayoutStruct[L] imprinted from bytes of exactly layout L's size, written binary::parse(L, data); any other length fails with LayoutLengthMismatch.
+index: stdlib
+keywords: parse bytes; decode; read struct; deserialize; unpack
+related: concept.binary-layouts stdlib.binary::emit stdlib.abi::bytes::from_list rule.unhandled-errors
+
+== NOTES
+L is a layout name written at the call (qualified for another module's
+layout), never a value; data must statically be an abi::bytes::Bytes.
+Each field is read at its offset in its encoding (nested layouts
+recursively); padding bytes are ignored. The result holds the fields only
+-- no view of or reference to the input.
+
+Fewer or more bytes than L's size is the builtin declared error
+LayoutLengthMismatch, and the compiler does not prove it away from the
+Bytes' length today: every call handles or admits it. There is no prefix
+parse and no cursor. Declared nomethod: the layout comes first and is no
+receiver (Header.parse(d) is rejected).
+
+== EXAMPLES
+@example accept
+import abi::bytes
+import binary
+import str
+
+layout Pair:
+    size 2
+    align 1
+    field a: binary::U8 at 0
+    field b: binary::U8 at 1
+
+fn second(data: abi::bytes::Bytes) -> int:
+    p = binary::parse(Pair, data):
+        on LayoutLengthMismatch:
+            return -1
+    p.b
+
+[
+    second(abi::bytes::from_list("AB".encode_utf8())),
+    second(abi::bytes::from_list("ABC".encode_utf8()))
+]
+@value [66, -1]
+@end
+
+@topic stdlib.binary::emit
+title: -
+summary: The bytes of a LayoutStruct[L] value laid out by L, written v.emit(): an abi::bytes::Bytes of L's size, padding zero; never fails.
+index: stdlib
+keywords: serialize; encode; write struct; pack; to bytes
+related: concept.binary-layouts stdlib.binary::parse
+
+== NOTES
+L is read from the value's static type, which must be LayoutStruct[L]
+(an untyped value or an ordinary struct is BINARY-OPERAND). Every field
+is written at its offset in its encoding, little-endian, and padding is
+written as zero bytes, so equal values emit equal bytes. It cannot fail:
+a field's value is in its domain by its type. parse of emit's result
+gives the value back. A LayoutStruct is built from its fields with
+`LayoutStruct[L] {field: value, ...}`. It is never a function value.
+
+== EXAMPLES
+@example accept
+import abi::bytes
+import binary
+import str
+
+layout Pair:
+    size 3
+    align 1
+    field a: binary::U16 at 0
+    field b: binary::U8 at 2
+
+p = LayoutStruct[Pair] {a: 16706, b: 67}
+p.emit() == abi::bytes::from_list("BAC".encode_utf8())
+@value true
+@caption 16706 is 0x4142, little-endian
+@end
+
+@topic stdlib.binary::layout_length
+title: -
+summary: The size in bytes of layout L, written binary::layout_length(L): a compile-time constant.
+index: stdlib
+keywords: sizeof; layout size; byte size
+related: concept.binary-layouts stdlib.binary::layout_alignment
+
+== NOTES
+L is a layout name; resolution replaces the call by the number, so it is
+usable wherever a proven Int is. Declared nomethod.
+
+== EXAMPLES
+@example accept
+import binary
+
+layout Header:
+    size 8
+    align 4
+    field magic: binary::U32 at 0
+    field count: binary::I16 at 4
+
+[binary::layout_length(Header), binary::layout_alignment(Header)]
+@value [8, 4]
+@end
+
+@topic stdlib.binary::layout_alignment
+title: -
+summary: The alignment in bytes of layout L, written binary::layout_alignment(L): a compile-time constant.
+index: stdlib
+keywords: alignof; alignment; layout alignment
+related: concept.binary-layouts stdlib.binary::layout_length
+
+== NOTES
+The `align` the layout declares, folded to a constant at resolution.
+Declared nomethod.
+
+== EXAMPLES
+@example accept
+import binary
+
+layout Word:
+    size 4
+    align 4
+    field value: binary::U32 at 0
+
+binary::layout_alignment(Word)
+@value 4
+@end
+
+@topic stdlib.module.ffi::c
+title: -
+summary: The C ABI value universe: target-sized C integer types, and affine C pointers with null, null?, clone, erase and retype.
+index: stdlib
+keywords: c types; c pointers; ffi; foreign function interface; c abi
+related: concept.c-ffi concept.affine
+
+== NOTES
+`import ffi::c` declares the C integer scalars (ffi::c::Char ...
+ffi::c::ULongLong: integer domains with the compilation target's C
+ranges), ffi::c::Void, ffi::c::Ptr[T] and ffi::c::FnPtr[Fn{...}]. A
+pointer is affine (binding, passing or storing it moves it), owns
+nothing, is never dereferenced, and has no arithmetic, ordering,
+equality or conversion to or from an Int. Calling C itself is
+`extern c fn` (concept.c-ffi), which runs only on the native backends.
+
+@topic stdlib.ffi::c::null
+title: -
+summary: The null C pointer of pointee T, written ffi::c::null[T]() with the type given explicitly.
+index: stdlib
+keywords: null pointer; nullptr; empty pointer
+related: stdlib.ffi::c::null? concept.c-ffi capability.null
+
+== NOTES
+T must be imprinted explicitly: ffi::c::null() without [T] is the IMPRINT
+error, since nothing else establishes T. T is the pointee: ffi::c::Void,
+a C integer scalar, an opaque struct or a pointer type. The result is
+always a data pointer, Ptr[T]: null[ffi::c::FnPtr[Fn{...}]]() is a
+pointer to a function pointer (a callback variable's address), not a
+null function pointer, and no operation makes a null FnPtr today. Runs on
+every backend. The result is affine, so it cannot itself be a program's
+final value.
+
+== EXAMPLES
+@example accept
+import ffi::c
+
+p = ffi::c::null[ffi::c::Int]()
+p.null?()
+@value true
+@end
+
+@topic stdlib.ffi::c::null?
+title: -
+summary: Whether a C pointer (data or function pointer) is null, written p.null?(); it observes the pointer without moving it.
+index: stdlib
+keywords: is null; null check; nullptr test
+related: stdlib.ffi::c::null stdlib.ffi::c::clone
+
+== NOTES
+The one question a pointer answers in Botlish: there is no comparison of
+two pointers and no address as an Int. It accepts a data pointer
+(ffi::c::Ptr[T]) or a function pointer (ffi::c::FnPtr[...]), and the
+pointer stays usable after the call.
+
+== EXAMPLES
+@example accept
+import ffi::c
+
+p = ffi::c::null[ffi::c::Void]()
+[p.null?(), p.null?()]
+@value [true, true]
+@caption Observing does not move the pointer
+@end
+
+@topic stdlib.ffi::c::clone
+title: -
+summary: A second alias of a C pointer (the same address, the same type), written p.clone(): the one way to have two pointers.
+index: stdlib
+keywords: copy pointer; alias pointer; duplicate pointer
+related: stdlib.ffi::c::erase concept.affine
+
+== NOTES
+Pointers are affine, so `q = p` moves p (using p afterwards is
+USE-AFTER-MOVE). clone observes p and returns another pointer to the same
+address: no pointee copy, no reference count, no ownership -- C's own
+rules decide what the aliases may do.
+
+== EXAMPLES
+@example accept
+import ffi::c
+
+p = ffi::c::null[ffi::c::Int]()
+q = p.clone()
+[p.null?(), q.null?()]
+@value [true, true]
+@end
+
+@topic stdlib.ffi::c::erase
+title: -
+summary: The same address as a Ptr[ffi::c::Void] (C's void *), written p.erase(): the pointer moves into the call.
+index: stdlib
+keywords: void pointer; cast to void; erase type
+related: stdlib.ffi::c::retype stdlib.ffi::c::clone
+
+== NOTES
+Converts a data pointer ffi::c::Ptr[T] to ffi::c::Ptr[ffi::c::Void]. A
+function pointer is rejected (IMPRINT: "data and function pointers are
+distinct, and nothing converts one into the other"). The argument is moved
+(clone first to keep it). There is no implicit conversion between pointer
+types: erase and retype are the explicit ones.
+
+== EXAMPLES
+@example accept
+import ffi::c
+
+p = ffi::c::null[ffi::c::Int]()
+v = p.erase()
+v.null?()
+@value true
+@end
+
+@topic stdlib.ffi::c::retype
+title: -
+summary: The same address of a Ptr[ffi::c::Void] as a Ptr[T], written ffi::c::retype[T](p): the pointer moves, and nothing about the pointee is proven.
+index: stdlib
+keywords: cast pointer; pointer conversion; from void pointer
+related: stdlib.ffi::c::erase concept.c-ffi
+
+== NOTES
+The inverse of erase. Its argument must be a Ptr[ffi::c::Void]: a
+pointer of another pointee is the TYPE error ("a pointer's pointee
+identity is never converted implicitly"), so a conversion between two
+pointee types goes through erase. T is imprinted explicitly. The call
+claims, without proof, that the address holds a T: that is the caller's
+C-level responsibility.
+
+== EXAMPLES
+@example accept
+import ffi::c
+
+v = ffi::c::null[ffi::c::Void]()
+b = ffi::c::retype[ffi::c::UChar](v)
+b.null?()
+@value true
+@end
+
+@topic stdlib.abi::I8Value
+title: -
+summary: The Int domain -128..127, the values an abi::I8 holds: an integer domain, so its values are ordinary Ints proven in range.
+index: stdlib
+keywords: i8 range; signed 8-bit range; integer domain
+related: stdlib.abi::I8 concept.integer-domains
+
+@topic stdlib.abi::I8
+title: -
+summary: A signed 8-bit ABI integer: a struct whose one field `value` is an Int proven in -128..127; made by abi::i8(n).
+index: stdlib
+keywords: i8; signed 8-bit integer; fixed width integer; foreign integer
+related: stdlib.abi::i8 stdlib.module.abi concept.integer-domains
+
+@topic stdlib.abi::i8
+title: -
+summary: The abi::I8 representing exactly the Int n, or the declared error abi::AbiIntegerBelowRange or abi::AbiIntegerAboveRange outside -128..127; never truncates.
+index: stdlib
+keywords: to i8; convert to signed 8-bit; checked conversion; narrow integer
+related: stdlib.abi::I8 stdlib.abi::AbiIntegerBelowRange stdlib.module.abi rule.unhandled-errors
+
+@topic stdlib.abi::I16Value
+title: -
+summary: The Int domain -32768..32767, the values an abi::I16 holds: an integer domain, so its values are ordinary Ints proven in range.
+index: stdlib
+keywords: i16 range; signed 16-bit range; integer domain
+related: stdlib.abi::I16 concept.integer-domains
+
+@topic stdlib.abi::I16
+title: -
+summary: A signed 16-bit ABI integer: a struct whose one field `value` is an Int proven in -32768..32767; made by abi::i16(n).
+index: stdlib
+keywords: i16; signed 16-bit integer; fixed width integer; foreign integer
+related: stdlib.abi::i16 stdlib.module.abi concept.integer-domains
+
+@topic stdlib.abi::i16
+title: -
+summary: The abi::I16 representing exactly the Int n, or the declared error abi::AbiIntegerBelowRange or abi::AbiIntegerAboveRange outside -32768..32767; never truncates.
+index: stdlib
+keywords: to i16; convert to signed 16-bit; checked conversion; narrow integer
+related: stdlib.abi::I16 stdlib.abi::AbiIntegerBelowRange stdlib.module.abi rule.unhandled-errors
+
+@topic stdlib.abi::I32Value
+title: -
+summary: The Int domain -2147483648..2147483647, the values an abi::I32 holds: an integer domain, so its values are ordinary Ints proven in range.
+index: stdlib
+keywords: i32 range; signed 32-bit range; integer domain
+related: stdlib.abi::I32 concept.integer-domains
+
+@topic stdlib.abi::I32
+title: -
+summary: A signed 32-bit ABI integer: a struct whose one field `value` is an Int proven in -2147483648..2147483647; made by abi::i32(n).
+index: stdlib
+keywords: i32; signed 32-bit integer; fixed width integer; foreign integer
+related: stdlib.abi::i32 stdlib.module.abi concept.integer-domains
+
+@topic stdlib.abi::i32
+title: -
+summary: The abi::I32 representing exactly the Int n, or the declared error abi::AbiIntegerBelowRange or abi::AbiIntegerAboveRange outside -2147483648..2147483647; never truncates.
+index: stdlib
+keywords: to i32; convert to signed 32-bit; checked conversion; narrow integer
+related: stdlib.abi::I32 stdlib.abi::AbiIntegerBelowRange stdlib.module.abi rule.unhandled-errors
+
+@topic stdlib.abi::I64Value
+title: -
+summary: The Int domain -2^63..2^63-1, the values an abi::I64 holds: an integer domain, so its values are ordinary Ints proven in range.
+index: stdlib
+keywords: i64 range; signed 64-bit range; integer domain
+related: stdlib.abi::I64 concept.integer-domains
+
+@topic stdlib.abi::I64
+title: -
+summary: A signed 64-bit ABI integer: a struct whose one field `value` is an Int proven in -2^63..2^63-1; made by abi::i64(n).
+index: stdlib
+keywords: i64; signed 64-bit integer; fixed width integer; foreign integer
+related: stdlib.abi::i64 stdlib.module.abi concept.integer-domains
+
+@topic stdlib.abi::i64
+title: -
+summary: The abi::I64 representing exactly the Int n, or the declared error abi::AbiIntegerBelowRange or abi::AbiIntegerAboveRange outside -2^63..2^63-1; never truncates.
+index: stdlib
+keywords: to i64; convert to signed 64-bit; checked conversion; narrow integer
+related: stdlib.abi::I64 stdlib.abi::AbiIntegerBelowRange stdlib.module.abi rule.unhandled-errors
+
+@topic stdlib.abi::U8Value
+title: -
+summary: The Int domain 0..255, the values an abi::U8 holds: an integer domain, so its values are ordinary Ints proven in range.
+index: stdlib
+keywords: u8 range; unsigned 8-bit range; integer domain
+related: stdlib.abi::U8 concept.integer-domains
+
+@topic stdlib.abi::U8
+title: -
+summary: A unsigned 8-bit ABI integer: a struct whose one field `value` is an Int proven in 0..255; made by abi::u8(n).
+index: stdlib
+keywords: u8; unsigned 8-bit integer; fixed width integer; foreign integer
+related: stdlib.abi::u8 stdlib.module.abi concept.integer-domains
+
+@topic stdlib.abi::u8
+title: -
+summary: The abi::U8 representing exactly the Int n, or the declared error abi::AbiIntegerBelowRange or abi::AbiIntegerAboveRange outside 0..255; never truncates.
+index: stdlib
+keywords: to u8; convert to unsigned 8-bit; checked conversion; narrow integer
+related: stdlib.abi::U8 stdlib.abi::AbiIntegerBelowRange stdlib.module.abi rule.unhandled-errors
+
+== NOTES
+Every creator of the family has this shape. A provably in-range argument
+(abi::u8(42)) needs no handler and a provably out-of-range constant
+(abi::u8(256)) is KNOWN-ERROR; any other Int must handle or admit both
+errors. x.value is the Int back, exactly.
+
+== EXAMPLES
+@example accept
+import abi
+
+fn to_u8(n: int) -> int:
+    x = abi::u8(n):
+        on abi::AbiIntegerBelowRange:
+            return -1
+        on abi::AbiIntegerAboveRange:
+            return 256
+    x.value
+
+[abi::u8(42).value, to_u8(300), to_u8(-5)]
+@value [42, 256, -1]
+@end
+
+@topic stdlib.abi::U16Value
+title: -
+summary: The Int domain 0..65535, the values an abi::U16 holds: an integer domain, so its values are ordinary Ints proven in range.
+index: stdlib
+keywords: u16 range; unsigned 16-bit range; integer domain
+related: stdlib.abi::U16 concept.integer-domains
+
+@topic stdlib.abi::U16
+title: -
+summary: A unsigned 16-bit ABI integer: a struct whose one field `value` is an Int proven in 0..65535; made by abi::u16(n).
+index: stdlib
+keywords: u16; unsigned 16-bit integer; fixed width integer; foreign integer
+related: stdlib.abi::u16 stdlib.module.abi concept.integer-domains
+
+@topic stdlib.abi::u16
+title: -
+summary: The abi::U16 representing exactly the Int n, or the declared error abi::AbiIntegerBelowRange or abi::AbiIntegerAboveRange outside 0..65535; never truncates.
+index: stdlib
+keywords: to u16; convert to unsigned 16-bit; checked conversion; narrow integer
+related: stdlib.abi::U16 stdlib.abi::AbiIntegerBelowRange stdlib.module.abi rule.unhandled-errors
+
+@topic stdlib.abi::U32Value
+title: -
+summary: The Int domain 0..4294967295, the values an abi::U32 holds: an integer domain, so its values are ordinary Ints proven in range.
+index: stdlib
+keywords: u32 range; unsigned 32-bit range; integer domain
+related: stdlib.abi::U32 concept.integer-domains
+
+@topic stdlib.abi::U32
+title: -
+summary: A unsigned 32-bit ABI integer: a struct whose one field `value` is an Int proven in 0..4294967295; made by abi::u32(n).
+index: stdlib
+keywords: u32; unsigned 32-bit integer; fixed width integer; foreign integer
+related: stdlib.abi::u32 stdlib.module.abi concept.integer-domains
+
+@topic stdlib.abi::u32
+title: -
+summary: The abi::U32 representing exactly the Int n, or the declared error abi::AbiIntegerBelowRange or abi::AbiIntegerAboveRange outside 0..4294967295; never truncates.
+index: stdlib
+keywords: to u32; convert to unsigned 32-bit; checked conversion; narrow integer
+related: stdlib.abi::U32 stdlib.abi::AbiIntegerBelowRange stdlib.module.abi rule.unhandled-errors
+
+@topic stdlib.abi::U64Value
+title: -
+summary: The Int domain 0..2^64-1, the values an abi::U64 holds: an integer domain, so its values are ordinary Ints proven in range.
+index: stdlib
+keywords: u64 range; unsigned 64-bit range; integer domain
+related: stdlib.abi::U64 concept.integer-domains
+
+@topic stdlib.abi::U64
+title: -
+summary: A unsigned 64-bit ABI integer: a struct whose one field `value` is an Int proven in 0..2^64-1; made by abi::u64(n).
+index: stdlib
+keywords: u64; unsigned 64-bit integer; fixed width integer; foreign integer
+related: stdlib.abi::u64 stdlib.module.abi concept.integer-domains
+
+@topic stdlib.abi::u64
+title: -
+summary: The abi::U64 representing exactly the Int n, or the declared error abi::AbiIntegerBelowRange or abi::AbiIntegerAboveRange outside 0..2^64-1; never truncates.
+index: stdlib
+keywords: to u64; convert to unsigned 64-bit; checked conversion; narrow integer
+related: stdlib.abi::U64 stdlib.abi::AbiIntegerBelowRange stdlib.module.abi rule.unhandled-errors
+
+@topic stdlib.abi::IsizeValue
+title: -
+summary: The Int domain -2^63..2^63-1, the values an abi::Isize holds: the signed address-width range, which is 64 bits on today's targets.
+index: stdlib
+keywords: isize range; signed address-width range; integer domain
+related: stdlib.abi::Isize concept.integer-domains
+
+@topic stdlib.abi::Isize
+title: -
+summary: A signed address-width ABI integer (64 bits on today's targets): a struct whose one field `value` is an Int proven in -2^63..2^63-1; made by abi::isize(n).
+index: stdlib
+keywords: isize; signed address-width integer; fixed width integer; foreign integer
+related: stdlib.abi::isize stdlib.module.abi concept.integer-domains
+
+@topic stdlib.abi::isize
+title: -
+summary: The abi::Isize representing exactly the Int n, or the declared error abi::AbiIntegerBelowRange or abi::AbiIntegerAboveRange outside -2^63..2^63-1; never truncates.
+index: stdlib
+keywords: to isize; convert to signed address-width; checked conversion; narrow integer
+related: stdlib.abi::Isize stdlib.abi::AbiIntegerBelowRange stdlib.module.abi rule.unhandled-errors
+
+@topic stdlib.abi::UsizeValue
+title: -
+summary: The Int domain 0..2^64-1, the values an abi::Usize holds: the unsigned address-width range, which is 64 bits on today's targets.
+index: stdlib
+keywords: usize range; unsigned address-width range; integer domain
+related: stdlib.abi::Usize concept.integer-domains
+
+@topic stdlib.abi::Usize
+title: -
+summary: A unsigned address-width ABI integer (64 bits on today's targets): a struct whose one field `value` is an Int proven in 0..2^64-1; made by abi::usize(n).
+index: stdlib
+keywords: usize; unsigned address-width integer; fixed width integer; foreign integer
+related: stdlib.abi::usize stdlib.module.abi concept.integer-domains
+
+@topic stdlib.abi::usize
+title: -
+summary: The abi::Usize representing exactly the Int n, or the declared error abi::AbiIntegerBelowRange or abi::AbiIntegerAboveRange outside 0..2^64-1; never truncates.
+index: stdlib
+keywords: to usize; convert to unsigned address-width; checked conversion; narrow integer
+related: stdlib.abi::Usize stdlib.abi::AbiIntegerBelowRange stdlib.module.abi rule.unhandled-errors
+
+@topic stdlib.abi::AbiIntegerBelowRange
+title: -
+summary: The declared error of a checked ABI creator (abi::i8 ... abi::usize) given an Int below its domain's minimum.
+index: stdlib
+keywords: below range; underflow; out of range; too small
+related: stdlib.abi::AbiIntegerAboveRange stdlib.module.abi
+
+== NOTES
+A payload-free error of module abi, spelled abi::AbiIntegerBelowRange
+in handlers and errors clauses outside it. A creator whose argument is
+provably in range needs no handler; a provably out-of-range constant is
+rejected as KNOWN-ERROR.
+
+@topic stdlib.abi::AbiIntegerAboveRange
+title: -
+summary: The declared error of a checked ABI creator (abi::i8 ... abi::usize) given an Int above its domain's maximum.
+index: stdlib
+keywords: above range; overflow; out of range; too large
+related: stdlib.abi::AbiIntegerBelowRange stdlib.module.abi
+
+== NOTES
+See stdlib.abi::AbiIntegerBelowRange: the same pair is shared by every
+creator of the family, so the creator's name says which domain was
+meant and the error which bound was violated.
+
+@topic stdlib.abi::x86_64::Register64BelowRange
+title: -
+summary: The declared error of abi::x86_64::register64 for an Int below -2^63.
+index: stdlib
+keywords: below range; register underflow
+related: stdlib.abi::x86_64::register64 stdlib.abi::x86_64::Register64AboveRange
+
+@topic stdlib.abi::x86_64::Register64AboveRange
+title: -
+summary: The declared error of abi::x86_64::register64 for an Int above 2^63-1.
+index: stdlib
+keywords: above range; register overflow
+related: stdlib.abi::x86_64::register64 stdlib.abi::x86_64::Register64BelowRange
+
+@topic stdlib.abi::x86_64::Register64
+title: -
+summary: One 64-bit x86-64 register's contents, the transport value of linux::abi::x86_64::syscall: no arithmetic, made by register64 or from_*, read by to_int.
+index: stdlib
+keywords: register; machine word; 64-bit word; syscall register
+related: stdlib.linux::abi::x86_64::syscall stdlib.abi::x86_64::register64 stdlib.abi::x86_64::to_int
+
+== NOTES
+A nominal struct whose one field `word` holds the register's signed
+(two's-complement) reading, a abi::x86_64::Register64Word. It is a bit
+pattern carried across the kernel boundary, not a machine integer: it
+has no arithmetic, ordering or bit operations (r + 5 is the TYPE
+error). A Register64 of one architecture is never accepted by the
+other's transport. Every conversion runs on every backend; only the
+syscall itself and the address bridges are native-only.
+
+@topic stdlib.abi::x86_64::register64
+title: -
+summary: The x86-64 register word whose signed reading is the Int n (-2^63..2^63-1); outside it fails with Register64BelowRange or Register64AboveRange.
+index: stdlib
+keywords: int to register; register word; syscall number; syscall argument
+related: stdlib.abi::x86_64::Register64 stdlib.abi::x86_64::to_int stdlib.linux::abi::x86_64::syscall
+
+== NOTES
+The word is n's 64-bit two's-complement bit pattern, so -1 is all ones.
+Never truncates. A provably in-range argument (a syscall number such
+as 39) needs no handler; an out-of-range constant is KNOWN-ERROR. For
+an unsigned value in the upper half of the 64-bit range use from_u64.
+
+== EXAMPLES
+@example accept
+import abi::x86_64
+
+r = abi::x86_64::register64(-1)
+abi::x86_64::to_int(r)
+@value -1
+@end
+
+@topic stdlib.abi::x86_64::to_int
+title: -
+summary: The x86-64 register word read as a signed 64-bit Int: all ones is -1, never 2^64-1.
+index: stdlib
+keywords: register to int; read register; syscall result
+related: stdlib.abi::x86_64::register64 stdlib.abi::x86_64::Register64
+
+== NOTES
+The result is an ordinary Int, statically known to be a
+abi::x86_64::Register64Word, so register64(to_int(r)) needs no handler.
+No meaning is read into it: a raw syscall result's -errno stays a
+negative Int. There is no unsigned reading.
+
+@topic stdlib.abi::x86_64::from_i8
+title: -
+summary: The x86-64 register word of an abi::I8, sign-extended to 64 bits (the word's signed reading is the value itself); total.
+index: stdlib
+keywords: i8 to register; encode argument; syscall argument
+related: stdlib.abi::x86_64::Register64 stdlib.abi::I8
+
+@topic stdlib.abi::x86_64::from_i16
+title: -
+summary: The x86-64 register word of an abi::I16, sign-extended to 64 bits (the word's signed reading is the value itself); total.
+index: stdlib
+keywords: i16 to register; encode argument; syscall argument
+related: stdlib.abi::x86_64::Register64 stdlib.abi::I16
+
+@topic stdlib.abi::x86_64::from_i32
+title: -
+summary: The x86-64 register word of an abi::I32, sign-extended to 64 bits (the word's signed reading is the value itself); total.
+index: stdlib
+keywords: i32 to register; encode argument; syscall argument
+related: stdlib.abi::x86_64::Register64 stdlib.abi::I32
+
+@topic stdlib.abi::x86_64::from_i64
+title: -
+summary: The x86-64 register word of an abi::I64, sign-extended to 64 bits (the word's signed reading is the value itself); total.
+index: stdlib
+keywords: i64 to register; encode argument; syscall argument
+related: stdlib.abi::x86_64::Register64 stdlib.abi::I64
+
+@topic stdlib.abi::x86_64::from_u8
+title: -
+summary: The x86-64 register word of an abi::U8, zero-extended to 64 bits; total.
+index: stdlib
+keywords: u8 to register; encode argument; syscall argument
+related: stdlib.abi::x86_64::Register64 stdlib.abi::U8
+
+@topic stdlib.abi::x86_64::from_u16
+title: -
+summary: The x86-64 register word of an abi::U16, zero-extended to 64 bits; total.
+index: stdlib
+keywords: u16 to register; encode argument; syscall argument
+related: stdlib.abi::x86_64::Register64 stdlib.abi::U16
+
+@topic stdlib.abi::x86_64::from_u32
+title: -
+summary: The x86-64 register word of an abi::U32, zero-extended to 64 bits; total.
+index: stdlib
+keywords: u32 to register; encode argument; syscall argument
+related: stdlib.abi::x86_64::Register64 stdlib.abi::U32
+
+@topic stdlib.abi::x86_64::from_u64
+title: -
+summary: The x86-64 register word of an abi::U64, zero-extended: a value of 2^63 or more travels as the negative word v - 2^64; total.
+index: stdlib
+keywords: u64 to register; encode argument; syscall argument
+related: stdlib.abi::x86_64::Register64 stdlib.abi::U64
+
+== NOTES
+The same 64 bits, read signed: to_int(from_u64(abi::u64(2^64 - 1))) is
+-1. This is how the whole unsigned 64-bit domain reaches a register,
+which register64 (signed) would reject.
+
+@topic stdlib.abi::x86_64::from_isize
+title: -
+summary: The x86-64 register word of an abi::Isize, sign-extended to 64 bits (the word's signed reading is the value itself); total.
+index: stdlib
+keywords: isize to register; encode argument; syscall argument
+related: stdlib.abi::x86_64::Register64 stdlib.abi::Isize
+
+@topic stdlib.abi::x86_64::from_usize
+title: -
+summary: The x86-64 register word of an abi::Usize, zero-extended: a value of 2^63 or more travels as the negative word v - 2^64; total.
+index: stdlib
+keywords: usize to register; encode argument; syscall argument
+related: stdlib.abi::x86_64::Register64 stdlib.abi::Usize
+
+== NOTES
+The same 64 bits, read signed: to_int(from_u64(abi::u64(2^64 - 1))) is
+-1. This is how the whole unsigned 64-bit domain reaches a register,
+which register64 (signed) would reject.
+
+@topic stdlib.abi::aarch64::Register64BelowRange
+title: -
+summary: The declared error of abi::aarch64::register64 for an Int below -2^63.
+index: stdlib
+keywords: below range; register underflow
+related: stdlib.abi::aarch64::register64 stdlib.abi::aarch64::Register64AboveRange
+
+@topic stdlib.abi::aarch64::Register64AboveRange
+title: -
+summary: The declared error of abi::aarch64::register64 for an Int above 2^63-1.
+index: stdlib
+keywords: above range; register overflow
+related: stdlib.abi::aarch64::register64 stdlib.abi::aarch64::Register64BelowRange
+
+@topic stdlib.abi::aarch64::Register64
+title: -
+summary: One 64-bit AArch64 register's contents, the transport value of linux::abi::aarch64::syscall: no arithmetic, made by register64 or from_*, read by to_int.
+index: stdlib
+keywords: register; machine word; 64-bit word; syscall register
+related: stdlib.linux::abi::aarch64::syscall stdlib.abi::aarch64::register64 stdlib.abi::aarch64::to_int
+
+== NOTES
+A nominal struct whose one field `word` holds the register's signed
+(two's-complement) reading, a abi::aarch64::Register64Word. It is a bit
+pattern carried across the kernel boundary, not a machine integer: it
+has no arithmetic, ordering or bit operations (r + 5 is the TYPE
+error). A Register64 of one architecture is never accepted by the
+other's transport. Every conversion runs on every backend; only the
+syscall itself and the address bridges are native-only.
+
+@topic stdlib.abi::aarch64::register64
+title: -
+summary: The AArch64 register word whose signed reading is the Int n (-2^63..2^63-1); outside it fails with Register64BelowRange or Register64AboveRange.
+index: stdlib
+keywords: int to register; register word; syscall number; syscall argument
+related: stdlib.abi::aarch64::Register64 stdlib.abi::aarch64::to_int stdlib.linux::abi::aarch64::syscall
+
+== NOTES
+The word is n's 64-bit two's-complement bit pattern, so -1 is all ones.
+Never truncates. A provably in-range argument (a syscall number such
+as 39) needs no handler; an out-of-range constant is KNOWN-ERROR. For
+an unsigned value in the upper half of the 64-bit range use from_u64.
+
+== EXAMPLES
+@example accept
+import abi::aarch64
+
+r = abi::aarch64::register64(-1)
+abi::aarch64::to_int(r)
+@value -1
+@end
+
+@topic stdlib.abi::aarch64::to_int
+title: -
+summary: The AArch64 register word read as a signed 64-bit Int: all ones is -1, never 2^64-1.
+index: stdlib
+keywords: register to int; read register; syscall result
+related: stdlib.abi::aarch64::register64 stdlib.abi::aarch64::Register64
+
+== NOTES
+The result is an ordinary Int, statically known to be a
+abi::aarch64::Register64Word, so register64(to_int(r)) needs no handler.
+No meaning is read into it: a raw syscall result's -errno stays a
+negative Int. There is no unsigned reading.
+
+@topic stdlib.abi::aarch64::from_i8
+title: -
+summary: The AArch64 register word of an abi::I8, sign-extended to 64 bits (the word's signed reading is the value itself); total.
+index: stdlib
+keywords: i8 to register; encode argument; syscall argument
+related: stdlib.abi::aarch64::Register64 stdlib.abi::I8
+
+@topic stdlib.abi::aarch64::from_i16
+title: -
+summary: The AArch64 register word of an abi::I16, sign-extended to 64 bits (the word's signed reading is the value itself); total.
+index: stdlib
+keywords: i16 to register; encode argument; syscall argument
+related: stdlib.abi::aarch64::Register64 stdlib.abi::I16
+
+@topic stdlib.abi::aarch64::from_i32
+title: -
+summary: The AArch64 register word of an abi::I32, sign-extended to 64 bits (the word's signed reading is the value itself); total.
+index: stdlib
+keywords: i32 to register; encode argument; syscall argument
+related: stdlib.abi::aarch64::Register64 stdlib.abi::I32
+
+@topic stdlib.abi::aarch64::from_i64
+title: -
+summary: The AArch64 register word of an abi::I64, sign-extended to 64 bits (the word's signed reading is the value itself); total.
+index: stdlib
+keywords: i64 to register; encode argument; syscall argument
+related: stdlib.abi::aarch64::Register64 stdlib.abi::I64
+
+@topic stdlib.abi::aarch64::from_u8
+title: -
+summary: The AArch64 register word of an abi::U8, zero-extended to 64 bits; total.
+index: stdlib
+keywords: u8 to register; encode argument; syscall argument
+related: stdlib.abi::aarch64::Register64 stdlib.abi::U8
+
+@topic stdlib.abi::aarch64::from_u16
+title: -
+summary: The AArch64 register word of an abi::U16, zero-extended to 64 bits; total.
+index: stdlib
+keywords: u16 to register; encode argument; syscall argument
+related: stdlib.abi::aarch64::Register64 stdlib.abi::U16
+
+@topic stdlib.abi::aarch64::from_u32
+title: -
+summary: The AArch64 register word of an abi::U32, zero-extended to 64 bits; total.
+index: stdlib
+keywords: u32 to register; encode argument; syscall argument
+related: stdlib.abi::aarch64::Register64 stdlib.abi::U32
+
+@topic stdlib.abi::aarch64::from_u64
+title: -
+summary: The AArch64 register word of an abi::U64, zero-extended: a value of 2^63 or more travels as the negative word v - 2^64; total.
+index: stdlib
+keywords: u64 to register; encode argument; syscall argument
+related: stdlib.abi::aarch64::Register64 stdlib.abi::U64
+
+== NOTES
+The same 64 bits, read signed: to_int(from_u64(abi::u64(2^64 - 1))) is
+-1. This is how the whole unsigned 64-bit domain reaches a register,
+which register64 (signed) would reject.
+
+@topic stdlib.abi::aarch64::from_isize
+title: -
+summary: The AArch64 register word of an abi::Isize, sign-extended to 64 bits (the word's signed reading is the value itself); total.
+index: stdlib
+keywords: isize to register; encode argument; syscall argument
+related: stdlib.abi::aarch64::Register64 stdlib.abi::Isize
+
+@topic stdlib.abi::aarch64::from_usize
+title: -
+summary: The AArch64 register word of an abi::Usize, zero-extended: a value of 2^63 or more travels as the negative word v - 2^64; total.
+index: stdlib
+keywords: usize to register; encode argument; syscall argument
+related: stdlib.abi::aarch64::Register64 stdlib.abi::Usize
+
+== NOTES
+The same 64 bits, read signed: to_int(from_u64(abi::u64(2^64 - 1))) is
+-1. This is how the whole unsigned 64-bit domain reaches a register,
+which register64 (signed) would reject.
+
+@topic stdlib.module.abi
+title: -
+summary: Fixed-width ABI integer types (abi::I8 ... abi::Usize): Ints proven in a foreign interface's range, made by checked creators such as abi::u32(n).
+index: stdlib
+keywords: fixed width integers; int32; uint8; c integer; abi types
+related: concept.integer-domains stdlib.module.abi::bytes stdlib.module.ffi::c
+
+== NOTES
+These are domains, not machine arithmetic: an abi::U8 is an ordinary Int
+with the proof that it lies in 0..255, held in the struct's one field
+`value`. Each type is a nominal struct, so abi::u8(255) + 1 is the TYPE
+error, never 0 or 256: compute in Int (x.value), and re-enter a domain
+through its creator. abi::I32 and abi::U32 are distinct even where they
+overlap, as are abi::I64 and abi::Isize. Machine meaning (sign or zero
+extension into a register) starts only at an architecture layer,
+abi::x86_64::from_i32 and its siblings. C's own integer types are
+ffi::c's.
+
+@topic stdlib.module.abi::bytes
+title: -
+summary: Bytes and MutableBytes: owned byte sequences, immutable and writable, that foreign boundaries (syscalls, C calls) take, with their construction and snapshots.
+index: stdlib
+keywords: byte array; byte buffer; binary data; raw bytes; bytes type
+related: stdlib.str::encode_utf8 stdlib.module.binary stdlib.module.linux
+
+== NOTES
+`import abi::bytes`. A Bytes is an immutable, finite sequence of bytes
+with an exact length: not a String, not a C string (a 0 is an ordinary
+byte and nothing terminates it), not a pointer or a view. A MutableBytes
+has a fixed length and changeable contents, and is a value too: replace
+returns a new value and every logical copy stays independent. Both are
+opaque structs, compared and hashed by their bytes; only this module can
+open or build them. Make Bytes from a List[byte::Byte] (for text,
+str::encode_utf8(s) gives one). There is deliberately no indexing,
+slicing, iteration or concatenation of Bytes.
+
+@topic stdlib.abi::bytes::Bytes
+title: -
+summary: An immutable, owned sequence of bytes with an exact length (an opaque struct), made by abi::bytes::from_list and compared and hashed by its bytes.
+index: stdlib
+keywords: bytes; byte string; binary data; immutable buffer
+related: stdlib.abi::bytes::from_list stdlib.abi::bytes::length stdlib.binary::parse stdlib.abi::bytes::MutableBytes
+
+== NOTES
+Its one field is private to module abi::bytes (a projection or a
+construction elsewhere is OPAQUE-REPRESENTATION / OPAQUE-CONSTRUCTION).
+Copy it, store it, compare it: no address, sharing or allocation is
+observable. The machine address of its payload exists only through the
+native-only bridge abi::x86_64::from_bytes (or its AArch64 twin).
+
+== EXAMPLES
+@example accept
+import abi::bytes
+import str
+
+a = abi::bytes::from_list("ab".encode_utf8())
+[
+    a == abi::bytes::from_list("ab".encode_utf8()),
+    abi::bytes::length(a).value
+]
+@value [true, 2]
+@end
+
+@topic stdlib.abi::bytes::MutableBytes
+title: -
+summary: A fixed-length byte sequence whose contents can change, as a value: updates return a new MutableBytes and logical copies stay independent (an opaque struct).
+index: stdlib
+keywords: mutable bytes; writable buffer; byte buffer; read buffer
+related: stdlib.abi::bytes::zeroed stdlib.abi::bytes::replace stdlib.abi::bytes::freeze stdlib.abi::bytes::Bytes
+
+== NOTES
+Made by abi::bytes::zeroed(n) or from_bytes(data); read back with freeze
+or freeze_prefix. It is not a reference: `b = a` and then
+`a2 = abi::bytes::replace(a, 0, x)` leave a and b unchanged. Compared and
+hashed by its current bytes. A foreign write (linux::read) works on a
+detached private copy and returns it.
+
+@topic stdlib.binary::U8
+title: -
+summary: The unsigned 8-bit layout field type: Int in 0..255, one byte.
+index: stdlib
+keywords: uint8; unsigned byte field; layout field type
+related: stdlib.module.binary concept.binary-layouts
+
+== NOTES
+An ordinary integer domain: a layout field's encoding follows from its
+type's interval, so byte::Byte or abi::U8Value serve as well. Every
+binary:: scalar is little-endian.
+
+@topic stdlib.binary::U16
+title: -
+summary: The unsigned 16-bit layout field type: Int in 0..65535, two bytes little-endian.
+index: stdlib
+keywords: uint16; unsigned short field; layout field type
+related: stdlib.module.binary concept.binary-layouts
+
+@topic stdlib.binary::U32
+title: -
+summary: The unsigned 32-bit layout field type: Int in 0..4294967295, four bytes little-endian.
+index: stdlib
+keywords: uint32; unsigned int field; layout field type
+related: stdlib.module.binary concept.binary-layouts
+
+@topic stdlib.binary::U64
+title: -
+summary: The unsigned 64-bit layout field type: Int in 0..2^64-1, eight bytes little-endian.
+index: stdlib
+keywords: uint64; unsigned long field; layout field type
+related: stdlib.module.binary concept.binary-layouts
+
+@topic stdlib.binary::I8
+title: -
+summary: The signed 8-bit layout field type: Int in -128..127, one byte in two's complement.
+index: stdlib
+keywords: int8; signed byte field; layout field type
+related: stdlib.module.binary concept.binary-layouts
+
+@topic stdlib.binary::I16
+title: -
+summary: The signed 16-bit layout field type: Int in -32768..32767, two bytes little-endian two's complement.
+index: stdlib
+keywords: int16; short field; layout field type
+related: stdlib.module.binary concept.binary-layouts
+
+@topic stdlib.binary::I32
+title: -
+summary: The signed 32-bit layout field type: Int in -2^31..2^31-1, four bytes little-endian two's complement.
+index: stdlib
+keywords: int32; int field; layout field type
+related: stdlib.module.binary concept.binary-layouts
+
+@topic stdlib.binary::I64
+title: -
+summary: The signed 64-bit layout field type: Int in -2^63..2^63-1, eight bytes little-endian two's complement.
+index: stdlib
+keywords: int64; long field; layout field type
+related: stdlib.module.binary concept.binary-layouts
+
+@topic stdlib.module.byte
+title: -
+summary: The Byte, Nibble, LowNibble and HighNibble integer domains, the checked conversion byte::from_int, nibble extraction, complement and byte::set.
+index: stdlib
+keywords: byte; nibble; bits; byte type; uint8
+related: concept.integer-domains stdlib.bit_and stdlib.module.ascii
+
+== NOTES
+Ordinary Botlish over the bit primitives (bit_and, bit_or, bit_xor,
+shift_left, shift_right): each function has a declared result domain the
+compiler verifies. An Int becomes a byte::Byte where the compiler proves
+its range (a comparison, a literal, a declared result) or through
+byte::from_int. Outside the module, `import type byte::Byte` binds the
+short type name. ASCII meaning is ascii::'s, not byte::'s.
+
+@topic stdlib.byte::Byte
+title: -
+summary: The integer domain 0..255 (type Byte = Int in 0..255): a byte value, an ordinary Int proven in range.
+index: stdlib
+keywords: byte; uint8; octet; byte type; 0..255
+related: stdlib.byte::from_int concept.integer-domains stdlib.str::encode_utf8 stdlib.abi::bytes::from_list
+
+== NOTES
+A Byte is an Int, so every Int operation applies, and its arithmetic is
+Int arithmetic (a sum of two Bytes is an Int, not a wrapped Byte). An Int
+enters the domain where the compiler proves 0 <= x <= 255 -- a literal, a
+comparison guard, a function's declared `-> Byte` result -- or through
+byte::from_int, which fails otherwise. str::encode_utf8 returns
+List[Byte]; abi::bytes::from_list takes one.
+
+@topic stdlib.byte::Nibble
+title: -
+summary: The integer domain 0..15 (a subtype of Byte): a logical 4-bit value.
+index: stdlib
+keywords: nibble; half byte; 4-bit value; hex digit value
+related: stdlib.byte::nibble stdlib.byte::LowNibble stdlib.byte::HighNibble
+
+@topic stdlib.byte::LowNibble
+title: -
+summary: The integer domain 0..15 for a nibble already positioned in the low half of a byte; nominally distinct from Nibble.
+index: stdlib
+keywords: low nibble; low half; lower 4 bits
+related: stdlib.byte::low_nibble stdlib.byte::position_low stdlib.byte::Nibble
+
+@topic stdlib.byte::HighNibble
+title: -
+summary: The 16 values 0, 16, 32, ..., 240: a nibble positioned in the high half of a byte.
+index: stdlib
+keywords: high nibble; high half; upper 4 bits
+related: stdlib.byte::high_nibble stdlib.byte::position_high stdlib.byte::Nibble
+
+@topic stdlib.byte::BelowRange
+title: -
+summary: The declared error byte::from_int fails with for a negative Int; handled as `on byte::BelowRange:`.
+index: stdlib
+keywords: below range; negative; too small; byte conversion error
+related: stdlib.byte::from_int stdlib.byte::AboveRange
+
+@topic stdlib.byte::AboveRange
+title: -
+summary: The declared error byte::from_int fails with for an Int above 255 (and byte::set for a character above U+00FF); handled as `on byte::AboveRange:`.
+index: stdlib
+keywords: above range; too large; byte conversion error
+related: stdlib.byte::from_int stdlib.byte::set stdlib.byte::BelowRange
+
+@topic stdlib.byte::high_nibble
+title: -
+summary: The high half of a byte kept in position, bit_and(b, 240): a byte::HighNibble (171 gives 160).
+index: stdlib
+keywords: high nibble; upper bits; mask high half
+related: stdlib.byte::nibble stdlib.byte::low_nibble stdlib.byte::HighNibble
+
+== EXAMPLES
+@example accept
+import byte
+
+b = byte::from_int(171)
+[
+    byte::high_nibble(b),
+    byte::low_nibble(b),
+    byte::nibble(byte::high_nibble(b)),
+    byte::complement(b)
+]
+@value [160, 11, 10, 84]
+@caption 171 is 0xAB
+@end
+
+@topic stdlib.byte::low_nibble
+title: -
+summary: The low half of a byte, bit_and(b, 15): a byte::LowNibble.
+index: stdlib
+keywords: low nibble; lower bits; mask low half
+related: stdlib.byte::high_nibble stdlib.byte::nibble stdlib.byte::LowNibble
+
+@topic stdlib.byte::nibble
+title: -
+summary: The logical 0..15 value of a positioned nibble (high or low half of a byte): a byte::Nibble.
+index: stdlib
+keywords: nibble value; hex digit value; normalize nibble
+related: stdlib.byte::high_nibble stdlib.byte::low_nibble stdlib.byte::Nibble
+
+== NOTES
+One branch-free formula for both halves: a low-positioned x (x <= 15) is
+returned unchanged, a high-positioned one (low 4 bits zero) is shifted
+down, so nibble(high_nibble(b)) is b's first hexadecimal digit.
+
+@topic stdlib.byte::complement
+title: -
+summary: The 8-bit one's complement of a byte, 255 - b: a byte::Byte (not Int's infinite-precision complement).
+index: stdlib
+keywords: invert bits; bitwise not; one's complement; flip byte
+related: stdlib.bit_xor stdlib.byte::Byte
+
+@topic stdlib.byte::position_low
+title: -
+summary: A Nibble as a LowNibble: the same number, now marked as positioned in the low half of a byte.
+index: stdlib
+keywords: place low nibble; low half
+related: stdlib.byte::position_high stdlib.byte::LowNibble
+
+@topic stdlib.byte::position_high
+title: -
+summary: A Nibble moved into the high half of a byte, n times 16: a byte::HighNibble (11 gives 176).
+index: stdlib
+keywords: place high nibble; shift nibble; high half
+related: stdlib.byte::position_low stdlib.byte::HighNibble
+
+@topic stdlib.byte::from_int
+title: -
+summary: The Int as a byte::Byte, or the declared error byte::BelowRange (negative) or byte::AboveRange (above 255): the checked conversion into the Byte domain.
+index: stdlib
+keywords: int to byte; to byte; checked conversion; narrow to byte
+related: stdlib.byte::Byte stdlib.byte::BelowRange stdlib.byte::AboveRange rule.known-error
+
+== NOTES
+Never truncates or wraps. The completion proof works per call: a
+provably in-range argument (a literal 48, a value guarded to 0..255)
+needs no handler, and a provably out-of-range constant (999) is
+rejected as KNOWN-ERROR; any other Int keeps both errors to handle or
+admit. Its parameter is declared `value: int`, so the argument must be
+proven an Int.
+
+== EXAMPLES
+@example accept
+import byte
+
+fn clamp(n: int) -> int:
+    b = byte::from_int(n):
+        on byte::BelowRange:
+            return 0
+        on byte::AboveRange:
+            return 255
+    b
+
+[byte::from_int(65), clamp(300), clamp(-3), clamp(7)]
+@value [65, 255, 0, 7]
+@end
+
+@topic stdlib.byte::set
+title: -
+summary: The ImmutableSet[Byte] of the characters' Unicode scalar values (not their UTF-8 bytes); a character above U+00FF fails with byte::AboveRange.
+index: stdlib
+keywords: byte set; character set; set of bytes
+related: stdlib.immutable_set::from_list stdlib.char::scalar_value stdlib.byte::from_int
+
+== NOTES
+Each character becomes the one byte equal to its scalar value, so 'é'
+(U+00E9) is 233, never the two UTF-8 bytes. No partial set: the first
+character outside Byte's domain ends the call. A literal List of
+characters in range needs no handler.
+
+== EXAMPLES
+@example accept
+import byte
+import immutable_set
+
+s = byte::set(['a', 'é'])
+[s.contains(97), s.contains(233), s.contains(98)]
+@value [true, true, false]
+@end
+
+@topic stdlib.module.ascii
+title: -
+summary: Structural ASCII classification of byte values: is_digit, is_upper, is_lower, is_alphabetic and is_alphanumeric over byte::Byte.
+index: stdlib
+keywords: ascii; character class; isdigit; isalpha; classify bytes
+related: stdlib.byte::Byte stdlib.str::encode_utf8 stdlib.str::is_tcl_alpha
+
+== NOTES
+Every predicate takes a byte::Byte and is total: a byte of 128..255 is
+simply not ASCII (false), never an error. Locale-, encoding- and
+platform-independent: no libc classes, no Unicode categories, no case
+folding. Classify a String by its UTF-8 bytes (str::encode_utf8) or a
+character by its scalar value once that is proven below 128.
+
+@topic stdlib.ascii::is_digit
+title: -
+summary: Whether a byte is an ASCII decimal digit, '0'..'9' (48..57).
+index: stdlib
+keywords: is digit; isdigit; numeric character
+related: stdlib.module.ascii stdlib.ascii::is_alphanumeric
+
+== EXAMPLES
+@example accept
+import ascii
+import list
+import str
+
+fn digits(s: str) -> int:
+    hits = loop b in s.encode_utf8():
+        if not ascii::is_digit(b):
+            continue
+        b
+    hits.length()
+
+digits("a1b22")
+@value 3
+@end
+
+@topic stdlib.ascii::is_upper
+title: -
+summary: Whether a byte is an ASCII uppercase letter, 'A'..'Z' (65..90).
+index: stdlib
+keywords: is uppercase; isupper; capital letter
+related: stdlib.module.ascii stdlib.ascii::is_lower
+
+@topic stdlib.ascii::is_lower
+title: -
+summary: Whether a byte is an ASCII lowercase letter, 'a'..'z' (97..122).
+index: stdlib
+keywords: is lowercase; islower; small letter
+related: stdlib.module.ascii stdlib.ascii::is_upper
+
+@topic stdlib.ascii::is_alphabetic
+title: -
+summary: Whether a byte is an ASCII letter (is_upper or is_lower); non-ASCII letters are bytes above 127 and are false.
+index: stdlib
+keywords: is letter; isalpha; alphabetic
+related: stdlib.module.ascii stdlib.str::is_tcl_alpha
+
+@topic stdlib.ascii::is_alphanumeric
+title: -
+summary: Whether a byte is an ASCII letter or decimal digit.
+index: stdlib
+keywords: is alphanumeric; isalnum; letter or digit
+related: stdlib.module.ascii stdlib.str::is_tcl_alnum stdlib.web::is_unreserved
+
+@topic stdlib.module.web
+title: -
+summary: URI percent-encoding (web::uri_escape_text) and the refinement types web::Emailish and web::UriQueryValue with their proving predicates.
+index: stdlib
+keywords: url encoding; percent encoding; uri escape; email validation; web
+related: concept.refinements stdlib.module.str
+
+== NOTES
+Ordinary Botlish. A program that imports web also prints the module's own
+ONE-CHAR-STRING-LITERAL findings (its tables of one-character Strings),
+which are listed in the warning gate's manifest; they are not about the
+importing program.
+
+@topic stdlib.web::Emailish
+title: -
+summary: A String proven to have the shape of an e-mail address by web::emailish? (a refinement of str, with a String's representation).
+index: stdlib
+keywords: email; email address type; validated email
+related: stdlib.web::emailish? concept.refinements
+
+@topic stdlib.web::emailish?
+title: -
+summary: Whether a String has the shape local@label.tld that lib/web.bot accepts as an address, proving it a web::Emailish when true.
+index: stdlib
+keywords: is email; validate email; email check
+related: stdlib.web::Emailish concept.refinements stdlib.str::is_tcl_alnum
+
+== NOTES
+The grammar: a local part of letters, digits and . _ % + -; an "@"; one
+or more labels of letters, digits and "-", each followed by "."; then a
+top-level domain of two or more letters (letters and digits as Tcl 9's
+[:alpha:]/[:alnum:] define them). It checks shape only, never that the
+address exists. In the true branch of `if web::emailish?(v):` v may be
+passed where a web::Emailish is required.
+
+@topic stdlib.web::local_extra_chars
+title: -
+summary: The punctuation emailish? accepts in an address's local part (. _ % + -), as an ImmutableSet of one-character Strings: an internal table.
+index: stdlib
+keywords: email punctuation
+related: stdlib.web::emailish?
+
+@topic stdlib.web::hex_digits
+title: -
+summary: The sixteen uppercase hexadecimal digits "0" ... "F" as Strings, indexed by a nibble value: an internal table of uri_escape_text.
+index: stdlib
+keywords: hex digits; hexadecimal table
+related: stdlib.web::uri_escape_text stdlib.byte::nibble
+
+@topic stdlib.web::additional_unreserved_chars
+title: -
+summary: The bytes of - . _ ~, the punctuation RFC 3986 leaves unescaped, as an ImmutableSet[Byte]: an internal table of is_unreserved.
+index: stdlib
+keywords: unreserved characters; uri punctuation
+related: stdlib.web::is_unreserved stdlib.byte::set
+
+@topic stdlib.web::is_unreserved
+title: -
+summary: Whether a byte is an RFC 3986 unreserved character: an ASCII letter or digit, or one of - . _ ~.
+index: stdlib
+keywords: unreserved; url safe character; uri character
+related: stdlib.web::uri_escape_text stdlib.ascii::is_alphanumeric
+
+@topic stdlib.web::UriQueryValue
+title: -
+summary: A String proven safe to embed as a URI query value by web::uri_query_value? (a refinement of str).
+index: stdlib
+keywords: url query value; escaped string; query parameter
+related: stdlib.web::uri_query_value? stdlib.web::uri_escape_text concept.refinements
+
+@topic stdlib.web::uri_escape_text
+title: -
+summary: The String percent-encoded for a URI: every UTF-8 byte except A-Z a-z 0-9 - . _ ~ written as uppercase %XX.
+index: stdlib
+keywords: url encode; percent encode; uri escape; urlencode; escape query
+related: stdlib.web::uri_query_value? stdlib.web::is_unreserved
+
+== NOTES
+A space becomes %20 and "é" %C3%A9 (its two UTF-8 bytes). The result is a
+plain str: like every String transformation it carries no refinement, so
+to pass it where a web::UriQueryValue is required, prove it with
+web::uri_query_value?, which accepts every String this function writes.
+
+@topic stdlib.module.linux::sys
+title: -
+summary: The architecture's Linux syscall numbers and register convention under lib/linux.bot's wrappers: linux::sys::write and read (a direct module).
+index: stdlib
+keywords: syscall numbers; linux system calls; raw write; raw read
+related: stdlib.module.linux concept.direct-modules backend.native-only
+
+== NOTES
+An architecture-specific module: the compilation target selects
+lib/linux/sys.x86_64.bot or lib/linux/sys.aarch64.bot, which declare the
+same members. It is a direct module (raw authority, no context), and its
+syscalls run only on the native backends. Programs use linux::write and
+linux::read, or the portable io.
+
+@topic stdlib.module.io
+title: -
+summary: Portable text output -- io::print, print_line, write_error and write_error_line -- through the io::IO context trait; with linux::io it runs on the native backends.
+index: stdlib
+keywords: print; output; stdout; stderr; write text; console
+related: task.print-output backend.io concept.context-traits
+
+== NOTES
+The operations require the io::IO context trait, which a program
+satisfies by installing a context that implements it, normally
+`with context linux::io::create()`. That standard implementation writes
+with raw Linux syscalls, so printing runs only on the native backends
+(cranelift, cranelift-generic, executables); on interp and compile the
+first write fails with NATIVE-ONLY. On every backend the program's final
+value is still printed by main.tcl. There is no input, file or
+formatting API here.
+
+@topic stdlib.linux::path::LinuxPath
+title: -
+summary: A String proven to be a valid textual Linux path -- non-empty, no U+0000 -- by linux::path::valid? or validate; it claims nothing about the filesystem.
+index: stdlib
+keywords: path; file path; filename; linux path type
+related: stdlib.linux::path::valid? stdlib.linux::path::validate concept.refinements capability.files
+
+== NOTES
+A refinement of str with a String's representation, so a validated value
+is still used as text. It does not mean the path exists, is accessible,
+canonical or short enough: validation looks at no filesystem and does not
+normalize ("a//b" stays as written). Botlish has no API that opens a path
+(capability.files).
+
+@topic stdlib.test::no_texts
+title: -
+summary: An empty MutableVector[str]: the test framework's typed empty vector (a declared result fixes the element type of from_list([])).
+index: stdlib
+keywords: empty vector; typed empty vector
+related: stdlib.mutable_vector::from_list stdlib.module.test
+
+@topic stdlib.test::no_results
+title: -
+summary: An empty MutableVector[test::TestResult]: the test framework's typed empty vector of results.
+index: stdlib
+keywords: empty vector; test results
+related: stdlib.mutable_vector::from_list stdlib.test::results
+
+@topic stdlib.linux::write
+title: -
+summary: One write(2) of a Bytes value to file descriptor fd, returning the kernel's raw signed result (bytes written, or -errno); native backends only.
+index: stdlib
+keywords: write bytes; write syscall; file descriptor; raw output
+related: stdlib.module.linux stdlib.module.io concept.direct-modules backend.native-only
+
+== NOTES
+fd is an abi::I32 (abi::i32(1) is standard output) and data an
+abi::bytes::Bytes (for text, abi::bytes::from_list(s.encode_utf8())).
+Exactly one syscall: no retry and no loop, so a positive result smaller
+than the length is a short write the caller must continue, and a
+negative one is the kernel's -errno, unchanged (-9 for a bad
+descriptor). module linux is direct: the caller must be a `direct
+module` or mediate the call through a context of its own. Portable code
+prints with io::print_line instead.
+
+@topic stdlib.linux::sys::write
+title: -
+summary: write(2) through the target architecture's transport: the syscall number and registers for writing data to fd, the raw result as an Int; native backends only.
+index: stdlib
+keywords: write syscall; sys_write
+related: stdlib.linux::write stdlib.module.linux::sys stdlib.linux::abi::x86_64::syscall
+
+== NOTES
+The architecture layer under linux::write (on x86-64: SYS_write = 1, rdi
+fd, rsi the payload's address, rdx its length). Call linux::write
+instead; the two have the same contract.
+
+@topic stdlib.linux::sys::read
+title: -
+summary: read(2) through the target architecture's transport into a freshly detached copy of the buffer: the raw result and the copy; native backends only.
+index: stdlib
+keywords: read syscall; sys_read
+related: stdlib.linux::read stdlib.module.linux::sys stdlib.abi::bytes::detach
+
+== NOTES
+The architecture layer under linux::read (on x86-64: SYS_read = 0). The
+kernel writes into a private copy of data, never into storage another
+value can observe. Call linux::read instead, which returns a
+linux::ReadResult.
+
+@topic stdlib.test::Suite
+title: -
+summary: The test suite context: the registered cases, in order, installed with `with context test::suite()` and filled by test::value, test::rejects and their siblings.
+index: stdlib
+keywords: test suite; test context; test registry
+related: concept.testing stdlib.test::suite stdlib.test::report
+
+== NOTES
+A context struct whose one field is a MutableVector of the registered
+cases. Only test::case and test::registered take it as their context
+parameter; every function that registers or runs tests requires it by
+derivation, so a test program installs one suite before registering.
+
+@topic stdlib.test::run
+title: -
+summary: The runner coroutine: it runs one registered case per resume, in registration order, yielding each result as a one-element List and the empty List at the end.
+index: stdlib
+keywords: test runner; run tests
+related: stdlib.test::results stdlib.test::report concept.coroutines concept.testing
+
+== NOTES
+Start it with `coroutine {step, first} = test::run()` and resume it with
+step(). Most programs call test::report() (or test::results()), which
+drive it to the end.
+
+@topic stdlib.module.linux
+title: -
+summary: Thin Botlish wrappers over the raw Linux syscall transports: linux::write and linux::read, one syscall each with the kernel's raw result (a direct module, native only).
+index: stdlib
+keywords: linux syscalls; raw io; file descriptor; write; read
+related: stdlib.module.linux::io stdlib.module.linux::sys concept.direct-modules backend.native-only
+
+== NOTES
+The same source on every architecture: linux::sys, chosen by the
+compilation target, holds the syscall numbers. A direct module: code that
+calls it must be a `direct module` or mediate the call through a context
+of its own (linux::io does, with LinuxIO). Every call runs only on the
+native backends; on interp and compile it fails with NATIVE-ONLY.
+
+@topic stdlib.module.linux::io
+title: -
+summary: The process's standard input, output and error as one context, LinuxIO: install it with `with context linux::io::create()`; it implements io::IO.
+index: stdlib
+keywords: stdout; stdin; stderr; standard output; console io
+related: stdlib.module.io stdlib.module.linux concept.contexts concept.context-traits
+
+== NOTES
+The functions here require the LinuxIO context and take no descriptor:
+write, write_error and read, plus write_text and write_error_text, which
+make LinuxIO the implementation of the portable io::IO trait. Calling one
+before the context is installed is MISSING-CONTEXT. Not a direct module:
+it mediates linux's raw authority through its own context. Its writes
+are raw syscalls, so they run on the native backends only.
+
+@topic stdlib.module.linux::path
+title: -
+summary: Textual Linux paths: the refinement linux::path::LinuxPath (a non-empty String without U+0000) with its validators, concat and text.
+index: stdlib
+keywords: path; file path; path validation; path join
+related: stdlib.module.io::path capability.files concept.refinements
+
+@topic stdlib.module.io::path
+title: -
+summary: The portable path abstraction: the trait io::path::Path (concat, text) and the error io::path::NotAPath; linux::path::LinuxPath implements it.
+index: stdlib
+keywords: path; portable path; path trait
+related: stdlib.module.linux::path concept.traits capability.files
+
+@topic stdlib.module.abi::x86_64
+title: -
+summary: The x86-64 register word abi::x86_64::Register64: conversions from Int and ABI integers, the signed reading back, and the native-only address bridges.
+index: stdlib
+keywords: register; x86-64; syscall arguments; machine word
+related: stdlib.linux::abi::x86_64::syscall stdlib.module.abi stdlib.module.abi::aarch64
+
+@topic stdlib.module.abi::aarch64
+title: -
+summary: The AArch64 register word abi::aarch64::Register64: conversions from Int and ABI integers, the signed reading back, and the native-only address bridges.
+index: stdlib
+keywords: register; arm64; aarch64; syscall arguments; machine word
+related: stdlib.linux::abi::aarch64::syscall stdlib.module.abi stdlib.module.abi::x86_64
+
+@topic stdlib.module.mathish
+title: -
+summary: A minimal demonstration module: one function, mathish::inc(x), which is x + 1.
+index: stdlib
+keywords: example module; demo module
+related: concept.modules
+
+@topic stdlib.module.compiler
+title: -
+summary: The compiler's diagnostics as Botlish values: compiler::CompilerError, the error a rejected `static compile:` block fails with, and its DiagnosticCode and SourceLocation.
+index: stdlib
+keywords: compile error; diagnostic; static compile
+related: concept.static-compile concept.testing
+
+@topic stdlib.module.test
+title: -
+summary: The golden test framework, an ordinary Botlish library: a suite context, test::value, test::holds and test::rejects cases, and test::report.
+index: stdlib
+keywords: testing; unit tests; test framework; assertions; golden tests
+related: concept.testing concept.negative-tests

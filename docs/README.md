@@ -83,7 +83,8 @@ examples/hir/    HIR samples (.hir text) with the core IR they lower to
 examples/surface/  source programs (.bot)
 examples/stdlib/   algorithm corpus in Botlish: reverse, replace, CSV, matmul (§18)
 tests/*.test     tcltest suite
-main.tcl         example runner
+main.tcl         the command line: run, build, inspect; -help (Compilerpedia)
+compilerpedia/   the built-in reference: engine, topics, generated stdlib topics (COMPILERPEDIA.md)
 single/          main.tcl and the compiler stack as one executable (SINGLE-EXECUTABLE.md)
 ```
 
@@ -99,7 +100,11 @@ tclsh9.0 main.tcl -emit-hir-interchange FILE.bot   # write the analyzed HIR as F
 tclsh9.0 main.tcl -backend cranelift FILE.hirx     # run it with no front end (same front end only)
 BOTLISH_HIR_CACHE=DIR tclsh9.0 main.tcl FILE.bot   # keep and reuse the front end's HIR across runs
 CORE_BACKEND=compile tclsh9.0 tests/all.tcl    # test suite, one backend
-tclsh9.0 main.tcl                              # run all examples (interp)
+tclsh9.0 main.tcl                              # the usage summary (runs no program)
+tclsh9.0 main.tcl -help                        # Compilerpedia, the built-in reference (COMPILERPEDIA.md)
+tclsh9.0 main.tcl -help "bounds proof"         # a topic, a code, a symbol or a search
+tclsh9.0 main.tcl -version                     # the build identity
+tclsh9.0 main.tcl examples/01-adder.ir         # run an example (interp)
 tclsh9.0 main.tcl -backend compile -code FILE.ir   # compile, show generated Tcl, run
 tclsh9.0 main.tcl -hir FILE.ir                 # show the program's HIR, run
 tclsh9.0 main.tcl -backend compile FILE.hir    # read HIR text, compile it, run
@@ -1564,7 +1569,8 @@ add10(32)          # 42 (add captures x)
   bindings are not hoisted, so write callees before callers. See
   STRICT-REFERENCE-DETERMINISM.md.
 * `if c:` / `elif c2:` … / `else:` (any number of `elif`s, optional `else`),
-  `loop:`, `break [e]`, `continue`. **`elif` is equivalent to `else:` holding
+  `loop:`, `break` (never with a value: PAYLOAD-FREE-BREAK.md), `continue`.
+  **`elif` is equivalent to `else:` holding
   one nested `if`**, under the ordinary `if` semantics, and nothing more:
 
   ```
@@ -1619,7 +1625,7 @@ add10(32)          # 42 (add captures x)
   the counts provably differ); there is no shortest-wins rule and no runtime
   length check. See COLLECTING-LOOPS.md. A bare `loop:` (no clause) is
   unchanged.
-* An `if` can also be the value of a binding, `return` or `break`
+* An `if` can also be the value of a binding or of `return`
   (`sign = if n < 0:` followed by its blocks). It can't be an operand or an
   argument.
 * A parameter or result annotation may be a **structural function type**,
@@ -2022,7 +2028,7 @@ references and hygiene.
   (§6), so `if integer?(x) and x > 0:` would not refine `x` in the branch.
   This doesn't bite yet, because predicates can't be named from source.
 * An `if` is a value only as the whole right side of `=`, or the whole value
-  of `return` or `break`. It can't be an operand or an argument
+  of `return`. It can't be an operand or an argument
   (`1 + if c: …`, `f(if c: …)`), because its blocks need their own lines.
   There's no one-line form (`if c: a else: b`). A chain of conditions is
   written with `elif` (ELIF.md); a chain's length is bounded only by the
@@ -3295,7 +3301,12 @@ f.bot:5:9: note: also returned here
 The proof is the compiler's own exact-value facts (`hir::exact`): equal exact
 values through immutable aliases, or the very same immutable binding. A call, an
 unproven expression or a separately constructed mutable value is never assumed
-equal, and `unit` is never reported. See WARNINGS-SAME-RETURN.md for the
+equal, and `unit` is never reported. Two refinements (COMPILERPEDIA-REPORT.md,
+"Lint audit") keep it to repetition that says something: exits that end the
+handlers of one call count as one exit (each error has its own `on NAME:`;
+there is no `on A, B:`), and a repeated Bool is reported only when every
+value exit returns it (a guard-style predicate repeats `false` by necessity).
+See WARNINGS-SAME-RETURN.md for the
 semantics, architecture, the corpus audit and known limitations; the tests are
 `tests/warnings.test` and `audit/same-return-value/tools/fuzz.tcl`.
 
@@ -3323,7 +3334,11 @@ else visible under the name, with no struct field of that name that could
 compete with it. (2) The function declares at least two ordinary parameters
 (flags do not count): the sugar moves a trailing argument behind the dot, and
 `length(s)` has none to move, so it never suggests `s.length()`. That rule
-lives in the warning only; the language's sugar is not restricted by it.
+lives in the warning only; the language's sugar is not restricted by it. A
+call whose receiver is an Int literal (`scan_while(0, p)`) is eligible but
+not reported: a written number is almost always a constant parameter of an
+operation on something else, and whether it is the subject is the writer's
+judgment (COMPILERPEDIA-REPORT.md, "Lint audit").
 
 The warning is one-directional (a call already written with sugar is never told
 it could be functional), prints no rewrite and carries no fixit, and is one

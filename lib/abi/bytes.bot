@@ -70,8 +70,8 @@
 # value can observe the storage, and must produce the same results.
 #
 # Contrast the things that DO have identity and are meant to: a raw address
-# (the bits are the value), a file descriptor or other handle (the token is
-# the value), and the existing MutableArray (a reference to a shared store).
+# (the bits are the value) and a file descriptor or other handle (the token is
+# the value). (MutableArray, once a reference to a shared store, is a value.)
 #
 # Equality and hashing are by the current bytes (never by storage identity).
 # A MutableBytes is not a Bytes, String, C string, pointer, borrow, resource,

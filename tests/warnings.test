@@ -103,14 +103,121 @@ test warn-int-literal {two exits returning Int 0 warn once, anchored at the firs
     return 1}
 } -result {{value `0` is returned from 2 distinct exits @ 3:9 5:9}}
 
-test warn-bool-literal {repeated false is a warning: Bool is not special-cased away} -body {
+test warn-bool-literal {repeated false beside an exit of the other value is not reported: Bool has two values, so a guard-style predicate with three exits repeats one by necessity (COMPILERPEDIA-REPORT.md, "Lint audit")} -body {
     shown {fn f(x):
     if x:
         return false
     if x == 3:
         return false
     true}
-} -result {{value `false` is returned from 2 distinct exits @ 3:9 5:9}}
+} -result {}
+
+# A repeated Bool constant is reported when it is the function's only
+# answer: every value exit returns it.
+test warn-bool-constant-result {a Bool constant returned from every value exit is reported} -body {
+    shown {fn f(x):
+    if x == 3:
+        return false
+    false}
+} -result {{value `false` is returned from 2 distinct exits @ 3:9 4:5}}
+
+test warn-bool-constant-final-branches {a final if/else whose every leaf is the same Bool constant is reported} -body {
+    shown {fn f(x):
+    if x == 3:
+        true
+    elif x == 4:
+        true
+    else:
+        true}
+} -result {{value `true` is returned from 3 distinct exits @ 3:9 5:9 7:9}}
+
+test warn-bool-unknown-exit-silent {a repeated Bool constant beside an exit of unknown value is not the function's only answer: silent} -body {
+    shown {fn f(x, y):
+    if x == 3:
+        return false
+    if x == 4:
+        return false
+    y == 1}
+} -result {}
+
+test warn-bool-binding-still-reported {the same Bool binding returned from two exits is a binding identity, not a constant: still reported} -body {
+    shown {fn f(x, flag: bool):
+    if x == 3:
+        return flag
+    if x == 4:
+        return true
+    flag}
+} -result {{the value of `flag` is returned from 2 distinct exits @ 3:9 6:5}}
+
+test warn-int-guards-still-reported {guard-style returns of one Int sentinel are still reported: the guard form is not exempt, only Bool's two values are} -body {
+    shown {fn f(x):
+    if x < 0:
+        return -1
+    if x > 9:
+        return -1
+    x}
+} -result {{value `-1` is returned from 2 distinct exits @ 3:9 5:9}}
+
+# Handler alternatives: the language gives each error its own handler, so
+# exits that end the handlers of one call are one exit unit.
+set ::handlerPrelude {error A
+error B
+fn g(x) errors A, B:
+    if x == 1:
+        fail A
+    if x == 2:
+        fail B
+    x
+}
+
+test warn-handler-alternatives-one-unit {two handlers of one call returning the same value are one exit unit: silent} -body {
+    shown "${::handlerPrelude}fn f(x):
+    y = g(x):
+        on A:
+            return -1
+        on B:
+            return -1
+    y"
+} -result {}
+
+test warn-handler-alternatives-and-another-exit {handler alternatives plus another exit of the same value span two units: reported, with every site} -body {
+    shown "${::handlerPrelude}fn f(x):
+    if x > 9:
+        return -1
+    y = g(x):
+        on A:
+            return -1
+        on B:
+            return -1
+    y"
+} -result {{value `-1` is returned from 3 distinct exits @ 11:9 14:13 16:13}}
+
+test warn-handlers-of-two-calls {handlers of two different calls are two units: reported} -body {
+    shown "${::handlerPrelude}fn f(x):
+    y = g(x):
+        on A:
+            return -1
+        on B:
+            0
+    z = g(y):
+        on A:
+            0
+        on B:
+            return -1
+    z"
+} -result {{value `-1` is returned from 2 distinct exits @ 12:13 19:13}}
+
+test warn-handler-return-not-the-tail {a return that does not end its handler is an ordinary exit: reported} -body {
+    shown "${::handlerPrelude}fn f(x):
+    y = g(x):
+        on A:
+            return -1
+        on B:
+            if x == 7:
+                return -1
+            0
+    y"
+} -result {{value `-1` is returned from 2 distinct exits @ 12:13 15:17}}
 
 test warn-string-literal {repeated String literals warn} -body {
     shown {fn f(x):

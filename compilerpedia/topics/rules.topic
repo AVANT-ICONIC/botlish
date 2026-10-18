@@ -1,0 +1,2128 @@
+# rules.topic -- the language rules a program must follow, each stated once
+# with its reason, its diagnostic and its alternative (COMPILERPEDIA.md).
+
+@topic rule.if-placement
+title: Where an if can be a value
+summary: An if chain is a value only as the whole right side of "=", the whole value of "return" or a statement of its own; never an operand, a call argument or a list element.
+index: rules errors
+alias: if as an argument; if arguments; if as an operand; inline if; one-line if; ternary operator; conditional expression inside a call
+keywords: if, elif, else, value, operand, argument, concat, ternary, whole right side
+related: concept.if-expressions rule.loop-placement rule.indentation rule.control-placement principle.bind-before-use principle.small-functions error.surface-syntax
+docs: README.md ELIF.md METHOD-SUGAR.md DIAGNOSTIC-RECOVERY.md
+match: SURFACE SYNTAX | an "if" value must be the whole right side*
+
+== THE RULE
+An `if` chain (`if`, any number of `elif`, an optional `else`) evaluates
+to the value of the branch that runs. It may stand only where its blocks
+get lines of their own:
+
+  * the whole right side of a binding:      sign = if n < 0: ...
+  * the whole right side of a destructuring: {a, b} = if ok: ...
+  * the whole value of `return`:             return if ok: ...
+  * a statement of its own; as the last statement of a function body (or
+    of the program) it is that body's value.
+
+It is never an operand (`1 + if c: ...`), a call or method argument
+(`f(if c: ...)`, `s.concat(if c: ...)`), a list or struct element, or a
+method receiver. There is no one-line form (`if c: a else: b`) and no `?:`
+operator. `break` takes no value at all (rule.control-placement), so it is
+not a place for an `if` either.
+
+== WHY
+The branches of an `if` are blocks, and a block is delimited by
+indentation. Inside parentheses and brackets the layout is ignored
+(rule.indentation), so a block cannot be written there; the places above
+are exactly those where the `if` ends the statement and its blocks can
+follow on their own lines. Botlish has one conditional form, and no
+second, inline one (`?:`, `a if c else b`) with a precedence of its own.
+Naming the value first also names that part of the computation
+(principle.bind-before-use).
+
+== WHAT IS REPORTED
+SURFACE SYNTAX, at the word `if`:
+
+    an "if" value must be the whole right side of "=" or "return"
+
+The one-line form `x = if ok: "yes" else: "no"` is reported earlier, at
+the first branch: `expected a new line and an indented block after ":"`
+(rule.indentation).
+
+@example reject
+import str
+
+fn answer(ok: bool) -> str:
+    "answer: ".concat(if ok: "yes" else: "no")
+
+0
+@caption An if as a method argument
+@error SURFACE SYNTAX
+@at 4:23
+@message an "if" value must be the whole right side of "=" or "return"
+@end
+
+== WHAT TO DO
+Bind the `if` to a name, then use the name; or move the choice into a
+small function whose body is the `if` (or a guard and a value), and call
+it where the value is needed.
+
+@example accept
+import str
+
+fn answer(ok: bool) -> str:
+    word = if ok:
+        "yes"
+    else:
+        "no"
+    "answer: ".concat(word)
+
+answer(true)
+@caption Bind the if's value first
+@value "answer: yes"
+@end
+
+@example accept
+import str
+
+fn yes_no(ok: bool) -> str:
+    if ok:
+        return "yes"
+    "no"
+
+fn answer(ok: bool) -> str:
+    "answer: ".concat(ok.yes_no())
+
+answer(false)
+@caption Or move the choice into a helper
+@value "answer: no"
+@end
+
+@topic rule.loop-placement
+title: Where a collecting loop can be a value
+summary: A loop with an iteration clause evaluates to the List of its body's values, but only as the whole right side of "=", the value of "return" or a statement of its own; never as an argument or operand.
+index: rules errors
+alias: loop arguments; loop as an argument; loop as an operand; loop inside a call; collecting loop as argument
+keywords: loop, in, from, to, through, collecting, argument, operand, list of values
+related: concept.loops rule.if-placement rule.indentation rule.control-placement principle.bind-before-use error.surface-syntax
+docs: README.md COLLECTING-LOOPS.md
+match: SURFACE SYNTAX | expected an expression, found "loop"*
+
+== THE RULE
+A loop with an iteration clause (`loop x in xs:`, `loop i from a to b:`,
+`... through b:`, `loop i down from b to a:`, lockstep clauses joined by
+`and`) evaluates to the List of its body's values. Like an `if`
+(rule.if-placement), it is a value only where its body gets lines of its
+own:
+
+  * the whole right side of a binding:   ok = loop x in xs: ...
+  * the whole value of `return`:          return loop x in xs: ...
+  * a statement of its own; as the last statement of a function body (or
+    of the program) it is that body's value.
+
+It is never a call or method argument, an operand, a list element or a
+receiver: `all_true?(loop b in xs: b.ok?())` and `n = 1 + loop ...` are
+syntax errors. A loop's body is always a block on its own lines; there is
+no one-line loop.
+
+== WHY
+The body of a loop is a block, delimited by indentation, and layout is
+ignored inside parentheses and brackets (rule.indentation). A collecting
+loop is therefore written where the statement ends, and the List it builds
+is used by name. The rule is the same as an `if`'s, so there is one rule
+for every construct that has a block.
+
+== WHAT IS REPORTED
+SURFACE SYNTAX, at the word `loop`:
+
+    expected an expression, found "loop"
+
+This is the parser's general message for a token that cannot start an
+expression; with "loop" it always means a loop written where a value is
+expected.
+
+@example reject
+fn all_true?(flags: List[bool]) -> bool:
+    loop f in flags:
+        if not f:
+            return false
+    true
+
+xs = [3, 5, 8]
+all_true?(loop x in xs: x > 0)
+@caption A loop as a call argument
+@error SURFACE SYNTAX
+@at 8:11
+@message expected an expression, found "loop"
+@end
+
+== WHAT TO DO
+Bind the loop's List to a name, then pass the name; or make the loop the
+body (or the `return` value) of a small function.
+
+@example accept
+fn all_true?(flags: List[bool]) -> bool:
+    loop f in flags:
+        if not f:
+            return false
+    true
+
+xs = [3, 5, 8]
+positive = loop x in xs:
+    x > 0
+positive.all_true?()
+@caption Bind the collected List first
+@value true
+@end
+
+@topic rule.forward-references
+title: No reference to a later binding
+summary: A binding is visible only from where it is established onward; a reference to a function or value defined later in the same scope is UNBOUND, even inside a function body that runs later.
+index: rules errors
+alias: forward reference; is declared later; use before definition; call a function defined below
+keywords: forward, later, declared later, hoisting, order, callee first, mutual recursion, unbound
+related: concept.definition-order concept.mutual-recursion concept.bindings rule.immutable-bindings rule.module-bindings principle.bind-before-use error.unbound
+docs: STRICT-REFERENCE-DETERMINISM.md MUTUAL-RECURSION.md MODULE-BINDINGS.md
+match: CORE SEMANTIC UNBOUND | *declared later*
+
+== THE RULE
+A name becomes visible where its binding is established -- a value after
+its initializer, a function at its `fn` line -- and stays visible to the
+end of its scope and in the scopes nested inside it. A reference to a name
+that is bound only later is an error:
+
+  * in a function body, even when the function is only called after the
+    later binding exists;
+  * in a branch that never runs and in a function that is never called;
+  * in a module: a module value may read earlier module values only, and a
+    module function may call only functions defined above it.
+
+Nothing is hoisted, and the order in which things run never makes a
+forward reference legal. A named function may call itself: `fn f`
+establishes `f` before its own body. A value is not visible in its own
+initializer (`x = x + 1` with no earlier `x` is a forward reference).
+
+Two functions that call each other cannot be written today: `mutual:`
+groups are designed (MUTUAL-RECURSION.md) but not implemented, and
+`mutual:` is a syntax error.
+
+== WHY
+Resolution walks the source once, in evaluation order, over scopes that
+start empty: a reference's target, identity and contract are fixed by the
+source before it (STRICT-REFERENCE-DETERMINISM.md). Every analysis then
+sees a callee completely before its first caller. When forward
+references were allowed, later definitions had to repair what earlier
+stages could not know: the caller-before-callee order of the same
+program produced about a third more specialized instances and twice the
+run-time guards. "The desired fix is not a smarter hoist; it is that
+later bindings do not exist."
+
+== WHAT IS REPORTED
+CORE SEMANTIC UNBOUND, at the reference:
+
+    unbound name "double": "double" is declared later; forward references
+    are not allowed (a binding is visible only after it is established)
+
+A name that is bound nowhere is the plain `unbound name "NAME"`
+(error.unbound).
+
+@example reject
+fn total(n: int) -> int:
+    double(n) + 1
+
+fn double(n: int) -> int:
+    n * 2
+
+total(3)
+@caption Caller before callee
+@error CORE SEMANTIC UNBOUND
+@at 2:5
+@message *"double" is declared later*
+@end
+
+== WHAT TO DO
+Write callees before their callers: helpers first, the functions that use
+them next, the top-level code last. For two functions that would call each
+other, write one self-recursive function and pass what distinguishes the
+two cases as a parameter, or use a loop.
+
+@example accept
+fn double(n: int) -> int:
+    n * 2
+
+fn total(n: int) -> int:
+    double(n) + 1
+
+total(3)
+@caption Callee first
+@value 7
+@end
+
+@example accept
+fn parity?(n: int, want_even: bool) -> bool:
+    if n == 0:
+        return want_even
+    parity?(n - 1, not want_even)
+
+parity?(10, true)
+@caption even?/odd? as one recursive function
+@value true
+@end
+
+@topic rule.one-handler-per-error
+title: A handler names exactly one error
+summary: Each "on" handler of a handled call names exactly one error; several errors take several handlers, and there is no "on A, B:", "on A | B:" or catch-all handler.
+index: rules errors
+alias: on A or B; one handler for two errors; handler names exactly one error; shared error handler
+keywords: on, handler, handled call, several errors, comma, enum payload
+related: concept.errors concept.error-payloads concept.enums rule.unhandled-errors capability.multi-error-handler task.handle-several-errors error.surface-syntax
+docs: ERROR-PAYLOADS.md EXPLICIT-ERROR-COMPLETIONS.md ENUMS.md
+match: SURFACE SYNTAX | a handler names exactly one error*
+
+== THE RULE
+A handled call is a call followed by `:` and an indented block of
+handlers:
+
+    r = parse(text):
+        on Empty:
+            ...
+        on TooLong:
+            ...
+
+Each handler names exactly one declared error, written `on NAME:`, `on
+NAME details:` (the payload bound whole) or `on NAME {field, ...}:` (the
+payload destructured). Several errors take several handlers. There is no
+list of errors (`on A, B:`), no alternative (`on A | B:`), no handler that
+catches every error, and no guard (`on A if ...:`). A second handler for
+the same error is DUPLICATE. Errors the handlers do not name propagate,
+and must be admitted by the enclosing function (rule.unhandled-errors).
+
+== WHY
+`on` selects by the error's identity only (ERROR-PAYLOADS.md). A handler's
+payload binding has exactly the payload type of the one error it names --
+the anonymous struct of that error's declared fields -- and two errors are
+unrelated identities even when their fields are identical, so a handler
+for two errors would have no single payload type. One name per handler
+keeps selection nominal: which handler runs is visible from its name, with
+no matching order or precedence to reason about.
+
+== WHAT IS REPORTED
+SURFACE SYNTAX, at the comma:
+
+    a handler names exactly one error: write one "on NAME:" handler per
+    error
+
+`on A | B:` is reported as `unexpected character "|"`: `|` is not a
+Botlish character at all.
+
+@example reject
+error Empty
+error TooLong
+
+fn check(s: str) -> str errors Empty, TooLong:
+    if s == "":
+        fail Empty
+    if s == "abcdef":
+        fail TooLong
+    s
+
+fn safe(s: str) -> str:
+    check(s):
+        on Empty, TooLong:
+            "invalid"
+
+safe("ok")
+@caption Two errors in one handler
+@error SURFACE SYNTAX
+@at 13:17
+@message a handler names exactly one error*
+@end
+
+== WHAT TO DO
+Write one handler per error; when the bodies are long, call one helper
+function from each. When callers usually treat the failures alike, declare
+one error whose payload says which failure it was, as an enum field: a
+caller that does not care writes one `on Invalid:`, and one that does
+reads the field (ERROR-PAYLOADS.md, concept.enums).
+
+@example accept
+error Empty
+error TooLong
+
+fn check(s: str) -> str errors Empty, TooLong:
+    if s == "":
+        fail Empty
+    if s == "abcdef":
+        fail TooLong
+    s
+
+fn safe(s: str) -> str:
+    check(s):
+        on Empty:
+            "invalid"
+        on TooLong:
+            "invalid"
+
+[safe("ok"), safe(""), safe("abcdef")]
+@caption One handler per error
+@value ["ok", "invalid", "invalid"]
+@end
+
+@example accept
+enum Problem:
+    Empty, TooLong
+
+error Invalid:
+    problem: Problem
+
+fn check(s: str) -> str errors Invalid:
+    if s == "":
+        fail Invalid {problem: Problem::Empty}
+    if s == "abcdef":
+        fail Invalid {problem: Problem::TooLong}
+    s
+
+fn safe(s: str) -> str:
+    check(s):
+        on Invalid:
+            "invalid"
+
+fn reason(s: str) -> str:
+    check(s):
+        on Invalid {problem}:
+            if problem == Problem::Empty:
+                return "empty"
+            "too long"
+
+[safe("ok"), safe(""), reason("abcdef")]
+@caption One error with an enum payload
+@value ["ok", "invalid", "too long"]
+@end
+
+@topic rule.unhandled-errors
+title: Every possible error of a call is handled, admitted or proven impossible
+summary: Each declared error a call may produce must be handled at the call, admitted by the enclosing function's errors clause, or proven impossible by the compiler; otherwise the call is UNHANDLED-ERROR.
+index: rules
+alias: errors must be handled; admit an error; propagate an error
+keywords: errors clause, handler, on, fail, propagate, declared error, completion, IndexNotFound
+related: concept.errors concept.error-payloads concept.known-errors proof.completions proof.list-bounds rule.known-error rule.one-handler-per-error principle.errors-over-sentinels task.handle-several-errors error.unhandled-error
+docs: EXPLICIT-ERROR-COMPLETIONS.md STATIC-COMPLETION-PROOFS.md ERROR-PAYLOADS.md
+
+== THE RULE
+A function's `errors` clause (`fn f(x) -> T errors E1, E2:`) declares the
+errors a call to it may produce; a standard-library function or intrinsic
+declares its own (`list::at` produces IndexNotFound, `argv` produces
+InvalidArgumentEncoding). Every error a call may produce must be accounted
+for at the call, in one of three ways:
+
+  * handled: the call is a handled call with an `on NAME:` handler for it;
+  * admitted: the enclosing function declares it in its own `errors`
+    clause, and it propagates to that function's callers;
+  * proven impossible: the compiler proves, from the facts it has about
+    the arguments at this call, that the callee cannot produce it
+    (proof.completions); such a call needs nothing.
+
+The program's top level has no `errors` clause: there every possible error
+must be handled or proven impossible. A `fail NAME` statement is held to
+the same rule: it needs `errors NAME` on the enclosing function (at the
+top level it is never admitted). A handler for an error the call cannot
+produce is accepted and never runs.
+
+== WHY
+"Known failure -> compile-time rejection; unknown failure -> declared
+runtime error completion; never an undeclared one"
+(EXPLICIT-ERROR-COMPLETIONS.md). An error is a completion of the call, not
+a value: there is no Result to unwrap and nothing that could drop a
+failure silently. A function's `errors` clause is part of its contract,
+like its parameter and result types, so every caller sees what can go
+wrong and decides where each failure is answered.
+
+== WHAT IS REPORTED
+CORE SEMANTIC UNHANDLED-ERROR, at the call, naming every error of the call
+that is left (one diagnostic per call):
+
+    this call may produce the declared error "Negative", which is neither
+    handled here nor admitted by the enclosing function's own "errors"
+    declaration
+
+A standard-library call names itself (`this call of "list::at" may
+produce ...`; proof.list-bounds lists the forms the index proof
+recognizes). A `fail` that nothing admits is `"fail Bad" is not admitted
+here: the enclosing function does not declare "errors Bad"`.
+
+@example reject
+error Negative
+
+fn check(n: int) -> int errors Negative:
+    if n < 0:
+        fail Negative
+    n
+
+fn use(n: int) -> int:
+    check(n)
+
+use(3)
+@caption Neither handled nor admitted
+@error CORE SEMANTIC UNHANDLED-ERROR
+@at 9:5
+@end
+
+== WHAT TO DO
+Decide where the failure belongs. Handle it where a sensible outcome
+exists (a fallback value, a `return`, or a `fail` of another error);
+admit it in the function's `errors` clause when the caller should decide;
+or restate the code so that the compiler proves the error impossible (a
+guard before the call, or a recognized pattern: proof.list-bounds).
+
+@example accept
+error Negative
+
+fn check(n: int) -> int errors Negative:
+    if n < 0:
+        fail Negative
+    n
+
+fn or_zero(n: int) -> int:
+    check(n):
+        on Negative:
+            0
+
+fn plus_one(n: int) -> int errors Negative:
+    check(n) + 1
+
+[or_zero(-3), plus_one(3)]
+@caption Handled in or_zero, admitted by plus_one
+@value [0, 4]
+@end
+
+@topic rule.known-error
+title: A call that always fails is rejected, even with a handler
+summary: A call the compiler proves can never complete normally under the facts at that call is KNOWN-ERROR; a handler does not make it legal.
+index: rules
+alias: a handler does not make a statically known failure legal; call that always fails
+keywords: known error, always fails, handler, literal argument, statically decided, negative test
+related: concept.known-errors concept.negative-tests concept.static-compile proof.completions rule.unhandled-errors stdlib.list::get error.known-error
+docs: STATIC-COMPLETION-PROOFS.md EXPLICIT-ERROR-COMPLETIONS.md
+
+== THE RULE
+For every call of an exactly known function, the compiler computes from
+the facts it has about the arguments at that call (literal values, ranges
+established by guards, declared types) which declared errors the call can
+produce and whether it can complete normally at all. A call that cannot
+complete normally -- it always produces a declared error -- is rejected,
+whether or not it is handled. Only a call that may succeed is legal; its
+possible errors then follow rule.unhandled-errors.
+
+`[1, 2].at(5)` is such a call, and so is `check(-3)` for a `check` that
+fails on every negative argument. The same call inside a function, with
+the argument a parameter, is an ordinary call that may fail: the analysis
+of a function does not take its callers' arguments into account.
+
+== WHY
+"A handler is not a way to encode an `if` for a statically known
+condition" (STATIC-COMPLETION-PROOFS.md). When the compiler knows that a
+call fails, the failure is a defect it can report now; writing the
+outcome directly says the same thing without a call that cannot succeed.
+
+== WHAT IS REPORTED
+CORE SEMANTIC KNOWN-ERROR, at the call:
+
+    this call can never complete normally under the facts proven for its
+    arguments here -- it always produces the declared error(s) Negative;
+    a handler does not make a statically known failure legal
+
+@example reject
+error Negative
+
+fn check(n: int) -> int errors Negative:
+    if n < 0:
+        fail Negative
+    n
+
+check(-3):
+    on Negative:
+        0
+@caption A call that always fails, handled
+@error CORE SEMANTIC KNOWN-ERROR
+@at 8:1
+@end
+
+== WHAT TO DO
+Write the outcome the failure would have produced (here, `0`). When the
+failing input is data -- a fallback path, a test of the failure -- pass it
+through a function parameter: the call inside the function may fail, and
+its handler is ordinary (concept.negative-tests). For a List read with a
+fallback, list::get(xs, i, fallback) is the handled read written once. To
+test that a program is rejected at compile time, use `static compile:`
+(concept.static-compile).
+
+@example accept
+error Negative
+
+fn check(n: int) -> int errors Negative:
+    if n < 0:
+        fail Negative
+    n
+
+fn checked_or_zero(n: int) -> int:
+    check(n):
+        on Negative:
+            0
+
+[checked_or_zero(-3), checked_or_zero(4)]
+@caption The failing input passed through a parameter
+@value [0, 4]
+@end
+
+@topic rule.method-requires-import
+title: Method syntax applies only functions visible by name
+summary: receiver.f(args) is the call f(receiver, args) and needs a function f visible at the call; nothing is looked up through the receiver's type, so s.concat("x") needs import str.
+index: rules
+alias: method call needs import; method not found on str; why does s.concat need import str
+keywords: method, import, visible, receiver, concat, str, list, namespace, MISSING-IMPORT
+related: concept.method-sugar concept.imports rule.method-resolution rule.imports-not-transitive principle.explicit-dependencies stdlib.module.str stdlib.str::concat error.missing-import
+docs: METHOD-SUGAR.md IMPORTS.md DIAGNOSTIC-RECOVERY.md
+
+== THE RULE
+`receiver.f(a, b)` is another spelling of the ordinary call
+`f(receiver, a, b)`, allowed exactly when a function named `f` is visible
+at the call:
+
+  * a function or binding of the file, defined above the call, or a
+    parameter or local of an enclosing scope;
+  * a root native (`argv`, `hash`, `mod`, ...), visible everywhere;
+  * a member `f` of a namespace the file imports directly (`import str`
+    makes `str::concat` a candidate for `.concat(...)`).
+
+Nothing is looked up through the receiver's type: a `str` value does not
+"have" the functions of `str`. Without `import str`, `s.concat("xy")`
+finds no `concat`, and neither does `str::concat(s, "xy")`. An import
+injects no unqualified name: after `import str`, `concat(s, "xy")` is
+still an unbound name; `s.concat("xy")` and `str::concat(s, "xy")` are
+the two spellings.
+
+== WHY
+Method syntax is parasitic on ordinary function calls (METHOD-SUGAR.md):
+no method declaration, no method table, no search by receiver type. It
+asks "is there a function f visible here, and would f(x, ...) be valid?".
+Visibility comes from the file's own header, the one place a file
+declares what it depends on (IMPORTS.md), so the functions a file can
+reach -- with either spelling -- are those its imports name.
+
+== WHAT IS REPORTED
+CORE SEMANTIC MISSING-IMPORT, at the method name, when an unimported
+namespace has a function the call would apply:
+
+    namespace "str" is not imported; add `import str` to use
+    `str::concat` (the method-style call ".concat(...)" applies only a
+    function visible by that name)
+
+The qualified spelling reports SURFACE MODULE MISSING-IMPORT. When no
+known namespace has such a function, the call is reported as the
+projection of a field (NOT-A-STRUCT or UNKNOWN-FIELD). (Before
+DIAGNOSTIC-RECOVERY.md, section 1, a failed method call was typed `any`
+and surfaced as a TYPE error far from the call.)
+
+@example reject
+s = "ab"
+s.concat("xy")
+@caption No import of str
+@error CORE SEMANTIC MISSING-IMPORT
+@at 2:3
+@end
+
+== WHAT TO DO
+Import the namespace whose function you mean.
+
+@example accept
+import str
+
+s = "ab"
+s.concat("xy")
+@caption import str makes str::concat a candidate
+@value "abxy"
+@end
+
+@topic rule.method-resolution
+title: Method calls: exactly one visible candidate must fit
+summary: When several visible functions share a method name, each is tried as the ordinary call; exactly one must be valid, and there is no precedence between them.
+index: rules
+alias: method candidates; which function does x.f() call; method overload
+keywords: method, candidate, ambiguous, no applicable, field, callable field, precedence, overload, nomethod
+related: concept.method-sugar concept.nomethod rule.method-requires-import rule.typed-parameters error.ambiguous-method-call error.no-applicable-method error.nomethod-call
+docs: METHOD-SUGAR.md WARNINGS-METHOD-ELIGIBLE.md
+
+== THE RULE
+The candidates of `x.f(args)` are the distinct functions named `f` visible
+at the call: the lexical one, if any, and the member `f` of each directly
+imported namespace. Each is tried as the ordinary call `f(x, args)`:
+
+  * exactly one is valid: the call is that function's call;
+  * several are valid: the call is ambiguous -- there is no precedence by
+    import order, by "local first" or by "standard library first";
+  * none is valid: no candidate applies, and the diagnostic lists why each
+    fails (with a single candidate, it is that call's own diagnostic).
+
+A candidate is valid when its call has no diagnostic of its own (a
+declared parameter type or an inferred contract the receiver cannot
+prove, an invalid flag); a declared error nobody handles is not evidence
+against it. A function of another arity, and a `nomethod fn`, are no
+candidates at all.
+
+A struct field interferes only when it may hold a function: if the
+receiver's struct has a field `f` whose value may be callable and a
+function `f` is visible, `x.f()` is ambiguous; `(x.f)()` calls the field
+and `f(x)` the function. A field of a non-callable type (an `int` field
+named like a function) is no candidate.
+
+== WHY
+Botlish has no overloading: a qualified spelling is one exact function and
+a name denotes one binding. A method name is looked up in several places
+at once, so the sugar applies its one rule to each candidate and refuses
+to guess. Because nothing is preferred, adding an import can make a call
+ambiguous, but it can never silently change which function a valid call
+runs.
+
+== WHAT IS REPORTED
+CORE SEMANTIC AMBIGUOUS-METHOD-CALL, at the method name:
+
+    method-style call "length" is ambiguous: more than one visible
+    function accepts the receiver (length, list::length); there is no
+    precedence between them: call the one you mean explicitly, e.g.
+    length(receiver, ...)
+
+and CORE SEMANTIC NO-APPLICABLE-METHOD, `method-style call "length": none
+of the visible functions of that name accepts the receiver (...)`.
+
+@example reject
+import list
+
+fn length(xs):
+    0
+
+ys = [1, 2, 3]
+ys.length()
+@caption Two candidates accept a List
+@error CORE SEMANTIC AMBIGUOUS-METHOD-CALL
+@at 7:4
+@end
+
+== WHAT TO DO
+Call the function you mean in its ordinary spelling (`list::length(ys)` or
+`length(ys)`), rename the local function, or declare its parameter type so
+that only one candidate accepts the receiver.
+
+@example accept
+import list
+
+fn length(s: str) -> int:
+    0
+
+xs = [1, 2, 3]
+xs.length()
+@caption Only list::length accepts a List
+@value 3
+@end
+
+@topic rule.immutable-bindings
+title: A name is bound once per scope; there is no assignment
+summary: "x = e" binds a new immutable name, at most once per scope; a nested scope may shadow it, and there is no assignment, "+=", field or element assignment.
+index: rules errors
+alias: rebind a variable; reassign a name; duplicate binding; field assignment; only a name can be bound
+keywords: binding, immutable, assignment, shadowing, duplicate, scope, accumulate, +=
+related: concept.bindings concept.values rule.forward-references capability.assignment principle.immutability concept.mutable-vector error.duplicate
+docs: README.md STRUCT-DESTRUCTURING.md
+match: SURFACE SYNTAX | only a name can be bound with "="*
+
+== THE RULE
+`name = expression` creates a new binding whose value never changes. It
+is not assignment:
+
+  * a name is bound at most once in a scope; a function's parameters and
+    its body are one scope, so a body cannot rebind a parameter;
+  * a nested scope (an `if` branch, a loop body, a handler, a nested
+    function) may bind the same name again; that binding shadows the
+    outer one until the nested scope ends, and the outer one is unchanged;
+  * only a name can be bound: there is no field assignment (`p.x = 2`), no
+    element assignment (`xs[0] = 1`), no `+=` and no `++`.
+
+Struct, List and String values are immutable too: a "changed" value is a
+new value. MutableVector and MutableArray change through their own
+operations on a place, never through `=`.
+
+A common surprise: `total = total + i` in a loop body binds a new `total`
+in the body on every iteration. The outer `total` keeps its value.
+
+== WHY
+A binding's value is fixed where it is established, so a fact the
+compiler proves about it -- its type, its range -- stays true wherever the
+binding is visible from then on, and a reader never has to trace later
+writes to know what a name means. State that changes is a separate,
+explicit kind of value (MutableVector, MutableArray) whose changes are
+calls.
+
+== WHAT IS REPORTED
+CORE SEMANTIC DUPLICATE, at the second binding:
+
+    duplicate binding "x" in the same lexical scope
+
+(for parameters, `... (block parameters)`), and SURFACE SYNTAX for a
+target that is not a name:
+
+    only a name can be bound with "="
+
+`x += 1` is `expected an expression, found "="`.
+
+@example reject
+price = 100
+price = price - 15
+price
+@caption A second binding in one scope
+@error CORE SEMANTIC DUPLICATE
+@at 2:1
+@end
+
+@example reject
+struct Point:
+    x: int
+    y: int
+
+p = Point {x: 1, y: 2}
+p.x = 5
+p
+@caption Field assignment
+@error SURFACE SYNTAX
+@at 6:5
+@message only a name can be bound with "="
+@end
+
+== WHAT TO DO
+Give each new value its own name (`discounted = price - 15`). Build a
+"changed" struct as a new construction. Accumulate with a collecting loop
+or with recursion that passes the running value as a parameter. Use
+MutableVector when a growing sequence really is the model
+(concept.mutable-vector).
+
+@example accept
+fn sum_to(n: int, acc: int) -> int:
+    if n == 0:
+        return acc
+    sum_to(n - 1, acc + n)
+
+sum_to(4, 0)
+@caption An accumulator passed as a parameter
+@value 10
+@end
+
+@example accept
+total = 1
+loop i from 0 to 3:
+    total = total + i
+total
+@caption Shadowing leaves the outer total unchanged
+@value 1
+@end
+
+@topic rule.no-callable-types
+title: No type is callable
+summary: A type declaration declares a type and nothing callable: T(x), T?(x), x.T?() and ns::T? are unknown names unless the program declares a function of that name.
+index: rules
+alias: type constructor call; type predicate; call a type as a function; convert to a domain type
+keywords: type, constructor, predicate, converter, domain, refinement, Small?, unbound
+related: concept.integer-domains concept.refinements concept.structs rule.struct-construction rule.typed-parameters proof.ranges proof.refinements error.unbound
+docs: ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md EXPLICIT-ERROR-COMPLETIONS.md REFINEMENT-VALUES.md
+
+== THE RULE
+No type declaration -- `type`, `refined type`, `struct`, `enum`,
+`layout`, `context struct` -- creates anything callable: no constructor
+function and no predicate. `Small(3)`, `Small?(3)`, `x.Small?()` and
+`geo::Small?(x)` name functions that do not exist unless the program
+declares them. Built-in type names are not functions either (`int(3)` is
+an unbound name). A struct value is made by its construction syntax,
+`Point {x: 1, y: 2}` (rule.struct-construction).
+
+A value enters an integer domain in one of two ordinary ways:
+
+  * a converter: a function whose declared result is the domain, checked
+    like any result (`fn to_small(n: int) -> Small errors OutOfRange:`);
+  * comparisons: on the edge where `0 <= n and n <= 10` holds, `n` is
+    proven to be a `Small` (proof.ranges).
+
+A refinement is entered through its owner's `proves` predicates and
+validators (concept.refinements).
+
+== WHY
+Automatic type predicates (`Small?`) and constructor calls (`Byte(x)`) once
+existed and were removed (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md): a
+constructor raised an undeclared run-time error, and a predicate was
+lowered differently by every backend and could not be compiled natively
+in exactly the case where a run-time test is worth anything. A converter
+is an ordinary function whose failure is a declared error in its `errors`
+clause, and a comparison is an ordinary condition: both are checked like
+any other code.
+
+== WHAT IS REPORTED
+CORE SEMANTIC UNBOUND, at the name: `unbound name "Small"` (or
+`"Small?"`); with method syntax, NOT-A-STRUCT, because `x.Small?()` is
+then read as the projection of a field.
+
+@example reject
+type Small = Int in 0..10
+
+Small(3)
+@caption A type is not a function
+@error CORE SEMANTIC UNBOUND
+@at 3:1
+@message unbound name "Small"
+@end
+
+== WHAT TO DO
+Write a converter with a declared error, or establish the range with
+comparisons before the use.
+
+@example accept
+type Small = Int in 0..10
+error OutOfRange
+
+fn to_small(n: int) -> Small errors OutOfRange:
+    if n < 0 or n > 10:
+        fail OutOfRange
+    n
+
+fn twice(x: Small) -> int:
+    x * 2
+
+twice(to_small(4))
+@caption A converter function
+@value 8
+@end
+
+@topic rule.struct-construction
+title: A struct construction gives every field exactly once
+summary: Name {field: value, ...} names every declared field exactly once, in any order, with no defaults and no unknown fields, each value proven to satisfy its field's type.
+index: rules
+alias: missing field in construction; struct default values; construct a struct; positional struct construction
+keywords: struct, construction, field, default, missing field, unknown field, duplicate field, shorthand
+related: concept.structs concept.opaque-structs concept.destructuring rule.no-callable-types rule.opaque-authority rule.immutable-bindings error.missing-field error.unknown-field error.duplicate-field
+docs: STRUCTS.md OPAQUE-STRUCTS.md
+
+== THE RULE
+`Point {x: 1, y: 2}` constructs a value of the declared struct `Point`:
+
+  * every declared field is given exactly once; the order is free;
+  * there are no defaults, no optional fields and no unknown fields;
+  * each value must be proven to satisfy its field's declared type, with
+    the proof a call argument gets for a declared parameter
+    (rule.typed-parameters); no run-time check is inserted;
+  * fields are always written `name: value`: there is no shorthand
+    `Point {x, y}` (that form exists only in destructuring) and no
+    positional form `Point(1, 2)` (rule.no-callable-types).
+
+A module's struct is constructed as `geo::Point {...}` after `import geo`;
+an opaque struct only inside its own module (rule.opaque-authority). An
+anonymous struct `{x: 1, y: 2}` has exactly the fields written. Struct
+values are immutable: a value with one field changed is a new
+construction that names every field.
+
+== WHY
+A struct is a fixed set of named fields whose shape the compiler knows, so
+a construction is complete, exact and statically checked (STRUCTS.md): one
+construction determines every field, and a projection can never fail.
+With no defaults, adding a field to a declaration turns every construction
+that lacks it into an error instead of silently filling it in.
+
+== WHAT IS REPORTED
+CORE SEMANTIC MISSING-FIELD, at the construction:
+
+    the Point construction is missing field "y" (every declared field must
+    be given exactly once; there are no defaults)
+
+and UNKNOWN-FIELD (`struct Point has no field "z" (declared fields: x,
+y)`), DUPLICATE-FIELD, or TYPE for a value that is not proven to satisfy
+its field's type.
+
+@example reject
+struct Point:
+    x: int
+    y: int
+
+Point {x: 1}
+@caption A missing field
+@error CORE SEMANTIC MISSING-FIELD
+@at 5:1
+@end
+
+== WHAT TO DO
+Give every field; to derive a value from another, construct a new one and
+copy the fields that stay.
+
+@example accept
+struct Point:
+    x: int
+    y: int
+
+fn moved_right(p: Point, by: int) -> Point:
+    Point {y: p.y, x: p.x + by}
+
+Point {x: 1, y: 2}.moved_right(3)
+@caption Every field once, in any order
+@value Point {x: 4, y: 2}
+@end
+
+@topic rule.import-type
+title: import type imports type declarations and enums, not structs
+summary: import type NS::T binds the short name T in type positions for NS's type declarations, refinements, traits and enums; a struct is spelled NS::Struct after import NS.
+index: rules
+alias: import type; import type of a struct; short name for a module's type; import type NS::T
+keywords: import type, short name, struct, enum, type declaration, refinement, trait, NOT-A-TYPE
+related: concept.imports concept.enums concept.structs concept.integer-domains rule.imports-not-transitive capability.struct-type-import error.not-a-type error.type-import-collision
+docs: IMPORTS.md ENUMS.md STRUCTS.md
+
+== THE RULE
+`import type NS::T` binds the short name `T`, in this file's type
+positions, for one of these declarations of namespace NS:
+
+  * a `type` declaration (an integer domain, `type Byte = Int in 0..255`)
+    or a `refined type`;
+  * a trait, including a context trait (`import type io::IO`);
+  * an enum, whose cases are then written `T::Case`.
+
+It does not import a struct, a layout, an error, a function or an
+intrinsic type of the namespace (the `ffi::c` scalars), and it creates no
+value binding. It authorizes nothing else: `NS::...` references, short or
+not, still need `import NS` (even `NS::T` itself). A struct keeps its
+qualified spelling, `NS::Struct`, in annotations and constructions alike,
+after `import NS`. The short name may not collide with a type the file
+declares, a built-in type or another imported short name
+(TYPE-IMPORT-COLLISION).
+
+== WHY
+The type import is deliberately narrow (IMPORTS.md): it names one type's
+last component for type positions only, it is not an alias (`T` and
+`NS::T` are one canonical type), and it authorizes nothing else of NS.
+Structs keep their qualified spelling after `import NS` (IMPORTS.md), and
+so do layouts; capability.struct-type-import has the alternatives.
+
+== WHAT IS REPORTED
+SURFACE MODULE NOT-A-TYPE, at the imported name:
+
+    "abi::U8" is a struct, not a source-defined `type`: `import type`
+    imports `type` declarations only; spell the struct abi::U8 after
+    `import abi`
+
+(with its own wording for a layout, an error, a function and an
+intrinsic type).
+
+@example reject
+import type abi::U8
+
+abi::U8 {value: 3}
+@caption abi::U8 is a struct
+@error SURFACE MODULE NOT-A-TYPE
+@at 1:18
+@end
+
+== WHAT TO DO
+Import the namespace and spell the struct qualified; use `import type` for
+domains, refinements, traits and enums.
+
+@example accept
+import abi
+
+v = abi::U8 {value: 3}
+v.value
+@caption A struct spelled qualified after import abi
+@value 3
+@end
+
+@example accept
+import type byte::Byte
+import compiler
+import type compiler::DiagnosticCode
+
+fn twice(b: Byte) -> int:
+    b * 2
+
+c = DiagnosticCode::Type
+[twice(3), c == compiler::DiagnosticCode::Type]
+@caption Short names: a domain and an enum
+@value [6, true]
+@end
+
+@topic rule.no-list-destructuring
+title: Lists are not destructured positionally
+summary: [a, b] = value is LIST-DESTRUCTURING: a List is a sequence; several results of different meaning are a struct, destructured by field name.
+index: rules
+alias: unpack a list; tuple unpacking; positional destructuring
+keywords: destructuring, list, tuple, pair, struct, named fields, positional
+related: concept.destructuring concept.lists concept.structs principle.name-the-parts warning.fixed-arity-list-return error.list-destructuring
+docs: STRUCT-DESTRUCTURING.md MULTI-VALUE-RESULTS.md
+
+== THE RULE
+`[a, b] = value`, and a List pattern nested in a struct pattern
+(`{pair: [a, b]} = v`), are not binding forms. A List is the type of a
+sequence of values; a function with several results of different meaning
+returns a struct, and the caller binds its fields by name with struct
+destructuring, `{first, second} = result`. There is no tuple or pair type.
+Elements of a List are read with `list::at` (with its proof obligations,
+proof.list-bounds) or by iterating it.
+
+== WHY
+"Destructuring is not pattern matching. It is one struct value, selected
+fields read by name" (STRUCT-DESTRUCTURING.md). Positions carry no meaning
+a reader can check, while field names do; a struct's fields are known
+statically, so struct destructuring cannot fail, while a positional
+binding would depend on the List's length. This is a language policy,
+not a missing feature.
+
+== WHAT IS REPORTED
+SURFACE SYNTAX, with the parser code LIST-DESTRUCTURING:
+
+    LIST-DESTRUCTURING: positional List destructuring is not supported;
+    use a struct value with named fields instead (...)
+
+@example reject
+pair = [1, 2]
+[a, b] = pair
+a + b
+@caption Positional destructuring of a List
+@error SURFACE SYNTAX
+@at 2:1
+@message LIST-DESTRUCTURING: *
+@end
+
+== WHAT TO DO
+Return a struct and destructure it by name.
+
+@example accept
+struct Split:
+    first: int
+    second: int
+
+fn split(n: int) -> Split:
+    Split {first: n, second: n * 2}
+
+{first, second} = split(3)
+first + second
+@caption A struct result, destructured by field name
+@value 9
+@end
+
+@topic rule.equality
+title: What == compares, and what has no equality
+summary: == and != compare values structurally (Lists element-wise, structs by shape and fields, enums by enum and case); functions and mutable collections have no equality; affine values are rejected.
+index: rules
+alias: compare two values; structural equality; compare functions; compare structs
+keywords: ==, !=, equality, compare, struct, list, enum, function, MutableVector, MutableArray, hash, ordering
+related: concept.values concept.structs concept.enums concept.affine concept.mutable-vector concept.mutable-array rule.comparison-chains error.equality error.affine-equality-unsupported
+docs: STRUCTS.md ENUMS.md OPAQUE-STRUCTS.md MUTABLE-VECTOR.md MUTABLE-ARRAY.md AFFINE-VALUES.md
+
+== THE RULE
+`a == b` and `a != b` compare values, never identities:
+
+  * Int, str, bool, unit and UnicodeChar compare by value; values of
+    different kinds are unequal, never converted (`1 == "one"` and
+    `'a' == "a"` are false, not errors);
+  * a List equals a List of the same length with equal elements;
+  * a struct equals a struct of the same shape -- the same named
+    declaration, or the same anonymous field set -- whose fields are all
+    equal; a named struct never equals an anonymous one or another
+    declaration's value, whatever their fields;
+  * an enum case equals the same case of the same enum; same-named cases
+    of two enums are unequal;
+  * an ImmutableSet equals a set with the same members, in any order;
+  * an opaque struct is compared whole, outside its module too; Bytes and
+    MutableBytes by their bytes;
+  * a refined value compares as its carrier.
+
+Function values (and natives), MutableVector and MutableArray, and any
+value containing one, have no equality: comparing them fails at run time
+with EQUALITY, on every backend. Affine values (a coroutine handle, an
+aggregate that owns one, an `ffi::c` pointer) are rejected at compile
+time. `hash` follows the same rules. The ordering comparisons `<`, `<=`,
+`>` and `>=` are defined for Int (and integer domains) only; another
+operand is a TYPE error, which today is raised when the comparison runs
+(`"ab" < "cd"` compiles).
+
+== WHY
+Equality of functions would require identity semantics, which are out of
+scope (core/value.tcl). A MutableVector's or MutableArray's header
+is the identity of one changing value, and "a header's identity is never a
+value's", so none was defined for them. An affine value owns something
+(a suspended coroutine); comparing or hashing it would observe the
+identity of what it owns (AFFINE-VALUES.md).
+
+== WHAT IS REPORTED
+For an affine operand, CORE SEMANTIC AFFINE-EQUALITY-UNSUPPORTED at the
+operand. For a function or a mutable collection, CORE SEMANTIC EQUALITY at
+run time (the program compiles):
+
+    == is not defined for callables: <block (x)> == <block (x)>
+
+(the message says "callables" for a MutableVector or MutableArray too).
+
+@example reject
+fn counter():
+    yield 1
+    2
+
+coroutine {step} = counter()
+step == step
+@caption A coroutine handle
+@error CORE SEMANTIC AFFINE-EQUALITY-UNSUPPORTED
+@at 6:1
+@end
+
+== WHAT TO DO
+Compare the data you mean: an id or enum field instead of a function, the
+elements of a mutable collection, the unrestricted fields of a struct
+that owns an affine value.
+
+@example accept
+struct P:
+    x: int
+
+enum Color:
+    Red, Green
+
+[
+    P {x: 1} == P {x: 1},
+    [1, [2]] == [1, [2]],
+    1 == "one",
+    P {x: 1} == {x: 1},
+    Color::Red != Color::Green,
+]
+@caption Structural equality
+@value [true, true, false, false, true]
+@end
+
+@topic rule.comparison-chains
+title: Comparisons do not chain
+summary: A comparison operator takes two operands; a < b < c and a == b == c are syntax errors; write a < b and b < c.
+index: rules errors
+alias: chained comparison; a < b < c; range check between two bounds
+keywords: comparison, chain, <, <=, ==, between, and, precedence
+related: concept.booleans concept.integers rule.equality concept.syntax error.surface-syntax
+docs: README.md
+match: SURFACE SYNTAX | comparison chaining is not supported*
+
+== THE RULE
+`==`, `!=`, `<`, `<=`, `>` and `>=` compare two operands and do not
+associate: a comparison cannot be an operand of another comparison without
+parentheses. `lo <= x <= hi` is a syntax error; write `lo <= x and
+x <= hi`. Comparisons bind more loosely than `+`, `-` and `*` and more
+tightly than `not`, `and` and `or`, so `a + 1 < b * 2 and b < c` needs no
+parentheses. A parenthesized comparison is an ordinary Bool operand:
+`(a < b) == ok` is legal.
+
+== WHY
+The chained form has two conventional meanings: in mathematics `a < b < c`
+is `a < b and b < c`, in C-like languages it is `(a < b) < c`, which
+compares a Bool with c. Botlish accepts neither silently; the program says
+which one it means.
+
+== WHAT IS REPORTED
+SURFACE SYNTAX, at the second comparison operator:
+
+    comparison chaining is not supported
+
+@example reject
+fn between?(x: int, lo: int, hi: int) -> bool:
+    lo <= x <= hi
+
+0
+@caption A chained comparison
+@error SURFACE SYNTAX
+@at 2:13
+@message comparison chaining is not supported
+@end
+
+== WHAT TO DO
+Join the two comparisons with `and`.
+
+@example accept
+fn between?(x: int, lo: int, hi: int) -> bool:
+    lo <= x and x <= hi
+
+[5.between?(1, 10), 0.between?(1, 10)]
+@caption Two comparisons joined with and
+@value [true, false]
+@end
+
+@topic rule.indentation
+title: Blocks are indented with spaces
+summary: A block follows a line ending in ":" on the next lines, indented deeper with spaces; tabs in indentation, inconsistent dedents and stray indentation are syntax errors.
+index: rules errors
+alias: tab used for indentation; indentation error; inconsistent dedent; indented block; tabs vs spaces
+keywords: indentation, indent, dedent, tab, spaces, block, colon, layout, brackets
+related: concept.syntax rule.if-placement rule.loop-placement rule.names error.surface-syntax
+docs: README.md DIAGNOSTIC-RECOVERY.md
+match: SURFACE SYNTAX | tab used for indentation*
+match: SURFACE SYNTAX | inconsistent dedent*
+match: SURFACE SYNTAX | unexpected indentation*
+match: SURFACE SYNTAX | expected an indented block*
+match: SURFACE SYNTAX | expected a new line and an indented block after ":"*
+
+== THE RULE
+Block structure is layout:
+
+  * a block -- a function body, an `if`/`elif`/`else` branch, a loop body,
+    a handler, the fields of a struct, error or enum declaration, a
+    `static compile:` body -- follows a line ending in `:` and starts on
+    the next line, indented deeper than that line; there are no one-line
+    blocks (`if c: x` on one line is an error);
+  * indentation is counted in spaces; any width works (the standard
+    library uses 4), and every line of a block has the same indentation;
+  * a line indented less than the one before must return exactly to an
+    enclosing level;
+  * a tab character in indentation is an error (a tab between tokens is
+    ordinary whitespace);
+  * blank lines and comment-only lines do not count;
+  * inside `( )`, `[ ]` and `{ }` newlines and indentation are ignored, so
+    a long call, list or struct literal may span lines freely.
+
+== WHY
+The indentation is the structure the parser sees, so it must be the
+structure a reader sees. A tab's width depends on the editor: a file that
+mixes tabs and spaces can look like one structure and parse as another, so
+indentation is spaces only.
+
+== WHAT IS REPORTED
+SURFACE SYNTAX, at the offending line:
+
+    tab used for indentation
+    inconsistent dedent: indentation does not match any enclosing level
+    unexpected indentation
+    expected an indented block, found ...
+    expected a new line and an indented block after ":", found ...
+
+@example reject
+fn f(x):
+	x
+
+f(1)
+@caption A tab in indentation
+@error SURFACE SYNTAX
+@at 2:1
+@message tab used for indentation
+@end
+
+@example reject
+fn f(x):
+    if x:
+        1
+      else:
+        2
+
+f(true)
+@caption A dedent to no enclosing level
+@error SURFACE SYNTAX
+@at 4:7
+@message inconsistent dedent*
+@end
+
+@example reject
+x = 1
+    y = 2
+y
+@caption Indentation without a block to open
+@error SURFACE SYNTAX
+@at 2:5
+@message unexpected indentation
+@end
+
+@example reject
+fn f(x):
+x
+
+f(1)
+@caption A body that is not indented
+@error SURFACE SYNTAX
+@at 2:1
+@message expected an indented block*
+@end
+
+@example reject
+fn f(n: int) -> int:
+    if n > 0: return 1
+    0
+
+f(1)
+@caption A block on its colon's line
+@error SURFACE SYNTAX
+@at 2:15
+@message expected a new line and an indented block after ":"*
+@end
+
+== WHAT TO DO
+Set the editor to insert spaces, re-indent the block consistently, and
+give every block its own lines.
+
+@example accept
+fn f(n: int) -> int:
+  if n > 0:
+      return 1
+  0
+
+xs = [
+1,
+        2]
+
+[f(2), f(-2), xs]
+@caption Any consistent width; free layout in brackets
+@value [1, 0, [1, 2]]
+@end
+
+@topic rule.names
+title: How names are spelled
+summary: A name is letters, digits and underscores, not starting with a digit, optionally ending in one "?"; "-" is the minus operator and a "?" anywhere else is a syntax error.
+index: rules errors
+alias: name spelling; identifier syntax; question mark in a name; hyphen in a name; dash in a function name
+keywords: name, identifier, ?, predicate, hyphen, dash, underscore, keyword, snake_case, unicode
+related: concept.syntax principle.predicate-naming warning.proves-naming rule.if-placement rule.indentation error.surface-syntax error.unbound
+docs: README.md R2A2-TRAILING-QUESTION-IDENTIFIERS.md
+match: SURFACE SYNTAX | *already ends in "?"*
+match: SURFACE SYNTAX | unexpected character "?"*
+match: SURFACE SYNTAX | expected "(" after the function name, found "-"*
+
+== THE RULE
+A name is `[A-Za-z_][A-Za-z0-9_]*`, optionally followed by one `?`:
+
+  * `?` may only end a name, once: `empty?` and `ready?` are names,
+    `ok??` and `is?ok` are not. By convention a name ending in `?` is a
+    predicate returning `bool` (principle.predicate-naming);
+  * `-` is the minus operator: `my-value` is `my - value`, so names use
+    underscores (`item_count`);
+  * letters are ASCII only (`café` is not a name);
+  * by convention functions and values are snake_case
+    (`encode_utf8`), declared types PascalCase (`MutableVector`);
+  * these words are reserved: fn if elif else loop return break continue
+    true false unit and or not type struct error errors fail on yield.
+    Words such as `import`, `with`, `context`, `flags`, `opaque`,
+    `nomethod`, `static`, `coroutine` and `enum` are contextual: ordinary
+    names wherever their construct cannot start.
+
+== WHY
+`?` at the end of a name is the predicate idiom (`emailish?`), kept
+unambiguous by allowing it nowhere else
+(R2A2-TRAILING-QUESTION-IDENTIFIERS.md); there is no `?:` operator for it
+to be confused with. `-` stays an operator, so `a-b` means subtraction
+whatever the spacing; one consequence is that the few internal natives
+with `-` in their names cannot be named from source at all.
+
+== WHAT IS REPORTED
+SURFACE SYNTAX:
+
+    "ok?" already ends in "?": an identifier can end in at most one "?",
+    with nothing directly after it
+    unexpected character "?"                     (a "?" not ending a name)
+    expected "(" after the function name, found "-"   (fn my-name(...))
+
+A hyphenated name elsewhere is read as a subtraction: in a binding it is
+`only a name can be bound with "="`, in an expression an `unbound name`
+for one of its halves.
+
+@example reject
+fn ok??(x):
+    x
+
+ok??(1)
+@caption Two question marks
+@error SURFACE SYNTAX
+@at 1:7
+@message *already ends in "?"*
+@end
+
+@example reject
+n = 3
+big = n > 2 ? 1 : 0
+big
+@caption A ? that does not end a name
+@error SURFACE SYNTAX
+@at 2:13
+@message unexpected character "?"
+@end
+
+@example reject
+fn item-count(xs):
+    0
+
+0
+@caption A hyphen in a function name
+@error SURFACE SYNTAX
+@at 1:8
+@message expected "(" after the function name, found "-"
+@end
+
+== WHAT TO DO
+Use underscores between words and at most one `?`, at the end. For a
+conditional value, use an `if` (rule.if-placement).
+
+@example accept
+fn ready?(n: int) -> bool:
+    n > 2
+
+item_count_2 = 3
+_hidden = item_count_2.ready?()
+_hidden
+@caption Underscores, digits and one trailing ?
+@value true
+@end
+
+@topic rule.opaque-authority
+title: Only the declaring module builds or inspects an opaque struct
+summary: An opaque struct's representation belongs to the module that declares it: only that module may construct it or read and destructure its fields; everyone else uses its operations.
+index: rules
+alias: opaque struct field access; construct an opaque struct; representation ownership
+keywords: opaque, struct, module, construction, projection, destructuring, authority, Bytes
+related: concept.opaque-structs concept.modules rule.struct-construction capability.visibility stdlib.abi::bytes::from_list error.opaque-construction error.opaque-representation
+docs: OPAQUE-STRUCTS.md
+
+== THE RULE
+`opaque struct Token:` declares an ordinary struct whose representation
+belongs to the module that declares it (an entry program owns its own):
+
+  * only the owner may construct it (`token::Token {...}`), project its
+    fields (`t.value`) or destructure it (`{value} = t`);
+  * everyone may name the type, pass, store and return its values,
+    compare and hash them whole, and call the owner's functions on them,
+    with method syntax too;
+  * authority is the declaring module exactly: no import, parent or child
+    module, and no struct that holds the value grants it.
+
+== WHY
+An opaque struct is representation ownership, not object-oriented privacy
+(OPAQUE-STRUCTS.md): the module that owns `abi::bytes::Bytes` keeps the
+invariants of its storage, because nothing else can manufacture or take
+apart a value. The check is static authority, never a run-time test, and
+the compiler still sees the fields when it optimizes.
+
+== WHAT IS REPORTED
+CORE SEMANTIC OPAQUE-REPRESENTATION for a field read or a destructuring
+outside the owner:
+
+    field access on abi::bytes::Bytes is not available outside module
+    "abi::bytes"; abi::bytes::Bytes has an opaque representation, so its
+    fields can be neither projected nor destructured here (use the public
+    operations provided by that module)
+
+and CORE SEMANTIC OPAQUE-CONSTRUCTION for a construction.
+
+@example reject
+import abi::bytes
+import str
+
+data = abi::bytes::from_list(str::encode_utf8("hi"))
+data.storage
+@caption A field read outside the owner
+@error CORE SEMANTIC OPAQUE-REPRESENTATION
+@at 5:6
+@end
+
+== WHAT TO DO
+Use the operations the owning module provides; in your own module, write
+the functions other code needs.
+
+@example accept
+import abi::bytes
+import str
+
+data = abi::bytes::from_list(str::encode_utf8("hi"))
+n = abi::bytes::length(data)
+n.value
+@caption The owner's operations, and whole-value use
+@value 2
+@end
+
+@topic rule.context-installation
+title: Installing a context: at the entry top level, once, before use
+summary: with context EXPR installs a context only at the entry program's top level, at most once per context type, and every top-level call must come after the installations it needs.
+index: rules
+alias: where to write with context; install a context; context installed too late
+keywords: context, with context, install, entry program, top level, requirement, order, MISSING-CONTEXT
+related: concept.contexts concept.context-traits proof.contexts rule.module-bindings error.missing-context error.duplicate-context error.context-installation-unsupported
+docs: CONTEXTS.md CONTEXT-TRAITS.md
+
+== THE RULE
+`with context EXPR` installs the value of EXPR, whose type is exactly one
+context struct, as that type's context from that statement on:
+
+  * only in the entry program's top-level scope, as a statement: not in a
+    function, a branch, a loop, a handler or a module;
+  * at most once per context type: no second installation, no nested or
+    overriding one;
+  * every top-level call must come after the installation of every context
+    its callee requires -- the contexts its own context parameters name
+    and those of everything it calls -- in source order.
+
+A function names a context only where it uses one (`fn stamp(x, context
+clock: Clock)`); its callers need nothing in their signatures, and the
+compiler derives each requirement from the call graph. A function that
+requires a context cannot become a value, an alias aside
+(CONTEXT-FUNCTION-VALUE).
+
+== WHY
+A context is a static dependency of the execution environment
+(CONTEXTS.md): the compiler proves, statement by statement, that each call
+runs after its contexts exist, and names the call chain that needs one
+when it does not. With one installation per type at the top level, each
+context has one statically known value, which native code reads from one
+fixed slot: no hidden argument, no lookup.
+
+== WHAT IS REPORTED
+CORE SEMANTIC MISSING-CONTEXT, at the call, with the chain that needs the
+context:
+
+    Clock is required by this call but is not installed here (install it
+    with "with context EXPR" before the call):
+        twice
+         -> stamp
+            directly requires Clock
+
+DUPLICATE-CONTEXT for a second installation, and
+CONTEXT-INSTALLATION-UNSUPPORTED for one anywhere else.
+
+@example reject
+context struct Clock:
+    now: int
+
+fn stamp(x: int, context clock: Clock) -> int:
+    x + clock.now
+
+fn twice(x: int) -> int:
+    stamp(x) * 2
+
+r = twice(5)
+with context Clock {now: 100}
+r
+@caption A call before its installation
+@error CORE SEMANTIC MISSING-CONTEXT
+@at 10:5
+@end
+
+== WHAT TO DO
+Install contexts near the top of the entry program, before the first call
+that needs them; move code that runs before the installation into
+functions called after it.
+
+@example accept
+context struct Clock:
+    now: int
+
+fn stamp(x: int, context clock: Clock) -> int:
+    x + clock.now
+
+fn twice(x: int) -> int:
+    stamp(x) * 2
+
+with context Clock {now: 100}
+twice(5)
+@caption Installed once, before the calls
+@value 210
+@end
+
+@topic rule.affine-use
+title: An affine value has one owner: no use after a move
+summary: Binding, passing, returning or storing an affine value (a coroutine handle, or a struct or List owning one) moves it; the old name may not be used again.
+index: rules
+alias: moved coroutine handle; copy a coroutine handle; affine ownership rule
+keywords: affine, move, owner, coroutine, handle, resume, release, USE-AFTER-MOVE
+related: concept.affine concept.coroutines proof.ownership rule.equality error.use-after-move error.affine-capture-unsupported
+docs: AFFINE-VALUES.md COROUTINES.md
+
+== THE RULE
+An affine value -- a coroutine handle, an `ffi::c` pointer, and every
+struct, anonymous struct or List that owns one -- has one usable owner:
+
+  * binding it to another name, passing it as an argument, returning it,
+    or storing it in a struct field or List element moves it; the old
+    owner is dead from then on, and any later use of it is an error;
+  * resuming a coroutine (`step()`, `step(message)`) uses the handle
+    without moving it;
+  * there is no copy or clone, and a nested function cannot capture an
+    affine value;
+  * an affine value may be dropped unused; it is released where its owner
+    dies (after its last use).
+
+== WHY
+An affine value owns something that must be released exactly once -- a
+suspended coroutine's stack and frames. A second owner could resume or
+release the same execution, so ownership is decided statically: there is
+no reference count, moved flag or ownership object at run time
+(AFFINE-VALUES.md).
+
+== WHAT IS REPORTED
+CORE SEMANTIC USE-AFTER-MOVE, at the use, with where it moved:
+
+    `step` was used after its coroutine value was moved
+
+    moved here:
+        other = step  (program.bot:6:1)
+
+AFFINE-CAPTURE-UNSUPPORTED for a capture by a nested function, and
+AFFINE-EQUALITY-UNSUPPORTED for a comparison (rule.equality).
+
+@example reject
+fn counter():
+    yield 1
+    yield 2
+    3
+
+coroutine {step, first} = counter()
+other = step
+step()
+@caption The old name used after the move
+@error CORE SEMANTIC USE-AFTER-MOVE
+@at 8:1
+@end
+
+== WHAT TO DO
+Use the new owner. A function that needs the value only for a while can
+take it as a parameter and return it with its result; a struct that owns
+it moves as a whole, and destructuring moves its fields out.
+
+@example accept
+fn counter():
+    yield 1
+    yield 2
+    3
+
+coroutine {step, first} = counter()
+other = step
+a = other()
+b = other()
+[first, a, b]
+@caption The new owner resumes the coroutine
+@value [1, 2, 3]
+@end
+
+@example accept
+fn counter():
+    yield 1
+    yield 2
+    3
+
+fn advance(h: Coroutine{args: [], return: int, errors: []}):
+    v = h()
+    {value: v, step: h}
+
+coroutine {step, first} = counter()
+{value, step: again} = advance(step)
+[first, value, again()]
+@caption Lent to a function that returns it with its result
+@value [1, 2, 3]
+@end
+
+@topic rule.control-placement
+title: Where break, continue and return may appear
+summary: break and continue belong in a loop body of the same function, return in a function body; none crosses a function boundary, and break takes no value.
+index: rules errors
+alias: break inside a nested function; break with a value; return a value from a loop
+keywords: break, continue, return, loop, function, top level, nested function, value
+related: concept.loops concept.functions rule.if-placement rule.loop-placement error.break-outside-loop error.continue-outside-loop error.return-outside-callable
+docs: README.md PAYLOAD-FREE-BREAK.md COLLECTING-LOOPS.md
+match: SURFACE SYNTAX | "break" does not take a value*
+
+== THE RULE
+  * `break` and `continue` must be inside a loop body of the same
+    function. `if` branches and handlers inside the loop count as the
+    loop's body; a nested function's body does not, even when it is
+    defined inside the loop.
+  * `return` must be inside a function body: not at the program's top
+    level and not in a module's top level.
+  * `break` takes no value. In a collecting loop it ends the loop with the
+    List collected so far; a bare `loop:` evaluates to `unit`. `continue`
+    in a collecting loop contributes nothing to the List.
+
+== WHY
+A nested function is a value that may run later, after the loop around
+its definition has finished, so a `break` inside it would have no loop to
+leave (README section 5, "Control placement"). `break` answers one
+question, whether the loop iterates again, never what the loop's value is
+(PAYLOAD-FREE-BREAK.md): a loop's value is its collected List, and a
+value found inside a loop leaves through `return`.
+
+== WHAT IS REPORTED
+CORE SEMANTIC BREAK-OUTSIDE-LOOP (`break outside lexical loop`),
+CONTINUE-OUTSIDE-LOOP (`continue outside lexical loop`),
+RETURN-OUTSIDE-CALLABLE (`return outside callable invocation`), and
+SURFACE SYNTAX for a value after `break`:
+
+    "break" does not take a value, found integer 5
+
+@example reject
+fn first_big(xs):
+    loop x in xs:
+        if x > 4:
+            break 5
+    0
+
+0
+@caption break with a value
+@error SURFACE SYNTAX
+@at 4:19
+@message "break" does not take a value*
+@end
+
+@example reject
+loop i from 0 to 3:
+    fn stop():
+        break
+    stop()
+@caption break in a nested function
+@error CORE SEMANTIC BREAK-OUTSIDE-LOOP
+@at 3:9
+@end
+
+== WHAT TO DO
+To get a value out of a loop, put the loop in a function and `return` the
+value; to stop collecting, `break`; to stop from inside a helper, have the
+helper return a Bool and test it in the loop.
+
+@example accept
+fn first_over(xs: List[int], limit: int) -> int:
+    loop x in xs:
+        if x > limit:
+            return x
+    -1
+
+[1, 5, 9].first_over(4)
+@caption return carries the found value out of the loop
+@value 5
+@end
+
+@example accept
+xs = loop i from 0 to 10:
+    if i == 3:
+        break
+    i
+xs
+@caption break ends a collecting loop
+@value [0, 1, 2]
+@end
+
+@topic rule.imports-not-transitive
+title: Imports are exact and not transitive
+summary: import NS makes exactly NS available in exactly this file: not its parent or child namespaces, not what NS imports, not other files of the program.
+index: rules
+alias: transitive import; import a nested namespace; parent namespace import; why must I import str again
+keywords: import, transitive, exact, nested namespace, parent, child, header, dependency
+related: concept.imports concept.modules rule.method-requires-import rule.import-type rule.application-modules principle.explicit-dependencies error.missing-import error.duplicate-import
+docs: IMPORTS.md
+
+== THE RULE
+`import NS` in a file's header lets that file write `NS::name` and makes
+NS's functions candidates for method syntax -- for NS exactly, in this
+file only:
+
+  * not NS's parent: `import abi::bytes` does not import `abi`;
+  * not NS's children: `import abi` does not import `abi::bytes`;
+  * not what NS itself imports: `import test` does not give the file
+    `str`, although lib/test.bot imports it;
+  * not other files: every module and the entry program write their own.
+
+Imports come first in a file, before any other declaration or statement,
+each namespace once (DUPLICATE-IMPORT). However many files import a
+namespace, it is loaded once.
+
+== WHY
+"A source file cannot refer across a namespace boundary unless it says so
+in its header" (IMPORTS.md). With exact, non-transitive imports a file's
+first lines are the complete list of what it depends on, and a library can
+change its own imports without changing what its users can see.
+
+== WHAT IS REPORTED
+MISSING-IMPORT, at the reference -- SURFACE MODULE for a qualified name,
+CORE SEMANTIC for a method call:
+
+    namespace "abi" is not imported; add `import abi` to use `abi::usize`
+    (imports are exact: `import abi::bytes` does not import "abi")
+
+@example reject
+import test
+
+s = "ab"
+str::length(s)
+@caption Only lib/test.bot imports str
+@error SURFACE MODULE MISSING-IMPORT
+@at 4:1
+@end
+
+== WHAT TO DO
+Import every namespace the file names, directly.
+
+@example accept
+import test
+import str
+
+s = "ab"
+str::length(s)
+@caption The file imports what it uses
+@value 2
+@end
+
+@topic rule.module-bindings
+title: What a module's top level may hold
+summary: A module's top level holds only declarations, functions and immutable bindings, no statements; a binding's initializer must be context-free and its value transitively immutable.
+index: rules
+alias: module top level; module variable; global variable in a module; module initializer
+keywords: module, top level, binding, immutable, context-free, statement, initializer, global
+related: concept.modules concept.program-value rule.forward-references rule.context-installation rule.application-modules error.invalid-toplevel error.module-context error.module-immutable
+docs: MODULE-BINDINGS.md IMPORTS.md CONTEXTS.md
+
+== THE RULE
+A file loaded by `import` is a module. At its top level it may hold only:
+
+  * imports, then function definitions and declarations (`type`,
+    `struct`, `enum`, `error`, `trait`, `layout`, `extern`);
+  * immutable value bindings, `sizes = [4, 8, 16]`.
+
+It may not hold expression statements (a call, a loop, an `if`), a struct
+destructuring, `with context` or `return`. A binding's initializer runs
+once, before the entry program, after the modules it depends on and after
+the earlier bindings of its file, and:
+
+  * must be context-free: no context, and only operations classified
+    context-free (constructing a MutableVector or MutableArray is not);
+  * must retain a transitively immutable value;
+  * may read only earlier bindings (rule.forward-references).
+
+Only the entry program has top-level statements; its last one is the
+program's value (concept.program-value).
+
+    # limits.bot (a module)            # main.bot (the entry program)
+    sizes = [4, 8, 16]                 import limits
+    fn largest() -> int:               import list
+        16                             [limits::sizes.length(),
+                                        limits::largest()]
+
+== WHY
+A module is a namespace of definitions and immutable values
+(MODULE-BINDINGS.md), not a script: importing it must not run arbitrary
+code or create shared state that changes. A module value is therefore a
+constant every user sees alike, computed once in a fixed order, and reads
+of it never need revalidation.
+
+== WHAT IS REPORTED
+In the module's file: SURFACE MODULE INVALID-TOPLEVEL for a statement
+(`module "bad" (PATH): only function definitions, immutable bindings, ...
+are allowed at module top level, found a "call" statement`), CORE
+SEMANTIC MODULE-CONTEXT (`module binding initializer must be
+context-free: native operation "mutable_vector::from_list" is not
+classified context-free`) and MODULE-IMMUTABLE for a value that is not
+proven immutable. These need a second file, so this page has no runnable
+example of them.
+
+== WHAT TO DO
+Move statements into functions the entry program calls; keep mutable
+state in the entry program or in values passed to functions; compute a
+module value from literals and context-free functions only.
+
+@topic rule.application-modules
+title: How an import finds a module file
+summary: import NAME is the standard namespace NAME if there is one, else the file NAME.bot beside the entry program; never the working directory or a search path; a shadowing file is MODULE-COLLISION.
+index: rules
+alias: module search path; import my own file; where does import look
+keywords: import, module, file, application root, standard library, entry file, directory, collision
+related: concept.modules concept.imports rule.imports-not-transitive rule.module-bindings error.unknown-namespace error.module-collision error.self-import
+docs: IMPORTS.md POST-2048-PRODUCT-FIXES.md
+
+== THE RULE
+The directory of the entry file (the `.bot` file given to botlish) is the
+program's application root. For an `import NAME` that the entry program or
+one of its own modules writes:
+
+  * a standard namespace comes first: lib/NAME.bot, or a namespace of
+    compiler intrinsics;
+  * otherwise the module is ROOT/NAME.bot (a nested `a::b` is
+    ROOT/a/b.bot);
+  * nothing else is searched: not the working directory, an environment
+    variable, a parent directory or a path list;
+  * an application file named like a standard namespace that the program
+    imports is an error, never a replacement of the standard one;
+  * a standard-library module's own imports never see application files;
+  * the entry file is not a module and cannot be imported (SELF-IMPORT);
+    a file beside it that the program imports is a module and follows the
+    module rules (rule.module-bindings).
+
+    game/main.bot:  import score          game/score.bot:
+                    score::points(4)        fn points(n: int) -> int:
+                                                n * 10
+
+== WHY
+The rule is fixed so that a name has at most one candidate file: a program
+means the same thing wherever it is run from, and the standard library
+cannot be shadowed by accident (IMPORTS.md, "Application modules").
+
+== WHAT IS REPORTED
+SURFACE MODULE UNKNOWN-NAMESPACE names the paths it looked for:
+
+    unknown namespace "score": no such module file ROOT/score.bot (an
+    application's own modules are the files beside its entry program),
+    and in the standard library no such module file lib/score.bot and no
+    intrinsics of that namespace
+
+SURFACE MODULE MODULE-COLLISION for a file that would shadow a standard
+namespace, SELF-IMPORT for an import of the entry file.
+
+@example reject
+import score
+
+score::points(4)
+@caption No score.bot beside the entry
+@error SURFACE MODULE UNKNOWN-NAMESPACE
+@at 1:8
+@message unknown namespace "score": no such module file *
+@end
+
+== WHAT TO DO
+Put the module file beside the entry file (or in a subdirectory for a
+nested namespace) and run the entry file; rename an application module
+that has a standard namespace's name.
+
+@topic rule.flags
+title: Flag parameters: declared last, written by name
+summary: A flag is a bool parameter that is false unless its name is written at the call (f(x, :loud)); flags come last, are never computed or positional, and a function with flags is not a value.
+index: rules
+alias: flag parameter rules; pass a flag; computed flag; boolean option parameter
+keywords: flags, flag, option, bool, :name, call, method, alias, function value
+related: concept.flags principle.options-are-flags warning.many-boolean-arguments error.unknown-flag error.duplicate-flag error.flag-function-value error.argument-after-flag error.flag-not-a-value
+docs: FLAGS.md
+
+== THE RULE
+  * A flag section follows the ordinary parameters: `fn label(n, flags
+    :loud, :short)`. Each flag is an immutable `bool` local named without
+    the colon, `true` exactly when the call writes it.
+  * A call writes flags last, by name, each at most once, and only flags
+    the callee declares: `label(1, :loud)`, `1.label(:loud)`.
+  * A flag is never positional (`label(1, true)` is an arity error) and
+    never computed: `:loud` is not a value, so it cannot be bound, passed
+    or chosen at run time.
+  * There are no defaults other than false, no required or negated flags.
+  * A function with flags may be called (also with method syntax) or
+    aliased (`g = label`), but not passed, returned or stored as a value.
+  * Flags share the local namespace of the ordinary parameters.
+
+== WHY
+A flag is the language's form for an option that is "absent means false"
+(FLAGS.md): its name at the call says what it does, where `f(x, true,
+false)` says nothing (MANY-BOOLEAN-ARGUMENTS warns on that). Flags are
+part of the function's call interface, which a function value's type
+(`Fn{...}`) cannot carry, so such a function stays a direct callee.
+
+== WHAT IS REPORTED
+CORE SEMANTIC UNKNOWN-FLAG (`function label does not accept flag :quiet
+(accepted flags: :loud)`), DUPLICATE-FLAG, FLAG-FUNCTION-VALUE, ARITY for
+a positional Bool; SURFACE SYNTAX with the codes ARGUMENT-AFTER-FLAG,
+FLAG-NOT-A-VALUE and MALFORMED-FLAG-SECTION.
+
+@example reject
+fn label(n: int, flags :loud) -> int:
+    if loud:
+        return n * 10
+    n
+
+label(1, :quiet)
+@caption An undeclared flag
+@error CORE SEMANTIC UNKNOWN-FLAG
+@at 6:10
+@end
+
+== WHAT TO DO
+To choose a flag at run time, choose between two calls with an `if`. An
+option that is more than "on or off" is an ordinary parameter, an enum or
+a struct.
+
+@example accept
+fn label(n: int, flags :loud) -> int:
+    if loud:
+        return n * 10
+    n
+
+fn label_for(n: int, shout: bool) -> int:
+    if shout:
+        return n.label(:loud)
+    n.label()
+
+[label(1), 2.label(:loud), 3.label_for(true)]
+@caption Flags by name; a run-time choice
+@value [1, 20, 30]
+@end
+
+@topic rule.typed-parameters
+title: Declared parameter types are proven at every call
+summary: A parameter annotation is a compile-time proof obligation: each call must prove its argument satisfies the declared type, and an unproven argument is rejected, never checked at run time.
+index: rules
+alias: typed parameter; parameter annotation; strict typed parameters; declared parameter type
+keywords: parameter, type, annotation, argument, proof, domain, range, guard, contract, inferred
+related: rule.type-argument rule.type-generic-call rule.type-result rule.type-field concept.functions concept.types concept.integer-domains proof.types proof.ranges rule.no-callable-types rule.struct-construction rule.method-resolution error.type
+docs: STRICT-TYPED-PARAMETERS.md README.md
+
+== THE RULE
+`fn f(x: T)` makes every call of f prove that its argument's possible
+values are values of T: by the argument's static type (a subtype of T),
+or, for an integer domain, by what is known about its value (a literal,
+or a range established by comparisons). The proof is local to the call:
+it uses what is known where the call is -- guards that dominate it, the
+argument's own binding and declared types, a callee's declared result --
+and not what the caller's callers pass. A merely unproven argument is
+rejected exactly like an incompatible one: no run-time check or
+conversion is ever inserted. Inside f, x has the type T.
+
+An untyped parameter gets a contract inferred from the function's body,
+checked the same way at each call. A declared result type (`-> T`) is
+proven at the function in the same way, and so is each field of a struct
+construction.
+
+== WHY
+"A parameter annotation is a compile-time proof obligation, not a runtime
+contract check" (STRICT-TYPED-PARAMETERS.md). The callee can rely on its
+declared types without testing them, the caller learns at compile time
+that a value may not fit, and no backend needs a hidden guard.
+
+== WHAT IS REPORTED
+CORE SEMANTIC TYPE, at the argument, with what the compiler knew about it:
+
+    argument for parameter "x" cannot be proven to satisfy int[Small]
+    (argument type: int, facts: [-∞, +∞])
+
+rule.type-argument explains this message and its facts. For an untyped
+parameter it adds "the parameter type inferred from the function body"
+and the use it was inferred from (rule.type-generic-call); a result that
+is not proven is rule.type-result, a struct field rule.type-field.
+
+@example reject
+type Small = Int in 0..10
+
+fn twice(x: Small) -> int:
+    x * 2
+
+fn g(n: int) -> int:
+    twice(n)
+
+g(3)
+@caption An int is not proven a Small
+@error CORE SEMANTIC TYPE
+@at 7:11
+@message argument for parameter "x" cannot be proven*
+@end
+
+== WHAT TO DO
+Establish the fact before the call: guard the argument with comparisons,
+convert it through a converter function with a declared error
+(rule.no-callable-types), or declare the caller's own parameter with the
+narrower type, which moves the obligation to its callers.
+
+@example accept
+type Small = Int in 0..10
+
+fn twice(x: Small) -> int:
+    x * 2
+
+fn g(n: int) -> int:
+    if n >= 0 and n <= 10:
+        return twice(n)
+    0
+
+g(3)
+@caption A guard proves the argument is in the domain
+@value 6
+@end

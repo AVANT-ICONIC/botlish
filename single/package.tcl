@@ -14,8 +14,10 @@
 #   main.tcl              single/main.tcl, run at startup with the arguments
 #   tcl_library/          BASEKIT's own Tcl script library
 #   botlish/              main.tcl, LICENSE, core/, compiler/, hir/, surface/,
-#                         native/*.tcl, lib/, examples/*.ir -- the compiler
-#                         stack, at its checkout-relative paths
+#                         native/*.tcl, lib/, compilerpedia/ (the engine,
+#                         topics/ and generated/: -help) -- the compiler
+#                         stack, at its checkout-relative paths -- and
+#                         BUILD, the source revision -version prints
 #   native-bin/           botlish-native, botlish-aot-stub, and ID (their
 #                         digest, naming the directory single/main.tcl
 #                         installs them in)
@@ -43,14 +45,29 @@ try {
     foreach item {main.tcl LICENSE core compiler hir surface lib} {
         file copy [file join $root $item] [file join $app $item]
     }
-    file mkdir [file join $app native] [file join $app examples]
+    file mkdir [file join $app native] [file join $app compilerpedia]
     foreach path [glob -directory [file join $root native] *.tcl] {
         file copy $path [file join $app native]
     }
-    # main.tcl without a file argument runs examples/*.ir.
-    foreach path [glob -directory [file join $root examples] *.ir] {
-        file copy $path [file join $app examples]
+    # Compilerpedia, the reference -help reads (COMPILERPEDIA.md): its
+    # engine and its topic files; the notes and the tool are development
+    # files.
+    file copy [file join $root compilerpedia compilerpedia.tcl] [file join $app compilerpedia]
+    foreach dir {topics generated} {
+        file copy [file join $root compilerpedia $dir] [file join $app compilerpedia $dir]
     }
+    # The source revision, for -version: the checkout's commit, marked when
+    # the working tree differs from it.
+    set revision unknown
+    if {![catch {exec git -C $root rev-parse --short HEAD} commit]} {
+        set revision $commit
+        if {![catch {exec git -C $root status --porcelain --untracked-files=no} status] && $status ne ""} {
+            append revision " (modified)"
+        }
+    }
+    set channel [open [file join $app BUILD] w]
+    puts $channel "commit $revision"
+    close $channel
 
     set bin [file join $stage native-bin]
     file mkdir $bin

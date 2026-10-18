@@ -11,7 +11,8 @@
 # container.
 #
 # Checked: every backend runs the sample programs to the same values; the
-# no-argument default run; the inspection options; a rejected program fails;
+# no-argument usage summary (no program runs); -help (the packed Compilerpedia)
+# and -version; the inspection options; a rejected program fails;
 # -emit-native-executable produces executables that run without anything
 # else; an application of two files (a module beside its entry file) with a
 # recursion deeper than tclsh's default limit allows on the interpreter; a
@@ -52,8 +53,24 @@ done
 # (The unspecialized baseline does not compile every corpus program.)
 run -backend cranelift-generic -warnings off samples/0*.bot >"$work/generic.out" || fail "backend cranelift-generic"
 
-run >"$work/default.out" || fail "the no-argument run (examples/*.ir)"
-grep -q '01-adder.ir (interp)' "$work/default.out" || fail "the no-argument run printed no example"
+# Without arguments: the usage summary, and no program runs.
+run >"$work/default.out" || fail "the no-argument run (usage)"
+grep -q '^usage: ' "$work/default.out" || fail "the no-argument run printed no usage"
+if grep -q -e '^== ' -e '^   value:' "$work/default.out"; then fail "the no-argument run ran a program"; fi
+# Compilerpedia, packed (no source tree here: the archive's topics).
+run -help >"$work/help.out" || fail "-help"
+grep -q '^Compilerpedia' "$work/help.out" || fail "-help printed no overview"
+# QUERY=FIRST: the query, and how its page starts.
+for pair in warnings=WARNINGS METHOD-ELIGIBLE=warning.method-eligible list::at=stdlib.list::at "bounds proof=proof.list-bounds"; do
+  query=${pair%%=*} first=${pair#*=}
+  run -help "$query" >"$work/help-query.out" || fail "-help $query"
+  if grep -q -e '^== ' -e '^   value:' "$work/help-query.out"; then fail "-help $query ran a program"; fi
+  [[ $(head -n 1 "$work/help-query.out") == "$first"* ]] || fail "-help $query does not show $first"
+done
+if run -help no-such-topic-anywhere >/dev/null 2>&1; then fail "-help of an unknown topic succeeded"; fi
+run -version >"$work/version.out" || fail "-version"
+grep -q '^source revision: ' "$work/version.out" || fail "-version names no source revision"
+grep -q '^native backend: packaged' "$work/version.out" || fail "-version names no packaged native backend"
 
 for option in -code -hir -ast -aot -aot-spec -contexts -traits -emit-nir -emit-clif; do
   run -backend compile -warnings off "$option" samples/01-arithmetic.bot >/dev/null || fail "option $option"

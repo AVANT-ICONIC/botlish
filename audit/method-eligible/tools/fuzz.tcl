@@ -21,6 +21,8 @@
 #   function value  g = f2 ; g(R, 1) and a parameter h ; h(R, 1): never warned
 #   ineligible      f2(n + 1, 1), f2(-n, 1), f2(n == 1, 1), f2(not b, 1),
 #   receiver        f2(b and b, 1), f2(n != 1, 1), f2((n + 1), 1): never warned
+#   Int literal     f2(5, 1), f3(0, 1, 2): eligible syntax, never warned
+#   receiver
 #
 # No shadowing is generated (the unit tests own it). The oracle is independent
 # of the compiler: it knows, from how each statement was built, which calls are
@@ -65,8 +67,13 @@ proc pick {list} {
 # since these forms need no parentheses).
 set ::receivers {
     x n b s xs rec
-    5 {"t"} {'c'} {[1, 2]} {rec.a} {f1(n)} {n.f1()} {true} {unit}
+    {"t"} {'c'} {[1, 2]} {rec.a} {f1(n)} {n.f1()} {true} {unit}
 }
+# Int literal receivers: accepted by the grammar and resolved like any
+# other, but never reported (an Int literal is almost always a constant
+# parameter of an operation on something else: hir/warnings.tcl's
+# IntLiteralReceiver).
+set ::intLiterals {5 0 500}
 
 # A statement is {LINES SITES VARIANTS}: its lines (relative indentation 0),
 # the predicted warnings {LINE-OFFSET COLUMN-OFFSET}, and for each site the
@@ -108,7 +115,7 @@ proc quiet {lines} {
 
 proc quietStatement {prefix i} {
     set recv [pick $::receivers]
-    switch [pick {sugar sugar3 one onesugar nomethod alias param ops}] {
+    switch [pick {sugar sugar3 one onesugar nomethod alias param ops intlit}] {
         sugar    { return [quiet [list "$prefix$recv.f2(1)"]] }
         sugar3   { return [quiet [list "$prefix$recv.f3(1, 2)"]] }
         one      { return [quiet [list "${prefix}f1($recv)"]] }
@@ -119,6 +126,10 @@ proc quietStatement {prefix i} {
         ops {
             set op [pick {{n + 1} {-n} {n == 1} {not b} {b and b} {n != 1} {(n + 1)} {n * 2} {n - 1} {b or b}}]
             return [quiet [list "${prefix}f2($op, 1)"]]
+        }
+        intlit {
+            set lit [pick $::intLiterals]
+            return [quiet [list "${prefix}[pick [list "f2($lit, 1)" "f3($lit, 1, 2)" "$lit.f2(1)"]]"]]
         }
     }
 }

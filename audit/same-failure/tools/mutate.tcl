@@ -18,7 +18,7 @@ set only [expr {[llength $argv] > 1 ? [lindex $argv 1] : "*"}]
 # hir/warnings.tcl).
 set siteLoop "    set sites {}\n    foreach e \[BodyExprs \$hir \$block\] \{\n"
 set siteTest "        if \{\[dict get \$node kind\] eq \"fail\" && \[dict get \$node reachable\]\n                && \[dict get \$node name\] in \$declared\} \{\n            lappend sites \[list \$e \[dict get \$node name\]\]\n"
-set threshold "        if \{\[llength \$members\] >= 2\} \{\n            lappend warnings \[FailureWarning"
+set threshold "        if \{\[Units \$tails \$members\] >= 2\} \{\n            lappend warnings \[FailureWarning"
 
 # A prologue for the site loop that collects the fails of handler bodies
 # (inHandler) and, among them, the re-raises (a fail of the name its handler
@@ -87,6 +87,9 @@ set mutants [list \
     [list same-short-name-grouped hir/warnings.tcl \
         {        dict lappend groups $failure $e} \
         {        dict lappend groups [list [namespace tail [lindex $failure 0]] {*}[lrange $failure 1 end]] $e}] \
+    [list handler-alternatives-counted-apart hir/warnings.tcl \
+        $threshold \
+        [string map {"Units \$tails \$members" "llength \$members"} $threshold]] \
     [list unreachable-functions-walked hir/warnings.tcl \
         "        if \{\[dict get \$node kind\] ne \"block\" || !\[dict get \$node reachable\]\} \{\n            continue\n        \}\n        lappend warnings \{*\}\[SameFailureIn" \
         "        if \{\[dict get \$node kind\] ne \"block\"\} \{\n            continue\n        \}\n        lappend warnings \{*\}\[SameFailureIn"] \

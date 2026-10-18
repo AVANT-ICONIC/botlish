@@ -1,0 +1,693 @@
+# proofs.topic -- what the compiler proves: language guarantees, recognized
+# proof patterns and limitations, kept apart (COMPILERPEDIA.md). Every
+# example here is compiled and run by tools/compilerpedia.tcl check: an
+# accepted example is a form the compiler proves today, a rejected one a
+# form it does not. When the compiler learns a new pattern, a rejected
+# example here starts compiling and the check fails until the page is
+# updated.
+
+@topic proof.overview
+title: What the compiler proves, and how to read a proof page
+summary: The compiler proves facts about types, errors, bounds, ranges, ownership and contexts; each proof page separates the language guarantee, the recognized forms and the limitations.
+index: proofs concepts
+alias: static proof; static analysis; what does the compiler prove
+keywords: guarantee, proven, limitation, completion, analysis
+related: proof.completions proof.list-bounds proof.slices proof.ranges proof.types proof.refinements proof.lockstep proof.contexts proof.ownership proof.callable-contracts proof.reachability principle.restate-in-proven-form
+docs: STATIC-COMPLETION-PROOFS.md PROOF-FACT-CENSUS.md
+
+== WHY PROOFS MATTER IN BOTLISH
+Botlish turns several run-time failures into compile-time obligations. A
+call that may fail with a declared error must be handled, admitted in the
+caller's `errors` clause, or proven unable to fail; a call proven to always
+fail is rejected; a context a function needs must be installed before it
+is called; an affine value is used at most once. Where the compiler can
+prove an obligation away, the program needs no handler; where it cannot,
+the program must say what happens.
+
+== THREE KINDS OF STATEMENT
+    LANGUAGE GUARANTEE   what the semantics promise on every backend: for
+                         example, list::at(xs, i) returns the element at i
+                         or fails with IndexNotFound, never anything else.
+    RECOGNIZED PATTERNS  what this compiler proves, and the program forms
+                         it recognizes: for example, list::at(xs, i) inside
+                         `loop i from 0 to xs.length():` cannot fail.
+    LIMITATIONS          what may be true but is not proven today: for
+                         example, an index computed into a local binding
+                         and then guarded is not related to the length.
+
+The recognized patterns and the limitations describe this implementation,
+not the language: a later compiler may prove more. Every example on a proof
+page is compiled by Compilerpedia's own check, so the pages cannot claim a
+pattern the compiler does not prove.
+
+== WHEN A PROOF FAILS
+An unproven obligation is not a bug in the program. The remedies, best
+first: restate the code in a recognized form (proof pages list them; see
+principle.restate-in-proven-form), handle the error where it can occur, or
+admit it in the function's `errors` clause and let the caller decide.
+
+== THE ANALYSES
+    proof.types               type inference and declared types
+    proof.completions         which errors a call can raise; KNOWN-ERROR
+    proof.list-bounds         indexed access: list::at, mutable_array::at/set,
+                              str::char_at
+    proof.slices              str::substring, mutable_array::freeze/copy
+    proof.ranges              integer ranges and integer domains
+    proof.refinements         refinement types: predicates and validators
+    proof.lockstep            equal iteration counts of lockstep loops
+    proof.contexts            context requirements (MISSING-CONTEXT)
+    proof.ownership           affine values: moves, releases
+    proof.callable-contracts  calls through function values
+    proof.reachability        dead code and decided branches
+
+@topic proof.list-bounds
+title: Indexed access: when list::at cannot fail
+summary: list::at, mutable_array::at, mutable_array::set and str::char_at fail with IndexNotFound unless the compiler proves the index in range; it proves a handful of recognized forms and nothing else.
+index: proofs stdlib
+alias: bounds proof; bounds; bounds check; IndexNotFound; index proof; range proof; indexed access; list index; index out of range; out of bounds; IndexNotFound proof; array index
+keywords: list::at, at, index, length, guard, loop, descending, field, local binding
+related: proof.slices proof.completions proof.ranges concept.lists concept.errors rule.unhandled-errors rule.known-error stdlib.list::at stdlib.list::get principle.restate-in-proven-form
+docs: STDLIB-NAMESPACES.md STATIC-COMPLETION-PROOFS.md REFACTOR-WARNINGS-CLEAN.md
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "list::at" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "mutable_array::at" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "mutable_array::set" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "mutable_vector::at" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "str::char_at" may produce*
+
+
+== LANGUAGE GUARANTEE
+list::at(xs, i) (written xs.at(i) after `import list`) returns the element
+of xs at i when 0 <= i < list::length(xs), and otherwise completes with the
+builtin declared error IndexNotFound -- an ordinary, handleable error, never
+a crash, a default or a wrapped index. There is no negative indexing: -1 is
+a missing index like any other. mutable_array::at, mutable_array::set,
+mutable_vector::at and str::char_at (character index) have the same
+contract against their own length or capacity.
+
+Because IndexNotFound is a declared error, every call must do one of three
+things (rule.unhandled-errors): handle it (`on IndexNotFound:`), admit it in
+the enclosing function's `errors` clause, or be proven unable to raise it.
+A call proven to *always* raise it (a literal index past a literal list) is
+rejected as KNOWN-ERROR, even with a handler (rule.known-error).
+
+The proof removes the obligation only: a proven call still performs its
+bounds check at run time.
+
+== RECOGNIZED PATTERNS (PROVEN TODAY)
+The index proof relates an index to the container's size only in these
+forms:
+
+  * a counted loop over the same container's own length:
+        loop i from 0 to xs.length():        (and `from 0 through
+            xs.at(i)                           xs.length() - 1`)
+  * a guard on a name, against the same container's length, that dominates
+    the access, in either form, with `return` or `fail` in the guard:
+        if i < 0 or i >= xs.length():        if i >= 0 and i < xs.length():
+            return ...                           xs.at(i)
+        xs.at(i)
+    The guarded name may be a parameter or a loop variable.
+  * a length guard and a constant index:  if xs.length() > 0: xs.at(0)
+  * a container of statically known size with an index of known range:
+    a list literal (or an immutable binding of one) and a constant index.
+  * a container reached through a field, once bound to a local name:
+    `xs = s.items` and then the loop or guard over xs.
+
+@example accept
+import list
+
+fn total(xs: List[int]) -> int:
+    sums = loop i from 0 to xs.length():
+        xs.at(i)
+    sums.length()
+
+total([4, 5, 6])
+@caption A counted loop over the list's own length
+@value 3
+@end
+
+@example accept
+import list
+
+fn pick(xs: List[int], t: int) -> int:
+    if t < 0 or t >= xs.length():
+        return -1
+    xs.at(t)
+
+[10, 20, 30].pick(1)
+@caption A guard on a parameter dominates the read
+@value 20
+@end
+
+@example accept
+import list
+
+struct Board:
+    cells: List[int]
+
+fn doubled(b: Board) -> List[int]:
+    cells = b.cells
+    loop i from 0 to cells.length():
+        cells.at(i) * 2
+
+doubled(Board {cells: [1, 2, 3]})
+@caption A field's list, bound to a local name first
+@value [2, 4, 6]
+@end
+
+== LIMITATIONS (NOT PROVEN TODAY)
+These forms are often correct, but the compiler does not relate the index
+to the length, so the call must handle or admit IndexNotFound:
+
+  * an index computed into a local binding, then guarded:
+        t = i + 1                 (or t = f(i), or f(i) written inline)
+        if t < 0 or t >= xs.length(): return -1
+        xs.at(t)
+    The guard is on a binding whose value is computed, not on a parameter
+    or loop variable.
+  * arithmetic on a bounded loop variable: xs.at(i + 1) with i below
+    xs.length() - 1, or xs.at(i - 1) with i from 1.
+  * a descending loop: `loop i down from xs.length() - 1 through 0:`
+    xs.at(i), including as a lockstep clause.
+  * a container written as a field path in the loop or the guard:
+    `loop i from 0 to s.items.length(): s.items.at(i)`.
+  * an index or length that crosses a function boundary: facts about a
+    caller's arguments are not carried into the callee's analysis.
+
+@example reject
+import list
+
+fn after(xs: List[int], i: int) -> int:
+    t = i + 1
+    if t < 0 or t >= xs.length():
+        return -1
+    xs.at(t)
+
+0
+@caption A guard on a computed local binding is not related to the length
+@error CORE SEMANTIC UNHANDLED-ERROR
+@at 7:5
+@end
+
+@example reject
+import list
+
+fn backwards(xs: List[int]) -> List[int]:
+    loop i down from xs.length() - 1 through 0:
+        xs.at(i)
+
+0
+@caption A descending loop is not proven
+@error CORE SEMANTIC UNHANDLED-ERROR
+@at 5:9
+@end
+
+@example reject
+import list
+
+struct Board:
+    cells: List[int]
+
+fn doubled(b: Board) -> List[int]:
+    loop i from 0 to b.cells.length():
+        b.cells.at(i) * 2
+
+0
+@caption A field path as the container is not proven
+@error CORE SEMANTIC UNHANDLED-ERROR
+@at 8:9
+@end
+
+== WHAT TO DO WHEN THE PROOF FAILS
+Restate the access in a recognized form when the code allows it: bind a
+field's list to a local name; pass a computed index to a small helper
+function as a parameter and guard it there; iterate ascending (or iterate
+the elements, `loop x in xs:`, when the index is not needed); use lockstep
+(`loop x in xs and i from 0 to xs.length():`) for an element and its index.
+Otherwise make the outcome explicit: handle IndexNotFound where the read is
+(`xs.at(t): on IndexNotFound: fallback`), or use list::get(xs, i, default),
+which is that handler written once (stdlib.list::get). Admitting the error
+in the function's `errors` clause passes the decision to the callers.
+
+@example accept
+import list
+
+fn at_or(xs: List[int], t: int, fallback: int) -> int:
+    xs.at(t):
+        on IndexNotFound:
+            fallback
+
+fn after(xs: List[int], i: int) -> int:
+    t = i + 1
+    xs.at_or(t, -1)
+
+[1, 2, 3].after(1)
+@caption Handled where the read is
+@value 3
+@end
+
+@topic proof.slices
+title: Slices: when str::substring cannot fail
+summary: str::substring, mutable_array::freeze and copy fail with LowerUnderrun or UpperOverrun unless the slice is proven valid: by literal lengths, length guards or counted loops over the same String.
+index: proofs stdlib
+alias: slice proof; substring proof; LowerUnderrun; UpperOverrun; substring bounds
+keywords: substring, slice, freeze, copy, start, end, length
+related: proof.list-bounds proof.completions concept.strings stdlib.str::substring rule.unhandled-errors
+docs: STDLIB-NAMESPACES.md
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "str::substring" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "mutable_array::freeze" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "mutable_array::copy" may produce*
+
+== LANGUAGE GUARANTEE
+A slice START..END of a sequence of N elements is valid iff
+0 <= START <= END <= N. START is checked first, against 0..N, then END
+against START..N: a bound below its interval fails with LowerUnderrun, one
+above it with UpperOverrun (so an inverted slice is LowerUnderrun). Both are
+builtin declared errors: handle them, admit them, or be proven unable to
+raise them. str::substring counts characters (Unicode scalar values), the
+index space of str::length and str::char_at.
+
+== RECOGNIZED PATTERNS (PROVEN TODAY)
+  * a literal String (or an immutable binding of one) and constant bounds;
+  * a length guard: `if s.length() > 0: s.substring(0, 1)`;
+  * a guard on a parameter against the String's length:
+    `if n < 0 or n > s.length(): return ""` then `s.substring(0, n)`;
+  * a counted loop over the String's length: `loop i from 0 to s.length():
+    s.substring(i, i + 1)`;
+  * lengths of str::concat results (the sum of the parts' lengths), and a
+    MutableArray's capacity for freeze and copy.
+
+@example accept
+import str
+
+fn prefix(s: str, n: int) -> str:
+    if n < 0 or n > s.length():
+        return ""
+    s.substring(0, n)
+
+"abc".prefix(2)
+@caption A guarded parameter as the end of the slice
+@value "ab"
+@end
+
+== LIMITATIONS (NOT PROVEN TODAY)
+The same as for indexed access (proof.list-bounds): a bound computed into a
+local and then guarded, a bound that depends on a value the analysis cannot
+relate to the length, a String reached through a field path. A slice whose
+start is an unconstrained parameter cannot be proven:
+
+@example reject
+import str
+
+fn tail(s: str, n: int) -> str:
+    s.substring(n, s.length())
+
+0
+@caption An unconstrained start
+@error CORE SEMANTIC UNHANDLED-ERROR
+@at 4:5
+@end
+
+== WHAT TO DO
+Guard the parameter (`if n < 0 or n > s.length(): return ""`), handle the
+two errors at the call, or admit them in the function's `errors` clause.
+
+@topic proof.completions
+title: Completion proofs: which errors a call can raise
+summary: For each call the compiler computes the errors it may raise from the facts proven there: a call that cannot fail needs no handler; one that always fails is rejected (KNOWN-ERROR).
+index: proofs concepts
+alias: completion proof; completion analysis; provable success; error analysis; static completion
+keywords: completion, errors, handler, fail, proof, known error, success
+related: concept.errors concept.known-errors rule.unhandled-errors rule.known-error error.unhandled-error error.known-error proof.list-bounds proof.slices proof.ranges proof.callable-contracts concept.negative-tests
+docs: STATIC-COMPLETION-PROOFS.md EXPLICIT-ERROR-COMPLETIONS.md ERROR-IDENTITY-AND-COMPLETION-SOUNDNESS.md
+
+== LANGUAGE GUARANTEE
+A function completes normally (with its value), with one of the declared
+errors its `errors` clause names, or not at all. Every error a call may
+raise must be handled at the call (`on NAME:`) or admitted by the enclosing
+function's `errors` clause; nothing propagates silently.
+
+== WHAT THE COMPILER PROVES
+For each call, the compiler evaluates the callee's completions under the
+facts proven for the call's arguments there (constants, ranges, guards,
+lengths), interprocedurally, with a budget:
+  * an error the callee cannot raise with these arguments is no
+    obligation: `risky(3)` needs no handler when `risky` fails only for
+    negative arguments;
+  * when the call cannot complete normally at all -- it always raises -- the
+    program is rejected (CORE SEMANTIC KNOWN-ERROR), handler or not: a
+    statically known failure is a bug in the program, not a run-time
+    situation to handle (concept.known-errors);
+  * otherwise the call must deal with the errors that remain possible.
+The analysis is sound in the conservative direction: when it cannot decide,
+the error stays possible.
+
+@example accept
+error Bad
+
+fn risky(x: int) -> int errors Bad:
+    if x < 0:
+        fail Bad
+    x
+
+risky(3)
+@caption Provable success: no handler needed
+@value 3
+@end
+
+@example reject
+error Bad
+
+fn risky(x: int) -> int errors Bad:
+    if x < 0:
+        fail Bad
+    x
+
+risky(-3):
+    on Bad:
+        -1
+@caption Provable failure is rejected, even with a handler
+@error CORE SEMANTIC KNOWN-ERROR
+@at 8:1
+@end
+
+== RECOGNIZED PATTERNS
+Facts the analysis carries into a call: exact constants and immutable
+bindings of them (proof.exact-values), integer ranges from comparisons and
+domains (proof.ranges), list and String lengths and their guards
+(proof.list-bounds, proof.slices), refinement proofs (proof.refinements),
+and the contracts of function values (proof.callable-contracts).
+
+== LIMITATIONS
+  * A fact must be about a value the analysis tracks at the call: a
+    parameter, a constant, a binding of one. Facts about a caller's
+    arguments are not carried into a callee's own body (each function body
+    is checked for every argument).
+  * Arithmetic relations between values (`i + 1 < n` from `i < n - 1`) are
+    not derived.
+  * Whether a call fails is decided from the callee's ordering comparisons
+    of an Int (`<`, `<=`, `>`, `>=`, combined with and, or and not), not
+    from `==`: after `fn f(n: int) -> int errors C: if n == 7: fail C`,
+    both f(7) and f(3) may fail as far as the compiler knows (f(3) needs a
+    handler, and f(7) is not KNOWN-ERROR). The same guard written
+    `n >= 7 and n <= 7` is decided at both calls.
+  * Recursion and large programs are bounded by a budget: beyond it, errors
+    stay possible.
+
+== TESTING A FAILURE
+Because a literal failing call is rejected, a test of a failure passes the
+failing input through a parameter, so the call is not statically known to
+fail (concept.negative-tests).
+
+@topic proof.ranges
+title: Integer ranges and integer domains
+summary: The compiler tracks the range of every Int from constants, comparisons and arithmetic, and uses it to prove declared integer domains (`type Digit = Int in 0..9`), bounds and decided branches.
+index: proofs
+alias: integer range; range analysis; integer domain proof; value range
+keywords: range, Int, domain, comparison, guard, facts
+related: concept.integer-domains proof.list-bounds proof.completions proof.reachability proof.exact-values
+docs: SOURCE-DEFINED-INTEGER-DOMAINS.md RANGE-FIXPOINT-SCALING.md M6-RANGE-DECIDED-BRANCH-LOWERING.md
+
+== LANGUAGE GUARANTEE
+A value of an integer domain (`type Byte = Int in 0..255`) is always within
+it: every place that produces one -- a function result declared as the
+domain, an argument to such a parameter -- must be proven in range at
+compile time. No run-time range check or wrap-around is inserted.
+
+== RECOGNIZED PATTERNS
+Ranges come from literals, + - * on ranges, comparisons in conditions
+(`if n < 0 or n > 9: return 0` leaves 0..9 on the fall-through, also through
+`and`, `or`, `not`), counted loop variables, domain-typed values and
+registered native results.
+
+@example accept
+type Digit = Int in 0..9
+
+fn digit(n: int) -> Digit:
+    if n < 0 or n > 9:
+        return 0
+    n
+
+digit(5)
+@caption A guard proves the domain
+@value 5
+@end
+
+@example reject
+type Digit = Int in 0..9
+
+fn digit(n: int) -> Digit:
+    n
+
+0
+@caption An unconstrained Int is not a Digit
+@error CORE SEMANTIC TYPE
+@at 3:9
+@end
+
+== LIMITATIONS
+Relations between two variables are not tracked (`i < j` proves nothing
+about i alone), nor facts that cross a function boundary into the callee's
+body; a range is an interval, so `n != 5` adds nothing. Deciding whether a
+call fails reads the callee's ordering comparisons, not `==`
+(proof.completions, LIMITATIONS).
+
+@topic proof.types
+title: Static types: proven, never checked at run time
+summary: A value meets a declared type (parameter, result, field) only if the compiler proves it: "cannot be proven to satisfy" means the proof failed; no run-time check stands behind it.
+index: proofs concepts
+alias: type proof; cannot be proven to satisfy; does not prove declared type
+keywords: type, inference, declared, annotation, any, prove, satisfy
+related: concept.types error.type rule.typed-parameters proof.ranges proof.refinements
+docs: README.md STRICT-TYPED-PARAMETERS.md SYMBOLIC-TYPE-IDENTITY.md
+
+== LANGUAGE GUARANTEE
+A declared parameter type, result type or struct field type holds for every
+value that reaches it on every backend: the compiler proves it at every
+call, return and construction. An unannotated parameter accepts any value
+and its function is checked for the kinds of values its calls pass.
+
+== WHAT THE COMPILER PROVES
+Types flow from literals, declarations, operations and the results of
+calls; conditions narrow them (refinements, ranges). A mismatch is reported
+where the value meets the declaration ("argument for parameter "n" cannot
+be proven to satisfy int (argument type: str)"; "function result does not
+prove declared type str").
+
+@example reject
+fn twice(n: int) -> int:
+    n * 2
+
+twice("x")
+@error CORE SEMANTIC TYPE
+@at 4:7
+@end
+
+== LIMITATIONS
+A value whose type is unknown statically (from an untyped generic
+parameter, `any`) does not prove a specific type: annotate the source of the
+value, or narrow it with a type test the compiler recognizes. Native
+operations check their argument kinds at run time too.
+
+@topic proof.refinements
+title: Refinement proofs: predicates and validators
+summary: A `proves` predicate refines its argument in the branch where it returned true; a validator refines it for the rest of the path once it returned; nothing else makes a refined value.
+index: proofs
+alias: refinement proof; predicate proof; validator proof
+keywords: proves, refined, predicate, validator, narrowing, if
+related: concept.refinements warning.proves-naming proof.types principle.predicate-naming
+docs: REFINEMENT-VALUES.md
+
+== LANGUAGE GUARANTEE
+A value of a refinement type (`refined type Small = int`) was proven to be
+one: by a predicate (`fn small?(n: int) -> bool proves n: Small`) that
+returned true for it, or by a validator (`-> unit proves n: Small errors
+E`) that returned normally. A refined value has its carrier's
+representation; there is no run-time tag.
+
+== RECOGNIZED PATTERNS
+  * `if small?(n):` -- n is Small in the then-branch;
+  * `ok = small?(n)` then `if ok:`;
+  * through `not`, `and`, `or`: `if not small?(n): return 0` leaves n Small
+    on the fall-through;
+  * a validator call: after `validate_small(n)` returns, n is Small (a
+    handled call keeps the fact only if every handler that completes proves
+    it too).
+
+@example accept
+refined type Small = int
+
+fn small?(n: int) -> bool proves n: Small:
+    n < 10
+
+fn use(n: Small) -> int:
+    n
+
+fn f(n: int) -> int:
+    if not small?(n):
+        return 0
+    use(n)
+
+f(3)
+@value 3
+@end
+
+== LIMITATIONS
+Facts are tied to the binding the predicate was called with; a copy made
+before the test is not refined. Only the declaring module of a refinement
+may write a `proves` clause for it.
+
+@topic proof.lockstep
+title: Lockstep loops: proving equal iteration counts
+summary: A lockstep loop (`loop x in xs and i from 0 to xs.length():`) compiles only when the compiler proves every clause runs the same number of times; there is no shortest-wins rule and no run-time check.
+index: proofs
+alias: lockstep proof; equal iteration counts; zip proof
+keywords: lockstep, and, loop, length, cardinality, zip
+related: concept.lockstep error.lockstep-unproven error.lockstep-unequal concept.loops
+docs: COLLECTING-LOOPS.md
+
+== RECOGNIZED PATTERNS
+The count of a list clause is its list's length; of a numeric clause its
+bounds. Equal counts are proven when they are the same length form
+(`xs` and `0 to xs.length()`), constants, or lists of known length.
+
+@example accept
+import list
+
+fn indexed(xs: List[int]) -> List[int]:
+    loop x in xs and i from 0 to xs.length():
+        x + i
+
+indexed([5, 6])
+@value [5, 7]
+@end
+
+@example reject
+fn pairs(xs: List[int], ys: List[int]) -> List[int]:
+    loop x in xs and y in ys:
+        x + y
+
+0
+@caption Two unrelated lists
+@error CORE SEMANTIC LOCKSTEP-UNPROVEN
+@at 2:5
+@end
+
+== LIMITATIONS
+Two different lists are unrelated even when the caller passes lists of the
+same length.
+
+@topic proof.contexts
+title: Context requirements
+summary: The compiler derives every function's transitive context requirements from the call graph and proves that each top-level call runs after the installation of every context it needs.
+index: proofs
+alias: context proof; context requirement; missing context proof
+keywords: context, with context, requirement, install, MISSING-CONTEXT
+related: concept.contexts concept.context-traits error.missing-context rule.context-installation
+docs: CONTEXTS.md CONTEXT-TRAITS.md
+
+== LANGUAGE GUARANTEE
+A function that uses a context declares it (`context io: LinuxIO`); its
+callers need it too, without saying so; a call at the top level must come
+after `with context EXPR` for every context it transitively needs, and a
+context type is installed at most once.
+
+== WHAT IS REPORTED
+MISSING-CONTEXT names the call and the chain of calls that explains the
+requirement; -contexts prints every function's requirements and why.
+
+@example reject
+import io
+import linux::io
+
+fn hello() errors io::WriteFailed:
+    io::print_line("hi")
+
+hello():
+    on io::WriteFailed:
+        unit
+with context linux::io::create()
+0
+@caption The call comes before the installation
+@error CORE SEMANTIC MISSING-CONTEXT
+@at 7:1
+@end
+
+@topic proof.ownership
+title: Ownership of affine values
+summary: An affine value (a coroutine handle, or an aggregate holding one) has one usable owner: the compiler proves every use comes before the value moves, and releases it where its owner dies.
+index: proofs
+alias: ownership proof; affine proof; use after move proof
+keywords: affine, move, release, coroutine, ownership, drop
+related: concept.affine concept.coroutines rule.affine-use error.use-after-move
+docs: AFFINE-VALUES.md COROUTINES.md
+
+== LANGUAGE GUARANTEE
+An affine value is never copied: binding it to another name, passing it,
+storing it in a struct moves it, and a use of the old name afterwards is
+rejected (USE-AFTER-MOVE). It is released after its last use or when its
+scope is left early; no run-time ownership state exists.
+
+== LIMITATIONS
+Several places an affine value could live are not supported yet (captures,
+some containers, generic nesting): the AFFINE-*-UNSUPPORTED diagnostics
+name them (-help errors).
+
+@topic proof.callable-contracts
+title: Calls through function values
+summary: A call of a function value is bounded by its structural type Fn{args, return, errors}, checked where the value acquires it; an untyped function value is charged every error it may carry.
+index: proofs
+alias: callable contract; function value errors; Fn contract proof
+keywords: Fn, callable, function value, contract, errors, higher-order
+related: concept.function-types concept.closures proof.completions error.unhandled-error
+docs: VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md STRUCTURAL-FUNCTION-TYPES.md STATIC-COMPLETION-PROOFS.md
+
+== LANGUAGE GUARANTEE
+A parameter typed `Fn{args: [int], return: int, errors: [E]}` admits only
+functions that take an int, return an int and raise at most E; every call
+through it may raise exactly the declared errors. A function value without
+a structural type is charged conservatively.
+
+== IN PRACTICE
+Declare the Fn type of callback parameters: callers then handle exactly
+the declared errors, and the callback's own errors are checked against the
+contract where it is passed.
+
+@topic proof.reachability
+title: Reachability and decided branches
+summary: Code after a completion that cannot finish, and branches whose condition the compiler decides, are unreachable; the analyses and warnings ignore what can never run.
+index: proofs
+alias: dead code; unreachable code; decided branch
+keywords: reachable, unreachable, dead code, decided, condition
+related: proof.ranges proof.exact-values warning.same-return-value
+docs: M6-RANGE-DECIDED-BRANCH-LOWERING.md
+
+== WHAT THE COMPILER PROVES
+A statement after `return`, `fail`, `break` or `continue`, or after a call
+that always fails, is unreachable; a condition the compiler can decide from
+constants and ranges (`if 1 == 2:`) makes the other branch unreachable.
+Warnings do not count unreachable exits; the native backends compile only
+the reachable branch.
+
+== LIMITATIONS
+Unreachability that depends on facts across functions, or on facts that
+contradict each other, is not always recognized: the code is then still
+checked.
+
+@topic proof.exact-values
+title: Exact values and constants
+summary: The compiler knows the exact value of literals, immutable bindings of them and simple operations on known values, and uses it in completion proofs, bounds proofs and warnings.
+index: proofs
+alias: exact value; constant folding; known value
+keywords: constant, literal, exact, binding, immutable
+related: proof.completions proof.ranges proof.list-bounds warning.same-return-value
+docs: EXACT-VALUE-FACTS.md
+
+== WHAT THE COMPILER PROVES
+Literals (Int, Bool, String, character, small Lists of them), immutable
+bindings of known values (aliases included: `a = 2`, `b = a`), and
++ - * of known Ints are exact. A literal list's length and elements are
+known, so `xs = [1, 2, 3]` then `xs.at(2)` needs no handler.
+
+== LIMITATIONS
+Struct values have no exact facts; Lists past a small size or depth, calls,
+and anything computed at run time are not exact.

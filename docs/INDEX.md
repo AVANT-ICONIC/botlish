@@ -135,6 +135,11 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [REFACTOR-WARNINGS-CLEAN.md](REFACTOR-WARNINGS-CLEAN.md) -- the corpus under its own warnings
 - [LANGUAGE-LIBRARY-DEFICIENCIES.md](LANGUAGE-LIBRARY-DEFICIENCIES.md) -- language and library gaps that refactor found
 
+### The built-in reference
+
+- [COMPILERPEDIA.md](COMPILERPEDIA.md) -- Compilerpedia, `-help`: the topic model, indices, search, help lines, generation, validation and maintenance
+- [COMPILERPEDIA-REPORT.md](COMPILERPEDIA-REPORT.md) -- the Compilerpedia milestone: the CLI changes, coverage, the lint audit and the 15-puzzle assessment
+
 ## Implementation
 
 ### Architecture and toolchain

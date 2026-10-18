@@ -1,0 +1,205 @@
+# main-cli.test -- main.tcl's command line (COMPILERPEDIA.md;
+# COMPILERPEDIA-REPORT.md, "CLI changes"): the usage summary without
+# arguments (no bundled program runs), -help and -version (nothing compiles),
+# malformed invocations (stderr, exit status 2), the help lines printed under
+# diagnostics and warnings, and that explicitly named programs still run.
+# Every test runs main.tcl as its own process.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+set mainScript [file join $::projectRoot main.tcl]
+
+# Runs main.tcl with ARGS: {status STATUS out STDOUT err STDERR}.
+proc runMain {args} {
+    set errFile [file join [temporaryDirectory] main-cli-stderr-[pid].txt]
+    set status 0
+    if {[catch {exec [info nameofexecutable] $::mainScript {*}$args 2> $errFile} out options]} {
+        set code [dict get $options -errorcode]
+        set status [expr {[lindex $code 0] eq "CHILDSTATUS" ? [lindex $code 2] : "error: $out"}]
+        regsub {\n?child process exited abnormally$} $out {} out
+    }
+    set channel [open $errFile]
+    set err [read $channel]
+    close $channel
+    file delete $errFile
+    return [dict create status $status out [string trimright $out] err [string trimright $err]]
+}
+
+# The options of main.tcl's cliOptions table, read from its source.
+proc cliOptionNames {} {
+    set channel [open $::mainScript]
+    set text [read $channel]
+    close $channel
+    regexp {\nset cliOptions \{\n(.*?)\n\}\n} $text -> table
+    return [lmap line [split $table \n] {lindex [string trim $line] 0}]
+}
+
+# ---------------------------------------------------------------------------
+# No arguments: the usage summary, never a program
+
+test cli-no-arguments-usage {main.tcl without arguments prints the usage summary on stdout and exits 0: the common options, the reference, no program run} -body {
+    set r [runMain]
+    list [dict get $r status] [string match "usage: *" [dict get $r out]] [dict get $r err] \
+        [string match "*== *" [dict get $r out]] [string match "*value:*" [dict get $r out]] \
+        [string match "*-backend NAME*" [dict get $r out]] [string match "*-help \\\[QUERY...\\\]*" [dict get $r out]] \
+        [string match "*-help \"bounds proof\"*" [dict get $r out]]
+} -cleanup {unset -nocomplain r} -result {0 1 {} 0 0 1 1 1}
+
+test cli-usage-lists-every-option {the usage summary names every option of the option table} -body {
+    set out [dict get [runMain] out]
+    lmap name [cliOptionNames] {expr {[string first $name $out] >= 0 ? [continue] : $name}}
+} -cleanup {unset -nocomplain out} -result {}
+
+test cli-usage-fits-a-terminal {every usage line fits 80 columns} -body {
+    lmap line [split [dict get [runMain] out] \n] {expr {[string length $line] <= 80 ? [continue] : $line}}
+} -result {}
+
+test cli-options-documented {every option of the table is documented in Compilerpedia's cli.options topic and in main.tcl's header comment} -body {
+    source [file join $::projectRoot compilerpedia compilerpedia.tcl]
+    set page [compilerpedia::render cli.options]
+    set text [compilerpedia::ReadFile $::mainScript]
+    set header [string range $text 0 [string first "\nset root" $text]]
+    list [lmap name [cliOptionNames] {expr {[string first $name $page] >= 0 ? [continue] : $name}}] \
+        [lmap name [cliOptionNames] {expr {[string first $name $header] >= 0 ? [continue] : $name}}]
+} -cleanup {unset -nocomplain page header text} -result {{} {}}
+
+test cli-explicit-ir-still-runs {an explicitly named .ir program still runs (only the argumentless demonstration is gone)} -body {
+    set r [runMain [file join $::projectRoot examples 01-adder.ir]]
+    list [dict get $r status] [dict get $r out]
+} -cleanup {unset -nocomplain r} -result {0 {== 01-adder.ir (interp)
+   value: 42}}
+
+# ---------------------------------------------------------------------------
+# -help and -version
+
+test cli-help-overview {-help alone prints Compilerpedia's overview on stdout and exits 0} -body {
+    set r [runMain -help]
+    list [dict get $r status] [string match "Compilerpedia -- *" [dict get $r out]] \
+        [string match "*INDICES*concepts*rules*proofs*errors*warnings*lint*principles*stdlib*backends*" [dict get $r out]] \
+        [dict get $r err]
+} -cleanup {unset -nocomplain r} -result {0 1 1 {}}
+
+test cli-help-spellings {--help and -h are -help} -body {
+    list [expr {[dict get [runMain --help] out] eq [dict get [runMain -help] out]}] \
+        [expr {[dict get [runMain -h warnings] out] eq [dict get [runMain -help warnings] out]}]
+} -result {1 1}
+
+test cli-help-index {-help warnings prints the warnings index: its introduction and every warning topic} -body {
+    set out [dict get [runMain -help warnings] out]
+    list [string match "WARNINGS -- Compilerpedia index*" $out] \
+        [llength [regexp -all -inline {warning\.[a-z-]+} $out]]
+} -cleanup {unset -nocomplain out} -result {1 7}
+
+test cli-help-code {-help METHOD-ELIGIBLE prints the warning's page} -body {
+    set r [runMain -help METHOD-ELIGIBLE]
+    list [dict get $r status] [lindex [split [dict get $r out] \n] 0] \
+        [string match "*WHY IT MATTERS*LEGITIMATE EXCEPTIONS*" [dict get $r out]]
+} -cleanup {unset -nocomplain r} -result {0 warning.method-eligible 1}
+
+test cli-help-words-unquoted {the words after -help are one query: -help bounds proof is -help "bounds proof"} -body {
+    expr {[dict get [runMain -help bounds proof] out] eq [dict get [runMain -help "bounds proof"] out]}
+} -result 1
+
+test cli-help-unknown {a query nothing matches prints near matches on stderr, nothing on stdout, and exits 1} -body {
+    set r [runMain -help metod-eligibel]
+    list [dict get $r status] [dict get $r out] \
+        [string match "no Compilerpedia topic matches \"metod-eligibel\"*Near matches:*warning.method-eligible*" [dict get $r err]]
+} -cleanup {unset -nocomplain r} -result {1 {} 1}
+
+test cli-help-reader-stops-early {a reader that stops reading (-help errors | head) ends the help quietly: no write error on stderr} -constraints unix -body {
+    set errFile [file join [temporaryDirectory] main-cli-pipe-[pid].txt]
+    set first [exec [info nameofexecutable] $::mainScript -help errors 2> $errFile | head -n 1]
+    set channel [open $errFile]
+    set err [read $channel]
+    close $channel
+    file delete $errFile
+    list $first $err
+} -cleanup {unset -nocomplain errFile first channel err} -result {{ERRORS -- Compilerpedia index} {}}
+
+test cli-help-compiles-nothing {-help never compiles or runs a program named before it, and everything after it is the query} -body {
+    set bad [makeFile "x = \n" cli-help-bad.bot]
+    set r [runMain $bad -help KNOWN-ERROR]
+    set r2 [runMain -help $bad]
+    list [dict get $r status] [string match "*== *" [dict get $r out]] [regexp {(^|\n)   error: } [dict get $r out]] \
+        [lindex [split [dict get $r out] \n] 0] [dict get $r2 status] [dict get $r2 out]
+} -cleanup {removeFile cli-help-bad.bot; unset -nocomplain bad r r2} -result {0 0 0 error.known-error 1 {}}
+
+test cli-version {-version prints the build identity on stdout and exits 0: no release number is invented} -body {
+    set r [runMain -version]
+    list [dict get $r status] [string match "Botlish compiler (no release version*" [dict get $r out]] \
+        [regexp {\nsource revision: \S} [dict get $r out]] [regexp {\nfront end: [0-9a-f]{16}-\d+\n} [dict get $r out]] \
+        [regexp "\nTcl: [string map {. \\.} [info patchlevel]]\n" [dict get $r out]] [dict get $r err]
+} -cleanup {unset -nocomplain r} -result {0 1 1 1 1 {}}
+
+test cli-version-spelling {--version is -version, and -version takes no arguments} -body {
+    set r [runMain -version extra]
+    list [expr {[dict get [runMain --version] out] eq [dict get [runMain -version] out]}] \
+        [dict get $r status] [string match "*-version takes no arguments*" [dict get $r err]]
+} -cleanup {unset -nocomplain r} -result {1 2 1}
+
+# ---------------------------------------------------------------------------
+# Malformed invocations: stderr, status 2, nothing compiled
+
+foreach {name arguments message} {
+    unknown-option        {-nope x.bot}                      {unknown option "-nope"}
+    missing-backend       {-backend}                         {option -backend needs an argument (NAME)}
+    missing-warnings      {-warnings}                        {option -warnings needs an argument (MODE)}
+    missing-target        {-target}                          {option -target needs an argument (NAME)}
+    missing-argv          {-argv}                            {option -argv needs an argument (TEXT)}
+    missing-L             {-L}                               {option -L needs an argument (DIR)}
+    unknown-backend       {-backend fast x.bot}              {unknown backend "fast"*}
+    unknown-mode          {-warnings loud x.bot}             {unknown warnings mode "loud"*}
+    unknown-target        {-target vax x.bot}                {unknown C ABI target "vax"*}
+    bad-argv-hex          {-argv-hex xyz x.bot}              {-argv-hex needs an even number of hexadecimal digits*}
+    no-input-file         {-backend compile}                 {no input file}
+    no-input-file-emit    {-emit-native-executable}          {no input file}
+} {
+    test cli-malformed-$name "a malformed invocation ($arguments) is a message on stderr and exit status 2; nothing runs" -body {
+        set r [runMain {*}$arguments]
+        list [dict get $r status] [dict get $r out] \
+            [string match "*: $message*" [lindex [split [dict get $r err] \n] 0]] \
+            [string match "*with no arguments for the usage summary*" [dict get $r err]]
+    } -cleanup {unset -nocomplain r} -result {2 {} 1 1}
+}
+
+# ---------------------------------------------------------------------------
+# Help lines under diagnostics and warnings
+
+test cli-help-line-under-diagnostic {a rejected program's diagnostic is followed by a help line naming its topic: here the specific rule (an unproven list::at), not the broad code} -body {
+    set path [makeFile "import list\n\nfn backwards(xs: List\[int\]) -> List\[int\]:\n    loop i down from xs.length() - 1 through 0:\n        xs.at(i)\n\n0\n" cli-bounds.bot]
+    set r [runMain -warnings off $path]
+    set lines [split [dict get $r out] \n]
+    list [dict get $r status] [string match "   error: *(CORE SEMANTIC UNHANDLED-ERROR)" [lindex $lines 1]] \
+        [regsub {^   help: .* -help } [lindex $lines 2] {}]
+} -cleanup {removeFile cli-bounds.bot; unset -nocomplain path r lines} -result {1 1 proof.list-bounds}
+
+test cli-help-line-once-per-topic {two diagnostics of one rule get one help line} -body {
+    set path [makeFile "import list\n\nfn a(xs: List\[int\], i: int) -> int:\n    xs.at(i + 1)\n\nfn b(xs: List\[int\], i: int) -> int:\n    xs.at(i + 2)\n\n0\n" cli-bounds2.bot]
+    set out [dict get [runMain -warnings off $path] out]
+    list [llength [regexp -all -inline {   error: } $out]] [llength [regexp -all -inline {   help: } $out]]
+} -cleanup {removeFile cli-bounds2.bot; unset -nocomplain path out} -result {2 1}
+
+test cli-help-line-syntax {a syntax error's help line names the code's topic or its specific rule} -body {
+    set path [makeFile "price = 1.5\nprice\n" cli-float.bot]
+    set out [dict get [runMain $path] out]
+    regsub {^.*   help: \S+ (main\.tcl )?-help } [lindex [split $out \n] end] {}
+} -cleanup {removeFile cli-float.bot; unset -nocomplain path out} -result capability.floats
+
+test cli-help-line-warning {a program's warnings are followed, on stderr, by one help line per distinct warning code; stdout is the program's} -body {
+    set path [makeFile "import list\n\nfn f(xs: List\[int\]) -> int:\n    a = list::at(xs, 0):\n        on IndexNotFound:\n            0\n    b = list::at(xs, 1):\n        on IndexNotFound:\n            0\n    a + b\n\nf(\[1, 2\])\n" cli-warn.bot]
+    set r [runMain -warnings default $path]
+    list [dict get $r status] [llength [regexp -all -inline {METHOD-ELIGIBLE} [dict get $r err]]] \
+        [regexp -all -inline {help: \S+(?: main\.tcl)? -help \S+} [dict get $r err]] \
+        [string match "*help:*" [dict get $r out]]
+} -cleanup {removeFile cli-warn.bot; unset -nocomplain path r} -match glob -result {0 2 {{help: * -help warning.method-eligible}} 0}
+
+test cli-help-lines-do-not-change-diagnostics {the diagnostics main.tcl prints are the compiler's own: the error lines are exactly the -diagnostics list, the help lines are added between them} -body {
+    set path [makeFile "x = missing\ny = other\nx\n" cli-two.bot]
+    set out [dict get [runMain $path] out]
+    set errors [lsearch -all -inline [split $out \n] "   error: *"]
+    catch {surface::readProgramFile $path -warnings off} message options
+    list [llength $errors] [expr {[lmap e $errors {regsub {^   error: } $e {}}] eq [lmap d [dict get $options -diagnostics] {string cat [dict get $d message] " (" [core::ShownCode $d] ")"}]}]
+} -cleanup {removeFile cli-two.bot; unset -nocomplain path out errors message options} -result {2 1}
+
+cleanupTests

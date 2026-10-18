@@ -1,0 +1,22 @@
+old_file	old_test	subsystem	status	confidence	observes	source_theorem	outcome	tcl_retained	tags	notes
+tests/main-cli.test	cli-no-arguments-usage	harness	KEEP-MULTI-PROGRAM	high	main.tcl with no arguments: usage on stdout, exit 0, no program run	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-usage-lists-every-option	harness	KEEP-MULTI-PROGRAM	high	the usage names every cliOptions entry	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-usage-fits-a-terminal	harness	KEEP-MULTI-PROGRAM	high	usage lines <= 80 columns	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-options-documented	harness	KEEP-MULTI-PROGRAM	high	every option in the cli.options topic and main.tcl header	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-explicit-ir-still-runs	harness	KEEP-MULTI-PROGRAM	high	main.tcl examples/01-adder.ir: value 42	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-overview	harness	KEEP-MULTI-PROGRAM	high	-help: the overview, exit 0	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-spellings	harness	KEEP-MULTI-PROGRAM	high	--help and -h are -help	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-index	harness	KEEP-MULTI-PROGRAM	high	-help warnings: the index with 7 warning topics	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-code	harness	KEEP-MULTI-PROGRAM	high	-help METHOD-ELIGIBLE: the warning page	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-words-unquoted	harness	KEEP-MULTI-PROGRAM	high	-help bounds proof is -help "bounds proof"	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-unknown	harness	KEEP-MULTI-PROGRAM	high	unknown query: stderr, exit 1	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-compiles-nothing	harness	KEEP-MULTI-PROGRAM	high	-help compiles nothing named before it; the rest is the query	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-reader-stops-early	harness	KEEP-MULTI-PROGRAM	high	-help piped into a reader that stops early writes no error	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-version	harness	KEEP-MULTI-PROGRAM	high	-version: the build identity	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-version-spelling	harness	KEEP-MULTI-PROGRAM	high	--version; -version extra is a usage error	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-malformed-*	harness	KEEP-MULTI-PROGRAM	high	malformed invocations: stderr, exit 2	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-line-under-diagnostic	harness	KEEP-MULTI-PROGRAM	high	a help line under a diagnostic names its specific rule	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-line-once-per-topic	harness	KEEP-MULTI-PROGRAM	high	one help line per topic per file	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-line-syntax	harness	KEEP-MULTI-PROGRAM	high	a syntax error help line (capability.floats)	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-line-warning	harness	KEEP-MULTI-PROGRAM	high	one stderr help line per distinct warning code	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-lines-do-not-change-diagnostics	harness	KEEP-MULTI-PROGRAM	high	the printed error lines are the -diagnostics list	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process

@@ -1,0 +1,1306 @@
+# errors-runtime.topic -- run-time failures, native-backend failures, file
+# format errors (.hir, .hirx, .ir), compiler limits, and SURFACE SYNTAX.
+
+@topic error.arithmetic
+title: ARITHMETIC: an arithmetic operation with no defined result
+summary: CORE SEMANTIC ARITHMETIC stops a run when an arithmetic operation has no defined result; today the only such operation is mod with a divisor of zero.
+index: errors
+alias: mod by zero; division by zero; modulo by zero
+keywords: mod, zero, divisor, remainder, euclidean, run time
+related: stdlib.mod capability.integer-division concept.integers error.range
+docs: README.md
+code: CORE SEMANTIC ARITHMETIC
+
+== MEANING
+Run time, on every backend; an error of the program. mod(a, b) (written
+a.mod(b)) is Euclidean: its result r satisfies 0 <= r < |b| whatever the
+signs. With b = 0 no such r exists, and the run stops with
+"mod: division by zero".
+
+It is not a declared error: no `on` handler catches it and no `errors`
+clause admits it. The compiler does not prove divisors nonzero, and it does
+not reject a literal zero either: mod(7, 0) compiles and fails when it
+runs.
+
+== EXAMPLE
+    fn bucket(hash: int, size: int) -> int:
+        hash.mod(size)
+
+    bucket(17, 0)
+
+compiles, and stops on every backend with
+
+    error: mod: division by zero (CORE SEMANTIC ARITHMETIC)
+
+== WHAT TO DO
+Decide what the program means when the divisor is zero, and test for it
+before the call:
+
+    fn bucket(hash: int, size: int) -> int:
+        if size == 0:
+            return 0
+        hash.mod(size)
+
+If zero is a caller's mistake rather than a case, fail with a declared
+error of your own instead, so callers must handle it (concept.errors).
+Botlish has no division operator (capability.integer-division).
+
+@topic error.range
+title: RANGE: an argument outside the range an operation accepts
+summary: CORE SEMANTIC RANGE stops a run when an intrinsic receives an argument outside the range it accepts: a shift amount, a capacity or length, a one-character string, a field too wide for its encoding.
+index: errors
+alias: shift amount out of range; capacity out of range; argument out of range
+keywords: shift_left, shift_right, capacity, mutable_array, is_tcl_alpha, binary::emit, length, ceiling, run time
+related: stdlib.shift_left stdlib.shift_right stdlib.mutable_array::create proof.list-bounds error.arithmetic concept.integers
+docs: README.md MUTABLE-ARRAY.md BINARY-LAYOUT.md
+code: CORE SEMANTIC RANGE
+
+== MEANING
+Run time, on every backend; normally an error of the program. Some
+intrinsics accept only part of their parameter type and check the rest as
+they run:
+  * shift_left, shift_right: the shift amount must be in 0..1048576;
+  * mutable_array::create, allocate and generate: the capacity must be in
+    0..4611686018427387903 (2^62 - 1);
+  * str::is_tcl_alpha, str::is_tcl_alnum: the string must hold exactly
+    one character;
+  * mutable_byte_store::zeroed, replace, freeze_prefix: lengths, counts
+    and indices within the store;
+  * binary::emit: each field's value must fit its encoding;
+  * the native runtime's ceiling: a String, List or byte store longer
+    than 2^62 - 1, or a byte store it cannot allocate (out of memory).
+
+RANGE is not a declared error: no handler catches it. It is not what an
+index past the end produces: list::at, mutable_array::at and str::char_at
+fail with the declared error IndexNotFound, and str::substring with
+LowerUnderrun or UpperOverrun, which a program handles or the compiler
+proves impossible (proof.list-bounds).
+
+== EXAMPLE
+    fn shifted(x: int, k: int) -> int:
+        x.shift_left(k)
+
+    shifted(1, -1)
+
+compiles, and stops on every backend with
+
+    error: shift amount out of range (0..1048576) (CORE SEMANTIC RANGE)
+
+A negative capacity:
+
+    error: mutable_array::create: capacity must be 0..4611686018427387903,
+    got -1 (CORE SEMANTIC RANGE)
+
+== HOW TO INVESTIGATE
+The message names the operation and the range it accepts. Find where the
+offending argument was computed: it is usually a difference or a count that
+can be negative, or a String where one character was expected.
+
+== WHAT TO DO
+Test the argument before the call (`if k < 0 or k > 64: ...`) or give the
+parameter an integer domain that excludes the bad values
+(concept.integer-domains), so callers must establish the range.
+
+@topic error.equality
+title: EQUALITY: == or hash on a value that has no equality
+summary: CORE SEMANTIC EQUALITY stops a run when == (or a hash) reaches a function, a native, a MutableArray, a MutableVector, a coroutine handle or a C pointer, which have no defined equality.
+index: errors
+alias: == on functions; function equality; equality of functions; hash of a function
+keywords: ==, hash, callable, block, function, mutable array, mutable vector, immutable_set, contains
+related: rule.equality stdlib.== stdlib.hash concept.function-types concept.mutable-array concept.mutable-vector error.not-callable
+docs: README.md MUTABLE-ARRAY.md M3-EQUALITY-TOTAL-SETCONTAINS-EFFECT.md
+code: CORE SEMANTIC EQUALITY
+
+== MEANING
+Run time, on every backend; an error of the program. `==` compares values
+structurally: Ints by value, strings by characters, Lists and structs
+element by element, values of different kinds as unequal. Some values have
+no equality at all, because the only equality they could have is identity,
+which Botlish does not expose: functions and natives (callables),
+MutableArray and MutableVector headers, coroutine handles and C pointers.
+`==`, `hash` and the operations built on them (immutable_set::from_list,
+immutable_set::contains) stop with EQUALITY when they reach one, also
+inside a List or a struct being compared.
+
+The message says "callables" for all of them, MutableArray included:
+
+    == is not defined for callables: A == B
+    hash is not defined for callables: V
+
+The front end does not reject these comparisons today, even where the
+operands' types show them: they fail when they run. (An affine value's
+comparison is the static AFFINE-EQUALITY-UNSUPPORTED instead.)
+
+== EXAMPLE
+    fn inc(x):
+        x + 1
+
+    fn dec(x):
+        x - 1
+
+    inc == dec
+
+compiles, and stops on every backend with
+
+    error: == is not defined for callables: <block (x)> == <block (x)>
+    (CORE SEMANTIC EQUALITY)
+
+Two MutableArrays with equal elements fail the same way.
+
+== WHAT TO DO
+Compare what the values mean, not the values themselves: for functions, a
+name, an enum case or an Int that identifies them; for a MutableArray or
+MutableVector, its contents as a List (mutable_array::freeze). Keep
+functions out of Lists that are compared or put in a set.
+
+@topic error.native-only
+title: NATIVE-ONLY: an operation only the native backends perform
+summary: CORE SEMANTIC NATIVE-ONLY stops a run on interp or compile when the program reaches a machine address, a raw Linux system call or a C call, which only the native backends perform.
+index: errors backends
+alias: native-only error; refused on the Tcl backends; print on interp
+keywords: interp, compile, syscall, address, from_bytes, extern c, io, print_line, LinuxIO
+related: backend.native-only backend.io task.print-output backend.cranelift concept.c-ffi stdlib.module.io
+docs: CONTEXT-TRAITS.md LINUX-X86-64-SYSCALL.md ABI-BYTES.md C-FFI.md
+code: CORE SEMANTIC NATIVE-ONLY
+
+== MEANING
+Run time, on interp and compile only; not an error of the program, but of
+the backend chosen for it. The Tcl backends have no machine memory and do
+not imitate the kernel or a C library, so they compile such a program like
+any other and refuse the operation when it runs:
+  * the address bridges abi::x86_64::from_bytes and from_mutable_bytes
+    (and the aarch64 ones);
+  * the system-call transports linux::abi::x86_64::syscall and
+    linux::abi::aarch64::syscall;
+  * a call of an `extern c fn`;
+  * reading or writing bytes through a raw C address.
+Everything built on them is native-only too: lib/linux.bot, linux::io,
+and so io::print_line and the rest of io's printing through
+linux::io::LinuxIO.
+
+== EXAMPLE
+    import io
+    import linux::io
+
+    fn hello() errors io::WriteFailed:
+        io::print_line("Hello, world!")
+
+    with context linux::io::create()
+
+    hello():
+        on io::WriteFailed:
+            unit
+
+prints "Hello, world!" on cranelift; on interp and compile it stops with
+(one line, wrapped here)
+
+    error: abi::x86_64::from_bytes produces the machine address of a byte
+    buffer, which exists only in the native backend (cranelift, or a
+    standalone executable) on Linux x86-64; the Tcl backends (interp,
+    compile) have no machine addresses and do not imitate one (CORE
+    SEMANTIC NATIVE-ONLY)
+
+== WHAT TO DO
+Run it with -backend cranelift (or cranelift-generic), or build an
+executable (-emit-native-executable). To keep a program runnable
+everywhere, compute its result in portable code and return it as the
+program's value, which every backend prints; print only at a native edge
+(backend.io).
+
+@topic error.not-boolean
+title: NOT-BOOLEAN: an if condition that is not a Boolean
+summary: CORE SEMANTIC NOT-BOOLEAN stops a run when an if (or and, or, not) condition evaluates to something other than true or false.
+index: errors
+alias: condition is not a Boolean; non-Boolean condition
+keywords: if, condition, bool, true, false, any, truthy, run time
+related: concept.booleans concept.if-expressions concept.types error.not-callable
+docs: README.md
+code: CORE SEMANTIC NOT-BOOLEAN
+
+== MEANING
+Run time, on every backend; an error of the program. A condition must be a
+Bool: there is no truthiness, so 0, "", [] and unit are not false. The
+message shows the value: "if condition must be a Boolean, got V" -- also
+for an operand of `and`, `or` and `not`, which are conditions too.
+
+Where the compiler infers a parameter's type from its use as a condition,
+a non-Boolean argument is rejected statically (TYPE). Where it cannot --
+a parameter declared `any`, a value from untyped code -- the check happens
+when the condition runs. The front end does not reject every condition
+whose type it knows today: even `if 3:` compiles and fails here.
+
+== EXAMPLE
+    fn choose(flag: any) -> int:
+        if flag:
+            return 1
+        2
+
+    choose(1)
+
+compiles, and stops on every backend with
+
+    error: if condition must be a Boolean, got 1 (CORE SEMANTIC NOT-BOOLEAN)
+
+== WHAT TO DO
+Write the comparison you mean (`if n != 0:`, `if s.length() > 0:`) and give
+the parameter its type (`flag: bool`), so a wrong argument is a compile-time
+TYPE error at the call.
+
+@topic error.not-callable
+title: NOT-CALLABLE: calling a value that is not a function
+summary: CORE SEMANTIC NOT-CALLABLE stops a run when a call's callee evaluates to something other than a function or a native.
+index: errors
+alias: call a non-function; non-callable value; calling a number
+keywords: call, callee, function value, untyped parameter, any, Fn
+related: concept.functions concept.function-types concept.types error.not-boolean error.equality
+docs: README.md
+code: CORE SEMANTIC NOT-CALLABLE
+
+== MEANING
+Run time, on every backend; an error of the program. A call `f(x)` whose
+`f` is an Int, a String, a struct or any other non-callable value stops
+with "cannot call non-callable value V". The compiler does not establish
+that a called parameter or binding holds a function: an untyped parameter
+(or one declared `any`) that is called is checked when the call runs.
+
+== EXAMPLE
+    fn apply(f, x):
+        f(x)
+
+    apply(3, 4)
+
+compiles, and stops on every backend with
+
+    error: cannot call non-callable value 3 (CORE SEMANTIC NOT-CALLABLE)
+
+== WHAT TO DO
+Give a parameter that is called a function type, `f: Fn{args: [int],
+return: int}` (concept.function-types): a non-function argument is then a
+compile-time TYPE error at the call, and the call itself is checked against
+the function's contract.
+
+@topic error.struct
+title: STRUCT: a struct value built with the wrong fields (core IR)
+summary: CORE SEMANTIC STRUCT is raised by the reference interpreter when core IR builds a named struct with fields other than its declaration's; a checked Botlish program never reaches it.
+index: errors
+alias: struct initializer fields mismatch
+keywords: struct, initializer, fields, core IR, ir, interp
+related: concept.structs rule.struct-construction error.core-malformed backend.interp
+docs: README.md STRUCTS.md
+code: CORE SEMANTIC STRUCT
+
+== MEANING
+Run time, on interp. Core IR's `(struct HEAD NAME EXPR ...)` names a
+declaration and its fields; when the written field names differ from the
+declaration's, the interpreter stops with "struct ID initializer has
+fields {NAMES}, but its declaration has {FIELDS}". In a .bot program the
+front end checks every construction statically (MISSING-FIELD,
+UNKNOWN-FIELD, DUPLICATE-FIELD, rule.struct-construction), so this code
+comes only from core IR text (.ir files) or unchecked HIR.
+
+== EXAMPLE
+The core IR file
+
+    {struct {Point x y} x {const 1}}
+
+stops on interp with
+
+    error: struct Point initializer has fields {x}, but its declaration
+    has {x y} (CORE SEMANTIC STRUCT)
+
+== WHAT TO DO
+Fix the IR text: write every declared field once. From a .bot program it
+would be a compiler bug: report the program.
+
+@topic error.uncaught-error
+title: UNCAUGHT-ERROR: a declared error reached the top of an unchecked program
+summary: CORE SEMANTIC UNCAUGHT-ERROR stops a run when a declared error propagates out of the whole program; a checked program cannot do that, so it comes from core IR text, unchecked HIR or a compiler bug.
+index: errors
+alias: uncaught propagated error; error escaped the program
+keywords: fail, propagate, top level, unhandled, core IR, strict, completion
+related: concept.errors rule.unhandled-errors proof.completions error.unhandled-error error.known-error
+docs: EXPLICIT-ERROR-COMPLETIONS.md STATIC-COMPLETION-PROOFS.md ARGV.md
+code: CORE SEMANTIC UNCAUGHT-ERROR
+
+== MEANING
+Run time, on every backend. The program's top level admits no errors, so
+in a checked .bot program every declared error that may reach it must be
+handled: an unhandled one is the compile-time UNHANDLED-ERROR, a certain
+one KNOWN-ERROR. At run time the error is shown as "uncaught propagated
+error: <error NAME>". It is reached only by:
+  * core IR text (.ir files), which is not checked for errors;
+  * a program compiled with its diagnostics suppressed (the API's
+    -strict 0), as the cross-backend tests do on purpose;
+  * a checked program, only through an unsound completion proof: a
+    compiler bug.
+
+== EXAMPLE
+The core IR file
+
+    {call {ref list::at} {const list {1 2}} {const 5}}
+
+stops on interp and compile with
+
+    error: uncaught propagated error: <error IndexNotFound>
+    (CORE SEMANTIC UNCAUGHT-ERROR)
+
+The same call in a .bot program, [1, 2].at(5), is rejected before it runs
+(KNOWN-ERROR).
+
+== WHAT TO DO
+In IR text, handle the error with a `(handle ...)` node. From a checked
+.bot program, report the program: the compiler accepted a call whose
+error it should have required you to handle.
+
+@topic error.unreachable
+title: UNREACHABLE: dead code the compiler proved never runs was executed
+summary: CORE SEMANTIC UNREACHABLE is a compiler bug: code that no installed context reaches, which static verification proved never runs, was executed on a Tcl backend.
+index: errors
+alias: context#unreachable
+keywords: context trait, dead code, monomorphization, placeholder, compiler bug
+related: concept.context-traits concept.traits proof.reachability error.native-bug
+docs: CONTEXT-TRAITS.md TRAITS.md
+code: CORE SEMANTIC UNREACHABLE
+
+== MEANING
+Run time; a compiler bug, never an error of the program. Context traits
+and traits are resolved before any backend runs (concept.context-traits):
+an operation or a call that no installed context reaches -- in statically
+unreachable code, or in a nested function that is never called -- is
+replaced by a call of the placeholder `context#unreachable()`, because
+verification proved it never runs. On interp and compile the placeholder
+raises "context#unreachable: code that no installed context reaches was
+executed (a compiler bug: static verification proved it never runs)";
+native code compiles it to a trap.
+
+== WHAT TO DO
+Report the program: the reachability proof was wrong. -contexts and
+-traits show what the compiler selected for each call.
+
+@topic error.coroutine-running
+title: COROUTINE-RUNNING: a coroutine resumed while it runs
+summary: CORE SEMANTIC COROUTINE-RUNNING is a defensive run-time check that a checked program cannot reach: a coroutine was resumed from inside its own running body.
+index: errors
+alias: coroutine resumes itself
+keywords: coroutine, resume, running, affine, handle
+related: concept.coroutines concept.affine error.coroutine-state error.yield-outside-coroutine
+docs: COROUTINES.md AFFINE-VALUES.md
+code: CORE SEMANTIC COROUTINE-RUNNING
+
+== MEANING
+Run time, on every backend; a compiler bug if a checked program reaches
+it. The message is "coroutine N is already running: a coroutine cannot
+resume itself" ("the coroutine is already running: ..." natively). A
+coroutine handle is an affine value with one owner, and
+the body that is running cannot own its own handle (concept.coroutines),
+so the runtimes keep this check only as a safety net, as the native
+runtime's source says: "Coroutine lifecycle states a checked program
+cannot reach (the affine discipline, COROUTINES.md), kept as defensive
+runtime checks."
+
+== WHAT TO DO
+Report the program, with the backend it failed on.
+
+@topic error.coroutine-state
+title: COROUTINE-STATE: a coroutine handle used in an impossible state
+summary: CORE SEMANTIC COROUTINE-STATE reports a coroutine started twice, resumed before it started or used after its release (a compiler bug), or a native coroutine stack the system refused.
+index: errors
+alias: coroutine already started; resume a released coroutine
+keywords: coroutine, start, resume, release, done?, handle, state, affine
+related: concept.coroutines concept.affine error.coroutine-running stdlib.coroutine::done?
+docs: COROUTINES.md AFFINE-VALUES.md
+code: CORE SEMANTIC COROUTINE-STATE
+
+== MEANING
+Run time, on every backend. The messages (natively "the coroutine"
+instead of "coroutine N"):
+
+    coroutine N was already started
+    coroutine N was never started
+    coroutine N was released after its handle's last use: nothing can
+      resume it (a compiler bug)
+    coroutine handle N does not belong to this program run
+
+are a compiler bug if a checked program reaches them. A coroutine starts
+when it is created and is released right after its handle's last use
+(concept.coroutines): the compiler places both, so a checked program never
+resumes or inspects a coroutine in the wrong state. Resuming a coroutine
+that has completed is not this error: it returns the same final result
+again.
+
+One form is a resource limit instead, on the native backends only: "cannot
+map a N-byte coroutine stack: ...". Each live native coroutine has its own
+stack, 8 MiB of address space by default
+(BOTLISH_NATIVE_COROUTINE_STACK_BYTES sets it, at least 64 KiB), and the
+system refused another one.
+
+== WHAT TO DO
+For the stack form, keep fewer coroutines alive at once or give them
+smaller stacks. Otherwise report the program, with the backend it failed
+on: a release placed too early is the likeliest cause.
+
+@topic error.yield-outside-coroutine
+title: YIELD-OUTSIDE-COROUTINE: yield ran with no coroutine running
+summary: CORE SEMANTIC YIELD-OUTSIDE-COROUTINE is a defensive run-time check that a checked program cannot reach: a yield executed while no coroutine was running.
+index: errors
+alias: yield with no coroutine running
+keywords: yield, coroutine, effect, run time
+related: concept.coroutines error.coroutine-running error.coroutine-state
+docs: COROUTINES.md
+code: CORE SEMANTIC YIELD-OUTSIDE-COROUTINE
+
+== MEANING
+Run time; a compiler bug if a checked program reaches it. The message is
+"yield outside a coroutine: no coroutine is running here". `yield` is a
+statically tracked effect: the compiler rejects a yield that is not inside
+a function a coroutine runs (YIELD-OUTSIDE-FUNCTION, UNWRAPPED-YIELD and
+the other coroutine diagnostics), so only core IR text or unchecked HIR
+can execute one outside a coroutine.
+
+== WHAT TO DO
+Report the program if it was a checked .bot program.
+
+@topic error.core-contract-type
+title: CORE CONTRACT TYPE: a native broke its declared type contract
+summary: CORE CONTRACT TYPE means trusted Tcl code -- a native's implementation -- returned or accepted a value outside its declared types; it is a bug in the runtime, never in the program.
+index: errors
+alias: trusted native broke its contract; contract violation of a native
+keywords: native, contract, registry, result type, implementation bug, Tcl runtime
+related: stdlib.module.root backend.interp backend.compile error.native-bug
+docs: README.md
+code: CORE CONTRACT TYPE
+
+== MEANING
+Run time, on interp and compile; a bug in the Tcl runtime, not in the
+program. Every native is registered with parameter and result types,
+which the type checker trusts; so after each native call the runtime
+checks that the implementation kept its promise. A violation reads
+
+    NAME result: contract violation: expected T, got V
+    NAME argument I: contract violation: expected T, got V
+
+or says that the native signalled an error it does not declare, or ended
+with a completion it may not. A native added by a test or an embedding
+tool (core::native::register) can raise it about its own implementation.
+
+== WHAT TO DO
+Report it with the program: the native named in the message is wrong. Run
+the program on another backend meanwhile.
+
+@topic error.core-declared-error
+title: CORE DECLARED-ERROR: a native's declared error escaped its call
+summary: CORE DECLARED-ERROR NAME is the runtime's internal signal for a native failing with a declared error; seen by a user, it escaped the call that converts it, which is a compiler or runtime bug.
+index: errors
+alias: failDeclared escaped
+keywords: native, declared error, IndexNotFound, compile backend, direct call, bounds proof
+related: proof.list-bounds proof.completions backend.compile error.uncaught-error
+docs: EXPLICIT-ERROR-COMPLETIONS.md STATIC-COMPLETION-PROOFS.md
+code: CORE DECLARED-ERROR
+
+== MEANING
+A Tcl native fails with one of its declared errors (IndexNotFound,
+InvalidArgumentEncoding, ...) by raising {CORE DECLARED-ERROR NAME}; the
+call that invoked it turns that into an ordinary error completion, which
+the program's handlers see. The code is printed only when the signal
+escaped that conversion:
+  * the Tcl compiler (compile) calls a native's implementation directly,
+    without the conversion, where the compiler proved the call's bounds
+    checks cannot fail; if that proof were wrong, the error would escape
+    as CORE DECLARED-ERROR NAME;
+  * a native that declares no errors raised one.
+Either is a bug in the compiler or the runtime, not in the program.
+
+== WHAT TO DO
+Report the program and the backend. Running it on interp shows the
+error the program was meant to see (an ordinary, handleable error, or
+UNCAUGHT-ERROR at the top).
+
+@topic error.core-malformed
+title: CORE MALFORMED: core IR text that is not well-formed
+summary: CORE MALFORMED rejects core IR (.ir files) whose nodes are not well-formed -- an unknown operation, a missing part, a bad literal; it is never a Botlish source error.
+index: errors
+alias: malformed IR; malformed core IR
+keywords: .ir, core IR, node, operation, literal, interp, compile
+related: backend.interp backend.compile error.native-aot-input error.hir-parse error.struct
+docs: README.md DIRECT-HIR-NATIVE-PATH.md
+code: CORE MALFORMED
+
+== MEANING
+Core IR is the small executable representation of the Tcl reference
+interpreter: a list of nodes such as {call {ref +} {const 1} {const 2}}.
+.ir files (examples/*.ir) are core IR text, run on interp and compile
+only. A node that is not well-formed is rejected, never guessed at:
+
+    malformed IR: unknown operation "frobnicate": frobnicate {const 1}
+    malformed IR: expected USAGE: NODE
+    malformed IR: not a canonical integer literal: NODE
+
+Text that is not even a list of nodes (an unbalanced brace) fails earlier,
+with "core::readProgramFile: FILE is not a list of IR expressions".
+
+A .bot program lowers to core IR only on interp (hir::lower); a malformed
+node there would be a compiler bug.
+
+== WHAT TO DO
+Fix the node the message quotes; README.md section 4 lists every form.
+Prefer writing Botlish source: .bot files are checked, and they run on
+every backend.
+
+@topic error.core-process-argv
+title: CORE PROCESS ARGV: an invalid injected argument vector
+summary: CORE PROCESS ARGV rejects an argument vector given to a run (the compiler's -argv-hex) that contains a NUL byte, which no real process argument can.
+index: errors
+alias: injected argv; argv NUL byte
+keywords: argv, -argv, -argv-hex, NUL, bytes, arguments, process, snapshot
+related: concept.argv stdlib.argv cli.options task.read-arguments
+docs: ARGV.md
+code: CORE PROCESS ARGV
+
+== MEANING
+Before a run starts, not an error of the program. the compiler's -argv TEXT,
+-argv-hex HEX and -argv-none give the program the argument vector argv()
+returns. A Linux argument is a byte string without NUL, so a vector with
+a NUL byte (-argv-hex 00) is refused before anything runs:
+
+    error: argv element 0 is not a byte string without NUL (every
+    character must be 1..255) (CORE PROCESS ARGV)
+
+Tools that call core::process::withArgv get it for a character outside
+1..255 too.
+
+== WHAT TO DO
+Drop the 00 bytes. To test how a program handles arguments that are not
+valid UTF-8, pass such bytes (-argv-hex ff): argv() then fails with the
+declared error InvalidArgumentEncoding, which the program handles.
+
+@topic error.hir-interchange-compiler
+title: HIR INTERCHANGE COMPILER: a .hirx file built by another front end
+summary: HIR INTERCHANGE COMPILER refuses a .hirx file written by a different front end (another revision of core/, hir/, surface/ or lib's Tcl, or another Tcl patch level); rebuild it from the source.
+index: errors backends
+alias: built by another front end; stale hirx file
+keywords: hirx, interchange, fingerprint, front end, stale, revision, rebuild
+related: backend.hir-interchange error.hir-interchange-format error.hir-interchange-input cli.options
+docs: HIR-INTERCHANGE.md COMPILATION-ISOLATION.md
+code: HIR INTERCHANGE COMPILER
+
+== MEANING
+When a .hirx file is read; not an error of the program. A .hirx file
+(-emit-hir-interchange) holds an analyzed HIR in the front end's own
+representation, together with the fingerprint of the front end that built
+it: a checksum of every Tcl source file that can shape a HIR (core/,
+hir/, surface/, lib's Tcl libraries) and the Tcl patch level. A HIR read
+by another front end could be silently wrong, so the reader refuses it,
+and there is no option to skip the check:
+
+    error: HIR interchange text built by another front end (FINGERPRINT;
+    this one is FINGERPRINT) (HIR INTERCHANGE COMPILER)
+
+Changing the backends (compiler/, native/) keeps .hirx files valid. The
+front-end cache (BOTLISH_HIR_CACHE) uses the same format but treats a
+foreign entry as a miss, never as this error.
+
+== WHAT TO DO
+A .hirx file is a compilation result, not a source: regenerate it from the
+.bot (or .hir) file with this compiler, -emit-hir-interchange FILE.bot.
+
+@topic error.hir-interchange-format
+title: HIR INTERCHANGE FORMAT: a file that is not HIR interchange text
+summary: HIR INTERCHANGE FORMAT rejects a .hirx file whose header is not the interchange format's, whose version this compiler does not read, or which lacks its compiler or its HIR.
+index: errors backends
+alias: not HIR interchange text; hirx version
+keywords: hirx, interchange, header, version, corrupt, truncated
+related: backend.hir-interchange error.hir-interchange-compiler error.hir-interchange-input error.hir-parse
+docs: HIR-INTERCHANGE.md
+code: HIR INTERCHANGE FORMAT
+
+== MEANING
+When a .hirx file is read; not an error of the program. The file must
+start with the line `botlish-hir-interchange 1` followed by a Tcl dict
+holding the compiler's fingerprint and the HIR. The messages:
+
+    not HIR interchange text (it starts "...")
+    HIR interchange version V: this compiler reads version 1
+    HIR interchange text without its compiler or its HIR
+
+Usual causes: a file renamed to .hirx (a .hir text file is a different
+format: HIR text), a truncated or edited file, or one written by a
+compiler with a newer format version.
+
+== WHAT TO DO
+Regenerate the file with -emit-hir-interchange FILE.bot. Run a .hir file
+under its own extension.
+
+@topic error.hir-interchange-input
+title: HIR INTERCHANGE INPUT: -emit-hir-interchange given the wrong file
+summary: HIR INTERCHANGE INPUT rejects an input of -emit-hir-interchange that is not a .bot or .hir file: interchange text is written from HIR, never from core IR.
+index: errors backends
+alias: emit-hir-interchange input
+keywords: -emit-hir-interchange, .ir, .hirx, input file, extension
+related: backend.hir-interchange error.hir-interchange-format error.native-aot-input cli.options
+docs: HIR-INTERCHANGE.md
+code: HIR INTERCHANGE INPUT
+
+== MEANING
+On the command line, before anything is compiled. -emit-hir-interchange
+writes FILE.hirx from the analyzed HIR of a .bot or .hir input; any other
+input is refused, for example a core IR file:
+
+    prog.ir: expected a .bot or .hir input file: prog.ir
+    (HIR INTERCHANGE INPUT)
+
+== WHAT TO DO
+Give it the Botlish source (.bot) or HIR text (.hir).
+
+@topic error.hir-parse
+title: HIR PARSE: HIR text that is malformed or inconsistent
+summary: HIR PARSE rejects a .hir file (hir::format's notation used as input) that is malformed or internally inconsistent: a bad header, an id declared twice, a reference to an invisible binding.
+index: errors
+alias: malformed HIR text; .hir file error
+keywords: .hir, HIR text, hir::parse, hir::readFile, header, binding id, scope
+related: error.hir-interchange-format error.core-malformed backend.hir-interchange cli.usage
+docs: README.md
+code: HIR PARSE
+
+== MEANING
+When a .hir file is read; not an error of a Botlish program. HIR text is
+the semantic HIR as hir::format (-hir) prints it, readable back as a
+program (examples/hir/*.hir). The reader checks that the text is
+well-formed and consistent -- a header line `program SCOPE ...`, every id
+declared once, every reference to a visible binding, a block's type
+naming that block, no forward reference -- and reports the first problem:
+
+    HIR text line N: expected a header "program SCOPE ?binds ...?" or
+    "ambient SCOPE"
+    HIR text: expression E refers to "x" (B), which is not established
+    until E2: forward references are not allowed
+
+It does not check that the stated facts (types, targets) are true.
+
+Run directly (botlish FILE.hir) the error is shown with a Tcl stack trace
+whose first line is the message; -emit-hir-interchange and
+-emit-native-executable print it as "FILE: MESSAGE (HIR PARSE)".
+
+== WHAT TO DO
+Fix the line the message names, or regenerate the text from the source
+(botlish -hir FILE.bot). HIR text is for compiler development; programs
+are written in Botlish source.
+
+@topic error.hir-range-limit
+title: HIR RANGE LIMIT: the native range analysis did not converge
+summary: HIR RANGE LIMIT is a compiler limit: native lowering's interprocedural integer-range fixpoint did not settle within its round budget; the program is not at fault.
+index: errors backends
+alias: closed-call facts did not converge
+keywords: range analysis, fixpoint, convergence, budget, native lowering, cranelift
+related: error.hir-specialize-limit concept.specialization backend.cranelift backend.interp proof.ranges error.native-bug
+docs: README.md CRANELIFT-WASM.md
+code: HIR RANGE LIMIT
+
+== MEANING
+At compile time, on the native backends only (cranelift,
+cranelift-generic, -emit-native-executable, -emit-nir, -emit-clif); a
+limit of the compiler, not an error of the program. Before emitting
+native code, the compiler computes integer ranges across function
+instances (to choose small-integer representations and drop checks),
+repeating rounds until nothing changes. Its budget is 4 rounds per
+instance plus 16; past it, compilation stops with "hir::range:
+closed-call facts did not converge" rather than guess. The analysis is
+designed to converge, so reaching the budget points at a bug in it.
+
+== WHAT TO DO
+Run the program on interp or compile, which do not run this analysis.
+Report the program (the smallest version that still fails helps most).
+
+@topic error.hir-specialize-limit
+title: HIR SPECIALIZE LIMIT: call-site specialization did not converge
+summary: HIR SPECIALIZE LIMIT is a compiler limit: the native backend's call-site specialization fixpoint did not settle within its analysis budget; the program is not at fault.
+index: errors backends
+alias: specialization did not converge
+keywords: specialization, instances, fixpoint, convergence, budget, cranelift, aot-spec
+related: concept.specialization error.hir-range-limit backend.cranelift backend.cranelift-generic backend.native-executable error.native-bug
+docs: README.md
+code: HIR SPECIALIZE LIMIT
+
+== MEANING
+At compile time, where call-site specialization runs: -backend cranelift,
+-emit-native-executable, -emit-nir and -emit-clif, and -aot-spec. A limit
+of the compiler, not an error of the program. Specialization creates
+function instances keyed by the argument kinds their call sites prove
+(concept.specialization) and re-analyzes them until their facts settle;
+past 64 analyses per allowed instance (instances are capped at 1000), it
+stops with "hir::specialize: the fixpoint did not converge".
+
+== WHAT TO DO
+Run the program with -backend cranelift-generic, which does not
+specialize, or on interp or compile. Report the program.
+
+@topic error.native-address
+title: NATIVE ADDRESS: a C function returned an address Botlish cannot hold
+summary: NATIVE ADDRESS stops a run when a C function's pointer result does not fit Botlish's C pointer word (a sign-extended 60-bit address): the pointer is never truncated or masked.
+index: errors backends
+alias: C pointer too wide; tagged pointer result
+keywords: extern c fn, pointer, address, ffi::c::Ptr, top byte, tagged pointer, aarch64
+related: concept.c-ffi backend.native-only error.native-bool error.native-contract-violation
+docs: C-FFI.md C-ABI-TYPES.md
+code: NATIVE ADDRESS
+
+== MEANING
+Run time, native backends only (a C call runs nowhere else). An
+ffi::c::Ptr is a tagged word holding a sign-extended 60-bit address. Every
+canonical x86-64 address and every untagged AArch64 address fits; a
+top-byte-tagged AArch64 pointer, or a garbage value returned as a pointer,
+does not, and the call fails with "the C function NAME returned the
+address 0x..., which a Botlish C pointer cannot hold ...".
+
+== WHAT TO DO
+Check the declaration against the C header: a function declared to return
+a pointer that really returns an integer or a tagged pointer is
+mis-declared. A C library that tags its pointers needs a C wrapper that
+returns them untagged.
+
+@topic error.native-aot-not-ready
+title: NATIVE AOT NOT-READY: the program cannot be compiled ahead of time
+summary: NATIVE AOT NOT-READY refuses -emit-native-executable when some function instance the program uses is not closed: an operand's kind or a call's target is not known statically.
+index: errors backends
+alias: not AOT-ready; program is not AOT-ready
+keywords: -emit-native-executable, -aot-spec, closed, guarded, open, annotation, parameter type, blocker
+related: backend.native-executable concept.specialization backend.cranelift error.native-link
+docs: README.md SINGLE-EXECUTABLE.md
+code: NATIVE AOT NOT-READY
+
+== MEANING
+At compile time, for -emit-native-executable only; the program is valid
+and runs on every backend, but not in the form a standalone executable
+needs. An executable contains no fallback: every function instance it
+uses must be *closed*, every operation chosen and every operand's kind
+known. An instance is *guarded* when some operand's kind is unknown (an
+untyped parameter no call site determines) and *open* when an operation
+cannot be chosen (a call of a value of unknown kind). The error lists each
+such instance and its blockers; nothing is written.
+
+== EXAMPLE
+    fn make_adder(x):
+        fn add(y):
+            x + y
+
+        add
+
+    add10 = make_adder(10)
+    add10(32)
+
+runs everywhere (42), but -emit-native-executable adder.bot reports
+
+    adder.bot: program is not AOT-ready:
+    add<generic>: guarded
+      line 3:13: + needs int; parameter y (no annotation, no call-site
+      inference) has no static kind (NATIVE AOT NOT-READY)
+
+== HOW TO INVESTIGATE
+botlish -aot-spec FILE.bot prints every function instance with its
+status, parameter types and blockers, then runs the program.
+
+== WHAT TO DO
+Annotate what the analysis cannot infer: here `fn make_adder(x: int):` and
+`fn add(y: int) -> int:` make every instance closed. Avoid `any` and
+calls of values of unknown kind in code an executable runs. The JIT
+backends (-backend cranelift) run guarded code as it is.
+
+@topic error.native-aot-input
+title: NATIVE AOT INPUT: core IR given to a native backend
+summary: NATIVE AOT INPUT refuses a core IR (.ir) file given to a native backend, -emit-nir, -emit-clif or -emit-native-executable: native compilation starts from HIR, never from core IR.
+index: errors backends
+alias: core IR on a native backend; ir file with cranelift
+keywords: .ir, core IR, cranelift, -emit-native-executable, -emit-nir, HIR, .hir, .hirx
+related: error.core-malformed backend.cranelift backend.native-executable error.hir-interchange-input cli.options
+docs: DIRECT-HIR-NATIVE-PATH.md
+code: NATIVE AOT INPUT
+
+== MEANING
+On the command line, before anything is compiled. Native code is compiled
+from the analyzed HIR (.bot source, .hir text or a .hirx file); core IR
+is the interpreter's lower-level form and lacks what native lowering needs
+(declared types, module identity, `errors` clauses). So a .ir file is
+refused:
+
+    error: prog.ir is core IR text; native compilation starts from HIR
+    (.bot or .hir), never core IR (NATIVE AOT INPUT)
+
+and with -emit-native-executable, "expected a .bot, .hir or .hirx input
+file (native executables are built from HIR, never from core IR text)".
+
+== WHAT TO DO
+Run a .ir file on interp or compile. For native code, use the program's
+.bot source, or a .hir file (examples/hir/ has .hir versions of the .ir
+samples).
+
+@topic error.native-bool
+title: NATIVE BOOL: a C function returned a _Bool that is neither 0 nor 1
+summary: NATIVE BOOL stops a run when a C function declared to return bool returns a result byte other than 0 or 1: the declaration does not describe the function.
+index: errors backends
+alias: _Bool result neither 0 nor 1
+keywords: extern c fn, bool, _Bool, result, ffi, declaration
+related: concept.c-ffi error.native-address error.native-contract-violation
+docs: C-FFI.md
+code: NATIVE BOOL
+
+== MEANING
+Run time, native backends only. A C _Bool result is the byte 0 or 1; no C
+compiler returns anything else. A declaration `-> bool` of a function that
+returns another byte (it really returns an int, a char, a pointer) gets
+"the C function NAME returned the byte 0x.. as its _Bool result, which is
+neither 0 nor 1: no C compiler returns such a _Bool, so its extern c fn
+declaration does not describe it". The byte is never read as one bit.
+
+== WHAT TO DO
+Correct the `extern c fn` declaration's result type to the C function's
+real one (an ffi::c integer type), and compare it with 0 in Botlish.
+
+@topic error.native-bug
+title: NATIVE BUG: an internal failure of the native backend
+summary: NATIVE BUG reports an internal failure of the native backend -- native lowering, the botlish-native driver, an executable -- or a driver that died without a result.
+index: errors backends
+alias: native backend panicked; native backend failed
+keywords: panic, crash, internal error, lowering, driver, invariant, report, cranelift
+related: error.native-codegen error.native-invalid-nir error.native-invalid-hir backend.cranelift backend.cranelift-generic backend.interp
+docs: README.md DIRECT-HIR-NATIVE-PATH.md
+code: NATIVE BUG
+
+== MEANING
+At compile or run time, on the native backends; a bug in the compiler or
+the native runtime, not in the program. Its forms:
+  * "native lowering: ..." -- native/lower.tcl found HIR facts that
+    contradict each other while emitting NIR;
+  * "the native backend panicked: ..." -- the Rust driver hit an
+    internal error;
+  * "native backend failed: ..." or "native backend produced no
+    result" -- the driver process ended without reporting (a crash, or
+    a process killed from outside, e.g. for lack of memory);
+  * "native executable panicked" -- a standalone executable's runtime.
+
+== HOW TO INVESTIGATE
+Run the program on -backend cranelift-generic and on interp: if they
+succeed, the bug is in specialized lowering. -emit-nir shows the NIR the
+program lowers to. A smaller program that still fails makes a good report.
+
+== WHAT TO DO
+Report the program, the backend and the message. Meanwhile run it on
+another backend.
+
+@topic error.native-codegen
+title: NATIVE CODEGEN: Cranelift rejected the generated code
+summary: NATIVE CODEGEN reports that Cranelift's verifier or code generator rejected the code the native backend produced, or could not target this host; a compiler bug or an unsupported machine.
+index: errors backends
+alias: Cranelift verifier error; Cranelift rejected the code
+keywords: cranelift, verifier, codegen, CLIF, ISA, host, machine code
+related: error.native-bug error.native-invalid-nir backend.cranelift backend.platforms
+docs: README.md CRANELIFT-WASM.md
+code: NATIVE CODEGEN
+
+== MEANING
+At compile time, on the native backends; a bug in the native backend, or
+a host Cranelift cannot generate code for. The driver translates NIR to
+Cranelift IR (shown by -emit-clif); when Cranelift's verifier or its code
+generation fails, or its ISA builder rejects the host, the message is
+Cranelift's own, usually naming the function.
+
+== WHAT TO DO
+Check that the host is a supported platform (backend.platforms). Otherwise
+report the program with the -emit-clif output, and run it on interp or
+compile meanwhile.
+
+@topic error.native-contract-violation
+title: NATIVE CONTRACT-VIOLATION: a C function broke its declared contract
+summary: NATIVE CONTRACT-VIOLATION stops a run when a C function declared to return its pointer argument (alias P) returns a different address: the binding's contract is false.
+index: errors backends
+alias: alias contract is false; extern alias result mismatch
+keywords: extern c fn, alias, contract, pointer result, provenance, ffi
+related: concept.c-ffi error.native-address error.native-bool
+docs: C-FFI.md C-POINTER-BORROWING.md
+code: NATIVE CONTRACT-VIOLATION
+
+== MEANING
+Run time, native backends only; an error of the `extern c fn`
+declaration, not of the calling code. A result fact `alias P` says the C
+function returns exactly its pointer argument P. It is the one fact a run
+can observe, so every call checks it right after returning: "the C
+function NAME returned 0x..., but its extern c fn declaration says its
+result is exactly its pointer argument (alias), 0x...: the binding's
+contract is false". Other facts (noescape, read, write) describe C's code
+and are never checked; a false one is undefined behaviour.
+
+== WHAT TO DO
+Read the C function's documentation: if it may return another pointer
+(into the buffer, a new allocation), declare the result `independent` or
+leave its provenance unknown (C-FFI.md, "Pointer results").
+
+@topic error.native-invalid-hir
+title: NATIVE INVALID-HIR: native lowering met HIR it cannot interpret
+summary: NATIVE INVALID-HIR means native lowering met HIR no checked build produces (an unknown node kind, an undeclared enum or C function): hand-written HIR or a front-end bug.
+index: errors backends
+alias: native lowering invalid HIR
+keywords: HIR, native lowering, .hir, enum, extern c fn, constant, front end
+related: error.hir-parse error.native-bug error.native-invalid-nir backend.cranelift
+docs: DIRECT-HIR-NATIVE-PATH.md README.md
+code: NATIVE INVALID-HIR
+
+== MEANING
+At compile time, on the native backends. native/lower.tcl lowers the
+analyzed HIR the front end built; its messages start "native lowering:"
+and name what it could not interpret: an unknown HIR expression kind, an
+enum or `extern c fn` the program does not declare, an enum case its
+enum lacks, an unexpected constant or root value. A HIR built from .bot
+source never has these, so the cause is HIR text (.hir) written or edited
+by hand, or a bug in the front end.
+
+== WHAT TO DO
+For a .hir file, regenerate it from its source (botlish -hir FILE.bot).
+For a .bot program, report it.
+
+@topic error.native-invalid-nir
+title: NATIVE INVALID-NIR: the native driver rejected the NIR
+summary: NATIVE INVALID-NIR means the botlish-native driver's validator rejected the native IR it was given: usually a driver built from older sources than native/lower.tcl, otherwise a lowering bug.
+index: errors backends
+alias: invalid NIR; stale native build
+keywords: NIR, botlish-native, validator, rebuild, cargo build, version
+related: error.native-not-built error.native-bug error.native-codegen backend.cranelift
+docs: README.md DIRECT-HIR-NATIVE-PATH.md
+code: NATIVE INVALID-NIR
+
+== MEANING
+At compile time, on the native backends; not an error of the program.
+native/lower.tcl writes NIR text, and the Rust driver parses and validates
+it before generating code ("invalid NIR at line N: ..."). The two are built
+from the same checkout: when native/ was updated (a pull, a branch switch)
+and the driver was not rebuilt, the old driver may not know the new NIR.
+Otherwise the lowering emitted NIR its own driver rejects: a bug.
+
+== WHAT TO DO
+Rebuild the native backend: cargo build --release --manifest-path
+native/Cargo.toml. If the error persists, report the program with its
+-emit-nir output.
+
+@topic error.native-io
+title: NATIVE IO: the native driver or an executable could not read or write
+summary: NATIVE IO reports an input or output failure of the native machinery itself -- the driver reading its NIR or writing its result, an executable writing its value -- not of the program's own I/O.
+index: errors backends
+alias: executable cannot write its value
+keywords: io, file, stdout, disk full, temporary directory, result file, executable
+related: error.native-startup error.native-link backend.native-executable cli.output
+docs: C-FFI.md SINGLE-EXECUTABLE.md
+code: NATIVE IO
+
+== MEANING
+On the native backends and in executables; a problem of the
+environment, not an error of the program. The forms:
+  * the driver cannot read its NIR file or create its result file, or a
+    program that calls C cannot create its private work directory or
+    start its linked executable;
+  * a standalone executable cannot write its final value, e.g. to a full
+    disk or a closed standard output:
+
+    No space left on device (os error 28) (NATIVE IO)
+
+The program's own printing (io::print_line) reports failures as the
+declared error io::WriteFailed instead.
+
+== WHAT TO DO
+Check the temporary directory (TMPDIR), free disk space and where the
+standard output goes.
+
+@topic error.native-limit-stack
+title: NATIVE LIMIT STACK: recursion too deep for the native stack
+summary: NATIVE LIMIT STACK stops a native run whose nested calls exhaust the native stack (1 GiB by default), and TCL LIMIT STACK a Tcl backend's: resource limits, not semantics.
+index: errors backends
+alias: stack overflow; recursion too deep; deep recursion; native stack exhausted
+keywords: recursion, stack, depth, BOTLISH_NATIVE_STACK_BYTES, too many nested evaluations, limit, tail call
+related: backend.cranelift backend.interp backend.compile backend.performance concept.loops
+docs: NATIVE-STACK-OVERFLOW.md README.md
+code: NATIVE LIMIT STACK
+code: TCL LIMIT STACK
+
+== MEANING
+Run time. Recursion depth is a resource limit, not semantics, so the
+backends stop at different depths:
+  * native backends and executables: native code runs on a 1 GiB stack;
+    overflowing it stops the run with "native stack exhausted: too many
+    nested calls" (NATIVE LIMIT STACK), never a crash. A standalone
+    executable prints it on stderr as `error {NATIVE LIMIT STACK}
+    {native stack exhausted: ...}` and exits 1.
+  * interp and compile: Tcl's evaluation limit, raised by the compiler to
+    about 14,000 nested Botlish calls on interp and 99,000 on compile,
+    stops the run with "too many nested evaluations (infinite loop?)"
+    (TCL LIMIT STACK); on interp it takes about a minute to arrive.
+Neither is a declared error: no handler catches it.
+
+== EXAMPLE
+    fn depth(n: int) -> int:
+        if n == 0:
+            return 0
+        1 + depth(n - 1)
+
+    depth(20000000)
+
+stops on cranelift with "native stack exhausted: too many nested calls
+(NATIVE LIMIT STACK)", and depth(200000) on compile with "too many nested
+evaluations (infinite loop?) (TCL LIMIT STACK)".
+
+== WHAT TO DO
+Make sure the recursion ends (a missing or unreachable base case is the
+usual cause). For a deep but finite computation, iterate instead
+(concept.loops), or recurse on halves rather than on n - 1. On the native
+backends and in executables, BOTLISH_NATIVE_STACK_BYTES=N (at least 1 MiB)
+sets the stack size: the example above runs with 4294967296.
+
+@topic error.native-link
+title: NATIVE LINK and NATIVE AOT: linking a native executable failed
+summary: NATIVE LINK (a program that calls C) and NATIVE AOT (any other) report that linking a native executable failed: a missing C library or symbol, no rustc, a refused linker.
+index: errors backends
+alias: link failed; undefined symbol; cannot find library; executable link failed
+keywords: linker, rustc, cc, ld, -l, -L, extern c library, BOTLISH_NATIVE_LINKER, stub, libbotlish_native
+related: concept.c-ffi backend.native-executable backend.single-executable error.native-aot-not-ready error.native-not-built
+docs: C-FFI.md SINGLE-EXECUTABLE.md
+code: NATIVE LINK
+code: NATIVE AOT
+
+== MEANING
+At link time: -emit-native-executable, and the native backends' runs of a
+program that calls C (which are linked as executables, then run). Not an
+error of the program's code. The code is NATIVE LINK when the program
+declares C functions or libraries, NATIVE AOT otherwise.
+
+NATIVE LINK:
+  * "native link failed: the system linker could not link this program
+    with the C functions and libraries it declares (symbols ...;
+    libraries -l...):" followed by the linker's own lines -- a library
+    the linker cannot find, or a symbol no library defines. A missing
+    library is never a front-end error: it fails here, even in a
+    program that calls nothing from it.
+  * the stub linker (BOTLISH_NATIVE_LINKER=stub, the single executable's)
+    refuses any program that calls C or declares a library.
+NATIVE AOT:
+  * "executable link failed (STATUS): ..." with rustc's output;
+  * "cannot launch rustc to link executable", "runtime library missing:
+    ..." (the native backend is not built), "unknown BOTLISH_NATIVE_LINKER",
+    "the stub linker supports x86_64 only".
+
+== WHAT TO DO
+For C: install the library, pass its directory with -L DIR, and check
+each `named` symbol against the library. For NATIVE AOT: the default
+(rustc) linker needs rustc and a built native backend in the checkout;
+the stub linker needs neither but is x86-64 only and links no C.
+
+@topic error.native-not-built
+title: NATIVE NOT-BUILT: the native backend has not been built
+summary: NATIVE NOT-BUILT means the botlish-native driver is missing: the checkout's native backend has not been built with cargo, or BOTLISH_NATIVE_BIN names no file.
+index: errors backends
+alias: native backend not built; build the native backend
+keywords: cargo build, rustc, native/target/release, botlish-native, BOTLISH_NATIVE_BIN, rustup
+related: backend.cranelift backend.single-executable error.native-invalid-nir error.native-link backend.interp
+docs: README.md SINGLE-EXECUTABLE.md
+code: NATIVE NOT-BUILT
+
+== MEANING
+Before native compilation; not an error of the program. The native
+backends (cranelift, cranelift-generic, -emit-clif, executables) run the
+Rust driver native/target/release/botlish-native. In a source checkout it
+is built separately; until then every native run stops with
+
+    error: native backend not built: run "cargo build --release" in
+    .../native (NATIVE NOT-BUILT)
+
+BOTLISH_NATIVE_BIN, when set, names the driver to use instead. The single
+executable packs its drivers and installs them itself.
+
+== WHAT TO DO
+Build it: cargo build --release --manifest-path native/Cargo.toml. The
+pinned Cranelift crates need a recent stable rustc; if cargo reports that
+a package is not supported, update the toolchain (rustup toolchain install
+stable; rustup default stable). Without a native build, interp and compile
+run every program except the native-only operations.
+
+@topic error.native-startup
+title: NATIVE STARTUP: a standalone executable could not start
+summary: NATIVE STARTUP means a stub-linked executable could not load the program image appended to it, or the runtime could not start its worker thread; the file is damaged or was built for another runtime.
+index: errors backends
+alias: no program image; bare botlish-aot-stub
+keywords: executable, stub linker, program image, botlish-aot-stub, startup, thread, format
+related: backend.native-executable backend.single-executable error.native-io error.native-link
+docs: SINGLE-EXECUTABLE.md
+code: NATIVE STARTUP
+
+== MEANING
+When a standalone executable starts, before the program runs; not an
+error of the program. A stub-linked executable (BOTLISH_NATIVE_LINKER=stub,
+what the single executable uses) is the prebuilt botlish-aot-stub with the
+program's image appended; at startup it reads the image back from its own
+file. The messages:
+
+    /proc/self/exe: no program image (this is the bare botlish-aot-stub,
+    not an executable it linked)
+    FILE: truncated program image
+    program image was compiled for a different native runtime build
+    program image format N, this runtime reads format M
+
+It is also reported when the runtime cannot create its worker thread
+(for example a BOTLISH_NATIVE_STACK_BYTES the system refuses), and by
+botlish-aot-stub on a machine other than x86-64 Linux.
+
+== WHAT TO DO
+Rebuild the executable with -emit-native-executable, and copy it whole
+(never strip or edit it: the image is at its end).
+
+@topic error.native-unsupported
+title: NATIVE UNSUPPORTED: a construct the native backend does not support
+summary: NATIVE UNSUPPORTED KIND reports a valid construct the native backends cannot handle: a field of unknown shape, a context too complex for a fixed slot, a function as the result.
+index: errors backends
+alias: native lowering does not support; not supported natively
+keywords: struct-shape, CONTEXT-NATIVE-LOWERING-UNSUPPORTED, value, foreign, sequence-mode, validator contract, cranelift-generic, context struct
+related: backend.cranelift backend.cranelift-generic backend.native-only concept.contexts concept.specialization error.native-bug
+docs: README.md CONTEXTS.md DIRECT-HIR-NATIVE-PATH.md
+code: NATIVE UNSUPPORTED
+code: NATIVE UNSUPPORTED CONTEXT-NATIVE-LOWERING-UNSUPPORTED
+code: NATIVE UNSUPPORTED struct-shape
+
+== MEANING
+On the native backends; the program is valid and runs on interp and
+compile, but the native backend cannot handle part of it. The third word
+of the code says what:
+  * struct-shape: a field projection whose receiver's struct type is not
+    known statically, in unspecialized code (cranelift-generic); native
+    code reads a field from a known slot, never by name.
+  * CONTEXT-NATIVE-LOWERING-UNSUPPORTED: an installed context struct with
+    a field that cannot live in the fixed native context area -- a str,
+    a List, a struct holding one, or an Int whose type does not bound it
+    to the small-integer range (plain `int`). Bool, unit, UnicodeChar,
+    enum cases, MutableVector, MutableArray and bounded integer domains
+    are supported.
+  * value: the program's final value is a function or a coroutine
+    handle, which the driver cannot hand back to the compiler. The same code
+    also reports the Linux syscall transport of another architecture and
+    native coroutines on an unsupported platform.
+  * native NAME: a native implemented only in Tcl (the regex library, the
+    test suite's instrumentation natives).
+  * foreign: batch timing or allocation reports of a program that calls
+    C, or such a program run with an empty argument vector.
+  * validator contract, ambient binding, DynamicBinding,
+    UnresolvedControl, sequence-mode: HIR that only unchecked programs or
+    the embedding API produce.
+Lowering messages start with the source location and the HIR node.
+
+== EXAMPLES
+    struct A:
+        x: int
+
+    struct B:
+        y: int
+        x: int
+
+    fn getx(p):
+        p.x
+
+    getx(A {x: 1}) + getx(B {y: 2, x: 3})
+
+gives 4 on interp, compile and cranelift (which specializes getx for each
+struct); on cranelift-generic it fails with "the field projection ".x"
+has a receiver of type any, so its slot is not statically known (NATIVE
+UNSUPPORTED struct-shape)".
+
+    context struct Limits:
+        depth: int
+
+installed with `with context Limits {depth: 3}` fails on the native
+backends: "field "depth" is an Int (int) whose declared domain does not
+fit the small-Int representation ... (NATIVE UNSUPPORTED
+CONTEXT-NATIVE-LOWERING-UNSUPPORTED)". Declaring `type Depth = Int in
+0..1000` and `depth: Depth` makes it compile.
+
+== WHAT TO DO
+  * struct-shape: run on cranelift, or give the parameter its struct
+    type.
+  * contexts: bound Int fields with an integer domain; pass strings and
+    Lists as ordinary parameters (or keep them in a MutableVector field).
+  * value: end the program with data (call the function), not with a
+    function.
+  * anything else: run on interp or compile, and report the program if
+    it is ordinary Botlish source.
+
+@topic error.surface-syntax
+title: SURFACE SYNTAX: the source does not parse
+summary: SURFACE SYNTAX reports Botlish source that does not parse; every malformed construct is reported once, with its line and column, and a file with syntax errors is not checked further.
+index: errors rules
+alias: syntax error; parse error; does not parse; unexpected token
+keywords: parser, lexer, expected, found, unterminated string, never closed, unexpected character, indentation, colon, recovery
+related: concept.syntax rule.if-placement rule.loop-placement rule.one-handler-per-error rule.comparison-chains rule.indentation rule.names rule.no-list-destructuring error.list-destructuring
+docs: DIAGNOSTIC-RECOVERY.md README.md
+code: SURFACE SYNTAX
+
+== MEANING
+At compile time, before any other check. The lexer and the parser read a
+.bot file into a syntax tree; text that does not fit the grammar is a
+syntax error, reported as FILE:LINE:COLUMN: MESSAGE (SURFACE SYNTAX).
+A file with syntax errors is not analyzed further: its semantic
+diagnostics (TYPE, UNBOUND, ...) appear once it parses.
+
+Some syntax errors carry a code of their own at the start of the message
+(LIST-DESTRUCTURING: ..., EXTERN-SYNTAX: ...); each has its own page.
+
+== HOW ERRORS ARE REPORTED
+Every independent error is reported, in source order, in one compilation:
+  * a statement that fails to parse is one error; parsing resumes after
+    its line and the block indented under it, and an `elif` or `else`
+    right after it belongs to it (not reported again);
+  * the lexer recovers locally -- it skips an unexpected character, ends
+    an unterminated string at the end of the line, closes a bracket left
+    open at the end of input or before a line that starts like a new
+    statement -- and errors caused by its own guesses inside a malformed
+    construct are not reported;
+  * two malformed constructs are two errors, and two brackets left open
+    are two.
+Recovery is by grammar boundaries, never by comparing messages
+(DIAGNOSTIC-RECOVERY.md, section 5).
+
+== THE MAIN FAMILIES
+  expected X, found Y        the commonest form, from the parser: Y is
+                             "end of line", "indentation", "end of block",
+                             "end of file", name "x", integer 3, or a
+                             token: expected ":" after the "if"
+                             condition, found end of line
+  "(" is never closed        a bracket left open (also "]" or "}"); "}"
+                             does not match "(" opened at L:C
+  unterminated string        a string with no closing quote on its line
+                             (also: unterminated character literal,
+                             invalid escape, empty character literal)
+  unexpected character "$"   a character outside the language
+  indentation                tab used for indentation; inconsistent
+                             dedent; unexpected indentation
+  names and literals         an identifier with more than one trailing
+                             "?"; leading zeros in an integer
+  placement                  an "if" value must be the whole right side
+                             of "=" or "return"; "else" without a
+                             matching "if"; a declaration nested in a
+                             function; an import after other statements
+  absent forms               comparison chaining, handler guards, several
+                             errors in one handler, import aliases and
+                             wildcards, positional destructuring
+
+Most messages for absent forms say what to write instead. The rules
+behind the commonest errors have their own pages (listed below), and the
+help line printed under a syntax error names its rule's page when there is
+one.
+
+== HOW TO INVESTIGATE
+Read the first error first: the column points at the token where parsing
+went wrong, which may be after the real mistake (a missing ":" or ")" on
+the previous line). Fix one error, compile again, and repeat.
+
+@example reject
+fn add(a: int, b: int) -> int:
+    a + b
+
+total = add(1, 2
+result = total * 2
+result
+@caption An unclosed parenthesis: the next statement line closes it
+@error SURFACE SYNTAX
+@at 4:12
+@message "(" is never closed
+@end

@@ -1,0 +1,472 @@
+# capabilities.topic -- facilities Botlish does not have (or has only in a
+# limited form), each documented as absent, with the nearest supported
+# alternative. Never describe one of these as available; when the language
+# or library gains one, replace its page with the real documentation.
+
+@topic capability.overview
+title: Facilities Botlish does not have, and what to use instead
+summary: Every facility other languages offer that Botlish lacks or offers only in a limited form has a capability page saying so, with the nearest supported alternative; this page lists them.
+index: concepts
+alias: capabilities; missing features; absent features; unsupported features; does it exist; what is missing; limitations of the language
+keywords: capability, absent, missing, unsupported, limitation, feature, exist, alternative
+related: capability.integer-division capability.int-to-string capability.string-formatting capability.floats capability.input capability.files capability.process-exit-status capability.test-timeout capability.concurrency capability.exceptions capability.multi-error-handler capability.lambdas capability.match capability.map-filter capability.null capability.assignment capability.visibility capability.struct-type-import
+
+== HOW TO FIND OUT WHETHER SOMETHING EXISTS
+Ask for it as you would name it elsewhere: `-help division`, `-help "exit
+status"`, `-help "try catch"`, `-help lambda`. A facility that exists
+leads to its concept or standard-library page; one that does not leads to
+its capability page (the list below), whose title says "absent" or
+"limited" and whose NEAREST ALTERNATIVE section says what to write. A
+standard-library function that is not listed by `-help NAMESPACE` (for
+example `-help str`) does not exist.
+
+@topic capability.integer-division
+title: Integer division: absent (mod exists)
+summary: Botlish has no division operator and no integer division function; `mod` (Euclidean remainder) exists, and bit shifts divide by powers of two.
+index: concepts stdlib
+alias: division; divide; integer division; quotient; div; / operator; % operator; remainder; modulo operator
+keywords: divide, quotient, remainder, mod, shift_right, slash, percent
+related: concept.integers stdlib.mod stdlib.shift_right capability.int-to-string
+docs: LANGUAGE-LIBRARY-DEFICIENCIES.md BYTE-NIBBLE-BIT-ARITHMETIC.md
+match: SURFACE SYNTAX | unexpected character "/"*
+match: SURFACE SYNTAX | unexpected character "%"*
+
+== STATUS
+There is no `/` operator, no `%` operator and no `div` function: `7 / 2`
+is a syntax error (unexpected character "/"). Int is arbitrary precision,
+with + - * and the comparisons.
+
+== WHAT EXISTS
+  * mod(a, b): the Euclidean remainder, 0 <= r < abs(b); mod(-7, 3) is 2.
+    mod(a, 0) fails at run time (CORE SEMANTIC ARITHMETIC).
+  * shift_right(n, k): n divided by 2^k, rounded down; bit_and(n, 2^k - 1)
+    is the remainder (row and column of a cell of a 4x4 board, for
+    example).
+  * Division by any other divisor: repeated subtraction, as lib/test.bot's
+    digit_value does for decimal digits (a recursive helper).
+
+@example accept
+[mod(17, 5), mod(-7, 3), shift_right(17, 2), bit_and(17, 3)]
+@caption Remainder and power-of-two division
+@value [2, 2, 4, 1]
+@end
+
+@example reject
+x = 7 / 2
+x
+@caption There is no division operator
+@error SURFACE SYNTAX
+@at 1:7
+@end
+
+@topic capability.int-to-string
+title: Int-to-String conversion: absent from the standard namespaces
+summary: There is no general Int-to-String conversion (no str::of, no formatting); the test framework's test::int_text(n) converts by repeated subtraction and is the one available route.
+index: concepts stdlib
+alias: integer to string; int to string; number to text; to_string; format number; itoa; tostring; string of a number
+keywords: convert, string, text, decimal, format, int_text
+related: stdlib.test::int_text concept.strings capability.string-formatting capability.integer-division
+docs: LANGUAGE-LIBRARY-DEFICIENCIES.md GOLDEN-TEST-FRAMEWORK.md
+
+== STATUS
+No standard namespace converts an Int to its decimal text, and there is no
+string formatting or interpolation (capability.string-formatting). A
+program's value is shown by the compiler (the compiler's "value:" line, an
+executable's last line), which is how most programs report numbers.
+
+== NEAREST ALTERNATIVE
+test::int_text(n), in lib/test.bot (import test), returns n in decimal with
+a leading minus sign when negative. It needs no installed suite. It is
+written in Botlish by repeated subtraction (there is no division), so it is
+slow for huge numbers but exact.
+
+@example accept
+import test
+import str
+
+"moves: ".concat(test::int_text(20))
+@value "moves: 20"
+@end
+
+@topic capability.process-exit-status
+title: Setting the process exit status: absent
+summary: A Botlish program cannot choose its exit status: there is no exit function; a compiled program exits 0 after printing its value, nonzero only after a run-time error.
+index: concepts backends
+alias: exit status; set exit code; process exit; exit function; return code
+keywords: exit, status, code, process, fail, verdict
+related: cli.exit-status backend.native-executable concept.program-value concept.testing
+
+== STATUS
+There is no `exit` operation and no way to make the compiler or an
+executable exit with a status the program chooses. A declared error cannot
+be raised to the top level deliberately either: every call's errors must be
+handled or admitted, and a top-level call has no `errors` clause to admit
+them in (rule.unhandled-errors).
+
+== NEAREST ALTERNATIVE
+Make the outcome the program's value and test it outside: a golden suite
+returns its report (test::report(), or a verdict String such as
+"GOLDEN PASS: 258 passed") and a script compares the printed value. The
+compiler's own status is 1 when a program is rejected or fails at run time.
+
+@topic capability.test-timeout
+title: Per-test timeouts: absent
+summary: The test framework has no timeout: a test that does not terminate hangs the suite; limit work by construction (a depth or step bound passed to the code under test) and time the whole run outside.
+index: concepts
+alias: test timeout; timeout; hanging test
+keywords: timeout, hang, infinite loop, test, limit
+related: concept.testing capability.process-exit-status
+docs: GOLDEN-TEST-FRAMEWORK.md
+
+== STATUS
+lib/test.bot runs each registered check to completion, in order; Botlish
+has no clock, no timer and no cancellation. A non-terminating check stops
+the whole run.
+
+== NEAREST ALTERNATIVE
+Give searches and loops an explicit bound the test can choose (a depth
+limit, a step count) and test the bound's behavior too; run suites under an
+external timeout (the shell's `timeout`).
+
+@topic capability.concurrency
+title: Threads, parallelism and async: absent
+summary: A Botlish program runs one computation on one thread: there are no threads, tasks, async/await, channels or locks; coroutines suspend and resume cooperatively, inside that one computation.
+index: concepts
+alias: threads; concurrency; parallelism; async; await; async await; multithreading
+keywords: thread, concurrent, parallel, async, await, task, lock, channel, mutex
+related: concept.coroutines concept.mutable-vector capability.test-timeout backend.overview
+
+== STATUS
+No construct or standard-library function starts a second thread of
+control. A coroutine is not a thread: `step(message)` runs the coroutine
+until its next `yield` while the caller waits, so at any moment exactly one
+piece of Botlish code runs (concept.coroutines).
+
+== NEAREST ALTERNATIVE
+Interleave work with coroutines (a scheduler loop resuming several
+handles), or run several processes from outside. The native runtime runs a
+program on a worker thread of its own (for its stack guard): an
+implementation detail, not something a program can use.
+
+@topic capability.multi-error-handler
+title: One handler for several errors: absent
+summary: A handler names exactly one error: `on A, B:` is a syntax error. Write one handler per error, or give the callee one error with an enum payload when callers treat the failures alike.
+index: concepts
+alias: catch several errors; multiple errors one handler; on A, B
+keywords: handler, on, several, errors, payload, enum
+related: rule.one-handler-per-error task.handle-several-errors concept.errors concept.error-payloads
+docs: EXPLICIT-ERROR-COMPLETIONS.md ERROR-PAYLOADS.md
+
+== STATUS
+`on A, B:` is rejected ("a handler names exactly one error: write one "on
+NAME:" handler per error"). There is no catch-all handler either: every
+handled error is named.
+
+== NEAREST ALTERNATIVE
+See task.handle-several-errors: one handler per error (handler values can
+be the same), or, as the callee's author, one error whose payload says what
+went wrong.
+
+@topic capability.input
+title: Reading input: raw bytes of standard input only
+summary: There is no line-reading or text input API; on the native backends linux::io::read(buffer) reads standard input into a MutableBytes, one read(2) call at a time, through the linux::io context.
+index: concepts stdlib
+alias: read input; stdin; read line; user input; keyboard input; standard input
+keywords: input, read, stdin, line, console, bytes
+related: concept.argv backend.io capability.files stdlib.linux::io::read stdlib.module.linux::io stdlib.abi::bytes::MutableBytes
+docs: CONTEXT-TRAITS.md
+
+== STATUS
+lib/io.bot is output only (print, print_line, write_error,
+write_error_line). Standard input is read through the Linux context
+itself, as bytes:
+
+    import abi
+    import abi::bytes
+    import linux::io
+
+    fn first_bytes() -> int:
+        r = linux::io::read(abi::bytes::zeroed(abi::usize(16)))
+        r.result                    # the byte count (or -errno)
+
+    with context linux::io::create()
+    first_bytes()
+
+r.data is the buffer with the bytes read. The call needs no direct module
+(the context mediates it), but it runs only on cranelift,
+cranelift-generic and native executables: interp and compile refuse it
+(NATIVE-ONLY). There is no line splitting or end-of-file helper (read
+until the result is 0), and no UTF-8 decoding of bytes into a String in
+the standard namespaces: what is read stays bytes.
+
+== NEAREST ALTERNATIVE
+For small, fixed inputs pass them in the program text or through argv()
+(concept.argv), which works on every backend.
+
+@topic capability.files
+title: Files and directories: absent
+summary: There is no file, directory or path-opening API in the portable standard library; io::path and linux::path handle path text only.
+index: concepts stdlib
+alias: open file; read file; write file; file system; filesystem
+keywords: file, open, read, write, directory, path
+related: capability.input backend.io stdlib.module.io::path stdlib.module.linux
+
+== STATUS
+No open/read/write of named files. io::path and linux::path are textual
+path utilities. On the native backends, lib/linux.bot's raw system calls
+are the only route, and they are low-level.
+
+@topic capability.floats
+title: Floating-point numbers: absent
+summary: Botlish's only number type is the arbitrary-precision Int: there are no floating-point literals, types or operations.
+index: concepts
+alias: float; floats; double; decimal number; real number; floating point
+keywords: float, double, decimal, fraction, real
+related: concept.integers capability.integer-division
+match: SURFACE SYNTAX | expected a field name after ".", found integer*
+
+== STATUS
+`1.5` is not a number: it reads as a field access of the integer 1 and is
+rejected (expected a field name after ".", found integer 5).
+
+== NEAREST ALTERNATIVE
+Fixed-point arithmetic on Int: keep values scaled by a power of ten (cents,
+thousandths) and convert only for display.
+
+@example reject
+price = 1.5
+price
+@error SURFACE SYNTAX
+@at 1:11
+@end
+
+@topic capability.string-formatting
+title: String formatting and interpolation: absent
+summary: There is no format function, template string or interpolation; text is built with str::concat and str::append_char, numbers with test::int_text.
+index: concepts stdlib
+alias: string formatting; format string; interpolation; sprintf; string interpolation; f-string
+keywords: format, interpolation, template, concat, text
+related: task.string-concatenation capability.int-to-string concept.strings stdlib.str::concat
+
+== STATUS
+No format, printf-style operation or interpolation syntax exists.
+
+== NEAREST ALTERNATIVE
+Concatenate: `"moves: ".concat(test::int_text(n)).concat(" steps")`; build
+long texts with a helper or lib/test.bot's test::joined(parts, separator).
+
+@topic capability.assignment
+title: Assignment and mutable variables: absent
+summary: Bindings are immutable and a name is bound once per scope: `x = x + 1` is a duplicate binding; compute a new name, recurse, collect with a loop, or grow a MutableVector.
+index: concepts
+alias: assignment; mutable variable; reassign; variable update; counter variable; x = x + 1
+keywords: assign, mutate, variable, counter, accumulate, update
+related: concept.bindings rule.immutable-bindings principle.immutability concept.loops concept.mutable-vector
+
+== STATUS
+`x = 1` then `x = x + 1` in the same scope is DUPLICATE. A nested scope may
+shadow a name with a new binding, which never changes the outer one.
+
+== NEAREST ALTERNATIVES
+  * a new name: `next = x + 1`;
+  * a collecting loop for per-element values: `squares = loop x in xs: x *
+    x`;
+  * recursion, carrying the accumulator as a parameter;
+  * a MutableVector (a mutable value with checked places) when growing a
+    collection in place is the point.
+
+@example accept
+import list
+
+fn sum(xs: List[int], i: int, total: int) -> int:
+    if i < 0 or i >= xs.length():
+        return total
+    xs.sum(i + 1, total + xs.at(i))
+
+[1, 2, 3].sum(0, 0)
+@caption An accumulator carried as a parameter
+@value 6
+@end
+
+@topic capability.null
+title: null, nil and optional values: absent
+summary: Botlish has no null, no nil and no optional type: a function that may not have a result fails with a declared error, or takes a default from its caller.
+index: concepts
+alias: null; nil; none; optional; maybe; undefined
+keywords: null, optional, missing, absent, default
+related: principle.errors-over-sentinels concept.errors stdlib.list::get capability.match
+match: CORE SEMANTIC UNBOUND | unbound name "null"*
+
+== STATUS
+`null` is just an unbound name. No value means "nothing" except unit, which
+is a value of its own type, not a member of every type.
+
+== NEAREST ALTERNATIVE
+Declare an error (`fn find(...) errors NotFound`) and handle it at the call
+(principle.errors-over-sentinels); or take a default argument as
+list::get(xs, i, default) does.
+
+@example reject
+x = null
+x
+@error CORE SEMANTIC UNBOUND
+@at 1:5
+@end
+
+@topic capability.visibility
+title: Private module members: absent
+summary: A module has no visibility control: every top-level function and value of a module is reachable after `import`; representation privacy exists for structs only, through `opaque struct`.
+index: concepts
+alias: private; public; visibility; export; hide function
+keywords: private, public, export, module, opaque
+related: concept.opaque-structs concept.modules rule.opaque-authority
+
+== STATUS
+No `private`, `pub` or export list. Helpers of a module are importable like
+its API.
+
+== NEAREST ALTERNATIVE
+`opaque struct` makes a struct's fields and construction belong to its
+module: everywhere else the value can be passed and compared but not built
+or inspected, so invariants hold by construction.
+
+@topic capability.match
+title: switch, match and pattern matching: absent
+summary: There is no switch or match statement: branch with if/elif/else (conditions in order), compare enum cases with ==, and destructure structs by field.
+index: concepts
+alias: switch; match; case statement; pattern matching
+keywords: switch, match, case, pattern, enum, elif
+related: concept.if-expressions concept.enums concept.destructuring capability.null
+
+== STATUS
+No switch/match/case construct and no patterns beyond struct
+destructuring (which binds fields; it never tests values).
+
+== NEAREST ALTERNATIVE
+    if d == Direction::Up:
+        ...
+    elif d == Direction::Down:
+        ...
+    else:
+        ...
+The chain is an expression too (`name = if ...`).
+
+@topic capability.lambdas
+title: Anonymous functions (lambdas): absent
+summary: There is no anonymous function expression: declare a nested named function, which captures its environment and is a value you can pass.
+index: concepts
+alias: lambda; lambdas; anonymous function; closure expression; arrow function
+keywords: lambda, anonymous, closure, callback, fn expression
+related: concept.closures concept.functions concept.function-types
+match: SURFACE SYNTAX | expected an expression, found "fn"*
+
+== STATUS
+`fn` starts a declaration only; `g = fn(y): y` is a syntax error
+(expected an expression, found "fn").
+
+== NEAREST ALTERNATIVE
+    fn big?(x: int) -> bool:
+        x > 10
+    xs.any?(big?)
+A nested function sees the bindings around it (concept.closures).
+
+@example reject
+g = fn(y): y
+1
+@error SURFACE SYNTAX
+@at 1:5
+@end
+
+@example accept
+import list
+
+fn has_big?(xs: List[int], limit: int) -> bool:
+    fn big?(x: int) -> bool:
+        x > limit
+    xs.any?(big?)
+
+[3, 12].has_big?(10)
+@caption A nested function capturing `limit`
+@value true
+@end
+
+@topic capability.map-filter
+title: map, filter and reduce: use loops
+summary: There are no map/filter/reduce functions: a collecting loop is the transformation (`loop x in xs: f(x)`), `continue` filters, and list::any?, all?, none? and find cover search.
+index: concepts stdlib
+alias: map; filter; reduce; fold; comprehension; list comprehension
+keywords: map, filter, reduce, fold, transform, collect
+related: concept.loops stdlib.module.list capability.assignment
+docs: RETURNING-ITERABLE-LOOPS.md COLLECTING-LOOPS.md
+
+== STATUS
+lib/list.bot deliberately has no map or filter: the collecting loop
+subsumes them. There is no fold either; carry an accumulator through
+recursion, or use a MutableVector.
+
+@example accept
+evens = loop x in [1, 2, 3, 4]:
+    if x.mod(2) == 1:
+        continue
+    x * 10
+evens
+@caption map and filter as one loop
+@value [20, 40]
+@end
+
+@topic capability.exceptions
+title: Exceptions (try, catch, throw): declared errors instead
+summary: No exceptions: a failure is a declared error, raised with `fail`, listed in the function's `errors` clause, handled by name with `on NAME:`; no catch-all, no finally, no unchecked throw.
+index: concepts
+alias: try catch; try/catch; throw; raise; exception; exceptions; catch; finally
+keywords: exception, throw, catch, try, raise, error, handler
+related: concept.errors concept.error-payloads rule.unhandled-errors rule.one-handler-per-error concept.known-errors capability.multi-error-handler
+docs: EXPLICIT-ERROR-COMPLETIONS.md
+
+== HOW THE CONCEPTS MAP
+    throw / raise E      fail E            (E a declared error: `error E`)
+    throws E (Java)      errors E          (in the function's signature)
+    try { f() }          f():              (the call, then its handlers)
+    catch (E e) { ... }      on E:         (one handler per error; payload
+                                            fields with `on E {field}:`)
+    catch-all, finally   (none)
+Differences that matter: errors are checked statically -- every call must
+handle, admit or be proven unable to raise each error it may raise -- and a
+call proven to always fail is rejected (concept.known-errors). A handler's
+value is the call's value, or it leaves with return/fail.
+
+@example accept
+import list
+
+error Empty
+
+fn first(xs: List[int]) -> int errors Empty:
+    if xs.length() == 0:
+        fail Empty
+    xs.at(0)
+
+fn safe_first(xs: List[int]) -> int:
+    first(xs):
+        on Empty:
+            -1
+
+safe_first([])
+@value -1
+@end
+
+@topic capability.struct-type-import
+title: Importing a struct's short name: absent
+summary: `import type NS::T` imports type declarations and enums, not structs: a struct of another module is always spelled NS::Struct after `import NS`.
+index: concepts
+alias: import struct; import struct type; import type struct
+keywords: import type, struct, qualified, short name
+related: rule.import-type concept.imports concept.structs concept.enums
+docs: IMPORTS.md
+
+== STATUS
+`import type puzzle15::Board` for a struct is rejected (NOT-A-TYPE: "is a
+struct, not a source-defined `type`"); enums and `type` declarations are
+importable by short name.
+
+== NEAREST ALTERNATIVE
+Spell the struct qualified (`puzzle15::Board`) after `import puzzle15`.
