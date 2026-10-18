@@ -3230,6 +3230,14 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
         # vacuously designates an element.
         return in
     }
+    # A size an enclosing branch proved at least M (ctx.minSizes) that this
+    # path also knows to be exactly N < M (`if list::length(xs) < 1: return
+    # ...` under this call's exact empty xs) is the same contradiction: the
+    # read is unreachable here.
+    set min [MinSizeOf $ctx $sizes]
+    if {$known ne "" && $min ne "" && [lindex $known 0] < $min} {
+        return in
+    }
     # Relational facts first: when they place the index below a size this
     # path also knows, the read designates an element -- and should the
     # range facts below say otherwise, the facts contradict each other, so
@@ -3260,7 +3268,6 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
     }
     # A size an enclosing branch proved at least M (`if list::length(xs) >
     # 0:`) holds every index in 0..M-1.
-    set min [MinSizeOf $ctx $sizes]
     if {$min ne "" && $indexRange ne {never}} {
         set lo [dict get $indexRange min]
         set hi [dict get $indexRange max]

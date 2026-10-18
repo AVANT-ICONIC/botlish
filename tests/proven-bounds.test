@@ -208,6 +208,18 @@ test bounds-reduced-empty-container-stays-known-error {a container of known size
         [strictKind "fn f(h: int) -> int:\n    xs = \[\]\n    list::at(xs, h.mod(list::length(xs)))\n0"]
 } -result {{IndexNotFound 0} KNOWN-ERROR KNOWN-ERROR}
 
+test bounds-reduced-contradicted-size {a size a guard proved at least 1 that the call-specific walk knows to be 0 (an exact empty List argument) is a contradiction, like two disagreeing known sizes: the masked read is unreachable there, so the call has no effective errors; without the guard the same call may fail} -body {
+    proc callErrors {source} {
+        set hir [boundsHir $source]
+        return [hir::completions::effectiveErrorsOf $hir [nativeCall $hir f]]
+    }
+    set body "    list::at(xs, bit_and(list::length(xs) - 1, h))\nf(\[\], -1)"
+    list \
+        [callErrors "fn f(xs: List\[int\], h: int):\n    if list::length(xs) < 1:\n        return -1\n$body"] \
+        [callErrors "fn f(xs: List\[int\], h: int):\n    if list::length(xs) == 0:\n        return -1\n$body"] \
+        [callErrors "fn f(xs: List\[int\], h: int) errors IndexNotFound:\n$body"]
+} -result {{} {} IndexNotFound}
+
 # ---------------------------------------------------------------------------
 # Field paths (hir::cardinality::ValueKey): `t.slots` written twice is one
 # value, so its size proves an access through the path

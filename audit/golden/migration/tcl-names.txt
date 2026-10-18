@@ -5042,6 +5042,7 @@ tests/proven-bounds.test bounds-nir-region-check-omitted pass
 tests/proven-bounds.test bounds-nir-short-slice-region-check-omitted pass
 tests/proven-bounds.test bounds-nir-slice-ops pass
 tests/proven-bounds.test bounds-nir-substring-one-check-proven-stays-checked pass
+tests/proven-bounds.test bounds-reduced-contradicted-size pass
 tests/proven-bounds.test bounds-reduced-empty-container-stays-known-error pass
 tests/proven-bounds.test bounds-reduced-mask-index pass
 tests/proven-bounds.test bounds-reduced-mask-rejected pass
