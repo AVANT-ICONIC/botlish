@@ -1,0 +1,155 @@
+# Mutants of the hash-table experiment's implementations
+# (audit/hash-table/tools/mutate.tcl; HASH-TABLE-EXPERIMENT.md,
+# "Correctness"): each a deliberate bug of the kind the brief names (wrong
+# bucket index, collision not checked, duplicate insert, resize loses an
+# entry, wraparound broken, probe terminates too early, load threshold off
+# by one, equality omitted after a hash match) or of a removal routine,
+# written against one implementation's text.
+#
+#   @@ NAME DESCRIPTION
+#   ## impl/IMPL.bot
+#   <<<<
+#   text to replace (must occur exactly once in the file)
+#   ====
+#   replacement
+#   >>>>
+#
+# Equivalent mutants are not listed; the ones the brief names that are
+# equivalent in a representation are explained beside it instead:
+#
+#   * "equality omitted after hash match" in an implementation that stores
+#     full 61-bit hashes (lp, rh, chain): two distinct keys of one key kind
+#     with equal 61-bit hashes are needed to observe it, and none is known
+#     for these key kinds (tools/model.py's bhash; no 61-bit FNV-1a
+#     collision of decimal Int or short String keys was found or sought).
+#     The hash-only comparison is therefore unobservable through the
+#     interface; ht0, which stores no hashes, carries the mutant.
+#   * "compare the stored hash" omitted (key equality alone) is correct by
+#     construction: it only costs time.
+
+# ---------------------------------------------------------------------------
+# lp
+
+@@ lp-lookup-home-shifted lookups start one slot after an entry's home (wrong bucket index)
+## impl/lp.bot
+<<<<
+        walk(next_slot(i, cap))
+    walk(home(h, cap))
+
+# The first empty slot
+====
+        walk(next_slot(i, cap))
+    walk(home(h + 1, cap))
+
+# The first empty slot
+>>>>
+
+@@ lp-probe-stops-early a lookup that meets another key at its home stops there (probe terminates too early)
+## impl/lp.bot
+<<<<
+        if s < 0 or s == h and keys.at(i) == key:
+            return i
+        walk(next_slot(i, cap))
+====
+        if s < 0 or s == h and keys.at(i) == key:
+            return i
+        i
+>>>>
+
+@@ lp-wraparound-broken the probe sequence runs off the last slot instead of wrapping to slot 0
+## impl/lp.bot
+<<<<
+fn next_slot(i: int, cap: int) -> int:
+    mod(i + 1, cap)
+====
+fn next_slot(i: int, cap: int) -> int:
+    i + 1
+>>>>
+
+@@ lp-duplicate-insert put of a present key inserts a second entry instead of replacing the value
+## impl/lp.bot
+<<<<
+    if t.hashes.at(i) >= 0:
+        t.vals.set(i, value)
+        return t
+    if full?(t):
+====
+    if t.hashes.at(i) >= 0 and t.count < 0:
+        t.vals.set(i, value)
+        return t
+    if full?(t):
+>>>>
+<<<<
+    with_count(store(t, i, h, key, value), t.count + 1)
+====
+    with_count(store(t, find_empty(t.hashes, h), h, key, value), t.count + 1)
+>>>>
+
+@@ lp-resize-loses-last-slot growth never moves the entry in the old table's last slot
+## impl/lp.bot
+<<<<
+    if i >= hashes.capacity():
+        return dest
+====
+    if i >= hashes.capacity() - 1:
+        return dest
+>>>>
+
+@@ lp-load-threshold-off-by-one the table grows one insert later than the policy says
+## impl/lp.bot
+<<<<
+    (t.count + 1) * load_den() > slots(t) * load_num()
+====
+    t.count * load_den() > slots(t) * load_num()
+>>>>
+
+@@ lp-presize-ignored fresh(expected) ignores the expected size
+## impl/lp.bot
+<<<<
+    empty_table(slots_for(expected, min_slots()))
+====
+    empty_table(min_slots())
+>>>>
+
+@@ lp-grow-ignores-collisions growth stores each entry at its home slot, overwriting an entry already there
+## impl/lp.bot
+<<<<
+    placed = store(dest, find_empty(dest.hashes, h), h, keys.at(i), vals.at(i))
+====
+    placed = store(dest, home(h, slots(dest)), h, keys.at(i), vals.at(i))
+>>>>
+
+@@ lp-drop-no-shift removal empties the slot without shifting later entries back (breaks probe chains)
+## impl/lp.bot
+<<<<
+    moved_in = store(t, hole, s, t.keys.at(n), t.vals.at(n))
+    shifted(moved_in, n, n)
+====
+    shifted(t, hole, n)
+>>>>
+
+@@ lp-drop-shift-wrong-interval removal moves an entry back past its own home
+## impl/lp.bot
+<<<<
+    if between?(home(s, cap), hole, n):
+====
+    if between?(home(s, cap), n, hole):
+>>>>
+
+@@ lp-between-wrapped-case the cyclic interval test is wrong when the interval wraps around slot 0
+## impl/lp.bot
+<<<<
+    else:
+        i < k or k <= j
+====
+    else:
+        i < k and k <= j
+>>>>
+
+@@ lp-drop-count removal does not decrease the entry count
+## impl/lp.bot
+<<<<
+    with_count(shifted(t, i, i), t.count - 1)
+====
+    with_count(shifted(t, i, i), t.count)
+>>>>
