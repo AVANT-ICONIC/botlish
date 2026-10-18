@@ -876,8 +876,9 @@ and no acceptance depends on one.
   test files that do not pass on macOS yet, with their causes, in
   `tier.tcl`'s `notYet`. A milestone that changes either updates it in the
   same change (and the audit's census). Never weaken a test to make macOS
-  green; a file joins `notYet` only for a capability not ported yet, with
-  that cause.
+  green; a file joins `notYet` only with a cause the census records and a
+  milestone owns (a capability not ported yet, or a host-toolchain
+  difference such as c-bindgen.test's), never for a regression.
 * Linux CI is unchanged and stays the authority for Linux: run tests.yml
   and tests-arm64.yml (and static-decisions.yml for a front-end change) on
   the branch with workflow_dispatch before a port change merges. A
