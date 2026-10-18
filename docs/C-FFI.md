@@ -570,13 +570,12 @@ argument registers, the rest on the stack).
 **Linux AArch64**: the same code path -- Cranelift's platform convention is
 AAPCS64 there, plain `char` is unsigned by the target table, the fixture's
 dirty-register functions have AArch64 versions, and rustc-linked
-executables are supported. The arm64 CI run (`tests-arm64.yml`, dispatched
-on the branch) passed every fixture call -- scalars at both bounds and
-their extension from dirty registers, ten-argument calls, pointers,
-function pointers, borrowing, the contract check, direct, interchange,
-cache, isolation -- the Tcl acceptance and GC stress; it failed the
-BoringSSL link (the as-needed loader, section 11, fixed since) and two tests
-that had assumed x86-64's signed plain `char` (now the target's).
+executables are supported. Tested natively by `tests-arm64.yml` on
+GitHub's ubuntu-24.04-arm runners: every C FFI test runs there, the Tcl
+and BoringSSL SHA-256 acceptance included, and passes (section 23). The
+first arm64 run found the one AArch64-specific bug, the BoringSSL link's
+as-needed loader (section 11, fixed), and two tests that had assumed
+x86-64's signed plain `char` (now the target's).
 
 Elsewhere the native backends already refuse executables (Linux glibc
 only), so they refuse a program that calls C the same way. A `-target`
@@ -993,17 +992,25 @@ On this checkout (Linux x86-64, Tcl 9.0.1, rustc 1.97.0):
 | `audit/compilation-isolation/tools/interleave.tcl`; its mutants | 80 artifacts and outcomes, 0 differ; 14 / 14 killed |
 | `audit/hir-interchange/tools/roundtrip.tcl -via interchange`, `-via cache`; its mutants | 90 and 100 compared, 0 differ; 27 / 27 killed |
 | `audit/static-compile/tools/fuzz.tcl`; its mutants | 0 disagreements; 21 / 21 killed |
-| `audit/static-decisions/tools/fuzz.tcl` (seeds 17, 41) | 0 failures |
+| `audit/static-decisions/tools/fuzz.tcl` (seeds 17, 41); its mutants | 0 failures; 73 / 73 killed (one run stopped at the 2-hour background limit after 50, all killed; the other 23 then with `-only`) |
 | the warning fuzzers (`method-eligible`, `many-boolean-arguments`, `fixed-arity-list-return`, `proves-naming`: 300 seeds each), `audit/imports/tools/fuzz.tcl` | 0 failures |
 | the warning gate | passed: the observed warnings are exactly the manifest |
 | `cargo test --release` (also under GC stress) | 237 runtime and 34 codegen unit tests passed |
 | `tests/native-coverage.tcl` of `c-ffi.test` and `compilation-isolation.test`, both native backends | 43 native, 31 backend-independent, 0 failed |
 | the single executable (`single/build.sh`) | builds; refuses a program that calls C or declares a library with the stub's `NATIVE LINK`, runs it on the Tcl backends to its first C call |
 
-Not run here: the batched-versus-sequential static decisions (CI only,
-`static-decisions.yml`, dispatched on the branch) and the arm64 workflow
-(dispatched on the branch). The 2048 workload is untouched
-(`tests/workload-2048.test` passes in the local run).
+CI on `main` at the milestone's last code commit (4b98494), every workflow
+green:
+
+| workflow | result |
+|---|---|
+| `tests.yml` (Linux x86-64) | success: the Tcl suite on interp and compile (the BoringSSL acceptance built by its cached step), cranelift and cranelift-generic coverage, the Rust unit tests, the stub-linked executables, the warning gate, the golden shards, GC stress |
+| `tests-arm64.yml` (Linux AArch64, ubuntu-24.04-arm) | success: interp 7,819 passed and compile 7,815 passed, 0 failed, no C FFI test skipped; coverage, golden shards, Rust unit tests, GC stress |
+| `static-decisions.yml` (batched against sequential scheduling, every golden suite) | success (also on the branch before the merge) |
+| `single-executable.yml`, `bench.yml`, `scalar-asm-audit.yml` | success |
+
+The 2048 workload is untouched (`tests/workload-2048.test` passes locally
+and in CI).
 
 ## 24. Architectural boundaries
 
