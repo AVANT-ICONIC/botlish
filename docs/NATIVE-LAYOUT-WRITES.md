@@ -790,7 +790,14 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
 * **The neighbouring fuzzers**: native-view seeds 1, 17, 41 (× 40) and 5
   (× 20, GC stress); binary-layout seeds 1, 17, 41 (× 30) and 5 (× 15, GC
   stress); c-abi-types seeds 1, 17, 41 (× 40); direct-modules seeds 1, 17,
-  41 (× 60): 0 disagreements. ISOLATION-AFFINE-FUZZ
+  41 (× 60); affine seeds 1, 17, 41 (× 30): 0 disagreements.
+* **Isolation, interchange, cache** (their default suites):
+  `audit/compilation-isolation/tools/interleave.tcl`, 80 artifacts and
+  outcomes, 0 differ; `audit/hir-interchange/tools/roundtrip.tcl -via
+  interchange`, 90 compared, 0 differ; `-via cache`, 100, 0 differ.
+  native-edit.test's own `ne-isolation`, `ne-interchange`,
+  `ne-interchange-fresh-process`, `ne-cache` and `ne-hir-text-roundtrip`
+  cover programs that write.
 * **The neighbouring mutation harnesses**, every mutant killed: native views
   29/29, binary layout 39/39, C ABI types 26/26, direct modules 18/18.
   ISOLATION-MUTANTS A static check of every audit's `mutants.txt` applies all
