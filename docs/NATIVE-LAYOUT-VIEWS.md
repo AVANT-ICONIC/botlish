@@ -551,8 +551,10 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
   namespace (DIRECT-MODULES.md), and the view constructor needs a direct
   namespace while `binary` itself must stay non-direct. The test now
   exempts it alongside the platform and C ABI namespaces, and
-  STDLIB-NAMESPACES.md's table lists it. All four files pass after the
-  update (74/74, 37/37, 151/151, 42/42).
+  STDLIB-NAMESPACES.md's table lists it. After the update
+  stdlib-namespaces.test (74/74) and linux-syscall.test (37/37) pass whole
+  locally, the two updated tests of method-eligible.test and
+  golden-framework.test pass, and CI runs all four files green (below).
 * **`cargo test --release --lib`**: 242 passed, the five `nview_` tests
   included.
 * **Stub linker** (`BOTLISH_NATIVE_LINKER=stub`): `tests/aot-stub-linker.test`
@@ -603,8 +605,9 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
     the warning gate.
   - `tests (linux arm64)` (`4563003`) on ubuntu-24.04-arm, green: interp,
     compile, cranelift and cranelift-generic coverage, the four golden
-    shards, and the native Rust unit tests, also under GC stress. Its
-    GC-stress run of the Tcl suite: REGRESSION-ARM64-GC.
+    shards, the native Rust unit tests (also under GC stress), and the
+    whole Tcl suite under GC stress (`BOTLISH_NATIVE_GC_STRESS=1`, 72
+    minutes).
   - `tests (macos arm64)` (`0802cc9`, after native-view.test's JIT tests
     moved from `nativeLinux` to `nativeBuilt`), green: Tier A and both
     Tier B shards. native-view.test runs in shard 1, on interp and compile,
