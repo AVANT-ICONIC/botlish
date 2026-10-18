@@ -145,7 +145,34 @@ overflow crashes the driver.
 
 ## Linux regression
 
-@LINUX@
+The milestone changes no file the Linux workflows run except AGENTS.md,
+docs/INDEX.md and the new workflow and action files (tests/golden-duplicates.test
+reads every workflow's text). The evidence:
+
+- **tests.yml, dispatched on the branch** at 8e0e03a
+  ([39105413349](https://github.com/mwagner-webdev/botlish/actions/runs/39105413349)):
+  ten jobs green -- the warning gate, the four golden shards (every suite
+  on every backend beside its Tcl originals), the stub-linked
+  executables, the native Rust unit tests, the cranelift and
+  cranelift-generic coverage and the Tcl suite on compile; GC stress
+  skipped (it runs on pushes to main only). The Tcl suite on interp failed
+  one test, in c-bindgen.test, with the same counts (7917 run,
+  7903 passed, 13 skipped, 1 failed) as main's own run at 952c7df, the
+  main commit the branch had merged
+  ([39101372634](https://github.com/mwagner-webdev/botlish/actions/runs/39101372634)):
+  main's failure, not the branch's, which main has since fixed (green at
+  0548757) and the second merge brought in.
+- **tests.yml, dispatched again** at 2f174d4, after the second merge
+  ([39109833044](https://github.com/mwagner-webdev/botlish/actions/runs/39109833044)):
+  pending.
+- **tests-arm64.yml, dispatched on the branch** at 6b357ed, after the
+  second merge of main
+  ([39108139741](https://github.com/mwagner-webdev/botlish/actions/runs/39108139741)):
+  pending.
+- **The Linux control job** (ubuntu-latest, x86-64) ran the same
+  host-generic scripts as the macOS smoke job -- the toolchain smoke, the C
+  ABI facts, native-status's Linux expectations (every capability works)
+  and `tier.tcl smoke` -- green in runs 4 to 7.
 
 ## The tiers and their invocation
 
