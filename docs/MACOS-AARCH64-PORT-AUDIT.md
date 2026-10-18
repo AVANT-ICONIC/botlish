@@ -383,6 +383,14 @@ native tests carry no host constraint at all.
 
 ## 15. The macOS census
 
+**Update (milestone 3).** The 14 files below that fail on native coroutines
+pass on macOS since milestone 3, and every golden suite runs natively
+there (the Linux programs excepted, as in milestone 2): the census
+(`CI-Tests: all`, run 39161417599) fails only on `c-bindgen.test` and
+`c-ffi.test`, milestone 7's. The tables that follow are the milestone 1
+census as it was; MACOS-AARCH64-MILESTONE-3.md has the new numbers, and
+`native-status.tcl` records the coroutine probe as a value.
+
 What the repository's own tests do on a `macos-15` runner with the native
 backend built: run 2 of the workflow (at aac30aa, before main's later
 merge), every `tests/*.test` file on interp in three shards (`tests/all.tcl
@@ -770,6 +778,11 @@ the census. Report: MACOS-AARCH64-MILESTONE-1.md.
   to `isa()` or signatures runs the arm64 workflow.
 
 ### 4. Native allocation, GC and coroutine validation
+
+**Done (milestone 3, MACOS-AARCH64-MILESTONE-3.md)** for coroutines, their
+stacks and the native golden runner; the entry below is the plan it was
+carried out from. Mach-O and C calls (milestones 6 and 7) and stack bounds
+(milestone 5) are not part of it.
 
 - **Files:** .cargo/config.toml (an `aarch64-apple-darwin` entry),
   runtime/framewalk.rs, codegen/clif.rs `define`, runtime/coroutine.rs
