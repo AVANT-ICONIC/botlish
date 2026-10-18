@@ -17,6 +17,14 @@ namespace eval ht {
     variable units [dict create]
 }
 
+# BOTLISH_HT_ROOT names another checkout whose compiler (and native
+# backend) the tools load instead of this one's, so one harness -- these
+# drivers, implementations and tools -- measures a prototype tree against
+# the baseline.
+if {[info exists ::env(BOTLISH_HT_ROOT)] && $::env(BOTLISH_HT_ROOT) ne ""} {
+    set ht::root [file normalize $::env(BOTLISH_HT_ROOT)]
+}
+
 source [file join $ht::root core core.tcl]
 source [file join $ht::root compiler compiler.tcl]
 source [file join $ht::root surface surface.tcl]

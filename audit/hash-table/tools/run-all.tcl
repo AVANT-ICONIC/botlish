@@ -67,7 +67,7 @@ foreach phase [dict get $options -phases] {
             step "rust spike" sh -c "$reference spike -sizes 11468,16384,65536 -loads 1/2,7/10,17/20 -runs $runs > [out rust-spike]"
         }
         copies {
-            set impls {listmap chain0 ht0 chain lp lpc lpa lpmono lpfact rh cd sorted}
+            set impls {listmap chain0 ht0 chain lp lpc lpa lpmono lpfact lpmask rh cd sorted}
             foreach keys {int str point} {
                 step "copies $keys" sh -c "$tclsh [file join $here copies.tcl] -keys $keys $impls >> [out copies txt] 2>&1; true"
             }
@@ -80,13 +80,13 @@ foreach phase [dict get $options -phases] {
             }
         }
         nir {
-            set impls {listmap chain0 ht0 chain lp lpa lpmono lpfact lpint rh cd sorted}
+            set impls {listmap chain0 ht0 chain lp lpa lpmono lpfact lpmask lpint rh cd sorted}
             step "nir int" sh -c "$tclsh [file join $here nirstats.tcl] -keys int $impls > [out nir txt] 2>&1; true"
             step "nir str" sh -c "$tclsh [file join $here nirstats.tcl] -keys str lpa lpstr chain cd rh >> [out nir txt] 2>&1; true"
         }
         sizes {
             file delete [out sizes]
-            foreach impl {lpa lpmono lpfact rh chain cd ht0 lp lpc} {
+            foreach impl {lpa lpmono lpfact lpmask rh chain cd ht0 lp lpc} {
                 set modes [expr {$impl eq "cd" ? [lsearch -all -inline -not $allModes drop] : $allModes}]
                 bench sizes -impls $impl -keys {int-dense str-short} -sizes $sizes -modes $modes
             }

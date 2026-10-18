@@ -156,7 +156,7 @@ proc report {name verdict} {
     }
     incr total
     puts [format "%-40s %s" $name $verdict]
-    if {$verdict eq "killed"} { incr killed } else { set exit 1 }
+    if {[string match "killed*" $verdict]} { incr killed } else { set exit 1 }
 }
 while {[llength $queue] || [dict size $running]} {
     while {[llength $queue] && [dict size $running] < [dict get $options -jobs]} {

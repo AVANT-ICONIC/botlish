@@ -10,6 +10,14 @@
 #       Botlish / Rust per size, PAIRS a list of {botlish-impl rust-impl}
 #   tclsh9.0 audit/hash-table/tools/summarize.tcl mixed FILE.tsv RUST-MIXED.tsv
 #       the mixed workloads, Botlish against the Rust reference
+#   tclsh9.0 audit/hash-table/tools/summarize.tcl stats RUST-STATS.tsv LOAD
+#       the reference's probe lengths (mean, p99, max) per key kind and size at
+#       maximum load LOAD, and Botlish's hash against the splitmix64 control
+#       (chi-squared over the slots, and empty slots)
+#   tclsh9.0 audit/hash-table/tools/summarize.tcl ladder FILE.tsv TAGS ?RUST.tsv RUST-IMPL?
+#       tools/ladder.tcl's rows: one row per implementation, keys, size and
+#       mode, one column per tag (tree), optionally the Rust reference's
+#       RUST-IMPL beside them
 #
 # A value is the median of the rows that match (several runs append rows).
 
@@ -137,8 +145,82 @@ switch -- $command {
             puts "| $work | $size | $impl | [fmt $bus] | [fmt $lp] | [fmt $std] | $ratio |"
         }
     }
+    stats {
+        lassign $argv _ path load
+        set probes [dict create]
+        set dist [dict create]
+        foreach r [readRows $path] {
+            switch -- [lindex $r 0] {
+                probes {
+                    lassign $r _ kind n l impl slots lf _ hmean _ _ hp99 hmax _ mmean _ _ mp99 mmax
+                    if {$l eq $load} { dict set probes [list $kind $n $impl] [list $slots $lf $hmean $hp99 $hmax $mmean $mp99 $mmax] }
+                }
+                distribution {
+                    lassign $r _ kind n slots lf _ chi _ empty _ mchi _ mempty _ khit _ kmiss
+                    dict set dist [list $kind $n $slots] [list $chi $empty $mchi $mempty $khit $kmiss]
+                }
+            }
+        }
+        puts "| keys | n | slots | load | lp hit mean / p99 / max | lp miss mean / p99 / max | rh miss mean / p99 / max | chain hit / miss mean | chi2 (control) | empty (control) | Knuth lp hit / miss |"
+        puts "|---|---:|---:|---:|---|---|---|---|---|---|---|"
+        foreach key [lsort -index 1 -integer [lsort -index 0 [lsort -unique [lmap k [dict keys $probes] {lrange $k 0 1}]]]] {
+            lassign $key kind n
+            if {![dict exists $probes [list $kind $n lp]]} continue
+            lassign [dict get $probes [list $kind $n lp]] slots lf hmean hp99 hmax mmean mp99 mmax
+            set row "| $kind | $n | $slots | $lf | [fmt $hmean] / $hp99 / $hmax | [fmt $mmean] / $mp99 / $mmax |"
+            if {[dict exists $probes [list $kind $n rh]]} {
+                lassign [dict get $probes [list $kind $n rh]] _ _ _ _ _ rmean rp99 rmax
+                append row " [fmt $rmean] / $rp99 / $rmax |"
+            } else { append row " |" }
+            if {[dict exists $probes [list $kind $n chain]]} {
+                lassign [dict get $probes [list $kind $n chain]] _ _ chit _ _ cmiss
+                append row " [fmt $chit] / [fmt $cmiss] |"
+            } else { append row " |" }
+            if {[dict exists $dist [list $kind $n $slots]]} {
+                lassign [dict get $dist [list $kind $n $slots]] chi empty mchi mempty khit kmiss
+                append row " [format %.0f $chi] ([format %.0f $mchi]) | $empty ($mempty) | [fmt $khit] / [fmt $kmiss] |"
+            } else { append row " | | |" }
+            puts $row
+        }
+    }
+    ladder {
+        lassign $argv _ path tags rpath rimpl
+        set cells [dict create]
+        set configs {}
+        foreach r [readRows $path] {
+            lassign $r tag impl k backend n m _ _ _ per
+            set config [list $impl $k $n $m]
+            if {$config ni $configs} { lappend configs $config }
+            dict lappend cells [list $tag {*}$config] $per
+        }
+        set rust [dict create]
+        if {$rpath ne ""} {
+            foreach r [readRows $rpath] {
+                lassign $r impl k m n _ _ _ ns
+                if {$impl eq $rimpl} { dict lappend rust [list $k $n $m] $ns }
+            }
+        }
+        set head "| impl | keys | n | mode | [join $tags { | }] |"
+        set rule "|---|---|---:|---|[string repeat ---:| [llength $tags]]"
+        if {$rpath ne ""} { append head " Rust $rimpl |"; append rule ---:| }
+        puts $head
+        puts $rule
+        foreach config [lsort -index 2 -integer [lsort -index 1 [lsort -index 0 $configs]]] {
+            lassign $config impl k n m
+            set row "| $impl | $k | $n | $m |"
+            foreach tag $tags {
+                set key [list $tag {*}$config]
+                append row " [expr {[dict exists $cells $key] ? [fmt [median [dict get $cells $key]]] : {}}] |"
+            }
+            if {$rpath ne ""} {
+                set key [list $k $n $m]
+                append row " [expr {[dict exists $rust $key] ? [fmt [median [dict get $rust $key]]] : {}}] |"
+            }
+            puts $row
+        }
+    }
     default {
-        puts stderr "usage: summarize.tcl sizes|rust|ratio|mixed ..."
+        puts stderr "usage: summarize.tcl sizes|rust|ratio|mixed|ladder ..."
         exit 2
     }
 }

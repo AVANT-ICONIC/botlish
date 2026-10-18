@@ -47,11 +47,11 @@
 @@ lp-probe-stops-early a lookup that meets another key at its home stops there (probe terminates too early)
 ## impl/lp.bot
 <<<<
-        if s < 0 or s == h and keys.at(i) == key:
+        if s < 0 or s == h and mutable_array::at(keys, i) == key:
             return i
         walk(next_slot(i, cap))
 ====
-        if s < 0 or s == h and keys.at(i) == key:
+        if s < 0 or s == h and mutable_array::at(keys, i) == key:
             return i
         i
 >>>>
@@ -114,9 +114,9 @@ fn next_slot(i: int, cap: int) -> int:
 @@ lp-grow-ignores-collisions growth stores each entry at its home slot, overwriting an entry already there
 ## impl/lp.bot
 <<<<
-    placed = store(dest, find_empty(dest.hashes, h), h, keys.at(i), vals.at(i))
+    placed = store(dest, find_empty(dest.hashes, h), h, mutable_array::at(keys, i), mutable_array::at(vals, i))
 ====
-    placed = store(dest, home(h, slots(dest)), h, keys.at(i), vals.at(i))
+    placed = store(dest, home(h, slots(dest)), h, mutable_array::at(keys, i), mutable_array::at(vals, i))
 >>>>
 
 @@ lp-drop-no-shift removal empties the slot without shifting later entries back (breaks probe chains)
@@ -377,4 +377,40 @@ fn bucket_of(t: Table, key) -> List[Entry]:
     t.buckets.set(slot, rest)
 ====
     t.buckets.set(slot, [])
+>>>>
+
+@@ lpmask-mask-is-capacity the lookup reduces its index by the capacity instead of capacity - 1 (an index outside the array, or the wrong slot)
+## impl/lpmask.bot
+<<<<
+    j = bit_and(i, t.hashes.capacity() - 1)
+    stored = t.hashes.at(j)
+====
+    j = bit_and(i, t.hashes.capacity())
+    stored = t.hashes.at(j)
+>>>>
+
+@@ lpmask-key-compared-at-next-slot the lookup compares the key of the next slot (a correctly masked, wrong index)
+## impl/lpmask.bot
+<<<<
+stored == h and t.keys.at(bit_and(i, t.keys.capacity() - 1)) == key
+====
+stored == h and t.keys.at(bit_and(i + 1, t.keys.capacity() - 1)) == key
+>>>>
+
+@@ lpmask-shift-home-unreduced backward shift compares an entry's unreduced hash, not its home slot, with the hole
+## impl/lpmask.bot
+<<<<
+    if between?(bit_and(stored, t.hashes.capacity() - 1), hole, n):
+====
+    if between?(stored, hole, n):
+>>>>
+
+@@ lpmask-store-value-next-slot an insert stores the value one slot after its key
+## impl/lpmask.bot
+<<<<
+    t.vals.set(bit_and(i, t.vals.capacity() - 1), value)
+    t
+====
+    t.vals.set(bit_and(i + 1, t.vals.capacity() - 1), value)
+    t
 >>>>

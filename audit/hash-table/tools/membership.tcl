@@ -39,6 +39,9 @@
 #            per bucket XORed into high hash bits, M = 2^ceil(log2 K) slots
 #            (int, str)
 #   length   dispatch on str::length, then an equality chain  (str)
+#   trie     dispatch on str::length, then on characters: at each node the
+#            position that splits the remaining members most, a comparison
+#            tree over its code points, one equality at a leaf (str)
 #
 # Per program and mode the native driver's best of R runs; a query costs
 # (T[M] - T[0]) / M. Code size: native::codeSize of the strategy's own
@@ -51,7 +54,7 @@
 source [file join [file dirname [file normalize [info script]]] lib.tcl]
 
 set options [dict create -domains {int-dense int-sparse str enum} \
-    -strategies {chain list iset table bsearch tree bits direct pmod phash length} \
+    -strategies {chain list iset table bsearch tree bits direct pmod phash length trie} \
     -sizes {1 2 3 4 6 8 12 16 24 32 48 64 128 256 512 1024} -queries 1000000 -runs 5 \
     -out "" -backend cranelift -show "" -check 0]
 for {set i 0} {$i < [llength $argv]} {incr i} {
@@ -380,6 +383,56 @@ proc lengthOf {domain members} {
         set first 0
     }
     return [list "fn member?(x: str) -> bool:\n    n = str::length(x)\n[join $branches \n]\n    else:\n        false\n" 0]
+}
+
+# A trie node over GROUP, members of one length: one equality when two or
+# fewer remain; otherwise the code point at the position that tells the
+# most of them apart, bound once (NAME), and a comparison tree over its
+# values whose leaves are the subgroups' nodes.
+proc trieNode {group indent} {
+    global trieNames
+    set pad [string repeat "    " $indent]
+    if {[llength $group] <= 2} {
+        return "${pad}[join [lmap v $group {format "x == \"%s\"" $v}] { or }]\n"
+    }
+    set best 0
+    set bestCount 0
+    for {set d 0} {$d < [string length [lindex $group 0]]} {incr d} {
+        set seen [lsort -unique [lmap v $group {string index $v $d}]]
+        if {[llength $seen] > $bestCount} { set best $d; set bestCount [llength $seen] }
+    }
+    set parts [dict create]
+    foreach v $group { dict lappend parts [scan [string index $v $best] %c] $v }
+    set name c[incr trieNames]
+    return "${pad}$name = char::scalar_value(str::char_at(x, $best))\n[trieSplit $name [lsort -integer [dict keys $parts]] $parts $indent]"
+}
+
+proc trieSplit {name points parts indent} {
+    set pad [string repeat "    " $indent]
+    if {[llength $points] == 1} {
+        set p [lindex $points 0]
+        return "${pad}if $name != $p:\n${pad}    return false\n[trieNode [dict get $parts $p] $indent]"
+    }
+    set mid [expr {[llength $points] / 2}]
+    set pivot [lindex $points $mid]
+    return "${pad}if $name < $pivot:\n[trieSplit $name [lrange $points 0 [expr {$mid - 1}]] $parts [expr {$indent + 1}]]${pad}else:\n[trieSplit $name [lrange $points $mid end] $parts [expr {$indent + 1}]]"
+}
+
+proc trieOf {domain members} {
+    global trieNames
+    if {$domain ne "str"} { return "" }
+    set trieNames 0
+    set groups [dict create]
+    foreach v $members { dict lappend groups [string length $v] $v }
+    set fns {}
+    set branches {}
+    set first 1
+    foreach len [lsort -integer [dict keys $groups]] {
+        lappend fns "fn member_len$len?(x: str) -> bool errors IndexNotFound:\n[trieNode [dict get $groups $len] 1]"
+        lappend branches "    [expr {$first ? "if" : "elif"}] n == $len:\n        member_len$len?(x)"
+        set first 0
+    }
+    return [list "[join $fns \n]\nfn member?(x: str) -> bool errors IndexNotFound:\n    n = str::length(x)\n[join $branches \n]\n    else:\n        false\n" 0]
 }
 
 # ---------------------------------------------------------------------------

@@ -71,7 +71,7 @@ fn find(t: Table, h: int, key) -> int errors IndexNotFound:
     cap = hashes.capacity()
     fn walk(i: int) -> int errors IndexNotFound:
         s = hashes.at(i)
-        if s < 0 or s == h and keys.at(i) == key:
+        if s < 0 or s == h and mutable_array::at(keys, i) == key:
             return i
         walk(next_slot(i, cap))
     walk(home(h, cap))
@@ -123,7 +123,7 @@ fn moved(hashes: MutableArray[int], keys, vals, i: int, dest: Table) -> Table er
     h = hashes.at(i)
     if h < 0:
         return moved(hashes, keys, vals, i + 1, dest)
-    placed = store(dest, find_empty(dest.hashes, h), h, keys.at(i), vals.at(i))
+    placed = store(dest, find_empty(dest.hashes, h), h, mutable_array::at(keys, i), mutable_array::at(vals, i))
     moved(hashes, keys, vals, i + 1, placed)
 
 # T at twice the capacity, its entries placed in old slot order.
