@@ -34,6 +34,14 @@ set mutants [list \
             continue
         }
 } {}] \
+    [list int-literal-receivers-reported hir/warnings.tcl \
+        {        if {$form eq "" || [IntLiteralReceiver $hir $receiver]} {
+            continue
+        }
+} {        if {$form eq ""} {
+            continue
+        }
+}] \
     [list field-check-skipped hir/warnings.tcl \
         {        if {![SugarFieldSafe $hir $receiver [dict get $callee method] [dict get $node written ns] $fields]} {
             continue

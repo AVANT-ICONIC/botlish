@@ -257,6 +257,11 @@ unit value. Procedural functions routinely have several, and a warning for them
 collapses no interesting domain information; the compiler has no corpus
 evidence they are useful. An exit whose type is `unit` is skipped whatever its
 identity. `Bool` is not special-cased: repeated `false` is reported.
+*(Superseded by COMPILERPEDIA-REPORT.md, "Lint audit": a repeated Bool
+constant is now reported only when every value exit of the function returns
+it -- Bool has two values, so a guard-style predicate with three or more
+exits repeats one by necessity -- and exits that end the handlers of one
+handled call count as one exit.)*
 
 **Generic vs specialized (items 52-55).** The pass reads the generic,
 source-level HIR once per source function. It never walks semantic instances or
@@ -416,6 +421,15 @@ no analysis reads them.
 * A body's synthesized boolean `if` is recognized by its origins (all branches
   carry the operator's origin); core-IR-built HIR has distinct origins and never
   contains `and`/`or`.
+* Successor note (COMPILERPEDIA-REPORT.md, "Lint audit"): two precision
+  refinements. Exits that end the handlers of one handled call are one exit
+  unit (`on A: return []` / `on B: return []` is one decision the language
+  spells once per error; a group warns when it spans two units), and a
+  repeated Bool constant is reported only when it is the function's only
+  answer (every value exit returns it). Non-Bool guard-style sentinels are
+  still reported. Pinned by `tests/warnings.test` (`warn-bool-*`,
+  `warn-handler-*`, `warn-int-guards-still-reported`) and by Compilerpedia's
+  examples (`warning.same-return-value`).
 * Successor note (REFACTOR-WARNINGS-CLEAN.md): the warning-driven refactor
   merged all six corpus findings (the two slot searches, `ht_delete`, and
   `web.bot`'s `domain?`, `emailish?` and `valid_from?`), so no library carries

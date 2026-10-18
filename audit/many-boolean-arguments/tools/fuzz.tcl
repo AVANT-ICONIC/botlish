@@ -54,7 +54,8 @@
 # a structurally reachable placement (everything but dead and after-return).
 # Another code can fire: METHOD-ELIGIBLE, at a reachable functional call (not
 # through an alias) to a declared callee of >= 2 ordinary parameters whose
-# first argument is not an operator expression. The oracle predicts those too,
+# first argument is neither an operator expression nor an Int literal (which
+# METHOD-ELIGIBLE never reports as a receiver). The oracle predicts those too,
 # exactly; no third code can fire (no String literal, one exit per function,
 # no list result, no `fail`, no `proves`). For every program it checks
 #
@@ -559,7 +560,7 @@ proc predict {model placed} {
             lappend many [list [dict get $site line] [dict get $site col] $literals]
         }
         if {[dict get $site spelling] eq "functional" && [llength [dict get $callee params]] >= 2
-                && [lindex [dict get $site args] 0 0] ne "computed"} {
+                && [lindex [dict get $site args] 0 0] ni {computed int}} {
             lappend eligible [list [dict get $site line] [dict get $site col]]
         }
     }
