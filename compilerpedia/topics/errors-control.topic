@@ -1530,7 +1530,7 @@ layout Header:
 
 @topic error.layout-field-type
 title: LAYOUT-FIELD-TYPE: a layout field's type has no fixed-width encoding
-summary: A layout field is a scalar whose integer domain is exactly one fixed-width encoding's value set (binary::U8 .. U64, I8 .. I64, or an equal `Int in a..b`), or a nested layout.
+summary: A layout field is a scalar whose integer domain is exactly one fixed-width encoding's value set (binary::U8 .. U64, I8 .. I64, or an equal `Int in a..b`), a nested layout, or a C pointer.
 index: errors
 alias: cannot have type; no fixed width
 keywords: layout, field, int, binary::U32, domain, encoding, width, signed, unsigned, nested layout
@@ -1552,7 +1552,9 @@ else is rejected at the type:
 
 Also rejected: a narrower or exact-set domain (`Int in 0..100`), a
 refinement, str, bool, a struct, `LayoutStruct[L]` (write the layout L
-itself) and an unknown name.
+itself) and an unknown name. A C pointer field (ffi::c::Ptr[T],
+ffi::c::FnPtr[F]) is accepted, and makes the layout native-only
+(error.layout-native-only).
 
 == WHAT TO DO
 Use binary::U8 .. binary::U64 or binary::I8 .. binary::I64 (or your own
@@ -1653,8 +1655,10 @@ code: CORE SEMANTIC LAYOUT-CYCLE
     layout has a finite size, so it can never contain itself (a reference
     to one is a pointer field, not a nested layout)
 
-The chain names every layout on the cycle. Layouts have no pointer scalar
-yet, so a linked record cannot be described as a layout today.
+The chain names every layout on the cycle. A link to another record is a
+pointer field (`field next: ffi::c::Ptr[Node] at 0`), which makes the
+layout native-only: it is read through a native view
+(error.layout-native-only).
 
 @example reject
 layout Node:
@@ -1666,6 +1670,55 @@ layout Node:
 @caption Node holds a Node by value
 @error CORE SEMANTIC LAYOUT-CYCLE
 @at 4:17
+@end
+
+@topic error.layout-native-only
+title: LAYOUT-NATIVE-ONLY: parse or emit of a layout with a pointer field
+summary: A layout with a C pointer field is read only from live native memory through a native view: binary::parse would forge a pointer from bytes, and binary::emit would write one into bytes.
+index: errors
+alias: cannot imprint layout; is a C pointer
+keywords: layout, pointer, ffi::c::Ptr, FnPtr, parse, emit, native view, forge
+related: concept.binary-layouts stdlib.binary::native::view stdlib.binary::load error.layout-field-type
+docs: NATIVE-LAYOUT-VIEWS.md BINARY-LAYOUT.md
+code: CORE SEMANTIC LAYOUT-NATIVE-ONLY
+
+== MEANING
+    binary::parse cannot imprint layout "Link" from bytes: its field "next"
+    is a C pointer, and imprinting arbitrary bytes into it would make a
+    pointer no foreign code handed out; a layout with a pointer field is
+    read through a native view of live native memory (binary::native::view,
+    binary::load)
+
+Any bit pattern can arrive in byte storage, so a pointer read from bytes
+would be forged. A pointer field nested inside another layout makes the
+outer layout native-only too; the message names the field's path. Emitting
+such a layout is rejected the same way.
+
+== WHAT TO DO
+Read the record where foreign code put it: binary::native::view(L, p) of
+the pointer that code handed out, then its fields or binary::load. To
+parse bytes, declare a second layout whose pointer field is an Int
+(binary::U64 at the same offset): its value is inert address bits, never a
+pointer.
+
+@example reject
+import abi::bytes
+import binary
+import ffi::c
+
+layout Link:
+    size 8
+    align 8
+    field next: ffi::c::Ptr[ffi::c::Void] at 0
+
+fn first(d: abi::bytes::Bytes) -> bool errors LayoutLengthMismatch:
+    l = binary::parse(Link, d)
+    l.next.null?()
+
+0
+@caption Bytes would become a pointer
+@error CORE SEMANTIC LAYOUT-NATIVE-ONLY
+@at 11:23
 @end
 
 @topic error.layout-not-a-type

@@ -3026,7 +3026,7 @@ index: concepts
 alias: binary layout; layout declaration; parse bytes; byte format
 keywords: layout, binary, parse, emit, LayoutStruct, size, align, field, offset, bytes, LayoutLengthMismatch, little-endian, U32, LAYOUT-FIELD-BOUNDS
 related: concept.structs concept.integer-domains concept.c-ffi stdlib.module.binary error.layout-field-bounds
-docs: BINARY-LAYOUT.md ABI-BYTES.md
+docs: BINARY-LAYOUT.md ABI-BYTES.md NATIVE-LAYOUT-VIEWS.md
 
 == WHAT IT IS
     layout Header:
@@ -3052,7 +3052,13 @@ be built directly: `LayoutStruct[Header] {magic: 7, count: -2}`.
   * binary::parse fails with LayoutLengthMismatch unless the input has
     exactly the layout's size; emit cannot fail.
   * A layout is not a value or a type: it is named only as the static
-    operand of the binary operations and in LayoutStruct[L].
+    operand of the binary operations, in LayoutStruct[L] and in
+    NativeView[L].
+  * The same layout reads live native memory: binary::native::view(L, p)
+    is a read-only NativeView[L] whose fields are read when projected, and
+    binary::load(v) its LayoutStruct[L]. A field may be a C pointer; such a
+    layout is native-only (LAYOUT-NATIVE-ONLY): bytes never become a
+    pointer (NATIVE-LAYOUT-VIEWS.md).
 
 == WHY
 A layout owns representation and ordinary structs own meaning: reading
