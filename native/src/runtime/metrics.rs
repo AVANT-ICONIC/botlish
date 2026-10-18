@@ -11,8 +11,12 @@
 //!   * `Off`: `Metrics::enabled()` is false everywhere, so every hook below
 //!     is a single predictable branch and nothing else. Byte-identical
 //!     execution to the uninstrumented backend otherwise.
-//!   * `Summary`: every hook below runs. No NIR/codegen change is needed
-//!     for this: counts, bytes, live/peak, GC, copies are all runtime-only.
+//!   * `Summary`: every hook below runs. No NIR change is needed for this:
+//!     counts, bytes, live/peak, GC, copies are all runtime-only. The one
+//!     codegen difference from `Off` (CompileOptions::count_accesses):
+//!     `mutable_array::at`, whose fast path is otherwise an inline load
+//!     (codegen/clif.rs), always calls its helper, so the optional
+//!     MutableArray read counter stays exact.
 //!   * `Sites`: additionally, codegen (codegen/clif.rs) emits one extra
 //!     store of the causing instruction's site id into `Vm::alloc_site`
 //!     before each allocating helper call, so `record_alloc` can attribute

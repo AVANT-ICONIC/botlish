@@ -36,11 +36,11 @@
 @@ copy-aliases-native an unrestricted copy aliases writes (native): a logical copy of an array is the same header
 ## native/src/runtime/ops.rs
 <<<<
-    let (start, backing) = (obj.start, Rc::clone(&obj.backing));
+    let (start, backing) = mutarray_of_mut(arr).share_backing();
     vm(p).metrics.record_mutarray_share();
     new_mutarray_header(p, start, backing, 0)
 ====
-    let (start, backing) = (obj.start, Rc::clone(&obj.backing));
+    let (start, backing) = mutarray_of_mut(arr).share_backing();
     vm(p).metrics.record_mutarray_share();
     drop((start, backing));
     arr
@@ -65,10 +65,10 @@
 @@ copy-eager-deep-native an unrestricted copy eagerly copies every element (native): no backing is ever shared, the first write never detaches
 ## native/src/runtime/ops.rs
 <<<<
-    let (start, backing) = (obj.start, Rc::clone(&obj.backing));
+    let (start, backing) = mutarray_of_mut(arr).share_backing();
     vm(p).metrics.record_mutarray_share();
 ====
-    let (start, backing) = (obj.start, Rc::from(&obj.backing[..]));
+    let (start, backing): (usize, Rc<[Value]>) = (0, Rc::from(mutarray_of(arr).items()));
     vm(p).metrics.record_mutarray_share();
 >>>>
 

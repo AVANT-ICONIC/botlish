@@ -138,6 +138,12 @@ pub struct CompileOptions {
     /// (runtime/metrics.rs's AllocMode::Sites). False recompiles to exactly
     /// today's uninstrumented code: no VM_ALLOC_SITE_OFFSET store anywhere.
     pub alloc_sites: bool,
+    /// The program runs with allocation metrics on (summary or sites mode,
+    /// runtime/metrics.rs): `mutable_array::at` calls its helper, which
+    /// counts reads, instead of its inline fast path (codegen::clif's
+    /// `mutarray_get`), which counts nothing. False for every
+    /// uninstrumented run and executable.
+    pub count_accesses: bool,
 }
 
 /// A code generator for NIR programs.
@@ -189,7 +195,7 @@ impl CraneliftJit {
         let mut defines = Vec::with_capacity(program.functions.len());
         for f in &program.functions {
             let result =
-                clif::define(&mut module, &symbols, f, &mut pool, &mut sites, options.alloc_sites, options.clif)?;
+                clif::define(&mut module, &symbols, f, &mut pool, &mut sites, options.alloc_sites, options.count_accesses, options.clif)?;
             code_sizes.push(result.direct_size + result.entry_size);
             if let (Some(listing), Some(text)) = (listing.as_mut(), &result.clif_text) {
                 listing.push('\n');
@@ -341,7 +347,7 @@ pub fn emit_object(program: &Program) -> Result<ObjectProgram, BackendError> {
     let mut sites = Vec::new();
     let mut functions = Vec::new();
     for f in &program.functions {
-        functions.push(clif::define(&mut module, &symbols, f, &mut pool, &mut sites, false, false)?);
+        functions.push(clif::define(&mut module, &symbols, f, &mut pool, &mut sites, false, false, false)?);
     }
     let mut bytes = module.finish().emit().map_err(|e| BackendError::Codegen(e.to_string()))?;
     if program.context_bytes > 0 {
@@ -502,7 +508,7 @@ mod context_area_tests {
         use crate::runtime::vm::ProgramInfo;
         use std::rc::Rc;
         let program = crate::nir::parse(PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
-        let options = CompileOptions { clif: true, vcode: false, alloc_sites: false };
+        let options = CompileOptions { clif: true, vcode: false, alloc_sites: false, count_accesses: false };
         let compiled = CraneliftJit.compile(&program, &options).expect("compiles");
         let clif = compiled.clif.clone().unwrap();
         assert!(clif.contains("symbol_value.i64"), "{clif}");
@@ -552,7 +558,7 @@ mod short_string_generic_entry_tests {
 
     fn rig() -> Rig {
         let program = crate::nir::parse(PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
-        let options = CompileOptions { clif: false, vcode: false, alloc_sites: false };
+        let options = CompileOptions { clif: false, vcode: false, alloc_sites: false, count_accesses: false };
         let compiled = CraneliftJit.compile(&program, &options).expect("compiles");
         let mut vm = Vm::new(
             Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }),
@@ -631,7 +637,7 @@ mod packed_ascii_generic_entry_tests {
 
     fn rig() -> Rig {
         let program = crate::nir::parse(PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
-        let options = CompileOptions { clif: false, vcode: false, alloc_sites: false };
+        let options = CompileOptions { clif: false, vcode: false, alloc_sites: false, count_accesses: false };
         let compiled = CraneliftJit.compile(&program, &options).expect("compiles");
         let mut vm = Vm::new(
             Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }),
