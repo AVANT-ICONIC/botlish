@@ -3153,13 +3153,16 @@ proc hir::completions::SliceFacts {hir ctx slices} {
 #     container's size form was proven equal to an exact N (`if
 #     list::length(bytes) == 1: list::at(bytes, 0)`), which the range check
 #     above then uses.
+#   * reduction (ReducedIndex): INDEX is (an alias of) `mod(X, SIZE)` or
+#     `bit_and(X, SIZE - 1)` with SIZE the container's own size form
+#     (`list::at(xs, h.mod(list::length(xs)))`).
 #
 # The relational proofs are tried first: an index they place in range is in
 # range on every path that reaches the read, so if this walk's exact ranges
 # also put it out of range, the two cannot both hold and the read is
 # unreachable here (vacuously in).
 #
-# Nothing else is attempted: no arithmetic on a bounded variable, no
+# Nothing else is attempted: no other arithmetic on a bounded variable, no
 # interprocedural parameter facts.
 proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
     set steps 0
@@ -3218,6 +3221,16 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
             }
         }
     }
+    # An index reduced into the container's own size by arithmetic
+    # (ReducedIndex: mod by the size, bit_and with the size minus one). A
+    # container of known size 0 is left to the range rule below: it has no
+    # element, so a read of it that is reached is out -- and a read whose
+    # index is reduced by that size 0 is never reached at all (mod fails
+    # with ARITHMETIC first) -- so such a read stays KNOWN-ERROR, as it
+    # always was, rather than becoming vacuously in.
+    if {$kind eq "expr" && 0 ni $known && [ReducedIndex $hir $ctx $binding $sizes $known]} {
+        return in
+    }
     # A size an enclosing branch proved at least M (`if list::length(xs) >
     # 0:`) holds every index in 0..M-1.
     set min [MinSizeOf $ctx $sizes]
@@ -3250,6 +3263,57 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
         }
     }
     return ""
+}
+
+# 1 if the Int expression E -- the expression an index's alias chain ends at
+# (hir::cardinality::Chase) -- is provably in 0..N-1, N the container size
+# that each of the forms SIZES names (KNOWN: the sizes this path knows
+# exactly, IndexBounds'), by one of two facts of integer arithmetic:
+#
+#   * mod(X, D) with D's form one of SIZES: mod is Euclidean
+#     (core/primitives.tcl) and returns only when D != 0 -- D == 0 fails
+#     with ARITHMETIC, which no handler catches -- with 0 <= r < |D|. D is
+#     a size, so D >= 0 and r < D = N: `xs.at(h.mod(xs.length()))`.
+#   * bit_and(X, M), in either operand order, with M + 1's form one of
+#     SIZES and M >= 0: two's-complement AND of a nonnegative M keeps a
+#     subset of M's bits, so 0 <= X & M <= M < N whatever X is (negative or
+#     beyond any machine word). M >= 0 holds when the size is proven at
+#     least 1 (an enclosing guard: ctx.minSizes, `if a.capacity() == 0:
+#     return ...`; or a known size), when M's form is nonnegative
+#     (hir::cardinality::NonNeg) or when M's Range in this walk is. No
+#     power of two is assumed: a mask keeps any index in range, whatever
+#     the size; a power of two only makes it reach every element. Without
+#     M >= 0 nothing is proven: for N = 0 the mask is -1 and X & -1 = X.
+#
+# Both forms name immutable values (hir/cardinality.tcl), so D and M + 1
+# are the container's size wherever the index is read. Nothing else is
+# recognized: no other operation, no offset of a reduced index.
+proc hir::completions::ReducedIndex {hir ctx e sizes known} {
+    set node [dict get $hir exprs $e]
+    set name [hir::cardinality::NativeName $hir $node]
+    if {$name ni {mod bit_and} || [llength [dict get $node args]] != 2} {
+        return 0
+    }
+    lassign [dict get $node args] x y
+    if {$name eq "mod"} {
+        set steps 0
+        return [expr {[hir::cardinality::IntForm $hir $y steps] in $sizes}]
+    }
+    set min [MinSizeOf $ctx $sizes]
+    set positive [expr {($min ne "" && $min >= 1) || ($known ne "" && [lindex $known 0] >= 1)}]
+    foreach m [list $y $x] {
+        set steps 0
+        set form [hir::cardinality::IntForm $hir $m steps]
+        if {[hir::cardinality::FormAdd $form [hir::cardinality::FormConst 1]] ni $sizes} {
+            continue
+        }
+        set range [expr {[dict exists $ctx exprs $m] ? [dict get $ctx exprs $m] : {never}}]
+        if {$positive || [hir::cardinality::NonNeg $form]
+                || ($range ne {never} && [dict get $range min] ne "-inf" && [dict get $range min] >= 0)} {
+            return 1
+        }
+    }
+    return 0
 }
 
 proc hir::completions::ErrorsPhrase {names} {

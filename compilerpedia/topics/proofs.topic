@@ -65,7 +65,7 @@ title: Indexed access: when list::at cannot fail
 summary: list::at, mutable_array::at, mutable_array::set and str::char_at fail with IndexNotFound unless the compiler proves the index in range; it proves a handful of recognized forms and nothing else.
 index: proofs stdlib
 alias: bounds proof; bounds; bounds check; IndexNotFound; index proof; range proof; indexed access; list index; index out of range; out of bounds; IndexNotFound proof; array index
-keywords: list::at, at, index, length, guard, loop, descending, field, local binding
+keywords: list::at, at, index, length, guard, loop, descending, field, local binding, mod, bit_and, mask, hash, capacity
 related: proof.slices proof.completions proof.ranges concept.lists concept.errors rule.unhandled-errors rule.known-error stdlib.list::at stdlib.list::get principle.restate-in-proven-form
 docs: STDLIB-NAMESPACES.md STATIC-COMPLETION-PROOFS.md REFACTOR-WARNINGS-CLEAN.md
 match: CORE SEMANTIC UNHANDLED-ERROR | this call of "list::at" may produce*
@@ -90,8 +90,12 @@ the enclosing function's `errors` clause, or be proven unable to raise it.
 A call proven to *always* raise it (a literal index past a literal list) is
 rejected as KNOWN-ERROR, even with a handler (rule.known-error).
 
-The proof removes the obligation only: a proven call still performs its
-bounds check at run time.
+The code generators use the proof: natively a proven call has no
+IndexNotFound path (a proven list::at is a bare element load, and a
+function whose only fallible operations are proven ones stops being
+fallible), and the Tcl compiler calls the native directly instead of
+through the error-handling call path. The interpreter, the reference,
+checks every access at run time.
 
 == RECOGNIZED PATTERNS (PROVEN TODAY)
 The index proof relates an index to the container's size only in these
@@ -111,6 +115,15 @@ forms:
     a list literal (or an immutable binding of one) and a constant index.
   * a container reached through a field, once bound to a local name:
     `xs = s.items` and then the loop or guard over xs.
+  * an index reduced into the container's own size, inline or through
+    local names:
+        xs.at(h.mod(xs.length()))          for any Int h, negative or huge
+        a.at(bit_and(h, a.capacity() - 1)) after `if a.capacity() == 0:
+                                           return ...`
+    mod by the size returns only when the size is not 0, and then
+    0 <= h.mod(n) < n. A mask m keeps bit_and(h, m) in 0..m when m >= 0, so
+    the mask needs m >= 0 proven (a guard that the size is not 0, or m's own
+    range) but no power of two.
 
 @example accept
 import list
@@ -154,6 +167,17 @@ doubled(Board {cells: [1, 2, 3]})
 @value [2, 4, 6]
 @end
 
+@example accept
+import mutable_array
+
+fn slot(a: MutableArray[int], h: int) -> int:
+    a.at(h.mod(a.capacity()))
+
+mutable_array::from_list([10, 20, 30]).slot(-4)
+@caption An index reduced mod the array's own capacity
+@value 30
+@end
+
 == LIMITATIONS (NOT PROVEN TODAY)
 These forms are often correct, but the compiler does not relate the index
 to the length, so the call must handle or admit IndexNotFound:
@@ -172,6 +196,11 @@ to the length, so the call must handle or admit IndexNotFound:
     `loop i from 0 to s.items.length(): s.items.at(i)`.
   * an index or length that crosses a function boundary: facts about a
     caller's arguments are not carried into the callee's analysis.
+  * an index reduced by another container's size, even one of equal size:
+    `keys.at(h.mod(slots.capacity()))` (equal capacities of two arrays are
+    not recorded), an offset of a reduced index (`h.mod(n) + 1`), or a mask
+    with nothing proving the size is not 0 (the mask of an empty array is -1,
+    and bit_and(h, -1) is h).
 
 @example reject
 import list
@@ -215,6 +244,18 @@ fn doubled(b: Board) -> List[int]:
 @caption A field path as the container is not proven
 @error CORE SEMANTIC UNHANDLED-ERROR
 @at 8:9
+@end
+
+@example reject
+import mutable_array
+
+fn masked(a: MutableArray[int], h: int) -> int:
+    a.at(bit_and(h, a.capacity() - 1))
+
+0
+@caption A mask with no guard that the capacity is not 0
+@error CORE SEMANTIC UNHANDLED-ERROR
+@at 4:5
 @end
 
 == WHAT TO DO WHEN THE PROOF FAILS
