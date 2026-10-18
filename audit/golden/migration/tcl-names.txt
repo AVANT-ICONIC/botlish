@@ -3810,6 +3810,7 @@ tests/mutable-vector.test mv-affine-whole-moves pass
 tests/mutable-vector.test mv-construction pass
 tests/mutable-vector.test mv-context-installed-copy pass
 tests/mutable-vector.test mv-context-member pass
+tests/mutable-vector.test mv-cow-by-reference-arguments pass
 tests/mutable-vector.test mv-cow-calls pass
 tests/mutable-vector.test mv-cow-copies pass
 tests/mutable-vector.test mv-cow-evidence pass

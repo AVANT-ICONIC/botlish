@@ -654,6 +654,118 @@ test mv-cow-indirect-callee {items 39, 41: a function also passed as a value (so
     list [mvAgree $grow] [mvAgree $pick] [mvAgree $hire] [dict get $mv shares] [dict get $mv detaches]
 } -cleanup {unset -nocomplain pre q grow pick hire mv} -result {{value {[3, 4, 4]}} {value {[3, 4, 3]}} {value 3} 0 0}
 
+# An argument the elaboration hands over uncopied because its callee only
+# reads it (an observed parameter, a native's observing role, a collection
+# operation's receiver) is read when the call runs -- after the call's later
+# arguments. hir/mutvec.tcl's ByReference: a later argument that would move
+# the same header into a mutating callee copies instead (NoLaterUse counts
+# the earlier argument as a later use), and one that mutates the same place
+# (or, for a context member, calls anything) makes the earlier argument a
+# copy (WrittenLater). A place receiver is never copied; later arguments
+# that only read cost no copy.
+set mvByRefDecls {import mutable_vector
+
+context struct Counts:
+    values: MutableVector[int]
+
+fn grow1(a: MutableVector[int], x: int) -> int:
+    a.push(x)
+    a.length()
+
+fn obs2(a: MutableVector[int], n: int) -> int:
+    a.length() * 10 + n
+
+fn pop1(v: MutableVector[int]) -> int errors IndexNotFound:
+    v.pop()
+
+fn items(v: MutableVector[int]) -> List[int]:
+    loop x in v:
+        x
+
+fn bump(context c: Counts) -> int:
+    c.values.push(1)
+    1
+
+}
+
+# The number of logical copies (mutable_vector#share calls) the elaboration
+# wrote into TEXT's HIR.
+proc mvShares {text} {
+    set hir [surface::compile $text -warnings off]
+    set n 0
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "call" && [hir::affine::NativeName $hir $e] eq "mutable_vector#share"} {
+            incr n
+        }
+    }
+    return $n
+}
+
+test mv-cow-by-reference-arguments {an argument handed over uncopied for a callee that only reads it sees the value it had when it was evaluated, whatever a later argument of the same call does: moves the same vector into a mutating function (observed parameter, receiver), pops it in place (observed parameter, receiver), or -- a context member -- calls a function that mutates the member; a mutating receiver stays the place (its update is kept); later arguments that only read copy nothing} -body {
+    lmap case {
+        {fn f() -> int:
+    v = mutable_vector::from_list([1, 2])
+    obs2(v, grow1(v, 5))
+f()
+}
+        {fn f() -> int errors IndexNotFound:
+    v = mutable_vector::from_list([7, 8, 9])
+    v.at(pop1(v) - 7)
+r = f():
+    on IndexNotFound:
+        -1
+r
+}
+        {fn f() -> int errors IndexNotFound:
+    v = mutable_vector::from_list([1, 2])
+    obs2(v, v.pop())
+r = f():
+    on IndexNotFound:
+        -1
+r
+}
+        {fn f() -> int errors IndexNotFound:
+    v = mutable_vector::from_list([7, 8, 9])
+    v.at(v.pop() - 7)
+r = f():
+    on IndexNotFound:
+        -1
+r
+}
+        {fn f() -> List[int] errors IndexNotFound:
+    v = mutable_vector::from_list([1, 2])
+    v.push(v.pop() + 10)
+    items(v)
+r = f():
+    on IndexNotFound:
+        []
+r
+}
+        {fn f(context c: Counts) -> int errors IndexNotFound:
+    mutable_vector::at(c.values, bump())
+with context Counts {values: mutable_vector::from_list([5])}
+r = f():
+    on IndexNotFound:
+        -1
+r
+}
+        {fn f() -> List[int] errors IndexNotFound:
+    v = mutable_vector::from_list([1, 2, 3])
+    x = v.at(v.length() - 1)
+    v.push(obs2(v, v.length()))
+    v.push(x)
+    items(v)
+r = f():
+    on IndexNotFound:
+        []
+r
+}
+    } {
+        set text "${::mvByRefDecls}${case}"
+        list [mvAgree $text] [mvShares $text]
+    }
+} -cleanup {unset -nocomplain case text} -result {{{value 23} 1} {{value 9} 1} {{value 22} 1} {{value 9} 1} {{value {[1, 12]}} 0} {{value -1} 2} {{value {[1, 2, 3, 33, 3]}} 0}}
+
 test mv-cow-gc-stress {items 64, 67, 94: heap values reachable only through vector elements survive collections at every allocation; copies stay valid and independent while either is mutated, collected and read} -constraints nativeLinux -body {
     set text "import mutable_vector\nimport str\nfn f() -> List\[str\] errors IndexNotFound:\n    a = mutable_vector::from_list(\[str::concat(\"x\", \"1\"), str::concat(\"y\", \"2\")\])\n    b = a\n    a.push(str::concat(\"z\", \"3\"))\n    junk = loop i from 0 to 50:\n        str::concat(\"j\", \"k\")\n    s = b.swap(0, str::concat(\"w\", \"4\"))\n    t = a.take(0)\n    \[a.at(0), a.at(1), b.at(0), b.at(1), s, t\]\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
     list [mvAgree $text] [withGcStress {lrange [outcomeUnderHir cranelift [surface::compile $text -warnings off]] 0 1}]

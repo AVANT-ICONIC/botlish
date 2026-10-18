@@ -31,6 +31,7 @@ primitive affine value the scheduler-shaped programs put in it.
 * [Representation in one page](#representation-in-one-page)
 * [Relation to the other mutable types](#relation-to-the-other-mutable-types)
 * [Report](#report) -- the 74 points of the milestone report, in order
+* [By-reference arguments](#by-reference-arguments) -- a later fix
 * [Files](#files)
 * [What to run when changing this](#what-to-run-when-changing-this)
 
@@ -1104,6 +1105,37 @@ front removal is O(1): the future test runner can keep either discipline.
 * **What enums and the test framework still need**: a `TestEvent` with
   several cases (enums/tagged unions), payload-bearing failures, and
   `compiler::assert_compiles` -- all non-goals here (item 100).
+
+## By-reference arguments
+
+A later fix of the copy elaboration (hir/mutvec.tcl), the same for both
+collections. The elaboration hands some arguments over uncopied although
+they are not their path's last use: the argument of a parameter that only
+observes (`ObservedOnly`), a native's argument whose ownership role does not
+keep it, a collection operation's receiver. That relied on "the callee reads
+it while the caller waits" -- but a call runs after its *later* arguments,
+and those could change the header first:
+
+| program | value before | value now |
+|---|---:|---:|
+| `obs2(v, grow1(v, 5))` (`v` = [1, 2]; grow1 pushes onto its parameter; v's last use moved into it) | 33 | 23 |
+| `v.at(pop1(v) - 7)` (`v` = [7, 8, 9]) | IndexNotFound | 9 |
+| `obs2(v, v.pop())` (`v` = [1, 2]) | 12 | 22 |
+| `v.at(v.pop() - 7)` | IndexNotFound | 9 |
+| `mutable_vector::at(c.values, bump())` (a context member [5]; bump pushes onto it) | 1 | IndexNotFound |
+
+(every backend agreed on the wrong values: the elaboration is shared). Now
+such an argument (`ByReference`) counts as a later use of its path for an
+operand after it (`NoLaterUse`: the later argument is copied instead of
+moved), and it is copied itself when a later argument of the call mutates
+the same place, or -- a context member, which any function sharing the
+context may mutate -- calls anything that may run code (`WrittenLater`,
+`MayRunCode`). A mutating receiver stays the place (`PlaceArgument`: `v.push(v.pop()
++ 10)` updates `v`), and later arguments that only read cost nothing
+(`x = v.at(v.length() - 1)` copies nothing). `tests/mutable-vector.test`'s
+`mv-cow-by-reference-arguments` pins the seven cases;
+`audit/mutable-vector/tools/mutants.txt`'s `byref-*` mutants are killed by
+it.
 
 ## Files
 

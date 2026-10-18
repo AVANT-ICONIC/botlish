@@ -204,6 +204,49 @@ proc hir::mutvec::ShareDescriptor {type} {
 >>>>
 
 # ---------------------------------------------------------------------------
+# By-reference arguments (hir/mutvec.tcl's ByReference, PlaceArgument,
+# WrittenLater): an argument handed over uncopied is read when its call
+# runs, after the call's later arguments (tests/mutable-vector.test's
+# mv-cow-by-reference-arguments).
+
+@@ byref-earlier-ignored a later argument of the same call may move the header of an earlier argument handed over by reference: `obs2(v, grow1(v, 5))` lets grow1 mutate what obs2 then reads
+## hir/mutvec.tcl
+<<<<
+                        if {[ByReference $hir $p $a] && [Reads $a $b]} {
+====
+                        if {0 && [ByReference $hir $p $a] && [Reads $a $b]} {
+>>>>
+
+@@ byref-later-write-ignored an argument handed over by reference stays uncopied while a later argument of the same call mutates the same place: `obs2(v, v.pop())` reads the popped vector
+## hir/mutvec.tcl
+<<<<
+    lassign [Path $hir $a] b fields
+    set n [llength $fields]
+    set context [IsContextParam $hir $b]
+====
+    return 0
+    lassign [Path $hir $a] b fields
+    set n [llength $fields]
+    set context [IsContextParam $hir $b]
+>>>>
+
+@@ byref-context-call-ignored a context member handed over by reference stays uncopied while a later argument calls a function that mutates the member: `at(c.values, bump())` reads the bumped member
+## hir/mutvec.tcl
+<<<<
+            if {$context && [MayRunCode $hir $x]} {
+====
+            if {0 && $context && [MayRunCode $hir $x]} {
+>>>>
+
+@@ byref-place-copied a mutating receiver is copied like a read when a later argument mutates the same place: `v.push(v.pop() + 10)` pushes onto a copy, and the update is lost
+## hir/mutvec.tcl
+<<<<
+                    && ([PlaceArgument $hir $p $e] || ![WrittenLater $hir $p $e])} {
+====
+                    && ![WrittenLater $hir $p $e]} {
+>>>>
+
+# ---------------------------------------------------------------------------
 # Moves in and out
 
 @@ push-no-invalidate push of an affine element does not invalidate its source: a later use of the binding is accepted

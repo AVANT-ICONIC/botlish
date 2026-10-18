@@ -481,14 +481,13 @@ proc hir::mutvec::Elaborate {hirVar} {
         if {$p ne ""} {
             set pnode [dict get $hir exprs $p]
             if {[dict get $pnode kind] eq "project"} continue
-            if {[dict get $pnode kind] eq "call" && ![IsContextParam $hir [lindex $path 0]]
-                    && [ObservedArgument $hir $p $e]} {
-                # The callee only reads it, while this function waits.
+            if {[dict get $pnode kind] eq "call" && [ByReference $hir $p $e]
+                    && ([PlaceArgument $hir $p $e] || ![WrittenLater $hir $p $e])} {
+                # The callee only reads it (or, a place, mutates it in
+                # place) when it runs, while this function waits -- and no
+                # later argument of the call writes it before that.
                 continue
             }
-            if {[dict get $pnode kind] eq "call" && [OpKind $hir $p] ne ""
-                    && [lindex [dict get $pnode args] 0] eq $e} continue
-            if {[dict get $pnode kind] eq "call" && [Observed $hir $p $e]} continue
             if {[dict get $pnode kind] eq "bind" && [dict get $pnode binding] in $roots} {
                 # The entry share below covers it.
                 continue
@@ -580,7 +579,12 @@ proc hir::mutvec::Elaborate {hirVar} {
 #               or mutates it) is given a place's header uncopied: the callee
 #               reads it while the caller -- the one function that could
 #               mutate the place -- waits. (Not a context parameter's: other
-#               functions sharing the context may mutate it meanwhile.)
+#               functions sharing the context may mutate it meanwhile.) Like
+#               a native's observing argument or a collection operation's
+#               receiver, it is read when the call runs, after the call's
+#               later arguments: one that would move its header on counts it
+#               as a later use, and one that writes it in place makes it a
+#               copy (ByReference, WrittenLater).
 #
 # The positions needing an exclusive header are a place root's entry, a
 # consumed parameter's argument, and the result of a function whose call
@@ -864,6 +868,16 @@ proc hir::mutvec::NoLaterUse {hir parent e b} {
                         return 0
                     }
                 }
+                if {$kind eq "call"} {
+                    # An earlier argument handed over by reference is read
+                    # when the call runs, after this operand (ByReference).
+                    foreach a [dict get $node args] {
+                        if {$a eq $x} break
+                        if {[ByReference $hir $p $a] && [Reads $a $b]} {
+                            return 0
+                        }
+                    }
+                }
                 if {$kind in {loop listloop countloop lockloop}} {
                     # (The body ran after the operand only once it was
                     # checked above: an operand runs once.)
@@ -932,6 +946,99 @@ proc hir::mutvec::Moved {hir parent e} {
         return 0
     }
     return [NoLaterUse $hir $parent $e $b]
+}
+
+# 1 if place path A, an argument of call P, is handed over by reference --
+# uncopied although it may not be its path's last use -- because the call
+# reads it (or mutates it, a place) when it runs: the argument of a
+# parameter that only observes (ObservedArgument; never a context
+# parameter's path: other functions sharing the context may mutate it
+# meanwhile), a native argument whose ownership role does not keep it
+# (Observed), or a collection operation's receiver. The call runs after
+# its later arguments: a later argument that moved A's header on into a
+# mutating callee (NoLaterUse counts A as a later use) or wrote it in place
+# (WrittenLater) would change what the call reads.
+proc hir::mutvec::ByReference {hir p a} {
+    if {[dict get $hir exprs $a kind] ni {ref project}} {
+        return 0
+    }
+    set path [Path $hir $a]
+    if {$path eq ""} {
+        return 0
+    }
+    if {[OpKind $hir $p] ne "" && [lindex [dict get $hir exprs $p args] 0] eq $a} {
+        return 1
+    }
+    if {[Observed $hir $p $a]} {
+        return 1
+    }
+    return [expr {![IsContextParam $hir [lindex $path 0]] && [ObservedArgument $hir $p $a]}]
+}
+
+# 1 if argument A of call P is a place the call mutates in place: the
+# receiver of a mutating collection operation, or a native argument whose
+# ownership role is `place`. A place is never copied for its call (the
+# update would be lost); what a later argument does to it first is what
+# the mutation sees.
+proc hir::mutvec::PlaceArgument {hir p a} {
+    set index [lsearch -exact [dict get $hir exprs $p args] $a]
+    if {$index == 0 && [OpKind $hir $p] eq "mutate"} {
+        return 1
+    }
+    set name [hir::affine::NativeName $hir $p]
+    return [expr {$name ne "" && $index >= 0 && [core::native::ownershipRole $name $index] eq "place"}]
+}
+
+# 1 if a later argument of call P than place path A (its root B) may write
+# the header A holds before P runs: it mutates a place path of B that A's
+# path is a prefix of (the same path, or a collection inside A), or -- A
+# being a context parameter's path, which every function sharing the
+# context may mutate in place -- it calls anything that may run code (a
+# function, or a native given a callable).
+proc hir::mutvec::WrittenLater {hir p a} {
+    lassign [Path $hir $a] b fields
+    set n [llength $fields]
+    set context [IsContextParam $hir $b]
+    set args [dict get $hir exprs $p args]
+    set work [lrange $args [expr {[lsearch -exact $args $a] + 1}] end]
+    while {$work ne {}} {
+        set x [lindex $work end]
+        set work [lrange $work 0 end-1]
+        if {$x eq "" || ![dict exists $hir exprs $x]} continue
+        if {[dict get $hir exprs $x kind] eq "call"} {
+            if {$context && [MayRunCode $hir $x]} {
+                return 1
+            }
+            foreach arg [dict get $hir exprs $x args] {
+                if {$arg eq "" || ![PlaceArgument $hir $x $arg]} continue
+                set q [Path $hir $arg]
+                if {$q ne "" && [lindex $q 0] eq $b && [lrange [lindex $q 1] 0 [expr {$n - 1}]] eq $fields} {
+                    return 1
+                }
+            }
+        }
+        lappend work {*}[hir::children $hir $x]
+    }
+    return 0
+}
+
+# 1 if call E may run Botlish code: a call of anything but a native, or of
+# a native that calls an argument (its ownership role says so: factory,
+# resume) or is given one that may be a callable.
+proc hir::mutvec::MayRunCode {hir e} {
+    set name [hir::affine::NativeName $hir $e]
+    if {$name eq ""} {
+        return 1
+    }
+    set index 0
+    foreach arg [dict get $hir exprs $e args] {
+        if {[core::native::ownershipRole $name $index] in {factory resume}
+                || ($arg ne "" && [lindex [hir::typeOf $hir $arg] 0] in {fn block native coroutine any})} {
+            return 1
+        }
+        incr index
+    }
+    return 0
 }
 
 # 1 if E is an argument of call P whose parameter only observes it
