@@ -685,6 +685,13 @@ pub fn int_to_big(v: Value) -> BigInt {
     }
 }
 
+/// The BigInt object's own value of the Int V that is not small (borrowed:
+/// `int_to_big` clones it).
+pub fn big_of<'a>(v: Value) -> &'a BigInt {
+    debug_assert_eq!(heap_kind(v), KIND_BIGINT);
+    &unsafe { as_ref::<'a, BigIntObj>(v) }.n
+}
+
 /// The Int V as an i64, if it is small.
 pub fn int_small(v: Value) -> Option<i64> {
     if is_small(v) { Some(small_of(v)) } else { None }

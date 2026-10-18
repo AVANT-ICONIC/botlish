@@ -4146,6 +4146,7 @@ tests/native-hashing.test hash-mutarray-1 pass
 tests/native-hashing.test hash-parity-astral-1 pass
 tests/native-hashing.test hash-parity-bigint-1 pass
 tests/native-hashing.test hash-parity-int-1 pass
+tests/native-hashing.test hash-parity-kinds-1 pass
 tests/native-hashing.test hash-parity-nested-1 pass
 tests/native-hashing.test hash-parity-str-1 pass
 tests/native-hashing.test hash-range-1 pass
