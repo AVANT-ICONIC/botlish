@@ -236,7 +236,11 @@ once per input file. A program that warns gets one line per distinct warning
 code, on stderr after the warnings. The diagnostic itself -- its code, its
 message, its order, the recovery state, `CompilerError`'s text, the
 static-decision scheduler's inputs -- is unchanged: the lookup reads the
-catalogue only, and only `main.tcl` prints the line.
+catalogue only, and only `main.tcl` prints the line. It reads only the
+topics' header lines (`compilerpedia::DiagnosticTables`, a scan of the
+files for their `code:` and `match:` keys, held equal to the full load by
+`cp-diagnostic-tables-equal-load`), so a rejected compilation pays about
+30 ms for its help lines, and a clean one never loads Compilerpedia.
 
 A broad code (`SURFACE SYNTAX`, `CORE SEMANTIC TYPE`,
 `CORE SEMANTIC UNHANDLED-ERROR`) is documented once, and each specific rule

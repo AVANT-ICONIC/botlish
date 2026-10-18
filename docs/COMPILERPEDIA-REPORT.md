@@ -730,11 +730,139 @@ or second query, or by a diagnostic's help line.
 
 All commands ran with `LANG=C.utf8 LC_ALL=C.utf8` and `tclsh9.0` 9.0.1.
 
-RESULTS-G
+**The whole local suite.** Command: `tclsh9.0 tests/local.tcl -jobs 4`, on
+a 4-core container with the front-end cache empty (the front end changed).
+It took 36.6 minutes.
+
+| part | result |
+|---|---|
+| 192 Tcl test files on interp and compile | 11,865 passed, 2 failed, 4,231 skipped (the manifest's golden duplicates and host constraints) |
+| 94 golden suites on interp, compile, cranelift-generic and cranelift | 18,822 of 18,822 test runs passed |
+
+**The one failure, and its fix.** The two failures are one test,
+`native-output-failure-keeps-output`, failing on both backends.
+
+* It pins main.tcl's stdout byte for byte, and that output now ends with
+  the help line after the error.
+* The test's theorem (the output, then the error line, in that order,
+  exit 1) is unchanged. Its expected bytes now include the help line, and
+  so do its census row and manifest entry.
+* The test then passed on both backends.
+* No other test pinned main.tcl's output in a way the help lines changed.
+
+After the last changes, the 37 test files that drive main.tcl or
+Compilerpedia were run again: pending at this revision.
+
+**Compilerpedia**
+
+| command | result |
+|---|---|
+| `tclsh9.0 tools/compilerpedia.tcl check` | 660 topics, 511 examples run (interp and compile; native-only ones on cranelift and cranelift-generic), 0 problems, 30 s |
+| `tclsh9.0 tests/compilerpedia.test` | 34 of 34 |
+| `tclsh9.0 tests/main-cli.test` | 32 of 32 |
+| `tools/compilerpedia.tcl inventory` | 223 entries, every one documented |
+
+**The lint refinements**
+
+| command | result |
+|---|---|
+| `tests/warnings.test`, `tests/same-failure.test`, `tests/method-eligible.test`, `tests/proves-naming.test`, `tests/many-boolean-arguments.test` (interp and compile, in the full run) | all pass |
+| `audit/method-eligible/tools/fuzz.tcl 300` | 0 failures, 1,515 of 1,515 round trips |
+| `audit/same-failure/tools/fuzz.tcl 300` | 0 failures |
+| `audit/same-return-value/tools/fuzz.tcl 500` | 0 failures |
+| `audit/many-boolean-arguments/tools/fuzz.tcl 200` (its METHOD-ELIGIBLE oracle updated), `audit/fixed-arity-list-return/tools/fuzz.tcl 200`, `audit/one-char-string-literal/tools/fuzz.tcl 200`, `audit/proves-naming/tools/fuzz.tcl 200` | 0 failures each |
+| `audit/method-eligible/tools/mutate.tcl` | 9 of 9 mutants applied and killed, including the new `int-literal-receivers-reported` |
+| `audit/same-failure/tools/mutate.tcl` | 16 of 16 applied and killed, including the new `handler-alternatives-counted-apart` |
+| `audit/refactor/tools/gate.tcl` (the warning gate) | passed: observed warnings are exactly the manifest, which did not change |
+
+**Other regression boundaries**
+
+| command | result |
+|---|---|
+| `audit/diagnostic-recovery/tools/efficiency.tcl` | passed: 14 cases, every primary in the first compilation, no cascade. It parses main.tcl's error lines, and the help lines do not disturb it |
+| `audit/golden/migration/merge.tcl -names audit/golden/migration/tcl-names.txt -check 1` | consistent: 9,490 manifest rows, 79 of them new (KEEP-WARNING, KEEP-INTERNAL, KEEP-MULTI-PROGRAM) |
+| before and after comparison of 164 programs: every `examples/`, `bench/` and golden program plus a loader per library module, each compiled by the tree before and after | every outcome and HIR identical; warnings changed only as section E describes |
+
+**Changed expectations**, each with its reason in the test's title or its
+census row:
+
+* `warn-bool-literal`, `sf-two-handlers-same-failure` and
+  `me-form-int-literal` are the lint refinements (section E).
+* `pn-independent-of-other-codes`: its predicate now returns `false` from
+  every exit, keeping the test's theorem.
+* `native-output-failure-keeps-output`: the help line, above.
+* No golden suite and no golden expectation changed.
+
+**Packaging**
+
+* `single/build.sh` produced an 8,106,977-byte executable.
+* `single/smoke-test.sh single/out/botlish` passed. It now also checks the
+  usage, `-help`, four queries, an unknown query and `-version`, all
+  without running a program.
+* Outside the repository, with an empty environment and a fresh HOME, these
+  all behaved as documented: `./botlish`, `-help`, `-help warnings`,
+  `-help METHOD-ELIGIBLE`, `-help list::at`, `-help "bounds proof"` and
+  `-version`.
+  * None of them ran a program or created a cache directory.
+  * An explicit `p.bot` ran on interp and cranelift.
+
+**CI** (`workflow_dispatch` on the branch):
+
+* `single-executable.yml` passed: the build and the smoke test in stock
+  ubuntu containers.
+* `tests.yml` on the first head:
+  * passed: warning gate, native Rust unit tests, and golden shards 1 to 4
+    (every suite beside its Tcl originals);
+  * failed: the stub-linked job, on the same pinned-output test, fixed above.
+* The run on the final head: pending at this revision.
+
+The static-decisions workflow was not dispatched. It compares the
+schedulers' decisions, which are taken inside the build, from diagnostics.
+Warnings run after the build, and nothing else this milestone changed is
+read by a build. It runs automatically when the change reaches main.
 
 ## H. Performance and distribution
 
-RESULTS-H
+Medians of 7 runs, idle 4-core container. The interleaved comparisons
+alternate the two trees run by run, over 21 to 25 runs.
+
+| invocation | before | after |
+|---|---:|---:|
+| `tclsh9.0 main.tcl` (no arguments) | ran the 4 demo programs | 9 ms (usage) |
+| an unknown option, until the error | 67 ms (the compiler was loaded first) | 9 ms |
+| `-version` | -- | 90 ms (it loads the front end, for the fingerprint) |
+| `-help` (overview); `-help METHOD-ELIGIBLE`; `-help list::at`; `-help "bounds proof"`; `-help errors` | -- | 143-166 ms |
+| `-help "how do I print a number"` (word search) | -- | 370 ms |
+| `-help xyzzyx` (nothing; near matches) | -- | 363 ms |
+| a clean program, interp (`1 + 2`), interleaved, 25 runs | 98 ms | 100 ms |
+| the same with `-warnings off` | 98 ms | 101 ms |
+| `examples/surface/01-arithmetic.bot` on cranelift, 11 runs | 135 ms | 140 ms |
+| a program with one warning (warning plus help line) | 120 ms | 175 ms |
+| a syntax error (diagnostic plus help line) | 76 ms | 103 ms |
+| single executable: usage / `-help METHOD-ELIGIBLE` / word search | -- | 13 / 143 / 392 ms |
+
+**Overhead on normal compilation.**
+
+* A clean compilation never loads Compilerpedia. Its measured difference
+  (+2 to 5 ms) is within the run-to-run spread.
+* A compilation that prints a diagnostic or warning pays for its help line.
+  The cost is 27 ms for a rejected program, because the help line is looked
+  up from the topics' header lines (`compilerpedia::DiagnosticTables`, which
+  a test holds equal to the full load) rather than a load of the
+  catalogue; the first version, which loaded it, cost about 130 ms.
+* An exact lookup costs about 150 ms, mostly parsing the 1 MB catalogue.
+* A word search costs about 370 ms, because it builds the word index on
+  first use.
+* Neither needs a cache, and both are fast enough to be interactive.
+
+**Distribution.**
+
+* The packed `compilerpedia/` (engine, topics and generated stdlib) and the
+  `BUILD` file are 16 archive entries: 1,090,146 bytes, 305,061 compressed.
+  That is 3.8% of the 8,106,977-byte executable.
+* The demo programs (`examples/*.ir`, 1.6 KB) are no longer packed.
+* Help, usage and `-version` install no native executables and create no
+  cache directory.
 
 ## I. Remaining limitations
 
