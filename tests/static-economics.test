@@ -21,12 +21,14 @@ source [file join $::sdRoot audit static-decisions tools lib.tcl]
 # ---------------------------------------------------------------------------
 # Helpers
 
-# The HIR of SOURCE (-strict 0, warnings off) under SCHEDULER.
+# The HIR of SOURCE (-strict 0, warnings off) under SCHEDULER, for a Linux
+# target (linuxTarget: the host's own on Linux), where linux::io is
+# importable; a program importing no platform namespace is every target's.
 proc seHir {source {scheduler batched}} {
     set saved $hir::static::scheduler
     set hir::static::scheduler $scheduler
     try {
-        return [surface::compile $source -strict 0 -warnings off]
+        return [surface::compile $source -strict 0 -warnings off -target [linuxTarget]]
     } finally {
         set hir::static::scheduler $saved
     }
@@ -42,14 +44,15 @@ proc seEcon {source {scheduler batched}} {
 # (and, with LEGACY, as the legacy one up to its schedule's internal ids),
 # else the first difference.
 proc seSame {source {legacy 1}} {
-    set b [sdCompile batched $source]
+    # (For a Linux target, as seHir.)
+    set b [sdCompile batched $source <input> [linuxTarget]]
     if {[dict get $b error] ne ""} {
         # Two compilations that fail alike are no evidence of anything.
         return "does not compile: [string range [dict get $b error] 0 300]"
     }
-    set diff [sdDiff $b [sdCompile sequential $source]]
+    set diff [sdDiff $b [sdCompile sequential $source <input> [linuxTarget]]]
     if {$diff eq "" && $legacy} {
-        set diff [sdDiff $b [sdCompile legacy $source] 1]
+        set diff [sdDiff $b [sdCompile legacy $source <input> [linuxTarget]] 1]
     }
     return $diff
 }

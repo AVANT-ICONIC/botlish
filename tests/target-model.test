@@ -1,0 +1,435 @@
+# target-model.test -- the compilation target as an identity
+# (MACOS-AARCH64-MILESTONE-2.md): an operating system *and* an architecture.
+# linux-aarch64 and macos-aarch64 share an instruction set, a pointer width
+# and a data model, and are two targets everywhere target-dependent meaning
+# can enter, persist or run:
+#
+#   * the target table (core/cabi.tcl): identity, triple, C scalar facts,
+#     host-default selection;
+#   * the C calling convention of a foreign call (native/src/codegen/
+#     target.rs's c_call_conv, through the driver's `target` report);
+#   * module resolution: the Linux platform's namespaces (linux::*) only for
+#     a Linux target (surface/modules.tcl's PlatformCheck), architecture-
+#     specific portable namespaces for every operating system;
+#   * the HIR's recorded target (hir::cabi::targetOf), HIR interchange's
+#     -target check, the front-end cache's target isolation;
+#   * native execution: machine code for a target runs only on its host
+#     (the driver's NATIVE TARGET refusal).
+#
+# Nothing here runs a C call or a syscall. The tests that need the native
+# driver carry nativeBuilt; the rest run on any host, simulating another
+# where they say so (::tcl_platform).
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+
+testConstraint nativeBuilt [expr {![catch {native::binary}]}]
+
+set tmScratch [makeDirectory target-model-[pid]]
+set tmCounter 0
+
+# A fresh file NAME holding TEXT in a directory of its own: its path.
+proc tmFile {name text} {
+    set dir [file join $::tmScratch d[incr ::tmCounter]]
+    file mkdir $dir
+    set path [file join $dir $name]
+    set channel [open $path w]
+    fconfigure $channel -encoding utf-8 -translation lf
+    puts -nonewline $channel $text
+    close $channel
+    return $path
+}
+
+# The HIR of program TEXT (a program file) compiled for TARGET ("" the
+# host's), with ARGS.
+proc tmHir {text target args} {
+    return [surface::readProgramFile [tmFile main.bot $text] -warnings off -cache "" -target $target {*}$args]
+}
+
+# {KIND LINE:COLUMN MESSAGE} of the first diagnostic of TEXT for TARGET, or
+# accepted.
+proc tmError {text target} {
+    if {![catch {tmHir $text $target} message options]} {
+        return accepted
+    }
+    if {[dict exists $options -diagnostics]} {
+        set message [dict get [lindex [dict get $options -diagnostics] 0] message]
+    }
+    regexp {^[^ ]*:([0-9]+:[0-9]+): (.*)$} $message -> location message
+    return [list [lindex [dict get $options -errorcode] end] $location $message]
+}
+
+# The value domain of ffi::c::Char as HIR has it (its own declarations).
+proc tmCharDomain {hir} {
+    hir::activate $hir
+    return [core::cabi::scalarDomain [core::type::cabiOf ffi::c::Char]]
+}
+
+# Runs BODY with ::tcl_platform's os and machine OS and MACHINE.
+proc tmOnHost {os machine body} {
+    set saved [list $::tcl_platform(os) $::tcl_platform(machine)]
+    set ::tcl_platform(os) $os
+    set ::tcl_platform(machine) $machine
+    try {
+        return [uplevel 1 $body]
+    } finally {
+        lassign $saved ::tcl_platform(os) ::tcl_platform(machine)
+    }
+}
+
+# The other operating system's target of this host's architecture: what a
+# matching architecture alone would mistake for the host's.
+proc tmOtherTarget {} {
+    set os [dict get [core::cabi::target [core::cabi::hostTarget]] os]
+    return [expr {$os eq "linux" ? "macos" : "linux"}]-[core::cabi::hostArchitecture]
+}
+
+# Program texts: plain char (a target-dependent C scalar), a program every
+# target compiles the same, a Linux one.
+set tmChar "import ffi::c\nfn f(x: ffi::c::Char) -> int:\n    x\nf(1)\n"
+set tmPlain "fn f(x: int) -> int:\n    x + 1\nf(1)\n"
+set tmLinux "import linux\n1\n"
+
+# ---------------------------------------------------------------------------
+# The target table (core/cabi.tcl)
+
+test tm-macos-aarch64-identity {macos-aarch64 is macOS on AArch64, LP64, 64-bit pointers, signed plain char, the triple aarch64-apple-darwin; it shares its architecture, data model and pointer width with linux-aarch64 and is still another target: operating system, plain char and triple differ} -body {
+    set m [core::cabi::target macos-aarch64]
+    set l [core::cabi::target linux-aarch64]
+    list [lmap k {os arch model pointer charSigned triple} {dict get $m $k}] \
+        [lmap k {arch model pointer} {expr {[dict get $m $k] eq [dict get $l $k]}}] \
+        [lmap k {os charSigned triple} {expr {[dict get $m $k] eq [dict get $l $k]}}]
+} -cleanup {unset -nocomplain m l} -result {{macos aarch64 LP64 64 1 aarch64-apple-darwin} {1 1 1} {0 0 0}}
+
+test tm-target-table {every target's identity and C scalar facts, pinned: Linux x86-64, Linux AArch64 and Windows unchanged, macOS AArch64 distinct from Linux AArch64 by plain char only among the scalars} -body {
+    lmap t [core::cabi::targetNames] {
+        set m [core::cabi::target $t]
+        list $t [dict get $m os] [dict get $m arch] [dict get $m model] [dict get $m triple] \
+            [lmap n [core::cabi::scalarNames] {
+                set info [core::cabi::scalarInfo $n $t]
+                string cat [dict get $info bits] [expr {[dict get $info signed] ? "s" : "u"}]
+            }]
+    }
+} -cleanup {unset -nocomplain m} -result {{linux-aarch64 linux aarch64 LP64 aarch64-unknown-linux-gnu {8u 8s 8u 16s 16u 32s 32u 64s 64u 64s 64u}} {linux-x86_64 linux x86_64 LP64 x86_64-unknown-linux-gnu {8s 8s 8u 16s 16u 32s 32u 64s 64u 64s 64u}} {macos-aarch64 macos aarch64 LP64 aarch64-apple-darwin {8s 8s 8u 16s 16u 32s 32u 64s 64u 64s 64u}} {macos-x86_64 macos x86_64 LP64 x86_64-apple-darwin {8s 8s 8u 16s 16u 32s 32u 64s 64u 64s 64u}} {windows-aarch64 windows aarch64 LLP64 aarch64-pc-windows-msvc {8s 8s 8u 16s 16u 32s 32u 32s 32u 64s 64u}} {windows-x86_64 windows x86_64 LLP64 x86_64-pc-windows-msvc {8s 8s 8u 16s 16u 32s 32u 32s 32u 64s 64u}}}
+
+test tm-macos-aarch64-scalars {macOS AArch64's C scalars: char signed 8, signed char 8, unsigned char 8, short 16, int 32, long 64, long long 64 (each signed or unsigned as spelled), and their exact domains} -body {
+    lmap n [core::cabi::scalarNames] {
+        set info [core::cabi::scalarInfo $n macos-aarch64]
+        list [dict get $info c] [dict get $info bits] [dict get $info signed] [lrange [core::cabi::scalarDomain $info] 1 2]
+    }
+} -cleanup {unset -nocomplain info} -result {{char 8 1 {-128 127}} {{signed char} 8 1 {-128 127}} {{unsigned char} 8 0 {0 255}} {short 16 1 {-32768 32767}} {{unsigned short} 16 0 {0 65535}} {int 32 1 {-2147483648 2147483647}} {{unsigned int} 32 0 {0 4294967295}} {long 64 1 {-9223372036854775808 9223372036854775807}} {{unsigned long} 64 0 {0 18446744073709551615}} {{long long} 64 1 {-9223372036854775808 9223372036854775807}} {{unsigned long long} 64 0 {0 18446744073709551615}}}
+
+test tm-host-default {the host's target is its operating system and its architecture, never one inferred from the other: Darwin on arm64 is macos-aarch64, Linux on aarch64 linux-aarch64; a host that is none of the table's has none; the Linux target of a host's architecture (what a test compiles a Linux program for) exists wherever the architecture does} -body {
+    set observed {}
+    foreach {os machine} {Darwin arm64 Linux aarch64 Linux arm64 Linux x86_64 Darwin x86_64 {Windows NT} amd64 Linux riscv64 FreeBSD amd64} {
+        lappend observed [tmOnHost $os $machine {list $os $machine [core::cabi::hostTarget] [core::cabi::systemTarget linux]}]
+    }
+    set observed
+} -cleanup {unset -nocomplain observed os machine} -result {{Darwin arm64 macos-aarch64 linux-aarch64} {Linux aarch64 linux-aarch64 linux-aarch64} {Linux arm64 linux-aarch64 linux-aarch64} {Linux x86_64 linux-x86_64 linux-x86_64} {Darwin x86_64 macos-x86_64 linux-x86_64} {{Windows NT} amd64 windows-x86_64 linux-x86_64} {Linux riscv64 {} {}} {FreeBSD amd64 {} linux-x86_64}}
+
+test tm-default-and-explicit-target {a compilation with no -target is the host's (its HIR records the host target), an explicit -target overrides it whatever the host: plain char is unsigned for linux-aarch64 and signed for macos-aarch64, so f(200) compiles for one and f(-1) for the other} -body {
+    set default [tmHir $::tmChar ""]
+    list [expr {[hir::cabi::targetOf $default] eq [core::cabi::hostTarget]}] \
+        [lmap t {linux-aarch64 macos-aarch64} {
+            set hir [tmHir $::tmChar $t]
+            list [hir::cabi::targetOf $hir] [tmCharDomain $hir]
+        }] \
+        [lmap t {linux-aarch64 macos-aarch64} {lindex [tmError "import ffi::c\nfn f(x: ffi::c::Char) -> int:\n    x\nf(200)\n" $t] 0}] \
+        [lmap t {linux-aarch64 macos-aarch64} {lindex [tmError "import ffi::c\nfn f(x: ffi::c::Char) -> int:\n    x\nf(0 - 1)\n" $t] 0}]
+} -cleanup {unset -nocomplain default hir t} -result {1 {{linux-aarch64 {interval 0 255}} {macos-aarch64 {interval -128 127}}} {accepted TYPE} {TYPE accepted}}
+
+test tm-unknown-host {on a host that is no known target, a namespace that needs one is UNKNOWN-TARGET at its import, ffi::c included (never a raw core::cabi error), and the Linux platform too; a program needing none compiles} -body {
+    tmOnHost Linux riscv64 {
+        list [lrange [tmError "import ffi::c\n1\n" ""] 0 1] [string match {*needs a C ABI target*compile with -target*} [lindex [tmError "import ffi::c\n1\n" ""] 2]] \
+            [lrange [tmError $::tmLinux ""] 0 1] [string match {namespace "linux" belongs to the Linux platform, and this host (Linux riscv64) is none of the known targets; compile with -target*} [lindex [tmError $::tmLinux ""] 2]] \
+            [tmError $::tmPlain ""]
+    }
+} -result {{UNKNOWN-TARGET 1:8} 1 {UNKNOWN-TARGET 1:8} 1 accepted}
+
+# ---------------------------------------------------------------------------
+# The C calling convention of a foreign call
+
+test tm-c-call-conv-of-each-target {the driver reads each target's triple as Cranelift does: architecture, operating system, pointer width (the table's), object format, and the C calling convention a foreign call compiled for it uses -- apple_aarch64 for macos-aarch64, never Linux AArch64's system_v; code for a target runs here exactly when it is the host's} -constraints nativeBuilt -body {
+    lmap t [core::cabi::targetNames] {
+        set m [core::cabi::target $t]
+        set facts [native::targetFacts [dict get $m triple]]
+        list $t [dict get $facts arch] [dict get $facts os] [expr {[dict get $facts pointer] == [dict get $m pointer]}] \
+            [dict get $facts format] [dict get $facts c-call-conv] [expr {[dict get $facts runs] == ($t eq [core::cabi::hostTarget])}]
+    }
+} -cleanup {unset -nocomplain m facts} -result {{linux-aarch64 aarch64 linux 1 elf system_v 1} {linux-x86_64 x86_64 linux 1 elf system_v 1} {macos-aarch64 aarch64 darwin 1 macho apple_aarch64 1} {macos-x86_64 x86_64 darwin 1 macho system_v 1} {windows-aarch64 aarch64 windows 1 coff windows_fastcall 1} {windows-x86_64 x86_64 windows 1 coff windows_fastcall 1}}
+
+# {SYMBOL CONVENTION ...}: the calling convention of every foreign C
+# function's signature in CLIF text (tests/platform/native-status.tcl's
+# probe reads it the same way).
+proc tmForeignConventions {clif} {
+    set symbols [dict create]
+    foreach {- ref symbol} [regexp -all -inline -line {^; (u0:[0-9]+) = \S+ \(C (\S+)\)$} $clif] {
+        dict set symbols $ref $symbol
+    }
+    set result [dict create]
+    foreach function [split [string map [list "\n\}\n" \x00] $clif] \x00] {
+        set sigs [dict create]
+        foreach {- sig conv} [regexp -all -inline -line {^\s+(sig[0-9]+) = .* (\S+)$} $function] {
+            dict set sigs $sig $conv
+        }
+        foreach {- ref sig} [regexp -all -inline -line {^\s+fn[0-9]+ = (?:colocated )?(u0:[0-9]+) (sig[0-9]+)$} $function] {
+            if {[dict exists $symbols $ref] && [dict exists $sigs $sig]} {
+                dict set result [dict get $symbols $ref] [dict get $sigs $sig]
+            }
+        }
+    }
+    return $result
+}
+
+test tm-foreign-signature-convention {a foreign C function's signature, compiled for the host, is in the host target's C calling convention (the driver's reading of its triple: apple_aarch64 on macOS arm64, system_v on Linux), narrow arguments extended by their class; CLIF compiles no C call} -constraints nativeBuilt -body {
+    set hir [tmHir "import ffi::c\n\nextern c fn labs(x: ffi::c::Long) -> ffi::c::Long\nextern c fn abs(x: ffi::c::Char) -> ffi::c::Int\n\nlabs(0 - 5) + abs(0 - 3)\n" ""]
+    set clif [native::clif $hir]
+    set expected [dict get [native::targetFacts [dict get [core::cabi::target [core::cabi::hostTarget]] triple]] c-call-conv]
+    list [expr {[tmForeignConventions $clif] eq [list labs $expected abs $expected]}] \
+        [regexp -line "^\\s+sig\[0-9\]+ = \\(i8 sext\\) -> i32 $expected\$" $clif]
+} -cleanup {unset -nocomplain hir clif expected} -result {1 1}
+
+# ---------------------------------------------------------------------------
+# Platform module resolution
+
+set tmLinuxImports {
+    {import linux} 8
+    {import linux::sys} 8
+    {import linux::io} 8
+    {import linux::path} 8
+    {import linux::abi::aarch64} 8
+    {import linux::abi::x86_64} 8
+    {import type linux::path::LinuxPath} 13
+}
+
+test tm-linux-platform-refused {for a target of another operating system every Linux platform namespace is UNSUPPORTED-PLATFORM at the import that names it -- linux, linux::sys (never sys.aarch64.bot for macos-aarch64), linux::io, linux::path, the transports, a type import -- whatever the architecture} -body {
+    set wrong {}
+    foreach target {macos-aarch64 macos-x86_64 windows-x86_64 windows-aarch64} {
+        foreach {import column} $::tmLinuxImports {
+            set got [lrange [tmError "$import\n1\n" $target] 0 1]
+            if {$got ne [list UNSUPPORTED-PLATFORM 1:$column]} {
+                lappend wrong [list $target $import $got]
+            }
+        }
+    }
+    list $wrong [lindex [tmError "import linux::sys\n1\n" macos-aarch64] 2]
+} -cleanup {unset -nocomplain wrong target import column got} -result {{} {namespace "linux::sys" belongs to the Linux platform (the standard namespace linux and every namespace under it), which is unavailable for target macos-aarch64 (macOS on aarch64): a Linux module is never chosen for, mapped to or substituted on another operating system, whatever the architecture; compile for a Linux target (-target linux-aarch64) or import no Linux namespace}}
+
+test tm-linux-platform-on-linux {for a Linux target the same imports resolve exactly as before: linux::sys is the target architecture's file} -body {
+    set wrong {}
+    foreach target {linux-aarch64 linux-x86_64} {
+        foreach {import column} $::tmLinuxImports {
+            set got [tmError "$import\n1\n" $target]
+            if {$got ne "accepted"} {
+                lappend wrong [list $target $import $got]
+            }
+        }
+    }
+    list $wrong [lmap target {linux-aarch64 linux-x86_64} {
+        set hir [tmHir "import linux::sys\n1\n" $target]
+        lmap {id file} [dict get $hir files] {
+            expr {[string match */linux/sys.* [dict get $file path]] ? [file tail [dict get $file path]] : [continue]}
+        }
+    }]
+} -cleanup {unset -nocomplain wrong target import column got hir} -result {{} {sys.aarch64.bot sys.x86_64.bot}}
+
+test tm-portable-architecture-namespaces {an architecture's portable namespaces are every operating system's: abi::aarch64 and abi::x86_64 compile and run for macos-aarch64 and windows-x86_64 as for Linux, and their HIR is every target's} -body {
+    lmap target {macos-aarch64 windows-x86_64 linux-aarch64} {
+        set hir [tmHir "import abi\nimport abi::aarch64\nimport abi::x86_64\n\[abi::aarch64::to_int(abi::aarch64::from_u32(abi::u32(7))), abi::x86_64::to_int(abi::x86_64::from_u32(abi::u32(8)))\]\n" $target]
+        list $target [hir::cabi::targetOf $hir] [lindex [outcomeUnderHir interp $hir] 1]
+    }
+} -cleanup {unset -nocomplain hir target} -result {{macos-aarch64 {} {[7, 8]}} {windows-x86_64 {} {[7, 8]}} {linux-aarch64 {} {[7, 8]}}}
+
+test tm-architecture-specific-module-on-macos {an architecture-specific namespace that is no platform's (a private demo::arch of demo/arch.x86_64.bot and demo/arch.aarch64.bot) gives macos-aarch64 its AArch64 file: the selection is by architecture, the platform by namespace} -body {
+    withPrivateLibrary {
+        file mkdir [file join $::core::libraryDir demo]
+        foreach {arch name} {x86_64 x86-64 aarch64 AArch64} {
+            set channel [open [file join $::core::libraryDir demo arch.$arch.bot] w]
+            puts -nonewline $channel "fn name() -> str:\n    \"$name\"\n"
+            close $channel
+        }
+        lmap target {macos-aarch64 macos-x86_64} {
+            set hir [tmHir "import demo::arch\ndemo::arch::name()\n" $target]
+            list [hir::cabi::targetOf $hir] [lindex [outcomeUnderHir interp $hir] 1]
+        }
+    }
+} -cleanup {unset -nocomplain arch name channel target hir} -result {{macos-aarch64 {"AArch64"}} {macos-x86_64 {"x86-64"}}}
+
+test tm-application-module-named-linux {an application module is the application's whatever its name: an application file linux/tool.bot (namespace linux::tool, no standard one) compiles for macos-aarch64; only standard namespaces are a platform's} -body {
+    set main [tmFile main.bot "import linux::tool\nlinux::tool::value()\n"]
+    file mkdir [file join [file dirname $main] linux]
+    set channel [open [file join [file dirname $main] linux tool.bot] w]
+    puts -nonewline $channel "fn value() -> int:\n    3\n"
+    close $channel
+    set hir [surface::readProgramFile $main -warnings off -cache "" -target macos-aarch64]
+    list [hir::cabi::targetOf $hir] [lindex [outcomeUnderHir interp $hir] 1]
+} -cleanup {unset -nocomplain main channel hir} -result {{} 3}
+
+# ---------------------------------------------------------------------------
+# The HIR's target
+
+test tm-hir-records-its-target {a HIR records the target its build read -- ffi::c's scalars, a platform namespace, an architecture-specific module -- and none when it read none: such a HIR is the same for every target} -body {
+    list [lmap text [list $::tmPlain $::tmChar $::tmLinux "import linux::path\n1\n" "import linux::sys\n1\n" "import abi::aarch64\n1\n"] {
+            hir::cabi::targetOf [tmHir $text linux-aarch64]
+        }] \
+        [expr {[hir::format [tmHir $::tmPlain linux-aarch64]] eq [hir::format [tmHir $::tmPlain macos-aarch64]]}] \
+        [expr {[hir::format [tmHir $::tmChar linux-aarch64]] eq [hir::format [tmHir $::tmChar macos-aarch64]]}]
+} -cleanup {unset -nocomplain text} -result {{{} linux-aarch64 linux-aarch64 linux-aarch64 linux-aarch64 {}} 1 0}
+
+test tm-hir-text-target {HIR text keeps the target in its C scalars' declarations, and a HIR read back from it records that target; text without them records none} -body {
+    list [hir::cabi::targetOf [hir::parse [hir::format [tmHir $::tmChar macos-aarch64]]]] \
+        [hir::cabi::targetOf [hir::parse [hir::format [tmHir $::tmPlain macos-aarch64]]]]
+} -result {macos-aarch64 {}}
+
+# ---------------------------------------------------------------------------
+# HIR interchange
+
+test tm-interchange-cross-os {interchange text built for one target is refused as a compilation for another of the same architecture (HIR INTERCHANGE TARGET), in both directions; accepted for its own target, keeping its own C facts whatever was compiled in between; a HIR that is every target's is accepted for any; without -target nothing is checked and the HIR stays its own target's} -body {
+    set linux [hir::interchange::encode [tmHir $::tmChar linux-aarch64]]
+    set mac [hir::interchange::encode [tmHir $::tmChar macos-aarch64]]
+    set plain [hir::interchange::encode [tmHir $::tmPlain linux-aarch64]]
+    set result {}
+    foreach {name text target} [list linux $linux macos-aarch64 macos $mac linux-aarch64 \
+            linux $linux linux-aarch64 macos $mac macos-aarch64 plain $plain macos-aarch64 plain $plain linux-aarch64 \
+            linux $linux "" plain $plain ""] {
+        tmHir $::tmChar [expr {$target eq "linux-aarch64" ? "macos-aarch64" : "linux-aarch64"}]
+        if {[catch {hir::interchange::decode $text -target $target} hir options]} {
+            lappend result [list $name $target [dict get $options -errorcode]]
+        } else {
+            lappend result [list $name $target [hir::cabi::targetOf $hir] [expr {[hir::cabi::targetOf $hir] eq "" ? "" : [tmCharDomain $hir]}]]
+        }
+    }
+    tmHir $::tmChar macos-aarch64
+    set unchecked [hir::interchange::decode $linux]
+    lappend result [list [hir::cabi::targetOf $unchecked] [tmCharDomain $unchecked]]
+    catch {hir::interchange::decode $linux -target macos-aarch64} message
+    lappend result $message
+} -cleanup {unset -nocomplain linux mac plain result name text target hir options unchecked message} -result {{linux macos-aarch64 {HIR INTERCHANGE TARGET}} {macos linux-aarch64 {HIR INTERCHANGE TARGET}} {linux linux-aarch64 linux-aarch64 {interval 0 255}} {macos macos-aarch64 macos-aarch64 {interval -128 127}} {plain macos-aarch64 {} {}} {plain linux-aarch64 {} {}} {linux {} {HIR INTERCHANGE TARGET}} {plain {} {} {}} {linux-aarch64 {interval 0 255}} {HIR interchange text for another target: it was built for target linux-aarch64, not macos-aarch64: a HIR keeps the target it was built for (its C ABI facts and platform modules) and is never reinterpreted as another's; compile the program for macos-aarch64}}
+
+# The output of main.tcl with ARGS (its exit status ignored).
+proc tmMain {args} {
+    catch {exec [info nameofexecutable] [file join $::projectRoot main.tcl] {*}$args 2>@1} output
+    return $output
+}
+
+test tm-interchange-main {main.tcl reads a .hirx as a compilation for its -target (the host's without one): a linux-aarch64 .hirx is refused for macos-aarch64 and runs for linux-aarch64} -body {
+    set path [tmFile char.bot $::tmChar]
+    tmMain -emit-hir-interchange -target linux-aarch64 $path
+    set hirx [file rootname $path].hirx
+    list [string match {*error: HIR interchange text for another target: it was built for target linux-aarch64, not macos-aarch64*(HIR INTERCHANGE TARGET)*} [tmMain -backend interp -target macos-aarch64 $hirx]] \
+        [string match {*value: 1*} [tmMain -backend interp -target linux-aarch64 $hirx]] \
+        [expr {[string match {*value: 1*} [tmMain -backend interp $hirx]] == ([core::cabi::hostTarget] eq "linux-aarch64")}]
+} -cleanup {unset -nocomplain path hirx} -result {1 1 1}
+
+# ---------------------------------------------------------------------------
+# The front-end cache
+
+# Compiles PATH for each target of TARGETS with the cache DIR: per
+# compilation {TARGET CHAR-DOMAIN HITS MISSES STORES INVALID}.
+proc tmCached {dir path targets} {
+    lmap target $targets {
+        surface::cache::resetStats
+        set hir [surface::readProgramFile $path -warnings off -cache $dir -target $target]
+        set stats [surface::cache::stats]
+        list [hir::cabi::targetOf $hir] [tmCharDomain $hir] [dict get $stats hits] [dict get $stats misses] \
+            [dict get $stats stores] [dict get $stats invalid]
+    }
+}
+
+test tm-cache-target-isolation {one cache directory, one program, plain char on linux-aarch64, then macos-aarch64, then linux-aarch64 again (and the reverse): each target is its own entry with its own C facts -- never the other's, though architecture and pointer width match -- and a later compilation for the same target is a hit} -body {
+    set path [tmFile char.bot $::tmChar]
+    set forward [makeDirectory tm-cache-forward-[pid]]
+    set reverse [makeDirectory tm-cache-reverse-[pid]]
+    list [tmCached $forward $path {linux-aarch64 macos-aarch64 linux-aarch64}] \
+        [tmCached $reverse $path {macos-aarch64 linux-aarch64 macos-aarch64}] \
+        [llength [glob -nocomplain -directory $forward *.hirc]] [llength [glob -nocomplain -directory $reverse *.hirc]]
+} -cleanup {
+    removeDirectory tm-cache-forward-[pid]
+    removeDirectory tm-cache-reverse-[pid]
+    unset -nocomplain path forward reverse
+} -result {{{linux-aarch64 {interval 0 255} 0 1 1 0} {macos-aarch64 {interval -128 127} 0 1 1 0} {linux-aarch64 {interval 0 255} 1 0 0 0}} {{macos-aarch64 {interval -128 127} 0 1 1 0} {linux-aarch64 {interval 0 255} 0 1 1 0} {macos-aarch64 {interval -128 127} 1 0 0 0}} 2 2}
+
+test tm-cache-entry-of-another-target {an entry holding a HIR built for another target is never taken, even filed under this compilation's own key: it is an invalid entry (a miss), and the compilation builds its own target's HIR} -body {
+    set path [tmFile char.bot $::tmChar]
+    set dir [makeDirectory tm-cache-planted-[pid]]
+    tmCached $dir $path linux-aarch64
+    set source [core::ReadFile $path]
+    set root [file dirname [file normalize $path]]
+    set linuxEntry [surface::cache::EntryPath $dir [surface::cache::Key $path $source off 1 linux-aarch64 $root]]
+    set macKey [surface::cache::Key $path $source off 1 macos-aarch64 $root]
+    set entry [core::ReadFile $linuxEntry]
+    dict set entry key $macKey
+    set channel [open [surface::cache::EntryPath $dir $macKey] w]
+    fconfigure $channel -encoding utf-8 -translation lf
+    puts -nonewline $channel $entry
+    close $channel
+    tmCached $dir $path macos-aarch64
+} -cleanup {
+    removeDirectory tm-cache-planted-[pid]
+    unset -nocomplain path dir source root linuxEntry macKey entry channel
+} -result {{macos-aarch64 {interval -128 127} 0 1 1 1}}
+
+# ---------------------------------------------------------------------------
+# Native execution
+
+test tm-nir-target-line {NIR names the target of a HIR that has one, by its table name and triple, and none for a HIR that is every target's} -constraints nativeBuilt -body {
+    list [lsearch -all -inline [split [native::nir [tmHir $::tmChar macos-aarch64]] \n] target*] \
+        [lsearch -all -inline [split [native::nir [tmHir $::tmPlain macos-aarch64]] \n] target*]
+} -result {{{target "macos-aarch64" triple="aarch64-apple-darwin"}} {}}
+
+test tm-native-refuses-another-target {native code runs only on its own target's host: a program built for the other operating system's target of this host's architecture is NATIVE TARGET when run, emitted as an executable or as an object -- before any code is made -- while the Tcl backends run it, the driver still shows its CLIF, a program that is every target's runs natively whatever its -target, and the host's own target runs} -constraints nativeBuilt -body {
+    set other [tmOtherTarget]
+    set hir [tmHir $::tmChar $other]
+    set work [makeDirectory tm-native-[pid]]
+    set refusals [lmap script {
+        {native::evalHir $hir}
+        {native::evalHir $hir -specialize 0}
+        {native::executable $hir [file join $work exe]}
+        {native::object $hir [file join $work obj.o]}
+    } {
+        catch $script message options
+        lrange [dict get $options -errorcode] 0 1
+    }]
+    catch {native::evalHir $hir} message
+    list $refusals \
+        [string match "this program was built for target $other ([dict get [core::cabi::target $other] triple]), and native code runs only on its own target's host: this host is *. Both are *, but a matching architecture is not a matching target. *" $message] \
+        [lmap b {interp compile} {lindex [outcomeUnderHir $b $hir] 1}] \
+        [expr {[string length [native::clif $hir]] > 0}] \
+        [core::value::show [native::evalHir [tmHir $::tmPlain $other]]] \
+        [core::value::show [native::evalHir [tmHir $::tmChar ""]]] \
+        [file exists [file join $work exe]] [file exists [file join $work obj.o]]
+} -cleanup {
+    removeDirectory tm-native-[pid]
+    unset -nocomplain other hir work refusals message options
+} -result {{{NATIVE TARGET} {NATIVE TARGET} {NATIVE TARGET} {NATIVE TARGET}} 1 {1 1} 1 2 1 0 0}
+
+test tm-native-driver-boundary {the driver enforces the target itself, whatever produced the NIR: a hand-written program naming another target is refused by run and accepted by check; an unreadable triple is refused; a program names one target} -constraints nativeBuilt -body {
+    set body "func 0 \"<program>\" params=0 env=0 regs=1 pnames=\"\" captures=0\n    %0 = int 7\n    ret %0\nend\n"
+    set other [tmOtherTarget]
+    set line "target \"$other\" triple=\"[dict get [core::cabi::target $other] triple]\""
+    set host [core::cabi::hostTarget]
+    set own "target \"$host\" triple=\"[dict get [core::cabi::target $host] triple]\""
+    set outcome {apply {{text command} {
+        set lines [native::Driver $command $text]
+        if {[catch {native::Outcome $lines} value options]} {
+            return [lrange [dict get $options -errorcode] 0 1]
+        }
+        return $value
+    }}}
+    list [{*}$outcome "nir 1\n$line\n\n$body" run] [lindex [native::Driver check "nir 1\n$line\n\n$body"] 0] \
+        [{*}$outcome "nir 1\ntarget \"x\" triple=\"not-a-triple-at-all-here\"\n\n$body" run] \
+        [{*}$outcome "nir 1\n$line\n$line\n\n$body" run] [{*}$outcome "nir 1\n$own\n\n$body" run] \
+        [{*}$outcome "nir 1\n\n$body" run]
+} -cleanup {unset -nocomplain body other line host own outcome} -result {{NATIVE TARGET} ok {NATIVE TARGET} {NATIVE INVALID-NIR} {int 7} {int 7}}
+
+test tm-main-native-target {main.tcl: a program built for another target with -target is NATIVE TARGET on the native backends and for -emit-native-executable, and runs on the Tcl backends} -constraints nativeBuilt -body {
+    set path [tmFile char.bot $::tmChar]
+    set other [tmOtherTarget]
+    list [string match {*error: this program was built for target*(NATIVE TARGET)*} [tmMain -backend cranelift -target $other $path]] \
+        [string match {*this program was built for target*(NATIVE TARGET)*} [tmMain -emit-native-executable -target $other $path]] \
+        [file exists [file rootname $path]] \
+        [string match {*value: 1*} [tmMain -backend interp -target $other $path]]
+} -cleanup {unset -nocomplain path other} -result {1 1 0 1}
+
+removeDirectory target-model-[pid]
+cleanupTests

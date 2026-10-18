@@ -12,9 +12,26 @@
 # compiler (the C header archaeology's ABI probe confirmed the Linux x86-64
 # row; C-HEADER-ARCHAEOLOGY.md, items 52-55).
 #
-#   targets   NAME -> {os OS arch ARCH model MODEL charSigned 0|1}
+#   targets   NAME -> {os OS arch ARCH model MODEL charSigned 0|1
+#             triple TRIPLE}
 #   models    MODEL -> {char BITS short BITS int BITS long BITS longlong BITS
 #             pointer BITS}
+#   systems   OS -> its name in messages (Linux, macOS, Windows)
+#
+# A target is an operating system *and* an architecture: linux-aarch64 and
+# macos-aarch64 share an instruction set, a pointer width and a data model,
+# and are still two targets (plain char differs, and so do the C calling
+# convention, the object format and every platform interface). Nothing
+# reads an operating system from an architecture, or the reverse.
+#
+# TRIPLE is the target's LLVM/Cranelift target triple (aarch64-apple-darwin),
+# the one name the native backend knows it by: the driver compares it with
+# its own host before it runs or emits machine code for a program built for
+# the target, and Cranelift derives the target's C calling convention
+# (AppleAarch64 for Apple AArch64, SystemV for Linux, WindowsFastcall for
+# Windows) and object format (Mach-O, ELF, COFF) from it
+# (native/src/codegen/clif.rs's c_call_conv). Botlish owns the triple;
+# Cranelift owns what the triple means for a machine ABI.
 #   scalars   SOURCE-NAME -> {c C-SPELLING width WIDTH-KEY signed 0|1|char}
 #             (signed `char`: plain char, the target's charSigned)
 #
@@ -52,12 +69,13 @@ namespace eval core::cabi {
         LP64  {char 8 short 16 int 32 long 64 longlong 64 pointer 64} \
         LLP64 {char 8 short 16 int 32 long 32 longlong 64 pointer 64}]
     variable targets [dict create \
-        linux-x86_64    {os linux arch x86_64 model LP64 charSigned 1} \
-        linux-aarch64   {os linux arch aarch64 model LP64 charSigned 0} \
-        macos-x86_64    {os macos arch x86_64 model LP64 charSigned 1} \
-        macos-aarch64   {os macos arch aarch64 model LP64 charSigned 1} \
-        windows-x86_64  {os windows arch x86_64 model LLP64 charSigned 1} \
-        windows-aarch64 {os windows arch aarch64 model LLP64 charSigned 1}]
+        linux-x86_64    {os linux arch x86_64 model LP64 charSigned 1 triple x86_64-unknown-linux-gnu} \
+        linux-aarch64   {os linux arch aarch64 model LP64 charSigned 0 triple aarch64-unknown-linux-gnu} \
+        macos-x86_64    {os macos arch x86_64 model LP64 charSigned 1 triple x86_64-apple-darwin} \
+        macos-aarch64   {os macos arch aarch64 model LP64 charSigned 1 triple aarch64-apple-darwin} \
+        windows-x86_64  {os windows arch x86_64 model LLP64 charSigned 1 triple x86_64-pc-windows-msvc} \
+        windows-aarch64 {os windows arch aarch64 model LLP64 charSigned 1 triple aarch64-pc-windows-msvc}]
+    variable systems [dict create linux Linux macos macOS windows Windows]
     # In declaration (and HIR text) order.
     variable scalars [dict create \
         Char      {c char width char signed char} \
@@ -88,6 +106,20 @@ proc core::cabi::architectures {} {
     return [lsort -unique [lmap name [dict keys $targets] {dict get $targets $name arch}]]
 }
 
+# The operating systems of the targets (their `os`), sorted: the platforms a
+# standard namespace may belong to (surface/modules.tcl's PlatformOf: the
+# `linux` namespace and everything under it are Linux's).
+proc core::cabi::operatingSystems {} {
+    variable targets
+    return [lsort -unique [lmap name [dict keys $targets] {dict get $targets $name os}]]
+}
+
+# The name of operating system OS in a message (macOS for macos).
+proc core::cabi::systemName {os} {
+    variable systems
+    return [dict get $systems $os]
+}
+
 proc core::cabi::isTarget {name} {
     variable targets
     return [dict exists $targets $name]
@@ -109,19 +141,39 @@ proc core::cabi::target {name} {
 # needs an explicit -target).
 proc core::cabi::hostTarget {} {
     set os [string tolower $::tcl_platform(os)]
-    set machine [string tolower $::tcl_platform(machine)]
     switch -glob -- $os {
         linux { set os linux }
         darwin { set os macos }
         windows* { set os windows }
         default { return "" }
     }
-    switch -- $machine {
-        x86_64 - amd64 { set arch x86_64 }
-        aarch64 - arm64 { set arch aarch64 }
-        default { return "" }
+    set arch [hostArchitecture]
+    if {$arch eq ""} {
+        return ""
     }
     set name $os-$arch
+    return [expr {[isTarget $name] ? $name : ""}]
+}
+
+# The architecture (a target's `arch`) of the machine this process runs on,
+# or "" if it is none of the table's: arm64 (macOS's name) is aarch64.
+proc core::cabi::hostArchitecture {} {
+    switch -- [string tolower $::tcl_platform(machine)] {
+        x86_64 - amd64 { return x86_64 }
+        aarch64 - arm64 { return aarch64 }
+    }
+    return ""
+}
+
+# The target of operating system OS on the architecture of the machine this
+# process runs on (linux-aarch64 on an arm64 Mac), or "" when there is none:
+# what a tool on this host compiles a program of OS's platform for -- the
+# host's own target on a host of OS. The test harnesses compile Linux
+# programs (ones importing linux::*) so: on a Linux host it is exactly the
+# default target; on another host the Tcl backends run the program, and the
+# native ones refuse it (it is not the host's target).
+proc core::cabi::systemTarget {os} {
+    set name $os-[hostArchitecture]
     return [expr {[isTarget $name] ? $name : ""}]
 }
 

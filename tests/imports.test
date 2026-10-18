@@ -56,7 +56,10 @@ proc hirOfSource {source {strict 1}} {
     set dir [tcltest::makeDirectory imports-main-[pid]-[incr ::scratchLibraryCounter]]
     try {
         set path [writeModule $dir main $source]
-        return [surface::readProgramFile $path -strict $strict -warnings off]
+        # For a Linux target (linuxTarget: the host's own on Linux), where
+        # the Linux platform's namespaces (linux::*) are importable; a
+        # program importing none is the same HIR for every target.
+        return [surface::readProgramFile $path -strict $strict -warnings off -target [linuxTarget]]
     } finally {
         tcltest::removeDirectory [file tail $dir]
     }

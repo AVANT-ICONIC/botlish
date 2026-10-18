@@ -1617,6 +1617,14 @@ proc native::lower::Program {hirProgram args} {
         set alias [core::cabi::AliasIndex [dict get $record contract]]
         lappend header "foreign [ForeignIndex $key] [Quote [dict get $record symbol]] params=[Quote [join [dict get $record abi params] { }]] result=[dict get $record abi result][expr {$alias >= 0 ? " alias=$alias" : ""}] name=[Quote $key]"
     }
+    # The target the program was built for (core/cabi.tcl's name and
+    # triple), when its HIR depends on one (hir::cabi::targetOf): the driver
+    # makes machine code for it only on that target's host
+    # (native/src/codegen/target.rs). A HIR that is every target's names none.
+    set built [hir::cabi::targetOf $hirProgram]
+    if {$built ne ""} {
+        lappend header "target [Quote $built] triple=[Quote [dict get [core::cabi::target $built] triple]]"
+    }
     set text "[join $header \n]\n\n[join $texts \n\n]\n"
     return [dict create text $text functions $infos statistics [Statistics $infos] \
         specialization $spec abiPlan $abiPlan shortPlan $shortPlan construction $construction structCensus [hir::escape::census $escape] \

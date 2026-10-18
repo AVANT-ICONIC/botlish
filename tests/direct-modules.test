@@ -48,9 +48,11 @@ proc removeApps {} {
     }
 }
 
-# The HIR of DIR/MAIN (strict unless STRICT is 0).
+# The HIR of DIR/MAIN (strict unless STRICT is 0), for a Linux target
+# (linuxTarget: the host's own on Linux): these programs use the Linux
+# platform's direct modules.
 proc appHir {dir {main main.bot} {strict 1}} {
-    return [surface::readProgramFile [file join $dir $main] -warnings off -cache "" -strict $strict]
+    return [surface::readProgramFile [file join $dir $main] -warnings off -cache "" -strict $strict -target [linuxTarget]]
 }
 
 # "KIND: MESSAGE" of the compilation of DIR/MAIN, with DIR spelled APP and
@@ -224,7 +226,7 @@ test dm-syscall-contextualized {the same raw call from a function requiring Loca
 } -cleanup removeApps -result {{{} contextualized} {{emit linux::write LocalIO}} 0}
 
 test dm-syscall-stdlib-layering {the standard library's own boundary: the transport provided direct, linux::sys (the architecture's syscall numbers and registers) and linux declared direct modules, linux::io contextualized by its LinuxIO, and a program using linux::io ordinary} -body {
-    set hir [surface::readProgramFile [file join $::projectRoot examples linux context-hello.bot] -warnings off -cache ""]
+    set hir [surface::readProgramFile [file join $::projectRoot examples linux context-hello.bot] -warnings off -cache "" -target [linuxTarget]]
     list [statuses $hir {linux::sys linux linux::io ""}] [llength [dict get $hir direct intrinsic]]
 } -result {{linux::sys direct linux direct linux::io contextualized {} ordinary} 1}
 

@@ -5,11 +5,18 @@
 #
 # Compiles and runs tests/platform/cabi-facts.c with COMPILER (default $CC,
 # else cc) in a private temporary directory, and compares what it prints --
-# the bit widths of char, short, int, long, long long and a pointer, and
-# whether plain char is signed -- with core::cabi::target of
-# core::cabi::hostTarget, the row a compilation for this host uses when it
-# imports ffi::c. Prints both and exits 1 on any difference, or when the host
-# is not one of the table's targets. It reads the table; it changes nothing.
+# the bit widths of char, short, int, long, long long and a pointer, whether
+# plain char is signed, and each ffi::c scalar's width and signedness
+# (core::cabi::scalarInfo), size_t's width with the pointer's (size_t is no
+# ffi::c scalar) -- with core::cabi::target of core::cabi::hostTarget, the
+# row a compilation for this host uses when it imports ffi::c. It also
+# checks that the compiler's own target (COMPILER -dumpmachine: arm64-apple-
+# darwin24.6.0 on a Mac) is the host target's operating system and
+# architecture: the host default is the toolchain's host, not an
+# architecture's other system. Prints both and exits 1 on any difference, or
+# when the host is not one of the table's targets. It reads the table; it
+# changes nothing. Never an oracle of another target: it runs on, and
+# checks, its own host's row only.
 
 set here [file dirname [file normalize [info script]]]
 set root [file dirname [file dirname $here]]
@@ -42,15 +49,51 @@ try {
     file delete -force $work
 }
 
-puts "host target:   $host ($::tcl_platform(os) $::tcl_platform(machine))"
-puts "C compiler:    $cc"
-puts "core::cabi:    [dict filter $table key char short int long longlong pointer charSigned]"
+# The C compiler's own target, as {OS ARCH} of the table's names ("" for a
+# part it does not name).
+set machine [string tolower [exec $cc -dumpmachine]]
+set machineArch [lindex [split $machine -] 0]
+set machineArch [expr {$machineArch in {arm64 aarch64} ? "aarch64" : $machineArch in {x86_64 amd64} ? "x86_64" : ""}]
+set machineOs [expr {[string match *darwin* $machine] || [string match *apple* $machine] ? "macos"
+    : [string match *linux* $machine] ? "linux" : [string match *mingw* $machine] || [string match *windows* $machine] ? "windows" : ""}]
+
+set scalars [dict create]
+foreach name [core::cabi::scalarNames] {
+    set info [core::cabi::scalarInfo $name $host]
+    dict set scalars $name [list [dict get $info bits] [dict get $info signed]]
+}
+
+puts "host target:   $host ($::tcl_platform(os) $::tcl_platform(machine)), triple [dict get $table triple]"
+puts "C compiler:    $cc, target $machine"
+puts "core::cabi:    [dict filter $table key char short int long longlong pointer charSigned] scalars [list $scalars]"
 puts "C toolchain:   $measured"
 set differences {}
 dict for {key value} $measured {
-    if {![dict exists $table $key] || [dict get $table $key] ne $value} {
-        lappend differences "$key: table [expr {[dict exists $table $key] ? [dict get $table $key] : {(none)}}], C $value"
+    switch -- $key {
+        sizeT {
+            if {$value != [dict get $table pointer]} {
+                lappend differences "size_t: C $value bits, the table's pointer [dict get $table pointer]"
+            }
+        }
+        sizeTSigned {
+            if {$value != 0} { lappend differences "size_t: C signed" }
+        }
+        scalars {
+            dict for {name facts} $value {
+                if {![dict exists $scalars $name] || [dict get $scalars $name] ne $facts} {
+                    lappend differences "ffi::c::$name: table {bits signed} [expr {[dict exists $scalars $name] ? [dict get $scalars $name] : {(none)}}], C $facts"
+                }
+            }
+        }
+        default {
+            if {![dict exists $table $key] || [dict get $table $key] ne $value} {
+                lappend differences "$key: table [expr {[dict exists $table $key] ? [dict get $table $key] : {(none)}}], C $value"
+            }
+        }
     }
+}
+if {$machineOs ne [dict get $table os] || $machineArch ne [dict get $table arch]} {
+    lappend differences "target: the C compiler's is $machine ($machineOs $machineArch), the host default $host ([dict get $table os] [dict get $table arch])"
 }
 if {$differences ne ""} {
     puts "FAIL: core::cabi's $host row disagrees with the C toolchain: [join $differences {; }]"

@@ -1,9 +1,9 @@
 # interchange.tcl -- the HIR interchange format (HIR-INTERCHANGE.md).
 #
 #   hir::interchange::encode HIR ?-trait-source 0|1?    the format's text of HIR
-#   hir::interchange::decode TEXT                       the HIR it holds, activated
+#   hir::interchange::decode TEXT ?-target T?           the HIR it holds, activated
 #   hir::interchange::writeFile PATH HIR ?-trait-source 0|1?
-#   hir::interchange::readFile PATH
+#   hir::interchange::readFile PATH ?-target T?
 #   hir::interchange::fingerprint                       this front end's identity
 #
 # A fully analyzed HIR -- the front end's output, what every backend starts
@@ -35,6 +35,19 @@
 # A HIR's representation is the front end's own, so the format is valid for
 # the front end that built it only: decode refuses another one's text
 # ({HIR INTERCHANGE COMPILER}). The backends may differ: they read a HIR.
+#
+# A HIR is also its target's (hir::cabi::targetOf: the compilation target,
+# when the build depended on it -- ffi::c's scalars, a platform or an
+# architecture-specific module). The text carries it inside the HIR, and a
+# decoded HIR keeps it, and its target's facts, whoever reads it: nothing is
+# reinterpreted for the reader's target. decode -target T is a compilation
+# for T (main.tcl passes its -target, or the host's): it refuses a HIR built
+# for another target ({HIR INTERCHANGE TARGET}, hir::cabi::TargetMismatch),
+# however much the two share (linux-aarch64 and macos-aarch64 share an
+# architecture and a pointer width, not plain char's signedness), and
+# accepts a HIR that is every target's. Without -target nothing is checked
+# (the HIR stays its own target's: the native driver refuses to run one built
+# for another host).
 
 namespace eval hir::interchange {
     variable version 1
@@ -90,9 +103,11 @@ proc hir::interchange::encode {hir args} {
     return "$magic $version\n[list compiler [fingerprint] requires $::core::loadedLibraries hir $hir]\n"
 }
 
-proc hir::interchange::decode {text} {
+proc hir::interchange::decode {text args} {
     variable version
     variable magic
+    set check [dict exists $args -target]
+    set options [hir::Options hir::interchange::decode {-target ""} $args]
     set newline [string first \n $text]
     set header [string range $text 0 [expr {$newline < 0 ? "end" : $newline - 1}]]
     if {[catch {llength $header} words] || $words != 2 || [lindex $header 0] ne $magic} {
@@ -109,10 +124,16 @@ proc hir::interchange::decode {text} {
     if {[dict get $body compiler] ne [fingerprint]} {
         throw {HIR INTERCHANGE COMPILER} "HIR interchange text built by another front end ([dict get $body compiler]; this one is [fingerprint])"
     }
+    set hir [dict get $body hir]
+    if {$check} {
+        set problem [hir::cabi::TargetMismatch $hir [dict get $options -target]]
+        if {$problem ne ""} {
+            throw {HIR INTERCHANGE TARGET} "HIR interchange text for another target: $problem"
+        }
+    }
     foreach name [expr {[dict exists $body requires] ? [dict get $body requires] : {}}] {
         core::loadLibrary $name
     }
-    set hir [dict get $body hir]
     hir::activate $hir
     return $hir
 }
@@ -130,7 +151,7 @@ proc hir::interchange::writeFile {path hir args} {
     return $path
 }
 
-proc hir::interchange::readFile {path} {
+proc hir::interchange::readFile {path args} {
     set f [open $path r]
     try {
         fconfigure $f -encoding utf-8 -translation lf
@@ -138,5 +159,5 @@ proc hir::interchange::readFile {path} {
     } finally {
         close $f
     }
-    return [decode $text]
+    return [decode $text {*}$args]
 }

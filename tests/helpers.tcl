@@ -277,6 +277,27 @@ proc outcomeUnderHir {backend hir} {
     return [list value [core::value::show $result 1 1] $::testLog]
 }
 
+# The C ABI target a test compiles a Linux program for -- one that imports the
+# Linux platform's namespaces (linux::*), which a compilation for a target of
+# another operating system refuses (UNSUPPORTED-PLATFORM): on a Linux host
+# the host's own target, exactly the default; on another host (macOS arm64)
+# the Linux target of its architecture (core::cabi::systemTarget). There the
+# program runs on the Tcl backends only (backendsFor).
+proc linuxTarget {} {
+    return [core::cabi::systemTarget linux]
+}
+
+# Of BACKENDS (default all four), the ones that run a program built for
+# TARGET on this host: every one for the host's own target (or ""), the Tcl
+# backends only for another (a native backend refuses a program built for a
+# target other than its host's: NATIVE TARGET).
+proc backendsFor {target {backends {interp compile cranelift-generic cranelift}}} {
+    if {$target eq "" || $target eq [core::cabi::hostTarget]} {
+        return $backends
+    }
+    return [lmap b $backends {expr {$b in {interp compile} ? $b : [continue]}}]
+}
+
 # The HIR native lowering compiles for a program written as core IR text
 # EXPRS: hir::build reads the text (HIR construction, as for the compile
 # backend) and native::prepareHir prepares it as every native entry point does.

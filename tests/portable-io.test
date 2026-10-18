@@ -60,14 +60,16 @@ proc readBinary {path} {
     return $data
 }
 
-# The HIR of source TEXT, compiled as a program file (so lib modules load).
+# The HIR of source TEXT, compiled as a program file (so lib modules load),
+# for a Linux target (linuxTarget: the host's own on Linux): linux::io is the
+# Linux platform's.
 proc ioHir {text} {
     set path [file join $::scratch p[incr ::programCounter].bot]
     set channel [open $path w]
     fconfigure $channel -encoding utf-8
     puts -nonewline $channel $text
     close $channel
-    return [surface::readProgramFile $path -warnings off]
+    return [surface::readProgramFile $path -warnings off -target [linuxTarget]]
 }
 
 # The standalone executable of source TEXT (built once per NAME).
@@ -267,8 +269,8 @@ test io-substitute-context {a test context implementing io::IO is selected like 
 
 test io-warning-clean {a program importing io and linux::io (the S16 reproduction) collects no warning from lib/io.bot under the default policy, and compiles under -warnings error} -body {
     set text "import io\nimport linux::io\nwith context linux::io::create()\nio::print_line(\"hi\"):\n    on io::WriteFailed:\n        unit\n"
-    set hir [surface::compile $text t.bot -warnings default -warning-channel ""]
-    set strict [catch {surface::compile $text t.bot -warnings error -warning-channel ""} message]
+    set hir [surface::compile $text t.bot -warnings default -warning-channel "" -target [linuxTarget]]
+    set strict [catch {surface::compile $text t.bot -warnings error -warning-channel "" -target [linuxTarget]} message]
     list [lmap w [hir::warnings::of $hir] {
         list [dict get $w code] [hir::originLocation $hir [dict get $w primary]]
     }] $strict

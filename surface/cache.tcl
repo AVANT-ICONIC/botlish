@@ -39,6 +39,15 @@
 # target's architecture and the application root alone (surface/modules.tcl:
 # no search path), so nothing else can change which files a program reads.
 #
+# Targets: the key holds the full target name (macos-aarch64, never its
+# architecture alone), so a compilation for one target never reads another
+# target's entry, and a hit's HIR is checked against the target once more
+# when it is decoded (hir::interchange::decode -target: a HIR built for
+# another target is an invalid entry, a miss). An entry is per target even
+# for a program whose HIR is every target's (hir::cabi::targetOf ""): the key
+# is computed before the build that would tell, and the entries of such a
+# program are equal.
+#
 # Warnings: an entry is per warning mode, and a hit in the default mode
 # prints the warnings its HIR carries, as the build did. A compilation that
 # fails, or that traces its static decisions (BOTLISH_STATIC_TRACE), is
@@ -181,7 +190,9 @@ proc surface::cache::lookup {dir path source mode strict {target ""} {root ""}} 
                 return ""
             }
         }
-        set hir [hir::interchange::decode [dict get $entry interchange]]
+        # The key holds the target; a HIR built for another one is still
+        # never taken for this compilation's (an invalid entry: a miss).
+        set hir [hir::interchange::decode [dict get $entry interchange] -target $target]
     } on error {} {
         dict incr stats invalid
         dict incr stats misses

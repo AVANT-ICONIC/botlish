@@ -28,20 +28,26 @@ set nativeBackends {cranelift-generic cranelift}
 # that only compiles it (NIR, CLIF, a diagnostic, a refusal) needs no host.
 testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
+# Linux on x86-64 or AArch64: the native backend runs a Linux program (one
+# built for a Linux target) only on a Linux host.
+testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
+    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint objdump [expr {[auto_execok objdump] ne ""}]
 testConstraint posixShell [expr {[auto_execok sh] ne ""}]
 
 set scratch [makeDirectory linux-syscall-scratch]
 set programCounter 0
 
-# The HIR of source TEXT, compiled as a program file (so lib modules load).
+# The HIR of source TEXT, compiled as a program file (so lib modules load),
+# for a Linux target (linuxTarget: the host's own on Linux): the transports
+# are the Linux platform's.
 proc syscallHir {text {strict 1}} {
     set path [file join $::scratch p[incr ::programCounter].bot]
     set channel [open $path w]
     fconfigure $channel -encoding utf-8
     puts -nonewline $channel $text
     close $channel
-    return [surface::readProgramFile $path -strict $strict]
+    return [surface::readProgramFile $path -strict $strict -target [linuxTarget]]
 }
 
 # The sorted diagnostic kinds of source TEXT.
@@ -59,14 +65,15 @@ proc strictError {text} {
     return [list [lindex [dict get $options -errorcode] end] $location $text]
 }
 
-# The outcome of source TEXT on every backend in BACKENDS: one {value SHOWN
-# LOG} / {error CODE MESSAGE LOG} per backend.
+# The outcome of source TEXT on every backend in BACKENDS that runs its HIR
+# here (backendsFor: a Linux program runs natively on Linux only): one {value
+# SHOWN LOG} / {error CODE MESSAGE LOG} per backend.
 proc outcomesOf {text {backends ""}} {
     if {$backends eq ""} {
         set backends $::allBackends
     }
     set hir [syscallHir $text]
-    return [lmap backend $backends {outcomeUnderHir $backend $hir}]
+    return [lmap backend [backendsFor [hir::cabi::targetOf $hir] $backends] {outcomeUnderHir $backend $hir}]
 }
 
 # The one shown value every backend in BACKENDS agrees on for TEXT, or a
@@ -315,7 +322,7 @@ test linux-syscall-diverging-field-hides-nothing {a literal field that cannot co
     list [lmap d [hir::diagnostics [syscallHir $text 0]] {dict get $d kind}] [lrange [strictError $text] 0 1]
 } -result {{UNKNOWN-FIELD UNKNOWN-FIELD} {UNKNOWN-FIELD 11:88}}
 
-test linux-syscall-unchecked-program-replays-the-contract {a -strict 0 program (diagnostics kept, not raised) still never runs a call that broke the contract natively: the problem is replayed as a run-time error before anything is evaluated -- no syscall with a defaulted rax, no register read from an unproven value} -body {
+test linux-syscall-unchecked-program-replays-the-contract {a -strict 0 program (diagnostics kept, not raised) still never runs a call that broke the contract natively: the problem is replayed as a run-time error before anything is evaluated -- no syscall with a defaulted rax, no register read from an unproven value} -constraints nativeLinux -body {
     set results {}
     foreach text [list \
             "direct module\nimport abi::x86_64\nimport linux::abi::x86_64\nfn f() -> int:\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rdi: abi::x86_64::register64(140), rbp: abi::x86_64::register64(7)}))\nf()" \
@@ -393,7 +400,7 @@ test linux-syscall-getpid-positive-and-stable {raw_getpid() is a positive pid, t
 } -result {[true, true, true]}
 
 test linux-syscall-example-file {examples/linux/getpid.bot, the canonical demonstration, prints [true, true] natively and is refused with NATIVE-ONLY by the Tcl backends} -body {
-    set hir [surface::readProgramFile [file join $::projectRoot examples linux getpid.bot]]
+    set hir [surface::readProgramFile [file join $::projectRoot examples linux getpid.bot] -target [linuxTarget]]
     set native [expr {[testConstraint linuxX86_64]
         ? [lsort -unique [lmap b $::nativeBackends {lrange [outcomeUnderHir $b $hir] 0 1}]]
         : {{value {[true, true]}}}}]

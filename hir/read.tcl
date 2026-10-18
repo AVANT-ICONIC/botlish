@@ -30,6 +30,9 @@ namespace eval hir::read {
     # NAME -> {fields {F T ...} namespace NS}: the payload descriptors of the
     # last ErrorDecls call (ERROR-PAYLOADS.md), HIR's `errorPayloads`.
     variable lastErrorPayloads {}
+    # The target the C integer scalars of the last TypeDecls call name ("" if
+    # it read none): the HIR's `target` (hir::cabi::targetOf).
+    variable lastTarget ""
 }
 
 # The HIR program described by TEXT.
@@ -189,6 +192,16 @@ proc hir::read::TypeDecls {lines} {
     }
     variable lastTypeDecls
     set lastTypeDecls $registered
+    # A build declares ffi::c's scalars for one target: text naming two is
+    # the HIR of no program.
+    variable lastTarget
+    set targets [lsort -unique [lmap decl $decls {
+        expr {[dict exists $decl cabi] ? [dict get $decl cabi target] : [continue]}
+    }]]
+    if {[llength $targets] > 1} {
+        Fail 0 "C integer scalars of several targets ([join $targets {, }]): a HIR is built for one target"
+    }
+    set lastTarget [lindex $targets 0]
     return $rest
 }
 
@@ -421,6 +434,12 @@ proc hir::read::Program {text} {
     dict unset hir pos
     variable lastTypeDecls
     dict set hir sourceTypes $lastTypeDecls
+    # Its scalars are the only target-dependent facts HIR text holds (it has
+    # no module sections): the target they name is the HIR's.
+    variable lastTarget
+    if {$lastTarget ne ""} {
+        dict set hir target $lastTarget
+    }
     variable lastErrorDecls
     dict set hir errorDecls $lastErrorDecls
     variable lastErrorPayloads

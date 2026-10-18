@@ -205,15 +205,18 @@ fn c_type(c: nir::CAbi) -> ir::Type {
     }
 }
 
-/// The C signature of foreign function DECL in the module's default (the
-/// platform C) calling convention: each integer parameter of its exact width,
-/// sign- or zero-extended by its class as the platform ABI expects of a
-/// caller (the narrow ones), a pointer a 64-bit word. The result is declared
-/// without an extension attribute: the bits beyond a narrow C result's width
-/// are unspecified by the ABI (GCC leaves them), so the caller extends it
-/// itself (`ForeignCall`).
+/// The C signature of foreign function DECL in the platform C calling
+/// convention of the module's target (`target::c_call_conv`: AppleAarch64
+/// on Apple AArch64, SystemV on Linux -- selected here explicitly, never the
+/// Botlish-internal default by accident): each integer parameter of its
+/// exact width, sign- or zero-extended by its class as the platform ABI
+/// expects of a caller (the narrow ones), a pointer a 64-bit word. The
+/// result is declared without an extension attribute: the bits beyond a
+/// narrow C result's width are unspecified by the ABI (GCC leaves them), so
+/// the caller extends it itself (`ForeignCall`).
 fn c_signature<M: Module>(module: &M, decl: &nir::ForeignDecl) -> Signature {
     let mut sig = module.make_signature();
+    sig.call_conv = super::target::c_call_conv(module.isa().triple());
     for c in &decl.params {
         let param = AbiParam::new(c_type(*c));
         sig.params.push(match (c.bits() < 64, c.signed()) {

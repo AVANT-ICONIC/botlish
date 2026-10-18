@@ -46,6 +46,7 @@ dependencies = [
  "log",
  "num-bigint",
  "num-traits",
+ "target-lexicon",
  "unicode-general-category",
 ]
 
